@@ -1401,8 +1401,11 @@ function backendHeaders(){
 function apiBaseUrl(){
   if(window.TAXFLOW_API_BASE_URL)return window.TAXFLOW_API_BASE_URL;
   const currentHost=window.location.hostname||'127.0.0.1';
-  const host=['localhost','::1',''].includes(currentHost)?'127.0.0.1':currentHost;
-  return `http://${host}:8000/api/v1`;
+  if(['localhost','127.0.0.1','::1',''].includes(currentHost)){
+    return 'http://127.0.0.1:8000/api/v1';
+  }
+  // Production: same host, HTTPS, no port (Render / any reverse proxy)
+  return `${window.location.protocol}//${currentHost}/api/v1`;
 }
 
 function localApiBaseUrl(){
