@@ -3,6 +3,7 @@ import pathlib
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
@@ -33,13 +34,33 @@ def create_app() -> FastAPI:
         ensure_schema_updates()
         seed_initial_data()
 
+    static_dir = pathlib.Path(__file__).parent.parent / "frontend" / "public"
+
     @app.get("/")
-    def root() -> dict[str, str]:
-        return {"status": "ok", "service": settings.app_name}
+    def root() -> FileResponse | dict:
+        f = static_dir / "landing.html"
+        return FileResponse(str(f)) if f.exists() else {"status": "ok", "service": settings.app_name}
 
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "service": settings.app_name}
+
+    @app.get("/landing.html", include_in_schema=False)
+    def landing() -> FileResponse:
+        return FileResponse(str(static_dir / "landing.html"))
+
+    @app.get("/signup.html", include_in_schema=False)
+    def signup() -> FileResponse:
+        return FileResponse(str(static_dir / "signup.html"))
+
+    @app.get("/taxflow/config.js", include_in_schema=False)
+    def config_js() -> Response:
+        api_base = os.environ.get("API_BASE_URL", "")
+        content = (
+            f'window.TAXFLOW_API_BASE_URL = "{api_base}";\n' if api_base
+            else "// local dev — app.js falls back to localhost:8000\n"
+        )
+        return Response(content=content, media_type="application/javascript")
 
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(ai.router, prefix="/api/v1")
@@ -61,17 +82,10 @@ def create_app() -> FastAPI:
     app.include_router(app_data.router, prefix="/api/v1")
     app.include_router(superadmin.router, prefix="/api/v1")
 
-    # Serve frontend static files — must be mounted last so API routes take priority
-    static_dir = pathlib.Path(__file__).parent.parent / "frontend" / "public"
+    # Serve frontend static files
     if static_dir.exists():
-        # Write config.js so the frontend knows the API URL
-        api_base = os.environ.get("API_BASE_URL", "")
-        config_js = static_dir / "taxflow" / "config.js"
-        config_js.write_text(
-            f'window.TAXFLOW_API_BASE_URL = "{api_base}";\n' if api_base
-            else "// local dev — app.js falls back to localhost:8000\n"
-        )
-        app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+        app.mount("/taxflow", StaticFiles(directory=str(static_dir / "taxflow")), name="taxflow")
+        app.mount("/static-assets", StaticFiles(directory=str(static_dir)), name="assets")
 
     return app
 
