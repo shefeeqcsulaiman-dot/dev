@@ -1,0 +1,38 @@
+from functools import lru_cache
+
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    app_name: str = "TaxFlow"
+    app_env: str = "development"
+    secret_key: str = "change-me-in-production"
+    access_token_expire_minutes: int = 1440
+    database_url: str = "postgresql+psycopg://taxflow:taxflow@localhost:5432/taxflow"
+    redis_url: str = "memory://"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    s3_endpoint_url: str | None = None
+    s3_bucket: str = "taxflow-documents"
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: str | None = None
+    aws_region: str = "us-east-1"
+    celery_task_always_eager: bool = True
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
+
+    @field_validator("s3_endpoint_url", "s3_access_key_id", "s3_secret_access_key", mode="before")
+    @classmethod
+    def blank_to_none(cls, value: str | None) -> str | None:
+        if value == "":
+            return None
+        return value
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

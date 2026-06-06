@@ -1,0 +1,975 @@
+import json
+import os
+import re
+import urllib.request
+from datetime import datetime, timezone
+from decimal import Decimal
+
+from fastapi import APIRouter, Body, Depends, HTTPException
+from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload
+
+from app.accounting_posting import create_gl_entries_from_journal, money, post_source_transaction
+from app.database import get_db
+from app.dependencies import get_current_user
+from app.models import (
+    Account,
+    AuditLog,
+    BankAccount,
+    BankReconciliationMatch,
+    BankStatementLine,
+    GeneralLedgerEntry,
+    JournalEntry,
+    JournalLine,
+    Payment,
+    PeriodLock,
+    PostingJob,
+    Receipt,
+    User,
+    Voucher,
+    VoucherLine,
+    VoucherType,
+)
+from app.schemas import (
+    AccountIn,
+    AccountOut,
+    AccountTreeNode,
+    BankAccountCreate,
+    BankAccountOut,
+    BankMatchCreate,
+    BankMatchOut,
+    BankStatementLineCreate,
+    BankStatementLineOut,
+    GeneralLedgerEntryOut,
+    JournalCreate,
+    JournalOut,
+    PaymentCreate,
+    PaymentOut,
+    PeriodLockIn,
+    PeriodLockOut,
+    PostingJobOut,
+    ReceiptCreate,
+    ReceiptOut,
+    VoucherCreate,
+    VoucherOut,
+    VoucherTypeIn,
+    VoucherTypeOut,
+)
+
+
+router = APIRouter(tags=["accounting"])
+
+
+def next_number(db: Session, company_id: str, prefix: str, model: object, field: object) -> str:
+    total = db.query(func.count(model.id)).filter(model.company_id == company_id).scalar() or 0
+    return f"{prefix}-{int(total) + 1:05d}"
+
+
+def ensure_voucher_type(db: Session, company_id: str, code: str, name: str, prefix: str) -> VoucherType:
+    voucher_type = db.query(VoucherType).filter(VoucherType.company_id == company_id, VoucherType.code == code).first()
+    if voucher_type:
+        return voucher_type
+    voucher_type = VoucherType(company_id=company_id, code=code, name=name, prefix=prefix)
+    db.add(voucher_type)
+    db.flush()
+    return voucher_type
+
+
+def assert_period_open(db: Session, company_id: str, module: str, value: datetime | None) -> None:
+    period = (value or datetime.now(timezone.utc)).strftime("%Y-%m")
+    lock = (
+        db.query(PeriodLock)
+        .filter(PeriodLock.company_id == company_id, PeriodLock.module.in_([module, "accounting"]), PeriodLock.period == period, PeriodLock.status == "locked")
+        .first()
+    )
+    if lock:
+        raise HTTPException(status_code=423, detail=f"{module.title()} period {period} is locked")
+
+
+def validate_lines(db: Session, company_id: str, lines: list) -> None:
+    debit = sum((line.debit for line in lines), Decimal("0.00"))
+    credit = sum((line.credit for line in lines), Decimal("0.00"))
+    if money(debit) != money(credit):
+        raise HTTPException(status_code=422, detail="Voucher must balance: total debit must equal total credit")
+    account_ids = {line.account_id for line in lines}
+    found = db.query(Account.id).filter(Account.company_id == company_id, Account.id.in_(account_ids)).all()
+    if len(found) != len(account_ids):
+        raise HTTPException(status_code=422, detail="One or more voucher accounts do not belong to this company")
+
+
+@router.get("/accounts", response_model=list[AccountOut])
+def list_accounts(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[Account]:
+    return db.query(Account).filter(Account.company_id == current_user.company_id).order_by(Account.code).all()
+
+
+@router.get("/accounts/tree", response_model=list[AccountTreeNode])
+def list_accounts_tree(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[AccountTreeNode]:
+    accounts = db.query(Account).filter(Account.company_id == current_user.company_id).order_by(Account.code).all()
+    by_id: dict[str, AccountTreeNode] = {}
+    roots: list[AccountTreeNode] = []
+    for acc in accounts:
+        node = AccountTreeNode.model_validate(acc)
+        by_id[acc.id] = node
+    for acc in accounts:
+        node = by_id[acc.id]
+        if acc.parent_account_id and acc.parent_account_id in by_id:
+            by_id[acc.parent_account_id].children.append(node)
+        else:
+            roots.append(node)
+    return roots
+
+
+@router.post("/accounts/ai-generate")
+def ai_generate_ledger(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Use AI to generate a ledger tree from a natural language description."""
+    prompt = str(payload.get("prompt", "")).strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="prompt is required")
+
+    # Get existing codes to pass to AI for duplicate avoidance
+    existing_codes = [a.code for a in db.query(Account.code).filter(Account.company_id == current_user.company_id).all()]
+
+    ai_result = _call_ledger_ai(prompt, existing_codes)
+    if "error" in ai_result:
+        raise HTTPException(status_code=422, detail=ai_result["error"])
+
+    # Validate and enrich the result
+    validated = _validate_ai_ledger_tree(ai_result.get("tree", []), existing_codes)
+    return {"tree": validated, "summary": ai_result.get("summary", ""), "prompt": prompt}
+
+
+@router.post("/accounts/ai-approve")
+def ai_approve_ledger(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Validate and save an AI-generated ledger tree after human approval."""
+    tree = payload.get("tree", [])
+    if not tree:
+        raise HTTPException(status_code=400, detail="tree is required")
+
+    existing_codes = {a.code for a in db.query(Account).filter(Account.company_id == current_user.company_id).all()}
+    created: list[dict] = []
+    errors: list[str] = []
+
+    def save_node(node: dict, parent_id: str | None, level: int) -> str | None:
+        code = str(node.get("code", "")).strip().upper()
+        name = str(node.get("name", "")).strip()
+        account_type = str(node.get("type", "Asset")).strip()
+        children = node.get("children", [])
+        is_group = bool(children) or bool(node.get("is_group"))
+        opening_balance = float(node.get("opening_balance", 0) or 0)
+        if not code or not name:
+            errors.append(f"Node missing code or name: {node}")
+            return None
+        if code in existing_codes:
+            errors.append(f"Duplicate code '{code}' — skipped")
+            return None
+        account = Account(
+            company_id=current_user.company_id,
+            code=code,
+            name=name,
+            type=account_type,
+            parent_account_id=parent_id,
+            level=level,
+            is_group=is_group,
+            node_type=_derive_node_type(level, is_group),
+            normal_balance=_derive_normal_balance(account_type),
+            opening_balance=opening_balance,
+            opening_balance_type=node.get("opening_balance_type", "DR"),
+            created_mode="ai",
+            status="active",
+            is_active=True,
+        )
+        db.add(account)
+        db.flush()
+        existing_codes.add(code)
+        created.append({"code": code, "name": name, "level": level, "is_group": is_group})
+        for child in children:
+            save_node(child, account.id, level + 1)
+        return account.id
+
+    for root_node in tree:
+        save_node(root_node, None, 1)
+
+    db.commit()
+    return {"created": created, "errors": errors, "total": len(created)}
+
+
+_LEDGER_AI_PROMPT = """You are a professional UAE/Dubai chartered accountant helping build a chart of accounts.
+The user will describe the ledger(s) they need.
+You must return ONLY a valid JSON object — no markdown, no code fences.
+
+!! CRITICAL — RESPOND LITERALLY TO WHAT THE USER ASKS !!
+- If the user names 1 account/ledger → create EXACTLY 1 ledger node
+- If the user names 2 accounts → create EXACTLY 2 ledger nodes
+- If the user says "create full chart of accounts" or "all accounts" → create a full structure
+- DO NOT add extra accounts, VAT ledgers, sub-groups, or categories the user did not ask for
+- A simple name like "Emirates NBD" → one level-4 ledger, NO parent group needed
+- Only use UAE context (VAT, WPS, etc.) when the user explicitly requests it
+
+UAE context (apply ONLY when user asks for it):
+- Currency: AED | VAT: 5% FTA | Banks: Emirates NBD, FAB, ADCB, Mashreq, DIB, HSBC UAE, RAK Bank, CBD
+- Payroll: WPS Salary, Gratuity Provision, ESB | Expenses: DEWA, Salik, Trade License, Visa Fees
+
+Return this structure:
+{
+  "summary": "one sentence: exactly what was created",
+  "tree": [
+    {
+      "code": "1110",
+      "name": "Ledger name",
+      "type": "Asset | Liability | Equity | Revenue | Expense",
+      "is_group": false,
+      "level": 4,
+      "nature": "Debit | Credit",
+      "posting": true,
+      "children": []
+    }
+  ]
+}
+
+For grouped structures (only when user explicitly asks for groups/hierarchy):
+{
+  "summary": "...",
+  "tree": [
+    {
+      "code": "1000",
+      "name": "Group name",
+      "type": "Asset",
+      "is_group": true,
+      "level": 1,
+      "nature": "Debit",
+      "children": [/* sub-groups and ledgers */]
+    }
+  ]
+}
+
+Rules:
+- Maximum 4 levels (Level 1=Primary Group, Level 2=Secondary Group, Level 3=Sub-Group, Level 4=Ledger)
+- Level 4: is_group=false, posting=true
+- Level 1-3: is_group=true, posting=false
+- Account types: Asset=Debit, Liability=Credit, Equity=Credit, Revenue=Credit, Expense=Debit
+- Codes: Assets 1xxx, Liabilities 2xxx, Equity 3xxx, Revenue 4xxx, Expenses 5xxx
+- Do NOT use codes from the existing_codes list
+- MATCH THE COUNT: user asks for N accounts → return exactly N leaf (posting) nodes"""
+
+
+def _call_ledger_ai(prompt: str, existing_codes: list[str]) -> dict:
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        # Fallback: rule-based generation when no AI key
+        return _rule_based_ledger_generator(prompt, existing_codes)
+    content = f"Existing account codes (DO NOT use these): {existing_codes[:50]}\n\nUser requirement: {prompt}"
+    request_payload = {
+        "model": os.environ.get("OPENAI_LEDGER_MODEL", "gpt-4o-mini"),
+        "messages": [
+            {"role": "system", "content": _LEDGER_AI_PROMPT},
+            {"role": "user", "content": content},
+        ],
+        "max_tokens": 3000,
+        "temperature": 0.2,
+    }
+    try:
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions",
+            data=json.dumps(request_payload).encode("utf-8"),
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        raw = result["choices"][0]["message"]["content"].strip()
+        raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
+        raw = re.sub(r"\s*```$", "", raw)
+        return json.loads(raw)
+    except Exception as exc:
+        return {"error": f"AI generation failed: {exc}"}
+
+
+def _rule_based_ledger_generator(prompt: str, existing_codes: list[str]) -> dict:
+    """Literal rule-based fallback: creates EXACTLY the accounts mentioned in prompt."""
+    import re as _re
+    existing_set = set(existing_codes)
+    _code_counter = [1100]
+
+    def nc(base_hint: int = 0) -> str:
+        base = base_hint if base_hint else _code_counter[0]
+        code = str(base)
+        while code in existing_set:
+            base += 10
+            code = str(base)
+        existing_set.add(code)
+        _code_counter[0] = base + 10
+        return code
+
+    def led(name: str, t: str, nat: str, code_hint: int = 0) -> dict:
+        return {'code': nc(code_hint), 'name': name, 'type': t, 'is_group': False, 'level': 4, 'nature': nat, 'posting': True, 'children': []}
+
+    text = prompt.lower()
+
+    # Split prompt on common separators to identify individual account names
+    # e.g. "Emirates NBD and petty cash" → ["Emirates NBD", "petty cash"]
+    # e.g. "Emirates NBD, FAB, ADCB" → ["Emirates NBD", "FAB", "ADCB"]
+    raw_parts = _re.split(r'\band\b|[,;]', prompt, flags=_re.IGNORECASE)
+    parts = [p.strip() for p in raw_parts if p.strip()]
+
+    # UAE name/type mapping for each extracted name
+    UAE_BANKS = {'enbd', 'emirates nbd', 'fab', 'first abu dhabi', 'adcb', 'mashreq',
+                 'dib', 'dubai islamic', 'hsbc', 'rak bank', 'cbd', 'standard chartered'}
+
+    trees = []
+    for part in parts:
+        pl = part.lower()
+        # Detect account type from keywords
+        if any(k in pl for k in ['bank', 'enbd', 'emirates nbd', 'fab', 'adcb', 'mashreq', 'dib', 'hsbc', 'rak bank', 'cbd']):
+            name = part if len(part) < 50 else part[:50]
+            if 'bank' not in pl:
+                name = name + ' - Current Account (AED)'
+            trees.append(led(name, 'Asset', 'Debit', 1100))
+        elif any(k in pl for k in ['petty cash', 'cash in hand', 'cash']):
+            name = part if len(part) < 50 else part[:50]
+            trees.append(led(name, 'Asset', 'Debit', 1160))
+        elif any(k in pl for k in ['receivable', 'debtor', 'customer']):
+            name = part if len(part) < 50 else part[:50]
+            trees.append(led(name, 'Asset', 'Debit', 1200))
+        elif any(k in pl for k in ['inventory', 'stock']):
+            name = part if len(part) < 50 else part[:50]
+            trees.append(led(name, 'Asset', 'Debit', 1300))
+        elif any(k in pl for k in ['input vat', 'vat recoverable']):
+            name = part if len(part) < 50 else part[:50]
+            trees.append(led(name, 'Asset', 'Debit', 1400))
+        elif any(k in pl for k in ['payable', 'creditor', 'supplier payable']):
+            name = part if len(part) < 50 else part[:50]
+            trees.append(led(name, 'Liability', 'Credit', 2100))
+        elif any(k in pl for k in ['output vat', 'vat payable']):
+            name = part if len(part) < 50 else part[:50]
+            trees.append(led(name, 'Liability', 'Credit', 2200))
+        elif any(k in pl for k in ['loan', 'borrowing']):
+            name = part if len(part) < 50 else part[:50]
+            trees.append(led(name, 'Liability', 'Credit', 2500))
+        elif any(k in pl for k in ['salary', 'payroll', 'wps']):
+            name = part if len(part) < 50 else part[:50]
+            trees.append(led(name, 'Expense', 'Debit', 5200))
+        elif any(k in pl for k in ['rent', 'rental']):
+            name = part if len(part) < 50 else part[:50]
+            trees.append(led(name, 'Expense', 'Debit', 5300))
+        elif any(k in pl for k in ['expense', 'cost', 'fee', 'charge', 'dewa', 'salik', 'license', 'visa', 'travel']):
+            name = part if len(part) < 50 else part[:50]
+            trees.append(led(name, 'Expense', 'Debit', 5900))
+        elif any(k in pl for k in ['sales', 'revenue', 'income', 'service']):
+            name = part if len(part) < 50 else part[:50]
+            trees.append(led(name, 'Revenue', 'Credit', 4100))
+        elif any(k in pl for k in ['capital', 'equity', 'owner']):
+            name = part if len(part) < 50 else part[:50]
+            trees.append(led(name, 'Equity', 'Credit', 3100))
+        else:
+            # Unknown type — create as generic asset ledger with the exact name given
+            name = part if len(part) < 50 else part[:50]
+            trees.append(led(name, 'Asset', 'Debit', 1100))
+
+    if not trees:
+        # Absolute fallback
+        trees = [led('General Ledger Account (AED)', 'Asset', 'Debit', 1100)]
+
+    count = len(trees)
+    return {
+        'summary': f'Created {count} ledger account{"s" if count != 1 else ""} as requested',
+        'tree': trees,
+    }
+
+
+def _validate_ai_ledger_tree(tree: list, existing_codes: list[str]) -> list:
+    """Validate and clean AI-generated tree — mark issues, deduplicate codes."""
+    seen_codes: set[str] = set(existing_codes)
+
+    def validate_node(node: dict, level: int) -> dict:
+        code = str(node.get("code", "")).strip().upper()
+        name = str(node.get("name", "")).strip()
+        children = [validate_node(c, level + 1) for c in node.get("children", [])]
+        issues = []
+        if not code:
+            issues.append("Missing code")
+        elif code in seen_codes:
+            issues.append(f"Duplicate code '{code}'")
+        else:
+            seen_codes.add(code)
+        if not name:
+            issues.append("Missing name")
+        if level > 5:
+            issues.append("Exceeds 5-level maximum depth")
+        is_group = bool(children) or bool(node.get("is_group"))
+        if level == 5 and is_group:
+            is_group = False
+        return {
+            **node,
+            "code": code,
+            "name": name,
+            "level": level,
+            "is_group": is_group,
+            "posting": not is_group,
+            "children": children,
+            "issues": issues,
+            "valid": len(issues) == 0,
+        }
+
+    return [validate_node(n, 1) for n in tree]
+
+
+def _derive_node_type(level: int, is_group: bool) -> str:
+    if not is_group:
+        return "POSTING_LEDGER"
+    return "MAIN_LEDGER" if level == 1 else "SUB_LEDGER"
+
+
+def _derive_normal_balance(account_type: str) -> str:
+    credit_types = {
+        "liability", "equity", "revenue", "income", "direct income",
+        "indirect income", "retained earnings", "sundry creditors",
+        "duties & taxes", "provisions", "credit",
+    }
+    return "CR" if account_type.lower().strip() in credit_types else "DR"
+
+
+@router.post("/accounts", response_model=AccountOut, status_code=201)
+def create_account(
+    payload: AccountIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Account:
+    level = payload.level
+    is_group = payload.is_group
+
+    if payload.parent_account_id:
+        parent = db.query(Account).filter(
+            Account.company_id == current_user.company_id,
+            Account.id == payload.parent_account_id,
+        ).first()
+        if not parent:
+            raise HTTPException(status_code=404, detail="Parent account not found")
+        if not parent.is_group:
+            raise HTTPException(status_code=400, detail="Cannot add under a Posting Ledger — choose a Group or Sub Ledger as parent.")
+        level = (parent.level or 1) + 1
+        if level > 5:
+            raise HTTPException(status_code=400, detail="Maximum hierarchy depth is 5 (MAIN → SUB×3 → POSTING)")
+        # Level 5 is always a posting ledger
+        if level == 5:
+            is_group = False
+    else:
+        level = 1
+        is_group = True  # root-level accounts are always groups (MAIN_LEDGER)
+
+    node_type = _derive_node_type(level, is_group)
+    normal_balance = _derive_normal_balance(payload.type)
+
+    data = payload.model_dump()
+    data.update({"level": level, "is_group": is_group, "node_type": node_type,
+                 "normal_balance": normal_balance, "created_mode": "manual", "status": "active"})
+    account = Account(company_id=current_user.company_id, **data)
+    db.add(account)
+    db.commit()
+    db.refresh(account)
+    return account
+
+
+@router.patch("/accounts/{account_id}", response_model=AccountOut)
+def update_account(
+    account_id: str,
+    payload: AccountIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Account:
+    account = db.query(Account).filter(Account.company_id == current_user.company_id, Account.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    # Never overwrite structural/derived fields on edit
+    editable = payload.model_dump(exclude={
+        "parent_account_id", "level", "is_group",
+        "node_type", "created_mode", "status", "ai_confidence",
+    })
+    # Re-derive normal_balance from updated type
+    editable["normal_balance"] = _derive_normal_balance(payload.type)
+    for field, value in editable.items():
+        setattr(account, field, value)
+    db.commit()
+    db.refresh(account)
+    return account
+
+
+@router.delete("/accounts", status_code=200)
+def clear_all_accounts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Delete all accounts for the company that are not used in journal lines."""
+    used_ids = {row[0] for row in db.query(JournalLine.account_id).distinct().all()}
+    accounts = db.query(Account).filter(Account.company_id == current_user.company_id).all()
+    deleted, skipped = 0, 0
+    for acc in accounts:
+        if acc.id in used_ids:
+            skipped += 1
+            continue
+        db.delete(acc)
+        deleted += 1
+    db.commit()
+    return {"deleted": deleted, "skipped": skipped}
+
+
+@router.delete("/accounts/{account_id}", status_code=204)
+def delete_account(
+    account_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    account = db.query(Account).filter(Account.company_id == current_user.company_id, Account.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    children = db.query(func.count(Account.id)).filter(Account.parent_account_id == account.id).scalar() or 0
+    if children:
+        raise HTTPException(status_code=409, detail="Cannot delete a Group that has child accounts. Delete children first.")
+    used = db.query(func.count(JournalLine.id)).filter(JournalLine.account_id == account.id).scalar() or 0
+    if used:
+        raise HTTPException(status_code=409, detail="Account is used by journal lines")
+    db.delete(account)
+    db.commit()
+    return None
+
+
+@router.patch("/accounts/{account_id}/opening-balance")
+def update_opening_balance(
+    account_id: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    account = db.query(Account).filter(Account.company_id == current_user.company_id, Account.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if account.is_group:
+        raise HTTPException(status_code=400, detail="Opening balance can only be set on Posting Ledger accounts")
+    account.opening_balance = float(payload.get("amount", 0) or 0)
+    account.opening_balance_type = payload.get("balance_type", "DR").upper()
+    db.commit()
+    return {"id": account.id, "opening_balance": float(account.opening_balance), "opening_balance_type": account.opening_balance_type}
+
+
+@router.patch("/accounts/{account_id}/status")
+def update_account_status(
+    account_id: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    account = db.query(Account).filter(Account.company_id == current_user.company_id, Account.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    new_status = str(payload.get("status", "active")).lower()
+    if new_status not in {"active", "inactive", "draft"}:
+        raise HTTPException(status_code=400, detail="status must be active, inactive, or draft")
+    account.status = new_status
+    account.is_active = new_status == "active"
+    db.commit()
+    return {"id": account.id, "status": account.status}
+
+
+@router.get("/journal", response_model=list[JournalOut])
+def list_journals(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[JournalEntry]:
+    return (
+        db.query(JournalEntry)
+        .options(joinedload(JournalEntry.lines))
+        .filter(JournalEntry.company_id == current_user.company_id)
+        .order_by(JournalEntry.created_at.desc())
+        .all()
+    )
+
+
+@router.get("/voucher-types", response_model=list[VoucherTypeOut])
+def list_voucher_types(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[VoucherType]:
+    return db.query(VoucherType).filter(VoucherType.company_id == current_user.company_id).order_by(VoucherType.code).all()
+
+
+@router.post("/voucher-types", response_model=VoucherTypeOut, status_code=201)
+def create_voucher_type(
+    payload: VoucherTypeIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> VoucherType:
+    row = VoucherType(company_id=current_user.company_id, **payload.model_dump())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.get("/vouchers", response_model=list[VoucherOut])
+def list_vouchers(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[Voucher]:
+    return (
+        db.query(Voucher)
+        .options(joinedload(Voucher.lines))
+        .filter(Voucher.company_id == current_user.company_id)
+        .order_by(Voucher.created_at.desc())
+        .all()
+    )
+
+
+@router.post("/vouchers", response_model=VoucherOut, status_code=201)
+def create_voucher(
+    payload: VoucherCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Voucher:
+    voucher_type = (
+        db.query(VoucherType)
+        .filter(VoucherType.company_id == current_user.company_id, VoucherType.id == payload.voucher_type_id)
+        .first()
+    )
+    if not voucher_type:
+        raise HTTPException(status_code=404, detail="Voucher type not found")
+    validate_lines(db, current_user.company_id, payload.lines)
+    voucher_date = payload.voucher_date or datetime.now(timezone.utc)
+    assert_period_open(db, current_user.company_id, "accounting", voucher_date)
+    voucher = Voucher(
+        company_id=current_user.company_id,
+        voucher_type_id=voucher_type.id,
+        voucher_no=payload.voucher_no or next_number(db, current_user.company_id, voucher_type.prefix, Voucher, Voucher.voucher_no),
+        voucher_date=voucher_date,
+        party=payload.party,
+        cost_center=payload.cost_center,
+        narration=payload.narration,
+        status="pending_approval" if voucher_type.approval_required else "approved",
+    )
+    voucher.lines = [VoucherLine(**line.model_dump()) for line in payload.lines]
+    db.add(voucher)
+    db.commit()
+    db.refresh(voucher)
+    return voucher
+
+
+@router.post("/vouchers/{voucher_id}/approve", response_model=VoucherOut)
+def approve_voucher(
+    voucher_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Voucher:
+    voucher = (
+        db.query(Voucher)
+        .options(joinedload(Voucher.lines), joinedload(Voucher.voucher_type))
+        .filter(Voucher.company_id == current_user.company_id, Voucher.id == voucher_id)
+        .first()
+    )
+    if not voucher:
+        raise HTTPException(status_code=404, detail="Voucher not found")
+    if voucher.status == "posted":
+        return voucher
+    assert_period_open(db, current_user.company_id, "accounting", voucher.voucher_date)
+    validate_lines(db, current_user.company_id, voucher.lines)
+    journal = JournalEntry(
+        company_id=current_user.company_id,
+        entry_number=voucher.voucher_no,
+        source_module="voucher",
+        source_id=voucher.id,
+        entry_date=voucher.voucher_date,
+        description=voucher.narration or f"{voucher.voucher_type.name} {voucher.voucher_no}",
+    )
+    journal.lines = [
+        JournalLine(account_id=line.account_id, description=line.narration, debit=money(line.debit), credit=money(line.credit))
+        for line in voucher.lines
+    ]
+    db.add(journal)
+    db.flush()
+    create_gl_entries_from_journal(db, journal, voucher.voucher_no, voucher.voucher_type.name, voucher.party, voucher.cost_center)
+    voucher.status = "posted"
+    voucher.approved_by = current_user.id
+    voucher.approved_at = datetime.now(timezone.utc)
+    voucher.posted_journal_id = journal.id
+    db.add(AuditLog(company_id=current_user.company_id, user_id=current_user.id, module="accounting", action="voucher_posted", record_id=voucher.id, detail=voucher.voucher_no))
+    db.commit()
+    db.refresh(voucher)
+    return voucher
+
+
+@router.get("/general-ledger", response_model=list[GeneralLedgerEntryOut])
+def list_general_ledger(
+    account_id: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[GeneralLedgerEntry]:
+    query = db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == current_user.company_id)
+    if account_id:
+        query = query.filter(GeneralLedgerEntry.account_id == account_id)
+    return query.order_by(GeneralLedgerEntry.entry_date.desc(), GeneralLedgerEntry.created_at.desc()).all()
+
+
+@router.get("/posting-jobs", response_model=list[PostingJobOut])
+def list_posting_jobs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[PostingJob]:
+    return (
+        db.query(PostingJob)
+        .filter(PostingJob.company_id == current_user.company_id)
+        .order_by(PostingJob.created_at.desc())
+        .all()
+    )
+
+
+@router.post("/posting-jobs/{job_id}/retry", response_model=PostingJobOut)
+def retry_posting_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PostingJob:
+    job = db.query(PostingJob).filter(PostingJob.company_id == current_user.company_id, PostingJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Posting job not found")
+    if job.status == "posted":
+        return job
+    post_source_transaction(db, job, current_user.id)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+@router.get("/payments", response_model=list[PaymentOut])
+def list_payments(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[Payment]:
+    return db.query(Payment).filter(Payment.company_id == current_user.company_id).order_by(Payment.created_at.desc()).all()
+
+
+@router.post("/payments", response_model=PaymentOut, status_code=201)
+def create_payment(
+    payload: PaymentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Payment:
+    payment_date = payload.payment_date or datetime.now(timezone.utc)
+    assert_period_open(db, current_user.company_id, "accounting", payment_date)
+    payment = Payment(
+        company_id=current_user.company_id,
+        payment_no=payload.payment_no or next_number(db, current_user.company_id, "PAY", Payment, Payment.payment_no),
+        payment_date=payment_date,
+        payment_mode=payload.payment_mode,
+        cash_bank_account_id=payload.cash_bank_account_id,
+        debit_account_id=payload.debit_account_id,
+        payee_type=payload.payee_type,
+        payee_name=payload.payee_name,
+        amount=payload.amount,
+        reference_no=payload.reference_no,
+        narration=payload.narration,
+        attachment=payload.attachment,
+        status="draft",
+    )
+    db.add(payment)
+    db.flush()
+    if payload.post:
+        voucher_type = ensure_voucher_type(db, current_user.company_id, "PAY", "Payment Voucher", "PAY")
+        voucher = Voucher(
+            company_id=current_user.company_id,
+            voucher_type_id=voucher_type.id,
+            voucher_no=payment.payment_no,
+            voucher_date=payment.payment_date,
+            party=payment.payee_name,
+            narration=payment.narration or payment.reference_no,
+            status="pending_approval",
+        )
+        voucher.lines = [
+            VoucherLine(account_id=payment.debit_account_id, debit=money(payment.amount), credit=Decimal("0.00"), party=payment.payee_name, narration=payment.narration),
+            VoucherLine(account_id=payment.cash_bank_account_id, debit=Decimal("0.00"), credit=money(payment.amount), party=payment.payee_name, narration=payment.narration),
+        ]
+        db.add(voucher)
+        db.flush()
+        payment.voucher_id = voucher.id
+        approve_voucher(voucher.id, db, current_user)
+        payment.status = "posted"
+    db.commit()
+    db.refresh(payment)
+    return payment
+
+
+@router.get("/receipts", response_model=list[ReceiptOut])
+def list_receipts(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[Receipt]:
+    return db.query(Receipt).filter(Receipt.company_id == current_user.company_id).order_by(Receipt.created_at.desc()).all()
+
+
+@router.post("/receipts", response_model=ReceiptOut, status_code=201)
+def create_receipt(
+    payload: ReceiptCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Receipt:
+    receipt_date = payload.receipt_date or datetime.now(timezone.utc)
+    assert_period_open(db, current_user.company_id, "accounting", receipt_date)
+    receipt = Receipt(
+        company_id=current_user.company_id,
+        receipt_no=payload.receipt_no or next_number(db, current_user.company_id, "RCT", Receipt, Receipt.receipt_no),
+        receipt_date=receipt_date,
+        receipt_mode=payload.receipt_mode,
+        cash_bank_account_id=payload.cash_bank_account_id,
+        credit_account_id=payload.credit_account_id,
+        received_from=payload.received_from,
+        amount=payload.amount,
+        reference_no=payload.reference_no,
+        narration=payload.narration,
+        attachment=payload.attachment,
+        status="draft",
+    )
+    db.add(receipt)
+    db.flush()
+    if payload.post:
+        voucher_type = ensure_voucher_type(db, current_user.company_id, "RCT", "Receipt Voucher", "RCT")
+        voucher = Voucher(
+            company_id=current_user.company_id,
+            voucher_type_id=voucher_type.id,
+            voucher_no=receipt.receipt_no,
+            voucher_date=receipt.receipt_date,
+            party=receipt.received_from,
+            narration=receipt.narration or receipt.reference_no,
+            status="pending_approval",
+        )
+        voucher.lines = [
+            VoucherLine(account_id=receipt.cash_bank_account_id, debit=money(receipt.amount), credit=Decimal("0.00"), party=receipt.received_from, narration=receipt.narration),
+            VoucherLine(account_id=receipt.credit_account_id, debit=Decimal("0.00"), credit=money(receipt.amount), party=receipt.received_from, narration=receipt.narration),
+        ]
+        db.add(voucher)
+        db.flush()
+        receipt.voucher_id = voucher.id
+        approve_voucher(voucher.id, db, current_user)
+        receipt.status = "posted"
+    db.commit()
+    db.refresh(receipt)
+    return receipt
+
+
+@router.get("/bank-accounts", response_model=list[BankAccountOut])
+def list_bank_accounts(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[BankAccount]:
+    return db.query(BankAccount).filter(BankAccount.company_id == current_user.company_id).order_by(BankAccount.bank_name).all()
+
+
+@router.post("/bank-accounts", response_model=BankAccountOut, status_code=201)
+def create_bank_account(
+    payload: BankAccountCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BankAccount:
+    account = db.query(Account).filter(Account.company_id == current_user.company_id, Account.id == payload.account_id).first()
+    if not account:
+        raise HTTPException(status_code=422, detail="Bank ledger account does not belong to this company")
+    account.is_bank_cash = True
+    row = BankAccount(company_id=current_user.company_id, **payload.model_dump())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.post("/bank-statement-lines", response_model=BankStatementLineOut, status_code=201)
+def create_bank_statement_line(
+    payload: BankStatementLineCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BankStatementLine:
+    bank = db.query(BankAccount).filter(BankAccount.company_id == current_user.company_id, BankAccount.id == payload.bank_account_id).first()
+    if not bank:
+        raise HTTPException(status_code=404, detail="Bank account not found")
+    row = BankStatementLine(company_id=current_user.company_id, **payload.model_dump())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.post("/bank-reconciliation/matches", response_model=BankMatchOut, status_code=201)
+def match_bank_line(
+    payload: BankMatchCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BankReconciliationMatch:
+    statement = db.query(BankStatementLine).filter(BankStatementLine.company_id == current_user.company_id, BankStatementLine.id == payload.statement_line_id).first()
+    ledger = db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == current_user.company_id, GeneralLedgerEntry.id == payload.ledger_entry_id).first()
+    if not statement or not ledger:
+        raise HTTPException(status_code=404, detail="Statement line or ledger entry not found")
+    match = BankReconciliationMatch(
+        company_id=current_user.company_id,
+        bank_account_id=statement.bank_account_id,
+        statement_line_id=statement.id,
+        ledger_entry_id=ledger.id,
+        match_status="matched",
+        match_method=payload.match_method,
+        difference=payload.difference,
+        confirmed_by=current_user.id,
+        confirmed_at=datetime.now(timezone.utc),
+    )
+    statement.status = "matched"
+    db.add(match)
+    db.commit()
+    db.refresh(match)
+    return match
+
+
+@router.post("/period-locks", response_model=PeriodLockOut, status_code=201)
+def upsert_period_lock(
+    payload: PeriodLockIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PeriodLock:
+    lock = (
+        db.query(PeriodLock)
+        .filter(PeriodLock.company_id == current_user.company_id, PeriodLock.module == payload.module, PeriodLock.period == payload.period)
+        .first()
+    )
+    if not lock:
+        lock = PeriodLock(company_id=current_user.company_id, module=payload.module, period=payload.period)
+        db.add(lock)
+    lock.status = payload.status
+    lock.reason = payload.reason
+    lock.locked_by = current_user.id if payload.status == "locked" else None
+    lock.locked_at = datetime.now(timezone.utc) if payload.status == "locked" else None
+    db.commit()
+    db.refresh(lock)
+    return lock
+
+
+@router.post("/journal", response_model=JournalOut, status_code=201)
+def create_journal(
+    payload: JournalCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> JournalEntry:
+    debit = sum((line.debit for line in payload.lines), Decimal("0.00"))
+    credit = sum((line.credit for line in payload.lines), Decimal("0.00"))
+    if debit != credit:
+        raise HTTPException(status_code=422, detail="Journal must balance: total debit must equal total credit")
+    assert_period_open(db, current_user.company_id, "accounting", payload.entry_date)
+
+    account_ids = {line.account_id for line in payload.lines}
+    found = (
+        db.query(Account.id)
+        .filter(Account.company_id == current_user.company_id, Account.id.in_(account_ids))
+        .all()
+    )
+    if len(found) != len(account_ids):
+        raise HTTPException(status_code=422, detail="One or more accounts do not belong to this company")
+
+    journal_data = {
+        "company_id": current_user.company_id,
+        "entry_number": payload.entry_number,
+        "source_module": payload.source_module,
+        "source_id": payload.source_id,
+        "description": payload.description,
+    }
+    if payload.entry_date is not None:
+        journal_data["entry_date"] = payload.entry_date
+    journal = JournalEntry(
+        **journal_data,
+    )
+    journal.lines = [JournalLine(**line.model_dump()) for line in payload.lines]
+    db.add(journal)
+    db.flush()
+    create_gl_entries_from_journal(db, journal, payload.entry_number, payload.source_module)
+    db.commit()
+    db.refresh(journal)
+    return journal

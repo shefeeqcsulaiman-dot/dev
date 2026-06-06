@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Digital Invoice</title>
+  <style>
+    :root{--accent:#2563eb;--ink:#172033;--muted:#667085;--line:#e5eaf2;--paper:#fff;--bg:#f4f7fb;}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.45;padding:24px}
+    .wrap{max-width:980px;margin:0 auto}
+    .sheet{background:var(--paper);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 24px 70px rgba(24,34,55,.12)}
+    .bar{height:8px;background:linear-gradient(90deg,var(--accent),#0f9f6e)}
+    .head{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;padding:32px;border-bottom:1px solid var(--line)}
+    .brand{display:flex;gap:14px;align-items:flex-start}
+    .logo{width:62px;height:62px;border-radius:14px;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:22px;font-weight:800;letter-spacing:.5px;flex:0 0 auto}
+    h1{margin:0;font-size:32px;text-transform:uppercase;text-align:right;letter-spacing:0}
+    h2{margin:0 0 4px;font-size:22px}
+    .muted{color:var(--muted);font-size:13px}
+    .mono{font-family:"Courier New",monospace}
+    .right{text-align:right}
+    .badge{display:inline-block;margin-top:9px;border:1px solid rgba(37,99,235,.22);background:rgba(37,99,235,.08);color:var(--accent);border-radius:999px;padding:5px 11px;font-size:11px;font-weight:700;text-transform:uppercase}
+    .grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;padding:24px 32px}
+    .panel{border:1px solid var(--line);border-radius:10px;padding:16px;background:#fbfcfe}
+    .kicker{font-size:11px;letter-spacing:.9px;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:8px}
+    .party{font-size:18px;font-weight:700}
+    .row{display:flex;justify-content:space-between;gap:12px;padding:5px 0;color:var(--muted)}
+    .row strong{color:var(--ink);text-align:right}
+    table{width:calc(100% - 64px);margin:0 32px;border-collapse:separate;border-spacing:0;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+    th{background:#f1f5fb;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.6px;text-align:left;padding:12px}
+    td{padding:13px 12px;border-top:1px solid var(--line);vertical-align:top}
+    .num{text-align:right;white-space:nowrap}
+    .summary{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;padding:24px 32px 30px}
+    .notes{border-left:4px solid var(--accent);padding-left:14px;color:var(--muted)}
+    .totals{border:1px solid var(--line);border-radius:10px;padding:16px;background:#fbfcfe}
+    .total-line,.grand{display:flex;justify-content:space-between;gap:16px}
+    .total-line{padding:5px 0;color:var(--muted)}
+    .grand{margin-top:10px;padding-top:12px;border-top:1px solid var(--line);font-size:20px;font-weight:800}
+    .grand strong{color:var(--accent)}
+    .foot{padding:18px 32px;border-top:1px solid var(--line);color:var(--muted);font-size:12px;display:flex;justify-content:space-between;gap:16px}
+    .error{background:#fff;border:1px solid #fecaca;color:#991b1b;border-radius:12px;padding:18px}
+    [dir="rtl"] .right{text-align:left}
+    [dir="rtl"] th{text-align:right}
+    [dir="rtl"] .num{text-align:left}
+    [dir="rtl"] .notes{border-left:0;border-right:4px solid var(--accent);padding-left:0;padding-right:14px}
+    [dir="rtl"] .row,[dir="rtl"] .total-line,[dir="rtl"] .grand{flex-direction:row-reverse}
+    @media(max-width:720px){
+      body{padding:12px}
+      .head,.grid,.summary{grid-template-columns:1fr;padding:20px}
+      h1,.right{text-align:left}
+      table{width:calc(100% - 40px);margin:0 20px;display:block;overflow-x:auto}
+      .foot{padding:16px 20px;flex-direction:column}
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap" id="app"></main>
+  <script>
+    function esc(value){
+      return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    }
+    function money(value){
+      return Number(value || 0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+    }
+    function decodePayload(){
+      const hash = new URLSearchParams(location.hash.replace(/^#/,''));
+      const raw = hash.get('invoice');
+      if(!raw) throw new Error('Invoice data missing from QR link.');
+      return JSON.parse(decodeURIComponent(escape(atob(raw))));
+    }
+    function render(){
+      const root=document.getElementById('app');
+      let data;
+      try{data=decodePayload();}catch(err){
+        root.innerHTML='<div class="error"><strong>Could not open digital invoice.</strong><br>'+esc(err.message)+'</div>';
+        return;
+      }
+      const company=data.company||{};
+      const inv=data.invoice||{};
+      const labels=inv.labels||{};
+      const lines=Array.isArray(inv.lines)&&inv.lines.length?inv.lines:[{description:'Invoice items',unit:'PCS',qty:1,price:inv.subtotal,amount:inv.subtotal}];
+      const initials=String(company.logo||company.name||'TF').split(/\s+/).map(part=>part[0]).join('').slice(0,2).toUpperCase()||'TF';
+      const accent=company.color||'#2563eb';
+      document.documentElement.style.setProperty('--accent',accent);
+      document.title='Invoice '+(inv.invoice_no||'Digital Invoice');
+      root.innerHTML=`
+        <section class="sheet" dir="${company.enableRtl?'rtl':'ltr'}">
+          <div class="bar"></div>
+          <div class="head">
+            <div class="brand">
+              <div class="logo">${esc(initials)}</div>
+              <div>
+                <h2>${esc(company.name||'TaxFlow')}</h2>
+                <div class="muted">${esc(company.address||'')}</div>
+                <div class="muted mono">${esc(company.trnLabel||'TRN')} ${esc(company.trn||'not set')}</div>
+              </div>
+            </div>
+            <div class="right">
+              <h1>${esc(company.taxLabel||'Tax Invoice')}</h1>
+              <div class="mono muted">${esc(inv.invoice_no||'Draft')}</div>
+              <span class="badge">${esc(inv.status||'Draft')}</span>
+            </div>
+          </div>
+          <div class="grid">
+            <div class="panel">
+              <div class="kicker">${esc(labels.billTo||'Bill To')}</div>
+              <div class="party">${esc(inv.customer||'Customer')}</div>
+              <div class="muted mono">${esc(company.customerTrnLabel||'Customer TRN')} ${esc(inv.customer_trn||'not provided')}</div>
+              <div class="muted">${esc(inv.customer_address||'')}</div>
+            </div>
+            <div class="panel">
+              <div class="row"><span>${esc(labels.issueDate||'Issue Date')}</span><strong>${esc(inv.date||'-')}</strong></div>
+              <div class="row"><span>${esc(labels.dueDate||'Due Date')}</span><strong>${esc(inv.due_date||'-')}</strong></div>
+              <div class="row"><span>${esc(labels.paymentTerms||'Terms')}</span><strong>${esc(inv.terms||'Net 30')}</strong></div>
+              ${inv.po_number?`<div class="row"><span>${esc(labels.purchaseOrder||'Purchase Order No.')}</span><strong>${esc(inv.po_number)}</strong></div>`:''}
+              ${inv.delivery_note_no?`<div class="row"><span>${esc(labels.deliveryNote||'Delivery Note No.')}</span><strong>${esc(inv.delivery_note_no)}</strong></div>`:''}
+              ${inv.reference_no?`<div class="row"><span>${esc(labels.reference||'Reference No.')}</span><strong>${esc(inv.reference_no)}</strong></div>`:''}
+              <div class="row"><span>${esc(labels.currency||'Currency')}</span><strong>AED</strong></div>
+            </div>
+          </div>
+          <table>
+            <thead><tr><th>#</th><th>${esc(labels.product||'Product')}</th><th>${esc(labels.unit||'Unit')}</th><th class="num">${esc(labels.quantity||'Qty')}</th><th class="num">${esc(labels.unitPrice||'Unit Price')}</th><th class="num">${esc(labels.amount||'Amount')}</th></tr></thead>
+            <tbody>${lines.map((line,index)=>`<tr><td class="mono">${index+1}</td><td><strong>${esc(line.description||'Item')}</strong></td><td>${esc(line.unit||'PCS')}</td><td class="num mono">${esc(line.qty||1)}</td><td class="num mono">${money(line.price)}</td><td class="num mono">${money(line.amount)}</td></tr>`).join('')}</tbody>
+          </table>
+          <div class="summary">
+            <div class="notes">
+              <div class="kicker">${esc(labels.paymentDetails||'Payment Details')}</div>
+              ${company.bankName?`<div>${esc(company.bankName)}</div>`:''}
+              ${company.accountName?`<div>${esc(company.accountName)}</div>`:''}
+              ${company.accountNumber?`<div class="mono">${esc(company.accountNumber)}</div>`:''}
+              ${company.iban?`<div class="mono">IBAN ${esc(company.iban)}</div>`:''}
+              ${company.swiftCode?`<div class="mono">SWIFT ${esc(company.swiftCode)}</div>`:''}
+              <div style="margin-top:8px">${esc(company.footer||'')}</div>
+            </div>
+            <div class="totals">
+              <div class="total-line"><span>${esc(labels.subtotal||'Subtotal')}</span><strong class="mono">AED ${money(inv.subtotal)}</strong></div>
+              <div class="total-line"><span>${esc(labels.vat||'VAT')}</span><strong class="mono">AED ${money(inv.vat_amount)}</strong></div>
+              <div class="grand"><span>${esc(labels.total||'Total')}</span><strong class="mono">AED ${money(inv.total)}</strong></div>
+            </div>
+          </div>
+          <div class="foot"><span>${esc(labels.digitalGenerated||'Digital invoice generated by TaxFlow')}</span><span class="mono">${esc(location.href.split('#')[0])}</span></div>
+        </section>`;
+    }
+    render();
+  </script>
+</body>
+</html>

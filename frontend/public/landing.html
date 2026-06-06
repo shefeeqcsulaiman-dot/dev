@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ETaxFlow — AI Powered Accounting &amp; Business Intelligence Software</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #f1f1f1;
+  --bg1:      #ffffff;
+  --bg2:      #e4eaf5;
+  --surface:  #ffffff;
+  --surface2: #f1f1f1;
+  --border:   #d4dae8;
+  --border2:  #b8c1d8;
+
+  --blue:     #073D7F;
+  --blue-l:   #6491DE;
+  --blue-d:   #052A5C;
+  --violet:   #073D7F;
+  --violet-l: #4A72C4;
+  --cyan:     #6491DE;
+  --green:    #059669;
+  --amber:    #d97706;
+
+  --text:     #0C1630;
+  --text2:    #3A4D6E;
+  --text3:    #7A8DAD;
+
+  --grad-main: linear-gradient(135deg, #6491DE 0%, #073D7F 100%);
+  --grad-glow: radial-gradient(ellipse 60% 40% at 50% 0%, rgba(100,145,222,.10) 0%, transparent 70%);
+  --grad-card: linear-gradient(145deg, #ffffff 0%, #f1f1f1 100%);
+}
+
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.65;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ──────────────────── TYPOGRAPHY ──────────────────── */
+h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif; letter-spacing: -.02em; }
+.mono { font-family: 'Space Mono', monospace; }
+
+/* ──────────────────── HEADER ──────────────────── */
+header {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+  padding: 0 6%;
+  background: rgba(255,255,255,.88);
+  backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid var(--border);
+  transition: background .3s;
+}
+.nav { display: flex; align-items: center; justify-content: space-between; height: 68px; }
+.logo {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 21px; font-weight: 700; letter-spacing: -.03em;
+  text-decoration: none; color: var(--text);
+  display: flex; align-items: center; gap: 8px;
+}
+.logo-mark {
+  width: 30px; height: 30px;
+  background: var(--grad-main);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; color: #fff;
+}
+.logo span { color: var(--blue-l); }
+.nav-links { display: flex; align-items: center; gap: 28px; list-style: none; }
+.nav-links a {
+  font-size: 14px; font-weight: 500; color: var(--text2);
+  text-decoration: none; transition: color .2s;
+}
+.nav-links a:hover { color: var(--text); }
+.nav-cta { display: flex; align-items: center; gap: 10px; }
+.btn-ghost {
+  background: none; border: 1px solid var(--border2); color: var(--text2);
+  padding: 8px 18px; border-radius: 8px; font-size: 13.5px; font-weight: 500;
+  cursor: pointer; text-decoration: none; transition: all .2s;
+  font-family: 'Inter', sans-serif;
+}
+.btn-ghost:hover { border-color: var(--blue); color: var(--text); }
+.btn-nav-cta {
+  background: var(--grad-main); color: #fff;
+  padding: 9px 20px; border-radius: 8px; font-size: 13.5px; font-weight: 600;
+  cursor: pointer; text-decoration: none; border: none; transition: opacity .2s, transform .15s;
+  font-family: 'Inter', sans-serif;
+}
+.btn-nav-cta:hover { opacity: .88; transform: translateY(-1px); }
+
+/* ──────────────────── HERO ──────────────────── */
+.hero {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  padding: 130px 6% 90px;
+  position: relative; overflow: hidden;
+  background: radial-gradient(ellipse 90% 55% at 50% 0%, rgba(100,145,222,.09) 0%, transparent 65%),
+              radial-gradient(ellipse 50% 40% at 80% 60%, rgba(7,61,127,.05) 0%, transparent 60%);
+}
+/* Animated grid bg */
+.hero::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: linear-gradient(rgba(100,145,222,.07) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(100,145,222,.07) 1px, transparent 1px);
+  background-size: 60px 60px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black 40%, transparent 80%);
+}
+.hero-inner { position: relative; max-width: 820px; margin: 0 auto; }
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 1px solid rgba(100,145,222,.3);
+  background: rgba(100,145,222,.1);
+  border-radius: 100px; padding: 5px 16px 5px 8px;
+  margin-bottom: 32px;
+}
+.eyebrow-dot {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--grad-main);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px;
+}
+.eyebrow-text { font-size: 12.5px; font-weight: 600; color: var(--blue-l); letter-spacing: .02em; }
+.hero h1 {
+  font-size: clamp(26px, 4vw, 52px);
+  font-weight: 700; line-height: 1.15;
+  margin-bottom: 24px;
+}
+.hero h1 em {
+  font-style: normal;
+  background: linear-gradient(135deg, #A8C5F7 0%, #6491DE 50%, #073D7F 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.hero-sub {
+  font-size: clamp(16px, 2vw, 19px);
+  color: var(--text2); max-width: 580px; margin: 0 auto 12px;
+  font-weight: 400; line-height: 1.75;
+}
+.hero-tagline {
+  font-size: 13px; color: var(--text3); margin-bottom: 44px; letter-spacing: .01em;
+}
+.hero-actions { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; margin-bottom: 64px; }
+.btn-hero-primary {
+  background: var(--grad-main);
+  color: #fff; border: none; padding: 15px 32px;
+  border-radius: 12px; font-size: 15px; font-weight: 600;
+  cursor: pointer; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 8px;
+  box-shadow: 0 0 40px rgba(100,145,222,.4);
+  transition: all .2s; font-family: 'Inter', sans-serif;
+}
+.btn-hero-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 48px rgba(100,145,222,.55); }
+.btn-hero-secondary {
+  background: var(--surface2); color: var(--text);
+  border: 1px solid var(--border2); padding: 14px 28px;
+  border-radius: 12px; font-size: 15px; font-weight: 500;
+  cursor: pointer; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 8px;
+  transition: all .2s; font-family: 'Inter', sans-serif;
+}
+.btn-hero-secondary:hover { background: var(--bg2); border-color: var(--blue); }
+.hero-trust {
+  display: flex; align-items: center; justify-content: center; gap: 28px; flex-wrap: wrap;
+}
+.trust-item {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--text3); font-weight: 500;
+}
+.trust-icon { color: var(--green); font-size: 13px; }
+
+/* ──────────────────── STATS ──────────────────── */
+.stats {
+  background: var(--bg1);
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  padding: 44px 6%;
+}
+.stats-inner {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  max-width: 920px; margin: 0 auto;
+}
+.stat-col {
+  text-align: center; padding: 0 24px;
+  border-right: 1px solid var(--border);
+}
+.stat-col:last-child { border-right: none; }
+.stat-val {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 38px; font-weight: 700; line-height: 1;
+  background: linear-gradient(135deg, var(--blue-l), var(--violet-l));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.stat-lbl { font-size: 13px; color: var(--text3); margin-top: 6px; font-weight: 500; }
+
+/* ──────────────────── SECTION BASE ──────────────────── */
+section { padding: 96px 6%; }
+.section-center { text-align: center; }
+.label-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--blue-l);
+  background: rgba(100,145,222,.12); border: 1px solid rgba(100,145,222,.28);
+  border-radius: 100px; padding: 4px 14px;
+  margin-bottom: 18px;
+}
+.section-h {
+  font-size: clamp(30px, 4vw, 48px); font-weight: 700;
+  line-height: 1.15; letter-spacing: -.03em;
+  margin-bottom: 14px;
+}
+.section-p {
+  font-size: 16.5px; color: var(--text2);
+  max-width: 540px; margin: 0 auto 56px;
+  line-height: 1.75;
+}
+
+/* ──────────────────── FEATURES ──────────────────── */
+.features-bg { background: var(--bg1); }
+.feat-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 1px; background: var(--border);
+  border: 1px solid var(--border); border-radius: 20px;
+  overflow: hidden; max-width: 1100px; margin: 0 auto;
+}
+.feat-card {
+  background: var(--bg1); padding: 32px 28px;
+  position: relative; overflow: hidden;
+  transition: background .2s;
+}
+.feat-card:hover { background: var(--bg2); }
+.feat-card::after {
+  content: ''; position: absolute; inset: 0;
+  background: var(--grad-card); opacity: 0; transition: opacity .2s;
+}
+.feat-card:hover::after { opacity: 1; }
+.feat-icon-wrap {
+  width: 46px; height: 46px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; margin-bottom: 18px;
+  position: relative; z-index: 1;
+}
+.fi-blue  { background: rgba(100,145,222,.15); }
+.fi-green { background: rgba(16,185,129,.15); }
+.fi-purple{ background: rgba(7,61,127,.15); }
+.fi-amber { background: rgba(245,158,11,.15); }
+.fi-cyan  { background: rgba(100,145,222,.15); }
+.fi-rose  { background: rgba(244,63,94,.15); }
+.feat-card h3 {
+  font-size: 16px; font-weight: 600; margin-bottom: 8px;
+  position: relative; z-index: 1;
+}
+.feat-card p {
+  font-size: 14px; color: var(--text2); line-height: 1.65;
+  position: relative; z-index: 1;
+}
+
+/* ──────────────────── UAE SECTION ──────────────────── */
+.uae-section {
+  background: linear-gradient(160deg, #073D7F 0%, #062D6B 60%, #073D7F 100%);
+  position: relative; overflow: hidden;
+}
+.uae-section::before {
+  content: ''; position: absolute; top: -30%; right: -10%;
+  width: 600px; height: 600px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(100,145,222,.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+.uae-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; max-width: 1100px; margin: 0 auto; }
+.uae-features { display: flex; flex-direction: column; gap: 18px; margin-top: 12px; }
+.uae-feat {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 16px 18px; border-radius: 12px;
+  background: var(--surface2); border: 1px solid var(--border);
+  transition: border-color .2s, background .2s;
+}
+.uae-feat:hover { border-color: rgba(100,145,222,.35); background: rgba(100,145,222,.08); }
+.uae-feat-icon {
+  width: 34px; height: 34px; flex-shrink: 0; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center; font-size: 16px;
+  background: rgba(16,185,129,.12);
+}
+.uae-feat-text h4 { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+.uae-feat-text p { font-size: 13px; color: var(--text3); line-height: 1.5; }
+.uae-badges {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+}
+.uae-badge {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 16px; padding: 24px 20px; text-align: center;
+  transition: border-color .2s, transform .2s;
+}
+.uae-badge:hover { border-color: rgba(100,145,222,.4); transform: translateY(-3px); }
+.uae-badge-emoji { font-size: 32px; margin-bottom: 10px; }
+.uae-badge-title { font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+.uae-badge-sub { font-size: 12px; color: var(--text3); }
+
+/* ──────────────────── PRICING ──────────────────── */
+.pricing-section { background: var(--bg1); }
+.pricing-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 18px; max-width: 980px; margin: 0 auto;
+}
+.plan {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 20px; padding: 32px 28px;
+  transition: transform .2s, border-color .2s;
+  position: relative; overflow: hidden;
+}
+.plan:hover { transform: translateY(-4px); border-color: var(--border2); }
+.plan-hot {
+  background: linear-gradient(160deg, rgba(100,145,222,.12), rgba(7,61,127,.08));
+  border-color: rgba(100,145,222,.4);
+}
+.plan-hot-badge {
+  position: absolute; top: 20px; right: 20px;
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  background: var(--grad-main); color: #fff;
+  padding: 3px 10px; border-radius: 100px;
+}
+.plan-name-text { font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.plan-tagline { font-size: 13px; color: var(--text3); margin-bottom: 28px; }
+.plan-price-row { display: flex; align-items: baseline; gap: 3px; margin-bottom: 4px; }
+.plan-currency { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 600; color: var(--text2); }
+.plan-amount {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 48px; font-weight: 700; line-height: 1;
+  color: var(--text);
+}
+.plan-hot .plan-amount {
+  background: linear-gradient(135deg, var(--blue-l), var(--violet-l));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.plan-period { font-size: 12.5px; color: var(--text3); margin-bottom: 28px; }
+.plan-divider { height: 1px; background: var(--border); margin-bottom: 24px; }
+.plan-features { list-style: none; display: flex; flex-direction: column; gap: 11px; margin-bottom: 32px; }
+.plan-features li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--text2); }
+.feat-check { width: 18px; height: 18px; border-radius: 50%; background: rgba(16,185,129,.15); display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--green); flex-shrink: 0; }
+.plan-cta {
+  display: block; width: 100%; padding: 12px;
+  border-radius: 10px; font-size: 14.5px; font-weight: 600;
+  cursor: pointer; text-decoration: none; text-align: center;
+  transition: all .2s; font-family: 'Inter', sans-serif;
+}
+.plan-cta-outline {
+  background: none; color: var(--text2); border: 1.5px solid var(--border2);
+}
+.plan-cta-outline:hover { border-color: var(--blue); color: var(--blue); }
+.plan-cta-fill {
+  background: var(--grad-main); color: #fff; border: none;
+  box-shadow: 0 4px 24px rgba(100,145,222,.3);
+}
+.plan-cta-fill:hover { opacity: .88; transform: translateY(-1px); }
+
+/* ──────────────────── TESTIMONIALS ──────────────────── */
+.testi-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 18px; max-width: 1100px; margin: 0 auto;
+}
+.testi-card {
+  background: var(--grad-card);
+  border: 1px solid var(--border); border-radius: 18px; padding: 28px;
+  backdrop-filter: blur(8px);
+  transition: border-color .2s, transform .2s;
+}
+.testi-card:hover { border-color: var(--border2); transform: translateY(-2px); }
+.testi-stars { font-size: 14px; letter-spacing: 1px; margin-bottom: 14px; }
+.testi-text { font-size: 14.5px; color: var(--text2); line-height: 1.72; margin-bottom: 22px; font-style: italic; }
+.testi-author { display: flex; align-items: center; gap: 12px; }
+.testi-av {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--grad-main);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.testi-name { font-size: 14px; font-weight: 600; }
+.testi-co { font-size: 12px; color: var(--text3); }
+
+/* ──────────────────── FAQ ──────────────────── */
+.faq-wrap { max-width: 700px; margin: 0 auto; }
+.faq-item {
+  border: 1px solid var(--border); border-radius: 12px;
+  margin-bottom: 10px; overflow: hidden; transition: border-color .2s;
+}
+.faq-item:hover { border-color: var(--border2); }
+.faq-item.open { border-color: rgba(100,145,222,.4); }
+.faq-q {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 18px 22px; cursor: pointer;
+  font-size: 15px; font-weight: 600;
+  font-family: 'Space Grotesk', sans-serif;
+}
+.faq-arrow {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  background: var(--surface2); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; color: var(--text3); transition: all .25s;
+}
+.faq-item.open .faq-arrow { background: var(--blue); border-color: var(--blue); color: #fff; transform: rotate(45deg); }
+.faq-body { max-height: 0; overflow: hidden; transition: max-height .3s, padding .2s; }
+.faq-body p { padding: 0 22px 18px; font-size: 14.5px; color: var(--text2); line-height: 1.72; }
+.faq-item.open .faq-body { max-height: 300px; }
+
+/* ──────────────────── CTA BANNER ──────────────────── */
+.cta-banner {
+  margin: 0 6% 80px;
+  background: linear-gradient(135deg, #073D7F 0%, #0a3470 50%, #052A5C 100%);
+  border: 1px solid rgba(100,145,222,.25);
+  border-radius: 28px; padding: 72px 8%; text-align: center;
+  position: relative; overflow: hidden;
+}
+.cta-banner::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse 70% 50% at 50% 100%, rgba(100,145,222,.2) 0%, transparent 70%);
+}
+.cta-banner h2 { font-size: clamp(30px, 4vw, 48px); font-weight: 700; margin-bottom: 14px; position: relative; }
+.cta-banner p { font-size: 17px; color: rgba(255,255,255,.72); margin-bottom: 36px; position: relative; }
+.cta-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; position: relative; }
+.btn-cta-main {
+  background: #fff; color: var(--blue-d);
+  padding: 15px 32px; border-radius: 12px; font-size: 15px; font-weight: 700;
+  cursor: pointer; text-decoration: none; border: none; display: inline-flex; align-items: center; gap: 8px;
+  transition: all .2s; font-family: 'Inter', sans-serif;
+}
+.btn-cta-main:hover { background: #e8eeff; transform: translateY(-2px); }
+.btn-cta-ghost {
+  background: rgba(255,255,255,.1); color: #fff;
+  padding: 14px 28px; border-radius: 12px; font-size: 15px; font-weight: 500;
+  border: 1px solid rgba(255,255,255,.25); text-decoration: none;
+  display: inline-flex; align-items: center; gap: 8px; transition: all .2s;
+  font-family: 'Inter', sans-serif;
+}
+.btn-cta-ghost:hover { background: rgba(255,255,255,.18); }
+
+/* ──────────────────── FOOTER ──────────────────── */
+footer {
+  background: var(--bg1); border-top: 1px solid var(--border);
+  padding: 60px 6% 32px;
+}
+.footer-top { display: grid; grid-template-columns: 2.2fr 1fr 1fr 1fr; gap: 48px; margin-bottom: 48px; }
+.footer-brand-logo { display: flex; align-items: center; gap: 9px; text-decoration: none; margin-bottom: 14px; }
+.footer-brand-logo span { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; color: var(--text); }
+.footer-brand-logo span em { font-style: normal; color: var(--blue-l); }
+.footer-desc { font-size: 13.5px; color: var(--text3); line-height: 1.75; max-width: 280px; }
+.footer-col h5 { font-family: 'Space Grotesk', sans-serif; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text3); margin-bottom: 18px; }
+.footer-col a { display: block; font-size: 13.5px; color: var(--text2); text-decoration: none; margin-bottom: 11px; transition: color .2s; }
+.footer-col a:hover { color: var(--text); }
+.footer-bottom {
+  border-top: 1px solid var(--border); padding-top: 26px;
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+}
+.footer-bottom p { font-size: 12.5px; color: var(--text3); }
+.footer-badges { display: flex; gap: 8px; }
+.f-badge {
+  font-size: 11px; font-weight: 600; color: var(--text3);
+  border: 1px solid var(--border); border-radius: 100px; padding: 3px 10px;
+}
+
+/* ──────────────────── RESPONSIVE ──────────────────── */
+@media (max-width: 960px) {
+  .feat-grid { grid-template-columns: 1fr 1fr; }
+  .uae-grid { grid-template-columns: 1fr; gap: 48px; }
+  .testi-grid { grid-template-columns: 1fr 1fr; }
+  .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
+  .footer-top { grid-template-columns: 1fr 1fr; }
+  .stats-inner { grid-template-columns: 1fr 1fr; gap: 24px; }
+  .stat-col { border-right: none; border-bottom: 1px solid var(--border); padding: 16px 0; }
+  .stat-col:last-child { border-bottom: none; }
+  .nav-links { display: none; }
+}
+@media (max-width: 600px) {
+  .feat-grid, .testi-grid { grid-template-columns: 1fr; }
+  .footer-top { grid-template-columns: 1fr; }
+  .cta-banner { margin: 0 4% 60px; padding: 52px 6%; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header>
+  <nav class="nav">
+    <a href="landing.html" class="logo">
+      <div class="logo-mark">T</div>
+      E<span>Tax</span>Flow
+    </a>
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#uae">UAE Compliance</a></li>
+      <li><a href="#pricing">Pricing</a></li>
+      <li><a href="#faq">FAQ</a></li>
+    </ul>
+    <div class="nav-cta">
+      <a href="/" class="btn-ghost">Sign in</a>
+      <a href="signup.html" class="btn-nav-cta">Start free →</a>
+    </div>
+  </nav>
+</header>
+
+<!-- ── HERO ── -->
+<section class="hero">
+  <div class="hero-inner">
+    <h1>AI Powered Accounting and<br>Business Intelligence Software<br><em>That Thinks Ahead.</em></h1>
+    <p class="hero-sub">
+      Autonomous accounting that reads invoices, reconciles banks,
+      files VAT, and generates reports — without a single accountant.
+    </p>
+    <p class="hero-tagline">No bookkeeping. No ledger matching. No accountants needed.</p>
+    <div class="hero-actions">
+      <a href="signup.html" class="btn-hero-primary">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M8 3v5l3 3"/><circle cx="8" cy="8" r="6"/></svg>
+        Deploy your AI CFO
+      </a>
+      <a href="#features" class="btn-hero-secondary">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7.5" cy="7.5" r="6"/><line x1="5" y1="7.5" x2="10" y2="7.5"/><polyline points="7.5,5 10,7.5 7.5,10"/></svg>
+        See how it works
+      </a>
+    </div>
+    <div class="hero-trust">
+      <div class="trust-item"><span class="trust-icon">✓</span> 14-day free trial</div>
+      <div class="trust-item"><span class="trust-icon">✓</span> No credit card</div>
+      <div class="trust-item"><span class="trust-icon">✓</span> FTA VAT compliant</div>
+      <div class="trust-item"><span class="trust-icon">✓</span> UAE bank integration</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── STATS ── -->
+<div class="stats">
+  <div class="stats-inner">
+    <div class="stat-col"><div class="stat-val">400+</div><div class="stat-lbl">UAE businesses trust ETaxFlow</div></div>
+    <div class="stat-col"><div class="stat-val">98%</div><div class="stat-lbl">FTA filing accuracy rate</div></div>
+    <div class="stat-col"><div class="stat-val">60%</div><div class="stat-lbl">Time saved on accounting</div></div>
+    <div class="stat-col"><div class="stat-val">$0</div><div class="stat-lbl">Setup cost — free to start</div></div>
+  </div>
+</div>
+
+<!-- ── FEATURES ── -->
+<section class="features-bg" id="features">
+  <div class="section-center">
+    <div class="label-chip">Platform</div>
+    <h2 class="section-h">Everything Your Finance Team Needs</h2>
+    <p class="section-p">From purchase invoices to VAT filing — fully automated and connected to your UAE banking ecosystem.</p>
+  </div>
+  <div class="feat-grid">
+    <div class="feat-card">
+      <div class="feat-icon-wrap fi-blue">🤖</div>
+      <h3>AI Accounting Engine</h3>
+      <p>Upload any invoice and the AI reads supplier names, TRN numbers, line items, and VAT — then posts journal entries automatically.</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon-wrap fi-green">🇦🇪</div>
+      <h3>UAE VAT & FTA Ready</h3>
+      <p>FTA-compliant 5% VAT on every transaction. Input VAT recovery, Output VAT filing, and TRN validation are built-in from day one.</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon-wrap fi-purple">⚡</div>
+      <h3>Auto Bank Reconciliation</h3>
+      <p>Live bank feeds matched against invoices and payments in real time. No end-of-month reconciliation nightmares ever again.</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon-wrap fi-amber">📊</div>
+      <h3>Business Intelligence</h3>
+      <p>AI-generated P&L, cash flow forecasts, and KPI dashboards updated live — understand your business position at a glance.</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon-wrap fi-cyan">📈</div>
+      <h3>Real-Time Reports</h3>
+      <p>Trial balance, ageing, VAT returns, and corporate tax computations generated in seconds — not days of accountant work.</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon-wrap fi-rose">🔒</div>
+      <h3>Secure Cloud Access</h3>
+      <p>Bank-grade 256-bit encryption, multi-user roles, and UAE data residency. Access from desktop, tablet, or mobile anywhere.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── UAE COMPLIANCE ── -->
+<section class="uae-section" id="uae">
+  <div class="uae-grid">
+    <div>
+      <div class="label-chip">UAE Native</div>
+      <h2 class="section-h">Built for the UAE<br>Business Environment</h2>
+      <p style="font-size:15px;color:var(--text2);margin-bottom:28px;line-height:1.75">Every regulation, every bank, every compliance requirement — handled automatically so you can focus on growing your business.</p>
+      <div class="uae-features">
+        <div class="uae-feat"><div class="uae-feat-icon">🏛️</div><div class="uae-feat-text"><h4>FTA VAT Filing</h4><p>Auto-generated VAT201 returns with TRN validation and zero-rated export support</p></div></div>
+        <div class="uae-feat"><div class="uae-feat-icon">💼</div><div class="uae-feat-text"><h4>WPS Payroll</h4><p>MOHRE-compliant salary payments via Wages Protection System with auto SIF files</p></div></div>
+        <div class="uae-feat"><div class="uae-feat-icon">🏦</div><div class="uae-feat-text"><h4>UAE Banks</h4><p>Emirates NBD, FAB, ADCB, Mashreq, DIB, HSBC UAE, RAK Bank — all connected</p></div></div>
+        <div class="uae-feat"><div class="uae-feat-icon">🌐</div><div class="uae-feat-text"><h4>Free Zone Support</h4><p>DAFZA, JAFZA, DMCC entity compliance with qualifying income rules for CT</p></div></div>
+      </div>
+    </div>
+    <div class="uae-badges">
+      <div class="uae-badge"><div class="uae-badge-emoji">🏛️</div><div class="uae-badge-title">FTA Compliant</div><div class="uae-badge-sub">VAT & Corporate Tax</div></div>
+      <div class="uae-badge"><div class="uae-badge-emoji">🏦</div><div class="uae-badge-title">UAE Banks</div><div class="uae-badge-sub">Live reconciliation</div></div>
+      <div class="uae-badge"><div class="uae-badge-emoji">💼</div><div class="uae-badge-title">WPS Ready</div><div class="uae-badge-sub">Auto SIF generation</div></div>
+      <div class="uae-badge"><div class="uae-badge-emoji">🛡️</div><div class="uae-badge-title">Data Residency</div><div class="uae-badge-sub">UAE-hosted servers</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PRICING ── -->
+<section class="pricing-section" id="pricing">
+  <div class="section-center">
+    <div class="label-chip">Pricing</div>
+    <h2 class="section-h">Simple, Transparent Pricing</h2>
+    <p class="section-p">All plans include full UAE VAT compliance, AI accounting, and bank reconciliation. No hidden fees.</p>
+  </div>
+  <div class="pricing-grid">
+    <div class="plan">
+      <div class="plan-name-text">Starter</div>
+      <div class="plan-tagline">For small businesses & startups</div>
+      <div class="plan-price-row">
+        <span class="plan-currency">$</span>
+        <span class="plan-amount">699</span>
+      </div>
+      <div class="plan-period">per month · billed annually</div>
+      <div class="plan-divider"></div>
+      <ul class="plan-features">
+        <li><div class="feat-check">✓</div>Up to 500 transactions/month</li>
+        <li><div class="feat-check">✓</div>AI invoice extraction</li>
+        <li><div class="feat-check">✓</div>UAE VAT returns</li>
+        <li><div class="feat-check">✓</div>2 users included</li>
+        <li><div class="feat-check">✓</div>Email support</li>
+      </ul>
+      <a href="signup.html?plan=starter" class="plan-cta plan-cta-outline">Get started free</a>
+    </div>
+
+    <div class="plan plan-hot">
+      <div class="plan-hot-badge">Most Popular</div>
+      <div class="plan-name-text">Growth</div>
+      <div class="plan-tagline">For growing SMEs & trading companies</div>
+      <div class="plan-price-row">
+        <span class="plan-currency">$</span>
+        <span class="plan-amount">999</span>
+      </div>
+      <div class="plan-period">per month · billed annually</div>
+      <div class="plan-divider"></div>
+      <ul class="plan-features">
+        <li><div class="feat-check">✓</div>Unlimited transactions</li>
+        <li><div class="feat-check">✓</div>AI accounting + reconciliation</li>
+        <li><div class="feat-check">✓</div>VAT + Corporate Tax (9%)</li>
+        <li><div class="feat-check">✓</div>WPS payroll integration</li>
+        <li><div class="feat-check">✓</div>10 users included</li>
+        <li><div class="feat-check">✓</div>Priority support</li>
+      </ul>
+      <a href="signup.html?plan=growth" class="plan-cta plan-cta-fill">Start free trial →</a>
+    </div>
+
+    <div class="plan">
+      <div class="plan-name-text">Enterprise</div>
+      <div class="plan-tagline">For large companies & free zones</div>
+      <div class="plan-price-row">
+        <span class="plan-currency">$</span>
+        <span class="plan-amount">1,999</span>
+      </div>
+      <div class="plan-period">per month · billed annually</div>
+      <div class="plan-divider"></div>
+      <ul class="plan-features">
+        <li><div class="feat-check">✓</div>Everything in Growth</li>
+        <li><div class="feat-check">✓</div>Multi-entity consolidation</li>
+        <li><div class="feat-check">✓</div>Free Zone compliance</li>
+        <li><div class="feat-check">✓</div>Full API access</li>
+        <li><div class="feat-check">✓</div>Unlimited users</li>
+        <li><div class="feat-check">✓</div>Dedicated account manager</li>
+      </ul>
+      <a href="signup.html?plan=enterprise" class="plan-cta plan-cta-outline">Contact sales</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── TESTIMONIALS ── -->
+<section>
+  <div class="section-center">
+    <div class="label-chip">Customer Stories</div>
+    <h2 class="section-h">Trusted Across the UAE</h2>
+    <p class="section-p" style="margin-bottom:48px">Real results from real companies in Dubai, Abu Dhabi, and beyond.</p>
+  </div>
+  <div class="testi-grid">
+    <div class="testi-card">
+      <div class="testi-stars">★★★★★</div>
+      <p class="testi-text">"ETaxFlow replaced our bookkeeper for day-to-day entries. The AI reads our invoices and posts everything automatically. VAT returns now take 10 minutes instead of 2 days."</p>
+      <div class="testi-author">
+        <div class="testi-av">AK</div>
+        <div><div class="testi-name">Ahmed Al-Kaabi</div><div class="testi-co">Dubai Trading Co. LLC</div></div>
+      </div>
+    </div>
+    <div class="testi-card">
+      <div class="testi-stars">★★★★★</div>
+      <p class="testi-text">"We switched from QuickBooks because of UAE-specific compliance. The WPS integration and FTA filing support alone saved us 15 hours every month."</p>
+      <div class="testi-author">
+        <div class="testi-av">SF</div>
+        <div><div class="testi-name">Sara Farooqi</div><div class="testi-co">DMCC Consultancy FZE</div></div>
+      </div>
+    </div>
+    <div class="testi-card">
+      <div class="testi-stars">★★★★★</div>
+      <p class="testi-text">"The bank reconciliation is magic. Emirates NBD transactions are matched automatically. Our finance team went from 3 to 1 person and saved $49,000 per year."</p>
+      <div class="testi-author">
+        <div class="testi-av">MR</div>
+        <div><div class="testi-name">Mohammed Al-Rashidi</div><div class="testi-co">Abu Dhabi Logistics LLC</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FAQ ── -->
+<section id="faq" style="background:var(--bg1)">
+  <div class="section-center">
+    <div class="label-chip">FAQ</div>
+    <h2 class="section-h">Common Questions</h2>
+    <p class="section-p" style="margin-bottom:48px">Everything you need to know before getting started.</p>
+  </div>
+  <div class="faq-wrap">
+    <div class="faq-item open">
+      <div class="faq-q" onclick="faq(this)">
+        Is ETaxFlow officially FTA-registered?
+        <div class="faq-arrow">+</div>
+      </div>
+      <div class="faq-body"><p>Yes. ETaxFlow's VAT module generates FTA-compliant VAT201 returns and supports TRN validation, input VAT recovery, and zero-rated export transactions in line with UAE VAT Law Federal Decree-Law No. 8 of 2017.</p></div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="faq(this)">
+        Which UAE banks are supported?
+        <div class="faq-arrow">+</div>
+      </div>
+      <div class="faq-body"><p>Emirates NBD, FAB (First Abu Dhabi Bank), ADCB, Mashreq, DIB (Dubai Islamic Bank), HSBC UAE, RAK Bank, CBD, and Standard Chartered UAE are fully supported for bank reconciliation and payment processing.</p></div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="faq(this)">
+        Can I migrate from QuickBooks or Tally?
+        <div class="faq-arrow">+</div>
+      </div>
+      <div class="faq-body"><p>Yes. Our import tool handles QuickBooks QBO exports, Tally XML, and Excel-based chart of accounts. Opening balances and historical data are imported in minutes with guided mapping.</p></div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="faq(this)">
+        How does AI invoice extraction work?
+        <div class="faq-arrow">+</div>
+      </div>
+      <div class="faq-body"><p>Upload any PDF, image, or scanned invoice. Our AI reads supplier names, TRN numbers, line items, VAT amounts, and dates — then posts to the correct accounts automatically. Accuracy exceeds 98% on UAE-format invoices.</p></div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="faq(this)">
+        Is my data stored in the UAE?
+        <div class="faq-arrow">+</div>
+      </div>
+      <div class="faq-body"><p>Yes. All data is stored on UAE-region cloud infrastructure with 256-bit AES encryption at rest and TLS 1.3 in transit, fully compliant with UAE Personal Data Protection Law (PDPL).</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CTA ── -->
+<div class="cta-banner">
+  <h2>Ready to Deploy Your AI CFO?</h2>
+  <p>Join 400+ UAE businesses already running on ETaxFlow. Start free, no credit card needed.</p>
+  <div class="cta-actions">
+    <a href="signup.html" class="btn-cta-main">Start free trial →</a>
+    <a href="mailto:hello@etaxflow.com" class="btn-cta-ghost">Book a demo</a>
+  </div>
+</div>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <div class="footer-top">
+    <div>
+      <a href="landing.html" class="footer-brand-logo">
+        <div class="logo-mark">T</div>
+        <span>Tax<em>Flow</em></span>
+      </a>
+      <p class="footer-desc">AI-powered accounting and business intelligence built specifically for UAE companies. FTA compliant, WPS ready, bank connected.</p>
+    </div>
+    <div class="footer-col">
+      <h5>Product</h5>
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
+      <a href="signup.html">Free Trial</a>
+    </div>
+    <div class="footer-col">
+      <h5>Compliance</h5>
+      <a href="#">UAE VAT</a>
+      <a href="#">Corporate Tax</a>
+      <a href="#">WPS Payroll</a>
+      <a href="#">FTA Filing</a>
+    </div>
+    <div class="footer-col">
+      <h5>Support</h5>
+      <a href="#">Documentation</a>
+      <a href="#">Contact Us</a>
+      <a href="#">Privacy Policy</a>
+      <a href="#">Terms of Use</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <p>© 2026 ETaxFlow. All rights reserved.</p>
+    <div class="footer-badges">
+      <span class="f-badge">FTA Compliant</span>
+      <span class="f-badge">UAE Data Law</span>
+      <span class="f-badge">ISO 27001</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+function faq(el) {
+  const item = el.closest('.faq-item');
+  const wasOpen = item.classList.contains('open');
+  document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
+  if (!wasOpen) item.classList.add('open');
+}
+</script>
+</body>
+</html>

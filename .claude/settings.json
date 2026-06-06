@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"renderPayrollEmployee\\\\|payroll.*employee\\\\|employee.*payroll\\\\|\\\\/payroll\" \"d:/dev/tax/frontend/public/taxflow/src/app.js\")",
+      "Bash(grep -n \"payroll\\\\|\\\\/staff\\\\|\\\\/employees\" \"d:/dev/tax/frontend/public/taxflow/src/app.js\")",
+      "Bash(taskkill /F /IM python.exe)",
+      "Bash(.venv-local/Scripts/python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload)",
+      "Bash(grep -v \"//\\\\|<!--\")",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}

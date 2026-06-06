@@ -1,0 +1,40 @@
+# Environment and secrets
+.env
+*.env
+.env.*
+*.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+.venv-local/
+venv/
+env/
+
+# Local databases and runtime files
+*.db
+*.sqlite
+*.sqlite3
+*-journal
+*.db-journal*
+*.log
+backend/local-storage/
+pytest-cache-files-*/
+test-results/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+.vite/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
