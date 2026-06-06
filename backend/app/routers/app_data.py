@@ -737,6 +737,16 @@ def ingest_purchase_document(db: Session, current_user: User, file: dict[str, An
     if not content:
         return [purchase_extraction_error(name, "Uploaded file content was empty")]
 
+    # For image uploads, check API key early so user gets a clear message
+    if ext in PURCHASE_IMAGE_EXTENSIONS:
+        api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+        if not api_key:
+            return [purchase_extraction_error(
+                name,
+                "AI extraction requires OPENAI_API_KEY. "
+                "Go to your Render dashboard → etaxflow → Environment and add OPENAI_API_KEY with your OpenAI key, then redeploy."
+            )]
+
     try:
         if ext == "csv":
             rows = parse_csv_rows(content)
@@ -1162,12 +1172,17 @@ def make_amazon_discount_row(match: re.Match[str]) -> dict[str, Any]:
 
 
 def parse_image_purchase_rows(content: bytes, ext: str) -> list[dict[str, Any]]:
+    # Raises RuntimeError if OpenAI key is set but call fails
     ai_rows = extract_purchase_rows_with_openai(content, ext)
     if ai_rows:
         return ai_rows
     text = extract_image_text_with_tesseract(content, ext)
     if not text:
-        return []
+        raise RuntimeError(
+            "Could not extract text from image. "
+            "Ensure OPENAI_API_KEY is set in Render for AI-based extraction, "
+            "or upload a PDF/CSV/Excel file instead."
+        )
     return purchase_rows_from_document_text(text)
 
 
@@ -1238,8 +1253,8 @@ def extract_purchase_rows_with_openai(content: bytes, ext: str) -> list[dict[str
     parts.append({"type": "text", "text": OPENAI_PURCHASE_EXTRACTION_PROMPT})
     try:
         data = call_openai_invoice_extractor(api_key, parts)
-    except Exception:
-        return []
+    except Exception as exc:
+        raise RuntimeError(f"OpenAI extraction failed: {exc}") from exc
     return openai_invoice_to_purchase_rows(data)
 
 
