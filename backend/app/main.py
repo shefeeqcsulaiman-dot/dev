@@ -62,7 +62,7 @@ def create_app() -> FastAPI:
     app.include_router(superadmin.router, prefix="/api/v1")
 
     # Serve frontend static files — must be mounted last so API routes take priority
-    static_dir = pathlib.Path(__file__).parent.parent.parent / "frontend" / "public"
+    static_dir = pathlib.Path(__file__).parent.parent / "frontend" / "public"
     if static_dir.exists():
         # Write config.js so the frontend knows the API URL
         api_base = os.environ.get("API_BASE_URL", "")
