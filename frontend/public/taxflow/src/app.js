@@ -5440,24 +5440,20 @@ async function requestInvoiceExtraction(entry){
     category:entry.category,
     period:entry.period
   };
-
-  try{
-    const endpoint=APP_CONFIG.extractionEndpoint||`${apiBaseUrl()}/app-data?action=documents.extract`;
-    const response=await authenticatedFetch(endpoint,{
-      method:'POST',
-      body:JSON.stringify(payload)
-    });
-    if(!response.ok)throw new Error('Extraction service returned '+response.status);
-    const data=await response.json();
-    const invoices=Array.isArray(data)?data:data.invoices;
-    if(!Array.isArray(invoices))throw new Error('Extraction service returned an invalid payload');
-    return normalizeExtractedPurchaseInvoices(invoices,entry.name);
-  }catch(err){
-    if(!APP_CONFIG.extractionFallback)throw err;
-    console.warn('Extraction unavailable:',err);
-    toast('Extraction unavailable. No demo data was added.','warn');
-    return buildFallbackExtraction(entry);
+  const endpoint=APP_CONFIG.extractionEndpoint||`${apiBaseUrl()}/app-data?action=documents.extract`;
+  const response=await authenticatedFetch(endpoint,{
+    method:'POST',
+    body:JSON.stringify(payload)
+  });
+  if(!response.ok){
+    let detail='';
+    try{const d=await response.json();detail=d.detail||d.message||'';}catch{}
+    throw new Error(`Extraction failed (${response.status})${detail?': '+detail:''}`);
   }
+  const data=await response.json();
+  const invoices=Array.isArray(data)?data:data.invoices;
+  if(!Array.isArray(invoices))throw new Error('Extraction service returned an invalid payload');
+  return normalizeExtractedPurchaseInvoices(invoices,entry.name);
 }
 
 function normalizeExtractedPurchaseInvoices(invoices=[],filename=''){

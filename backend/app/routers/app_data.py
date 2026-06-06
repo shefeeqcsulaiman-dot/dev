@@ -737,16 +737,6 @@ def ingest_purchase_document(db: Session, current_user: User, file: dict[str, An
     if not content:
         return [purchase_extraction_error(name, "Uploaded file content was empty")]
 
-    # For image uploads, check API key early so user gets a clear message
-    if ext in PURCHASE_IMAGE_EXTENSIONS:
-        api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-        if not api_key:
-            return [purchase_extraction_error(
-                name,
-                "AI extraction requires OPENAI_API_KEY. "
-                "Go to your Render dashboard → etaxflow → Environment and add OPENAI_API_KEY with your OpenAI key, then redeploy."
-            )]
-
     try:
         if ext == "csv":
             rows = parse_csv_rows(content)
@@ -1172,17 +1162,21 @@ def make_amazon_discount_row(match: re.Match[str]) -> dict[str, Any]:
 
 
 def parse_image_purchase_rows(content: bytes, ext: str) -> list[dict[str, Any]]:
-    # Raises RuntimeError if OpenAI key is set but call fails
+    # Raises RuntimeError if OpenAI key is set but call fails (propagates to caller)
     ai_rows = extract_purchase_rows_with_openai(content, ext)
     if ai_rows:
         return ai_rows
+    # Fallback: Tesseract OCR
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError(
+            "Image extraction requires OPENAI_API_KEY. "
+            "Add it in Render dashboard → etaxflow → Environment. "
+            "Alternatively upload a PDF, CSV, or Excel file."
+        )
     text = extract_image_text_with_tesseract(content, ext)
     if not text:
-        raise RuntimeError(
-            "Could not extract text from image. "
-            "Ensure OPENAI_API_KEY is set in Render for AI-based extraction, "
-            "or upload a PDF/CSV/Excel file instead."
-        )
+        raise RuntimeError("Could not extract text from image. Try uploading a clearer image or a PDF/CSV instead.")
     return purchase_rows_from_document_text(text)
 
 
