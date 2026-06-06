@@ -5,6 +5,14 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+# System deps: tesseract for OCR, poppler for PDF-to-image
+RUN apt-get update && apt-get install -y \
+    tesseract-ocr \
+    tesseract-ocr-ara \
+    poppler-utils \
+    libgl1 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

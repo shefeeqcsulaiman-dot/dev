@@ -17,3 +17,5 @@ services:
         value: "true"
       - key: API_BASE_URL
         value: https://etaxflow.onrender.com/api/v1
+      - key: OPENAI_API_KEY
+        sync: false
