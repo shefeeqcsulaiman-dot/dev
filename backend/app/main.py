@@ -1,5 +1,9 @@
+import os
+import pathlib
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
@@ -56,6 +60,19 @@ def create_app() -> FastAPI:
     app.include_router(module_records.router, prefix="/api/v1")
     app.include_router(app_data.router, prefix="/api/v1")
     app.include_router(superadmin.router, prefix="/api/v1")
+
+    # Serve frontend static files — must be mounted last so API routes take priority
+    static_dir = pathlib.Path(__file__).parent.parent.parent / "frontend" / "public"
+    if static_dir.exists():
+        # Write config.js so the frontend knows the API URL
+        api_base = os.environ.get("API_BASE_URL", "")
+        config_js = static_dir / "taxflow" / "config.js"
+        config_js.write_text(
+            f'window.TAXFLOW_API_BASE_URL = "{api_base}";\n' if api_base
+            else "// local dev — app.js falls back to localhost:8000\n"
+        )
+        app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+
     return app
 
 

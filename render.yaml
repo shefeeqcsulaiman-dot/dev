@@ -1,33 +1,19 @@
 ## Render Blueprint — TaxFlow UAE
-## Deploy: connect this repo in Render dashboard → "New Blueprint"
+## One service: FastAPI backend + frontend static files served together
 
 services:
-
-  # ── BACKEND (FastAPI) ────────────────────────────────────────────
   - type: web
-    name: etaxflow-api
+    name: etaxflow
     runtime: docker
     healthCheckPath: /health
     envVars:
       - key: SECRET_KEY
         generateValue: true
       - key: CORS_ORIGINS
-        value: https://etaxflow.onrender.com,http://localhost:5173
+        value: https://etaxflow.onrender.com
       - key: REDIS_URL
         value: memory://
       - key: CELERY_TASK_ALWAYS_EAGER
         value: "true"
-
-  # ── FRONTEND (Static Site) ───────────────────────────────────────
-  - type: web
-    name: etaxflow
-    env: static
-    buildCommand: bash build-frontend.sh
-    staticPublishPath: frontend/public
-    envVars:
       - key: API_BASE_URL
-        value: https://etaxflow-api.onrender.com/api/v1
-    headers:
-      - path: /taxflow/config.js
-        name: Cache-Control
-        value: no-cache, no-store
+        value: https://etaxflow.onrender.com/api/v1
