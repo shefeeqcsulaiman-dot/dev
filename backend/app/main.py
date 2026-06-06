@@ -36,8 +36,8 @@ def create_app() -> FastAPI:
 
     static_dir = pathlib.Path(__file__).parent.parent / "frontend" / "public"
 
-    @app.get("/")
-    def root() -> FileResponse | dict:
+    @app.get("/", response_model=None)
+    def root():
         f = static_dir / "landing.html"
         return FileResponse(str(f)) if f.exists() else {"status": "ok", "service": settings.app_name}
 
