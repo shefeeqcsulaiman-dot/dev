@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     secret_key: str = "change-me-in-production"
     access_token_expire_minutes: int = 1440
-    database_url: str = "postgresql+psycopg://taxflow:taxflow@localhost:5432/taxflow"
+    database_url: str = "sqlite:///./taxflow.db"
     redis_url: str = "memory://"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     s3_endpoint_url: str | None = None
