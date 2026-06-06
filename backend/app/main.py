@@ -29,6 +29,10 @@ def create_app() -> FastAPI:
         ensure_schema_updates()
         seed_initial_data()
 
+    @app.get("/")
+    def root() -> dict[str, str]:
+        return {"status": "ok", "service": settings.app_name}
+
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "service": settings.app_name}
