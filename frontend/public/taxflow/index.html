@@ -5146,6 +5146,36 @@ period_locks ─&lt; audit_logs
   </div>
 </div>
 
+<!-- Login overlay -->
+<div id="login-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(7,61,127,0.18);backdrop-filter:blur(6px);align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:18px;padding:40px 36px;width:100%;max-width:400px;box-shadow:0 24px 80px rgba(7,61,127,0.18);border:1px solid rgba(100,145,222,0.18);">
+    <div style="text-align:center;margin-bottom:28px;">
+      <div style="font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:800;color:#073D7F;margin-bottom:4px;">ETaxFlow</div>
+      <div style="font-size:13px;color:#7a8dad;">Sign in to your account</div>
+    </div>
+    <div id="login-error" style="display:none;background:#fff0f0;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;font-size:13px;color:#dc2626;margin-bottom:16px;"></div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:11.5px;font-weight:600;color:#3a4d6e;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:6px;">Email</label>
+      <input id="login-email" type="email" placeholder="admin@taxflowapp.com" autocomplete="username"
+        style="width:100%;padding:10px 14px;border:1.5px solid rgba(100,145,222,0.3);border-radius:8px;font-size:14px;color:#0c1630;background:#f8faff;outline:none;box-sizing:border-box;"
+        onkeydown="if(event.key==='Enter')document.getElementById('login-password').focus()">
+    </div>
+    <div style="margin-bottom:22px;">
+      <label style="font-size:11.5px;font-weight:600;color:#3a4d6e;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:6px;">Password</label>
+      <input id="login-password" type="password" placeholder="••••••••" autocomplete="current-password"
+        style="width:100%;padding:10px 14px;border:1.5px solid rgba(100,145,222,0.3);border-radius:8px;font-size:14px;color:#0c1630;background:#f8faff;outline:none;box-sizing:border-box;"
+        onkeydown="if(event.key==='Enter')submitLogin()">
+    </div>
+    <button onclick="submitLogin()" id="login-btn"
+      style="width:100%;padding:13px;background:#6491DE;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;transition:background .2s;">
+      Sign In
+    </button>
+    <div style="text-align:center;margin-top:16px;font-size:13px;color:#7a8dad;">
+      Don't have an account? <a href="/signup.html" style="color:#073D7F;font-weight:600;">Sign up</a>
+    </div>
+  </div>
+</div>
+
 <script src="config.js"></script>
 <script src="src/app.js" defer></script>
 </body>

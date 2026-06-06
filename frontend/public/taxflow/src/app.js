@@ -1355,9 +1355,8 @@ function saveInventoryItem(){
 }
 
 function logout(){
-  go('dashboard');
-  toast('Logged out. Session cleared locally.','info');
-  audit('Logged out','Session','Logged');
+  localStorage.removeItem('taxflow_token');
+  window.location.href='/landing.html';
 }
 
 function chkTRN(inp){
@@ -1421,9 +1420,50 @@ function localApiUrlFor(url){
   }
 }
 
+function showLoginOverlay(){
+  const el=document.getElementById('login-overlay');
+  if(el){el.style.display='flex';}
+}
+function hideLoginOverlay(){
+  const el=document.getElementById('login-overlay');
+  if(el){el.style.display='none';}
+}
+async function submitLogin(){
+  const email=(document.getElementById('login-email').value||'').trim();
+  const password=(document.getElementById('login-password').value||'').trim();
+  const errEl=document.getElementById('login-error');
+  const btn=document.getElementById('login-btn');
+  if(!email||!password){errEl.textContent='Please enter email and password.';errEl.style.display='block';return;}
+  btn.disabled=true;btn.textContent='Signing in…';errEl.style.display='none';
+  try{
+    const resp=await fetch(`${apiBaseUrl()}/auth/login`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email,password})
+    });
+    const data=await resp.json();
+    if(resp.ok&&data.access_token){
+      localStorage.setItem('taxflow_token',data.access_token);
+      hideLoginOverlay();
+      initApp();
+    }else{
+      errEl.textContent=data.detail||'Incorrect email or password.';
+      errEl.style.display='block';
+    }
+  }catch(err){
+    errEl.textContent='Cannot reach server. Try again.';
+    errEl.style.display='block';
+  }finally{
+    btn.disabled=false;btn.textContent='Sign In';
+  }
+}
 async function ensureBackendSession(){
   if(localStorage.getItem('taxflow_token'))return true;
-  return loginLocalBackend();
+  const host=window.location.hostname||'127.0.0.1';
+  if(['localhost','127.0.0.1','::1',''].includes(host)){
+    return loginLocalBackend();
+  }
+  showLoginOverlay();
+  return false;
 }
 
 async function loginLocalBackend(){
