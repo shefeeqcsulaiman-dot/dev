@@ -305,8 +305,8 @@ section { padding: 96px 6%; }
 /* ──────────────────── PRICING ──────────────────── */
 .pricing-section { background: var(--bg1); }
 .pricing-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 18px; max-width: 980px; margin: 0 auto;
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: 24px; max-width: 760px; margin: 0 auto;
 }
 .plan {
   background: var(--surface2); border: 1px solid var(--border);
@@ -468,7 +468,7 @@ footer {
   .feat-grid { grid-template-columns: 1fr 1fr; }
   .uae-grid { grid-template-columns: 1fr; gap: 48px; }
   .testi-grid { grid-template-columns: 1fr 1fr; }
-  .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
+  .pricing-grid { grid-template-columns: 1fr; max-width: 440px; }
   .footer-top { grid-template-columns: 1fr 1fr; }
   .stats-inner { grid-template-columns: 1fr 1fr; gap: 24px; }
   .stat-col { border-right: none; border-bottom: 1px solid var(--border); padding: 16px 0; }
@@ -546,39 +546,39 @@ footer {
 <section class="features-bg" id="features">
   <div class="section-center">
     <div class="label-chip">Platform</div>
-    <h2 class="section-h">Everything Your Finance Team Needs</h2>
-    <p class="section-p">From purchase invoices to VAT filing — fully automated and connected to your UAE banking ecosystem.</p>
+    <h2 class="section-h">Everything Your Business Needs</h2>
+    <p class="section-p">From AI invoice extraction to VAT filing, payroll, inventory, and full accounting — one platform, fully automated.</p>
   </div>
   <div class="feat-grid">
     <div class="feat-card">
       <div class="feat-icon-wrap fi-blue">🤖</div>
-      <h3>AI Accounting Engine</h3>
-      <p>Upload any invoice and the AI reads supplier names, TRN numbers, line items, and VAT — then posts journal entries automatically.</p>
+      <h3>AI Invoice Extraction</h3>
+      <p>Upload any PDF, image, or scanned invoice. AI reads supplier name, TRN, line items, VAT amounts, and dates — then posts journal entries automatically.</p>
     </div>
     <div class="feat-card">
-      <div class="feat-icon-wrap fi-green">🇦🇪</div>
-      <h3>UAE VAT & FTA Ready</h3>
-      <p>FTA-compliant 5% VAT on every transaction. Input VAT recovery, Output VAT filing, and TRN validation are built-in from day one.</p>
+      <div class="feat-icon-wrap fi-green">🧾</div>
+      <h3>UAE VAT & FTA Filing</h3>
+      <p>FTA-compliant VAT201 returns with 5% standard, zero-rated, exempt, and reverse charge. TRN validation, input VAT recovery, and VAT audit trail built-in.</p>
     </div>
     <div class="feat-card">
-      <div class="feat-icon-wrap fi-purple">⚡</div>
-      <h3>Auto Bank Reconciliation</h3>
-      <p>Live bank feeds matched against invoices and payments in real time. No end-of-month reconciliation nightmares ever again.</p>
+      <div class="feat-icon-wrap fi-purple">🏢</div>
+      <h3>Corporate Tax 9%</h3>
+      <p>Auto-compute UAE Corporate Tax at 9%. Qualifying income rules, small business relief, and free zone entity compliance — all handled without an external advisor.</p>
     </div>
     <div class="feat-card">
-      <div class="feat-icon-wrap fi-amber">📊</div>
-      <h3>Business Intelligence</h3>
-      <p>AI-generated P&L, cash flow forecasts, and KPI dashboards updated live — understand your business position at a glance.</p>
+      <div class="feat-icon-wrap fi-amber">💰</div>
+      <h3>WPS Payroll</h3>
+      <p>Run payroll and generate MOHRE-compliant Salary Information Files (SIF) for WPS submission. Employee management, overtime, and end-of-service calculations included.</p>
     </div>
     <div class="feat-card">
-      <div class="feat-icon-wrap fi-cyan">📈</div>
-      <h3>Real-Time Reports</h3>
-      <p>Trial balance, ageing, VAT returns, and corporate tax computations generated in seconds — not days of accountant work.</p>
+      <div class="feat-icon-wrap fi-cyan">📦</div>
+      <h3>Inventory & Purchases</h3>
+      <p>Track stock levels, manage purchase orders, and auto-sync purchase invoices to accounting. Barcode-ready product catalogue with unit conversions and cost layers.</p>
     </div>
     <div class="feat-card">
-      <div class="feat-icon-wrap fi-rose">🔒</div>
-      <h3>Secure Cloud Access</h3>
-      <p>Bank-grade 256-bit encryption, multi-user roles, and UAE data residency. Access from desktop, tablet, or mobile anywhere.</p>
+      <div class="feat-icon-wrap fi-rose">📊</div>
+      <h3>Reports & Audit Trail</h3>
+      <p>Trial balance, balance sheet, P&amp;L, cash flow, VAT returns, and ageing reports — generated in seconds. Complete audit log of every transaction for compliance.</p>
     </div>
   </div>
 </section>
@@ -611,23 +611,26 @@ footer {
   <div class="section-center">
     <div class="label-chip">Pricing</div>
     <h2 class="section-h">Simple, Transparent Pricing</h2>
-    <p class="section-p">All plans include full UAE VAT compliance, AI accounting, and bank reconciliation. No hidden fees.</p>
+    <p class="section-p">All plans include UAE VAT compliance, AI invoice extraction, accounting, and reports. No hidden fees.</p>
   </div>
   <div class="pricing-grid">
     <div class="plan">
       <div class="plan-name-text">Starter</div>
-      <div class="plan-tagline">For small businesses & startups</div>
+      <div class="plan-tagline">For small businesses &amp; startups</div>
       <div class="plan-price-row">
-        <span class="plan-currency">$</span>
-        <span class="plan-amount">699</span>
+        <span class="plan-currency">AED</span>
+        <span class="plan-amount" style="font-size:40px">299</span>
       </div>
       <div class="plan-period">per month · billed annually</div>
       <div class="plan-divider"></div>
       <ul class="plan-features">
-        <li><div class="feat-check">✓</div>Up to 500 transactions/month</li>
-        <li><div class="feat-check">✓</div>AI invoice extraction</li>
-        <li><div class="feat-check">✓</div>UAE VAT returns</li>
-        <li><div class="feat-check">✓</div>2 users included</li>
+        <li><div class="feat-check">✓</div>Up to 1,000 transactions/month</li>
+        <li><div class="feat-check">✓</div>AI invoice extraction (PDF &amp; images)</li>
+        <li><div class="feat-check">✓</div>UAE VAT returns &amp; FTA filing</li>
+        <li><div class="feat-check">✓</div>Sales &amp; purchase invoices</li>
+        <li><div class="feat-check">✓</div>Chart of accounts &amp; GL</li>
+        <li><div class="feat-check">✓</div>Trial balance &amp; P&amp;L reports</li>
+        <li><div class="feat-check">✓</div>3 users included</li>
         <li><div class="feat-check">✓</div>Email support</li>
       </ul>
       <a href="signup.html?plan=starter" class="plan-cta plan-cta-outline">Get started free</a>
@@ -635,43 +638,25 @@ footer {
 
     <div class="plan plan-hot">
       <div class="plan-hot-badge">Most Popular</div>
-      <div class="plan-name-text">Growth</div>
-      <div class="plan-tagline">For growing SMEs & trading companies</div>
+      <div class="plan-name-text">Pro</div>
+      <div class="plan-tagline">For growing SMEs &amp; trading companies</div>
       <div class="plan-price-row">
-        <span class="plan-currency">$</span>
-        <span class="plan-amount">999</span>
+        <span class="plan-currency">AED</span>
+        <span class="plan-amount" style="font-size:40px">699</span>
       </div>
       <div class="plan-period">per month · billed annually</div>
       <div class="plan-divider"></div>
       <ul class="plan-features">
         <li><div class="feat-check">✓</div>Unlimited transactions</li>
-        <li><div class="feat-check">✓</div>AI accounting + reconciliation</li>
-        <li><div class="feat-check">✓</div>VAT + Corporate Tax (9%)</li>
-        <li><div class="feat-check">✓</div>WPS payroll integration</li>
-        <li><div class="feat-check">✓</div>10 users included</li>
-        <li><div class="feat-check">✓</div>Priority support</li>
+        <li><div class="feat-check">✓</div>Everything in Starter</li>
+        <li><div class="feat-check">✓</div>Corporate Tax 9% computation</li>
+        <li><div class="feat-check">✓</div>WPS payroll &amp; SIF file generation</li>
+        <li><div class="feat-check">✓</div>Inventory &amp; stock management</li>
+        <li><div class="feat-check">✓</div>Bank reconciliation</li>
+        <li><div class="feat-check">✓</div>Audit trail &amp; exception center</li>
+        <li><div class="feat-check">✓</div>10 users · Priority support</li>
       </ul>
-      <a href="signup.html?plan=growth" class="plan-cta plan-cta-fill">Start free trial →</a>
-    </div>
-
-    <div class="plan">
-      <div class="plan-name-text">Enterprise</div>
-      <div class="plan-tagline">For large companies & free zones</div>
-      <div class="plan-price-row">
-        <span class="plan-currency">$</span>
-        <span class="plan-amount">1,999</span>
-      </div>
-      <div class="plan-period">per month · billed annually</div>
-      <div class="plan-divider"></div>
-      <ul class="plan-features">
-        <li><div class="feat-check">✓</div>Everything in Growth</li>
-        <li><div class="feat-check">✓</div>Multi-entity consolidation</li>
-        <li><div class="feat-check">✓</div>Free Zone compliance</li>
-        <li><div class="feat-check">✓</div>Full API access</li>
-        <li><div class="feat-check">✓</div>Unlimited users</li>
-        <li><div class="feat-check">✓</div>Dedicated account manager</li>
-      </ul>
-      <a href="signup.html?plan=enterprise" class="plan-cta plan-cta-outline">Contact sales</a>
+      <a href="signup.html?plan=pro" class="plan-cta plan-cta-fill">Start free trial →</a>
     </div>
   </div>
 </section>
