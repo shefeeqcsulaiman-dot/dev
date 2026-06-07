@@ -331,7 +331,7 @@ section { padding: 96px 6%; }
 .plan-currency { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 600; color: var(--text2); }
 .plan-amount {
   font-family: 'Space Grotesk', sans-serif;
-  font-size: 48px; font-weight: 700; line-height: 1;
+  font-size: 44px; font-weight: 700; line-height: 1;
   color: var(--text);
 }
 .plan-hot .plan-amount {
@@ -463,6 +463,45 @@ footer {
   border: 1px solid var(--border); border-radius: 100px; padding: 3px 10px;
 }
 
+/* ──────────────────── DARK SECTION OVERRIDES ──────────────────── */
+/* UAE section and CTA banner have dark blue backgrounds — text must be white */
+.uae-section .label-chip {
+  color: rgba(255,255,255,.85);
+  background: rgba(255,255,255,.12);
+  border-color: rgba(255,255,255,.2);
+}
+.uae-section .section-h { color: #fff; }
+.uae-section > .uae-grid > div > p { color: rgba(255,255,255,.75) !important; }
+.cta-banner h2 { color: #fff; }
+
+/* ──────────────────── FEAT CARD HOVER FIX ──────────────────── */
+/* ::after gradient overlay must stay behind text content */
+.feat-card::after { z-index: 0; }
+.feat-icon-wrap, .feat-card h3, .feat-card p { position: relative; z-index: 1; }
+
+/* ──────────────────── MOBILE NAV ──────────────────── */
+.nav-mobile-toggle {
+  display: none; background: none; border: 1px solid var(--border2);
+  border-radius: 8px; padding: 7px 10px; cursor: pointer; color: var(--text2);
+  font-size: 18px; line-height: 1;
+}
+.mobile-menu {
+  display: none; position: fixed; top: 68px; left: 0; right: 0;
+  background: rgba(255,255,255,.97); backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border); z-index: 199;
+  padding: 16px 6%;
+  flex-direction: column; gap: 4px;
+}
+.mobile-menu.open { display: flex; }
+.mobile-menu a {
+  font-size: 15px; font-weight: 500; color: var(--text2);
+  text-decoration: none; padding: 10px 12px; border-radius: 8px;
+  transition: background .15s, color .15s;
+}
+.mobile-menu a:hover { background: var(--bg2); color: var(--text); }
+.mobile-menu-divider { height: 1px; background: var(--border); margin: 8px 0; }
+.mobile-menu .btn-nav-cta { text-align: center; margin-top: 4px; }
+
 /* ──────────────────── RESPONSIVE ──────────────────── */
 @media (max-width: 960px) {
   .feat-grid { grid-template-columns: 1fr 1fr; }
@@ -474,12 +513,42 @@ footer {
   .stat-col { border-right: none; border-bottom: 1px solid var(--border); padding: 16px 0; }
   .stat-col:last-child { border-bottom: none; }
   .nav-links { display: none; }
+  .nav-mobile-toggle { display: block; }
+  .nav-cta .btn-ghost { display: none; }
 }
 @media (max-width: 600px) {
   .feat-grid, .testi-grid { grid-template-columns: 1fr; }
   .footer-top { grid-template-columns: 1fr; }
   .cta-banner { margin: 0 4% 60px; padding: 52px 6%; }
+  .nav-cta .btn-nav-cta { font-size: 12.5px; padding: 8px 14px; }
+  .hero-actions { flex-direction: column; align-items: stretch; }
+  .btn-hero-primary, .btn-hero-secondary { justify-content: center; }
 }
+
+/* ──────────────────── WHATSAPP BUTTON ──────────────────── */
+.wa-float {
+  position: fixed; bottom: 28px; right: 28px; z-index: 999;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: #25D366;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 20px rgba(37,211,102,.45);
+  text-decoration: none;
+  transition: transform .2s, box-shadow .2s;
+}
+.wa-float:hover { transform: scale(1.1); box-shadow: 0 8px 32px rgba(37,211,102,.6); }
+.wa-tooltip {
+  position: absolute; right: 68px; top: 50%; transform: translateY(-50%);
+  background: #fff; color: #0c1630;
+  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500;
+  padding: 7px 14px; border-radius: 8px; white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.wa-tooltip::after {
+  content: ''; position: absolute; right: -6px; top: 50%; transform: translateY(-50%);
+  border: 6px solid transparent; border-right: none; border-left-color: #fff;
+}
+.wa-float:hover .wa-tooltip { opacity: 1; }
 </style>
 </head>
 <body>
@@ -500,9 +569,19 @@ footer {
     <div class="nav-cta">
       <a href="/taxflow/" class="btn-ghost">Sign in</a>
       <a href="signup.html" class="btn-nav-cta">Start free →</a>
+      <button class="nav-mobile-toggle" onclick="toggleMobileMenu()" aria-label="Menu">&#9776;</button>
     </div>
   </nav>
 </header>
+<div class="mobile-menu" id="mobile-menu">
+  <a href="#features" onclick="closeMobileMenu()">Features</a>
+  <a href="#uae" onclick="closeMobileMenu()">UAE Compliance</a>
+  <a href="#pricing" onclick="closeMobileMenu()">Pricing</a>
+  <a href="#faq" onclick="closeMobileMenu()">FAQ</a>
+  <div class="mobile-menu-divider"></div>
+  <a href="/taxflow/">Sign in</a>
+  <a href="signup.html" class="btn-nav-cta">Start free →</a>
+</div>
 
 <!-- ── HERO ── -->
 <section class="hero">
@@ -619,7 +698,7 @@ footer {
       <div class="plan-tagline">For small businesses &amp; startups</div>
       <div class="plan-price-row">
         <span class="plan-currency">$</span>
-        <span class="plan-amount" style="font-size:40px">699</span>
+        <span class="plan-amount">699</span>
       </div>
       <div class="plan-period">per month · billed annually</div>
       <div class="plan-divider"></div>
@@ -642,7 +721,7 @@ footer {
       <div class="plan-tagline">For growing SMEs &amp; trading companies</div>
       <div class="plan-price-row">
         <span class="plan-currency">$</span>
-        <span class="plan-amount" style="font-size:40px">999</span>
+        <span class="plan-amount">999</span>
       </div>
       <div class="plan-period">per month · billed annually</div>
       <div class="plan-divider"></div>
@@ -800,34 +879,19 @@ function faq(el) {
   document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
   if (!wasOpen) item.classList.add('open');
 }
+function toggleMobileMenu() {
+  document.getElementById('mobile-menu').classList.toggle('open');
+}
+function closeMobileMenu() {
+  document.getElementById('mobile-menu').classList.remove('open');
+}
+document.addEventListener('click', function(e) {
+  const menu = document.getElementById('mobile-menu');
+  if (menu.classList.contains('open') && !menu.contains(e.target) && !e.target.closest('.nav-mobile-toggle')) {
+    menu.classList.remove('open');
+  }
+});
 </script>
-
-<!-- WhatsApp floating button -->
-<style>
-.wa-float {
-  position: fixed; bottom: 28px; right: 28px; z-index: 999;
-  width: 56px; height: 56px; border-radius: 50%;
-  background: #25D366;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 4px 20px rgba(37,211,102,.45);
-  text-decoration: none;
-  transition: transform .2s, box-shadow .2s;
-}
-.wa-float:hover { transform: scale(1.1); box-shadow: 0 8px 32px rgba(37,211,102,.6); }
-.wa-tooltip {
-  position: absolute; right: 68px; top: 50%; transform: translateY(-50%);
-  background: #fff; color: #0c1630;
-  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500;
-  padding: 7px 14px; border-radius: 8px; white-space: nowrap;
-  box-shadow: 0 4px 16px rgba(0,0,0,.12);
-  opacity: 0; pointer-events: none; transition: opacity .2s;
-}
-.wa-tooltip::after {
-  content: ''; position: absolute; right: -6px; top: 50%; transform: translateY(-50%);
-  border: 6px solid transparent; border-right: none; border-left-color: #fff;
-}
-.wa-float:hover .wa-tooltip { opacity: 1; }
-</style>
 <a class="wa-float" href="https://wa.me/447898812372" target="_blank" rel="noopener" aria-label="Chat on WhatsApp">
   <span class="wa-tooltip">Chat with us</span>
   <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
