@@ -222,6 +222,41 @@ section { padding: 96px 6%; }
   line-height: 1.75;
 }
 
+/* ──────────────────── CLIENT STRIP ──────────────────── */
+.clients-strip {
+  background: var(--bg1);
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  padding: 40px 0;
+  overflow: hidden;
+}
+.clients-label {
+  text-align: center; font-size: 12px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .1em; color: var(--text3);
+  margin-bottom: 28px;
+}
+.clients-track-wrap {
+  overflow: hidden; position: relative;
+  mask-image: linear-gradient(90deg, transparent 0%, black 10%, black 90%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 10%, black 90%, transparent 100%);
+}
+.clients-track {
+  display: flex; align-items: center; gap: 48px;
+  width: max-content;
+  animation: scroll-logos 30s linear infinite;
+}
+.clients-track:hover { animation-play-state: paused; }
+.client-logo {
+  height: 40px; width: auto; max-width: 130px;
+  object-fit: contain; filter: grayscale(100%) opacity(.55);
+  transition: filter .3s;
+  flex-shrink: 0;
+}
+.client-logo:hover { filter: grayscale(0%) opacity(1); }
+@keyframes scroll-logos {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
 /* ──────────────────── FEATURES ──────────────────── */
 .features-bg { background: var(--bg1); }
 .feat-grid {
@@ -634,6 +669,46 @@ footer {
     <div class="stat-col"><div class="stat-val">98%</div><div class="stat-lbl">FTA filing accuracy rate</div></div>
     <div class="stat-col"><div class="stat-val">60%</div><div class="stat-lbl">Time saved on accounting</div></div>
     <div class="stat-col"><div class="stat-val">$0</div><div class="stat-lbl">Setup cost — free to start</div></div>
+  </div>
+</div>
+
+<!-- ── CLIENTS ── -->
+<div class="clients-strip">
+  <div class="clients-label">Trusted by businesses across the UAE &amp; Gulf</div>
+  <div class="clients-track-wrap">
+    <div class="clients-track">
+      <img src="/clients/adcon-logo.png"       alt="Adcon"       class="client-logo">
+      <img src="/clients/alkhor-logo.jpg"      alt="Al Khor"     class="client-logo">
+      <img src="/clients/baw-logo.png"         alt="BAW"         class="client-logo">
+      <img src="/clients/buildscape-logo.jpg"  alt="Buildscape"  class="client-logo">
+      <img src="/clients/limitless-logo.png"   alt="Limitless"   class="client-logo">
+      <img src="/clients/ntpt-logo.jpg"        alt="NTPT"        class="client-logo">
+      <img src="/clients/optimize-logo.png"    alt="Optimize"    class="client-logo">
+      <img src="/clients/qbc-logo.png"         alt="QBC"         class="client-logo">
+      <img src="/clients/qhr-logo.png"         alt="QHR"         class="client-logo">
+      <img src="/clients/qtcg-logo.png"        alt="QTCG"        class="client-logo">
+      <img src="/clients/NRI.png"              alt="NRI"         class="client-logo">
+      <img src="/clients/exdo.png"             alt="Exdo"        class="client-logo">
+      <img src="/clients/genesis.png"          alt="Genesis"     class="client-logo">
+      <img src="/clients/koa.png"              alt="KOA"         class="client-logo">
+      <img src="/clients/qatalab.png"          alt="Qatalab"     class="client-logo">
+      <!-- duplicate set for seamless loop -->
+      <img src="/clients/adcon-logo.png"       alt="Adcon"       class="client-logo">
+      <img src="/clients/alkhor-logo.jpg"      alt="Al Khor"     class="client-logo">
+      <img src="/clients/baw-logo.png"         alt="BAW"         class="client-logo">
+      <img src="/clients/buildscape-logo.jpg"  alt="Buildscape"  class="client-logo">
+      <img src="/clients/limitless-logo.png"   alt="Limitless"   class="client-logo">
+      <img src="/clients/ntpt-logo.jpg"        alt="NTPT"        class="client-logo">
+      <img src="/clients/optimize-logo.png"    alt="Optimize"    class="client-logo">
+      <img src="/clients/qbc-logo.png"         alt="QBC"         class="client-logo">
+      <img src="/clients/qhr-logo.png"         alt="QHR"         class="client-logo">
+      <img src="/clients/qtcg-logo.png"        alt="QTCG"        class="client-logo">
+      <img src="/clients/NRI.png"              alt="NRI"         class="client-logo">
+      <img src="/clients/exdo.png"             alt="Exdo"        class="client-logo">
+      <img src="/clients/genesis.png"          alt="Genesis"     class="client-logo">
+      <img src="/clients/koa.png"              alt="KOA"         class="client-logo">
+      <img src="/clients/qatalab.png"          alt="Qatalab"     class="client-logo">
+    </div>
   </div>
 </div>
 

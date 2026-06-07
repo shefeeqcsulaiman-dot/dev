@@ -85,6 +85,9 @@ def create_app() -> FastAPI:
     # Serve frontend static files
     if static_dir.exists():
         app.mount("/taxflow", StaticFiles(directory=str(static_dir / "taxflow"), html=True), name="taxflow")
+        clients_dir = static_dir / "clients"
+        if clients_dir.exists():
+            app.mount("/clients", StaticFiles(directory=str(clients_dir)), name="clients")
         app.mount("/static-assets", StaticFiles(directory=str(static_dir)), name="assets")
 
     return app
