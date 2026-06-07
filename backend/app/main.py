@@ -129,8 +129,8 @@ def ensure_schema_updates() -> None:
         if "item_units" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("item_units")}
             required_columns = {
-                "purchase_default": "BOOLEAN DEFAULT 0",
-                "sales_default": "BOOLEAN DEFAULT 0",
+                "purchase_default": "BOOLEAN DEFAULT FALSE",
+                "sales_default": "BOOLEAN DEFAULT FALSE",
                 "status": "VARCHAR(30) DEFAULT 'active'",
             }
             for column_name, column_type in required_columns.items():
@@ -149,11 +149,11 @@ def ensure_schema_updates() -> None:
                 "opening_balance": "NUMERIC(18, 2) DEFAULT 0",
                 "opening_balance_type": "VARCHAR(2) DEFAULT 'DR'",
                 "currency": "VARCHAR(10) DEFAULT 'AED'",
-                "tax_applicable": "BOOLEAN DEFAULT 0",
-                "is_bank_cash": "BOOLEAN DEFAULT 0",
-                "is_control_account": "BOOLEAN DEFAULT 0",
+                "tax_applicable": "BOOLEAN DEFAULT FALSE",
+                "is_bank_cash": "BOOLEAN DEFAULT FALSE",
+                "is_control_account": "BOOLEAN DEFAULT FALSE",
                 "level": "INTEGER DEFAULT 5",
-                "is_group": "BOOLEAN DEFAULT 0",
+                "is_group": "BOOLEAN DEFAULT FALSE",
                 "node_type": "VARCHAR(30) DEFAULT 'POSTING_LEDGER'",
                 "normal_balance": "VARCHAR(2) DEFAULT 'DR'",
                 "created_mode": "VARCHAR(20) DEFAULT 'manual'",
@@ -165,10 +165,10 @@ def ensure_schema_updates() -> None:
                     connection.execute(text(f"ALTER TABLE accounts ADD COLUMN {column_name} {column_type}"))
             # Backfill node_type for existing accounts
             connection.execute(text(
-                "UPDATE accounts SET node_type='MAIN_LEDGER' WHERE is_group=1 AND level=1 AND (node_type IS NULL OR node_type='POSTING_LEDGER')"
+                "UPDATE accounts SET node_type='MAIN_LEDGER' WHERE is_group=TRUE AND level=1 AND (node_type IS NULL OR node_type='POSTING_LEDGER')"
             ))
             connection.execute(text(
-                "UPDATE accounts SET node_type='SUB_LEDGER' WHERE is_group=1 AND level>1 AND (node_type IS NULL OR node_type='POSTING_LEDGER')"
+                "UPDATE accounts SET node_type='SUB_LEDGER' WHERE is_group=TRUE AND level>1 AND (node_type IS NULL OR node_type='POSTING_LEDGER')"
             ))
 
 

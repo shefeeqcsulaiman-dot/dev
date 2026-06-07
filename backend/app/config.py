@@ -25,6 +25,16 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalise_db_url(cls, v: str) -> str:
+        # Render injects postgres:// or postgresql:// — SQLAlchemy 2 needs the driver explicit
+        if v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql+psycopg2://", 1)
+        if v.startswith("postgresql://") and "+psycopg" not in v:
+            return v.replace("postgresql://", "postgresql+psycopg2://", 1)
+        return v
+
     @field_validator("s3_endpoint_url", "s3_access_key_id", "s3_secret_access_key", mode="before")
     @classmethod
     def blank_to_none(cls, value: str | None) -> str | None:
