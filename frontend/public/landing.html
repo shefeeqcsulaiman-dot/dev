@@ -420,9 +420,9 @@ section { padding: 96px 6%; }
   content: ''; position: absolute; inset: 0;
   background: radial-gradient(ellipse 70% 50% at 50% 100%, rgba(100,145,222,.2) 0%, transparent 70%);
 }
-.cta-banner h2 { font-size: clamp(30px, 4vw, 48px); font-weight: 700; margin-bottom: 14px; position: relative; }
-.cta-banner p { font-size: 17px; color: rgba(255,255,255,.72); margin-bottom: 36px; position: relative; }
-.cta-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; position: relative; }
+.cta-banner h2 { font-size: clamp(30px, 4vw, 48px); font-weight: 700; margin-bottom: 14px; }
+.cta-banner p { font-size: 17px; color: rgba(255,255,255,.72); margin-bottom: 36px; }
+.cta-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
 .btn-cta-main {
   background: #fff; color: var(--blue-d);
   padding: 15px 32px; border-radius: 12px; font-size: 15px; font-weight: 700;
@@ -501,6 +501,22 @@ footer {
 .mobile-menu a:hover { background: var(--bg2); color: var(--text); }
 .mobile-menu-divider { height: 1px; background: var(--border); margin: 8px 0; }
 .mobile-menu .btn-nav-cta { text-align: center; margin-top: 4px; }
+
+/* ──────────────────── LARGE SCREEN CLAMP ──────────────────── */
+/* On 22" (1920px) and 27" (2560px), cap content so it doesn't stretch wall-to-wall */
+.nav { max-width: 1480px; margin: 0 auto; }
+.stats-inner { max-width: 1100px; }
+.footer-inner { max-width: 1480px; margin: 0 auto; }
+.cta-inner { max-width: 900px; margin: 0 auto; position: relative; }
+
+@media (min-width: 1480px) {
+  header { padding: 0 max(6%, calc((100vw - 1480px) / 2 + 48px)); }
+  .stats { padding: 44px max(6%, calc((100vw - 1480px) / 2 + 48px)); }
+  section { padding: 96px max(6%, calc((100vw - 1480px) / 2 + 48px)); }
+  footer { padding: 60px max(6%, calc((100vw - 1480px) / 2 + 48px)) 32px; }
+  .mobile-menu { padding: 16px max(6%, calc((100vw - 1480px) / 2 + 48px)); }
+  .cta-banner { margin: 0 max(6%, calc((100vw - 1480px) / 2 + 48px)) 80px; }
+}
 
 /* ──────────────────── RESPONSIVE ──────────────────── */
 @media (max-width: 960px) {
@@ -823,16 +839,19 @@ footer {
 
 <!-- ── CTA ── -->
 <div class="cta-banner">
-  <h2>Ready to Deploy Your AI CFO?</h2>
-  <p>Join 400+ UAE businesses already running on ETaxFlow. 3-day free trial, no credit card needed.</p>
-  <div class="cta-actions">
-    <a href="signup.html" class="btn-cta-main">Start 3-day free trial →</a>
-    <a href="mailto:hello@etaxflow.com" class="btn-cta-ghost">Book a demo</a>
+  <div class="cta-inner">
+    <h2>Ready to Deploy Your AI CFO?</h2>
+    <p>Join 400+ UAE businesses already running on ETaxFlow. 3-day free trial, no credit card needed.</p>
+    <div class="cta-actions">
+      <a href="signup.html" class="btn-cta-main">Start 3-day free trial →</a>
+      <a href="mailto:hello@etaxflow.com" class="btn-cta-ghost">Book a demo</a>
+    </div>
   </div>
 </div>
 
 <!-- ── FOOTER ── -->
 <footer>
+  <div class="footer-inner">
   <div class="footer-top">
     <div>
       <a href="landing.html" class="footer-brand-logo">
@@ -870,6 +889,7 @@ footer {
       <span class="f-badge">ISO 27001</span>
     </div>
   </div>
+  </div><!-- /footer-inner -->
 </footer>
 
 <script>
