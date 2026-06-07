@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Contact Us — ETaxFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #f1f1f1;
+  --bg1:      #ffffff;
+  --bg2:      #e4eaf5;
+  --surface:  #ffffff;
+  --surface2: #f1f1f1;
+  --border:   #d4dae8;
+  --border2:  #b8c1d8;
+
+  --blue:     #073D7F;
+  --blue-l:   #6491DE;
+  --blue-d:   #052A5C;
+  --violet:   #073D7F;
+  --violet-l: #4A72C4;
+  --cyan:     #6491DE;
+  --green:    #059669;
+  --amber:    #d97706;
+
+  --text:     #0C1630;
+  --text2:    #3A4D6E;
+  --text3:    #7A8DAD;
+
+  --grad-main: linear-gradient(135deg, #6491DE 0%, #073D7F 100%);
+  --grad-glow: radial-gradient(ellipse 60% 40% at 50% 0%, rgba(100,145,222,.10) 0%, transparent 70%);
+  --grad-card: linear-gradient(145deg, #ffffff 0%, #f1f1f1 100%);
+}
+
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.65;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif; letter-spacing: -.02em; }
+
+/* ──────────────────── HEADER ──────────────────── */
+header {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+  padding: 0 6%;
+  background: rgba(255,255,255,.88);
+  backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid var(--border);
+}
+.nav { display: flex; align-items: center; justify-content: space-between; height: 68px; max-width: 1480px; margin: 0 auto; }
+.logo {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 21px; font-weight: 700; letter-spacing: -.03em;
+  text-decoration: none; color: var(--text);
+  display: flex; align-items: center; gap: 8px;
+}
+.logo-mark {
+  width: 30px; height: 30px;
+  background: var(--grad-main);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; color: #fff;
+}
+.logo span { color: var(--blue-l); }
+.nav-links { display: flex; align-items: center; gap: 28px; list-style: none; }
+.nav-links a { font-size: 14px; font-weight: 500; color: var(--text2); text-decoration: none; transition: color .2s; }
+.nav-links a:hover { color: var(--text); }
+.nav-cta { display: flex; align-items: center; gap: 10px; }
+.btn-ghost {
+  background: none; border: 1px solid var(--border2); color: var(--text2);
+  padding: 8px 18px; border-radius: 8px; font-size: 13.5px; font-weight: 500;
+  cursor: pointer; text-decoration: none; transition: all .2s; font-family: 'Inter', sans-serif;
+}
+.btn-ghost:hover { border-color: var(--blue); color: var(--text); }
+.btn-nav-cta {
+  background: var(--grad-main); color: #fff;
+  padding: 9px 20px; border-radius: 8px; font-size: 13.5px; font-weight: 600;
+  cursor: pointer; text-decoration: none; border: none; transition: opacity .2s, transform .15s;
+  font-family: 'Inter', sans-serif;
+}
+.btn-nav-cta:hover { opacity: .88; transform: translateY(-1px); }
+.nav-mobile-toggle {
+  display: none; background: none; border: 1px solid var(--border2);
+  border-radius: 8px; padding: 7px 10px; cursor: pointer; color: var(--text2);
+  font-size: 18px; line-height: 1;
+}
+.mobile-menu {
+  display: none; position: fixed; top: 68px; left: 0; right: 0;
+  background: rgba(255,255,255,.97); backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border); z-index: 199;
+  padding: 16px 6%; flex-direction: column; gap: 4px;
+}
+.mobile-menu.open { display: flex; }
+.mobile-menu a {
+  font-size: 15px; font-weight: 500; color: var(--text2);
+  text-decoration: none; padding: 10px 12px; border-radius: 8px;
+  transition: background .15s, color .15s;
+}
+.mobile-menu a:hover { background: var(--bg2); color: var(--text); }
+.mobile-menu-divider { height: 1px; background: var(--border); margin: 8px 0; }
+.mobile-menu .btn-nav-cta { text-align: center; margin-top: 4px; }
+
+/* ──────────────────── PAGE HERO ──────────────────── */
+.page-hero {
+  padding: 130px 6% 72px;
+  text-align: center;
+  background: radial-gradient(ellipse 80% 55% at 50% 0%, rgba(100,145,222,.09) 0%, transparent 65%);
+  position: relative;
+}
+.page-hero::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: linear-gradient(rgba(100,145,222,.07) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(100,145,222,.07) 1px, transparent 1px);
+  background-size: 60px 60px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 20%, black 30%, transparent 75%);
+  pointer-events: none;
+}
+.page-hero-inner { position: relative; max-width: 640px; margin: 0 auto; }
+.label-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--blue-l);
+  background: rgba(100,145,222,.10);
+  border: 1px solid rgba(100,145,222,.22);
+  border-radius: 100px; padding: 5px 14px; margin-bottom: 20px;
+}
+.page-hero h1 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700; color: var(--text); line-height: 1.18; margin-bottom: 18px;
+}
+.page-hero p {
+  font-size: 16px; color: var(--text2); max-width: 480px; margin: 0 auto;
+}
+
+/* ──────────────────── CONTACT SECTION ──────────────────── */
+.contact-section {
+  padding: 72px 6% 100px;
+  max-width: 1200px; margin: 0 auto;
+}
+.contact-grid {
+  display: grid; grid-template-columns: 1fr 400px; gap: 56px; align-items: start;
+}
+
+/* ── Contact Form ── */
+.contact-form-card {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 44px 40px;
+}
+.contact-form-card h2 {
+  font-size: 1.5rem; font-weight: 700; color: var(--text); margin-bottom: 6px;
+}
+.contact-form-card > p {
+  font-size: 14px; color: var(--text3); margin-bottom: 32px;
+}
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-group { display: flex; flex-direction: column; gap: 7px; margin-bottom: 18px; }
+.form-group label {
+  font-size: 13px; font-weight: 600; color: var(--text2); letter-spacing: .01em;
+}
+.form-group input,
+.form-group select,
+.form-group textarea {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px; color: var(--text);
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 10px; padding: 11px 14px;
+  outline: none; transition: border-color .2s, box-shadow .2s;
+  width: 100%;
+}
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  border-color: var(--blue-l);
+  box-shadow: 0 0 0 3px rgba(100,145,222,.15);
+}
+.form-group textarea { resize: vertical; min-height: 130px; line-height: 1.6; }
+.form-group select { cursor: pointer; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237A8DAD' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center;
+  padding-right: 38px;
+}
+.btn-submit {
+  width: 100%; padding: 14px 24px;
+  background: var(--grad-main); color: #fff;
+  font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 600;
+  border: none; border-radius: 10px; cursor: pointer;
+  transition: opacity .2s, transform .15s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-top: 4px;
+}
+.btn-submit:hover { opacity: .88; transform: translateY(-1px); }
+.btn-submit:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+/* Success state */
+.form-success {
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 48px 24px;
+  gap: 16px;
+}
+.form-success.visible { display: flex; }
+.success-icon {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: rgba(5,150,105,.12);
+  display: flex; align-items: center; justify-content: center;
+}
+.form-success h3 { font-size: 1.3rem; color: var(--text); }
+.form-success p { font-size: 14px; color: var(--text3); max-width: 320px; }
+
+/* ── Right: office info ── */
+.contact-aside { display: flex; flex-direction: column; gap: 20px; }
+
+.office-card {
+  background: var(--bg1); border: 1px solid var(--border); border-radius: 16px;
+  padding: 28px 26px;
+}
+.office-card-flag {
+  font-size: 28px; margin-bottom: 12px; line-height: 1;
+}
+.office-card h3 {
+  font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 4px;
+}
+.office-card .office-sub {
+  font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--blue-l); margin-bottom: 14px;
+}
+.office-detail {
+  display: flex; align-items: flex-start; gap: 10px; margin-bottom: 11px;
+}
+.office-detail:last-child { margin-bottom: 0; }
+.office-detail-icon {
+  width: 32px; height: 32px; min-width: 32px;
+  background: var(--bg2); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+}
+.office-detail-text { font-size: 13.5px; color: var(--text2); line-height: 1.5; }
+.office-detail-text a { color: var(--blue-l); text-decoration: none; }
+.office-detail-text a:hover { color: var(--blue); text-decoration: underline; }
+
+.contact-info-card {
+  background: linear-gradient(135deg, #073D7F 0%, #052A5C 100%);
+  border-radius: 16px; padding: 28px 26px;
+  color: #fff;
+}
+.contact-info-card h3 { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+.contact-info-card p { font-size: 13px; color: rgba(255,255,255,.7); margin-bottom: 20px; }
+.contact-info-actions { display: flex; flex-direction: column; gap: 10px; }
+.btn-wa {
+  display: flex; align-items: center; gap: 10px;
+  background: #25D366; color: #fff;
+  padding: 12px 18px; border-radius: 10px;
+  font-size: 13.5px; font-weight: 600; text-decoration: none;
+  transition: opacity .2s;
+}
+.btn-wa:hover { opacity: .88; }
+.btn-email {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(255,255,255,.12); color: #fff;
+  padding: 12px 18px; border-radius: 10px;
+  font-size: 13.5px; font-weight: 600; text-decoration: none;
+  border: 1px solid rgba(255,255,255,.2);
+  transition: background .2s;
+}
+.btn-email:hover { background: rgba(255,255,255,.2); }
+
+/* ──────────────────── FOOTER ──────────────────── */
+footer {
+  background: var(--bg1); border-top: 1px solid var(--border);
+  padding: 60px 6% 32px;
+}
+.footer-inner { max-width: 1480px; margin: 0 auto; }
+.footer-top { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1.5fr; gap: 40px; margin-bottom: 48px; }
+.footer-brand-logo { display: flex; align-items: center; gap: 9px; text-decoration: none; margin-bottom: 14px; }
+.footer-brand-logo span { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; color: var(--text); }
+.footer-brand-logo span em { font-style: normal; color: var(--blue-l); }
+.footer-desc { font-size: 13.5px; color: var(--text3); line-height: 1.75; max-width: 280px; }
+.footer-col h5 { font-family: 'Space Grotesk', sans-serif; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text3); margin-bottom: 18px; }
+.footer-col a { display: block; font-size: 13.5px; color: var(--text2); text-decoration: none; margin-bottom: 11px; transition: color .2s; }
+.footer-col a:hover { color: var(--text); }
+.footer-office { margin-bottom: 20px; }
+.footer-office-label { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--blue-l); margin-bottom: 6px; }
+.footer-office p { font-size: 12.5px; color: var(--text3); line-height: 1.6; margin: 0; }
+.footer-office a.footer-office-tel { display: inline-block; font-size: 12.5px; color: var(--text2); text-decoration: none; margin-top: 4px; margin-bottom: 0; }
+.footer-office a.footer-office-tel:hover { color: var(--text); }
+.footer-bottom {
+  border-top: 1px solid var(--border); padding-top: 26px;
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+}
+.footer-bottom p { font-size: 12.5px; color: var(--text3); }
+.footer-badges { display: flex; gap: 8px; }
+.f-badge { font-size: 11px; font-weight: 600; color: var(--text3); border: 1px solid var(--border); border-radius: 100px; padding: 3px 10px; }
+
+/* ──────────────────── WHATSAPP FLOAT ──────────────────── */
+.wa-float {
+  position: fixed; bottom: 28px; right: 28px; z-index: 999;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: #25D366;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 20px rgba(37,211,102,.45);
+  text-decoration: none; transition: transform .2s, box-shadow .2s;
+}
+.wa-float:hover { transform: scale(1.1); box-shadow: 0 8px 32px rgba(37,211,102,.6); }
+.wa-tooltip {
+  position: absolute; right: 68px; top: 50%; transform: translateY(-50%);
+  background: #fff; color: #0c1630; font-family: 'Inter', sans-serif;
+  font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: 8px;
+  white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.wa-tooltip::after {
+  content: ''; position: absolute; right: -6px; top: 50%; transform: translateY(-50%);
+  border: 6px solid transparent; border-right: none; border-left-color: #fff;
+}
+.wa-float:hover .wa-tooltip { opacity: 1; }
+
+/* ──────────────────── RESPONSIVE ──────────────────── */
+@media (max-width: 960px) {
+  .contact-grid { grid-template-columns: 1fr; }
+  .contact-aside { flex-direction: column; }
+  .footer-top { grid-template-columns: 1fr 1fr; gap: 32px; }
+  .nav-links { display: none; }
+  .nav-mobile-toggle { display: block; }
+  .nav-cta .btn-ghost { display: none; }
+}
+@media (max-width: 600px) {
+  .contact-form-card { padding: 28px 20px; }
+  .form-row { grid-template-columns: 1fr; }
+  .footer-top { grid-template-columns: 1fr; }
+}
+@media (min-width: 1480px) {
+  header { padding: 0 max(6%, calc((100vw - 1480px) / 2 + 48px)); }
+  .page-hero { padding: 130px max(6%, calc((100vw - 1480px) / 2 + 48px)) 72px; }
+  .contact-section { padding-left: max(6%, calc((100vw - 1480px) / 2 + 48px)); padding-right: max(6%, calc((100vw - 1480px) / 2 + 48px)); }
+  footer { padding: 60px max(6%, calc((100vw - 1480px) / 2 + 48px)) 32px; }
+  .mobile-menu { padding: 16px max(6%, calc((100vw - 1480px) / 2 + 48px)); }
+}
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header>
+  <nav class="nav">
+    <a href="landing.html" class="logo">
+      <div class="logo-mark">T</div>
+      E<span>Tax</span>Flow
+    </a>
+    <ul class="nav-links">
+      <li><a href="landing.html#features">Features</a></li>
+      <li><a href="landing.html#uae">UAE Compliance</a></li>
+      <li><a href="landing.html#pricing">Pricing</a></li>
+      <li><a href="contact.html" style="color:var(--text)">Contact</a></li>
+    </ul>
+    <div class="nav-cta">
+      <a href="/taxflow/" class="btn-ghost">Sign in</a>
+      <a href="signup.html" class="btn-nav-cta">Start free →</a>
+      <button class="nav-mobile-toggle" onclick="toggleMobileMenu()" aria-label="Menu">&#9776;</button>
+    </div>
+  </nav>
+</header>
+<div class="mobile-menu" id="mobile-menu">
+  <a href="landing.html#features" onclick="closeMobileMenu()">Features</a>
+  <a href="landing.html#uae" onclick="closeMobileMenu()">UAE Compliance</a>
+  <a href="landing.html#pricing" onclick="closeMobileMenu()">Pricing</a>
+  <a href="contact.html" onclick="closeMobileMenu()">Contact</a>
+  <div class="mobile-menu-divider"></div>
+  <a href="/taxflow/">Sign in</a>
+  <a href="signup.html" class="btn-nav-cta">Start free →</a>
+</div>
+
+<!-- ── PAGE HERO ── -->
+<section class="page-hero">
+  <div class="page-hero-inner">
+    <div class="label-chip">Get in touch</div>
+    <h1>We'd Love to<br>Hear From You</h1>
+    <p>Have a question about pricing, compliance, or how ETaxFlow fits your business? Our team is ready to help.</p>
+  </div>
+</section>
+
+<!-- ── CONTACT SECTION ── -->
+<div class="contact-section">
+  <div class="contact-grid">
+
+    <!-- Form -->
+    <div class="contact-form-card">
+      <h2>Send us a message</h2>
+      <p>We'll get back to you within 1 business day.</p>
+
+      <form id="contact-form" onsubmit="handleSubmit(event)" novalidate>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cf-name">Full Name *</label>
+            <input type="text" id="cf-name" name="name" placeholder="Ahmed Al Mansoori" required>
+          </div>
+          <div class="form-group">
+            <label for="cf-email">Email Address *</label>
+            <input type="email" id="cf-email" name="email" placeholder="ahmed@company.ae" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cf-phone">Phone / WhatsApp</label>
+            <input type="tel" id="cf-phone" name="phone" placeholder="+971 50 000 0000">
+          </div>
+          <div class="form-group">
+            <label for="cf-company">Company Name</label>
+            <input type="text" id="cf-company" name="company" placeholder="Your company">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="cf-subject">I'm interested in</label>
+          <select id="cf-subject" name="subject">
+            <option value="">Select a topic…</option>
+            <option value="demo">Book a demo</option>
+            <option value="pricing">Pricing &amp; plans</option>
+            <option value="vat">UAE VAT / FTA filing</option>
+            <option value="corporate-tax">Corporate Tax 9%</option>
+            <option value="payroll">WPS Payroll</option>
+            <option value="trial">Start free trial</option>
+            <option value="support">Technical support</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="cf-message">Message *</label>
+          <textarea id="cf-message" name="message" placeholder="Tell us a bit about your business and how we can help…" required></textarea>
+        </div>
+        <button type="submit" class="btn-submit" id="submit-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          Send Message
+        </button>
+      </form>
+
+      <div class="form-success" id="form-success">
+        <div class="success-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+        <h3>Message sent!</h3>
+        <p>Thank you for reaching out. Our team will be in touch within 1 business day.</p>
+      </div>
+    </div>
+
+    <!-- Aside: offices + quick contact -->
+    <div class="contact-aside">
+
+      <!-- UAE Office -->
+      <div class="office-card">
+        <div class="office-card-flag">🇦🇪</div>
+        <div class="office-sub">UAE Office</div>
+        <h3>Dubai, United Arab Emirates</h3>
+        <div style="margin-top:16px">
+          <div class="office-detail">
+            <div class="office-detail-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--blue-l)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            </div>
+            <div class="office-detail-text">Dubai, United Arab Emirates</div>
+          </div>
+          <div class="office-detail">
+            <div class="office-detail-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--blue-l)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.02 1.21a2 2 0 012-2.18h3a2 2 0 012 1.72c.127.96.36 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7a16 16 0 006.09 6.09l1.27-1.27a2 2 0 012.11-.45c.908.34 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+            </div>
+            <div class="office-detail-text">
+              <a href="https://wa.me/447898812372" target="_blank" rel="noopener">WhatsApp Us →</a>
+            </div>
+          </div>
+          <div class="office-detail">
+            <div class="office-detail-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--blue-l)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 8l10 6 10-6"/></svg>
+            </div>
+            <div class="office-detail-text">
+              <a href="mailto:hello@etaxflow.com">hello@etaxflow.com</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- UK Office -->
+      <div class="office-card">
+        <div class="office-card-flag">🇬🇧</div>
+        <div class="office-sub">UK Office — Scotland</div>
+        <h3>Stirling, Scotland</h3>
+        <div style="margin-top:16px">
+          <div class="office-detail">
+            <div class="office-detail-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--blue-l)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            </div>
+            <div class="office-detail-text">Stirling, Scotland, United Kingdom</div>
+          </div>
+          <div class="office-detail">
+            <div class="office-detail-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--blue-l)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.02 1.21a2 2 0 012-2.18h3a2 2 0 012 1.72c.127.96.36 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7a16 16 0 006.09 6.09l1.27-1.27a2 2 0 012.11-.45c.908.34 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+            </div>
+            <div class="office-detail-text">
+              <a href="tel:+447898812372">+44 7898 812 372</a>
+            </div>
+          </div>
+          <div class="office-detail">
+            <div class="office-detail-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--blue-l)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 8l10 6 10-6"/></svg>
+            </div>
+            <div class="office-detail-text">
+              <a href="mailto:hello@etaxflow.com">hello@etaxflow.com</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick contact card -->
+      <div class="contact-info-card">
+        <h3>Prefer a quick chat?</h3>
+        <p>Reach us instantly on WhatsApp or send an email — we reply the same business day.</p>
+        <div class="contact-info-actions">
+          <a class="btn-wa" href="https://wa.me/447898812372" target="_blank" rel="noopener">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+            Chat on WhatsApp
+          </a>
+          <a class="btn-email" href="mailto:hello@etaxflow.com">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 8l10 6 10-6"/></svg>
+            hello@etaxflow.com
+          </a>
+        </div>
+      </div>
+
+    </div><!-- /contact-aside -->
+  </div>
+</div>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <div class="footer-inner">
+  <div class="footer-top">
+    <div>
+      <a href="landing.html" class="footer-brand-logo">
+        <div class="logo-mark">T</div>
+        <span>Tax<em>Flow</em></span>
+      </a>
+      <p class="footer-desc">AI-powered accounting and business intelligence built specifically for UAE companies. FTA compliant, WPS ready, bank connected.</p>
+    </div>
+    <div class="footer-col">
+      <h5>Product</h5>
+      <a href="landing.html#features">Features</a>
+      <a href="landing.html#pricing">Pricing</a>
+      <a href="signup.html">Free Trial</a>
+    </div>
+    <div class="footer-col">
+      <h5>Compliance</h5>
+      <a href="#">UAE VAT</a>
+      <a href="#">Corporate Tax</a>
+      <a href="#">WPS Payroll</a>
+      <a href="#">FTA Filing</a>
+    </div>
+    <div class="footer-col">
+      <h5>Support</h5>
+      <a href="#">Documentation</a>
+      <a href="contact.html">Contact Us</a>
+      <a href="#">Privacy Policy</a>
+      <a href="#">Terms of Use</a>
+    </div>
+    <div class="footer-col">
+      <h5>Offices</h5>
+      <div class="footer-office">
+        <div class="footer-office-label">🇦🇪 UAE</div>
+        <p>Dubai, United Arab Emirates</p>
+        <a class="footer-office-tel" href="https://wa.me/447898812372">WhatsApp Us</a>
+      </div>
+      <div class="footer-office">
+        <div class="footer-office-label">🇬🇧 UK — Scotland</div>
+        <p>Stirling, Scotland<br>United Kingdom</p>
+        <a class="footer-office-tel" href="tel:+447898812372">+44 7898 812 372</a>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <p>© 2026 ETaxFlow. All rights reserved.</p>
+    <div class="footer-badges">
+      <span class="f-badge">FTA Compliant</span>
+      <span class="f-badge">UAE Data Law</span>
+      <span class="f-badge">ISO 27001</span>
+    </div>
+  </div>
+  </div>
+</footer>
+
+<a class="wa-float" href="https://wa.me/447898812372" target="_blank" rel="noopener" aria-label="Chat on WhatsApp">
+  <span class="wa-tooltip">Chat with us</span>
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+</a>
+
+<script>
+function toggleMobileMenu() { document.getElementById('mobile-menu').classList.toggle('open'); }
+function closeMobileMenu() { document.getElementById('mobile-menu').classList.remove('open'); }
+document.addEventListener('click', function(e) {
+  const menu = document.getElementById('mobile-menu');
+  if (menu.classList.contains('open') && !menu.contains(e.target) && !e.target.closest('.nav-mobile-toggle')) {
+    menu.classList.remove('open');
+  }
+});
+
+async function handleSubmit(e) {
+  e.preventDefault();
+  const form = document.getElementById('contact-form');
+  const btn = document.getElementById('submit-btn');
+
+  const name = document.getElementById('cf-name').value.trim();
+  const email = document.getElementById('cf-email').value.trim();
+  const message = document.getElementById('cf-message').value.trim();
+  if (!name || !email || !message) {
+    alert('Please fill in your name, email, and message.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Sending…';
+
+  const payload = {
+    name,
+    email,
+    phone: document.getElementById('cf-phone').value.trim(),
+    company: document.getElementById('cf-company').value.trim(),
+    subject: document.getElementById('cf-subject').value,
+    message,
+  };
+
+  try {
+    const base = (window.TAXFLOW_API_BASE_URL || 'http://localhost:8000/api/v1').replace(/\/+$/, '');
+    const res = await fetch(`${base}/contact`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('server');
+  } catch (_) {
+    /* No backend contact endpoint yet — still show success and open mailto fallback */
+    const sub = encodeURIComponent(`ETaxFlow enquiry from ${name}`);
+    const body = encodeURIComponent(`Name: ${name}\nEmail: ${email}\nPhone: ${payload.phone}\nCompany: ${payload.company}\nTopic: ${payload.subject}\n\n${message}`);
+    window.location.href = `mailto:hello@etaxflow.com?subject=${sub}&body=${body}`;
+  }
+
+  form.style.display = 'none';
+  document.getElementById('form-success').classList.add('visible');
+}
+</script>
+<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+</body>
+</html>

@@ -53,6 +53,10 @@ def create_app() -> FastAPI:
     def signup() -> FileResponse:
         return FileResponse(str(static_dir / "signup.html"))
 
+    @app.get("/contact.html", include_in_schema=False)
+    def contact() -> FileResponse:
+        return FileResponse(str(static_dir / "contact.html"))
+
     @app.get("/taxflow/config.js", include_in_schema=False)
     def config_js() -> Response:
         api_base = os.environ.get("API_BASE_URL", "")
