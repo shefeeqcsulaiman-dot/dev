@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+import app.cache as cache
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import (
@@ -46,6 +47,15 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 @router.get("/dashboard")
 def dashboard(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     company_id = current_user.company_id
+    cached = cache.get(f"dashboard:{company_id}")
+    if cached is not None:
+        return cached
+    result = _build_dashboard(db, company_id)
+    cache.set(f"dashboard:{company_id}", result, ttl=60)
+    return result
+
+
+def _build_dashboard(db: Session, company_id: str) -> dict[str, Any]:
     app_sales = app_sales_invoice_records(db, company_id)
     app_employees = app_data_payloads(db, company_id, "employees")
     app_purchases = app_data_payloads(db, company_id, "purchaseRecords")
@@ -303,12 +313,27 @@ def invoice_status(db: Session, company_id: str) -> dict[str, dict[str, str | in
 
 @router.get("/trial-balance")
 def trial_balance(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
-    return {"status": "ready", "source": "posted journal entries", "rows": trial_balance_rows(db, current_user.company_id)}
+    company_id = current_user.company_id
+    cached = cache.get(f"trial_balance:{company_id}")
+    if cached is not None:
+        return cached
+    result = {"status": "ready", "source": "posted journal entries", "rows": trial_balance_rows(db, company_id)}
+    cache.set(f"trial_balance:{company_id}", result, ttl=120)
+    return result
 
 
 @router.get("/summary")
 def report_summary(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     company_id = current_user.company_id
+    cached = cache.get(f"summary:{company_id}")
+    if cached is not None:
+        return cached
+    result = _build_summary(db, company_id)
+    cache.set(f"summary:{company_id}", result, ttl=120)
+    return result
+
+
+def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
     app_sales = app_sales_invoice_records(db, company_id)
     app_purchases = app_data_payloads(db, company_id, "purchaseRecords")
     revenue = money(db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(Invoice.company_id == company_id).scalar())

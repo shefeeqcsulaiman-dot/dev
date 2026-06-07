@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+import app.cache as cache
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import CorporateTaxReturn, TaxCode, TaxLine, User, VatReturn
@@ -42,6 +43,10 @@ def vat_return(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
+    cache_key = f"vat_return:{current_user.company_id}:{period}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
     output_vat = (
         db.query(func.coalesce(func.sum(TaxLine.tax_amount), 0))
         .filter(TaxLine.company_id == current_user.company_id, TaxLine.period == period, TaxLine.direction == "output")
@@ -53,12 +58,14 @@ def vat_return(
         .scalar()
     )
     net = Decimal(str(output_vat)) - Decimal(str(input_vat))
-    return {
+    result = {
         "period": period,
         "output_vat": f"{Decimal(str(output_vat)):.2f}",
         "input_vat": f"{Decimal(str(input_vat)):.2f}",
         "net_vat_payable": f"{net:.2f}",
     }
+    cache.set(cache_key, result, ttl=300)
+    return result
 
 
 @router.get("/vat-returns", response_model=list[VatReturnOut])

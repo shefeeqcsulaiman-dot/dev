@@ -1,5 +1,5 @@
 ## Render Blueprint — ETaxFlow
-## Web service (FastAPI + frontend) + managed PostgreSQL
+## Web service (FastAPI + frontend) + managed PostgreSQL + Redis cache
 
 databases:
   - name: etaxflow-db
@@ -7,6 +7,11 @@ databases:
     plan: free
 
 services:
+  - type: redis
+    name: etaxflow-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+
   - type: web
     name: etaxflow
     runtime: docker
@@ -16,12 +21,15 @@ services:
         fromDatabase:
           name: etaxflow-db
           property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: etaxflow-redis
+          type: redis
+          property: connectionString
       - key: SECRET_KEY
         generateValue: true
       - key: CORS_ORIGINS
         value: https://etaxflow.onrender.com
-      - key: REDIS_URL
-        value: memory://
       - key: CELERY_TASK_ALWAYS_EAGER
         value: "true"
       - key: API_BASE_URL
