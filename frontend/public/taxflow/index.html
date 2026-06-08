@@ -3129,8 +3129,6 @@
     <div class="tab" onclick="stab(this,'set-users')">Users & Roles</div>
     <div class="tab" onclick="stab(this,'set-tax')">Tax Settings</div>
     <div class="tab" onclick="stab(this,'set-notif')">Notifications</div>
-    <div class="tab" onclick="stab(this,'set-security')">Security</div>
-    <div class="tab" onclick="stab(this,'set-approvals')">Approvals</div>
     <div class="tab" onclick="stab(this,'set-docs')">Invoice Design</div>
     <div class="tab" onclick="stab(this,'set-quotation-docs')">Quotation Design</div>
     <div class="tab" onclick="stab(this,'set-backup')">Backup & Audit</div>
@@ -3304,67 +3302,6 @@
           <tr><td><div style="font-weight:500">Leave Requests</div><div style="font-size:12px;color:var(--text3)">Notify when leave request is submitted</div></td><td><input type="checkbox" checked></td></tr>
         </tbody>
       </table>
-    </div>
-  </div>
-
-  <div class="tab-body" id="set-security">
-    <div class="g2 mb16">
-      <div class="card">
-        <div class="card-hd"><div><div class="card-title">Authentication Policy</div><div class="card-sub">Login security and session controls</div></div><span class="b b-g">Healthy</span></div>
-        <div class="toggle-row"><div><div>Require multi-factor authentication</div><div class="toggle-copy">Apply to owners, finance users, payroll users, and approvers.</div></div><input type="checkbox" checked></div>
-        <div class="toggle-row"><div><div>Force password rotation</div><div class="toggle-copy">Every 90 days for admin and finance users.</div></div><input type="checkbox" checked></div>
-        <div class="toggle-row"><div><div>Block login outside UAE</div><div class="toggle-copy">Require admin approval for foreign IP sign-ins.</div></div><input type="checkbox"></div>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Session Rules</div></div>
-        <div class="fr2">
-          <div class="fg"><label class="fl">Idle Timeout</label><select class="fi"><option>15 minutes</option><option selected>30 minutes</option><option>60 minutes</option></select></div>
-          <div class="fg"><label class="fl">Max Devices</label><select class="fi"><option>1 device</option><option selected>3 devices</option><option>Unlimited</option></select></div>
-        </div>
-        <div class="fg"><label class="fl">Allowed IP Ranges</label><textarea class="fi" placeholder="192.168.1.0/24&#10;Office static IP"></textarea></div>
-        <button class="btn btn-p btn-sm" onclick="saveSettings('Security policy saved')">Save Security</button>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-hd"><div class="card-title">Recent Security Events</div></div>
-      <table class="tbl">
-        <thead><tr><th>Time</th><th>User</th><th>Event</th><th>Location</th><th>Status</th></tr></thead>
-        <tbody>
-          <tr><td class="mono">09:15</td><td>Sara Al Mansouri</td><td>MFA login</td><td>Dubai</td><td><span class="b b-g">Allowed</span></td></tr>
-          <tr><td class="mono">08:30</td><td>Rania Abboud</td><td>Report export</td><td>Dubai</td><td><span class="b b-g">Logged</span></td></tr>
-          <tr><td class="mono">Yesterday</td><td>Unknown</td><td>Failed login</td><td>Outside UAE</td><td><span class="b b-r">Blocked</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="tab-body" id="set-approvals">
-    <div class="card mb16">
-      <div class="card-hd"><div><div class="card-title">Approval Workflows</div><div class="card-sub">Thresholds and approver routing</div></div><button class="btn btn-p btn-sm" onclick="toast('Workflow builder opened','info')">+ New Workflow</button></div>
-      <table class="tbl">
-        <thead><tr><th>Workflow</th><th>Trigger</th><th>Level 1</th><th>Level 2</th><th>Status</th></tr></thead>
-        <tbody>
-          <tr><td>Purchase Approval</td><td>Over AED 10,000</td><td>Finance Manager</td><td>Owner</td><td><span class="b b-g">Active</span></td></tr>
-          <tr><td>Expense Approval</td><td>Over AED 1,000</td><td>Department Head</td><td>Finance</td><td><span class="b b-g">Active</span></td></tr>
-          <tr><td>Payroll Approval</td><td>Every payroll run</td><td>Finance Manager</td><td>General Manager</td><td><span class="b b-g">Active</span></td></tr>
-          <tr><td>VAT Return Approval</td><td>Before export</td><td>Accountant</td><td>Owner</td><td><span class="b b-a">Draft</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="g2">
-      <div class="card">
-        <div class="card-title mb12">Escalation Rules</div>
-        <div class="toggle-row"><div><div>Auto-escalate overdue approvals</div><div class="toggle-copy">Notify the next approver after 48 hours.</div></div><input type="checkbox" checked></div>
-        <div class="toggle-row"><div><div>Block posting without approval</div><div class="toggle-copy">Prevents journals, SIF, and VAT exports until approved.</div></div><input type="checkbox" checked></div>
-      </div>
-      <div class="card">
-        <div class="card-title mb12">Delegation</div>
-        <div class="fr2">
-          <div class="fg"><label class="fl">Approver</label><select class="fi"><option>Sara Al Mansouri</option><option>Rania Abboud</option></select></div>
-          <div class="fg"><label class="fl">Delegate To</label><select class="fi"><option>Rania Abboud</option><option>Ahmed Rashid</option></select></div>
-        </div>
-        <button class="btn btn-g btn-sm" onclick="saveSettings('Delegation rule saved')">Save Delegation</button>
-      </div>
     </div>
   </div>
 
