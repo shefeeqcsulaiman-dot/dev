@@ -175,3 +175,37 @@ def test_bootstrap_includes_payments(client, auth_headers):
     data = r.json()["data"]
     payment_refs = [p.get("ref") for p in data.get("payments", [])]
     assert ref in payment_refs
+
+
+def test_db_dump_returns_sql(client, auth_headers):
+    # Save a payment so there's something to dump
+    _save_payment(client, auth_headers, {**FULL_PAYMENT, "ref": "RCT-DUMP-001"})
+
+    r = client.get("/api/v1/app-data/db-dump", headers=auth_headers)
+    assert r.status_code == 200
+    content = r.text
+    # Must look like SQL
+    assert "BEGIN;" in content
+    assert "COMMIT;" in content
+    assert "INSERT INTO" in content
+    assert "app_data_records" in content
+
+
+def test_db_dump_tenant_isolation(client, auth_headers, second_tenant_headers):
+    ref = "RCT-DUMP-ISOLATED"
+    _save_payment(client, auth_headers, {**FULL_PAYMENT, "ref": ref})
+
+    # Tenant 2's dump must NOT contain tenant 1's record
+    r = client.get("/api/v1/app-data/db-dump", headers=second_tenant_headers)
+    assert r.status_code == 200
+    assert ref not in r.text
+
+
+def test_export_endpoint_returns_all_collections(client, auth_headers):
+    r = client.get("/api/v1/app-data/export", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert "meta" in body
+    assert "data" in body
+    assert "exported_at" in body["meta"]

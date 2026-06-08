@@ -13754,13 +13754,24 @@ function triggerRawDownload(blob,filename){
 
 async function _loadSheetJs(){
   if(window.XLSX)return;
-  await new Promise((resolve,reject)=>{
-    const s=document.createElement('script');
-    s.src='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
-    s.onload=resolve;
-    s.onerror=()=>reject(new Error('Could not load SheetJS — check internet connection'));
-    document.head.appendChild(s);
-  });
+  // Try multiple CDNs in order
+  const cdns=[
+    'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js',
+    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+  ];
+  for(const src of cdns){
+    try{
+      await new Promise((resolve,reject)=>{
+        const s=document.createElement('script');
+        s.src=src;
+        s.onload=resolve;
+        s.onerror=reject;
+        document.head.appendChild(s);
+      });
+      if(window.XLSX)return;
+    }catch{/* try next */}
+  }
+  throw new Error('Could not load Excel library — check internet connection');
 }
 
 function _backupModuleFilter(){
@@ -13846,7 +13857,10 @@ async function downloadExcelBackup(){
     if(wb.SheetNames.length===0){toast('No data to export','err');return;}
 
     const ts=new Date().toISOString().slice(0,10);
-    XLSX.writeFile(wb,`taxflow-backup-${ts}.xlsx`);
+    // Use write+blob instead of writeFile for reliable browser downloads
+    const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+    const xlsxBlob=new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    triggerRawDownload(xlsxBlob,`taxflow-backup-${ts}.xlsx`);
     audit('Downloaded Excel backup','Backup','Complete');
     toast('Excel downloaded','ok');
   }catch(e){
