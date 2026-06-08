@@ -1554,6 +1554,61 @@ function readFieldValue(labelText,scopeId='set-company'){
   return (findSettingsInput(labelText,scopeId)?.value||'').trim();
 }
 
+/* ── Company logo (localStorage) ── */
+const _LOGO_KEY='tf_company_logo';
+function _getCompanyLogo(){return localStorage.getItem(_LOGO_KEY)||null;}
+
+function _logoHtml(initials){
+  const logo=_getCompanyLogo();
+  if(logo)return `<img src="${logo}" class="invoice-logo-img" alt="Logo">`;
+  return `<div class="invoice-logo">${escapeHtml(initials)}</div>`;
+}
+
+function _logoPdfHtml(initials){
+  const logo=_getCompanyLogo();
+  if(logo)return `<img src="${logo}" style="width:58px;height:58px;object-fit:contain;border-radius:12px;flex:0 0 auto;" alt="Logo">`;
+  return `<div class="logo">${escapeHtml(initials)}</div>`;
+}
+
+function _applyLogoEverywhere(){
+  const logo=_getCompanyLogo();
+  const sbImg=document.getElementById('sb-logo-img');
+  const sbBrand=document.querySelector('.sb-brand');
+  if(sbImg){sbImg.src=logo||'';sbImg.style.display=logo?'block':'none';}
+  if(sbBrand)sbBrand.style.display=logo?'none':'';
+  const prevImg=document.getElementById('co-logo-preview-img');
+  const initEl=document.getElementById('co-logo-initials');
+  const rmBtn=document.getElementById('co-logo-remove');
+  if(prevImg){prevImg.src=logo||'';prevImg.style.display=logo?'block':'none';}
+  if(initEl)initEl.style.display=logo?'none':'';
+  if(rmBtn)rmBtn.style.display=logo?'':'none';
+}
+
+function handleLogoUpload(input){
+  const file=input.files?.[0];
+  if(!file)return;
+  if(file.size>2097152){toast('Logo must be under 2 MB','warn');return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    localStorage.setItem(_LOGO_KEY,e.target.result);
+    _applyLogoEverywhere();
+    toast('Company logo saved','ok');
+    updateInvoiceLayoutPreview?.();
+    updateQuotationLayoutPreview?.();
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeLogo(){
+  localStorage.removeItem(_LOGO_KEY);
+  const f=document.getElementById('co-logo-file');
+  if(f)f.value='';
+  _applyLogoEverywhere();
+  toast('Logo removed','ok');
+  updateInvoiceLayoutPreview?.();
+  updateQuotationLayoutPreview?.();
+}
+
 function applyCompanyToUi(company){
   if(!company)return;
   currentCompany=company;
@@ -1565,6 +1620,7 @@ function applyCompanyToUi(company){
   const layoutCompany=document.getElementById('inv-layout-company');
   if(layoutCompany&&!layoutCompany.dataset.userEdited)setFieldValue(layoutCompany,name);
   updateInvoiceLayoutPreview?.();
+  _applyLogoEverywhere();
 }
 
 async function syncCompanyFromDatabase(){
@@ -6763,7 +6819,7 @@ function quotationLayoutPreviewHtml(quote=sampleQuotationLayoutRecord(),layout=g
       <div class="invoice-topbar"></div>
       <div class="invoice-head invoice-layout-head" style="grid-template-columns:1fr;gap:12px">
         <div class="invoice-brand" style="justify-content:${brandJustify};text-align:${textAlign}">
-          <div class="invoice-logo">${escapeHtml(initials)}</div>
+          ${_logoHtml(initials)}
           <div>
             <div class="invoice-company" style="font-family:${fontFamily}">${escapeHtml(layout.company)}</div>
             <div class="invoice-muted">${escapeHtml(layout.address)}</div>
@@ -6970,7 +7026,7 @@ function invoicePdfHtml(inv=currentInvoiceForShare()){
     <style>
       *{box-sizing:border-box}body{margin:0;background:#fff;color:#172033;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.45}.sheet{max-width:900px;margin:0 auto;padding:34px}.bar{height:7px;background:${accent};margin:-34px -34px 28px}.head{display:grid;grid-template-columns:1fr 280px;gap:24px;border-bottom:1px solid #e5eaf2;padding-bottom:22px}.brand{display:flex;gap:14px}.logo{width:58px;height:58px;border-radius:12px;background:${accent};color:#fff;display:grid;place-items:center;font-size:20px;font-weight:800}.company{font-size:22px;font-weight:800}.muted{color:#667085;font-size:12px;margin-top:3px}.right{text-align:right}.label{font-size:30px;font-weight:900;text-transform:uppercase}.badge{display:inline-block;margin-top:8px;border:1px solid #d8e2ff;color:${accent};border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;text-transform:uppercase}.grid{display:grid;grid-template-columns:1fr 280px;gap:16px;margin:22px 0}.panel{border:1px solid #e5eaf2;border-radius:8px;padding:14px}.kicker{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#667085;font-weight:700;margin-bottom:7px}.party{font-size:17px;font-weight:800}.row{display:flex;justify-content:space-between;gap:12px;color:#667085;padding:4px 0}.row strong{color:#172033;text-align:right}table{width:100%;border-collapse:collapse;border:1px solid #e5eaf2;border-radius:8px;overflow:hidden}th{background:#f3f6fb;color:#667085;text-transform:uppercase;font-size:10px;letter-spacing:.5px;text-align:left;padding:10px}td{padding:11px 10px;border-top:1px solid #e5eaf2}.num{text-align:right;white-space:nowrap}.summary{display:grid;grid-template-columns:1fr 300px;gap:20px;margin-top:22px}.notes{border-left:4px solid ${accent};padding-left:12px;color:#667085}.totals{border:1px solid #e5eaf2;border-radius:8px;padding:14px}.total,.grand{display:flex;justify-content:space-between;gap:14px}.total{color:#667085;padding:4px 0}.grand{border-top:1px solid #e5eaf2;margin-top:8px;padding-top:12px;font-size:19px;font-weight:900}.grand strong{color:${accent}}.link{margin-top:14px;font-size:11px;color:#667085;word-break:break-all}[dir=rtl] .right{text-align:left}[dir=rtl] th{text-align:right}[dir=rtl] .num{text-align:left}[dir=rtl] .notes{border-left:0;border-right:4px solid ${accent};padding-left:0;padding-right:12px}@media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.sheet{padding:24px}.bar{margin:-24px -24px 24px}.no-print{display:none}}
     </style></head><body><main class="sheet"><div class="bar"></div>
-      <section class="head" dir="${company.enableRtl?'rtl':'ltr'}"><div class="brand"><div class="logo">${escapeHtml(initials)}</div><div><div class="company">${escapeHtml(company.name||'TaxFlow')}</div><div class="muted">${escapeHtml(company.address||'')}</div><div class="muted">${escapeHtml(company.trnLabel||'TRN')} ${escapeHtml(company.trn||'not set')}</div></div></div><div class="right"><div class="label">${escapeHtml(company.taxLabel||'Tax Invoice')}</div><div>${escapeHtml(invoice.invoice_no||'Draft')}</div><span class="badge">${escapeHtml(invoice.status||'Draft')}</span></div></section>
+      <section class="head" dir="${company.enableRtl?'rtl':'ltr'}"><div class="brand">${_logoPdfHtml(initials)}<div><div class="company">${escapeHtml(company.name||'TaxFlow')}</div><div class="muted">${escapeHtml(company.address||'')}</div><div class="muted">${escapeHtml(company.trnLabel||'TRN')} ${escapeHtml(company.trn||'not set')}</div></div></div><div class="right"><div class="label">${escapeHtml(company.taxLabel||'Tax Invoice')}</div><div>${escapeHtml(invoice.invoice_no||'Draft')}</div><span class="badge">${escapeHtml(invoice.status||'Draft')}</span></div></section>
       <section class="grid" dir="${company.enableRtl?'rtl':'ltr'}"><div class="panel"><div class="kicker">${escapeHtml(labels.billTo||'Bill To')}</div><div class="party">${escapeHtml(invoice.customer||'Customer')}</div><div class="muted">${escapeHtml(company.customerTrnLabel||'Customer TRN')} ${escapeHtml(invoice.customer_trn||'not provided')}</div><div class="muted">${escapeHtml(invoice.customer_address||'')}</div></div><div class="panel"><div class="row"><span>${escapeHtml(labels.issueDate||'Issue Date')}</span><strong>${escapeHtml(invoice.date||'-')}</strong></div><div class="row"><span>${escapeHtml(labels.dueDate||'Due Date')}</span><strong>${escapeHtml(invoice.due_date||'-')}</strong></div><div class="row"><span>${escapeHtml(labels.paymentTerms||'Terms')}</span><strong>${escapeHtml(invoice.terms||'Net 30')}</strong></div><div class="row"><span>${escapeHtml(labels.currency||'Currency')}</span><strong>AED</strong></div></div></section>
       <table dir="${company.enableRtl?'rtl':'ltr'}"><thead><tr><th>#</th><th>${escapeHtml(labels.product||'Product')}</th><th>${escapeHtml(labels.unit||'Unit')}</th><th class="num">${escapeHtml(labels.quantity||'Qty')}</th><th class="num">${escapeHtml(labels.unitPrice||'Unit Price')}</th><th class="num">${escapeHtml(labels.amount||'Amount')}</th></tr></thead><tbody>${lines.map((line,index)=>`<tr><td>${index+1}</td><td><strong>${escapeHtml(line.description||'Item')}</strong></td><td>${escapeHtml(line.unit||'PCS')}</td><td class="num">${escapeHtml(line.qty||1)}</td><td class="num">${fmt(line.price)}</td><td class="num">${fmt(line.amount)}</td></tr>`).join('')}</tbody></table>
       <section class="summary" dir="${company.enableRtl?'rtl':'ltr'}"><div class="notes"><div class="kicker">${escapeHtml(labels.paymentDetails||'Payment Details')}</div><div style="margin-top:8px">${escapeHtml(company.footer||'')}</div><div class="link">Online view: ${escapeHtml(publicInvoiceUrl(inv))}</div></div><div class="totals"><div class="total"><span>${escapeHtml(labels.subtotal||'Subtotal')}</span><strong>AED ${fmt(invoice.subtotal)}</strong></div><div class="total"><span>${escapeHtml(labels.vat||'VAT')}</span><strong>AED ${fmt(invoice.vat_amount)}</strong></div><div class="grand"><span>${escapeHtml(labels.total||'Total')}</span><strong>AED ${fmt(invoice.total)}</strong></div></div></section>
@@ -7188,7 +7244,7 @@ function updateInvoiceLayoutPreview(){
       <div class="invoice-topbar"></div>
       <div class="invoice-head invoice-layout-head" style="grid-template-columns:1fr;gap:12px">
         <div class="invoice-brand" style="justify-content:${brandJustify};text-align:${textAlign}">
-          <div class="invoice-logo">${escapeHtml(initials)}</div>
+          ${_logoHtml(initials)}
           <div>
             <div class="invoice-company" style="font-family:${fontFamily}">${escapeHtml(layout.company)}</div>
             <div class="invoice-muted">${escapeHtml(layout.address)}</div>
@@ -7296,7 +7352,7 @@ function renderSalesInvoicePreview(inv){
       <div class="invoice-topbar"></div>
       <div class="invoice-head">
         <div class="invoice-brand" style="justify-content:${brandJustify};text-align:${textAlign}">
-          <div class="invoice-logo" aria-label="Invoice logo">${escapeHtml(initials)}</div>
+          ${_logoHtml(initials)}
           <div>
             <div class="invoice-company" style="font-family:${fontFamily}">${escapeHtml(layout.company)}</div>
             <div class="invoice-muted">${escapeHtml(layout.address)}</div>
@@ -14038,7 +14094,7 @@ function renderQuotationPreview(quote){
       <div class="invoice-topbar"></div>
       <div class="invoice-head">
         <div class="invoice-brand" style="justify-content:${brandJustify};text-align:${textAlign}">
-          <div class="invoice-logo" aria-label="Quotation logo">${escapeHtml(initials)}</div>
+          ${_logoHtml(initials)}
           <div>
             <div class="invoice-company" style="font-family:${fontFamily}">${escapeHtml(layout.company)}</div>
             <div class="invoice-muted">${escapeHtml(layout.address)}</div>
@@ -14103,7 +14159,7 @@ function quotationPdfHtml(quote=currentQuotation){
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(quote?.quote_no||'Quotation')} - PDF</title>
     <style>*{box-sizing:border-box}body{margin:0;background:#fff;color:#172033;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.45}.sheet{max-width:900px;margin:0 auto;padding:34px}.bar{height:7px;background:${accent};margin:-34px -34px 28px}.head{display:grid;grid-template-columns:1fr 280px;gap:24px;border-bottom:1px solid #e5eaf2;padding-bottom:22px}.brand{display:flex;gap:14px}.logo{width:58px;height:58px;border-radius:12px;background:${accent};color:#fff;display:grid;place-items:center;font-size:20px;font-weight:800}.company{font-size:22px;font-weight:800}.muted{color:#667085;font-size:12px;margin-top:3px}.right{text-align:right}.label{font-size:30px;font-weight:900;text-transform:uppercase}.badge{display:inline-block;margin-top:8px;border:1px solid #d8e2ff;color:${accent};border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;text-transform:uppercase}.grid{display:grid;grid-template-columns:1fr 280px;gap:16px;margin:22px 0}.panel{border:1px solid #e5eaf2;border-radius:8px;padding:14px}.kicker{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#667085;font-weight:700;margin-bottom:7px}.party{font-size:17px;font-weight:800}.row{display:flex;justify-content:space-between;gap:12px;color:#667085;padding:4px 0}.row strong{color:#172033;text-align:right}table{width:100%;border-collapse:collapse;border:1px solid #e5eaf2;border-radius:8px;overflow:hidden}th{background:#f3f6fb;color:#667085;text-transform:uppercase;font-size:10px;letter-spacing:.5px;text-align:left;padding:10px}td{padding:11px 10px;border-top:1px solid #e5eaf2}.num{text-align:right;white-space:nowrap}.summary{display:grid;grid-template-columns:1fr 300px;gap:20px;margin-top:22px}.notes{border-left:4px solid ${accent};padding-left:12px;color:#667085}.totals{border:1px solid #e5eaf2;border-radius:8px;padding:14px}.total,.grand{display:flex;justify-content:space-between;gap:14px}.total{color:#667085;padding:4px 0}.grand{border-top:1px solid #e5eaf2;margin-top:8px;padding-top:12px;font-size:19px;font-weight:900}.grand strong{color:${accent}}@media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.sheet{padding:24px}.bar{margin:-24px -24px 24px}}</style>
     </head><body><main class="sheet"><div class="bar"></div>
-      <section class="head"><div class="brand"><div class="logo">${escapeHtml(initials)}</div><div><div class="company">${escapeHtml(layout.company||'TaxFlow')}</div><div class="muted">${escapeHtml(layout.address||'')}</div><div class="muted">${escapeHtml(layout.trnLabel||'TRN')} ${escapeHtml(companyTrn||'not set')}</div></div></div><div class="right"><div class="label">${escapeHtml(layout.quotationHeading||'Quotation')}</div><div>${escapeHtml(quote?.quote_no||'Draft')}</div><span class="badge">${escapeHtml(quote?.status||'Draft')}</span></div></section>
+      <section class="head"><div class="brand">${_logoPdfHtml(initials)}<div><div class="company">${escapeHtml(layout.company||'TaxFlow')}</div><div class="muted">${escapeHtml(layout.address||'')}</div><div class="muted">${escapeHtml(layout.trnLabel||'TRN')} ${escapeHtml(companyTrn||'not set')}</div></div></div><div class="right"><div class="label">${escapeHtml(layout.quotationHeading||'Quotation')}</div><div>${escapeHtml(quote?.quote_no||'Draft')}</div><span class="badge">${escapeHtml(quote?.status||'Draft')}</span></div></section>
       <section class="grid"><div class="panel"><div class="kicker">${escapeHtml(layout.quoteToLabel||'Quote To')}</div><div class="party">${escapeHtml(quote?.customer||'Customer')}</div><div class="muted">${escapeHtml(quote?.subject||'')}</div></div><div class="panel"><div class="row"><span>Date</span><strong>${escapeHtml(quote?.date||'-')}</strong></div>${layout.showValidity?`<div class="row"><span>${escapeHtml(layout.validityLabel||'Valid Until')}</span><strong>${escapeHtml(quote?.valid_until||'-')}</strong></div>`:''}<div class="row"><span>Currency</span><strong>AED</strong></div></div></section>
       <table><thead><tr><th>#</th><th>Product</th><th class="num">Qty</th><th class="num">Unit Price</th><th class="num">Amount</th></tr></thead><tbody>${lines.map((line,index)=>`<tr><td>${index+1}</td><td><strong>${escapeHtml(line.description||line.item||'Item')}</strong></td><td class="num">${escapeHtml(line.qty||line.quantity||1)}</td><td class="num">${fmt(line.price||line.unit_price)}</td><td class="num">${fmt(line.amount)}</td></tr>`).join('')}</tbody></table>
       <section class="summary"><div class="notes"><div class="kicker">Terms & Payment Details</div><div>${escapeHtml(layout.quotationTerms||layout.terms||'')}</div><div style="margin-top:8px">${escapeHtml(layout.footer||'')}</div></div><div class="totals"><div class="total"><span>Subtotal</span><strong>AED ${fmt(subtotal)}</strong></div>${layout.showVat?`<div class="total"><span>VAT 5%</span><strong>AED ${fmt(vat)}</strong></div>`:''}<div class="grand"><span>Total</span><strong>AED ${fmt(total)}</strong></div></div></section>
@@ -14298,6 +14354,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
+  _applyLogoEverywhere();
   applyTheme('light');
   const today=new Date().toISOString().split('T')[0];
   document.querySelectorAll('input[type=date]').forEach(i=>{if(!i.value)i.value=today;});
