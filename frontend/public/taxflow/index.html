@@ -398,27 +398,6 @@
 <!-- ═══════════════════ COMPANY REGISTRATION ═══════════════════ -->
 <div class="page" id="page-company">
 
-  <!-- ── Company Logo ── -->
-  <div class="card mb16">
-    <div class="card-hd mb12"><div class="card-title">Company Logo</div><span class="b b-b" style="font-size:11px">Used on invoices, quotations &amp; sidebar</span></div>
-    <div class="co-logo-upload">
-      <div class="co-logo-preview" id="co-logo-preview">
-        <span id="co-logo-initials">TF</span>
-        <img id="co-logo-preview-img" style="display:none;width:100%;height:100%;object-fit:contain;" alt="Logo preview">
-      </div>
-      <div class="co-logo-actions">
-        <div class="co-logo-hint">PNG, JPG or SVG · max 2 MB · recommended 200 × 200 px</div>
-        <div class="co-logo-btns">
-          <label class="btn btn-g" style="cursor:pointer;margin:0">
-            Upload Logo
-            <input type="file" id="co-logo-file" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none" onchange="handleLogoUpload(this)">
-          </label>
-          <button class="btn btn-r btn-sm" id="co-logo-remove" style="display:none" onclick="removeLogo()">Remove</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <div class="g2 mb16">
     <div class="card">
       <div class="card-hd"><div class="card-title">Business Registration Details</div><button class="btn btn-p btn-sm" onclick="toast('Company profile saved','ok')">Save All</button></div>
@@ -3158,6 +3137,28 @@
   </div>
 
   <div class="tab-body on" id="set-company">
+
+    <!-- ── Company Logo ── -->
+    <div class="card mb16">
+      <div class="card-hd mb12"><div class="card-title">Company Logo</div><span class="b b-b" style="font-size:11px">Used on invoices, quotations &amp; sidebar</span></div>
+      <div class="co-logo-upload">
+        <div class="co-logo-preview" id="co-logo-preview">
+          <span id="co-logo-initials">TF</span>
+          <img id="co-logo-preview-img" style="display:none;width:100%;height:100%;object-fit:contain;" alt="Logo preview">
+        </div>
+        <div class="co-logo-actions">
+          <div class="co-logo-hint">PNG, JPG or SVG · max 2 MB · recommended 200 × 200 px</div>
+          <div class="co-logo-btns">
+            <label class="btn btn-g" style="cursor:pointer;margin:0">
+              Upload Logo
+              <input type="file" id="co-logo-file" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none" onchange="handleLogoUpload(this)">
+            </label>
+            <button class="btn btn-r btn-sm" id="co-logo-remove" style="display:none" onclick="removeLogo()">Remove</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="g2 mb16">
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Business Registration Details</div><div class="card-sub">Trade license, legal structure, activity, and registered address</div></div><button class="btn btn-p btn-sm" onclick="saveSettings('Company registration saved')">Save</button></div>
