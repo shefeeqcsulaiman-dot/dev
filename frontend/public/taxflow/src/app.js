@@ -2921,6 +2921,8 @@ function clearDemoCardsAndCounters(){
 
 const financePaymentsByRef=new Map();
 const financeBankAccountsByKey=new Map();
+// ref.toLowerCase() → {paid, total, isSupplier}
+const _invoicePaidMap=new Map();
 
 function resetDraftEntryDefaults(){
   setFieldValue(document.getElementById('inv-no'),'');
@@ -3614,6 +3616,7 @@ function calculateAllOwing(){
   const contact=(document.getElementById('payment-contact')?.value||'').trim().toLowerCase();
   const docs=collectPaymentDocuments(type)
     .filter(d=>!contact||d.contact.toLowerCase().includes(contact));
+  // Sum remaining balances (partial invoices show their remaining amount)
   const total=docs.reduce((sum,d)=>sum+Number(d.amount||0),0);
   setFieldValue(document.getElementById('payment-amount'),total.toFixed(2));
   loadAllocationTable(docs);
@@ -3635,16 +3638,20 @@ function loadAllocationTable(docs){
   }
   const fmt=n=>Number(n||0).toLocaleString('en-AE',{minimumFractionDigits:2});
   tbody.innerHTML=docs.map(d=>{
-    const amt=Number(d.amount||0);
+    const remaining=Number(d.amount||0);
+    const original=Number(d.original_amount||d.amount||0);
+    const isPartial=original>remaining+0.01;
     const src=d.source||'-';
+    const srcColor=isPartial?'background:#fff3e0;color:#e65100':'background:#eef3ff;color:#2e5db5';
+    const srcLabel=isPartial?`${escapeHtml(src)} (partial)`:escapeHtml(src);
     return `<tr>
       <td><input type="checkbox" class="pmt-alloc-chk" checked onchange="updatePmtBalance()"></td>
       <td class="mono" style="font-size:11.5px">${escapeHtml(d.ref)}</td>
       <td style="font-size:11.5px">${escapeHtml(d.date||'-')}</td>
-      <td><span style="font-size:10.5px;background:#eef3ff;color:#2e5db5;border-radius:4px;padding:1px 6px;font-weight:600">${escapeHtml(src)}</span></td>
-      <td class="mono r">${fmt(amt)}</td>
-      <td class="mono r">${fmt(amt)}</td>
-      <td><input type="number" class="pmt-alloc-inp" value="${amt.toFixed(2)}" min="0" max="${amt}" step="0.01" oninput="updatePmtBalance()" data-doc-ref="${escapeHtml(d.ref)}" data-doc-amount="${amt}"></td>
+      <td><span style="font-size:10.5px;${srcColor};border-radius:4px;padding:1px 6px;font-weight:600">${srcLabel}</span></td>
+      <td class="mono r">${fmt(original)}</td>
+      <td class="mono r">${fmt(remaining)}</td>
+      <td><input type="number" class="pmt-alloc-inp" value="${remaining.toFixed(2)}" min="0" max="${remaining}" step="0.01" oninput="updatePmtBalance()" data-doc-ref="${escapeHtml(d.ref)}" data-doc-amount="${remaining}"></td>
     </tr>`;
   }).join('');
   updatePmtBalance();
@@ -3686,12 +3693,14 @@ function collectPaymentContacts(type=document.getElementById('payment-type')?.va
 function paidPaymentDocumentRefs(type=document.getElementById('payment-type')?.value){
   const supplier=isSupplierPaymentType(type);
   const refs=new Set();
-  const rows=[...document.querySelectorAll(supplier?'#payment-out-tbody tr:not([data-empty-state])':'#payment-in-tbody tr:not([data-empty-state])')];
-  rows.forEach(row=>{
-    let payment={};
-    try{payment=JSON.parse(row.dataset.payment||'{}');}catch(_err){}
-    const ref=payment.document_ref||payment.bill_no||payment.invoice_no||row.children[2]?.textContent.trim();
-    if(ref&&ref!=='-'&&!/manual/i.test(ref))refs.add(String(ref).trim().toLowerCase());
+  // Only exclude invoices/bills whose status is exactly "Paid" — Partial ones stay in the list
+  const statusColIdx=supplier?7:8;
+  const selector=supplier?'#bill-tbody tr:not([data-empty-state])':'#sales-invoice-tbody tr:not([data-empty-state])';
+  document.querySelectorAll(selector).forEach(row=>{
+    const status=(row.children[statusColIdx]?.textContent||'').trim().toLowerCase();
+    if(status==='paid'){
+      refs.add((row.children[0]?.textContent||'').trim().toLowerCase());
+    }
   });
   return refs;
 }
@@ -3702,34 +3711,46 @@ function isPendingDocumentStatus(status){
   return !/(paid|posted|settled|allocated|closed|reconciled|complete)/.test(text);
 }
 
+function remainingBalance(ref,total){
+  const info=_invoicePaidMap.get(String(ref||'').trim().toLowerCase());
+  if(!info)return total;
+  return Math.max(0,total-(info.paid||0));
+}
+
 function collectPaymentDocuments(type=document.getElementById('payment-type')?.value){
   const paidRefs=paidPaymentDocumentRefs(type);
   if(isSupplierPaymentType(type)){
-    // Bills section
-    const bills=[...document.querySelectorAll('#bill-tbody tr:not([data-empty-state])')].map(row=>({
-      ref:row.children[0]?.textContent.trim()||'',
-      contact:row.children[1]?.textContent.trim()||'',
-      date:row.children[2]?.textContent.trim()||'',
-      amount:parseAmount(row.children[6]?.textContent||'0'),
-      status:row.children[7]?.textContent.trim()||'',
-      source:'Bill'
-    })).filter(item=>item.ref&&isPendingDocumentStatus(item.status)&&!paidRefs.has(item.ref.toLowerCase()));
+    const bills=[...document.querySelectorAll('#bill-tbody tr:not([data-empty-state])')].map(row=>{
+      const ref=row.children[0]?.textContent.trim()||'';
+      const total=parseAmount(row.children[6]?.textContent||'0');
+      const remaining=remainingBalance(ref,total);
+      return {
+        ref,
+        contact:row.children[1]?.textContent.trim()||'',
+        date:row.children[2]?.textContent.trim()||'',
+        amount:remaining,
+        original_amount:total,
+        status:row.children[7]?.textContent.trim()||'',
+        source:'Bill'
+      };
+    }).filter(item=>item.ref&&isPendingDocumentStatus(item.status)&&!paidRefs.has(item.ref.toLowerCase())&&item.amount>0.01);
 
-    // Purchase records (supplier invoices from purchases module)
     const purchases=[...document.querySelectorAll('#purchase-record-tbody tr:not([data-empty-state])')].map(row=>{
       const rec=purchaseRecordFromRow(row);
       if(!rec||!rec.ref)return null;
+      const total=rec.total||parseAmount(row.children[9]?.textContent||'0');
+      const remaining=remainingBalance(rec.ref,total);
       return {
         ref:rec.ref,
         contact:rec.supplier||rec.vendor||row.children[2]?.textContent.trim()||'',
         date:rec.date||row.children[3]?.textContent.trim()||'',
-        amount:rec.total||parseAmount(row.children[9]?.textContent||'0'),
+        amount:remaining,
+        original_amount:total,
         status:rec.status||'Pending',
         source:'Purchase Invoice'
       };
-    }).filter(item=>item&&item.ref&&item.contact&&isPendingDocumentStatus(item.status)&&!paidRefs.has(item.ref.toLowerCase()));
+    }).filter(item=>item&&item.ref&&item.contact&&isPendingDocumentStatus(item.status)&&!paidRefs.has(item.ref.toLowerCase())&&item.amount>0.01);
 
-    // Merge; deduplicate by ref
     const seen=new Set();
     return [...bills,...purchases].filter(d=>{
       const k=d.ref.toLowerCase();
@@ -3738,20 +3759,23 @@ function collectPaymentDocuments(type=document.getElementById('payment-type')?.v
       return true;
     });
   }
-  // Customer invoices
   return [...document.querySelectorAll('#sales-invoice-tbody tr:not([data-empty-state])')].map(row=>{
     let data={};
     try{data=JSON.parse(row.dataset.salesInvoice||'{}');}catch(_err){}
     if(isSalesReturn(data))return null;
+    const total=parseAmount(data.total??row.children[6]?.textContent??'0');
+    const ref=data.invoice_no||row.children[0]?.textContent.trim()||'';
+    const remaining=remainingBalance(ref,total);
     return {
-      ref:data.invoice_no||row.children[0]?.textContent.trim()||'',
+      ref,
       contact:data.customer||row.children[1]?.textContent.trim()||'',
       date:data.date||row.children[2]?.textContent.trim()||'',
-      amount:parseAmount(data.total??row.children[6]?.textContent??'0'),
+      amount:remaining,
+      original_amount:total,
       status:data.status||row.children[8]?.textContent.trim()||'',
       source:'Invoice'
     };
-  }).filter(item=>item&&item.ref&&isPendingDocumentStatus(item.status)&&!paidRefs.has(item.ref.toLowerCase()));
+  }).filter(item=>item&&item.ref&&isPendingDocumentStatus(item.status)&&!paidRefs.has(item.ref.toLowerCase())&&item.amount>0.01);
 }
 
 function nextPaymentReference(type=document.getElementById('payment-type')?.value){
@@ -3843,7 +3867,7 @@ function applyPaymentContactSelection(){
   const docs=collectPaymentDocuments(type)
     .filter(d=>d.contact.toLowerCase().includes(contact.toLowerCase()));
   loadAllocationTable(docs);
-  // Auto-fill total owing
+  // Auto-fill total remaining (partial invoices contribute only their outstanding balance)
   if(docs.length){
     const total=docs.reduce((sum,d)=>sum+Number(d.amount||0),0);
     setFieldValue(document.getElementById('payment-amount'),total.toFixed(2));
@@ -3864,18 +3888,66 @@ function applyPaymentDocumentSelection(){
 }
 
 function markPaymentDocumentPaid(payment){
-  const ref=String(payment?.document_ref||payment?.bill_no||payment?.invoice_no||'').trim().toLowerCase();
-  if(!ref)return;
-  const tbody=document.getElementById(payment?.type==='Supplier Payment'?'bill-tbody':'sales-invoice-tbody');
-  const row=[...(tbody?.querySelectorAll('tr:not([data-empty-state])')||[])]
-    .find(item=>(item.children[0]?.textContent||'').trim().toLowerCase()===ref);
-  if(!row)return;
-  const statusCell=row.children[payment?.type==='Supplier Payment'?7:8];
-  if(statusCell)statusCell.innerHTML='<span class="b b-g">Paid</span>';
+  const isSupplier=payment?.type==='Supplier Payment';
+  const tbody=document.getElementById(isSupplier?'bill-tbody':'sales-invoice-tbody');
+  const statusColIdx=isSupplier?7:8;
+  const totalColIdx=6;
+  const fmt=n=>Number(n).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  // Build allocations: use payment.allocations if present, else single-doc fallback
+  const allocations=(Array.isArray(payment?.allocations)&&payment.allocations.length)
+    ?payment.allocations
+    :[{doc_ref:payment?.document_ref||payment?.bill_no||payment?.invoice_no||'',amount:Number(payment?.amount||0)}];
+
+  allocations.forEach(alloc=>{
+    const ref=String(alloc.doc_ref||'').trim().toLowerCase();
+    if(!ref||ref==='-')return;
+    const allocAmt=Number(alloc.amount||0);
+    if(!allocAmt)return;
+
+    const row=[...(tbody?.querySelectorAll('tr:not([data-empty-state])')||[])]
+      .find(r=>(r.children[0]?.textContent||'').trim().toLowerCase()===ref);
+    if(!row)return;
+
+    const invoiceTotal=parseAmount(row.children[totalColIdx]?.textContent||'0');
+    const existing=_invoicePaidMap.get(ref)||{paid:0,total:invoiceTotal,isSupplier};
+    const newPaid=existing.paid+allocAmt;
+    _invoicePaidMap.set(ref,{...existing,paid:newPaid,total:invoiceTotal});
+
+    const statusCell=row.children[statusColIdx];
+    if(!statusCell)return;
+    const remaining=invoiceTotal-newPaid;
+
+    if(remaining<=0.01){
+      statusCell.innerHTML='<span class="b b-g">Paid</span>';
+      if(row.dataset.salesInvoice){
+        try{const d=JSON.parse(row.dataset.salesInvoice);d.status='Paid';d.balance_due=0;d.amount_paid=invoiceTotal;row.dataset.salesInvoice=JSON.stringify(d);}catch{}
+      }
+    }else{
+      statusCell.innerHTML=`<span class="b b-a" title="Remaining: AED ${fmt(remaining)}">Partial</span>`;
+      if(row.dataset.salesInvoice){
+        try{const d=JSON.parse(row.dataset.salesInvoice);d.status='Partial';d.balance_due=remaining;d.amount_paid=newPaid;row.dataset.salesInvoice=JSON.stringify(d);}catch{}
+      }
+    }
+  });
 }
 
 function renderPaymentRecord(payment){
-  const tbody=document.getElementById(payment?.type==='Supplier Payment'?'payment-out-tbody':'payment-in-tbody');
+  // Rebuild _invoicePaidMap from stored allocations (for page-reload persistence)
+  const isSupplier=payment?.type==='Supplier Payment';
+  const allocations=(Array.isArray(payment?.allocations)&&payment.allocations.length)
+    ?payment.allocations
+    :[{doc_ref:payment?.document_ref||payment?.invoice_no||payment?.bill_no||'',amount:Number(payment?.amount||0)}];
+  allocations.forEach(alloc=>{
+    const ref=String(alloc.doc_ref||'').trim().toLowerCase();
+    if(!ref||ref==='-')return;
+    const allocAmt=Number(alloc.amount||0);
+    if(!allocAmt)return;
+    const existing=_invoicePaidMap.get(ref)||{paid:0,total:0,isSupplier};
+    _invoicePaidMap.set(ref,{...existing,paid:existing.paid+allocAmt});
+  });
+
+  const tbody=document.getElementById(isSupplier?'payment-out-tbody':'payment-in-tbody');
   if(payment?.ref)financePaymentsByRef.set(String(payment.ref),payment);
   if(!tbody||!payment?.ref||hasFirstCellValue(tbody,payment.ref)){
     updateFinanceFromDatabaseRecords();
@@ -6091,7 +6163,8 @@ function addSalesInvoiceRow(inv,options={persist:true}){
   const status=inv.status||'Draft';
   const sl=String(status).toLowerCase();
   const statusClass=returnDoc?'b-r':
-    sl.includes('paid')?'b-g':
+    sl==='paid'?'b-g':
+    sl==='partial'?'b-a':
     sl.includes('overdue')?'b-r':
     sl.includes('draft')||sl==='cancelled'?'b-gray':
     sl.includes('pending')||sl.includes('sent')?'b-t':
