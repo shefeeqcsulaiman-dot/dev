@@ -180,6 +180,7 @@ function stab(el,target){
   if(t)t.classList.add('on');
   if(target==='inv-mapping')loadStockMappingsFromServer();
   if(target==='inv-stock')ensurePurchaseRecordsLoadedForStock();
+  if(target==='inv-movement')loadStockMovements();
   if(String(target||'').startsWith('inv-'))setTimeout(()=>ensureInventoryBulkSelection(),80);
   if(target==='p-records')ensurePurchaseRecordsLoaded();
   if(target==='acc-voucher')prepareJournalForm();
@@ -1304,55 +1305,117 @@ function syncInventoryItemOptions(){
   }
 }
 
-function openInventoryItemModal(){
+let _invEditCode=null;
+
+function openInventoryItemModal(editRow=null){
   syncInventoryItemOptions();
+  _invEditCode=null;
+  // Clear form
+  document.querySelectorAll('#m-inv-item input,#m-inv-item select').forEach(el=>{
+    if(el.tagName==='SELECT')el.selectedIndex=0;
+    else el.value='';
+  });
+  const titleEl=document.getElementById('inv-item-modal-title');
+  const saveBtn=document.getElementById('inv-item-save-btn');
+  const codeField=document.getElementById('inv-item-code');
+  if(editRow){
+    _invEditCode=inventoryRowCellText(editRow,0);
+    if(titleEl)titleEl.textContent='Edit Inventory Item';
+    if(saveBtn)saveBtn.textContent='Update Item';
+    if(codeField)codeField.readOnly=true;
+    const s=(id,val)=>{const el=document.getElementById(id);if(el&&val!=null)el.value=val;};
+    s('inv-item-code',_invEditCode);
+    s('inv-item-name',inventoryRowCellText(editRow,1));
+    s('inv-item-type',editRow.dataset.type||'Stock Item');
+    s('inv-item-status',editRow.dataset.status||'Active');
+    s('inv-item-description',editRow.dataset.description||'');
+    s('inv-item-category',inventoryRowCellText(editRow,3));
+    s('inv-item-unit',inventoryRowCellText(editRow,4));
+    s('inv-item-cost',editRow.dataset.cost||'');
+    s('inv-item-selling-price',editRow.dataset.price||'');
+    s('inv-item-vat',editRow.dataset.vat||'Standard 5%');
+    s('inv-item-tracking',editRow.dataset.tracking||'Yes');
+    s('inv-item-reorder',editRow.dataset.reorderLevel||'');
+    s('inv-item-min',editRow.dataset.minStock||'');
+    s('inv-item-max',editRow.dataset.maxStock||'');
+    s('inv-item-supplier',editRow.dataset.supplier||'');
+    s('inv-item-opening-date',editRow.dataset.openingDate||'');
+  }else{
+    if(titleEl)titleEl.textContent='Add Inventory Item';
+    if(saveBtn)saveBtn.textContent='Add Item';
+    if(codeField)codeField.readOnly=false;
+  }
   showM('m-inv-item');
   setTimeout(()=>document.getElementById('inv-item-name')?.focus(),50);
 }
 
+function _buildItemRowHtml({code,name,type,category,unit,tracking,vatText,vatClass,trackingClass,statusClass,status}){
+  return `<td class="mono">${escapeHtml(code)}</td><td>${escapeHtml(name)}</td><td>${escapeHtml(type||'Stock Item')}</td><td>${escapeHtml(category)}</td><td>${escapeHtml(unit)}</td><td>Main Store</td><td><span class="b ${trackingClass}">${escapeHtml(tracking)}</span></td><td><span class="b ${vatClass}">${escapeHtml(vatText)}</span></td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td><button class="btn btn-g btn-sm" onclick="openInventoryItemModal(this.closest('tr'))">Edit</button></td>`;
+}
+
 function saveInventoryItem(){
-  const code=(document.getElementById('inv-item-code')?.value||generateStockSku(document.getElementById('inv-item-name')?.value)).trim();
-  const name=(document.getElementById('inv-item-name')?.value||'').trim();
-  const category=document.getElementById('inv-item-category')?.value||'';
-  const unit=document.getElementById('inv-item-unit')?.value||'';
-  const cost=parseAmount(document.getElementById('inv-item-cost')?.value);
-  const tracking=document.getElementById('inv-item-tracking')?.value||'Yes';
-  const reorderLevel=parseAmount(document.getElementById('inv-item-reorder')?.value);
-  const supplier=document.getElementById('inv-item-supplier')?.value||'';
-  const status=document.getElementById('inv-item-status')?.value||'Active';
-  if(!name){
-    toast('Enter item name','warn');
-    return;
-  }
-  if(!category){
-    toast('Select category from database','warn');
-    return;
-  }
-  if(!unit){
-    toast('Select unit of measure from database','warn');
-    return;
-  }
+  const v=id=>document.getElementById(id)?.value||'';
+  const code=(v('inv-item-code')||generateStockSku(v('inv-item-name'))).trim();
+  const name=v('inv-item-name').trim();
+  const type=v('inv-item-type')||'Stock Item';
+  const description=v('inv-item-description');
+  const category=v('inv-item-category');
+  const unit=v('inv-item-unit');
+  const cost=parseAmount(v('inv-item-cost'));
+  const sellingPrice=parseAmount(v('inv-item-selling-price'));
+  const vat=v('inv-item-vat')||'Standard 5%';
+  const tracking=v('inv-item-tracking')||'Yes';
+  const openingDate=v('inv-item-opening-date');
+  const reorderLevel=parseAmount(v('inv-item-reorder'));
+  const minStock=parseAmount(v('inv-item-min'));
+  const maxStock=parseAmount(v('inv-item-max'));
+  const supplier=v('inv-item-supplier');
+  const status=v('inv-item-status')||'Active';
+  if(!name){toast('Enter item name','warn');return;}
+  if(!category){toast('Select category from database','warn');return;}
+  if(!unit){toast('Select unit of measure from database','warn');return;}
+  const vatText=vat.includes('Zero')||vat.includes('0%')?'0%':vat==='Exempt'?'Exempt':'5%';
+  const vatClass=vatText==='5%'?'b-b':vatText==='Exempt'?'b-t':'b-g';
+  const trackingClass=tracking==='No'?'b-gray':'b-g';
+  const statusClass=status==='Active'?'b-g':'b-gray';
+  const htmlArgs={code,name,type,category,unit,tracking,vatText,vatClass,trackingClass,statusClass,status};
   const tbody=document.getElementById('prod-tbody');
-  if(tbody&&!hasFirstCellValue(tbody,code)){
-    setInventoryTableCleared(false);
-    removeEmptyState(tbody);
-    const row=document.createElement('tr');
-    row.dataset.reorderLevel=reorderLevel;
-    row.dataset.available=0;
-    row.dataset.reserved=0;
-    row.dataset.cost=cost;
-    row.dataset.supplier=supplier;
-    row.innerHTML=`<td class="mono">${escapeHtml(code)}</td><td>${escapeHtml(name)}</td><td>Stock Item</td><td>${escapeHtml(category)}</td><td>${escapeHtml(unit)}</td><td>Main Store</td><td><span class="b ${tracking==='No'?'b-gray':'b-g'}">${escapeHtml(tracking)}</span></td><td><span class="b b-b">5%</span></td><td><span class="b ${status==='Active'?'b-g':'b-gray'}">${escapeHtml(status)}</span></td>`;
-    tbody.prepend(row);
-    syncStockLevelsFromProducts();
+  const isEdit=!!_invEditCode;
+  if(tbody){
+    if(isEdit){
+      const existingRow=[...tbody.querySelectorAll('tr:not([data-empty-state])')].find(r=>inventoryRowCellText(r,0)===_invEditCode);
+      if(existingRow){
+        existingRow.dataset.cost=cost;existingRow.dataset.price=sellingPrice;
+        existingRow.dataset.supplier=supplier;existingRow.dataset.reorderLevel=reorderLevel;
+        existingRow.dataset.minStock=minStock;existingRow.dataset.maxStock=maxStock;
+        existingRow.dataset.tracking=tracking;existingRow.dataset.type=type;
+        existingRow.dataset.vat=vat;existingRow.dataset.status=status;
+        existingRow.dataset.description=description;existingRow.dataset.openingDate=openingDate;
+        existingRow.innerHTML=_buildItemRowHtml(htmlArgs);
+        ensureInventoryBulkSelection();
+        refreshEnhancedTable(tbody.closest('table'));
+      }
+    }else if(!hasFirstCellValue(tbody,code)){
+      setInventoryTableCleared(false);removeEmptyState(tbody);
+      const row=document.createElement('tr');
+      row.dataset.reorderLevel=reorderLevel;row.dataset.available=0;row.dataset.reserved=0;
+      row.dataset.cost=cost;row.dataset.price=sellingPrice;row.dataset.supplier=supplier;
+      row.dataset.tracking=tracking;row.dataset.type=type;row.dataset.vat=vat;
+      row.dataset.status=status;row.dataset.minStock=minStock;row.dataset.maxStock=maxStock;
+      row.dataset.description=description;row.dataset.openingDate=openingDate;
+      row.innerHTML=_buildItemRowHtml(htmlArgs);
+      tbody.prepend(row);syncStockLevelsFromProducts();
+    }
   }
-  saveServer('products',{code,name,category,unit,cost,vat:'Standard 5%',supplier_name:supplier,reorder_level:reorderLevel,status});
+  saveServer('products',{code,name,type,description,category,unit,cost,selling_price:sellingPrice,vat,tracking,opening_date:openingDate,reorder_level:reorderLevel,min_stock:minStock,max_stock:maxStock,supplier_name:supplier,status});
   syncStockMappingFromItems();
   closeM('m-inv-item');
-  document.querySelectorAll('#m-inv-item input').forEach(input=>input.value='');
+  document.querySelectorAll('#m-inv-item input').forEach(i=>i.value='');
+  document.getElementById('inv-item-code').readOnly=false;
+  _invEditCode=null;
   syncInventoryItemOptions();
-  toast('Item added to inventory','ok');
-  audit('Added inventory item',name,'Saved');
+  toast(isEdit?'Item updated':'Item added to inventory','ok');
+  audit(isEdit?'Updated inventory item':'Added inventory item',name,'Saved');
 }
 
 function logout(){
@@ -3212,18 +3275,32 @@ function renderProductRecord(product,options={}){
   if(isInventoryTableCleared())return;
   if(isDemoProductRecord(product))return;
   if(!tbody||!product?.name||hasFirstCellValue(tbody,product.code))return;
-  const vatText=String(product.vat||'').includes('0')&&!String(product.vat||'').includes('5')?'0% Zero':String(product.vat||'').includes('Exempt')?'Exempt':'5%';
-  const vatClass=vatText==='5%'?'b-b':'b-t';
+  const vatRaw=String(product.vat||'');
+  const vatText=vatRaw.includes('Zero')||vatRaw.includes('zero')||(vatRaw.includes('0')&&!vatRaw.includes('5'))?'0%':vatRaw.includes('Exempt')||vatRaw.includes('exempt')?'Exempt':'5%';
+  const vatClass=vatText==='5%'?'b-b':vatText==='Exempt'?'b-t':'b-g';
+  const tracking=product.tracking||'Yes';
+  const trackingClass=tracking==='No'?'b-gray':'b-g';
+  const status=product.status||'Active';
+  const statusClass=status==='Active'?'b-g':'b-gray';
+  const type=product.type||'Stock Item';
   const row=document.createElement('tr');
   row.dataset.serverRecord='products';
   row.dataset.cost=product.cost??product.unit_cost??0;
-  row.dataset.price=product.price??product.sales_price??product.selling_price??product.unit_price??product.cost??0;
+  row.dataset.price=product.selling_price??product.price??product.sales_price??product.unit_price??product.cost??0;
   row.dataset.unit=product.unit||'Each';
   row.dataset.supplier=product.supplier_name||product.supplier||'';
   row.dataset.reorderLevel=product.reorder_level??product.reorderLevel??0;
   row.dataset.available=product.available??product.quantity??product.stock_on_hand??product.opening_stock??0;
   row.dataset.reserved=product.reserved??product.reserved_quantity??0;
-  row.innerHTML=`<td class="mono">${escapeHtml(product.code||'PRD')}</td><td>${escapeHtml(product.name)}</td><td>Stock Item</td><td>${escapeHtml(product.category||'Materials')}</td><td>${escapeHtml(product.unit||'Each')}</td><td>Main Store</td><td><span class="b b-g">Yes</span></td><td><span class="b ${vatClass}">${escapeHtml(vatText)}</span></td><td><span class="b b-g">Active</span></td>`;
+  row.dataset.tracking=tracking;
+  row.dataset.type=type;
+  row.dataset.vat=product.vat||'Standard 5%';
+  row.dataset.status=status;
+  row.dataset.minStock=product.min_stock??product.minStock??0;
+  row.dataset.maxStock=product.max_stock??product.maxStock??0;
+  row.dataset.description=product.description||'';
+  row.dataset.openingDate=product.opening_date||'';
+  row.innerHTML=_buildItemRowHtml({code:product.code||'PRD',name:product.name,type,category:product.category||'Materials',unit:product.unit||'Each',tracking,vatText,vatClass,trackingClass,statusClass,status});
   removeEmptyState(tbody);
   tbody.prepend(row);
   ensureInventoryBulkSelection();
@@ -3330,6 +3407,78 @@ async function loadStockLevelsFromServer(){
   }finally{
     stockLevelsLoading=false;
   }
+}
+
+let _allStockMovements=[];
+
+async function loadStockMovements(){
+  const tbody=document.getElementById('stock-movement-tbody');
+  if(!tbody)return;
+  try{
+    const data=await moduleApi('/inventory/stock-movements');
+    _allStockMovements=Array.isArray(data)?data:[];
+    _populateMovementFilters();
+    filterStockMovements();
+  }catch(e){
+    console.warn('Stock movements load failed:',e);
+    emptyTableMessage(tbody,'No stock movements in database yet.');
+  }
+}
+
+function _populateMovementFilters(){
+  const itemSel=document.getElementById('inv-movement-item-filter');
+  const monthSel=document.getElementById('inv-movement-month-filter');
+  if(!itemSel||!monthSel)return;
+  const items=[...new Set(_allStockMovements.map(m=>m.item_name||m.name||'').filter(Boolean))].sort();
+  const months=[...new Set(_allStockMovements.map(m=>{
+    const d=m.date||m.movement_date||'';
+    if(!d)return '';
+    const dt=new Date(d);
+    return isNaN(dt)?'':dt.toLocaleString('en-AE',{month:'short',year:'numeric'});
+  }).filter(Boolean))].reverse();
+  const prevItem=itemSel.value;const prevMonth=monthSel.value;
+  itemSel.innerHTML='<option value="">All Items</option>'+items.map(i=>`<option value="${escapeHtml(i)}">${escapeHtml(i)}</option>`).join('');
+  monthSel.innerHTML='<option value="">All Months</option>'+months.map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+  if(prevItem)itemSel.value=prevItem;
+  if(prevMonth)monthSel.value=prevMonth;
+}
+
+function filterStockMovements(){
+  const tbody=document.getElementById('stock-movement-tbody');
+  if(!tbody)return;
+  const itemFilter=document.getElementById('inv-movement-item-filter')?.value||'';
+  const monthFilter=document.getElementById('inv-movement-month-filter')?.value||'';
+  const filtered=_allStockMovements.filter(m=>{
+    const itemName=m.item_name||m.name||'';
+    if(itemFilter&&itemName!==itemFilter)return false;
+    if(monthFilter){
+      const dt=new Date(m.date||m.movement_date||'');
+      const label=isNaN(dt)?'':dt.toLocaleString('en-AE',{month:'short',year:'numeric'});
+      if(label!==monthFilter)return false;
+    }
+    return true;
+  });
+  tbody.innerHTML='';
+  if(!filtered.length){
+    emptyTableMessage(tbody,'No stock movements found.');
+    return;
+  }
+  // Build running balance per item
+  const balances=new Map();
+  filtered.forEach(m=>{
+    const key=m.item_name||m.name||'';
+    const qty=Number(m.quantity||0);
+    const prev=balances.get(key)||0;
+    const bal=prev+qty;
+    balances.set(key,bal);
+    const isIn=qty>=0;
+    const row=document.createElement('tr');
+    const dateStr=m.date||m.movement_date||'';
+    const formatted=dateStr?new Date(dateStr).toLocaleDateString('en-AE',{dateStyle:'short'}):'-';
+    row.innerHTML=`<td>${escapeHtml(formatted)}</td><td>${escapeHtml(m.movement_type||m.type||'-')}</td><td>${escapeHtml(key||'-')}</td><td style="color:var(--green)">${isIn?Math.abs(qty).toFixed(2):''}</td><td style="color:var(--red)">${!isIn?Math.abs(qty).toFixed(2):''}</td><td>${bal.toFixed(2)}</td><td class="mono" style="font-size:12px">${escapeHtml(m.reference||'-')}</td>`;
+    tbody.appendChild(row);
+  });
+  refreshEnhancedTable(tbody.closest('table'));
 }
 
 async function clearInventoryTable(){

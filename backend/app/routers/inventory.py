@@ -90,6 +90,29 @@ def list_stock_levels(db: Session = Depends(get_db), current_user: User = Depend
     ]
 
 
+@router.get("/inventory/stock-movements")
+def list_stock_movements(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[dict[str, object]]:
+    rows = (
+        db.query(StockMovement, StockProductMapping)
+        .join(StockProductMapping, StockMovement.mapping_id == StockProductMapping.id)
+        .filter(StockMovement.company_id == current_user.company_id)
+        .order_by(StockMovement.created_at.desc())
+        .limit(500)
+        .all()
+    )
+    return [
+        {
+            "date": m.created_at.strftime("%Y-%m-%d") if m.created_at else "",
+            "movement_type": m.movement_type,
+            "item_name": mapping.taxflow_name or mapping.name or mapping.sku or "",
+            "quantity": float(m.quantity),
+            "unit_cost": float(m.unit_cost),
+            "reference": m.reference or "",
+        }
+        for m, mapping in rows
+    ]
+
+
 @router.delete("/inventory/stock-levels")
 def clear_stock_levels(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, object]:
     company_id = current_user.company_id

@@ -1863,9 +1863,9 @@
     <div class="card">
       <div class="card-hd"><div class="card-title">Item Master</div><div class="flx"><button class="btn btn-p" onclick="openInventoryItemModal()">+ New Item</button></div></div>
       <table class="tbl">
-        <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Category</th><th>Unit</th><th>Default Warehouse</th><th>Tracking</th><th>VAT</th><th>Status</th></tr></thead>
+        <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Category</th><th>Unit</th><th>Warehouse</th><th>Tracking</th><th>VAT</th><th>Status</th><th></th></tr></thead>
         <tbody id="prod-tbody">
-          <tr data-empty-state="1"><td colspan="9" style="color:var(--text3);text-align:center">No products in database yet.</td></tr>
+          <tr data-empty-state="1"><td colspan="10" style="color:var(--text3);text-align:center">No products in database yet.</td></tr>
         </tbody>
       </table>
     </div>
@@ -1875,8 +1875,9 @@
     <div class="card">
       <div class="card-hd"><div class="card-title">Stock Movement History</div>
         <div class="flx">
-          <select class="fi" style="width:150px"><option>All Items</option></select>
-          <select class="fi" style="width:130px"><option>June 2024</option></select>
+          <select class="fi" id="inv-movement-item-filter" style="width:160px" onchange="filterStockMovements()"><option value="">All Items</option></select>
+          <select class="fi" id="inv-movement-month-filter" style="width:140px" onchange="filterStockMovements()"><option value="">All Months</option></select>
+          <button class="btn btn-g btn-sm" onclick="loadStockMovements()">Refresh</button>
         </div>
       </div>
       <table class="tbl">
@@ -4984,16 +4985,17 @@ period_locks ─&lt; audit_logs
 </div>
 
 <div class="overlay" id="m-inv-item" onclick="closeOvBg(event,'m-inv-item')">
-  <div class="modal modal-lg"><div class="modal-title">Add Inventory Item</div><div class="modal-sub">Add item, stock settings, warehouse, and accounting mappings</div>
-    <div class="fr2"><div class="fg"><label class="fl">Item Code</label><input class="fi mono" id="inv-item-code" placeholder="ITM-005"></div><div class="fg"><label class="fl">Category</label><select class="fi" id="inv-item-category"><option value="">Select Category</option></select></div></div>
+  <div class="modal modal-lg"><div class="modal-title" id="inv-item-modal-title">Add Inventory Item</div><div class="modal-sub">Item details, pricing, stock settings, and supplier</div>
+    <div class="fr3"><div class="fg"><label class="fl">Item Code</label><input class="fi mono" id="inv-item-code" placeholder="ITM-005"></div><div class="fg"><label class="fl">Item Type</label><select class="fi" id="inv-item-type"><option>Stock Item</option><option>Service</option><option>Consumable</option><option>Raw Material</option><option>Finished Good</option></select></div><div class="fg"><label class="fl">Status</label><select class="fi" id="inv-item-status"><option>Active</option><option>Inactive</option><option>Draft</option></select></div></div>
     <div class="fg"><label class="fl">Item Name</label><input class="fi" id="inv-item-name" placeholder="Full item name"></div>
-    <div class="fr2"><div class="fg"><label class="fl">Unit of Measure</label><select class="fi" id="inv-item-unit"><option value="">Select Unit</option></select></div><div class="fg"><label class="fl">Cost Price</label><input class="fi mono" id="inv-item-cost" placeholder="0.00"></div></div>
+    <div class="fg"><label class="fl">Description</label><input class="fi" id="inv-item-description" placeholder="Short description (optional)"></div>
+    <div class="fr2"><div class="fg"><label class="fl">Category</label><select class="fi" id="inv-item-category"><option value="">Select Category</option></select></div><div class="fg"><label class="fl">Unit of Measure</label><select class="fi" id="inv-item-unit"><option value="">Select Unit</option></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Cost Price</label><input class="fi mono" id="inv-item-cost" placeholder="0.00"></div><div class="fg"><label class="fl">Selling Price</label><input class="fi mono" id="inv-item-selling-price" placeholder="0.00"></div><div class="fg"><label class="fl">VAT</label><select class="fi" id="inv-item-vat"><option value="Standard 5%">Standard 5%</option><option value="Zero-rated 0%">Zero-rated 0%</option><option value="Exempt">Exempt</option></select></div></div>
     <div class="section-hd">Stock Settings</div>
     <div class="fr2"><div class="fg"><label class="fl">Stock Tracking</label><select class="fi" id="inv-item-tracking"><option>Yes</option><option>No</option><option>Optional</option></select></div><div class="fg"><label class="fl">Opening Date</label><input class="fi" id="inv-item-opening-date" type="date"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Reorder Level</label><input class="fi mono" id="inv-item-reorder" placeholder="50"></div><div class="fg"><label class="fl">Minimum Stock</label><input class="fi mono" id="inv-item-min" placeholder="25"></div><div class="fg"><label class="fl">Maximum Stock</label><input class="fi mono" id="inv-item-max" placeholder="500"></div></div>
     <div class="fg"><label class="fl">Preferred Supplier</label><select class="fi" id="inv-item-supplier"><option value="">Select Supplier</option></select></div>
-    <div class="fr2"><div class="fg"><label class="fl">Status</label><select class="fi" id="inv-item-status"><option>Active</option><option>Inactive</option><option>Draft</option></select></div></div>
-    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-inv-item')">Cancel</button><button class="btn btn-p" onclick="saveInventoryItem()">Add Item</button></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-inv-item')">Cancel</button><button class="btn btn-p" id="inv-item-save-btn" onclick="saveInventoryItem()">Add Item</button></div>
   </div>
 </div>
 
