@@ -158,176 +158,234 @@
 <!-- ═══════════════════ DASHBOARD ═══════════════════ -->
 <div class="page on" id="page-dashboard" style="max-width:1400px;margin:0 auto">
 
-  <!-- ── HEADER BAR ── -->
-  <div class="dv2-header mb20">
-    <div class="dv2-header-left">
-      <div class="dv2-greeting" id="dash-greeting">Good morning</div>
-      <div class="dv2-date" id="dash-today-date"></div>
+  <!-- ── HEADER ── -->
+  <div class="mb3-hdr mb20">
+    <div class="mb3-hdr-left">
+      <div class="mb3-greeting" id="dash-greeting">Good morning</div>
+      <div class="mb3-hdr-sub">Manage your finances now</div>
+      <div class="mb3-hdr-date" id="dash-today-date"></div>
     </div>
-    <div class="dv2-header-right">
+    <div class="mb3-hdr-right">
+      <div class="mb3-search-pill">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><circle cx="9" cy="9" r="5.5"/><path d="M14.5 14.5l-3-3"/></svg>
+        <span>Search transactions…</span>
+      </div>
       <div class="dv2-live-badge"><span class="live-dot"></span><span id="dash-period-label">Live</span></div>
-      <button class="dv2-action-btn" onclick="go('sales')">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M2 4h12l-1 8H3L2 4z"/></svg>New Invoice
+      <button class="mb3-hdr-btn" onclick="go('sales')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13"><path d="M2 4h12l-1 8H3L2 4z"/></svg>New Invoice
       </button>
-      <button class="dv2-action-btn accent" onclick="go('purchase')">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M2 2h2l2 8h8"/><circle cx="7" cy="13" r="1"/><circle cx="13" cy="13" r="1"/></svg>Add Purchase
+      <button class="mb3-hdr-btn accent" onclick="go('purchase')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13"><path d="M2 2h2l2 8h8"/><circle cx="7" cy="13" r="1"/><circle cx="13" cy="13" r="1"/></svg>Add Purchase
       </button>
     </div>
   </div>
 
-  <!-- ── ROW 1: 4 Gradient KPI Cards ── -->
-  <div class="dv2-kpi-grid mb20">
+  <!-- ── MAIN GRID: left content | right sidebar ── -->
+  <div class="mb3-main-grid">
 
-    <div class="dv2-kpi-card" style="--kc1:#6366f1;--kc2:#818cf8">
-      <div class="dv2-kpi-glow"></div>
-      <div class="dv2-kpi-inner">
-        <div class="dv2-kpi-head">
-          <div class="dv2-kpi-icon">
-            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M2 11l8-9 8 9v7a1 1 0 01-1 1H3a1 1 0 01-1-1v-7z"/></svg>
+    <!-- ══ LEFT: main content ══ -->
+    <div class="mb3-main">
+
+      <!-- ROW 1: 3 pastel KPI cards -->
+      <div class="mb3-kpi-row mb16">
+
+        <!-- Money Incoming = Revenue -->
+        <div class="mb3-kpi-card kc-lavender">
+          <div class="mb3-kpi-glow" style="background:radial-gradient(circle at 80% 20%,rgba(139,92,246,.4),transparent 65%)"></div>
+          <div class="mb3-kpi-ico" style="background:linear-gradient(135deg,#7c3aed,#a78bfa)">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm1 11H9v-4H7l3-3 3 3h-2v4z"/></svg>
           </div>
-          <span class="dv2-kpi-badge up" id="dash-rev-trend">—</span>
-        </div>
-        <div class="dv2-kpi-value" id="dash-revenue">AED 0</div>
-        <div class="dv2-kpi-label">Total Revenue</div>
-        <div class="dv2-kpi-meta" id="dash-revenue-sub">Loading…</div>
-        <div class="dv2-spark" id="dash-rev-spark"></div>
-      </div>
-    </div>
-
-    <div class="dv2-kpi-card" style="--kc1:#ef4444;--kc2:#f87171">
-      <div class="dv2-kpi-glow"></div>
-      <div class="dv2-kpi-inner">
-        <div class="dv2-kpi-head">
-          <div class="dv2-kpi-icon">
-            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M3 1h1l3 9h7l2-6H6"/><circle cx="8" cy="17" r="1.5"/><circle cx="14" cy="17" r="1.5"/></svg>
-          </div>
-          <span class="dv2-kpi-badge dn" id="dash-pur-trend">—</span>
-        </div>
-        <div class="dv2-kpi-value" id="dash-total-purchases">AED 0</div>
-        <div class="dv2-kpi-label">Total Purchases</div>
-        <div class="dv2-kpi-meta" id="dash-purchases-sub">Loading…</div>
-        <div class="dv2-spark" id="dash-pur-spark"></div>
-      </div>
-    </div>
-
-    <div class="dv2-kpi-card" style="--kc1:#f59e0b;--kc2:#fbbf24">
-      <div class="dv2-kpi-glow"></div>
-      <div class="dv2-kpi-inner">
-        <div class="dv2-kpi-head">
-          <div class="dv2-kpi-icon">
-            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M3 3h14v3H3V3zm0 5h14v3H3V8zm0 5h9v3H3v-3z"/></svg>
-          </div>
-          <span class="dv2-kpi-badge warn" id="dash-vat-trend">Due</span>
-        </div>
-        <div class="dv2-kpi-value" id="dash-vat">AED 0</div>
-        <div class="dv2-kpi-label">Net VAT Payable</div>
-        <div class="dv2-kpi-meta" id="dash-vat-sub">Output – Input</div>
-        <div class="dv2-spark" id="dash-vat-spark"></div>
-      </div>
-    </div>
-
-    <div class="dv2-kpi-card" style="--kc1:#10b981;--kc2:#34d399">
-      <div class="dv2-kpi-glow"></div>
-      <div class="dv2-kpi-inner">
-        <div class="dv2-kpi-head">
-          <div class="dv2-kpi-icon">
-            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M10 1l2.5 5.5L18 7.5l-4 4 1 5.5L10 14.5 5 17l1-5.5-4-4 5.5-1z"/></svg>
-          </div>
-          <span class="dv2-kpi-badge up" id="dash-profit-trend">—</span>
-        </div>
-        <div class="dv2-kpi-value" id="dash-gross-profit">AED 0</div>
-        <div class="dv2-kpi-label">Gross Profit</div>
-        <div class="dv2-kpi-meta" id="dash-profit-sub">Revenue – Purchases</div>
-        <div class="dv2-spark" id="dash-profit-spark"></div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- ── ROW 2: Chart (wide) + AR/AP (narrow) ── -->
-  <!-- ── ROW 3: VAT Donut + Invoice Status + Top Customers ── -->
-  <div class="dv2-row3 mb20">
-
-    <!-- VAT donut -->
-    <div class="dv2-vat-card">
-      <div class="dv2-section-title mb12">VAT Position <span class="b b-a" id="dash-vat-status-badge" style="margin-left:8px;font-size:11px">Calculating</span></div>
-      <div class="dv2-vat-donut">
-        <div class="dv2-donut-wrap">
-          <svg viewBox="0 0 100 100" width="100" height="100">
-            <circle cx="50" cy="50" r="38" fill="none" stroke="var(--border2)" stroke-width="12"/>
-            <circle cx="50" cy="50" r="38" fill="none" stroke="#6366f1" stroke-width="12" stroke-dasharray="0 239" stroke-dashoffset="60" id="dash-vat-ring-output" style="transition:stroke-dasharray .7s"/>
-            <circle cx="50" cy="50" r="38" fill="none" stroke="#10b981" stroke-width="12" stroke-dasharray="0 239" stroke-dashoffset="60" id="dash-vat-ring-input" style="transition:stroke-dasharray .7s;opacity:.75"/>
-          </svg>
-          <div class="dv2-donut-center">
-            <div style="font-size:11px;color:var(--text3)">UAE VAT</div>
-            <div style="font-size:17px;font-weight:700;color:var(--text)" id="dash-vat-rate">5%</div>
+          <div class="mb3-kpi-name">Money Incoming</div>
+          <div class="mb3-kpi-val" id="dash-revenue">AED 0</div>
+          <div class="mb3-kpi-sub" id="dash-revenue-sub">Loading…</div>
+          <div class="mb3-kpi-foot">
+            <span class="dv2-kpi-badge up" id="dash-rev-trend">—</span>
+            <div class="dv2-spark" id="dash-rev-spark"></div>
           </div>
         </div>
-        <div class="dv2-vat-legend">
-          <div class="dv2-vat-item"><span class="dv2-dot" style="background:#6366f1"></span><div><div style="font-size:11px;color:var(--text3)">Output VAT</div><div class="dv2-vat-num" id="dash-vat-output">AED 0</div></div></div>
-          <div class="dv2-vat-item"><span class="dv2-dot" style="background:#10b981"></span><div><div style="font-size:11px;color:var(--text3)">Input VAT</div><div class="dv2-vat-num" id="dash-vat-input">AED 0</div></div></div>
-          <div style="border-top:1px solid var(--border);margin:10px 0 8px"></div>
-          <div class="dv2-vat-item"><span class="dv2-dot" style="background:#f59e0b"></span><div><div style="font-size:11px;color:var(--text3)">Net Payable</div><div class="dv2-vat-num" id="dash-vat-net" style="color:#f59e0b">AED 0</div></div></div>
+
+        <!-- Money Spend = Purchases -->
+        <div class="mb3-kpi-card kc-peach">
+          <div class="mb3-kpi-glow" style="background:radial-gradient(circle at 80% 20%,rgba(234,88,12,.35),transparent 65%)"></div>
+          <div class="mb3-kpi-ico" style="background:linear-gradient(135deg,#ea580c,#fb923c)">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm1 11H9v-4H7l3-3 3 3h-2v4z" transform="rotate(180 10 10)"/></svg>
+          </div>
+          <div class="mb3-kpi-name">Money Spend</div>
+          <div class="mb3-kpi-val" id="dash-total-purchases">AED 0</div>
+          <div class="mb3-kpi-sub" id="dash-purchases-sub">Loading…</div>
+          <div class="mb3-kpi-foot">
+            <span class="dv2-kpi-badge dn" id="dash-pur-trend">—</span>
+            <div class="dv2-spark" id="dash-pur-spark"></div>
+          </div>
+        </div>
+
+        <!-- Total Profit = Gross Profit -->
+        <div class="mb3-kpi-card kc-mint">
+          <div class="mb3-kpi-glow" style="background:radial-gradient(circle at 80% 20%,rgba(5,150,105,.35),transparent 65%)"></div>
+          <div class="mb3-kpi-ico" style="background:linear-gradient(135deg,#059669,#34d399)">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M3 10h14M10 3l7 7-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+          </div>
+          <div class="mb3-kpi-name">Total Profit</div>
+          <div class="mb3-kpi-val" id="dash-gross-profit">AED 0</div>
+          <div class="mb3-kpi-sub" id="dash-profit-sub">Revenue – Purchases</div>
+          <div class="mb3-kpi-foot">
+            <span class="dv2-kpi-badge up" id="dash-profit-trend">—</span>
+            <div class="dv2-spark" id="dash-profit-spark"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ROW 2: Statistics chart + Profit gauge -->
+      <div class="mb3-mid-row mb16">
+
+        <!-- Bar chart -->
+        <div class="mb3-stat-card">
+          <div class="mb3-card-hd mb16">
+            <div class="mb3-card-title">Statistic</div>
+            <div class="dv2-legend">
+              <span><i style="background:#6366f1"></i>Revenue</span>
+              <span><i style="background:#ef4444"></i>Purchases</span>
+              <span><i style="background:#f59e0b"></i>VAT</span>
+            </div>
+          </div>
+          <div class="dv2-bar-area" id="dash-monthly-bars" style="height:130px">
+            <div class="dv2-loading" style="grid-column:1/-1">Loading chart…</div>
+          </div>
+          <div class="dv2-chart-footer" id="dash-monthly-summary" style="margin-top:14px"></div>
+        </div>
+
+        <!-- Profit margin gauge -->
+        <div class="mb3-gauge-card">
+          <div class="mb3-card-hd mb12">
+            <div class="mb3-card-title">Net VAT</div>
+            <span class="dv2-kpi-badge warn" id="dash-vat-trend">Due</span>
+          </div>
+          <div class="mb3-gauge-wrap">
+            <svg viewBox="0 0 160 110" width="160" height="110" style="overflow:visible">
+              <defs>
+                <linearGradient id="gaugeGradVat" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#f59e0b"/>
+                  <stop offset="100%" stop-color="#ef4444"/>
+                </linearGradient>
+              </defs>
+              <!-- background track -->
+              <path d="M18,96 A62,62 0 0,1 142,96" fill="none" stroke="var(--border2)" stroke-width="13" stroke-linecap="round"/>
+              <!-- fill arc -->
+              <path id="dash-vat-gauge-arc" d="M18,96 A62,62 0 0,1 142,96" fill="none" stroke="url(#gaugeGradVat)" stroke-width="13" stroke-linecap="round" stroke-dasharray="0 195" style="transition:stroke-dasharray .8s cubic-bezier(.34,1.56,.64,1)"/>
+              <!-- tick marks -->
+              <line x1="18" y1="96" x2="22" y2="96" stroke="var(--border3)" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="142" y1="96" x2="138" y2="96" stroke="var(--border3)" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <div class="mb3-gauge-center">
+              <div class="mb3-gauge-val" id="dash-vat">AED 0</div>
+              <div class="mb3-gauge-lbl" id="dash-vat-sub">Output – Input</div>
+            </div>
+          </div>
+          <div style="text-align:center;margin-top:12px">
+            <div class="dv2-spark" id="dash-vat-spark" style="justify-content:center"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ROW 3: Last Transactions + Staff Today -->
+      <div class="mb3-bottom-row">
+
+        <div class="mb3-card">
+          <div class="mb3-card-hd mb12">
+            <div class="mb3-card-title">Last Transaction</div>
+            <button class="btn btn-g btn-sm" onclick="go('sales')">View All</button>
+          </div>
+          <div id="dash-recent-activity"><div class="dv2-loading">Reading database…</div></div>
+        </div>
+
+        <div class="mb3-card">
+          <div class="mb3-card-hd mb12">
+            <div class="mb3-card-title">Staff Today</div>
+            <span class="bio-pulse"></span>
+          </div>
+          <div id="dash-staff-today"><div class="dv2-loading">Reading database…</div></div>
+        </div>
+
+      </div>
+
+    </div><!-- end .mb3-main -->
+
+    <!-- ══ RIGHT: sidebar ══ -->
+    <div class="mb3-sidebar">
+
+      <!-- VAT Position — UNCHANGED DATA/IDs -->
+      <div class="mb3-side-card mb3-vat-side">
+        <div class="mb3-card-hd mb12">
+          <div class="mb3-card-title">VAT Position <span class="b b-b" id="dash-vat-status-badge" style="margin-left:6px;font-size:11px">Balanced</span></div>
+        </div>
+        <div class="dv2-vat-donut">
+          <div class="dv2-donut-wrap">
+            <svg viewBox="0 0 100 100" width="94" height="94">
+              <circle cx="50" cy="50" r="38" fill="none" stroke="var(--border2)" stroke-width="12"/>
+              <circle cx="50" cy="50" r="38" fill="none" stroke="#8b5cf6" stroke-width="12" stroke-dasharray="0 239" stroke-dashoffset="60" id="dash-vat-ring-output" style="transition:stroke-dasharray .7s"/>
+              <circle cx="50" cy="50" r="38" fill="none" stroke="#10b981" stroke-width="12" stroke-dasharray="0 239" stroke-dashoffset="60" id="dash-vat-ring-input" style="transition:stroke-dasharray .7s;opacity:.75"/>
+            </svg>
+            <div class="dv2-donut-center">
+              <div style="font-size:10px;color:var(--text3)">UAE VAT</div>
+              <div style="font-size:15px;font-weight:700;color:var(--text)" id="dash-vat-rate">5%</div>
+            </div>
+          </div>
+          <div class="dv2-vat-legend">
+            <div class="dv2-vat-item"><span class="dv2-dot" style="background:#8b5cf6"></span><div><div style="font-size:11px;color:var(--text3)">Output VAT</div><div class="dv2-vat-num" id="dash-vat-output">AED 0.00</div></div></div>
+            <div class="dv2-vat-item"><span class="dv2-dot" style="background:#10b981"></span><div><div style="font-size:11px;color:var(--text3)">Input VAT</div><div class="dv2-vat-num" id="dash-vat-input">AED 0.00</div></div></div>
+            <div style="border-top:1px solid var(--border);margin:8px 0 6px"></div>
+            <div class="dv2-vat-item"><span class="dv2-dot" style="background:#f59e0b"></span><div><div style="font-size:11px;color:var(--text3)">Net Payable</div><div class="dv2-vat-num" id="dash-vat-net" style="color:#f59e0b">AED 0.00</div></div></div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Invoice status -->
-    <div class="dv2-status-card">
-      <div class="dv2-section-title mb16">Invoice Status</div>
-      <div id="dash-invoice-status"><div class="dv2-loading">Reading database…</div></div>
-    </div>
-
-    <!-- Quick Actions (swapped from row 4) -->
-    <div class="dv2-actions-card">
-      <div class="dv2-section-title mb14">Quick Actions</div>
-      <div class="dv2-qa-grid">
-        <button class="dv2-qa" onclick="go('sales')" style="--qa:#6366f1">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M3 5h14M3 10h14M3 15h8"/></svg><span>Invoice</span>
-        </button>
-        <button class="dv2-qa" onclick="go('purchase')" style="--qa:#ef4444">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M3 3h14v14H3z"/><path d="M7 7h6M7 11h4"/></svg><span>Purchase</span>
-        </button>
-        <button class="dv2-qa" onclick="go('quotations')" style="--qa:#f59e0b">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M5 3h8l2 2v12H5z"/><path d="M8 3v4h5"/></svg><span>Quote</span>
-        </button>
-        <button class="dv2-qa" onclick="go('accounting')" style="--qa:#10b981">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M3 4h14v12H3z"/><path d="M3 9h14M8 9v7"/></svg><span>Ledger</span>
-        </button>
-        <button class="dv2-qa" onclick="go('reports')" style="--qa:#8b5cf6">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M4 17V8l4-5 4 5v9"/><path d="M8 17v-5h4v5"/></svg><span>Reports</span>
-        </button>
-        <button class="dv2-qa" onclick="go('exception')" style="--qa:#f472b6">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><circle cx="10" cy="10" r="7"/><path d="M10 7v3M10 13v1"/></svg><span>Alerts</span>
-        </button>
+      <!-- Invoice Status — UNCHANGED DATA/IDs -->
+      <div class="mb3-side-card">
+        <div class="mb3-card-hd mb14">
+          <div class="mb3-card-title">Invoice Status</div>
+        </div>
+        <div id="dash-invoice-status"><div class="dv2-loading">Reading database…</div></div>
       </div>
-    </div>
 
-  </div>
-
-  <!-- ── ROW 4: Activity + Staff + Top Customers ── -->
-  <div class="dv2-row4">
-
-    <div class="dv2-activity-card">
-      <div class="dv2-section-head mb12"><div class="dv2-section-title">Recent Activity</div><span class="bio-pulse"></span></div>
-      <div id="dash-recent-activity"><div class="dv2-loading">Reading database…</div></div>
-    </div>
-
-    <div class="dv2-staff-card">
-      <div class="dv2-section-head mb12"><div class="dv2-section-title">Staff Today</div><span class="bio-pulse"></span></div>
-      <div id="dash-staff-today"><div class="dv2-loading">Reading database…</div></div>
-    </div>
-
-    <!-- Top Customers (swapped from row 3) -->
-    <div class="dv2-customers-card">
-      <div class="dv2-section-head mb12">
-        <div class="dv2-section-title">Top Customers</div>
-        <button class="btn btn-g btn-sm" onclick="go('sales')">View All</button>
+      <!-- Quick Actions — UNCHANGED -->
+      <div class="mb3-side-card">
+        <div class="mb3-card-title mb12">Quick Actions</div>
+        <div class="dv2-qa-grid">
+          <button class="dv2-qa" onclick="go('sales')" style="--qa:#8b5cf6">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M3 5h14M3 10h14M3 15h8"/></svg><span>Invoice</span>
+          </button>
+          <button class="dv2-qa" onclick="go('purchase')" style="--qa:#ef4444">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M3 3h14v14H3z"/><path d="M7 7h6M7 11h4"/></svg><span>Purchase</span>
+          </button>
+          <button class="dv2-qa" onclick="go('quotations')" style="--qa:#f59e0b">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M5 3h8l2 2v12H5z"/><path d="M8 3v4h5"/></svg><span>Quote</span>
+          </button>
+          <button class="dv2-qa" onclick="go('accounting')" style="--qa:#10b981">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M3 4h14v12H3z"/><path d="M3 9h14M8 9v7"/></svg><span>Ledger</span>
+          </button>
+          <button class="dv2-qa" onclick="go('reports')" style="--qa:#6366f1">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M4 17V8l4-5 4 5v9"/><path d="M8 17v-5h4v5"/></svg><span>Reports</span>
+          </button>
+          <button class="dv2-qa" onclick="go('exception')" style="--qa:#f472b6">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><circle cx="10" cy="10" r="7"/><path d="M10 7v3M10 13v1"/></svg><span>Alerts</span>
+          </button>
+        </div>
       </div>
-      <div id="dash-top-customers-v2"></div>
-    </div>
 
-  </div>
+      <!-- Top Customers -->
+      <div class="mb3-side-card">
+        <div class="mb3-card-hd mb12">
+          <div class="mb3-card-title">Top Customers</div>
+          <button class="btn btn-g btn-sm" onclick="go('sales')">View All</button>
+        </div>
+        <div id="dash-top-customers-v2"></div>
+      </div>
+
+    </div><!-- end .mb3-sidebar -->
+
+  </div><!-- end .mb3-main-grid -->
 
   <!-- hidden stubs kept for JS compatibility -->
   <div style="display:none">
@@ -3287,8 +3345,25 @@
   </div>
 
   <div class="tab-body" id="set-docs">
-    <div class="card mb16">
-      <div class="card-hd"><div><div class="card-title">Invoice Design Layout</div><div class="card-sub">Branding, tax details, numbering, payment terms, QR, signature, and live invoice preview</div></div><div class="flx"><button class="btn btn-g btn-sm" onclick="previewLayoutSampleInvoice()">Preview Invoice</button><button class="btn btn-p btn-sm" onclick="saveInvoiceLayout()">Save Layout</button></div></div>
+
+    <!-- ── Layout Gallery ── -->
+    <div class="flx-b mb12">
+      <div>
+        <div class="card-title">Invoice Layouts</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Select a layout to edit · changes are saved per layout</div>
+      </div>
+      <button class="btn btn-p btn-sm" onclick="addInvoiceLayout()">+ Add Layout</button>
+    </div>
+    <div class="inv-lgal-grid mb20" id="inv-layouts-grid">
+      <div class="dv2-loading">Loading layouts…</div>
+    </div>
+
+    <div class="card mb16" id="inv-design-card">
+      <div class="card-hd"><div><div class="card-title">Invoice Design Layout</div><div class="card-sub">Branding, tax details, numbering, payment terms, QR, signature, and live preview</div></div><div class="flx"><button class="btn btn-g btn-sm" onclick="previewLayoutSampleInvoice()">Preview</button><button class="btn btn-p btn-sm" onclick="saveInvoiceLayout()">Save Layout</button></div></div>
+      <div class="fr2 mb14" style="align-items:flex-end">
+        <div class="fg"><label class="fl">Layout Name</label><input class="fi" id="inv-layout-name" placeholder="e.g. Standard, Export, Retail…" oninput="_ilLiveNameSync()"></div>
+        <div class="fg" style="max-width:180px"><label class="fl">Active Layout</label><select class="fi" id="inv-layout-switcher" onchange="selectInvoiceLayout(this.value)"></select></div>
+      </div>
       <div class="g2">
         <div>
           <div class="section-hd">Template & Brand</div>
@@ -3429,11 +3504,40 @@
   </div>
 
   <div class="tab-body" id="set-backup">
+    <!-- Row 1: Download + User Export -->
     <div class="g2 mb16">
       <div class="card">
-        <div class="card-hd"><div><div class="card-title">Backup Policy</div><div class="card-sub">Data retention and recovery controls</div></div><button class="btn btn-p btn-sm" onclick="runBackup()">Run Backup</button></div>
-        <div class="toggle-row"><div><div>Automatic nightly backup</div><div class="toggle-copy">Encrypted backup at 02:00 GST.</div></div><input type="checkbox" checked></div>
-        <div class="toggle-row"><div><div>Retain audit logs for 7 years</div><div class="toggle-copy">Covers invoices, journals, payroll, and tax return changes.</div></div><input type="checkbox" checked></div>
+        <div class="card-hd"><div><div class="card-title">Download Backup</div><div class="card-sub">Export all company data as a JSON file</div></div></div>
+        <div class="toggle-row"><div><div>Invoices &amp; Sales</div><div class="toggle-copy">Sales invoices and quotations</div></div><input type="checkbox" id="bk-inv" checked></div>
+        <div class="toggle-row"><div><div>Purchases &amp; Bills</div><div class="toggle-copy">Purchase records and vendor bills</div></div><input type="checkbox" id="bk-pur" checked></div>
+        <div class="toggle-row"><div><div>Journal &amp; Accounts</div><div class="toggle-copy">Chart of accounts and ledger entries</div></div><input type="checkbox" id="bk-jnl" checked></div>
+        <div class="toggle-row"><div><div>Payroll &amp; HR</div><div class="toggle-copy">Employee records and payroll data</div></div><input type="checkbox" id="bk-hr" checked></div>
+        <div class="toggle-row"><div><div>Audit Log</div><div class="toggle-copy">Full action history</div></div><input type="checkbox" id="bk-audit" checked></div>
+        <div style="margin-top:14px">
+          <button class="btn btn-p" style="width:100%" onclick="downloadFullBackup()">&#8659; Download Full Backup</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">User Data Export</div><div class="card-sub">Download data for a specific user</div></div></div>
+        <div class="fg mb12"><label class="fl">Select User</label><select class="fi" id="bk-user-sel" onchange="onBackupUserChange(this.value)"><option value="">— loading users… —</option></select></div>
+        <div id="bk-user-profile" style="display:none" class="mb12">
+          <div style="background:var(--bg3);border-radius:10px;padding:12px;font-size:13px;display:flex;flex-direction:column;gap:6px">
+            <div class="flx-b"><span style="color:var(--text3)">Name</span><span id="bkup-uname" style="font-weight:600"></span></div>
+            <div class="flx-b"><span style="color:var(--text3)">Email</span><span id="bkup-uemail" style="color:var(--text2)"></span></div>
+            <div class="flx-b"><span style="color:var(--text3)">Role</span><span id="bkup-urole" class="b b-a"></span></div>
+            <div class="flx-b"><span style="color:var(--text3)">Created</span><span id="bkup-ucreated" style="color:var(--text2)"></span></div>
+          </div>
+        </div>
+        <button class="btn btn-p" id="bk-user-btn" style="width:100%;opacity:.5;margin-bottom:8px" disabled onclick="downloadUserData()">&#8659; Download User Data</button>
+        <div style="font-size:12px;color:var(--text3)">Includes profile, audit trail, and activity linked to this user.</div>
+      </div>
+    </div>
+    <!-- Row 2: Backup Policy + System Health -->
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Backup Policy</div><div class="card-sub">Retention and scheduling</div></div></div>
+        <div class="toggle-row"><div><div>Automatic nightly backup</div><div class="toggle-copy">Encrypted backup at 02:00 GST</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Retain audit logs for 7 years</div><div class="toggle-copy">Covers invoices, journals, payroll, and tax return changes</div></div><input type="checkbox" checked></div>
         <div class="fr2" style="margin-top:14px">
           <div class="fg"><label class="fl">Backup Region</label><select class="fi"><option>UAE</option><option>GCC</option></select></div>
           <div class="fg"><label class="fl">Retention</label><select class="fi"><option>7 years</option><option>5 years</option><option>10 years</option></select></div>
@@ -3447,14 +3551,13 @@
         <div class="risk-row"><span>OCR Queue</span><div class="risk-track"><div class="risk-fill" style="width:84%"></div></div><span class="mono">84%</span></div>
       </div>
     </div>
+    <!-- Audit log -->
     <div class="card">
-      <div class="card-hd"><div class="card-title">Audit Log</div><button class="btn btn-g btn-sm" onclick="toast('Audit log exported','ok')">Export CSV</button></div>
+      <div class="card-hd"><div class="card-title">Audit Log</div><button class="btn btn-g btn-sm" onclick="exportAuditCsv()">Export CSV</button></div>
       <table class="tbl">
         <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Record</th><th>Result</th></tr></thead>
         <tbody id="audit-tbody">
-          <tr><td class="mono">Today 09:15</td><td>Sara</td><td>Changed VAT setting</td><td>Tax Rules</td><td><span class="b b-g">Saved</span></td></tr>
-          <tr><td class="mono">Today 08:42</td><td>Rania</td><td>Exported report</td><td>VAT June 2024</td><td><span class="b b-g">Logged</span></td></tr>
-          <tr><td class="mono">Yesterday</td><td>System</td><td>Nightly backup</td><td>Full tenant</td><td><span class="b b-g">Complete</span></td></tr>
+          <tr><td class="mono" colspan="5" style="color:var(--text3);text-align:center">Loading audit log…</td></tr>
         </tbody>
       </table>
     </div>
@@ -4760,6 +4863,24 @@ period_locks ─&lt; audit_logs
     <div class="fg"><label class="fl">Opening Balance</label><input class="fi mono" id="bank-balance" placeholder="0.00" inputmode="decimal"></div>
     <div class="fr2"><div class="fg"><label class="fl">Swift Code</label><input class="fi mono" id="bank-swift" placeholder="ENBD AEADxxx"></div><div class="fg"><label class="fl">Branch</label><input class="fi" id="bank-branch" placeholder="Branch name"></div></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-bank')">Cancel</button><button class="btn btn-p" onclick="saveBankAccount()">Save Account</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-new-layout" onclick="closeOvBg(event,'m-new-layout')">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-title">New Invoice Layout</div>
+    <div class="modal-sub">Give this layout a name — customise all design settings after creating it</div>
+    <div class="fg" style="margin-top:14px"><label class="fl">Layout Name</label><input class="fi" id="new-layout-name" placeholder="e.g. Export Invoice, Arabic Layout…" maxlength="60" onkeydown="if(event.key==='Enter')confirmAddInvoiceLayout()"></div>
+    <div class="fg"><label class="fl">Start From</label>
+      <select class="fi" id="new-layout-base">
+        <option value="default">Default settings (blank)</option>
+        <option value="current">Current active layout (duplicate)</option>
+      </select>
+    </div>
+    <div class="fr2" style="margin-top:16px">
+      <button class="btn btn-g" onclick="hideM('m-new-layout')">Cancel</button>
+      <button class="btn btn-p" onclick="confirmAddInvoiceLayout()">Create Layout</button>
+    </div>
   </div>
 </div>
 

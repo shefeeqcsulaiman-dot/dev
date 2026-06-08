@@ -184,6 +184,7 @@ function stab(el,target){
   if(target==='p-records')ensurePurchaseRecordsLoaded();
   if(target==='acc-voucher')prepareJournalForm();
   if(target==='acc-ledger')loadAccountingFromDb();
+  if(target==='set-backup')loadBackupTab();
   if(target==='p-manual'){
     bindManualPurchaseCalculator();
     setManualPurchaseDefaults();
@@ -1848,6 +1849,9 @@ function renderDashVatRing(data,kpis={}){
   const inRing=document.getElementById('dash-vat-ring-input');
   if(outRing)outRing.setAttribute('stroke-dasharray',`${outDash} ${circ-outDash}`);
   if(inRing){inRing.setAttribute('stroke-dasharray',`${inDash} ${circ-inDash}`);inRing.setAttribute('stroke-dashoffset',`${60+outDash}`);}
+  // Gauge arc: fill = output/(output+input) ratio, full arc = 195
+  const gaugeArc=document.getElementById('dash-vat-gauge-arc');
+  if(gaugeArc){const full=195;const fill=Math.round(outputVat/vatTotal*full);gaugeArc.setAttribute('stroke-dasharray',`${fill} ${full-fill}`);}
 }
 
 function renderMonthlyRevenueVat(rows){
@@ -5373,8 +5377,15 @@ function hydrateFromServer(){
     console.info(`TaxFlow DB tables loaded: ${totalLoaded} records`);
     if(totalLoaded>0)toast(`Database tables loaded: ${totalLoaded} records`,'ok');
     if(data.invoiceLayout){
-      setInvoiceLayoutFields(data.invoiceLayout);
+      // Seed server layout into the default slot if it's still the only one
+      const defaultSlot=_invoiceLayouts.find(l=>l.isDefault)||_invoiceLayouts[0];
+      if(defaultSlot&&_invoiceLayouts.length===1){
+        Object.assign(defaultSlot,data.invoiceLayout);
+        _ilSave();
+      }
+      if(_activeLayoutId===defaultSlot?.id)setInvoiceLayoutFields(defaultSlot);
       updateInvoiceLayoutPreview();
+      renderInvoiceLayoutGallery();
     }
     const quotationLayoutRecord=Array.isArray(data.quotationLayout)?data.quotationLayout[0]:data.quotationLayout;
     if(quotationLayoutRecord){
@@ -6250,7 +6261,9 @@ function getInvoiceLayout(){
   const base=defaultInvoiceLayout();
   const value=(id,key)=>document.getElementById(id)?.value||base[key];
   const checked=(id,key)=>document.getElementById(id)?.checked ?? base[key];
+  const nameVal=(document.getElementById('inv-layout-name')?.value||'').trim();
   return {
+    name:nameVal||(_invoiceLayouts.find(l=>l.id===_activeLayoutId)?.name||'Layout'),
     template:value('inv-layout-template','template'),
     paper:value('inv-layout-paper','paper'),
     align:value('inv-layout-align','align'),
@@ -6312,6 +6325,8 @@ function getInvoiceLayout(){
 
 function setInvoiceLayoutFields(layout={}){
   layout=normalizeInvoiceLayout(layout);
+  const nameField=document.getElementById('inv-layout-name');
+  if(nameField)nameField.value=layout.name||'';
   const fields={
     'inv-layout-template':layout.template,
     'inv-layout-paper':layout.paper,
@@ -6390,8 +6405,151 @@ function goToInvoiceDesignSettings(){
   },60);
 }
 
+// ── Multi-layout state ──────────────────────────────────────────
+let _invoiceLayouts=[];
+let _activeLayoutId=null;
+const _IL_KEY='tf_invoice_layouts';
+
+function _ilSave(){try{localStorage.setItem(_IL_KEY,JSON.stringify(_invoiceLayouts));}catch{}}
+
+function initInvoiceLayouts(){
+  try{_invoiceLayouts=JSON.parse(localStorage.getItem(_IL_KEY)||'null')||[];}catch{_invoiceLayouts=[];}
+  if(!_invoiceLayouts.length){
+    _invoiceLayouts=[{id:'layout-default',name:'Default',isDefault:true,...defaultInvoiceLayout()}];
+    _ilSave();
+  }
+  _activeLayoutId=(_invoiceLayouts.find(l=>l.isDefault)||_invoiceLayouts[0])?.id;
+  renderInvoiceLayoutGallery();
+  const active=_invoiceLayouts.find(l=>l.id===_activeLayoutId);
+  if(active)setInvoiceLayoutFields(active);
+  _ilUpdateNameBadge();
+  // do NOT scroll on init — only scroll on explicit user action
+}
+
+function _ilUpdateNameBadge(){
+  const l=_invoiceLayouts.find(x=>x.id===_activeLayoutId);
+  const sw=document.getElementById('inv-layout-switcher');
+  if(sw){
+    sw.innerHTML=_invoiceLayouts.map(x=>`<option value="${x.id}"${x.id===_activeLayoutId?' selected':''}>${escapeHtml(x.name)}${x.isDefault?' ★':''}</option>`).join('');
+  }
+}
+
+function _ilLiveNameSync(){
+  const nameField=document.getElementById('inv-layout-name');
+  const sw=document.getElementById('inv-layout-switcher');
+  if(!nameField||!sw)return;
+  const val=nameField.value.trim();
+  const opt=sw.querySelector(`option[value="${_activeLayoutId}"]`);
+  if(opt&&val)opt.textContent=val;
+}
+
+function renderInvoiceLayoutGallery(){
+  const grid=document.getElementById('inv-layouts-grid');
+  if(!grid)return;
+  const colors=['#2563eb','#059669','#d97706','#7c3aed','#dc2626','#0891b2'];
+  grid.innerHTML=_invoiceLayouts.map((l,i)=>{
+    const bc=l.color||colors[i%colors.length];
+    const isActive=l.id===_activeLayoutId;
+    return `<div class="inv-lgal-card${isActive?' active':''}" onclick="selectInvoiceLayout('${l.id}')">
+      <div class="inv-lgal-ico">
+        <div class="inv-lgal-ico-doc" style="--bc:${bc}">
+          <div class="inv-lgal-ico-line w80"></div>
+          <div class="inv-lgal-ico-line w60"></div>
+          <div class="inv-lgal-ico-line w80"></div>
+          <div class="inv-lgal-ico-line w70"></div>
+          <div class="inv-lgal-ico-line w60"></div>
+        </div>
+        ${l.isDefault?'<span class="inv-lgal-badge">Default</span>':''}
+      </div>
+      <div class="inv-lgal-name" title="${escapeHtml(l.name)}">${escapeHtml(l.name)}</div>
+      <div class="inv-lgal-meta">${escapeHtml(l.template||'Modern Tax Invoice')}</div>
+      <div class="inv-lgal-actions" onclick="event.stopPropagation()">
+        <button class="inv-lgal-act${isActive?' inv-lgal-act-primary':''}" onclick="selectInvoiceLayout('${l.id}')">&#9998; Edit</button>
+        ${!l.isDefault?`<button class="inv-lgal-act" onclick="setDefaultInvoiceLayout('${l.id}')">&#9733;</button>`:''}
+        <button class="inv-lgal-act" onclick="duplicateInvoiceLayout('${l.id}')">Copy</button>
+        ${_invoiceLayouts.length>1&&!l.isDefault?`<button class="inv-lgal-act danger" onclick="deleteInvoiceLayout('${l.id}')">Del</button>`:''}
+      </div>
+    </div>`;
+  }).join('')+`<button class="inv-lgal-add" onclick="addInvoiceLayout()">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 4v12M4 10h12"/></svg>
+    <span>Add Layout</span>
+  </button>`;
+}
+
+function selectInvoiceLayout(id,{scroll=true}={}){
+  // persist current edits into current slot first
+  const cur=_invoiceLayouts.find(l=>l.id===_activeLayoutId);
+  if(cur){Object.assign(cur,getInvoiceLayout());}
+  _activeLayoutId=id;
+  const l=_invoiceLayouts.find(x=>x.id===id);
+  if(l){setInvoiceLayoutFields(l);updateInvoiceLayoutPreview();}
+  renderInvoiceLayoutGallery();
+  _ilUpdateNameBadge();
+  if(scroll){
+    const card=document.getElementById('inv-design-card');
+    if(card)setTimeout(()=>card.scrollIntoView({behavior:'smooth',block:'start'}),60);
+  }
+}
+
+function addInvoiceLayout(){
+  document.getElementById('new-layout-name').value='';
+  document.getElementById('new-layout-base').value='default';
+  showM('m-new-layout');
+  setTimeout(()=>document.getElementById('new-layout-name').focus(),120);
+}
+
+function confirmAddInvoiceLayout(){
+  const name=(document.getElementById('new-layout-name')?.value||'').trim();
+  if(!name){toast('Enter a layout name','err');return;}
+  const base=document.getElementById('new-layout-base')?.value||'default';
+  let fields=defaultInvoiceLayout();
+  if(base==='current'){
+    const cur=_invoiceLayouts.find(l=>l.id===_activeLayoutId);
+    if(cur)fields={...cur};
+  }
+  const newLayout={...fields,id:'layout-'+Date.now(),name,isDefault:false};
+  _invoiceLayouts.push(newLayout);
+  _ilSave();
+  hideM('m-new-layout');
+  selectInvoiceLayout(newLayout.id);
+  toast(`Layout "${name}" created`,'ok');
+}
+
+function setDefaultInvoiceLayout(id){
+  _invoiceLayouts.forEach(l=>l.isDefault=(l.id===id));
+  _ilSave();
+  renderInvoiceLayoutGallery();
+  toast('Default layout updated','ok');
+}
+
+function duplicateInvoiceLayout(id){
+  const src=_invoiceLayouts.find(l=>l.id===id);
+  if(!src)return;
+  const copy={...src,id:'layout-'+Date.now(),name:src.name+' (Copy)',isDefault:false};
+  _invoiceLayouts.push(copy);
+  _ilSave();
+  selectInvoiceLayout(copy.id);
+  toast(`"${copy.name}" created`,'ok');
+}
+
+function deleteInvoiceLayout(id){
+  const l=_invoiceLayouts.find(x=>x.id===id);
+  if(!l||l.isDefault){toast('Cannot delete the default layout','err');return;}
+  if(_invoiceLayouts.length<=1){toast('Cannot delete the last layout','err');return;}
+  if(!confirm(`Delete layout "${l.name}"?`))return;
+  _invoiceLayouts=_invoiceLayouts.filter(x=>x.id!==id);
+  if(_activeLayoutId===id)_activeLayoutId=(_invoiceLayouts.find(x=>x.isDefault)||_invoiceLayouts[0])?.id;
+  _ilSave();
+  selectInvoiceLayout(_activeLayoutId);
+  toast('Layout deleted','ok');
+}
+// ── end multi-layout ─────────────────────────────────────────────
+
 async function saveInvoiceLayout(){
+  // Capture current form → update active slot
   const layout=getInvoiceLayout();
+  const idx=_invoiceLayouts.findIndex(l=>l.id===_activeLayoutId);
+  if(idx>=0){_invoiceLayouts[idx]={..._invoiceLayouts[idx],...layout};_ilSave();renderInvoiceLayoutGallery();_ilUpdateNameBadge();}
   try{
     await saveInvoiceLayoutServer(layout);
     updateInvoiceLayoutPreview();
@@ -13428,9 +13586,139 @@ function rotateApiKey(){
   audit('Rotated API key','Integrations','Rotated');
 }
 
-function runBackup(){
-  toast('Backup started...','info');
-  setTimeout(()=>{toast('Encrypted backup completed ?','ok');audit('Completed encrypted backup','Full tenant','Complete');},1200);
+function runBackup(){downloadFullBackup();}
+
+let _backupUsers=[];
+let _selectedBackupUserId=null;
+
+async function loadBackupTab(){
+  await Promise.all([loadBackupUsers(),loadLiveAuditLog()]);
+}
+
+async function loadBackupUsers(){
+  try{
+    const resp=await authenticatedFetch(`${apiBaseUrl()}/app-data/users`);
+    if(!resp.ok)return;
+    const r=await resp.json();
+    _backupUsers=r.users||[];
+    const sel=document.getElementById('bk-user-sel');
+    if(!sel)return;
+    sel.innerHTML='<option value="">— select user —</option>'+
+      _backupUsers.map(u=>`<option value="${u.id}">${escapeHtml(u.name)} (${escapeHtml(u.email)})</option>`).join('');
+  }catch{/* silent */}
+}
+
+function onBackupUserChange(userId){
+  _selectedBackupUserId=userId||null;
+  const profile=document.getElementById('bk-user-profile');
+  const btn=document.getElementById('bk-user-btn');
+  if(!userId){
+    if(profile)profile.style.display='none';
+    if(btn){btn.disabled=true;btn.style.opacity='.5';}
+    return;
+  }
+  const u=_backupUsers.find(x=>x.id===userId);
+  if(!u)return;
+  if(document.getElementById('bkup-uname'))document.getElementById('bkup-uname').textContent=u.name;
+  if(document.getElementById('bkup-uemail'))document.getElementById('bkup-uemail').textContent=u.email;
+  if(document.getElementById('bkup-urole'))document.getElementById('bkup-urole').textContent=u.role;
+  if(document.getElementById('bkup-ucreated'))document.getElementById('bkup-ucreated').textContent=u.created_at||'—';
+  if(profile)profile.style.display='';
+  if(btn){btn.disabled=false;btn.style.opacity='1';}
+}
+
+async function downloadFullBackup(){
+  toast('Preparing backup…','info');
+  try{
+    const resp=await authenticatedFetch(`${apiBaseUrl()}/app-data/export`);
+    if(!resp.ok)throw new Error('Export failed');
+    const r=await resp.json();
+
+    const include={inv:document.getElementById('bk-inv')?.checked!==false,pur:document.getElementById('bk-pur')?.checked!==false,jnl:document.getElementById('bk-jnl')?.checked!==false,hr:document.getElementById('bk-hr')?.checked!==false,audit:document.getElementById('bk-audit')?.checked!==false};
+    const data=r.data||{};
+    const filtered={};
+    const invCols=['salesInvoices','quotations','salesCategories','salesUnits','customers','creditControl'];
+    const purCols=['purchaseRecords','purchaseDocuments','bills','vendors','payments','receipts'];
+    const jnlCols=['accounts','ledger','journalDrafts','bankAccounts','bankTransactions','vatReturns','corporateTax','fixedAssets','accrualsPrepayments','costCenters','budgets','cashFlowForecasts','consolidation','relatedPartyTransactions'];
+    const hrCols=['employees','rotaShifts','rotaAssignments','rotaSwaps','rotaApprovals','rotaDrafts'];
+
+    Object.keys(data).forEach(k=>{
+      if(k==='audit'&&!include.audit)return;
+      if(k==='users')return;
+      if(invCols.includes(k)&&!include.inv)return;
+      if(purCols.includes(k)&&!include.pur)return;
+      if(jnlCols.includes(k)&&!include.jnl)return;
+      if(hrCols.includes(k)&&!include.hr)return;
+      filtered[k]=data[k];
+    });
+
+    const blob={meta:r.meta,data:filtered};
+    const ts=new Date().toISOString().slice(0,19).replace(/[T:]/g,'-');
+    triggerJsonDownload(blob,`taxflow-backup-${ts}.json`);
+    audit('Downloaded full company backup','Backup','Complete');
+    toast('Backup downloaded','ok');
+  }catch(e){
+    toast('Backup failed: '+e.message,'err');
+  }
+}
+
+async function downloadUserData(){
+  if(!_selectedBackupUserId){toast('Select a user first','err');return;}
+  toast('Preparing user export…','info');
+  try{
+    const resp=await authenticatedFetch(`${apiBaseUrl()}/app-data/user-export/${_selectedBackupUserId}`);
+    if(!resp.ok)throw new Error('Export failed');
+    const r=await resp.json();
+    const ts=new Date().toISOString().slice(0,10);
+    const slug=(r.user?.name||'user').toLowerCase().replace(/\s+/g,'-');
+    triggerJsonDownload(r,`taxflow-user-${slug}-${ts}.json`);
+    audit(`Downloaded user data for ${r.user?.name||'user'}`,'Backup','Complete');
+    toast('User data downloaded','ok');
+  }catch(e){
+    toast('Export failed: '+e.message,'err');
+  }
+}
+
+function triggerJsonDownload(obj,filename){
+  const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function loadLiveAuditLog(){
+  try{
+    const resp=await authenticatedFetch(`${apiBaseUrl()}/app-data`);
+    if(!resp.ok)return;
+    const r=await resp.json();
+    const rows=r?.data?.audit||[];
+    const tbody=document.getElementById('audit-tbody');
+    if(!tbody)return;
+    if(!rows.length){tbody.innerHTML='<tr><td colspan="5" style="color:var(--text3);text-align:center">No audit entries yet</td></tr>';return;}
+    tbody.innerHTML=rows.map(row=>`<tr><td class="mono">${escapeHtml(row.time)}</td><td>${escapeHtml(row.user)}</td><td>${escapeHtml(row.action)}</td><td>${escapeHtml(row.record||'')}</td><td><span class="b b-g">${escapeHtml(row.result)}</span></td></tr>`).join('');
+  }catch{/* silent */}
+}
+
+function exportAuditCsv(){
+  const tbody=document.getElementById('audit-tbody');
+  if(!tbody){toast('No data','err');return;}
+  const rows=[['Time','User','Action','Record','Result']];
+  tbody.querySelectorAll('tr').forEach(tr=>{
+    const cells=[...tr.querySelectorAll('td')].map(td=>td.textContent.trim());
+    if(cells.length===5)rows.push(cells);
+  });
+  const csv=rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`taxflow-audit-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Audit log exported','ok');
 }
 
 function quotationNumber(){
@@ -13840,7 +14128,7 @@ function initApp(){
 
   restoreSalesInvoices();
   renderAuditLog();
-  setInvoiceLayoutFields();
+  initInvoiceLayouts();
   updateInvoiceLayoutPreview();
   setQuotationLayoutFields();
   updateQuotationLayoutPreview();

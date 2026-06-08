@@ -199,6 +199,147 @@ def bootstrap(
     return {"ok": True, "data": data}
 
 
+@router.get("/users")
+def list_company_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, object]:
+    users = (
+        db.query(User)
+        .filter(User.company_id == current_user.company_id)
+        .order_by(User.full_name.asc())
+        .all()
+    )
+    return {
+        "ok": True,
+        "users": [
+            {
+                "id": u.id,
+                "name": u.full_name,
+                "email": u.email,
+                "role": u.role,
+                "created_at": u.created_at.strftime("%d/%m/%Y") if u.created_at else "",
+            }
+            for u in users
+        ],
+    }
+
+
+@router.get("/export")
+def export_all_data(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, object]:
+    records = (
+        db.query(AppDataRecord)
+        .filter(AppDataRecord.company_id == current_user.company_id)
+        .order_by(AppDataRecord.created_at.asc())
+        .all()
+    )
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for item in records:
+        grouped.setdefault(item.collection, []).append(serialize(item))
+
+    audit_rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.company_id == current_user.company_id)
+        .order_by(AuditLog.created_at.desc())
+        .all()
+    )
+
+    user_map: dict[str, str] = {}
+    for u in db.query(User).filter(User.company_id == current_user.company_id).all():
+        user_map[u.id] = u.full_name
+
+    audit = [
+        {
+            "time": row.created_at.strftime("%d/%m/%Y, %H:%M") if row.created_at else "",
+            "user": user_map.get(row.user_id or "", current_user.full_name),
+            "action": row.action.replace("_", " ").title(),
+            "record": row.module,
+            "result": "Logged",
+        }
+        for row in audit_rows
+    ]
+
+    users = [
+        {
+            "id": u.id,
+            "name": u.full_name,
+            "email": u.email,
+            "role": u.role,
+            "created_at": u.created_at.strftime("%d/%m/%Y") if u.created_at else "",
+        }
+        for u in db.query(User).filter(User.company_id == current_user.company_id).all()
+    ]
+
+    return {
+        "ok": True,
+        "meta": {
+            "exported_at": __import__("datetime").datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+            "exported_by": current_user.full_name,
+            "company_id": current_user.company_id,
+        },
+        "data": {
+            **grouped,
+            "audit": audit,
+            "users": users,
+        },
+    }
+
+
+@router.get("/user-export/{user_id}")
+def export_user_data(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, object]:
+    target = db.query(User).filter(
+        User.id == user_id,
+        User.company_id == current_user.company_id,
+    ).first()
+    if not target:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="User not found")
+
+    audit_rows = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.company_id == current_user.company_id,
+            AuditLog.user_id == user_id,
+        )
+        .order_by(AuditLog.created_at.desc())
+        .all()
+    )
+    audit = [
+        {
+            "time": row.created_at.strftime("%d/%m/%Y, %H:%M") if row.created_at else "",
+            "action": row.action.replace("_", " ").title(),
+            "record": row.module,
+            "result": "Logged",
+        }
+        for row in audit_rows
+    ]
+
+    return {
+        "ok": True,
+        "meta": {
+            "exported_at": __import__("datetime").datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+            "exported_by": current_user.full_name,
+            "user_id": user_id,
+        },
+        "user": {
+            "id": target.id,
+            "name": target.full_name,
+            "email": target.email,
+            "role": target.role,
+            "created_at": target.created_at.strftime("%d/%m/%Y") if target.created_at else "",
+        },
+        "audit_log": audit,
+        "total_actions": len(audit),
+    }
+
+
 @router.post("")
 async def app_data_action(
     request: Request,

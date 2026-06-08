@@ -12,6 +12,7 @@ os.environ["DATABASE_URL"] = f"sqlite:///./{TEST_DB.name}"
 os.environ["SECRET_KEY"] = "taxflow-test-secret"
 os.environ["CELERY_TASK_ALWAYS_EAGER"] = "true"
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
+os.environ["TESTING"] = "true"
 
 from app.database import Base, SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
