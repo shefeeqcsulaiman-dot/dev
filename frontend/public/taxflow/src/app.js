@@ -1580,7 +1580,7 @@ function _applyLogoEverywhere(){
   if(sbName){
     const name=currentCompany?.name||'';
     sbName.textContent=name;
-    sbName.style.display=(logo&&name)?'block':'none';
+    sbName.style.display=name?'block':'none';
   }
   const prevImg=document.getElementById('co-logo-preview-img');
   const initEl=document.getElementById('co-logo-initials');

@@ -40,8 +40,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .sb-brand{font-family:'Syne',sans-serif;font-size:19px;font-weight:700;letter-spacing:-0.5px;color:var(--text);}
 .sb-brand span{color:var(--accent);}
 .sb-tagline{font-size:10.5px;color:var(--text3);letter-spacing:.8px;text-transform:uppercase;margin-top:2px;}
-.sb-logo-img{height:36px;max-width:140px;object-fit:contain;border-radius:8px;display:none;margin-bottom:4px;}
-.sb-company-name{font-size:12.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px;margin-top:1px;}
+.sb-logo-img{height:52px;max-width:170px;object-fit:contain;border-radius:10px;display:none;margin-bottom:6px;}
+.sb-company-name{font-size:12.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px;margin-top:2px;}
 /* Company logo upload */
 .co-logo-upload{display:flex;align-items:center;gap:20px;padding:8px 0 4px;}
 .co-logo-preview{width:78px;height:78px;border-radius:16px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;font-family:'Syne',sans-serif;flex:0 0 78px;overflow:hidden;}
