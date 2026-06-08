@@ -16,7 +16,10 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
 
+import datetime as _dt
+
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -338,6 +341,170 @@ def export_user_data(
         "audit_log": audit,
         "total_actions": len(audit),
     }
+
+
+@router.get("/db-dump")
+def export_db_dump(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Stream a self-contained SQL dump for the current company — restorable locally."""
+
+    company_id = current_user.company_id
+    now_str = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    date_str = _dt.datetime.utcnow().strftime("%Y%m%d")
+
+    def _esc(val: Any) -> str:
+        """Escape a value for SQL single-quoted string literals."""
+        if val is None:
+            return "NULL"
+        return "'" + str(val).replace("'", "''") + "'"
+
+    def _row_values(cols: list[str], obj: Any) -> str:
+        parts = []
+        for col in cols:
+            v = getattr(obj, col, None)
+            if v is None:
+                parts.append("NULL")
+            elif isinstance(v, bool):
+                parts.append("TRUE" if v else "FALSE")
+            elif isinstance(v, (int, float)):
+                parts.append(str(v))
+            elif hasattr(v, "__str__"):
+                parts.append(_esc(str(v)))
+            else:
+                parts.append("NULL")
+        return "(" + ", ".join(parts) + ")"
+
+    def generate() -> Any:
+        yield (
+            f"-- TaxFlow Database Backup\n"
+            f"-- Company ID : {company_id}\n"
+            f"-- Exported by: {current_user.full_name}\n"
+            f"-- Exported at: {now_str}\n"
+            f"-- Restore    : psql -d <your_db> -f this_file.sql\n"
+            f"-- Note       : Run against a TaxFlow schema (same version)\n\n"
+            f"BEGIN;\n\n"
+        )
+
+        # ── app_data_records ─────────────────────────────────────────
+        cols_adr = ["id", "company_id", "collection", "record_key", "payload", "created_at", "updated_at"]
+        rows_adr = (
+            db.query(AppDataRecord)
+            .filter(AppDataRecord.company_id == company_id)
+            .order_by(AppDataRecord.created_at.asc())
+            .all()
+        )
+        if rows_adr:
+            yield f"-- app_data_records ({len(rows_adr)} rows)\n"
+            for r in rows_adr:
+                vals = _row_values(cols_adr, r)
+                yield f"INSERT INTO app_data_records ({', '.join(cols_adr)}) VALUES {vals} ON CONFLICT (id) DO NOTHING;\n"
+            yield "\n"
+
+        # ── invoices ─────────────────────────────────────────────────
+        cols_inv = [
+            "id", "company_id", "invoice_number", "customer_name", "customer_trn",
+            "issue_date", "due_date", "currency", "subtotal", "vat", "total",
+            "status", "notes", "created_at", "updated_at",
+        ]
+        rows_inv = (
+            db.query(Invoice)
+            .filter(Invoice.company_id == company_id)
+            .order_by(Invoice.created_at.asc())
+            .all()
+        )
+        if rows_inv:
+            yield f"-- invoices ({len(rows_inv)} rows)\n"
+            for r in rows_inv:
+                vals = _row_values(cols_inv, r)
+                yield f"INSERT INTO invoices ({', '.join(cols_inv)}) VALUES {vals} ON CONFLICT (id) DO NOTHING;\n"
+            yield "\n"
+
+        # ── invoice_lines ─────────────────────────────────────────────
+        inv_ids = [r.id for r in rows_inv]
+        if inv_ids:
+            cols_il = ["id", "invoice_id", "description", "quantity", "unit_price", "vat_rate", "line_total"]
+            rows_il = (
+                db.query(InvoiceLine)
+                .filter(InvoiceLine.invoice_id.in_(inv_ids))
+                .all()
+            )
+            if rows_il:
+                yield f"-- invoice_lines ({len(rows_il)} rows)\n"
+                for r in rows_il:
+                    vals = _row_values(cols_il, r)
+                    yield f"INSERT INTO invoice_lines ({', '.join(cols_il)}) VALUES {vals} ON CONFLICT (id) DO NOTHING;\n"
+                yield "\n"
+
+        # ── accounts ─────────────────────────────────────────────────
+        cols_acc = ["id", "company_id", "code", "name", "type", "is_group", "parent_id", "created_at", "updated_at"]
+        rows_acc = (
+            db.query(Account)
+            .filter(Account.company_id == company_id)
+            .order_by(Account.code.asc())
+            .all()
+        )
+        if rows_acc:
+            yield f"-- accounts ({len(rows_acc)} rows)\n"
+            for r in rows_acc:
+                vals = _row_values(cols_acc, r)
+                yield f"INSERT INTO accounts ({', '.join(cols_acc)}) VALUES {vals} ON CONFLICT (id) DO NOTHING;\n"
+            yield "\n"
+
+        # ── employees ─────────────────────────────────────────────────
+        cols_emp = ["id", "company_id", "employee_no", "full_name", "department", "designation", "salary", "status", "created_at", "updated_at"]
+        rows_emp = (
+            db.query(Employee)
+            .filter(Employee.company_id == company_id)
+            .all()
+        )
+        if rows_emp:
+            yield f"-- employees ({len(rows_emp)} rows)\n"
+            for r in rows_emp:
+                vals = _row_values(cols_emp, r)
+                yield f"INSERT INTO employees ({', '.join(cols_emp)}) VALUES {vals} ON CONFLICT (id) DO NOTHING;\n"
+            yield "\n"
+
+        # ── audit_logs ───────────────────────────────────────────────
+        cols_audit = ["id", "company_id", "user_id", "action", "module", "record_id", "created_at"]
+        rows_audit = (
+            db.query(AuditLog)
+            .filter(AuditLog.company_id == company_id)
+            .order_by(AuditLog.created_at.asc())
+            .all()
+        )
+        if rows_audit:
+            yield f"-- audit_logs ({len(rows_audit)} rows)\n"
+            for r in rows_audit:
+                vals = _row_values(cols_audit, r)
+                yield f"INSERT INTO audit_logs ({', '.join(cols_audit)}) VALUES {vals} ON CONFLICT (id) DO NOTHING;\n"
+            yield "\n"
+
+        # ── source_transactions ───────────────────────────────────────
+        cols_st = ["id", "company_id", "module", "reference", "party_name", "subtotal", "vat", "total", "status", "created_at", "updated_at"]
+        rows_st = (
+            db.query(SourceTransaction)
+            .filter(SourceTransaction.company_id == company_id)
+            .order_by(SourceTransaction.created_at.asc())
+            .all()
+        )
+        if rows_st:
+            yield f"-- source_transactions ({len(rows_st)} rows)\n"
+            for r in rows_st:
+                vals = _row_values(cols_st, r)
+                yield f"INSERT INTO source_transactions ({', '.join(cols_st)}) VALUES {vals} ON CONFLICT (id) DO NOTHING;\n"
+            yield "\n"
+
+        yield "COMMIT;\n"
+        yield f"\n-- End of dump — {len(rows_adr)} data records, {len(rows_inv)} invoices, {len(rows_acc)} accounts\n"
+
+    fname = f"taxflow-db-{company_id[:8]}-{date_str}.sql"
+    return StreamingResponse(
+        generate(),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 @router.post("")

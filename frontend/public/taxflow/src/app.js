@@ -13706,30 +13706,11 @@ async function downloadFullBackup(){
     const resp=await authenticatedFetch(`${apiBaseUrl()}/app-data/export`);
     if(!resp.ok)throw new Error('Export failed');
     const r=await resp.json();
-
-    const include={inv:document.getElementById('bk-inv')?.checked!==false,pur:document.getElementById('bk-pur')?.checked!==false,jnl:document.getElementById('bk-jnl')?.checked!==false,hr:document.getElementById('bk-hr')?.checked!==false,audit:document.getElementById('bk-audit')?.checked!==false};
-    const data=r.data||{};
-    const filtered={};
-    const invCols=['salesInvoices','quotations','salesCategories','salesUnits','customers','creditControl'];
-    const purCols=['purchaseRecords','purchaseDocuments','bills','vendors','payments','receipts'];
-    const jnlCols=['accounts','ledger','journalDrafts','bankAccounts','bankTransactions','vatReturns','corporateTax','fixedAssets','accrualsPrepayments','costCenters','budgets','cashFlowForecasts','consolidation','relatedPartyTransactions'];
-    const hrCols=['employees','rotaShifts','rotaAssignments','rotaSwaps','rotaApprovals','rotaDrafts'];
-
-    Object.keys(data).forEach(k=>{
-      if(k==='audit'&&!include.audit)return;
-      if(k==='users')return;
-      if(invCols.includes(k)&&!include.inv)return;
-      if(purCols.includes(k)&&!include.pur)return;
-      if(jnlCols.includes(k)&&!include.jnl)return;
-      if(hrCols.includes(k)&&!include.hr)return;
-      filtered[k]=data[k];
-    });
-
-    const blob={meta:r.meta,data:filtered};
+    const filtered=_applyModuleFilter(r.data||{});
     const ts=new Date().toISOString().slice(0,19).replace(/[T:]/g,'-');
-    triggerJsonDownload(blob,`taxflow-backup-${ts}.json`);
+    triggerJsonDownload({meta:r.meta,data:filtered},`taxflow-backup-${ts}.json`);
     audit('Downloaded full company backup','Backup','Complete');
-    toast('Backup downloaded','ok');
+    toast('JSON backup downloaded','ok');
   }catch(e){
     toast('Backup failed: '+e.message,'err');
   }
@@ -13760,6 +13741,133 @@ function triggerJsonDownload(obj,filename){
   document.body.appendChild(a);a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function triggerRawDownload(blob,filename){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function _loadSheetJs(){
+  if(window.XLSX)return;
+  await new Promise((resolve,reject)=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+    s.onload=resolve;
+    s.onerror=()=>reject(new Error('Could not load SheetJS — check internet connection'));
+    document.head.appendChild(s);
+  });
+}
+
+function _backupModuleFilter(){
+  return{
+    inv:document.getElementById('bk-inv')?.checked!==false,
+    pur:document.getElementById('bk-pur')?.checked!==false,
+    jnl:document.getElementById('bk-jnl')?.checked!==false,
+    hr:document.getElementById('bk-hr')?.checked!==false,
+    audit:document.getElementById('bk-audit')?.checked!==false
+  };
+}
+
+function _applyModuleFilter(data){
+  const include=_backupModuleFilter();
+  const invCols=['salesInvoices','quotations','salesCategories','salesUnits','customers','creditControl'];
+  const purCols=['purchaseRecords','purchaseDocuments','bills','vendors','payments','receipts'];
+  const jnlCols=['accounts','ledger','journalDrafts','bankAccounts','bankTransactions','vatReturns','corporateTax','fixedAssets','accrualsPrepayments','costCenters','budgets','cashFlowForecasts','consolidation','relatedPartyTransactions'];
+  const hrCols=['employees','rotaShifts','rotaAssignments','rotaSwaps','rotaApprovals','rotaDrafts'];
+  const filtered={};
+  Object.keys(data).forEach(k=>{
+    if(k==='audit'&&!include.audit)return;
+    if(k==='users')return;
+    if(invCols.includes(k)&&!include.inv)return;
+    if(purCols.includes(k)&&!include.pur)return;
+    if(jnlCols.includes(k)&&!include.jnl)return;
+    if(hrCols.includes(k)&&!include.hr)return;
+    filtered[k]=data[k];
+  });
+  return filtered;
+}
+
+async function downloadExcelBackup(){
+  toast('Preparing Excel…','info');
+  try{
+    await _loadSheetJs();
+    const resp=await authenticatedFetch(`${apiBaseUrl()}/app-data/export`);
+    if(!resp.ok)throw new Error('Export failed');
+    const r=await resp.json();
+    const data=_applyModuleFilter(r.data||{});
+
+    const XLSX=window.XLSX;
+    const wb=XLSX.utils.book_new();
+
+    // Friendly sheet name → collection key(s)
+    const sheetMap=[
+      ['Invoices',      ['salesInvoices']],
+      ['Customers',     ['customers']],
+      ['Quotations',    ['quotations']],
+      ['Bills',         ['bills']],
+      ['Vendors',       ['vendors']],
+      ['Payments',      ['payments','receipts']],
+      ['Accounts',      ['accounts']],
+      ['Employees',     ['employees']],
+      ['Products',      ['products']],
+      ['Bank Accounts', ['bankAccounts']],
+      ['VAT Returns',   ['vatReturns']],
+      ['Expenses',      ['expenses']],
+      ['Audit Log',     ['audit']],
+    ];
+
+    sheetMap.forEach(([sheetName,keys])=>{
+      const rows=keys.flatMap(k=>Array.isArray(data[k])?data[k]:[]);
+      if(!rows.length)return;
+      // Flatten nested objects one level deep
+      const flat=rows.map(row=>{
+        const out={};
+        Object.entries(row).forEach(([k,v])=>{
+          if(v!==null&&v!==undefined&&typeof v==='object'&&!Array.isArray(v)){
+            Object.entries(v).forEach(([ik,iv])=>out[`${k}.${ik}`]=iv);
+          }else if(!Array.isArray(v)){
+            out[k]=v;
+          }
+        });
+        return out;
+      });
+      const ws=XLSX.utils.json_to_sheet(flat);
+      // Auto column widths
+      const cols=Object.keys(flat[0]||{});
+      ws['!cols']=cols.map(c=>({wch:Math.min(40,Math.max(10,c.length+2))}));
+      XLSX.utils.book_append_sheet(wb,ws,sheetName.slice(0,31));
+    });
+
+    if(wb.SheetNames.length===0){toast('No data to export','err');return;}
+
+    const ts=new Date().toISOString().slice(0,10);
+    XLSX.writeFile(wb,`taxflow-backup-${ts}.xlsx`);
+    audit('Downloaded Excel backup','Backup','Complete');
+    toast('Excel downloaded','ok');
+  }catch(e){
+    toast('Excel export failed: '+e.message,'err');
+  }
+}
+
+async function downloadDbDump(){
+  toast('Requesting DB dump…','info');
+  try{
+    const resp=await authenticatedFetch(`${apiBaseUrl()}/app-data/db-dump`);
+    if(!resp.ok)throw new Error(`Server error ${resp.status}`);
+    const text=await resp.text();
+    const blob=new Blob([text],{type:'text/plain;charset=utf-8'});
+    const ts=new Date().toISOString().slice(0,10);
+    triggerRawDownload(blob,`taxflow-db-dump-${ts}.sql`);
+    audit('Downloaded DB dump (SQL)','Backup','Complete');
+    toast('DB dump downloaded','ok');
+  }catch(e){
+    toast('DB dump failed: '+e.message,'err');
+  }
 }
 
 async function loadLiveAuditLog(){
