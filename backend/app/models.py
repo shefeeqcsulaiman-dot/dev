@@ -40,6 +40,7 @@ class Company(Base, TimestampMixin):
     trn: Mapped[str | None] = mapped_column(String(32), unique=True)
     country: Mapped[str] = mapped_column(String(80), default="United Arab Emirates")
     subscription_expires_at: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    logo: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     users: Mapped[list["User"]] = relationship(back_populates="company")
     invoices: Mapped[list["Invoice"]] = relationship(back_populates="company")

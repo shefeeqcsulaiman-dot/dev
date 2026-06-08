@@ -1584,14 +1584,27 @@ function _applyLogoEverywhere(){
   if(rmBtn)rmBtn.style.display=logo?'':'none';
 }
 
+async function _saveLogoToDb(dataUrl){
+  try{
+    await authenticatedFetch(`${apiBaseUrl()}/companies/current`,{
+      method:'PUT',
+      body:JSON.stringify({logo:dataUrl||null})
+    });
+  }catch(e){
+    console.warn('Logo DB save failed:',e);
+  }
+}
+
 function handleLogoUpload(input){
   const file=input.files?.[0];
   if(!file)return;
   if(file.size>2097152){toast('Logo must be under 2 MB','warn');return;}
   const reader=new FileReader();
-  reader.onload=e=>{
-    localStorage.setItem(_LOGO_KEY,e.target.result);
+  reader.onload=async e=>{
+    const dataUrl=e.target.result;
+    localStorage.setItem(_LOGO_KEY,dataUrl);
     _applyLogoEverywhere();
+    await _saveLogoToDb(dataUrl);
     toast('Company logo saved','ok');
     updateInvoiceLayoutPreview?.();
     updateQuotationLayoutPreview?.();
@@ -1599,11 +1612,12 @@ function handleLogoUpload(input){
   reader.readAsDataURL(file);
 }
 
-function removeLogo(){
+async function removeLogo(){
   localStorage.removeItem(_LOGO_KEY);
   const f=document.getElementById('co-logo-file');
   if(f)f.value='';
   _applyLogoEverywhere();
+  await _saveLogoToDb(null);
   toast('Logo removed','ok');
   updateInvoiceLayoutPreview?.();
   updateQuotationLayoutPreview?.();
@@ -1619,8 +1633,15 @@ function applyCompanyToUi(company){
   setFieldValue(document.getElementById('trn'),trn);
   const layoutCompany=document.getElementById('inv-layout-company');
   if(layoutCompany&&!layoutCompany.dataset.userEdited)setFieldValue(layoutCompany,name);
-  updateInvoiceLayoutPreview?.();
+  // Sync logo from DB into localStorage so it works offline too
+  if(company.logo){
+    localStorage.setItem(_LOGO_KEY,company.logo);
+  } else if(!company.logo && localStorage.getItem(_LOGO_KEY)){
+    // DB has no logo — clear local cache to stay in sync
+    localStorage.removeItem(_LOGO_KEY);
+  }
   _applyLogoEverywhere();
+  updateInvoiceLayoutPreview?.();
 }
 
 async function syncCompanyFromDatabase(){

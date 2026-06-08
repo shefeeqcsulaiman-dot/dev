@@ -32,8 +32,16 @@ class CompanyOut(BaseModel):
     name: str
     trn: str | None
     country: str
+    logo: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class CompanyUpdate(BaseModel):
+    name: str | None = None
+    trn: str | None = None
+    country: str | None = None
+    logo: str | None = None
 
 
 class UserOut(BaseModel):

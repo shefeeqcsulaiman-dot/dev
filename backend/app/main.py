@@ -135,6 +135,8 @@ def ensure_schema_updates() -> None:
             existing_columns = {column["name"] for column in inspector.get_columns("companies")}
             if "subscription_expires_at" not in existing_columns:
                 connection.execute(text("ALTER TABLE companies ADD COLUMN subscription_expires_at VARCHAR(20)"))
+            if "logo" not in existing_columns:
+                connection.execute(text("ALTER TABLE companies ADD COLUMN logo TEXT"))
         if "users" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("users")}
             if "password_plain" not in existing_columns:
