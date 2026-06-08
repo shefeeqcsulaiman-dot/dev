@@ -101,6 +101,7 @@ def record_key(collection: str, record: dict[str, Any]) -> str | None:
         "rotaDrafts": "id",
         "rotaAssignments": "id",
         "app_actions": "id",
+        "invoice-layouts-pack": "id",
     }
     field = keys.get(collection)
     if field and record.get(field):

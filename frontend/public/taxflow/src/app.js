@@ -1648,9 +1648,11 @@ function applyCompanyToUi(company){
   set('set-company-pobox',company.po_box);
   set('set-company-phone',company.phone);
   set('set-company-website',company.website);
-  // Invoice layout company name (if not user-overridden)
+  // Invoice layout company name + address (if not user-overridden)
   const layoutCompany=document.getElementById('inv-layout-company');
   if(layoutCompany&&!layoutCompany.dataset.userEdited)setFieldValue(layoutCompany,company.name||'');
+  const layoutAddr=document.getElementById('inv-layout-address');
+  if(layoutAddr&&!layoutAddr.dataset.userEdited&&company.address)setFieldValue(layoutAddr,company.address);
   // Logo sync
   if(company.logo){
     localStorage.setItem(_LOGO_KEY,company.logo);
@@ -2860,7 +2862,10 @@ function explainExceptionAI(button){
 }
 
 function saveInvoiceLayoutServer(layout){
-  return apiRequest('invoice-layout',layout);
+  // Save active layout (for backwards compat)
+  apiRequest('invoice-layout',layout).catch(()=>{});
+  // Save full layouts array for cross-device multi-layout sync
+  return saveServer('invoice-layouts-pack',{id:'pack',layouts:JSON.stringify(_invoiceLayouts)});
 }
 
 function audit(action,record='System',result='Logged'){
@@ -5557,8 +5562,25 @@ function hydrateFromServer(){
     window.__taxflowLastDbLoad={at:new Date().toISOString(),totalLoaded,renderStats};
     console.info(`TaxFlow DB tables loaded: ${totalLoaded} records`);
     if(totalLoaded>0)toast(`Database tables loaded: ${totalLoaded} records`,'ok');
-    if(data.invoiceLayout){
-      // Seed server layout into the default slot if it's still the only one
+    // Restore full multi-layout array from server (cross-device sync)
+    const packArr=data['invoice-layouts-pack'];
+    const packRecord=Array.isArray(packArr)?packArr[0]:packArr;
+    if(packRecord?.layouts){
+      try{
+        const serverLayouts=JSON.parse(packRecord.layouts);
+        if(Array.isArray(serverLayouts)&&serverLayouts.length){
+          _invoiceLayouts=serverLayouts;
+          _activeLayoutId=(_invoiceLayouts.find(l=>l.isDefault)||_invoiceLayouts[0])?.id;
+          _ilSave();
+          renderInvoiceLayoutGallery();
+          const active=_invoiceLayouts.find(l=>l.id===_activeLayoutId);
+          if(active)setInvoiceLayoutFields(active);
+          _ilUpdateNameBadge();
+          updateInvoiceLayoutPreview();
+        }
+      }catch{}
+    } else if(data.invoiceLayout){
+      // Fallback: seed single server layout into the default slot
       const defaultSlot=_invoiceLayouts.find(l=>l.isDefault)||_invoiceLayouts[0];
       if(defaultSlot&&_invoiceLayouts.length===1){
         Object.assign(defaultSlot,data.invoiceLayout);
@@ -6323,7 +6345,7 @@ function defaultInvoiceLayout(){
     company:currentCompany?.name||'',
     trnMode:'show',
     taxLabel:'Tax Invoice',
-    address:'Dubai, United Arab Emirates',
+    address:currentCompany?.address||'Dubai, United Arab Emirates',
     terms:'Net 30',
     dueDays:'30',
     currency:'AED 1,234.00',
