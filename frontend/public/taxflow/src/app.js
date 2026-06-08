@@ -1574,8 +1574,14 @@ function _applyLogoEverywhere(){
   const logo=_getCompanyLogo();
   const sbImg=document.getElementById('sb-logo-img');
   const sbBrand=document.querySelector('.sb-brand');
+  const sbName=document.getElementById('sb-company-name');
   if(sbImg){sbImg.src=logo||'';sbImg.style.display=logo?'block':'none';}
   if(sbBrand)sbBrand.style.display=logo?'none':'';
+  if(sbName){
+    const name=currentCompany?.name||'';
+    sbName.textContent=name;
+    sbName.style.display=(logo&&name)?'block':'none';
+  }
   const prevImg=document.getElementById('co-logo-preview-img');
   const initEl=document.getElementById('co-logo-initials');
   const rmBtn=document.getElementById('co-logo-remove');
