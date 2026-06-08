@@ -137,6 +137,20 @@ def ensure_schema_updates() -> None:
                 connection.execute(text("ALTER TABLE companies ADD COLUMN subscription_expires_at VARCHAR(20)"))
             if "logo" not in existing_columns:
                 connection.execute(text("ALTER TABLE companies ADD COLUMN logo TEXT"))
+            for col, typedef in [
+                ("trade_name", "VARCHAR(160)"),
+                ("emirate", "VARCHAR(80)"),
+                ("business_type", "VARCHAR(80)"),
+                ("business_activity", "VARCHAR(160)"),
+                ("legal_structure", "VARCHAR(80)"),
+                ("trade_license_no", "VARCHAR(80)"),
+                ("address", "VARCHAR(400)"),
+                ("po_box", "VARCHAR(20)"),
+                ("phone", "VARCHAR(40)"),
+                ("website", "VARCHAR(160)"),
+            ]:
+                if col not in existing_columns:
+                    connection.execute(text(f"ALTER TABLE companies ADD COLUMN {col} {typedef}"))
         if "users" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("users")}
             if "password_plain" not in existing_columns:

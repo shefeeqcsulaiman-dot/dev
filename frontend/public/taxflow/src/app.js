@@ -1632,18 +1632,29 @@ async function removeLogo(){
 function applyCompanyToUi(company){
   if(!company)return;
   currentCompany=company;
-  const name=company.name||'';
-  const trn=company.trn||'';
-  setFieldValue(findSettingsInput('Legal Company Name'),name);
-  setFieldValue(document.getElementById('set-company-trn'),trn);
-  setFieldValue(document.getElementById('trn'),trn);
+  const set=(id,val)=>{const el=document.getElementById(id);if(el&&val!=null)el.value=val;};
+  // Core fields
+  set('set-company-name',company.name);
+  set('set-company-trn',company.trn);
+  set('trn',company.trn);
+  // Extended fields
+  set('set-company-trade-name',company.trade_name);
+  set('set-company-license',company.trade_license_no);
+  set('set-company-activity',company.business_activity);
+  set('set-company-structure',company.legal_structure);
+  set('set-company-emirate',company.emirate);
+  set('set-company-biz-type',company.business_type);
+  set('set-company-address',company.address);
+  set('set-company-pobox',company.po_box);
+  set('set-company-phone',company.phone);
+  set('set-company-website',company.website);
+  // Invoice layout company name (if not user-overridden)
   const layoutCompany=document.getElementById('inv-layout-company');
-  if(layoutCompany&&!layoutCompany.dataset.userEdited)setFieldValue(layoutCompany,name);
-  // Sync logo from DB into localStorage so it works offline too
+  if(layoutCompany&&!layoutCompany.dataset.userEdited)setFieldValue(layoutCompany,company.name||'');
+  // Logo sync
   if(company.logo){
     localStorage.setItem(_LOGO_KEY,company.logo);
-  } else if(!company.logo && localStorage.getItem(_LOGO_KEY)){
-    // DB has no logo — clear local cache to stay in sync
+  } else if(!company.logo&&localStorage.getItem(_LOGO_KEY)){
     localStorage.removeItem(_LOGO_KEY);
   }
   _applyLogoEverywhere();
@@ -1666,12 +1677,27 @@ async function syncCompanyFromDatabase(){
 }
 
 async function saveCompanySettingsToDatabase(){
-  const name=readFieldValue('Legal Company Name')||currentCompany?.name||'';
-  const trn=(document.getElementById('set-company-trn')?.value||currentCompany?.trn||'').replace(/\D/g,'');
-  const country=currentCompany?.country||'United Arab Emirates';
+  const v=id=>document.getElementById(id)?.value?.trim()||null;
+  const name=v('set-company-name')||readFieldValue('Legal Company Name')||currentCompany?.name||'';
+  const trn=(v('set-company-trn')||currentCompany?.trn||'').replace(/\D/g,'')||null;
+  const payload={
+    name,
+    trn,
+    trade_name:v('set-company-trade-name'),
+    country:currentCompany?.country||'United Arab Emirates',
+    emirate:v('set-company-emirate'),
+    business_type:v('set-company-biz-type'),
+    business_activity:v('set-company-activity'),
+    legal_structure:v('set-company-structure'),
+    trade_license_no:v('set-company-license'),
+    address:v('set-company-address'),
+    po_box:v('set-company-pobox'),
+    phone:v('set-company-phone'),
+    website:v('set-company-website'),
+  };
   const response=await authenticatedFetch(`${apiBaseUrl()}/companies/current`,{
     method:'PUT',
-    body:JSON.stringify({name,trn:trn||null,country})
+    body:JSON.stringify(payload)
   });
   if(!response.ok)throw new Error('Company save returned '+response.status);
   const company=await response.json();

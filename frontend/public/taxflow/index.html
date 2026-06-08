@@ -3163,28 +3163,28 @@
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Business Registration Details</div><div class="card-sub">Trade license, legal structure, activity, and registered address</div></div><button class="btn btn-p btn-sm" onclick="saveSettings('Company registration saved')">Save</button></div>
         <div class="fr2">
-          <div class="fg"><label class="fl">Legal Company Name</label><input class="fi" value="Acme Trading LLC"></div>
-          <div class="fg"><label class="fl">Trade Name</label><input class="fi" value="Acme Trading"></div>
+          <div class="fg"><label class="fl">Legal Company Name</label><input class="fi" id="set-company-name" value="Acme Trading LLC"></div>
+          <div class="fg"><label class="fl">Trade Name</label><input class="fi" id="set-company-trade-name" value="Acme Trading"></div>
         </div>
         <div class="fr3">
-          <div class="fg"><label class="fl">Trade License No.</label><input class="fi mono" value="DED-2018-84521"></div>
+          <div class="fg"><label class="fl">Trade License No.</label><input class="fi mono" id="set-company-license" value="DED-2018-84521"></div>
           <div class="fg"><label class="fl">Issue Date</label><input class="fi" type="date" value="2018-01-01"></div>
           <div class="fg"><label class="fl">Expiry Date</label><input class="fi" type="date" value="2026-12-31"></div>
         </div>
         <div class="fr2">
-          <div class="fg"><label class="fl">Business Activity</label><input class="fi" value="General Trading"></div>
-          <div class="fg"><label class="fl">Legal Structure</label><select class="fi"><option>LLC (Limited Liability Company)</option><option>Free Zone Entity</option><option>Branch of Foreign Company</option><option>Sole Proprietorship</option></select></div>
+          <div class="fg"><label class="fl">Business Activity</label><input class="fi" id="set-company-activity" value="General Trading"></div>
+          <div class="fg"><label class="fl">Legal Structure</label><select class="fi" id="set-company-structure"><option>LLC (Limited Liability Company)</option><option>Free Zone Entity</option><option>Branch of Foreign Company</option><option>Sole Proprietorship</option></select></div>
         </div>
         <div class="fr3">
-          <div class="fg"><label class="fl">Emirate</label><select class="fi"><option selected>Dubai</option><option>Abu Dhabi</option><option>Sharjah</option><option>Ajman</option><option>Ras Al Khaimah</option></select></div>
+          <div class="fg"><label class="fl">Emirate</label><select class="fi" id="set-company-emirate"><option selected>Dubai</option><option>Abu Dhabi</option><option>Sharjah</option><option>Ajman</option><option>Ras Al Khaimah</option></select></div>
           <div class="fg"><label class="fl">Free Zone</label><select class="fi"><option>Not Applicable</option><option>JAFZA</option><option>DAFZA</option><option>DMCC</option><option>ADGM</option><option>RAKEZ</option></select></div>
-          <div class="fg"><label class="fl">Business Type</label><select class="fi"><option>Mainland</option><option>Free Zone</option><option>Offshore</option></select></div>
+          <div class="fg"><label class="fl">Business Type</label><select class="fi" id="set-company-biz-type"><option>Mainland</option><option>Free Zone</option><option>Offshore</option></select></div>
         </div>
-        <div class="fg"><label class="fl">Registered Address</label><input class="fi" value="Office 801, Emaar Square Building 3, Downtown Dubai"></div>
+        <div class="fg"><label class="fl">Registered Address</label><input class="fi" id="set-company-address" value="Office 801, Emaar Square Building 3, Downtown Dubai"></div>
         <div class="fr3">
-          <div class="fg"><label class="fl">PO Box</label><input class="fi" value="12345"></div>
-          <div class="fg"><label class="fl">Phone</label><input class="fi" value="+971 4 123 4567"></div>
-          <div class="fg"><label class="fl">Website</label><input class="fi" value="www.acmetrading.ae"></div>
+          <div class="fg"><label class="fl">PO Box</label><input class="fi" id="set-company-pobox" value="12345"></div>
+          <div class="fg"><label class="fl">Phone</label><input class="fi" id="set-company-phone" value="+971 4 123 4567"></div>
+          <div class="fg"><label class="fl">Website</label><input class="fi" id="set-company-website" value="www.acmetrading.ae"></div>
         </div>
       </div>
       <div>

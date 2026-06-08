@@ -21,14 +21,17 @@ def update_company(
     current_user: User = Depends(get_current_user),
 ):
     company = current_user.company
-    if payload.name is not None:
-        company.name = payload.name
+    simple_fields = [
+        "name", "trade_name", "country", "emirate", "business_type",
+        "business_activity", "legal_structure", "trade_license_no",
+        "address", "po_box", "phone", "website", "logo",
+    ]
+    for field in simple_fields:
+        val = getattr(payload, field, None)
+        if val is not None:
+            setattr(company, field, val or None)
     if payload.trn is not None:
         company.trn = payload.trn or None
-    if payload.country is not None:
-        company.country = payload.country
-    if payload.logo is not None:
-        company.logo = payload.logo or None
     db.add(company)
     db.commit()
     db.refresh(company)

@@ -37,8 +37,18 @@ class Company(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
+    trade_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     trn: Mapped[str | None] = mapped_column(String(32), unique=True)
     country: Mapped[str] = mapped_column(String(80), default="United Arab Emirates")
+    emirate: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    business_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    business_activity: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    legal_structure: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    trade_license_no: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    po_box: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    website: Mapped[str | None] = mapped_column(String(160), nullable=True)
     subscription_expires_at: Mapped[str | None] = mapped_column(String(20), nullable=True)
     logo: Mapped[str | None] = mapped_column(Text, nullable=True)
 

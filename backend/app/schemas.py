@@ -30,8 +30,18 @@ class RegisterRequest(BaseModel):
 class CompanyOut(BaseModel):
     id: str
     name: str
-    trn: str | None
+    trade_name: str | None = None
+    trn: str | None = None
     country: str
+    emirate: str | None = None
+    business_type: str | None = None
+    business_activity: str | None = None
+    legal_structure: str | None = None
+    trade_license_no: str | None = None
+    address: str | None = None
+    po_box: str | None = None
+    phone: str | None = None
+    website: str | None = None
     logo: str | None = None
 
     model_config = {"from_attributes": True}
@@ -39,8 +49,18 @@ class CompanyOut(BaseModel):
 
 class CompanyUpdate(BaseModel):
     name: str | None = None
+    trade_name: str | None = None
     trn: str | None = None
     country: str | None = None
+    emirate: str | None = None
+    business_type: str | None = None
+    business_activity: str | None = None
+    legal_structure: str | None = None
+    trade_license_no: str | None = None
+    address: str | None = None
+    po_box: str | None = None
+    phone: str | None = None
+    website: str | None = None
     logo: str | None = None
 
 
