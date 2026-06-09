@@ -1501,7 +1501,7 @@ def parse_image_purchase_rows(content: bytes, ext: str) -> list[dict[str, Any]]:
     if not api_key:
         raise RuntimeError(
             "Image extraction requires OPENAI_API_KEY. "
-            "Add it in Render dashboard → etaxflow → Environment. "
+            "Add OPENAI_API_KEY in DigitalOcean App Platform → etaxflow → Settings → Environment Variables. "
             "Alternatively upload a PDF, CSV, or Excel file."
         )
     text = extract_image_text_with_tesseract(content, ext)
