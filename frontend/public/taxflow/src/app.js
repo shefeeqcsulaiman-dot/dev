@@ -1429,7 +1429,7 @@ function saveInventoryItem(){
 
 function logout(){
   localStorage.removeItem('taxflow_token');
-  window.location.href='/landing.html';
+  showLoginOverlay();
 }
 
 function chkTRN(inp){
