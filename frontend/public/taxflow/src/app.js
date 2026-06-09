@@ -14863,4 +14863,5 @@ function initApp(){
   },900);
 }
 
+if(!localStorage.getItem('taxflow_token'))showLoginOverlay();
 initApp();
