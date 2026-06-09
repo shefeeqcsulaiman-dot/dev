@@ -65,10 +65,11 @@ def create_app() -> FastAPI:
         seed_initial_data()
 
     static_dir = pathlib.Path(__file__).parent.parent / "frontend" / "public"
+    site_dir = static_dir / "site"
 
     @app.get("/", response_model=None)
     def root():
-        f = static_dir / "landing.html"
+        f = site_dir / "landing.html"
         return FileResponse(str(f)) if f.exists() else {"status": "ok", "service": settings.app_name}
 
     @app.get("/health")
@@ -77,15 +78,15 @@ def create_app() -> FastAPI:
 
     @app.get("/landing.html", include_in_schema=False)
     def landing() -> FileResponse:
-        return FileResponse(str(static_dir / "landing.html"))
+        return FileResponse(str(site_dir / "landing.html"))
 
     @app.get("/signup.html", include_in_schema=False)
     def signup() -> FileResponse:
-        return FileResponse(str(static_dir / "signup.html"))
+        return FileResponse(str(site_dir / "signup.html"))
 
     @app.get("/contact.html", include_in_schema=False)
     def contact() -> FileResponse:
-        return FileResponse(str(static_dir / "contact.html"))
+        return FileResponse(str(site_dir / "contact.html"))
 
     @app.get("/taxflow/config.js", include_in_schema=False)
     def config_js() -> Response:

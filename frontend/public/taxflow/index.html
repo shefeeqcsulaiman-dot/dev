@@ -2565,14 +2565,12 @@
   <div class="tab-body" id="pay-out">
     <div class="card">
       <div class="card-hd"><div class="card-title">Supplier Payments Made</div><button class="btn btn-p btn-sm" onclick="openPaymentModal('Supplier Payment')">+ Pay Vendor</button></div>
-      <table class="tbl">
-        <thead><tr><th>Payment No.</th><th>Vendor</th><th>Bill</th><th>Method</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
-        <tbody id="payment-out-tbody">
-          <tr><td class="mono">PAY-2024-0098</td><td>UAE Paints Co.</td><td class="mono">BILL-2024-0186</td><td>Bank Transfer</td><td>18 Jun</td><td class="mono">5,880</td><td><span class="b b-g">Posted</span></td></tr>
-          <tr><td class="mono">PAY-2024-0097</td><td>Office Supplies UAE</td><td class="mono">BILL-2024-0181</td><td>Card</td><td>14 Jun</td><td class="mono">2,200</td><td><span class="b b-g">Posted</span></td></tr>
-        </tbody>
-      </table>
+      <div class="pay-card-list" id="payment-out-cards">
+        <div class="pay-card-empty" id="payment-out-empty">No supplier payments in database yet.</div>
+      </div>
     </div>
+    <!-- hidden table keeps dedup/auto-number logic intact -->
+    <table style="display:none"><tbody id="payment-out-tbody"></tbody></table>
   </div>
 </div>
 
