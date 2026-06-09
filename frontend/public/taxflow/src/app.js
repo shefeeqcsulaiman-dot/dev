@@ -1879,12 +1879,15 @@ async function syncDashboardFromDatabase(){
     renderFullDashboardFromDatabase(data);
   }catch(err){
     console.warn('Dashboard database sync failed:',err);
-    setDashboardStat('Total Revenue','API error','Check backend connection');
-    setDashboardStat('VAT Payable','API error','Dashboard sync failed');
-    setDashboardStat('Open Invoices','API error','Open browser console for details');
-    setDashboardStat('Staff Present','API error','Try http://127.0.0.1:5173');
-    const target=document.getElementById('dash-recent-activity');
-    if(target)target.innerHTML=`<div style="font-size:12px;color:var(--red)">Dashboard database sync failed: ${escapeHtml(err.message||err)}</div>`;
+    setDashboardStat('Total Revenue','—','Check backend connection');
+    setDashboardStat('VAT Payable','—','Dashboard sync failed');
+    setDashboardStat('Open Invoices','—','Open browser console for details');
+    setDashboardStat('Staff Present','—','Retrying on next load');
+    const errHtml=`<div style="font-size:12px;color:var(--text3)">Could not load data. Please refresh.</div>`;
+    ['dash-recent-activity','dash-invoice-status','dash-staff-today'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el)el.innerHTML=errHtml;
+    });
   }
 }
 
