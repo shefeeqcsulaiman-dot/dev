@@ -27,18 +27,8 @@
       box-shadow:0 40px 120px rgba(0,0,0,.45);
     }
     .brand{text-align:center;margin-bottom:34px;}
-    .brand-logo{
-      display:inline-flex;align-items:center;justify-content:center;
-      width:52px;height:52px;border-radius:14px;
-      background:linear-gradient(135deg,#073D7F,#4f8ef0);
-      margin-bottom:14px;
-    }
-    .brand-logo svg{width:26px;height:26px;fill:#fff;}
-    .brand-name{
-      font-family:'Space Grotesk',sans-serif;
-      font-size:24px;font-weight:800;color:#0c1630;letter-spacing:-.3px;
-    }
-    .brand-sub{font-size:13.5px;color:#6b7a99;margin-top:5px;}
+    .brand-img{width:140px;height:auto;margin-bottom:10px;}
+    .brand-sub{font-size:13.5px;color:#6b7a99;margin-top:2px;}
     .error{
       display:none;
       background:#fef2f2;border:1px solid #fecaca;border-radius:9px;
@@ -81,12 +71,7 @@
 <body>
 <div class="card">
   <div class="brand">
-    <div class="brand-logo">
-      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path d="M3 3h18v2H3V3zm0 4h12v2H3V7zm0 4h18v2H3v-2zm0 4h12v2H3v-2zm0 4h18v2H3v-2z"/>
-      </svg>
-    </div>
-    <div class="brand-name">ETaxFlow</div>
+    <img src="/taxflow/logo.png" alt="ETaxFlow" class="brand-img">
     <div class="brand-sub">Sign in to your account</div>
   </div>
   <div id="err" class="error"></div>
