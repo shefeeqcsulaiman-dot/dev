@@ -1517,7 +1517,7 @@ async function submitLogin(){
     if(resp.ok&&data.access_token){
       localStorage.setItem('taxflow_token',data.access_token);
       hideLoginOverlay();
-      initApp();
+      hydrateFromServer().catch(err=>console.warn('Database hydrate failed after login:',err));
     }else{
       errEl.textContent=data.detail||'Incorrect email or password.';
       errEl.style.display='block';
@@ -1562,11 +1562,13 @@ async function loginLocalBackend(){
 }
 
 async function fetchWithBackendFallback(url,options={}){
+  const isLocal=['localhost','127.0.0.1','::1',''].includes(window.location.hostname);
   try{
     const response=await fetch(url,options);
-    if(response.ok||url===localApiUrlFor(url))return response;
+    if(!isLocal||response.ok||url===localApiUrlFor(url))return response;
     return fetch(localApiUrlFor(url),options);
   }catch(err){
+    if(!isLocal)throw err;
     const fallbackUrl=localApiUrlFor(url);
     if(fallbackUrl!==url)return fetch(fallbackUrl,options);
     throw err;
