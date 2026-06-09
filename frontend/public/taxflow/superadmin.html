@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Super Admin — ETaxFlow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'DM Sans',system-ui,sans-serif;background:#0a0f1e;color:#dde4f0;min-height:100vh;font-size:13.5px;}
+    a{color:inherit;text-decoration:none;}
+
+    /* topbar */
+    .topbar{background:#111827;border-bottom:1px solid rgba(99,130,200,.15);padding:0 28px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+    .topbar-brand{display:flex;align-items:center;gap:12px;}
+    .topbar-logo{height:32px;width:auto;}
+    .topbar-title{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:#fff;}
+    .topbar-badge{background:#7c3aed;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;letter-spacing:.5px;}
+    .topbar-right{display:flex;align-items:center;gap:14px;}
+    .topbar-user{font-size:12.5px;color:#8896b3;}
+    .btn-logout{background:rgba(240,107,107,.12);color:#f06b6b;border:1px solid rgba(240,107,107,.25);border-radius:7px;padding:6px 14px;font-size:12.5px;font-family:inherit;cursor:pointer;transition:background .15s;}
+    .btn-logout:hover{background:rgba(240,107,107,.22);}
+
+    /* main */
+    .main{max-width:1200px;margin:0 auto;padding:28px 24px;}
+    .page-title{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:800;margin-bottom:4px;}
+    .page-sub{font-size:13px;color:#8896b3;margin-bottom:24px;}
+
+    /* stats */
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:28px;}
+    .stat-card{background:#111827;border:1px solid rgba(99,130,200,.14);border-radius:12px;padding:18px 20px;}
+    .stat-label{font-size:11.5px;color:#8896b3;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+    .stat-val{font-family:'DM Mono',monospace;font-size:26px;font-weight:500;color:#dde4f0;}
+
+    /* card */
+    .card{background:#111827;border:1px solid rgba(99,130,200,.14);border-radius:14px;padding:22px;}
+    .card-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;}
+    .card-title{font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;}
+
+    /* table */
+    .tbl{width:100%;border-collapse:collapse;font-size:13px;}
+    .tbl th{text-align:left;padding:9px 12px;font-size:11px;font-weight:600;color:#8896b3;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid rgba(99,130,200,.12);}
+    .tbl td{padding:11px 12px;border-bottom:1px solid rgba(99,130,200,.07);vertical-align:middle;}
+    .tbl tr:last-child td{border-bottom:none;}
+    .tbl tr:hover td{background:rgba(99,130,200,.04);}
+    .mono{font-family:'DM Mono',monospace;}
+
+    /* badges */
+    .b{display:inline-flex;align-items:center;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;white-space:nowrap;}
+    .b-g{background:rgba(62,207,142,.1);color:#3ecf8e;border:1px solid rgba(62,207,142,.22);}
+    .b-r{background:rgba(240,107,107,.1);color:#f06b6b;border:1px solid rgba(240,107,107,.22);}
+    .b-a{background:rgba(245,166,35,.1);color:#f5a623;border:1px solid rgba(245,166,35,.22);}
+    .b-p{background:rgba(124,58,237,.15);color:#a78bfa;border:1px solid rgba(124,58,237,.3);}
+
+    /* buttons */
+    .btn{display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:8px;padding:7px 14px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;transition:filter .15s;}
+    .btn:hover{filter:brightness(1.1);}
+    .btn:disabled{opacity:.5;cursor:not-allowed;filter:none;}
+    .btn-p{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;}
+    .btn-g{background:rgba(99,130,200,.12);color:#8896b3;border:1px solid rgba(99,130,200,.18);}
+    .btn-r{background:rgba(240,107,107,.12);color:#f06b6b;border:1px solid rgba(240,107,107,.22);}
+    .btn-sm{padding:4px 10px;font-size:12px;}
+
+    /* modal */
+    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:200;display:none;align-items:center;justify-content:center;padding:20px;}
+    .overlay.on{display:flex;}
+    .modal{background:#111827;border:1px solid rgba(99,130,200,.2);border-radius:16px;padding:28px;width:100%;max-width:500px;max-height:90vh;overflow-y:auto;}
+    .modal-title{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;margin-bottom:4px;}
+    .modal-sub{font-size:12px;color:#8896b3;margin-bottom:20px;}
+    .fg{margin-bottom:14px;}
+    .fl{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#8896b3;margin-bottom:6px;}
+    .fi{width:100%;background:#0d1120;border:1.5px solid rgba(99,130,200,.2);border-radius:8px;padding:10px 13px;font-size:13.5px;font-family:inherit;color:#dde4f0;outline:none;transition:border-color .15s;}
+    .fi:focus{border-color:#4f8ef0;}
+    .fr2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    .modal-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
+    .err-msg{display:none;background:rgba(240,107,107,.1);border:1px solid rgba(240,107,107,.25);border-radius:8px;padding:10px 14px;font-size:13px;color:#f06b6b;margin-bottom:16px;}
+
+    /* loading */
+    .spinner{display:inline-block;width:18px;height:18px;border:2.5px solid rgba(99,130,200,.2);border-top-color:#4f8ef0;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .loading-state{text-align:center;padding:40px;color:#8896b3;}
+  </style>
+</head>
+<body>
+
+<!-- Topbar -->
+<div class="topbar">
+  <div class="topbar-brand">
+    <img src="/taxflow/logo.png" alt="ETaxFlow" class="topbar-logo">
+    <span class="topbar-title">ETaxFlow</span>
+    <span class="topbar-badge">SUPER ADMIN</span>
+  </div>
+  <div class="topbar-right">
+    <span class="topbar-user" id="sa-user-email"></span>
+    <button class="btn-logout" onclick="saLogout()">Sign Out</button>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="page-title">Company Management</div>
+  <div class="page-sub">Manage all tenant companies, users and subscriptions</div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat-card"><div class="stat-label">Total Companies</div><div class="stat-val" id="sa-stat-companies">—</div></div>
+    <div class="stat-card"><div class="stat-label">Total Users</div><div class="stat-val" id="sa-stat-users">—</div></div>
+    <div class="stat-card"><div class="stat-label">Active Subscriptions</div><div class="stat-val" id="sa-stat-active">—</div></div>
+    <div class="stat-card"><div class="stat-label">Expiring Soon</div><div class="stat-val" id="sa-stat-expiring">—</div></div>
+  </div>
+
+  <!-- Companies -->
+  <div class="card">
+    <div class="card-hd">
+      <div class="card-title">All Companies</div>
+      <button class="btn btn-p btn-sm" onclick="openCreateCompany()">+ New Company</button>
+    </div>
+    <div id="sa-companies-wrap">
+      <div class="loading-state"><span class="spinner"></span> Loading companies…</div>
+    </div>
+  </div>
+</div>
+
+<!-- Create Company Modal -->
+<div class="overlay" id="m-create" onclick="if(event.target===this)closeModal('m-create')">
+  <div class="modal">
+    <div class="modal-title">New Company</div>
+    <div class="modal-sub">Create a new tenant company with an admin user</div>
+    <div id="create-err" class="err-msg"></div>
+    <div class="fg"><label class="fl">Company Name</label><input class="fi" id="c-name" placeholder="Acme LLC"></div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">TRN (optional)</label><input class="fi mono" id="c-trn" placeholder="100000000000003"></div>
+      <div class="fg"><label class="fl">Subscription Expiry</label><input class="fi" id="c-expiry" type="date"></div>
+    </div>
+    <div class="fg"><label class="fl">Admin Email</label><input class="fi" id="c-email" type="email" placeholder="admin@company.ae"></div>
+    <div class="fg"><label class="fl">Admin Full Name</label><input class="fi" id="c-fullname" placeholder="Company Administrator"></div>
+    <div class="fg"><label class="fl">Admin Password</label><input class="fi" id="c-password" type="password" placeholder="Set a strong password"></div>
+    <div class="modal-foot">
+      <button class="btn btn-g" onclick="closeModal('m-create')">Cancel</button>
+      <button class="btn btn-p" id="create-btn" onclick="createCompany()">Create Company</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="overlay" id="m-reset" onclick="if(event.target===this)closeModal('m-reset')">
+  <div class="modal">
+    <div class="modal-title">Reset Password</div>
+    <div class="modal-sub" id="reset-sub">Set a new password for this user</div>
+    <div id="reset-err" class="err-msg"></div>
+    <input type="hidden" id="reset-user-id">
+    <input type="hidden" id="reset-company-id">
+    <div class="fg"><label class="fl">New Password</label><input class="fi" id="reset-password" type="password" placeholder="Enter new password"></div>
+    <div class="modal-foot">
+      <button class="btn btn-g" onclick="closeModal('m-reset')">Cancel</button>
+      <button class="btn btn-p" id="reset-btn" onclick="doResetPassword()">Reset Password</button>
+    </div>
+  </div>
+</div>
+
+<!-- Set Expiry Modal -->
+<div class="overlay" id="m-expiry" onclick="if(event.target===this)closeModal('m-expiry')">
+  <div class="modal">
+    <div class="modal-title">Set Subscription Expiry</div>
+    <div class="modal-sub" id="expiry-sub">Update the subscription expiry date</div>
+    <div id="expiry-err" class="err-msg"></div>
+    <input type="hidden" id="expiry-company-id">
+    <div class="fg"><label class="fl">Expiry Date (leave blank to remove)</label><input class="fi" id="expiry-date" type="date"></div>
+    <div class="modal-foot">
+      <button class="btn btn-g" onclick="closeModal('m-expiry')">Cancel</button>
+      <button class="btn btn-p" id="expiry-btn" onclick="doSetExpiry()">Save Expiry</button>
+    </div>
+  </div>
+</div>
+
+<script src="/taxflow/config.js"></script>
+<script>
+  const token = localStorage.getItem('taxflow_token');
+  if(!token) window.location.replace('/taxflow/login');
+
+  function apiBase(){
+    if(window.TAXFLOW_API_BASE_URL) return window.TAXFLOW_API_BASE_URL;
+    const h = window.location.hostname;
+    if(['localhost','127.0.0.1','::1',''].includes(h)) return 'http://localhost:8000/api/v1';
+    return window.location.protocol+'//'+h+'/api/v1';
+  }
+
+  function authHeaders(){
+    return {'Authorization':'Bearer '+localStorage.getItem('taxflow_token'),'Content-Type':'application/json'};
+  }
+
+  async function apiFetch(path, options={}){
+    const res = await fetch(apiBase()+path, {...options, headers:{...authHeaders(),...(options.headers||{})}});
+    if(res.status===401||res.status===403){ saLogout(); throw new Error('Session expired'); }
+    return res;
+  }
+
+  function saLogout(){
+    localStorage.removeItem('taxflow_token');
+    window.location.replace('/taxflow/login');
+  }
+
+  function openModal(id){ document.getElementById(id).classList.add('on'); }
+  function closeModal(id){ document.getElementById(id).classList.remove('on'); }
+
+  function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  // ── Load ──────────────────────────────────────────────────────
+  let companies = [];
+
+  async function loadDashboard(){
+    try{
+      const meRes = await apiFetch('/auth/me');
+      const me = await meRes.json();
+      if(me.role !== 'superadmin'){ window.location.replace('/taxflow/'); return; }
+      document.getElementById('sa-user-email').textContent = me.email;
+
+      const res = await apiFetch('/superadmin/companies');
+      companies = await res.json();
+      renderStats(companies);
+      renderCompanies(companies);
+    }catch(err){
+      document.getElementById('sa-companies-wrap').innerHTML = '<div class="loading-state" style="color:#f06b6b">Failed to load: '+escHtml(err.message)+'</div>';
+    }
+  }
+
+  function renderStats(data){
+    const now = new Date();
+    const soon = new Date(); soon.setDate(soon.getDate()+30);
+    let active=0, expiring=0, totalUsers=0;
+    data.forEach(c=>{
+      totalUsers += (c.users||[]).length;
+      const exp = c.subscription_expires_at ? new Date(c.subscription_expires_at) : null;
+      if(!exp || exp > now) active++;
+      if(exp && exp > now && exp <= soon) expiring++;
+    });
+    document.getElementById('sa-stat-companies').textContent = data.length;
+    document.getElementById('sa-stat-users').textContent = totalUsers;
+    document.getElementById('sa-stat-active').textContent = active;
+    document.getElementById('sa-stat-expiring').textContent = expiring;
+  }
+
+  function renderCompanies(data){
+    if(!data.length){
+      document.getElementById('sa-companies-wrap').innerHTML = '<div class="loading-state">No companies yet — create one above.</div>';
+      return;
+    }
+    const now = new Date();
+    const rows = data.map(c=>{
+      const admin = (c.users||[]).find(u=>u.role==='admin') || c.users?.[0] || {};
+      const exp = c.subscription_expires_at ? new Date(c.subscription_expires_at) : null;
+      const expBadge = !exp ? '<span class="b b-g">Active</span>'
+        : exp < now ? '<span class="b b-r">Expired</span>'
+        : '<span class="b b-a">'+c.subscription_expires_at+'</span>';
+      const userList = (c.users||[]).filter(u=>u.role!=='superadmin').map(u=>
+        `<div style="display:flex;align-items:center;gap:8px;padding:3px 0">
+          <span>${escHtml(u.full_name||u.email)}</span>
+          <span class="mono" style="color:#8896b3;font-size:11px">${escHtml(u.email)}</span>
+          <button class="btn btn-g btn-sm" onclick="openResetPassword('${escHtml(c.id)}','${escHtml(u.id)}','${escHtml(u.email)}')">Reset Pwd</button>
+        </div>`
+      ).join('');
+      return `<tr>
+        <td><strong>${escHtml(c.name)}</strong><br><span class="mono" style="font-size:11px;color:#8896b3">${escHtml(c.trn||'—')}</span></td>
+        <td>${escHtml(admin.email||'—')}</td>
+        <td class="mono">${c.employee_count||0} emp · ${(c.users||[]).length} users</td>
+        <td>${expBadge}</td>
+        <td style="font-size:11.5px;color:#8896b3">${c.created_at ? c.created_at.slice(0,10) : '—'}</td>
+        <td>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-g btn-sm" onclick="toggleUsers('users-${escHtml(c.id)}')">Users</button>
+            <button class="btn btn-g btn-sm" onclick="openSetExpiry('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}')">Expiry</button>
+            <button class="btn btn-r btn-sm" onclick="deleteCompany('${escHtml(c.id)}','${escHtml(c.name)}')">Delete</button>
+          </div>
+          <div id="users-${escHtml(c.id)}" style="display:none;margin-top:8px;padding:8px;background:rgba(99,130,200,.05);border-radius:8px;font-size:12.5px">${userList||'<span style="color:#8896b3">No sub-users</span>'}</div>
+        </td>
+      </tr>`;
+    }).join('');
+    document.getElementById('sa-companies-wrap').innerHTML = `
+      <div style="overflow-x:auto">
+        <table class="tbl">
+          <thead><tr><th>Company</th><th>Admin Email</th><th>Size</th><th>Subscription</th><th>Created</th><th>Actions</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function toggleUsers(id){
+    const el = document.getElementById(id);
+    if(el) el.style.display = el.style.display==='none' ? '' : 'none';
+  }
+
+  // ── Create company ────────────────────────────────────────────
+  function openCreateCompany(){
+    document.getElementById('create-err').style.display='none';
+    ['c-name','c-trn','c-email','c-fullname','c-password'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    openModal('m-create');
+  }
+
+  async function createCompany(){
+    const btn = document.getElementById('create-btn');
+    const errEl = document.getElementById('create-err');
+    errEl.style.display='none';
+    const name = document.getElementById('c-name').value.trim();
+    const email = document.getElementById('c-email').value.trim();
+    const password = document.getElementById('c-password').value;
+    const fullName = document.getElementById('c-fullname').value.trim();
+    const trn = document.getElementById('c-trn').value.trim()||null;
+    const expiry = document.getElementById('c-expiry').value||null;
+    if(!name||!email||!password){ errEl.textContent='Company name, email and password are required.'; errEl.style.display='block'; return; }
+    btn.disabled=true; btn.textContent='Creating…';
+    try{
+      const res = await apiFetch('/superadmin/companies',{method:'POST',body:JSON.stringify({name,email,password,full_name:fullName,trn,expires_at:expiry})});
+      const data = await res.json();
+      if(!res.ok){ errEl.textContent=data.detail||'Failed to create company.'; errEl.style.display='block'; return; }
+      closeModal('m-create');
+      loadDashboard();
+    }catch(err){
+      errEl.textContent=err.message; errEl.style.display='block';
+    }finally{ btn.disabled=false; btn.textContent='Create Company'; }
+  }
+
+  // ── Reset password ────────────────────────────────────────────
+  function openResetPassword(companyId, userId, email){
+    document.getElementById('reset-err').style.display='none';
+    document.getElementById('reset-sub').textContent='Reset password for '+email;
+    document.getElementById('reset-company-id').value=companyId;
+    document.getElementById('reset-user-id').value=userId;
+    document.getElementById('reset-password').value='';
+    openModal('m-reset');
+  }
+
+  async function doResetPassword(){
+    const btn=document.getElementById('reset-btn');
+    const errEl=document.getElementById('reset-err');
+    errEl.style.display='none';
+    const companyId=document.getElementById('reset-company-id').value;
+    const userId=document.getElementById('reset-user-id').value;
+    const password=document.getElementById('reset-password').value;
+    if(!password){ errEl.textContent='Password cannot be empty.'; errEl.style.display='block'; return; }
+    btn.disabled=true; btn.textContent='Saving…';
+    try{
+      const res=await apiFetch(`/superadmin/companies/${companyId}/reset-password`,{method:'POST',body:JSON.stringify({user_id:userId,password})});
+      const data=await res.json();
+      if(!res.ok){ errEl.textContent=data.detail||'Failed.'; errEl.style.display='block'; return; }
+      closeModal('m-reset');
+      alert('Password reset successfully.');
+    }catch(err){ errEl.textContent=err.message; errEl.style.display='block'; }
+    finally{ btn.disabled=false; btn.textContent='Reset Password'; }
+  }
+
+  // ── Set expiry ────────────────────────────────────────────────
+  function openSetExpiry(companyId, name, currentExpiry){
+    document.getElementById('expiry-err').style.display='none';
+    document.getElementById('expiry-sub').textContent='Set expiry for '+name;
+    document.getElementById('expiry-company-id').value=companyId;
+    document.getElementById('expiry-date').value=currentExpiry||'';
+    openModal('m-expiry');
+  }
+
+  async function doSetExpiry(){
+    const btn=document.getElementById('expiry-btn');
+    const errEl=document.getElementById('expiry-err');
+    errEl.style.display='none';
+    const companyId=document.getElementById('expiry-company-id').value;
+    const expiry=document.getElementById('expiry-date').value||null;
+    btn.disabled=true; btn.textContent='Saving…';
+    try{
+      const res=await apiFetch(`/superadmin/companies/${companyId}/set-expiry`,{method:'POST',body:JSON.stringify({expires_at:expiry})});
+      const data=await res.json();
+      if(!res.ok){ errEl.textContent=data.detail||'Failed.'; errEl.style.display='block'; return; }
+      closeModal('m-expiry');
+      loadDashboard();
+    }catch(err){ errEl.textContent=err.message; errEl.style.display='block'; }
+    finally{ btn.disabled=false; btn.textContent='Save Expiry'; }
+  }
+
+  // ── Delete company ────────────────────────────────────────────
+  async function deleteCompany(companyId, name){
+    if(!confirm('Delete company "'+name+'" and ALL its data? This cannot be undone.')) return;
+    try{
+      const res=await apiFetch(`/superadmin/companies/${companyId}`,{method:'DELETE'});
+      if(!res.ok){ const d=await res.json(); alert(d.detail||'Delete failed.'); return; }
+      loadDashboard();
+    }catch(err){ alert(err.message); }
+  }
+
+  loadDashboard();
+</script>
+</body>
+</html>

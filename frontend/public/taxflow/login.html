@@ -89,7 +89,16 @@
 
 <script src="/taxflow/config.js"></script>
 <script>
-  if(localStorage.getItem('taxflow_token'))window.location.replace('/taxflow/');
+  (async function(){
+    var t=localStorage.getItem('taxflow_token');
+    if(!t)return;
+    try{
+      var r=await fetch(apiBase()+'/auth/me',{headers:{'Authorization':'Bearer '+t}});
+      var m=await r.json();
+      if(m&&m.role==='superadmin'){window.location.replace('/taxflow/superadmin');return;}
+      if(r.ok)window.location.replace('/taxflow/');
+    }catch(e){ window.location.replace('/taxflow/'); }
+  })();
 
   document.getElementById('email').addEventListener('keydown',function(e){
     if(e.key==='Enter')document.getElementById('password').focus();
@@ -122,6 +131,11 @@
       var data=await resp.json();
       if(resp.ok&&data.access_token){
         localStorage.setItem('taxflow_token',data.access_token);
+        try{
+          var meResp=await fetch(apiBase()+'/auth/me',{headers:{'Authorization':'Bearer '+data.access_token}});
+          var me=await meResp.json();
+          if(me&&me.role==='superadmin'){window.location.replace('/taxflow/superadmin');return;}
+        }catch(e){}
         window.location.replace('/taxflow/');
       }else{
         err.textContent=data.detail||'Incorrect email or password.';
