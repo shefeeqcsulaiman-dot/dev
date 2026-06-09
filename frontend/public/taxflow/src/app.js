@@ -1584,6 +1584,8 @@ async function authenticatedFetch(url,options={}){
     const relogged=await loginLocalBackend();
     if(relogged){
       response=await fetchWithBackendFallback(url,{...options,headers:{...backendHeaders(),...(options.headers||{})}});
+    }else{
+      showLoginOverlay();
     }
   }
   return response;
