@@ -4483,6 +4483,7 @@ async function runExpAiExtraction(){
   const fill=document.getElementById('exp-ai-ext-fill');
   const pct=document.getElementById('exp-ai-ext-pct');
   if(prog)prog.style.display='block';
+  if(fill)fill.classList.add('running');
   let done=0;
   for(const entry of ready){
     entry.status='Extracting';
@@ -4503,7 +4504,9 @@ async function runExpAiExtraction(){
     if(pct)pct.textContent=`${Math.round(done/ready.length*100)}%`;
     expAiRenderFileList();
   }
-  setTimeout(()=>{if(prog)prog.style.display='none';},800);
+  if(fill){fill.style.width='100%';}
+  if(pct)pct.textContent='100%';
+  setTimeout(()=>{if(prog)prog.style.display='none';if(fill){fill.style.width='0%';fill.classList.remove('running');}},800);
   const statEl=document.getElementById('exp-ai-stat-extracted');
   if(statEl)statEl.textContent=document.querySelectorAll('#exp-ai-tbody .exp-ai-card').length;
 }
@@ -6076,16 +6079,17 @@ function readAndAddSalesFile(file){
 function animateSalesUpload(entry){
   const pg=document.getElementById('sales-prog'),fill=document.getElementById('sales-fill'),fn=document.getElementById('sales-fname'),pct=document.getElementById('sales-pct');
   pg.style.display='block';fn.textContent='Uploading: '+entry.name;
+  if(fill)fill.classList.add('running');
   let p=0;
   const iv=setInterval(()=>{
     p+=Math.random()*18+6;
     if(p>=100){
       p=100;clearInterval(iv);
       setTimeout(()=>{
-        pg.style.display='none';fill.style.width='0%';
+        pg.style.display='none';fill.style.width='0%';fill.classList.remove('running');
         entry.status='Ready';
         renderSalesFileList();
-        toast(entry.name+' uploaded ?','ok');
+        toast(entry.name+' uploaded','ok');
         setTimeout(()=>extractSalesInvoiceFile(entry),500);
       },250);
     }
@@ -6124,11 +6128,25 @@ async function extractSalesInvoiceFile(entry){
   if(!entry){toast('Sales invoice file not found','err');return;}
   entry.status='Extracting';
   renderSalesFileList();
-  toast('Reading invoice data from '+entry.name+'...','info');
   const extTab=document.querySelector('#page-sales .tab:nth-child(2)');
   if(extTab)stab(extTab,'s-extract');
+
+  const ep=document.getElementById('sales-ext-prog');
+  const fill=document.getElementById('sales-ext-fill');
+  const pct=document.getElementById('sales-ext-pct');
+  if(ep)ep.style.display='block';
+  if(fill){fill.classList.add('running');fill.style.width='8%';}
+  if(pct)pct.textContent='0%';
+  let p=8;
+  const ticker=setInterval(()=>{p=Math.min(p+4,88);if(fill)fill.style.width=p+'%';if(pct)pct.textContent=p+'%';},250);
+
   try{
     const invoices=await requestSalesInvoiceExtraction(entry);
+    clearInterval(ticker);
+    if(fill){fill.style.width='100%';}
+    if(pct)pct.textContent='100%';
+    setTimeout(()=>{if(ep)ep.style.display='none';if(fill){fill.style.width='0%';fill.classList.remove('running');}},600);
+
     entry.status='Extracted';
     entry.invoices=invoices;
     salesExtractedInvoices.push(...invoices.map(inv=>({...inv,sourceFile:entry.name,stored:false})));
@@ -6140,6 +6158,9 @@ async function extractSalesInvoiceFile(entry){
     }
     toast('Read '+invoices.length+' invoice(s) from '+entry.name+' ?','ok');
   }catch(err){
+    clearInterval(ticker);
+    if(ep)ep.style.display='none';
+    if(fill){fill.style.width='0%';fill.classList.remove('running');}
     entry.status='Error';
     renderSalesFileList();
     toast('Invoice read failed: '+err.message,'err');
@@ -8422,8 +8443,9 @@ async function extractSingleFile(entry){
 
   const ep=document.getElementById('ext-prog'),ef=document.getElementById('ext-fill'),epct=document.getElementById('ext-pct');
   ep.style.display='block';
+  if(ef)ef.classList.add('running');
   let prog=0;
-  const ticker=setInterval(()=>{prog=Math.min(prog+3,88);ef.style.width=prog+'%';epct.textContent=prog+'%';},200);
+  const ticker=setInterval(()=>{prog=Math.min(prog+3,88);if(ef)ef.style.width=prog+'%';if(epct)epct.textContent=prog+'%';},200);
 
   try{
     const invoices=await requestInvoiceExtraction(entry);
@@ -8447,7 +8469,10 @@ async function extractSingleFile(entry){
       hydrateFromServer().catch(err=>console.warn('Refresh after extraction failed:',err));
     }
 
-    setTimeout(()=>{ep.style.display='none';ef.style.width='0%';},600);
+    clearInterval(ticker);
+    if(ef){ef.style.width='100%';}
+    if(epct)epct.textContent='100%';
+    setTimeout(()=>{ep.style.display='none';if(ef){ef.style.width='0%';ef.classList.remove('running');}},600);
     toast(extractionFailed
       ? `Extraction needs review for ${entry.name}`
       : `Extracted ${entry.invoices.length} invoice(s) from ${entry.name} ?`, extractionFailed?'warn':'ok');
@@ -8459,6 +8484,7 @@ async function extractSingleFile(entry){
   }catch(err){
     clearInterval(ticker);
     ep.style.display='none';
+    if(ef){ef.style.width='0%';ef.classList.remove('running');}
     entry.status='Error';
     persistPurchaseDocumentRecord(entry);
     renderFileList();

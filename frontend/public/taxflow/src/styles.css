@@ -426,8 +426,14 @@ textarea.fi{resize:vertical;min-height:80px;}
 .drop-sub{font-size:12px;color:var(--text3);}
 
 /* ── PROGRESS ── */
-.prog-bar{height:3px;background:var(--surface2);border-radius:99px;overflow:hidden;}
-.prog-fill{height:100%;border-radius:99px;transition:width .4s;}
+.prog-bar{height:8px;background:var(--surface2);border-radius:99px;overflow:hidden;}
+.prog-fill{height:100%;border-radius:99px;background:var(--accent);transition:width .35s ease;}
+.prog-fill.running{
+  background:linear-gradient(90deg,var(--accent2),var(--accent),var(--accent2));
+  background-size:200% 100%;
+  animation:prog-shimmer 1.4s linear infinite;
+}
+@keyframes prog-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 
 /* ── TOAST ── */
 .toasts{position:fixed;bottom:22px;right:22px;z-index:200;display:flex;flex-direction:column;gap:7px;}
