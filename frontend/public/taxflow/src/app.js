@@ -14099,21 +14099,75 @@ function bindGenericAddActions(){
 }
 
 // -- BILLS / VENDORS / PAYMENTS -----------------------------------
+function addBillLine(){
+  const tbody=document.getElementById('bill-lines');
+  const empty=document.getElementById('bill-lines-empty');
+  if(!tbody)return;
+  if(empty)empty.style.display='none';
+  const tr=document.createElement('tr');
+  tr.className='bill-line';
+  tr.innerHTML=`<td><input class="fi" style="width:100%;min-width:120px" placeholder="Product or description" oninput="recalcBill()"></td><td><input class="fi mono" style="width:64px;text-align:right" type="number" min="0" step="0.001" value="1" oninput="recalcBill()"></td><td><input class="fi mono" style="width:90px;text-align:right" type="number" min="0" step="0.01" placeholder="0.00" oninput="recalcBill()"></td><td><select class="fi" onchange="recalcBill()"><option value="5">5%</option><option value="0">0%</option></select></td><td class="mono bill-line-amt" style="text-align:right;padding:8px 6px;white-space:nowrap">0.00</td><td style="text-align:center"><button class="btn btn-g btn-sm" type="button" onclick="removeBillLine(this)" style="padding:2px 8px;font-size:16px;line-height:1">&times;</button></td>`;
+  tbody.appendChild(tr);
+  recalcBill();
+  tr.querySelector('input').focus();
+}
+
+function removeBillLine(btn){
+  btn.closest('tr').remove();
+  const tbody=document.getElementById('bill-lines');
+  const empty=document.getElementById('bill-lines-empty');
+  if(tbody&&!tbody.children.length&&empty)empty.style.display='';
+  recalcBill();
+}
+
+function recalcBill(){
+  let subtotal=0,vatTotal=0;
+  document.querySelectorAll('#bill-lines .bill-line').forEach(row=>{
+    const nums=row.querySelectorAll('input[type=number]');
+    const qty=parseFloat(nums[0]?.value)||0;
+    const price=parseFloat(nums[1]?.value)||0;
+    const vatPct=parseFloat(row.querySelector('select')?.value)||0;
+    const net=qty*price;
+    const vat=net*vatPct/100;
+    subtotal+=net;vatTotal+=vat;
+    const amtEl=row.querySelector('.bill-line-amt');
+    if(amtEl)amtEl.textContent=(net+vat).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  });
+  const fmt=n=>'AED '+n.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const s=document.getElementById('bill-subtotal'),v=document.getElementById('bill-vat-total'),g=document.getElementById('bill-grand-total');
+  if(s)s.textContent=fmt(subtotal);if(v)v.textContent=fmt(vatTotal);if(g)g.textContent=fmt(subtotal+vatTotal);
+}
+
 function saveBill(){
   const vendor=(document.getElementById('bill-vendor')?.value||'').trim();
-  const billNo=(document.getElementById('bill-no')?.value||'BILL-2024-0189').trim();
-  const date=document.getElementById('bill-date')?.value||'Today';
-  const due=document.getElementById('bill-due')?.value||'30 days';
-  const total=parseAmount(document.getElementById('bill-total')?.value);
-  if(!vendor||!total){toast('Vendor and bill total are required','err');return;}
-  const subtotal=total/1.05;
-  const vat=total-subtotal;
+  const billNo=(document.getElementById('bill-no')?.value||('BILL-'+Date.now())).trim();
+  const date=document.getElementById('bill-date')?.value||new Date().toISOString().split('T')[0];
+  const due=document.getElementById('bill-due')?.value||'';
+  const notes=(document.getElementById('bill-desc')?.value||'').trim();
+  if(!vendor){toast('Vendor name is required','err');return;}
+  const lines=[];
+  let subtotal=0,vatTotal=0;
+  document.querySelectorAll('#bill-lines .bill-line').forEach(row=>{
+    const desc=(row.querySelector('input:not([type=number])')?.value||'').trim();
+    const nums=row.querySelectorAll('input[type=number]');
+    const qty=parseFloat(nums[0]?.value)||0;
+    const unitPrice=parseFloat(nums[1]?.value)||0;
+    const vatPct=parseFloat(row.querySelector('select')?.value)||0;
+    const net=qty*unitPrice;const vat=net*vatPct/100;
+    if(desc||net>0){lines.push({description:desc,qty,unit_price:unitPrice,vat_pct:vatPct,net,vat,total:net+vat});subtotal+=net;vatTotal+=vat;}
+  });
+  if(!lines.length){toast('Add at least one product line','err');return;}
+  const total=subtotal+vatTotal;
+  const fmt=n=>n.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
   const row=document.createElement('tr');
-  row.innerHTML=`<td class="mono">${escapeHtml(billNo)}</td><td>${escapeHtml(vendor)}</td><td>${escapeHtml(date)}</td><td>${escapeHtml(due)}</td><td class="mono">${subtotal.toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${vat.toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${total.toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b b-a">Awaiting Payment</span></td><td><button class="btn btn-g btn-sm" onclick="openRowDetail(this,'Bill / Vendor Detail','Bill detail')">View</button></td>`;
+  row.innerHTML=`<td class="mono">${escapeHtml(billNo)}</td><td>${escapeHtml(vendor)}</td><td>${escapeHtml(date)}</td><td>${escapeHtml(due)}</td><td class="mono">${fmt(subtotal)}</td><td class="mono">${fmt(vatTotal)}</td><td class="mono">${fmt(total)}</td><td><span class="b b-a">Awaiting Payment</span></td><td><button class="btn btn-g btn-sm" onclick="openRowDetail(this,'Bill / Vendor Detail','Bill detail')">View</button></td>`;
   document.getElementById('bill-tbody')?.prepend(row);
-  saveServer('bills',{vendor,bill_no:billNo,date,due,subtotal,vat,total,status:'Awaiting Payment'});
+  saveServer('bills',{id:'BILL-'+Date.now(),vendor,bill_no:billNo,date,due,notes,lines,subtotal,vat:vatTotal,total,status:'Awaiting Payment'});
   closeM('m-bill');
-  toast('Vendor bill saved ?','ok');
+  const lbody=document.getElementById('bill-lines');if(lbody)lbody.innerHTML='';
+  const le=document.getElementById('bill-lines-empty');if(le)le.style.display='';
+  recalcBill();
+  toast('Vendor bill saved','ok');
   audit('Saved vendor bill',billNo,'Saved');
 }
 

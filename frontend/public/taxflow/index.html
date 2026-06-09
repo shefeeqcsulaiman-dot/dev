@@ -4482,11 +4482,44 @@ period_locks ─&lt; audit_logs
 </div>
 
 <div class="overlay" id="m-bill" onclick="closeOvBg(event,'m-bill')">
-  <div class="modal"><div class="modal-title">New Vendor Bill</div><div class="modal-sub">Record a payable from a supplier or vendor</div>
-    <div class="fr2"><div class="fg"><label class="fl">Vendor</label><input class="fi" id="bill-vendor" placeholder="Vendor name"></div><div class="fg"><label class="fl">Bill No.</label><input class="fi mono" id="bill-no" placeholder="BILL-2024-0189"></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Bill Date</label><input class="fi" id="bill-date" type="date"></div><div class="fg"><label class="fl">Due Date</label><input class="fi" id="bill-due" type="date"></div><div class="fg"><label class="fl">Total (AED)</label><input class="fi mono" id="bill-total" placeholder="0.00"></div></div>
-    <div class="fg"><label class="fl">Description</label><input class="fi" id="bill-desc" placeholder="Goods or services purchased"></div>
-    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-bill')">Cancel</button><button class="btn btn-p" onclick="saveBill()">Save Bill</button></div>
+  <div class="modal modal-lg">
+    <div class="modal-title">New Vendor Bill</div>
+    <div class="modal-sub">Record a payable from a supplier — add product lines below</div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Vendor</label><input class="fi" id="bill-vendor" placeholder="Vendor name"></div>
+      <div class="fg"><label class="fl">Bill No.</label><input class="fi mono" id="bill-no" placeholder="BILL-2024-0001"></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Bill Date</label><input class="fi" id="bill-date" type="date"></div>
+      <div class="fg"><label class="fl">Due Date</label><input class="fi" id="bill-due" type="date"></div>
+    </div>
+    <!-- Line items -->
+    <div style="margin-top:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <label class="fl" style="margin:0;font-size:12px">Products / Line Items</label>
+        <button class="btn btn-g btn-sm" type="button" onclick="addBillLine()">+ Add Product</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="tbl" style="min-width:560px">
+          <thead><tr><th style="width:38%">Product / Description</th><th style="width:10%">Qty</th><th style="width:16%">Unit Price</th><th style="width:12%">VAT %</th><th style="width:16%">Amount</th><th style="width:8%"></th></tr></thead>
+          <tbody id="bill-lines"></tbody>
+        </table>
+      </div>
+      <div id="bill-lines-empty" style="text-align:center;padding:18px 0;font-size:12.5px;color:var(--text3)">No products added yet — click <strong>+ Add Product</strong> to start</div>
+    </div>
+    <!-- Totals -->
+    <div style="display:flex;justify-content:flex-end;margin-top:14px">
+      <div style="min-width:240px;border-top:1px solid var(--border2);padding-top:10px">
+        <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px"><span style="color:var(--text2)">Subtotal</span><span class="mono" id="bill-subtotal">AED 0.00</span></div>
+        <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px"><span style="color:var(--text2)">VAT</span><span class="mono" id="bill-vat-total">AED 0.00</span></div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:14px;font-weight:700;border-top:1px solid var(--border2);margin-top:4px"><span>Total</span><span class="mono" id="bill-grand-total">AED 0.00</span></div>
+      </div>
+    </div>
+    <div class="fg" style="margin-top:10px"><label class="fl">Notes</label><input class="fi" id="bill-desc" placeholder="Optional notes or reference"></div>
+    <div class="modal-foot">
+      <button class="btn btn-g" onclick="closeM('m-bill')">Cancel</button>
+      <button class="btn btn-p" onclick="saveBill()">Save Bill</button>
+    </div>
   </div>
 </div>
 
