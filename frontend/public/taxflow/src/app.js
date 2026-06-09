@@ -209,12 +209,21 @@ function toast(msg,type='ok'){
 }
 
 function toggleSidebar(force){
-  const open=force??!document.body.classList.contains('nav-open');
-  document.body.classList.toggle('nav-open',open);
-  document.getElementById('nav-scrim')?.classList.toggle('on',open);
-  document.getElementById('menu-btn')?.setAttribute('aria-expanded',String(open));
+  const isMobile=window.innerWidth<=1100;
+  if(isMobile){
+    const open=force??!document.body.classList.contains('nav-open');
+    document.body.classList.toggle('nav-open',open);
+    document.getElementById('nav-scrim')?.classList.toggle('on',open);
+    document.getElementById('menu-btn')?.setAttribute('aria-expanded',String(open));
+  } else {
+    const hide=force!==undefined?force:!document.body.classList.contains('sb-hidden');
+    document.body.classList.toggle('sb-hidden',hide);
+    localStorage.setItem('sb-hidden',hide?'1':'');
+  }
 }
-function closeSidebar(){toggleSidebar(false);}
+function closeSidebar(){
+  if(window.innerWidth<=1100)toggleSidebar(false);
+}
 
 function showM(id){
   const modal=document.getElementById(id);
@@ -4195,6 +4204,57 @@ function markPaymentDocumentPaid(payment){
   });
 }
 
+function renderSupplierPaymentCard(payment){
+  const container=document.getElementById('payment-out-cards');
+  if(!container)return;
+  if(container.querySelector(`[data-pay-ref="${CSS.escape(payment.ref)}"]`))return;
+  const empty=document.getElementById('payment-out-empty');
+  if(empty)empty.style.display='none';
+  const allocations=(Array.isArray(payment?.allocations)&&payment.allocations.length)
+    ?payment.allocations
+    :[{doc_ref:payment?.document_ref||payment?.bill_no||'—',amount:Number(payment?.amount||0)}];
+  const method=payment.method||'Bank Transfer';
+  const methodIcon=method.toLowerCase().includes('cash')?'💵':method.toLowerCase().includes('cheque')||method.toLowerCase().includes('check')?'🧾':'🏦';
+  const allocRows=allocations.map(a=>{
+    const ref=String(a.doc_ref||'—');
+    const amt=Number(a.amount||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+    return `<div class="pay-card-alloc-row">
+      <span class="pay-card-alloc-ref">${escapeHtml(ref)}</span>
+      <span class="pay-card-alloc-desc">Invoice / Bill</span>
+      <span class="pay-card-alloc-amt">AED ${amt}</span>
+    </div>`;
+  }).join('');
+  const totalAmt=Number(payment.amount||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const card=document.createElement('div');
+  card.className='pay-card';
+  card.dataset.payRef=payment.ref;
+  card.innerHTML=`
+    <div class="pay-card-head">
+      <div class="pay-card-icon">💸</div>
+      <div class="pay-card-info">
+        <div class="pay-card-ref">${escapeHtml(payment.ref)}</div>
+        <div class="pay-card-vendor">${escapeHtml(payment.contact||'Supplier')}</div>
+        <div class="pay-card-date">${escapeHtml(payment.date||'')}</div>
+      </div>
+      <div class="pay-card-right">
+        <div class="pay-card-amount">AED ${totalAmt}</div>
+        <div class="pay-card-amount-label">PAID</div>
+      </div>
+    </div>
+    <div class="pay-card-body">
+      <div class="pay-card-method-row">
+        <span class="pay-card-method-icon">${methodIcon}</span>
+        <span class="pay-card-method-name">${escapeHtml(method)}</span>
+      </div>
+      ${allocations.length?`<div class="pay-card-alloc-title">Applied to</div>${allocRows}`:''}
+    </div>
+    <div class="pay-card-foot">
+      <span class="pay-card-note">${escapeHtml(payment.notes||payment.memo||'')}</span>
+      <button class="pay-card-del" style="margin-left:auto" onclick="toast('Delete not yet implemented','info')">Delete</button>
+    </div>`;
+  container.appendChild(card);
+}
+
 function renderPaymentRecord(payment){
   // Rebuild _invoicePaidMap from stored allocations (for page-reload persistence)
   const isSupplier=payment?.type==='Supplier Payment';
@@ -4223,6 +4283,7 @@ function renderPaymentRecord(payment){
   row.innerHTML=`<td class="mono">${escapeHtml(payment.ref)}</td><td>${escapeHtml(payment.contact)}</td><td class="mono">${escapeHtml(documentRef)}</td><td>${escapeHtml(payment.method||'Bank Transfer')}</td><td>${escapeHtml(payment.date)}</td><td class="mono">${Number(payment.amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b b-g">Posted</span></td>`;
   removeEmptyState(tbody);
   tbody.prepend(row);
+  if(isSupplier)renderSupplierPaymentCard(payment);
   markPaymentDocumentPaid(payment);
   updateFinanceFromDatabaseRecords();
 }
@@ -5688,6 +5749,9 @@ function hydrateFromServer(){
       renderStats.rotaApprovals=renderRecordList(data.rotaApprovals,renderRotaApprovalRecord,'rota approval');
       renderStats.rotaAssignments=renderRecordList(data.rotaAssignments,renderRotaAssignmentRecord,'rota assignment');
       renderRotaBoards();
+      renderStats.overtimeRequests=renderRecordList(data.overtimeRequests,renderOTRecord,'overtime request');
+      renderStats.leaveRequests=renderRecordList(data.leaveRequests,renderLeaveRecord,'leave request');
+      renderStats.attendanceCorrections=renderRecordList(data.attendanceCorrections,renderCorrectionRecord,'correction');
       renderStats.expenses=renderRecordList(data.expenses,renderExpenseRecord,'expense');
       renderStats.purchaseRecords={rendered:0,failed:0,total:0,lazy:true};
       loadPurchaseDocumentsFromServer(data.purchaseDocuments||[],[]);
@@ -11588,20 +11652,100 @@ function addCorporateApprovalRule(){
   saveCorporateRecord('approvalMatrix',record,renderCorporateApprovals,'Approval rule saved to database');
 }
 
-function approveLeave(btn){const row=btn.closest('tr');row.querySelector('td:nth-child(6)').innerHTML='<span class="b b-g">Approved</span>';row.querySelector('td:last-child').innerHTML='';toast('Leave approved ?','ok');}
-function rejectLeave(btn){const row=btn.closest('tr');row.querySelector('td:nth-child(6)').innerHTML='<span class="b b-r">Rejected</span>';row.querySelector('td:last-child').innerHTML='';toast('Leave rejected','warn');}
+function approveLeave(btn){
+  const row=btn.closest('tr');
+  row.querySelector('td:nth-child(6)').innerHTML='<span class="b b-g">Approved</span>';
+  row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm">View</button>';
+  toast('Leave approved ✓','ok');
+  const id=row.dataset.recordId;
+  if(id)saveServer('leaveRequests',{id,status:'Approved'});
+  audit('Leave approved',row.children[0]?.textContent||'','Approved');
+}
+function rejectLeave(btn){
+  const row=btn.closest('tr');
+  row.querySelector('td:nth-child(6)').innerHTML='<span class="b b-r">Rejected</span>';
+  row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm">View</button>';
+  toast('Leave rejected','warn');
+  const id=row.dataset.recordId;
+  if(id)saveServer('leaveRequests',{id,status:'Rejected'});
+  audit('Leave rejected',row.children[0]?.textContent||'','Rejected');
+}
+
+function saveLeaveRequest(){
+  const employee=document.getElementById('leave-employee')?.value.trim()||'';
+  const type=document.getElementById('leave-type')?.value.trim()||'';
+  const from=document.getElementById('leave-from')?.value||'';
+  const to=document.getElementById('leave-to')?.value||'';
+  const reason=document.getElementById('leave-reason')?.value.trim()||'';
+  if(!employee||!from||!to){toast('Employee, From and To dates are required','warn');return;}
+  const fromDate=new Date(from);const toDate=new Date(to);
+  const days=Math.max(1,Math.round((toDate-fromDate)/(1000*60*60*24))+1);
+  const record={id:`LVE-${Date.now()}`,employee,type,from,to,days,reason,status:'Pending',submitted:new Date().toISOString()};
+  renderLeaveRecord(record);
+  saveServer('leaveRequests',record);
+  closeM('m-leave');
+  document.getElementById('leave-reason').value='';
+  toast('Leave request submitted ✓','ok');
+  audit('Leave request submitted',employee,'Pending');
+}
+
+function renderLeaveRecord(rec){
+  const tbody=document.getElementById('leave-tbody');
+  if(!tbody)return;
+  if(tbody.querySelector(`[data-record-id="${CSS.escape(rec.id)}"]`))return;
+  const statusCls=rec.status==='Approved'?'b-g':rec.status==='Rejected'?'b-r':'b-a';
+  const typeCls={Annual:'b-a',Sick:'b-t',Emergency:'b-p',Unpaid:'b-gray',Hajj:'b-b'}[rec.type?.replace(' Leave','')]||'b-b';
+  const actions=rec.status==='Pending'
+    ?`<div class="flx"><button class="btn btn-success btn-sm" onclick="approveLeave(this)">✓</button><button class="btn btn-danger btn-sm" onclick="rejectLeave(this)">✕</button></div>`
+    :`<button class="btn btn-g btn-sm">View</button>`;
+  const row=document.createElement('tr');
+  row.dataset.recordId=rec.id;
+  row.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td><span class="b ${typeCls}">${escapeHtml(rec.type?.replace(' Leave','')||rec.type)}</span></td><td>${escapeHtml(rec.from)}</td><td>${escapeHtml(rec.to)}</td><td>${rec.days||'—'}</td><td><span class="b ${statusCls}">${escapeHtml(rec.status)}</span></td><td>${actions}</td>`;
+  tbody.prepend(row);
+}
 
 function submitOTRequest(){
+  const employee=document.getElementById('ot-employee')?.value.trim()||'';
+  const dept=document.getElementById('ot-dept')?.value.trim()||'';
+  const date=document.getElementById('ot-date')?.value.trim()||'';
+  const shift=document.getElementById('ot-shift')?.value.trim()||'';
+  const login=document.getElementById('ot-login')?.value.trim()||'';
+  const logout=document.getElementById('ot-logout')?.value.trim()||'';
+  const hours=document.getElementById('ot-hours')?.value.trim()||'0';
+  const reason=document.getElementById('ot-reason')?.value.trim()||'';
+  if(!employee){toast('Employee name is required','warn');return;}
+  const record={id:`OT-${Date.now()}`,employee,department:dept,date,shift,login,logout,ot_hours:hours,reason,status:'Pending',submitted:new Date().toISOString()};
+  renderOTRecord(record);
+  saveServer('overtimeRequests',record);
   closeM('m-ot');
-  toast('Overtime submitted for supervisor approval ?','ok');
+  document.getElementById('ot-reason').value='';
+  toast('Overtime submitted for supervisor approval ✓','ok');
   audit('Overtime submitted','HR Overtime','Pending');
+}
+
+function renderOTRecord(rec){
+  const tbody=document.getElementById('ot-tbody');
+  if(!tbody)return;
+  if(tbody.querySelector(`[data-record-id="${CSS.escape(rec.id)}"]`))return;
+  const statusCls=rec.status==='Approved'||rec.status==='HR Approved'?'b-g':rec.status==='Rejected'?'b-r':'b-a';
+  const isPending=rec.status==='Pending'||rec.status==='Supervisor Pending'||rec.status==='HR Review';
+  const actions=isPending
+    ?`<div class="flx"><button class="btn btn-success btn-sm" onclick="approveOT(this,'Supervisor approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="rejectOT(this)">Reject</button></div>`
+    :`<button class="btn btn-g btn-sm" onclick="toast('OT detail opened','info')">View</button>`;
+  const worked=rec.login&&rec.logout?`${rec.login}–${rec.logout}`:(rec.shift||'—');
+  const row=document.createElement('tr');
+  row.dataset.recordId=rec.id;
+  row.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td>${escapeHtml(rec.date)}</td><td class="mono">${escapeHtml(rec.shift||'—')}</td><td class="mono">${escapeHtml(rec.login||'—')}–${escapeHtml(rec.logout||'—')}</td><td class="mono">${escapeHtml(rec.ot_hours||rec.otHours||'0')}h</td><td><span class="b ${statusCls}">${escapeHtml(rec.status||'Pending')}</span></td><td>${actions}</td>`;
+  tbody.prepend(row);
 }
 
 function approveOT(btn,msg='Overtime approved'){
   const row=btn.closest('tr');
   row.querySelector('td:nth-child(6)').innerHTML='<span class="b b-g">Approved</span>';
   row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm" onclick="toast(\'OT detail opened\',\'info\')">View</button>';
-  toast(msg+' ?','ok');
+  toast(msg+' ✓','ok');
+  const id=row.dataset.recordId;
+  if(id)saveServer('overtimeRequests',{id,status:'Approved'});
   audit(msg,'HR Overtime','Approved');
 }
 
@@ -11611,6 +11755,8 @@ function rejectOT(btn){
   row.querySelector('td:nth-child(6)').innerHTML='<span class="b b-r">Rejected</span>';
   row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm" onclick="toast(\'Rejection reason: '+escapeHtml(reason).replace(/'/g,'&#39;')+'\',\'warn\')">Reason</button>';
   toast('Overtime rejected','warn');
+  const id=row.dataset.recordId;
+  if(id)saveServer('overtimeRequests',{id,status:'Rejected',rejection_reason:reason});
   audit('Overtime rejected','HR Overtime','Rejected');
 }
 
@@ -11629,7 +11775,9 @@ function approveCorrection(btn){
   const row=btn.closest('tr');
   row.querySelector('td:nth-child(6)').innerHTML='<span class="b b-g">Approved</span>';
   row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm">View</button>';
-  toast('Attendance correction approved ?','ok');
+  toast('Attendance correction approved ✓','ok');
+  const id=row.dataset.recordId;
+  if(id)saveServer('attendanceCorrections',{id,status:'Approved'});
   audit('Attendance correction approved','HR Attendance','Approved');
 }
 
@@ -11638,7 +11786,40 @@ function rejectCorrection(btn){
   row.querySelector('td:nth-child(6)').innerHTML='<span class="b b-r">Rejected</span>';
   row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm">View</button>';
   toast('Attendance correction rejected','warn');
+  const id=row.dataset.recordId;
+  if(id)saveServer('attendanceCorrections',{id,status:'Rejected'});
   audit('Attendance correction rejected','HR Attendance','Rejected');
+}
+
+function saveCorrectionRequest(){
+  const employee=document.getElementById('corr-employee')?.value.trim()||'';
+  const date=document.getElementById('corr-date')?.value||'';
+  const checkin=document.getElementById('corr-checkin')?.value||'';
+  const checkout=document.getElementById('corr-checkout')?.value||'';
+  const reason=document.getElementById('corr-reason')?.value.trim()||'';
+  if(!employee||!date){toast('Employee and date are required','warn');return;}
+  const record={id:`CORR-${Date.now()}`,employee,date,checkin,checkout,reason,status:'Pending',submitted:new Date().toISOString()};
+  renderCorrectionRecord(record);
+  saveServer('attendanceCorrections',record);
+  closeM('m-att-correction');
+  document.getElementById('corr-reason').value='';
+  toast('Attendance correction submitted ✓','ok');
+  audit('Attendance correction submitted',employee,'Pending');
+}
+
+function renderCorrectionRecord(rec){
+  const tbody=document.getElementById('corrections-tbody');
+  if(!tbody)return;
+  if(tbody.querySelector(`[data-record-id="${CSS.escape(rec.id)}"]`))return;
+  const statusCls=rec.status==='Approved'?'b-g':rec.status==='Rejected'?'b-r':'b-a';
+  const isPending=rec.status==='Pending';
+  const actions=isPending
+    ?`<div class="flx"><button class="btn btn-success btn-sm" onclick="approveCorrection(this)">Approve</button><button class="btn btn-danger btn-sm" onclick="rejectCorrection(this)">Reject</button></div>`
+    :`<button class="btn btn-g btn-sm">View</button>`;
+  const row=document.createElement('tr');
+  row.dataset.recordId=rec.id;
+  row.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td>${escapeHtml(rec.date)}</td><td class="mono">${escapeHtml(rec.checkin||'—')}</td><td class="mono">${escapeHtml(rec.checkout||'—')}</td><td>${escapeHtml(rec.reason||'—')}</td><td><span class="b ${statusCls}">${escapeHtml(rec.status||'Pending')}</span></td><td>${actions}</td>`;
+  tbody.prepend(row);
 }
 
 function rotaBadge(status){
@@ -12573,8 +12754,56 @@ function approvePayroll(){
   const mgmt=document.getElementById('pay-mgmt-status');
   if(fin){fin.className='b b-g';fin.textContent='Approved';}
   if(mgmt){mgmt.className=blocked?'b b-a':'b b-g';mgmt.textContent=blocked?'Conditional':'Approved';}
-  toast(blocked?'Payroll conditionally approved with WPS hold':'Payroll approved ?',blocked?'warn':'ok');
-  audit('Approved payroll','June 2024',blocked?'Conditional':'Approved');
+  const period=document.getElementById('pay-period')?.value||'';
+  const preparedBy=document.getElementById('pay-prepared-by')?.value.trim()||'';
+  const payDate=document.getElementById('pay-date')?.value||'';
+  saveServer('payrollRuns',{id:`PAY-${Date.now()}`,period,prepared_by:preparedBy,payment_date:payDate,status:blocked?'Conditional':'Approved',approved_at:new Date().toISOString()});
+  toast(blocked?'Payroll conditionally approved with WPS hold':'Payroll approved ✓',blocked?'warn':'ok');
+  audit('Approved payroll',period,blocked?'Conditional':'Approved');
+}
+
+function addPayrollAdjustment(){
+  const employee=document.getElementById('pay-adj-emp')?.value.trim()||'';
+  const type=document.getElementById('pay-adj-type')?.value.trim()||'';
+  const amount=document.getElementById('pay-adj-amount')?.value.trim()||'';
+  const reason=document.getElementById('pay-adj-reason')?.value.trim()||'';
+  if(!employee||!amount){toast('Employee and amount are required','warn');return;}
+  const record={id:`ADJ-${Date.now()}`,employee,type,amount:Number(amount)||0,reason,period:document.getElementById('pay-period')?.value||'',created:new Date().toISOString()};
+  saveServer('payrollAdjustments',record);
+  document.getElementById('pay-adj-amount').value='';
+  document.getElementById('pay-adj-reason').value='';
+  toast('Payroll adjustment added ✓','ok');
+  audit('Payroll adjustment',`${employee} ${type} ${amount}`,'Saved');
+}
+
+function renderAttendanceCalendar(){
+  const grid=document.getElementById('att-cal-grid');
+  const title=document.getElementById('att-cal-title');
+  if(!grid)return;
+  const now=new Date();
+  const year=now.getFullYear();
+  const month=now.getMonth();
+  const monthName=now.toLocaleString('en-AE',{month:'long'});
+  if(title)title.textContent=`${monthName} ${year} — Attendance Calendar`;
+  const firstDay=new Date(year,month,1).getDay();
+  const daysInMonth=new Date(year,month+1,0).getDate();
+  const today=now.getDate();
+  const dayNames=[...grid.querySelectorAll('.cal-day-name')];
+  grid.innerHTML='';
+  dayNames.forEach(n=>grid.appendChild(n));
+  for(let i=0;i<firstDay;i++){
+    const blank=document.createElement('div');
+    blank.className='cal-day wknd';
+    grid.appendChild(blank);
+  }
+  for(let d=1;d<=daysInMonth;d++){
+    const dayOfWeek=new Date(year,month,d).getDay();
+    const isWknd=dayOfWeek===0||dayOfWeek===6;
+    const div=document.createElement('div');
+    div.className='cal-day'+(isWknd?' wknd':d===today?' today':'');
+    div.textContent=d;
+    grid.appendChild(div);
+  }
 }
 
 function validateWPS(){
@@ -14578,6 +14807,9 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
+  if(localStorage.getItem('sb-hidden')==='1'&&window.innerWidth>1100){
+    document.body.classList.add('sb-hidden');
+  }
   _applyLogoEverywhere();
   applyTheme('light');
   const today=new Date().toISOString().split('T')[0];
@@ -14598,6 +14830,7 @@ function initApp(){
   mergeBankAndPaymentsModule();
   separateCorporateAccountingModule();
   clearStaticDemoData();
+  renderAttendanceCalendar();
   watchVisibleTablePagination();
   applyAllTableActions();
   updateBackButton();

@@ -80,10 +80,6 @@
   </div>
 
   <div class="sb-section">
-    <div class="sb-lbl">Operations</div>
-  </div>
-
-  <div class="sb-section">
     <div class="sb-lbl">People</div>
     <div class="nav" onclick="go('staff')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="5" r="3"/><path d="M1 14c0-3 2.5-5 5-5s5 2 5 5"/><circle cx="13" cy="6" r="2"/><path d="M15 14c0-2-1-3.5-2-4"/></svg>
@@ -132,7 +128,7 @@
   </div>
 
   <div class="sb-foot">
-    <button class="btn btn-g" style="width:100%;justify-content:center" onclick="logout()">Logout</button>
+    <button class="btn btn-g btn-block" onclick="logout()">Logout</button>
   </div>
 </nav>
 
@@ -141,7 +137,7 @@
   <div class="topbar">
     <button class="btn btn-g menu-btn" id="menu-btn" type="button" aria-label="Open navigation" aria-expanded="false" onclick="toggleSidebar()">☰</button>
     <button class="btn btn-g back-btn" id="back-btn" type="button" onclick="goBack()" title="Go back" disabled>← Back</button>
-    <div>
+    <div class="tb-info">
       <div class="tb-title" id="ptitle">Dashboard</div>
       <div id="psub" class="tb-sub">Loading dashboard from database</div>
     </div>
@@ -193,7 +189,7 @@
         <!-- Money Incoming = Revenue -->
         <div class="mb3-kpi-card kc-lavender">
           <div class="mb3-kpi-glow" style="background:radial-gradient(circle at 80% 20%,rgba(139,92,246,.4),transparent 65%)"></div>
-          <div class="mb3-kpi-ico" style="background:linear-gradient(135deg,#7c3aed,#a78bfa)">
+          <div class="mb3-kpi-ico kpi-ico-purple">
             <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm1 11H9v-4H7l3-3 3 3h-2v4z"/></svg>
           </div>
           <div class="mb3-kpi-name">Money Incoming</div>
@@ -208,7 +204,7 @@
         <!-- Money Spend = Purchases -->
         <div class="mb3-kpi-card kc-peach">
           <div class="mb3-kpi-glow" style="background:radial-gradient(circle at 80% 20%,rgba(234,88,12,.35),transparent 65%)"></div>
-          <div class="mb3-kpi-ico" style="background:linear-gradient(135deg,#ea580c,#fb923c)">
+          <div class="mb3-kpi-ico kpi-ico-orange">
             <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm1 11H9v-4H7l3-3 3 3h-2v4z" transform="rotate(180 10 10)"/></svg>
           </div>
           <div class="mb3-kpi-name">Money Spend</div>
@@ -223,7 +219,7 @@
         <!-- Total Profit = Gross Profit -->
         <div class="mb3-kpi-card kc-mint">
           <div class="mb3-kpi-glow" style="background:radial-gradient(circle at 80% 20%,rgba(5,150,105,.35),transparent 65%)"></div>
-          <div class="mb3-kpi-ico" style="background:linear-gradient(135deg,#059669,#34d399)">
+          <div class="mb3-kpi-ico kpi-ico-green">
             <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M3 10h14M10 3l7 7-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
           </div>
           <div class="mb3-kpi-name">Total Profit</div>
@@ -245,9 +241,9 @@
           <div class="mb3-card-hd mb16">
             <div class="mb3-card-title">Statistic</div>
             <div class="dv2-legend">
-              <span><i style="background:#6366f1"></i>Revenue</span>
-              <span><i style="background:#ef4444"></i>Purchases</span>
-              <span><i style="background:#f59e0b"></i>VAT</span>
+              <span><i class="lg-accent"></i>Revenue</span>
+              <span><i class="lg-red"></i>Purchases</span>
+              <span><i class="lg-amber"></i>VAT</span>
             </div>
           </div>
           <div class="dv2-bar-area" id="dash-monthly-bars" style="height:130px">
@@ -334,10 +330,10 @@
             </div>
           </div>
           <div class="dv2-vat-legend">
-            <div class="dv2-vat-item"><span class="dv2-dot" style="background:#8b5cf6"></span><div><div style="font-size:11px;color:var(--text3)">Output VAT</div><div class="dv2-vat-num" id="dash-vat-output">AED 0.00</div></div></div>
-            <div class="dv2-vat-item"><span class="dv2-dot" style="background:#10b981"></span><div><div style="font-size:11px;color:var(--text3)">Input VAT</div><div class="dv2-vat-num" id="dash-vat-input">AED 0.00</div></div></div>
+            <div class="dv2-vat-item"><span class="dv2-dot purple"></span><div><div style="font-size:11px;color:var(--text3)">Output VAT</div><div class="dv2-vat-num" id="dash-vat-output">AED 0.00</div></div></div>
+            <div class="dv2-vat-item"><span class="dv2-dot green"></span><div><div style="font-size:11px;color:var(--text3)">Input VAT</div><div class="dv2-vat-num" id="dash-vat-input">AED 0.00</div></div></div>
             <div style="border-top:1px solid var(--border);margin:8px 0 6px"></div>
-            <div class="dv2-vat-item"><span class="dv2-dot" style="background:#f59e0b"></span><div><div style="font-size:11px;color:var(--text3)">Net Payable</div><div class="dv2-vat-num" id="dash-vat-net" style="color:#f59e0b">AED 0.00</div></div></div>
+            <div class="dv2-vat-item"><span class="dv2-dot amber"></span><div><div style="font-size:11px;color:var(--text3)">Net Payable</div><div class="dv2-vat-num amber-text" id="dash-vat-net">AED 0.00</div></div></div>
           </div>
         </div>
       </div>
@@ -582,20 +578,20 @@
   <div class="tab-body" id="s-invoices">
     <div class="sinv-kpi-row mb16">
       <div class="sinv-kpi-card">
-        <div class="sinv-kpi-icon" style="background:#eff6ff;color:#2563eb">&#128176;</div>
-        <div><div class="sinv-kpi-val" style="color:#2563eb">AED 965,000</div><div class="sinv-kpi-lbl">Total Invoiced</div></div>
+        <div class="sinv-kpi-icon c-blue">&#128176;</div>
+        <div><div class="sinv-kpi-val c-blue">AED 965,000</div><div class="sinv-kpi-lbl">Total Invoiced</div></div>
       </div>
       <div class="sinv-kpi-card">
-        <div class="sinv-kpi-icon" style="background:#f0fdf4;color:#16a34a">&#10003;</div>
-        <div><div class="sinv-kpi-val" style="color:#16a34a">AED 880,800</div><div class="sinv-kpi-lbl">Collected</div></div>
+        <div class="sinv-kpi-icon c-green">&#10003;</div>
+        <div><div class="sinv-kpi-val c-green">AED 880,800</div><div class="sinv-kpi-lbl">Collected</div></div>
       </div>
       <div class="sinv-kpi-card">
-        <div class="sinv-kpi-icon" style="background:#fffbeb;color:#d97706">&#9200;</div>
-        <div><div class="sinv-kpi-val" style="color:#d97706">AED 84,200</div><div class="sinv-kpi-lbl">Pending</div></div>
+        <div class="sinv-kpi-icon c-amber">&#9200;</div>
+        <div><div class="sinv-kpi-val c-amber">AED 84,200</div><div class="sinv-kpi-lbl">Pending</div></div>
       </div>
       <div class="sinv-kpi-card">
-        <div class="sinv-kpi-icon" style="background:#fef2f2;color:#dc2626;font-weight:800">!</div>
-        <div><div class="sinv-kpi-val" style="color:#dc2626">AED 21,000</div><div class="sinv-kpi-lbl">Overdue</div></div>
+        <div class="sinv-kpi-icon c-red">!</div>
+        <div><div class="sinv-kpi-val c-red">AED 21,000</div><div class="sinv-kpi-lbl">Overdue</div></div>
       </div>
     </div>
     <div class="card">
@@ -1150,10 +1146,6 @@
       <table class="tbl">
         <thead><tr><th>ID</th><th>Name</th><th>Department</th><th>Designation</th><th>Supervisor</th><th>Shift</th><th>Salary (AED)</th><th>Status</th><th></th></tr></thead>
         <tbody id="employee-tbody">
-          <tr><td class="mono">EMP-001</td><td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px">SA</div><div>Sara Al Mansouri<div class="card-sub">Full-time · Dubai HQ</div></div></div></td><td>Management</td><td>General Manager</td><td>Board</td><td><span class="b b-g">09:00-18:00</span></td><td class="mono">22,000</td><td><span class="b b-g">Active</span></td><td><button class="btn btn-g btn-sm" onclick="openEmployeeProfile(this)">View</button></td></tr>
-          <tr><td class="mono">EMP-002</td><td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px;background:var(--teal)">AR</div><div>Ahmed Rashid<div class="card-sub">Full-time · Warehouse</div></div></div></td><td>Operations</td><td>Warehouse Manager</td><td>Sara</td><td><span class="b b-g">08:00-17:00</span></td><td class="mono">8,500</td><td><span class="b b-a">On Leave</span></td><td><button class="btn btn-g btn-sm" onclick="openEmployeeProfile(this)">View</button></td></tr>
-          <tr><td class="mono">EMP-003</td><td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px;background:var(--purple)">RA</div><div>Rania Abboud<div class="card-sub">Full-time · Finance</div></div></div></td><td>Finance</td><td>Accountant</td><td>Sara</td><td><span class="b b-b">09:00-18:00</span></td><td class="mono">7,200</td><td><span class="b b-g">Active</span></td><td><button class="btn btn-g btn-sm" onclick="openEmployeeProfile(this)">View</button></td></tr>
-          <tr><td class="mono">EMP-004</td><td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px;background:var(--pink)">MJ</div><div>Mohamed Jaber<div class="card-sub">Full-time · Sales</div></div></div></td><td>Sales</td><td>Sales Executive</td><td>Sara</td><td><span class="b b-b">10:00-19:00</span></td><td class="mono">6,800</td><td><span class="b b-g">Active</span></td><td><button class="btn btn-g btn-sm" onclick="openEmployeeProfile(this)">View</button></td></tr>
         </tbody>
       </table>
     </div>
@@ -1168,32 +1160,22 @@
     <div class="g2 mb16">
       <div class="card">
         <div class="card-hd">
-          <div class="card-title">June 2024 — Attendance Calendar</div>
+          <div class="card-title" id="att-cal-title">Attendance Calendar</div>
           <div class="flx">
             <span class="b b-g" style="font-size:10px">Present</span>
             <span class="b b-r" style="font-size:10px">Absent</span>
             <span class="b b-a" style="font-size:10px">Leave</span>
           </div>
         </div>
-        <div class="cal-grid">
+        <div id="att-cal-grid" class="cal-grid">
           <div class="cal-day-name">Sun</div><div class="cal-day-name">Mon</div><div class="cal-day-name">Tue</div><div class="cal-day-name">Wed</div><div class="cal-day-name">Thu</div><div class="cal-day-name">Fri</div><div class="cal-day-name">Sat</div>
-          <div class="cal-day wknd"></div>
-          <div class="cal-day present">1</div><div class="cal-day present">2</div><div class="cal-day present">3</div><div class="cal-day present">4</div><div class="cal-day wknd">5</div><div class="cal-day wknd">6</div>
-          <div class="cal-day present">7</div><div class="cal-day absent">8</div><div class="cal-day present">9</div><div class="cal-day leave">10</div><div class="cal-day leave">11</div><div class="cal-day wknd">12</div><div class="cal-day wknd">13</div>
-          <div class="cal-day present">14</div><div class="cal-day present">15</div><div class="cal-day present">16</div><div class="cal-day present">17</div><div class="cal-day present">18</div><div class="cal-day wknd">19</div><div class="cal-day wknd">20</div>
-          <div class="cal-day present">21</div><div class="cal-day present">22</div><div class="cal-day present">23</div><div class="cal-day present">24</div><div class="cal-day present">25</div><div class="cal-day wknd">26</div><div class="cal-day wknd">27</div>
-          <div class="cal-day today">28</div><div class="cal-day today">29</div><div class="cal-day today">30</div>
         </div>
       </div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Today's Attendance</div><span id="att-time" class="mono" style="font-size:12px;color:var(--accent)">Live</span></div>
         <table class="tbl">
           <thead><tr><th>Employee</th><th>In</th><th>Out</th><th>Hours</th><th>Late</th><th>OT</th><th>Status</th></tr></thead>
-          <tbody>
-            <tr><td>Sara Al Mansouri</td><td class="mono">08:47</td><td class="mono">18:08</td><td class="mono">9.3h</td><td class="mono">0</td><td class="mono">1.3h</td><td><span class="b b-a">OT Pending</span></td></tr>
-            <tr><td>Ahmed Rashid</td><td class="mono">—</td><td class="mono">—</td><td>—</td><td class="mono">—</td><td class="mono">—</td><td><span class="b b-a">Leave</span></td></tr>
-            <tr><td>Rania Abboud</td><td class="mono">09:12</td><td class="mono">18:00</td><td class="mono">8.8h</td><td class="mono">12</td><td class="mono">0.8h</td><td><span class="b b-a">Late</span></td></tr>
-            <tr><td>Mohamed Jaber</td><td class="mono">08:55</td><td class="mono">17:30</td><td class="mono">8.5h</td><td class="mono">0</td><td class="mono">0.5h</td><td><span class="b b-gray">Out</span></td></tr>
+          <tbody id="att-today-tbody">
           </tbody>
         </table>
         <div class="divider"></div>
@@ -1214,10 +1196,7 @@
         <div class="card-hd"><div><div class="card-title">Overtime Requests</div><div class="card-sub">Detected from attendance after checkout</div></div><button class="btn btn-p btn-sm" onclick="showM('m-ot')">+ Submit OT</button></div>
         <table class="tbl">
           <thead><tr><th>Employee</th><th>Date</th><th>Shift</th><th>Worked</th><th>OT</th><th>Status</th><th></th></tr></thead>
-          <tbody>
-            <tr><td>Ahmed Rashid</td><td>03 May</td><td class="mono">09:00-18:00</td><td class="mono">9.5h</td><td class="mono">1.5h</td><td><span class="b b-a">Supervisor Pending</span></td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="approveOT(this,'Supervisor approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="rejectOT(this)">Reject</button></div></td></tr>
-            <tr><td>Sara Al Mansouri</td><td>28 Jun</td><td class="mono">09:00-18:00</td><td class="mono">9.3h</td><td class="mono">1.3h</td><td><span class="b b-g">HR Approved</span></td><td><button class="btn btn-g btn-sm" onclick="toast('OT detail opened','info')">View</button></td></tr>
-            <tr><td>Mohamed Jaber</td><td>27 Jun</td><td class="mono">10:00-19:00</td><td class="mono">10h</td><td class="mono">1.0h</td><td><span class="b b-a">HR Review</span></td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="approveOT(this,'HR approved')">Approve</button><button class="btn btn-warn btn-sm" onclick="adjustOT(this)">Adjust</button></div></td></tr>
+          <tbody id="ot-tbody">
           </tbody>
         </table>
       </div>
@@ -1237,14 +1216,7 @@
         <div class="card-hd"><div class="card-title">Leave Requests</div><button class="btn btn-p" onclick="showM('m-leave')">+ Apply Leave</button></div>
         <table class="tbl">
           <thead><tr><th>Employee</th><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Status</th><th></th></tr></thead>
-          <tbody>
-            <tr><td>Ahmed Rashid</td><td><span class="b b-a">Annual</span></td><td>10 Jun</td><td>15 Jun</td><td>6</td><td><span class="b b-g">Approved</span></td><td><button class="btn btn-g btn-sm">View</button></td></tr>
-            <tr><td>Mohamed Jaber</td><td><span class="b b-t">Sick</span></td><td>28 Jun</td><td>29 Jun</td><td>2</td><td><span class="b b-a">Pending</span></td><td>
-              <div class="flx"><button class="btn btn-success btn-sm" onclick="approveLeave(this)">✓</button><button class="btn btn-danger btn-sm" onclick="rejectLeave(this)">✕</button></div>
-            </td></tr>
-            <tr><td>Rania Abboud</td><td><span class="b b-p">Emergency</span></td><td>02 Jul</td><td>03 Jul</td><td>2</td><td><span class="b b-a">Pending</span></td><td>
-              <div class="flx"><button class="btn btn-success btn-sm" onclick="approveLeave(this)">✓</button><button class="btn btn-danger btn-sm" onclick="rejectLeave(this)">✕</button></div>
-            </td></tr>
+          <tbody id="leave-tbody">
           </tbody>
         </table>
       </div>
@@ -1252,11 +1224,7 @@
         <div class="card-hd"><div class="card-title">Leave Balance Summary</div></div>
         <table class="tbl">
           <thead><tr><th>Employee</th><th>Annual</th><th>Sick</th><th>Used</th><th>Remaining</th></tr></thead>
-          <tbody>
-            <tr><td>Sara Al Mansouri</td><td>30</td><td>15</td><td class="mono">4</td><td class="mono" style="color:var(--green)">41</td></tr>
-            <tr><td>Ahmed Rashid</td><td>30</td><td>15</td><td class="mono">12</td><td class="mono" style="color:var(--amber)">33</td></tr>
-            <tr><td>Rania Abboud</td><td>30</td><td>15</td><td class="mono">6</td><td class="mono" style="color:var(--green)">39</td></tr>
-            <tr><td>Mohamed Jaber</td><td>30</td><td>15</td><td class="mono">8</td><td class="mono" style="color:var(--green)">37</td></tr>
+          <tbody id="leave-balance-tbody">
           </tbody>
         </table>
       </div>
@@ -1269,9 +1237,7 @@
         <div class="card-hd"><div><div class="card-title">Attendance Corrections</div><div class="card-sub">Forgotten check-in, checkout, and break fixes</div></div><button class="btn btn-p btn-sm" onclick="showM('m-att-correction')">+ New Request</button></div>
         <table class="tbl">
           <thead><tr><th>Employee</th><th>Date</th><th>Requested In</th><th>Requested Out</th><th>Reason</th><th>Status</th><th></th></tr></thead>
-          <tbody>
-            <tr><td>Rania Abboud</td><td>26 Jun</td><td class="mono">09:05</td><td class="mono">18:10</td><td>Biometric missed</td><td><span class="b b-a">Pending</span></td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="approveCorrection(this)">Approve</button><button class="btn btn-danger btn-sm" onclick="rejectCorrection(this)">Reject</button></div></td></tr>
-            <tr><td>Mohamed Jaber</td><td>24 Jun</td><td class="mono">10:00</td><td class="mono">19:15</td><td>Client visit</td><td><span class="b b-g">Approved</span></td><td><button class="btn btn-g btn-sm">View</button></td></tr>
+          <tbody id="corrections-tbody">
           </tbody>
         </table>
       </div>
@@ -1594,50 +1560,6 @@
       <table class="tbl">
         <thead><tr><th>Employee</th><th>Basic</th><th>Allowances</th><th>OT</th><th>Deductions</th><th>Net Pay</th><th>WPS</th><th>Status</th><th></th></tr></thead>
         <tbody id="payroll-tbody">
-          <tr data-basic="22000" data-allow="6500" data-ot="0" data-ded="0" data-wps="ok">
-            <td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px">SA</div><div><div>Sara Al Mansouri</div><div class="card-sub">EMP-001 · Management</div></div></div></td>
-            <td><input class="fi mono pay-basic" value="22000" oninput="recalcPayroll()"></td>
-            <td><input class="fi mono pay-allow" value="6500" oninput="recalcPayroll()"></td>
-            <td><input class="fi mono pay-ot" value="0" oninput="recalcPayroll()"></td>
-            <td><input class="fi mono pay-ded" value="0" oninput="recalcPayroll()"></td>
-            <td class="mono pay-net" style="color:var(--green)">AED 28,500.00</td>
-            <td><span class="b b-g">Ready</span></td>
-            <td><span class="b b-gray pay-status">Draft</span></td>
-            <td><button class="btn btn-g btn-sm" onclick="previewPayslip(this)">Payslip</button></td>
-          </tr>
-          <tr data-basic="8500" data-allow="1800" data-ot="450" data-ded="550" data-wps="ok">
-            <td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px;background:var(--teal)">AR</div><div><div>Ahmed Rashid</div><div class="card-sub">EMP-002 · Operations</div></div></div></td>
-            <td><input class="fi mono pay-basic" value="8500" oninput="recalcPayroll()"></td>
-            <td><input class="fi mono pay-allow" value="1800" oninput="recalcPayroll()"></td>
-            <td><input class="fi mono pay-ot" value="450" oninput="recalcPayroll()"></td>
-            <td><input class="fi mono pay-ded" value="550" oninput="recalcPayroll()"></td>
-            <td class="mono pay-net" style="color:var(--green)">AED 10,200.00</td>
-            <td><span class="b b-g">Ready</span></td>
-            <td><span class="b b-gray pay-status">Draft</span></td>
-            <td><button class="btn btn-g btn-sm" onclick="previewPayslip(this)">Payslip</button></td>
-          </tr>
-          <tr data-basic="7200" data-allow="1200" data-ot="0" data-ded="300" data-wps="hold">
-            <td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px;background:var(--purple)">RA</div><div><div>Rania Abboud</div><div class="card-sub">EMP-003 · Finance</div></div></div></td>
-            <td><input class="fi mono pay-basic" value="7200" oninput="recalcPayroll()"></td>
-            <td><input class="fi mono pay-allow" value="1200" oninput="recalcPayroll()"></td>
-            <td><input class="fi mono pay-ot" value="0" oninput="recalcPayroll()"></td>
-            <td><input class="fi mono pay-ded" value="300" oninput="recalcPayroll()"></td>
-            <td class="mono pay-net" style="color:var(--green)">AED 8,100.00</td>
-            <td><span class="b b-a">IBAN Missing</span></td>
-            <td><span class="b b-a pay-status">Review</span></td>
-            <td><button class="btn btn-g btn-sm" onclick="previewPayslip(this)">Payslip</button></td>
-          </tr>
-          <tr data-basic="6800" data-allow="1400" data-ot="350" data-ded="0" data-wps="ok">
-            <td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px;background:var(--pink)">MJ</div><div><div>Mohamed Jaber</div><div class="card-sub">EMP-004 · Sales</div></div></div></td>
-            <td><input class="fi mono pay-basic" value="6800" oninput="recalcPayroll()"></td>
-            <td><input class="fi mono pay-allow" value="1400" oninput="recalcPayroll()"></td>
-            <td><input class="fi mono pay-ot" value="350" oninput="recalcPayroll()"></td>
-            <td><input class="fi mono pay-ded" value="0" oninput="recalcPayroll()"></td>
-            <td class="mono pay-net" style="color:var(--green)">AED 8,550.00</td>
-            <td><span class="b b-g">Ready</span></td>
-            <td><span class="b b-gray pay-status">Draft</span></td>
-            <td><button class="btn btn-g btn-sm" onclick="previewPayslip(this)">Payslip</button></td>
-          </tr>
         </tbody>
       </table>
     </div>
@@ -1652,19 +1574,19 @@
       <div class="card">
         <div class="card-title mb12">Quick Adjustments</div>
         <div class="fr2">
-          <div class="fg"><label class="fl">Employee</label><select class="fi"><option>Ahmed Rashid</option><option>Mohamed Jaber</option><option>Rania Abboud</option></select></div>
-          <div class="fg"><label class="fl">Type</label><select class="fi"><option>Overtime</option><option>Deduction</option><option>Advance</option><option>Bonus</option></select></div>
+          <div class="fg"><label class="fl">Employee</label><select class="fi" id="pay-adj-emp"><option>Ahmed Rashid</option><option>Mohamed Jaber</option><option>Rania Abboud</option></select></div>
+          <div class="fg"><label class="fl">Type</label><select class="fi" id="pay-adj-type"><option>Overtime</option><option>Deduction</option><option>Advance</option><option>Bonus</option></select></div>
         </div>
         <div class="fr2">
-          <div class="fg"><label class="fl">Amount</label><input class="fi mono" placeholder="0.00"></div>
-          <div class="fg"><label class="fl">Reason</label><input class="fi" placeholder="Reason"></div>
+          <div class="fg"><label class="fl">Amount</label><input class="fi mono" id="pay-adj-amount" placeholder="0.00"></div>
+          <div class="fg"><label class="fl">Reason</label><input class="fi" id="pay-adj-reason" placeholder="Reason"></div>
         </div>
-        <button class="btn btn-p btn-sm" onclick="toast('Payroll adjustment added ✓','ok')">Add Adjustment</button>
+        <button class="btn btn-p btn-sm" onclick="addPayrollAdjustment()">Add Adjustment</button>
       </div>
       <div class="card">
         <div class="card-title mb12">Run Controls</div>
-        <div class="fg"><label class="fl">Prepared By</label><input class="fi" value="Rania Abboud"></div>
-        <div class="fg"><label class="fl">Payment Date</label><input class="fi" type="date" value="2024-06-30"></div>
+        <div class="fg"><label class="fl">Prepared By</label><input class="fi" id="pay-prepared-by" value="Rania Abboud"></div>
+        <div class="fg"><label class="fl">Payment Date</label><input class="fi" id="pay-date" type="date" value="2024-06-30"></div>
         <div class="flx" style="flex-wrap:wrap"><button class="btn btn-g btn-sm" onclick="toast('Payroll draft locked','ok')">Lock Draft</button><button class="btn btn-success btn-sm" onclick="approvePayroll()">Approve</button></div>
       </div>
     </div>
@@ -1676,10 +1598,6 @@
       <table class="tbl">
         <thead><tr><th>Employee</th><th>Pay Group</th><th>Basic</th><th>Housing</th><th>Transport</th><th>Bank / IBAN</th><th>WPS ID</th><th>Status</th></tr></thead>
         <tbody id="payroll-employee-tbody">
-          <tr><td>Sara Al Mansouri</td><td><span class="b b-p">Management</span></td><td class="mono">22,000</td><td class="mono">5,000</td><td class="mono">1,500</td><td class="mono">ADCB · AE070...</td><td class="mono">WPS-001</td><td><span class="b b-g">Complete</span></td></tr>
-          <tr><td>Ahmed Rashid</td><td><span class="b b-t">Monthly</span></td><td class="mono">8,500</td><td class="mono">1,200</td><td class="mono">600</td><td class="mono">ENBD · AE150...</td><td class="mono">WPS-002</td><td><span class="b b-g">Complete</span></td></tr>
-          <tr><td>Rania Abboud</td><td><span class="b b-t">Monthly</span></td><td class="mono">7,200</td><td class="mono">900</td><td class="mono">300</td><td class="mono" style="color:var(--amber)">Missing</td><td class="mono">WPS-003</td><td><span class="b b-a">Review</span></td></tr>
-          <tr><td>Mohamed Jaber</td><td><span class="b b-b">Sales</span></td><td class="mono">6,800</td><td class="mono">900</td><td class="mono">500</td><td class="mono">FAB · AE460...</td><td class="mono">WPS-004</td><td><span class="b b-g">Complete</span></td></tr>
         </tbody>
       </table>
     </div>
@@ -4786,7 +4704,7 @@ period_locks ─&lt; audit_logs
     <!-- Channel cards -->
     <div class="sinv-share-grid mb14">
       <div class="sinv-share-tile">
-        <div class="sinv-share-icon" style="background:#eff6ff;color:#2563eb">
+        <div class="sinv-share-icon c-blue">
           <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 4l7 5 7-5"/></svg>
         </div>
         <div class="sinv-share-label">Email</div>
@@ -4794,7 +4712,7 @@ period_locks ─&lt; audit_logs
         <button class="btn btn-p btn-sm" onclick="shareCurrentInvoice('email')">Send Email</button>
       </div>
       <div class="sinv-share-tile">
-        <div class="sinv-share-icon" style="background:#f0fdf4;color:#16a34a">
+        <div class="sinv-share-icon c-green">
           <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 0 0-6.08 10.46L1 15l3.64-.9A7 7 0 1 0 8 1zm0 1.4A5.6 5.6 0 1 1 4.5 12.6l-.22-.13-2.16.54.56-2.1-.14-.23A5.6 5.6 0 0 1 8 2.4zm-1.8 2.5c-.18 0-.47.07-.71.34-.25.28-.94.92-.94 2.24s.96 2.6 1.09 2.78c.14.18 1.88 2.88 4.58 3.93.64.26 1.14.41 1.53.52.64.2 1.23.17 1.69.1.52-.07 1.59-.65 1.81-1.28.23-.63.23-1.17.16-1.28-.07-.11-.25-.18-.52-.31-.28-.14-1.64-.81-1.89-.9-.26-.1-.45-.14-.63.14-.19.28-.72.9-.88 1.08-.16.19-.33.21-.6.07-.28-.14-1.17-.43-2.24-1.37-.83-.74-1.39-1.65-1.55-1.93-.16-.28-.02-.43.12-.57.12-.12.28-.32.42-.48.14-.16.19-.28.28-.46.1-.19.05-.35-.02-.49-.07-.14-.63-1.52-.87-2.08-.23-.55-.46-.47-.63-.48l-.54-.01z"/></svg>
         </div>
         <div class="sinv-share-label">WhatsApp</div>
@@ -4802,7 +4720,7 @@ period_locks ─&lt; audit_logs
         <button class="btn btn-success btn-sm" onclick="shareCurrentInvoice('whatsapp')">Send WhatsApp</button>
       </div>
       <div class="sinv-share-tile">
-        <div class="sinv-share-icon" style="background:#f8f0ff;color:#7c3aed">
+        <div class="sinv-share-icon c-purple">
           <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 2v7"/><path d="M5 6l3 3 3-3"/><path d="M3 13h10"/></svg>
         </div>
         <div class="sinv-share-label">Download PDF</div>
@@ -4810,7 +4728,7 @@ period_locks ─&lt; audit_logs
         <button class="btn btn-g btn-sm" onclick="downloadCurrentInvoicePdf()">Download PDF</button>
       </div>
       <div class="sinv-share-tile">
-        <div class="sinv-share-icon" style="background:#fff7ed;color:#d97706">
+        <div class="sinv-share-icon c-amber">
           <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 3H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V8"/><path d="M13 1h2v2"/><path d="M10 6l5-5"/></svg>
         </div>
         <div class="sinv-share-label">Online View</div>
@@ -4885,20 +4803,20 @@ period_locks ─&lt; audit_logs
 
 <div class="overlay" id="m-leave" onclick="closeOvBg(event,'m-leave')">
   <div class="modal"><div class="modal-title">Apply for Leave</div><div class="modal-sub">Submit leave request for approval</div>
-    <div class="fg"><label class="fl">Employee</label><select class="fi"><option>Sara Al Mansouri</option><option>Ahmed Rashid</option><option>Rania Abboud</option><option>Mohamed Jaber</option></select></div>
-    <div class="fg"><label class="fl">Leave Type</label><select class="fi"><option>Annual Leave</option><option>Sick Leave</option><option>Emergency Leave</option><option>Unpaid Leave</option><option>Hajj Leave</option></select></div>
-    <div class="fr2"><div class="fg"><label class="fl">From Date</label><input class="fi" type="date"></div><div class="fg"><label class="fl">To Date</label><input class="fi" type="date"></div></div>
-    <div class="fg"><label class="fl">Reason</label><textarea class="fi" rows="3"></textarea></div>
-    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-leave')">Cancel</button><button class="btn btn-p" onclick="saveM('m-leave','Leave request submitted ✓')">Submit Request</button></div>
+    <div class="fg"><label class="fl">Employee</label><select class="fi" id="leave-employee"><option>Sara Al Mansouri</option><option>Ahmed Rashid</option><option>Rania Abboud</option><option>Mohamed Jaber</option></select></div>
+    <div class="fg"><label class="fl">Leave Type</label><select class="fi" id="leave-type"><option>Annual Leave</option><option>Sick Leave</option><option>Emergency Leave</option><option>Unpaid Leave</option><option>Hajj Leave</option></select></div>
+    <div class="fr2"><div class="fg"><label class="fl">From Date</label><input class="fi" id="leave-from" type="date"></div><div class="fg"><label class="fl">To Date</label><input class="fi" id="leave-to" type="date"></div></div>
+    <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="leave-reason" rows="3"></textarea></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-leave')">Cancel</button><button class="btn btn-p" onclick="saveLeaveRequest()">Submit Request</button></div>
   </div>
 </div>
 
 <div class="overlay" id="m-ot" onclick="closeOvBg(event,'m-ot')">
   <div class="modal"><div class="modal-title">Overtime Request</div><div class="modal-sub">Submit detected overtime for approval</div>
-    <div class="fr2"><div class="fg"><label class="fl">Employee</label><input class="fi" value="Ahmed Rashid" readonly></div><div class="fg"><label class="fl">Department</label><input class="fi" value="Operations" readonly></div></div>
-    <div class="fr2"><div class="fg"><label class="fl">Date</label><input class="fi mono" value="03 May 2026" readonly></div><div class="fg"><label class="fl">Shift Time</label><input class="fi mono" value="09:00-18:00" readonly></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Login Time</label><input class="fi mono" value="09:00" readonly></div><div class="fg"><label class="fl">Logout Time</label><input class="fi mono" value="19:30" readonly></div><div class="fg"><label class="fl">Overtime Hours</label><input class="fi mono" value="1.5" readonly></div></div>
-    <div class="fg"><label class="fl">Reason</label><textarea class="fi" rows="3" placeholder="Stock count, client delivery, urgent closing..."></textarea></div>
+    <div class="fr2"><div class="fg"><label class="fl">Employee</label><input class="fi" id="ot-employee" value="Ahmed Rashid" readonly></div><div class="fg"><label class="fl">Department</label><input class="fi" id="ot-dept" value="Operations" readonly></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Date</label><input class="fi mono" id="ot-date" value="03 May 2026" readonly></div><div class="fg"><label class="fl">Shift Time</label><input class="fi mono" id="ot-shift" value="09:00-18:00" readonly></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Login Time</label><input class="fi mono" id="ot-login" value="09:00" readonly></div><div class="fg"><label class="fl">Logout Time</label><input class="fi mono" id="ot-logout" value="19:30" readonly></div><div class="fg"><label class="fl">Overtime Hours</label><input class="fi mono" id="ot-hours" value="1.5" readonly></div></div>
+    <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="ot-reason" rows="3" placeholder="Stock count, client delivery, urgent closing..."></textarea></div>
     <div class="fg"><label class="fl">Attachment</label><div class="drop-zone" style="padding:18px" onclick="toast('Choose overtime attachment...','info')"><div style="font-size:12.5px;color:var(--text2)">Drop files or click to attach</div></div></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-ot')">Cancel</button><button class="btn btn-p" onclick="submitOTRequest()">Submit for Approval</button></div>
   </div>
@@ -4906,10 +4824,10 @@ period_locks ─&lt; audit_logs
 
 <div class="overlay" id="m-att-correction" onclick="closeOvBg(event,'m-att-correction')">
   <div class="modal"><div class="modal-title">Attendance Correction</div><div class="modal-sub">Request check-in or checkout adjustment</div>
-    <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi"><option>Rania Abboud</option><option>Sara Al Mansouri</option><option>Ahmed Rashid</option><option>Mohamed Jaber</option></select></div><div class="fg"><label class="fl">Date</label><input class="fi" type="date"></div></div>
-    <div class="fr2"><div class="fg"><label class="fl">Requested Check-in</label><input class="fi mono" type="time"></div><div class="fg"><label class="fl">Requested Check-out</label><input class="fi mono" type="time"></div></div>
-    <div class="fg"><label class="fl">Reason</label><textarea class="fi" rows="3" placeholder="Biometric device issue, client visit, missed checkout..."></textarea></div>
-    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-att-correction')">Cancel</button><button class="btn btn-p" onclick="saveM('m-att-correction','Attendance correction submitted ✓')">Submit Request</button></div>
+    <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="corr-employee"><option>Rania Abboud</option><option>Sara Al Mansouri</option><option>Ahmed Rashid</option><option>Mohamed Jaber</option></select></div><div class="fg"><label class="fl">Date</label><input class="fi" id="corr-date" type="date"></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Requested Check-in</label><input class="fi mono" id="corr-checkin" type="time"></div><div class="fg"><label class="fl">Requested Check-out</label><input class="fi mono" id="corr-checkout" type="time"></div></div>
+    <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="corr-reason" rows="3" placeholder="Biometric device issue, client visit, missed checkout..."></textarea></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-att-correction')">Cancel</button><button class="btn btn-p" onclick="saveCorrectionRequest()">Submit Request</button></div>
   </div>
 </div>
 
@@ -5244,31 +5162,26 @@ period_locks ─&lt; audit_logs
 </div>
 
 <!-- Login overlay -->
-<div id="login-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(7,61,127,0.18);backdrop-filter:blur(6px);align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:18px;padding:40px 36px;width:100%;max-width:400px;box-shadow:0 24px 80px rgba(7,61,127,0.18);border:1px solid rgba(100,145,222,0.18);">
-    <div style="text-align:center;margin-bottom:28px;">
-      <div style="font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:800;color:#073D7F;margin-bottom:4px;">ETaxFlow</div>
-      <div style="font-size:13px;color:#7a8dad;">Sign in to your account</div>
+<div id="login-overlay">
+  <div class="login-card">
+    <div class="login-card-brand">
+      <div class="login-card-brand-name">ETaxFlow</div>
+      <div class="login-card-brand-sub">Sign in to your account</div>
     </div>
-    <div id="login-error" style="display:none;background:#fff0f0;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;font-size:13px;color:#dc2626;margin-bottom:16px;"></div>
-    <div style="margin-bottom:14px;">
-      <label style="font-size:11.5px;font-weight:600;color:#3a4d6e;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:6px;">Email</label>
-      <input id="login-email" type="email" placeholder="admin@taxflowapp.com" autocomplete="username"
-        style="width:100%;padding:10px 14px;border:1.5px solid rgba(100,145,222,0.3);border-radius:8px;font-size:14px;color:#0c1630;background:#f8faff;outline:none;box-sizing:border-box;"
+    <div id="login-error" class="login-card-error"></div>
+    <div class="login-card-field">
+      <label class="login-card-lbl">Email</label>
+      <input id="login-email" type="email" class="login-card-input" placeholder="admin@taxflowapp.com" autocomplete="username"
         onkeydown="if(event.key==='Enter')document.getElementById('login-password').focus()">
     </div>
-    <div style="margin-bottom:22px;">
-      <label style="font-size:11.5px;font-weight:600;color:#3a4d6e;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:6px;">Password</label>
-      <input id="login-password" type="password" placeholder="••••••••" autocomplete="current-password"
-        style="width:100%;padding:10px 14px;border:1.5px solid rgba(100,145,222,0.3);border-radius:8px;font-size:14px;color:#0c1630;background:#f8faff;outline:none;box-sizing:border-box;"
+    <div class="login-card-field last">
+      <label class="login-card-lbl">Password</label>
+      <input id="login-password" type="password" class="login-card-input" placeholder="••••••••" autocomplete="current-password"
         onkeydown="if(event.key==='Enter')submitLogin()">
     </div>
-    <button onclick="submitLogin()" id="login-btn"
-      style="width:100%;padding:13px;background:#6491DE;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;transition:background .2s;">
-      Sign In
-    </button>
-    <div style="text-align:center;margin-top:16px;font-size:13px;color:#7a8dad;">
-      Don't have an account? <a href="/signup.html" style="color:#073D7F;font-weight:600;">Sign up</a>
+    <button onclick="submitLogin()" id="login-btn" class="login-card-btn">Sign In</button>
+    <div class="login-card-footer">
+      Don't have an account? <a href="/signup.html">Sign up</a>
     </div>
   </div>
 </div>
