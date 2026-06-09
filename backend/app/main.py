@@ -69,8 +69,11 @@ def create_app() -> FastAPI:
 
     @app.get("/", response_model=None)
     def root():
+        from fastapi.responses import RedirectResponse
         f = site_dir / "landing.html"
-        return FileResponse(str(f)) if f.exists() else {"status": "ok", "service": settings.app_name}
+        if f.exists():
+            return FileResponse(str(f))
+        return RedirectResponse(url="/taxflow/", status_code=302)
 
     @app.get("/health")
     def health() -> dict[str, str]:
