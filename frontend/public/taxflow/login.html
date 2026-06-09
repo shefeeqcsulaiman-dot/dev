@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sign In — ETaxFlow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{
+      font-family:'DM Sans',system-ui,sans-serif;
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:linear-gradient(145deg,#040d1e 0%,#0a1f4a 45%,#07163a 100%);
+    }
+    .card{
+      background:#fff;
+      border-radius:20px;
+      padding:44px 40px 36px;
+      width:100%;
+      max-width:420px;
+      margin:20px;
+      box-shadow:0 40px 120px rgba(0,0,0,.45);
+    }
+    .brand{text-align:center;margin-bottom:34px;}
+    .brand-logo{
+      display:inline-flex;align-items:center;justify-content:center;
+      width:52px;height:52px;border-radius:14px;
+      background:linear-gradient(135deg,#073D7F,#4f8ef0);
+      margin-bottom:14px;
+    }
+    .brand-logo svg{width:26px;height:26px;fill:#fff;}
+    .brand-name{
+      font-family:'Space Grotesk',sans-serif;
+      font-size:24px;font-weight:800;color:#0c1630;letter-spacing:-.3px;
+    }
+    .brand-sub{font-size:13.5px;color:#6b7a99;margin-top:5px;}
+    .error{
+      display:none;
+      background:#fef2f2;border:1px solid #fecaca;border-radius:9px;
+      padding:11px 14px;font-size:13px;color:#dc2626;margin-bottom:20px;
+    }
+    .field{margin-bottom:16px;}
+    .field label{
+      display:block;font-size:11px;font-weight:600;letter-spacing:.6px;
+      text-transform:uppercase;color:#374151;margin-bottom:7px;
+    }
+    .field input{
+      width:100%;padding:11px 15px;
+      border:1.5px solid #d1d5db;border-radius:9px;
+      font-size:14px;font-family:inherit;color:#111827;
+      background:#f9fafb;outline:none;
+      transition:border-color .15s,box-shadow .15s,background .15s;
+    }
+    .field input:focus{
+      border-color:#4f8ef0;
+      box-shadow:0 0 0 3px rgba(79,142,240,.15);
+      background:#fff;
+    }
+    .field.last{margin-bottom:24px;}
+    .btn{
+      width:100%;padding:13px;
+      background:linear-gradient(135deg,#073D7F,#4f8ef0);
+      color:#fff;border:none;border-radius:10px;
+      font-size:15px;font-weight:700;font-family:inherit;
+      cursor:pointer;letter-spacing:.1px;
+      transition:filter .2s,opacity .2s;
+    }
+    .btn:hover{filter:brightness(1.08);}
+    .btn:disabled{opacity:.6;cursor:not-allowed;filter:none;}
+    .footer{text-align:center;margin-top:22px;font-size:12.5px;color:#9ca3af;}
+    @media(max-width:480px){
+      .card{padding:36px 24px 28px;}
+    }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="brand">
+    <div class="brand-logo">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 3h18v2H3V3zm0 4h12v2H3V7zm0 4h18v2H3v-2zm0 4h12v2H3v-2zm0 4h18v2H3v-2z"/>
+      </svg>
+    </div>
+    <div class="brand-name">ETaxFlow</div>
+    <div class="brand-sub">Sign in to your account</div>
+  </div>
+  <div id="err" class="error"></div>
+  <div class="field">
+    <label for="email">Email address</label>
+    <input id="email" type="email" placeholder="admin@taxflowapp.com" autocomplete="username">
+  </div>
+  <div class="field last">
+    <label for="password">Password</label>
+    <input id="password" type="password" placeholder="••••••••" autocomplete="current-password">
+  </div>
+  <button id="btn" class="btn" onclick="signIn()">Sign In</button>
+  <div class="footer">ETaxFlow &mdash; UAE Business Management Platform</div>
+</div>
+
+<script src="/taxflow/config.js"></script>
+<script>
+  if(localStorage.getItem('taxflow_token'))window.location.replace('/taxflow/');
+
+  document.getElementById('email').addEventListener('keydown',function(e){
+    if(e.key==='Enter')document.getElementById('password').focus();
+  });
+  document.getElementById('password').addEventListener('keydown',function(e){
+    if(e.key==='Enter')signIn();
+  });
+
+  function apiBase(){
+    if(window.TAXFLOW_API_BASE_URL)return window.TAXFLOW_API_BASE_URL;
+    var h=window.location.hostname;
+    if(['localhost','127.0.0.1','::1',''].includes(h))return 'http://localhost:8000/api/v1';
+    return window.location.protocol+'//'+h+'/api/v1';
+  }
+
+  async function signIn(){
+    var btn=document.getElementById('btn');
+    var err=document.getElementById('err');
+    var email=document.getElementById('email').value.trim();
+    var pwd=document.getElementById('password').value;
+    err.style.display='none';
+    if(!email||!pwd){err.textContent='Please enter your email and password.';err.style.display='block';return;}
+    btn.disabled=true;btn.textContent='Signing in…';
+    try{
+      var resp=await fetch(apiBase()+'/auth/login',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({email:email,password:pwd})
+      });
+      var data=await resp.json();
+      if(resp.ok&&data.access_token){
+        localStorage.setItem('taxflow_token',data.access_token);
+        window.location.replace('/taxflow/');
+      }else{
+        err.textContent=data.detail||'Incorrect email or password.';
+        err.style.display='block';
+        btn.disabled=false;btn.textContent='Sign In';
+      }
+    }catch(e){
+      err.textContent='Cannot reach server. Please try again.';
+      err.style.display='block';
+      btn.disabled=false;btn.textContent='Sign In';
+    }
+  }
+</script>
+</body>
+</html>

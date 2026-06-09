@@ -1429,7 +1429,7 @@ function saveInventoryItem(){
 
 function logout(){
   localStorage.removeItem('taxflow_token');
-  showLoginOverlay();
+  window.location.replace('/taxflow/login.html');
 }
 
 function chkTRN(inp){
@@ -1494,13 +1494,9 @@ function localApiUrlFor(url){
 }
 
 function showLoginOverlay(){
-  const el=document.getElementById('login-overlay');
-  if(el){el.style.display='flex';}
+  window.location.replace('/taxflow/login.html');
 }
-function hideLoginOverlay(){
-  const el=document.getElementById('login-overlay');
-  if(el){el.style.display='none';}
-}
+function hideLoginOverlay(){}
 async function submitLogin(){
   const email=(document.getElementById('login-email').value||'').trim();
   const password=(document.getElementById('login-password').value||'').trim();
@@ -14865,5 +14861,8 @@ function initApp(){
   },900);
 }
 
-if(!localStorage.getItem('taxflow_token'))showLoginOverlay();
-initApp();
+if(!localStorage.getItem('taxflow_token')){
+  window.location.replace('/taxflow/login.html');
+}else{
+  initApp();
+}
