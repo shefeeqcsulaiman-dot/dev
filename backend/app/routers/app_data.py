@@ -23,8 +23,10 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.limiter import limiter
 from app.module_integration import sync_purchase_accounting, sync_sales_invoice_accounting
 from app.models import (
     Account,
@@ -43,6 +45,25 @@ from app.models import (
 
 
 router = APIRouter(prefix="/app-data", tags=["app data"])
+
+# Per-collection caps for bootstrap to prevent memory spikes on large accounts.
+# Heavy transactional collections are capped at recent N; reference data is uncapped.
+_BOOTSTRAP_COLLECTION_CAPS: dict[str, int] = {
+    "salesInvoices": 500,
+    "quotations": 300,
+    "bills": 500,
+    "payments": 500,
+    "ledger": 1000,
+    "expenses": 300,
+    "purchaseDocuments": 300,
+    "journalDrafts": 200,
+    "overtimeRequests": 200,
+    "leaveRequests": 200,
+    "attendanceCorrections": 200,
+    "payrollRuns": 50,
+    "payrollAdjustments": 200,
+    "audit": 50,
+}
 
 
 def decimal_value(value: Any) -> Decimal:
@@ -159,21 +180,35 @@ def list_collection_records(
 
 
 @router.get("")
+@limiter.limit("60/minute")
 def bootstrap(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, object]:
+    cap = get_settings().bootstrap_record_cap
     records = (
         db.query(AppDataRecord)
         .filter(AppDataRecord.company_id == current_user.company_id)
-        .order_by(AppDataRecord.created_at.asc())
+        .order_by(AppDataRecord.created_at.desc())
+        .limit(cap)
         .all()
     )
+    records.reverse()  # restore chronological order after desc fetch
+
     grouped: dict[str, list[dict[str, Any]]] = {}
+    collection_totals: dict[str, int] = {}
     for item in records:
         if item.collection == "purchaseRecords":
             continue
-        grouped.setdefault(item.collection, []).append(serialize(item))
+        coll = item.collection
+        collection_totals[coll] = collection_totals.get(coll, 0) + 1
+        coll_cap = _BOOTSTRAP_COLLECTION_CAPS.get(coll)
+        bucket = grouped.setdefault(coll, [])
+        if coll_cap is None or len(bucket) < coll_cap:
+            bucket.append(serialize(item))
+
+    truncated = [c for c, total in collection_totals.items() if _BOOTSTRAP_COLLECTION_CAPS.get(c) and total > _BOOTSTRAP_COLLECTION_CAPS[c]]
 
     audit_rows = (
         db.query(AuditLog)
@@ -200,7 +235,7 @@ def bootstrap(
         "invoiceLayout": invoice_layout,
         "user": {"name": current_user.full_name, "role": current_user.role},
     }
-    return {"ok": True, "data": data}
+    return {"ok": True, "data": data, "truncated_collections": truncated}
 
 
 @router.get("/users")
@@ -230,7 +265,9 @@ def list_company_users(
 
 
 @router.get("/export")
+@limiter.limit("10/minute")
 def export_all_data(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, object]:
@@ -345,7 +382,9 @@ def export_user_data(
 
 
 @router.get("/db-dump")
+@limiter.limit("5/minute")
 def export_db_dump(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
@@ -490,6 +529,7 @@ def export_db_dump(
 
 
 @router.post("")
+@limiter.limit("180/minute")
 async def app_data_action(
     request: Request,
     action: str,

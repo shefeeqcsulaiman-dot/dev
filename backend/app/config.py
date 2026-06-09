@@ -18,6 +18,15 @@ class Settings(BaseSettings):
     s3_secret_access_key: str | None = None
     aws_region: str = "us-east-1"
     celery_task_always_eager: bool = True
+    # Seed credentials — override in production via environment variables
+    admin_password: str = "admin123"
+    superadmin_password: str = "super123"
+    # Database connection pool
+    db_pool_size: int = 20
+    db_max_overflow: int = 40
+    db_pool_timeout: int = 30
+    # Bootstrap data cap per company (max records returned on login)
+    bootstrap_record_cap: int = 10000
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

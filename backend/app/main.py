@@ -245,12 +245,16 @@ def seed_initial_data() -> None:
                 )
                 db.add(user)
 
+        admin_pwd = settings.admin_password
+        superadmin_pwd = settings.superadmin_password
+        if admin_pwd in ("admin123", "change-me") and settings.app_env == "production":
+            import warnings
+            warnings.warn("ADMIN_PASSWORD is using the default value in production — set it via environment variable.", stacklevel=2)
+
         user.full_name = "Administrator"
         user.role = "admin"
-        user.password_hash = hash_password("admin123")
+        user.password_hash = hash_password(admin_pwd)
         user.company_id = company.id
-
-        user.password_plain = "admin123"
 
         seed_accounts(db, company.id)
         seed_voucher_types(db, company.id)
@@ -268,15 +272,13 @@ def seed_initial_data() -> None:
                 company_id=sa_company.id,
                 email="superadmin@etaxflow.com",
                 full_name="Super Administrator",
-                password_hash=hash_password("super123"),
-                password_plain="super123",
+                password_hash=hash_password(superadmin_pwd),
                 role="superadmin",
             )
             db.add(sa_user)
         else:
             sa_user.role = "superadmin"
-            sa_user.password_hash = hash_password("super123")
-            sa_user.password_plain = "super123"
+            sa_user.password_hash = hash_password(superadmin_pwd)
             sa_user.company_id = sa_company.id
 
         db.commit()

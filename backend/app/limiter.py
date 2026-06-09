@@ -17,4 +17,9 @@ def _storage_uri() -> str:
 
 # Disable rate limiting during automated tests so login fixtures never hit 429
 _enabled = os.environ.get("TESTING", "").lower() not in ("1", "true", "yes")
-limiter = Limiter(key_func=get_remote_address, storage_uri=_storage_uri(), enabled=_enabled)
+limiter = Limiter(
+    key_func=get_remote_address,
+    storage_uri=_storage_uri(),
+    enabled=_enabled,
+    default_limits=["300/minute"],
+)

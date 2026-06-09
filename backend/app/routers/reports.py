@@ -2,13 +2,14 @@ import json
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import app.cache as cache
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.limiter import limiter
 from app.models import (
     Account,
     AccrualPrepaymentRecord,
@@ -45,7 +46,8 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 
 
 @router.get("/dashboard")
-def dashboard(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+@limiter.limit("30/minute")
+def dashboard(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     company_id = current_user.company_id
     cached = cache.get(f"dashboard:{company_id}")
     if cached is not None:
@@ -312,7 +314,8 @@ def invoice_status(db: Session, company_id: str) -> dict[str, dict[str, str | in
 
 
 @router.get("/trial-balance")
-def trial_balance(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+@limiter.limit("30/minute")
+def trial_balance(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     company_id = current_user.company_id
     cached = cache.get(f"trial_balance:{company_id}")
     if cached is not None:
@@ -323,7 +326,8 @@ def trial_balance(db: Session = Depends(get_db), current_user: User = Depends(ge
 
 
 @router.get("/summary")
-def report_summary(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+@limiter.limit("30/minute")
+def report_summary(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     company_id = current_user.company_id
     cached = cache.get(f"summary:{company_id}")
     if cached is not None:
