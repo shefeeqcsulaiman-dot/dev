@@ -61,12 +61,11 @@ services:
 
       - key: CORS_ORIGINS
         scope: RUN_TIME
-        # Update after your first deploy — use your actual app URL
-        value: https://etaxflow-xxxxx.ondigitalocean.app
+        value: https://e4cs.com
 
       - key: API_BASE_URL
         scope: RUN_TIME
-        value: https://etaxflow-xxxxx.ondigitalocean.app/api/v1
+        value: https://e4cs.com/api/v1
 
       # ── Workers & pool ────────────────────────────────────────────────
       - key: WORKERS
