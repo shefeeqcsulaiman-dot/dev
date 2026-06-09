@@ -1,0 +1,176 @@
+## DigitalOcean App Platform — ETaxFlow
+## Deploy via: doctl apps create --spec .do/app.yaml
+## Or: push to GitHub and import via https://cloud.digitalocean.com/apps
+
+name: etaxflow
+region: nyc  # nyc3 — matches your managed DB location
+
+services:
+  # ── API + Frontend (FastAPI serves both) ─────────────────────────────
+  - name: api
+    source_dir: /
+    dockerfile_path: backend/Dockerfile
+    github:
+      branch: main
+      deploy_on_push: true
+      repo: shefeeqcsulaiman-dot/host
+    http_port: 8000
+    health_check:
+      http_path: /health
+      timeout_seconds: 10
+      failure_threshold: 3
+      success_threshold: 1
+    instance_count: 2
+    instance_size_slug: professional-s   # 2 vCPU · 2 GB — handles ~500 concurrent users
+    autoscaling:
+      min_instance_count: 2
+      max_instance_count: 6
+      metrics:
+        - type: CPU_UTILIZATION
+          percent: 70
+    envs:
+      # ── Database (your DigitalOcean Managed PostgreSQL) ───────────────
+      - key: DATABASE_URL
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+        # Set in DO dashboard:
+        # postgresql+psycopg2://doadmin:<PASSWORD>@db-pgsql-nyc3-67475-do-user-38425833-0.e.db.ondigitalocean.com:25060/defaultdb?sslmode=require
+        value: REPLACE_IN_DO_DASHBOARD
+
+      # ── Redis ─────────────────────────────────────────────────────────
+      - key: REDIS_URL
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+        # Set in DO dashboard after creating Managed Redis cluster
+        value: REPLACE_IN_DO_DASHBOARD
+
+      # ── App settings ──────────────────────────────────────────────────
+      - key: APP_ENV
+        scope: RUN_AND_BUILD_TIME
+        value: production
+
+      - key: SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+        # Generate: python -c "import secrets; print(secrets.token_hex(32))"
+        value: REPLACE_IN_DO_DASHBOARD
+
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        scope: RUN_TIME
+        value: "1440"
+
+      - key: CORS_ORIGINS
+        scope: RUN_TIME
+        # Update after your first deploy — use your actual app URL
+        value: https://etaxflow-xxxxx.ondigitalocean.app
+
+      - key: API_BASE_URL
+        scope: RUN_TIME
+        value: https://etaxflow-xxxxx.ondigitalocean.app/api/v1
+
+      # ── Workers & pool ────────────────────────────────────────────────
+      - key: WORKERS
+        scope: RUN_TIME
+        value: "4"
+
+      - key: DB_POOL_SIZE
+        scope: RUN_TIME
+        value: "20"
+
+      - key: DB_MAX_OVERFLOW
+        scope: RUN_TIME
+        value: "40"
+
+      - key: DB_POOL_TIMEOUT
+        scope: RUN_TIME
+        value: "30"
+
+      - key: BOOTSTRAP_RECORD_CAP
+        scope: RUN_TIME
+        value: "10000"
+
+      # ── Celery ───────────────────────────────────────────────────────
+      - key: CELERY_TASK_ALWAYS_EAGER
+        scope: RUN_TIME
+        value: "false"
+
+      # ── Seed passwords — set strong values before first deploy ────────
+      - key: ADMIN_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DO_DASHBOARD
+
+      - key: SUPERADMIN_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DO_DASHBOARD
+
+      # ── S3-compatible storage (Spaces or AWS S3) ──────────────────────
+      - key: S3_ENDPOINT_URL
+        scope: RUN_TIME
+        # DigitalOcean Spaces: https://nyc3.digitaloceanspaces.com
+        value: ""
+
+      - key: S3_BUCKET
+        scope: RUN_TIME
+        value: etaxflow-documents
+
+      - key: S3_ACCESS_KEY_ID
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DO_DASHBOARD
+
+      - key: S3_SECRET_ACCESS_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DO_DASHBOARD
+
+      - key: AWS_REGION
+        scope: RUN_TIME
+        value: nyc3
+
+      # ── OpenAI (optional) ─────────────────────────────────────────────
+      - key: OPENAI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DO_DASHBOARD
+
+  # ── Celery background worker ──────────────────────────────────────────
+  - name: worker
+    source_dir: /
+    dockerfile_path: backend/Dockerfile
+    run_command: celery -A app.worker worker --loglevel=info --concurrency=4
+    github:
+      branch: main
+      deploy_on_push: true
+      repo: shefeeqcsulaiman-dot/host
+    instance_count: 1
+    instance_size_slug: basic-s          # 1 vCPU · 2 GB
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+        value: REPLACE_IN_DO_DASHBOARD
+
+      - key: REDIS_URL
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+        value: REPLACE_IN_DO_DASHBOARD
+
+      - key: APP_ENV
+        scope: RUN_AND_BUILD_TIME
+        value: production
+
+      - key: SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DO_DASHBOARD
+
+      - key: CELERY_TASK_ALWAYS_EAGER
+        scope: RUN_TIME
+        value: "false"
+
+      - key: OPENAI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DO_DASHBOARD
