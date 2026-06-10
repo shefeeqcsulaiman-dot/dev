@@ -186,33 +186,75 @@
       <!-- ROW 1: 3 pastel KPI cards -->
       <div class="mb3-kpi-row mb16">
 
-        <!-- Money Incoming = Revenue -->
-        <div class="mb3-kpi-card kc-lavender">
-          <div class="mb3-kpi-glow" style="background:radial-gradient(circle at 80% 20%,rgba(139,92,246,.4),transparent 65%)"></div>
-          <div class="mb3-kpi-ico kpi-ico-purple">
-            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm1 11H9v-4H7l3-3 3 3h-2v4z"/></svg>
+        <!-- Total Revenue card -->
+        <div class="fin-kpi-card">
+          <div class="fin-kpi-head">
+            <div class="fin-kpi-icon fin-icon-g">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+            </div>
+            <div class="fin-kpi-head-info">
+              <div class="fin-kpi-label">TOTAL REVENUE</div>
+              <div class="fin-kpi-main fin-val-g" id="dash-revenue">AED 0.00</div>
+              <div class="fin-kpi-ct"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" width="11" height="11"><rect x="2" y="2" width="12" height="12" rx="1"/><line x1="5" y1="6" x2="11" y2="6"/><line x1="5" y1="9" x2="9" y2="9"/></svg> <span id="dash-revenue-sub">0 Invoices</span></div>
+            </div>
           </div>
-          <div class="mb3-kpi-name">Money Incoming</div>
-          <div class="mb3-kpi-val" id="dash-revenue">AED 0</div>
-          <div class="mb3-kpi-sub" id="dash-revenue-sub">Loading…</div>
-          <div class="mb3-kpi-foot">
-            <span class="dv2-kpi-badge up" id="dash-rev-trend">—</span>
-            <div class="dv2-spark" id="dash-rev-spark"></div>
+          <div class="fin-kpi-divider"></div>
+          <div class="fin-kpi-row2">
+            <div class="fin-kpi-col">
+              <div class="fin-kpi-col-lbl">Collected (Actual)</div>
+              <div class="fin-kpi-col-val" id="dash-rev-collected">AED 0.00</div>
+            </div>
+            <div class="fin-kpi-col fin-kpi-col-r">
+              <div class="fin-kpi-col-lbl">Paid Invoices</div>
+              <div class="fin-kpi-col-val" id="dash-rev-paid-count">0</div>
+            </div>
+          </div>
+          <div class="fin-prog-wrap"><div class="fin-prog-bg"><div class="fin-prog-fill fin-prog-g" id="dash-rev-rate-bar" style="width:0%"></div></div></div>
+          <div class="fin-rate-row">
+            <div class="fin-check fin-check-g">✓</div>
+            <span class="fin-rate-lbl">Collection Rate</span>
+            <span class="fin-rate-val fin-val-g" id="dash-rev-rate">0%</span>
+          </div>
+          <div class="fin-footer">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" width="12" height="12"><rect x="2" y="2" width="12" height="12" rx="1"/><line x1="5" y1="6" x2="11" y2="6"/><line x1="5" y1="9" x2="9" y2="9"/></svg>
+            <span>Pending Invoices</span>
+            <span class="fin-pending fin-val-g" id="dash-rev-pending">0 Invoices</span>
           </div>
         </div>
 
-        <!-- Money Spend = Purchases -->
-        <div class="mb3-kpi-card kc-peach">
-          <div class="mb3-kpi-glow" style="background:radial-gradient(circle at 80% 20%,rgba(234,88,12,.35),transparent 65%)"></div>
-          <div class="mb3-kpi-ico kpi-ico-orange">
-            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm1 11H9v-4H7l3-3 3 3h-2v4z" transform="rotate(180 10 10)"/></svg>
+        <!-- Total Purchase card -->
+        <div class="fin-kpi-card">
+          <div class="fin-kpi-head">
+            <div class="fin-kpi-icon fin-icon-b">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 001.99 1.61h9.72a2 2 0 001.99-1.78l1.54-7.22H6"/></svg>
+            </div>
+            <div class="fin-kpi-head-info">
+              <div class="fin-kpi-label">TOTAL PURCHASE</div>
+              <div class="fin-kpi-main fin-val-b" id="dash-total-purchases">AED 0.00</div>
+              <div class="fin-kpi-ct"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" width="11" height="11"><rect x="2" y="2" width="12" height="12" rx="1"/><line x1="5" y1="6" x2="11" y2="6"/><line x1="5" y1="9" x2="9" y2="9"/></svg> <span id="dash-purchases-sub">0 Bills</span></div>
+            </div>
           </div>
-          <div class="mb3-kpi-name">Money Spend</div>
-          <div class="mb3-kpi-val" id="dash-total-purchases">AED 0</div>
-          <div class="mb3-kpi-sub" id="dash-purchases-sub">Loading…</div>
-          <div class="mb3-kpi-foot">
-            <span class="dv2-kpi-badge dn" id="dash-pur-trend">—</span>
-            <div class="dv2-spark" id="dash-pur-spark"></div>
+          <div class="fin-kpi-divider"></div>
+          <div class="fin-kpi-row2">
+            <div class="fin-kpi-col">
+              <div class="fin-kpi-col-lbl">Paid (Actual)</div>
+              <div class="fin-kpi-col-val" id="dash-pur-paid-amount">AED 0.00</div>
+            </div>
+            <div class="fin-kpi-col fin-kpi-col-r">
+              <div class="fin-kpi-col-lbl">Paid Bills</div>
+              <div class="fin-kpi-col-val" id="dash-pur-paid-count">0</div>
+            </div>
+          </div>
+          <div class="fin-prog-wrap"><div class="fin-prog-bg"><div class="fin-prog-fill fin-prog-b" id="dash-pur-rate-bar" style="width:0%"></div></div></div>
+          <div class="fin-rate-row">
+            <div class="fin-check fin-check-b">✓</div>
+            <span class="fin-rate-lbl">Payment Rate</span>
+            <span class="fin-rate-val fin-val-b" id="dash-pur-rate">0%</span>
+          </div>
+          <div class="fin-footer">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" width="12" height="12"><rect x="2" y="2" width="12" height="12" rx="1"/><line x1="5" y1="6" x2="11" y2="6"/><line x1="5" y1="9" x2="9" y2="9"/></svg>
+            <span>Pending Bills</span>
+            <span class="fin-pending fin-val-b" id="dash-pur-pending">0 Bills</span>
           </div>
         </div>
 
@@ -396,37 +438,37 @@
 
   <div class="g2 mb16">
     <div class="card">
-      <div class="card-hd"><div class="card-title">Business Registration Details</div><button class="btn btn-p btn-sm" onclick="toast('Company profile saved','ok')">Save All</button></div>
+      <div class="card-hd"><div class="card-title">Business Registration Details</div><button class="btn btn-p btn-sm" onclick="saveCompanyRegistration()">Save All</button></div>
       <div class="section-hd">Basic Information</div>
-      <div class="fg"><label class="fl">Legal Business Name (as per Trade License)</label><input class="fi" value="Acme Trading LLC"></div>
+      <div class="fg"><label class="fl">Legal Business Name (as per Trade License)</label><input class="fi" id="co-name" placeholder="Enter legal business name"></div>
       <div class="fr2">
-        <div class="fg"><label class="fl">Trade License Number</label><input class="fi" value="DED-2018-84521"></div>
-        <div class="fg"><label class="fl">Trade License Expiry</label><input class="fi" type="date" value="2025-12-31"></div>
+        <div class="fg"><label class="fl">Trade License Number</label><input class="fi mono" id="co-trade-license" placeholder="e.g. DED-2024-12345"></div>
+        <div class="fg"><label class="fl">Trade License Expiry</label><input class="fi" id="co-license-expiry" type="date"></div>
       </div>
       <div class="fr2">
-        <div class="fg"><label class="fl">Business Activity</label><input class="fi" value="General Trading"></div>
+        <div class="fg"><label class="fl">Business Activity</label><input class="fi" id="co-activity" placeholder="e.g. General Trading"></div>
         <div class="fg"><label class="fl">Legal Structure</label>
-          <select class="fi"><option>LLC (Limited Liability Company)</option><option>Free Zone Entity</option><option>Branch of Foreign Company</option><option>Sole Proprietorship</option><option>Civil Company</option></select>
+          <select class="fi" id="co-structure"><option value="">Select…</option><option>LLC (Limited Liability Company)</option><option>Free Zone Entity</option><option>Branch of Foreign Company</option><option>Sole Proprietorship</option><option>Civil Company</option></select>
         </div>
       </div>
       <div class="fr3">
         <div class="fg"><label class="fl">Emirate</label>
-          <select class="fi"><option selected>Dubai</option><option>Abu Dhabi</option><option>Sharjah</option><option>Ajman</option><option>Ras Al Khaimah</option><option>Fujairah</option><option>Umm Al Quwain</option></select>
+          <select class="fi" id="co-emirate"><option value="">Select…</option><option>Dubai</option><option>Abu Dhabi</option><option>Sharjah</option><option>Ajman</option><option>Ras Al Khaimah</option><option>Fujairah</option><option>Umm Al Quwain</option></select>
         </div>
         <div class="fg"><label class="fl">Free Zone</label>
-          <select class="fi"><option>Not Applicable</option><option>JAFZA</option><option>DAFZA</option><option>DMCC</option><option>Dubai Internet City</option><option>ADGM</option><option>RAKEZ</option></select>
+          <select class="fi" id="co-freezone"><option value="Not Applicable">Not Applicable</option><option>JAFZA</option><option>DAFZA</option><option>DMCC</option><option>Dubai Internet City</option><option>ADGM</option><option>RAKEZ</option></select>
         </div>
         <div class="fg"><label class="fl">Business Type</label>
-          <select class="fi"><option>Mainland</option><option>Free Zone</option><option>Offshore</option></select>
+          <select class="fi" id="co-biz-type"><option value="">Select…</option><option>Mainland</option><option>Free Zone</option><option>Offshore</option></select>
         </div>
       </div>
       <div class="divider"></div>
       <div class="section-hd">Contact & Address</div>
-      <div class="fg"><label class="fl">Registered Address</label><input class="fi" value="Office 801, Emaar Square Building 3, Downtown Dubai"></div>
+      <div class="fg"><label class="fl">Registered Address</label><input class="fi" id="co-address" placeholder="Office address as per trade license"></div>
       <div class="fr3">
-        <div class="fg"><label class="fl">PO Box</label><input class="fi" value="12345"></div>
-        <div class="fg"><label class="fl">Phone</label><input class="fi" value="+971 4 123 4567"></div>
-        <div class="fg"><label class="fl">Website</label><input class="fi" value="www.acmetrading.ae"></div>
+        <div class="fg"><label class="fl">PO Box</label><input class="fi" id="co-pobox" placeholder="12345"></div>
+        <div class="fg"><label class="fl">Phone</label><input class="fi" id="co-phone" placeholder="+971 4 000 0000"></div>
+        <div class="fg"><label class="fl">Website</label><input class="fi" id="co-website" placeholder="www.example.ae"></div>
       </div>
     </div>
     <div>

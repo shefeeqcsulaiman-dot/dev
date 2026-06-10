@@ -756,6 +756,39 @@ textarea.fi{resize:vertical;min-height:80px;}
 .mb3-main-grid{display:grid;grid-template-columns:1fr 290px;gap:18px;align-items:start;}
 /* KPI row */
 .mb3-kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+/* ── Financial KPI cards (Revenue / Purchase) ── */
+.fin-kpi-card{background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:18px 20px;display:flex;flex-direction:column;gap:11px;}
+.fin-kpi-head{display:flex;align-items:flex-start;gap:13px;}
+.fin-kpi-icon{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.fin-icon-g{background:rgba(62,207,142,.13);color:var(--green);border:1.5px solid var(--green-border);}
+.fin-icon-b{background:rgba(79,142,240,.12);color:var(--accent);border:1.5px solid rgba(79,142,240,.28);}
+.fin-kpi-head-info{flex:1;min-width:0;}
+.fin-kpi-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--text3);margin-bottom:3px;}
+.fin-kpi-main{font-family:'DM Mono',monospace;font-size:20px;font-weight:600;line-height:1.1;margin-bottom:3px;}
+.fin-val-g{color:var(--green);}
+.fin-val-b{color:var(--accent);}
+.fin-kpi-ct{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--text3);}
+.fin-kpi-divider{border-top:1px solid var(--border);margin:0 -2px;}
+.fin-kpi-row2{display:grid;grid-template-columns:1fr 1fr;}
+.fin-kpi-col-lbl{font-size:10.5px;color:var(--text3);margin-bottom:3px;}
+.fin-kpi-col-val{font-family:'DM Mono',monospace;font-size:13.5px;font-weight:600;color:var(--text);}
+.fin-kpi-col-r{text-align:right;}
+.fin-prog-wrap{}
+.fin-prog-bg{height:6px;background:var(--surface2);border-radius:99px;overflow:hidden;}
+.fin-prog-fill{height:100%;border-radius:99px;transition:width .7s ease;}
+.fin-prog-g{background:var(--green);}
+.fin-prog-b{background:var(--accent);}
+.fin-rate-row{display:flex;align-items:center;gap:7px;}
+.fin-check{width:17px;height:17px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0;}
+.fin-check-g{background:rgba(62,207,142,.13);color:var(--green);border:1px solid var(--green-border);}
+.fin-check-b{background:rgba(79,142,240,.12);color:var(--accent);border:1px solid rgba(79,142,240,.28);}
+.fin-rate-lbl{font-size:12px;color:var(--text2);flex:1;}
+.fin-rate-val{font-family:'DM Mono',monospace;font-size:14px;font-weight:700;}
+.fin-footer{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text3);}
+.fin-pending{margin-left:auto;font-weight:600;}
+body.theme-light .fin-kpi-card{background:#fff;border-color:rgba(7,61,127,.14);box-shadow:0 1px 4px rgba(7,61,127,.06);}
+body.theme-light .fin-val-g{color:var(--green);}
+body.theme-light .fin-val-b{color:var(--accent2);}
 .mb3-kpi-card{border-radius:22px;padding:22px 20px 18px;position:relative;overflow:hidden;transition:transform .2s,box-shadow .2s;}
 .mb3-kpi-card:hover{transform:translateY(-5px);box-shadow:0 20px 50px rgba(0,0,0,.28);}
 .mb3-kpi-glow{position:absolute;top:0;right:0;width:140px;height:140px;pointer-events:none;}

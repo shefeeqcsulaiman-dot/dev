@@ -109,9 +109,11 @@ def _build_dashboard(db: Session, company_id: str) -> dict[str, Any]:
         "purchase_invoice_count": app_counts.get("purchaseInvoices", 0) + app_counts.get("purchaseDocuments", 0),
     }
     status = invoice_status(db, company_id)
+    pur_summary = _purchase_summary(db, company_id)
     return {
         "kpis": {
             "revenue": amount(revenue),
+            "total_purchases": pur_summary["total"],
             "vat_payable": amount(vat_payable),
             "open_invoice_count": open_invoice_count,
             "open_invoice_amount": amount(open_invoice_amount),
@@ -123,6 +125,7 @@ def _build_dashboard(db: Session, company_id: str) -> dict[str, Any]:
         "recent_activity": recent_activity(db, company_id),
         "top_customers": top_customers(db, company_id),
         "invoice_status": status,
+        "purchase_summary": pur_summary,
         "staff_today": {
             "present": employee_count,
             "total": employee_count,
@@ -291,6 +294,36 @@ def top_customers(db: Session, company_id: str) -> list[dict[str, str]]:
         {"name": name, "total": amount(total)}
         for name, total in sorted(totals.items(), key=lambda item: item[1], reverse=True)[:5]
     ]
+
+
+def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
+    records = (
+        app_data_payloads(db, company_id, "purchaseRecords")
+        + app_data_payloads(db, company_id, "bills")
+    )
+    total = Decimal("0")
+    paid_amount = Decimal("0")
+    paid_count = 0
+    pending_count = 0
+    for row in records:
+        row_total = record_amount(row, "total", "grand_total")
+        total += row_total
+        row_paid = record_amount(row, "paid", "paid_amount")
+        paid_amount += row_paid
+        if is_paid_status(normalized_ref(row.get("status") or "")):
+            paid_count += 1
+        else:
+            pending_count += 1
+    total_count = len(records)
+    payment_rate = int(paid_amount / total * 100) if total else 0
+    return {
+        "total": amount(total),
+        "paid": amount(paid_amount),
+        "paid_count": paid_count,
+        "pending_count": pending_count,
+        "total_count": total_count,
+        "payment_rate": payment_rate,
+    }
 
 
 def invoice_status(db: Session, company_id: str) -> dict[str, dict[str, str | int]]:

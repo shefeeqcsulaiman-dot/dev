@@ -1709,7 +1709,7 @@ function applyCompanyToUi(company){
   set('set-company-name',company.name);
   set('set-company-trn',company.trn);
   set('trn',company.trn);
-  // Extended fields
+  // Settings page fields
   set('set-company-trade-name',company.trade_name);
   set('set-company-license',company.trade_license_no);
   set('set-company-activity',company.business_activity);
@@ -1720,6 +1720,17 @@ function applyCompanyToUi(company){
   set('set-company-pobox',company.po_box);
   set('set-company-phone',company.phone);
   set('set-company-website',company.website);
+  // Company registration page fields
+  set('co-name',company.name);
+  set('co-trade-license',company.trade_license_no);
+  set('co-activity',company.business_activity);
+  set('co-structure',company.legal_structure);
+  set('co-emirate',company.emirate);
+  set('co-biz-type',company.business_type);
+  set('co-address',company.address);
+  set('co-pobox',company.po_box);
+  set('co-phone',company.phone);
+  set('co-website',company.website);
   // Invoice layout company name + address (if not user-overridden)
   const layoutCompany=document.getElementById('inv-layout-company');
   if(layoutCompany&&!layoutCompany.dataset.userEdited)setFieldValue(layoutCompany,company.name||'');
@@ -1777,6 +1788,37 @@ async function saveCompanySettingsToDatabase(){
   const company=await response.json();
   applyCompanyToUi(company);
   return company;
+}
+
+async function saveCompanyRegistration(){
+  const v=id=>document.getElementById(id)?.value?.trim()||null;
+  const name=v('co-name')||currentCompany?.name||'';
+  if(!name){toast('Company name is required','warn');return;}
+  const payload={
+    name,
+    trn:currentCompany?.trn||null,
+    trade_name:currentCompany?.trade_name||null,
+    country:currentCompany?.country||'United Arab Emirates',
+    trade_license_no:v('co-trade-license'),
+    business_activity:v('co-activity'),
+    legal_structure:v('co-structure'),
+    emirate:v('co-emirate'),
+    business_type:v('co-biz-type'),
+    address:v('co-address'),
+    po_box:v('co-pobox'),
+    phone:v('co-phone'),
+    website:v('co-website'),
+  };
+  try{
+    const response=await authenticatedFetch(`${apiBaseUrl()}/companies/current`,{method:'PUT',body:JSON.stringify(payload)});
+    if(!response.ok)throw new Error('Save returned '+response.status);
+    const company=await response.json();
+    applyCompanyToUi(company);
+    toast('Company registration saved','ok');
+    audit('Saved business registration details','Company','Saved');
+  }catch(err){
+    toast('Save failed: '+err.message,'err');
+  }
 }
 
 function setDashboardStat(label,value,delta){
@@ -1966,6 +2008,31 @@ function renderDashboardHero(data,kpis={},counts={}){
   setTrend('dash-rev-trend',Number(kpis.revenue_trend||0));
   setTrend('dash-pur-trend',Number(kpis.purchase_trend||0));
   setTrend('dash-profit-trend',Number(kpis.profit_trend||0));
+
+  // Revenue card: collection metrics from invoice_status
+  const invStat=data.invoice_status||{};
+  const paidInv=invStat.paid||{};
+  const pendInv=invStat.pending||{};
+  const ovdInv=invStat.overdue||{};
+  const colRate=Number(paidInv.percentage||0);
+  set('dash-rev-collected',formatAed(parseAmount(paidInv.amount||0)));
+  set('dash-rev-paid-count',Number(paidInv.count||0));
+  set('dash-rev-rate',colRate+'%');
+  set('dash-rev-pending',(Number(pendInv.count||0)+Number(ovdInv.count||0))+' Invoices');
+  const revBar=document.getElementById('dash-rev-rate-bar');
+  if(revBar)revBar.style.width=colRate+'%';
+
+  // Purchase card: payment metrics from purchase_summary
+  const purSum=data.purchase_summary||{};
+  const purRate=Number(purSum.payment_rate||0);
+  set('dash-total-purchases',formatAed(parseAmount(purSum.total||0)));
+  set('dash-purchases-sub',Number(purSum.total_count||0)+' Bills');
+  set('dash-pur-paid-amount',formatAed(parseAmount(purSum.paid||0)));
+  set('dash-pur-paid-count',Number(purSum.paid_count||0));
+  set('dash-pur-rate',purRate+'%');
+  set('dash-pur-pending',Number(purSum.pending_count||0)+' Bills');
+  const purBar=document.getElementById('dash-pur-rate-bar');
+  if(purBar)purBar.style.width=purRate+'%';
 
   // Sparklines (mini bar charts from monthly data)
   const monthly=data.monthly_revenue_vat||[];
