@@ -263,57 +263,13 @@
 
       </div>
 
-      <!-- ROW 2: Statistics chart + Profit gauge -->
-      <div class="mb3-mid-row mb16">
 
-        <!-- Bar chart -->
-        <div class="mb3-stat-card">
-          <div class="mb3-card-hd mb16">
-            <div class="mb3-card-title">Statistic</div>
-            <div class="dv2-legend">
-              <span><i class="lg-accent"></i>Revenue</span>
-              <span><i class="lg-red"></i>Purchases</span>
-              <span><i class="lg-amber"></i>VAT</span>
-            </div>
-          </div>
-          <div class="dv2-bar-area" id="dash-monthly-bars" style="height:130px">
-            <div class="dv2-loading" style="grid-column:1/-1">Loading chart…</div>
-          </div>
-          <div class="dv2-chart-footer" id="dash-monthly-summary" style="margin-top:14px"></div>
-        </div>
-
-        <!-- Profit margin gauge -->
-        <div class="mb3-gauge-card">
-          <div class="mb3-card-hd mb12">
-            <div class="mb3-card-title">Net VAT</div>
-            <span class="dv2-kpi-badge warn" id="dash-vat-trend">Due</span>
-          </div>
-          <div class="mb3-gauge-wrap">
-            <svg viewBox="0 0 160 110" width="160" height="110" style="overflow:visible">
-              <defs>
-                <linearGradient id="gaugeGradVat" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stop-color="#f59e0b"/>
-                  <stop offset="100%" stop-color="#ef4444"/>
-                </linearGradient>
-              </defs>
-              <!-- background track -->
-              <path d="M18,96 A62,62 0 0,1 142,96" fill="none" stroke="var(--border2)" stroke-width="13" stroke-linecap="round"/>
-              <!-- fill arc -->
-              <path id="dash-vat-gauge-arc" d="M18,96 A62,62 0 0,1 142,96" fill="none" stroke="url(#gaugeGradVat)" stroke-width="13" stroke-linecap="round" stroke-dasharray="0 195" style="transition:stroke-dasharray .8s cubic-bezier(.34,1.56,.64,1)"/>
-              <!-- tick marks -->
-              <line x1="18" y1="96" x2="22" y2="96" stroke="var(--border3)" stroke-width="1.5" stroke-linecap="round"/>
-              <line x1="142" y1="96" x2="138" y2="96" stroke="var(--border3)" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            <div class="mb3-gauge-center">
-              <div class="mb3-gauge-val" id="dash-vat">AED 0</div>
-              <div class="mb3-gauge-lbl" id="dash-vat-sub">Output – Input</div>
-            </div>
-          </div>
-          <div style="text-align:center;margin-top:12px">
-            <div class="dv2-spark" id="dash-vat-spark" style="justify-content:center"></div>
-          </div>
-        </div>
-
+      <!-- hidden: preserves IDs referenced by JS -->
+      <div style="display:none">
+        <span id="dash-vat">0</span><span id="dash-vat-sub"></span>
+        <span id="dash-vat-trend"></span><span id="dash-vat-spark"></span>
+        <span id="dash-vat-gauge-arc"></span>
+        <div id="dash-monthly-bars"></div><div id="dash-monthly-summary"></div>
       </div>
 
       <!-- ROW 3: Last Transactions + Staff Today -->
@@ -368,13 +324,8 @@
         </div>
       </div>
 
-      <!-- Invoice Status — UNCHANGED DATA/IDs -->
-      <div class="mb3-side-card">
-        <div class="mb3-card-hd mb14">
-          <div class="mb3-card-title">Invoice Status</div>
-        </div>
-        <div id="dash-invoice-status"><div class="dv2-loading">Reading database…</div></div>
-      </div>
+      <!-- Invoice Status hidden, ID preserved for JS -->
+      <div style="display:none" id="dash-invoice-status"></div>
 
       <!-- Quick Actions — UNCHANGED -->
       <div class="mb3-side-card">
