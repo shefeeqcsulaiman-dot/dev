@@ -14973,6 +14973,11 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
+  const _SNAP_VER='20260611f';
+  if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
+    localStorage.removeItem('taxflow_dashboard_snapshot');
+    localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
+  }
   if(localStorage.getItem('sb-hidden')==='1'&&window.innerWidth>1100){
     document.body.classList.add('sb-hidden');
   }
