@@ -59,8 +59,7 @@ def list_mappings(db: Session = Depends(get_db), current_user: User = Depends(ge
 
 @router.get("/inventory/stock-levels")
 def list_stock_levels(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[dict[str, object]]:
-    if not inventory_backfill_disabled(db, current_user.company_id):
-        backfill_purchase_stock_movements(db, current_user)
+    backfill_purchase_stock_movements(db, current_user)
     rows = (
         db.query(
             StockProductMapping,
@@ -92,6 +91,7 @@ def list_stock_levels(db: Session = Depends(get_db), current_user: User = Depend
 
 @router.get("/inventory/stock-movements")
 def list_stock_movements(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[dict[str, object]]:
+    backfill_purchase_stock_movements(db, current_user)
     rows = (
         db.query(StockMovement, StockProductMapping)
         .join(StockProductMapping, StockMovement.mapping_id == StockProductMapping.id)
@@ -124,7 +124,12 @@ def clear_stock_levels(db: Session = Depends(get_db), current_user: User = Depen
         .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == "products")
         .delete(synchronize_session=False)
     )
-    set_inventory_backfill_disabled(db, company_id)
+    # Remove the backfill disabled marker so new purchase records generate movements again
+    db.query(AppDataRecord).filter(
+        AppDataRecord.company_id == company_id,
+        AppDataRecord.collection == "inventorySettings",
+        AppDataRecord.record_key == "stock_backfill_disabled",
+    ).delete(synchronize_session=False)
     db.commit()
     return {
         "ok": True,

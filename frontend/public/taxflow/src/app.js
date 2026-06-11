@@ -1650,7 +1650,7 @@ function _applyLogoEverywhere(){
   if(sbImg){sbImg.src=logo||'';sbImg.style.display=logo?'block':'none';}
   if(sbBrand)sbBrand.style.display=logo?'none':'';
   if(sbName){
-    const name=currentCompany?.name||'';
+    const name=currentCompany?.name||localStorage.getItem('taxflow_company_name')||'';
     sbName.textContent=name;
     sbName.style.display=name?'block':'none';
   }
@@ -1704,7 +1704,7 @@ async function removeLogo(){
 function applyCompanyToUi(company){
   if(!company)return;
   currentCompany=company;
-  const set=(id,val)=>{const el=document.getElementById(id);if(el&&val!=null)el.value=val;};
+  const set=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val||'';};
   // Core fields
   set('set-company-name',company.name);
   set('set-company-trn',company.trn);
@@ -1736,12 +1736,13 @@ function applyCompanyToUi(company){
   if(layoutCompany&&!layoutCompany.dataset.userEdited)setFieldValue(layoutCompany,company.name||'');
   const layoutAddr=document.getElementById('inv-layout-address');
   if(layoutAddr&&!layoutAddr.dataset.userEdited&&company.address)setFieldValue(layoutAddr,company.address);
-  // Logo sync
+  // Logo + company name sync
   if(company.logo){
     localStorage.setItem(_LOGO_KEY,company.logo);
   } else if(!company.logo&&localStorage.getItem(_LOGO_KEY)){
     localStorage.removeItem(_LOGO_KEY);
   }
+  if(company.name)localStorage.setItem('taxflow_company_name',company.name);
   _applyLogoEverywhere();
   updateInvoiceLayoutPreview?.();
 }
@@ -9325,7 +9326,7 @@ function ensurePurchaseAiEditModal(){
         </div>
         <div class="purchase-edit-table-wrap">
           <table class="tbl purchase-edit-lines">
-            <thead><tr><th>#</th><th>Product</th><th>Category</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Disc %</th><th>Before Tax</th><th>Line Total</th><th>Margin %</th><th>Selling Inc. Tax</th><th></th></tr></thead>
+            <thead><tr><th>#</th><th>Product</th><th>Category</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th style="display:none">Disc %</th><th>Before Tax</th><th>Line Total</th><th>Margin %</th><th>Selling Inc. Tax</th><th></th></tr></thead>
             <tbody id="pai-lines"></tbody>
           </table>
         </div>
@@ -9437,7 +9438,7 @@ function addPurchaseAiEditLine(line={}){
     <td><input class="fi mono pai-qty" value="${escapeHtml(line.quantity||line.qty||0)}" oninput="calcPurchaseAiEditLine(this)"></td>
     <td><input class="fi mono pai-unit" value="${escapeHtml(line.unit||line.unit_of_measure||line.uom||'PCS')}"></td>
     <td><input class="fi mono pai-cost" value="${escapeHtml(line.unit_cost||line.cost||line.unitCost||0)}" oninput="calcPurchaseAiEditLine(this)"></td>
-    <td><input class="fi mono pai-line-discount" value="${escapeHtml(line.discount_percent||line.discountPct||0)}" oninput="calcPurchaseAiEditLine(this)"></td>
+    <td style="display:none"><input class="fi mono pai-line-discount" value="${escapeHtml(line.discount_percent||line.discountPct||0)}" oninput="calcPurchaseAiEditLine(this)"></td>
     <td><input class="fi mono pai-cost-before-tax" value="${escapeHtml(line.unit_cost_before_tax||line.unit_cost||line.cost||0)}" readonly></td>
     <td><input class="fi mono pai-line-total" value="${escapeHtml(line.line_total||line.amount||0)}" oninput="calcPurchaseAiEditInvoice()"></td>
     <td><input class="fi mono pai-margin" value="${escapeHtml(line.profit_margin||line.margin||0)}" oninput="calcPurchaseAiEditLine(this)"></td>
@@ -10483,7 +10484,7 @@ function ensurePurchasePreviewModal(){
     <div class="modal modal-xl purchase-edit-modal">
       <div class="purchase-edit-top">
         <div>
-          <div class="modal-title" id="purchase-view-title">Purchase Order Preview</div>
+          <div class="modal-title" id="purchase-view-title">Purchase Preview</div>
           <div class="modal-sub" id="purchase-view-sub">Purchase record</div>
         </div>
         <button class="btn btn-g btn-sm" onclick="closeM('m-purchase-view')">Close</button>
@@ -10539,7 +10540,7 @@ function renderPurchaseRecordPreview(purchase,options={}){
   const total=parseAmount(purchase.total)||net+vat+shipping;
   const due=Number.isFinite(Number(purchase.due))?parseAmount(purchase.due):Math.max(0,total-paid);
   const fmt=n=>Number(n||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
-  if(title)title.textContent=(editable?'Edit Purchase Order ':'Purchase Order ')+ref;
+  if(title)title.textContent=(editable?'Edit Purchase ':'Purchase ')+ref;
   if(sub)sub.textContent=`${purchase.supplier||'Supplier'} - ${purchase.status||'Draft'}`;
   if(saveBtn)saveBtn.classList.toggle('hidden',!editable);
   const cur=purchase.currency||'AED';
@@ -10584,7 +10585,7 @@ function renderPurchaseRecordPreview(purchase,options={}){
       </div>
       <div class="purchase-edit-table-wrap">
         <table class="tbl purchase-edit-lines">
-          <thead><tr><th>#</th><th>Item Description</th><th>SKU</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th>Disc %</th><th>Disc Amt</th><th>VAT</th><th>Line Total</th><th></th></tr></thead>
+          <thead><tr><th>#</th><th>Item Description</th><th>SKU</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th style="display:none">Disc %</th><th>Disc Amt</th><th>VAT</th><th>Line Total</th><th></th></tr></thead>
           <tbody>
             ${lines.map((line,index)=>{
               const lQty=parseAmount(line.qty||line.quantity||1);
@@ -10599,7 +10600,7 @@ function renderPurchaseRecordPreview(purchase,options={}){
                 <td><input class="fi mono pv-qty" value="${fmt(lQty)}" oninput="calcPurchasePreviewEdit()" ${editable?'':'readonly'}></td>
                 <td><input class="fi pv-unit" value="${escapeHtml(line.unit||'PCS')}" ${editable?'':'readonly'}></td>
                 <td><input class="fi mono pv-cost" value="${fmt(lCost)}" oninput="calcPurchasePreviewEdit()" ${editable?'':'readonly'}></td>
-                <td><input class="fi mono pv-disc-pct" value="${lDiscPct>0?fmt(lDiscPct):''}" placeholder="0" oninput="calcPurchasePreviewEdit()" ${editable?'':'readonly'} style="width:60px"></td>
+                <td style="display:none"><input class="fi mono pv-disc-pct" value="${lDiscPct>0?fmt(lDiscPct):''}" placeholder="0" oninput="calcPurchasePreviewEdit()" ${editable?'':'readonly'} style="width:60px"></td>
                 <td><input class="fi mono pv-disc-amt" value="${lDiscAmt>0?fmt(lDiscAmt):''}" placeholder="0" readonly style="width:80px"></td>
                 <td><input class="fi mono pv-line-vat" value="${lVat>0?fmt(lVat):''}" placeholder="0" readonly style="width:70px"></td>
                 <td><input class="fi mono pv-line-total" value="${fmt(line.total)}" readonly style="font-weight:700;color:var(--accent)"></td>
@@ -10621,7 +10622,7 @@ function renderPurchaseRecordPreview(purchase,options={}){
         </div>
         <div class="purchase-summary-box">
           <div class="tot-row"><span>Net Amount</span><input class="fi mono" id="pv-net" value="${fmt(net)}" readonly></div>
-          ${discount>0?`<div class="tot-row"><span>Discount (${escapeHtml(discountType)})</span><input class="fi mono" id="pv-discount" value="${fmt(discount)}" readonly></div>`:''}
+          <div class="tot-row"><span>Discount${discountType&&discountType!=='None'?` (${escapeHtml(discountType)})`:''}</span><input class="fi mono" id="pv-discount" value="${fmt(discount)}" oninput="calcPurchasePreviewEdit()" ${editable?'':'readonly'}></div>
           <div class="tot-row"><span>VAT (${escapeHtml(taxType)})</span><input class="fi mono" id="pv-vat" value="${fmt(vat)}" oninput="calcPurchasePreviewEdit()" ${editable?'':'readonly'}></div>
           <div class="tot-row"><span>Shipping</span><input class="fi mono" id="pv-shipping" value="${fmt(shipping)}" oninput="calcPurchasePreviewEdit()" ${editable?'':'readonly'}></div>
           <div class="tot-final"><span>Total (${escapeHtml(cur)})</span><input class="fi mono" id="pv-total" value="${fmt(total)}" readonly></div>
@@ -14301,11 +14302,10 @@ function savePayment(){
 
 // -- SETTINGS ----------------------------------------------------
 function saveSettings(message='Settings saved'){
-  toast(message+' ?','ok');
   audit(message,'Settings','Saved');
   saveCompanySettingsToDatabase()
-    .then(()=>syncDashboardFromDatabase())
-    .catch(err=>console.warn('Company settings save failed:',err));
+    .then(()=>{toast(message,'ok');syncDashboardFromDatabase();})
+    .catch(err=>toast('Save failed: '+err.message,'err'));
 }
 
 function testIntegration(name){
