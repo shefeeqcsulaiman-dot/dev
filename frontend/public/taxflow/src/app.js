@@ -1989,17 +1989,32 @@ function renderDashboardHero(data,kpis={},counts={}){
   const greet=document.getElementById('dash-greeting');
   if(greet){const h=new Date().getHours();greet.textContent=h<12?'Good morning':h<17?'Good afternoon':'Good evening';}
 
-  const revenue=parseAmount(kpis.total_revenue||data.total_revenue||0);
-  const purchases=parseAmount(kpis.total_purchases||data.total_purchases||0);
+  // Revenue card: collection metrics from invoice_status
+  const invStat=data.invoice_status||{};
+  const paidInv=invStat.paid||{};
+  const pendInv=invStat.pending||{};
+  const ovdInv=invStat.overdue||{};
+  const totalInv=invStat.total||{};
+
+  // Use invoice_status.total.amount as the authoritative revenue figure
+  // (covers both Invoice model rows + AppDataRecord sales); fallback to kpis.revenue
+  const revenue=parseAmount(totalInv.amount||kpis.total_revenue||kpis.revenue||data.total_revenue||data.revenue||0);
+  const invCount=Number(totalInv.count||kpis.invoice_count||counts.invoice_count||0);
+
+  // Purchase card: payment metrics from purchase_summary
+  const purSum=data.purchase_summary||{};
+  const purchases=parseAmount(purSum.total||kpis.total_purchases||data.total_purchases||0);
+  const purCount=Number(purSum.total_count||kpis.purchase_count||counts.purchase_record_count||0);
+
   const vatPayable=parseAmount(kpis.vat_payable||data.vat_payable||0);
   const grossProfit=revenue-purchases;
 
   // KPI cards
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
   set('dash-revenue',formatAed(revenue));
-  set('dash-revenue-sub',`${Number(kpis.invoice_count||0)} invoices`);
+  set('dash-revenue-sub',`${invCount} invoices`);
   set('dash-total-purchases',formatAed(purchases));
-  set('dash-purchases-sub',`${Number(kpis.purchase_count||counts.purchase_record_count||0)} records`);
+  set('dash-purchases-sub',`${purCount} Bills`);
   set('dash-vat',formatAed(vatPayable));
   set('dash-vat-sub',vatPayable>0?'Payable to FTA':'Credit position');
   set('dash-gross-profit',formatAed(grossProfit));
@@ -2017,30 +2032,24 @@ function renderDashboardHero(data,kpis={},counts={}){
   setTrend('dash-pur-trend',Number(kpis.purchase_trend||0));
   setTrend('dash-profit-trend',Number(kpis.profit_trend||0));
 
-  // Revenue card: collection metrics from invoice_status
-  const invStat=data.invoice_status||{};
-  const paidInv=invStat.paid||{};
-  const pendInv=invStat.pending||{};
-  const ovdInv=invStat.overdue||{};
-  const colRate=Number(paidInv.percentage||0);
-  set('dash-rev-collected',formatAed(parseAmount(paidInv.amount||0)));
+  // Revenue card detail rows (amount-based collection rate)
+  const paidAmt=parseAmount(paidInv.amount||0);
+  const colRate=revenue>0?Math.round(paidAmt/revenue*100):0;
+  set('dash-rev-collected',formatAed(paidAmt));
   set('dash-rev-paid-count',Number(paidInv.count||0));
   set('dash-rev-rate',colRate+'%');
   set('dash-rev-pending',(Number(pendInv.count||0)+Number(ovdInv.count||0))+' Invoices');
   const revBar=document.getElementById('dash-rev-rate-bar');
-  if(revBar)revBar.style.width=colRate+'%';
+  if(revBar)revBar.style.width=Math.min(colRate,100)+'%';
 
-  // Purchase card: payment metrics from purchase_summary
-  const purSum=data.purchase_summary||{};
-  const purRate=Number(purSum.payment_rate||0);
-  set('dash-total-purchases',formatAed(parseAmount(purSum.total||0)));
-  set('dash-purchases-sub',Number(purSum.total_count||0)+' Bills');
+  // Purchase card detail rows
+  const purRate=purchases>0?Math.round(parseAmount(purSum.paid||0)/purchases*100):0;
   set('dash-pur-paid-amount',formatAed(parseAmount(purSum.paid||0)));
   set('dash-pur-paid-count',Number(purSum.paid_count||0));
   set('dash-pur-rate',purRate+'%');
   set('dash-pur-pending',Number(purSum.pending_count||0)+' Bills');
   const purBar=document.getElementById('dash-pur-rate-bar');
-  if(purBar)purBar.style.width=purRate+'%';
+  if(purBar)purBar.style.width=Math.min(purRate,100)+'%';
 
   // Sparklines (mini bar charts from monthly data)
   const monthly=data.monthly_revenue_vat||[];
