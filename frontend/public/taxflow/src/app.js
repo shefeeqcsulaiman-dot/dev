@@ -1781,11 +1781,18 @@ async function saveCompanySettingsToDatabase(){
     phone:v('set-company-phone'),
     website:v('set-company-website'),
   };
-  const response=await authenticatedFetch(`${apiBaseUrl()}/companies/current`,{
+  const _saveUrl=`${apiBaseUrl()}/companies/current`;
+  console.log('[saveCompanySettings] PUT',_saveUrl);
+  const response=await authenticatedFetch(_saveUrl,{
     method:'PUT',
     body:JSON.stringify(payload)
   });
-  if(!response.ok)throw new Error('Company save returned '+response.status);
+  console.log('[saveCompanySettings] response',response.status,response.url);
+  if(!response.ok){
+    let detail='';
+    try{const e=await response.clone().json();detail=e.detail||'';}catch(x){}
+    throw new Error(`Company save returned ${response.status}${detail?' — '+detail:''} (url: ${response.url})`);
+  }
   const company=await response.json();
   applyCompanyToUi(company);
   return company;
