@@ -296,6 +296,32 @@ def top_customers(db: Session, company_id: str) -> list[dict[str, str]]:
     ]
 
 
+def _purchase_row_amount(row: dict[str, Any]) -> Decimal:
+    """Extract the total amount from a purchase record using multiple fallback strategies."""
+    # 1. Try common total fields — skip if zero (might be unset placeholder)
+    for key in ("total", "grand_total", "amount"):
+        val = row.get(key)
+        if val not in (None, ""):
+            d = money(val)
+            if d != Decimal("0"):
+                return d
+    # 2. net_amount + tax_amount
+    net = money(row.get("net_amount") or row.get("subtotal") or 0)
+    tax = money(row.get("tax_amount") or row.get("vat_amount") or row.get("vat") or 0)
+    if net or tax:
+        return net + tax
+    # 3. Sum product lines
+    lines = row.get("lines")
+    if isinstance(lines, list):
+        line_sum = sum(
+            money(ln.get("total") or ln.get("line_total") or ln.get("amount") or 0)
+            for ln in lines
+        )
+        if line_sum:
+            return line_sum
+    return Decimal("0.00")
+
+
 def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
     records = (
         app_data_payloads(db, company_id, "purchaseRecords")
@@ -306,15 +332,37 @@ def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
     paid_count = 0
     pending_count = 0
     for row in records:
-        row_total = record_amount(row, "total", "grand_total")
+        row_total = _purchase_row_amount(row)
         total += row_total
         row_paid = record_amount(row, "paid", "paid_amount")
-        paid_amount += row_paid
         if is_paid_status(normalized_ref(row.get("status") or "")):
             paid_count += 1
+            # Bills have no explicit paid field — use row total when status is paid
+            paid_amount += row_paid if row_paid else row_total
         else:
             pending_count += 1
+            paid_amount += row_paid
     total_count = len(records)
+    # Fallback: use SourceTransaction totals when AppDataRecord amounts are all zero
+    if total == Decimal("0") and total_count > 0:
+        total = money(
+            db.query(func.coalesce(func.sum(SourceTransaction.total), 0))
+            .filter(
+                SourceTransaction.company_id == company_id,
+                SourceTransaction.module.in_(["purchase", "purchase_bill"]),
+            )
+            .scalar()
+        )
+        if paid_amount == Decimal("0"):
+            paid_amount = money(
+                db.query(func.coalesce(func.sum(SourceTransaction.total), 0))
+                .filter(
+                    SourceTransaction.company_id == company_id,
+                    SourceTransaction.module.in_(["purchase", "purchase_bill"]),
+                    SourceTransaction.status.in_(["paid", "posted", "complete", "completed", "received", "settled"]),
+                )
+                .scalar()
+            )
     payment_rate = int(paid_amount / total * 100) if total else 0
     return {
         "total": amount(total),
