@@ -36,12 +36,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 
 /* ── SIDEBAR ── */
 .sb{width:230px;min-width:230px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;overflow-y:auto;transition:width .26s ease,min-width .26s ease;}
-.sb-logo{padding:20px 18px 16px;border-bottom:1px solid var(--border);}
-.sb-brand{font-family:'Syne',sans-serif;font-size:19px;font-weight:700;letter-spacing:-0.5px;color:var(--text);}
+.sb-logo{padding:16px 18px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.sb-logo-text{display:flex;flex-direction:column;justify-content:center;min-width:0;flex:1;}
+.sb-brand{font-family:'Syne',sans-serif;font-size:19px;font-weight:700;letter-spacing:-0.5px;color:var(--text);line-height:1.2;}
 .sb-brand span{color:var(--accent);}
 .sb-tagline{font-size:10.5px;color:var(--text3);letter-spacing:.8px;text-transform:uppercase;margin-top:2px;}
-.sb-logo-img{height:52px;max-width:170px;object-fit:contain;border-radius:10px;display:none;margin-bottom:6px;}
-.sb-company-name{font-size:12.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px;margin-top:2px;}
+.sb-logo-img{height:44px;width:44px;object-fit:contain;border-radius:8px;display:none;flex-shrink:0;}
+.sb-company-name{font-size:11.5px;font-weight:600;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
 /* Company logo upload */
 .co-logo-upload{display:flex;align-items:center;gap:20px;padding:8px 0 4px;}
 .co-logo-preview{width:78px;height:78px;border-radius:16px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;font-family:'Syne',sans-serif;flex:0 0 78px;overflow:hidden;}
