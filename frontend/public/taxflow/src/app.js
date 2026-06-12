@@ -10084,6 +10084,36 @@ function runOCR(){
   ready.forEach((f,i)=>setTimeout(()=>extractSingleFile(f),i*500));
 }
 
+async function clearPendingUploads(){
+  const toDelete=uploadedFiles.filter(f=>{
+    if(f.category==='Purchase Records')return false;
+    const invoices=Array.isArray(f.invoices)?f.invoices:[];
+    const saved=f.savedInvoiceNos instanceof Set?f.savedInvoiceNos:new Set(f.savedInvoiceNos||[]);
+    return invoices.length===0||saved.size<invoices.length;
+  });
+  if(!toDelete.length){toast('No incomplete uploads to clear','warn');return;}
+  const confirmed=await appConfirm({
+    title:'Clear Incomplete Uploads',
+    message:`Remove ${toDelete.length} incomplete upload(s)? Files and extraction data not yet saved to purchase records will be deleted.`,
+    okText:'Clear All',
+    tone:'danger'
+  });
+  if(!confirmed)return;
+  await Promise.all(toDelete.map(f=>deleteServer('purchaseDocuments',{id:f.id})));
+  const deleteIds=new Set(toDelete.map(f=>f.id));
+  for(let i=uploadedFiles.length-1;i>=0;i--){
+    if(deleteIds.has(uploadedFiles[i].id))uploadedFiles.splice(i,1);
+  }
+  toDelete.forEach(f=>purchaseDocumentIds.delete(f.id));
+  const tbody=document.getElementById('ext-tbody');
+  if(tbody)tbody.innerHTML='<div class="ai-empty-state">AI uploaded purchase data will appear here for validation.</div>';
+  renderFileList();
+  updateFileCount();
+  updatePurchaseValidationFileStatus();
+  toast(`${toDelete.length} incomplete upload(s) cleared`,'ok');
+  audit('Cleared incomplete uploads',`${toDelete.length} file(s)`,'Deleted');
+}
+
 function formatInputDateTime(date=new Date()){
   const pad=value=>String(value).padStart(2,'0');
   return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
@@ -15108,7 +15138,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260612i';
+  const _SNAP_VER='20260612j';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);

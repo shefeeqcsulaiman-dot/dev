@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260612i" as="style">
-<link rel="preload" href="src/app.js?v=20260612i" as="script">
+<link rel="preload" href="src/styles.css?v=20260612j" as="style">
+<link rel="preload" href="src/app.js?v=20260612j" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260612i">
+<link rel="stylesheet" href="src/styles.css?v=20260612j">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -841,6 +841,7 @@
         </div>
         <div style="margin-top:12px">
           <button class="btn btn-g btn-sm" type="button" onclick="showM('m-old-uploads')">View Old Uploads</button>
+          <button class="btn btn-r btn-sm" type="button" onclick="clearPendingUploads()">Clear Incomplete</button>
         </div>
       </div>
     </div>
@@ -850,7 +851,7 @@
     <div class="card mb16">
       <div class="card-hd">
         <div><div class="card-title">AI Upload Validation</div><div class="card-sub">Review updated purchase details, fix validation issues, then save selected rows</div></div>
-        <div class="flx"><button class="btn btn-g btn-sm" onclick="togglePurchaseAiSelection(true)">Select All</button><button class="btn btn-g btn-sm" onclick="runOCR()">Run Extraction</button><button class="btn btn-p btn-sm" onclick="storeExtractedPurchaseRecords()">Save All</button></div>
+        <div class="flx"><button class="btn btn-g btn-sm" onclick="togglePurchaseAiSelection(true)">Select All</button><button class="btn btn-g btn-sm" onclick="runOCR()">Run Extraction</button><button class="btn btn-p btn-sm" onclick="storeExtractedPurchaseRecords()">Save All</button><button class="btn btn-r btn-sm" onclick="clearPendingUploads()">Clear Incomplete</button></div>
       </div>
       <div id="pur-validation-file-status" class="g3 mb16"></div>
       <div class="ai-card-toolbar flx-b mb12">
@@ -5204,6 +5205,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260612i" defer></script>
+<script src="src/app.js?v=20260612j" defer></script>
 </body>
 </html>
