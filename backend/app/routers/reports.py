@@ -424,6 +424,44 @@ def invoice_status(db: Session, company_id: str) -> dict[str, dict[str, str | in
 
 
 
+@router.get("/debug/purchase")
+def debug_purchase(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+    """Diagnostic: shows exactly what is stored in DB for bills/purchaseRecords."""
+    import json as _json
+    company_id = current_user.company_id
+    rows = (
+        db.query(AppDataRecord)
+        .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection.in_(["bills", "purchaseRecords"]))
+        .order_by(AppDataRecord.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    records = []
+    for r in rows:
+        try:
+            parsed = _json.loads(r.payload or "{}")
+        except Exception as e:
+            parsed = {"_parse_error": str(e), "_raw": str(r.payload)[:200]}
+        records.append({
+            "id": r.id,
+            "collection": r.collection,
+            "record_key": r.record_key,
+            "payload_length": len(r.payload or ""),
+            "payload_preview": (r.payload or "")[:300],
+            "parsed_total": parsed.get("total"),
+            "parsed_status": parsed.get("status"),
+            "parsed_vendor": parsed.get("vendor"),
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        })
+    purchase_summary = _purchase_summary(db, company_id)
+    return {
+        "company_id": company_id,
+        "record_count": len(rows),
+        "purchase_summary": purchase_summary,
+        "records": records,
+    }
+
+
 @router.get("/trial-balance")
 @limiter.limit("30/minute")
 def trial_balance(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
