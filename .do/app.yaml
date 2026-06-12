@@ -74,11 +74,11 @@ services:
 
       - key: DB_POOL_SIZE
         scope: RUN_TIME
-        value: "20"
+        value: "10"
 
       - key: DB_MAX_OVERFLOW
         scope: RUN_TIME
-        value: "40"
+        value: "15"
 
       - key: DB_POOL_TIMEOUT
         scope: RUN_TIME
@@ -86,7 +86,7 @@ services:
 
       - key: BOOTSTRAP_RECORD_CAP
         scope: RUN_TIME
-        value: "10000"
+        value: "5000"
 
       # ── Celery ───────────────────────────────────────────────────────
       - key: CELERY_TASK_ALWAYS_EAGER

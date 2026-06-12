@@ -3,7 +3,7 @@ from decimal import Decimal
 from enum import Enum
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -664,6 +664,10 @@ class WpsBatch(Base, TimestampMixin):
 
 class AppDataRecord(Base, TimestampMixin):
     __tablename__ = "app_data_records"
+    __table_args__ = (
+        Index("ix_app_data_company_collection", "company_id", "collection"),
+        Index("ix_app_data_company_collection_created", "company_id", "collection", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)

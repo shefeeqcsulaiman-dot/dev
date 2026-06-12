@@ -23,6 +23,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+import app.cache as cache
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_current_user
@@ -52,6 +53,13 @@ from app.models import (
 
 
 router = APIRouter(prefix="/app-data", tags=["app data"])
+
+# Collections whose writes should bust the report cache for the company.
+_REPORT_AFFECTING_COLLECTIONS = frozenset({
+    "salesInvoices", "bills", "payments", "expenses", "ledger",
+    "journalDrafts", "purchaseDocuments", "purchaseRecords",
+    "bankAccounts", "employees", "payrollRuns",
+})
 
 # Per-collection caps for bootstrap to prevent memory spikes on large accounts.
 # Heavy transactional collections are capped at recent N; reference data is uncapped.
@@ -557,6 +565,8 @@ async def app_data_action(
         saved = save_app_record(db, current_user, collection, record)
         sync_domain_model(db, current_user, collection, serialize(saved))
         db.commit()
+        if collection in _REPORT_AFFECTING_COLLECTIONS:
+            cache.invalidate_company(current_user.company_id)
         return {"ok": True, "saved": True, "id": saved.id}
 
     if action == "bulk-save":
@@ -608,6 +618,8 @@ async def app_data_action(
             {"count": saved_count, "created": created_count, "updated": updated_count},
         )
         db.commit()
+        if collection in _REPORT_AFFECTING_COLLECTIONS:
+            cache.invalidate_company(current_user.company_id)
         return {"ok": True, "saved": saved_count, "created": created_count, "updated": updated_count}
 
     if action == "delete":
@@ -633,6 +645,8 @@ async def app_data_action(
             sync_domain_delete(db, current_user, collection, record)
         log_action(db, current_user, collection, "record_deleted" if deleted else "delete_not_found", record)
         db.commit()
+        if collection in _REPORT_AFFECTING_COLLECTIONS:
+            cache.invalidate_company(current_user.company_id)
         return {"ok": True, "deleted": deleted, "key": key}
 
     if action == "invoice-layout":

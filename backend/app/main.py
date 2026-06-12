@@ -245,6 +245,15 @@ def ensure_schema_updates() -> None:
             """))
             connection.execute(text("CREATE INDEX IF NOT EXISTS idx_client_errors_company ON client_errors (company_id)"))
             connection.execute(text("CREATE INDEX IF NOT EXISTS idx_client_errors_occurred ON client_errors (occurred_at DESC)"))
+        # Composite indexes on app_data_records for scale
+        connection.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_app_data_company_collection "
+            "ON app_data_records (company_id, collection)"
+        ))
+        connection.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_app_data_company_collection_created "
+            "ON app_data_records (company_id, collection, created_at)"
+        ))
 
 
 def seed_initial_data() -> None:

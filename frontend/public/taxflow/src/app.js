@@ -2016,10 +2016,13 @@ function renderDashboardHero(data,kpis={},counts={}){
   const revenue=parseAmount(totalInv.amount||kpis.total_revenue||kpis.revenue||data.total_revenue||data.revenue||0);
   const invCount=Number(totalInv.count||kpis.invoice_count||counts.invoice_count||0);
 
-  // Purchase card: payment metrics from purchase_summary
+  // Purchase card: prefer DB purchase_summary; fall back to live in-memory bill table
   const purSum=data.purchase_summary||{};
-  const purchases=parseAmount(purSum.total||kpis.total_purchases||data.total_purchases||0);
-  const purCount=Number(purSum.total_count||kpis.purchase_count||counts.purchase_record_count||0);
+  const _localPur=_computeLocalPurchaseStats();
+  const purchases=parseAmount(purSum.total||kpis.total_purchases||data.total_purchases||0)||_localPur.total;
+  const purCount=Number(purSum.total_count||kpis.purchase_count||counts.purchase_record_count||0)||_localPur.count;
+  // Fill paid/pending from local data when DB returns zeros
+  if(!parseAmount(purSum.paid||0)&&_localPur.paid>0){purSum.paid=_localPur.paid;purSum.paid_count=_localPur.paidCount;purSum.pending_count=_localPur.pendingCount;}
 
   const vatPayable=parseAmount(kpis.vat_payable||data.vat_payable||0);
   const grossProfit=revenue-purchases;
@@ -3844,6 +3847,25 @@ function renderSalesUnitRecord(unit){
   tbody.prepend(row);
   syncProductMasterOptions();
   syncInventoryItemOptions();
+}
+
+function _computeLocalPurchaseStats(){
+  let total=0,paid=0,paidCount=0,pendingCount=0,count=0;
+  document.querySelectorAll('#bill-tbody tr:not([data-empty-state])').forEach(row=>{
+    const cells=row.querySelectorAll('td');
+    const rowTotal=parseAmount(cells[6]?.textContent||cells[4]?.textContent||0);
+    const status=(cells[7]?.querySelector('.b')?.textContent||cells[7]?.textContent||'').trim().toLowerCase();
+    total+=rowTotal;count++;
+    const isPaid=['paid','complete','completed','posted','settled','received'].includes(status);
+    if(isPaid){paid+=rowTotal;paidCount++;}else{pendingCount++;}
+  });
+  // Also count purchase records
+  document.querySelectorAll('#purchase-record-tbody tr:not([data-empty-state])').forEach(row=>{
+    const cells=row.querySelectorAll('td');
+    const rowTotal=parseAmount(cells[9]?.textContent||0);
+    total+=rowTotal;count++;pendingCount++;
+  });
+  return {total,paid,paidCount,pendingCount,count};
 }
 
 function renderBillRecord(bill){
@@ -15932,7 +15954,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260612o';
+  const _SNAP_VER='20260612p';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
