@@ -4797,7 +4797,8 @@ function buildPurchaseRecordRow(purchase){
   const statusClass=status==='Paid'?'b-g':status==='Received'?'b-b':status.includes('Payment')?'b-a':'b-gray';
   const source=String(purchase.source||'Manual');
   const sourceClass=source.toLowerCase().includes('ai')?'b-p':'b-gray';
-  const hasImage=Boolean(normalizedPurchase.source_image);
+  // Show image icon if source_image stored in record OR a matching uploaded document exists
+  const hasImage=Boolean(normalizedPurchase.source_image)||uploadedFiles.some(f=>f.base64&&Array.isArray(f.invoices)&&f.invoices.some(inv=>invoiceKey(inv.invoice_no)===invoiceKey(ref)));
   row.innerHTML=`<td class="mono">${escapeHtml(ref)}</td><td>${escapeHtml(purchaseRecordProductSummary(normalizedPurchase))}</td><td>${escapeHtml(normalizedPurchase.supplier||'-')}</td><td>${escapeHtml(normalizedPurchase.date||'-')}</td><td>${escapeHtml(normalizedPurchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(normalizedPurchase.net_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.tax_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.shipping||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.total||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.paid||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.due||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b ${sourceClass}">${escapeHtml(source)}</span></td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td data-action-col="1"><div class="row-actions"><button class="icon-btn edit" type="button" title="Edit" aria-label="Edit purchase" onclick="editPurchaseRecord(this)">${editIconSvg()}</button><button class="icon-btn view" type="button" title="View" aria-label="View purchase" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button>${hasImage?`<button class="icon-btn invoice-img" type="button" title="View Invoice" aria-label="View invoice image" onclick="openPurchaseInvoiceImage(this)">${invoiceImageIconSvg()}</button>`:`<button class="icon-btn copy" type="button" title="Copy" aria-label="Copy purchase" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button>`}<button class="icon-btn danger" type="button" title="Delete" aria-label="Delete purchase" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td>`;
   return row;
 }
@@ -4810,9 +4811,23 @@ function openPurchaseInvoiceImage(btn){
   try{meta=JSON.parse(row.dataset.purchaseRecord||'{}');}catch{}
   const ref=row.dataset.purchaseRef||meta.ref||'';
   const cached=ref?purchaseRecordCache.get(ref):null;
-  const src=(cached?.source_image)||meta.source_image||'';
-  if(!src){toast('No invoice image saved for this record','warn');return;}
-  const filename=(cached?.source_filename)||meta.source_filename||`invoice-${ref||'download'}`;
+  // Primary: cache (source_image saved with purchase record)
+  let src=(cached?.source_image)||'';
+  let filename=(cached?.source_filename)||`invoice-${ref||'download'}`;
+  // Fallback: search uploadedFiles for the document whose extracted invoices include this ref
+  if(!src&&ref){
+    const refKey=invoiceKey(ref);
+    for(const file of uploadedFiles){
+      if(!file.base64)continue;
+      const invs=Array.isArray(file.invoices)?file.invoices:[];
+      if(invs.some(inv=>invoiceKey(inv.invoice_no)===refKey)){
+        src=file.base64;
+        filename=file.name||filename;
+        break;
+      }
+    }
+  }
+  if(!src){toast('No invoice image found for this record','warn');return;}
   const supplier=(cached?.supplier)||meta.supplier||'Invoice';
   const date=(cached?.date)||meta.date||'';
   const isPdf=src.startsWith('data:application/pdf')||filename.toLowerCase().endsWith('.pdf');
@@ -9165,11 +9180,14 @@ async function saveVendorRecordsInChunks(records){
 }
 
 async function savePurchaseRecordsInChunks(records){
-  const chunkSize=500;
+  // Reduce chunk size to 1 when records carry source_image (compressed base64)
+  // to keep individual HTTP request bodies small
+  const hasImages=records.some(r=>r.source_image);
+  const chunkSize=hasImages?1:500;
   for(let index=0;index<records.length;index+=chunkSize){
     const chunk=records.slice(index,index+chunkSize);
     await bulkSaveServer('purchaseRecords',chunk,{throwOnError:true});
-    toast(`Saved ${Math.min(index+chunk.length,records.length)} of ${records.length} purchase rows...`,'info');
+    if(records.length>1)toast(`Saved ${Math.min(index+chunk.length,records.length)} of ${records.length} purchase rows...`,'info');
   }
 }
 
@@ -15084,7 +15102,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260612e';
+  const _SNAP_VER='20260612f';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
