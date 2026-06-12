@@ -8600,6 +8600,8 @@ async function appendExtractedRows(invoices,filename){
   let fragment=document.createDocumentFragment();
   let appended=0;
   const previewInvoices=invoices.slice(0,PURCHASE_AI_PREVIEW_LIMIT);
+  // Build DB duplicate key set once for the whole batch
+  const existingDuplicateKeys=buildExistingPurchaseDuplicateKeys();
   for(const [invoiceIndex,inv] of previewInvoices.entries()){
     if(isPurchaseExtractionError(inv)){
       const row=document.createElement('div');
@@ -8613,7 +8615,8 @@ async function appendExtractedRows(invoices,filename){
       continue;
     }
     const invoiceUid=`${Date.now()}-${invoiceIndex}-${Math.random().toString(36).slice(2,8)}`;
-    const validation={valid:true,issues:[]};
+    // Validate against DB records only (not other cards in this upload)
+    const validation=validatePurchaseAiInvoice(inv,{existingDuplicateKeys});
     const row=document.createElement('div');
     row.className='ai-extract-card';
     row.setAttribute('data-inv',JSON.stringify(inv));
@@ -8621,7 +8624,7 @@ async function appendExtractedRows(invoices,filename){
     row.dataset.invoiceNo=inv.invoice_no||'';
     row.dataset.invoiceUid=invoiceUid;
     row.dataset.lineIndex='0';
-    row.dataset.validation=validation.valid?'valid':'review';
+    row.dataset.validation=validation.isDuplicate?'duplicate':validation.valid?'valid':'review';
     row.dataset.filename=filename||'';
     row.innerHTML=purchaseAiRowHtml(inv,(Array.isArray(inv.lines)&&inv.lines[0])||{},0,validation,filename||'');
     fragment.appendChild(row);
@@ -9277,14 +9280,10 @@ function validatePurchaseAiInvoice(inv,options={}){
       : tableHasText('#purchase-record-tbody',invoiceNo);
     if(existsInRecords)issues.push('Duplicate purchase invoice in records');
   }
-  if(invoiceNo){
-    const duplicateCount=options.aiInvoiceCounts?.get(invoiceKeyValue)??countPurchaseAiInvoiceNo(invoiceNo);
-    if(duplicateCount>1)issues.push('Duplicate invoice number in AI upload');
-  }
-  // Duplicate by supplier + date + SKU + qty
+  // Duplicate by supplier + date + SKU + qty — checked against DB records only
   const dupKey=purchaseAiDuplicateKey(inv);
   if(dupKey){
-    const existingKeys=options.existingDuplicateKeys||(options._dupKeysCache=options._dupKeysCache||buildExistingPurchaseDuplicateKeys());
+    const existingKeys=options.existingDuplicateKeys||buildExistingPurchaseDuplicateKeys();
     if(existingKeys.has(dupKey))issues.push('Already have this product (same supplier, date, item & qty)');
   }
   if(!String(inv.supplier||'').trim())issues.push('Supplier missing');
