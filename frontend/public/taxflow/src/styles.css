@@ -249,6 +249,7 @@ body.theme-light .nbadge.red{background:var(--red);}
 .icon-btn.edit:hover{background:var(--amber-bg);border-color:var(--amber-border);color:var(--amber);}
 .icon-btn.skip:hover{background:var(--amber-bg);border-color:var(--amber-border);color:var(--amber);}
 .icon-btn.danger:hover{background:var(--red-bg);border-color:var(--red-border);color:var(--red);}
+.icon-btn.invoice-img:hover{background:#f0f0ff;border-color:#c7d2fe;color:#6366f1;}
 .row-actions{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;}
 .ai-card-toolbar{gap:12px;flex-wrap:wrap;}
 .ai-card-controls{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;}

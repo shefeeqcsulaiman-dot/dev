@@ -4813,8 +4813,54 @@ function buildPurchaseRecordRow(purchase){
   const statusClass=status==='Paid'?'b-g':status==='Received'?'b-b':status.includes('Payment')?'b-a':'b-gray';
   const source=String(purchase.source||'Manual');
   const sourceClass=source.toLowerCase().includes('ai')?'b-p':'b-gray';
-  row.innerHTML=`<td class="mono">${escapeHtml(ref)}</td><td>${escapeHtml(purchaseRecordProductSummary(normalizedPurchase))}</td><td>${escapeHtml(normalizedPurchase.supplier||'-')}</td><td>${escapeHtml(normalizedPurchase.date||'-')}</td><td>${escapeHtml(normalizedPurchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(normalizedPurchase.net_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.tax_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.shipping||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.total||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.paid||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.due||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b ${sourceClass}">${escapeHtml(source)}</span></td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td data-action-col="1"><div class="row-actions"><button class="icon-btn edit" type="button" title="Edit" aria-label="Edit purchase" onclick="editPurchaseRecord(this)">${editIconSvg()}</button><button class="icon-btn view" type="button" title="View" aria-label="View purchase" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button><button class="icon-btn copy" type="button" title="Copy" aria-label="Copy purchase" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button><button class="icon-btn danger" type="button" title="Delete" aria-label="Delete purchase" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td>`;
+  const hasImage=Boolean(normalizedPurchase.source_image);
+  row.innerHTML=`<td class="mono">${escapeHtml(ref)}</td><td>${escapeHtml(purchaseRecordProductSummary(normalizedPurchase))}</td><td>${escapeHtml(normalizedPurchase.supplier||'-')}</td><td>${escapeHtml(normalizedPurchase.date||'-')}</td><td>${escapeHtml(normalizedPurchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(normalizedPurchase.net_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.tax_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.shipping||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.total||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.paid||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.due||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b ${sourceClass}">${escapeHtml(source)}</span></td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td data-action-col="1"><div class="row-actions"><button class="icon-btn edit" type="button" title="Edit" aria-label="Edit purchase" onclick="editPurchaseRecord(this)">${editIconSvg()}</button><button class="icon-btn view" type="button" title="View" aria-label="View purchase" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button>${hasImage?`<button class="icon-btn invoice-img" type="button" title="View Invoice" aria-label="View invoice image" onclick="openPurchaseInvoiceImage(this)">${invoiceImageIconSvg()}</button>`:`<button class="icon-btn copy" type="button" title="Copy" aria-label="Copy purchase" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button>`}<button class="icon-btn danger" type="button" title="Delete" aria-label="Delete purchase" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td>`;
   return row;
+}
+
+function openPurchaseInvoiceImage(btn){
+  const row=btn.closest('tr');
+  if(!row)return;
+  let record={};
+  try{record=JSON.parse(row.dataset.purchaseRecord||'{}');}catch{}
+  const src=record.source_image||'';
+  if(!src){toast('No invoice image saved for this record','warn');return;}
+  const filename=record.source_filename||`invoice-${record.ref||'download'}`;
+  const isPdf=src.startsWith('data:application/pdf')||filename.toLowerCase().endsWith('.pdf');
+  let overlay=document.getElementById('m-invoice-image');
+  if(!overlay){
+    overlay=document.createElement('div');
+    overlay.className='overlay';
+    overlay.id='m-invoice-image';
+    overlay.onclick=e=>{if(e.target===overlay)overlay.style.display='none';};
+    overlay.innerHTML=`
+      <div class="modal" style="max-width:900px;width:95vw;padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:90vh">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)">
+          <div>
+            <div class="modal-title" style="margin:0" id="inv-img-title">Invoice</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px" id="inv-img-sub"></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <a id="inv-img-download" class="btn btn-g btn-sm" download style="text-decoration:none">Download</a>
+            <button class="btn btn-g btn-sm" onclick="document.getElementById('m-invoice-image').style.display='none'">Close</button>
+          </div>
+        </div>
+        <div id="inv-img-body" style="flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding:16px;background:var(--bg2)"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+  }
+  document.getElementById('inv-img-title').textContent=record.supplier||'Invoice';
+  document.getElementById('inv-img-sub').textContent=`${record.ref||''} · ${record.date||''}`.replace(/^ · | · $/,'');
+  const dlLink=document.getElementById('inv-img-download');
+  dlLink.href=src;
+  dlLink.download=filename;
+  const body=document.getElementById('inv-img-body');
+  if(isPdf){
+    body.innerHTML=`<iframe src="${src}" style="width:100%;min-height:70vh;border:none;border-radius:8px" title="Invoice PDF"></iframe>`;
+  }else{
+    body.innerHTML=`<img src="${escapeHtml(src)}" alt="Invoice" style="max-width:100%;border-radius:8px;box-shadow:0 2px 16px rgba(0,0,0,.12)">`;
+  }
+  overlay.style.display='flex';
 }
 
 function purchaseRecordProductSummary(purchase={}){
@@ -8539,7 +8585,10 @@ async function extractSingleFile(entry){
   try{
     const invoices=await requestInvoiceExtraction(entry);
     const extractionFailed=isExtractionErrorResult(invoices);
-
+    // Tag each invoice with the source file id so the image can be saved with the record
+    if(Array.isArray(invoices)&&entry.id){
+      invoices.forEach(inv=>{inv._source_entry_id=entry.id;inv._source_filename=entry.name;});
+    }
     entry.status=extractionFailed?'Error':'Extracted';
     entry.invoices=invoices;
     entry.savedInvoiceNos=entry.savedInvoiceNos||new Set();
@@ -8877,6 +8926,10 @@ function purchaseRecordFromExtractedInvoice(inv){
   const lines=Array.isArray(inv.lines)?inv.lines:[];
   const itemQuantity=purchaseLinesTotalQuantity(lines)||lines.length||1;
   const paid=purchaseAiNumber(inv.paid);
+  // Attach source image from the uploaded file entry
+  const sourceFile=inv._source_entry_id?uploadedFiles.find(f=>f.id===inv._source_entry_id):null;
+  const source_image=sourceFile?.base64||inv.source_image||'';
+  const source_filename=sourceFile?.name||inv._source_filename||inv.source_filename||'';
   return {
     ref:inv.invoice_no,
     supplier:inv.supplier||'Supplier',
@@ -8908,7 +8961,9 @@ function purchaseRecordFromExtractedInvoice(inv){
     payment_note:inv.payment_note||'',
     paid_on:inv.paid_on||'',
     shipping_details:inv.shipping_details||'',
-    notes:inv.notes||''
+    notes:inv.notes||'',
+    source_image,
+    source_filename
   };
 }
 
@@ -13571,6 +13626,10 @@ function checkIconSvg(){
 
 function copyIconSvg(){
   return `<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="1" width="8" height="10" rx="1.2"/><rect x="2" y="5" width="8" height="10" rx="1.2"/></svg>`;
+}
+
+function invoiceImageIconSvg(){
+  return `<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2" width="13" height="12" rx="1.2"/><path d="M1.5 10.5l3-3 2.5 2.5 2.5-2 3.5 4"/><circle cx="11.5" cy="5.5" r="1.2"/></svg>`;
 }
 
 function uploadIconSvg(){
