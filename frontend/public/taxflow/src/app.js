@@ -158,6 +158,7 @@ function go(page){
   closeSidebar();
   if(page==='reports')syncReportsFromDatabase();
   if(page==='exception')loadExceptionCenter();
+  if(page==='staff')scheduleIdleTask(()=>renderLeaveCalendar(),300);
   if(page==='inventory'){
     ensurePurchaseRecordsLoadedForStock();
     setTimeout(()=>ensureInventoryBulkSelection(),80);
@@ -4520,6 +4521,123 @@ function formatFinanceAmount(value){
   return Number(value||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 
+// ── Bank Reconciliation ───────────────────────────────────────────────────────
+const _reconMatches=new Map(); // bookId -> stmtId
+const _stmtLines=[]; // {id, date, desc, amount, matched}
+
+function loadBankReconItems(){
+  const bookTbody=document.getElementById('recon-book-tbody');
+  const stmtTbody=document.getElementById('recon-stmt-tbody');
+  if(!bookTbody||!stmtTbody)return;
+
+  // Collect ledger entries that look like bank movements
+  const ledgerRows=[...document.querySelectorAll('#ledger-tbody tr')].filter(r=>r.cells.length>=5);
+  bookTbody.innerHTML='';
+  ledgerRows.slice(0,50).forEach(row=>{
+    const date=row.cells[0]?.textContent.trim();
+    const ref=row.cells[1]?.textContent.trim();
+    const desc=row.cells[2]?.textContent.trim();
+    const dr=parseAmount(row.cells[3]?.textContent)||0;
+    const cr=parseAmount(row.cells[4]?.textContent)||0;
+    const amount=dr||cr;
+    if(!amount)return;
+    const id='BOOK-'+ref+'-'+date;
+    const matched=_reconMatches.has(id);
+    const tr=document.createElement('tr');
+    tr.dataset.id=id;
+    tr.dataset.amount=String(amount);
+    tr.style.cursor='pointer';
+    tr.innerHTML=`<td><input type="checkbox" data-recon-book="${escapeHtml(id)}"></td><td>${escapeHtml(date)}</td><td class="mono" style="font-size:11px">${escapeHtml(ref)}</td><td>${escapeHtml(desc.slice(0,40))}</td><td class="mono text-right">${formatAed(amount)}</td><td><span class="b ${matched?'b-g':'b-a'}">${matched?'Matched':'Unmatched'}</span></td>`;
+    bookTbody.appendChild(tr);
+  });
+
+  stmtTbody.innerHTML='';
+  _stmtLines.forEach(line=>{
+    const matched=[..._reconMatches.values()].includes(line.id);
+    const tr=document.createElement('tr');
+    tr.dataset.id=line.id;
+    tr.dataset.amount=String(line.amount);
+    tr.innerHTML=`<td><input type="checkbox" data-recon-stmt="${escapeHtml(line.id)}"></td><td>${escapeHtml(line.date)}</td><td>${escapeHtml(line.desc)}</td><td class="mono text-right">${formatAed(line.amount)}</td><td><span class="b ${matched?'b-g':'b-a'}">${matched?'Matched':'Unmatched'}</span></td><td><button class="btn btn-g btn-sm" onclick="removeStmtLine('${escapeHtml(line.id)}')">✕</button></td>`;
+    stmtTbody.appendChild(tr);
+  });
+
+  _updateReconStats();
+}
+
+function _updateReconStats(){
+  const stmtTotal=_stmtLines.reduce((s,l)=>s+l.amount,0);
+  const bookTotal=[...document.querySelectorAll('#recon-book-tbody tr')].reduce((s,r)=>s+parseFloat(r.dataset.amount||0),0);
+  updateBankReconciliation(stmtTotal,bookTotal,[..._reconMatches.keys()].length);
+  const unmatchedBook=[...document.querySelectorAll('#recon-book-tbody tr')].filter(r=>!_reconMatches.has(r.dataset.id)).length;
+  const el=document.getElementById('recon-unmatched-book');
+  if(el)el.textContent=unmatchedBook+' unmatched';
+}
+
+function addStatementLine(){
+  const date=prompt('Statement line date (YYYY-MM-DD):',new Date().toISOString().split('T')[0]);
+  if(!date)return;
+  const desc=prompt('Description:','');
+  if(!desc)return;
+  const amtStr=prompt('Amount (AED):','');
+  const amount=parseFloat(amtStr)||0;
+  if(!amount)return;
+  _stmtLines.push({id:'STMT-'+Date.now(),date,desc,amount});
+  saveServer('bankReconLines',{id:'STMT-'+Date.now(),date,desc,amount,created:new Date().toISOString()});
+  loadBankReconItems();
+}
+
+function removeStmtLine(id){
+  const idx=_stmtLines.findIndex(l=>l.id===id);
+  if(idx>=0)_stmtLines.splice(idx,1);
+  loadBankReconItems();
+}
+
+function matchSelected(){
+  const bookChecked=[...document.querySelectorAll('[data-recon-book]:checked')];
+  const stmtChecked=[...document.querySelectorAll('[data-recon-stmt]:checked')];
+  if(!bookChecked.length||!stmtChecked.length){toast('Select one book entry and one statement line','warn');return;}
+  const bookId=bookChecked[0].dataset.reconBook;
+  const stmtId=stmtChecked[0].dataset.reconStmt;
+  const bookAmt=parseFloat(document.querySelector(`[data-id="${bookId}"]`)?.dataset.amount||0);
+  const stmtAmt=parseFloat(document.querySelector(`[data-id="${stmtId}"]`)?.dataset.amount||0);
+  if(Math.abs(bookAmt-stmtAmt)>0.01){
+    toast(`Amount mismatch: book ${formatAed(bookAmt)} vs statement ${formatAed(stmtAmt)}. Match anyway?`,'warn');
+  }
+  _reconMatches.set(bookId,stmtId);
+  saveServer('bankReconMatches',{book_id:bookId,stmt_id:stmtId,matched_at:new Date().toISOString()});
+  loadBankReconItems();
+  audit('Matched bank reconciliation item',bookId,'Matched');
+  toast('Matched ✓','ok');
+}
+
+function unmatchSelected(){
+  const bookChecked=[...document.querySelectorAll('[data-recon-book]:checked')];
+  bookChecked.forEach(cb=>_reconMatches.delete(cb.dataset.reconBook));
+  loadBankReconItems();
+}
+
+function autoReconcile(){
+  const bookRows=[...document.querySelectorAll('#recon-book-tbody tr')];
+  let matched=0;
+  bookRows.forEach(bRow=>{
+    if(_reconMatches.has(bRow.dataset.id))return;
+    const bAmt=parseFloat(bRow.dataset.amount||0);
+    const stmtMatch=_stmtLines.find(l=>Math.abs(l.amount-bAmt)<=0.01&&![..._reconMatches.values()].includes(l.id));
+    if(stmtMatch){_reconMatches.set(bRow.dataset.id,stmtMatch.id);matched++;}
+  });
+  loadBankReconItems();
+  toast(matched?`Auto-matched ${matched} item(s) ✓`:'No automatic matches found',matched?'ok':'info');
+}
+
+function finishReconciliation(){
+  const diff=parseAmount(document.getElementById('bank-reconcile-difference')?.textContent)||0;
+  if(diff>0.01){toast('Reconciliation has unmatched difference of '+formatAed(diff),'warn');return;}
+  saveServer('bankReconSessions',{id:'RECON-'+Date.now(),period:new Date().toISOString().slice(0,7),matches:_reconMatches.size,locked_at:new Date().toISOString(),status:'Locked'});
+  audit('Completed bank reconciliation',new Date().toISOString().slice(0,7),'Locked');
+  toast('Reconciliation locked ✓','ok');
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function buildBankAccountFromForm(){
   return {
     id:(document.getElementById('bank-iban')?.value||`BANK-${Date.now()}`).trim(),
@@ -6058,6 +6176,11 @@ function hydrateFromServer(){
     loadStockMappingsFromServer();
     loadAccountingFromDb();
     loadCorporateAccountingFromDb(data);
+    // Load new feature collections
+    if(Array.isArray(data.lockedPeriods))data.lockedPeriods.filter(r=>r.locked).forEach(r=>_lockedPeriods.add(r.id));
+    if(Array.isArray(data.recurringJournals))loadRecurringJournals(data.recurringJournals);
+    if(Array.isArray(data.alertRules))loadAlertRules(data.alertRules);
+    scheduleIdleTask(()=>{checkDueRecurringJournals();},1000);
     refreshActivePageTables();
     refreshInitializedTables();
     scheduleIdleTask(()=>{
@@ -11286,9 +11409,14 @@ function invoiceProductRecords(){
 function refreshInvoiceProductSuggestions(){
   const list=document.getElementById('invoice-product-options');
   if(!list)return;
-  list.innerHTML=invoiceProductRecords()
-    .map(item=>`<option value="${escapeHtml(item.name)}" label="${escapeHtml([item.code,item.unit].filter(Boolean).join(' - '))}"></option>`)
-    .join('');
+  list.innerHTML=invoiceProductRecords().map(item=>{
+    // Show mapped name for mapped products; original name otherwise
+    const displayVal=item.mapped?(item.displayName||item.name):item.name;
+    const priceHint=Number(item.price||0)>0?formatAed(item.price):'';
+    const src=item.mapped?'Mapped':'Purchase';
+    const label=[item.code,item.unit,priceHint,src].filter(Boolean).join(' · ');
+    return `<option value="${escapeHtml(displayVal)}" label="${escapeHtml(label)}"></option>`;
+  }).join('');
 }
 
 function applyInvoiceProductSuggestion(input){
@@ -11306,28 +11434,40 @@ function applyInvoiceProductSuggestion(input){
 
   if(unit)unit.value=match.unit||'PCS';
 
+  // Show mapped name in the input if product is mapped; otherwise keep original name
+  if(match.mapped&&match.displayName){
+    input.value=match.displayName;
+  } else if(match.name){
+    input.value=match.name;
+  }
+
   // Price lock: if row already has a saved price (from an existing invoice), don't override
-  const existingPrice=parseAmount(price?.value||'0');
   const isPriceLocked=row?.dataset.priceLocked==='true';
   if(!isPriceLocked){
     const newPrice=Number(match.price||0);
     if(price)price.value=newPrice.toFixed(2);
-    if(priceIndicator&&match.mapped){
-      priceIndicator.textContent=`From mapping`;
-      priceIndicator.title=`Price loaded from Stock Mapping at ${new Date().toLocaleTimeString()}. This price is locked once invoice is saved.`;
+    if(priceIndicator){
+      if(match.mapped){
+        priceIndicator.textContent='From mapping';
+        priceIndicator.title=`Mapped price loaded from Stock Mapping (${match.displayName||match.name}).`;
+      } else {
+        priceIndicator.textContent='From purchase';
+        priceIndicator.title=`Price from inventory/purchase record.`;
+      }
       priceIndicator.style.display='';
     }
   } else if(priceIndicator){
-    priceIndicator.textContent=`Locked`;
-    priceIndicator.title=`Price locked from original sale — changing product re-selection will not update it.`;
+    priceIndicator.textContent='Locked';
+    priceIndicator.title='Price locked from original sale — re-selecting product will not update it.';
     priceIndicator.style.display='';
   }
 
   if(row){
     row.dataset.productCode=match.code||'';
-    // Use Display Name as the canonical product name stored in the invoice
-    row.dataset.productName=match.displayName||match.name||input.value||'';
-    row.dataset.priceSource=match.source||'Item Master';
+    // Use mapped display name (taxflow_name) when mapped, original name otherwise
+    const displayName=match.mapped?(match.displayName||match.name):match.name;
+    row.dataset.productName=displayName||input.value||'';
+    row.dataset.priceSource=match.mapped?'Stock Mapping':'Item Master';
     row.dataset.priceSnapshot=String(Number(match.price||0));
     row.dataset.sourcePrice=String(Number(match.sourcePrice??match.price??0));
     row.dataset.mappingId=match.mappingId||'';
@@ -11348,9 +11488,13 @@ function quotationProductOptionsHtml(selected=''){
   const current=String(selected||'');
   if(!records.length)return '<option value="">No items in item table</option>';
   return '<option value="">Select item...</option>'+records.map(item=>{
-    const label=[item.code,item.unit,Number(item.price||0)>0?formatAed(item.price):''].filter(Boolean).join(' - ');
-    const chosen=item.name===current||item.code===current?' selected':'';
-    return `<option value="${escapeHtml(item.name)}" data-code="${escapeHtml(item.code||'')}" data-unit="${escapeHtml(item.unit||'PCS')}" data-price="${escapeHtml(String(item.price??0))}"${chosen}>${escapeHtml(item.name)}${label?` (${escapeHtml(label)})`:''}</option>`;
+    // Use mapped display name when mapped, original name otherwise
+    const displayVal=item.mapped?(item.displayName||item.name):item.name;
+    const priceHint=Number(item.price||0)>0?formatAed(item.price):'';
+    const src=item.mapped?'Mapped':'Purchase';
+    const label=[item.code,item.unit,priceHint,src].filter(Boolean).join(' · ');
+    const chosen=displayVal===current||item.name===current||item.code===current?' selected':'';
+    return `<option value="${escapeHtml(displayVal)}" data-code="${escapeHtml(item.code||'')}" data-unit="${escapeHtml(item.unit||'PCS')}" data-price="${escapeHtml(String(item.price??0))}"${chosen}>${escapeHtml(displayVal)}${label?` (${escapeHtml(label)})`:''}</option>`;
   }).join('');
 }
 
@@ -11372,7 +11516,7 @@ function selectQuotationItem(select){
     return;
   }
   const selectedOption=select?.selectedOptions?.[0];
-  const match=quotationProductRecords().find(item=>[item.name,item.code,...(item.aliases||[])].some(text=>String(text||'').toLowerCase()===value));
+  const match=quotationProductRecords().find(item=>[item.name,item.displayName,item.taxflowName,item.code,...(item.aliases||[])].filter(Boolean).some(text=>String(text||'').toLowerCase()===value));
   if(!match){
     calcQuotationTotals();
     return;
@@ -11625,6 +11769,10 @@ function saveJournalDraft(){
 }
 
 function postLedgerLine({date,ref,description,debit=0,credit=0,account='',account_id=''},{persist=true}={}){
+  if(persist&&date&&isPeriodLocked(date)){
+    toast(`Period ${date.slice(0,7)} is locked — unlock before posting`,'warn');
+    return;
+  }
   const tbody=document.getElementById('ledger-tbody');
   if(!tbody)return;
   const balance=debit-credit;
@@ -12115,6 +12263,90 @@ function renderLeaveRecord(rec){
   row.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td><span class="b ${typeCls}">${escapeHtml(rec.type?.replace(' Leave','')||rec.type)}</span></td><td>${escapeHtml(rec.from)}</td><td>${escapeHtml(rec.to)}</td><td>${rec.days||'—'}</td><td><span class="b ${statusCls}">${escapeHtml(rec.status)}</span></td><td>${actions}</td>`;
   tbody.prepend(row);
 }
+
+// ── Leave Calendar ────────────────────────────────────────────────────────────
+let _leaveCalYear=new Date().getFullYear();
+let _leaveCalMonth=new Date().getMonth(); // 0-based
+
+function leaveCalNav(dir){
+  _leaveCalMonth+=dir;
+  if(_leaveCalMonth>11){_leaveCalMonth=0;_leaveCalYear++;}
+  if(_leaveCalMonth<0){_leaveCalMonth=11;_leaveCalYear--;}
+  renderLeaveCalendar();
+}
+
+function renderLeaveCalendar(){
+  const cal=document.getElementById('leave-calendar');
+  const label=document.getElementById('leave-cal-label');
+  if(!cal)return;
+  const year=_leaveCalYear, month=_leaveCalMonth;
+  const monthName=new Date(year,month,1).toLocaleString('en-AE',{month:'long',year:'numeric'});
+  if(label)label.textContent=monthName;
+  const daysInMonth=new Date(year,month+1,0).getDate();
+  const firstDow=new Date(year,month,1).getDay(); // 0=Sun
+
+  // Collect leave records for this month
+  const leaveRows=[...document.querySelectorAll('#leave-tbody tr')];
+  const typeColour={Annual:'rgba(108,92,231,.25)',Sick:'rgba(0,206,201,.25)',Emergency:'rgba(253,203,110,.35)',Unpaid:'rgba(150,150,150,.2)',Hajj:'rgba(99,205,218,.25)'};
+  // Build per-employee leave map: empName -> Set of date strings 'YYYY-MM-DD'
+  const empLeave={}; // empName -> {date:'TYPE'}
+  leaveRows.forEach(row=>{
+    const cells=[...row.cells];
+    if(cells.length<4)return;
+    const emp=cells[0]?.textContent.trim();
+    const type=cells[1]?.textContent.trim();
+    const from=cells[2]?.textContent.trim();
+    const to=cells[3]?.textContent.trim();
+    const status=cells[5]?.textContent.trim()||'';
+    if(status==='Rejected')return;
+    if(!emp||!from||!to)return;
+    if(!empLeave[emp])empLeave[emp]={};
+    const d=new Date(from);
+    const end=new Date(to);
+    while(d<=end){
+      const key=d.toISOString().split('T')[0];
+      if(d.getFullYear()===year&&d.getMonth()===month)empLeave[emp][key]=type;
+      d.setDate(d.getDate()+1);
+    }
+  });
+  const employees=Object.keys(empLeave);
+  if(!employees.length){
+    cal.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">No leave records for this month.</div>';
+    return;
+  }
+
+  // Day headers
+  const days=Array.from({length:daysInMonth},(_,i)=>i+1);
+  const today=new Date();
+  let html='<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:11px"><thead><tr>';
+  html+='<th style="padding:6px 8px;background:var(--surface2);min-width:120px;text-align:left;border-bottom:1px solid var(--border)">Employee</th>';
+  days.forEach(d=>{
+    const isToday=year===today.getFullYear()&&month===today.getMonth()&&d===today.getDate();
+    const dow=new Date(year,month,d).toLocaleString('en-AE',{weekday:'short'}).slice(0,2);
+    const isWeekend=[0,6].includes(new Date(year,month,d).getDay());
+    html+=`<th style="padding:4px 2px;text-align:center;min-width:28px;background:${isToday?'rgba(108,92,231,.15)':isWeekend?'var(--hover)':'var(--surface2)'};border-bottom:1px solid var(--border);color:${isWeekend?'var(--muted)':'var(--text)'}"><div>${d}</div><div style="font-size:9px;color:var(--muted)">${dow}</div></th>`;
+  });
+  html+='</tr></thead><tbody>';
+  employees.forEach(emp=>{
+    html+=`<tr><td style="padding:6px 8px;font-weight:500;border-bottom:1px solid var(--border);white-space:nowrap">${escapeHtml(emp)}</td>`;
+    days.forEach(d=>{
+      const key=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const type=empLeave[emp][key];
+      const isWeekend=[0,6].includes(new Date(year,month,d).getDay());
+      const bg=type?(typeColour[type.replace(' Leave','')]||'rgba(108,92,231,.2)'):(isWeekend?'var(--hover)':'');
+      html+=`<td style="padding:2px;text-align:center;border-bottom:1px solid var(--border);background:${bg}" title="${type||''}">${type?'●':''}</td>`;
+    });
+    html+='</tr>';
+  });
+  // Legend
+  html+='</tbody></table></div><div style="display:flex;gap:12px;padding:10px 8px;font-size:11px;flex-wrap:wrap">';
+  Object.entries(typeColour).forEach(([t,c])=>{
+    html+=`<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:${c};display:inline-block"></span>${t}</span>`;
+  });
+  html+='</div>';
+  cal.innerHTML=html;
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function submitOTRequest(){
   const employee=document.getElementById('ot-employee')?.value.trim()||'';
@@ -13221,23 +13453,61 @@ function renderAttendanceCalendar(){
 function validateWPS(){
   const status=document.getElementById('wps-status');
   const results=document.getElementById('wps-results');
-  const exceptions=getPayrollRows().filter(row=>row.dataset.wps!=='ok').length;
-  if(status){
-    status.className=exceptions?'b b-a':'b b-g';
-    status.textContent=exceptions?exceptions+' exception':'Validated';
-  }
+  const rows=getPayrollRows();
+  const exceptions=rows.filter(row=>row.dataset.wps!=='ok').length;
+  if(status){status.className=exceptions?'b b-a':'b b-g';status.textContent=exceptions?exceptions+' exception(s)':'Validated';}
   if(results){
-    results.innerHTML=exceptions
-      ? '<div><span style="color:var(--green)">?</span> Payroll totals match SIF preview</div><div><span style="color:var(--amber)">?</span> 1 employee requires bank details before bank upload</div><div><span style="color:var(--green)">?</span> Employer MOL ID and file sequence are present</div>'
-      : '<div><span style="color:var(--green)">?</span> All employees passed WPS validation</div><div><span style="color:var(--green)">?</span> SIF file is ready for bank upload</div>';
+    const lines=rows.map(row=>{
+      const info=getPayrollRowInfo(row);
+      const ok=row.dataset.wps==='ok';
+      return `<div><span style="color:var(--${ok?'green':'amber'})">${ok?'✓':'⚠'}</span> ${escapeHtml(info.name)} — ${ok?'Ready':'Missing bank/IBAN'}</div>`;
+    });
+    lines.push(`<div style="margin-top:6px;color:var(--${exceptions?'amber':'green'})">Total net pay: ${money(rows.reduce((s,r)=>s+getPayrollRowInfo(r).net,0))}</div>`);
+    results.innerHTML=lines.join('');
   }
-  toast(exceptions?'WPS validation completed with exceptions':'WPS validation passed ?',exceptions?'warn':'ok');
+  toast(exceptions?'WPS validation: '+exceptions+' exception(s)':'WPS validation passed ✓',exceptions?'warn':'ok');
+  return exceptions===0;
 }
 
 function generateSIF(){
-  validateWPS();
-  const hasHold=getPayrollRows().some(row=>row.dataset.wps!=='ok');
-  toast(hasHold?'SIF draft generated. Blocked employees excluded until fixed.':'SIF generated for bank upload ?',hasHold?'warn':'ok');
+  const valid=validateWPS();
+  const molId=(document.querySelector('#page-payroll input[placeholder="MOL-7845129"]')?.value||'MOL-0000000').trim();
+  const fileSeq=(document.querySelector('#page-payroll input[value*="SIF"]')?.value||'SIF-001').trim();
+  const salaryMonth=(document.querySelector('#page-payroll input[value*="2024"]')?.value||'').trim();
+  const payDate=document.getElementById('pay-date')?.value||new Date().toISOString().split('T')[0];
+  const period=document.getElementById('pay-period')?.value||salaryMonth;
+  const rows=getPayrollRows().filter(r=>r.dataset.wps==='ok');
+  if(!rows.length){toast('No validated employees — run payroll first','warn');return;}
+
+  // Build SIF (UAE CBUAE Wage Protection System format)
+  const today=new Date().toISOString().split('T')[0].replace(/-/g,'');
+  const transferDate=payDate.replace(/-/g,'');
+  const lines=[];
+  // EHR — Employer Header Record
+  lines.push(`EHR|${molId}|${today}|${period}|${fileSeq}|${rows.length}|${rows.reduce((s,r)=>s+getPayrollRowInfo(r).net,0).toFixed(2)}`);
+  // SCR — Salary Credit Records
+  rows.forEach((row,i)=>{
+    const info=getPayrollRowInfo(row);
+    const emp=[...document.querySelectorAll('#payroll-employee-tbody tr')].find(r=>r.textContent.includes(info.name));
+    const iban=emp?.querySelector('.mono')?.textContent?.trim()||'';
+    const bank=emp?.cells?.[2]?.textContent?.trim()||'';
+    const empId='EMP-'+String(i+1).padStart(3,'0');
+    lines.push(`SCR|${empId}|${bank}|${transferDate}|${empId}|${info.name}|30|${info.basic.toFixed(2)}|${(info.allow+info.ot).toFixed(2)}|${info.ded.toFixed(2)}|${info.net.toFixed(2)}|IBAN|${iban}`);
+  });
+  // ETR — Employer Trailer Record
+  const totNet=rows.reduce((s,r)=>s+getPayrollRowInfo(r).net,0);
+  const totBasic=rows.reduce((s,r)=>s+getPayrollRowInfo(r).basic,0);
+  lines.push(`ETR|${rows.length}|${totBasic.toFixed(2)}|0.00|0.00|${totNet.toFixed(2)}`);
+
+  const blob=new Blob([lines.join('\n')],{type:'text/plain'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`${fileSeq}.sif`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  saveServer('payrollRuns',{id:`SIF-${Date.now()}`,period,type:'SIF',file_seq:fileSeq,mol_id:molId,records:rows.length,total_net:totNet,generated_at:new Date().toISOString()});
+  audit('Generated WPS SIF file',fileSeq,'Downloaded');
+  toast(valid?'SIF file downloaded ✓':'SIF draft downloaded (some employees excluded)','ok');
 }
 
 function getPayrollRowInfo(row){
@@ -13301,19 +13571,355 @@ function calcGratuity(){
   const basic=parseMoneyInput(document.getElementById('eos-basic'));
   const years=parseFloat(document.getElementById('eos-years')?.value)||0;
   const months=parseFloat(document.getElementById('eos-months')?.value)||0;
+  const contractType=document.getElementById('eos-contract')?.value||'unlimited';
+  const reason=document.getElementById('eos-reason')?.value||'dismissal';
   const serviceYears=years+(months/12);
+
+  // UAE Labour Law (Federal Decree-Law No.33 of 2021)
+  // Gratuity = 21 days/year for first 5 yrs + 30 days/year after 5 yrs
+  // Resignation reduction for unlimited contract
+  let multiplier=1;
+  if(reason==='resignation'&&contractType==='unlimited'){
+    if(serviceYears<1){multiplier=0;}
+    else if(serviceYears<3){multiplier=1/3;}
+    else if(serviceYears<5){multiplier=2/3;}
+    // 5+ years = full gratuity even on resignation
+  }
+  if(serviceYears<1){multiplier=0;}
+
   const daily=basic/30;
   const firstFive=Math.min(serviceYears,5)*21;
   const aboveFive=Math.max(serviceYears-5,0)*30;
   const eligibleDays=firstFive+aboveFive;
-  const total=daily*eligibleDays;
+  const raw=daily*eligibleDays*multiplier;
+  const cap=basic*24; // 2-year cap
+  const total=Math.min(raw,cap);
+
   const dailyEl=document.getElementById('eos-daily');
   const daysEl=document.getElementById('eos-days');
   const totalEl=document.getElementById('eos-total');
+  const noteEl=document.getElementById('eos-note');
   if(dailyEl)dailyEl.textContent=money(daily);
   if(daysEl)daysEl.textContent=eligibleDays.toFixed(2);
   if(totalEl)totalEl.textContent=money(total);
+  if(noteEl){
+    const notes=[];
+    if(serviceYears<1)notes.push('Less than 1 year — no gratuity entitlement');
+    else if(reason==='resignation'&&contractType==='unlimited'&&serviceYears<5)notes.push(`Resignation before 5 years: ${Math.round(multiplier*100)}% of full gratuity`);
+    if(raw>cap)notes.push('Capped at 2 years\' total salary (AED '+money(cap)+')');
+    if(!notes.length&&multiplier===1)notes.push('Full gratuity entitlement under UAE Labour Law');
+    noteEl.textContent=notes.join(' · ');
+  }
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PERIOD LOCKING
+// ══════════════════════════════════════════════════════════════════════════════
+const _lockedPeriods=new Set(); // 'YYYY-MM' strings
+
+function isPeriodLocked(dateStr){
+  if(!dateStr)return false;
+  return _lockedPeriods.has(String(dateStr).slice(0,7));
+}
+
+function togglePeriodLock(period){
+  if(_lockedPeriods.has(period)){
+    _lockedPeriods.delete(period);
+    debouncedSaveServer('lockedPeriods',{id:period,locked:false,updated:new Date().toISOString()});
+    toast(`Period ${period} unlocked`,'ok');
+  }else{
+    _lockedPeriods.add(period);
+    debouncedSaveServer('lockedPeriods',{id:period,locked:true,updated:new Date().toISOString()});
+    toast(`Period ${period} locked ✓`,'ok');
+    audit('Locked accounting period',period,'Locked');
+  }
+  renderPeriodLockPanel();
+}
+
+function renderPeriodLockPanel(){
+  const wrap=document.getElementById('period-lock-wrap');
+  if(!wrap)return;
+  const now=new Date();
+  const months=Array.from({length:12},(_,i)=>{
+    const d=new Date(now.getFullYear(),now.getMonth()-6+i,1);
+    return d.toISOString().slice(0,7);
+  });
+  wrap.innerHTML=months.map(m=>{
+    const locked=_lockedPeriods.has(m);
+    const label=new Date(m+'-01').toLocaleString('en-AE',{month:'short',year:'numeric'});
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span>${label} <span class="b ${locked?'b-r':'b-g'}" style="margin-left:8px">${locked?'Locked':'Open'}</span></span>
+      <button class="btn ${locked?'btn-g':'btn-r'} btn-sm" onclick="togglePeriodLock('${m}')">${locked?'Unlock':'Lock'}</button>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RECURRING JOURNAL ENTRIES
+// ══════════════════════════════════════════════════════════════════════════════
+let _recurringJournals=[]; // loaded from server
+
+function loadRecurringJournals(data=[]){
+  _recurringJournals=Array.isArray(data)?data:[];
+  renderRecurringJournalList();
+}
+
+function saveRecurringJournal(){
+  const desc=document.getElementById('rec-je-desc')?.value.trim();
+  const debitAcc=document.getElementById('rec-je-debit')?.value.trim();
+  const creditAcc=document.getElementById('rec-je-credit')?.value.trim();
+  const amount=parseAmount(document.getElementById('rec-je-amount')?.value);
+  const freq=document.getElementById('rec-je-freq')?.value||'monthly';
+  const nextDate=document.getElementById('rec-je-next')?.value;
+  if(!desc||!amount||!debitAcc||!creditAcc){toast('All fields are required','warn');return;}
+  const record={id:'RJE-'+Date.now(),description:desc,debit_account:debitAcc,credit_account:creditAcc,amount,frequency:freq,next_date:nextDate||new Date().toISOString().split('T')[0],active:true,created:new Date().toISOString()};
+  _recurringJournals.push(record);
+  saveServer('recurringJournals',record);
+  renderRecurringJournalList();
+  ['rec-je-desc','rec-je-amount','rec-je-next'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  toast('Recurring journal saved ✓','ok');
+  audit('Added recurring journal',desc,'Created');
+}
+
+function renderRecurringJournalList(){
+  const tbody=document.getElementById('recurring-je-tbody');
+  if(!tbody)return;
+  if(!_recurringJournals.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted)">No recurring journals set up.</td></tr>';return;}
+  tbody.innerHTML=_recurringJournals.map(r=>`<tr>
+    <td>${escapeHtml(r.description)}</td>
+    <td class="mono">${escapeHtml(r.debit_account)}</td>
+    <td class="mono">${escapeHtml(r.credit_account)}</td>
+    <td class="mono">${formatAed(r.amount)}</td>
+    <td><span class="b b-a">${escapeHtml(r.frequency)}</span></td>
+    <td>${escapeHtml(r.next_date||'')}</td>
+    <td><button class="btn btn-p btn-sm" onclick="postRecurringJournal('${r.id}')">Post Now</button>
+        <button class="btn btn-g btn-sm" onclick="deleteRecurringJournal('${r.id}')">✕</button></td>
+  </tr>`).join('');
+}
+
+function postRecurringJournal(id){
+  const r=_recurringJournals.find(x=>x.id===id);
+  if(!r)return;
+  const date=new Date().toISOString().split('T')[0];
+  const ref='RJE-'+date.replace(/-/g,'');
+  postLedgerLine({date,ref,description:r.description,debit:r.amount,credit:0,account:r.debit_account});
+  postLedgerLine({date,ref,description:r.description,debit:0,credit:r.amount,account:r.credit_account});
+  filterLedger();
+  // Advance next date
+  const next=new Date(r.next_date||date);
+  if(r.frequency==='monthly')next.setMonth(next.getMonth()+1);
+  else if(r.frequency==='quarterly')next.setMonth(next.getMonth()+3);
+  else if(r.frequency==='weekly')next.setDate(next.getDate()+7);
+  r.next_date=next.toISOString().split('T')[0];
+  saveServer('recurringJournals',r);
+  renderRecurringJournalList();
+  toast(`Posted: ${r.description}  ✓`,'ok');
+  audit('Posted recurring journal',r.description,'Posted');
+}
+
+function deleteRecurringJournal(id){
+  const idx=_recurringJournals.findIndex(x=>x.id===id);
+  if(idx>=0){
+    deleteServer('recurringJournals',{id});
+    _recurringJournals.splice(idx,1);
+    renderRecurringJournalList();
+    toast('Recurring journal removed','ok');
+  }
+}
+
+function checkDueRecurringJournals(){
+  if(!_recurringJournals.length)return;
+  const today=new Date().toISOString().split('T')[0];
+  const due=_recurringJournals.filter(r=>r.active&&r.next_date&&r.next_date<=today);
+  if(due.length){
+    toast(`${due.length} recurring journal(s) due — check Accounting → Recurring`,'warn');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VAT 201 PDF EXPORT
+// ══════════════════════════════════════════════════════════════════════════════
+function exportVat201Pdf(){
+  const vat=latestReportSummary?.vat||{};
+  const out=vat.output||{};const inp=vat.input||{};
+  const company=currentCompany||{};
+  const settlement=vat.settlement||{};
+  const ra=n=>Number(n||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const win=window.open('','_blank','width=800,height=900');
+  if(!win){toast('Pop-up blocked — allow pop-ups for this site','warn');return;}
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>VAT Return 201</title>
+  <style>body{font-family:Arial,sans-serif;font-size:12px;margin:0;padding:20px;color:#000}
+  h1{font-size:18px;text-align:center;margin:0 0 4px}.hdr{text-align:center;margin-bottom:20px;color:#555}
+  table{width:100%;border-collapse:collapse;margin-bottom:16px}
+  th,td{border:1px solid #ccc;padding:8px;text-align:left}
+  th{background:#f5f5f5;font-weight:600}.mono{text-align:right;font-family:monospace}
+  .section{background:#e8f4fd;font-weight:700;font-size:13px}
+  .total{background:#f0f9e8;font-weight:700}.net{background:#fff3cd;font-weight:700;font-size:14px}
+  @media print{button{display:none}}</style>
+  </head><body>
+  <div style="text-align:center;margin-bottom:8px"><strong>FEDERAL TAX AUTHORITY</strong><br>United Arab Emirates<br><em>VAT Return Form 201</em></div>
+  <table><tr><td><strong>Taxpayer Name</strong></td><td>${company.name||'—'}</td><td><strong>TRN</strong></td><td class="mono">${company.trn||'—'}</td></tr>
+  <tr><td><strong>Tax Period</strong></td><td>${new Date().toLocaleString('en-AE',{month:'long',year:'numeric'})}</td><td><strong>Filing Date</strong></td><td>${new Date().toLocaleDateString('en-AE')}</td></tr></table>
+  <table><thead><tr><th>Box</th><th>Description</th><th class="mono">Amount (AED)</th><th class="mono">VAT Amount (AED)</th></tr></thead><tbody>
+  <tr class="section"><td colspan="4">PART A — OUTPUT TAX</td></tr>
+  <tr><td>1</td><td>Standard rated supplies (5%)</td><td class="mono">${ra(out.standard_rated)}</td><td class="mono">${ra(out.output_vat)}</td></tr>
+  <tr><td>2</td><td>Zero-rated supplies</td><td class="mono">0.00</td><td class="mono">0.00</td></tr>
+  <tr><td>3</td><td>Exempt supplies</td><td class="mono">0.00</td><td class="mono">—</td></tr>
+  <tr><td>4</td><td>Supplies subject to tax outside UAE</td><td class="mono">0.00</td><td class="mono">—</td></tr>
+  <tr class="total"><td>5</td><td>Total Output Supplies</td><td class="mono">${ra(out.total_supplies)}</td><td class="mono">${ra(out.output_vat)}</td></tr>
+  <tr><td>6</td><td>Supplies from which no VAT is due</td><td class="mono">0.00</td><td class="mono">—</td></tr>
+  <tr class="section"><td colspan="4">PART B — INPUT TAX</td></tr>
+  <tr><td>9</td><td>Standard rated expenses (recoverable)</td><td class="mono">${ra(inp.standard_rated)}</td><td class="mono">${ra(inp.input_vat)}</td></tr>
+  <tr class="total"><td>10</td><td>Total Recoverable Input Tax</td><td class="mono">${ra(inp.total_purchases)}</td><td class="mono">${ra(inp.input_vat)}</td></tr>
+  <tr class="section"><td colspan="4">PART C — NET VAT DUE</td></tr>
+  <tr class="net"><td>11</td><td>Net VAT Due to FTA (Box 5 VAT − Box 10 VAT)</td><td class="mono" colspan="2" style="font-size:16px">${ra(settlement.net_vat_due||((out.output_vat||0)-(inp.input_vat||0)))}</td></tr>
+  </tbody></table>
+  <div style="margin-top:20px;font-size:11px;color:#666;border-top:1px solid #ccc;padding-top:8px">
+  <strong>Declaration:</strong> I declare that the information given in this return is true and complete.<br>
+  Generated by TaxFlow on ${new Date().toLocaleString('en-AE')} — This is a system-generated draft. Verify with your tax advisor before submission.
+  </div>
+  <div style="text-align:center;margin-top:16px"><button onclick="window.print()" style="padding:10px 24px;background:#6c5ce7;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer">Print / Save as PDF</button></div>
+  </body></html>`;
+  win.document.write(html);
+  win.document.close();
+  audit('Exported VAT 201 return','VAT Report','Exported');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CORPORATE TAX WORKSHEET (UAE 9% CT — effective June 2023)
+// ══════════════════════════════════════════════════════════════════════════════
+function calcCorporateTax(){
+  const pl=latestReportSummary?.profit_loss||{};
+  const plNetProfit=Number(pl.net_profit||0);
+  const npInput=document.getElementById('ct-net-profit');
+  // Prefill input from P&L if empty
+  if(npInput&&!npInput.value&&plNetProfit!==0)npInput.value=plNetProfit;
+  const netProfit=parseAmount(npInput?.value)||plNetProfit;
+  const nonDed=parseAmount(document.getElementById('ct-non-ded')?.value)||0;
+  const exempt=parseAmount(document.getElementById('ct-exempt')?.value)||0;
+  const taxableIncome=netProfit+nonDed-exempt;
+  const threshold=375000;
+  const rate=0.09;
+  let taxLiability=0;
+  let note='';
+  if(taxableIncome<=threshold){
+    taxLiability=0;
+    note='Small Business Relief applies (≤ AED 375,000)';
+  }else{
+    taxLiability=(taxableIncome-threshold)*rate;
+    note=`9% on AED ${(taxableIncome-threshold).toLocaleString('en-AE')} above threshold`;
+  }
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  set('ct-taxable-income',formatAed(taxableIncome));
+  set('ct-liability',formatAed(taxLiability));
+  set('ct-sbr-note',note);
+  set('corp-tax',formatAed(taxLiability));
+  set('corp-income',formatAed(taxableIncome));
+  const row=document.getElementById('ct-result-row');
+  if(row)row.style.display='';
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// BULK CSV EXPORT — universal export for any table
+// ══════════════════════════════════════════════════════════════════════════════
+function exportTableToCSV(tableEl,filename){
+  if(!tableEl){toast('Table not found','warn');return;}
+  const rows=[...tableEl.querySelectorAll('tr')];
+  const csv=rows.map(row=>{
+    return [...row.querySelectorAll('th,td')].map(cell=>{
+      const text=(cell.textContent||'').trim().replace(/\s+/g,' ');
+      return '"'+text.replace(/"/g,'""')+'"';
+    }).join(',');
+  }).join('\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=(filename||'export')+'.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('CSV exported ✓','ok');
+}
+
+function exportNearestTable(btn,filename){
+  const table=btn?.closest('.card')?.querySelector('table.tbl')||btn?.closest('.page')?.querySelector('table.tbl');
+  exportTableToCSV(table,filename||'taxflow-export');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// NOTIFICATION ALERT RULES
+// ══════════════════════════════════════════════════════════════════════════════
+let _alertRules=[]; // {id, type, threshold, enabled}
+
+function loadAlertRules(rules=[]){
+  _alertRules=Array.isArray(rules)?rules:[];
+  renderAlertRules();
+}
+
+function saveAlertRule(){
+  const type=document.getElementById('alert-type')?.value||'cash_below';
+  const threshold=parseAmount(document.getElementById('alert-threshold')?.value)||0;
+  const rule={id:'RULE-'+Date.now(),type,threshold,enabled:true,created:new Date().toISOString()};
+  _alertRules.push(rule);
+  saveServer('alertRules',rule);
+  renderAlertRules();
+  const el=document.getElementById('alert-threshold');
+  if(el)el.value='';
+  toast('Alert rule saved ✓','ok');
+}
+
+function deleteAlertRule(id){
+  const idx=_alertRules.findIndex(r=>r.id===id);
+  if(idx>=0){deleteServer('alertRules',{id});_alertRules.splice(idx,1);renderAlertRules();}
+}
+
+function toggleAlertRule(id){
+  const r=_alertRules.find(x=>x.id===id);
+  if(r){r.enabled=!r.enabled;saveServer('alertRules',r);renderAlertRules();}
+}
+
+const _ALERT_LABELS={
+  cash_below:'Cash balance below AED',
+  invoice_overdue_days:'Invoice overdue by days',
+  expense_above:'Single expense above AED',
+  payroll_above:'Monthly payroll above AED',
+};
+
+function renderAlertRules(){
+  const tbody=document.getElementById('alert-rules-tbody');
+  if(!tbody)return;
+  if(!_alertRules.length){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--muted)">No alert rules configured.</td></tr>';return;}
+  tbody.innerHTML=_alertRules.map(r=>`<tr>
+    <td>${escapeHtml(_ALERT_LABELS[r.type]||r.type)}</td>
+    <td class="mono">${Number(r.threshold).toLocaleString('en-AE')}</td>
+    <td><span class="b ${r.enabled?'b-g':'b-gray'}">${r.enabled?'Active':'Paused'}</span></td>
+    <td><button class="btn btn-g btn-sm" onclick="toggleAlertRule('${r.id}')">${r.enabled?'Pause':'Activate'}</button>
+        <button class="btn btn-g btn-sm" onclick="deleteAlertRule('${r.id}')">✕</button></td>
+  </tr>`).join('');
+}
+
+function checkAlertRules(){
+  if(!_alertRules.length)return;
+  const d=latestReportSummary?.dashboard||{};
+  const cashBal=Number(d.cash_balance||d.bank_balance||0);
+  const fired=[];
+  _alertRules.filter(r=>r.enabled).forEach(r=>{
+    if(r.type==='cash_below'&&cashBal<r.threshold){
+      fired.push(`Cash balance AED ${cashBal.toLocaleString('en-AE')} is below threshold AED ${Number(r.threshold).toLocaleString('en-AE')}`);
+    }
+  });
+  if(fired.length){
+    fired.forEach(msg=>toast('⚠ Alert: '+msg,'warn'));
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Hook alerts + recurring checks into bootstrap / report load
+// ══════════════════════════════════════════════════════════════════════════════
+const _origRenderReports=renderReportsFromDatabase;
+renderReportsFromDatabase=function(data){
+  _origRenderReports(data);
+  scheduleIdleTask(()=>{checkAlertRules();},500);
+};
 
 // -- REPORTS + AI INSIGHTS ----------------------------------------
 function runAIReport(){
@@ -15326,7 +15932,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260612n';
+  const _SNAP_VER='20260612o';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);

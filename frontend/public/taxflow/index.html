@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260612n" as="style">
-<link rel="preload" href="src/app.js?v=20260612n" as="script">
+<link rel="preload" href="src/styles.css?v=20260612o" as="style">
+<link rel="preload" href="src/app.js?v=20260612o" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260612n">
+<link rel="stylesheet" href="src/styles.css?v=20260612o">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -733,7 +733,7 @@
   <!-- Customers -->
   <div class="tab-body" id="s-customers">
     <div class="card">
-      <div class="card-hd"><div class="card-title">Customer Directory</div><button class="btn btn-p" onclick="showM('m-customer')">+ Add Customer</button></div>
+      <div class="card-hd"><div class="card-title">Customer Directory</div><div class="flx" style="gap:6px"><button class="btn btn-g btn-sm" onclick="exportNearestTable(this,'customers.csv')">⬇ CSV</button><button class="btn btn-p" onclick="showM('m-customer')">+ Add Customer</button></div></div>
       <table class="tbl">
         <thead><tr><th>Name</th><th>TRN</th><th>Emirate</th><th>Contact</th><th>Total Business</th><th></th></tr></thead>
         <tbody id="customer-tbody">
@@ -1007,7 +1007,7 @@
 
   <div class="tab-body" id="p-vendors">
     <div class="card">
-      <div class="card-hd"><div class="card-title">Vendor Directory</div><button class="btn btn-p btn-sm" onclick="showM('m-vendor')">+ Add Vendor</button></div>
+      <div class="card-hd"><div class="card-title">Vendor Directory</div><div class="flx" style="gap:6px"><button class="btn btn-g btn-sm" onclick="exportNearestTable(this,'vendors.csv')">⬇ CSV</button><button class="btn btn-p btn-sm" onclick="showM('m-vendor')">+ Add Vendor</button></div></div>
       <table class="tbl">
         <thead><tr><th>Vendor</th><th>TRN</th><th>Category</th><th>Email</th><th>Address</th><th>Open Balance</th><th>Status</th></tr></thead>
         <tbody id="vendor-tbody">
@@ -1110,13 +1110,47 @@
     </div>
   </div>
   <div class="tab-body" id="bk-reconcile">
-    <div class="card">
-      <div class="card-hd"><div class="card-title">Bank Reconciliation — June 2024</div><button class="btn btn-p btn-sm" onclick="toast('Reconciliation complete ✓','ok')">Auto-Reconcile</button></div>
+    <div class="card mb16">
+      <div class="card-hd">
+        <div><div class="card-title">Bank Reconciliation</div><div class="card-sub">Select bank account, import statement lines, match with book entries</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-g btn-sm" onclick="loadBankReconItems()">↻ Refresh</button>
+          <button class="btn btn-p btn-sm" onclick="autoReconcile()">Auto-Match</button>
+          <button class="btn btn-g btn-sm" onclick="finishReconciliation()">Finish & Lock</button>
+        </div>
+      </div>
       <div class="g3 mb16">
         <div class="stat"><div class="stat-lbl">Bank Statement Balance</div><div class="stat-val" id="bank-statement-balance" style="color:var(--accent);font-size:18px">AED 0.00</div></div>
         <div class="stat"><div class="stat-lbl">Book Balance</div><div class="stat-val" id="bank-book-balance" style="color:var(--green);font-size:18px">AED 0.00</div></div>
-        <div class="stat"><div class="stat-lbl">Difference</div><div class="stat-val" id="bank-reconcile-difference" style="color:var(--amber);font-size:18px">AED 0.00</div><div class="stat-delta dn" id="bank-reconcile-note">No unmatched items</div></div>
+        <div class="stat"><div class="stat-lbl">Unmatched Difference</div><div class="stat-val" id="bank-reconcile-difference" style="color:var(--amber);font-size:18px">AED 0.00</div><div class="stat-delta dn" id="bank-reconcile-note"></div></div>
       </div>
+    </div>
+    <div class="g2">
+      <div class="card">
+        <div class="card-hd">
+          <div><div class="card-title">Book Entries (Ledger)</div></div>
+          <span class="b b-a" id="recon-unmatched-book">0 unmatched</span>
+        </div>
+        <table class="tbl" style="font-size:12px">
+          <thead><tr><th></th><th>Date</th><th>Reference</th><th>Description</th><th class="text-right">Amount</th><th>Status</th></tr></thead>
+          <tbody id="recon-book-tbody"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-hd">
+          <div><div class="card-title">Bank Statement Lines</div></div>
+          <button class="btn btn-g btn-sm" onclick="addStatementLine()">+ Add Line</button>
+        </div>
+        <table class="tbl" style="font-size:12px">
+          <thead><tr><th></th><th>Date</th><th>Description</th><th class="text-right">Amount</th><th>Status</th><th></th></tr></thead>
+          <tbody id="recon-stmt-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:10px">
+      <button class="btn btn-p" onclick="matchSelected()">Match Selected</button>
+      <button class="btn btn-g" onclick="unmatchSelected()">Unmatch</button>
+      <span style="font-size:12px;color:var(--muted);align-self:center">Select one row from each side, then click Match</span>
     </div>
   </div>
 </div>
@@ -1135,7 +1169,7 @@
 
   <div class="tab-body on" id="hr-emp">
     <div class="card mb16">
-      <div class="card-hd"><div class="card-title">Employee Directory</div><button class="btn btn-p" onclick="showM('m-emp')">+ Add Employee</button></div>
+      <div class="card-hd"><div class="card-title">Employee Directory</div><div class="flx" style="gap:6px"><button class="btn btn-g btn-sm" onclick="exportNearestTable(this,'employees.csv')">⬇ CSV</button><button class="btn btn-p" onclick="showM('m-emp')">+ Add Employee</button></div></div>
       <table class="tbl">
         <thead><tr><th>ID</th><th>Name</th><th>Department</th><th>Designation</th><th>Supervisor</th><th>Shift</th><th>Salary (AED)</th><th>Status</th><th></th></tr></thead>
         <tbody id="employee-tbody">
@@ -1221,6 +1255,18 @@
           </tbody>
         </table>
       </div>
+    </div>
+    <!-- Leave Calendar -->
+    <div class="card">
+      <div class="card-hd">
+        <div><div class="card-title">Leave Calendar</div><div class="card-sub">Visual monthly overview of all leave</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-g btn-sm" onclick="leaveCalNav(-1)">&#8592;</button>
+          <span id="leave-cal-label" style="font-weight:600;min-width:120px;text-align:center"></span>
+          <button class="btn btn-g btn-sm" onclick="leaveCalNav(1)">&#8594;</button>
+        </div>
+      </div>
+      <div id="leave-calendar" style="overflow-x:auto"></div>
     </div>
   </div>
 
@@ -1599,21 +1645,22 @@
   <div class="tab-body" id="pay-benefits">
     <div class="g2 mb16">
       <div class="card">
-        <div class="card-hd"><div><div class="card-title">End of Service Estimate</div><div class="card-sub">Gratuity estimate based on basic salary and service period</div></div><button class="btn btn-g btn-sm" onclick="calcGratuity()">Calculate</button></div>
+        <div class="card-hd"><div><div class="card-title">End of Service Gratuity (EOSB)</div><div class="card-sub">UAE Labour Law — Federal Decree-Law No.33 of 2021</div></div></div>
         <div class="fr2">
-          <div class="fg"><label class="fl">Employee</label><select class="fi"><option>Ahmed Rashid</option><option>Sara Al Mansouri</option><option>Rania Abboud</option><option>Mohamed Jaber</option></select></div>
-          <div class="fg"><label class="fl">Contract Type</label><select class="fi"><option>Unlimited / Full-time</option><option>Limited</option><option>Part-time</option></select></div>
+          <div class="fg"><label class="fl">Contract Type</label><select class="fi" id="eos-contract" onchange="calcGratuity()"><option value="unlimited">Unlimited / Open-ended</option><option value="limited">Limited (Fixed-term)</option></select></div>
+          <div class="fg"><label class="fl">Reason for Termination</label><select class="fi" id="eos-reason" onchange="calcGratuity()"><option value="dismissal">Dismissal / Redundancy</option><option value="resignation">Resignation</option></select></div>
         </div>
         <div class="fr3">
-          <div class="fg"><label class="fl">Basic Salary</label><input class="fi mono" id="eos-basic" value="8500" oninput="calcGratuity()"></div>
-          <div class="fg"><label class="fl">Years</label><input class="fi mono" id="eos-years" value="5" oninput="calcGratuity()"></div>
-          <div class="fg"><label class="fl">Months</label><input class="fi mono" id="eos-months" value="3" oninput="calcGratuity()"></div>
+          <div class="fg"><label class="fl">Basic Monthly Salary</label><input class="fi mono" id="eos-basic" value="8500" oninput="calcGratuity()"></div>
+          <div class="fg"><label class="fl">Years of Service</label><input class="fi mono" id="eos-years" value="5" oninput="calcGratuity()"></div>
+          <div class="fg"><label class="fl">Additional Months</label><input class="fi mono" id="eos-months" value="3" oninput="calcGratuity()"></div>
         </div>
         <div class="inv-total-box" style="width:100%;min-width:0">
-          <div class="tot-row"><span style="color:var(--text3)">Daily Basic</span><span class="mono" id="eos-daily">AED 283.33</span></div>
-          <div class="tot-row"><span style="color:var(--text3)">Eligible Days</span><span class="mono" id="eos-days">110.25</span></div>
-          <div class="tot-final"><span>Estimated EOS</span><span class="mono" id="eos-total" style="color:var(--green)">AED 31,237.50</span></div>
+          <div class="tot-row"><span style="color:var(--text3)">Daily Basic Rate</span><span class="mono" id="eos-daily">AED 283.33</span></div>
+          <div class="tot-row"><span style="color:var(--text3)">Eligible Gratuity Days</span><span class="mono" id="eos-days">110.25</span></div>
+          <div class="tot-final"><span>Estimated EOSB</span><span class="mono" id="eos-total" style="color:var(--green)">AED 31,237.50</span></div>
         </div>
+        <div id="eos-note" style="font-size:12px;color:var(--muted);margin-top:8px;padding:8px;background:var(--surface2);border-radius:6px"></div>
       </div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Leave Salary & Air Ticket</div></div>
@@ -1982,6 +2029,8 @@
     <div class="tab" onclick="stab(this,'acc-payrec')">Payments / Receipts</div>
     <div class="tab" onclick="stab(this,'acc-filing')">Statutory Filing</div>
     <div class="tab" onclick="stab(this,'acc-bankrec')">Bank Reconciliation</div>
+    <div class="tab" onclick="stab(this,'acc-recurring');renderRecurringJournalList()">Recurring Journals</div>
+    <div class="tab" onclick="stab(this,'acc-periods');renderPeriodLockPanel()">Period Lock</div>
   </div>
 
   <div class="tab-body on" id="acc-chart">
@@ -2140,9 +2189,10 @@
   <div class="tab-body" id="acc-ledger">
     <div class="card">
       <div class="card-hd"><div class="card-title">General Ledger</div>
-        <div class="flx">
+        <div class="flx" style="gap:6px">
           <select class="fi" id="ledger-account-filter" style="width:200px" onchange="filterLedger()"><option>All Accounts</option><option>Cash & Cash Equivalents</option><option>Accounts Receivable</option><option>Sales Revenue</option></select>
           <select class="fi" style="width:130px"><option>June 2024</option></select>
+          <button class="btn btn-g btn-sm" onclick="exportNearestTable(this,'ledger.csv')">⬇ CSV</button>
         </div>
       </div>
       <table class="tbl">
@@ -2239,6 +2289,50 @@
           <tr><td>AED 500 Bank Charge</td><td>—</td><td><span class="b b-r">0%</span></td><td><span class="b b-r">Unmatched</span></td><td><button class="btn btn-p btn-sm">Create Journal</button></td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- Recurring Journals Tab -->
+  <div class="tab-body" id="acc-recurring">
+    <div class="g2">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">New Recurring Journal</div></div>
+        <div class="fg"><label class="fl">Description</label><input class="fi" id="rec-je-desc" placeholder="Monthly rent, depreciation, subscription…"></div>
+        <div class="fr2">
+          <div class="fg"><label class="fl">Debit Account</label><input class="fi mono" id="rec-je-debit" placeholder="Rent Expense (6100)"></div>
+          <div class="fg"><label class="fl">Credit Account</label><input class="fi mono" id="rec-je-credit" placeholder="Accounts Payable (2000)"></div>
+        </div>
+        <div class="fr3">
+          <div class="fg"><label class="fl">Amount (AED)</label><input class="fi mono" id="rec-je-amount" placeholder="0.00"></div>
+          <div class="fg"><label class="fl">Frequency</label><select class="fi" id="rec-je-freq"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="weekly">Weekly</option></select></div>
+          <div class="fg"><label class="fl">Next Post Date</label><input class="fi" id="rec-je-next" type="date"></div>
+        </div>
+        <div class="modal-foot"><button class="btn btn-p" onclick="saveRecurringJournal()">Save Recurring Journal</button></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Scheduled Journals</div></div>
+        <table class="tbl" style="font-size:12px">
+          <thead><tr><th>Description</th><th>Debit</th><th>Credit</th><th>Amount</th><th>Freq</th><th>Next Date</th><th></th></tr></thead>
+          <tbody id="recurring-je-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Period Lock Tab -->
+  <div class="tab-body" id="acc-periods">
+    <div class="g2">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Period Lock</div><div class="card-sub">Lock closed months to prevent backdated journal entries</div></div></div>
+        <div id="period-lock-wrap" style="padding:8px 0"></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">What is Period Locking?</div></div>
+        <div style="font-size:13px;line-height:1.8;color:var(--muted)">
+          <p>Locking a period prevents any new journal entries from being posted to that month. This protects your closed-period financial statements from accidental or unauthorized changes.</p>
+          <p>Typical practice: lock the previous month after reconciliation and management approval. Locked periods can be unlocked by an admin if corrections are needed.</p>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2908,7 +3002,7 @@
 
       <!-- VAT 201 -->
       <div class="rep-panel" id="rep-vat201">
-        <div class="rep-panel-head"><h2 class="rep-title">VAT 201 Preparation</h2><div class="flx" style="gap:6px"><button class="btn btn-g btn-sm" onclick="exportActiveReportExcel()">⬇ Excel</button><button class="btn btn-p btn-sm" onclick="exportActiveReportPdf()">⬇ PDF</button></div></div>
+        <div class="rep-panel-head"><h2 class="rep-title">VAT 201 Preparation</h2><div class="flx" style="gap:6px"><button class="btn btn-g btn-sm" onclick="exportActiveReportExcel()">⬇ Excel</button><button class="btn btn-p btn-sm" onclick="exportActiveReportPdf()">⬇ PDF</button><button class="btn btn-sm" style="background:var(--red);color:#fff" onclick="exportVat201Pdf()">⬇ FTA VAT 201</button></div></div>
         <div class="card mb16"><div class="g2">
           <div class="fg"><label class="fl">Tax Period</label><select class="fi"><option>Current Period</option></select></div>
           <div class="fg"><label class="fl">Filing Frequency</label><select class="fi"><option>Monthly</option><option>Quarterly</option></select></div>
@@ -2930,7 +3024,17 @@
 
       <!-- CORPORATE TAX -->
       <div class="rep-panel" id="rep-corp">
-        <div class="rep-panel-head"><h2 class="rep-title">Corporate Tax Computation</h2><div class="flx" style="gap:6px"><button class="btn btn-g btn-sm" onclick="exportActiveReportExcel()">⬇ Excel</button><button class="btn btn-p btn-sm" onclick="exportActiveReportPdf()">⬇ PDF</button></div></div>
+        <div class="rep-panel-head"><h2 class="rep-title">Corporate Tax Computation</h2><div class="flx" style="gap:6px"><button class="btn btn-sm" style="background:var(--accent);color:#fff" onclick="calcCorporateTax()">Calculate CT</button><button class="btn btn-g btn-sm" onclick="exportActiveReportExcel()">⬇ Excel</button><button class="btn btn-p btn-sm" onclick="exportActiveReportPdf()">⬇ PDF</button></div></div>
+        <div class="card mb16"><div class="g3">
+          <div class="fg"><label class="fl">Accounting Net Profit (AED)</label><input class="fi mono" id="ct-net-profit" type="number" placeholder="From P&L" oninput="calcCorporateTax()"></div>
+          <div class="fg"><label class="fl">Non-Deductible Expenses (AED)</label><input class="fi mono" id="ct-non-ded" type="number" placeholder="0" oninput="calcCorporateTax()"></div>
+          <div class="fg"><label class="fl">Exempt / Adjustments (AED)</label><input class="fi mono" id="ct-exempt" type="number" placeholder="0" oninput="calcCorporateTax()"></div>
+        </div>
+        <div class="g3 mt12" id="ct-result-row" style="display:none">
+          <div class="stat"><div class="stat-lbl">Taxable Income</div><div class="stat-val mono" id="ct-taxable-income">—</div></div>
+          <div class="stat"><div class="stat-lbl">CT @ 9%</div><div class="stat-val mono" style="color:var(--red)" id="ct-liability">—</div></div>
+          <div class="stat"><div class="stat-lbl">Small Business Relief</div><div class="stat-val mono" style="color:var(--green)" id="ct-sbr-note">—</div></div>
+        </div></div>
         <div class="g4 mb16">
           <div class="stat"><div class="stat-lbl">Corporate Tax</div><div class="stat-val" style="color:var(--green)" id="corp-tax">—</div></div>
           <div class="stat"><div class="stat-lbl">Taxable Income</div><div class="stat-val" style="color:var(--accent)" id="corp-income">—</div></div>
@@ -3201,7 +3305,7 @@
   </div>
 
   <div class="tab-body" id="set-notif">
-    <div class="card">
+    <div class="card mb16">
       <div class="card-hd"><div class="card-title">Notification Preferences</div></div>
       <table class="tbl">
         <tbody>
@@ -3211,6 +3315,23 @@
           <tr><td><div style="font-weight:500">Low Stock Alerts</div><div style="font-size:12px;color:var(--text3)">Notify when stock falls below reorder level</div></td><td><input type="checkbox" checked></td></tr>
           <tr><td><div style="font-weight:500">Leave Requests</div><div style="font-size:12px;color:var(--text3)">Notify when leave request is submitted</div></td><td><input type="checkbox" checked></td></tr>
         </tbody>
+      </table>
+    </div>
+    <!-- Alert Rules -->
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">Alert Rules</div><div class="card-sub">Auto-trigger alerts when thresholds are crossed</div></div><button class="btn btn-p btn-sm" onclick="saveAlertRule()">+ Add Rule</button></div>
+      <div class="g3 mb12" style="padding-top:8px">
+        <div class="fg"><label class="fl">Rule Name</label><input class="fi" id="alert-rule-name" placeholder="e.g. Low Cash Warning"></div>
+        <div class="fg"><label class="fl">Metric</label><select class="fi" id="alert-rule-metric">
+          <option value="cash_below">Cash Balance Below</option>
+          <option value="overdue_invoice">Overdue Invoice Count Above</option>
+          <option value="expense_above">Monthly Expense Above</option>
+        </select></div>
+        <div class="fg"><label class="fl">Threshold (AED / count)</label><input class="fi mono" id="alert-rule-threshold" type="number" placeholder="e.g. 10000"></div>
+      </div>
+      <table class="tbl">
+        <thead><tr><th>Name</th><th>Metric</th><th>Threshold</th><th>Status</th><th></th></tr></thead>
+        <tbody id="alert-rules-tbody"><tr><td colspan="5" style="color:var(--text3);text-align:center">No alert rules configured.</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -5213,6 +5334,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260612n" defer></script>
+<script src="src/app.js?v=20260612o" defer></script>
 </body>
 </html>
