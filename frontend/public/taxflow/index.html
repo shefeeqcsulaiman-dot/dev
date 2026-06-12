@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260612k" as="style">
-<link rel="preload" href="src/app.js?v=20260612k" as="script">
+<link rel="preload" href="src/styles.css?v=20260612l" as="style">
+<link rel="preload" href="src/app.js?v=20260612l" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260612k">
+<link rel="stylesheet" href="src/styles.css?v=20260612l">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -1055,6 +1055,13 @@
             <tr><td class="mono">HOUR</td><td>Hour</td><td>Time</td><td class="mono">2</td><td><span class="b b-g">Active</span></td></tr>
           </tbody>
         </table>
+      </div>
+    </div>
+    <div class="card" style="border-color:rgba(240,107,107,.3)">
+      <div class="card-hd"><div><div class="card-title" style="color:var(--red)">Danger Zone</div><div class="card-sub">Irreversible operations — data cannot be recovered</div></div></div>
+      <div class="flx" style="gap:10px;flex-wrap:wrap">
+        <button class="btn btn-r btn-sm" onclick="wipeAllCompanyData()">Clear All Data from Database</button>
+        <span style="font-size:12px;color:var(--text3);align-self:center">Deletes all invoices, purchases, products, employees and transactions. Keeps invoice layouts and settings.</span>
       </div>
     </div>
   </div>
@@ -5205,6 +5212,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260612k" defer></script>
+<script src="src/app.js?v=20260612l" defer></script>
 </body>
 </html>

@@ -32,14 +32,21 @@ from app.models import (
     Account,
     AppDataRecord,
     AuditLog,
+    AuditLogDetail,
     Employee,
     InventoryValuationLayer,
     Invoice,
     InvoiceLine,
+    JournalEntry,
+    JournalLine,
+    Payment,
+    PayrollRun,
+    Receipt,
     SourceTransaction,
     SourceTransactionLine,
     StockMovement,
     StockProductMapping,
+    TaxLine,
     User,
 )
 
@@ -2897,3 +2904,76 @@ def clean_base(name: str) -> str:
     stem = name.rsplit(".", 1)[0]
     cleaned = "".join(ch if ch.isalnum() else "-" for ch in stem).strip("-").upper()
     return (cleaned or "TAXFLOW")[:18]
+
+
+# Collections that hold user config/templates — preserved on wipe
+_WIPE_KEEP_COLLECTIONS = frozenset({
+    "invoiceLayout",
+    "invoice-layouts-pack",
+    "salesCategories",
+    "salesUnits",
+})
+
+
+@router.post("/wipe")
+@limiter.limit("5/minute")
+def wipe_company_data(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Delete all transactional data for the company. Keeps invoice layouts,
+    sales categories and sales units. Irreversible — requires explicit call."""
+    cid = current_user.company_id
+
+    # Domain tables (order matters for FK constraints)
+    db.query(AuditLogDetail).filter(
+        AuditLogDetail.audit_log_id.in_(
+            db.query(AuditLog.id).filter(AuditLog.company_id == cid)
+        )
+    ).delete(synchronize_session=False)
+    db.query(AuditLog).filter(AuditLog.company_id == cid).delete(synchronize_session=False)
+    db.query(InventoryValuationLayer).filter(InventoryValuationLayer.company_id == cid).delete(synchronize_session=False)
+    db.query(StockMovement).filter(StockMovement.company_id == cid).delete(synchronize_session=False)
+    db.query(TaxLine).filter(TaxLine.company_id == cid).delete(synchronize_session=False)
+    db.query(JournalLine).filter(
+        JournalLine.journal_id.in_(
+            db.query(JournalEntry.id).filter(JournalEntry.company_id == cid)
+        )
+    ).delete(synchronize_session=False)
+    db.query(JournalEntry).filter(JournalEntry.company_id == cid).delete(synchronize_session=False)
+    db.query(InvoiceLine).filter(
+        InvoiceLine.invoice_id.in_(
+            db.query(Invoice.id).filter(Invoice.company_id == cid)
+        )
+    ).delete(synchronize_session=False)
+    db.query(Invoice).filter(Invoice.company_id == cid).delete(synchronize_session=False)
+    db.query(Payment).filter(Payment.company_id == cid).delete(synchronize_session=False)
+    db.query(Receipt).filter(Receipt.company_id == cid).delete(synchronize_session=False)
+    db.query(SourceTransactionLine).filter(
+        SourceTransactionLine.source_id.in_(
+            db.query(SourceTransaction.id).filter(SourceTransaction.company_id == cid)
+        )
+    ).delete(synchronize_session=False)
+    db.query(SourceTransaction).filter(SourceTransaction.company_id == cid).delete(synchronize_session=False)
+    db.query(PayrollRun).filter(PayrollRun.company_id == cid).delete(synchronize_session=False)
+    db.query(Employee).filter(Employee.company_id == cid).delete(synchronize_session=False)
+    db.query(StockProductMapping).filter(StockProductMapping.company_id == cid).delete(synchronize_session=False)
+
+    # App data records (all transactional collections)
+    app_deleted = (
+        db.query(AppDataRecord)
+        .filter(
+            AppDataRecord.company_id == cid,
+            AppDataRecord.collection.notin_(_WIPE_KEEP_COLLECTIONS),
+        )
+        .delete(synchronize_session=False)
+    )
+
+    db.commit()
+
+    import app.cache as cache
+    cache.delete(f"summary:{cid}")
+    cache.delete(f"dashboard:{cid}")
+
+    return {"ok": True, "app_records_deleted": app_deleted}

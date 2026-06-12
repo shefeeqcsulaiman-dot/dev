@@ -10094,6 +10094,48 @@ function runOCR(){
   ready.forEach((f,i)=>setTimeout(()=>extractSingleFile(f),i*500));
 }
 
+async function wipeAllCompanyData(){
+  const confirmed=await appConfirm({
+    title:'Clear All Data from Database',
+    message:'This permanently deletes ALL invoices, purchases, products, customers, employees, ledger entries, and transactions for your company. Invoice layouts and settings are kept.\n\nThis cannot be undone.',
+    okText:'Delete Everything',
+    tone:'danger'
+  });
+  if(!confirmed)return;
+  const confirmed2=await appConfirm({
+    title:'Are you absolutely sure?',
+    message:'Type-to-confirm: all financial records will be permanently deleted from the database.',
+    okText:'Yes, Delete All',
+    tone:'danger'
+  });
+  if(!confirmed2)return;
+  try{
+    toast('Clearing all data…','info');
+    const res=await authenticatedFetch(`${apiBaseUrl()}/app-data/wipe`,{method:'POST'});
+    if(!res.ok)throw new Error('Wipe failed ('+res.status+')');
+    const data=await res.json();
+    // Clear all in-memory caches
+    purchaseRecordCache.clear();
+    purchaseRecordsTotal=0;
+    purchaseRecordsOffset=0;
+    purchaseRecordsLoaded=false;
+    uploadedFiles.length=0;
+    purchaseDocumentIds.clear();
+    stockProductMappings.clear();
+    // Clear all table tbodies
+    document.querySelectorAll('tbody[id]').forEach(tbody=>{tbody.innerHTML='';});
+    document.querySelectorAll('.ai-card-grid').forEach(el=>{el.innerHTML='<div class="ai-empty-state">No data.</div>';});
+    // Reload from server (will be empty)
+    await hydrateFromServer().catch(()=>{});
+    syncReportsFromDatabase().catch(()=>{});
+    toast('All data cleared — '+((data.app_records_deleted||0)+' records deleted'),'ok');
+    audit('Wiped all company data','All collections','Deleted');
+  }catch(err){
+    toast('Clear failed: '+(err.message||'Unknown error'),'err');
+    console.error('[Wipe]',err);
+  }
+}
+
 async function clearPendingUploads(){
   const toDelete=uploadedFiles.filter(f=>{
     if(f.category==='Purchase Records')return false;
@@ -15148,7 +15190,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260612k';
+  const _SNAP_VER='20260612l';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
