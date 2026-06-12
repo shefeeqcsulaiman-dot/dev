@@ -167,6 +167,8 @@ def ensure_schema_updates() -> None:
             existing_columns = {column["name"] for column in inspector.get_columns("users")}
             if "password_plain" not in existing_columns:
                 connection.execute(text("ALTER TABLE users ADD COLUMN password_plain VARCHAR(255)"))
+            if "is_active" not in existing_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT TRUE NOT NULL"))
         if "stock_product_mappings" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("stock_product_mappings")}
             required_columns = {

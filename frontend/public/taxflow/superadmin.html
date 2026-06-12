@@ -207,6 +207,7 @@
         <option value="viewer">Viewer</option>
       </select>
     </div>
+    <div class="fg"><label class="fl">New Password <span style="color:#8896b3;font-weight:400">(leave blank to keep current)</span></label><input class="fi" id="edit-user-pwd" type="password" placeholder="Enter new password"></div>
     <div class="modal-foot">
       <button class="btn btn-g" onclick="closeModal('m-edit-user')">Cancel</button>
       <button class="btn btn-p" id="edit-user-btn" onclick="doEditUser()">Save Changes</button>
@@ -323,19 +324,23 @@
       const expBadge = !exp ? '<span class="b b-g">Active</span>'
         : exp < now ? '<span class="b b-r">Expired</span>'
         : '<span class="b b-a">'+c.subscription_expires_at.slice(0,10)+'</span>';
-      const userList = (c.users||[]).filter(u=>u.role!=='superadmin').map(u=>
-        `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(99,130,200,.08)">
+      const userList = (c.users||[]).filter(u=>u.role!=='superadmin').map(u=>{
+        const active = u.is_active !== false;
+        const statusBadge = active ? '<span class="b b-g" style="font-size:10px;padding:1px 7px">Active</span>' : '<span class="b b-r" style="font-size:10px;padding:1px 7px">Disabled</span>';
+        const toggleLabel = active ? 'Disable' : 'Enable';
+        const toggleCls = active ? 'btn-r' : 'btn-g';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(99,130,200,.08)">
           <div style="flex:1;min-width:0">
-            <div style="font-size:12.5px;font-weight:500">${escHtml(u.full_name||'—')}</div>
+            <div style="font-size:12.5px;font-weight:500">${escHtml(u.full_name||'—')} ${statusBadge}</div>
             <div class="mono" style="color:#8896b3;font-size:11px">${escHtml(u.email)} · <span class="b b-p" style="font-size:10px;padding:1px 6px">${escHtml(u.role)}</span></div>
           </div>
           <div style="display:flex;gap:5px;flex-shrink:0">
             <button class="btn btn-g btn-sm" onclick="openEditUser('${escHtml(c.id)}','${escHtml(u.id)}','${escHtml(u.full_name)}','${escHtml(u.email)}','${escHtml(u.role)}')">Edit</button>
-            <button class="btn btn-g btn-sm" onclick="openResetPassword('${escHtml(c.id)}','${escHtml(u.id)}','${escHtml(u.email)}')">Reset Pwd</button>
+            <button class="btn ${toggleCls} btn-sm" onclick="toggleUserStatus('${escHtml(c.id)}','${escHtml(u.id)}','${escHtml(u.email)}',${active})">${toggleLabel}</button>
             <button class="btn btn-r btn-sm" onclick="deleteUser('${escHtml(c.id)}','${escHtml(u.id)}','${escHtml(u.email)}')">Remove</button>
           </div>
-        </div>`
-      ).join('');
+        </div>`;
+      }).join('');
       return `<tr>
         <td>
           <div style="font-weight:600">${escHtml(c.name)}</div>
@@ -477,6 +482,7 @@
     document.getElementById('edit-user-name').value=fullName;
     document.getElementById('edit-user-email').value=email;
     document.getElementById('edit-user-role').value=role;
+    document.getElementById('edit-user-pwd').value='';
     openModal('m-edit-user');
   }
 
@@ -489,16 +495,30 @@
     const fullName=document.getElementById('edit-user-name').value.trim();
     const email=document.getElementById('edit-user-email').value.trim();
     const role=document.getElementById('edit-user-role').value;
+    const newPwd=document.getElementById('edit-user-pwd').value;
     if(!email){ errEl.textContent='Email is required.'; errEl.style.display='block'; return; }
     btn.disabled=true; btn.textContent='Saving…';
     try{
-      const res=await apiFetch(`/superadmin/companies/${companyId}/users/${userId}`,{method:'PATCH',body:JSON.stringify({full_name:fullName,email,role})});
-      const data=await res.json();
-      if(!res.ok){ errEl.textContent=data.detail||'Failed to update user.'; errEl.style.display='block'; return; }
+      const patches=[apiFetch(`/superadmin/companies/${companyId}/users/${userId}`,{method:'PATCH',body:JSON.stringify({full_name:fullName,email,role})})];
+      if(newPwd) patches.push(apiFetch(`/superadmin/companies/${companyId}/reset-password`,{method:'POST',body:JSON.stringify({user_id:userId,password:newPwd})}));
+      const [r1]=await Promise.all(patches);
+      const d1=await r1.json();
+      if(!r1.ok){ errEl.textContent=d1.detail||'Failed to update user.'; errEl.style.display='block'; return; }
       closeModal('m-edit-user');
       loadDashboard();
     }catch(err){ errEl.textContent=err.message; errEl.style.display='block'; }
     finally{ btn.disabled=false; btn.textContent='Save Changes'; }
+  }
+
+  // ── Toggle user status ────────────────────────────────────────
+  async function toggleUserStatus(companyId, userId, email, currentlyActive){
+    const action = currentlyActive ? 'disable' : 'enable';
+    if(!confirm((currentlyActive?'Disable':'Enable')+' user "'+email+'"?')) return;
+    try{
+      const res=await apiFetch(`/superadmin/companies/${companyId}/users/${userId}/toggle-status`,{method:'POST'});
+      if(!res.ok){ const d=await res.json(); alert(d.detail||'Failed.'); return; }
+      loadDashboard();
+    }catch(err){ alert(err.message); }
   }
 
   // ── Delete user ───────────────────────────────────────────────

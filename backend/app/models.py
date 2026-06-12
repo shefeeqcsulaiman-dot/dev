@@ -66,6 +66,7 @@ class User(Base, TimestampMixin):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     password_plain: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(String(40), default="admin")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     company: Mapped[Company] = relationship(back_populates="users")
 

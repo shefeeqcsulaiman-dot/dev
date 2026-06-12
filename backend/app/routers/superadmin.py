@@ -88,6 +88,7 @@ def list_companies(db: Session = Depends(get_db), _: User = Depends(_require_sup
                         "email": u.email,
                         "full_name": u.full_name,
                         "role": u.role,
+                        "is_active": getattr(u, "is_active", True),
                         "password_plain": u.password_plain,
                         "created_at": u.created_at.isoformat() if u.created_at else None,
                     }
@@ -231,6 +232,23 @@ def update_user(
         user.role = body.role
     db.commit()
     return {"ok": True}
+
+
+@router.post("/companies/{company_id}/users/{user_id}/toggle-status")
+def toggle_user_status(
+    company_id: str,
+    user_id: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    user = db.query(User).filter(User.id == user_id, User.company_id == company_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.role == "superadmin":
+        raise HTTPException(status_code=400, detail="Cannot disable superadmin")
+    user.is_active = not getattr(user, "is_active", True)
+    db.commit()
+    return {"ok": True, "is_active": user.is_active}
 
 
 @router.delete("/companies/{company_id}/users/{user_id}")

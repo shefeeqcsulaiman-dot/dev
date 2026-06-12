@@ -30,6 +30,8 @@ def authenticate_user(db: Session, email: str, password: str) -> User | None:
     user = db.query(User).filter(User.email == email.lower()).first()
     if not user or not verify_password(password, user.password_hash):
         return None
+    if not getattr(user, "is_active", True):
+        return None
     return user
 
 
