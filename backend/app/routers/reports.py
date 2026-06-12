@@ -495,7 +495,7 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
     overdue_total = sum(money(row["d31_60"]) + money(row["d61_90"]) + money(row["over90"]) for row in aging_rows)
     risk_score = "Low" if overdue_total == 0 else "Medium" if overdue_total < ar_total / Decimal("2") else "High"
     monthly = monthly_revenue_vat(db, company_id)
-    return {
+    result = {
         "dashboard": {
             "revenue": amount(revenue),
             "gross_margin": amount(gross_margin),
@@ -560,7 +560,13 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
                 "net_profit": amount(net_profit),
             },
         },
-        "balance_sheet": balance_sheet_rows(db, company_id),
+    }
+    # Compute once and reuse — balance_sheet_rows and working_capital_rows are
+    # each called multiple times above, making 3× the DB queries necessary.
+    _bs = balance_sheet_rows(db, company_id)
+    _wc = working_capital_rows(db, company_id, _bs)
+    result.update({
+        "balance_sheet": _bs,
         "trial_balance": trial_balance_rows(db, company_id),
         "aging": aging_rows,
         "ai": {
@@ -580,9 +586,10 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
         "supplier_ledger": supplier_ledger_rows(db, company_id, app_purchases),
         "ap_aging": ap_aging_rows(db, company_id, app_purchases),
         "revenue_intelligence": revenue_intelligence_rows(db, company_id, app_sales, monthly),
-        "working_capital": working_capital_rows(db, company_id, balance_sheet_rows(db, company_id)),
-        "ai_health": ai_health_score(revenue, gross_margin, net_profit, money(working_capital_rows(db, company_id, balance_sheet_rows(db, company_id))["current_ratio"]), overdue_total, ar_total),
-    }
+        "working_capital": _wc,
+        "ai_health": ai_health_score(revenue, gross_margin, net_profit, money(_wc["current_ratio"]), overdue_total, ar_total),
+    })
+    return result
 
 
 def trial_balance_rows(db: Session, company_id: str) -> list[dict[str, str]]:

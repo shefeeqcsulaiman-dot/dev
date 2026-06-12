@@ -2231,6 +2231,15 @@ async function syncReportsFromDatabase(){
     renderReportsFromDatabase(data);
   }catch(err){
     console.warn('Reports database sync failed:',err);
+    toast('Reports could not load from database: '+(err.message||'Unknown error'),'warn');
+    document.querySelectorAll('#page-reports .stat-val').forEach(el=>{
+      if(el.textContent==='Loading...')el.textContent='—';
+    });
+    document.querySelectorAll('#page-reports tbody').forEach(tbody=>{
+      if(!tbody.children.length||tbody.querySelector('td[colspan]'))return;
+      if([...tbody.querySelectorAll('td')].every(td=>td.textContent.trim()==='Loading…'||td.textContent.trim()===''))
+        tbody.innerHTML='<tr><td colspan="10" style="color:var(--text3);text-align:center">Could not load — try refreshing</td></tr>';
+    });
   }
 }
 
@@ -2251,29 +2260,30 @@ let latestReportSummary=null;
 function renderReportsFromDatabase(data){
   latestReportSummary=data||{};
   const d=data||{};
-  renderKpiDashboard(d.dashboard||{},d.working_capital||{},d.revenue_intelligence||{});
-  renderAiHealthScore(d.ai_health||{});
-  renderCfoPanel(d.dashboard||{},d.ai||{});
-  renderProfitLossReport(d.profit_loss||{});
-  renderBalanceSheetReport(d.balance_sheet||{});
-  renderCashFlowReport(d.budget_cash||{});
-  renderTrialBalanceReport(d.trial_balance||[]);
-  renderGeneralLedger(d.general_ledger||[]);
-  renderPartyLedger('rep-cl-body',d.customer_ledger||[],'Customer','customer');
-  renderPartyLedger('rep-sl-body',d.supplier_ledger||[],'Supplier','supplier');
-  renderAgingReport(d.aging||[]);
-  renderApAging(d.ap_aging||[]);
-  renderVatReport(d.vat||{});
-  renderInventoryReport();
-  renderAssetReports(d.assets||{});
-  renderRevenueIntelligence(d.revenue_intelligence||{},d.dashboard||{});
-  renderProfitabilityAnalytics(d.profit_loss||{});
-  renderWorkingCapital(d.working_capital||{});
-  renderGrowthTrends(d.dashboard||{},d.revenue_intelligence||{});
-  renderVat201(d.vat||{});
-  renderCorporateReports(d.corporate||{});
-  renderBudgetCashReports(d.budget_cash||{});
-  renderControlReports(d.control||{});
+  const renders=[
+    ()=>renderKpiDashboard(d.dashboard||{},d.working_capital||{},d.revenue_intelligence||{}),
+    ()=>renderAiHealthScore(d.ai_health||{}),
+    ()=>renderCfoPanel(d.dashboard||{},d.ai||{}),
+    ()=>renderProfitLossReport(d.profit_loss||{}),
+    ()=>renderBalanceSheetReport(d.balance_sheet||{}),
+    ()=>renderBudgetCashReports(d.budget_cash||{}),
+    ()=>renderTrialBalanceReport(d.trial_balance||[]),
+    ()=>renderGeneralLedger(d.general_ledger||[]),
+    ()=>renderPartyLedger('rep-cl-body',d.customer_ledger||[],'Customer','customer'),
+    ()=>renderPartyLedger('rep-sl-body',d.supplier_ledger||[],'Supplier','supplier'),
+    ()=>renderAgingReport(d.aging||[]),
+    ()=>renderApAging(d.ap_aging||[]),
+    ()=>renderVatReport(d.vat||{}),
+    ()=>renderInventoryReport(),
+    ()=>renderAssetReports(d.assets||{}),
+    ()=>renderRevenueIntelligence(d.revenue_intelligence||{},d.dashboard||{}),
+    ()=>renderProfitabilityAnalytics(d.profit_loss||{}),
+    ()=>renderWorkingCapital(d.working_capital||{}),
+    ()=>renderGrowthTrends(d.dashboard||{},d.revenue_intelligence||{}),
+    ()=>renderVat201(d.vat||{}),
+    ()=>renderCorporateReports(d.corporate||{}),
+  ];
+  renders.forEach(fn=>{try{fn();}catch(e){console.warn('[Report render]',e);}});
   document.querySelectorAll('#page-reports table.tbl').forEach(refreshEnhancedTable);
 }
 
@@ -15138,7 +15148,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260612j';
+  const _SNAP_VER='20260612k';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
