@@ -208,6 +208,11 @@ def bootstrap(
         if coll_cap is None or len(bucket) < coll_cap:
             bucket.append(serialize(item))
 
+    # Strip base64 blobs from purchaseDocuments — they can be several MB each and are not
+    # needed on bootstrap (the client stores them locally and only needs metadata).
+    for doc in grouped.get("purchaseDocuments", []):
+        doc.pop("base64", None)
+
     truncated = [c for c, total in collection_totals.items() if _BOOTSTRAP_COLLECTION_CAPS.get(c) and total > _BOOTSTRAP_COLLECTION_CAPS[c]]
 
     audit_rows = (

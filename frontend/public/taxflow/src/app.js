@@ -8644,10 +8644,6 @@ async function extractSingleFile(entry){
     }catch(panelErr){
       console.warn('Purchase validation status update failed:',panelErr);
     }
-    if(invoices.length<=250){
-      hydrateFromServer().catch(err=>console.warn('Refresh after extraction failed:',err));
-    }
-
     clearInterval(ticker);
     if(ef)ef.style.width='100%';
     if(epct)epct.textContent='100%';
@@ -15112,7 +15108,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260612h';
+  const _SNAP_VER='20260612i';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
