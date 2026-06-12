@@ -394,6 +394,19 @@ def invoice_status(db: Session, company_id: str) -> dict[str, dict[str, str | in
     return statuses
 
 
+@router.get("/debug/purchases")
+@limiter.limit("10/minute")
+def debug_purchases(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+    company_id = current_user.company_id
+    bills = app_data_payloads(db, company_id, "bills")
+    purchases = app_data_payloads(db, company_id, "purchaseRecords")
+    return {
+        "bills": [{"keys": list(r.keys()), "total": r.get("total"), "subtotal": r.get("subtotal"), "vat": r.get("vat"), "status": r.get("status"), "bill_no": r.get("bill_no")} for r in bills],
+        "purchaseRecords": [{"keys": list(r.keys()), "total": r.get("total"), "net_amount": r.get("net_amount"), "subtotal": r.get("subtotal"), "status": r.get("status"), "ref": r.get("ref")} for r in purchases],
+        "purchase_summary": _purchase_summary(db, company_id),
+    }
+
+
 @router.get("/trial-balance")
 @limiter.limit("30/minute")
 def trial_balance(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
