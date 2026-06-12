@@ -422,24 +422,6 @@ def invoice_status(db: Session, company_id: str) -> dict[str, dict[str, str | in
     return statuses
 
 
-@router.get("/debug/purchases")
-@limiter.limit("10/minute")
-def debug_purchases(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
-    company_id = current_user.company_id
-    bills = app_data_payloads(db, company_id, "bills")
-    purchases = app_data_payloads(db, company_id, "purchaseRecords")
-    from sqlalchemy import text as _text
-    src_rows = db.execute(
-        _text("SELECT module, status, total FROM source_transactions WHERE company_id=:cid AND module IN ('purchase','purchase_bill') LIMIT 20"),
-        {"cid": company_id},
-    ).fetchall()
-    return {
-        "bills_raw": bills,
-        "purchaseRecords_raw": purchases,
-        "source_transactions": [{"module": r[0], "status": r[1], "total": str(r[2])} for r in src_rows],
-        "purchase_summary": _purchase_summary(db, company_id),
-    }
-
 
 @router.get("/trial-balance")
 @limiter.limit("30/minute")
