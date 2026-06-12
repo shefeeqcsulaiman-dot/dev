@@ -1187,6 +1187,7 @@ function renderStockMappingRecord(mapping){
   const name=mapping.name||mapping.taxflow_name||mapping.sku;
   const supplier=mapping.supplier_name||'Not assigned';
   const taxflowName=mapping.taxflow_name||mapping.name||mapping.sku;
+  const isMapped=Boolean(mapping.taxflow_name&&mapping.taxflow_name.trim());
   tr.dataset.mappingId=mapping.id||'';
   tr.dataset.stockSku=mapping.sku;
   tr.dataset.salesAccountCode=mapping.sales_account_code||'3000';
@@ -1201,7 +1202,7 @@ function renderStockMappingRecord(mapping){
   tr.dataset.vatAmount=mapping.vat_amount??0;
   tr.dataset.incVat=mapping.inc_vat??0;
   tr.dataset.priceOuter=mapping.price_outer??0;
-  tr.innerHTML=`<td>${escapeHtml(name)}</td><td>${escapeHtml(supplier)}</td><td>${escapeHtml(taxflowName)}</td><td class="mono">${Number(mapping.units_per_outer||1).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td><span class="b b-g">Mapped</span></td><td data-action-col="1">${stockMapActionsHtml()}</td>`;
+  tr.innerHTML=`<td>${escapeHtml(name)}</td><td>${escapeHtml(supplier)}</td><td>${escapeHtml(taxflowName)}</td><td class="mono">${Number(mapping.units_per_outer||1).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td><span class="b ${isMapped?'b-g':'b-a'}">${isMapped?'Mapped':'Not mapped'}</span></td><td data-action-col="1">${stockMapActionsHtml()}</td>`;
 }
 
 function stockMappingPayloadFromRow(row){
@@ -15111,7 +15112,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260612g';
+  const _SNAP_VER='20260612h';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
