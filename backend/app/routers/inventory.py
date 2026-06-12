@@ -50,7 +50,7 @@ def list_mappings(db: Session = Depends(get_db), current_user: User = Depends(ge
     mappings = (
         db.query(StockProductMapping)
         .filter(StockProductMapping.company_id == current_user.company_id)
-        .order_by(StockProductMapping.sku)
+        .order_by(StockProductMapping.created_at.desc(), StockProductMapping.id.desc())
         .all()
     )
     hydrate_mapping_costs_from_purchase_data(db, current_user.company_id, mappings)

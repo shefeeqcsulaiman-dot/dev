@@ -1182,7 +1182,7 @@ function renderStockMappingRecord(mapping){
   let tr=tbody.querySelector(selector);
   if(!tr){
     tr=document.createElement('tr');
-    tbody.appendChild(tr);
+    tbody.prepend(tr);
   }
   const name=mapping.name||mapping.taxflow_name||mapping.sku;
   const supplier=mapping.supplier_name||'Not assigned';
@@ -15111,7 +15111,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260612f';
+  const _SNAP_VER='20260612g';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
