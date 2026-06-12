@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 import app.cache as cache
@@ -323,27 +323,54 @@ def _purchase_row_amount(row: dict[str, Any]) -> Decimal:
 
 
 def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
+    # Use direct SQL JSON extraction to sum totals — avoids Python-side parsing edge cases.
+    # Tries multiple field names in priority order: total → grand_total → net_amount → subtotal.
+    sql = text("""
+        SELECT
+            COALESCE(SUM(
+                CASE
+                    WHEN (payload::jsonb->>'total') IS NOT NULL AND (payload::jsonb->>'total')::numeric <> 0
+                        THEN (payload::jsonb->>'total')::numeric
+                    WHEN (payload::jsonb->>'grand_total') IS NOT NULL AND (payload::jsonb->>'grand_total')::numeric <> 0
+                        THEN (payload::jsonb->>'grand_total')::numeric
+                    WHEN (payload::jsonb->>'net_amount') IS NOT NULL
+                        THEN COALESCE((payload::jsonb->>'net_amount')::numeric, 0)
+                            + COALESCE((payload::jsonb->>'tax_amount')::numeric, 0)
+                            + COALESCE((payload::jsonb->>'shipping')::numeric, 0)
+                    WHEN (payload::jsonb->>'subtotal') IS NOT NULL
+                        THEN COALESCE((payload::jsonb->>'subtotal')::numeric, 0)
+                            + COALESCE((payload::jsonb->>'vat')::numeric, 0)
+                    ELSE 0
+                END
+            ), 0) AS total_amount,
+            COUNT(*) AS total_count
+        FROM app_data_records
+        WHERE company_id = :cid
+          AND collection IN ('purchaseRecords', 'bills')
+    """)
+    row = db.execute(sql, {"cid": company_id}).fetchone()
+    total = money(row[0] if row else 0)
+    total_count = int(row[1] if row else 0)
+
+    # Per-record breakdown for paid/pending counts
     records = (
         app_data_payloads(db, company_id, "purchaseRecords")
         + app_data_payloads(db, company_id, "bills")
     )
-    total = Decimal("0")
     paid_amount = Decimal("0")
     paid_count = 0
     pending_count = 0
-    for row in records:
-        row_total = _purchase_row_amount(row)
-        total += row_total
-        row_paid = record_amount(row, "paid", "paid_amount")
-        if is_paid_status(normalized_ref(row.get("status") or "")):
+    for rec in records:
+        row_total = _purchase_row_amount(rec)
+        row_paid = record_amount(rec, "paid", "paid_amount")
+        if is_paid_status(normalized_ref(rec.get("status") or "")):
             paid_count += 1
-            # Bills have no explicit paid field — use row total when status is paid
             paid_amount += row_paid if row_paid else row_total
         else:
             pending_count += 1
             paid_amount += row_paid
-    total_count = len(records)
-    # Fallback: use SourceTransaction totals when AppDataRecord amounts are all zero
+
+    # Fallback to SourceTransaction if all AppDataRecord amounts resolved to zero
     if total == Decimal("0") and total_count > 0:
         total = money(
             db.query(func.coalesce(func.sum(SourceTransaction.total), 0))
@@ -363,6 +390,7 @@ def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
                 )
                 .scalar()
             )
+
     payment_rate = int(paid_amount / total * 100) if total else 0
     return {
         "total": amount(total),
