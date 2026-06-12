@@ -400,9 +400,15 @@ def debug_purchases(request: Request, db: Session = Depends(get_db), current_use
     company_id = current_user.company_id
     bills = app_data_payloads(db, company_id, "bills")
     purchases = app_data_payloads(db, company_id, "purchaseRecords")
+    from sqlalchemy import text as _text
+    src_rows = db.execute(
+        _text("SELECT module, status, total FROM source_transactions WHERE company_id=:cid AND module IN ('purchase','purchase_bill') LIMIT 20"),
+        {"cid": company_id},
+    ).fetchall()
     return {
-        "bills": [{"keys": list(r.keys()), "total": r.get("total"), "subtotal": r.get("subtotal"), "vat": r.get("vat"), "status": r.get("status"), "bill_no": r.get("bill_no")} for r in bills],
-        "purchaseRecords": [{"keys": list(r.keys()), "total": r.get("total"), "net_amount": r.get("net_amount"), "subtotal": r.get("subtotal"), "status": r.get("status"), "ref": r.get("ref")} for r in purchases],
+        "bills_raw": bills,
+        "purchaseRecords_raw": purchases,
+        "source_transactions": [{"module": r[0], "status": r[1], "total": str(r[2])} for r in src_rows],
         "purchase_summary": _purchase_summary(db, company_id),
     }
 
