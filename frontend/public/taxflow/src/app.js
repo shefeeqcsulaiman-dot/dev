@@ -1514,6 +1514,7 @@ async function submitLogin(){
     if(resp.ok&&data.access_token){
       localStorage.setItem('taxflow_token',data.access_token);
       hideLoginOverlay();
+      applyRoleBasedNav().catch(()=>{});
       hydrateFromServer().catch(err=>console.warn('Database hydrate failed after login:',err));
     }else{
       errEl.textContent=data.detail||'Incorrect email or password.';
@@ -1526,6 +1527,36 @@ async function submitLogin(){
     btn.disabled=false;btn.textContent='Sign In';
   }
 }
+// Role-based nav visibility. Roles from JWT: 'admin' (full access), 'viewer',
+// 'accountant', 'sales' — defined as the User.role field in the backend.
+// 'superadmin' is redirected to /taxflow/superadmin.html at login page level.
+const _NAV_ROLE_MAP={
+  viewer:   ['sales','quotations','purchase','inventory','expense','reports','exception'],
+  sales:    ['sales','quotations','reports'],
+  accountant:['sales','quotations','purchase','expense','bank','accounting','reports','exception'],
+};
+async function applyRoleBasedNav(){
+  try{
+    const token=localStorage.getItem('taxflow_token');
+    if(!token)return;
+    const resp=await authenticatedFetch(`${apiBaseUrl()}/auth/me`);
+    if(!resp.ok)return;
+    const user=await resp.json();
+    const role=(user.role||'admin').toLowerCase();
+    localStorage.setItem('taxflow_user_role',role);
+    if(role==='admin'||role==='superadmin')return; // full access
+    const allowed=new Set(_NAV_ROLE_MAP[role]||[]);
+    document.querySelectorAll('.nav[onclick]').forEach(nav=>{
+      const match=(nav.getAttribute('onclick')||'').match(/go\('([^']+)'\)/);
+      if(!match)return;
+      const page=match[1];
+      nav.style.display=allowed.has(page)?'':'none';
+    });
+  }catch(e){
+    console.warn('[RoleNav]',e);
+  }
+}
+
 async function ensureBackendSession(){
   if(localStorage.getItem('taxflow_token'))return true;
   const host=window.location.hostname||'127.0.0.1';
@@ -2221,6 +2252,7 @@ function showReport(id){
   if(latestReportSummary)renderReportsFromDatabase(latestReportSummary);
 }
 
+let _lastReportVersion=null;
 async function syncReportsFromDatabase(){
   const ready=await ensureBackendSession();
   if(!ready)return;
@@ -2228,6 +2260,11 @@ async function syncReportsFromDatabase(){
     const response=await authenticatedFetch(`${apiBaseUrl()}/reports/summary`);
     if(!response.ok)throw new Error('Reports API returned '+response.status);
     const data=await response.json();
+    if(data._version&&data._version===_lastReportVersion){
+      // Data unchanged since last render — skip expensive re-render
+      return;
+    }
+    _lastReportVersion=data._version||null;
     renderReportsFromDatabase(data);
   }catch(err){
     console.warn('Reports database sync failed:',err);
@@ -2896,6 +2933,22 @@ function saveServer(collection,record,options={}){
   });
 }
 
+// Coalesces rapid saves to the same collection+id within `delay` ms.
+// Useful for audit log writes and any record that can be saved multiple times
+// in quick succession (e.g., product sync after bulk import).
+const _debounceSaveTimers=new Map();
+function debouncedSaveServer(collection,record,delay=400){
+  const key=collection+':'+(record.id||record.key||JSON.stringify(record).slice(0,40));
+  const existing=_debounceSaveTimers.get(key);
+  if(existing)clearTimeout(existing);
+  return new Promise((resolve,reject)=>{
+    _debounceSaveTimers.set(key,setTimeout(()=>{
+      _debounceSaveTimers.delete(key);
+      saveServer(collection,record).then(resolve).catch(reject);
+    },delay));
+  });
+}
+
 function bulkSaveServer(collection,records,options={}){
   return apiRequest('bulk-save',{collection,records}).catch(err=>{
     console.warn('Database bulk save failed:',err);
@@ -3022,7 +3075,7 @@ function saveInvoiceLayoutServer(layout){
 
 function audit(action,record='System',result='Logged'){
   const entry={time:new Date().toLocaleString('en-AE',{dateStyle:'short',timeStyle:'short'}),user:'System User',action,record,result};
-  saveServer('audit',entry);
+  debouncedSaveServer('audit',entry,300);
   renderAuditLog([entry]);
 }
 
@@ -5887,37 +5940,54 @@ function hydrateFromServer(){
       financePaymentsByRef.clear();
       financeBankAccountsByKey.clear();
       if(data.company)applyCompanyToUi(data.company);
+      // ── Phase 1: critical collections — render immediately ───────────────────
       renderStats.products=renderRecordList(productRows,product=>renderProductRecord(product,{deferRefresh:true,deferStockSync:true,deferMappingSync:true,deferSuggestions:true}),'product');
       renderStats.salesCategories=renderRecordList(data.salesCategories,renderSalesCategoryRecord,'sales category');
       renderStats.salesUnits=renderRecordList(data.salesUnits,renderSalesUnitRecord,'sales unit');
       renderStats.customers=renderRecordList(data.customers,renderCustomerRecord,'customer');
       renderStats.users=renderRecordList(data.users,renderUserRecord,'user');
-      renderStats.employees=renderRecordList(data.employees,record=>{
-        renderEmployeeRecord(record);
-        renderPayrollEmployeeRecord(record);
-      },'employee');
       renderStats.salesInvoices=renderRecordList(data.salesInvoices,inv=>addSalesInvoiceRow(inv,{persist:false}),'sales invoice');
       renderStats.quotations=renderRecordList(data.quotations,renderQuotationRecord,'quotation');
       renderStats.accounts=renderRecordList(data.accounts,renderAccountRecord,'account');
-      renderStats.ledger=renderRecordList(data.ledger,line=>postLedgerLine(line,{persist:false}),'ledger');
-      renderStats.bills=renderRecordList(data.bills,renderBillRecord,'bill');
-      renderStats.vendors=renderRecordList(data.vendors,renderVendorRecord,'vendor');
-      renderStats.payments=renderRecordList(data.payments,renderPaymentRecord,'payment');
-      renderStats.bankAccounts=renderRecordList(data.bankAccounts,renderBankAccountRecord,'bank account');
-      renderStats.rotaShifts=renderRecordList(data.rotaShifts,renderRotaShiftRecord,'rota shift');
-      renderStats.rotaSwaps=renderRecordList(data.rotaSwaps,renderRotaSwapRecord,'rota swap');
-      renderStats.rotaApprovals=renderRecordList(data.rotaApprovals,renderRotaApprovalRecord,'rota approval');
-      renderStats.rotaAssignments=renderRecordList(data.rotaAssignments,renderRotaAssignmentRecord,'rota assignment');
-      renderRotaBoards();
-      renderStats.overtimeRequests=renderRecordList(data.overtimeRequests,renderOTRecord,'overtime request');
-      renderStats.leaveRequests=renderRecordList(data.leaveRequests,renderLeaveRecord,'leave request');
-      renderStats.attendanceCorrections=renderRecordList(data.attendanceCorrections,renderCorrectionRecord,'correction');
-      renderStats.expenses=renderRecordList(data.expenses,renderExpenseRecord,'expense');
       renderStats.purchaseRecords={rendered:0,failed:0,total:0,lazy:true};
       loadPurchaseDocumentsFromServer(data.purchaseDocuments||[],[]);
     }finally{
       isHydratingFromServer=false;
     }
+    // ── Phase 2: deferred collections — render during idle time ─────────────
+    const _deferred2=data;
+    scheduleIdleTask(()=>{
+      isHydratingFromServer=true;
+      try{
+        renderStats.employees=renderRecordList(_deferred2.employees,record=>{
+          renderEmployeeRecord(record);
+          renderPayrollEmployeeRecord(record);
+        },'employee');
+        renderStats.bankAccounts=renderRecordList(_deferred2.bankAccounts,renderBankAccountRecord,'bank account');
+        renderStats.payments=renderRecordList(_deferred2.payments,renderPaymentRecord,'payment');
+        renderStats.expenses=renderRecordList(_deferred2.expenses,renderExpenseRecord,'expense');
+        renderStats.bills=renderRecordList(_deferred2.bills,renderBillRecord,'bill');
+        renderStats.vendors=renderRecordList(_deferred2.vendors,renderVendorRecord,'vendor');
+      }finally{isHydratingFromServer=false;}
+      updateFinanceFromDatabaseRecords();
+      updateAccountSelectors();
+    },600);
+    // ── Phase 3: HR/rota — render after a longer idle window ────────────────
+    scheduleIdleTask(()=>{
+      isHydratingFromServer=true;
+      try{
+        renderStats.rotaShifts=renderRecordList(_deferred2.rotaShifts,renderRotaShiftRecord,'rota shift');
+        renderStats.rotaSwaps=renderRecordList(_deferred2.rotaSwaps,renderRotaSwapRecord,'rota swap');
+        renderStats.rotaApprovals=renderRecordList(_deferred2.rotaApprovals,renderRotaApprovalRecord,'rota approval');
+        renderStats.rotaAssignments=renderRecordList(_deferred2.rotaAssignments,renderRotaAssignmentRecord,'rota assignment');
+        renderRotaBoards();
+        renderStats.overtimeRequests=renderRecordList(_deferred2.overtimeRequests,renderOTRecord,'overtime request');
+        renderStats.leaveRequests=renderRecordList(_deferred2.leaveRequests,renderLeaveRecord,'leave request');
+        renderStats.attendanceCorrections=renderRecordList(_deferred2.attendanceCorrections,renderCorrectionRecord,'correction');
+        renderStats.ledger=renderRecordList(_deferred2.ledger,line=>postLedgerLine(line,{persist:false}),'ledger');
+      }finally{isHydratingFromServer=false;}
+      filterLedger();
+    },1400);
     const totalLoaded=[
       productRows,
       data.customers,
@@ -5971,7 +6041,6 @@ function hydrateFromServer(){
     if(Array.isArray(data.audit)&&data.audit.length){
       renderAuditLog(data.audit);
     }
-    updateAccountSelectors();
     refreshInvoiceCustomerOptions();
     refreshQuotationCustomerOptions();
     syncProductMasterOptions();
@@ -5989,8 +6058,6 @@ function hydrateFromServer(){
     loadStockMappingsFromServer();
     loadAccountingFromDb();
     loadCorporateAccountingFromDb(data);
-    updateFinanceFromDatabaseRecords();
-    filterLedger();
     refreshActivePageTables();
     refreshInitializedTables();
     scheduleIdleTask(()=>{
@@ -8617,9 +8684,24 @@ function updatePurchaseValidationFileStatus(){
 }
 
 // -- AI EXTRACTION via backend API ----------------------------------
+let _extractingCount=0;
+function _updateExtractBadge(){
+  const badge=document.getElementById('extract-top-badge');
+  const cnt=document.getElementById('extract-top-count');
+  if(!badge)return;
+  if(_extractingCount>0){
+    badge.classList.remove('hidden');
+    if(cnt)cnt.textContent=_extractingCount;
+  }else{
+    badge.classList.add('hidden');
+  }
+}
+
 async function extractSingleFile(entry){
   if(!entry){toast('File not found','err');return;}
   entry.status='Extracting';
+  _extractingCount++;
+  _updateExtractBadge();
   renderFileList();
   toast('AI extracting: '+entry.name+'-','info');
 
@@ -8665,6 +8747,8 @@ async function extractSingleFile(entry){
     if(Array.isArray(entry.invoices)&&entry.invoices.some(i=>!validatePurchaseAiInvoice(i).valid)){
       toast('Validation issues found - review required','warn');
     }
+    _extractingCount=Math.max(0,_extractingCount-1);
+    _updateExtractBadge();
 
   }catch(err){
     clearInterval(ticker);
@@ -8676,6 +8760,8 @@ async function extractSingleFile(entry){
     updatePurchaseValidationFileStatus();
     toast('Extraction failed: '+(err.message||'Unknown error'),'err');
     console.error('[AI Extract]',err);
+    _extractingCount=Math.max(0,_extractingCount-1);
+    _updateExtractBadge();
   }
 }
 
@@ -15240,7 +15326,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260612m';
+  const _SNAP_VER='20260612n';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
@@ -15302,5 +15388,6 @@ function initApp(){
 if(!localStorage.getItem('taxflow_token')){
   window.location.replace('/taxflow/login');
 }else{
+  applyRoleBasedNav().catch(()=>{});
   initApp();
 }

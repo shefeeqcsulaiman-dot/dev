@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260612m" as="style">
-<link rel="preload" href="src/app.js?v=20260612m" as="script">
+<link rel="preload" href="src/styles.css?v=20260612n" as="style">
+<link rel="preload" href="src/app.js?v=20260612n" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260612m">
+<link rel="stylesheet" href="src/styles.css?v=20260612n">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -144,6 +144,7 @@
       <div id="psub" class="tb-sub">Loading dashboard from database</div>
     </div>
     <div class="tb-right">
+      <button class="btn btn-g hidden" id="extract-top-badge" onclick="go('purchase')" title="AI extraction in progress" style="background:rgba(108,92,231,.12);border-color:rgba(108,92,231,.3);color:var(--primary)">⟳ Extracting <span id="extract-top-count">0</span></button>
       <button class="btn btn-g" id="exception-top-badge" onclick="go('exception')" title="Open Exception Center">Exceptions <span class="b b-g" id="exception-top-count">0</span></button>
       <button class="btn btn-g" id="theme-menu-toggle" onclick="toggleNightMode(document.body.classList.contains('theme-light'))">☾ Dark Mode</button>
       <button class="btn btn-g" onclick="go('ai')">AI Assistant</button>
@@ -5212,6 +5213,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260612m" defer></script>
+<script src="src/app.js?v=20260612n" defer></script>
 </body>
 </html>

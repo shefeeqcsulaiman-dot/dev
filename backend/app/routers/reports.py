@@ -1,3 +1,4 @@
+import hashlib
 import json
 from decimal import Decimal
 from typing import Any
@@ -443,6 +444,9 @@ def report_summary(request: Request, db: Session = Depends(get_db), current_user
     if cached is not None:
         return cached
     result = _build_summary(db, company_id)
+    # Stable fingerprint for frontend diff-check (skips re-render when data unchanged)
+    _sig = f"{result.get('dashboard',{}).get('revenue',0)}:{result.get('dashboard',{}).get('expenses',0)}:{result.get('dashboard',{}).get('net_profit',0)}"
+    result["_version"] = hashlib.md5(_sig.encode()).hexdigest()[:12]
     cache.set(f"summary:{company_id}", result, ttl=120)
     return result
 

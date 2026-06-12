@@ -1,16 +1,16 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import ClientError, Company, Employee, User
-from app.security import user_id_from_token
-from app.security import hash_password
+from app.limiter import limiter
+from app.models import AppDataRecord, ClientError, Company, Employee, User
+from app.security import hash_password, user_id_from_token
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
 
@@ -300,7 +300,9 @@ class ClientErrorIn(BaseModel):
 
 
 @router.post("/client-errors", status_code=201)
+@limiter.limit("30/minute")
 def report_client_error(
+    request: Request,
     payload: ClientErrorIn,
     db: Session = Depends(get_db),
     authorization: Optional[str] = Header(default=None),
@@ -375,3 +377,54 @@ def clear_client_errors(
     deleted = db.query(ClientError).delete()
     db.commit()
     return {"ok": True, "deleted": deleted}
+
+
+# ── Audit log aggregation ─────────────────────────────────────────────────────
+
+@router.get("/audit-logs")
+def list_audit_logs(
+    days: int = 7,
+    limit: int = 300,
+    company_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    """Return recent audit log entries from all companies (or one if company_id given)."""
+    import json as _json
+    from datetime import datetime, timedelta, timezone
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    q = (
+        db.query(AppDataRecord)
+        .filter(
+            AppDataRecord.collection == "audit",
+            AppDataRecord.created_at >= since,
+        )
+        .order_by(AppDataRecord.created_at.desc())
+    )
+    if company_id:
+        q = q.filter(AppDataRecord.company_id == company_id)
+    rows = q.limit(limit).all()
+
+    # Load company names for display
+    company_ids = {r.company_id for r in rows}
+    companies = {c.id: c.name for c in db.query(Company).filter(Company.id.in_(company_ids)).all()} if company_ids else {}
+
+    entries = []
+    for row in rows:
+        try:
+            payload = _json.loads(row.data) if isinstance(row.data, str) else (row.data or {})
+        except Exception:
+            payload = {}
+        entries.append({
+            "id": row.id,
+            "company_id": row.company_id,
+            "company_name": companies.get(row.company_id, row.company_id),
+            "action": payload.get("action") or payload.get("event") or "—",
+            "detail": payload.get("detail") or payload.get("description") or "",
+            "status": payload.get("status") or "",
+            "user": payload.get("user") or payload.get("email") or "",
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        })
+
+    return {"total": len(entries), "entries": entries}

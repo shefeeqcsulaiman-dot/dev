@@ -143,6 +143,29 @@
       <div class="loading-state">Loading errors…</div>
     </div>
   </div>
+
+  <!-- Audit Log Panel -->
+  <div class="card" style="margin-top:24px">
+    <div class="card-hd">
+      <div>
+        <div class="card-title">Activity Audit Log</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">User actions from all companies</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="sa-audit-days" onchange="loadAuditLogs()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text)">
+          <option value="1">Last 24h</option>
+          <option value="7" selected>Last 7 days</option>
+          <option value="30">Last 30 days</option>
+        </select>
+        <select id="sa-audit-company" onchange="loadAuditLogs()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text)">
+          <option value="">All Companies</option>
+        </select>
+      </div>
+    </div>
+    <div id="sa-audit-wrap">
+      <div class="loading-state">Loading audit log…</div>
+    </div>
+  </div>
 </div>
 
 <!-- Create Company Modal -->
@@ -314,6 +337,8 @@
       companies = await res.json();
       renderStats(companies);
       renderCompanies(companies);
+      populateAuditCompanyFilter(companies);
+      loadAuditLogs();
     }catch(err){
       document.getElementById('sa-companies-wrap').innerHTML = '<div class="loading-state" style="color:#f06b6b">Failed to load: '+escHtml(err.message)+'</div>';
     }
@@ -674,6 +699,53 @@
       document.getElementById('sa-stat-errors').textContent='0';
       document.getElementById('sa-errors-wrap').innerHTML='<div class="loading-state" style="color:var(--green)">All errors cleared.</div>';
     }catch(err){ alert('Failed: '+err.message); }
+  }
+
+  // ── Audit log ─────────────────────────────────────────────────
+  async function loadAuditLogs(){
+    const wrap=document.getElementById('sa-audit-wrap');
+    const days=parseInt(document.getElementById('sa-audit-days').value)||7;
+    const companyId=document.getElementById('sa-audit-company').value||'';
+    wrap.innerHTML='<div class="loading-state"><span class="spinner"></span> Loading…</div>';
+    try{
+      const qs=`?days=${days}&limit=300`+(companyId?`&company_id=${encodeURIComponent(companyId)}`:'');
+      const res=await apiFetch('/superadmin/audit-logs'+qs);
+      const data=await res.json();
+      if(!data.entries||!data.entries.length){
+        wrap.innerHTML='<div class="loading-state" style="color:var(--muted)">No activity in the selected period.</div>';
+        return;
+      }
+      let html='<table class="tbl" style="font-size:12px"><thead><tr><th>Time</th><th>Company</th><th>Action</th><th>Detail</th><th>Status</th></tr></thead><tbody>';
+      data.entries.forEach(e=>{
+        const ts=e.created_at?new Date(e.created_at).toLocaleString():'';
+        const statusCls=e.status==='Deleted'?'b-r':e.status==='Created'?'b-g':e.status==='Opened'?'b-a':'b-gray';
+        html+=`<tr>
+          <td style="white-space:nowrap;color:var(--muted)">${escHtml(ts)}</td>
+          <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(e.company_name||e.company_id||'—')}</td>
+          <td style="font-weight:500">${escHtml(e.action)}</td>
+          <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;color:var(--muted)">${escHtml(e.detail||'')}</td>
+          <td>${e.status?`<span class="b ${escHtml(statusCls)}">${escHtml(e.status)}</span>`:'—'}</td>
+        </tr>`;
+      });
+      html+='</tbody></table>';
+      wrap.innerHTML=html;
+    }catch(err){
+      wrap.innerHTML='<div class="loading-state" style="color:var(--red)">Failed: '+escHtml(err.message)+'</div>';
+    }
+  }
+
+  function populateAuditCompanyFilter(companiesData){
+    const sel=document.getElementById('sa-audit-company');
+    if(!sel)return;
+    const existing=new Set([...sel.options].map(o=>o.value));
+    companiesData.forEach(c=>{
+      if(!existing.has(c.id)){
+        const opt=document.createElement('option');
+        opt.value=c.id;
+        opt.textContent=c.name;
+        sel.appendChild(opt);
+      }
+    });
   }
 
   loadDashboard();
