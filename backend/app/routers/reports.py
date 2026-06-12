@@ -325,7 +325,7 @@ def _purchase_row_amount(row: dict[str, Any]) -> Decimal:
 
 def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
     # Use direct SQL JSON extraction to sum totals — avoids Python-side parsing edge cases.
-    # Tries multiple field names in priority order: total → grand_total → net_amount → subtotal.
+    # Tries multiple field names in priority order: total → grand_total → net_amount → subtotal → lines sum.
     sql = text("""
         SELECT
             COALESCE(SUM(
@@ -334,13 +334,23 @@ def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
                         THEN (payload::jsonb->>'total')::numeric
                     WHEN (payload::jsonb->>'grand_total') IS NOT NULL AND (payload::jsonb->>'grand_total')::numeric <> 0
                         THEN (payload::jsonb->>'grand_total')::numeric
-                    WHEN (payload::jsonb->>'net_amount') IS NOT NULL
+                    WHEN (payload::jsonb->>'net_amount') IS NOT NULL AND (payload::jsonb->>'net_amount')::numeric <> 0
                         THEN COALESCE((payload::jsonb->>'net_amount')::numeric, 0)
                             + COALESCE((payload::jsonb->>'tax_amount')::numeric, 0)
                             + COALESCE((payload::jsonb->>'shipping')::numeric, 0)
-                    WHEN (payload::jsonb->>'subtotal') IS NOT NULL
+                    WHEN (payload::jsonb->>'subtotal') IS NOT NULL AND (payload::jsonb->>'subtotal')::numeric <> 0
                         THEN COALESCE((payload::jsonb->>'subtotal')::numeric, 0)
                             + COALESCE((payload::jsonb->>'vat')::numeric, 0)
+                    WHEN payload::jsonb->'lines' IS NOT NULL
+                        THEN COALESCE((
+                            SELECT SUM(
+                                COALESCE((line->>'total')::numeric,
+                                    COALESCE((line->>'net')::numeric, 0)
+                                    + COALESCE((line->>'vat')::numeric, 0)
+                                )
+                            )
+                            FROM jsonb_array_elements(payload::jsonb->'lines') AS line
+                        ), 0)
                     ELSE 0
                 END
             ), 0) AS total_amount,

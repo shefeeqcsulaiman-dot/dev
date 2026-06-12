@@ -2,22 +2,28 @@
 
 TaxFlow is a UAE business management platform for sales, purchases, accounting, tax, eInvoicing, payroll, HR, rota planning, documents, reporting, approvals, and audit control.
 
-The current repository is a React + Vite frontend that mounts the TaxFlow UI shell and a FastAPI backend with local SQLite support for development. The live development build now includes module APIs, source transactions, tax lines, Exception Center, domain events, inventory unit/costing tables, audit detail tables, reporting snapshots, a repeatable seed dataset with 20+ realistic UAE records per module, and fully connected invoice design settings across create, view, and download flows. The production target remains a modular, tenant-aware business system where source transactions, tax lines, accounting, audit, and reporting are controlled by backend services.
+The system is live in production at `https://e4cs.com` on DigitalOcean App Platform. The frontend is a vanilla JS single-page app served by FastAPI. The backend uses PostgreSQL with SQLAlchemy 2.0 and Redis for report caching. Local development uses SQLite. The production target is a modular, tenant-aware business system where source transactions, tax lines, accounting, audit, and reporting are controlled by backend services.
 
-## 1. Current Prototype Structure
+## 1. Current Structure
 
 ```text
-frontend/                    React + Vite shell
-frontend/index.html          Vite entry document only
+frontend/                    React + Vite shell (local dev only)
+frontend/index.html          Vite entry document (local dev only)
 frontend/src/main.jsx        Login shell, legacy UI mount, backend bridge
 frontend/src/api.js          Authenticated API client
 frontend/.env.local          Local API base override when backend is not on port 8000
-frontend/public/taxflow/     Main TaxFlow UI markup, styles, and browser logic
+frontend/public/taxflow/     Main TaxFlow UI — served by FastAPI in production
+frontend/public/taxflow/index.html       Single-page app HTML
+frontend/public/taxflow/src/app.js       All frontend logic (~16,000 lines)
+frontend/public/taxflow/src/styles.css   UI styles
 backend/                     FastAPI API, SQLAlchemy models, routers, storage
-backend/app/main.py          API app, router registration, startup seed data
+backend/app/main.py          API app, router registration, startup migrations
+backend/app/models.py        SQLAlchemy ORM models
 backend/app/routers/         Auth, invoices, documents, reports, app data, modules, events, exceptions
-backend/scripts/             Local data reset and 50-record seed scripts
+backend/app/cache.py         Redis report cache with company-scoped invalidation
+backend/scripts/             Local data reset and seed scripts
 backend/*.db                 Local SQLite databases for lightweight development
+.do/app.yaml                 DigitalOcean App Platform deployment spec
 docs/                        Architecture and roadmap
 ```
 
@@ -28,7 +34,7 @@ backend/.env currently points local SQLite to taxflow-seed50-v2.db.
 frontend/.env.local points Vite to http://127.0.0.1:8000/api/v1 for the default local backend.
 backend/scripts/add_seed_50_real.py extends the local seed set for realistic module data.
 SQLite journaling is disabled in local dev because this Windows workspace denies rollback-journal deletion.
-Production must use PostgreSQL with normal transactional durability.
+Production uses PostgreSQL with normal transactional durability.
 ```
 
 Verified local runtime:
@@ -40,142 +46,164 @@ Docs:     http://127.0.0.1:8000/docs
 Login:    admin@taxflowapp.com / admin123
 ```
 
-Production must harden the current backend with a production relational database, object storage, queue workers, backend validation, stronger audit logging, and tenant enforcement.
-
-## 1.1 Current Implemented Development State
-
-Implemented now:
+Production:
 
 ```text
-Frontend
-|-- React + Vite shell
-|-- TaxFlow UI pages
-|-- Sales AI upload, extraction, validation, Save All
-|-- Purchase AI upload, extraction, validation, Save All
-|-- Invoice source badges: AI Upload / Manual
-|-- Sales & Invoices module
-|   |-- KPI cards row (Total, Outstanding, Paid, Overdue)
-|   |-- Two-column invoice create form with live summary sidebar
-|   |-- Live sidebar preview updates on every field/line change
-|   |-- Full PDF Preview button in create form sidebar
-|   |-- Customize Invoice Design shortcut in create sidebar and view modal
-|   |-- Invoice view modal: Print PDF, Online View, Edit, Mark Paid, Design, Share
-|   |-- Edit invoice: loads all fields and line items back into the create form
-|   |-- Mark Paid: redirects to Customer Receipt form pre-filled with invoice details
-|   |-- Share modal: Email, WhatsApp, Download PDF, Online View channels
-|   |-- Customer contact auto-populated in share modal from customer directory
-|   |-- Invoice design settings connected to view, print, and download
-|   |-- Print popup uses Google Fonts and light-mode CSS variables
-|   `-- Row actions: View, Download PDF, Share, Edit, Mark Paid, Delete
-|-- Exception Center screen
-|-- Dashboard/report widgets reading backend summaries
-`-- Sidebar module badges reading live counts from dashboard API
+Live URL:         https://e4cs.com
+App name:         etaxflow
+Platform:         DigitalOcean App Platform (nyc3)
+Instances:        2–6 × professional-s (2 vCPU / 2 GB), autoscales at 70% CPU
+Database:         DigitalOcean Managed PostgreSQL (nyc3)
+Cache:            Redis (managed)
+Worker:           Celery (1 × basic-s)
+Deploy trigger:   Push to main branch → auto deploy
+DB pool:          pool_size=10, max_overflow=15 per instance
+Bootstrap cap:    5,000 records per collection bootstrap
+```
 
-Backend
-|-- Auth and current company APIs
-|-- Invoices and invoice lines
-|-- Documents and jobs
-|-- Source transactions, validation, approval, posting jobs
-|-- Accounting accounts and journal entries
-|-- Corporate accounting: tax, fixed assets, accruals, cost centers, budgets, cash flow, credit control, close, consolidation, approvals
-|-- Tax codes, tax lines, VAT return summary
-|-- Inventory warehouses, mappings, item units, valuation layers, adjustment approvals
-|-- Payroll employees, payroll runs, payroll items, WPS batches
-|-- Audit logs and audit detail table
-|-- Exception Center API
-|-- Domain events, event outbox, processing logs
+## 1.1 Current Implemented State
+
+```text
+Frontend (frontend/public/taxflow/)
+|-- Vanilla JS single-page app — no framework, no build step
+|-- Login overlay shown immediately on page load before dashboard renders
+|-- Bootstrap hydration: loads all app_data_records on login, stores in localStorage
+|-- Cache-busting: ?v=YYYYMMDD[letter] on CSS/JS assets + _SNAP_VER in localStorage
+|-- Sales & Invoices
+|   |-- KPI cards (Total, Outstanding, Paid, Overdue)
+|   |-- Two-column create form with live summary sidebar and PDF preview
+|   |-- Invoice view modal: Print PDF, Online View, Edit, Mark Paid, Design, Share
+|   |-- Mark Paid → Customer Receipt modal pre-filled with invoice details
+|   |-- Share: Email, WhatsApp, Download PDF, Online View
+|   |-- Invoice design settings (logo, color, layout) connected to view/print/download
+|   |-- Row actions: View, Download, Share, Edit, Mark Paid, Delete
+|   |-- Product suggestion: mapped products show taxflow_name + mapped price
+|-- Purchases
+|   |-- AI upload, extraction, validation, Save All
+|   |-- Manual purchase entry with line items, tax, payment
+|   |-- Vendor Bills table (bill_no, vendor, date, due, subtotal, VAT, total, status)
+|   |-- Purchase dashboard card showing totals, paid/pending counts
+|-- Inventory
+|   |-- Item master (code, name, type, category, unit, VAT, cost, price, status)
+|   |-- Duplicate detection on add: blocks same item code or item name
+|   |-- Stock level table from purchase movements
+|   |-- Stock mapping: source product → taxflow name, cost, markup, price
+|   |-- Mapped products show taxflow_name in sales suggestions
+|-- Staff
+|   |-- Employee directory with WPS SIF export
+|   |-- EOSB / Gratuity calculator (UAE Labour Law formula)
+|   |-- Leave calendar (monthly grid view)
+|   |-- Payroll runs
+|-- Bank & Payments
+|   |-- Bank accounts, receipts, payments
+|   |-- Bank reconciliation: match statement lines to ledger entries
+|-- Accounting
+|   |-- Chart of accounts, journal entries, general ledger
+|   |-- Period locking (lock fiscal months, block backdated entries)
+|-- Reports
+|   |-- VAT 201 report + FTA VAT 201 PDF export button
+|   |-- Corporate Tax worksheet (9% UAE CT, AED 375,000 threshold, SBR)
+|   |-- P&L, Trial Balance, Balance Sheet
+|-- Settings
+|   |-- Company registration, tax settings, invoice design
+|   |-- Sales categories, units of measure
+|   |-- Notification alert rules panel
+|-- CSV export on Customer, Vendor, Employee, General Ledger tables
+|-- Exception Center screen
+|-- Dashboard: revenue, VAT, invoices, purchases, staff KPI cards
+`-- Sidebar module badges from live dashboard API counts
+
+Backend (backend/app/)
+|-- Auth and company context (JWT, token expiry 1440 min)
+|-- app_data_records: single table storing all module JSON as payload column
+|-- Reports: dashboard, purchase summary, P&L, trial balance, VAT, debug endpoints
+|-- Cache: Redis-backed report cache (app/cache.py)
+|   |-- invalidate_company(company_id) clears all report keys for a tenant
+|   `-- Triggered on save/delete when collection is in _REPORT_AFFECTING_COLLECTIONS
+|-- DB indexes: composite (company_id, collection) and (company_id, collection, created_at)
+|-- Invoices, source transactions, posting jobs, journal entries
+|-- Tax codes, tax lines, VAT returns, corporate tax returns
+|-- Inventory: warehouses, mappings, stock movements, valuation layers, adjustment approvals
+|-- Payroll: employees, payroll runs, WPS batches, SIF export
+|-- Audit logs, domain events, event outbox, exception events
 |-- Reporting snapshot tables
-|-- Module record APIs for purchases, items, units, settings
-|-- Dashboard module_counts: invoice, purchase, bank, staff, payroll, exception, receipt counts
+|-- Period locks (accounting, VAT, payroll, inventory)
 `-- Prototype app-data API retained as compatibility bridge
 ```
 
-## 1.2 Current Local Runtime Architecture
+## 1.2 Runtime Architecture
 
-The local development runtime is intentionally lightweight and does not require Docker.
+### Local Development
 
 ```text
 Browser
   |
   v
-React + Vite dev server
-http://127.0.0.1:5173
+React + Vite dev server  http://127.0.0.1:5173
   |
-  | loads Vite shell:
-  |   frontend/index.html
-  |   frontend/src/main.jsx
-  |   frontend/src/api.js
-  |
-  | mounts legacy TaxFlow UI from:
-  |   frontend/public/taxflow/index.html
-  |   frontend/public/taxflow/src/styles.css
-  |   frontend/public/taxflow/src/app.js
+  | loads Vite shell (frontend/index.html, main.jsx, api.js)
+  | mounts TaxFlow UI from frontend/public/taxflow/
   |
   v
-FastAPI backend
-http://127.0.0.1:8000/api/v1 by default
-alternate ports can be used by updating frontend/.env.local
+FastAPI backend  http://127.0.0.1:8000/api/v1
   |
   v
-SQLite seed database
-backend/taxflow-seed50-v2.db
+SQLite  backend/taxflow-seed50-v2.db
 ```
 
-Runtime responsibilities:
+Local responsibilities:
 
 ```text
-React + Vite shell
-|-- owns login and token storage
-|-- verifies /auth/me before mounting the workspace
-|-- sets window.TAXFLOW_API_BASE_URL from VITE_API_BASE_URL
-|-- injects the legacy TaxFlow document into the page body
-`-- exposes a small window.TaxFlowAPI bridge for backend-backed actions
-
-Legacy TaxFlow UI
-|-- owns most current screens, navigation, tables, forms, and demo workflows
-|-- reads window.TAXFLOW_API_BASE_URL before falling back to port 8000
-|-- uses local browser state for some prototype UI collections
-`-- calls proper module APIs where backend endpoints already exist
-
-FastAPI backend
-|-- owns authentication, tenant/company context, and durable API records
-|-- serves module APIs under /api/v1
-|-- uses SQLite for local development
-`-- targets PostgreSQL, Redis/Celery, and S3-compatible storage in production
+Vite shell     — login, token storage, /auth/me check, sets TAXFLOW_API_BASE_URL
+TaxFlow UI     — all screens; reads TAXFLOW_API_BASE_URL, falls back to port 8000
+FastAPI        — auth, tenant context, module APIs, app-data bridge
 ```
 
-Important local rule:
+Do not replace `frontend/index.html` with the TaxFlow HTML. The Vite shell must stay at root.
+
+### Production (https://e4cs.com)
 
 ```text
-Do not replace frontend/index.html with the legacy TaxFlow HTML.
-The root index.html must remain the Vite shell.
-The legacy UI belongs under frontend/public/taxflow/.
+Browser
+  |
+  v
+DigitalOcean App Platform (nyc3)
+  2–6 × professional-s instances  (autoscale at 70% CPU)
+  FastAPI served by uvicorn (4 workers per instance)
+  Static files: frontend/public/taxflow/ served at /taxflow/
+  |
+  v
+DigitalOcean Managed PostgreSQL (nyc3)
+  Connection pool: pool_size=10, max_overflow=15 per instance
+  Indexes: (company_id, collection), (company_id, collection, created_at)
+  |
+  v
+DigitalOcean Managed Redis
+  Report cache: keys taxflow:report:{company_id}:*
+  Invalidated on any write to report-affecting collections
 ```
 
-Seeded local data (taxflow-seed50-v2.db, realistic UAE business records):
+Seeded local data (`taxflow-seed50-v2.db`, realistic UAE business records):
 
 ```text
-app_data_records (customers)      21  — UAE company names, TRNs, Emirates
-app_data_records (employees)      21  — with designation, department, salary
-app_data_records (salesInvoices)  21  — invoices with line items, VAT, status
-app_data_records (products)       31  — with SKU, price, VAT rate
-app_data_records (suppliers)      20  — with TRNs and contact details
+app_data_records (customers)        21  — UAE company names, TRNs, Emirates
+app_data_records (employees)        21  — designation, department, salary
+app_data_records (salesInvoices)    21  — line items, VAT, status
+app_data_records (products)         31  — SKU, price, VAT rate
+app_data_records (suppliers)        20  — TRNs, contact details
 app_data_records (purchaseInvoices) 20
 app_data_records (purchaseDocuments) 73
-app_data_records (payments)        2
-app_data_records (salesCategories) 100
-app_data_records (salesUnits)     101
-app_data_records (vendors)          7
-employees (ORM table)             21  — mirrored from app_data_records
-invoices (ORM table)              20+
-source_transactions               27
-payroll_runs                       2
-payroll_items                     21
-payments (ORM table)               6
-receipts (ORM table)               6
-exception_events                   7
-bank_statement_lines              10+
-stock_movements                   10+
+app_data_records (salesCategories)  100
+app_data_records (salesUnits)       101
+employees (ORM)                     21  — mirrored from app_data_records
+invoices (ORM)                      20+
+source_transactions                 27
+payroll_runs                         2
+payroll_items                       21
+payments / receipts (ORM)            6 each
+exception_events                     7
+bank_statement_lines                10+
+stock_movements                     10+
 ```
 
 Seed script: `backend/seed_test_data.py` — idempotent, safe to re-run.

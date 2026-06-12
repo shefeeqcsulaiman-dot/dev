@@ -163,7 +163,7 @@ function go(page){
     ensurePurchaseRecordsLoadedForStock();
     setTimeout(()=>ensureInventoryBulkSelection(),80);
   }
-  if(page==='accounting')loadAccountingFromDb();
+  if(page==='accounting'){loadAccountingFromDb();renderPeriodLockPanel();}
   runPageWarmup(page);
   updateBackButton();
 }
@@ -1385,6 +1385,18 @@ function saveInventoryItem(){
   if(!name){toast('Enter item name','warn');return;}
   if(!category){toast('Select category from database','warn');return;}
   if(!unit){toast('Select unit of measure from database','warn');return;}
+  // Duplicate check — skip the row being edited
+  {
+    const existingRows=[...document.querySelectorAll('#prod-tbody tr:not([data-empty-state])')];
+    const nameLower=name.toLowerCase();
+    const codeLower=code.toLowerCase();
+    const editCodeLower=(_invEditCode||'').toLowerCase();
+    const otherRows=existingRows.filter(r=>inventoryRowCellText(r,0).trim().toLowerCase()!==editCodeLower);
+    const dupName=otherRows.some(r=>inventoryRowCellText(r,1).trim().toLowerCase()===nameLower);
+    const dupCode=otherRows.some(r=>inventoryRowCellText(r,0).trim().toLowerCase()===codeLower);
+    if(dupName){toast(`Item name "${name}" already exists in inventory`,'warn');return;}
+    if(dupCode){toast(`Item code "${code}" already exists — use a unique code`,'warn');return;}
+  }
   const vatText=vat.includes('Zero')||vat.includes('0%')?'0%':vat==='Exempt'?'Exempt':'5%';
   const vatClass=vatText==='5%'?'b-b':vatText==='Exempt'?'b-t':'b-g';
   const trackingClass=tracking==='No'?'b-gray':'b-g';
@@ -1993,6 +2005,20 @@ function renderFullDashboardFromDatabase(data){
   renderInvoiceStatus(data.invoice_status||{});
   renderStaffToday(data.staff_today||{present:kpis.staff_present||0,total:kpis.staff_total||0,leave:0,absent:0,source:'Employees database'});
   renderDatabaseDashboardSummary(data);
+}
+
+function _refreshPurchaseDashboardCard(){
+  // Called after bootstrap fills _hydratedBills — updates only the purchase card elements
+  const lp=_computeLocalPurchaseStats();
+  if(!lp.count)return;
+  const setEl=(id,v)=>{const el=document.getElementById(id);if(el&&el.textContent==='AED 0.00'||el?.textContent==='0 Bills')el.textContent=v;};
+  // Only update if currently showing zero (avoid overwriting good API data)
+  const purEl=document.getElementById('dash-total-purchases');
+  const purSubEl=document.getElementById('dash-purchases-sub');
+  if(purEl&&parseAmount(purEl.textContent||'0')===0&&lp.total>0){
+    purEl.textContent=formatAed(lp.total);
+    if(purSubEl)purSubEl.textContent=`${lp.count} Bills`;
+  }
 }
 
 function renderDashboardHero(data,kpis={},counts={}){
@@ -3420,7 +3446,10 @@ function renderProductRecord(product,options={}){
   const tbody=document.getElementById('prod-tbody');
   if(isInventoryTableCleared())return;
   if(isDemoProductRecord(product))return;
-  if(!tbody||!product?.name||hasFirstCellValue(tbody,product.code))return;
+  if(!tbody||!product?.name)return;
+  if(hasFirstCellValue(tbody,product.code))return;
+  const _existingNames=[...tbody.querySelectorAll('tr:not([data-empty-state])')].map(r=>inventoryRowCellText(r,1).toLowerCase());
+  if(_existingNames.includes((product.name||'').toLowerCase()))return;
   const vatRaw=String(product.vat||'');
   const vatText=vatRaw.includes('Zero')||vatRaw.includes('zero')||(vatRaw.includes('0')&&!vatRaw.includes('5'))?'0%':vatRaw.includes('Exempt')||vatRaw.includes('exempt')?'Exempt':'5%';
   const vatClass=vatText==='5%'?'b-b':vatText==='Exempt'?'b-t':'b-g';
@@ -3849,23 +3878,45 @@ function renderSalesUnitRecord(unit){
   syncInventoryItemOptions();
 }
 
+// Populated during bootstrap hydration — used as reliable source for purchase dashboard stats
+const _hydratedBills=[];
+
 function _computeLocalPurchaseStats(){
   let total=0,paid=0,paidCount=0,pendingCount=0,count=0;
-  document.querySelectorAll('#bill-tbody tr:not([data-empty-state])').forEach(row=>{
-    const cells=row.querySelectorAll('td');
-    const rowTotal=parseAmount(cells[6]?.textContent||cells[4]?.textContent||0);
-    const status=(cells[7]?.querySelector('.b')?.textContent||cells[7]?.textContent||'').trim().toLowerCase();
-    total+=rowTotal;count++;
-    const isPaid=['paid','complete','completed','posted','settled','received'].includes(status);
-    if(isPaid){paid+=rowTotal;paidCount++;}else{pendingCount++;}
-  });
-  // Also count purchase records
-  document.querySelectorAll('#purchase-record-tbody tr:not([data-empty-state])').forEach(row=>{
-    const cells=row.querySelectorAll('td');
-    const rowTotal=parseAmount(cells[9]?.textContent||0);
-    total+=rowTotal;count++;pendingCount++;
-  });
+  // Prefer hydrated data (populated from server bootstrap) over DOM scanning
+  const billSrc=_hydratedBills.length?_hydratedBills:null;
+  if(billSrc){
+    billSrc.forEach(bill=>{
+      const rowTotal=parseAmount(bill.total||bill.grand_total||bill.net_amount||(Number(bill.subtotal||0)+Number(bill.vat||0))||_sumLines(bill.lines));
+      const status=(bill.status||'').trim().toLowerCase();
+      total+=rowTotal;count++;
+      if(['paid','complete','completed','posted','settled','received'].includes(status)){paid+=rowTotal;paidCount++;}
+      else pendingCount++;
+    });
+  }else{
+    // DOM fallback — only counts rows with data-server-record (real DB rows, not demo HTML rows)
+    document.querySelectorAll('#bill-tbody tr[data-server-record]').forEach(row=>{
+      const cells=row.querySelectorAll('td');
+      const rowTotal=parseAmount(cells[6]?.textContent||cells[4]?.textContent||0);
+      const status=(cells[7]?.querySelector('.b')?.textContent||cells[7]?.textContent||'').trim().toLowerCase();
+      total+=rowTotal;count++;
+      if(['paid','complete','completed','posted','settled','received'].includes(status)){paid+=rowTotal;paidCount++;}
+      else pendingCount++;
+    });
+  }
+  // Purchase records from cache (populated during bootstrap)
+  if(purchaseRecordCache.size>0){
+    purchaseRecordCache.forEach(rec=>{
+      const rowTotal=parseAmount(rec.total||rec.grand_total||(Number(rec.subtotal||0)+Number(rec.vat||rec.tax||0))||_sumLines(rec.lines||rec.items));
+      total+=rowTotal;count++;pendingCount++;
+    });
+  }
   return {total,paid,paidCount,pendingCount,count};
+}
+
+function _sumLines(lines){
+  if(!Array.isArray(lines))return 0;
+  return lines.reduce((s,l)=>s+parseAmount(l.total||l.net||l.amount||((Number(l.qty||l.quantity||1))*(Number(l.unit_price||l.price||0)))),0);
 }
 
 function renderBillRecord(bill){
@@ -4975,6 +5026,10 @@ function saveExpense(status='Pending'){
   const record=buildExpenseRecord(status);
   if(!record.description||record.amount<=0){
     toast('Enter expense description and amount','warn');
+    return;
+  }
+  if(isPeriodLocked(record.date)){
+    toast(`Period ${(record.date||'').slice(0,7)} is locked — unlock before saving`,'warn');
     return;
   }
   renderExpenseRecord(record);
@@ -6106,8 +6161,11 @@ function hydrateFromServer(){
         renderStats.bankAccounts=renderRecordList(_deferred2.bankAccounts,renderBankAccountRecord,'bank account');
         renderStats.payments=renderRecordList(_deferred2.payments,renderPaymentRecord,'payment');
         renderStats.expenses=renderRecordList(_deferred2.expenses,renderExpenseRecord,'expense');
+        if(Array.isArray(_deferred2.bills)){_hydratedBills.length=0;_hydratedBills.push(..._deferred2.bills);}
         renderStats.bills=renderRecordList(_deferred2.bills,renderBillRecord,'bill');
         renderStats.vendors=renderRecordList(_deferred2.vendors,renderVendorRecord,'vendor');
+        // Re-render purchase card now that bill data is loaded
+        _refreshPurchaseDashboardCard();
       }finally{isHydratingFromServer=false;}
       updateFinanceFromDatabaseRecords();
       updateAccountSelectors();
@@ -8285,6 +8343,10 @@ function saveDraftInvoice(options={}){
     toast(message,'warn');
     return null;
   }
+  if(isPeriodLocked(inv.date)){
+    toast(`Period ${(inv.date||'').slice(0,7)} is locked — unlock before saving`,'warn');
+    return null;
+  }
   currentSalesInvoice=inv;
   const saved=addSalesInvoiceRow(inv);
   if(saved){
@@ -8854,6 +8916,10 @@ async function extractSingleFile(entry){
   const extTab=document.querySelector('#page-purchase .tab:nth-child(2)');
   if(extTab)stab(extTab,'p-extract');
 
+  // Clear previous extraction cards so new file starts with a clean view
+  const extTbody=document.getElementById('ext-tbody');
+  if(extTbody)extTbody.innerHTML='';
+
   const ep=document.getElementById('ext-prog'),ef=document.getElementById('ext-fill'),epct=document.getElementById('ext-pct');
   if(ep)ep.style.display='block';
   if(ef)ef.classList.add('running');
@@ -8919,7 +8985,7 @@ function isExtractionErrorResult(invoices){
 async function appendExtractedRows(invoices,filename){
   const tbody=document.getElementById('ext-tbody');
   if(!tbody)return;
-  if(tbody.querySelector('.ai-empty-state,[data-extraction-error]'))tbody.innerHTML='';
+  tbody.innerHTML='';
   if(!Array.isArray(invoices)||!invoices.length){
     tbody.innerHTML=`<div class="ai-empty-state" style="color:var(--red)">No data extracted from ${escapeHtml(filename||'uploaded file')}.</div>`;
     return;
@@ -9181,7 +9247,7 @@ function purchaseAiRowHtml(inv,line,index,validation,filename){
       </div>
     </div>
     <div class="ai-invoice-divider"></div>
-    <div class="ai-invoice-fields">
+    <div class="ai-invoice-fields" style="cursor:pointer" onclick="openPurchaseAiEdit(this)" title="Click to edit">
       ${filename?`<div><span>Filename</span><strong style="font-size:11px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(filename)}</strong></div>`:''}
       <div><span>TRN / VAT #</span><strong class="mono" style="${trnInvalid?'color:var(--red)':''}" title="${trnInvalid?'Invalid TRN — must be 15 digits':''}">${escapeHtml(trnVal||'-')}${trnInvalid?' ⚠':''}</strong></div>
       <div><span>Subtotal (excl. VAT)</span><strong class="mono">${cur} ${fmt(net)}</strong></div>
@@ -9650,7 +9716,7 @@ function countPurchaseAiInvoiceNo(invoiceNo){
 
 function purchaseAiUploadActionsHtml(){
   return `<div class="row-actions">
-    <button class="ai-card-action view" type="button" title="View" aria-label="View purchase AI invoice" onclick="openPurchaseAiView(this)">${viewIconSvg()}</button>
+    <button class="ai-card-action view" type="button" title="Edit" aria-label="Edit purchase AI invoice" onclick="openPurchaseAiEdit(this)">${viewIconSvg()}</button>
     <button class="ai-card-action approve" type="button" title="Approve" aria-label="Approve purchase AI row" onclick="approvePurchaseAiRow(this)">Approve</button>
     <button class="ai-card-action delete" type="button" title="Delete" aria-label="Delete purchase AI row" onclick="deletePurchaseAiRow(this)">${deleteIconSvg()}</button>
   </div>`;
@@ -10873,6 +10939,7 @@ async function saveManualPurchase(){
     source:isReturn?'Purchase Return':isLPO?'Local PO':'Manual',
     document_type:isReturn?'Purchase Return':isLPO?'Local Purchase Order':'Purchase Invoice'
   };
+  if(isPeriodLocked(record.date)){toast(`Period ${(record.date||'').slice(0,7)} is locked — unlock before saving`,'warn');return;}
   const wasEditing=Boolean(manualPurchaseEditingRef);
   if(manualPurchaseEditingRef){
     [...document.querySelectorAll('#purchase-record-tbody tr')].find(row=>row.children[0]?.textContent.trim()===manualPurchaseEditingRef)?.remove();
@@ -10947,13 +11014,12 @@ function ensurePurchasePreviewModal(){
           <div class="modal-title" id="purchase-view-title">Purchase Preview</div>
           <div class="modal-sub" id="purchase-view-sub">Purchase record</div>
         </div>
-        <button class="btn btn-g btn-sm" onclick="closeM('m-purchase-view')">Close</button>
       </div>
       <div id="purchase-view-body"></div>
       <div class="modal-foot">
         <button class="btn btn-g" onclick="toast('Preparing purchase PDF...','info')">Export PDF</button>
         <button class="btn btn-p hidden" id="purchase-view-save" onclick="savePurchasePreviewEdit()">Save Changes</button>
-        <button class="btn btn-p" onclick="closeM('m-purchase-view')">Close</button>
+        <button class="btn btn-g" onclick="closeM('m-purchase-view')">Close</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -11100,7 +11166,7 @@ function openPurchaseRecordPreview(btn){
     toast('Purchase record not found','warn');
     return;
   }
-  renderPurchaseRecordPreview(purchase);
+  renderPurchaseRecordPreview(purchase,{editable:true});
   showM('m-purchase-view');
   audit('Viewed purchase order',purchase.ref,'Viewed');
 }
@@ -11785,6 +11851,7 @@ function saveJournalDraft(){
     status:'Draft',
     lines:getJournalLines().filter(line=>line.account_id&&line.account!=='Select Account...'&&(line.debit||line.credit))
   };
+  if(isPeriodLocked(record.date)){toast(`Period ${record.date.slice(0,7)} is locked — unlock before saving`,'warn');return;}
   saveServer('journalDrafts',record);
   toast('Journal draft saved to database','ok');
   audit('Saved journal draft',ref,'Saved');
@@ -15175,6 +15242,7 @@ function saveBill(){
     if(desc||net>0){lines.push({description:desc,qty,unit_price:unitPrice,vat_pct:vatPct,net,vat,total:net+vat});subtotal+=net;vatTotal+=vat;}
   });
   if(!lines.length){toast('Add at least one product line','err');return;}
+  if(isPeriodLocked(date)){toast(`Period ${(date||'').slice(0,7)} is locked — unlock before saving`,'warn');return;}
   const total=subtotal+vatTotal;
   const fmt=n=>n.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
   const row=document.createElement('tr');
@@ -15954,7 +16022,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260612p';
+  const _SNAP_VER='20260612s';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
