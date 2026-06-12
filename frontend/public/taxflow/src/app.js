@@ -15187,10 +15187,60 @@ function mergeBankAndPaymentsModule(){
   bankPage.dataset.paymentsMerged='1';
 }
 
+// ── Global error capture ──────────────────────────────────────────────────────
+(function setupGlobalErrorCapture(){
+  if(window.__taxflowErrorCaptureActive)return;
+  window.__taxflowErrorCaptureActive=true;
+  let _errCount=0;
+  const MAX_ERRORS_PER_SESSION=30;
+  const THROTTLE_MS=5000;
+  let _lastSent=0;
+  function _sendError(message,stack,context){
+    if(_errCount>=MAX_ERRORS_PER_SESSION)return;
+    const now=Date.now();
+    if(now-_lastSent<THROTTLE_MS)return;
+    _lastSent=now;
+    _errCount++;
+    try{
+      const token=localStorage.getItem('taxflow_token')||'';
+      const headers={'Content-Type':'application/json'};
+      if(token)headers['Authorization']='Bearer '+token;
+      const base=window.location.hostname==='localhost'?'http://localhost:8000':'';
+      navigator.sendBeacon
+        ?navigator.sendBeacon(base+'/api/v1/superadmin/client-errors',new Blob([JSON.stringify({
+            message:String(message).slice(0,2000),
+            stack:String(stack||'').slice(0,4000),
+            url:window.location.href.slice(0,500),
+            context:String(context||'').slice(0,120),
+            user_agent:navigator.userAgent.slice(0,500)
+          })],{type:'application/json'}))
+        :fetch(base+'/api/v1/superadmin/client-errors',{method:'POST',headers,body:JSON.stringify({
+            message:String(message).slice(0,2000),
+            stack:String(stack||'').slice(0,4000),
+            url:window.location.href.slice(0,500),
+            context:String(context||'').slice(0,120),
+            user_agent:navigator.userAgent.slice(0,500)
+          })}).catch(()=>{});
+    }catch(e){/* never throw inside error handler */}
+  }
+  window.addEventListener('error',function(e){
+    _sendError(e.message||'Script error',e.error&&e.error.stack,'window.onerror');
+  });
+  window.addEventListener('unhandledrejection',function(e){
+    const msg=(e.reason&&(e.reason.message||String(e.reason)))||'Unhandled promise rejection';
+    const stack=e.reason&&e.reason.stack;
+    _sendError(msg,stack,'unhandledrejection');
+  });
+  window._reportAppError=function(message,context){
+    _sendError(message,null,context||'manual');
+  };
+})();
+// ─────────────────────────────────────────────────────────────────────────────
+
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260612l';
+  const _SNAP_VER='20260612m';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);

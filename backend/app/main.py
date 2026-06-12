@@ -229,6 +229,22 @@ def ensure_schema_updates() -> None:
             connection.execute(text(
                 "UPDATE accounts SET node_type='SUB_LEDGER' WHERE is_group=TRUE AND level>1 AND (node_type IS NULL OR node_type='POSTING_LEDGER')"
             ))
+        if "client_errors" not in table_names:
+            connection.execute(text("""
+                CREATE TABLE IF NOT EXISTS client_errors (
+                    id VARCHAR(36) PRIMARY KEY,
+                    company_id VARCHAR(36),
+                    user_id VARCHAR(36),
+                    message TEXT NOT NULL,
+                    stack TEXT,
+                    url VARCHAR(500),
+                    context VARCHAR(120),
+                    user_agent VARCHAR(500),
+                    occurred_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                )
+            """))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS idx_client_errors_company ON client_errors (company_id)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS idx_client_errors_occurred ON client_errors (occurred_at DESC)"))
 
 
 def seed_initial_data() -> None:

@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import Company, Employee, User
+from app.models import ClientError, Company, Employee, User
+from app.security import user_id_from_token
 from app.security import hash_password
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
@@ -283,3 +287,91 @@ def delete_company(
     db.delete(company)
     db.commit()
     return {"ok": True}
+
+
+# ── Client error reporting ────────────────────────────────────────────────────
+
+class ClientErrorIn(BaseModel):
+    message: str
+    stack: Optional[str] = None
+    url: Optional[str] = None
+    context: Optional[str] = None
+    user_agent: Optional[str] = None
+
+
+@router.post("/client-errors", status_code=201)
+def report_client_error(
+    payload: ClientErrorIn,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
+    """Accepts client-side JS errors. Auth is optional — errors before login are still captured."""
+    from app.models import uuid as _uuid
+    company_id: Optional[str] = None
+    user_id: Optional[str] = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+        uid = user_id_from_token(token)
+        if uid:
+            user = db.query(User).filter(User.id == uid).first()
+            if user:
+                user_id = user.id
+                company_id = user.company_id
+    err = ClientError(
+        id=_uuid(),
+        company_id=company_id,
+        user_id=user_id,
+        message=payload.message[:2000],
+        stack=(payload.stack or "")[:4000] or None,
+        url=(payload.url or "")[:500] or None,
+        context=(payload.context or "")[:120] or None,
+        user_agent=(payload.user_agent or "")[:500] or None,
+    )
+    db.add(err)
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/client-errors")
+def list_client_errors(
+    days: int = 7,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = (
+        db.query(ClientError)
+        .filter(ClientError.occurred_at >= since)
+        .order_by(ClientError.occurred_at.desc())
+        .limit(limit)
+        .all()
+    )
+    total = db.query(func.count(ClientError.id)).filter(ClientError.occurred_at >= since).scalar()
+    return {
+        "total": total,
+        "errors": [
+            {
+                "id": r.id,
+                "company_id": r.company_id,
+                "user_id": r.user_id,
+                "message": r.message,
+                "stack": r.stack,
+                "url": r.url,
+                "context": r.context,
+                "user_agent": r.user_agent,
+                "occurred_at": r.occurred_at.isoformat() if r.occurred_at else None,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.delete("/client-errors")
+def clear_client_errors(
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    deleted = db.query(ClientError).delete()
+    db.commit()
+    return {"ok": True, "deleted": deleted}

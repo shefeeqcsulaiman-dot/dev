@@ -109,6 +109,7 @@
     <div class="stat-card"><div class="stat-label">Total Users</div><div class="stat-val" id="sa-stat-users">—</div></div>
     <div class="stat-card"><div class="stat-label">Active Subscriptions</div><div class="stat-val" id="sa-stat-active">—</div></div>
     <div class="stat-card"><div class="stat-label">Expiring Soon</div><div class="stat-val" id="sa-stat-expiring">—</div></div>
+    <div class="stat-card" style="border-color:rgba(240,107,107,.35)"><div class="stat-label">JS Errors (7d)</div><div class="stat-val" id="sa-stat-errors" style="color:var(--red)">—</div></div>
   </div>
 
   <!-- Companies -->
@@ -119,6 +120,27 @@
     </div>
     <div id="sa-companies-wrap">
       <div class="loading-state"><span class="spinner"></span> Loading companies…</div>
+    </div>
+  </div>
+
+  <!-- Client Error Report -->
+  <div class="card" style="margin-top:24px">
+    <div class="card-hd">
+      <div>
+        <div class="card-title">Client Error Report</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">JavaScript errors captured from all users (last 7 days)</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="sa-err-days" onchange="loadClientErrors()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text)">
+          <option value="1">Last 24h</option>
+          <option value="7" selected>Last 7 days</option>
+          <option value="30">Last 30 days</option>
+        </select>
+        <button class="btn btn-sm" style="background:rgba(240,107,107,.12);color:var(--red);border:1px solid rgba(240,107,107,.3)" onclick="clearClientErrors()">Clear All</button>
+      </div>
+    </div>
+    <div id="sa-errors-wrap">
+      <div class="loading-state">Loading errors…</div>
     </div>
   </div>
 </div>
@@ -596,7 +618,66 @@
     }catch(err){ alert(err.message); }
   }
 
+  // ── Client error report ───────────────────────────────────────
+  async function loadClientErrors(){
+    const wrap=document.getElementById('sa-errors-wrap');
+    const days=parseInt(document.getElementById('sa-err-days').value)||7;
+    wrap.innerHTML='<div class="loading-state"><span class="spinner"></span> Loading…</div>';
+    try{
+      const res=await apiFetch(`/superadmin/client-errors?days=${days}&limit=200`);
+      const data=await res.json();
+      document.getElementById('sa-stat-errors').textContent=data.total||0;
+      if(!data.errors||!data.errors.length){
+        wrap.innerHTML='<div class="loading-state" style="color:var(--green)">No errors in the selected period.</div>';
+        return;
+      }
+      // Group by message
+      const grouped={};
+      data.errors.forEach(e=>{
+        const key=e.message.slice(0,120);
+        if(!grouped[key]) grouped[key]={count:0,first:e,last:e,companies:new Set()};
+        grouped[key].count++;
+        grouped[key].last=e;
+        if(e.company_id) grouped[key].companies.add(e.company_id);
+      });
+      const rows=Object.values(grouped).sort((a,b)=>b.count-a.count);
+      let html='<table class="tbl" style="font-size:12px"><thead><tr><th>Count</th><th>Error Message</th><th>Context</th><th>URL</th><th>Last Seen</th><th></th></tr></thead><tbody>';
+      rows.forEach(g=>{
+        const e=g.last;
+        const ts=e.occurred_at?new Date(e.occurred_at).toLocaleString():'';
+        const ctx=escHtml(e.context||'');
+        const url=e.url?'<a href="'+escHtml(e.url)+'" target="_blank" style="color:var(--primary);word-break:break-all">'+escHtml(e.url.slice(0,60))+'…</a>':'—';
+        const stack=e.stack?`<div style="font-family:monospace;font-size:11px;white-space:pre-wrap;background:var(--hover);padding:8px;border-radius:4px;margin-top:6px;max-height:120px;overflow:auto">${escHtml(e.stack.slice(0,1500))}</div>`:'';
+        html+=`<tr>
+          <td><span style="background:rgba(240,107,107,.15);color:var(--red);padding:2px 8px;border-radius:12px;font-weight:600">${g.count}</span></td>
+          <td style="max-width:340px">
+            <div style="font-weight:500;word-break:break-word">${escHtml(e.message.slice(0,200))}</div>
+            ${stack}
+          </td>
+          <td>${ctx||'—'}</td>
+          <td style="max-width:180px">${url}</td>
+          <td style="white-space:nowrap;color:var(--muted)">${ts}</td>
+          <td></td>
+        </tr>`;
+      });
+      html+='</tbody></table>';
+      wrap.innerHTML=html;
+    }catch(err){
+      wrap.innerHTML='<div class="loading-state" style="color:var(--red)">Failed to load errors: '+escHtml(err.message)+'</div>';
+    }
+  }
+
+  async function clearClientErrors(){
+    if(!confirm('Clear all captured client errors? This cannot be undone.')) return;
+    try{
+      await apiFetch('/superadmin/client-errors',{method:'DELETE'});
+      document.getElementById('sa-stat-errors').textContent='0';
+      document.getElementById('sa-errors-wrap').innerHTML='<div class="loading-state" style="color:var(--green)">All errors cleared.</div>';
+    }catch(err){ alert('Failed: '+err.message); }
+  }
+
   loadDashboard();
+  loadClientErrors();
 </script>
 </body>
 </html>
