@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -39,7 +39,7 @@ class CreateCompanyIn(BaseModel):
 def list_companies(db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
     companies = (
         db.query(Company)
-        .filter(Company.trn != "SUPERADMIN-INTERNAL")
+        .filter(or_(Company.trn.is_(None), Company.trn != "SUPERADMIN-INTERNAL"))
         .order_by(Company.created_at.desc())
         .all()
     )
