@@ -1867,31 +1867,13 @@ function setNavBadge(page,count,variant=''){
 }
 
 function syncSidebarCounts(data){
+  // Counts removed from sidebar — only exception badge remains
   const counts=data.module_counts||data;
-  // Sales & Invoices: invoices only
-  const salesTotal=Number(counts.invoice_count)||0;
-  // Purchases: all purchase records + purchase invoices/documents from app data
-  const purchaseTotal=(Number(counts.purchase_record_count)||0)
-    +(Number(counts.purchase_source_count)||0)
-    +(Number(counts.purchase_invoice_count)||0)
-    +(Number(counts.bill_count)||0);
-  // Bank & Payments: accounts + payments + receipts
-  const bankTotal=(Number(counts.account_count)||0)
-    +(Number(counts.payment_receipt_count)||0);
   const exceptionCount=Number(counts.exception_count||0);
-  setNavBadge('sales',salesTotal);
-  setNavBadge('quotations',counts.quotation_count||0,'warn');
-  setNavBadge('purchase',purchaseTotal||0,'warn');
-  setNavBadge('bank',bankTotal||counts.account_count);
-  setNavBadge('accounting',counts.journal_count);
-  setNavBadge('reports',counts.tax_line_count);
-  setNavBadge('inventory',counts.inventory_mapping_count);
-  setNavBadge('staff',counts.employee_count,'warn');
-  setNavBadge('payroll',counts.payroll_run_count||0);
-  setNavBadge('notifications',counts.job_count);
-  setNavBadge('expert',counts.audit_count?'1':0,counts.audit_count?'red':'');
+  // Clear all nav badges
+  document.querySelectorAll('.nbadge').forEach(el=>el.remove());
+  // Only keep exception warning badge
   if(exceptionCount)setNavBadge('exception',exceptionCount,'warn');
-  setNavBadge('settings',(Number(counts.sales_category_count)||0)+(Number(counts.sales_unit_count)||0)+(Number(counts.account_count)||0));
 }
 
 function renderDashboardMeta(data){

@@ -470,13 +470,8 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
     app_purchases = app_data_payloads(db, company_id, "purchaseRecords")
     revenue = money(db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(Invoice.company_id == company_id).scalar())
     revenue += sum((record_amount(row, "total", "amount", "net_amount") for row in app_sales), Decimal("0.00"))
-    purchases = money(
-        db.query(func.coalesce(func.sum(SourceTransaction.total), 0))
-        .filter(SourceTransaction.company_id == company_id, SourceTransaction.module.in_(["purchase", "purchase_bill"]))
-        .scalar()
-    )
-    if purchases == 0:
-        purchases += sum((record_amount(row, "total", "amount", "net_amount") for row in app_purchases), Decimal("0.00"))
+    # Use same SQL JSON extraction as _purchase_summary to cover all field variants
+    purchases = money(_purchase_summary(db, company_id)["total"])
     payroll = money(db.query(func.coalesce(func.sum(PayrollRun.net_total), 0)).filter(PayrollRun.company_id == company_id).scalar())
     expenses = money(
         db.query(func.coalesce(func.sum(SourceTransaction.total), 0))
