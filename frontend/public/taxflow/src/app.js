@@ -8294,27 +8294,29 @@ function readAndAddFile(file){
 
 function animateUpload(name,size,entry){
   const pg=document.getElementById('pur-prog'),fill=document.getElementById('pur-fill'),fn=document.getElementById('pur-fname'),pct=document.getElementById('pur-pct');
-  pg.style.display='block';fn.textContent='Uploading: '+name;
+  if(pg)pg.style.display='block';
+  if(fn)fn.textContent='Uploading: '+name;
   let p=0;
   const iv=setInterval(()=>{
     p+=Math.random()*18+5;
     if(p>=100){
       p=100;clearInterval(iv);
       setTimeout(()=>{
-        pg.style.display='none';fill.style.width='0%';
+        if(pg)pg.style.display='none';
+        if(fill)fill.style.width='0%';
         entry.status='Ready';
         persistPurchaseDocumentRecord(entry);
         renderFileList();
         updatePurchaseValidationFileStatus();
         updateFileCount();
-        toast(name+' uploaded ?','ok');
+        toast(name+' uploaded','ok');
         // auto-extract if setting says yes
         const autoEl=document.querySelector('#page-purchase select[id="pur-auto"]');
         if(!autoEl||String(autoEl.value||'').toLowerCase()==='yes')setTimeout(()=>extractSingleFile(entry),600);
       },300);
     }
-    fill.style.width=Math.min(p,100)+'%';
-    pct.textContent=Math.round(Math.min(p,100))+'%';
+    if(fill)fill.style.width=Math.min(p,100)+'%';
+    if(pct)pct.textContent=Math.round(Math.min(p,100))+'%';
   },120);
 }
 
@@ -8529,7 +8531,7 @@ async function extractSingleFile(entry){
   if(extTab)stab(extTab,'p-extract');
 
   const ep=document.getElementById('ext-prog'),ef=document.getElementById('ext-fill'),epct=document.getElementById('ext-pct');
-  ep.style.display='block';
+  if(ep)ep.style.display='block';
   if(ef)ef.classList.add('running');
   let prog=0;
   const ticker=setInterval(()=>{prog=Math.min(prog+3,88);if(ef)ef.style.width=prog+'%';if(epct)epct.textContent=prog+'%';},200);
@@ -8557,27 +8559,27 @@ async function extractSingleFile(entry){
     }
 
     clearInterval(ticker);
-    if(ef){ef.style.width='100%';}
+    if(ef)ef.style.width='100%';
     if(epct)epct.textContent='100%';
-    setTimeout(()=>{ep.style.display='none';if(ef){ef.style.width='0%';ef.classList.remove('running');}},600);
+    setTimeout(()=>{if(ep)ep.style.display='none';if(ef){ef.style.width='0%';ef.classList.remove('running');}},600);
     toast(extractionFailed
       ? `Extraction needs review for ${entry.name}`
-      : `Extracted ${entry.invoices.length} invoice(s) from ${entry.name} ?`, extractionFailed?'warn':'ok');
+      : `Extracted ${entry.invoices.length} invoice(s) from ${entry.name}`, extractionFailed?'warn':'ok');
 
-    if(entry.invoices.some(i=>!validatePurchaseAiInvoice(i).valid)){
+    if(Array.isArray(entry.invoices)&&entry.invoices.some(i=>!validatePurchaseAiInvoice(i).valid)){
       toast('Validation issues found - review required','warn');
     }
 
   }catch(err){
     clearInterval(ticker);
-    ep.style.display='none';
+    if(ep)ep.style.display='none';
     if(ef){ef.style.width='0%';ef.classList.remove('running');}
     entry.status='Error';
     persistPurchaseDocumentRecord(entry);
     renderFileList();
     updatePurchaseValidationFileStatus();
-    toast('Extraction failed: '+err.message,'err');
-    console.error(err);
+    toast('Extraction failed: '+(err.message||'Unknown error'),'err');
+    console.error('[AI Extract]',err);
   }
 }
 
@@ -8806,6 +8808,7 @@ function purchaseAiConfidenceBadge(inv={}){
 }
 
 function purchaseAiStatusMeta(inv={},validation={valid:false}){
+  if(validation.isDuplicate)return {label:'Already Exists',cls:'duplicate'};
   if(!validation.valid)return {label:'Pending',cls:'pending'};
   const total=purchaseAiNumber(inv.total);
   const paid=purchaseAiNumber(inv.paid);
@@ -8947,8 +8950,9 @@ async function storeExtractedPurchaseRecords(){
   const existingRows=purchaseRecordRowMap();
   const existingRefs=new Set(existingRows.keys());
   const aiInvoiceCounts=purchaseAiInvoiceCounts();
+  const existingDuplicateKeys=buildExistingPurchaseDuplicateKeys();
   for(const inv of selectedInvoices.values()){
-    const validation=validatePurchaseAiInvoice(inv,{aiInvoiceCounts,existingPurchaseRefs:existingRefs});
+    const validation=validatePurchaseAiInvoice(inv,{aiInvoiceCounts,existingPurchaseRefs:existingRefs,existingDuplicateKeys});
     if(!validation.valid){
       reviewSaved++;
       markPurchaseAiInvoiceRows(inv.invoice_no,'Review',validation.issues.join('; ')||'Saved with review notes');
@@ -9231,6 +9235,31 @@ function markPurchaseAiInvoiceRows(invoiceNo,status,details,skip=false){
   });
 }
 
+function purchaseAiDuplicateKey(inv){
+  // Fingerprint: supplier + date + first-line SKU/product + first-line qty
+  const supplier=String(inv.supplier||'').trim().toLowerCase();
+  const date=String(inv.date||'').trim();
+  const lines=Array.isArray(inv.lines)?inv.lines:[];
+  const firstLine=lines[0]||{};
+  const sku=String(firstLine.sku||firstLine.code||purchaseAiProductName(firstLine)||firstLine.product||'').trim().toLowerCase();
+  const qty=String(purchaseAiNumber(firstLine.quantity||firstLine.qty||0));
+  if(!supplier&&!sku)return null;
+  return `${supplier}|${date}|${sku}|${qty}`;
+}
+
+function buildExistingPurchaseDuplicateKeys(){
+  const keys=new Set();
+  purchaseRecordCache.forEach(record=>{
+    const k=purchaseAiDuplicateKey({
+      supplier:record.supplier,
+      date:record.date,
+      lines:record.lines
+    });
+    if(k)keys.add(k);
+  });
+  return keys;
+}
+
 function validatePurchaseAiInvoice(inv,options={}){
   const issues=[];
   const invoiceNo=String(inv.invoice_no||'').trim();
@@ -9252,13 +9281,19 @@ function validatePurchaseAiInvoice(inv,options={}){
     const duplicateCount=options.aiInvoiceCounts?.get(invoiceKeyValue)??countPurchaseAiInvoiceNo(invoiceNo);
     if(duplicateCount>1)issues.push('Duplicate invoice number in AI upload');
   }
+  // Duplicate by supplier + date + SKU + qty
+  const dupKey=purchaseAiDuplicateKey(inv);
+  if(dupKey){
+    const existingKeys=options.existingDuplicateKeys||(options._dupKeysCache=options._dupKeysCache||buildExistingPurchaseDuplicateKeys());
+    if(existingKeys.has(dupKey))issues.push('Already have this product (same supplier, date, item & qty)');
+  }
   if(!String(inv.supplier||'').trim())issues.push('Supplier missing');
   if(!String(inv.date||'').trim())issues.push('Date missing');
   if(trn&&trn.length!==15)issues.push('Supplier TRN must be 15 digits');
   if(total&&Math.abs((Math.max(0,subtotal-discount)+vat+shipping)-total)>.05)issues.push('Total does not match subtotal - discount + VAT + shipping');
   if(String(inv.status||'').toLowerCase()==='error')issues.push(inv.issues||'Extraction returned error status');
   if(purchaseAiNumber(inv.confidence)<70)issues.push('Low confidence extraction');
-  return {valid:issues.length===0,issues};
+  return {valid:issues.length===0,issues,isDuplicate:issues.some(i=>i.startsWith('Already have'))};
 }
 
 function countPurchaseAiInvoiceNo(invoiceNo){

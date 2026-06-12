@@ -284,6 +284,7 @@ body.theme-light .nbadge.red{background:var(--red);}
 .ai-status-pill.pending{background:var(--amber-bg);color:var(--amber);border-color:var(--amber-border);}
 .ai-status-pill.partial{background:var(--amber-bg);color:var(--amber);border-color:var(--amber-border);}
 .ai-status-pill.approved{background:var(--green-bg);color:var(--green);border-color:var(--green-border);}
+.ai-status-pill.duplicate{background:#f0f0ff;color:#6366f1;border-color:#c7d2fe;}
 .ai-invoice-divider{height:1px;background:var(--border);margin:0 0 14px;}
 .ai-invoice-fields{display:grid;gap:12px;margin-bottom:14px;}
 .ai-invoice-fields>div{display:grid;grid-template-columns:120px minmax(0,1fr);align-items:center;gap:10px;}
