@@ -6353,15 +6353,20 @@ function storeExtractedSalesInvoices(options={}){
     const validation=validateSalesAiInvoice(inv);
     if(!validation.valid){
       blocked++;
-      row.querySelector('.sales-ai-validation').innerHTML='<span class="b b-a">Review</span>';
-      row.querySelector('.sales-ai-details').textContent=validation.issues.join('; ');
+      const vc=row.querySelector('.sales-ai-validation');
+      const dc=row.querySelector('.sales-ai-details');
+      if(vc)vc.innerHTML='<span class="b b-a">Review</span>';
+      if(dc)dc.textContent=validation.issues.join('; ');
       return;
     }
     if(addSalesInvoiceRow(inv)){
       stored++;
-      row.querySelector('.sales-ai-validation').innerHTML='<span class="b b-g">Saved</span>';
-      row.querySelector('.sales-ai-details').textContent='Saved to invoice register';
-      row.querySelector('.sales-ai-select').checked=false;
+      const vc=row.querySelector('.sales-ai-validation');
+      const dc=row.querySelector('.sales-ai-details');
+      const sel=row.querySelector('.sales-ai-select');
+      if(vc)vc.innerHTML='<span class="b b-g">Saved</span>';
+      if(dc)dc.textContent='Saved to invoice register';
+      if(sel)sel.checked=false;
       row.dataset.skipped='1';
     }
   });
@@ -6513,8 +6518,10 @@ function skipSalesAiRow(btn){
   row.dataset.skipped='1';
   const box=row.querySelector('.sales-ai-select');
   if(box)box.checked=false;
-  row.querySelector('.sales-ai-validation').innerHTML='<span class="b b-gray">Skipped</span>';
-  row.querySelector('.sales-ai-details').textContent='Skipped by user';
+  const sv=row.querySelector('.sales-ai-validation');
+  const sd=row.querySelector('.sales-ai-details');
+  if(sv)sv.innerHTML='<span class="b b-gray">Skipped</span>';
+  if(sd)sd.textContent='Skipped by user';
   refreshSalesValidationPanel();
   toast('AI upload row skipped','info');
 }
@@ -9319,8 +9326,10 @@ function markPurchaseAiInvoiceRows(invoiceNo,status,details,skip=false){
   purchaseAiRows().forEach(row=>{
     if((row.dataset.invoiceNo||'')!==String(invoiceNo||''))return;
     const pillCls=status==='Saved'||status==='Approved'?'approved':status==='Review'?'partial':'pending';
-    row.querySelector('.purchase-ai-validation').innerHTML=purchaseAiStatusPillHtml(status==='Saved'?'Approved':status,pillCls);
-    row.querySelector('.purchase-ai-details').textContent=details||status;
+    const vc=row.querySelector('.purchase-ai-validation');
+    const dc=row.querySelector('.purchase-ai-details');
+    if(vc)vc.innerHTML=purchaseAiStatusPillHtml(status==='Saved'?'Approved':status,pillCls);
+    if(dc)dc.textContent=details||status;
     if(skip){
       row.dataset.skipped='1';
       const box=row.querySelector('.purchase-ai-select');
