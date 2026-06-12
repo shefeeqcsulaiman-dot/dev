@@ -8370,14 +8370,13 @@ function compressImageBase64(dataUrl,maxWidth=1200,maxHeight=1600,quality=0.72){
     if(!dataUrl||!dataUrl.startsWith('data:image/')){resolve(dataUrl);return;}
     const img=new Image();
     img.onload=()=>{
-      let {width,height}=img;
-      const scale=Math.min(1,maxWidth/width,maxHeight/height);
-      if(scale>=1){resolve(dataUrl);return;}
+      const scale=Math.min(1,maxWidth/img.width,maxHeight/img.height);
       const canvas=document.createElement('canvas');
-      canvas.width=Math.round(width*scale);
-      canvas.height=Math.round(height*scale);
+      canvas.width=Math.round(img.width*scale);
+      canvas.height=Math.round(img.height*scale);
       const ctx=canvas.getContext('2d');
       ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      // Always convert to JPEG — compresses PNGs too
       resolve(canvas.toDataURL('image/jpeg',quality));
     };
     img.onerror=()=>resolve(dataUrl);
