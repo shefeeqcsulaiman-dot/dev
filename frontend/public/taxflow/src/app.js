@@ -4790,7 +4790,9 @@ function buildPurchaseRecordRow(purchase){
   const row=document.createElement('tr');
   row.dataset.serverRecord='purchaseRecords';
   row.dataset.purchaseRef=String(ref);
-  row.dataset.purchaseRecord=JSON.stringify(normalizedPurchase);
+  // Exclude source_image from dataset (large base64); image is in purchaseRecordCache
+  const {source_image:_si,...recordForDataset}=normalizedPurchase;
+  row.dataset.purchaseRecord=JSON.stringify(recordForDataset);
   const status=purchase.status||'Draft';
   const statusClass=status==='Paid'?'b-g':status==='Received'?'b-b':status.includes('Payment')?'b-a':'b-gray';
   const source=String(purchase.source||'Manual');
@@ -4803,11 +4805,16 @@ function buildPurchaseRecordRow(purchase){
 function openPurchaseInvoiceImage(btn){
   const row=btn.closest('tr');
   if(!row)return;
-  let record={};
-  try{record=JSON.parse(row.dataset.purchaseRecord||'{}');}catch{}
-  const src=record.source_image||'';
+  // Get metadata from dataset; get image from cache (source_image not stored in dataset)
+  let meta={};
+  try{meta=JSON.parse(row.dataset.purchaseRecord||'{}');}catch{}
+  const ref=row.dataset.purchaseRef||meta.ref||'';
+  const cached=ref?purchaseRecordCache.get(ref):null;
+  const src=(cached?.source_image)||meta.source_image||'';
   if(!src){toast('No invoice image saved for this record','warn');return;}
-  const filename=record.source_filename||`invoice-${record.ref||'download'}`;
+  const filename=(cached?.source_filename)||meta.source_filename||`invoice-${ref||'download'}`;
+  const supplier=(cached?.supplier)||meta.supplier||'Invoice';
+  const date=(cached?.date)||meta.date||'';
   const isPdf=src.startsWith('data:application/pdf')||filename.toLowerCase().endsWith('.pdf');
   let overlay=document.getElementById('m-invoice-image');
   if(!overlay){
@@ -4831,16 +4838,25 @@ function openPurchaseInvoiceImage(btn){
       </div>`;
     document.body.appendChild(overlay);
   }
-  document.getElementById('inv-img-title').textContent=record.supplier||'Invoice';
-  document.getElementById('inv-img-sub').textContent=`${record.ref||''} · ${record.date||''}`.replace(/^ · | · $/,'');
+  document.getElementById('inv-img-title').textContent=supplier;
+  document.getElementById('inv-img-sub').textContent=`${ref} · ${date}`.replace(/^ · | · $/,'');
   const dlLink=document.getElementById('inv-img-download');
   dlLink.href=src;
   dlLink.download=filename;
   const body=document.getElementById('inv-img-body');
+  body.innerHTML='';
   if(isPdf){
-    body.innerHTML=`<iframe src="${src}" style="width:100%;min-height:70vh;border:none;border-radius:8px" title="Invoice PDF"></iframe>`;
+    const frame=document.createElement('iframe');
+    frame.src=src;
+    frame.style.cssText='width:100%;min-height:70vh;border:none;border-radius:8px';
+    frame.title='Invoice PDF';
+    body.appendChild(frame);
   }else{
-    body.innerHTML=`<img src="${escapeHtml(src)}" alt="Invoice" style="max-width:100%;border-radius:8px;box-shadow:0 2px 16px rgba(0,0,0,.12)">`;
+    const img=document.createElement('img');
+    img.src=src;
+    img.alt='Invoice';
+    img.style.cssText='max-width:100%;border-radius:8px;box-shadow:0 2px 16px rgba(0,0,0,.12)';
+    body.appendChild(img);
   }
   overlay.style.display='flex';
 }
@@ -8303,8 +8319,9 @@ function readAndAddFile(file){
   updateFileCount();
   toast(`Reading ${file.name}...`,'info');
   const reader=new FileReader();
-  reader.onload=function(e){
-    const base64=e.target.result; // full data URL
+  reader.onload=async function(e){
+    const raw=e.target.result;
+    const base64=raw.startsWith('data:image/')?await compressImageBase64(raw):raw;
     entry.base64=base64;
     entry.uploadedAt=entry.uploadedAt||new Date().toISOString();
     entry.status='Queued';
@@ -8346,6 +8363,26 @@ function animateUpload(name,size,entry){
     if(fill)fill.style.width=Math.min(p,100)+'%';
     if(pct)pct.textContent=Math.round(Math.min(p,100))+'%';
   },120);
+}
+
+function compressImageBase64(dataUrl,maxWidth=1200,maxHeight=1600,quality=0.72){
+  return new Promise(resolve=>{
+    if(!dataUrl||!dataUrl.startsWith('data:image/')){resolve(dataUrl);return;}
+    const img=new Image();
+    img.onload=()=>{
+      let {width,height}=img;
+      const scale=Math.min(1,maxWidth/width,maxHeight/height);
+      if(scale>=1){resolve(dataUrl);return;}
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.round(width*scale);
+      canvas.height=Math.round(height*scale);
+      const ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      resolve(canvas.toDataURL('image/jpeg',quality));
+    };
+    img.onerror=()=>resolve(dataUrl);
+    img.src=dataUrl;
+  });
 }
 
 function getFileIcon(name){
@@ -15048,7 +15085,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260611f';
+  const _SNAP_VER='20260612e';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
