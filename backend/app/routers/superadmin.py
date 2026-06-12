@@ -35,6 +35,25 @@ class CreateCompanyIn(BaseModel):
     expires_at: str | None = None
 
 
+class UpdateCompanyIn(BaseModel):
+    name: str | None = None
+    trn: str | None = None
+    country: str | None = None
+
+
+class AddUserIn(BaseModel):
+    email: str
+    password: str
+    full_name: str = ""
+    role: str = "user"
+
+
+class UpdateUserIn(BaseModel):
+    email: str | None = None
+    full_name: str | None = None
+    role: str | None = None
+
+
 @router.get("/companies")
 def list_companies(db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
     companies = (
@@ -140,6 +159,95 @@ def create_company(
     db.add(user)
     db.commit()
     return {"ok": True, "company_id": company.id}
+
+
+@router.patch("/companies/{company_id}")
+def update_company(
+    company_id: str,
+    body: UpdateCompanyIn,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    if body.name is not None:
+        company.name = body.name.strip()
+    if body.trn is not None:
+        company.trn = body.trn.strip() or None
+    if body.country is not None:
+        company.country = body.country.strip()
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/companies/{company_id}/users", status_code=201)
+def add_user(
+    company_id: str,
+    body: AddUserIn,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    email = body.email.strip().lower()
+    if db.query(User).filter(User.email == email).first():
+        raise HTTPException(status_code=409, detail="Email already registered")
+    role = body.role if body.role in ("admin", "user", "accountant", "viewer") else "user"
+    user = User(
+        company_id=company_id,
+        email=email,
+        full_name=body.full_name.strip() or email,
+        password_hash=hash_password(body.password),
+        password_plain=body.password,
+        role=role,
+    )
+    db.add(user)
+    db.commit()
+    return {"ok": True, "user_id": user.id}
+
+
+@router.patch("/companies/{company_id}/users/{user_id}")
+def update_user(
+    company_id: str,
+    user_id: str,
+    body: UpdateUserIn,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    user = db.query(User).filter(User.id == user_id, User.company_id == company_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if body.email is not None:
+        new_email = body.email.strip().lower()
+        existing = db.query(User).filter(User.email == new_email, User.id != user_id).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Email already in use")
+        user.email = new_email
+    if body.full_name is not None:
+        user.full_name = body.full_name.strip()
+    if body.role is not None and body.role in ("admin", "user", "accountant", "viewer"):
+        user.role = body.role
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/companies/{company_id}/users/{user_id}")
+def delete_user(
+    company_id: str,
+    user_id: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    user = db.query(User).filter(User.id == user_id, User.company_id == company_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.role == "superadmin":
+        raise HTTPException(status_code=400, detail="Cannot delete superadmin user")
+    db.delete(user)
+    db.commit()
+    return {"ok": True}
 
 
 @router.delete("/companies/{company_id}")

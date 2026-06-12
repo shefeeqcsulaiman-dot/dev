@@ -144,6 +144,76 @@
   </div>
 </div>
 
+<!-- Edit Company Modal -->
+<div class="overlay" id="m-edit-co" onclick="if(event.target===this)closeModal('m-edit-co')">
+  <div class="modal">
+    <div class="modal-title">Edit Company</div>
+    <div class="modal-sub" id="edit-co-sub">Update company details</div>
+    <div id="edit-co-err" class="err-msg"></div>
+    <input type="hidden" id="edit-co-id">
+    <div class="fg"><label class="fl">Company Name</label><input class="fi" id="edit-co-name" placeholder="Acme LLC"></div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">TRN</label><input class="fi mono" id="edit-co-trn" placeholder="100000000000003"></div>
+      <div class="fg"><label class="fl">Country</label><input class="fi" id="edit-co-country" placeholder="United Arab Emirates"></div>
+    </div>
+    <div class="fg"><label class="fl">Subscription Expiry (leave blank to remove)</label><input class="fi" id="edit-co-expiry" type="date"></div>
+    <div class="modal-foot">
+      <button class="btn btn-g" onclick="closeModal('m-edit-co')">Cancel</button>
+      <button class="btn btn-p" id="edit-co-btn" onclick="doEditCompany()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add User Modal -->
+<div class="overlay" id="m-add-user" onclick="if(event.target===this)closeModal('m-add-user')">
+  <div class="modal">
+    <div class="modal-title">Add User</div>
+    <div class="modal-sub" id="add-user-sub">Add a new user to this company</div>
+    <div id="add-user-err" class="err-msg"></div>
+    <input type="hidden" id="add-user-co-id">
+    <div class="fg"><label class="fl">Email</label><input class="fi" id="add-user-email" type="email" placeholder="user@company.ae"></div>
+    <div class="fg"><label class="fl">Full Name</label><input class="fi" id="add-user-name" placeholder="Full Name"></div>
+    <div class="fg"><label class="fl">Password</label><input class="fi" id="add-user-pwd" type="password" placeholder="Set a password"></div>
+    <div class="fg"><label class="fl">Role</label>
+      <select class="fi" id="add-user-role">
+        <option value="admin">Admin</option>
+        <option value="user" selected>User</option>
+        <option value="accountant">Accountant</option>
+        <option value="viewer">Viewer</option>
+      </select>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-g" onclick="closeModal('m-add-user')">Cancel</button>
+      <button class="btn btn-p" id="add-user-btn" onclick="doAddUser()">Add User</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit User Modal -->
+<div class="overlay" id="m-edit-user" onclick="if(event.target===this)closeModal('m-edit-user')">
+  <div class="modal">
+    <div class="modal-title">Edit User</div>
+    <div class="modal-sub" id="edit-user-sub">Update user details</div>
+    <div id="edit-user-err" class="err-msg"></div>
+    <input type="hidden" id="edit-user-id">
+    <input type="hidden" id="edit-user-co-id">
+    <div class="fg"><label class="fl">Full Name</label><input class="fi" id="edit-user-name" placeholder="Full Name"></div>
+    <div class="fg"><label class="fl">Email</label><input class="fi" id="edit-user-email" type="email" placeholder="user@company.ae"></div>
+    <div class="fg"><label class="fl">Role</label>
+      <select class="fi" id="edit-user-role">
+        <option value="admin">Admin</option>
+        <option value="user">User</option>
+        <option value="accountant">Accountant</option>
+        <option value="viewer">Viewer</option>
+      </select>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-g" onclick="closeModal('m-edit-user')">Cancel</button>
+      <button class="btn btn-p" id="edit-user-btn" onclick="doEditUser()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <!-- Reset Password Modal -->
 <div class="overlay" id="m-reset" onclick="if(event.target===this)closeModal('m-reset')">
   <div class="modal">
@@ -249,38 +319,48 @@
     }
     const now = new Date();
     const rows = data.map(c=>{
-      const admin = (c.users||[]).find(u=>u.role==='admin') || c.users?.[0] || {};
       const exp = c.subscription_expires_at ? new Date(c.subscription_expires_at) : null;
       const expBadge = !exp ? '<span class="b b-g">Active</span>'
         : exp < now ? '<span class="b b-r">Expired</span>'
-        : '<span class="b b-a">'+c.subscription_expires_at+'</span>';
+        : '<span class="b b-a">'+c.subscription_expires_at.slice(0,10)+'</span>';
       const userList = (c.users||[]).filter(u=>u.role!=='superadmin').map(u=>
-        `<div style="display:flex;align-items:center;gap:8px;padding:3px 0">
-          <span>${escHtml(u.full_name||u.email)}</span>
-          <span class="mono" style="color:#8896b3;font-size:11px">${escHtml(u.email)}</span>
-          <button class="btn btn-g btn-sm" onclick="openResetPassword('${escHtml(c.id)}','${escHtml(u.id)}','${escHtml(u.email)}')">Reset Pwd</button>
+        `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(99,130,200,.08)">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12.5px;font-weight:500">${escHtml(u.full_name||'—')}</div>
+            <div class="mono" style="color:#8896b3;font-size:11px">${escHtml(u.email)} · <span class="b b-p" style="font-size:10px;padding:1px 6px">${escHtml(u.role)}</span></div>
+          </div>
+          <div style="display:flex;gap:5px;flex-shrink:0">
+            <button class="btn btn-g btn-sm" onclick="openEditUser('${escHtml(c.id)}','${escHtml(u.id)}','${escHtml(u.full_name)}','${escHtml(u.email)}','${escHtml(u.role)}')">Edit</button>
+            <button class="btn btn-g btn-sm" onclick="openResetPassword('${escHtml(c.id)}','${escHtml(u.id)}','${escHtml(u.email)}')">Reset Pwd</button>
+            <button class="btn btn-r btn-sm" onclick="deleteUser('${escHtml(c.id)}','${escHtml(u.id)}','${escHtml(u.email)}')">Remove</button>
+          </div>
         </div>`
       ).join('');
       return `<tr>
-        <td><strong>${escHtml(c.name)}</strong><br><span class="mono" style="font-size:11px;color:#8896b3">${escHtml(c.trn||'—')}</span></td>
-        <td>${escHtml(admin.email||'—')}</td>
-        <td class="mono">${c.employee_count||0} emp · ${(c.users||[]).length} users</td>
+        <td>
+          <div style="font-weight:600">${escHtml(c.name)}</div>
+          <div class="mono" style="font-size:11px;color:#8896b3">${escHtml(c.trn||'No TRN')} · ${escHtml(c.country||'')}</div>
+        </td>
+        <td class="mono" style="font-size:12px">${c.employee_count||0} emp · ${(c.users||[]).filter(u=>u.role!=='superadmin').length} users</td>
         <td>${expBadge}</td>
         <td style="font-size:11.5px;color:#8896b3">${c.created_at ? c.created_at.slice(0,10) : '—'}</td>
         <td>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-p btn-sm" onclick="openEditCompany('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.trn||'')}','${escHtml(c.country||'')}','${escHtml(c.subscription_expires_at||'')}')">Edit</button>
             <button class="btn btn-g btn-sm" onclick="toggleUsers('users-${escHtml(c.id)}')">Users</button>
-            <button class="btn btn-g btn-sm" onclick="openSetExpiry('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}')">Expiry</button>
+            <button class="btn btn-g btn-sm" onclick="openAddUser('${escHtml(c.id)}','${escHtml(c.name)}')">+ User</button>
             <button class="btn btn-r btn-sm" onclick="deleteCompany('${escHtml(c.id)}','${escHtml(c.name)}')">Delete</button>
           </div>
-          <div id="users-${escHtml(c.id)}" style="display:none;margin-top:8px;padding:8px;background:rgba(99,130,200,.05);border-radius:8px;font-size:12.5px">${userList||'<span style="color:#8896b3">No sub-users</span>'}</div>
+          <div id="users-${escHtml(c.id)}" style="display:none;margin-top:10px;padding:8px;background:rgba(99,130,200,.05);border-radius:8px">
+            ${userList||'<span style="color:#8896b3;font-size:12px">No users yet</span>'}
+          </div>
         </td>
       </tr>`;
     }).join('');
     document.getElementById('sa-companies-wrap').innerHTML = `
       <div style="overflow-x:auto">
         <table class="tbl">
-          <thead><tr><th>Company</th><th>Admin Email</th><th>Size</th><th>Subscription</th><th>Created</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Company</th><th>Size</th><th>Subscription</th><th>Created</th><th>Actions</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>`;
@@ -295,6 +375,7 @@
   function openCreateCompany(){
     document.getElementById('create-err').style.display='none';
     ['c-name','c-trn','c-email','c-fullname','c-password'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    const ex=document.getElementById('c-expiry'); if(ex) ex.value='';
     openModal('m-create');
   }
 
@@ -319,6 +400,115 @@
     }catch(err){
       errEl.textContent=err.message; errEl.style.display='block';
     }finally{ btn.disabled=false; btn.textContent='Create Company'; }
+  }
+
+  // ── Edit company ──────────────────────────────────────────────
+  function openEditCompany(id, name, trn, country, expiry){
+    document.getElementById('edit-co-err').style.display='none';
+    document.getElementById('edit-co-id').value=id;
+    document.getElementById('edit-co-name').value=name;
+    document.getElementById('edit-co-trn').value=trn;
+    document.getElementById('edit-co-country').value=country;
+    document.getElementById('edit-co-expiry').value=expiry?expiry.slice(0,10):'';
+    openModal('m-edit-co');
+  }
+
+  async function doEditCompany(){
+    const btn=document.getElementById('edit-co-btn');
+    const errEl=document.getElementById('edit-co-err');
+    errEl.style.display='none';
+    const id=document.getElementById('edit-co-id').value;
+    const name=document.getElementById('edit-co-name').value.trim();
+    const trn=document.getElementById('edit-co-trn').value.trim()||'';
+    const country=document.getElementById('edit-co-country').value.trim();
+    const expiry=document.getElementById('edit-co-expiry').value||null;
+    if(!name){ errEl.textContent='Company name is required.'; errEl.style.display='block'; return; }
+    btn.disabled=true; btn.textContent='Saving…';
+    try{
+      const [r1,r2]=await Promise.all([
+        apiFetch(`/superadmin/companies/${id}`,{method:'PATCH',body:JSON.stringify({name,trn,country})}),
+        apiFetch(`/superadmin/companies/${id}/set-expiry`,{method:'POST',body:JSON.stringify({expires_at:expiry})})
+      ]);
+      const d1=await r1.json();
+      if(!r1.ok){ errEl.textContent=d1.detail||'Failed to update company.'; errEl.style.display='block'; return; }
+      closeModal('m-edit-co');
+      loadDashboard();
+    }catch(err){ errEl.textContent=err.message; errEl.style.display='block'; }
+    finally{ btn.disabled=false; btn.textContent='Save Changes'; }
+  }
+
+  // ── Add user ──────────────────────────────────────────────────
+  function openAddUser(companyId, companyName){
+    document.getElementById('add-user-err').style.display='none';
+    document.getElementById('add-user-sub').textContent='Add user to '+companyName;
+    document.getElementById('add-user-co-id').value=companyId;
+    ['add-user-email','add-user-name','add-user-pwd'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    document.getElementById('add-user-role').value='user';
+    openModal('m-add-user');
+  }
+
+  async function doAddUser(){
+    const btn=document.getElementById('add-user-btn');
+    const errEl=document.getElementById('add-user-err');
+    errEl.style.display='none';
+    const companyId=document.getElementById('add-user-co-id').value;
+    const email=document.getElementById('add-user-email').value.trim();
+    const fullName=document.getElementById('add-user-name').value.trim();
+    const password=document.getElementById('add-user-pwd').value;
+    const role=document.getElementById('add-user-role').value;
+    if(!email||!password){ errEl.textContent='Email and password are required.'; errEl.style.display='block'; return; }
+    btn.disabled=true; btn.textContent='Adding…';
+    try{
+      const res=await apiFetch(`/superadmin/companies/${companyId}/users`,{method:'POST',body:JSON.stringify({email,full_name:fullName,password,role})});
+      const data=await res.json();
+      if(!res.ok){ errEl.textContent=data.detail||'Failed to add user.'; errEl.style.display='block'; return; }
+      closeModal('m-add-user');
+      loadDashboard();
+    }catch(err){ errEl.textContent=err.message; errEl.style.display='block'; }
+    finally{ btn.disabled=false; btn.textContent='Add User'; }
+  }
+
+  // ── Edit user ─────────────────────────────────────────────────
+  function openEditUser(companyId, userId, fullName, email, role){
+    document.getElementById('edit-user-err').style.display='none';
+    document.getElementById('edit-user-sub').textContent='Edit user: '+email;
+    document.getElementById('edit-user-co-id').value=companyId;
+    document.getElementById('edit-user-id').value=userId;
+    document.getElementById('edit-user-name').value=fullName;
+    document.getElementById('edit-user-email').value=email;
+    document.getElementById('edit-user-role').value=role;
+    openModal('m-edit-user');
+  }
+
+  async function doEditUser(){
+    const btn=document.getElementById('edit-user-btn');
+    const errEl=document.getElementById('edit-user-err');
+    errEl.style.display='none';
+    const companyId=document.getElementById('edit-user-co-id').value;
+    const userId=document.getElementById('edit-user-id').value;
+    const fullName=document.getElementById('edit-user-name').value.trim();
+    const email=document.getElementById('edit-user-email').value.trim();
+    const role=document.getElementById('edit-user-role').value;
+    if(!email){ errEl.textContent='Email is required.'; errEl.style.display='block'; return; }
+    btn.disabled=true; btn.textContent='Saving…';
+    try{
+      const res=await apiFetch(`/superadmin/companies/${companyId}/users/${userId}`,{method:'PATCH',body:JSON.stringify({full_name:fullName,email,role})});
+      const data=await res.json();
+      if(!res.ok){ errEl.textContent=data.detail||'Failed to update user.'; errEl.style.display='block'; return; }
+      closeModal('m-edit-user');
+      loadDashboard();
+    }catch(err){ errEl.textContent=err.message; errEl.style.display='block'; }
+    finally{ btn.disabled=false; btn.textContent='Save Changes'; }
+  }
+
+  // ── Delete user ───────────────────────────────────────────────
+  async function deleteUser(companyId, userId, email){
+    if(!confirm('Remove user "'+email+'" from this company?')) return;
+    try{
+      const res=await apiFetch(`/superadmin/companies/${companyId}/users/${userId}`,{method:'DELETE'});
+      if(!res.ok){ const d=await res.json(); alert(d.detail||'Delete failed.'); return; }
+      loadDashboard();
+    }catch(err){ alert(err.message); }
   }
 
   // ── Reset password ────────────────────────────────────────────
@@ -355,7 +545,7 @@
     document.getElementById('expiry-err').style.display='none';
     document.getElementById('expiry-sub').textContent='Set expiry for '+name;
     document.getElementById('expiry-company-id').value=companyId;
-    document.getElementById('expiry-date').value=currentExpiry||'';
+    document.getElementById('expiry-date').value=currentExpiry?currentExpiry.slice(0,10):'';
     openModal('m-expiry');
   }
 
