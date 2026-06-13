@@ -3966,6 +3966,70 @@ function renderVendorRecord(vendor){
   tbody.prepend(row);
   syncSupplierOptions(vendor.name);
   syncInventoryItemOptions();
+  ensureSupplierLedger(vendor.name);
+}
+
+async function ensureSupplierLedger(vendorName){
+  const name=String(vendorName||'').trim();
+  if(!name)return;
+  // Ensure COA is loaded
+  if(!_coaFlatAccounts.length){
+    try{const accs=await moduleApi('/accounts');if(Array.isArray(accs))_coaFlatAccounts=accs;}
+    catch{return;}
+  }
+  const nameLower=name.toLowerCase();
+  // Check for existing ledger by name (any type)
+  const existing=_coaFlatAccounts.find(a=>!a.is_group&&(a.name||'').toLowerCase()===nameLower);
+  if(existing)return;
+  // Find Sundry Creditors parent group
+  const parent=_coaFlatAccounts.find(a=>a.is_group&&(
+    (a.type||'').toLowerCase().replace(/[^a-z]/g,'').includes('sundrycreditor')||
+    (a.name||'').toLowerCase().replace(/[^a-z]/g,'').includes('sundrycreditor')
+  ));
+  if(!parent)return;
+  // Auto-generate next code under parent
+  const parentCodeNum=parseInt(parent.code)||2100;
+  const childCodes=_coaFlatAccounts
+    .filter(a=>a.parent_account_id===parent.id)
+    .map(a=>parseInt(a.code))
+    .filter(n=>!isNaN(n));
+  const nextCode=childCodes.length?Math.max(...childCodes)+1:parentCodeNum+1;
+  try{
+    const saved=await moduleApi('/accounts',{method:'POST',body:{
+      code:String(nextCode),
+      name,
+      type:parent.type||'Sundry Creditors',
+      is_group:false,
+      parent_account_id:parent.id,
+      opening_balance:0,
+      normal_balance:'CR',
+      is_active:true,
+      level:(parent.level||1)+1,
+    }});
+    _coaFlatAccounts.push(saved);
+    renderAccountTree();
+    updateAccountSelectors();
+  }catch(err){console.warn('Supplier ledger auto-create failed:',err);}
+}
+
+function updateSupplierBalances(){
+  const rows=[...document.querySelectorAll('#vendor-tbody tr:not([data-empty-state])')];
+  if(!rows.length)return;
+  const purchases=[...purchaseRecordCache.values()];
+  rows.forEach(row=>{
+    const supplierName=(row.children[0]?.textContent||'').trim().toLowerCase();
+    if(!supplierName)return;
+    const outstanding=purchases
+      .filter(p=>(p.supplier||'').toLowerCase()===supplierName&&
+                 p.document_type!=='Purchase Return'&&
+                 p.source!=='Purchase Return')
+      .reduce((sum,p)=>sum+parseAmount(p.due),0);
+    const balCell=row.children[5];
+    if(balCell){
+      balCell.textContent=outstanding.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+      balCell.style.color=outstanding>0?'var(--red)':'inherit';
+    }
+  });
 }
 
 function vendorAddressByName(name){
@@ -5223,6 +5287,7 @@ function renderPurchaseRecordWindow(){
   refreshEnhancedTable(tbody.closest('table'));
   renderLPOList();
   renderFPOList();
+  updateSupplierBalances();
   return {rendered,failed,total};
 }
 
@@ -9459,6 +9524,7 @@ async function saveVendorsFromExtractedPurchases(invoices){
   records.forEach(record=>renderVendorRecord(record));
   syncSupplierOptions();
   refreshEnhancedTable(document.getElementById('vendor-tbody')?.closest('table'));
+  updateSupplierBalances();
   return {created:records.length,existing:0};
 }
 
@@ -15365,8 +15431,9 @@ function saveVendor(){
   saveServer('vendors',{name,trn,category,email,phone,address});
   closeM('m-vendor');
   ['vendor-name','vendor-trn','vendor-email','vendor-phone','vendor-address'].forEach(id=>setFieldValue(document.getElementById(id),''));
-  toast('Vendor added ?','ok');
+  toast('Vendor added','ok');
   audit('Added vendor',name,'Saved');
+  updateSupplierBalances();
 }
 
 function savePayment(){
@@ -16116,7 +16183,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260613e';
+  const _SNAP_VER='20260613f';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
