@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260613k" as="style">
-<link rel="preload" href="src/app.js?v=20260613k" as="script">
+<link rel="preload" href="src/styles.css?v=20260613l" as="style">
+<link rel="preload" href="src/app.js?v=20260613l" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260613k">
+<link rel="stylesheet" href="src/styles.css?v=20260613l">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -5061,7 +5061,13 @@ period_locks ─&lt; audit_logs
           <div class="flx" style="gap:6px"><input class="fi" id="inv-cat-new-name" placeholder="Category name" style="flex:1"><button class="btn btn-p btn-sm" onclick="quickAddInventoryCategory()">Add</button><button class="btn btn-g btn-sm" onclick="toggleInvCategoryAdd()">✕</button></div>
         </div>
       </div>
-      <div class="fg"><label class="fl">Unit of Measure</label><select class="fi" id="inv-item-unit"><option value="">Select Unit</option></select></div>
+      <div class="fg">
+        <div class="flx-b"><label class="fl">Unit of Measure</label><button type="button" class="btn-link" onclick="toggleInvUnitAdd()">+ New</button></div>
+        <select class="fi" id="inv-item-unit"><option value="">Select Unit</option></select>
+        <div id="inv-unit-quick-add" style="display:none;margin-top:6px">
+          <div class="flx" style="gap:6px"><input class="fi" id="inv-unit-new-name" placeholder="Unit name e.g. KG" style="flex:1"><button class="btn btn-p btn-sm" onclick="quickAddInventoryUnit()">Add</button><button class="btn btn-g btn-sm" onclick="toggleInvUnitAdd()">✕</button></div>
+        </div>
+      </div>
     </div>
     <div class="fr3"><div class="fg"><label class="fl">Cost Price</label><input class="fi mono" id="inv-item-cost" placeholder="0.00"></div><div class="fg"><label class="fl">Selling Price</label><input class="fi mono" id="inv-item-selling-price" placeholder="0.00"></div><div class="fg"><label class="fl">VAT</label><select class="fi" id="inv-item-vat"><option value="Standard 5%">Standard 5%</option><option value="Zero-rated 0%">Zero-rated 0%</option><option value="Exempt">Exempt</option></select></div></div>
     <div class="section-hd">Stock Settings</div>
@@ -5343,6 +5349,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260613k" defer></script>
+<script src="src/app.js?v=20260613l" defer></script>
 </body>
 </html>

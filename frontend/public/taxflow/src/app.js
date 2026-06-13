@@ -1345,6 +1345,37 @@ function quickAddInventoryCategory(){
   toast(`Category "${name}" added`,'ok');
 }
 
+function toggleInvUnitAdd(){
+  const panel=document.getElementById('inv-unit-quick-add');
+  if(!panel)return;
+  const visible=panel.style.display!=='none';
+  panel.style.display=visible?'none':'block';
+  if(!visible)setTimeout(()=>document.getElementById('inv-unit-new-name')?.focus(),30);
+}
+
+function quickAddInventoryUnit(){
+  const input=document.getElementById('inv-unit-new-name');
+  const name=(input?.value||'').trim();
+  if(!name){toast('Enter a unit name','warn');return;}
+  const tbody=document.getElementById('sales-unit-tbody');
+  const code=name.slice(0,6).toUpperCase();
+  if(tbody&&[...tbody.querySelectorAll('td:first-child')].some(td=>td.textContent.trim().toUpperCase()===code)){
+    toast('Unit already exists','warn');
+    const sel=document.getElementById('inv-item-unit');
+    if(sel){const opt=[...sel.options].find(o=>o.text.toLowerCase()===name.toLowerCase());if(opt)sel.value=opt.value;}
+    toggleInvUnitAdd();
+    if(input)input.value='';
+    return;
+  }
+  renderSalesUnitRecord({code,name,type:'Quantity',decimals:'2',status:'Active'});
+  saveServer('salesUnits',{code,name,type:'Quantity',decimals:'2',status:'Active'});
+  const sel=document.getElementById('inv-item-unit');
+  if(sel)sel.value=name;
+  toggleInvUnitAdd();
+  if(input)input.value='';
+  toast(`Unit "${name}" added`,'ok');
+}
+
 let _invEditCode=null;
 
 function openInventoryItemModal(editRow=null){
@@ -16231,7 +16262,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260613k';
+  const _SNAP_VER='20260613l';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
