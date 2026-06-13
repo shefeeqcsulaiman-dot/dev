@@ -3507,7 +3507,18 @@ function syncStockLevelsFromProducts(){
   purchaseStockItems().forEach(item=>{
     const existing=stockByKey.get(stockItemKey(item.code))||stockByKey.get(stockItemKey(item.name));
     if(existing){
-      existing.available=Number(existing.available||0)+Number(item.available||0);
+      const addedQty=Number(item.available||0);
+      // Weighted average purchase rate when merging
+      if(item.purchase_rate>0&&addedQty>0){
+        const existingQty=Number(existing.available||0);
+        const totalQty=existingQty+addedQty;
+        existing.purchase_rate=totalQty>0
+          ?(Number(existing.purchase_rate||0)*existingQty+item.purchase_rate*addedQty)/totalQty
+          :item.purchase_rate;
+      }else if(item.purchase_rate>0&&!existing.purchase_rate){
+        existing.purchase_rate=item.purchase_rate;
+      }
+      existing.available=Number(existing.available||0)+addedQty;
       if(!existing.unit&&item.unit)existing.unit=item.unit;
     }else{
       addStockItemAliases(stockByKey,item);
@@ -3562,7 +3573,8 @@ async function loadStockLevelsFromServer(){
         category:row.category||'Purchases',
         available:parseAmount(row.current_stock??row.quantity??row.available),
         unit:row.unit||'PCS',
-        reorderLevel:parseAmount(row.reorder_level??row.reorderLevel)
+        reorderLevel:parseAmount(row.reorder_level??row.reorderLevel),
+        purchase_rate:parseAmount(row.cost??row.purchase_rate??row.unit_cost??0)
       }))
       .filter(item=>!isDemoProductRecord(item))
       .filter(item=>item.code||item.name);
@@ -3725,6 +3737,7 @@ function purchaseStockItems(){
       if(!key)return;
       const quantity=purchaseLineQuantity(line);
       if(!quantity)return;
+      const unitCost=parseAmount(line.unit_cost_before_tax||line.unit_cost||line.purchase_unit_cost||line.cost||0);
       const existing=items.get(key)||{
         code,
         name,
@@ -3732,8 +3745,16 @@ function purchaseStockItems(){
         available:0,
         unit:line.unit||line.unit_of_measure||line.uom||'PCS',
         reorderLevel:0,
+        purchase_rate:0,
+        _rate_qty:0,
         source:'purchase'
       };
+      // Weighted average purchase rate
+      if(stockSign>0&&unitCost>0){
+        const newTotalQty=existing._rate_qty+quantity;
+        existing.purchase_rate=(existing.purchase_rate*existing._rate_qty+unitCost*quantity)/newTotalQty;
+        existing._rate_qty=newTotalQty;
+      }
       existing.available+=stockSign*quantity;
       if(!existing.code&&code)existing.code=code;
       if(!existing.name&&name)existing.name=name;
@@ -3791,7 +3812,8 @@ function renderStockLevelRow(item){
   const cls=status==='Out'?'b-r':status==='Low'?'b-a':'b-g';
   row.dataset.itemCode=item.code;
   row.dataset.stockSource=item.source||'product';
-  row.innerHTML=`<td class="mono">${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td><span class="b b-gray">${escapeHtml(item.category)}</span></td><td class="mono">${Number(item.available||0).toLocaleString('en-AE')}</td><td>${escapeHtml(item.unit)}</td><td class="mono">${Number(item.reorderLevel||0).toLocaleString('en-AE')}</td><td><span class="b ${cls}">${status}</span></td><td><button class="btn btn-g btn-sm" onclick="openRowDetail(this,'Stock Level Detail','Current Stock Levels')">View</button></td>`;
+  const rate=Number(item.purchase_rate||0);
+  row.innerHTML=`<td class="mono">${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td><span class="b b-gray">${escapeHtml(item.category)}</span></td><td class="mono">${Number(item.available||0).toLocaleString('en-AE')}</td><td>${escapeHtml(item.unit)}</td><td class="mono">${Number(item.reorderLevel||0).toLocaleString('en-AE')}</td><td class="mono">${rate>0?rate.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:4}):'-'}</td><td><span class="b ${cls}">${status}</span></td><td><button class="btn btn-g btn-sm" onclick="openRowDetail(this,'Stock Level Detail','Current Stock Levels')">View</button></td>`;
   return row;
 }
 
@@ -9782,7 +9804,7 @@ function ensurePurchaseAiEditModal(){
         </div>
         <div class="purchase-edit-table-wrap">
           <table class="tbl purchase-edit-lines">
-            <thead><tr><th>#</th><th>Product</th><th>Category</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th style="display:none">Disc %</th><th>Before Tax</th><th>Line Total</th><th>Margin %</th><th>Selling Inc. Tax</th><th></th></tr></thead>
+            <thead><tr><th>#</th><th>Product</th><th>Category</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th style="display:none">Disc %</th><th>Before Tax</th><th>Line Total</th><th></th></tr></thead>
             <tbody id="pai-lines"></tbody>
           </table>
         </div>
@@ -9897,8 +9919,6 @@ function addPurchaseAiEditLine(line={}){
     <td style="display:none"><input class="fi mono pai-line-discount" value="${escapeHtml(line.discount_percent||line.discountPct||0)}" oninput="calcPurchaseAiEditLine(this)"></td>
     <td><input class="fi mono pai-cost-before-tax" value="${escapeHtml(line.unit_cost_before_tax||line.unit_cost||line.cost||0)}" readonly></td>
     <td><input class="fi mono pai-line-total" value="${escapeHtml(line.line_total||line.amount||0)}" oninput="calcPurchaseAiEditInvoice()"></td>
-    <td><input class="fi mono pai-margin" value="${escapeHtml(line.profit_margin||line.margin||0)}" oninput="calcPurchaseAiEditLine(this)"></td>
-    <td><input class="fi mono pai-selling" value="${escapeHtml(line.selling_price_inc_tax||line.selling_price||0)}" readonly></td>
     <td><button class="icon-btn danger" type="button" title="Remove line" onclick="removePurchaseAiEditLine(this)">${deleteIconSvg()}</button></td>`;
   body.appendChild(row);
   calcPurchaseAiEditLine(row);
@@ -9918,13 +9938,10 @@ function calcPurchaseAiEditLine(source){
   const cost=parseAmount(row.querySelector('.pai-cost')?.value);
   const discountPct=parseAmount(row.querySelector('.pai-line-discount')?.value);
   const beforeTax=cost*(1-(discountPct/100));
-  const margin=parseAmount(row.querySelector('.pai-margin')?.value);
   const beforeTaxField=row.querySelector('.pai-cost-before-tax');
   const totalField=row.querySelector('.pai-line-total');
-  const sellingField=row.querySelector('.pai-selling');
   if(beforeTaxField)beforeTaxField.value=beforeTax.toFixed(2);
   if(totalField)totalField.value=(qty*beforeTax).toFixed(2);
-  if(sellingField)sellingField.value=(beforeTax*(1+margin/100)*1.05).toFixed(2);
   calcPurchaseAiEditInvoice();
 }
 
@@ -9969,8 +9986,6 @@ function collectPurchaseAiEditLines(){
       discount_percent:parseAmount(row.querySelector('.pai-line-discount')?.value),
       unit_cost_before_tax:parseAmount(row.querySelector('.pai-cost-before-tax')?.value),
       line_total:parseAmount(row.querySelector('.pai-line-total')?.value),
-      profit_margin:parseAmount(row.querySelector('.pai-margin')?.value),
-      selling_price_inc_tax:parseAmount(row.querySelector('.pai-selling')?.value)
     }))
     .filter(line=>line.product||line.quantity||line.unit_cost||line.line_total);
 }
@@ -10499,7 +10514,7 @@ function bindManualPurchaseCalculator(){
   if(!page||page.dataset.purchaseCalcBound==='1')return;
   page.dataset.purchaseCalcBound='1';
   page.addEventListener('input',event=>{
-    if(event.target.matches('.mp-qty,.mp-cost,.mp-discount-pct,.mp-margin,.mp-expense-amount,#mp-discount,#mp-shipping,#mp-pay-amount')){
+    if(event.target.matches('.mp-qty,.mp-cost,.mp-discount-pct,.mp-expense-amount,#mp-discount,#mp-shipping,#mp-pay-amount')){
       calcManualPurchase();
     }
   });
@@ -10527,8 +10542,7 @@ function removeInitialBlankPurchaseLine(){
   const qty=(row.querySelector('.mp-qty')?.value||'').trim();
   const cost=parseAmount(row.querySelector('.mp-cost')?.value);
   const discount=parseAmount(row.querySelector('.mp-discount-pct')?.value);
-  const margin=parseAmount(row.querySelector('.mp-margin')?.value);
-  if(!product&&(!qty||qty==='1')&&!cost&&!discount&&!margin){
+  if(!product&&(!qty||qty==='1')&&!cost&&!discount){
     row.remove();
   }
 }
@@ -10538,7 +10552,7 @@ function addManualPurchaseLine(){
   if(!tbody)return;
   refreshPurchaseProductSuggestions();
   const row=document.createElement('tr');
-  row.innerHTML=`<td><input class="fi mp-product" list="purchase-product-options" placeholder="Product name" onfocus="refreshPurchaseProductSuggestions()" onchange="applyPurchaseProductSuggestion(this)"></td><td><input class="fi mono mp-qty" value="1" oninput="calcManualPurchase()"></td><td><select class="fi mp-unit">${unitOptionsHtml('PCS')}</select></td><td><input class="fi mono mp-cost" value="0.00" oninput="calcManualPurchase()"></td><td><input class="fi mono mp-discount-pct" value="0" oninput="calcManualPurchase()"></td><td class="mono mp-before-tax">0.00</td><td class="mono mp-line-total">0.00</td><td><input class="fi mono mp-margin" value="0" oninput="calcManualPurchase()"></td><td class="mono mp-selling">0.00</td><td><button class="icon-btn danger" type="button" onclick="removeManualPurchaseLine(this)" title="Remove line">${deleteIconSvg()}</button></td>`;
+  row.innerHTML=`<td><input class="fi mp-product" list="purchase-product-options" placeholder="Product name" onfocus="refreshPurchaseProductSuggestions()" onchange="applyPurchaseProductSuggestion(this)"></td><td><input class="fi mono mp-qty" value="1" oninput="calcManualPurchase()"></td><td><select class="fi mp-unit">${unitOptionsHtml('PCS')}</select></td><td><input class="fi mono mp-cost" value="0.00" oninput="calcManualPurchase()"></td><td><input class="fi mono mp-discount-pct" value="0" oninput="calcManualPurchase()"></td><td class="mono mp-before-tax">0.00</td><td class="mono mp-line-total">0.00</td><td><button class="icon-btn danger" type="button" onclick="removeManualPurchaseLine(this)" title="Remove line">${deleteIconSvg()}</button></td>`;
   tbody.appendChild(row);
   calcManualPurchase();
 }
@@ -10564,8 +10578,7 @@ function manualPurchaseLineHasValue(row){
     (row.querySelector('.mp-product')?.value||'').trim()||
     parseAmount(row.querySelector('.mp-qty')?.value)>1||
     parseAmount(row.querySelector('.mp-cost')?.value)>0||
-    parseAmount(row.querySelector('.mp-discount-pct')?.value)>0||
-    parseAmount(row.querySelector('.mp-margin')?.value)>0
+    parseAmount(row.querySelector('.mp-discount-pct')?.value)>0
   );
 }
 
@@ -10578,10 +10591,8 @@ function collectManualPurchaseLines(){
       unit_of_measure:row.querySelector('.mp-unit')?.value||'PCS',
       unit_cost:parseAmount(row.querySelector('.mp-cost')?.value),
       discount_percent:parseAmount(row.querySelector('.mp-discount-pct')?.value),
-      profit_margin:parseAmount(row.querySelector('.mp-margin')?.value),
       unit_cost_before_tax:parseAmount(row.querySelector('.mp-before-tax')?.textContent),
-      line_total:parseAmount(row.querySelector('.mp-line-total')?.textContent),
-      selling_price_inc_tax:parseAmount(row.querySelector('.mp-selling')?.textContent)
+      line_total:parseAmount(row.querySelector('.mp-line-total')?.textContent)
     }));
 }
 
@@ -10797,16 +10808,12 @@ function calcManualPurchase(){
     const qty=parseAmount(row.querySelector('.mp-qty')?.value);
     const cost=parseAmount(row.querySelector('.mp-cost')?.value);
     const discountPct=parseAmount(row.querySelector('.mp-discount-pct')?.value);
-    const margin=parseAmount(row.querySelector('.mp-margin')?.value);
     const beforeTax=cost*(1-(discountPct/100));
     const lineTotal=qty*beforeTax;
-    const selling=beforeTax*(1+(margin/100))*1.05;
     const beforeTaxCell=row.querySelector('.mp-before-tax');
     const lineTotalCell=row.querySelector('.mp-line-total');
-    const sellingCell=row.querySelector('.mp-selling');
     if(beforeTaxCell)beforeTaxCell.textContent=beforeTax.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
     if(lineTotalCell)lineTotalCell.textContent=lineTotal.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
-    if(sellingCell)sellingCell.textContent=selling.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
     if(manualPurchaseLineHasValue(row)){
       itemCount+=qty;
       net+=lineTotal;
@@ -11266,7 +11273,6 @@ function addManualPurchaseLineFromData(line={}){
   setSelectValue(row.querySelector('.mp-unit'),line.unit_of_measure||line.unit||line.uom||'PCS');
   row.querySelector('.mp-cost').value=line.unit_cost||line.cost||line.unitCost||0;
   row.querySelector('.mp-discount-pct').value=line.discount_percent||line.discountPct||0;
-  row.querySelector('.mp-margin').value=line.profit_margin||line.margin||0;
 }
 
 function editPurchaseRecord(btn){
@@ -11363,7 +11369,11 @@ function buildLPORow(purchase){
   const statusClass=status==='Paid'?'b-g':status==='Received'?'b-b':status.includes('Payment')?'b-a':'b-gray';
   const source=String(purchase.source||'Local PO');
   const sourceClass=source.toLowerCase().includes('ai')?'b-p':'b-gray';
-  row.innerHTML=`<td class="mono">${escapeHtml(ref)}</td><td>${escapeHtml(purchaseRecordProductSummary(normalizedPurchase))}</td><td>${escapeHtml(normalizedPurchase.supplier||'-')}</td><td>${escapeHtml(normalizedPurchase.date||'-')}</td><td>${escapeHtml(normalizedPurchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(normalizedPurchase.net_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.tax_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.shipping||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.total||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.paid||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.due||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b ${sourceClass}">${escapeHtml(source)}</span></td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td data-action-col="1"><div class="row-actions"><button class="icon-btn edit" type="button" title="Edit" aria-label="Edit LPO" onclick="editPurchaseRecord(this)">${editIconSvg()}</button><button class="icon-btn view" type="button" title="View" aria-label="View LPO" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button><button class="icon-btn" type="button" title="Convert to Purchase Invoice" aria-label="Convert LPO to Purchase" onclick="convertPOToPurchase(this)" style="color:var(--blue)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><button class="icon-btn copy" type="button" title="Copy" aria-label="Copy LPO" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button><button class="icon-btn danger" type="button" title="Delete" aria-label="Delete LPO" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td>`;
+  const convertedTo=purchase.converted_to||'';
+  const convertBtn=convertedTo
+    ?`<span class="b b-g" title="Converted to ${escapeHtml(convertedTo)}" style="font-size:11px;padding:2px 6px">Converted</span>`
+    :`<button class="icon-btn" type="button" title="Convert to Purchase Invoice" aria-label="Convert LPO to Purchase" onclick="convertPOToPurchase(this)" style="color:var(--blue)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>`;
+  row.innerHTML=`<td class="mono">${escapeHtml(ref)}</td><td>${escapeHtml(purchaseRecordProductSummary(normalizedPurchase))}</td><td>${escapeHtml(normalizedPurchase.supplier||'-')}</td><td>${escapeHtml(normalizedPurchase.date||'-')}</td><td>${escapeHtml(normalizedPurchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(normalizedPurchase.net_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.tax_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.shipping||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.total||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.paid||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.due||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b ${sourceClass}">${escapeHtml(source)}</span></td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td data-action-col="1"><div class="row-actions"><button class="icon-btn edit" type="button" title="Edit" aria-label="Edit LPO" onclick="editPurchaseRecord(this)">${editIconSvg()}</button><button class="icon-btn view" type="button" title="View" aria-label="View LPO" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button>${convertBtn}<button class="icon-btn copy" type="button" title="Copy" aria-label="Copy LPO" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button><button class="icon-btn danger" type="button" title="Delete" aria-label="Delete LPO" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td>`;
   return row;
 }
 
@@ -11398,7 +11408,11 @@ function buildFPORow(purchase){
   const statusClass=status==='Paid'?'b-g':status==='Received'?'b-b':status.includes('Payment')?'b-a':'b-gray';
   const source=String(purchase.source||'Foreign PO');
   const sourceClass=source.toLowerCase().includes('ai')?'b-p':'b-gray';
-  row.innerHTML=`<td class="mono">${escapeHtml(ref)}</td><td>${escapeHtml(purchaseRecordProductSummary(normalizedPurchase))}</td><td>${escapeHtml(normalizedPurchase.supplier||'-')}</td><td>${escapeHtml(normalizedPurchase.date||'-')}</td><td>${escapeHtml(normalizedPurchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(normalizedPurchase.net_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.tax_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.shipping||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.total||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.paid||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.due||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b ${sourceClass}">${escapeHtml(source)}</span></td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td data-action-col="1"><div class="row-actions"><button class="icon-btn edit" type="button" title="Edit" aria-label="Edit FPO" onclick="editPurchaseRecord(this)">${editIconSvg()}</button><button class="icon-btn view" type="button" title="View" aria-label="View FPO" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button><button class="icon-btn" type="button" title="Convert to Purchase Invoice" aria-label="Convert FPO to Purchase" onclick="convertPOToPurchase(this)" style="color:var(--blue)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><button class="icon-btn copy" type="button" title="Copy" aria-label="Copy FPO" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button><button class="icon-btn danger" type="button" title="Delete" aria-label="Delete FPO" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td>`;
+  const convertedTo=purchase.converted_to||'';
+  const convertBtn=convertedTo
+    ?`<span class="b b-g" title="Converted to ${escapeHtml(convertedTo)}" style="font-size:11px;padding:2px 6px">Converted</span>`
+    :`<button class="icon-btn" type="button" title="Convert to Purchase Invoice" aria-label="Convert FPO to Purchase" onclick="convertPOToPurchase(this)" style="color:var(--blue)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>`;
+  row.innerHTML=`<td class="mono">${escapeHtml(ref)}</td><td>${escapeHtml(purchaseRecordProductSummary(normalizedPurchase))}</td><td>${escapeHtml(normalizedPurchase.supplier||'-')}</td><td>${escapeHtml(normalizedPurchase.date||'-')}</td><td>${escapeHtml(normalizedPurchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(normalizedPurchase.net_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.tax_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.shipping||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.total||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.paid||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.due||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b ${sourceClass}">${escapeHtml(source)}</span></td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td data-action-col="1"><div class="row-actions"><button class="icon-btn edit" type="button" title="Edit" aria-label="Edit FPO" onclick="editPurchaseRecord(this)">${editIconSvg()}</button><button class="icon-btn view" type="button" title="View" aria-label="View FPO" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button>${convertBtn}<button class="icon-btn copy" type="button" title="Copy" aria-label="Copy FPO" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button><button class="icon-btn danger" type="button" title="Delete" aria-label="Delete FPO" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td>`;
   return row;
 }
 
@@ -11439,11 +11453,14 @@ async function convertPOToPurchase(btn){
     notes:(purchase.notes?purchase.notes+'\n':'')+`Converted from ${docType} ${purchase.ref} on ${new Date().toLocaleDateString('en-AE')}`
   };
   purchaseRecordCache.set(String(newRef),newRecord);
+  // Mark original as converted so the convert button hides
+  const originalUpdated={...purchase,converted_to:newRef};
+  purchaseRecordCache.set(String(purchase.ref),originalUpdated);
   renderPurchaseRecordWindow();
-  // LPO/FPO original is unchanged — no re-render needed, but refresh counts
   renderLPOList();
   renderFPOList();
-  saveServer('purchaseRecords',newRecord,{throwOnError:false})
+  saveServer('purchaseRecords',newRecord,{throwOnError:false});
+  saveServer('purchaseRecords',originalUpdated,{throwOnError:false})
     .then(()=>{
       toast(`${purchase.ref} → ${newRef} created as Purchase Invoice`,'ok');
       audit('Converted PO to purchase invoice',`${purchase.ref} → ${newRef}`,'Created');
@@ -16099,7 +16116,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260613c';
+  const _SNAP_VER='20260613e';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);

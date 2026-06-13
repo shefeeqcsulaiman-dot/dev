@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260613c" as="style">
-<link rel="preload" href="src/app.js?v=20260613c" as="script">
+<link rel="preload" href="src/styles.css?v=20260613e" as="style">
+<link rel="preload" href="src/app.js?v=20260613e" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260613c">
+<link rel="stylesheet" href="src/styles.css?v=20260613e">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -898,7 +898,7 @@
         <div class="flx"><button class="btn btn-g btn-sm" onclick="importManualPurchaseProducts()">Import Products</button><button class="btn btn-p btn-sm" onclick="addManualPurchaseLine()">+ Add Product</button></div>
       </div>
       <table class="tbl" data-delete-actions-bound="skip" data-no-table-tools="1">
-        <thead><tr><th>Product Name</th><th>Purchase Quantity</th><th>Unit of Measure</th><th>Unit Cost Before Discount</th><th>Discount %</th><th>Unit Cost Before Tax</th><th>Line Total</th><th>Profit Margin %</th><th>Unit Selling Price Inc. Tax</th><th></th></tr></thead>
+        <thead><tr><th>Product Name</th><th>Purchase Quantity</th><th>Unit of Measure</th><th>Unit Cost Before Discount</th><th>Discount %</th><th>Unit Cost Before Tax</th><th>Line Total</th><th></th></tr></thead>
         <tbody id="mp-lines"></tbody>
       </table>
       <datalist id="purchase-product-options"></datalist>
@@ -1817,9 +1817,9 @@
     <div class="card">
       <div class="card-hd"><div class="card-title">Current Stock Levels</div><div class="flx"><button class="btn btn-g" onclick="clearInventoryTable()">Clear Table</button><button class="btn btn-p" onclick="openInventoryItemModal()">+ Add Item</button></div></div>
       <table class="tbl">
-        <thead><tr><th>Item Code</th><th>Item Name</th><th>Category</th><th>Current Stock</th><th>Unit</th><th>Reorder Level</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Item Code</th><th>Item Name</th><th>Category</th><th>Current Stock</th><th>Unit</th><th>Reorder Level</th><th>Purchase Rate</th><th>Status</th><th></th></tr></thead>
         <tbody id="stock-level-tbody">
-          <tr data-empty-state="1"><td colspan="8" style="color:var(--text3);text-align:center">No stock items in database yet.</td></tr>
+          <tr data-empty-state="1"><td colspan="9" style="color:var(--text3);text-align:center">No stock items in database yet.</td></tr>
         </tbody>
       </table>
     </div>
@@ -5329,6 +5329,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260613c" defer></script>
+<script src="src/app.js?v=20260613e" defer></script>
 </body>
 </html>

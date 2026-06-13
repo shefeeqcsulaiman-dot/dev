@@ -75,18 +75,38 @@ def list_stock_levels(db: Session = Depends(get_db), current_user: User = Depend
         .order_by(StockProductMapping.sku)
         .all()
     )
-    return [
-        {
-            "code": mapping.sku,
-            "name": mapping.taxflow_name or mapping.name,
-            "category": "Purchases",
-            "current_stock": current_stock,
-            "unit": "PCS",
-            "reorder_level": mapping.reorder_level,
-            "cost": mapping.cost,
-        }
-        for mapping, current_stock in rows
-    ]
+    # Consolidate duplicate mappings by normalised key (legacy data may have case variants)
+    consolidated: dict[str, dict] = {}
+    for mapping, current_stock in rows:
+        key = (mapping.taxflow_name or mapping.name or mapping.sku or "").strip().lower()
+        if key in consolidated:
+            entry = consolidated[key]
+            entry["current_stock"] = float(entry["current_stock"]) + float(current_stock)
+            # Weighted average cost across both entries
+            old_qty = float(entry.get("_qty_for_avg", 0))
+            new_qty = float(current_stock)
+            old_cost = float(entry["cost"] or 0)
+            new_cost = float(mapping.cost or 0)
+            total_qty = old_qty + new_qty
+            if total_qty > 0:
+                entry["cost"] = round((old_cost * old_qty + new_cost * new_qty) / total_qty, 6)
+            entry["_qty_for_avg"] = total_qty
+        else:
+            consolidated[key] = {
+                "code": mapping.sku,
+                "name": mapping.taxflow_name or mapping.name,
+                "category": "Purchases",
+                "current_stock": float(current_stock),
+                "unit": "PCS",
+                "reorder_level": mapping.reorder_level,
+                "cost": float(mapping.cost or 0),
+                "_qty_for_avg": float(current_stock),
+            }
+    result = []
+    for entry in consolidated.values():
+        entry.pop("_qty_for_avg", None)
+        result.append(entry)
+    return result
 
 
 @router.get("/inventory/stock-movements")
@@ -179,6 +199,7 @@ def backfill_purchase_stock_movements(db: Session, current_user: User) -> None:
         .all()
     )
     changed = False
+    updated_mapping_ids: set[int] = set()
     for item in records:
         try:
             record = json.loads(item.payload or "{}")
@@ -234,9 +255,40 @@ def backfill_purchase_stock_movements(db: Session, current_user: User) -> None:
                     unit_cost=unit_cost,
                 )
             )
+            updated_mapping_ids.add(mapping.id)
             changed = True
     if changed:
         db.commit()
+        # Recompute weighted average cost for each affected mapping
+        _update_mapping_weighted_avg_cost(db, current_user.company_id, updated_mapping_ids)
+        db.commit()
+
+
+def _update_mapping_weighted_avg_cost(db: Session, company_id: str, mapping_ids: set[int]) -> None:
+    """Update each mapping's cost to the weighted average of all its purchase movements."""
+    for mapping_id in mapping_ids:
+        movements = (
+            db.query(StockMovement)
+            .filter(
+                StockMovement.company_id == company_id,
+                StockMovement.mapping_id == mapping_id,
+                StockMovement.movement_type == "purchase",
+                StockMovement.quantity > 0,
+            )
+            .all()
+        )
+        if not movements:
+            continue
+        total_qty = sum(float(m.quantity) for m in movements)
+        total_value = sum(float(m.quantity) * float(m.unit_cost) for m in movements)
+        if total_qty > 0:
+            avg_cost = Decimal(str(round(total_value / total_qty, 6)))
+            mapping = db.query(StockProductMapping).filter(
+                StockProductMapping.id == mapping_id,
+                StockProductMapping.company_id == company_id,
+            ).first()
+            if mapping:
+                mapping.cost = avg_cost
 
 
 def stock_mapping_for_purchase_line(
@@ -250,16 +302,42 @@ def stock_mapping_for_purchase_line(
     if not sku and not product:
         return None
     mapping = None
+    # Case-insensitive lookup — prevents duplicate mappings for same item with different casing
     if sku:
         mapping = (
             db.query(StockProductMapping)
-            .filter(StockProductMapping.company_id == current_user.company_id, StockProductMapping.sku == sku)
+            .filter(
+                StockProductMapping.company_id == current_user.company_id,
+                func.lower(StockProductMapping.sku) == sku.lower(),
+            )
             .first()
         )
     if not mapping and product:
         mapping = (
             db.query(StockProductMapping)
-            .filter(StockProductMapping.company_id == current_user.company_id, StockProductMapping.name == product)
+            .filter(
+                StockProductMapping.company_id == current_user.company_id,
+                func.lower(StockProductMapping.name) == product.lower(),
+            )
+            .first()
+        )
+    # Also try cross-matching sku↔name in case item was previously registered differently
+    if not mapping and product:
+        mapping = (
+            db.query(StockProductMapping)
+            .filter(
+                StockProductMapping.company_id == current_user.company_id,
+                func.lower(StockProductMapping.sku) == product.lower(),
+            )
+            .first()
+        )
+    if not mapping and sku:
+        mapping = (
+            db.query(StockProductMapping)
+            .filter(
+                StockProductMapping.company_id == current_user.company_id,
+                func.lower(StockProductMapping.name) == sku.lower(),
+            )
             .first()
         )
     if not mapping:
