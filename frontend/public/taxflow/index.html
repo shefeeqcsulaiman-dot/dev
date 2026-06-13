@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260613h" as="style">
-<link rel="preload" href="src/app.js?v=20260613h" as="script">
+<link rel="preload" href="src/styles.css?v=20260613i" as="style">
+<link rel="preload" href="src/app.js?v=20260613i" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260613h">
+<link rel="stylesheet" href="src/styles.css?v=20260613i">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -380,12 +380,16 @@
 
   <div class="g2 mb16">
     <div class="card">
-      <div class="card-hd"><div class="card-title">Business Registration Details</div><button class="btn btn-p btn-sm" onclick="saveCompanyRegistration()">Save All</button></div>
+      <div class="card-hd"><div class="card-title">Business Registration Details</div><div class="card-sub">Trade license, legal structure, activity, and registered address</div><button class="btn btn-p btn-sm" onclick="saveCompanyRegistration()">Save</button></div>
       <div class="section-hd">Basic Information</div>
-      <div class="fg"><label class="fl">Legal Business Name (as per Trade License)</label><input class="fi" id="co-name" placeholder="Enter legal business name"></div>
       <div class="fr2">
-        <div class="fg"><label class="fl">Trade License Number</label><input class="fi mono" id="co-trade-license" placeholder="e.g. DED-2024-12345"></div>
-        <div class="fg"><label class="fl">Trade License Expiry</label><input class="fi" id="co-license-expiry" type="date"></div>
+        <div class="fg"><label class="fl">Legal Company Name</label><input class="fi" id="co-name" placeholder="Enter legal company name"></div>
+        <div class="fg"><label class="fl">Trade Name</label><input class="fi" id="co-trade-name" placeholder="Trade or brand name"></div>
+      </div>
+      <div class="fr3">
+        <div class="fg"><label class="fl">Trade License No.</label><input class="fi mono" id="co-trade-license" placeholder="e.g. DED-2024-12345"></div>
+        <div class="fg"><label class="fl">Issue Date</label><input class="fi" id="co-issue-date" type="date"></div>
+        <div class="fg"><label class="fl">Expiry Date</label><input class="fi" id="co-license-expiry" type="date"></div>
       </div>
       <div class="fr2">
         <div class="fg"><label class="fl">Business Activity</label><input class="fi" id="co-activity" placeholder="e.g. General Trading"></div>
@@ -5331,6 +5335,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260613h" defer></script>
+<script src="src/app.js?v=20260613i" defer></script>
 </body>
 </html>

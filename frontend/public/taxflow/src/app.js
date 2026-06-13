@@ -1766,7 +1766,11 @@ function applyCompanyToUi(company){
   set('set-company-website',company.website);
   // Company registration page fields
   set('co-name',company.name);
+  set('co-trade-name',company.trade_name);
   set('co-trade-license',company.trade_license_no);
+  set('co-issue-date',company.trade_license_issue_date);
+  set('co-license-expiry',company.trade_license_expiry);
+  set('co-freezone',company.free_zone||'Not Applicable');
   set('co-activity',company.business_activity);
   set('co-structure',company.legal_structure);
   set('co-emirate',company.emirate);
@@ -1849,9 +1853,12 @@ async function saveCompanyRegistration(){
   const payload={
     name,
     trn:currentCompany?.trn||null,
-    trade_name:currentCompany?.trade_name||null,
+    trade_name:v('co-trade-name')||currentCompany?.trade_name||null,
     country:currentCompany?.country||'United Arab Emirates',
     trade_license_no:v('co-trade-license'),
+    trade_license_issue_date:v('co-issue-date'),
+    trade_license_expiry:v('co-license-expiry'),
+    free_zone:v('co-freezone'),
     business_activity:v('co-activity'),
     legal_structure:v('co-structure'),
     emirate:v('co-emirate'),
@@ -16194,7 +16201,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260613h';
+  const _SNAP_VER='20260613i';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);

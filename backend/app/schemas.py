@@ -38,6 +38,9 @@ class CompanyOut(BaseModel):
     business_activity: str | None = None
     legal_structure: str | None = None
     trade_license_no: str | None = None
+    trade_license_issue_date: str | None = None
+    trade_license_expiry: str | None = None
+    free_zone: str | None = None
     address: str | None = None
     po_box: str | None = None
     phone: str | None = None
@@ -57,6 +60,9 @@ class CompanyUpdate(BaseModel):
     business_activity: str | None = None
     legal_structure: str | None = None
     trade_license_no: str | None = None
+    trade_license_issue_date: str | None = None
+    trade_license_expiry: str | None = None
+    free_zone: str | None = None
     address: str | None = None
     po_box: str | None = None
     phone: str | None = None

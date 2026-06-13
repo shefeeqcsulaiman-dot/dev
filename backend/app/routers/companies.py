@@ -24,6 +24,7 @@ def update_company(
     simple_fields = [
         "name", "trade_name", "country", "emirate", "business_type",
         "business_activity", "legal_structure", "trade_license_no",
+        "trade_license_issue_date", "trade_license_expiry", "free_zone",
         "address", "po_box", "phone", "website", "logo",
     ]
     for field in simple_fields:
