@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260613f" as="style">
-<link rel="preload" href="src/app.js?v=20260613f" as="script">
+<link rel="preload" href="src/styles.css?v=20260613g" as="style">
+<link rel="preload" href="src/app.js?v=20260613g" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260613f">
+<link rel="stylesheet" href="src/styles.css?v=20260613g">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -1041,6 +1041,8 @@
             <tr><td>Materials</td><td>Sales & Purchase</td><td><span class="b b-b">Standard 5%</span></td><td><span class="b b-g">Active</span></td></tr>
             <tr><td>Services</td><td>Sales & Purchase</td><td><span class="b b-b">Standard 5%</span></td><td><span class="b b-g">Active</span></td></tr>
             <tr><td>Supplies</td><td>Purchase Only</td><td><span class="b b-b">Standard 5%</span></td><td><span class="b b-g">Active</span></td></tr>
+            <tr><td>Logistics</td><td>Purchase Only</td><td><span class="b b-b">Standard 5%</span></td><td><span class="b b-g">Active</span></td></tr>
+            <tr><td>Purchase Supplier</td><td>Purchase Only</td><td><span class="b b-b">Standard 5%</span></td><td><span class="b b-g">Active</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -4635,7 +4637,7 @@ period_locks ─&lt; audit_logs
 <div class="overlay" id="m-vendor" onclick="closeOvBg(event,'m-vendor')">
   <div class="modal"><div class="modal-title">Add Vendor</div><div class="modal-sub">Register supplier details for bills and purchase orders</div>
     <div class="fg"><label class="fl">Vendor Name</label><input class="fi" id="vendor-name" placeholder="Vendor company"></div>
-    <div class="fr2"><div class="fg"><label class="fl">TRN</label><input class="fi mono" id="vendor-trn" maxlength="15" placeholder="15-digit TRN"></div><div class="fg"><label class="fl">Category</label><select class="fi" id="vendor-category"><option>Materials</option><option>Logistics</option><option>Supplies</option><option>Services</option></select></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">TRN</label><input class="fi mono" id="vendor-trn" maxlength="15" placeholder="15-digit TRN"></div><div class="fg"><label class="fl">Category</label><select class="fi" id="vendor-category"><option value="">Select Category</option></select></div></div>
     <div class="fr2"><div class="fg"><label class="fl">Email</label><input class="fi" id="vendor-email" type="email"></div><div class="fg"><label class="fl">Phone</label><input class="fi" id="vendor-phone"></div></div>
     <div class="fg"><label class="fl">Address</label><textarea class="fi" id="vendor-address" rows="3" placeholder="Vendor billing or delivery address"></textarea></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-vendor')">Cancel</button><button class="btn btn-p" onclick="saveVendor()">Save Vendor</button></div>
@@ -5329,6 +5331,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260613f" defer></script>
+<script src="src/app.js?v=20260613g" defer></script>
 </body>
 </html>

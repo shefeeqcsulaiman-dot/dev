@@ -3833,13 +3833,18 @@ function syncProductMasterOptions(){
   const categorySelect=document.getElementById('prod-category');
   const unitSelect=document.getElementById('prod-unit');
   const supplierSelect=document.getElementById('prod-supplier');
+  const vendorCategorySelect=document.getElementById('vendor-category');
+  const allCategories=[...new Set([...document.querySelectorAll('#sales-category-tbody tr td:first-child')]
+    .map(td=>td.textContent.trim()).filter(Boolean))];
   if(categorySelect){
     const current=categorySelect.value;
-    const categories=[...document.querySelectorAll('#sales-category-tbody tr td:first-child')]
-      .map(td=>td.textContent.trim())
-      .filter(Boolean);
-    categorySelect.innerHTML=[...new Set(categories)].map(name=>`<option>${escapeHtml(name)}</option>`).join('');
-    if(current&&categories.includes(current))categorySelect.value=current;
+    categorySelect.innerHTML=allCategories.map(name=>`<option>${escapeHtml(name)}</option>`).join('');
+    if(current&&allCategories.includes(current))categorySelect.value=current;
+  }
+  if(vendorCategorySelect){
+    const current=vendorCategorySelect.value;
+    vendorCategorySelect.innerHTML='<option value="">Select Category</option>'+allCategories.map(name=>`<option>${escapeHtml(name)}</option>`).join('');
+    if(current&&allCategories.includes(current))vendorCategorySelect.value=current;
   }
   if(unitSelect){
     const current=unitSelect.value;
@@ -16183,7 +16188,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260613f';
+  const _SNAP_VER='20260613g';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
