@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260613i" as="style">
-<link rel="preload" href="src/app.js?v=20260613i" as="script">
+<link rel="preload" href="src/styles.css?v=20260613j" as="style">
+<link rel="preload" href="src/app.js?v=20260613j" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260613i">
+<link rel="stylesheet" href="src/styles.css?v=20260613j">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -5053,7 +5053,16 @@ period_locks ─&lt; audit_logs
     <div class="fr3"><div class="fg"><label class="fl">Item Code</label><input class="fi mono" id="inv-item-code" placeholder="ITM-005"></div><div class="fg"><label class="fl">Item Type</label><select class="fi" id="inv-item-type"><option>Stock Item</option><option>Service</option><option>Consumable</option><option>Raw Material</option><option>Finished Good</option></select></div><div class="fg"><label class="fl">Status</label><select class="fi" id="inv-item-status"><option>Active</option><option>Inactive</option><option>Draft</option></select></div></div>
     <div class="fg"><label class="fl">Item Name</label><input class="fi" id="inv-item-name" placeholder="Full item name"></div>
     <div class="fg"><label class="fl">Description</label><input class="fi" id="inv-item-description" placeholder="Short description (optional)"></div>
-    <div class="fr2"><div class="fg"><label class="fl">Category</label><select class="fi" id="inv-item-category"><option value="">Select Category</option></select></div><div class="fg"><label class="fl">Unit of Measure</label><select class="fi" id="inv-item-unit"><option value="">Select Unit</option></select></div></div>
+    <div class="fr2">
+      <div class="fg">
+        <div class="flx-b"><label class="fl">Category</label><button type="button" class="btn-link" onclick="toggleInvCategoryAdd()" id="inv-cat-add-btn">+ New</button></div>
+        <select class="fi" id="inv-item-category"><option value="">Select Category</option></select>
+        <div id="inv-cat-quick-add" style="display:none;margin-top:6px;display:none">
+          <div class="flx" style="gap:6px"><input class="fi" id="inv-cat-new-name" placeholder="Category name" style="flex:1"><button class="btn btn-p btn-sm" onclick="quickAddInventoryCategory()">Add</button><button class="btn btn-g btn-sm" onclick="toggleInvCategoryAdd()">✕</button></div>
+        </div>
+      </div>
+      <div class="fg"><label class="fl">Unit of Measure</label><select class="fi" id="inv-item-unit"><option value="">Select Unit</option></select></div>
+    </div>
     <div class="fr3"><div class="fg"><label class="fl">Cost Price</label><input class="fi mono" id="inv-item-cost" placeholder="0.00"></div><div class="fg"><label class="fl">Selling Price</label><input class="fi mono" id="inv-item-selling-price" placeholder="0.00"></div><div class="fg"><label class="fl">VAT</label><select class="fi" id="inv-item-vat"><option value="Standard 5%">Standard 5%</option><option value="Zero-rated 0%">Zero-rated 0%</option><option value="Exempt">Exempt</option></select></div></div>
     <div class="section-hd">Stock Settings</div>
     <div class="fr2"><div class="fg"><label class="fl">Stock Tracking</label><select class="fi" id="inv-item-tracking"><option>Yes</option><option>No</option><option>Optional</option></select></div><div class="fg"><label class="fl">Opening Date</label><input class="fi" id="inv-item-opening-date" type="date"></div></div>
@@ -5335,6 +5344,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260613i" defer></script>
+<script src="src/app.js?v=20260613j" defer></script>
 </body>
 </html>
