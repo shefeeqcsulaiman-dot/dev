@@ -47,6 +47,8 @@ def create_warehouse(
 
 @router.get("/inventory/mappings", response_model=list[StockMappingOut])
 def list_mappings(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[StockProductMapping]:
+    if not inventory_backfill_disabled(db, current_user.company_id):
+        backfill_purchase_stock_movements(db, current_user)
     mappings = (
         db.query(StockProductMapping)
         .filter(StockProductMapping.company_id == current_user.company_id)

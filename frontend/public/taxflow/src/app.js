@@ -1232,20 +1232,19 @@ function stockMappingPayloadFromRow(row){
 async function loadStockMappingsFromServer(){
   const tbody=document.getElementById('stock-map-tbody');
   if(!tbody)return;
-  if(isInventoryTableCleared()){
-    emptyTableMessage(tbody,'No stock mappings in database yet.');
-    return;
-  }
   try{
     await ensureBackendSession();
     const mappings=await moduleApi('/inventory/mappings');
     tbody.innerHTML='';
     (mappings||[]).forEach(renderStockMappingRecord);
-    syncStockMappingFromItems();
+    if(!isInventoryTableCleared())syncStockMappingFromItems();
+    if(tbody.querySelectorAll('tr:not([data-empty-state])').length===0){
+      emptyTableMessage(tbody,'No stock mappings in database yet.');
+    }
     ensureInventoryBulkSelection();
   }catch(err){
     console.warn('Stock mappings unavailable:',err);
-    syncStockMappingFromItems();
+    if(!isInventoryTableCleared())syncStockMappingFromItems();
   }
 }
 
@@ -4255,9 +4254,16 @@ function updatePmtBalance(){
 
 function collectPaymentContacts(type=document.getElementById('payment-type')?.value){
   const selector=isSupplierPaymentType(type)?'#vendor-tbody tr:not([data-empty-state])':'#customer-tbody tr:not([data-empty-state])';
-  return [...document.querySelectorAll(selector)]
+  const fromTable=[...document.querySelectorAll(selector)]
     .map(row=>row.children[0]?.textContent.trim())
     .filter(Boolean);
+  if(isSupplierPaymentType(type)){
+    const fromPurchases=[...purchaseRecordCache.values()]
+      .map(p=>String(p.supplier||'').trim())
+      .filter(Boolean);
+    return [...new Set([...fromTable,...fromPurchases])];
+  }
+  return fromTable;
 }
 
 function paidPaymentDocumentRefs(type=document.getElementById('payment-type')?.value){
@@ -16188,7 +16194,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260613g';
+  const _SNAP_VER='20260613h';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
