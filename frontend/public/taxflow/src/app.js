@@ -5403,6 +5403,13 @@ async function fetchPurchaseRecordsPage({reset=false}={}){
     });
     purchaseRecordsOffset+=records.length;
     purchaseRecordsLoaded=purchaseRecordCache.size>=purchaseRecordsTotal||data.has_more===false;
+    // Delete demo purchase records from DB so they don't re-seed stock mappings
+    const demoRefs=records.map(r=>String(r?.ref||r?.invoice_no||r?.reference||'').trim()).filter(ref=>ref&&isDemoPurchaseRecord({...purchaseRecordCache.get(ref)||{},ref}));
+    if(demoRefs.length){
+      demoRefs.forEach(ref=>purchaseRecordCache.delete(ref));
+      Promise.allSettled(demoRefs.map(ref=>deleteServer('purchaseRecords',{ref,id:ref,record_key:ref})))
+        .then(results=>console.info(`Removed ${results.filter(r=>r.status==='fulfilled').length} demo purchase record(s) from database`));
+    }
     renderPurchaseRecordWindow();
     syncStockLevelsFromProducts();
     return data;
@@ -6307,18 +6314,41 @@ function removeDemoProductRows(){
   return removed;
 }
 
+function isDemoPurchaseRecord(record={}){
+  const ref=String(record.ref||record.invoice_no||record.reference||'').trim();
+  if(/^(INV|PUR|QTN|BILL|PO|RCT)-2024-/i.test(ref))return true;
+  const supplier=String(record.supplier||'').toLowerCase();
+  const demoSuppliers=['al hamad steel','gulf freight','office depot uae','uae paints co','uae paints co.','gulf logistics ltd','emirates supplies','al baraka trading'];
+  if(demoSuppliers.includes(supplier))return true;
+  const lines=Array.isArray(record.lines)?record.lines:[];
+  return lines.length>0&&lines.every(line=>isDemoProductRecord({code:line.sku||line.code||'',name:line.product||line.name||line.description||''}));
+}
+
 function cleanupDemoProductsFromServer(products=[]){
   const demoProducts=(products||[]).filter(isDemoProductRecord);
-  if(!demoProducts.length)return;
-  Promise.allSettled(demoProducts.map(product=>deleteServer('products',{
-    ...product,
-    id:productCodeValue(product),
-    code:productCodeValue(product),
-    name:productNameValue(product)
-  }))).then(results=>{
-    const deleted=results.filter(result=>result.status==='fulfilled').length;
-    if(deleted)console.info(`Removed ${deleted} demo Item Master product(s) from database`);
-  });
+  if(demoProducts.length){
+    Promise.allSettled(demoProducts.map(product=>deleteServer('products',{
+      ...product,
+      id:productCodeValue(product),
+      code:productCodeValue(product),
+      name:productNameValue(product)
+    }))).then(results=>{
+      const deleted=results.filter(result=>result.status==='fulfilled').length;
+      if(deleted)console.info(`Removed ${deleted} demo Item Master product(s) from database`);
+    });
+  }
+  // Also delete demo purchase records from AppDataRecord so they don't re-seed stock mappings
+  const demoPurchaseRefs=[...purchaseRecordCache.entries()]
+    .filter(([,rec])=>isDemoPurchaseRecord(rec))
+    .map(([ref])=>ref);
+  if(demoPurchaseRefs.length){
+    demoPurchaseRefs.forEach(ref=>purchaseRecordCache.delete(ref));
+    Promise.allSettled(demoPurchaseRefs.map(ref=>deleteServer('purchaseRecords',{ref,id:ref,record_key:ref})))
+      .then(results=>{
+        const deleted=results.filter(r=>r.status==='fulfilled').length;
+        if(deleted)console.info(`Removed ${deleted} demo purchase record(s) from database`);
+      });
+  }
 }
 
 function hydrateFromServer(){
@@ -16307,7 +16337,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260613s';
+  const _SNAP_VER='20260613t';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);

@@ -1,4 +1,5 @@
 import json
+import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -26,6 +27,80 @@ from app.schemas import (
 
 router = APIRouter(tags=["inventory"])
 
+# ── Demo product detection ───────────────────────────────────────────────────
+_DEMO_REFERENCE_RE = re.compile(r"^(INV|PUR|QTN|BILL|PO|RCT)-2024-", re.IGNORECASE)
+_DEMO_SKUS: set[str] = {
+    "PRD-001", "STL-12MM", "PKG-BOX-A", "OIL-5L", "GLV-SAFE", "LOG-LOCAL",
+    "OFF-CHAIR", "PPE-HELMET", "ELE-CABLE", "PKG-BOX", "PRN-FLYER",
+    "FUEL-DIESEL", "IT-MON24", "UNI-STAFF", "WTR-CASE", "MNT-HOUR",
+    "COU-DOC", "TLS-DRILL", "WH-SPACE", "PPE-VEST", "JAN-CLEAN",
+    "IT-LAP15", "ELE-LED", "TLS-HAM",
+}
+_DEMO_NAMES: set[str] = {
+    "steel rods 12mm", "packaging box a", "industrial oil 5l", "safety gloves",
+    "corrugated box a", "safety helmet", "copper cable roll", "ergonomic office chair",
+    "business laptop 15 inch", "diesel supply", "document courier",
+    "maintenance technician hour", "high visibility vest", "local delivery service",
+    "corrugated packing box", "printed flyer pack", "24 inch led monitor",
+    "staff uniform set", "drinking water case", "cordless drill machine",
+    "warehouse space rental", "deep cleaning service", "led panel light",
+    "industrial hammer",
+}
+_DEMO_SUPPLIERS: set[str] = {
+    "al hamad steel", "gulf freight", "office depot uae", "uae paints co",
+    "uae paints co.", "gulf logistics ltd", "emirates supplies", "al baraka trading",
+}
+
+
+def _is_demo_sku_or_name(sku: str, name: str) -> bool:
+    return sku.upper() in _DEMO_SKUS or name.lower() in _DEMO_NAMES
+
+
+def _is_demo_purchase_record(record: dict) -> bool:
+    ref = str(record.get("ref") or record.get("invoice_no") or record.get("reference") or "").strip()
+    if _DEMO_REFERENCE_RE.match(ref):
+        return True
+    supplier = str(record.get("supplier") or "").strip().lower()
+    if supplier in _DEMO_SUPPLIERS:
+        return True
+    lines = record.get("lines") or []
+    if lines and all(
+        _is_demo_sku_or_name(
+            str(ln.get("sku") or ln.get("code") or ""),
+            str(ln.get("product") or ln.get("name") or ln.get("description") or ""),
+        )
+        for ln in lines
+        if isinstance(ln, dict)
+    ):
+        return True
+    return False
+
+
+def _delete_demo_stock_mappings(db: Session, company_id: str) -> None:
+    """Remove any StockProductMapping rows whose SKU or name matches demo patterns."""
+    mappings = (
+        db.query(StockProductMapping)
+        .filter(StockProductMapping.company_id == company_id)
+        .all()
+    )
+    demo_ids = [
+        m.id
+        for m in mappings
+        if _is_demo_sku_or_name(m.sku or "", m.name or "")
+        or re.match(r"^(RT10-|REAL15|REAL50|BULK50)", (m.sku or "").upper())
+    ]
+    if not demo_ids:
+        return
+    db.query(StockMovement).filter(
+        StockMovement.mapping_id.in_(demo_ids),
+        StockMovement.company_id == company_id,
+    ).delete(synchronize_session=False)
+    db.query(StockProductMapping).filter(
+        StockProductMapping.id.in_(demo_ids),
+        StockProductMapping.company_id == company_id,
+    ).delete(synchronize_session=False)
+    db.commit()
+
 
 @router.get("/warehouses", response_model=list[WarehouseOut])
 def list_warehouses(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[Warehouse]:
@@ -47,6 +122,7 @@ def create_warehouse(
 
 @router.get("/inventory/mappings", response_model=list[StockMappingOut])
 def list_mappings(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[StockProductMapping]:
+    _delete_demo_stock_mappings(db, current_user.company_id)
     if not inventory_backfill_disabled(db, current_user.company_id):
         backfill_purchase_stock_movements(db, current_user)
     mappings = (
@@ -61,6 +137,7 @@ def list_mappings(db: Session = Depends(get_db), current_user: User = Depends(ge
 
 @router.get("/inventory/stock-levels")
 def list_stock_levels(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[dict[str, object]]:
+    _delete_demo_stock_mappings(db, current_user.company_id)
     backfill_purchase_stock_movements(db, current_user)
     rows = (
         db.query(
@@ -208,6 +285,8 @@ def backfill_purchase_stock_movements(db: Session, current_user: User) -> None:
         except (TypeError, json.JSONDecodeError):
             continue
         if not isinstance(record, dict):
+            continue
+        if _is_demo_purchase_record(record):
             continue
         reference = str(record.get("ref") or record.get("invoice_no") or record.get("reference") or item.record_key or "").strip()
         if not reference:
