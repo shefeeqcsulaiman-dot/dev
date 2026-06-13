@@ -1238,6 +1238,7 @@ async function loadStockMappingsFromServer(){
     tbody.innerHTML='';
     (mappings||[]).forEach(renderStockMappingRecord);
     if(!isInventoryTableCleared())syncStockMappingFromItems();
+    removeDemoProductRows();
     if(tbody.querySelectorAll('tr:not([data-empty-state])').length===0){
       emptyTableMessage(tbody,'No stock mappings in database yet.');
     }
@@ -6270,14 +6271,39 @@ function isDemoProductRecord(product={}){
 
 function removeDemoProductRows(){
   let removed=0;
+  // Item Master
   document.querySelectorAll('#prod-tbody tr:not([data-empty-state])').forEach(row=>{
     if(isDemoProductRecord({code:inventoryRowCellText(row,0),name:inventoryRowCellText(row,1)})){
-      row.remove();
-      removed++;
+      row.remove();removed++;
     }
   });
-  const tbody=document.getElementById('prod-tbody');
-  if(tbody&&tbody.querySelectorAll('tr:not([data-empty-state])').length===0)emptyTableMessage(tbody,'No products in database yet.');
+  const prodTbody=document.getElementById('prod-tbody');
+  if(prodTbody&&prodTbody.querySelectorAll('tr:not([data-empty-state])').length===0)emptyTableMessage(prodTbody,'No products in database yet.');
+  // Stock Mapping
+  const demoMappingIds=[];
+  document.querySelectorAll('#stock-map-tbody tr:not([data-empty-state])').forEach(row=>{
+    const name=inventoryRowCellText(row,0);
+    const sku=row.dataset.stockSku||name;
+    if(isDemoProductRecord({code:sku,name})){
+      if(row.dataset.mappingId)demoMappingIds.push(row.dataset.mappingId);
+      row.remove();removed++;
+    }
+  });
+  const mapTbody=document.getElementById('stock-map-tbody');
+  if(mapTbody&&mapTbody.querySelectorAll('tr:not([data-empty-state])').length===0)emptyTableMessage(mapTbody,'No stock mappings in database yet.');
+  // Stock Levels
+  document.querySelectorAll('#stock-level-tbody tr:not([data-empty-state])').forEach(row=>{
+    const code=inventoryRowCellText(row,0);
+    const name=inventoryRowCellText(row,1);
+    if(isDemoProductRecord({code,name})){row.remove();removed++;}
+  });
+  const lvlTbody=document.getElementById('stock-level-tbody');
+  if(lvlTbody&&lvlTbody.querySelectorAll('tr:not([data-empty-state])').length===0)emptyTableMessage(lvlTbody,'No stock items in database yet.');
+  // Delete demo mappings from DB
+  if(demoMappingIds.length){
+    Promise.allSettled(demoMappingIds.map(id=>moduleApi(`/inventory/mappings/${encodeURIComponent(id)}`,{method:'DELETE'})))
+      .then(results=>console.info(`Removed ${results.filter(r=>r.status==='fulfilled').length} demo stock mapping(s) from database`));
+  }
   return removed;
 }
 
@@ -16281,7 +16307,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260613q';
+  const _SNAP_VER='20260613r';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
