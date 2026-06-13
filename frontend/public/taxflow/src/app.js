@@ -3592,7 +3592,7 @@ function syncStockLevelsFromProducts(){
       addStockItemAliases(stockByKey,item);
     }
   });
-  const products=[...new Set(stockByKey.values())];
+  const products=[...new Set(stockByKey.values())].filter(item=>!isDemoProductRecord(item));
   tbody.innerHTML='';
   if(!products.length){
     emptyTableMessage(tbody,'No stock items in database yet.');
@@ -16307,7 +16307,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260613r';
+  const _SNAP_VER='20260613s';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
