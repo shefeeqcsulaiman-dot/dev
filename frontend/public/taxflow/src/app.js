@@ -11429,22 +11429,26 @@ async function convertPOToPurchase(btn){
   if(docType!=='Local Purchase Order'&&docType!=='Foreign Purchase Order'){
     toast('Not a purchase order','warn');return;
   }
-  if(!confirm(`Convert ${purchase.ref} to a Purchase Invoice? It will move to Purchase Records.`))return;
-  const updated={...purchase,
+  if(!confirm(`Convert ${purchase.ref} to a Purchase Invoice?\nThe original order will remain in its list.`))return;
+  // Create a new PUR- record — original LPO/FPO stays unchanged in its list
+  const newRef=`PUR-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
+  const newRecord={...purchase,
+    ref:newRef,
     document_type:'Purchase Invoice',
     source:'Manual',
-    notes:(purchase.notes?purchase.notes+'\n':'')+`Converted from ${docType} on ${new Date().toLocaleDateString('en-AE')}`
+    notes:(purchase.notes?purchase.notes+'\n':'')+`Converted from ${docType} ${purchase.ref} on ${new Date().toLocaleDateString('en-AE')}`
   };
-  purchaseRecordCache.set(String(purchase.ref),updated);
+  purchaseRecordCache.set(String(newRef),newRecord);
   renderPurchaseRecordWindow();
+  // LPO/FPO original is unchanged — no re-render needed, but refresh counts
   renderLPOList();
   renderFPOList();
-  saveServer('purchaseRecords',updated,{throwOnError:false})
+  saveServer('purchaseRecords',newRecord,{throwOnError:false})
     .then(()=>{
-      toast(`${purchase.ref} converted to Purchase Invoice`,'ok');
-      audit('Converted PO to purchase invoice',purchase.ref,'Updated');
+      toast(`${purchase.ref} → ${newRef} created as Purchase Invoice`,'ok');
+      audit('Converted PO to purchase invoice',`${purchase.ref} → ${newRef}`,'Created');
     })
-    .catch(()=>toast('Converted locally; database sync pending','warn'));
+    .catch(()=>toast('Created locally; database sync pending','warn'));
   stab(document.querySelector('#page-purchase .tab:nth-child(4)'),'p-records');
 }
 
@@ -16095,7 +16099,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260613b';
+  const _SNAP_VER='20260613c';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
