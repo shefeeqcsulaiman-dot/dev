@@ -11355,12 +11355,15 @@ function buildLPORow(purchase){
   const ref=purchase?.ref||purchase?.invoice_no||purchase?.reference;
   if(!ref)return null;
   const quantity=purchaseRecordQuantity(purchase);
+  const normalizedPurchase={...purchase,ref,items:quantity};
   const row=document.createElement('tr');
   row.dataset.purchaseRef=String(ref);
-  row.dataset.purchaseRecord=JSON.stringify({...purchase,ref,items:quantity});
+  row.dataset.purchaseRecord=JSON.stringify(normalizedPurchase);
   const status=purchase.status||'Draft';
   const statusClass=status==='Paid'?'b-g':status==='Received'?'b-b':status.includes('Payment')?'b-a':'b-gray';
-  row.innerHTML=`<td class="mono">${escapeHtml(ref)}</td><td>${escapeHtml(purchaseRecordProductSummary(purchase))}</td><td>${escapeHtml(purchase.supplier||'-')}</td><td>${escapeHtml(purchase.date||'-')}</td><td>${escapeHtml(purchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(purchase.net_amount||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.tax_amount||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.total||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.paid||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.due||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td data-action-col="1"><div class="row-actions"><button class="icon-btn view" type="button" title="View" aria-label="View LPO" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button><button class="icon-btn" type="button" title="Convert to Purchase Invoice" aria-label="Convert LPO to Purchase" onclick="convertPOToPurchase(this)" style="color:var(--blue)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><button class="icon-btn copy" type="button" title="Copy" aria-label="Copy LPO" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button><button class="icon-btn danger" type="button" title="Delete" aria-label="Delete LPO" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td>`;
+  const source=String(purchase.source||'Local PO');
+  const sourceClass=source.toLowerCase().includes('ai')?'b-p':'b-gray';
+  row.innerHTML=`<td class="mono">${escapeHtml(ref)}</td><td>${escapeHtml(purchaseRecordProductSummary(normalizedPurchase))}</td><td>${escapeHtml(normalizedPurchase.supplier||'-')}</td><td>${escapeHtml(normalizedPurchase.date||'-')}</td><td>${escapeHtml(normalizedPurchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(normalizedPurchase.net_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.tax_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.shipping||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.total||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.paid||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.due||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b ${sourceClass}">${escapeHtml(source)}</span></td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td data-action-col="1"><div class="row-actions"><button class="icon-btn edit" type="button" title="Edit" aria-label="Edit LPO" onclick="editPurchaseRecord(this)">${editIconSvg()}</button><button class="icon-btn view" type="button" title="View" aria-label="View LPO" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button><button class="icon-btn" type="button" title="Convert to Purchase Invoice" aria-label="Convert LPO to Purchase" onclick="convertPOToPurchase(this)" style="color:var(--blue)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><button class="icon-btn copy" type="button" title="Copy" aria-label="Copy LPO" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button><button class="icon-btn danger" type="button" title="Delete" aria-label="Delete LPO" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td>`;
   return row;
 }
 
@@ -11371,7 +11374,7 @@ function renderLPOList(){
   const countEl=document.getElementById('lpo-record-count');
   if(countEl)countEl.textContent=records.length?`${records.length} local purchase order${records.length===1?'':'s'}`:'No local purchase orders yet.';
   if(!records.length){
-    tbody.innerHTML=`<tr data-empty-state="1"><td colspan="13" style="color:var(--text3);text-align:center">No local purchase orders yet.</td></tr>`;
+    tbody.innerHTML=`<tr data-empty-state="1"><td colspan="15" style="color:var(--text3);text-align:center">No local purchase orders yet.</td></tr>`;
     return;
   }
   const fragment=document.createDocumentFragment();
@@ -11387,12 +11390,15 @@ function buildFPORow(purchase){
   const ref=purchase?.ref||purchase?.invoice_no||purchase?.reference;
   if(!ref)return null;
   const quantity=purchaseRecordQuantity(purchase);
+  const normalizedPurchase={...purchase,ref,items:quantity};
   const row=document.createElement('tr');
   row.dataset.purchaseRef=String(ref);
-  row.dataset.purchaseRecord=JSON.stringify({...purchase,ref,items:quantity});
+  row.dataset.purchaseRecord=JSON.stringify(normalizedPurchase);
   const status=purchase.status||'Draft';
   const statusClass=status==='Paid'?'b-g':status==='Received'?'b-b':status.includes('Payment')?'b-a':'b-gray';
-  row.innerHTML=`<td class="mono">${escapeHtml(ref)}</td><td>${escapeHtml(purchaseRecordProductSummary(purchase))}</td><td>${escapeHtml(purchase.supplier||'-')}</td><td>${escapeHtml(purchase.date||'-')}</td><td>${escapeHtml(purchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(purchase.net_amount||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.tax_amount||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.total||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.paid||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.due||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td data-action-col="1"><div class="row-actions"><button class="icon-btn view" type="button" title="View" aria-label="View FPO" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button><button class="icon-btn" type="button" title="Convert to Purchase Invoice" aria-label="Convert FPO to Purchase" onclick="convertPOToPurchase(this)" style="color:var(--blue)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><button class="icon-btn copy" type="button" title="Copy" aria-label="Copy FPO" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button><button class="icon-btn danger" type="button" title="Delete" aria-label="Delete FPO" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td>`;
+  const source=String(purchase.source||'Foreign PO');
+  const sourceClass=source.toLowerCase().includes('ai')?'b-p':'b-gray';
+  row.innerHTML=`<td class="mono">${escapeHtml(ref)}</td><td>${escapeHtml(purchaseRecordProductSummary(normalizedPurchase))}</td><td>${escapeHtml(normalizedPurchase.supplier||'-')}</td><td>${escapeHtml(normalizedPurchase.date||'-')}</td><td>${escapeHtml(normalizedPurchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(normalizedPurchase.net_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.tax_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.shipping||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.total||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.paid||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.due||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b ${sourceClass}">${escapeHtml(source)}</span></td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td data-action-col="1"><div class="row-actions"><button class="icon-btn edit" type="button" title="Edit" aria-label="Edit FPO" onclick="editPurchaseRecord(this)">${editIconSvg()}</button><button class="icon-btn view" type="button" title="View" aria-label="View FPO" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button><button class="icon-btn" type="button" title="Convert to Purchase Invoice" aria-label="Convert FPO to Purchase" onclick="convertPOToPurchase(this)" style="color:var(--blue)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><button class="icon-btn copy" type="button" title="Copy" aria-label="Copy FPO" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button><button class="icon-btn danger" type="button" title="Delete" aria-label="Delete FPO" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td>`;
   return row;
 }
 
@@ -11403,7 +11409,7 @@ function renderFPOList(){
   const countEl=document.getElementById('fpo-record-count');
   if(countEl)countEl.textContent=records.length?`${records.length} foreign purchase order${records.length===1?'':'s'}`:'No foreign purchase orders yet.';
   if(!records.length){
-    tbody.innerHTML=`<tr data-empty-state="1"><td colspan="13" style="color:var(--text3);text-align:center">No foreign purchase orders yet.</td></tr>`;
+    tbody.innerHTML=`<tr data-empty-state="1"><td colspan="15" style="color:var(--text3);text-align:center">No foreign purchase orders yet.</td></tr>`;
     return;
   }
   const fragment=document.createDocumentFragment();
@@ -16089,7 +16095,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260613a';
+  const _SNAP_VER='20260613b';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
