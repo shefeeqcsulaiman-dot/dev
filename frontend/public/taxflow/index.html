@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260612s" as="style">
-<link rel="preload" href="src/app.js?v=20260612s" as="script">
+<link rel="preload" href="src/styles.css?v=20260613a" as="style">
+<link rel="preload" href="src/app.js?v=20260613a" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260612s">
+<link rel="stylesheet" href="src/styles.css?v=20260613a">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -793,6 +793,7 @@
     <div class="tab" onclick="openPurchaseAddChoice()">Add Purchase</div>
     <div class="tab" onclick="stab(this,'p-records')">Purchase Records</div>
     <div class="tab" onclick="stab(this,'p-lpo')">Local Purchase Orders</div>
+    <div class="tab" onclick="stab(this,'p-fpo')">Foreign Purchase Orders</div>
     <div class="tab" onclick="stab(this,'p-vendors')">Vendors</div>
     <div class="tab" onclick="stab(this,'p-master')">Purchase Settings</div>
   </div>
@@ -987,6 +988,26 @@
         <thead><tr><th>Ref No.</th><th>Product Name</th><th>Supplier</th><th>Date</th><th>Location</th><th>Items</th><th>Net Amount</th><th>Tax</th><th>Total</th><th>Paid</th><th>Due</th><th>Status</th><th data-action-col="1">Actions</th></tr></thead>
         <tbody id="lpo-record-tbody">
           <tr data-empty-state="1"><td colspan="13" style="color:var(--text3);text-align:center">No local purchase orders yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-body" id="p-fpo">
+    <div class="card">
+      <div class="card-hd">
+        <div>
+          <div class="card-title">Foreign Purchase Orders</div>
+          <div class="card-sub" id="fpo-record-count">No foreign purchase orders yet.</div>
+        </div>
+        <div class="flx">
+          <button class="btn btn-p btn-sm" type="button" onclick="startPurchaseTransaction('foreign_po')">+ New FPO</button>
+        </div>
+      </div>
+      <table class="tbl" data-delete-actions-bound="skip">
+        <thead><tr><th>Ref No.</th><th>Product Name</th><th>Supplier</th><th>Date</th><th>Location</th><th>Items</th><th>Net Amount</th><th>Tax</th><th>Total</th><th>Paid</th><th>Due</th><th>Status</th><th data-action-col="1">Actions</th></tr></thead>
+        <tbody id="fpo-record-tbody">
+          <tr data-empty-state="1"><td colspan="13" style="color:var(--text3);text-align:center">No foreign purchase orders yet.</td></tr>
         </tbody>
       </table>
     </div>
@@ -5308,6 +5329,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260612s" defer></script>
+<script src="src/app.js?v=20260613a" defer></script>
 </body>
 </html>

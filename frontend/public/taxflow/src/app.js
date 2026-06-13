@@ -5200,6 +5200,7 @@ function renderPurchaseRecordWindow(){
   updatePurchaseRecordControls(total,rendered);
   refreshEnhancedTable(tbody.closest('table'));
   renderLPOList();
+  renderFPOList();
   return {rendered,failed,total};
 }
 
@@ -8285,7 +8286,8 @@ function openPurchaseAddChoice(){
   showAddChoice('Purchase',[
     {title:'Purchase Invoice',sub:'Create a normal supplier purchase entry',action:"startPurchaseTransaction('purchase')"},
     {title:'Purchase Return',sub:'Create a supplier return / debit note',action:"startPurchaseTransaction('return')"},
-    {title:'Local Purchase Order',sub:'Create a local purchase order for domestic suppliers',action:"startPurchaseTransaction('local_po')"}
+    {title:'LPO — Local Purchase Order',sub:'Domestic supplier purchase order',action:"startPurchaseTransaction('local_po')"},
+    {title:'FPO — Foreign Purchase Order',sub:'Overseas supplier purchase order',action:"startPurchaseTransaction('foreign_po')"}
   ]);
 }
 
@@ -10852,7 +10854,7 @@ function resetManualPurchase(){
 }
 
 function startPurchaseTransaction(type='purchase'){
-  currentPurchaseTransactionType=type==='return'?'return':type==='local_po'?'local_po':'purchase';
+  currentPurchaseTransactionType=type==='return'?'return':type==='local_po'?'local_po':type==='foreign_po'?'foreign_po':'purchase';
   closeM('m-add-choice');
   go('purchase');
   setTimeout(()=>{
@@ -10867,10 +10869,11 @@ function configureManualPurchaseMode(){
   const t=currentPurchaseTransactionType;
   const isReturn=t==='return';
   const isLPO=t==='local_po';
-  const title=isReturn?'Purchase Return':isLPO?'Local Purchase Order':'Add Purchase';
-  const sub=isReturn?'Supplier return entry for returned goods, debit notes, or purchase adjustments':isLPO?'Local purchase order for domestic suppliers':'Manual supplier purchase entry with items, discounts, tax, shipping, and payment';
-  const btn=isReturn?'Save Purchase Return':isLPO?'Save LPO':'Save';
-  const prefix=isReturn?'PRET':isLPO?'LPO':'PUR';
+  const isFPO=t==='foreign_po';
+  const title=isReturn?'Purchase Return':isLPO?'Local Purchase Order':isFPO?'Foreign Purchase Order':'Add Purchase';
+  const sub=isReturn?'Supplier return entry for returned goods, debit notes, or purchase adjustments':isLPO?'Local purchase order for domestic suppliers':isFPO?'Foreign purchase order for overseas / international suppliers':'Manual supplier purchase entry with items, discounts, tax, shipping, and payment';
+  const btn=isReturn?'Save Purchase Return':isLPO?'Save LPO':isFPO?'Save FPO':'Save';
+  const prefix=isReturn?'PRET':isLPO?'LPO':isFPO?'FPO':'PUR';
   setText('mp-form-title',title);
   setText('mp-form-sub',sub);
   setText('mp-save-btn',btn);
@@ -10891,6 +10894,7 @@ async function saveManualPurchase(){
   const status=totals.due<=0?'Paid':'Pending Payment';
   const isReturn=currentPurchaseTransactionType==='return';
   const isLPO=currentPurchaseTransactionType==='local_po';
+  const isFPO=currentPurchaseTransactionType==='foreign_po';
   if(!document.querySelector('#mp-lines tr')){
     ensureManualPurchaseLine();
     toast('Add at least one product','warn');
@@ -10907,7 +10911,7 @@ async function saveManualPurchase(){
     toast('Each purchase line needs product name and quantity','warn');
     return;
   }
-  const ref=(document.getElementById('mp-ref')?.value||`${isReturn?'PRET':isLPO?'LPO':'PUR'}-${Date.now()}`).trim();
+  const ref=(document.getElementById('mp-ref')?.value||`${isReturn?'PRET':isLPO?'LPO':isFPO?'FPO':'PUR'}-${Date.now()}`).trim();
   const record={
     ref,
     supplier,
@@ -10936,8 +10940,8 @@ async function saveManualPurchase(){
     paid_on:document.getElementById('mp-paid-on')?.value||'',
     shipping_details:document.getElementById('mp-shipping-details')?.value||'',
     notes:document.getElementById('mp-notes')?.value||'',
-    source:isReturn?'Purchase Return':isLPO?'Local PO':'Manual',
-    document_type:isReturn?'Purchase Return':isLPO?'Local Purchase Order':'Purchase Invoice'
+    source:isReturn?'Purchase Return':isLPO?'Local PO':isFPO?'Foreign PO':'Manual',
+    document_type:isReturn?'Purchase Return':isLPO?'Local Purchase Order':isFPO?'Foreign Purchase Order':'Purchase Invoice'
   };
   if(isPeriodLocked(record.date)){toast(`Period ${(record.date||'').slice(0,7)} is locked — unlock before saving`,'warn');return;}
   const wasEditing=Boolean(manualPurchaseEditingRef);
@@ -10951,12 +10955,12 @@ async function saveManualPurchase(){
   const savedRecord=upsert.record;
   savedRecord.items=purchaseLinesTotalQuantity(savedRecord.lines)||savedRecord.items;
   purchaseRecordsTotal=Math.max(purchaseRecordsTotal,purchaseRecordCache.size);
-  audit(wasEditing?'Updated manual purchase':isReturn?'Added purchase return':upsert.wasMerged?'Merged manual purchase':'Added manual purchase',ref,'Saved');
+  audit(wasEditing?'Updated manual purchase':isReturn?'Added purchase return':isLPO?'Added LPO':isFPO?'Added FPO':upsert.wasMerged?'Merged manual purchase':'Added manual purchase',ref,'Saved');
   saveServer('purchaseRecords',savedRecord,{throwOnError:true})
     .then(()=>{
       stockLevelsServerRefreshPaused=false;
       loadStockLevelsFromServer();
-      toast(wasEditing?'Purchase updated in database':isReturn?'Purchase return saved to database':upsert.wasMerged?`Purchase merged: ${upsert.mergedSameProduct} same product updated, ${upsert.addedProducts} new product line(s)`:'Purchase saved to database','ok');
+      toast(wasEditing?'Purchase updated in database':isReturn?'Purchase return saved to database':isLPO?'LPO saved to database':isFPO?'FPO saved to database':upsert.wasMerged?`Purchase merged: ${upsert.mergedSameProduct} same product updated, ${upsert.addedProducts} new product line(s)`:'Purchase saved to database','ok');
     })
     .catch(()=>{
       stockLevelsServerRefreshPaused=false;
@@ -10967,10 +10971,13 @@ async function saveManualPurchase(){
   if(refField)refField.disabled=false;
   updatePurchaseRecordControls(purchaseRecordsTotal,purchaseRecordCache.size);
   renderLPOList();
+  renderFPOList();
   if(isLPO){
-    stab(document.querySelector('#page-purchase .tab:nth-child(6)'),'p-lpo');
+    stab(document.querySelector('#page-purchase .tab:nth-child(5)'),'p-lpo');
+  }else if(isFPO){
+    stab(document.querySelector('#page-purchase .tab:nth-child(6)'),'p-fpo');
   }else{
-    stab(document.querySelector('#page-purchase .tab:nth-child(5)'),'p-records');
+    stab(document.querySelector('#page-purchase .tab:nth-child(4)'),'p-records');
   }
 }
 
@@ -11312,13 +11319,14 @@ function copyPurchaseRecord(btn){
   const purchase=purchaseRecordFromRow(row);
   if(!purchase?.ref){toast('Purchase record not found','warn');return;}
   const isLPO=purchase.document_type==='Local Purchase Order';
-  currentPurchaseTransactionType=isLPO?'local_po':'purchase';
+  const isFPO=purchase.document_type==='Foreign Purchase Order';
+  currentPurchaseTransactionType=isLPO?'local_po':isFPO?'foreign_po':'purchase';
   go('purchase');
   setTimeout(()=>{
     const tab=document.querySelector('#page-purchase .tab:nth-child(4)');
     if(tab)stab(tab,'p-manual');
     resetManualPurchase();
-    const prefix=isLPO?'LPO':'PUR';
+    const prefix=isLPO?'LPO':isFPO?'FPO':'PUR';
     setSelectValue(document.getElementById('mp-supplier'),purchase.supplier);
     setFieldValue(document.getElementById('mp-ref'),`${prefix}-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`);
     setFieldValue(document.getElementById('mp-date'),purchase.date||'');
@@ -11352,7 +11360,7 @@ function buildLPORow(purchase){
   row.dataset.purchaseRecord=JSON.stringify({...purchase,ref,items:quantity});
   const status=purchase.status||'Draft';
   const statusClass=status==='Paid'?'b-g':status==='Received'?'b-b':status.includes('Payment')?'b-a':'b-gray';
-  row.innerHTML=`<td class="mono">${escapeHtml(ref)}</td><td>${escapeHtml(purchaseRecordProductSummary(purchase))}</td><td>${escapeHtml(purchase.supplier||'-')}</td><td>${escapeHtml(purchase.date||'-')}</td><td>${escapeHtml(purchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(purchase.net_amount||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.tax_amount||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.total||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.paid||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.due||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td data-action-col="1"><div class="row-actions"><button class="icon-btn view" type="button" title="View" aria-label="View LPO" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button><button class="icon-btn copy" type="button" title="Copy" aria-label="Copy LPO" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button><button class="icon-btn danger" type="button" title="Delete" aria-label="Delete LPO" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td>`;
+  row.innerHTML=`<td class="mono">${escapeHtml(ref)}</td><td>${escapeHtml(purchaseRecordProductSummary(purchase))}</td><td>${escapeHtml(purchase.supplier||'-')}</td><td>${escapeHtml(purchase.date||'-')}</td><td>${escapeHtml(purchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(purchase.net_amount||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.tax_amount||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.total||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.paid||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.due||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td data-action-col="1"><div class="row-actions"><button class="icon-btn view" type="button" title="View" aria-label="View LPO" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button><button class="icon-btn" type="button" title="Convert to Purchase Invoice" aria-label="Convert LPO to Purchase" onclick="convertPOToPurchase(this)" style="color:var(--blue)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><button class="icon-btn copy" type="button" title="Copy" aria-label="Copy LPO" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button><button class="icon-btn danger" type="button" title="Delete" aria-label="Delete LPO" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td>`;
   return row;
 }
 
@@ -11373,6 +11381,65 @@ function renderLPOList(){
   });
   tbody.innerHTML='';
   tbody.appendChild(fragment);
+}
+
+function buildFPORow(purchase){
+  const ref=purchase?.ref||purchase?.invoice_no||purchase?.reference;
+  if(!ref)return null;
+  const quantity=purchaseRecordQuantity(purchase);
+  const row=document.createElement('tr');
+  row.dataset.purchaseRef=String(ref);
+  row.dataset.purchaseRecord=JSON.stringify({...purchase,ref,items:quantity});
+  const status=purchase.status||'Draft';
+  const statusClass=status==='Paid'?'b-g':status==='Received'?'b-b':status.includes('Payment')?'b-a':'b-gray';
+  row.innerHTML=`<td class="mono">${escapeHtml(ref)}</td><td>${escapeHtml(purchaseRecordProductSummary(purchase))}</td><td>${escapeHtml(purchase.supplier||'-')}</td><td>${escapeHtml(purchase.date||'-')}</td><td>${escapeHtml(purchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(purchase.net_amount||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.tax_amount||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.total||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.paid||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="mono">${Number(purchase.due||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td data-action-col="1"><div class="row-actions"><button class="icon-btn view" type="button" title="View" aria-label="View FPO" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button><button class="icon-btn" type="button" title="Convert to Purchase Invoice" aria-label="Convert FPO to Purchase" onclick="convertPOToPurchase(this)" style="color:var(--blue)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><button class="icon-btn copy" type="button" title="Copy" aria-label="Copy FPO" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button><button class="icon-btn danger" type="button" title="Delete" aria-label="Delete FPO" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td>`;
+  return row;
+}
+
+function renderFPOList(){
+  const tbody=document.getElementById('fpo-record-tbody');
+  if(!tbody)return;
+  const records=[...purchaseRecordCache.values()].filter(p=>p.document_type==='Foreign Purchase Order');
+  const countEl=document.getElementById('fpo-record-count');
+  if(countEl)countEl.textContent=records.length?`${records.length} foreign purchase order${records.length===1?'':'s'}`:'No foreign purchase orders yet.';
+  if(!records.length){
+    tbody.innerHTML=`<tr data-empty-state="1"><td colspan="13" style="color:var(--text3);text-align:center">No foreign purchase orders yet.</td></tr>`;
+    return;
+  }
+  const fragment=document.createDocumentFragment();
+  records.forEach(purchase=>{
+    const row=buildFPORow(purchase);
+    if(row)fragment.appendChild(row);
+  });
+  tbody.innerHTML='';
+  tbody.appendChild(fragment);
+}
+
+async function convertPOToPurchase(btn){
+  const row=btn.closest('tr');
+  const purchase=purchaseRecordFromRow(row);
+  if(!purchase?.ref){toast('Record not found','warn');return;}
+  const docType=purchase.document_type;
+  if(docType!=='Local Purchase Order'&&docType!=='Foreign Purchase Order'){
+    toast('Not a purchase order','warn');return;
+  }
+  if(!confirm(`Convert ${purchase.ref} to a Purchase Invoice? It will move to Purchase Records.`))return;
+  const updated={...purchase,
+    document_type:'Purchase Invoice',
+    source:'Manual',
+    notes:(purchase.notes?purchase.notes+'\n':'')+`Converted from ${docType} on ${new Date().toLocaleDateString('en-AE')}`
+  };
+  purchaseRecordCache.set(String(purchase.ref),updated);
+  renderPurchaseRecordWindow();
+  renderLPOList();
+  renderFPOList();
+  saveServer('purchaseRecords',updated,{throwOnError:false})
+    .then(()=>{
+      toast(`${purchase.ref} converted to Purchase Invoice`,'ok');
+      audit('Converted PO to purchase invoice',purchase.ref,'Updated');
+    })
+    .catch(()=>toast('Converted locally; database sync pending','warn'));
+  stab(document.querySelector('#page-purchase .tab:nth-child(4)'),'p-records');
 }
 
 let lineCount=1;
@@ -16022,7 +16089,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260612s';
+  const _SNAP_VER='20260613a';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
