@@ -11664,21 +11664,21 @@ function updateSalesInvPreview(){
 
 function invoiceProductRecords(){
   const records=[];
-  const recordByKey=new Map();
+  const recordByCode=new Map();
   const addRecord=(record,preferMapping=false)=>{
-    const aliases=[record.code,record.name,...(record.aliases||[])]
-      .map(value=>String(value||'').trim().toLowerCase())
-      .filter(Boolean);
-    const existing=aliases.map(key=>recordByKey.get(key)).find(Boolean);
-    if(existing){
-      if(preferMapping||!existing.mapped){
-        Object.assign(existing,record,{aliases:[...new Set([...(existing.aliases||[]),...(record.aliases||[])])],mapped:preferMapping||record.mapped});
+    const code=String(record.code||'').trim().toLowerCase();
+    // Dedup only by code — same-name different-code products stay separate
+    if(code){
+      const existing=recordByCode.get(code);
+      if(existing){
+        if(preferMapping||!existing.mapped){
+          Object.assign(existing,record,{aliases:[...new Set([...(existing.aliases||[]),...(record.aliases||[])])],mapped:preferMapping||record.mapped});
+        }
+        return existing;
       }
-      aliases.forEach(key=>recordByKey.set(key,existing));
-      return existing;
     }
     records.push(record);
-    aliases.forEach(key=>recordByKey.set(key,record));
+    if(code)recordByCode.set(code,record);
     return record;
   };
   document.querySelectorAll('#prod-tbody tr:not([data-empty-state])').forEach(row=>{
@@ -11736,23 +11736,39 @@ function invoiceProductRecords(){
 function refreshInvoiceProductSuggestions(){
   const list=document.getElementById('invoice-product-options');
   if(!list)return;
-  list.innerHTML=invoiceProductRecords().map(item=>{
-    // Show mapped name for mapped products; original name otherwise
-    const displayVal=item.mapped?(item.displayName||item.name):item.name;
+  const items=invoiceProductRecords();
+  // Count how many items share each display name so we can disambiguate
+  const nameCounts=new Map();
+  items.forEach(item=>{
+    const n=(item.mapped?(item.displayName||item.name):item.name)||'';
+    nameCounts.set(n,(nameCounts.get(n)||0)+1);
+  });
+  list.innerHTML=items.map(item=>{
+    const baseName=item.mapped?(item.displayName||item.name):item.name;
+    // Append SKU to make value unique when multiple products share the same name
+    const displayVal=nameCounts.get(baseName)>1&&item.code?`${baseName} · ${item.code}`:baseName;
     const priceHint=Number(item.price||0)>0?formatAed(item.price):'';
     const src=item.mapped?'Mapped':'Purchase';
-    const label=[item.code,item.unit,priceHint,src].filter(Boolean).join(' · ');
+    const label=[item.unit,priceHint,src].filter(Boolean).join(' · ');
     return `<option value="${escapeHtml(displayVal)}" label="${escapeHtml(label)}"></option>`;
   }).join('');
 }
 
 function applyInvoiceProductSuggestion(input){
-  const value=(input?.value||'').trim().toLowerCase();
+  const raw=(input?.value||'').trim();
+  const value=raw.toLowerCase();
   if(!value)return;
-  const match=invoiceProductRecords().find(item=>
-    [item.name,item.displayName,item.taxflowName,item.code,...(item.aliases||[])]
-      .filter(Boolean).some(text=>String(text||'').toLowerCase()===value)
-  );
+  // Strip disambiguation suffix "Name · CODE" → "Name"
+  const basePart=raw.includes(' · ')?raw.split(' · ')[0].trim():raw;
+  const baseValue=basePart.toLowerCase();
+  const codeFromValue=raw.includes(' · ')?raw.split(' · ').pop().trim().toLowerCase():'';
+  const match=invoiceProductRecords().find(item=>{
+    const code=String(item.code||'').toLowerCase();
+    const names=[item.name,item.displayName,item.taxflowName,...(item.aliases||[])].filter(Boolean).map(t=>t.toLowerCase());
+    // Prefer exact code match when disambiguation suffix was used
+    if(codeFromValue&&code===codeFromValue&&names.some(n=>n===baseValue))return true;
+    return names.some(n=>n===value)||names.some(n=>n===baseValue)||(item.code&&code===value);
+  });
   if(!match)return;
   const row=input.closest('.inv-item');
   const unit=row?.querySelector('.inv-unit');
@@ -16262,7 +16278,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260613m';
+  const _SNAP_VER='20260613n';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
