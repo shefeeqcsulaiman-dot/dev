@@ -3879,7 +3879,11 @@ function renderStockLevelRow(item){
   const cls=status==='Out'?'b-r':status==='Low'?'b-a':'b-g';
   row.dataset.itemCode=item.code;
   row.dataset.stockSource=item.source||'product';
-  row.innerHTML=`<td class="mono">${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td><span class="b b-gray">${escapeHtml(item.category)}</span></td><td class="mono">${Number(item.available||0).toLocaleString('en-AE')}</td><td>${escapeHtml(item.unit)}</td><td><span class="b ${cls}">${status}</span></td><td><button class="btn btn-g btn-sm" onclick="openRowDetail(this,'Stock Level Detail','Current Stock Levels')">View</button></td>`;
+  const qty=Number(item.available||0);
+  const rate=Number(item.purchase_rate||0);
+  const value=qty*rate;
+  const fmt=(n,d=2)=>n.toLocaleString('en-AE',{minimumFractionDigits:d,maximumFractionDigits:d});
+  row.innerHTML=`<td class="mono">${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td><span class="b b-gray">${escapeHtml(item.category)}</span></td><td class="mono">${fmt(qty,0)}</td><td>${escapeHtml(item.unit)}</td><td class="mono">${rate>0?fmt(rate,4):'-'}</td><td class="mono">${value>0?fmt(value,2):'-'}</td><td><span class="b ${cls}">${status}</span></td><td><button class="btn btn-g btn-sm" onclick="openRowDetail(this,'Stock Level Detail','Current Stock Levels')">View</button></td>`;
   return row;
 }
 
@@ -16277,7 +16281,7 @@ function mergeBankAndPaymentsModule(){
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
-  const _SNAP_VER='20260613p';
+  const _SNAP_VER='20260613q';
   if(localStorage.getItem('taxflow_snap_ver')!==_SNAP_VER){
     localStorage.removeItem('taxflow_dashboard_snapshot');
     localStorage.setItem('taxflow_snap_ver',_SNAP_VER);
