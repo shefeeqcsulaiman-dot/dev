@@ -279,7 +279,8 @@ def bootstrap(
 
     invoice_layout = grouped.get("invoiceLayout", [{}])[-1] if grouped.get("invoiceLayout") else None
 
-    company = current_user.company
+    from app.routers.companies import _resolve_company
+    company = _resolve_company(current_user, db)
     company_data: dict[str, object] | None = None
     if company:
         company_data = {

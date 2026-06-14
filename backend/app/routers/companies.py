@@ -12,11 +12,29 @@ router = APIRouter(prefix="/companies", tags=["companies"])
 _REQUIRED_FIELDS = {"name", "country"}
 
 
+def _resolve_company(current_user: User, db: Session) -> "Company | None":
+    """Return the user's company, auto-linking to an existing one if needed."""
+    company = current_user.company
+    if not company:
+        # company_id mismatch — find the first available company and re-link
+        company = db.query(Company).first()
+        if company:
+            current_user.company_id = company.id
+            db.add(current_user)
+            db.commit()
+            db.refresh(current_user)
+    return company
+
+
 @router.get("/current", response_model=CompanyOut)
-def current_company(current_user: User = Depends(get_current_user)):
-    if not current_user.company:
-        raise HTTPException(status_code=404, detail="Company not found for this user")
-    return current_user.company
+def current_company(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    company = _resolve_company(current_user, db)
+    if not company:
+        raise HTTPException(status_code=404, detail="No company found")
+    return company
 
 
 @router.put("/current", response_model=CompanyOut)
@@ -25,9 +43,9 @@ def update_company(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    company = current_user.company
+    company = _resolve_company(current_user, db)
     if not company:
-        # Auto-create a company record and link it to this user
+        # No existing company at all — create one
         company = Company(id=_new_uuid(), name=payload.name or "My Company")
         db.add(company)
         db.flush()
