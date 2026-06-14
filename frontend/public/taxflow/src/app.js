@@ -239,7 +239,7 @@ function showM(id){
 
 function ensureModalCloseButton(overlay,id){
   const panel=overlay.querySelector('.modal');
-  if(!panel||panel.querySelector('.modal-x'))return;
+  if(!panel||panel.querySelector('.modal-x,.pmt-close,.icon-btn[aria-label="Close"]'))return;
   const close=document.createElement('button');
   close.type='button';
   close.className='modal-x';
@@ -559,7 +559,6 @@ function ensureEmployeeProfileModal(){
       <div class="modal-foot">
         <button class="btn btn-g" onclick="toast('Employee edit opened','info')">Edit Profile</button>
         <button class="btn btn-g" onclick="toast('Employee document checklist exported','ok')">Export Documents</button>
-        <button class="btn btn-p" onclick="closeM('m-employee-profile')">Close</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -1084,6 +1083,8 @@ async function deleteInventoryProductAndMapping({productRow=null,mappingRow=null
     productRow?.remove();
     mappingRow?.remove();
     stockRow?.remove();
+    if(productCode)_productCodeSet.delete(productCode.toLowerCase());
+    if(productName)_productNameSet.delete(productName.toLowerCase());
     ['prod-tbody','stock-map-tbody','stock-level-tbody'].forEach(id=>{
       const tbody=document.getElementById(id);
       if(tbody&&tbody.querySelectorAll('tr:not([data-empty-state])').length===0){
@@ -1818,9 +1819,12 @@ function applyCompanyToUi(company){
   // Settings page fields
   set('set-company-trade-name',company.trade_name);
   set('set-company-license',company.trade_license_no);
+  set('set-company-issue-date',company.trade_license_issue_date);
+  set('set-company-license-expiry',company.trade_license_expiry);
   set('set-company-activity',company.business_activity);
   set('set-company-structure',company.legal_structure);
   set('set-company-emirate',company.emirate);
+  set('set-company-freezone',company.free_zone||'Not Applicable');
   set('set-company-biz-type',company.business_type);
   set('set-company-address',company.address);
   set('set-company-pobox',company.po_box);
@@ -1886,6 +1890,9 @@ async function saveCompanySettingsToDatabase(){
     business_activity:v('set-company-activity'),
     legal_structure:v('set-company-structure'),
     trade_license_no:v('set-company-license'),
+    trade_license_issue_date:v('set-company-issue-date'),
+    trade_license_expiry:v('set-company-license-expiry'),
+    free_zone:v('set-company-freezone'),
     address:v('set-company-address'),
     po_box:v('set-company-pobox'),
     phone:v('set-company-phone'),
@@ -2124,13 +2131,18 @@ function renderDashboardHero(data,kpis={},counts={}){
   // KPI cards
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
   set('dash-revenue',formatAed(revenue));
-  set('dash-revenue-sub',`${invCount} invoices`);
+  set('dash-revenue-sub',`${invCount} invoice${invCount===1?'':'s'}`);
   set('dash-total-purchases',formatAed(purchases));
-  set('dash-purchases-sub',`${purCount} Bills`);
+  set('dash-purchases-sub',`${purCount} bill${purCount===1?'':'s'}`);
   set('dash-vat',formatAed(vatPayable));
   set('dash-vat-sub',vatPayable>0?'Payable to FTA':'Credit position');
   set('dash-gross-profit',formatAed(grossProfit));
-  set('dash-profit-sub',revenue?`${Math.round(grossProfit/revenue*100)}% margin`:'—');
+  set('dash-profit-sub','');
+  // Profit card: margin bar
+  const marginPct=revenue>0?Math.max(0,Math.round(grossProfit/revenue*100)):0;
+  set('dash-margin-pct',`${marginPct}%`);
+  const marginBar=document.getElementById('dash-profit-margin-bar');
+  if(marginBar)marginBar.style.width=Math.min(Math.max(marginPct,0),100)+'%';
 
   // Trend badges
   const setTrend=(id,val)=>{
@@ -3231,6 +3243,8 @@ function clearStaticDemoData(){
     'audit-tbody':'No audit records in database yet.'
   };
   Object.entries(emptyTables).forEach(([id,message])=>emptyTableMessage(document.getElementById(id),message));
+  _productCodeSet.clear();
+  _productNameSet.clear();
   document.querySelectorAll('.page table.tbl tbody').forEach(tbody=>{
     if(tbody.querySelector('[data-empty-state]'))return;
     if(tbody.closest('#page-dashboard'))return;
@@ -3510,14 +3524,33 @@ function applyQuotationCustomerSelection(){
   }
 }
 
+function _renderProductsBatch(products){
+  const tbody=document.getElementById('prod-tbody');
+  if(!tbody||!products?.length)return{rendered:0,failed:0};
+  const frag=document.createDocumentFragment();
+  let rendered=0,failed=0;
+  const opts={deferRefresh:true,deferStockSync:true,deferMappingSync:true,deferSuggestions:true,fragment:frag};
+  products.slice().reverse().forEach(p=>{
+    try{renderProductRecord(p,opts);rendered++;}catch(e){failed++;console.warn('Product render failed:',e,p);}
+  });
+  if(frag.childNodes.length){
+    removeEmptyState(tbody);
+    tbody.prepend(frag);
+  }
+  refreshEnhancedTable(tbody.closest('table'));
+  scheduleIdleTask(()=>{syncStockLevelsFromProducts();syncStockMappingFromItems();},200);
+  scheduleIdleTask(()=>{refreshInvoiceProductSuggestions();refreshPurchaseProductSuggestions();refreshQuotationProductOptions();},400);
+  return{rendered,failed};
+}
+
 function renderProductRecord(product,options={}){
   const tbody=document.getElementById('prod-tbody');
   if(isInventoryTableCleared())return;
   if(isDemoProductRecord(product))return;
   if(!tbody||!product?.name)return;
-  if(hasFirstCellValue(tbody,product.code))return;
-  const _existingNames=[...tbody.querySelectorAll('tr:not([data-empty-state])')].map(r=>inventoryRowCellText(r,1).toLowerCase());
-  if(_existingNames.includes((product.name||'').toLowerCase()))return;
+  const codeKey=(product.code||'').toLowerCase();
+  const nameKey=(product.name||'').toLowerCase();
+  if((codeKey&&_productCodeSet.has(codeKey))||_productNameSet.has(nameKey))return;
   const vatRaw=String(product.vat||'');
   const vatText=vatRaw.includes('Zero')||vatRaw.includes('zero')||(vatRaw.includes('0')&&!vatRaw.includes('5'))?'0%':vatRaw.includes('Exempt')||vatRaw.includes('exempt')?'Exempt':'5%';
   const vatClass=vatText==='5%'?'b-b':vatText==='Exempt'?'b-t':'b-g';
@@ -3544,7 +3577,10 @@ function renderProductRecord(product,options={}){
   row.dataset.description=product.description||'';
   row.dataset.openingDate=product.opening_date||'';
   row.innerHTML=_buildItemRowHtml({code:product.code||'PRD',name:product.name,type,category:product.category||'Materials',unit:product.unit||'Each',tracking,vatText,vatClass,trackingClass,statusClass,status});
+  if(codeKey)_productCodeSet.add(codeKey);
+  _productNameSet.add(nameKey);
   removeEmptyState(tbody);
+  if(options.fragment){options.fragment.appendChild(row);return;}
   tbody.prepend(row);
   ensureInventoryBulkSelection();
   if(!options.deferRefresh&&!isHydratingFromServer)refreshEnhancedTable(tbody.closest('table'));
@@ -3642,7 +3678,8 @@ async function loadStockLevelsFromServer(){
         available:parseAmount(row.current_stock??row.quantity??row.available),
         unit:row.unit||'PCS',
         reorderLevel:parseAmount(row.reorder_level??row.reorderLevel),
-        purchase_rate:parseAmount(row.cost??row.purchase_rate??row.unit_cost??0)
+        purchase_rate:parseAmount(row.cost??row.purchase_rate??row.unit_cost??0),
+        selling_price:parseAmount(row.selling_price??row.price??row.unit_price??0)
       }))
       .filter(item=>!isDemoProductRecord(item))
       .filter(item=>item.code||item.name);
@@ -3736,6 +3773,129 @@ function filterStockMovements(){
   refreshEnhancedTable(tbody.closest('table'));
 }
 
+async function openStockMovementHistory(el){
+  const row=el.tagName==='TR'?el:el.closest('tr');
+  const itemName=row?.dataset.itemName||row?.children[1]?.textContent.trim()||'';
+  const unit=row?.dataset.itemUnit||'Pcs';
+  const rate=Number(row?.dataset.sellingRate||0);
+  document.getElementById('smh-title').textContent='Stock Movement Monthly History';
+  document.getElementById('smh-sub').textContent=itemName;
+  const tbody=document.getElementById('smh-tbody');
+  const emptyEl=document.getElementById('smh-empty');
+  tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Loading…</td></tr>';
+  if(emptyEl)emptyEl.style.display='none';
+  showM('m-stock-history');
+  // Load or use cached movements
+  if(!_allStockMovements.length){
+    try{
+      const data=await moduleApi('/inventory/stock-movements');
+      _allStockMovements=Array.isArray(data)?data:[];
+    }catch(e){console.warn('Movements load failed:',e);}
+  }
+  const nameKey=itemName.toLowerCase();
+  const relevant=_allStockMovements.filter(m=>(m.item_name||m.name||'').toLowerCase()===nameKey);
+  tbody.innerHTML='';
+  if(!relevant.length){
+    tbody.innerHTML='';
+    if(emptyEl)emptyEl.style.display='';
+    return;
+  }
+  // Group by month label (YYYY-MM)
+  const months=new Map();
+  relevant.forEach(m=>{
+    const d=new Date(m.date||m.movement_date||'');
+    const key=isNaN(d.getTime())?'Unknown':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const label=isNaN(d.getTime())?'Unknown':d.toLocaleString('en-AE',{month:'long',year:'numeric'});
+    if(!months.has(key))months.set(key,{label,inQty:0,inVal:0,outQty:0,outVal:0});
+    const bucket=months.get(key);
+    const qty=Number(m.quantity||0);
+    const cost=Number(m.unit_cost||rate||0);
+    if(qty>=0){bucket.inQty+=qty;bucket.inVal+=qty*cost;}
+    else{bucket.outQty+=Math.abs(qty);bucket.outVal+=Math.abs(qty)*cost;}
+  });
+  const sorted=[...months.entries()].sort((a,b)=>a[0]<b[0]?-1:1);
+  const fmt=(n,d=2)=>n>0?n.toLocaleString('en-AE',{minimumFractionDigits:d,maximumFractionDigits:d}):'-';
+  const fmtQ=(n)=>n>0?`${n.toLocaleString('en-AE',{maximumFractionDigits:0})} ${unit}`:'-';
+  // Opening Balance row
+  const obRow=document.createElement('tr');
+  obRow.style.cssText='font-style:italic;color:var(--text3)';
+  obRow.innerHTML=`<td style="padding:8px 12px;border:1px solid var(--border);font-weight:600;color:var(--text)">Opening Balance</td><td colspan="6" style="padding:8px 12px;border:1px solid var(--border);text-align:center;color:var(--text3)">—</td>`;
+  tbody.appendChild(obRow);
+  let closingQty=0,closingVal=0;
+  const now=new Date();
+  const currentKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  sorted.forEach(([key,m])=>{
+    closingQty=closingQty+m.inQty-m.outQty;
+    closingVal=closingVal+m.inVal-m.outVal;
+    const isCurrent=key===currentKey;
+    const tr=document.createElement('tr');
+    if(isCurrent)tr.style.cssText='background:color-mix(in srgb,#f59e0b 12%,var(--card));font-weight:600';
+    tr.style.cursor='pointer';
+    tr.title='Click to view daily transactions';
+    tr.onclick=()=>openStockDayHistory(itemName,unit,key,m.label,relevant);
+    tr.innerHTML=`
+      <td style="padding:8px 12px;border:1px solid var(--border)">${escapeHtml(m.label)}</td>
+      <td class="mono" style="text-align:right;padding:8px 12px;border:1px solid var(--border);color:var(--green)">${fmtQ(m.inQty)}</td>
+      <td class="mono" style="text-align:right;padding:8px 12px;border:1px solid var(--border);color:var(--green)">${fmt(m.inVal)}</td>
+      <td class="mono" style="text-align:right;padding:8px 12px;border:1px solid var(--border);color:var(--red)">${fmtQ(m.outQty)}</td>
+      <td class="mono" style="text-align:right;padding:8px 12px;border:1px solid var(--border);color:var(--red)">${fmt(m.outVal)}</td>
+      <td class="mono" style="text-align:right;padding:8px 12px;border:1px solid var(--border);font-weight:700">${fmtQ(closingQty)}</td>
+      <td class="mono" style="text-align:right;padding:8px 12px;border:1px solid var(--border);font-weight:700">${fmt(closingVal)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function openStockDayHistory(itemName,unit,monthKey,monthLabel,allMovements){
+  document.getElementById('sdh-title').textContent='Stock Movement Day History';
+  document.getElementById('sdh-sub').textContent=`${escapeHtml(itemName)} · ${escapeHtml(monthLabel)}`;
+  const tbody=document.getElementById('sdh-tbody');
+  const emptyEl=document.getElementById('sdh-empty');
+  if(emptyEl)emptyEl.style.display='none';
+  tbody.innerHTML='';
+  // Filter to this item + this month, sorted by date asc
+  const rows=allMovements.filter(m=>{
+    const d=new Date(m.date||m.movement_date||'');
+    if(isNaN(d.getTime()))return false;
+    const k=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    return k===monthKey;
+  }).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1);
+  if(!rows.length){if(emptyEl)emptyEl.style.display='';showM('m-stock-day-history');return;}
+  const fmt=(n,d=2)=>n!=null&&n!==''&&Number(n)>0?Number(n).toLocaleString('en-AE',{minimumFractionDigits:d,maximumFractionDigits:d}):'';
+  const fmtQ=(n)=>Number(n)>0?Number(n).toLocaleString('en-AE',{maximumFractionDigits:2}):'';
+  let closingQty=0,closingVal=0;
+  rows.forEach((m,i)=>{
+    const qty=Number(m.quantity||0);
+    const cost=Number(m.unit_cost||0);
+    const isIn=qty>=0;
+    const inQty=isIn?qty:0;
+    const inVal=isIn?qty*cost:0;
+    const outQty=isIn?0:Math.abs(qty);
+    const outVal=isIn?0:Math.abs(qty)*cost;
+    closingQty+=qty;
+    closingVal+=qty*cost;
+    const date=m.date||m.movement_date||'';
+    const formattedDate=date?new Date(date).toLocaleDateString('en-AE',{day:'2-digit',month:'2-digit',year:'numeric'}):'-';
+    const voucherType=String(m.movement_type||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+    const even=i%2===0;
+    const tr=document.createElement('tr');
+    tr.style.background=even?'var(--card)':'var(--bg2)';
+    tr.innerHTML=`
+      <td style="padding:7px 10px;border:1px solid var(--border)" class="mono">${escapeHtml(formattedDate)}</td>
+      <td style="padding:7px 10px;border:1px solid var(--border)">${escapeHtml(m.vendor_name||'-')}</td>
+      <td style="padding:7px 10px;border:1px solid var(--border)">${escapeHtml(m.display_name||m.item_name||'-')}</td>
+      <td style="padding:7px 10px;border:1px solid var(--border)">${escapeHtml(m.item_name||'-')}</td>
+      <td style="padding:7px 10px;border:1px solid var(--border)"><span class="b ${isIn?'b-g':'b-r'}">${escapeHtml(voucherType)}</span></td>
+      <td class="mono" style="text-align:right;padding:7px 10px;border:1px solid var(--border);color:var(--green)">${fmtQ(inQty)}</td>
+      <td class="mono" style="text-align:right;padding:7px 10px;border:1px solid var(--border);color:var(--green)">${fmt(inVal)}</td>
+      <td class="mono" style="text-align:right;padding:7px 10px;border:1px solid var(--border);color:var(--red)">${fmtQ(outQty)}</td>
+      <td class="mono" style="text-align:right;padding:7px 10px;border:1px solid var(--border);color:var(--red)">${fmt(outVal)}</td>
+      <td class="mono" style="text-align:right;padding:7px 10px;border:1px solid var(--border);font-weight:700">${fmtQ(closingQty)}</td>
+      <td class="mono" style="text-align:right;padding:7px 10px;border:1px solid var(--border);font-weight:700">${fmt(Math.abs(closingVal))}</td>`;
+    tbody.appendChild(tr);
+  });
+  showM('m-stock-day-history');
+}
+
 async function clearInventoryTable(){
   const tbody=document.getElementById('stock-level-tbody');
   if(!tbody)return;
@@ -3770,6 +3930,7 @@ function productStockLevelFromRow(row){
     available,
     unit:inventoryRowCellText(row,4)||'Each',
     reorderLevel,
+    selling_price:Number(row.dataset.price||0),
     source:'product'
   };
 }
@@ -3881,10 +4042,16 @@ function renderStockLevelRow(item){
   row.dataset.itemCode=item.code;
   row.dataset.stockSource=item.source||'product';
   const qty=Number(item.available||0);
-  const rate=Number(item.purchase_rate||0);
+  const rate=Number(item.selling_price||item.price||item.purchase_rate||0);
   const value=qty*rate;
   const fmt=(n,d=2)=>n.toLocaleString('en-AE',{minimumFractionDigits:d,maximumFractionDigits:d});
-  row.innerHTML=`<td class="mono">${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td><span class="b b-gray">${escapeHtml(item.category)}</span></td><td class="mono">${fmt(qty,0)}</td><td>${escapeHtml(item.unit)}</td><td class="mono">${rate>0?fmt(rate,4):'-'}</td><td class="mono">${value>0?fmt(value,2):'-'}</td><td><span class="b ${cls}">${status}</span></td><td><button class="btn btn-g btn-sm" onclick="openRowDetail(this,'Stock Level Detail','Current Stock Levels')">View</button></td>`;
+  row.dataset.itemName=item.name||'';
+  row.dataset.itemUnit=item.unit||'';
+  row.dataset.sellingRate=String(rate);
+  row.style.cursor='pointer';
+  row.title='Click to view stock movement history';
+  row.onclick=e=>{if(!e.target.closest('button'))openStockMovementHistory(row);};
+  row.innerHTML=`<td class="mono">${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td><span class="b b-gray">${escapeHtml(item.category)}</span></td><td class="mono">${fmt(qty,0)}</td><td>${escapeHtml(item.unit)}</td><td class="mono">${rate>0?fmt(rate,4):'-'}</td><td class="mono">${value>0?fmt(value,2):'-'}</td><td><span class="b ${cls}">${status}</span></td>`;
   return row;
 }
 
@@ -4014,7 +4181,7 @@ function _computeLocalPurchaseStats(){
 
 function _sumLines(lines){
   if(!Array.isArray(lines))return 0;
-  return lines.reduce((s,l)=>s+parseAmount(l.total||l.net||l.amount||((Number(l.qty||l.quantity||1))*(Number(l.unit_price||l.price||0)))),0);
+  return lines.reduce((s,l)=>s+parseAmount(l.line_total||l.total||l.net||l.amount||((Number(l.qty||l.quantity||1))*(Number(l.unit_price||l.price||0)))),0);
 }
 
 function renderBillRecord(bill){
@@ -4578,6 +4745,7 @@ function markPaymentDocumentPaid(payment){
       }
     }
   });
+  refreshSalesInvoiceKpis();
 }
 
 function renderSupplierPaymentCard(payment){
@@ -6362,7 +6530,7 @@ function hydrateFromServer(){
       financeBankAccountsByKey.clear();
       if(data.company)applyCompanyToUi(data.company);
       // ── Phase 1: critical collections — render immediately ───────────────────
-      renderStats.products=renderRecordList(productRows,product=>renderProductRecord(product,{deferRefresh:true,deferStockSync:true,deferMappingSync:true,deferSuggestions:true}),'product');
+      renderStats.products=_renderProductsBatch(productRows);
       renderStats.salesCategories=renderRecordList(data.salesCategories,renderSalesCategoryRecord,'sales category');
       renderStats.salesUnits=renderRecordList(data.salesUnits,renderSalesUnitRecord,'sales unit');
       renderStats.customers=renderRecordList(data.customers,renderCustomerRecord,'customer');
@@ -6429,6 +6597,7 @@ function hydrateFromServer(){
     window.__taxflowLastDbLoad={at:new Date().toISOString(),totalLoaded,renderStats};
     console.info(`TaxFlow DB tables loaded: ${totalLoaded} records`);
     if(totalLoaded>0)toast(`Database tables loaded: ${totalLoaded} records`,'ok');
+    refreshSalesInvoiceKpis();
     // Restore full multi-layout array from server (cross-device sync)
     const packArr=data['invoice-layouts-pack'];
     const packRecord=Array.isArray(packArr)?packArr[0]:packArr;
@@ -6648,6 +6817,8 @@ function addSelectedPurchaseInvoice(map,invoice){
 const salesUploadedFiles = [];
 const salesExtractedInvoices = [];
 const salesInvoiceDbKeys = new Set();
+const _productCodeSet = new Set();
+const _productNameSet = new Set();
 
 function invoiceKey(value){
   return String(value||'').trim().toLowerCase();
@@ -7202,7 +7373,28 @@ function addSalesInvoiceRow(inv,options={persist:true}){
   tbody.prepend(row);
   registerSalesInvoiceKey(inv.invoice_no);
   if(options.persist)persistSalesInvoice({...inv,source,status});
+  if(!isHydratingFromServer)refreshSalesInvoiceKpis();
   return true;
+}
+
+function refreshSalesInvoiceKpis(){
+  let total=0,collected=0,pending=0,overdue=0;
+  document.querySelectorAll('#sales-invoice-tbody tr:not([data-empty-state])').forEach(row=>{
+    let inv={};
+    try{inv=JSON.parse(row.dataset.salesInvoice||'{}');}catch(_){}
+    const amount=parseAmount(inv.total||inv.subtotal||0);
+    const sl=(inv.status||'').toLowerCase();
+    total+=amount;
+    if(sl==='paid')collected+=amount;
+    else if(sl.includes('overdue'))overdue+=amount;
+    else pending+=amount;
+  });
+  const fmt=n=>'AED '+n.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  set('sinv-kpi-total',fmt(total));
+  set('sinv-kpi-collected',fmt(collected));
+  set('sinv-kpi-pending',fmt(pending));
+  set('sinv-kpi-overdue',fmt(overdue));
 }
 
 function parseAmount(value){
@@ -9492,9 +9684,13 @@ function purchaseAiRowHtml(inv,line,index,validation,filename){
 }
 
 function purchaseRecordFromExtractedInvoice(inv){
-  const total=purchaseAiNumber(inv.total);
+  const netAmount=purchaseAiNumber(inv.net_amount||inv.subtotal);
+  const taxAmount=purchaseAiNumber(inv.tax_amount||inv.vat_amount);
+  const shippingAmount=purchaseAiNumber(inv.shipping);
   const status=String(inv.status||'Review');
   const lines=Array.isArray(inv.lines)?inv.lines:[];
+  const lineSubtotal=lines.reduce((s,l)=>s+purchaseAiNumber(l.line_total||l.total||l.amount),0);
+  const total=purchaseAiNumber(inv.total)||(netAmount+taxAmount+shippingAmount)||lineSubtotal;
   const itemQuantity=purchaseLinesTotalQuantity(lines)||lines.length||1;
   const paid=purchaseAiNumber(inv.paid);
   // Attach source image from the uploaded file entry
@@ -11237,7 +11433,6 @@ function ensurePurchasePreviewModal(){
       <div class="modal-foot">
         <button class="btn btn-g" onclick="toast('Preparing purchase PDF...','info')">Export PDF</button>
         <button class="btn btn-p hidden" id="purchase-view-save" onclick="savePurchasePreviewEdit()">Save Changes</button>
-        <button class="btn btn-g" onclick="closeM('m-purchase-view')">Close</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -15102,7 +15297,6 @@ function ensureDetailModal(){
         <button class="btn btn-danger" onclick="deleteCurrentDetailRow()">Delete</button>
         <button class="btn btn-g" onclick="exportRowDetailPdf()">Export PDF</button>
         <button class="btn btn-g" onclick="toast('Record marked for review','ok')">Mark Review</button>
-        <button class="btn btn-p" onclick="closeM('m-row-detail')">Close</button>
       </div>
     </div>
   `;
@@ -15205,6 +15399,7 @@ async function deleteCurrentDetailRow(){
   currentDetailRow=null;
   currentDetailTable=null;
   toast('Record deleted','warn');
+  if(collection==='salesInvoices')refreshSalesInvoiceKpis();
 }
 
 function patchViewButtonsInPage(pageId,title){
@@ -15989,7 +16184,6 @@ function ensureQuotationPreviewModal(){
         <button class="btn btn-g" onclick="shareCurrentQuotation('email')">Email</button>
         <button class="btn btn-success" onclick="shareCurrentQuotation('whatsapp')">WhatsApp</button>
         <button class="btn btn-p" onclick="shareCurrentQuotation('options')">Share Options</button>
-        <button class="btn btn-p" onclick="closeM('m-quotation-view')">Close</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);

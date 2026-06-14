@@ -186,81 +186,127 @@
     <!-- ══ LEFT: main content ══ -->
     <div class="mb3-main">
 
-      <!-- ROW 1: 3 pastel KPI cards -->
+      <!-- ROW 1: 3 KPI cards -->
       <div class="mb3-kpi-row mb16">
 
         <!-- Total Revenue card -->
-        <div class="card" style="display:flex;flex-direction:column;gap:12px;padding:20px 22px">
-          <div style="display:flex;align-items:flex-start;gap:14px">
-            <div style="width:44px;height:44px;border-radius:50%;background:rgba(62,207,142,.13);border:1.5px solid rgba(62,207,142,.28);color:var(--green);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);display:flex;flex-direction:column">
+          <div style="height:4px;background:linear-gradient(90deg,#10b981,#34d399)"></div>
+          <div style="padding:18px 20px 16px;display:flex;flex-direction:column;gap:0;flex:1">
+            <!-- Header -->
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:14px">
+              <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#059669,#34d399);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(16,185,129,.28);flex-shrink:0">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" width="18" height="18"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+              </div>
+              <div style="min-width:0;flex:1">
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--text3)">Total Revenue</div>
+                <div style="font-size:11.5px;color:var(--text3);margin-top:1px" id="dash-revenue-sub">0 Invoices</div>
+              </div>
+              <span id="dash-rev-trend" class="dv2-kpi-badge up" style="font-size:10.5px">—</span>
             </div>
-            <div style="flex:1;min-width:0">
-              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--text3);margin-bottom:3px">TOTAL REVENUE</div>
-              <div class="mono" style="font-size:20px;font-weight:600;color:var(--green);line-height:1.1;margin-bottom:3px" id="dash-revenue">AED 0.00</div>
-              <div style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--text3)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" width="11" height="11"><rect x="2" y="2" width="12" height="12" rx="1"/><line x1="5" y1="6" x2="11" y2="6"/><line x1="5" y1="9" x2="9" y2="9"/></svg><span id="dash-revenue-sub">0 Invoices</span></div>
+            <!-- Main value -->
+            <div class="mono" style="font-size:22px;font-weight:700;color:#10b981;letter-spacing:-0.5px;margin-bottom:14px" id="dash-revenue">AED 0.00</div>
+            <div style="border-top:1px solid var(--border);margin-bottom:12px"></div>
+            <!-- Stats row -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+              <div style="background:rgba(16,185,129,.07);border-radius:10px;padding:8px 10px">
+                <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Collected</div>
+                <div class="mono" style="font-size:13px;font-weight:700;color:var(--text)" id="dash-rev-collected">AED 0.00</div>
+              </div>
+              <div style="background:var(--surface2);border-radius:10px;padding:8px 10px">
+                <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Paid Invoices</div>
+                <div class="mono" style="font-size:13px;font-weight:700;color:var(--text)" id="dash-rev-paid-count">0</div>
+              </div>
             </div>
-          </div>
-          <div style="border-top:1px solid var(--border)"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr">
-            <div><div style="font-size:10.5px;color:var(--text3);margin-bottom:3px">Collected (Actual)</div><div class="mono" style="font-size:13.5px;font-weight:600;color:var(--text)" id="dash-rev-collected">AED 0.00</div></div>
-            <div style="text-align:right"><div style="font-size:10.5px;color:var(--text3);margin-bottom:3px">Paid Invoices</div><div class="mono" style="font-size:13.5px;font-weight:600;color:var(--text)" id="dash-rev-paid-count">0</div></div>
-          </div>
-          <div class="prog-bar"><div class="prog-fill" id="dash-rev-rate-bar" style="width:0%;background:var(--green)"></div></div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <div style="width:18px;height:18px;border-radius:50%;background:rgba(62,207,142,.13);color:var(--green);border:1px solid rgba(62,207,142,.28);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0">✓</div>
-            <span style="font-size:12px;color:var(--text2);flex:1">Collection Rate</span>
-            <span class="mono" style="font-size:14px;font-weight:700;color:var(--green)" id="dash-rev-rate">0%</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text3)">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" width="12" height="12"><rect x="2" y="2" width="12" height="12" rx="1"/><line x1="5" y1="6" x2="11" y2="6"/><line x1="5" y1="9" x2="9" y2="9"/></svg>
-            <span>Pending Invoices</span>
-            <span class="mono" style="margin-left:auto;font-weight:600;color:var(--green)" id="dash-rev-pending">0 Invoices</span>
+            <!-- Progress bar -->
+            <div style="background:var(--surface2);border-radius:99px;height:5px;margin-bottom:8px;overflow:hidden">
+              <div id="dash-rev-rate-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#10b981,#34d399);border-radius:99px;transition:width .5s ease"></div>
+            </div>
+            <!-- Footer -->
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:11px;color:var(--text3)">Collection Rate</span>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="mono" style="font-size:13px;font-weight:700;color:#10b981" id="dash-rev-rate">0%</span>
+                <span style="font-size:11px;color:var(--text3)" id="dash-rev-pending">0 Pending</span>
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- Total Purchase card -->
-        <div class="card" style="display:flex;flex-direction:column;gap:12px;padding:20px 22px">
-          <div style="display:flex;align-items:flex-start;gap:14px">
-            <div style="width:44px;height:44px;border-radius:50%;background:rgba(79,142,240,.12);border:1.5px solid rgba(79,142,240,.28);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 001.99 1.61h9.72a2 2 0 001.99-1.78l1.54-7.22H6"/></svg>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);display:flex;flex-direction:column">
+          <div style="height:4px;background:linear-gradient(90deg,#4f8ef0,#818cf8)"></div>
+          <div style="padding:18px 20px 16px;display:flex;flex-direction:column;gap:0;flex:1">
+            <!-- Header -->
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:14px">
+              <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#3b82f6,#818cf8);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(79,142,240,.28);flex-shrink:0">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" width="18" height="18"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+              </div>
+              <div style="min-width:0;flex:1">
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--text3)">Total Purchase</div>
+                <div style="font-size:11.5px;color:var(--text3);margin-top:1px" id="dash-purchases-sub">0 Bills</div>
+              </div>
+              <span id="dash-pur-trend" class="dv2-kpi-badge up" style="font-size:10.5px">—</span>
             </div>
-            <div style="flex:1;min-width:0">
-              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--text3);margin-bottom:3px">TOTAL PURCHASE</div>
-              <div class="mono" style="font-size:20px;font-weight:600;color:var(--accent);line-height:1.1;margin-bottom:3px" id="dash-total-purchases">AED 0.00</div>
-              <div style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--text3)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" width="11" height="11"><rect x="2" y="2" width="12" height="12" rx="1"/><line x1="5" y1="6" x2="11" y2="6"/><line x1="5" y1="9" x2="9" y2="9"/></svg><span id="dash-purchases-sub">0 Bills</span></div>
+            <!-- Main value -->
+            <div class="mono" style="font-size:22px;font-weight:700;color:#4f8ef0;letter-spacing:-0.5px;margin-bottom:14px" id="dash-total-purchases">AED 0.00</div>
+            <div style="border-top:1px solid var(--border);margin-bottom:12px"></div>
+            <!-- Stats row -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+              <div style="background:rgba(79,142,240,.07);border-radius:10px;padding:8px 10px">
+                <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Amount Paid</div>
+                <div class="mono" style="font-size:13px;font-weight:700;color:var(--text)" id="dash-pur-paid-amount">AED 0.00</div>
+              </div>
+              <div style="background:var(--surface2);border-radius:10px;padding:8px 10px">
+                <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Paid Bills</div>
+                <div class="mono" style="font-size:13px;font-weight:700;color:var(--text)" id="dash-pur-paid-count">0</div>
+              </div>
             </div>
-          </div>
-          <div style="border-top:1px solid var(--border)"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr">
-            <div><div style="font-size:10.5px;color:var(--text3);margin-bottom:3px">Paid (Actual)</div><div class="mono" style="font-size:13.5px;font-weight:600;color:var(--text)" id="dash-pur-paid-amount">AED 0.00</div></div>
-            <div style="text-align:right"><div style="font-size:10.5px;color:var(--text3);margin-bottom:3px">Paid Bills</div><div class="mono" style="font-size:13.5px;font-weight:600;color:var(--text)" id="dash-pur-paid-count">0</div></div>
-          </div>
-          <div class="prog-bar"><div class="prog-fill" id="dash-pur-rate-bar" style="width:0%;background:var(--accent)"></div></div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <div style="width:18px;height:18px;border-radius:50%;background:rgba(79,142,240,.12);color:var(--accent);border:1px solid rgba(79,142,240,.28);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0">✓</div>
-            <span style="font-size:12px;color:var(--text2);flex:1">Payment Rate</span>
-            <span class="mono" style="font-size:14px;font-weight:700;color:var(--accent)" id="dash-pur-rate">0%</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text3)">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" width="12" height="12"><rect x="2" y="2" width="12" height="12" rx="1"/><line x1="5" y1="6" x2="11" y2="6"/><line x1="5" y1="9" x2="9" y2="9"/></svg>
-            <span>Pending Bills</span>
-            <span class="mono" style="margin-left:auto;font-weight:600;color:var(--accent)" id="dash-pur-pending">0 Bills</span>
+            <!-- Progress bar -->
+            <div style="background:var(--surface2);border-radius:99px;height:5px;margin-bottom:8px;overflow:hidden">
+              <div id="dash-pur-rate-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#4f8ef0,#818cf8);border-radius:99px;transition:width .5s ease"></div>
+            </div>
+            <!-- Footer -->
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:11px;color:var(--text3)">Payment Rate</span>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="mono" style="font-size:13px;font-weight:700;color:#4f8ef0" id="dash-pur-rate">0%</span>
+                <span style="font-size:11px;color:var(--text3)" id="dash-pur-pending">0 Pending</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Total Profit = Gross Profit -->
-        <div class="mb3-kpi-card kc-mint">
-          <div class="mb3-kpi-glow" style="background:radial-gradient(circle at 80% 20%,rgba(5,150,105,.35),transparent 65%)"></div>
-          <div class="mb3-kpi-ico kpi-ico-green">
-            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M3 10h14M10 3l7 7-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-          </div>
-          <div class="mb3-kpi-name">Total Profit</div>
-          <div class="mb3-kpi-val" id="dash-gross-profit">AED 0</div>
-          <div class="mb3-kpi-sub" id="dash-profit-sub">Revenue – Purchases</div>
-          <div class="mb3-kpi-foot">
-            <span class="dv2-kpi-badge up" id="dash-profit-trend">—</span>
-            <div class="dv2-spark" id="dash-profit-spark"></div>
+        <!-- Total Profit card -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);display:flex;flex-direction:column">
+          <div style="height:4px;background:linear-gradient(90deg,#8b5cf6,#c084fc)"></div>
+          <div style="padding:18px 20px 16px;display:flex;flex-direction:column;gap:0;flex:1">
+            <!-- Header -->
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:14px">
+              <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#7c3aed,#c084fc);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(139,92,246,.28);flex-shrink:0">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" width="18" height="18"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+              </div>
+              <div style="min-width:0;flex:1">
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--text3)">Net Profit</div>
+                <div style="font-size:11.5px;color:var(--text3);margin-top:1px" id="dash-profit-sub"></div>
+              </div>
+              <span id="dash-profit-trend" class="dv2-kpi-badge up" style="font-size:10.5px">—</span>
+            </div>
+            <!-- Main value -->
+            <div class="mono" style="font-size:22px;font-weight:700;color:#8b5cf6;letter-spacing:-0.5px;margin-bottom:14px" id="dash-gross-profit">AED 0</div>
+            <div style="border-top:1px solid var(--border);margin-bottom:12px"></div>
+            <!-- Margin progress bar -->
+            <div style="background:var(--surface2);border-radius:99px;height:5px;margin-bottom:8px;overflow:hidden">
+              <div id="dash-profit-margin-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#8b5cf6,#c084fc);border-radius:99px;transition:width .5s ease"></div>
+            </div>
+            <!-- Footer -->
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:11px;color:var(--text3)">Net Profit Margin</span>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="mono" style="font-size:13px;font-weight:700;color:#8b5cf6" id="dash-margin-pct">0%</span>
+                <div class="dv2-spark" id="dash-profit-spark" style="display:none"></div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -554,19 +600,19 @@
     <div class="sinv-kpi-row mb16">
       <div class="sinv-kpi-card">
         <div class="sinv-kpi-icon c-blue">&#128176;</div>
-        <div><div class="sinv-kpi-val c-blue">AED 965,000</div><div class="sinv-kpi-lbl">Total Invoiced</div></div>
+        <div><div class="sinv-kpi-val c-blue" id="sinv-kpi-total">AED 0.00</div><div class="sinv-kpi-lbl">Total Invoiced</div></div>
       </div>
       <div class="sinv-kpi-card">
         <div class="sinv-kpi-icon c-green">&#10003;</div>
-        <div><div class="sinv-kpi-val c-green">AED 880,800</div><div class="sinv-kpi-lbl">Collected</div></div>
+        <div><div class="sinv-kpi-val c-green" id="sinv-kpi-collected">AED 0.00</div><div class="sinv-kpi-lbl">Collected</div></div>
       </div>
       <div class="sinv-kpi-card">
         <div class="sinv-kpi-icon c-amber">&#9200;</div>
-        <div><div class="sinv-kpi-val c-amber">AED 84,200</div><div class="sinv-kpi-lbl">Pending</div></div>
+        <div><div class="sinv-kpi-val c-amber" id="sinv-kpi-pending">AED 0.00</div><div class="sinv-kpi-lbl">Pending</div></div>
       </div>
       <div class="sinv-kpi-card">
         <div class="sinv-kpi-icon c-red">!</div>
-        <div><div class="sinv-kpi-val c-red">AED 21,000</div><div class="sinv-kpi-lbl">Overdue</div></div>
+        <div><div class="sinv-kpi-val c-red" id="sinv-kpi-overdue">AED 0.00</div><div class="sinv-kpi-lbl">Overdue</div></div>
       </div>
     </div>
     <div class="card">
@@ -1822,9 +1868,9 @@
     <div class="card">
       <div class="card-hd"><div class="card-title">Current Stock Levels</div><div class="flx"><button class="btn btn-g" onclick="clearInventoryTable()">Clear Table</button><button class="btn btn-p" onclick="openInventoryItemModal()">+ Add Item</button></div></div>
       <table class="tbl">
-        <thead><tr><th>Item Code</th><th>Item Name</th><th>Category</th><th>Qty</th><th>Unit</th><th>Rate</th><th>Value</th><th>Status</th><th data-action-col="1">Actions</th></tr></thead>
+        <thead><tr><th>Item Code</th><th>Item Name</th><th>Category</th><th>Qty</th><th>Unit</th><th>Selling Rate</th><th>Value</th><th>Status</th></tr></thead>
         <tbody id="stock-level-tbody">
-          <tr data-empty-state="1"><td colspan="9" style="color:var(--text3);text-align:center">No stock items in database yet.</td></tr>
+          <tr data-empty-state="1"><td colspan="8" style="color:var(--text3);text-align:center">No stock items in database yet.</td></tr>
         </tbody>
       </table>
     </div>
@@ -3176,8 +3222,8 @@
         </div>
         <div class="fr3">
           <div class="fg"><label class="fl">Trade License No.</label><input class="fi mono" id="set-company-license" placeholder="e.g. DED-2024-12345"></div>
-          <div class="fg"><label class="fl">Issue Date</label><input class="fi" type="date"></div>
-          <div class="fg"><label class="fl">Expiry Date</label><input class="fi" type="date"></div>
+          <div class="fg"><label class="fl">Issue Date</label><input class="fi" type="date" id="set-company-issue-date"></div>
+          <div class="fg"><label class="fl">Expiry Date</label><input class="fi" type="date" id="set-company-license-expiry"></div>
         </div>
         <div class="fr2">
           <div class="fg"><label class="fl">Business Activity</label><input class="fi" id="set-company-activity" placeholder="e.g. General Trading"></div>
@@ -3185,7 +3231,7 @@
         </div>
         <div class="fr3">
           <div class="fg"><label class="fl">Emirate</label><select class="fi" id="set-company-emirate"><option value="">Select…</option><option>Dubai</option><option>Abu Dhabi</option><option>Sharjah</option><option>Ajman</option><option>Ras Al Khaimah</option></select></div>
-          <div class="fg"><label class="fl">Free Zone</label><select class="fi"><option>Not Applicable</option><option>JAFZA</option><option>DAFZA</option><option>DMCC</option><option>ADGM</option><option>RAKEZ</option></select></div>
+          <div class="fg"><label class="fl">Free Zone</label><select class="fi" id="set-company-freezone"><option>Not Applicable</option><option>JAFZA</option><option>DAFZA</option><option>DMCC</option><option>ADGM</option><option>RAKEZ</option></select></div>
           <div class="fg"><label class="fl">Business Type</label><select class="fi" id="set-company-biz-type"><option value="">Select…</option><option>Mainland</option><option>Free Zone</option><option>Offshore</option></select></div>
         </div>
         <div class="fg"><label class="fl">Registered Address</label><input class="fi" id="set-company-address" placeholder="Office address as per trade license"></div>
@@ -4775,6 +4821,77 @@ period_locks ─&lt; audit_logs
   </div>
 </div>
 
+<!-- ═══ STOCK MOVEMENT MONTHLY HISTORY MODAL ═══ -->
+<div class="overlay" id="m-stock-history" onclick="closeOvBg(event,'m-stock-history')">
+  <div class="modal" style="max-width:780px;width:95vw;max-height:90vh;display:flex;flex-direction:column">
+    <div style="padding:18px 20px 14px;flex-shrink:0;border-bottom:1px solid var(--border)">
+      <div class="modal-title" id="smh-title" style="margin:0 0 2px">Stock Movement Monthly History</div>
+      <div class="modal-sub" id="smh-sub" style="margin:0">Monthly inwards, outwards and closing balance</div>
+    </div>
+    <div style="overflow:auto;flex:1;padding:16px 20px 20px">
+      <table class="tbl" id="smh-table" data-delete-actions-bound="skip" data-no-table-tools="1" style="border-collapse:collapse;width:100%;font-size:13px">
+        <thead>
+          <tr style="background:var(--bg2)">
+            <th rowspan="2" style="text-align:left;padding:8px 12px;border:1px solid var(--border);min-width:90px">Month</th>
+            <th colspan="2" style="text-align:center;padding:6px 12px;border:1px solid var(--border);color:var(--green);background:color-mix(in srgb,var(--green) 8%,var(--card))">Inwards</th>
+            <th colspan="2" style="text-align:center;padding:6px 12px;border:1px solid var(--border);color:var(--red);background:color-mix(in srgb,var(--red) 8%,var(--card))">Outwards</th>
+            <th colspan="2" style="text-align:center;padding:6px 12px;border:1px solid var(--border);color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--card))">Closing Balance</th>
+          </tr>
+          <tr style="background:var(--bg2)">
+            <th style="text-align:right;padding:6px 12px;border:1px solid var(--border);font-weight:500;color:var(--text3);font-size:11px">Quantity</th>
+            <th style="text-align:right;padding:6px 12px;border:1px solid var(--border);font-weight:500;color:var(--text3);font-size:11px">Value</th>
+            <th style="text-align:right;padding:6px 12px;border:1px solid var(--border);font-weight:500;color:var(--text3);font-size:11px">Quantity</th>
+            <th style="text-align:right;padding:6px 12px;border:1px solid var(--border);font-weight:500;color:var(--text3);font-size:11px">Value</th>
+            <th style="text-align:right;padding:6px 12px;border:1px solid var(--border);font-weight:500;color:var(--text3);font-size:11px">Quantity</th>
+            <th style="text-align:right;padding:6px 12px;border:1px solid var(--border);font-weight:500;color:var(--text3);font-size:11px">Value</th>
+          </tr>
+        </thead>
+        <tbody id="smh-tbody"></tbody>
+      </table>
+      <div id="smh-empty" style="display:none;color:var(--text3);text-align:center;padding:32px 0;font-size:13px">No movement records found for this item.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STOCK MOVEMENT DAY HISTORY MODAL ═══ -->
+<div class="overlay" id="m-stock-day-history" onclick="closeOvBg(event,'m-stock-day-history')">
+  <div class="modal" style="max-width:980px;width:98vw;max-height:92vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px;flex-shrink:0;border-bottom:1px solid var(--border)">
+      <div>
+        <div class="modal-title" id="sdh-title" style="margin:0 0 2px">Stock Movement Day History</div>
+        <div class="modal-sub" id="sdh-sub" style="margin:0"></div>
+      </div>
+      <button class="btn btn-g btn-sm" onclick="closeM('m-stock-day-history')">← Back</button>
+    </div>
+    <div style="overflow:auto;flex:1;padding:14px 20px 20px">
+      <table class="tbl" id="sdh-table" data-delete-actions-bound="skip" data-no-table-tools="1" style="border-collapse:collapse;width:100%;font-size:12.5px;white-space:nowrap">
+        <thead>
+          <tr style="background:var(--bg2)">
+            <th rowspan="2" style="text-align:left;padding:8px 10px;border:1px solid var(--border);min-width:88px">Date</th>
+            <th rowspan="2" style="text-align:left;padding:8px 10px;border:1px solid var(--border)">Vendor Name</th>
+            <th rowspan="2" style="text-align:left;padding:8px 10px;border:1px solid var(--border)">Display Name</th>
+            <th rowspan="2" style="text-align:left;padding:8px 10px;border:1px solid var(--border)">Item Name</th>
+            <th rowspan="2" style="text-align:left;padding:8px 10px;border:1px solid var(--border)">Voucher Type</th>
+            <th colspan="2" style="text-align:center;padding:6px 10px;border:1px solid var(--border);color:var(--green);background:color-mix(in srgb,var(--green) 8%,var(--card))">Inward</th>
+            <th colspan="2" style="text-align:center;padding:6px 10px;border:1px solid var(--border);color:var(--red);background:color-mix(in srgb,var(--red) 8%,var(--card))">Outward</th>
+            <th colspan="2" style="text-align:center;padding:6px 10px;border:1px solid var(--border);color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--card))">Closing Balance</th>
+          </tr>
+          <tr style="background:var(--bg2)">
+            <th style="text-align:right;padding:6px 10px;border:1px solid var(--border);font-weight:500;color:var(--text3);font-size:11px">Qty</th>
+            <th style="text-align:right;padding:6px 10px;border:1px solid var(--border);font-weight:500;color:var(--text3);font-size:11px">Value</th>
+            <th style="text-align:right;padding:6px 10px;border:1px solid var(--border);font-weight:500;color:var(--text3);font-size:11px">Qty</th>
+            <th style="text-align:right;padding:6px 10px;border:1px solid var(--border);font-weight:500;color:var(--text3);font-size:11px">Value</th>
+            <th style="text-align:right;padding:6px 10px;border:1px solid var(--border);font-weight:500;color:var(--text3);font-size:11px">Qty</th>
+            <th style="text-align:right;padding:6px 10px;border:1px solid var(--border);font-weight:500;color:var(--text3);font-size:11px">Value</th>
+          </tr>
+        </thead>
+        <tbody id="sdh-tbody"></tbody>
+      </table>
+      <div id="sdh-empty" style="display:none;color:var(--text3);text-align:center;padding:32px 0;font-size:13px">No transactions found for this month.</div>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="m-sales-view" onclick="closeOvBg(event,'m-sales-view')">
   <div class="modal modal-xl" style="display:flex;flex-direction:column;max-height:92vh">
     <!-- header -->
@@ -4820,7 +4937,6 @@ period_locks ─&lt; audit_logs
         </button>
         <button class="btn btn-p btn-sm" onclick="openInvoiceShareModal()">All Share Options</button>
       </div>
-      <button class="btn btn-g" onclick="closeM('m-sales-view')" style="flex-shrink:0">Close</button>
     </div>
     <!-- hidden anchor for edit-from-view -->
     <span data-sinv-edit-anchor style="display:none"></span>
@@ -4873,7 +4989,6 @@ period_locks ─&lt; audit_logs
     </div>
     <div class="fg mb10"><label class="fl">Message</label><textarea class="fi" id="share-message" rows="3" style="font-size:12.5px"></textarea></div>
     <div class="fg"><label class="fl">Online View Link</label><div class="field-action-row"><input class="fi mono" id="share-link" readonly style="font-size:12px"><button class="btn btn-g btn-sm" type="button" onclick="copyCurrentInvoiceLink();toast('Link copied','ok')">Copy</button></div></div>
-    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-invoice-share')">Close</button></div>
   </div>
 </div>
 
@@ -5026,7 +5141,7 @@ period_locks ─&lt; audit_logs
       <div style="text-align:center;background:var(--bg3);border-radius:10px;padding:12px"><div class="mono" style="color:var(--amber);font-size:18px">48h</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Response time</div></div>
     </div>
     <div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:16px">Specializes in UAE VAT filings, FTA audit representation, and penalty disputes. Previously worked at Big 4 firm. Fluent in Arabic and English. Registered Tax Agent (TAAN 20009871).</div>
-    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-expert1')">Close</button><button class="btn btn-p" onclick="closeM('m-expert1');showM('m-newreview');toast('Expert pre-selected','info')">Request Review →</button></div>
+    <div class="modal-foot"><button class="btn btn-p" onclick="closeM('m-expert1');showM('m-newreview');toast('Expert pre-selected','info')">Request Review →</button></div>
   </div>
 </div>
 

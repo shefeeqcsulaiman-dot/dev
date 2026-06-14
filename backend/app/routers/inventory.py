@@ -199,11 +199,40 @@ def list_stock_movements(db: Session = Depends(get_db), current_user: User = Dep
         .limit(500)
         .all()
     )
+    # Build a lookup: reference → purchase record payload (for vendor/date)
+    references = list({m.reference for m, _ in rows if m.reference})
+    purchase_meta: dict[str, dict] = {}
+    if references:
+        pr_records = (
+            db.query(AppDataRecord)
+            .filter(
+                AppDataRecord.company_id == current_user.company_id,
+                AppDataRecord.collection == "purchaseRecords",
+                AppDataRecord.record_key.in_(references),
+            )
+            .all()
+        )
+        for pr in pr_records:
+            try:
+                payload = json.loads(pr.payload or "{}")
+            except (TypeError, json.JSONDecodeError):
+                payload = {}
+            purchase_meta[pr.record_key] = payload
     return [
         {
-            "date": m.created_at.strftime("%Y-%m-%d") if m.created_at else "",
+            "date": (
+                purchase_meta.get(m.reference or "", {}).get("date")
+                or (m.created_at.strftime("%Y-%m-%d") if m.created_at else "")
+            ),
             "movement_type": m.movement_type,
             "item_name": mapping.taxflow_name or mapping.name or mapping.sku or "",
+            "display_name": mapping.name or mapping.sku or "",
+            "vendor_name": (
+                purchase_meta.get(m.reference or "", {}).get("supplier")
+                or purchase_meta.get(m.reference or "", {}).get("vendor")
+                or purchase_meta.get(m.reference or "", {}).get("contact")
+                or ""
+            ),
             "quantity": float(m.quantity),
             "unit_cost": float(m.unit_cost),
             "reference": m.reference or "",

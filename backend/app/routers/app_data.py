@@ -64,6 +64,9 @@ _REPORT_AFFECTING_COLLECTIONS = frozenset({
 # Per-collection caps for bootstrap to prevent memory spikes on large accounts.
 # Heavy transactional collections are capped at recent N; reference data is uncapped.
 _BOOTSTRAP_COLLECTION_CAPS: dict[str, int] = {
+    "products": 500,
+    "salesCategories": 200,
+    "salesUnits": 200,
     "salesInvoices": 500,
     "quotations": 300,
     "bills": 500,
@@ -202,20 +205,46 @@ def bootstrap(
     current_user: User = Depends(get_current_user),
 ) -> dict[str, object]:
     cap = get_settings().bootstrap_record_cap
+    # Collections with large record counts are fetched with DB-level LIMIT to avoid
+    # loading and deserializing thousands of rows that will be discarded in Python.
+    _HEAVY_COLLECTIONS = {c for c, n in _BOOTSTRAP_COLLECTION_CAPS.items() if n <= 500}
+    heavy_results: dict[str, list[dict[str, Any]]] = {}
+    heavy_totals: dict[str, int] = {}
+    for coll, coll_cap in _BOOTSTRAP_COLLECTION_CAPS.items():
+        if coll_cap > 500:
+            continue  # low-cap collections handled in the bulk query below
+        total = (
+            db.query(AppDataRecord)
+            .filter(AppDataRecord.company_id == current_user.company_id, AppDataRecord.collection == coll)
+            .count()
+        )
+        heavy_totals[coll] = total
+        rows = (
+            db.query(AppDataRecord)
+            .filter(AppDataRecord.company_id == current_user.company_id, AppDataRecord.collection == coll)
+            .order_by(AppDataRecord.created_at.desc())
+            .limit(coll_cap)
+            .all()
+        )
+        rows.reverse()
+        heavy_results[coll] = [serialize(r) for r in rows]
+
+    # Bulk query for all remaining (non-heavy) collections
     records = (
         db.query(AppDataRecord)
-        .filter(AppDataRecord.company_id == current_user.company_id)
+        .filter(
+            AppDataRecord.company_id == current_user.company_id,
+            AppDataRecord.collection.notin_(_HEAVY_COLLECTIONS | {"purchaseRecords"}),
+        )
         .order_by(AppDataRecord.created_at.desc())
         .limit(cap)
         .all()
     )
-    records.reverse()  # restore chronological order after desc fetch
+    records.reverse()
 
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    collection_totals: dict[str, int] = {}
+    grouped: dict[str, list[dict[str, Any]]] = {**heavy_results}
+    collection_totals: dict[str, int] = {**heavy_totals}
     for item in records:
-        if item.collection == "purchaseRecords":
-            continue
         coll = item.collection
         collection_totals[coll] = collection_totals.get(coll, 0) + 1
         coll_cap = _BOOTSTRAP_COLLECTION_CAPS.get(coll)

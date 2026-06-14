@@ -62,8 +62,8 @@ def _build_dashboard(db: Session, company_id: str) -> dict[str, Any]:
     app_sales = app_sales_invoice_records(db, company_id)
     app_employees = app_data_payloads(db, company_id, "employees")
     app_purchases = app_data_payloads(db, company_id, "purchaseRecords")
-    revenue = money(db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(Invoice.company_id == company_id).scalar())
-    revenue += sum((record_amount(row, "total", "amount", "net_amount") for row in app_sales), Decimal("0.00"))
+    revenue = money(db.query(func.coalesce(func.sum(Invoice.subtotal), 0)).filter(Invoice.company_id == company_id, Invoice.status != "draft").scalar())
+    revenue += sum((record_amount(row, "subtotal", "net_amount", "amount") for row in app_sales if normalized_ref(row.get("status", "")) != "draft"), Decimal("0.00"))
     open_invoice_count = int(db.query(func.count(Invoice.id)).filter(Invoice.company_id == company_id, Invoice.status != "paid").scalar() or 0)
     app_open_sales = [row for row in app_sales if not is_paid_status(row.get("status"))]
     open_invoice_count += len(app_open_sales)
@@ -116,6 +116,8 @@ def _build_dashboard(db: Session, company_id: str) -> dict[str, Any]:
             "revenue": amount(revenue),
             "total_purchases": pur_summary["total"],
             "vat_payable": amount(vat_payable),
+            "output_vat": amount(output_vat),
+            "input_vat": amount(input_vat),
             "open_invoice_count": open_invoice_count,
             "open_invoice_amount": amount(open_invoice_amount),
             "staff_total": employee_count,
@@ -324,65 +326,28 @@ def _purchase_row_amount(row: dict[str, Any]) -> Decimal:
 
 
 def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
-    # Use direct SQL JSON extraction to sum totals — avoids Python-side parsing edge cases.
-    # Tries multiple field names in priority order: total → grand_total → net_amount → subtotal → lines sum.
-    sql = text("""
-        SELECT
-            COALESCE(SUM(
-                CASE
-                    WHEN (payload::jsonb->>'total') IS NOT NULL AND (payload::jsonb->>'total')::numeric <> 0
-                        THEN (payload::jsonb->>'total')::numeric
-                    WHEN (payload::jsonb->>'grand_total') IS NOT NULL AND (payload::jsonb->>'grand_total')::numeric <> 0
-                        THEN (payload::jsonb->>'grand_total')::numeric
-                    WHEN (payload::jsonb->>'net_amount') IS NOT NULL AND (payload::jsonb->>'net_amount')::numeric <> 0
-                        THEN COALESCE((payload::jsonb->>'net_amount')::numeric, 0)
-                            + COALESCE((payload::jsonb->>'tax_amount')::numeric, 0)
-                            + COALESCE((payload::jsonb->>'shipping')::numeric, 0)
-                    WHEN (payload::jsonb->>'subtotal') IS NOT NULL AND (payload::jsonb->>'subtotal')::numeric <> 0
-                        THEN COALESCE((payload::jsonb->>'subtotal')::numeric, 0)
-                            + COALESCE((payload::jsonb->>'vat')::numeric, 0)
-                    WHEN payload::jsonb->'lines' IS NOT NULL
-                        THEN COALESCE((
-                            SELECT SUM(
-                                COALESCE((line->>'total')::numeric,
-                                    COALESCE((line->>'net')::numeric, 0)
-                                    + COALESCE((line->>'vat')::numeric, 0)
-                                )
-                            )
-                            FROM jsonb_array_elements(payload::jsonb->'lines') AS line
-                        ), 0)
-                    ELSE 0
-                END
-            ), 0) AS total_amount,
-            COUNT(*) AS total_count
-        FROM app_data_records
-        WHERE company_id = :cid
-          AND collection IN ('purchaseRecords', 'bills')
-    """)
-    row = db.execute(sql, {"cid": company_id}).fetchone()
-    total = money(row[0] if row else 0)
-    total_count = int(row[1] if row else 0)
-
-    # Per-record breakdown for paid/pending counts
     records = (
         app_data_payloads(db, company_id, "purchaseRecords")
         + app_data_payloads(db, company_id, "bills")
     )
+    total = Decimal("0")
     paid_amount = Decimal("0")
     paid_count = 0
     pending_count = 0
     for rec in records:
         row_total = _purchase_row_amount(rec)
         row_paid = record_amount(rec, "paid", "paid_amount")
+        total += row_total
         if is_paid_status(normalized_ref(rec.get("status") or "")):
             paid_count += 1
             paid_amount += row_paid if row_paid else row_total
         else:
             pending_count += 1
             paid_amount += row_paid
+    total_count = len(records)
 
-    # Fallback to SourceTransaction if all AppDataRecord amounts resolved to zero
-    if total == Decimal("0") and total_count > 0:
+    # Fallback to SourceTransaction when no AppDataRecord entries exist
+    if total == Decimal("0") and total_count == 0:
         total = money(
             db.query(func.coalesce(func.sum(SourceTransaction.total), 0))
             .filter(
@@ -390,6 +355,14 @@ def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
                 SourceTransaction.module.in_(["purchase", "purchase_bill"]),
             )
             .scalar()
+        )
+        total_count = int(
+            db.query(func.count(SourceTransaction.id))
+            .filter(
+                SourceTransaction.company_id == company_id,
+                SourceTransaction.module.in_(["purchase", "purchase_bill"]),
+            )
+            .scalar() or 0
         )
         if paid_amount == Decimal("0"):
             paid_amount = money(
@@ -415,11 +388,13 @@ def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
 
 def invoice_status(db: Session, company_id: str) -> dict[str, dict[str, str | int]]:
     app_sales = app_sales_invoice_records(db, company_id)
-    total_count = int(db.query(func.count(Invoice.id)).filter(Invoice.company_id == company_id).scalar() or 0) + len(app_sales)
-    total_amount = money(db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(Invoice.company_id == company_id).scalar())
-    total_amount += sum((record_amount(row, "total", "amount", "net_amount") for row in app_sales), Decimal("0.00"))
+    # Total excludes drafts — drafts are not yet revenue
+    total_count = int(db.query(func.count(Invoice.id)).filter(Invoice.company_id == company_id, Invoice.status != "draft").scalar() or 0)
+    total_count += sum(1 for r in app_sales if normalized_ref(r.get("status", "")) != "draft")
+    total_amount = money(db.query(func.coalesce(func.sum(Invoice.subtotal), 0)).filter(Invoice.company_id == company_id, Invoice.status != "draft").scalar())
+    total_amount += sum((record_amount(row, "subtotal", "net_amount", "amount") for row in app_sales if normalized_ref(row.get("status", "")) != "draft"), Decimal("0.00"))
     statuses: dict[str, dict[str, str | int]] = {}
-    for key, names in {"paid": ["paid"], "pending": ["draft", "issued", "pending"], "overdue": ["overdue", "cancelled"]}.items():
+    for key, names in {"paid": ["paid"], "pending": ["issued", "pending"], "overdue": ["overdue", "cancelled"], "draft": ["draft"]}.items():
         row_count = int(db.query(func.count(Invoice.id)).filter(Invoice.company_id == company_id, Invoice.status.in_(names)).scalar() or 0)
         row_amount = money(db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(Invoice.company_id == company_id, Invoice.status.in_(names)).scalar())
         for invoice in app_sales:
