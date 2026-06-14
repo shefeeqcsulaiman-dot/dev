@@ -467,8 +467,8 @@
       <div class="card mb16">
         <div class="card-hd"><div class="card-title">VAT Registration (FTA)</div><span class="b b-g">● Registered</span></div>
         <div class="section-hd">Tax Details</div>
-        <div class="fg"><label class="fl">Tax Registration Number (TRN)</label><input class="fi mono" value="100123456700003" maxlength="15" id="trn" oninput="chkTRN(this)"></div>
-        <div id="trn-msg" style="font-size:11px;color:var(--green);margin-top:-8px;margin-bottom:10px">✓ Valid UAE TRN (15 digits)</div>
+        <div class="fg"><label class="fl">Tax Registration Number (TRN)</label><input class="fi mono" placeholder="15-digit TRN" maxlength="15" id="trn" oninput="chkTRN(this)"></div>
+        <div id="trn-msg" style="font-size:11px;color:var(--text3);margin-top:-8px;margin-bottom:10px"></div>
         <div class="fr2">
           <div class="fg"><label class="fl">VAT Registration Date</label><input class="fi" type="date" value="2018-01-01"></div>
           <div class="fg"><label class="fl">Filing Frequency</label><select class="fi"><option selected>Monthly</option><option>Quarterly</option></select></div>
@@ -3244,7 +3244,7 @@
       <div>
         <div class="card mb16">
           <div class="card-hd"><div><div class="card-title">VAT Registration (FTA)</div><div class="card-sub">TRN, filing frequency, and FTA account details</div></div><span class="b b-g">Registered</span></div>
-          <div class="fg"><label class="fl">Tax Registration Number (TRN)</label><input class="fi mono" value="100123456700003" maxlength="15" id="set-company-trn" oninput="chkSettingsTRN(this)"></div>
+          <div class="fg"><label class="fl">Tax Registration Number (TRN)</label><input class="fi mono" placeholder="15-digit TRN" maxlength="15" id="set-company-trn" oninput="chkSettingsTRN(this)"></div>
           <div id="set-company-trn-msg" style="font-size:11px;color:var(--green);margin-top:-8px;margin-bottom:10px">✓ Valid UAE TRN (15 digits)</div>
           <div class="fr2">
             <div class="fg"><label class="fl">VAT Registration Date</label><input class="fi" type="date" value="2018-01-01"></div>
@@ -4855,7 +4855,7 @@ period_locks ─&lt; audit_logs
 
 <!-- ═══ STOCK MOVEMENT DAY HISTORY MODAL ═══ -->
 <div class="overlay" id="m-stock-day-history" onclick="closeOvBg(event,'m-stock-day-history')">
-  <div class="modal" style="max-width:980px;width:98vw;max-height:92vh;display:flex;flex-direction:column">
+  <div class="modal" style="max-width:1400px;width:98vw;max-height:92vh;display:flex;flex-direction:column">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px;flex-shrink:0;border-bottom:1px solid var(--border)">
       <div>
         <div class="modal-title" id="sdh-title" style="margin:0 0 2px">Stock Movement Day History</div>

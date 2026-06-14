@@ -1878,8 +1878,10 @@ async function syncCompanyFromDatabase(){
 
 async function saveCompanySettingsToDatabase(){
   const v=id=>document.getElementById(id)?.value?.trim()||null;
-  const name=v('set-company-name')||readFieldValue('Legal Company Name')||currentCompany?.name||'';
-  const trn=(v('set-company-trn')||currentCompany?.trn||'').replace(/\D/g,'')||null;
+  const name=v('set-company-name')||readFieldValue('Legal Company Name')||currentCompany?.name||null;
+  if(!name){toast('Company name is required','warn');return;}
+  const rawTrn=(v('set-company-trn')||'').replace(/\D/g,'');
+  const trn=rawTrn.length===15?rawTrn:(currentCompany?.trn||null);
   const payload={
     name,
     trn,

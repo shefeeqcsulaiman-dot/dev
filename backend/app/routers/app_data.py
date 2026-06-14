@@ -278,11 +278,37 @@ def bootstrap(
     ]
 
     invoice_layout = grouped.get("invoiceLayout", [{}])[-1] if grouped.get("invoiceLayout") else None
+
+    company = current_user.company
+    company_data: dict[str, object] | None = None
+    if company:
+        company_data = {
+            "id": company.id,
+            "name": company.name,
+            "trade_name": company.trade_name,
+            "trn": company.trn,
+            "country": company.country,
+            "emirate": company.emirate,
+            "business_type": company.business_type,
+            "business_activity": company.business_activity,
+            "legal_structure": company.legal_structure,
+            "trade_license_no": company.trade_license_no,
+            "trade_license_issue_date": company.trade_license_issue_date,
+            "trade_license_expiry": company.trade_license_expiry,
+            "free_zone": company.free_zone,
+            "address": company.address,
+            "po_box": company.po_box,
+            "phone": company.phone,
+            "website": company.website,
+            "logo": company.logo,
+        }
+
     data: dict[str, object] = {
         **grouped,
         "audit": audit,
         "invoiceLayout": invoice_layout,
         "user": {"name": current_user.full_name, "role": current_user.role},
+        "company": company_data,
     }
     return {"ok": True, "data": data, "truncated_collections": truncated}
 
