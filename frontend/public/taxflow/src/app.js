@@ -1695,15 +1695,16 @@ async function authenticatedFetch(url,options={}){
 }
 
 const AED_SYMBOL='AED';
-const AED_HTML='AED';
-function AED_SYMBOL_SVG(){return 'AED';}
+const AED_CHAR=''; // Dirham symbol in custom font (DMSans-Regular2.ttf, U+E800)
+const AED_HTML='<span class="dh"></span>';
+function AED_SYMBOL_SVG(){return AED_HTML;}
 function formatAed(value){
   const num=Number(value||0);
-  return 'AED '+num.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return AED_CHAR+' '+num.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 function formatAedHtml(value){
   const num=Number(value||0);
-  return 'AED '+num.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return AED_HTML+' '+num.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 
 function findSettingsInput(labelText,scopeId='set-company'){
