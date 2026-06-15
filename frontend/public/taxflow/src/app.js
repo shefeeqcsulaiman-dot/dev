@@ -4053,7 +4053,7 @@ function renderStockLevelRow(item){
   row.style.cursor='pointer';
   row.title='Click to view stock movement history';
   row.onclick=e=>{if(!e.target.closest('button'))openStockMovementHistory(row);};
-  row.innerHTML=`<td class="mono">${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td><span class="b b-gray">${escapeHtml(item.category)}</span></td><td class="mono">${fmt(qty,0)}</td><td>${escapeHtml(item.unit)}</td><td class="mono">${rate>0?fmt(rate,4):'-'}</td><td class="mono">${value>0?fmt(value,2):'-'}</td><td><span class="b ${cls}">${status}</span></td>`;
+  row.innerHTML=`<td class="mono">${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td class="mono">${fmt(qty,0)}</td><td>${escapeHtml(item.unit)}</td><td class="mono">${rate>0?fmt(rate,4):'-'}</td><td class="mono">${value>0?fmt(value,2):'-'}</td><td><span class="b ${cls}">${status}</span></td>`;
   return row;
 }
 
