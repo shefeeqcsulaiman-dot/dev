@@ -8401,7 +8401,7 @@ function updateInvoiceLayoutPreview(){
   const qrValue=invoiceQrValue(sampleInvoice,layout);
   const qrType=layout.qrCodeType==='payment_url'?'invoice_url':layout.qrCodeType;
   const labels=invoiceLabels(layout);
-  const heading=salesDocumentHeading(inv,layout);
+  const heading=salesDocumentHeading(sampleInvoice,layout);
   preview.innerHTML=`
     <div class="invoice-layout-live" dir="${layout.enableRtl?'rtl':'ltr'}" style="--invoice-accent:${escapeHtml(layout.color)}">
       <div class="invoice-topbar"></div>
