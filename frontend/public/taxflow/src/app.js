@@ -1695,16 +1695,16 @@ async function authenticatedFetch(url,options={}){
 }
 
 const AED_SYMBOL='AED';
-const AED_CHAR='\u{1ECBA}'; // UAE Dirham symbol (Unicode 15.0, U+1ECBA)
-const AED_HTML='\u{1ECBA}';
-function AED_SYMBOL_SVG(){return '\u{1ECBA}';}
+const AED_CHAR='$';
+const AED_HTML='$';
+function AED_SYMBOL_SVG(){return '$';}
 function formatAed(value){
   const num=Number(value||0);
-  return AED_CHAR+' '+num.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return '$'+num.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 function formatAedHtml(value){
   const num=Number(value||0);
-  return AED_CHAR+' '+num.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return '$'+num.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 
 function findSettingsInput(labelText,scopeId='set-company'){
