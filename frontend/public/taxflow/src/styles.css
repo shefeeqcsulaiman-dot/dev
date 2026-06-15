@@ -1,8 +1,4 @@
-﻿/* Dirham symbol font — U+E800 only */
-@font-face{font-family:'Dirham';src:url('./fonts/DMSans-Regular2.ttf') format('truetype');unicode-range:U+E800;}
-.dh{font-family:'Dirham','DM Sans',sans-serif;}
-
-:root{
+﻿:root{
   --bg:#080b12;--bg2:#0e1220;--bg3:#131929;--surface:#182030;--surface2:#1e283d;--surface3:#232f45;
   --border:rgba(99,130,200,0.1);--border2:rgba(99,130,200,0.18);--border3:rgba(99,130,200,0.28);
   --text:#dde4f0;--text2:#8896b3;--text3:#4d5a72;
@@ -28,7 +24,7 @@ body.theme-light{
   --pink:#cc4d91;--pink-bg:rgba(204,77,145,0.1);
 }
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Dirham','DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;overflow:hidden;font-size:13.5px;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;overflow:hidden;font-size:13.5px;}
 .hidden{display:none!important;}
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:80;opacity:0;pointer-events:none;transition:opacity .2s;}
 .scrim.on{opacity:1;pointer-events:auto;}
