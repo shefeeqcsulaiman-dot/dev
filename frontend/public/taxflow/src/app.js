@@ -5688,24 +5688,27 @@ async function clearPurchaseRecords(){
     okText:'Clear Records'
   });
   if(!confirmed)return;
-  let deleted=0;
   let failed=0;
   for(const record of records){
+    // result===null means HTTP error; result.deleted===false just means AppDataRecord was absent
+    // but sync_domain_delete still cleaned stock movements — treat both as success
     const result=await deleteServer('purchaseRecords',record);
-    if(result?.deleted)deleted++;
-    else failed++;
+    if(result===null)failed++;
   }
-  if(deleted){
-    purchaseRecordCache.clear();
-    purchaseRecordsTotal=0;
-    purchaseRecordsOffset=0;
-    purchaseRecordsLoaded=true;
-    renderPurchaseRecordWindow();
-    syncStockLevelsFromProducts();
-    loadStockLevelsFromServer();
-    audit('Cleared purchase records',`${deleted} record(s)`,'Deleted');
-  }
-  toast(`${deleted.toLocaleString('en-AE')} purchase record(s) cleared${failed?`; ${failed.toLocaleString('en-AE')} failed`:''}`,failed?'warn':'ok');
+  // Always clear UI — domain cleanup ran for every non-error record
+  purchaseRecordCache.clear();
+  purchaseRecordsTotal=0;
+  purchaseRecordsOffset=0;
+  purchaseRecordsLoaded=true;
+  renderPurchaseRecordWindow();
+  syncStockLevelsFromProducts();
+  loadStockLevelsFromServer();
+  const cleared=records.length-failed;
+  audit('Cleared purchase records',`${cleared} record(s)`,'Deleted');
+  toast(
+    `${cleared.toLocaleString('en-AE')} purchase record(s) cleared${failed?`; ${failed.toLocaleString('en-AE')} failed`:''}`,
+    failed?'warn':'ok'
+  );
 }
 
 function showRecentPurchaseRecords(){
