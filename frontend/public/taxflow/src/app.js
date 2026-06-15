@@ -15251,6 +15251,8 @@ function deleteTableRow(btn){
   const table=row?.closest('table');
   if(!row||!table)return;
   if(handleInventoryDelete(btn,row,table))return;
+  // User deletion requires 2-step password verification
+  if(table.tBodies?.[0]?.id==='user-tbody'){confirmDeleteUser(btn,row);return;}
   const reason=rowDeleteBlockReason(row,table);
   const label=rowFirstValue(row);
   if(reason){
@@ -15262,6 +15264,100 @@ function deleteTableRow(btn){
   currentDetailRow=row;
   currentDetailTable=table;
   deleteCurrentDetailRow();
+}
+
+async function confirmDeleteUser(btn,row){
+  let userData={};
+  try{userData=JSON.parse(row.dataset.user||'{}');}catch{}
+  const name=row.children[0]?.textContent.trim()||userData.name||'this user';
+  const email=userData.email||'';
+
+  // Step 1 — Are you sure?
+  const step1=await appConfirm({
+    title:'Delete User',
+    message:`Are you sure you want to delete "${name}"?\nThis will permanently remove their account and permissions.`,
+    okText:'Yes, Continue'
+  });
+  if(!step1)return;
+
+  // Step 2 — Password verification modal
+  const password=await _promptAdminPassword(name);
+  if(!password)return;
+
+  // Verify password against server
+  let adminEmail='';
+  try{
+    const meResp=await authenticatedFetch(`${apiBaseUrl()}/auth/me`);
+    if(meResp.ok){const me=await meResp.json();adminEmail=me.email||'';}
+  }catch{}
+  if(!adminEmail){toast('Could not verify your identity','err');return;}
+
+  let verified=false;
+  try{
+    const verResp=await fetch(`${apiBaseUrl()}/auth/login`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:adminEmail,password})
+    });
+    verified=verResp.ok;
+  }catch{}
+
+  if(!verified){toast('Incorrect password — deletion cancelled','err');return;}
+
+  // Proceed with deletion
+  row.remove();
+  const table=document.getElementById('user-tbody')?.closest('table');
+  if(table){
+    const tbody=table.tBodies?.[0];
+    if(tbody&&tbody.querySelectorAll('tr:not([data-empty-state])').length===0)
+      emptyTableMessage(tbody,'No users yet.');
+    refreshEnhancedTable(table);
+  }
+  deleteServer('users',userData).catch(err=>console.warn('User delete failed:',err));
+  toast(`User "${name}" deleted`,'warn');
+  audit('Deleted user',name,'Deleted');
+}
+
+function _promptAdminPassword(targetName){
+  return new Promise(resolve=>{
+    let overlay=document.getElementById('m-admin-pw-confirm');
+    if(!overlay){
+      overlay=document.createElement('div');
+      overlay.className='overlay';
+      overlay.id='m-admin-pw-confirm';
+      overlay.innerHTML=`
+        <div class="modal" style="max-width:420px">
+          <div class="modal-title">Confirm Your Identity</div>
+          <div class="modal-sub" id="admin-pw-sub">Enter your admin password to confirm deletion</div>
+          <div class="fg" style="margin-top:16px">
+            <label class="fl">Your Password</label>
+            <input class="fi" id="admin-pw-input" type="password" placeholder="Enter your password" autocomplete="current-password">
+            <div id="admin-pw-err" style="color:var(--red);font-size:12px;margin-top:6px;display:none">Password cannot be empty</div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-g" id="admin-pw-cancel">Cancel</button>
+            <button class="btn btn-danger" id="admin-pw-ok">Confirm Delete</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+    }
+    const input=document.getElementById('admin-pw-input');
+    const errEl=document.getElementById('admin-pw-err');
+    const sub=document.getElementById('admin-pw-sub');
+    if(sub)sub.textContent=`Enter your admin password to confirm deletion of "${targetName}"`;
+    input.value='';
+    errEl.style.display='none';
+    overlay.classList.add('on');
+    setTimeout(()=>input.focus(),60);
+
+    function cleanup(){overlay.classList.remove('on');}
+    document.getElementById('admin-pw-cancel').onclick=()=>{cleanup();resolve(null);};
+    document.getElementById('admin-pw-ok').onclick=()=>{
+      const pw=input.value.trim();
+      if(!pw){errEl.style.display='';return;}
+      cleanup();resolve(pw);
+    };
+    input.onkeydown=e=>{if(e.key==='Enter'){const pw=input.value.trim();if(!pw){errEl.style.display='';return;}cleanup();resolve(pw);}if(e.key==='Escape'){cleanup();resolve(null);}};
+  });
 }
 
 function getTableRows(table){
