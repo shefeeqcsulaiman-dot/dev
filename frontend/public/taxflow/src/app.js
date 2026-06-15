@@ -3881,6 +3881,13 @@ function openStockDayHistory(itemName,unit,monthKey,monthLabel,allMovements){
     const even=i%2===0;
     const tr=document.createElement('tr');
     tr.style.background=even?'var(--card)':'var(--bg2)';
+    const movRef=m.reference||m.ref||'';
+    const movType=(m.movement_type||m.type||'').toLowerCase();
+    if(movRef){
+      tr.style.cursor='pointer';
+      tr.title='Click to open source record';
+      tr.onclick=()=>openMovementSource(movType,movRef);
+    }
     tr.innerHTML=`
       <td style="padding:7px 10px;border:1px solid var(--border)" class="mono">${escapeHtml(formattedDate)}</td>
       <td style="padding:7px 10px;border:1px solid var(--border)">${escapeHtml(m.vendor_name||'-')}</td>
@@ -3896,6 +3903,37 @@ function openStockDayHistory(itemName,unit,monthKey,monthLabel,allMovements){
     tbody.appendChild(tr);
   });
   showM('m-stock-day-history');
+}
+
+function openMovementSource(type,ref){
+  if(!ref||ref==='-'){toast('No source reference for this movement','warn');return;}
+  const isPurchase=type.includes('purchase')||type.includes('bill')||type.includes('vendor');
+  const isSale=!isPurchase&&(type.includes('sale')||type.includes('invoice'));
+  if(isPurchase){
+    // Try cache first, then search purchase record table rows
+    let purchase=purchaseRecordCache.get(ref);
+    if(!purchase){
+      const row=[...document.querySelectorAll('#purchase-record-tbody tr:not([data-empty-state])')].find(r=>
+        (r.dataset.purchaseRef||r.children[0]?.textContent.trim())===ref
+      );
+      if(row)purchase=purchaseRecordFromRow(row);
+    }
+    if(!purchase){toast(`Purchase record ${ref} not found — open Purchases page first`,'warn');return;}
+    renderPurchaseRecordPreview(purchase,{editable:false});
+    showM('m-purchase-view');
+    return;
+  }
+  if(isSale){
+    const row=[...document.querySelectorAll('#sales-invoice-tbody tr:not([data-empty-state])')].find(r=>{
+      try{return (JSON.parse(r.dataset.salesInvoice||'{}').invoice_no||'').toLowerCase()===ref.toLowerCase();}catch{return false;}
+    });
+    if(!row){toast(`Sales invoice ${ref} not found — open Sales page first`,'warn');return;}
+    const inv=invoiceFromSalesRow(row);
+    renderSalesInvoicePreview(inv);
+    showM('m-sales-view');
+    return;
+  }
+  toast(`No linked record for movement type "${type}"`, 'warn');
 }
 
 async function clearInventoryTable(){
