@@ -705,6 +705,65 @@ async def app_data_action(
             cache.invalidate_company(current_user.company_id)
         return {"ok": True, "deleted": deleted, "key": key}
 
+    if action == "bulk-delete":
+        collection = str(payload.get("collection", "app_actions"))
+        records = payload.get("records", [])
+        if not isinstance(records, list):
+            records = []
+        records = [r if isinstance(r, dict) else {"value": r} for r in records]
+        keys = [k for k in (record_key(collection, r) for r in records) if k]
+        deleted_count = 0
+        if keys:
+            deleted_count = (
+                db.query(AppDataRecord)
+                .filter(
+                    AppDataRecord.company_id == current_user.company_id,
+                    AppDataRecord.collection == collection,
+                    AppDataRecord.record_key.in_(keys),
+                )
+                .delete(synchronize_session=False)
+            )
+        # Bulk domain cleanup for purchaseRecords
+        if collection == "purchaseRecords" and records:
+            refs = [
+                str(r.get("ref") or r.get("invoice_no") or r.get("id") or "").strip()
+                for r in records
+            ]
+            refs = [ref for ref in refs if ref]
+            if refs:
+                tx_ids = [
+                    row[0] for row in db.query(SourceTransaction.id).filter(
+                        SourceTransaction.company_id == current_user.company_id,
+                        SourceTransaction.module == "purchase",
+                        SourceTransaction.reference.in_(refs),
+                    ).all()
+                ]
+                if tx_ids:
+                    db.query(SourceTransactionLine).filter(
+                        SourceTransactionLine.source_id.in_(tx_ids)
+                    ).delete(synchronize_session=False)
+                    db.query(SourceTransaction).filter(
+                        SourceTransaction.id.in_(tx_ids)
+                    ).delete(synchronize_session=False)
+                db.query(StockMovement).filter(
+                    StockMovement.company_id == current_user.company_id,
+                    StockMovement.movement_type == "purchase",
+                    StockMovement.reference.in_(refs),
+                ).delete(synchronize_session=False)
+                db.query(InventoryValuationLayer).filter(
+                    InventoryValuationLayer.company_id == current_user.company_id,
+                    InventoryValuationLayer.source_module == "purchase",
+                    InventoryValuationLayer.source_id.in_(refs),
+                ).delete(synchronize_session=False)
+        else:
+            for r in records:
+                sync_domain_delete(db, current_user, collection, r)
+        log_action(db, current_user, collection, "records_bulk_deleted", {"count": deleted_count})
+        db.commit()
+        if collection in _REPORT_AFFECTING_COLLECTIONS:
+            cache.invalidate_company(current_user.company_id)
+        return {"ok": True, "deleted": deleted_count}
+
     if action == "invoice-layout":
         record = dict(payload)
         saved = save_app_record(db, current_user, "invoiceLayout", record)
@@ -1679,9 +1738,11 @@ def openai_purchase_content_parts(content: bytes, ext: str) -> list[dict[str, An
         parts = openai_image_parts_with_pillow(content, ext)
         if parts:
             return parts
-        mime = OPENAI_DIRECT_IMAGE_MIME.get(ext)
-        if mime:
-            return [openai_image_part(content, mime)]
+        # PIL not available or failed — send raw bytes only if within size limit
+        if len(content) <= _MAX_IMAGE_BYTES:
+            mime = OPENAI_DIRECT_IMAGE_MIME.get(ext)
+            if mime:
+                return [openai_image_part(content, mime)]
         return []
 
     if ext == "pdf":
@@ -1697,6 +1758,10 @@ def openai_image_part(content: bytes, mime: str = "image/png") -> dict[str, Any]
     return {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{encoded}", "detail": "high"}}
 
 
+_MAX_IMAGE_DIMENSION = 1568   # Claude's optimal max edge (≤ 1568px on longest side)
+_MAX_IMAGE_BYTES = 4 * 1024 * 1024  # 4 MB safety cap (Anthropic limit is 5 MB)
+
+
 def openai_image_parts_with_pillow(content: bytes, ext: str) -> list[dict[str, Any]]:
     try:
         from PIL import Image  # type: ignore[import-not-found]
@@ -1705,9 +1770,22 @@ def openai_image_parts_with_pillow(content: bytes, ext: str) -> list[dict[str, A
     try:
         with Image.open(io.BytesIO(content)) as image:
             frame = image.copy().convert("RGB")
-            output = io.BytesIO()
-            frame.save(output, format="PNG")
-            return [openai_image_part(output.getvalue(), "image/png")]
+            # Downscale if either dimension exceeds the safe maximum
+            w, h = frame.size
+            if max(w, h) > _MAX_IMAGE_DIMENSION:
+                scale = _MAX_IMAGE_DIMENSION / max(w, h)
+                frame = frame.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+            # Save as JPEG (much smaller than PNG for photos); reduce quality until within limit
+            data = b""
+            for quality in (85, 70, 55, 40):
+                output = io.BytesIO()
+                frame.save(output, format="JPEG", quality=quality, optimize=True)
+                data = output.getvalue()
+                if len(data) <= _MAX_IMAGE_BYTES:
+                    break
+            if len(data) > _MAX_IMAGE_BYTES:
+                return []  # give up — too large even at lowest quality
+            return [openai_image_part(data, "image/jpeg")]
     except Exception:
         return []
 
@@ -1739,7 +1817,7 @@ def openai_purchase_pdf_max_pages() -> int:
 
 
 def call_claude_invoice_extractor(api_key: str, parts: list[dict[str, Any]]) -> dict[str, Any]:
-    model = os.environ.get("ANTHROPIC_PURCHASE_MODEL", "claude-haiku-4-5-20251001").strip() or "claude-haiku-4-5-20251001"
+    model = os.environ.get("ANTHROPIC_PURCHASE_MODEL", "claude-sonnet-4-6").strip() or "claude-sonnet-4-6"
     # Convert OpenAI-style content parts to Anthropic format
     anthropic_content: list[dict[str, Any]] = []
     for part in parts:
@@ -1758,20 +1836,30 @@ def call_claude_invoice_extractor(api_key: str, parts: list[dict[str, Any]]) -> 
     payload = {
         "model": model,
         "max_tokens": 8192,
+        "temperature": 0,
         "messages": [{"role": "user", "content": anthropic_content}],
     }
-    request = urllib.request.Request(
-        "https://api.anthropic.com/v1/messages",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(request, timeout=60) as response:
-        result = json.loads(response.read().decode("utf-8"))
+    import time as _time
+    for attempt in range(3):
+        request = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=90) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429 and attempt < 2:
+                _time.sleep(30)
+                continue
+            raise
     raw = str(result["content"][0]["text"] or "").strip()
     raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
     raw = re.sub(r"\s*```$", "", raw)
@@ -1787,17 +1875,26 @@ def call_openai_invoice_extractor(api_key: str, parts: list[dict[str, Any]]) -> 
         "max_tokens": 8192,
         "temperature": 0,
     }
-    request = urllib.request.Request(
-        "https://api.openai.com/v1/chat/completions",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(request, timeout=60) as response:
-        result = json.loads(response.read().decode("utf-8"))
+    import time as _time
+    for attempt in range(3):
+        request = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=90) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429 and attempt < 2:
+                _time.sleep(30)
+                continue
+            raise
     raw = str(result["choices"][0]["message"]["content"] or "").strip()
     raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
     raw = re.sub(r"\s*```$", "", raw)
@@ -1856,11 +1953,10 @@ def openai_invoice_to_purchase_rows(data: dict[str, Any]) -> list[dict[str, Any]
         line_vat_explicit = decimal_value(item.get("line_vat_amount"))
         if line_vat_explicit:
             vat = line_vat_explicit
-        elif vat_total:
-            if net_sum:
-                vat = vat_total * (line_net / net_sum)
-            elif index == 0:
-                vat = vat_total
+        elif vat_total and net_sum:
+            vat = vat_total * (line_net / net_sum)
+        elif vat_total and index == 0:
+            vat = vat_total
         else:
             vat = Decimal("0")
         unit_cost = openai_unit_price(item, line_net)

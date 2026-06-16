@@ -5746,14 +5746,31 @@ async function clearPurchaseRecords(){
     okText:'Clear Records'
   });
   if(!confirmed)return;
-  let failed=0;
-  for(const record of records){
-    // result===null means HTTP error; result.deleted===false just means AppDataRecord was absent
-    // but sync_domain_delete still cleaned stock movements — treat both as success
-    const result=await deleteServer('purchaseRecords',record);
-    if(result===null)failed++;
+  // Show full-page loader
+  const fpl=document.getElementById('fullpage-loader');
+  const fplFill=document.getElementById('fullpage-loader-fill');
+  const fplPct=document.getElementById('fullpage-loader-pct');
+  const fplSub=document.getElementById('fullpage-loader-sub');
+  const fplTitle=document.getElementById('fullpage-loader-title');
+  if(fpl){
+    if(fplTitle)fplTitle.textContent='Deleting Purchase Records';
+    if(fplSub)fplSub.textContent=`Deleting ${records.length.toLocaleString('en-AE')} record(s)…`;
+    if(fplFill)fplFill.style.width='10%';
+    if(fplPct)fplPct.textContent='';
+    fpl.style.display='flex';
   }
-  // Always clear UI — domain cleanup ran for every non-error record
+  let failed=0;
+  try{
+    // Send all records in one bulk-delete request
+    const result=await apiRequest('bulk-delete',{collection:'purchaseRecords',records});
+    if(result===null)failed=records.length;
+    if(fplFill)fplFill.style.width='90%';
+  }catch(err){
+    failed=records.length;
+    console.warn('Bulk delete failed:',err);
+  }
+  if(fpl)fpl.style.display='none';
+  // Always clear UI
   purchaseRecordCache.clear();
   purchaseRecordsTotal=0;
   purchaseRecordsOffset=0;
@@ -9740,6 +9757,9 @@ function purchaseAiStatusPillHtml(label='Pending',cls='pending'){
 
 function purchaseAiRowHtml(inv,line,index,validation,filename){
   const fmt=n=>purchaseAiNumber(n).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fileExt=(filename||'').split('.').pop().toLowerCase();
+  const isImage=['jpg','jpeg','png','bmp','webp','tiff','tif'].includes(fileExt);
+  const fileTypeLabel=isImage?'IMG':fileExt==='pdf'?'PDF':fileExt?fileExt.toUpperCase():'FILE';
   const lineTotal=purchaseAiInvoiceLineTotal(inv);
   const vat=purchaseAiNumber(inv.vat_amount);
   const net=purchaseAiNumber(inv.net_amount||inv.subtotal)||lineTotal;
@@ -9760,7 +9780,7 @@ function purchaseAiRowHtml(inv,line,index,validation,filename){
     <div class="ai-card-head">
       <div class="ai-card-title-wrap">
         <input type="checkbox" class="purchase-ai-select" ${validation.valid?'checked':''} aria-label="Select ${escapeHtml(inv.invoice_no)} line ${index+1}">
-        <div class="ai-pdf-icon"><span>PDF</span></div>
+        <div class="ai-pdf-icon"><span>${fileTypeLabel}</span></div>
         <div>
           <div class="ai-card-title mono">${escapeHtml(inv.invoice_no||'Missing invoice no')}</div>
           <div class="ai-card-kicker">${escapeHtml(inv.supplier||'Supplier missing')}${inv.date?` · <span style="font-weight:400;color:var(--fg-3)">${escapeHtml(inv.date)}</span>`:''}</div>
@@ -9769,6 +9789,7 @@ function purchaseAiRowHtml(inv,line,index,validation,filename){
     </div>
     <div class="ai-invoice-divider"></div>
     <div class="ai-invoice-fields" style="cursor:pointer" onclick="openPurchaseAiEdit(this)" title="Click to edit">
+      ${(()=>{const srcEntry=inv._source_entry_id?uploadedFiles.find(f=>f.id===inv._source_entry_id):null;const imgSrc=srcEntry?.base64||inv.source_image||'';return isImage&&imgSrc?`<div style="grid-column:1/-1;text-align:center;margin-bottom:4px"><img src="${imgSrc}" alt="Invoice" style="max-width:100%;max-height:140px;border-radius:6px;border:1px solid var(--border);object-fit:contain"></div>`:'';})()}
       ${filename?`<div><span>Filename</span><strong style="font-size:11px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(filename)}</strong></div>`:''}
       <div><span>TRN / VAT #</span><strong class="mono" style="${trnInvalid?'color:var(--red)':''}" title="${trnInvalid?'Invalid TRN — must be 15 digits':''}">${escapeHtml(trnVal||'-')}${trnInvalid?' ⚠':''}</strong></div>
       <div><span>Subtotal (excl. VAT)</span><strong class="mono">${cur} ${fmt(net)}</strong></div>
@@ -9915,6 +9936,12 @@ async function storeExtractedPurchaseRecords(){
     if(result==='created')stored++;
     recordsToSave.push({record:merged.record,result,invoiceNo:inv.invoice_no,refKey,merge:merged});
   }
+  const fpl=document.getElementById('fullpage-loader');
+  const fplFill=document.getElementById('fullpage-loader-fill');
+  const fplPct=document.getElementById('fullpage-loader-pct');
+  const fplSub=document.getElementById('fullpage-loader-sub');
+  const fplCount=document.getElementById('fullpage-loader-count');
+  const fplTitle=document.getElementById('fullpage-loader-title');
   if(recordsToSave.length){
     try{
       try{
@@ -9929,7 +9956,21 @@ async function storeExtractedPurchaseRecords(){
       if(fill)fill.style.width='50%';
       if(pct)pct.textContent='50%';
       if(label)label.textContent=`Saving ${recordsToSave.length} purchase record${recordsToSave.length!==1?'s':''}…`;
-      await savePurchaseRecordsInChunks(recordsToSave.map(item=>item.record));
+      if(fpl){
+        if(fplTitle)fplTitle.textContent='Saving Purchase Records';
+        if(fplSub)fplSub.textContent=`0 of ${recordsToSave.length} saved`;
+        if(fplFill)fplFill.style.width='0%';
+        if(fplPct)fplPct.textContent='0%';
+        if(fplCount)fplCount.textContent='';
+        fpl.style.display='flex';
+      }
+      await savePurchaseRecordsInChunks(recordsToSave.map(item=>item.record),(done,total)=>{
+        const p=Math.round(done/total*100);
+        if(fplFill)fplFill.style.width=p+'%';
+        if(fplPct)fplPct.textContent=p+'%';
+        if(fplSub)fplSub.textContent=`${done} of ${total} saved`;
+      });
+      if(fpl)fpl.style.display='none';
       setInventoryTableCleared(false);
       recordsToSave.forEach(item=>{
         const oldRow=existingRows.get(item.refKey);
@@ -9949,6 +9990,7 @@ async function storeExtractedPurchaseRecords(){
         skip:true
       })));
     }catch(err){
+      if(fpl)fpl.style.display='none';
       failed=recordsToSave.length;
       stored=0;
       updated=0;
@@ -10061,7 +10103,7 @@ async function saveVendorRecordsInChunks(records){
   }
 }
 
-async function savePurchaseRecordsInChunks(records){
+async function savePurchaseRecordsInChunks(records,onProgress){
   // Reduce chunk size to 1 when records carry source_image (compressed base64)
   // to keep individual HTTP request bodies small
   const hasImages=records.some(r=>r.source_image);
@@ -10069,7 +10111,8 @@ async function savePurchaseRecordsInChunks(records){
   for(let index=0;index<records.length;index+=chunkSize){
     const chunk=records.slice(index,index+chunkSize);
     await bulkSaveServer('purchaseRecords',chunk,{throwOnError:true});
-    if(records.length>1)toast(`Saved ${Math.min(index+chunk.length,records.length)} of ${records.length} purchase rows...`,'info');
+    const done=Math.min(index+chunk.length,records.length);
+    if(onProgress)onProgress(done,records.length);
   }
 }
 
