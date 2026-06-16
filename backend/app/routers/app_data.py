@@ -2527,7 +2527,9 @@ def purchase_item_rows_from_lines(lines: list[str], invoice_no: str, date: str, 
             if item_section_started and looks_like_item_description(line):
                 pending_description = line
             continue
-        qty_match = re.search(r"(?:^|\s)([0-9]+(?:\.[0-9]+)?)\s*(?:pcs|nos|qty|each|ea|unit|units|kg|ltr|mtr)?\b", line, flags=re.IGNORECASE)
+        # Prefer qty adjacent to a unit keyword; fall back to first whole integer
+        # after the description text (skip leading serial/line numbers at pos 0)
+        qty_unit_match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*(?:pcs|nos|each|ea|units?|kg|ltr|mtr|box|btl|can|ctn|set)\b", line, flags=re.IGNORECASE)
         description = re.sub(r"\b[0-9][0-9,]*(?:\.[0-9]{1,2})?\b", " ", line)
         description = re.sub(r"\b(?:AED|VAT|TOTAL|SUBTOTAL|TAX|QTY|PCS|NOS)\b", " ", description, flags=re.IGNORECASE)
         description = re.sub(r"\s+", " ", description).strip(" :-")
@@ -2535,8 +2537,27 @@ def purchase_item_rows_from_lines(lines: list[str], invoice_no: str, date: str, 
             description = pending_description
         if not description or re.search(r"\b(total|subtotal|vat|tax|amount due|balance|invoice|date|trn)\b", description, flags=re.IGNORECASE):
             continue
-        qty = decimal_value(qty_match.group(1) if qty_match else 1) or Decimal("1")
-        line_total = decimal_value(money[-1])
+        if qty_unit_match:
+            qty = decimal_value(qty_unit_match.group(1)) or Decimal("1")
+        else:
+            # Skip the first token if it looks like a row serial number (1–3 digits at line start)
+            qty_line = re.sub(r"^\s*[0-9]{1,3}\s+", "", line)
+            qty_match = re.search(r"(?:^|\s)([1-9][0-9]{0,2})(?:\s|$)", qty_line)
+            qty = decimal_value(qty_match.group(1) if qty_match else 1) or Decimal("1")
+        # Select line net (excl. VAT): if last 3 money values fit the pattern
+        # [net, vat≈net×5%, gross≈net×1.05] then use money[-3] not money[-1]
+        money_vals = [decimal_value(m) for m in money]
+        if len(money_vals) >= 3:
+            net_candidate = money_vals[-3]
+            vat_candidate = money_vals[-2]
+            gross_candidate = money_vals[-1]
+            if (net_candidate > 0 and vat_candidate > 0
+                    and abs(vat_candidate - net_candidate * Decimal("0.05")) <= net_candidate * Decimal("0.02") + Decimal("0.10")):
+                line_total = net_candidate
+            else:
+                line_total = money_vals[-1]
+        else:
+            line_total = money_vals[-1] if money_vals else Decimal("0")
         if line_total <= 0:
             continue
         unit_cost = line_total / qty if qty else line_total
