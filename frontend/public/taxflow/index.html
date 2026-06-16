@@ -890,7 +890,7 @@
     <div class="card mb16">
       <div class="card-hd">
         <div><div class="card-title">AI Upload Validation</div><div class="card-sub">Review updated purchase details, fix validation issues, then save selected rows</div></div>
-        <div class="flx"><button class="btn btn-g btn-sm" onclick="togglePurchaseAiSelection(true)">Select All</button><button class="btn btn-g btn-sm" onclick="runOCR()">Run Extraction</button><button class="btn btn-p btn-sm" onclick="storeExtractedPurchaseRecords()">Save All</button><button class="btn btn-r btn-sm" onclick="clearPendingUploads()">Clear Incomplete</button></div>
+        <div class="flx"><button class="btn btn-g btn-sm" onclick="togglePurchaseAiSelection(true)">Select All</button><button class="btn btn-g btn-sm" onclick="runOCR()">Run Extraction</button><button class="btn btn-p btn-sm" id="purchase-save-all-btn" onclick="storeExtractedPurchaseRecords()">Save All</button><button class="btn btn-r btn-sm" onclick="clearPendingUploads()">Clear Incomplete</button></div>
       </div>
       <div id="pur-validation-file-status" class="g3 mb16"></div>
       <div class="ai-card-toolbar flx-b mb12">
@@ -917,6 +917,19 @@
       <div id="ext-prog" style="display:none;margin-top:14px">
         <div class="flx-b mb12"><span style="font-size:13px;color:var(--text2)">Extracting...</span><span id="ext-pct" class="mono" style="color:var(--accent)">0%</span></div>
         <div class="prog-bar"><div class="prog-fill" id="ext-fill" style="width:0%"></div></div>
+      </div>
+      <div id="pur-save-prog" style="display:none;margin-top:14px">
+        <div class="flx-b mb12"><span style="font-size:13px;color:var(--text2)" id="pur-save-prog-label">Saving...</span><span id="pur-save-pct" class="mono" style="color:var(--accent)">0%</span></div>
+        <div class="prog-bar"><div class="prog-fill" id="pur-save-fill" style="width:0%"></div></div>
+      </div>
+      <div id="pur-save-result" style="display:none;margin-top:14px;padding:14px 16px;border-radius:10px;background:var(--surface2);border:1px solid var(--border)">
+        <div class="flx-b" style="align-items:flex-start">
+          <div>
+            <div style="font-weight:700;font-size:14px;margin-bottom:8px">Save Complete</div>
+            <div id="pur-save-result-stats" class="g3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px"></div>
+          </div>
+          <button class="btn btn-g btn-sm" onclick="document.getElementById('pur-save-result').style.display='none'">✕</button>
+        </div>
       </div>
     </div>
     <div class="g3">

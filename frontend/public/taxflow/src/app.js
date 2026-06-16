@@ -9867,6 +9867,20 @@ async function storeExtractedPurchaseRecords(){
     });
   });
   if(selectedInvoices.size===0){toast('No extracted purchase invoices to store','warn');return;}
+  // Show progress
+  const total=selectedInvoices.size;
+  const saveBtn=document.getElementById('purchase-save-all-btn');
+  const prog=document.getElementById('pur-save-prog');
+  const fill=document.getElementById('pur-save-fill');
+  const pct=document.getElementById('pur-save-pct');
+  const label=document.getElementById('pur-save-prog-label');
+  const resultEl=document.getElementById('pur-save-result');
+  if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Saving…';}
+  if(resultEl)resultEl.style.display='none';
+  if(prog)prog.style.display='block';
+  if(fill){fill.style.width='5%';fill.classList.add('running');}
+  if(label)label.textContent=`Saving ${total} invoice${total!==1?'s':''}…`;
+  if(pct)pct.textContent='5%';
   let stored=0;
   let updated=0;
   let existing=0;
@@ -9912,6 +9926,9 @@ async function storeExtractedPurchaseRecords(){
         toast('Vendor master save failed; purchase records will still be saved','warn');
         console.warn('Purchase AI vendor sync failed:',vendorErr);
       }
+      if(fill)fill.style.width='50%';
+      if(pct)pct.textContent='50%';
+      if(label)label.textContent=`Saving ${recordsToSave.length} purchase record${recordsToSave.length!==1?'s':''}…`;
       await savePurchaseRecordsInChunks(recordsToSave.map(item=>item.record));
       setInventoryTableCleared(false);
       recordsToSave.forEach(item=>{
@@ -9950,7 +9967,35 @@ async function storeExtractedPurchaseRecords(){
     if(tab)stab(tab,'p-records');
   }
   updatePurchaseValidationFileStatus();
-  toast(`${stored} added, ${updated} updated, ${existing} already exist${reviewSaved?`; ${reviewSaved} saved with review notes`:''}${failed?`; ${failed} failed to save`:''}`,'ok');
+  // Update progress to 100% then hide
+  if(fill)fill.style.width='100%';
+  if(pct)pct.textContent='100%';
+  if(label)label.textContent='Done';
+  setTimeout(()=>{
+    if(prog)prog.style.display='none';
+    if(fill){fill.style.width='0%';fill.classList.remove('running');}
+  },600);
+  // Restore button
+  if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save All';}
+  // Show result banner
+  const statsEl=document.getElementById('pur-save-result-stats');
+  if(statsEl&&resultEl){
+    const stats=[
+      {label:'Added',val:stored,color:'var(--green)'},
+      {label:'Updated',val:updated,color:'var(--accent)'},
+      {label:'Already Existed',val:existing,color:'var(--text3)'},
+      ...(reviewSaved?[{label:'Saved with Issues',val:reviewSaved,color:'var(--amber)'}]:[]),
+      ...(failed?[{label:'Failed',val:failed,color:'var(--red)'}]:[]),
+    ];
+    statsEl.innerHTML=stats.map(s=>`
+      <div style="text-align:center;padding:10px 8px;background:var(--bg2);border-radius:8px;border:1px solid var(--border)">
+        <div style="font-size:22px;font-weight:800;color:${s.color}">${s.val}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${s.label}</div>
+      </div>`).join('');
+    resultEl.style.display='block';
+  }
+  const msg=`${stored} added, ${updated} updated, ${existing} already exist${reviewSaved?`; ${reviewSaved} with review notes`:''}${failed?`; ${failed} failed`:''}`;
+  toast(msg,failed?'warn':'ok');
 }
 
 async function saveVendorsFromExtractedPurchases(invoices){
