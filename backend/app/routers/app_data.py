@@ -1653,7 +1653,10 @@ def extract_purchase_rows_with_openai(content: bytes, ext: str) -> list[dict[str
     try:
         data = call_openai_invoice_extractor(api_key, parts)
     except Exception as exc:
-        raise RuntimeError(f"OpenAI extraction failed: {exc}") from exc
+        # Auth errors, rate limits, network failures — fall through to Tesseract
+        import logging
+        logging.getLogger(__name__).warning("OpenAI extraction failed, falling back to Tesseract: %s", exc)
+        return []
     return openai_invoice_to_purchase_rows(data)
 
 
