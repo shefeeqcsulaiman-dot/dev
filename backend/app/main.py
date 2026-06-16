@@ -149,6 +149,8 @@ def ensure_schema_updates() -> None:
                 connection.execute(text("ALTER TABLE companies ADD COLUMN subscription_expires_at VARCHAR(20)"))
             if "logo" not in existing_columns:
                 connection.execute(text("ALTER TABLE companies ADD COLUMN logo TEXT"))
+            if "fta_username" not in existing_columns:
+                connection.execute(text("ALTER TABLE companies ADD COLUMN fta_username VARCHAR(255)"))
             for col, typedef in [
                 ("trade_name", "VARCHAR(160)"),
                 ("emirate", "VARCHAR(80)"),

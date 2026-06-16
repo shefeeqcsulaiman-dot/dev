@@ -1571,7 +1571,8 @@ function localApiUrlFor(url){
 }
 
 function showLoginOverlay(){
-  window.location.replace('/taxflow/login');
+  try{toast('Session expired — please sign in again','warn');}catch{}
+  setTimeout(()=>window.location.replace('/taxflow/login'),1200);
 }
 function hideLoginOverlay(){}
 async function submitLogin(){
@@ -1591,6 +1592,7 @@ async function submitLogin(){
       localStorage.setItem('taxflow_token',data.access_token);
       hideLoginOverlay();
       applyRoleBasedNav().catch(()=>{});
+      audit('User signed in',email,'Login');
       hydrateFromServer().catch(err=>console.warn('Database hydrate failed after login:',err));
     }else{
       errEl.textContent=data.detail||'Incorrect email or password.';
@@ -1908,12 +1910,10 @@ async function saveCompanySettingsToDatabase(){
     fta_username:v('tax-fta-user')||v('co-fta-user')||currentCompany?.fta_username||null,
   };
   const _saveUrl=`${apiBaseUrl()}/companies/current`;
-  console.log('[saveCompanySettings] PUT',_saveUrl);
   const response=await authenticatedFetch(_saveUrl,{
     method:'PUT',
     body:JSON.stringify(payload)
   });
-  console.log('[saveCompanySettings] response',response.status,response.url);
   if(!response.ok){
     let detail='';
     try{const e=await response.clone().json();detail=e.detail||'';}catch(x){}
@@ -1921,6 +1921,7 @@ async function saveCompanySettingsToDatabase(){
   }
   const company=await response.json();
   applyCompanyToUi(company);
+  audit('Updated company settings',company.name,'Saved');
   return company;
 }
 
@@ -1939,6 +1940,7 @@ async function saveTaxSettings(){
     if(!response.ok)throw new Error('Save failed ('+response.status+')');
     const company=await response.json();
     applyCompanyToUi(company);
+    audit('Updated tax settings',company.trn||company.name,'Saved');
     toast('Tax settings saved','ok');
   }catch(err){toast('Save failed: '+err.message,'warn');}
 }

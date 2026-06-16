@@ -1643,17 +1643,30 @@ Rules:
 
 
 def extract_purchase_rows_with_openai(content: bytes, ext: str) -> list[dict[str, Any]]:
-    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-    if not api_key:
+    # Try Anthropic Claude first (preferred), fall back to OpenAI if configured
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if anthropic_key:
+        parts = openai_purchase_content_parts(content, ext)
+        if parts:
+            try:
+                data = call_claude_invoice_extractor(anthropic_key, parts)
+                rows = openai_invoice_to_purchase_rows(data)
+                if rows:
+                    return rows
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).warning("Claude extraction failed, trying fallback: %s", exc)
+
+    openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not openai_key:
         return []
     parts = openai_purchase_content_parts(content, ext)
     if not parts:
         return []
     parts.append({"type": "text", "text": OPENAI_PURCHASE_EXTRACTION_PROMPT})
     try:
-        data = call_openai_invoice_extractor(api_key, parts)
+        data = call_openai_invoice_extractor(openai_key, parts)
     except Exception as exc:
-        # Auth errors, rate limits, network failures — fall through to Tesseract
         import logging
         logging.getLogger(__name__).warning("OpenAI extraction failed, falling back to Tesseract: %s", exc)
         return []
@@ -1723,6 +1736,47 @@ def openai_purchase_pdf_max_pages() -> int:
         return max(0, int(os.environ.get("OPENAI_PURCHASE_PDF_MAX_PAGES", "10")))
     except ValueError:
         return 10
+
+
+def call_claude_invoice_extractor(api_key: str, parts: list[dict[str, Any]]) -> dict[str, Any]:
+    model = os.environ.get("ANTHROPIC_PURCHASE_MODEL", "claude-haiku-4-5-20251001").strip() or "claude-haiku-4-5-20251001"
+    # Convert OpenAI-style content parts to Anthropic format
+    anthropic_content: list[dict[str, Any]] = []
+    for part in parts:
+        if part.get("type") == "image_url":
+            url = part["image_url"]["url"]
+            if url.startswith("data:"):
+                mime, b64 = url.split(";base64,", 1)
+                mime = mime[5:]  # strip "data:"
+                anthropic_content.append({
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": mime, "data": b64},
+                })
+        elif part.get("type") == "text":
+            anthropic_content.append({"type": "text", "text": part["text"]})
+    anthropic_content.append({"type": "text", "text": OPENAI_PURCHASE_EXTRACTION_PROMPT})
+    payload = {
+        "model": model,
+        "max_tokens": 8192,
+        "messages": [{"role": "user", "content": anthropic_content}],
+    }
+    request = urllib.request.Request(
+        "https://api.anthropic.com/v1/messages",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        result = json.loads(response.read().decode("utf-8"))
+    raw = str(result["content"][0]["text"] or "").strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
+    raw = re.sub(r"\s*```$", "", raw)
+    parsed = json.loads(raw)
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def call_openai_invoice_extractor(api_key: str, parts: list[dict[str, Any]]) -> dict[str, Any]:

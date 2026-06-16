@@ -56,7 +56,7 @@ def update_company(
         "trade_name", "emirate", "business_type", "business_activity",
         "legal_structure", "trade_license_no", "trade_license_issue_date",
         "trade_license_expiry", "free_zone", "address", "po_box",
-        "phone", "website", "logo",
+        "phone", "website", "logo", "fta_username",
     ]
     for field in nullable_fields:
         val = getattr(payload, field, None)

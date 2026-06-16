@@ -46,6 +46,7 @@ class CompanyOut(BaseModel):
     phone: str | None = None
     website: str | None = None
     logo: str | None = None
+    fta_username: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -68,6 +69,7 @@ class CompanyUpdate(BaseModel):
     phone: str | None = None
     website: str | None = None
     logo: str | None = None
+    fta_username: str | None = None
 
 
 class UserOut(BaseModel):
