@@ -293,6 +293,8 @@ body.theme-light .nbadge.red{background:var(--red);}
 .ai-invoice-fields strong{font-size:13px;color:var(--text2);font-weight:800;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .ai-invoice-fields .paid-ok{color:var(--green);}
 .ai-invoice-fields .paid-due{color:var(--red);}
+.ai-invoice-fields-edit>div{align-items:center;}
+.ai-invoice-fields-edit input.fi{padding:5px 8px;font-size:12px;height:30px;}
 .ai-invoice-lines-label{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin:0 0 8px;}
 .ai-invoice-lines{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;}
 .ai-line-row{border:1px solid var(--border);border-radius:6px;padding:8px 10px;background:var(--surface2);}

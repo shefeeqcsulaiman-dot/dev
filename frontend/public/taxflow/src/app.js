@@ -2093,8 +2093,8 @@ function _refreshPurchaseDashboardCard(){
   // Only update if currently showing zero (avoid overwriting good API data)
   const purEl=document.getElementById('dash-total-purchases');
   const purSubEl=document.getElementById('dash-purchases-sub');
-  if(purEl&&parseAmount(purEl.textContent||'0')===0&&lp.total>0){
-    purEl.textContent=formatAed(lp.total);
+  if(purEl&&parseAmount(purEl.textContent||'0')===0&&(lp.net||lp.total)>0){
+    purEl.textContent=formatAed(lp.net||lp.total);
     if(purSubEl)purSubEl.textContent=`${lp.count} Bills`;
   }
 }
@@ -2123,7 +2123,8 @@ function renderDashboardHero(data,kpis={},counts={}){
   // Purchase card: prefer DB purchase_summary; fall back to live in-memory bill table
   const purSum=data.purchase_summary||{};
   const _localPur=_computeLocalPurchaseStats();
-  const purchases=parseAmount(purSum.total||kpis.total_purchases||data.total_purchases||0)||_localPur.total;
+  // Show net (excl. VAT); purSum.net added in backend, fall back to local net then gross total
+  const purchases=parseAmount(purSum.net||purSum.total||kpis.total_purchases||data.total_purchases||0)||_localPur.net||_localPur.total;
   const purCount=Number(purSum.total_count||kpis.purchase_count||counts.purchase_record_count||0)||_localPur.count;
   // Fill paid/pending from local data when DB returns zeros
   if(!parseAmount(purSum.paid||0)&&_localPur.paid>0){purSum.paid=_localPur.paid;purSum.paid_count=_localPur.paidCount;purSum.pending_count=_localPur.pendingCount;}
@@ -2235,6 +2236,10 @@ function renderDashVatRing(data,kpis={}){
   set('dash-vat-output',formatAed(outputVat));
   set('dash-vat-input',formatAed(inputVat));
   set('dash-vat-net',formatAed(Math.abs(netVat)));
+  // Also populate Accounting → Tax Filing VAT widget
+  set('acc-filing-output-vat',formatAed(outputVat));
+  set('acc-filing-input-vat',formatAed(inputVat));
+  set('acc-filing-net-vat',formatAed(Math.abs(netVat)));
   const badge=document.getElementById('dash-vat-status-badge');
   if(badge){badge.textContent=netVat>0?'Payable':netVat<0?'Refund':'Balanced';badge.className=netVat>0?'b b-a':netVat<0?'b b-g':'b b-b';}
   // SVG donut r=38 → circ≈239
@@ -4092,7 +4097,7 @@ function renderStockLevelRow(item){
   row.style.cursor='pointer';
   row.title='Click to view stock movement history';
   row.onclick=e=>{if(!e.target.closest('button'))openStockMovementHistory(row);};
-  row.innerHTML=`<td class="mono">${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td class="mono" style="text-align:center">${fmt(qty,2)}</td><td>${escapeHtml(item.unit)}</td><td class="mono" style="text-align:right">${rate>0?fmt(rate,2):'-'}</td><td class="mono" style="text-align:right">${value>0?fmt(value,2):'-'}</td><td><span class="b ${cls}">${status}</span></td>`;
+  row.innerHTML=`<td class="mono">${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td class="mono" style="text-align:center">${fmt(qty,2)}</td><td>${escapeHtml(item.unit)}</td><td class="mono" style="text-align:right">${value>0?fmt(value,2):'-'}</td><td><span class="b ${cls}">${status}</span></td>`;
   return row;
 }
 
@@ -4188,36 +4193,35 @@ function renderSalesUnitRecord(unit){
 const _hydratedBills=[];
 
 function _computeLocalPurchaseStats(){
-  let total=0,paid=0,paidCount=0,pendingCount=0,count=0;
-  // Prefer hydrated data (populated from server bootstrap) over DOM scanning
+  let total=0,net=0,paid=0,paidCount=0,pendingCount=0,count=0;
   const billSrc=_hydratedBills.length?_hydratedBills:null;
   if(billSrc){
     billSrc.forEach(bill=>{
-      const rowTotal=parseAmount(bill.total||bill.grand_total||bill.net_amount||(Number(bill.subtotal||0)+Number(bill.vat||0))||_sumLines(bill.lines));
+      const rowTotal=parseAmount(bill.total||bill.grand_total||(Number(bill.subtotal||0)+Number(bill.vat||0))||_sumLines(bill.lines));
+      const rowNet=parseAmount(bill.net_amount||bill.subtotal||0)||(rowTotal-parseAmount(bill.vat_amount||bill.vat||bill.tax||0));
       const status=(bill.status||'').trim().toLowerCase();
-      total+=rowTotal;count++;
-      if(['paid','complete','completed','posted','settled','received'].includes(status)){paid+=rowTotal;paidCount++;}
+      total+=rowTotal;net+=rowNet;count++;
+      if(['paid','complete','completed','posted','settled','received'].includes(status)){paid+=rowNet;paidCount++;}
       else pendingCount++;
     });
   }else{
-    // DOM fallback — only counts rows with data-server-record (real DB rows, not demo HTML rows)
     document.querySelectorAll('#bill-tbody tr[data-server-record]').forEach(row=>{
       const cells=row.querySelectorAll('td');
       const rowTotal=parseAmount(cells[6]?.textContent||cells[4]?.textContent||0);
       const status=(cells[7]?.querySelector('.b')?.textContent||cells[7]?.textContent||'').trim().toLowerCase();
-      total+=rowTotal;count++;
+      total+=rowTotal;net+=rowTotal;count++;
       if(['paid','complete','completed','posted','settled','received'].includes(status)){paid+=rowTotal;paidCount++;}
       else pendingCount++;
     });
   }
-  // Purchase records from cache (populated during bootstrap)
   if(purchaseRecordCache.size>0){
     purchaseRecordCache.forEach(rec=>{
       const rowTotal=parseAmount(rec.total||rec.grand_total||(Number(rec.subtotal||0)+Number(rec.vat||rec.tax||0))||_sumLines(rec.lines||rec.items));
-      total+=rowTotal;count++;pendingCount++;
+      const rowNet=parseAmount(rec.net_amount||rec.subtotal||0)||(rowTotal-parseAmount(rec.vat_amount||rec.vat||rec.tax||0));
+      total+=rowTotal;net+=rowNet;count++;pendingCount++;
     });
   }
-  return {total,paid,paidCount,pendingCount,count};
+  return {total,net,paid,paidCount,pendingCount,count};
 }
 
 function _sumLines(lines){
@@ -5237,15 +5241,16 @@ function expAiRenderExtracted(invoices,filename){
         </div>
       </div>
       <div class="ai-invoice-divider"></div>
-      <div class="ai-invoice-fields">
-        <div><span>Date</span><strong>${escapeHtml(inv.date||'—')}</strong></div>
-        <div><span>Ref</span><strong class="mono">${escapeHtml(inv.invoice_no||'—')}</strong></div>
-        <div><span>Supplier</span><strong>${escapeHtml(inv.supplier||'—')}</strong></div>
-        <div><span>Total</span><strong class="mono">AED ${total.toLocaleString('en-AE',{minimumFractionDigits:2})}</strong></div>
-        <div><span>VAT</span><strong class="mono">AED ${vat.toLocaleString('en-AE',{minimumFractionDigits:2})}</strong></div>
+      <div class="ai-invoice-fields ai-invoice-fields-edit">
+        <div><span>Date</span><input class="fi fi-sm exp-ai-date" value="${escapeHtml(inv.date||'')}" placeholder="YYYY-MM-DD"></div>
+        <div><span>Ref</span><input class="fi fi-sm mono exp-ai-ref" value="${escapeHtml(inv.invoice_no||'')}" placeholder="Invoice No."></div>
+        <div><span>Supplier</span><input class="fi fi-sm exp-ai-supplier" value="${escapeHtml(inv.supplier||'')}" placeholder="Supplier name"></div>
+        <div><span>Net</span><input class="fi fi-sm mono exp-ai-amount" value="${amount>0?amount.toFixed(2):''}" placeholder="0.00" type="number" step="0.01" min="0"></div>
+        <div><span>VAT</span><input class="fi fi-sm mono exp-ai-vat" value="${vat>0?vat.toFixed(2):''}" placeholder="0.00" type="number" step="0.01" min="0"></div>
       </div>
       <div class="ai-card-foot">
         <div class="row-actions">
+          <span></span>
           <button class="ai-card-action approve" onclick="expAiSaveOne(this)">Save</button>
           <button class="ai-card-action delete" onclick="this.closest('.exp-ai-card').remove()">${deleteIconSvg()}</button>
         </div>
@@ -5260,18 +5265,24 @@ function expAiSaveOne(btn){
   const card=btn.closest('.exp-ai-card');
   if(!card)return;
   try{
-    const inv=JSON.parse(card.getAttribute('data-exp-inv')||'{}');
+    const date=card.querySelector('.exp-ai-date')?.value||new Date().toISOString().slice(0,10);
+    const ref=card.querySelector('.exp-ai-ref')?.value||`EXP-AI-${Date.now()}`;
+    const supplier=card.querySelector('.exp-ai-supplier')?.value||'';
+    const amount=parseAmount(card.querySelector('.exp-ai-amount')?.value||0);
+    const vat=parseAmount(card.querySelector('.exp-ai-vat')?.value||0);
+    const total=amount+vat;
     const record={
       ref:`EXP-AI-${Date.now()}`,
-      date:inv.date||new Date().toISOString().slice(0,10),
+      date,
+      invoice_no:ref,
       category:'Supplies',
-      description:inv.supplier||(inv.lines?.[0]?.product)||'AI Extracted Expense',
-      amount:parseAmount(inv.subtotal||inv.net_amount||0),
-      vat:parseAmount(inv.vat_amount||inv.tax_amount||0),
-      total:parseAmount(inv.total||0),
+      description:supplier||'AI Extracted Expense',
+      amount,
+      vat,
+      total,
       status:'Pending',
       source:'AI Upload',
-      supplier:inv.supplier||''
+      supplier
     };
     renderExpenseRecord(record);
     saveServer('expenses',record);
@@ -10484,7 +10495,7 @@ function savePurchaseAiEdit(next=false){
   if(next){
     const nextRow=purchaseAiRows()
       .find(row=>row.dataset.skipped!=='1'&&row!==current);
-    if(nextRow)setTimeout(()=>openPurchaseAiEdit(nextRow.querySelector('.row-actions .icon-btn')),80);
+    if(nextRow)setTimeout(()=>openPurchaseAiEdit(nextRow),80);
   }
 }
 
@@ -12616,6 +12627,26 @@ function filterLedger(){
     const account=row.dataset.account||row.querySelector('td:nth-child(3)')?.textContent||'';
     row.style.display=filter==='All Accounts'||account.includes(filter)?'':'none';
   });
+}
+
+async function clearLedgerRecords(){
+  const ok=await appConfirm({title:'Clear Ledger Records',message:'Remove all ledger entries? This cannot be undone.',okText:'Clear Records'});
+  if(!ok)return;
+  let failed=0;
+  try{
+    const resp=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/ledger?limit=1000&offset=0`);
+    if(resp.ok){
+      const data=await resp.json();
+      const records=Array.isArray(data)?data:(data.records||[]);
+      for(const rec of records){
+        const result=await deleteServer('ledger',rec);
+        if(result===null)failed++;
+      }
+    }
+  }catch(e){console.warn('Clear ledger error:',e);}
+  clearTableBody('ledger-tbody','No ledger entries in database yet.');
+  toast(`Ledger cleared${failed?`; ${failed} failed`:''}`,failed?'warn':'ok');
+  audit('Cleared ledger entries','All','Deleted');
 }
 
 // -- CORPORATE ACCOUNTING ----------------------------------------
@@ -15121,6 +15152,7 @@ function findGenericActionCell(row){
 
 function addTableDeleteActions(table){
   if(!table||table.dataset.deleteActionsBound==='skip')return;
+  if(table.closest('#page-reports'))return;
   const headRow=table.tHead?.rows?.[0];
   const existingActionCells=getTableRows(table).map(findGenericActionCell).filter(Boolean);
   const actionIndex=existingActionCells[0]?[...existingActionCells[0].parentElement.children].indexOf(existingActionCells[0]):-1;

@@ -1578,14 +1578,7 @@ def parse_image_purchase_rows(content: bytes, ext: str) -> list[dict[str, Any]]:
     ai_rows = extract_purchase_rows_with_openai(content, ext)
     if ai_rows:
         return ai_rows
-    # Fallback: Tesseract OCR
-    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-    if not api_key:
-        raise RuntimeError(
-            "Image extraction requires OPENAI_API_KEY. "
-            "Add OPENAI_API_KEY in DigitalOcean App Platform → etaxflow → Settings → Environment Variables. "
-            "Alternatively upload a PDF, CSV, or Excel file."
-        )
+    # Fallback: Tesseract OCR (no API key required)
     text = extract_image_text_with_tesseract(content, ext)
     if not text:
         raise RuntimeError("Could not extract text from image. Try uploading a clearer image or a PDF/CSV instead.")

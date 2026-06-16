@@ -325,19 +325,33 @@ def _purchase_row_amount(row: dict[str, Any]) -> Decimal:
     return Decimal("0.00")
 
 
+def _purchase_row_net(row: dict[str, Any]) -> Decimal:
+    """Extract net amount (excl. VAT) from a purchase record."""
+    net = money(row.get("net_amount") or row.get("subtotal") or 0)
+    if net:
+        return net
+    # Fall back: total minus VAT
+    total = _purchase_row_amount(row)
+    vat = money(row.get("vat_amount") or row.get("tax_amount") or row.get("vat") or 0)
+    return total - vat if total else Decimal("0.00")
+
+
 def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
     records = (
         app_data_payloads(db, company_id, "purchaseRecords")
         + app_data_payloads(db, company_id, "bills")
     )
     total = Decimal("0")
+    net_total = Decimal("0")
     paid_amount = Decimal("0")
     paid_count = 0
     pending_count = 0
     for rec in records:
         row_total = _purchase_row_amount(rec)
+        row_net = _purchase_row_net(rec)
         row_paid = record_amount(rec, "paid", "paid_amount")
         total += row_total
+        net_total += row_net
         if is_paid_status(normalized_ref(rec.get("status") or "")):
             paid_count += 1
             paid_amount += row_paid if row_paid else row_total
@@ -356,6 +370,7 @@ def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
             )
             .scalar()
         )
+        net_total = total  # SourceTransaction has no separate net field
         total_count = int(
             db.query(func.count(SourceTransaction.id))
             .filter(
@@ -378,6 +393,7 @@ def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
     payment_rate = int(paid_amount / total * 100) if total else 0
     return {
         "total": amount(total),
+        "net": amount(net_total),
         "paid": amount(paid_amount),
         "paid_count": paid_count,
         "pending_count": pending_count,
