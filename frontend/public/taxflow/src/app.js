@@ -187,6 +187,7 @@ function stab(el,target){
   if(target==='acc-voucher')prepareJournalForm();
   if(target==='acc-ledger')loadAccountingFromDb();
   if(target==='set-backup')loadBackupTab();
+  if(target==='set-users')loadUsersIntoTable();
   if(target==='p-manual'){
     bindManualPurchaseCalculator();
     setManualPurchaseDefaults();
@@ -1817,6 +1818,10 @@ function applyCompanyToUi(company){
   set('set-company-name',company.name);
   set('set-company-trn',company.trn);
   set('trn',company.trn);
+  set('tax-trn',company.trn);
+  set('tax-fta-user',company.fta_username);
+  set('co-fta-user',company.fta_username);
+  set('co-fta-user-reg',company.fta_username);
   // Settings page fields
   set('set-company-trade-name',company.trade_name);
   set('set-company-license',company.trade_license_no);
@@ -1900,6 +1905,7 @@ async function saveCompanySettingsToDatabase(){
     po_box:v('set-company-pobox'),
     phone:v('set-company-phone'),
     website:v('set-company-website'),
+    fta_username:v('tax-fta-user')||v('co-fta-user')||currentCompany?.fta_username||null,
   };
   const _saveUrl=`${apiBaseUrl()}/companies/current`;
   console.log('[saveCompanySettings] PUT',_saveUrl);
@@ -1916,6 +1922,45 @@ async function saveCompanySettingsToDatabase(){
   const company=await response.json();
   applyCompanyToUi(company);
   return company;
+}
+
+async function saveTaxSettings(){
+  const trn=(document.getElementById('tax-trn')?.value||'').replace(/\D/g,'');
+  const fta_username=(document.getElementById('tax-fta-user')?.value||'').trim();
+  if(trn&&trn.length!==15){toast('TRN must be exactly 15 digits','warn');return;}
+  const payload={
+    ...(currentCompany||{}),
+    name:currentCompany?.name||'',
+    trn:trn||currentCompany?.trn||null,
+    fta_username:fta_username||currentCompany?.fta_username||null,
+  };
+  try{
+    const response=await authenticatedFetch(`${apiBaseUrl()}/companies/current`,{method:'PUT',body:JSON.stringify(payload)});
+    if(!response.ok)throw new Error('Save failed ('+response.status+')');
+    const company=await response.json();
+    applyCompanyToUi(company);
+    toast('Tax settings saved','ok');
+  }catch(err){toast('Save failed: '+err.message,'warn');}
+}
+
+async function loadUsersIntoTable(){
+  const tbody=document.getElementById('user-tbody');
+  if(!tbody)return;
+  try{
+    const resp=await authenticatedFetch(`${apiBaseUrl()}/app-data/users`);
+    if(!resp.ok)throw new Error('Users API returned '+resp.status);
+    const data=await resp.json();
+    const users=data.users||[];
+    if(!users.length){
+      tbody.innerHTML='<tr><td colspan="7" style="color:var(--text3);text-align:center">No users found. Add users with the button above.</td></tr>';
+      return;
+    }
+    tbody.innerHTML='';
+    users.forEach(u=>renderUserRecord({status:'Active',permissions:null,...u}));
+  }catch(err){
+    tbody.innerHTML='<tr><td colspan="7" style="color:var(--text3);text-align:center">Could not load users.</td></tr>';
+    console.warn('[loadUsersIntoTable]',err);
+  }
 }
 
 async function saveCompanyRegistration(){
@@ -14529,15 +14574,19 @@ function loadAlertRules(rules=[]){
 }
 
 function saveAlertRule(){
-  const type=document.getElementById('alert-type')?.value||'cash_below';
-  const threshold=parseAmount(document.getElementById('alert-threshold')?.value)||0;
-  const rule={id:'RULE-'+Date.now(),type,threshold,enabled:true,created:new Date().toISOString()};
+  const name=document.getElementById('alert-rule-name')?.value?.trim()||'';
+  const type=document.getElementById('alert-rule-metric')?.value||'cash_below';
+  const threshold=parseAmount(document.getElementById('alert-rule-threshold')?.value)||0;
+  if(!threshold){toast('Enter a threshold value','warn');return;}
+  const rule={id:'RULE-'+Date.now(),name,type,threshold,enabled:true,created:new Date().toISOString()};
   _alertRules.push(rule);
   saveServer('alertRules',rule);
   renderAlertRules();
-  const el=document.getElementById('alert-threshold');
-  if(el)el.value='';
-  toast('Alert rule saved ✓','ok');
+  const nameEl=document.getElementById('alert-rule-name');
+  const threshEl=document.getElementById('alert-rule-threshold');
+  if(nameEl)nameEl.value='';
+  if(threshEl)threshEl.value='';
+  toast('Alert rule saved','ok');
 }
 
 function deleteAlertRule(id){
@@ -14562,6 +14611,7 @@ function renderAlertRules(){
   if(!tbody)return;
   if(!_alertRules.length){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--muted)">No alert rules configured.</td></tr>';return;}
   tbody.innerHTML=_alertRules.map(r=>`<tr>
+    <td>${escapeHtml(r.name||_ALERT_LABELS[r.type]||r.type)}</td>
     <td>${escapeHtml(_ALERT_LABELS[r.type]||r.type)}</td>
     <td class="mono">${Number(r.threshold).toLocaleString('en-AE')}</td>
     <td><span class="b ${r.enabled?'b-g':'b-gray'}">${r.enabled?'Active':'Paused'}</span></td>
@@ -16747,6 +16797,7 @@ function initApp(){
   configureSalesFormMode();
   configureManualPurchaseMode();
   syncCompanyFromDatabase();
+  loadUsersIntoTable();
   enhancePageTables('page-dashboard');
   syncDashboardFromDatabase().catch(err=>console.warn('Dashboard sync failed during init:',err));
   hydrateFromServer().catch(err=>console.warn('Database hydrate failed during init:',err));

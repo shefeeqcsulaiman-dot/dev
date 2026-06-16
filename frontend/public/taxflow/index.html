@@ -477,7 +477,7 @@
           <div class="fg"><label class="fl">Standard VAT Rate</label><input class="fi" value="5%" readonly style="color:var(--accent);font-weight:600"></div>
           <div class="fg"><label class="fl">Annual Taxable Turnover (AED)</label><input class="fi mono" value="2,400,000"></div>
         </div>
-        <div class="fg"><label class="fl">FTA Account Username</label><input class="fi" value="acme.trading@eservices.tax.gov.ae"></div>
+        <div class="fg"><label class="fl">FTA Account Username</label><input class="fi" id="co-fta-user" placeholder="username@eservices.tax.gov.ae"></div>
       </div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Key Contacts</div><button class="btn btn-g btn-sm" onclick="toast('Contact added','ok')">+ Add</button></div>
@@ -3255,7 +3255,7 @@
             <div class="fg"><label class="fl">Standard VAT Rate</label><input class="fi" value="5%" readonly style="color:var(--accent);font-weight:600"></div>
             <div class="fg"><label class="fl">Annual Taxable Turnover (AED)</label><input class="fi mono" value="2,400,000"></div>
           </div>
-          <div class="fg"><label class="fl">FTA Account Username</label><input class="fi" value="acme.trading@eservices.tax.gov.ae"></div>
+          <div class="fg"><label class="fl">FTA Account Username</label><input class="fi" id="co-fta-user-reg" placeholder="username@eservices.tax.gov.ae"></div>
         </div>
         <div class="card">
           <div class="card-hd"><div class="card-title">Key Contacts</div><button class="btn btn-g btn-sm" onclick="toast('Contact added','ok')">+ Add</button></div>
@@ -3277,9 +3277,7 @@
       <table class="tbl">
         <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Permissions</th><th>Status</th><th>Last Login</th><th></th></tr></thead>
         <tbody id="user-tbody">
-          <tr><td><div class="flx"><div class="co-av">SA</div><span style="margin-left:8px">Sara Al Mansouri</span></div></td><td>sara@acmetrading.ae</td><td><span class="b b-p">Admin</span></td><td><span class="b b-p">All modules</span></td><td><span class="b b-g">Active</span></td><td class="mono">28 Jun, 09:15</td><td><button class="btn btn-g btn-sm">Edit</button></td></tr>
-          <tr><td><div class="flx"><div class="co-av" style="background:var(--teal)">RA</div><span style="margin-left:8px">Rania Abboud</span></div></td><td>rania@acmetrading.ae</td><td><span class="b b-b">Accountant</span></td><td><span class="b b-b">Finance</span></td><td><span class="b b-g">Active</span></td><td class="mono">28 Jun, 08:30</td><td><button class="btn btn-g btn-sm">Edit</button></td></tr>
-          <tr><td><div class="flx"><div class="co-av" style="background:var(--purple)">MJ</div><span style="margin-left:8px">Mohamed Jaber</span></div></td><td>mohamed@acmetrading.ae</td><td><span class="b b-gray">Sales</span></td><td><span class="b b-gray">Sales</span></td><td><span class="b b-g">Active</span></td><td class="mono">27 Jun, 14:22</td><td><button class="btn btn-g btn-sm">Edit</button></td></tr>
+          <tr><td colspan="7" style="color:var(--text3);text-align:center">Loading users…</td></tr>
         </tbody>
       </table>
     </div>
@@ -3307,11 +3305,12 @@
         <div class="fg"><label class="fl">Zero Rate</label><input class="fi" value="0%"></div>
         <div class="fg"><label class="fl">Excise Rate</label><input class="fi" value="100%"></div>
       </div>
-      <div class="fg"><label class="fl">VAT Registration Number (TRN)</label><input class="fi mono" value="100123456700003"></div>
+      <div class="fg"><label class="fl">VAT Registration Number (TRN)</label><input class="fi mono" id="tax-trn" placeholder="15-digit TRN"></div>
       <div class="fr2">
-        <div class="fg"><label class="fl">FTA Username</label><input class="fi" value="acme.trading@eservices.tax.gov.ae"></div>
-        <div class="fg"><label class="fl">Filing Frequency</label><select class="fi"><option>Monthly</option><option>Quarterly</option></select></div>
+        <div class="fg"><label class="fl">FTA Username</label><input class="fi" id="tax-fta-user" placeholder="username@eservices.tax.gov.ae"></div>
+        <div class="fg"><label class="fl">Filing Frequency</label><select class="fi" id="tax-filing-freq"><option>Monthly</option><option>Quarterly</option></select></div>
       </div>
+      <div style="margin-top:12px"><button class="btn btn-p btn-sm" onclick="saveTaxSettings()">Save Tax Settings</button></div>
     </div>
     <div class="card">
       <div class="card-hd"><div><div class="card-title">UAE eInvoicing Readiness</div><div class="card-sub">Structured invoice and ASP preparation</div></div><span class="b b-a">Planning</span></div>
