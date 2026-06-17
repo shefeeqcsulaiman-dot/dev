@@ -10292,7 +10292,9 @@ function validatePurchaseAiInvoice(inv,options={}){
   const discount=discountAmountFromExtractedInvoice(inv);
   const shipping=purchaseAiNumber(inv.shipping);
   if(!invoiceNo)issues.push('Invoice number missing');
-  if(invoiceNo){
+  // Backend-confirmed DB duplicate (checked at extract time against actual DB)
+  if(inv.already_in_db)issues.push('Already in database — this invoice number already exists in purchase records');
+  if(invoiceNo&&!inv.already_in_db){
     const existsInRecords=options.existingPurchaseRefs
       ? options.existingPurchaseRefs.has(invoiceKeyValue)
       : tableHasText('#purchase-record-tbody',invoiceNo);
@@ -10300,7 +10302,7 @@ function validatePurchaseAiInvoice(inv,options={}){
   }
   // Duplicate by supplier + date + SKU + qty — checked against DB records only
   const dupKey=purchaseAiDuplicateKey(inv);
-  if(dupKey){
+  if(dupKey&&!inv.already_in_db){
     const existingKeys=options.existingDuplicateKeys||buildExistingPurchaseDuplicateKeys();
     if(existingKeys.has(dupKey))issues.push('Already have this product (same supplier, date, item & qty)');
   }
@@ -10310,7 +10312,8 @@ function validatePurchaseAiInvoice(inv,options={}){
   if(total&&Math.abs((Math.max(0,subtotal-discount)+vat+shipping)-total)>.05)issues.push('Total does not match subtotal - discount + VAT + shipping');
   if(String(inv.status||'').toLowerCase()==='error')issues.push(inv.issues||'Extraction returned error status');
   if(purchaseAiNumber(inv.confidence)<70)issues.push('Low confidence extraction');
-  return {valid:issues.length===0,issues,isDuplicate:issues.some(i=>i.startsWith('Already have'))};
+  const isDuplicate=inv.already_in_db||issues.some(i=>i.startsWith('Already have')||i.startsWith('Duplicate purchase'));
+  return {valid:issues.length===0,issues,isDuplicate};
 }
 
 function countPurchaseAiInvoiceNo(invoiceNo){

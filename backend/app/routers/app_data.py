@@ -774,6 +774,25 @@ async def app_data_action(
     if action == "documents.extract":
         file = payload.get("file", {})
         invoices = ingest_purchase_document(db, current_user, file)
+        # Flag any extracted invoice whose invoice_no already exists in purchaseRecords
+        non_error_invoices = [inv for inv in invoices if not inv.get("extraction_error")]
+        invoice_nos = [str(inv.get("invoice_no") or "").strip() for inv in non_error_invoices]
+        invoice_nos = [n for n in invoice_nos if n]
+        if invoice_nos:
+            existing_keys = {
+                row[0]
+                for row in db.query(AppDataRecord.record_key)
+                .filter(
+                    AppDataRecord.company_id == current_user.company_id,
+                    AppDataRecord.collection == "purchaseRecords",
+                    AppDataRecord.record_key.in_(invoice_nos),
+                )
+                .all()
+            }
+            for inv in non_error_invoices:
+                inv_no = str(inv.get("invoice_no") or "").strip()
+                if inv_no and inv_no in existing_keys:
+                    inv["already_in_db"] = True
         log_action(
             db,
             current_user,
