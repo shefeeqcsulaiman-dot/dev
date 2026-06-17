@@ -9881,6 +9881,7 @@ async function storeExtractedPurchaseRecords(){
       }catch{}
     });
   uploadedFiles.forEach(file=>{
+    if(file.status!=='Extracted')return;
     const saved=file.savedInvoiceNos instanceof Set?file.savedInvoiceNos:new Set(file.savedInvoiceNos||[]);
     (file.invoices||[]).forEach(inv=>{
       const invoiceNo=String(inv.invoice_no||'');
@@ -10509,6 +10510,28 @@ function openPurchaseAiView(btn){
   showM('m-purchase-view');
 }
 
+function purchaseLedgerCategoryOptions(selected=''){
+  const byId={};
+  _coaFlatAccounts.forEach(a=>{byId[a.id]=a;});
+  const isUnderPurchase=acc=>{
+    let cur=acc;
+    while(cur){
+      if(/purchase/i.test(cur.name||''))return true;
+      cur=cur.parent_account_id?byId[cur.parent_account_id]:null;
+    }
+    return false;
+  };
+  const purchaseTypes=['expense','direct cost','purchase','cost'];
+  let accounts=_coaFlatAccounts.filter(a=>{
+    if(a.is_group||a.status==='inactive')return false;
+    const t=String(a.type||a.account_type||'').toLowerCase();
+    return purchaseTypes.some(pt=>t.includes(pt))||isUnderPurchase(a);
+  });
+  if(!accounts.length)accounts=_coaFlatAccounts.filter(a=>!a.is_group&&a.status!=='inactive');
+  const extra=selected&&!accounts.find(a=>a.name===selected)?`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`:'';
+  return '<option value="">Select Category</option>'+extra+accounts.map(a=>`<option value="${escapeHtml(a.name)}"${a.name===selected?' selected':''}>${escapeHtml((a.code?a.code+' — ':'')+a.name)}</option>`).join('');
+}
+
 function addPurchaseAiEditLine(line={}){
   const body=document.getElementById('pai-lines');
   if(!body)return;
@@ -10516,9 +10539,9 @@ function addPurchaseAiEditLine(line={}){
   row.innerHTML=`
     <td class="mono pai-line-no">1</td>
     <td><input class="fi pai-product" value="${escapeHtml(purchaseAiProductName(line))}" placeholder="Product name"></td>
-    <td><input class="fi pai-category" value="${escapeHtml(line.category||'')}" placeholder="Category"></td>
+    <td><select class="fi pai-category">${purchaseLedgerCategoryOptions(line.category||'')}</select></td>
     <td><input class="fi mono pai-qty" value="${escapeHtml(line.quantity||line.qty||0)}" oninput="calcPurchaseAiEditLine(this)"></td>
-    <td><input class="fi mono pai-unit" value="${escapeHtml(line.unit||line.unit_of_measure||line.uom||'PCS')}"></td>
+    <td><select class="fi pai-unit">${unitOptionsHtml(line.unit||line.unit_of_measure||line.uom||'PCS')}</select></td>
     <td><input class="fi mono pai-cost" value="${escapeHtml(line.unit_cost||line.cost||line.unitCost||0)}" oninput="calcPurchaseAiEditLine(this)"></td>
     <td style="display:none"><input class="fi mono pai-line-discount" value="${escapeHtml(line.discount_percent||line.discountPct||0)}" oninput="calcPurchaseAiEditLine(this)"></td>
     <td><input class="fi mono pai-cost-before-tax" value="${escapeHtml(line.unit_cost_before_tax||line.unit_cost||line.cost||0)}" readonly></td>
