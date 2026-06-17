@@ -11257,21 +11257,27 @@ function mergePurchaseRecords(existing={},incoming={}){
   const baseLines=(Array.isArray(existing.lines)?existing.lines:[]).map(normalizePurchaseLineForMerge);
   const incomingLines=(Array.isArray(incoming.lines)?incoming.lines:[]).map(normalizePurchaseLineForMerge);
   const mergedLines=[...baseLines.map(line=>({...line}))];
-  const lineMap=new Map();
-  mergedLines.forEach((line,index)=>{
+  // Count occurrences of each key in the existing record.
+  // When the same product appears twice (e.g. rows 5 and 8 on a Eurovets invoice),
+  // each occurrence consumes one slot — so N existing copies allow N incoming copies
+  // to be skipped; any additional copies are treated as new and added.
+  const keyCounts=new Map();
+  baseLines.forEach(line=>{
     const key=purchaseLineMergeKey(line,date);
-    if(key&&!lineMap.has(key))lineMap.set(key,index);
+    if(key)keyCounts.set(key,(keyCounts.get(key)||0)+1);
   });
   let mergedSameProduct=0;
   let addedProducts=0;
   incomingLines.forEach(line=>{
     const key=purchaseLineMergeKey(line,date);
-    if(key&&lineMap.has(key)){
-      // Line with same product code + name + date already exists — skip to avoid duplication
+    const remaining=key?(keyCounts.get(key)||0):0;
+    if(remaining>0){
+      // One existing copy absorbs this incoming line — decrement and skip
+      keyCounts.set(key,remaining-1);
       mergedSameProduct++;
     }else{
+      // No existing copy left to absorb — this is a new line
       mergedLines.push({...line});
-      if(key)lineMap.set(key,mergedLines.length-1);
       addedProducts++;
     }
   });
