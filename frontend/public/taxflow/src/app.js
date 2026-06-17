@@ -9929,7 +9929,7 @@ async function storeExtractedPurchaseRecords(){
     if(result==='same'){
       existing++;
       markExtractedInvoiceUploaded(inv.invoice_no);
-      markPurchaseAiInvoiceRows(inv.invoice_no,'Already Exists','Same purchase already exists in database',true);
+      markPurchaseAiInvoiceRows(inv.invoice_no,'Already Exists','All products already in database — nothing new to add',true);
       continue;
     }
     if(result==='updated')updated++;
@@ -9985,7 +9985,7 @@ async function storeExtractedPurchaseRecords(){
         invoiceNo:item.invoiceNo,
         status:item.result==='updated'?'Updated':'Saved',
         details:item.result==='updated'
-          ? `Existing invoice updated: ${item.merge.mergedSameProduct} same product merged, ${item.merge.addedProducts} new product line(s)`
+          ? `Existing invoice updated: ${item.merge.mergedSameProduct} already existed (skipped), ${item.merge.addedProducts} new product line(s) added`
           : 'Saved to purchase records',
         skip:true
       })));
@@ -11243,31 +11243,31 @@ function findPurchaseRecordByRef(ref){
   return row?purchaseRecordFromRow(row):null;
 }
 
+function purchaseLineMergeKey(line={},date=''){
+  // Dedup key: product_code + product_name + invoice_date
+  // All three must match to consider a line already present in the existing record.
+  const sku=String(line.sku||line.code||'').trim().toLowerCase().replace(/\s+/g,' ');
+  const name=String(purchaseAiProductName(line)||line.product||line.name||line.description||'').trim().toLowerCase().replace(/\s+/g,' ');
+  if(!sku&&!name)return null;
+  return `${sku}|${name}|${date}`;
+}
+
 function mergePurchaseRecords(existing={},incoming={}){
+  const date=String(incoming.date||existing.date||'').trim();
   const baseLines=(Array.isArray(existing.lines)?existing.lines:[]).map(normalizePurchaseLineForMerge);
   const incomingLines=(Array.isArray(incoming.lines)?incoming.lines:[]).map(normalizePurchaseLineForMerge);
   const mergedLines=[...baseLines.map(line=>({...line}))];
   const lineMap=new Map();
   mergedLines.forEach((line,index)=>{
-    const key=purchaseLineProductKey(line);
+    const key=purchaseLineMergeKey(line,date);
     if(key&&!lineMap.has(key))lineMap.set(key,index);
   });
   let mergedSameProduct=0;
   let addedProducts=0;
   incomingLines.forEach(line=>{
-    const key=purchaseLineProductKey(line);
-    const index=key?lineMap.get(key):undefined;
-    if(index!==undefined){
-      const target=mergedLines[index];
-      const quantity=parseAmount(target.quantity||target.qty)+parseAmount(line.quantity||line.qty);
-      const lineTotal=parseAmount(target.line_total||target.amount)+parseAmount(line.line_total||line.amount);
-      target.quantity=quantity;
-      target.qty=quantity;
-      target.line_total=lineTotal;
-      target.amount=lineTotal;
-      target.unit_cost=quantity?lineTotal/quantity:parseAmount(line.unit_cost||target.unit_cost);
-      target.unit_cost_before_tax=target.unit_cost;
-      target.selling_price_inc_tax=parseAmount(line.selling_price_inc_tax||target.selling_price_inc_tax);
+    const key=purchaseLineMergeKey(line,date);
+    if(key&&lineMap.has(key)){
+      // Line with same product code + name + date already exists — skip to avoid duplication
       mergedSameProduct++;
     }else{
       mergedLines.push({...line});
