@@ -192,6 +192,7 @@ function stab(el,target){
     bindManualPurchaseCalculator();
     setManualPurchaseDefaults();
   }
+  if(target==='p-extract')autoClearIncompleteUploads();
   updateBackButton();
 }
 
@@ -11081,6 +11082,27 @@ async function clearPendingUploads(){
   updatePurchaseValidationFileStatus();
   toast(`${toDelete.length} incomplete upload(s) cleared`,'ok');
   audit('Cleared incomplete uploads',`${toDelete.length} file(s)`,'Deleted');
+}
+
+async function autoClearIncompleteUploads(){
+  const toDelete=uploadedFiles.filter(f=>{
+    if(f.category==='Purchase Records')return false;
+    const invoices=Array.isArray(f.invoices)?f.invoices:[];
+    const saved=f.savedInvoiceNos instanceof Set?f.savedInvoiceNos:new Set(f.savedInvoiceNos||[]);
+    return invoices.length===0||saved.size<invoices.length;
+  });
+  if(!toDelete.length)return;
+  Promise.all(toDelete.map(f=>deleteServer('purchaseDocuments',{id:f.id}))).catch(()=>{});
+  const deleteIds=new Set(toDelete.map(f=>f.id));
+  for(let i=uploadedFiles.length-1;i>=0;i--){
+    if(deleteIds.has(uploadedFiles[i].id))uploadedFiles.splice(i,1);
+  }
+  toDelete.forEach(f=>purchaseDocumentIds.delete(f.id));
+  const tbody=document.getElementById('ext-tbody');
+  if(tbody)tbody.innerHTML='<div class="ai-empty-state">AI uploaded purchase data will appear here for validation.</div>';
+  renderFileList();
+  updateFileCount();
+  updatePurchaseValidationFileStatus();
 }
 
 function formatInputDateTime(date=new Date()){
