@@ -10294,6 +10294,11 @@ function validatePurchaseAiInvoice(inv,options={}){
   if(!invoiceNo)issues.push('Invoice number missing');
   // Backend-confirmed DB duplicate (checked at extract time against actual DB)
   if(inv.already_in_db)issues.push('Already in database — this invoice number already exists in purchase records');
+  // Session-level duplicate: same invoice uploaded more than once in this session
+  if(invoiceNo&&options.aiInvoiceCounts){
+    const sessionCount=options.aiInvoiceCounts.get(invoiceKeyValue)||0;
+    if(sessionCount>1)issues.push('Duplicate upload — same invoice number already in this session');
+  }
   if(invoiceNo&&!inv.already_in_db){
     const existsInRecords=options.existingPurchaseRefs
       ? options.existingPurchaseRefs.has(invoiceKeyValue)
@@ -10312,7 +10317,12 @@ function validatePurchaseAiInvoice(inv,options={}){
   if(total&&Math.abs((Math.max(0,subtotal-discount)+vat+shipping)-total)>.05)issues.push('Total does not match subtotal - discount + VAT + shipping');
   if(String(inv.status||'').toLowerCase()==='error')issues.push(inv.issues||'Extraction returned error status');
   if(purchaseAiNumber(inv.confidence)<70)issues.push('Low confidence extraction');
-  const isDuplicate=inv.already_in_db||issues.some(i=>i.startsWith('Already have')||i.startsWith('Duplicate purchase'));
+  const isDuplicate=inv.already_in_db||issues.some(i=>
+    i.startsWith('Already have')||
+    i.startsWith('Duplicate purchase')||
+    i.startsWith('Duplicate upload')||
+    i.startsWith('Already in database')
+  );
   return {valid:issues.length===0,issues,isDuplicate};
 }
 
@@ -10763,7 +10773,7 @@ function revalidatePurchaseAiRows(){
     let inv={};
     try{inv=JSON.parse(row.dataset.inv||'{}');}catch{return;}
     const validation=validatePurchaseAiInvoice(inv,{aiInvoiceCounts,existingPurchaseRefs});
-    row.dataset.validation=validation.valid?'valid':'review';
+    row.dataset.validation=validation.isDuplicate?'duplicate':validation.valid?'valid':'review';
     const validationCell=row.querySelector('.purchase-ai-validation');
     const detailsCell=row.querySelector('.purchase-ai-details');
     const checkbox=row.querySelector('.purchase-ai-select');
