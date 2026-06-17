@@ -1672,7 +1672,7 @@ Return ONLY a valid JSON object. Do not include markdown, code fences, or extra 
   "line_items": [
     {
       "description": "product or service name exactly as written — do NOT include batch number, lot number, V-code, SKU code, or expiry date in the description",
-      "sku": "product/vendor code from 'V Code', 'Item Code', 'SKU', 'Product Code', or 'Code' column — empty string if not found",
+      "sku": "product/vendor code from 'V Code', 'Item Code', 'SKU', 'Product Code', or 'Code' column — empty string if not found; if the same V-code appears on multiple rows, append the row number e.g. '98-17321-00-R5' and '98-17321-00-R8' so each entry is unique",
       "qty": "ONLY from the 'Qty' or 'Quantity' column — the number of units sold — plain number only, no units or text",
       "unit": "unit of measure e.g. PCS KG BOX ML, empty string if not shown",
       "unit_price": "unit price BEFORE discount — use column labelled 'Price Before Discount', 'Rate', 'Unit Price', 'Unit Cost', or 'Price' — plain number only",
@@ -1687,7 +1687,7 @@ Return ONLY a valid JSON object. Do not include markdown, code fences, or extra 
 
 Rules:
 - Extract ALL line items including free/sample items, delivery, and shipping charges.
-- CRITICAL — every row in the invoice table is a separate line item. Do NOT merge, deduplicate, or skip any row. If two rows have the same quantity, same price, or same amount they are still two separate products — output both.
+- CRITICAL — COUNT the rows in the invoice table first, then output exactly that many entries in line_items. Every visible row is a separate line item. Do NOT merge, deduplicate, or skip any row — even if two rows have identical description, V-code, quantity, and price they are separate deliveries and MUST both appear. If the invoice has 8 rows, line_items must have 8 entries.
 - CRITICAL — qty: Use ONLY the 'Qty' or 'Quantity' column. NEVER use 'Batch Qty', 'Pack Qty', 'Batch Size', 'Order Qty'. Lot/Batch numbers are NOT quantities. The row serial number (1, 2, 3 … at the far left) is NOT the qty.
 - CRITICAL — unit_price: Use 'Price Before Discount', 'Rate', 'Unit Price', or 'Price'. Do NOT use 'Price After Discount', 'Lot No', 'Batch No', or 'Expiry Date' as price.
 - CRITICAL — line_total_excl_vat: Use 'Excl.Vat', 'Excl. VAT', or 'Amount' column (before VAT). Do NOT use the 'Incl.Vat' or VAT-inclusive total for this field. line_total_excl_vat = qty × unit_price — it is NEVER equal to unit_price alone unless qty = 1. For multi-line description rows, the Qty column value still appears in the same table row.
