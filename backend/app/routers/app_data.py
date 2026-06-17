@@ -1688,9 +1688,10 @@ Return ONLY a valid JSON object. Do not include markdown, code fences, or extra 
 Rules:
 - Extract ALL line items including free/sample items, delivery, and shipping charges.
 - CRITICAL — every row in the invoice table is a separate line item. Do NOT merge, deduplicate, or skip any row. If two rows have the same quantity, same price, or same amount they are still two separate products — output both.
-- CRITICAL — qty: Use ONLY the 'Qty' or 'Quantity' column. NEVER use 'Batch Qty', 'Pack Qty', 'Batch Size', 'Order Qty'. Lot/Batch numbers are NOT quantities.
+- CRITICAL — qty: Use ONLY the 'Qty' or 'Quantity' column. NEVER use 'Batch Qty', 'Pack Qty', 'Batch Size', 'Order Qty'. Lot/Batch numbers are NOT quantities. The row serial number (1, 2, 3 … at the far left) is NOT the qty.
 - CRITICAL — unit_price: Use 'Price Before Discount', 'Rate', 'Unit Price', or 'Price'. Do NOT use 'Price After Discount', 'Lot No', 'Batch No', or 'Expiry Date' as price.
-- CRITICAL — line_total_excl_vat: Use 'Excl.Vat', 'Excl. VAT', or 'Amount' column (before VAT). Do NOT use the 'Incl.Vat' or VAT-inclusive total for this field.
+- CRITICAL — line_total_excl_vat: Use 'Excl.Vat', 'Excl. VAT', or 'Amount' column (before VAT). Do NOT use the 'Incl.Vat' or VAT-inclusive total for this field. line_total_excl_vat = qty × unit_price — it is NEVER equal to unit_price alone unless qty = 1. For multi-line description rows, the Qty column value still appears in the same table row.
+- CRITICAL — verify each row: line_total_excl_vat ÷ unit_price should equal qty. If it does not, re-read the Qty column.
 - CRITICAL — if invoice shows 'Price Before Discount' AND 'Price After Discount', use 'Price Before Discount' as unit_price and set discount_pct from the Discount % column.
 - trn_vat is the SUPPLIER's TRN only — digits only, no spaces or hyphens.
 - 'Business Partner TRN', 'Customer TRN', or 'Buyer TRN' on the invoice is the buyer's TRN — do NOT put it in trn_vat.
@@ -1943,12 +1944,18 @@ def openai_invoice_to_purchase_rows(data: dict[str, Any]) -> list[dict[str, Any]
         if not product:
             continue
         line_net = line_nets[index] if index < len(line_nets) else Decimal("0")
-        raw_qty = decimal_value(item.get("qty"))
+        raw_qty = decimal_value(item.get("qty")) or Decimal("1")
         raw_unit_price = decimal_value(first_present_raw(item, "unit_price", "rate", "price", "unit_cost"))
-        raw_line_amount = decimal_value(
-            item.get("line_total_excl_vat") or item.get("line_total_before_vat")
-            or item.get("line_total") or item.get("line_subtotal")
-        )
+        # Correct qty when unit_price × qty doesn't match the (cross-validated) line_net.
+        # Handles the case where the AI reads the serial number or defaults to 1 instead
+        # of the actual Qty column value (common on invoices with multi-line descriptions).
+        if raw_unit_price and line_net and raw_unit_price > Decimal("0"):
+            expected_net = raw_unit_price * raw_qty
+            if abs(expected_net - line_net) > max(line_net * Decimal("0.03"), Decimal("0.50")):
+                computed_qty = line_net / raw_unit_price
+                rounded_qty = int(round(float(computed_qty)))
+                if rounded_qty >= 1 and abs(Decimal(str(rounded_qty)) - computed_qty) < Decimal("0.06"):
+                    raw_qty = Decimal(str(rounded_qty))
         # Use per-line VAT from AI if available, otherwise distribute invoice VAT proportionally
         line_vat_explicit = decimal_value(item.get("line_vat_amount"))
         if line_vat_explicit:
@@ -1959,7 +1966,10 @@ def openai_invoice_to_purchase_rows(data: dict[str, Any]) -> list[dict[str, Any]
             vat = vat_total
         else:
             vat = Decimal("0")
-        unit_cost = openai_unit_price(item, line_net)
+        # Pass corrected item so openai_unit_price uses the right qty
+        item_corrected = dict(item)
+        item_corrected["qty"] = str(raw_qty)
+        unit_cost = openai_unit_price(item_corrected, line_net)
         rows.append(normalize_purchase_row({
             "invoice_no": data.get("invoice_number") or "",
             "date": data.get("invoice_date") or "",
@@ -1969,7 +1979,7 @@ def openai_invoice_to_purchase_rows(data: dict[str, Any]) -> list[dict[str, Any]
             "currency": data.get("currency") or "AED",
             "product": product,
             "sku": str(item.get("sku") or "").strip(),
-            "quantity": decimal_value(item.get("qty")) or 1,
+            "quantity": raw_qty,
             "unit": item.get("unit") or "PCS",
             "unit_cost": unit_cost,
             "unit_price": unit_cost,
@@ -2041,7 +2051,7 @@ def openai_line_net_amounts(
 
 
 def openai_explicit_line_net_amount(item: dict[str, Any]) -> Decimal:
-    return first_decimal_value(
+    explicit = first_decimal_value(
         item,
         "line_total_excl_vat",
         "line_total_before_vat",
@@ -2055,6 +2065,20 @@ def openai_explicit_line_net_amount(item: dict[str, Any]) -> Decimal:
         "amount_excl_vat",
         "amount_before_tax",
     )
+    # Cross-check: use Incl.VAT − line_vat when explicit is absent or inconsistent.
+    # Catches the common AI mistake of putting unit_price in line_total_excl_vat
+    # instead of qty × unit_price (the actual Excl.Vat column value).
+    line_vat = first_decimal_value(item, "line_vat_amount")
+    line_gross = first_decimal_value(item, "line_total", "line_total_incl_vat", "line_total_including_vat")
+    if line_vat and line_gross:
+        net_from_gross = line_gross - line_vat
+        if net_from_gross > Decimal("0"):
+            if not explicit:
+                return net_from_gross
+            tolerance = max(Decimal("0.10"), line_gross * Decimal("0.01"))
+            if abs(explicit + line_vat - line_gross) > tolerance:
+                return net_from_gross
+    return explicit
 
 
 def openai_line_gross_amount(item: dict[str, Any]) -> Decimal:
