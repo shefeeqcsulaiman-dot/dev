@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260618b" as="style">
-<link rel="preload" href="src/app.js?v=20260618b" as="script">
+<link rel="preload" href="src/styles.css?v=20260618c" as="style">
+<link rel="preload" href="src/app.js?v=20260618c" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260618b">
+<link rel="stylesheet" href="src/styles.css?v=20260618c">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -4728,12 +4728,12 @@ period_locks ─&lt; audit_logs
         <!-- Record Allocation -->
         <div class="pmt-alloc-bar">
           <span class="pmt-alloc-title">Record Allocation</span>
-          <label class="pmt-alloc-all-lbl"><input type="checkbox" id="pmt-alloc-all" onchange="toggleAllAllocation(this.checked)"> All</label>
         </div>
         <div class="pmt-alloc-wrap">
           <table class="pmt-alloc-tbl">
             <thead><tr>
-              <th style="width:28px"></th><th>Number</th><th>Date</th><th>Method</th>
+              <th style="width:36px"><button class="pmt-alloc-toggle" id="pmt-alloc-toggle-btn" onclick="toggleAllAllocationBtn(this)" title="Toggle all">&#8722;</button></th>
+              <th>Number</th><th>Date</th><th>Method</th>
               <th class="r">Amount</th><th class="r">Allocatable</th><th class="r">Allocation</th>
             </tr></thead>
             <tbody id="pmt-alloc-tbody">
@@ -5437,6 +5437,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260618b" defer></script>
+<script src="src/app.js?v=20260618c" defer></script>
 </body>
 </html>

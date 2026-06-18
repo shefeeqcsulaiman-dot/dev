@@ -4573,7 +4573,15 @@ function toggleAllAllocation(checked){
   document.querySelectorAll('#pmt-alloc-tbody .pmt-alloc-chk').forEach(chk=>{
     chk.checked=checked;
   });
+  const btn=document.getElementById('pmt-alloc-toggle-btn');
+  if(btn)btn.textContent=checked?'−':'+';
   updatePmtBalance();
+}
+
+function toggleAllAllocationBtn(btn){
+  const allChks=[...document.querySelectorAll('#pmt-alloc-tbody .pmt-alloc-chk')];
+  const allChecked=allChks.every(c=>c.checked);
+  toggleAllAllocation(!allChecked);
 }
 
 function updatePmtBalance(){
