@@ -35,12 +35,14 @@ from app.models import (
     AuditLog,
     AuditLogDetail,
     Employee,
+    GeneralLedgerEntry,
     InventoryValuationLayer,
     Invoice,
     InvoiceLine,
     JournalEntry,
     JournalLine,
     Payment,
+    PostingJob,
     PayrollRun,
     Receipt,
     SourceTransaction,
@@ -739,6 +741,29 @@ async def app_data_action(
                     ).all()
                 ]
                 if tx_ids:
+                    journal_ids = [
+                        row[0] for row in db.query(JournalEntry.id).filter(
+                            JournalEntry.company_id == current_user.company_id,
+                            JournalEntry.source_id.in_(tx_ids),
+                        ).all()
+                    ]
+                    if journal_ids:
+                        db.query(GeneralLedgerEntry).filter(
+                            GeneralLedgerEntry.journal_entry_id.in_(journal_ids)
+                        ).delete(synchronize_session=False)
+                        db.query(JournalLine).filter(
+                            JournalLine.journal_id.in_(journal_ids)
+                        ).delete(synchronize_session=False)
+                        db.query(JournalEntry).filter(
+                            JournalEntry.id.in_(journal_ids)
+                        ).delete(synchronize_session=False)
+                    db.query(TaxLine).filter(
+                        TaxLine.company_id == current_user.company_id,
+                        TaxLine.source_id.in_(tx_ids),
+                    ).delete(synchronize_session=False)
+                    db.query(PostingJob).filter(
+                        PostingJob.source_id.in_(tx_ids)
+                    ).delete(synchronize_session=False)
                     db.query(SourceTransactionLine).filter(
                         SourceTransactionLine.source_id.in_(tx_ids)
                     ).delete(synchronize_session=False)
@@ -1051,6 +1076,38 @@ def purchase_line_stock_mapping(
     return mapping
 
 
+def _delete_source_transaction_cascade(db: Session, company_id: str, tx_id: str) -> None:
+    journal_ids = [
+        row[0] for row in db.query(JournalEntry.id).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.source_id == tx_id,
+        ).all()
+    ]
+    if journal_ids:
+        db.query(GeneralLedgerEntry).filter(
+            GeneralLedgerEntry.journal_entry_id.in_(journal_ids)
+        ).delete(synchronize_session=False)
+        db.query(JournalLine).filter(
+            JournalLine.journal_id.in_(journal_ids)
+        ).delete(synchronize_session=False)
+        db.query(JournalEntry).filter(
+            JournalEntry.id.in_(journal_ids)
+        ).delete(synchronize_session=False)
+    db.query(TaxLine).filter(
+        TaxLine.company_id == company_id,
+        TaxLine.source_id == tx_id,
+    ).delete(synchronize_session=False)
+    db.query(PostingJob).filter(
+        PostingJob.source_id == tx_id
+    ).delete(synchronize_session=False)
+    db.query(SourceTransactionLine).filter(
+        SourceTransactionLine.source_id == tx_id
+    ).delete(synchronize_session=False)
+    db.query(SourceTransaction).filter(
+        SourceTransaction.id == tx_id
+    ).delete(synchronize_session=False)
+
+
 def sync_domain_delete(db: Session, current_user: User, collection: str, record: dict[str, Any]) -> None:
     if collection == "products":
         code = str(record.get("code") or record.get("sku") or record.get("id") or "").strip()
@@ -1095,8 +1152,7 @@ def sync_domain_delete(db: Session, current_user: User, collection: str, record:
                 .first()
             )
             if tx:
-                db.query(SourceTransactionLine).filter(SourceTransactionLine.source_id == tx.id).delete(synchronize_session=False)
-                db.delete(tx)
+                _delete_source_transaction_cascade(db, current_user.company_id, tx.id)
             db.query(StockMovement).filter(
                 StockMovement.company_id == current_user.company_id,
                 StockMovement.movement_type == module,
