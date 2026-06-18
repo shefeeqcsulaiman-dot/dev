@@ -323,7 +323,6 @@ def seed_initial_data() -> None:
         user.password_hash = hash_password(admin_pwd)
         user.company_id = company.id
 
-        seed_accounts(db, company.id)
         seed_voucher_types(db, company.id)
         seed_tax_codes(db, company.id)
 

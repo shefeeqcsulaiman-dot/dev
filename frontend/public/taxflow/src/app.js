@@ -5962,10 +5962,13 @@ function renderAccountTree(accounts){
   (children['root']||[]).forEach(acc=>root.appendChild(coaNodeEl(acc,byId,children,0)));
 }
 
-function coaNodeTypePill(nodeType){
-  if(nodeType==='MAIN_LEDGER')return`<span class="nt-pill nt-main">MAIN</span>`;
-  if(nodeType==='SUB_LEDGER')return`<span class="nt-pill nt-sub">SUB</span>`;
-  return`<span class="nt-pill nt-posting">POSTING</span>`;
+function coaNodeTypePill(nodeType,level){
+  if(nodeType==='MAIN_LEDGER')return`<span class="nt-pill nt-main">Primary</span>`;
+  if(nodeType==='SUB_LEDGER'){
+    if(level===2)return`<span class="nt-pill nt-sub">Secondary</span>`;
+    return`<span class="nt-pill nt-sub3">Sub-Group</span>`;
+  }
+  return`<span class="nt-pill nt-posting">Ledger</span>`;
 }
 
 function coaStatusBadge(status){
@@ -5989,13 +5992,14 @@ function coaNodeEl(acc,byId,children,depth){
   const id=escapeHtml(acc.id);
   let actionBtns='';
   if(isMain){
+    // Level 1 — Primary Group
     actionBtns=`
-      <button class="btn btn-g btn-xs" onclick="openCreateSubLedgerUnder('${id}')">+ Sub Ledger</button>
+      <button class="btn btn-g btn-xs" onclick="openCreateSubLedgerUnder('${id}')">+ Secondary</button>
+      <button class="btn btn-p btn-xs" onclick="openCreatePostingLedgerUnder('${id}')">+ Ledger</button>
       <button class="btn btn-g btn-xs" onclick="openEditAccount('${id}')">Edit</button>`;
   } else if(!isPosting){
-    // SUB_LEDGER — level 2,3,4 can add more sub-ledgers (max depth 4 for groups)
-    const canAddSub=level<4;
-    if(canAddSub) actionBtns+=`<button class="btn btn-g btn-xs" onclick="openCreateSubLedgerUnder('${id}')">+ Sub</button>`;
+    // Level 2 (Secondary) or Level 3 (Sub-Group)
+    if(level===2) actionBtns+=`<button class="btn btn-g btn-xs" onclick="openCreateSubLedgerUnder('${id}')">+ Sub-Group</button>`;
     actionBtns+=`<button class="btn btn-p btn-xs" onclick="openCreatePostingLedgerUnder('${id}')">+ Ledger</button>`;
     actionBtns+=`<button class="btn btn-g btn-xs" onclick="openEditAccount('${id}')">Edit</button>`;
   } else {
@@ -6022,7 +6026,7 @@ function coaNodeEl(acc,byId,children,depth){
   row.innerHTML=`
     <span class="coa-indent" style="width:${indent}px"></span>
     ${hasKids?`<button class="coa-toggle open" onclick="toggleCoaNode(this)">▼</button>`:'<span class="coa-toggle-spacer"></span>'}
-    ${coaNodeTypePill(nodeType)}
+    ${coaNodeTypePill(nodeType,level)}
     <span class="coa-code mono">${escapeHtml(acc.code)}</span>
     <span class="coa-name${!isPosting?' group-name':''}">${escapeHtml(acc.name)}</span>
     ${coaStatusBadge(status)}
@@ -6130,7 +6134,7 @@ function aiTreeNodeEl(node,depth){
   const indent=depth*20;
   const isGroup=node.is_group||!!node.children?.length;
   const levelPillCls={1:'coa-pill-l1',2:'coa-pill-l2',3:'coa-pill-l3',4:'coa-pill-led'}[node.level]||'coa-pill-led';
-  const levelLabel={1:'L1',2:'L2',3:'L3',4:'Ledger'}[node.level]||'L'+node.level;
+  const levelLabel={1:'Primary',2:'Secondary',3:'Sub-Group',4:'Ledger'}[node.level]||'L'+node.level;
   const hasIssues=node.issues?.length>0;
   const row=document.createElement('div');
   row.className='ai-tree-row'+(hasIssues?' ai-tree-issue':'')+(isGroup?' ai-tree-group':'');
@@ -6262,8 +6266,8 @@ function openCreateAccount(type){
   modal.removeAttribute('data-edit-id');
   const groupBtn=document.getElementById('acc-type-group-btn');
   const ledgerBtn=document.getElementById('acc-type-ledger-btn');
-  if(groupBtn)groupBtn.textContent='Sub Ledger (Group)';
-  if(ledgerBtn)ledgerBtn.textContent='Posting Ledger';
+  if(groupBtn)groupBtn.textContent='Group';
+  if(ledgerBtn)ledgerBtn.textContent='Ledger';
   setAccModalType(type||'ledger');
   populateParentSelector(null);
   showM('m-acc');
@@ -6297,26 +6301,28 @@ function openEditAccount(accountId){
   modal.dataset.editId=accountId;
 
   const nodeType=acc.node_type||(acc.is_group?(acc.level===1?'MAIN_LEDGER':'SUB_LEDGER'):'POSTING_LEDGER');
-  const nodeLabel={'MAIN_LEDGER':'Main Ledger','SUB_LEDGER':'Sub Ledger','POSTING_LEDGER':'Posting Ledger'}[nodeType]||'Account';
-  const nodeSub={
-    MAIN_LEDGER:'Top-level group — organises Sub Ledgers. Transactions do NOT post here.',
-    SUB_LEDGER:'Group — organises Posting Ledgers. Transactions do NOT post here.',
-    POSTING_LEDGER:'Posting Ledger — transactions, journals and invoices post to this account.',
-  }[nodeType]||'';
+  const accLevel=acc.level||1;
+  const nodeLabel=nodeType==='MAIN_LEDGER'?'Primary Group':
+    nodeType==='SUB_LEDGER'?(accLevel===2?'Secondary Group':'Sub-Group'):'Ledger';
+  const nodeSub=nodeType==='MAIN_LEDGER'?'Primary Group — top of hierarchy. No transactions post here.':
+    nodeType==='SUB_LEDGER'?(accLevel===2?
+      'Secondary Group — organises Sub-Groups or Ledgers. No transactions post here.':
+      'Sub-Group — organises Ledgers. No transactions post here.'):
+    'Ledger — transactions, journals and invoices post to this account.';
 
   setAccModalType(acc.is_group?'group':'ledger');
   _lockGroupToggle(true);
   populateParentSelector(acc.parent_account_id||null);
 
-  // Fix "None" option text for edit mode (not "becomes")
+  // Fix "None" option text for edit mode
   const noneOpt=document.querySelector('#acc-parent option[value=""]');
-  if(noneOpt)noneOpt.textContent='— None (MAIN LEDGER, Level 1) —';
+  if(noneOpt)noneOpt.textContent='— None (Primary Group, Level 1) —';
 
   // Update type bar label to show actual node type
   const groupBtn=document.getElementById('acc-type-group-btn');
   const ledgerBtn=document.getElementById('acc-type-ledger-btn');
-  if(groupBtn)groupBtn.textContent=nodeType==='MAIN_LEDGER'?'Main Ledger (Group)':'Sub Ledger (Group)';
-  if(ledgerBtn)ledgerBtn.textContent='Posting Ledger';
+  if(groupBtn)groupBtn.textContent=nodeLabel;
+  if(ledgerBtn)ledgerBtn.textContent='Ledger';
 
   document.getElementById('acc-code').value=acc.code||'';
   document.getElementById('acc-name').value=acc.name||'';
@@ -6390,13 +6396,16 @@ function setAccModalType(type){
   const parentId=document.getElementById('acc-parent')?.value||'';
   const parent=_coaFlatAccounts.find(a=>a.id===parentId);
   const childLevel=parent?(parent.level||1)+1:1;
-  const nodeTypeLabel=isGroup?(childLevel===1?'MAIN LEDGER':childLevel<=4?'SUB LEDGER':'SUB LEDGER'):'POSTING LEDGER';
+  const groupName=childLevel===1?'Primary Group':childLevel===2?'Secondary Group':'Sub-Group';
+  const nodeTypeLabel=isGroup?groupName:'Ledger';
   if(!document.getElementById('m-acc').dataset.editId){
-    document.getElementById('acc-modal-title').textContent=`New ${nodeTypeLabel} (Level ${childLevel})`;
+    document.getElementById('acc-modal-title').textContent=`New ${nodeTypeLabel}`;
     document.getElementById('acc-modal-sub').textContent=isGroup
-      ?'Sub Ledger — organises posting ledgers. Transactions do NOT post here.'
-      :'Posting Ledger — transactions, journals and invoices post to this account.';
-    document.getElementById('acc-save-btn').textContent=isGroup?'Create Sub Ledger':'Create Posting Ledger';
+      ?(childLevel===1?'Primary Group — top of hierarchy. No transactions post here.':
+        childLevel===2?'Secondary Group — organises Sub-Groups or Ledgers. No transactions post here.':
+        'Sub-Group — organises Ledgers. No transactions post here.')
+      :'Ledger — transactions, journals and invoices post to this account.';
+    document.getElementById('acc-save-btn').textContent=`Create ${nodeTypeLabel}`;
   }
   const extraWrap=document.getElementById('acc-extra-wrap');
   const openWrap=document.getElementById('acc-opening-wrap');
@@ -6412,13 +6421,13 @@ function populateParentSelector(selectedId){
   if(!sel)return;
   // Groups at level 1-3 can be parents (level 4 groups would overflow, level 4 is max)
   const groups=_coaFlatAccounts.filter(a=>a.is_group&&(a.level||1)<=3);
-  sel.innerHTML='<option value="">— None (becomes Level 1 Primary Group) —</option>';
+  sel.innerHTML='<option value="">— None (Primary Group, Level 1) —</option>';
   // Sort by code but render as tree path
   const sortedGroups=groups.slice().sort((a,b)=>String(a.code).localeCompare(String(b.code)));
   sortedGroups.forEach(g=>{
     const depth=(g.level||1)-1;
     const indent='    '.repeat(depth); // non-breaking spaces for indent
-    const levelTag={1:'L1',2:'L2',3:'L3'}[g.level]||'';
+    const levelTag={1:'Primary',2:'Secondary',3:'Sub-Group'}[g.level]||'';
     const opt=document.createElement('option');
     opt.value=g.id;
     opt.textContent=`${indent}[${levelTag}] ${g.code} — ${g.name}`;
@@ -6455,10 +6464,10 @@ function updateAccLevelInfo(){
     // No parent = MAIN LEDGER — hide Normal Balance (not relevant for top-level group)
     if(nbWrap)nbWrap.style.display='none';
     if(isGroup){
-      info.textContent='✓ Level 1 — MAIN LEDGER (top of hierarchy). Add Sub Ledgers under this.';
+      info.textContent='✓ Level 1 — Primary Group (top of hierarchy). Add Secondary Groups or Ledgers under this.';
       info.className='coa-level-info show';
     }else{
-      info.textContent='⚠ Root-level Posting Ledger — consider adding a parent group first.';
+      info.textContent='⚠ Root-level Ledger — consider adding a Primary Group parent first.';
       info.style.color='var(--amber)';
       info.className='coa-level-info show';
     }

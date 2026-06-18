@@ -401,10 +401,10 @@ def _validate_ai_ledger_tree(tree: list, existing_codes: list[str]) -> list:
             seen_codes.add(code)
         if not name:
             issues.append("Missing name")
-        if level > 5:
-            issues.append("Exceeds 5-level maximum depth")
+        if level > 4:
+            issues.append("Exceeds 4-level maximum depth")
         is_group = bool(children) or bool(node.get("is_group"))
-        if level == 5 and is_group:
+        if level == 4 and is_group:
             is_group = False
         return {
             **node,
@@ -455,10 +455,10 @@ def create_account(
         if not parent.is_group:
             raise HTTPException(status_code=400, detail="Cannot add under a Posting Ledger — choose a Group or Sub Ledger as parent.")
         level = (parent.level or 1) + 1
-        if level > 5:
-            raise HTTPException(status_code=400, detail="Maximum hierarchy depth is 5 (MAIN → SUB×3 → POSTING)")
-        # Level 5 is always a posting ledger
-        if level == 5:
+        if level > 4:
+            raise HTTPException(status_code=400, detail="Maximum hierarchy depth is 4 (Primary → Secondary → Sub-Group → Ledger)")
+        # Level 4 is always a posting ledger
+        if level == 4:
             is_group = False
     else:
         level = 1
