@@ -4517,9 +4517,7 @@ function syncAllocationMeta(){
   const method=document.getElementById('payment-method')?.value||'';
   const date=document.getElementById('payment-date')?.value||'';
   document.querySelectorAll('#pmt-alloc-tbody tr').forEach(row=>{
-    const dateCell=row.querySelector('td:nth-child(3)');
-    const methodCell=row.querySelector('td:nth-child(4)');
-    if(dateCell&&date)dateCell.textContent=date;
+    const methodCell=row.querySelector('.pmt-alloc-method');
     if(methodCell&&method)methodCell.textContent=method;
   });
 }
@@ -4549,21 +4547,21 @@ function loadAllocationTable(docs){
     tbody.innerHTML=`<tr class="pmt-alloc-empty"><td colspan="7">${hint}</td></tr>`;
     return;
   }
-  const fmt=n=>Number(n||0).toLocaleString('en-AE',{minimumFractionDigits:2});
+  const fmtAed=n=>'د.إ'+Number(n||0).toLocaleString('en-AE',{minimumFractionDigits:2});
+  const fmtDate=s=>{
+    if(!s||s==='-')return '-';
+    try{const[y,m,d]=s.split('-');return d&&m&&y?`${d}-${m}-${y}`:s;}catch{return s;}
+  };
   tbody.innerHTML=docs.map(d=>{
     const remaining=Number(d.amount||0);
     const original=Number(d.original_amount||d.amount||0);
-    const isPartial=original>remaining+0.01;
-    const src=d.source||'-';
-    const srcColor=isPartial?'background:#fff3e0;color:#e65100':'background:#eef3ff;color:#2e5db5';
-    const srcLabel=isPartial?`${escapeHtml(src)} (partial)`:escapeHtml(src);
     return `<tr>
       <td><input type="checkbox" class="pmt-alloc-chk" checked onchange="updatePmtBalance()"></td>
-      <td class="mono" style="font-size:11.5px">${escapeHtml(d.ref)}</td>
-      <td style="font-size:11.5px">${escapeHtml(d.date||'-')}</td>
-      <td><span style="font-size:10.5px;${srcColor};border-radius:4px;padding:1px 6px;font-weight:600">${srcLabel}</span></td>
-      <td class="mono r">${fmt(original)}</td>
-      <td class="mono r">${fmt(remaining)}</td>
+      <td class="mono">${escapeHtml(d.ref)}</td>
+      <td>${fmtDate(d.date||'-')}</td>
+      <td class="pmt-alloc-method"></td>
+      <td class="mono r">${fmtAed(original)}</td>
+      <td class="mono r">${fmtAed(remaining)}</td>
       <td><input type="number" class="pmt-alloc-inp" value="${remaining.toFixed(2)}" min="0" max="${remaining}" step="0.01" oninput="updatePmtBalance()" data-doc-ref="${escapeHtml(d.ref)}" data-doc-amount="${remaining}"></td>
     </tr>`;
   }).join('');
