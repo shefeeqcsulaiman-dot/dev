@@ -197,13 +197,18 @@ function stab(el,target){
 }
 
 function toast(msg,type='ok'){
-  const icons={ok:'?',warn:'?',err:'?',info:'?'};
+  const svgs={
+    ok:`<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><polyline points="5.5,8 7,9.5 10.5,6"/></svg>`,
+    warn:`<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 2.5L14 13H2z"/><line x1="8" y1="7" x2="8" y2="10"/><circle cx="8" cy="11.5" r=".6" fill="currentColor" stroke="none"/></svg>`,
+    err:`<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><line x1="5.5" y1="5.5" x2="10.5" y2="10.5"/><line x1="10.5" y1="5.5" x2="5.5" y2="10.5"/></svg>`,
+    info:`<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><line x1="8" y1="7.5" x2="8" y2="11"/><circle cx="8" cy="5.5" r=".6" fill="currentColor" stroke="none"/></svg>`,
+  };
   const clrs={ok:'var(--green)',warn:'var(--amber)',err:'var(--red)',info:'var(--accent)'};
   const t=document.createElement('div');
   t.className='toast '+type;
   const icon=document.createElement('span');
-  icon.style.cssText=`color:${clrs[type]||clrs.info};font-size:15px`;
-  icon.textContent=icons[type]||'?';
+  icon.style.cssText=`color:${clrs[type]||clrs.info};display:inline-flex;flex-shrink:0`;
+  icon.innerHTML=svgs[type]||svgs.info;
   const text=document.createElement('span');
   text.textContent=msg;
   t.append(icon,text);
@@ -3262,11 +3267,12 @@ function restoreSalesInvoices(){
   // Sales invoices are restored from the database by hydrateFromServer().
 }
 
-function emptyTableMessage(tbody,message='No database records yet.'){
+function emptyTableMessage(tbody,message='No records yet.'){
   if(!tbody)return;
   const table=tbody.closest('table');
   const cols=table?.tHead?.rows?.[0]?.cells?.length||1;
-  tbody.innerHTML=`<tr data-empty-state="1"><td colspan="${cols}" style="color:var(--text3);text-align:center">${escapeHtml(message)}</td></tr>`;
+  const icon=`<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" style="opacity:.45;flex-shrink:0"><rect x="2" y="4" width="14" height="11" rx="2"/><line x1="2" y1="8" x2="16" y2="8"/><line x1="5.5" y1="4" x2="5.5" y2="2.5"/><line x1="12.5" y1="4" x2="12.5" y2="2.5"/></svg>`;
+  tbody.innerHTML=`<tr data-empty-state="1" class="tbl-empty-row"><td colspan="${cols}"><div class="tbl-empty-inner">${icon}${escapeHtml(message)}</div></td></tr>`;
 }
 
 function removeEmptyState(tbody){
