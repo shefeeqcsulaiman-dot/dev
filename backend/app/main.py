@@ -73,7 +73,7 @@ def create_app() -> FastAPI:
         f = site_dir / "landing.html"
         if f.exists():
             return FileResponse(str(f))
-        return RedirectResponse(url="/taxflow/", status_code=302)
+        return FileResponse(str(static_dir / "taxflow" / "index.html"))
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -91,16 +91,37 @@ def create_app() -> FastAPI:
     def contact() -> FileResponse:
         return FileResponse(str(site_dir / "contact.html"))
 
-    @app.get("/taxflow/login", include_in_schema=False)
+    # Primary routes at root path
+    @app.get("/login", include_in_schema=False)
     def login_page() -> FileResponse:
         return FileResponse(str(static_dir / "taxflow" / "login.html"))
 
-    @app.get("/taxflow/superadmin", include_in_schema=False)
+    @app.get("/superadmin", include_in_schema=False)
     def superadmin_page() -> FileResponse:
         return FileResponse(str(static_dir / "taxflow" / "superadmin.html"))
 
-    @app.get("/taxflow/config.js", include_in_schema=False)
+    @app.get("/config.js", include_in_schema=False)
     def config_js() -> Response:
+        api_base = os.environ.get("API_BASE_URL", "")
+        content = (
+            f'window.TAXFLOW_API_BASE_URL = "{api_base}";\n' if api_base
+            else "// local dev — app.js falls back to localhost:8000\n"
+        )
+        return Response(content=content, media_type="application/javascript")
+
+    # Legacy /taxflow/* redirects for backward compatibility
+    @app.get("/taxflow/login", include_in_schema=False)
+    def taxflow_login_redirect():
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/login", status_code=301)
+
+    @app.get("/taxflow/superadmin", include_in_schema=False)
+    def taxflow_superadmin_redirect():
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/superadmin", status_code=301)
+
+    @app.get("/taxflow/config.js", include_in_schema=False)
+    def taxflow_config_js_redirect() -> Response:
         api_base = os.environ.get("API_BASE_URL", "")
         content = (
             f'window.TAXFLOW_API_BASE_URL = "{api_base}";\n' if api_base
@@ -130,11 +151,15 @@ def create_app() -> FastAPI:
 
     # Serve frontend static files
     if static_dir.exists():
+        # Legacy mount — keeps /taxflow/* working for old bookmarks
         app.mount("/taxflow", StaticFiles(directory=str(static_dir / "taxflow"), html=True), name="taxflow")
         clients_dir = static_dir / "clients"
         if clients_dir.exists():
             app.mount("/clients", StaticFiles(directory=str(clients_dir)), name="clients")
         app.mount("/static-assets", StaticFiles(directory=str(static_dir)), name="assets")
+        # Root asset mount — allows index.html at "/" to load src/app.js, src/styles.css etc.
+        # html=False so it never serves index.html as SPA fallback (avoids masking API 404s)
+        app.mount("/", StaticFiles(directory=str(static_dir / "taxflow")), name="taxflow-root")
 
     return app
 

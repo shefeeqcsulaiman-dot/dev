@@ -4484,16 +4484,28 @@ function populatePaymentMethods(defaultMethod='Cash'){
     ['Bank Transfer','Cheque','Card'].forEach(n=>methods.push({name:n,icon:'bank'}));
   }
 
-  const cashIconSvg=`<svg viewBox="0 0 16 16"><rect x="1" y="4" width="14" height="8" rx="1.5"/><circle cx="8" cy="8" r="2"/></svg>`;
-  const bankIconSvg=`<svg viewBox="0 0 16 16"><rect x="1" y="8" width="14" height="6" rx="1"/><polygon points="8,2 1,8 15,8"/></svg>`;
+  const icons={
+    cash:`<svg viewBox="0 0 24 24" stroke-width="1.5" fill="none"><rect x="2" y="7" width="20" height="12" rx="2"/><path d="M16 13a4 4 0 1 1-8 0 4 4 0 0 1 8 0z"/><line x1="2" y1="10" x2="6" y2="10"/><line x1="18" y1="10" x2="22" y2="10"/><line x1="2" y1="16" x2="6" y2="16"/><line x1="18" y1="16" x2="22" y2="16"/></svg>`,
+    card:`<svg viewBox="0 0 24 24" stroke-width="1.5" fill="none"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><rect x="5" y="14" width="5" height="2" rx="1" fill="currentColor" stroke="none"/></svg>`,
+    cheque:`<svg viewBox="0 0 24 24" stroke-width="1.5" fill="none"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="10" x2="17" y2="10"/><line x1="7" y1="14" x2="13" y2="14"/></svg>`,
+    transfer:`<svg viewBox="0 0 24 24" stroke-width="1.5" fill="none"><path d="M5 12h14M14 7l5 5-5 5"/><path d="M10 7 5 12l5 5" opacity=".4"/></svg>`,
+    bank:`<svg viewBox="0 0 24 24" stroke-width="1.5" fill="none"><polygon points="12,3 2,10 22,10"/><rect x="4" y="10" width="3" height="8"/><rect x="10.5" y="10" width="3" height="8"/><rect x="17" y="10" width="3" height="8"/><line x1="2" y1="18" x2="22" y2="18"/></svg>`,
+  };
+  const getIconType=name=>{
+    const n=name.toLowerCase();
+    if(n.includes('cash')||n.includes('petty'))return 'cash';
+    if(n.includes('cheque')||n.includes('check'))return 'cheque';
+    if(n.includes('card')||n.includes('amex')||n.includes('visa')||n.includes('master')||n.includes('eftpos'))return 'card';
+    if(n.includes('transfer')||n.includes('paylink')||n.includes('magnati')||n.includes('tabby')||n.includes('xfer'))return 'transfer';
+    return 'bank';
+  };
 
   container.innerHTML=methods.map(m=>{
-    const isCash=m.icon==='cash';
-    const icon=isCash?cashIconSvg:bankIconSvg;
-    const iconCls=isCash?'pmt-m-icon cash':'pmt-m-icon';
+    const type=m.icon==='cash'?'cash':getIconType(m.name);
+    const iconCls=`pmt-m-icon ${type}`;
     const isDefault=m.name===defaultMethod;
-    const label=escapeHtml(m.name.length>14?m.name.slice(0,13)+'…':m.name);
-    return `<button class="pmt-m-btn${isDefault?' on':''}" data-method="${escapeHtml(m.name)}" onclick="selectPaymentMethod(this)"><div class="${iconCls}">${icon}</div>${label}</button>`;
+    const label=escapeHtml(m.name.length>16?m.name.slice(0,15)+'…':m.name);
+    return `<button class="pmt-m-btn${isDefault?' on':''}" data-method="${escapeHtml(m.name)}" onclick="selectPaymentMethod(this)"><div class="${iconCls}">${icons[type]}</div><span class="pmt-m-label">${label}</span></button>`;
   }).join('');
 
   // Set the hidden payment-method field
