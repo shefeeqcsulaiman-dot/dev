@@ -4454,6 +4454,10 @@ function openPaymentModal(type='Customer Receipt'){
 
   showM('m-payment');
   setTimeout(()=>syncPaymentFormOptions(),0);
+  // Ensure purchase records are loaded so vendor invoices appear in allocation table
+  if(isSupplierPaymentType(type)&&!purchaseRecordsLoaded){
+    fetchPurchaseRecordsPage().then(()=>syncPaymentFormOptions());
+  }
 }
 
 function selectPaymentMethod(btn){
@@ -4505,7 +4509,7 @@ function calculateAllOwing(){
   const type=document.getElementById('payment-type')?.value||'Customer Receipt';
   const contact=(document.getElementById('payment-contact')?.value||'').trim().toLowerCase();
   const docs=collectPaymentDocuments(type)
-    .filter(d=>!contact||d.contact.toLowerCase().includes(contact));
+    .filter(d=>{if(!contact)return true;const cl=d.contact.toLowerCase();return cl.includes(contact)||contact.includes(cl);});
   // Sum remaining balances (partial invoices show their remaining amount)
   const total=docs.reduce((sum,d)=>sum+Number(d.amount||0),0);
   setFieldValue(document.getElementById('payment-amount'),total.toFixed(2));
@@ -4535,7 +4539,7 @@ function loadAllocationTable(docs){
     const remaining=Number(d.amount||0);
     const original=Number(d.original_amount||d.amount||0);
     return `<tr>
-      <td><input type="checkbox" class="pmt-alloc-chk" checked onchange="updatePmtBalance()"></td>
+      <td><input type="checkbox" class="pmt-alloc-chk" checked onchange="onAllocChkChange(this)"></td>
       <td class="mono">${escapeHtml(d.ref)}</td>
       <td>${fmtDate(d.date||'-')}</td>
       <td class="pmt-alloc-method"></td>
@@ -4551,6 +4555,14 @@ function loadAllocationTable(docs){
 function toggleAllAllocation(checked){
   document.querySelectorAll('#pmt-alloc-tbody .pmt-alloc-chk').forEach(chk=>{
     chk.checked=checked;
+    const inp=chk.closest('tr')?.querySelector('.pmt-alloc-inp');
+    if(inp){
+      if(!checked){
+        inp.value='0.00';
+      } else {
+        inp.value=parseFloat(inp.dataset.docAmount||'0').toFixed(2);
+      }
+    }
   });
   const btn=document.getElementById('pmt-alloc-toggle-btn');
   if(btn)btn.textContent=checked?'−':'+';
@@ -4561,6 +4573,18 @@ function toggleAllAllocationBtn(btn){
   const allChks=[...document.querySelectorAll('#pmt-alloc-tbody .pmt-alloc-chk')];
   const allChecked=allChks.every(c=>c.checked);
   toggleAllAllocation(!allChecked);
+}
+
+function onAllocChkChange(chk){
+  const inp=chk.closest('tr')?.querySelector('.pmt-alloc-inp');
+  if(!inp)return;
+  if(!chk.checked){
+    inp.value='0.00';
+  } else {
+    const original=parseFloat(inp.dataset.docAmount||'0');
+    inp.value=original.toFixed(2);
+  }
+  updatePmtBalance();
 }
 
 function updatePmtBalance(){
@@ -4590,9 +4614,16 @@ function collectPaymentContacts(type=document.getElementById('payment-type')?.va
     const fromPurchases=[...purchaseRecordCache.values()]
       .map(p=>String(p.supplier||'').trim())
       .filter(Boolean);
-    return [...new Set([...fromTable,...fromPurchases])];
+    const fromBills=[...document.querySelectorAll('#bill-tbody tr:not([data-empty-state])')]
+      .map(row=>row.children[1]?.textContent.trim())
+      .filter(Boolean);
+    return [...new Set([...fromTable,...fromPurchases,...fromBills])];
   }
-  return fromTable;
+  // For customer receipts: also pull names from the sales invoice table
+  const fromInvoices=[...document.querySelectorAll('#sales-invoice-tbody tr:not([data-empty-state])')].map(row=>{
+    try{return JSON.parse(row.dataset.salesInvoice||'{}').customer||'';}catch{return '';}
+  }).filter(Boolean);
+  return [...new Set([...fromTable,...fromInvoices])];
 }
 
 function paidPaymentDocumentRefs(type=document.getElementById('payment-type')?.value){
@@ -4744,6 +4775,9 @@ function switchPmtType(type,btn){
   if(contactLabel)contactLabel.textContent=supplier?'Vendor':'Client';
   setFieldValue(document.getElementById('payment-ref'),nextPaymentReference(type));
   syncPaymentFormOptions();
+  if(supplier&&!purchaseRecordsLoaded){
+    fetchPurchaseRecordsPage().then(()=>syncPaymentFormOptions());
+  }
   // Reset allocation table
   const tbody=document.getElementById('pmt-alloc-tbody');
   if(tbody)tbody.innerHTML='<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:12px">Select a client to see outstanding invoices.</td></tr>';
@@ -4768,9 +4802,10 @@ function applyPaymentContactSelection(){
   const type=document.getElementById('payment-type')?.value||'Customer Receipt';
   const contact=(document.getElementById('payment-contact')?.value||'').trim();
   if(!contact)return;
-  // Load allocation table for this client
+  // Load allocation table for this client (bidirectional substring match)
+  const contactLc=contact.toLowerCase();
   const docs=collectPaymentDocuments(type)
-    .filter(d=>d.contact.toLowerCase().includes(contact.toLowerCase()));
+    .filter(d=>{const cl=d.contact.toLowerCase();return cl.includes(contactLc)||contactLc.includes(cl);});
   loadAllocationTable(docs);
   // Auto-fill total remaining (partial invoices contribute only their outstanding balance)
   if(docs.length){
