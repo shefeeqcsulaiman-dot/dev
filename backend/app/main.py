@@ -69,10 +69,6 @@ def create_app() -> FastAPI:
 
     @app.get("/", response_model=None)
     def root():
-        from fastapi.responses import RedirectResponse
-        f = site_dir / "landing.html"
-        if f.exists():
-            return FileResponse(str(f))
         return FileResponse(str(static_dir / "taxflow" / "index.html"))
 
     @app.get("/health")
@@ -110,6 +106,16 @@ def create_app() -> FastAPI:
         return Response(content=content, media_type="application/javascript")
 
     # Legacy /taxflow/* redirects for backward compatibility
+    @app.get("/taxflow", include_in_schema=False)
+    def taxflow_root_redirect():
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/", status_code=301)
+
+    @app.get("/taxflow/", include_in_schema=False)
+    def taxflow_slash_redirect():
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/", status_code=301)
+
     @app.get("/taxflow/login", include_in_schema=False)
     def taxflow_login_redirect():
         from fastapi.responses import RedirectResponse

@@ -88,7 +88,7 @@
 <!-- Topbar -->
 <div class="topbar">
   <div class="topbar-brand">
-    <img src="/taxflow/logo.png" alt="ETaxFlow" class="topbar-logo">
+    <img src="/logo.png" alt="ETaxFlow" class="topbar-logo">
     <span class="topbar-title">ETaxFlow</span>
     <span class="topbar-badge">SUPER ADMIN</span>
   </div>
@@ -291,10 +291,10 @@
   </div>
 </div>
 
-<script src="/taxflow/config.js"></script>
+<script src="/config.js"></script>
 <script>
   const token = localStorage.getItem('taxflow_token');
-  if(!token) window.location.replace('/taxflow/login');
+  if(!token) window.location.replace('/login');
 
   function apiBase(){
     if(window.TAXFLOW_API_BASE_URL) return window.TAXFLOW_API_BASE_URL;
@@ -315,7 +315,7 @@
 
   function saLogout(){
     localStorage.removeItem('taxflow_token');
-    window.location.replace('/taxflow/login');
+    window.location.replace('/login');
   }
 
   function openModal(id){ document.getElementById(id).classList.add('on'); }
@@ -330,7 +330,7 @@
     try{
       const meRes = await apiFetch('/auth/me');
       const me = await meRes.json();
-      if(me.role !== 'superadmin'){ window.location.replace('/taxflow/'); return; }
+      if(me.role !== 'superadmin'){ window.location.replace('/'); return; }
       document.getElementById('sa-user-email').textContent = me.email;
 
       const res = await apiFetch('/superadmin/companies');

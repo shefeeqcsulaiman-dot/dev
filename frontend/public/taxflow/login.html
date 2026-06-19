@@ -71,7 +71,7 @@
 <body>
 <div class="card">
   <div class="brand">
-    <img src="/taxflow/logo.png" alt="ETaxFlow" class="brand-img">
+    <img src="/logo.png" alt="ETaxFlow" class="brand-img">
     <div class="brand-sub">Sign in to your account</div>
   </div>
   <div id="err" class="error"></div>
@@ -87,7 +87,7 @@
   <div class="footer">ETaxFlow &mdash; UAE Business Management Platform</div>
 </div>
 
-<script src="/taxflow/config.js"></script>
+<script src="/config.js"></script>
 <script>
   (async function(){
     var t=localStorage.getItem('taxflow_token');
@@ -95,9 +95,9 @@
     try{
       var r=await fetch(apiBase()+'/auth/me',{headers:{'Authorization':'Bearer '+t}});
       var m=await r.json();
-      if(m&&m.role==='superadmin'){window.location.replace('/taxflow/superadmin');return;}
-      if(r.ok)window.location.replace('/taxflow/');
-    }catch(e){ window.location.replace('/taxflow/'); }
+      if(m&&m.role==='superadmin'){window.location.replace('/superadmin');return;}
+      if(r.ok)window.location.replace('/');
+    }catch(e){ window.location.replace('/'); }
   })();
 
   document.getElementById('email').addEventListener('keydown',function(e){
@@ -134,9 +134,9 @@
         try{
           var meResp=await fetch(apiBase()+'/auth/me',{headers:{'Authorization':'Bearer '+data.access_token}});
           var me=await meResp.json();
-          if(me&&me.role==='superadmin'){window.location.replace('/taxflow/superadmin');return;}
+          if(me&&me.role==='superadmin'){window.location.replace('/superadmin');return;}
         }catch(e){}
-        window.location.replace('/taxflow/');
+        window.location.replace('/');
       }else{
         err.textContent=data.detail||'Incorrect email or password.';
         err.style.display='block';

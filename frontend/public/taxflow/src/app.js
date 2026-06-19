@@ -1512,7 +1512,7 @@ function saveInventoryItem(){
 
 function logout(){
   localStorage.removeItem('taxflow_token');
-  window.location.replace('/taxflow/login');
+  window.location.replace('/login');
 }
 
 function chkTRN(inp){
@@ -1578,7 +1578,7 @@ function localApiUrlFor(url){
 
 function showLoginOverlay(){
   try{toast('Session expired — please sign in again','warn');}catch{}
-  setTimeout(()=>window.location.replace('/taxflow/login'),1200);
+  setTimeout(()=>window.location.replace('/login'),1200);
 }
 function hideLoginOverlay(){}
 async function submitLogin(){
@@ -1613,7 +1613,7 @@ async function submitLogin(){
 }
 // Role-based nav visibility. Roles from JWT: 'admin' (full access), 'viewer',
 // 'accountant', 'sales' — defined as the User.role field in the backend.
-// 'superadmin' is redirected to /taxflow/superadmin.html at login page level.
+// 'superadmin' is redirected to /superadmin at login page level.
 const _NAV_ROLE_MAP={
   viewer:   ['sales','quotations','purchase','inventory','expense','reports','exception'],
   sales:    ['sales','quotations','reports'],
@@ -1704,16 +1704,16 @@ async function authenticatedFetch(url,options={}){
 }
 
 const AED_SYMBOL='AED';
-const AED_CHAR='$';
-const AED_HTML='$';
-function AED_SYMBOL_SVG(){return '$';}
+const AED_CHAR='AED ';
+const AED_HTML='AED ';
+function AED_SYMBOL_SVG(){return 'AED ';}
 function formatAed(value){
   const num=Number(value||0);
-  return '$'+num.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return 'AED '+num.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 function formatAedHtml(value){
   const num=Number(value||0);
-  return '$'+num.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return 'AED '+num.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 
 function findSettingsInput(labelText,scopeId='set-company'){
@@ -2183,7 +2183,13 @@ function renderDashboardHero(data,kpis={},counts={}){
   if(!parseAmount(purSum.paid||0)&&_localPur.paid>0){purSum.paid=_localPur.paid;purSum.paid_count=_localPur.paidCount;purSum.pending_count=_localPur.pendingCount;}
 
   const vatPayable=parseAmount(kpis.vat_payable||data.vat_payable||0);
-  const grossProfit=revenue-purchases;
+  const closingStock=purchaseStockItems().reduce((sum,item)=>sum+Math.max(0,Number(item.available||0))*Number(item.purchase_rate||0),0);
+  const directExpenses=[...document.querySelectorAll('#expense-tbody tr:not([data-empty-state])')].reduce((sum,row)=>{
+    const cat=(row.children[2]?.textContent||'').trim().toLowerCase();
+    return cat.includes('direct')?sum+parseAmount(row.children[5]?.textContent||'0'):sum;
+  },0);
+  const openingStock=0;
+  const grossProfit=revenue+closingStock-openingStock-purchases-directExpenses;
 
   // KPI cards
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
@@ -2194,7 +2200,7 @@ function renderDashboardHero(data,kpis={},counts={}){
   set('dash-vat',formatAed(vatPayable));
   set('dash-vat-sub',vatPayable>0?'Payable to FTA':'Credit position');
   set('dash-gross-profit',formatAed(grossProfit));
-  set('dash-profit-sub','');
+  set('dash-profit-sub',closingStock>0?`Closing stock: ${formatAed(closingStock)}`:'');
   // Profit card: margin bar
   const marginPct=revenue>0?Math.max(0,Math.round(grossProfit/revenue*100)):0;
   set('dash-margin-pct',`${marginPct}%`);
@@ -3765,12 +3771,33 @@ async function loadStockLevelsFromServer(){
 
 let _allStockMovements=[];
 
+function _collectSalesMovements(){
+  const movements=[];
+  document.querySelectorAll('#sales-invoice-tbody tr:not([data-empty-state])').forEach(row=>{
+    let inv={};
+    try{inv=JSON.parse(row.dataset.salesInvoice||'{}');}catch{}
+    if(!inv.date||isSalesReturn(inv))return;
+    const lines=Array.isArray(inv.lines)?inv.lines:[];
+    lines.forEach(line=>{
+      const name=(line.description||line.product||'').trim();
+      if(!name)return;
+      const qty=Number(line.qty||line.quantity||0);
+      if(!qty)return;
+      movements.push({item_name:name,movement_type:'sale',quantity:-qty,date:inv.date,reference:inv.invoice_no||'',unit:line.unit||'PCS'});
+    });
+  });
+  return movements;
+}
+
 async function loadStockMovements(){
   const tbody=document.getElementById('stock-movement-tbody');
   if(!tbody)return;
   try{
     const data=await moduleApi('/inventory/stock-movements');
-    _allStockMovements=Array.isArray(data)?data:[];
+    const purchaseMvt=Array.isArray(data)?data:[];
+    const salesMvt=_collectSalesMovements();
+    _allStockMovements=[...purchaseMvt,...salesMvt]
+      .sort((a,b)=>new Date(a.date||a.movement_date||0)-new Date(b.date||b.movement_date||0));
     _populateMovementFilters();
     filterStockMovements();
   }catch(e){
@@ -3829,7 +3856,9 @@ function filterStockMovements(){
     const row=document.createElement('tr');
     const dateStr=m.date||m.movement_date||'';
     const formatted=dateStr?new Date(dateStr).toLocaleDateString('en-AE',{dateStyle:'short'}):'-';
-    row.innerHTML=`<td>${escapeHtml(formatted)}</td><td>${escapeHtml(m.movement_type||m.type||'-')}</td><td>${escapeHtml(key||'-')}</td><td style="color:var(--green)">${isIn?Math.abs(qty).toFixed(2):''}</td><td style="color:var(--red)">${!isIn?Math.abs(qty).toFixed(2):''}</td><td>${bal.toFixed(2)}</td><td class="mono" style="font-size:12px">${escapeHtml(m.reference||'-')}</td>`;
+    const mvtType=m.movement_type||m.type||'-';
+    const mvtLabel=mvtType==='sale'?'<span class="b b-r" style="font-size:11px">Sale</span>':mvtType==='purchase'||mvtType==='Purchase'?'<span class="b b-g" style="font-size:11px">Purchase</span>':escapeHtml(mvtType);
+    row.innerHTML=`<td>${escapeHtml(formatted)}</td><td>${mvtLabel}</td><td>${escapeHtml(key||'-')}</td><td style="color:var(--green)">${isIn?Math.abs(qty).toFixed(2):''}</td><td style="color:var(--red)">${!isIn?Math.abs(qty).toFixed(2):''}</td><td>${bal.toFixed(2)}</td><td class="mono" style="font-size:12px">${escapeHtml(m.reference||'-')}</td>`;
     tbody.appendChild(row);
   });
   refreshEnhancedTable(tbody.closest('table'));
@@ -3851,7 +3880,10 @@ async function openStockMovementHistory(el){
   if(!_allStockMovements.length){
     try{
       const data=await moduleApi('/inventory/stock-movements');
-      _allStockMovements=Array.isArray(data)?data:[];
+      const purchaseMvt=Array.isArray(data)?data:[];
+      const salesMvt=_collectSalesMovements();
+      _allStockMovements=[...purchaseMvt,...salesMvt]
+        .sort((a,b)=>new Date(a.date||a.movement_date||0)-new Date(b.date||b.movement_date||0));
     }catch(e){console.warn('Movements load failed:',e);}
   }
   const nameKey=itemName.toLowerCase();
@@ -8290,7 +8322,7 @@ function publicInvoicePayload(inv=currentSalesInvoice){
 
 function publicInvoiceUrl(inv=currentSalesInvoice){
   const payload=encodePublicInvoicePayload(publicInvoicePayload(inv));
-  const url=new URL('/taxflow/digital-invoice.html',window.location.origin);
+  const url=new URL('/digital-invoice.html',window.location.origin);
   url.hash='invoice='+payload;
   return url.toString();
 }
@@ -8469,7 +8501,7 @@ function invoiceViewPrintHtml(inv=currentInvoiceForShare()){
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
-    <link rel="stylesheet" href="/taxflow/src/styles.css">
+    <link rel="stylesheet" href="/src/styles.css">
     <style>
       body{margin:0;background:#fff;color:#172033;padding:24px;height:auto;overflow:auto;}
       .invoice-print-shell{max-width:980px;margin:0 auto;}
@@ -10494,12 +10526,15 @@ function ensurePurchaseAiEditModal(){
   return overlay;
 }
 
-function openPurchaseAiEdit(btn){
+async function openPurchaseAiEdit(btn){
   const row=purchaseAiRowFromButton(btn);
   if(!row)return;
   purchaseAiEditRow=row;
   let inv={};
   try{inv=JSON.parse(row.dataset.inv||'{}');}catch{return;}
+  if(!_coaFlatAccounts.length){
+    try{const accs=await moduleApi('/accounts');if(Array.isArray(accs))_coaFlatAccounts=accs;}catch{}
+  }
   ensurePurchaseAiEditModal();
   document.getElementById('pai-invoice').value=inv.invoice_no||'';
   document.getElementById('pai-date').value=inv.date||'';
@@ -10554,23 +10589,21 @@ function openPurchaseAiView(btn){
 function purchaseLedgerCategoryOptions(selected=''){
   const byId={};
   _coaFlatAccounts.forEach(a=>{byId[a.id]=a;});
+  const isPurchaseNode=a=>/purchase/i.test(a.name||'')||/purchase/i.test(String(a.type||a.account_type||''));
   const isUnderPurchase=acc=>{
     let cur=acc;
     while(cur){
-      if(/purchase/i.test(cur.name||''))return true;
+      if(isPurchaseNode(cur))return true;
       cur=cur.parent_account_id?byId[cur.parent_account_id]:null;
     }
     return false;
   };
-  const purchaseTypes=['expense','direct cost','purchase','cost'];
-  let accounts=_coaFlatAccounts.filter(a=>{
-    if(a.is_group||a.status==='inactive')return false;
-    const t=String(a.type||a.account_type||'').toLowerCase();
-    return purchaseTypes.some(pt=>t.includes(pt))||isUnderPurchase(a);
-  });
+  // Posting ledgers whose own type OR any ancestor name/type contains "purchase"
+  let accounts=_coaFlatAccounts.filter(a=>!a.is_group&&a.status!=='inactive'&&isUnderPurchase(a));
   if(!accounts.length)accounts=_coaFlatAccounts.filter(a=>!a.is_group&&a.status!=='inactive');
   const extra=selected&&!accounts.find(a=>a.name===selected)?`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`:'';
-  return '<option value="">Select Category</option>'+extra+accounts.map(a=>`<option value="${escapeHtml(a.name)}"${a.name===selected?' selected':''}>${escapeHtml((a.code?a.code+' — ':'')+a.name)}</option>`).join('');
+  const opts=accounts.map(a=>`<option value="${escapeHtml(a.name)}"${a.name===selected?' selected':''}>${escapeHtml((a.code?a.code+' — ':'')+a.name)}</option>`).join('');
+  return `<option value="">— Select Category —</option>${extra}${opts}`;
 }
 
 function addPurchaseAiEditLine(line={}){
@@ -17009,7 +17042,7 @@ function initApp(){
 }
 
 if(!localStorage.getItem('taxflow_token')){
-  window.location.replace('/taxflow/login');
+  window.location.replace('/login');
 }else{
   applyRoleBasedNav().catch(()=>{});
   initApp();
