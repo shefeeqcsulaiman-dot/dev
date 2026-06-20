@@ -114,6 +114,14 @@ def create_app() -> FastAPI:
     def digital_invoice() -> FileResponse:
         return FileResponse(str(static_dir / "taxflow" / "digital-invoice.html"))
 
+    @app.get("/pos", include_in_schema=False)
+    def pos_terminal() -> FileResponse:
+        return FileResponse(str(static_dir / "taxflow" / "pos.html"))
+
+    @app.get("/taxflow/pos.html", include_in_schema=False)
+    def pos_terminal_html() -> FileResponse:
+        return FileResponse(str(static_dir / "taxflow" / "pos.html"))
+
     @app.get("/config.js", include_in_schema=False)
     def config_js() -> Response:
         api_base = os.environ.get("API_BASE_URL", "")

@@ -33,6 +33,11 @@ function App() {
         body: JSON.stringify({ email, password }),
       });
       setToken(data.access_token);
+      const redirect = new URLSearchParams(window.location.search).get("redirect");
+      if (redirect === "pos" || redirect === "/pos") {
+        window.location.href = "/pos";
+        return;
+      }
       setTokenReady(true);
     } catch (err) {
       setError("Could not sign in. Use admin@taxflowapp.com / admin123 and make sure the API is running on 127.0.0.1:8000.");
@@ -673,4 +678,11 @@ function Login({ onLogin, error }) {
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+if (window.location.pathname === '/pos') {
+  fetch('/taxflow/pos.html')
+    .then(r => r.text())
+    .then(html => { document.open(); document.write(html); document.close(); })
+    .catch(() => { window.location.replace('/taxflow/pos.html'); });
+} else {
+  createRoot(document.getElementById("root")).render(<App />);
+}

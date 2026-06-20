@@ -14,7 +14,7 @@ META.accounting={t:'Accounting',s:'Chart - Vouchers - Ledger - Filing - Bank Rec
 META.corporate={t:'Corporate Accounting',s:'Corporate tax - Assets - Accruals - Cost centers - Budgets',a:'Tax Report',ao:()=>{go('corporate');setTimeout(()=>stab(document.querySelectorAll('#page-corporate .tab')[0],'corp-tax'),50)}};
 META.reports={t:'Reports',s:'VAT - P&L - Balance Sheet - Trial Balance',a:'Export PDF',ao:()=>exportActiveReportPdf()};
 META.exception={t:'Exception Center',s:'Failed postings - duplicates - VAT/OCR - stock and payroll issues',a:'Refresh',ao:()=>loadExceptionCenter()};
-META.pos={t:'Point of Sale',s:'Quick sale - Products - Receipt - Cash & Card',a:'New Sale',ao:()=>{go('pos');clearPosCart();}};
+META.pos={t:'Point of Sale',s:'Quick sale - Products - Receipt - Cash & Card',a:'Launch Terminal',ao:()=>window.open('/pos','_blank')};
 
 let isHydratingFromServer=false;
 const tableRefreshTimers=new WeakMap();
@@ -12598,233 +12598,43 @@ function saveProd(){
   audit('Added product',name,'Saved');
 }
 
-// ── POS ──────────────────────────────────────────────────────────
-let _posCart=[];
-let _posProducts=[];
-let _currentPosReceipt=null;
+// ── POS HUB ──────────────────────────────────────────────────────
+function loadPosPage(){loadPosSalesHub();}
 
-async function loadPosPage(){
-  try{
-    const data=await moduleApi('/app-data?types=products');
-    _posProducts=(data.products||[]).filter(p=>p.status!=='Inactive'&&p.status!=='inactive');
-    renderPosCategoryFilter();
-    renderPosGrid();
-  }catch(e){
-    console.warn('POS load failed',e);
-    _posProducts=[];
-    renderPosGrid();
-  }
-}
-
-function renderPosCategoryFilter(){
-  const sel=document.getElementById('pos-cat-filter');
-  if(!sel)return;
-  const cats=[...new Set(_posProducts.map(p=>p.category||'').filter(Boolean))].sort();
-  sel.innerHTML='<option value="">All Categories</option>'+cats.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
-}
-
-function renderPosGrid(){
-  const grid=document.getElementById('pos-product-grid');
-  if(!grid)return;
-  const q=(document.getElementById('pos-search')?.value||'').toLowerCase();
-  const cat=document.getElementById('pos-cat-filter')?.value||'';
-  let prods=_posProducts;
-  if(q)prods=prods.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.code||'').toLowerCase().includes(q));
-  if(cat)prods=prods.filter(p=>(p.category||'')===cat);
-  if(!prods.length){
-    grid.innerHTML='<div class="pos-empty">No products found.<br>Add products in Inventory first.</div>';
-    return;
-  }
-  grid.innerHTML=prods.map(p=>{
-    const price=Number(p.selling_price||p.price||0);
-    const hasVat=(p.vat||'').includes('5');
-    const safeP=escapeHtml(JSON.stringify({id:p.id||p.code,code:p.code||'',name:p.name||'',price,vat_rate:hasVat?5:0,unit:p.unit||'PCS',selling_price:price}));
-    return `<button class="pos-tile" type="button" onclick='addToPosCart(${safeP})'>
-      <div class="pos-tile-cat">${escapeHtml(p.category||'')}</div>
-      <div class="pos-tile-name">${escapeHtml(p.name||'')}</div>
-      <div class="pos-tile-code mono">${escapeHtml(p.code||'')}</div>
-      <div class="pos-tile-price">AED ${price.toFixed(2)}${hasVat?' <span class="pos-vat-badge">+5%</span>':''}</div>
-    </button>`;
-  }).join('');
-}
-
-function addToPosCart(product){
-  const id=String(product.id||product.code||product.name);
-  const existing=_posCart.find(i=>i.id===id);
-  if(existing){
-    existing.qty++;
-    existing.amount=existing.price*existing.qty;
-    existing.vat_amount=existing.amount*(existing.vat_rate/100);
-  }else{
-    const price=Number(product.price||product.selling_price||0);
-    const vatRate=Number(product.vat_rate||0);
-    _posCart.push({id,code:product.code||'',name:product.name||'',qty:1,price,vat_rate:vatRate,unit:product.unit||'PCS',amount:price,vat_amount:price*vatRate/100});
-  }
-  renderPosCart();
-}
-
-function updatePosQty(id,delta){
-  const item=_posCart.find(i=>i.id===id);
-  if(!item)return;
-  const newQty=item.qty+delta;
-  if(newQty<=0){_posCart=_posCart.filter(i=>i.id!==id);}
-  else{item.qty=newQty;item.amount=item.price*newQty;item.vat_amount=item.amount*(item.vat_rate/100);}
-  renderPosCart();
-}
-
-function setPosQty(id,val){
-  const item=_posCart.find(i=>i.id===id);
-  if(!item)return;
-  const qty=Math.max(0,Number(val)||0);
-  if(qty===0){_posCart=_posCart.filter(i=>i.id!==id);}
-  else{item.qty=qty;item.amount=item.price*qty;item.vat_amount=item.amount*(item.vat_rate/100);}
-  renderPosCart();
-}
-
-function renderPosCart(){
-  const wrap=document.getElementById('pos-cart-items');
+async function loadPosSalesHub(){
+  const wrap=document.getElementById('pos-hub-sales');
   if(!wrap)return;
-  if(!_posCart.length){
-    wrap.innerHTML='<div class="pos-cart-empty">Cart is empty<br><span style="font-size:11px;opacity:.5">Tap a product to add</span></div>';
-  }else{
-    wrap.innerHTML=_posCart.map(item=>`<div class="pos-ci">
-      <div class="pos-ci-info">
-        <div class="pos-ci-name">${escapeHtml(item.name)}</div>
-        <div class="pos-ci-unit-price">AED ${item.price.toFixed(2)} / ${escapeHtml(item.unit)}${item.vat_rate?` +${item.vat_rate}% VAT`:''}</div>
-      </div>
-      <div class="pos-ci-qty">
-        <button onclick="updatePosQty('${escapeHtml(item.id)}',-1)">−</button>
-        <input type="number" value="${item.qty}" min="1" onchange="setPosQty('${escapeHtml(item.id)}',this.value)" style="width:40px;text-align:center;border:1px solid var(--border);border-radius:4px;padding:2px 4px;background:var(--bg);color:var(--text1);font-size:12px">
-        <button onclick="updatePosQty('${escapeHtml(item.id)}',1)">+</button>
-      </div>
-      <div class="pos-ci-total">AED ${(item.amount+item.vat_amount).toFixed(2)}</div>
-      <button class="pos-ci-del" onclick="updatePosQty('${escapeHtml(item.id)}',-${item.qty})">✕</button>
-    </div>`).join('');
-  }
-  const subtotal=_posCart.reduce((s,i)=>s+i.amount,0);
-  const vatTotal=_posCart.reduce((s,i)=>s+i.vat_amount,0);
-  const total=subtotal+vatTotal;
-  setText('pos-subtotal',`AED ${subtotal.toFixed(2)}`);
-  setText('pos-vat',`AED ${vatTotal.toFixed(2)}`);
-  setText('pos-total',`AED ${total.toFixed(2)}`);
-  const btn=document.getElementById('pos-pay-btn');
-  if(btn)btn.disabled=!_posCart.length;
-}
-
-function clearPosCart(){
-  _posCart=[];
-  const cust=document.getElementById('pos-customer');
-  if(cust)cust.value='';
-  renderPosCart();
-}
-
-function openPosPayment(){
-  if(!_posCart.length){toast('Add items to cart first','warn');return;}
-  const total=_posCart.reduce((s,i)=>s+i.amount+i.vat_amount,0);
-  setText('pos-pay-total',`AED ${total.toFixed(2)}`);
-  const tender=document.getElementById('pos-cash-tender');
-  if(tender){tender.value='';setTimeout(()=>tender.focus(),100);}
-  setText('pos-change','AED 0.00');
-  setPosPayMethod('cash');
-  showM('m-pos-pay');
-}
-
-function setPosPayMethod(method){
-  document.querySelectorAll('.pos-pm-btn').forEach(b=>b.classList.toggle('on',b.dataset.method===method));
-  const cashPanel=document.getElementById('pos-cash-panel');
-  const cardPanel=document.getElementById('pos-card-panel');
-  if(cashPanel)cashPanel.style.display=method==='cash'?'':'none';
-  if(cardPanel)cardPanel.style.display=method==='card'?'':'none';
-}
-
-function calcPosChange(){
-  const total=_posCart.reduce((s,i)=>s+i.amount+i.vat_amount,0);
-  const tendered=Number(document.getElementById('pos-cash-tender')?.value||0);
-  const change=tendered>=total?tendered-total:0;
-  setText('pos-change',`AED ${change.toFixed(2)}`);
-  const changeEl=document.getElementById('pos-change');
-  if(changeEl)changeEl.style.color=tendered<total?'var(--red)':'var(--green)';
-}
-
-async function completePosSale(){
-  if(!_posCart.length)return;
-  const method=document.querySelector('.pos-pm-btn.on')?.dataset.method||'cash';
-  const subtotal=_posCart.reduce((s,i)=>s+i.amount,0);
-  const vatTotal=_posCart.reduce((s,i)=>s+i.vat_amount,0);
-  const total=subtotal+vatTotal;
-  if(method==='cash'){
-    const tendered=Number(document.getElementById('pos-cash-tender')?.value||0);
-    if(tendered<total){toast('Cash tendered is less than total','err');return;}
-  }
-  const receiptNo=`POS-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
-  const customer=(document.getElementById('pos-customer')?.value||'').trim()||'Walk-in Customer';
-  const date=new Date().toISOString().slice(0,10);
-  const tendered=method==='cash'?Number(document.getElementById('pos-cash-tender')?.value||total):total;
-  const change=method==='cash'?Math.max(0,tendered-total):0;
-  const cardRef=(document.getElementById('pos-card-ref')?.value||'').trim();
-  const companyName=(document.getElementById('co-name')?.value||document.querySelector('[data-company-name]')?.textContent||'TaxFlow');
-  const sale={receipt_no:receiptNo,date,customer,items:_posCart.map(i=>({...i})),subtotal,vat:vatTotal,total,payment_method:method,cash_tendered:tendered,change,card_ref:cardRef,company_name:companyName};
-  saveServer('posSales',sale);
-  _posCart.forEach(item=>{
-    if(item.qty>0){
-      saveServer('stockMovements',{item_name:item.name,item_code:item.code,movement_type:'pos_sale',quantity:-item.qty,date,reference:receiptNo,unit:item.unit});
+  wrap.innerHTML='<div style="padding:30px;text-align:center;color:var(--text3);font-size:13px">Loading…</div>';
+  try{
+    const data=await moduleApi('/app-data?types=posSales');
+    const sales=(data.posSales||[])
+      .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))
+      .slice(0,30);
+    if(!sales.length){
+      wrap.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">No POS sales yet.<br><span style="font-size:11px">Launch the POS terminal to start selling.</span></div>';
+      return;
     }
-  });
-  audit('POS Sale',receiptNo,'Completed');
-  closeM('m-pos-pay');
-  openPosReceipt(sale);
-}
-
-function openPosReceipt(sale){
-  _currentPosReceipt=sale;
-  setText('receipt-no',sale.receipt_no);
-  setText('receipt-date',sale.date);
-  setText('receipt-customer',sale.customer);
-  setText('receipt-method',sale.payment_method==='cash'?'Cash':'Card');
-  const tbody=document.getElementById('receipt-items');
-  if(tbody){
-    tbody.innerHTML=(sale.items||[]).map(i=>`<tr>
-      <td>${escapeHtml(i.name)}</td>
-      <td class="mono" style="text-align:center">${i.qty} ${escapeHtml(i.unit)}</td>
-      <td class="mono" style="text-align:right">AED ${Number(i.price).toFixed(2)}</td>
-      <td class="mono" style="text-align:right">AED ${(Number(i.amount)+Number(i.vat_amount)).toFixed(2)}</td>
-    </tr>`).join('');
+    wrap.innerHTML=`<table style="width:100%;border-collapse:collapse">
+      <thead><tr style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)">
+        <th style="padding:8px 16px;text-align:left;border-bottom:1px solid var(--border)">Receipt</th>
+        <th style="padding:8px 16px;text-align:left;border-bottom:1px solid var(--border)">Date</th>
+        <th style="padding:8px 16px;text-align:left;border-bottom:1px solid var(--border)">Customer</th>
+        <th style="padding:8px 16px;text-align:right;border-bottom:1px solid var(--border)">Total</th>
+        <th style="padding:8px 16px;text-align:left;border-bottom:1px solid var(--border)">Payment</th>
+        <th style="padding:8px 16px;text-align:left;border-bottom:1px solid var(--border)">Status</th>
+      </tr></thead>
+      <tbody>${sales.map(s=>`<tr style="font-size:12.5px">
+        <td style="padding:8px 16px;border-bottom:1px solid var(--border);font-weight:600;color:var(--accent)">${escapeHtml(s.receipt_no||'')}</td>
+        <td style="padding:8px 16px;border-bottom:1px solid var(--border);color:var(--text2)">${escapeHtml(s.date||'')}</td>
+        <td style="padding:8px 16px;border-bottom:1px solid var(--border)">${escapeHtml(s.customer||'Walk-in')}</td>
+        <td style="padding:8px 16px;border-bottom:1px solid var(--border);text-align:right;font-weight:700;font-variant-numeric:tabular-nums">AED ${Number(s.total||0).toFixed(2)}</td>
+        <td style="padding:8px 16px;border-bottom:1px solid var(--border);color:var(--text2)">${escapeHtml(s.payment_method==='card'?'Card':'Cash')}</td>
+        <td style="padding:8px 16px;border-bottom:1px solid var(--border)"><span class="b ${s.status==='draft'?'b-y':'b-g'}">${s.status==='draft'?'Draft':'Completed'}</span></td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  }catch(e){
+    wrap.innerHTML='<div style="padding:30px;text-align:center;color:var(--text3)">Failed to load sales history.</div>';
   }
-  setText('receipt-subtotal',`AED ${Number(sale.subtotal).toFixed(2)}`);
-  setText('receipt-vat',`AED ${Number(sale.vat).toFixed(2)}`);
-  setText('receipt-total',`AED ${Number(sale.total).toFixed(2)}`);
-  const changeRow=document.getElementById('receipt-change-row');
-  if(changeRow)changeRow.style.display=sale.payment_method==='cash'?'':'none';
-  setText('receipt-tendered',`AED ${Number(sale.cash_tendered).toFixed(2)}`);
-  setText('receipt-change',`AED ${Number(sale.change).toFixed(2)}`);
-  showM('m-pos-receipt');
-  _posCart=[];
-  renderPosCart();
-  if(document.getElementById('pos-customer'))document.getElementById('pos-customer').value='';
-}
-
-function printPosReceipt(){
-  const el=document.getElementById('pos-receipt-printable');
-  if(!el)return;
-  const w=window.open('','_blank','width=380,height=640');
-  if(!w){toast('Popup blocked — allow popups to print','warn');return;}
-  w.document.write(`<!doctype html><html><head><title>Receipt</title><style>
-    *{box-sizing:border-box}body{font-family:monospace;font-size:12px;padding:16px;max-width:300px;margin:0 auto}
-    h2,h3{text-align:center;margin:4px 0}hr{border:none;border-top:1px dashed #000;margin:8px 0}
-    table{width:100%;border-collapse:collapse}td{padding:2px 0;font-size:11px;vertical-align:top}
-    .r{text-align:right}.c{text-align:center}.bold{font-weight:700}.lg{font-size:14px}
-    @media print{body{padding:0}}
-  </style></head><body>${el.innerHTML}</body></html>`);
-  w.document.close();w.focus();setTimeout(()=>{w.print();w.close();},300);
-}
-
-function sharePosReceipt(channel){
-  const sale=_currentPosReceipt;
-  if(!sale)return;
-  const lines=(sale.items||[]).map(i=>`${i.name} ×${i.qty} = AED ${(Number(i.amount)+Number(i.vat_amount)).toFixed(2)}`).join('\n');
-  const msg=`Receipt: ${sale.receipt_no}\nDate: ${sale.date}\nCustomer: ${sale.customer}\n\n${lines}\n\nSubtotal: AED ${Number(sale.subtotal).toFixed(2)}\nVAT: AED ${Number(sale.vat).toFixed(2)}\nTotal: AED ${Number(sale.total).toFixed(2)}\nPayment: ${sale.payment_method==='cash'?'Cash':'Card'}`;
-  if(channel==='whatsapp')window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`,'_blank');
-  else if(channel==='email')window.open(`mailto:?subject=${encodeURIComponent('Receipt '+sale.receipt_no)}&body=${encodeURIComponent(msg)}`,'_blank');
 }
 
 // -- ACCOUNTING ---------------------------------------------------
