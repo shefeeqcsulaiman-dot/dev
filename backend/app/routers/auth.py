@@ -38,7 +38,6 @@ def register(request: Request, payload: RegisterRequest, db: Session = Depends(g
         email=payload.email.lower(),
         full_name=payload.full_name,
         password_hash=hash_password(payload.password),
-        password_plain=payload.password,
         role="admin",
     )
     db.add(user)

@@ -4,7 +4,7 @@ import pathlib
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -58,8 +58,15 @@ def create_app() -> FastAPI:
                 pass
         return response
 
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        import logging
+        logging.getLogger("taxflow").error("Unhandled error on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+        return JSONResponse(status_code=500, content={"detail": "An internal error occurred."})
+
     @app.on_event("startup")
     def startup() -> None:
+        settings.assert_production_secrets()
         Base.metadata.create_all(bind=engine)
         ensure_schema_updates()
         seed_initial_data()
@@ -73,7 +80,14 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     def health() -> dict[str, str]:
-        return {"status": "ok", "service": settings.app_name}
+        try:
+            db = SessionLocal()
+            db.execute(text("SELECT 1"))
+            db.close()
+            db_status = "ok"
+        except Exception:
+            db_status = "error"
+        return {"status": "ok" if db_status == "ok" else "degraded", "db": db_status, "service": settings.app_name}
 
     @app.get("/landing.html", include_in_schema=False)
     def landing() -> FileResponse:
@@ -324,9 +338,6 @@ def seed_initial_data() -> None:
 
         admin_pwd = settings.admin_password
         superadmin_pwd = settings.superadmin_password
-        if admin_pwd in ("admin123", "change-me") and settings.app_env == "production":
-            import warnings
-            warnings.warn("ADMIN_PASSWORD is using the default value in production — set it via environment variable.", stacklevel=2)
 
         user.full_name = "Administrator"
         user.role = "admin"

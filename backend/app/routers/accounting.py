@@ -261,7 +261,9 @@ Rules:
 
 
 def _call_ledger_ai(prompt: str, existing_codes: list[str]) -> dict:
-    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    from app.config import get_settings as _get_settings
+    _settings = _get_settings()
+    api_key = (_settings.openai_api_key or os.environ.get("OPENAI_API_KEY", "")).strip()
     if not api_key:
         # Fallback: rule-based generation when no AI key
         return _rule_based_ledger_generator(prompt, existing_codes)

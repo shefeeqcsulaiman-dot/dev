@@ -93,7 +93,6 @@ def list_companies(db: Session = Depends(get_db), _: User = Depends(_require_sup
                         "full_name": u.full_name,
                         "role": u.role,
                         "is_active": getattr(u, "is_active", True),
-                        "password_plain": u.password_plain,
                         "created_at": u.created_at.isoformat() if u.created_at else None,
                     }
                     for u in users
@@ -130,7 +129,6 @@ def reset_password(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user.password_hash = hash_password(body.password)
-    user.password_plain = body.password
     db.commit()
     return {"ok": True}
 

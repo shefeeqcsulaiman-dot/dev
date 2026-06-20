@@ -4,6 +4,9 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+_INSECURE_DEFAULTS = {"change-me-in-production", "admin123", "super123", "secret"}
+
+
 class Settings(BaseSettings):
     app_name: str = "TaxFlow"
     app_env: str = "development"
@@ -21,6 +24,8 @@ class Settings(BaseSettings):
     # Seed credentials — override in production via environment variables
     admin_password: str = "admin123"
     superadmin_password: str = "super123"
+    # AI integrations
+    openai_api_key: str | None = None
     # Database connection pool
     db_pool_size: int = 20
     db_max_overflow: int = 40
@@ -29,6 +34,23 @@ class Settings(BaseSettings):
     bootstrap_record_cap: int = 10000
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+    def assert_production_secrets(self) -> None:
+        """Raise at startup if insecure defaults are used in production."""
+        if self.app_env != "production":
+            return
+        insecure = []
+        if self.secret_key in _INSECURE_DEFAULTS:
+            insecure.append("SECRET_KEY")
+        if self.admin_password in _INSECURE_DEFAULTS:
+            insecure.append("ADMIN_PASSWORD")
+        if self.superadmin_password in _INSECURE_DEFAULTS:
+            insecure.append("SUPERADMIN_PASSWORD")
+        if insecure:
+            raise RuntimeError(
+                f"PRODUCTION STARTUP BLOCKED — insecure default values detected for: "
+                f"{', '.join(insecure)}. Set them via environment variables."
+            )
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -641,12 +641,7 @@
             <div class="sinv-doc-title" id="sales-form-title">New Invoice</div>
             <div class="sinv-doc-sub" id="sales-form-sub">Fill in the details below to create a UAE-compliant tax invoice</div>
           </div>
-          <div class="sinv-doc-actions">
-            <button class="btn btn-g btn-sm" onclick="saveDraftInvoice()">Save Draft</button>
-            <button class="btn btn-g btn-sm" onclick="openDraftInvoicePreview()">Preview</button>
-            <button class="btn btn-g btn-sm" onclick="openDraftInvoiceShare()">Share</button>
-            <button class="btn btn-p" id="sales-save-send-btn" onclick="saveAndSendDraftInvoice()">Save &amp; Send</button>
-          </div>
+          <div class="sinv-doc-actions"></div>
         </div>
 
         <!-- Invoice details -->
@@ -728,6 +723,12 @@
       <div class="sinv-sidebar">
         <div class="sinv-preview-card">
           <div class="sinv-preview-hd">Live Summary</div>
+          <div class="sinv-sidebar-actions">
+            <button class="btn btn-g btn-sm" onclick="saveDraftInvoice()">Save Draft</button>
+            <button class="btn btn-g btn-sm" onclick="openDraftInvoicePreview()">Preview</button>
+            <button class="btn btn-g btn-sm" onclick="openDraftInvoiceShare()">Share</button>
+            <button class="btn btn-p btn-sm" id="sales-save-send-btn" onclick="saveAndSendDraftInvoice()">Save &amp; Send</button>
+          </div>
           <div class="sinv-preview-content">
             <div class="sinv-prev-inv-no">
               <div class="sinv-prev-label">Invoice No.</div>
