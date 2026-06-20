@@ -43,6 +43,10 @@
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2h8l2 2v10H3z"/><path d="M10.5 2v3H13"/><path d="M5 7h6M5 10h5"/></svg>
       Quotations
     </div>
+    <div class="nav" onclick="go('pos')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="11" rx="1"/><path d="M1 7h14"/><path d="M5 11h2M10 11h1"/><path d="M8 1v2"/></svg>
+      Point of Sale
+    </div>
   </div>
 
   <div class="sb-section">
@@ -5384,6 +5388,144 @@ period_locks ─&lt; audit_logs
           <div style="font-size:12px;color:var(--text3)">Upload and extract purchase files to see document status here.</div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ POS PAGE ═══ -->
+<div class="page" id="page-pos">
+  <div class="pos-layout">
+    <!-- Left: Products -->
+    <div class="pos-products">
+      <div class="pos-search-bar">
+        <input id="pos-search" type="text" placeholder="Search products by name or code…" oninput="renderPosGrid()">
+        <select id="pos-cat-filter" onchange="renderPosGrid()">
+          <option value="">All Categories</option>
+        </select>
+      </div>
+      <div class="pos-product-grid" id="pos-product-grid">
+        <div class="pos-empty">Loading products…</div>
+      </div>
+    </div>
+
+    <!-- Right: Cart -->
+    <div class="pos-cart">
+      <div class="pos-cart-head">
+        <input id="pos-customer" type="text" placeholder="Walk-in Customer">
+      </div>
+      <div class="pos-cart-items" id="pos-cart-items">
+        <div class="pos-cart-empty">Cart is empty<br><span style="font-size:11px;opacity:.5">Tap a product to add</span></div>
+      </div>
+      <div class="pos-cart-totals">
+        <div class="pos-tot-row"><span>Subtotal</span><span id="pos-subtotal">AED 0.00</span></div>
+        <div class="pos-tot-row"><span>VAT</span><span id="pos-vat">AED 0.00</span></div>
+        <div class="pos-grand"><span>Total</span><span id="pos-total">AED 0.00</span></div>
+      </div>
+      <div class="pos-cart-btns">
+        <button class="btn btn-ghost" onclick="clearPosCart()">Clear</button>
+        <button class="pos-pay-btn" id="pos-pay-btn" onclick="openPosPayment()" disabled>Charge</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ POS PAYMENT MODAL ═══ -->
+<div class="overlay" id="m-pos-pay" onclick="closeOvBg(event,'m-pos-pay')">
+  <div class="modal" style="max-width:420px;width:95vw">
+    <div class="modal-title">Payment</div>
+    <div class="pos-pay-display" id="pos-pay-total">AED 0.00</div>
+    <div class="pos-pm-tabs">
+      <button class="pos-pm-btn on" data-method="cash" onclick="setPosPayMethod('cash')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px"><rect x="1" y="4" width="14" height="8" rx="1"/><circle cx="8" cy="8" r="2"/><path d="M4 8h.01M12 8h.01"/></svg>
+        Cash
+      </button>
+      <button class="pos-pm-btn" data-method="card" onclick="setPosPayMethod('card')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px"><rect x="1" y="3" width="14" height="10" rx="1"/><path d="M1 7h14"/><path d="M4 10.5h3"/></svg>
+        Card
+      </button>
+    </div>
+
+    <!-- Cash panel -->
+    <div id="pos-cash-panel">
+      <div class="form-row">
+        <label class="form-lbl">Cash Tendered (AED)</label>
+        <input type="number" id="pos-cash-tender" class="form-input" placeholder="0.00" min="0" step="0.01" oninput="calcPosChange()">
+      </div>
+      <div class="pos-change-row">
+        <span style="font-size:13px;color:var(--text3)">Change</span>
+        <span id="pos-change" style="font-size:18px;font-weight:800;color:var(--green)">AED 0.00</span>
+      </div>
+    </div>
+
+    <!-- Card panel -->
+    <div id="pos-card-panel" style="display:none">
+      <div class="form-row">
+        <label class="form-lbl">Card Reference / Auth Code</label>
+        <input type="text" id="pos-card-ref" class="form-input" placeholder="Optional reference">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeM('m-pos-pay')">Cancel</button>
+      <button class="btn" style="flex:2;background:var(--accent);color:#fff;font-size:15px;font-weight:700" onclick="completePosSale()">Complete Sale</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ POS RECEIPT MODAL ═══ -->
+<div class="overlay" id="m-pos-receipt" onclick="closeOvBg(event,'m-pos-receipt')">
+  <div class="modal" style="max-width:420px;width:95vw;max-height:90vh;overflow-y:auto">
+    <div class="modal-title" style="margin-bottom:8px">Receipt</div>
+    <div id="pos-receipt-printable">
+      <div class="pos-receipt-wrap">
+        <h2 id="receipt-company-name">TaxFlow</h2>
+        <div class="sub">Point of Sale Receipt</div>
+        <hr>
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">
+          <span>Receipt #: <strong id="receipt-no"></strong></span>
+          <span id="receipt-date"></span>
+        </div>
+        <div style="font-size:11px;margin-bottom:8px">Customer: <strong id="receipt-customer"></strong></div>
+        <hr>
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align:left;font-size:10px;color:var(--text3);padding-bottom:4px">Item</th>
+              <th style="text-align:center;font-size:10px;color:var(--text3);padding-bottom:4px">Qty</th>
+              <th style="text-align:right;font-size:10px;color:var(--text3);padding-bottom:4px">Price</th>
+              <th style="text-align:right;font-size:10px;color:var(--text3);padding-bottom:4px">Total</th>
+            </tr>
+          </thead>
+          <tbody id="receipt-items"></tbody>
+        </table>
+        <hr>
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin:3px 0"><span>Subtotal</span><span id="receipt-subtotal"></span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin:3px 0"><span>VAT</span><span id="receipt-vat"></span></div>
+        <div class="grand-row"><span>TOTAL</span><span id="receipt-total"></span></div>
+        <hr>
+        <div id="receipt-change-row">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin:2px 0"><span>Cash Tendered</span><span id="receipt-tendered"></span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin:2px 0"><span>Change</span><span id="receipt-change"></span></div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px">Payment: <span id="receipt-method"></span></div>
+        <hr>
+        <div style="text-align:center;font-size:10px;color:var(--text3);margin-top:8px">Thank you for your business!</div>
+      </div>
+    </div>
+    <div class="pos-receipt-actions">
+      <button class="btn btn-ghost" style="flex:1" onclick="printPosReceipt()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:13px;height:13px;vertical-align:-2px"><path d="M4 5V2h8v3"/><rect x="1" y="5" width="14" height="6" rx="1"/><path d="M4 8h8M4 11v3h8v-3"/></svg>
+        Print
+      </button>
+      <button class="btn btn-ghost" style="flex:1" onclick="sharePosReceipt('whatsapp')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:13px;height:13px;vertical-align:-2px"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 8.5c.5 1.5 2 2.5 3 2.5s2-1 1.5-2-2-1-2-2 .5-2 1.5-2"/></svg>
+        WhatsApp
+      </button>
+      <button class="btn btn-ghost" style="flex:1" onclick="sharePosReceipt('email')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:13px;height:13px;vertical-align:-2px"><rect x="1" y="3" width="14" height="10" rx="1"/><path d="M1 4l7 5 7-5"/></svg>
+        Email
+      </button>
+      <button class="btn" style="flex:1;background:var(--accent);color:#fff" onclick="closeM('m-pos-receipt')">New Sale</button>
     </div>
   </div>
 </div>
