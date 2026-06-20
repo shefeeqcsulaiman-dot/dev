@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
+    :root{--red:#f06b6b;--green:#3ecf8e;--muted:#8896b3;--border:rgba(99,130,200,.14);--surface:#0d1120;--text:#dde4f0;--primary:#4f8ef0;--hover:rgba(99,130,200,.06);}
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'DM Sans',system-ui,sans-serif;background:#0a0f1e;color:#dde4f0;min-height:100vh;font-size:13.5px;}
     a{color:inherit;text-decoration:none;}
@@ -109,14 +110,21 @@
     <div class="stat-card"><div class="stat-label">Total Users</div><div class="stat-val" id="sa-stat-users">—</div></div>
     <div class="stat-card"><div class="stat-label">Active Subscriptions</div><div class="stat-val" id="sa-stat-active">—</div></div>
     <div class="stat-card"><div class="stat-label">Expiring Soon</div><div class="stat-val" id="sa-stat-expiring">—</div></div>
+    <div class="stat-card" style="border-color:rgba(240,107,107,.35)"><div class="stat-label">Expired</div><div class="stat-val" id="sa-stat-expired" style="color:var(--red)">—</div></div>
     <div class="stat-card" style="border-color:rgba(240,107,107,.35)"><div class="stat-label">JS Errors (7d)</div><div class="stat-val" id="sa-stat-errors" style="color:var(--red)">—</div></div>
   </div>
 
   <!-- Companies -->
   <div class="card">
     <div class="card-hd">
-      <div class="card-title">All Companies</div>
-      <button class="btn btn-p btn-sm" onclick="openCreateCompany()">+ New Company</button>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div class="card-title">All Companies</div>
+        <input type="text" id="sa-co-search" placeholder="Search by name, TRN…" oninput="filterCompanies()" style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;background:var(--surface);color:var(--text);outline:none;width:200px">
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-g btn-sm" onclick="exportCompaniesCSV()">Export CSV</button>
+        <button class="btn btn-p btn-sm" onclick="openCreateCompany()">+ New Company</button>
+      </div>
     </div>
     <div id="sa-companies-wrap">
       <div class="loading-state"><span class="spinner"></span> Loading companies…</div>
@@ -347,17 +355,19 @@
   function renderStats(data){
     const now = new Date();
     const soon = new Date(); soon.setDate(soon.getDate()+30);
-    let active=0, expiring=0, totalUsers=0;
+    let active=0, expiring=0, expired=0, totalUsers=0;
     data.forEach(c=>{
       totalUsers += (c.users||[]).length;
       const exp = c.subscription_expires_at ? new Date(c.subscription_expires_at) : null;
       if(!exp || exp > now) active++;
       if(exp && exp > now && exp <= soon) expiring++;
+      if(exp && exp < now) expired++;
     });
     document.getElementById('sa-stat-companies').textContent = data.length;
     document.getElementById('sa-stat-users').textContent = totalUsers;
     document.getElementById('sa-stat-active').textContent = active;
     document.getElementById('sa-stat-expiring').textContent = expiring;
+    document.getElementById('sa-stat-expired').textContent = expired;
   }
 
   function renderCompanies(data){
@@ -399,6 +409,9 @@
         <td>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <button class="btn btn-p btn-sm" onclick="openEditCompany('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.trn||'')}','${escHtml(c.country||'')}','${escHtml(c.subscription_expires_at||'')}')">Edit</button>
+            <button class="btn btn-g btn-sm" onclick="quickExtend('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}',30)">+30d</button>
+            <button class="btn btn-g btn-sm" onclick="quickExtend('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}',90)">+90d</button>
+            <button class="btn btn-g btn-sm" onclick="quickExtend('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}',365)">+1yr</button>
             <button class="btn btn-g btn-sm" onclick="toggleUsers('users-${escHtml(c.id)}')">Users</button>
             <button class="btn btn-g btn-sm" onclick="openAddUser('${escHtml(c.id)}','${escHtml(c.name)}')">+ User</button>
             <button class="btn btn-r btn-sm" onclick="deleteCompany('${escHtml(c.id)}','${escHtml(c.name)}')">Delete</button>
@@ -718,7 +731,7 @@
       let html='<table class="tbl" style="font-size:12px"><thead><tr><th>Time</th><th>Company</th><th>Action</th><th>Detail</th><th>Status</th></tr></thead><tbody>';
       data.entries.forEach(e=>{
         const ts=e.created_at?new Date(e.created_at).toLocaleString():'';
-        const statusCls=e.status==='Deleted'?'b-r':e.status==='Created'?'b-g':e.status==='Opened'?'b-a':'b-gray';
+        const statusCls=e.status==='Deleted'?'b-r':e.status==='Created'?'b-g':e.status==='Opened'?'b-a':'b-p';
         html+=`<tr>
           <td style="white-space:nowrap;color:var(--muted)">${escHtml(ts)}</td>
           <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(e.company_name||e.company_id||'—')}</td>
@@ -746,6 +759,43 @@
         sel.appendChild(opt);
       }
     });
+  }
+
+  // ── Company search filter ─────────────────────────────────────
+  function filterCompanies(){
+    const q=(document.getElementById('sa-co-search').value||'').toLowerCase();
+    const filtered=q?companies.filter(c=>(c.name||'').toLowerCase().includes(q)||(c.trn||'').toLowerCase().includes(q)||(c.country||'').toLowerCase().includes(q)):companies;
+    renderCompanies(filtered);
+  }
+
+  // ── Quick-extend subscription ─────────────────────────────────
+  async function quickExtend(companyId, name, currentExpiry, days){
+    const base=currentExpiry&&new Date(currentExpiry)>new Date()?new Date(currentExpiry):new Date();
+    base.setDate(base.getDate()+days);
+    const newExpiry=base.toISOString().slice(0,10);
+    if(!confirm('Extend "'+name+'" by '+days+' days → '+newExpiry+'?')) return;
+    try{
+      const res=await apiFetch(`/superadmin/companies/${companyId}/set-expiry`,{method:'POST',body:JSON.stringify({expires_at:newExpiry})});
+      if(!res.ok){const d=await res.json();alert(d.detail||'Failed.');return;}
+      loadDashboard();
+    }catch(err){alert(err.message);}
+  }
+
+  // ── Export companies CSV ──────────────────────────────────────
+  function exportCompaniesCSV(){
+    const now=new Date();
+    const header=['Name','TRN','Country','Employees','Users','Status','Expires','Created'];
+    const rows=companies.map(c=>{
+      const exp=c.subscription_expires_at?new Date(c.subscription_expires_at):null;
+      const status=!exp?'Active (no expiry)':exp<now?'Expired':'Active';
+      return [c.name||'',c.trn||'',c.country||'',c.employee_count||0,(c.users||[]).filter(u=>u.role!=='superadmin').length,status,c.subscription_expires_at?c.subscription_expires_at.slice(0,10):'',c.created_at?c.created_at.slice(0,10):''].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',');
+    });
+    const csv=[header.join(','),...rows].join('\n');
+    const blob=new Blob([csv],{type:'text/csv'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download='companies-'+new Date().toISOString().slice(0,10)+'.csv';
+    a.click();URL.revokeObjectURL(url);
   }
 
   loadDashboard();

@@ -96,6 +96,10 @@ def create_app() -> FastAPI:
     def superadmin_page() -> FileResponse:
         return FileResponse(str(static_dir / "taxflow" / "superadmin.html"))
 
+    @app.get("/digital-invoice.html", include_in_schema=False)
+    def digital_invoice() -> FileResponse:
+        return FileResponse(str(static_dir / "taxflow" / "digital-invoice.html"))
+
     @app.get("/config.js", include_in_schema=False)
     def config_js() -> Response:
         api_base = os.environ.get("API_BASE_URL", "")

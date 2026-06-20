@@ -1,5 +1,6 @@
 import hashlib
 import json
+from datetime import date as _date, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -604,10 +605,19 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
             },
         },
     }
-    # Compute once and reuse — balance_sheet_rows and working_capital_rows are
-    # each called multiple times above, making 3× the DB queries necessary.
     _bs = balance_sheet_rows(db, company_id)
-    _wc = working_capital_rows(db, company_id, _bs)
+    _ap_aging = ap_aging_rows(db, company_id, app_purchases)
+    ap_total = sum(money(r["total"]) for r in _ap_aging)
+    _wc = working_capital_rows(db, company_id, _bs, revenue=revenue, purchases=purchases, ar_total=ar_total, ap_total=ap_total)
+
+    # E-invoicing readiness metrics
+    invoice_count_db = count(db, Invoice, company_id)
+    invoice_count_total = invoice_count_db + len(app_sales)
+    app_with_trn = sum(1 for r in app_sales if str(r.get("customer_trn") or "").strip())
+    trn_rate = int(app_with_trn / len(app_sales) * 100) if app_sales else 100
+    with_trn_total = app_with_trn + int(invoice_count_db * trn_rate / 100)
+    einv_score = min(100, int((with_trn_total / max(1, invoice_count_total)) * 70) + 20) if invoice_count_total else 0
+
     result.update({
         "balance_sheet": _bs,
         "trial_balance": trial_balance_rows(db, company_id),
@@ -627,10 +637,16 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
         "general_ledger": general_ledger_rows(db, company_id),
         "customer_ledger": customer_ledger_rows(db, company_id, app_sales),
         "supplier_ledger": supplier_ledger_rows(db, company_id, app_purchases),
-        "ap_aging": ap_aging_rows(db, company_id, app_purchases),
+        "ap_aging": _ap_aging,
         "revenue_intelligence": revenue_intelligence_rows(db, company_id, app_sales, monthly),
         "working_capital": _wc,
         "ai_health": ai_health_score(revenue, gross_margin, net_profit, money(_wc["current_ratio"]), overdue_total, ar_total),
+        "einvoicing": {
+            "total": invoice_count_total,
+            "with_trn": with_trn_total,
+            "with_qr": invoice_count_total,
+            "score": einv_score,
+        },
     })
     return result
 
@@ -690,26 +706,68 @@ def balance_sheet_rows(db: Session, company_id: str) -> dict[str, Any]:
     }
 
 
+def _days_overdue(due_date_str: Any) -> int:
+    """Days past due date. Negative = not yet due, 0 = current, positive = overdue."""
+    try:
+        if not due_date_str:
+            return 0
+        due = _date.fromisoformat(str(due_date_str)[:10])
+        return (_date.today() - due).days
+    except (ValueError, TypeError):
+        return 0
+
+
+def _add_to_aging_bucket(buckets: dict[str, Decimal], value: Decimal, days_overdue: int) -> None:
+    if days_overdue <= 0:
+        buckets["current"] += value
+    elif days_overdue <= 30:
+        buckets["d1_30"] += value
+    elif days_overdue <= 60:
+        buckets["d31_60"] += value
+    elif days_overdue <= 90:
+        buckets["d61_90"] += value
+    else:
+        buckets["over90"] += value
+
+
 def receivables_aging(db: Session, company_id: str) -> list[dict[str, str]]:
-    rows = (
-        db.query(Invoice.customer_name, func.coalesce(func.sum(Invoice.total), 0))
+    result: dict[str, dict[str, Decimal]] = {}
+
+    # DB invoices — no due_date field; use created_at + 30 days as proxy
+    db_rows = (
+        db.query(Invoice.customer_name, Invoice.total, Invoice.created_at)
         .filter(Invoice.company_id == company_id, Invoice.status != "paid")
-        .group_by(Invoice.customer_name)
-        .order_by(func.coalesce(func.sum(Invoice.total), 0).desc())
         .all()
     )
-    return [
-        {
-            "customer": customer,
-            "current": amount(money(total)),
-            "d1_30": "0.00",
-            "d31_60": "0.00",
-            "d61_90": "0.00",
-            "over90": "0.00",
-            "total": amount(money(total)),
-        }
-        for customer, total in rows
-    ]
+    for customer, total, created_at in db_rows:
+        key = str(customer or "Unknown").strip() or "Unknown"
+        e = result.setdefault(key, {k: Decimal("0") for k in ("current", "d1_30", "d31_60", "d61_90", "over90")})
+        proxy_due = str((created_at.date() + timedelta(days=30))) if created_at else ""
+        _add_to_aging_bucket(e, money(total), _days_overdue(proxy_due))
+
+    # App sales invoices — have real due_date
+    for invoice in app_sales_invoice_records(db, company_id):
+        if is_paid_status(invoice.get("status")):
+            continue
+        key = str(invoice.get("customer") or invoice.get("customer_name") or "Unknown").strip() or "Unknown"
+        e = result.setdefault(key, {k: Decimal("0") for k in ("current", "d1_30", "d31_60", "d61_90", "over90")})
+        _add_to_aging_bucket(e, record_amount(invoice, "total", "amount", "net_amount"), _days_overdue(invoice.get("due_date")))
+
+    return sorted(
+        [
+            {
+                "customer": k,
+                "current": amount(v["current"]),
+                "d1_30": amount(v["d1_30"]),
+                "d31_60": amount(v["d31_60"]),
+                "d61_90": amount(v["d61_90"]),
+                "over90": amount(v["over90"]),
+                "total": amount(sum(v.values())),
+            }
+            for k, v in result.items()
+        ],
+        key=lambda x: -money(x["total"]),
+    )
 
 
 def receivables_mix(rows: list[dict[str, str]]) -> dict[str, Any]:
@@ -1015,22 +1073,41 @@ def supplier_ledger_rows(db: Session, company_id: str, app_purchases: list[dict[
 
 
 def ap_aging_rows(db: Session, company_id: str, app_purchases: list[dict[str, Any]]) -> list[dict[str, str]]:
-    result: dict[str, Decimal] = {}
-    for party, total in (
-        db.query(SourceTransaction.party_name, func.coalesce(func.sum(SourceTransaction.total), 0))
+    result: dict[str, dict[str, Decimal]] = {}
+
+    # SourceTransaction — no due_date; use created_at + 30 days as proxy
+    for party, total, created_at in (
+        db.query(SourceTransaction.party_name, func.coalesce(func.sum(SourceTransaction.total), 0), func.max(SourceTransaction.created_at))
         .filter(SourceTransaction.company_id == company_id, SourceTransaction.module.in_(["purchase", "purchase_bill"]), SourceTransaction.status != "paid")
         .group_by(SourceTransaction.party_name)
         .all()
     ):
         key = str(party or "Unknown").strip() or "Unknown"
-        result[key] = result.get(key, Decimal("0")) + money(total)
+        e = result.setdefault(key, {k: Decimal("0") for k in ("current", "d1_30", "d31_60", "d61_90", "over90")})
+        proxy_due = str((created_at.date() + timedelta(days=30))) if created_at else ""
+        _add_to_aging_bucket(e, money(total), _days_overdue(proxy_due))
+
+    # App purchase records — have real due_date
     for row in app_purchases:
         if not is_paid_status(row.get("status")):
             key = str(row.get("supplier") or row.get("vendor") or "Unknown").strip() or "Unknown"
-            result[key] = result.get(key, Decimal("0")) + record_amount(row, "total", "amount", "net_amount")
+            e = result.setdefault(key, {k: Decimal("0") for k in ("current", "d1_30", "d31_60", "d61_90", "over90")})
+            _add_to_aging_bucket(e, record_amount(row, "total", "amount", "net_amount"), _days_overdue(row.get("due_date")))
+
     return sorted(
-        [{"supplier": k, "current": amount(v), "d1_30": "0.00", "d31_60": "0.00", "d61_90": "0.00", "over90": "0.00", "total": amount(v)} for k, v in result.items()],
-        key=lambda x: -money(x["total"])
+        [
+            {
+                "supplier": k,
+                "current": amount(v["current"]),
+                "d1_30": amount(v["d1_30"]),
+                "d31_60": amount(v["d31_60"]),
+                "d61_90": amount(v["d61_90"]),
+                "over90": amount(v["over90"]),
+                "total": amount(sum(v.values())),
+            }
+            for k, v in result.items()
+        ],
+        key=lambda x: -money(x["total"]),
     )
 
 
@@ -1060,11 +1137,21 @@ def _growth_pct(monthly: list[dict[str, Any]]) -> str:
     return amount(((curr - prev) / prev) * Decimal("100"))
 
 
-def working_capital_rows(db: Session, company_id: str, balance_sheet: dict[str, Any]) -> dict[str, Any]:
+def working_capital_rows(
+    db: Session,
+    company_id: str,
+    balance_sheet: dict[str, Any],
+    revenue: Decimal = Decimal("0"),
+    purchases: Decimal = Decimal("0"),
+    ar_total: Decimal = Decimal("0"),
+    ap_total: Decimal = Decimal("0"),
+) -> dict[str, Any]:
     assets = sum(money(r["amount"]) for r in balance_sheet.get("assets", []))
     liabilities = sum(money(r["amount"]) for r in balance_sheet.get("liabilities", []))
     current_ratio = (assets / liabilities).quantize(Decimal("0.01")) if liabilities else Decimal("0.00")
     working_capital = assets - liabilities
+    receivable_days = int((ar_total / revenue * 365).quantize(Decimal("1"))) if revenue else 0
+    payable_days = int((ap_total / purchases * 365).quantize(Decimal("1"))) if purchases else 0
     return {
         "current_ratio": amount(current_ratio),
         "quick_ratio": amount(current_ratio),
@@ -1072,8 +1159,8 @@ def working_capital_rows(db: Session, company_id: str, balance_sheet: dict[str, 
         "current_assets": amount(assets),
         "current_liabilities": amount(liabilities),
         "inventory_turnover": "0.00",
-        "receivable_days": "0.00",
-        "payable_days": "0.00",
+        "receivable_days": str(receivable_days),
+        "payable_days": str(payable_days),
     }
 
 

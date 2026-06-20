@@ -2007,7 +2007,7 @@ async function saveCompanyRegistration(){
 
 function setDashboardStat(label,value,delta){
   const idMap={
-    'Total Revenue':['dash-revenue','dash-revenue-sub'],
+    'Total Revenue + VAT':['dash-revenue','dash-revenue-sub'],
     'VAT Payable':['dash-vat','dash-vat-sub'],
     'Open Invoices':['dash-open-invoices','dash-open-invoices-sub'],
     'Staff Present':['dash-staff','dash-staff-sub']
@@ -2068,7 +2068,7 @@ function renderDashboardMeta(data){
 async function syncDashboardFromDatabase(){
   const ready=await ensureBackendSession();
   if(!ready){
-    setDashboardStat('Total Revenue','Login needed','Open the root app and sign in');
+    setDashboardStat('Total Revenue + VAT','Login needed','Open the root app and sign in');
     setDashboardStat('VAT Payable','Login needed','No backend token found');
     setDashboardStat('Open Invoices','Login needed','Dashboard cannot read database');
     setDashboardStat('Staff Present','Login needed','Use admin@taxflowapp.com');
@@ -2087,7 +2087,7 @@ async function syncDashboardFromDatabase(){
     renderFullDashboardFromDatabase(data);
   }catch(err){
     console.warn('Dashboard database sync failed:',err);
-    setDashboardStat('Total Revenue','—','Check backend connection');
+    setDashboardStat('Total Revenue + VAT','—','Check backend connection');
     setDashboardStat('VAT Payable','—','Dashboard sync failed');
     setDashboardStat('Open Invoices','—','Open browser console for details');
     setDashboardStat('Staff Present','—','Retrying on next load');
@@ -2108,7 +2108,7 @@ function renderCachedDashboardSnapshot(){
     renderFullDashboardFromDatabase(cached);
     return;
   }
-  setDashboardStat('Total Revenue','AED 0.00','Syncing database...');
+  setDashboardStat('Total Revenue + VAT','AED 0.00','Syncing database...');
   setDashboardStat('VAT Payable','AED 0.00','Syncing database...');
   setDashboardStat('Open Invoices','0','Syncing database...');
   setDashboardStat('Staff Present','0/0','Syncing database...');
@@ -2125,7 +2125,7 @@ function renderFullDashboardFromDatabase(data){
     staff_total:data.employee_count,
     payroll_net:data.payroll_net
   };
-  setDashboardStat('Total Revenue',formatAed(kpis.revenue),`${counts.invoice_count||0} invoices in database`);
+  setDashboardStat('Total Revenue + VAT',formatAed((kpis.revenue||0)+(kpis.output_vat||0)),`${counts.invoice_count||0} invoices in database`);
   setDashboardStat('VAT Payable',formatAed(kpis.vat_payable),`${counts.tax_line_count||0} tax lines - DB period`);
   setDashboardStat('Open Invoices',String(kpis.open_invoice_count||0),`${formatAed(kpis.open_invoice_amount||0)} open amount`);
   setDashboardStat('Staff Present',`${kpis.staff_present||0}/${kpis.staff_total||0}`,`${counts.payroll_run_count||0} payroll run - ${formatAed(kpis.payroll_net||0)} net`);
@@ -2146,8 +2146,8 @@ function _refreshPurchaseDashboardCard(){
   // Only update if currently showing zero (avoid overwriting good API data)
   const purEl=document.getElementById('dash-total-purchases');
   const purSubEl=document.getElementById('dash-purchases-sub');
-  if(purEl&&parseAmount(purEl.textContent||'0')===0&&(lp.net||lp.total)>0){
-    purEl.textContent=formatAed(lp.net||lp.total);
+  if(purEl&&parseAmount(purEl.textContent||'0')===0&&(lp.total||lp.net)>0){
+    purEl.textContent=formatAed(lp.total||lp.net);
     if(purSubEl)purSubEl.textContent=`${lp.count} Bills`;
   }
 }
@@ -2170,14 +2170,17 @@ function renderDashboardHero(data,kpis={},counts={}){
 
   // Use invoice_status.total.amount as the authoritative revenue figure
   // (covers both Invoice model rows + AppDataRecord sales); fallback to kpis.revenue
-  const revenue=parseAmount(totalInv.amount||kpis.total_revenue||kpis.revenue||data.total_revenue||data.revenue||0);
+  const revenueNet=parseAmount(totalInv.amount||kpis.total_revenue||kpis.revenue||data.total_revenue||data.revenue||0);
+  const outputVatForRevCard=parseAmount(kpis.output_vat||data.output_vat||0);
+  const revenue=revenueNet+outputVatForRevCard;
   const invCount=Number(totalInv.count||kpis.invoice_count||counts.invoice_count||0);
 
   // Purchase card: prefer DB purchase_summary; fall back to live in-memory bill table
   const purSum=data.purchase_summary||{};
   const _localPur=_computeLocalPurchaseStats();
-  // Show net (excl. VAT); purSum.net added in backend, fall back to local net then gross total
-  const purchases=parseAmount(purSum.net||purSum.total||kpis.total_purchases||data.total_purchases||0)||_localPur.net||_localPur.total;
+  const purchasesNet=parseAmount(purSum.net||purSum.total||kpis.total_purchases||data.total_purchases||0)||_localPur.net||_localPur.total;
+  const inputVatForPurCard=parseAmount(kpis.input_vat||data.input_vat||0);
+  const purchases=purchasesNet+inputVatForPurCard;
   const purCount=Number(purSum.total_count||kpis.purchase_count||counts.purchase_record_count||0)||_localPur.count;
   // Fill paid/pending from local data when DB returns zeros
   if(!parseAmount(purSum.paid||0)&&_localPur.paid>0){purSum.paid=_localPur.paid;purSum.paid_count=_localPur.paidCount;purSum.pending_count=_localPur.pendingCount;}
@@ -2189,7 +2192,7 @@ function renderDashboardHero(data,kpis={},counts={}){
     return cat.includes('direct')?sum+parseAmount(row.children[5]?.textContent||'0'):sum;
   },0);
   const openingStock=0;
-  const grossProfit=revenue+closingStock-openingStock-purchases-directExpenses;
+  const grossProfit=revenueNet+closingStock-openingStock-purchasesNet-directExpenses;
 
   // KPI cards
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
@@ -2202,7 +2205,7 @@ function renderDashboardHero(data,kpis={},counts={}){
   set('dash-gross-profit',formatAed(grossProfit));
   set('dash-profit-sub',closingStock>0?`Closing stock: ${formatAed(closingStock)}`:'');
   // Profit card: margin bar
-  const marginPct=revenue>0?Math.max(0,Math.round(grossProfit/revenue*100)):0;
+  const marginPct=revenueNet>0?Math.max(0,Math.round(grossProfit/revenueNet*100)):0;
   set('dash-margin-pct',`${marginPct}%`);
   const marginBar=document.getElementById('dash-profit-margin-bar');
   if(marginBar)marginBar.style.width=Math.min(Math.max(marginPct,0),100)+'%';
@@ -2221,7 +2224,7 @@ function renderDashboardHero(data,kpis={},counts={}){
 
   // Revenue card detail rows (amount-based collection rate)
   const paidAmt=parseAmount(paidInv.amount||0);
-  const colRate=revenue>0?Math.round(paidAmt/revenue*100):0;
+  const colRate=revenueNet>0?Math.round(paidAmt/revenueNet*100):0;
   set('dash-rev-collected',formatAed(paidAmt));
   set('dash-rev-paid-count',Number(paidInv.count||0));
   set('dash-rev-rate',colRate+'%');
@@ -2230,7 +2233,7 @@ function renderDashboardHero(data,kpis={},counts={}){
   if(revBar)revBar.style.width=Math.min(colRate,100)+'%';
 
   // Purchase card detail rows
-  const purRate=purchases>0?Math.round(parseAmount(purSum.paid||0)/purchases*100):0;
+  const purRate=purchasesNet>0?Math.round(parseAmount(purSum.paid||0)/purchasesNet*100):0;
   set('dash-pur-paid-amount',formatAed(parseAmount(purSum.paid||0)));
   set('dash-pur-paid-count',Number(purSum.paid_count||0));
   set('dash-pur-rate',purRate+'%');
@@ -2496,6 +2499,7 @@ function renderReportsFromDatabase(data){
     ()=>renderGrowthTrends(d.dashboard||{},d.revenue_intelligence||{}),
     ()=>renderVat201(d.vat||{}),
     ()=>renderCorporateReports(d.corporate||{}),
+    ()=>renderEInvoicingReport(d.einvoicing||{}),
   ];
   renders.forEach(fn=>{try{fn();}catch(e){console.warn('[Report render]',e);}});
   document.querySelectorAll('#page-reports table.tbl').forEach(refreshEnhancedTable);
@@ -2695,9 +2699,9 @@ function renderWorkingCapital(wc){
   setText('wc-cr',wc.current_ratio||'—');
   setText('wc-qr',wc.quick_ratio||'—');
   setText('wc-liab',formatAed(wc.current_liabilities||0));
-  const rdp=document.getElementById('wc-rdp');if(rdp)rdp.textContent=wc.receivable_days||'—';
-  const pdp=document.getElementById('wc-pdp');if(pdp)pdp.textContent=wc.payable_days||'—';
-  const inv=document.getElementById('wc-inv');if(inv)inv.textContent=wc.inventory_turnover||'—';
+  const rdp=document.getElementById('wc-rdp');if(rdp)rdp.textContent=(wc.receivable_days&&wc.receivable_days!=='0')?wc.receivable_days+' days':'—';
+  const pdp=document.getElementById('wc-pdp');if(pdp)pdp.textContent=(wc.payable_days&&wc.payable_days!=='0')?wc.payable_days+' days':'—';
+  const inv=document.getElementById('wc-inv');if(inv)inv.textContent=(wc.inventory_turnover&&wc.inventory_turnover!=='0.00')?wc.inventory_turnover+'×':'—';
   const assets=Number(wc.current_assets||0);const liab=Number(wc.current_liabilities||0);
   const maxVal=Math.max(assets,liab,1);
   const ab=document.getElementById('wc-asset-bar');if(ab)ab.style.width=(assets/maxVal*100)+'%';
@@ -2746,6 +2750,17 @@ function renderCorporateReports(corp){
     const rows=corp.related_party_rows||[];
     rpBody.innerHTML=rows.length?rows.map(r=>`<tr><td>${escapeHtml(r.party)}</td><td>${escapeHtml(r.type)}</td><td class="mono" style="text-align:right">${reportAmount(r.amount)}</td></tr>`).join(''):`<tr><td colspan="3" style="color:var(--text3);text-align:center">No related party records found in database.</td></tr>`;
   }
+}
+
+function renderEInvoicingReport(einv){
+  const total=Number(einv.total||0);
+  const withTrn=Number(einv.with_trn||0);
+  const withQr=Number(einv.with_qr||0);
+  const score=Number(einv.score||0);
+  setText('einv-total',String(total));
+  setText('einv-trn',total?`${withTrn} / ${total}`:'—');
+  setText('einv-qr',total?`${withQr} / ${total}`:'—');
+  setText('einv-score',score?score+'%':'—');
 }
 
 function renderAssetReports(data){
@@ -2987,16 +3002,15 @@ function renderDatabaseDashboardSummary(data){
 
   // Group config: label, color, dist-bar color
   const groupDef={
-    Revenue:   {color:'#6366f1',label:'Revenue'},
-    Operations:{color:'#f59e0b',label:'Operations'},
-    Cash:      {color:'#10b981',label:'Cash'},
-    Finance:   {color:'#2eb8b8',label:'Finance'},
-    Compliance:{color:'#3ecf8e',label:'Compliance'},
-    People:    {color:'#9b72f0',label:'People'},
-    Control:   {color:'#f06b6b',label:'Control'},
+    Revenue:   {color:'#6366f1', cls:'g-revenue'},
+    Operations:{color:'#f59e0b', cls:'g-operations'},
+    Cash:      {color:'#10b981', cls:'g-cash'},
+    Finance:   {color:'#2eb8b8', cls:'g-finance'},
+    Compliance:{color:'#3ecf8e', cls:'g-compliance'},
+    People:    {color:'#9b72f0', cls:'g-people'},
+    Control:   {color:'#f06b6b', cls:'g-control'},
   };
 
-  // Build distribution bar (one segment per group)
   const groupTotals={};
   rows.forEach(r=>{groupTotals[r.group]=(groupTotals[r.group]||0)+Number(r.count||0);});
   const distBar=Object.entries(groupTotals).map(([g,n])=>{
@@ -3005,33 +3019,26 @@ function renderDatabaseDashboardSummary(data){
     return `<div class="af-dist-seg" style="flex:${pct};background:${color}" title="${escapeHtml(g)}: ${n.toLocaleString('en-AE')} records"></div>`;
   }).join('');
 
-  // Build groups
   const grouped={};
   rows.forEach(r=>{(grouped[r.group]=grouped[r.group]||[]).push(r);});
 
   const groupsHtml=Object.entries(grouped).map(([groupName,items])=>{
-    const gDef=groupDef[groupName]||{color:'#888'};
+    const gDef=groupDef[groupName]||{color:'#888',cls:''};
     const gTotal=items.reduce((s,r)=>s+Number(r.count||0),0);
     const tilesHtml=items.map(item=>{
       const n=Number(item.count||0);
-      const sharePct=totalRecords?Math.max(1,Math.round(n/totalRecords*100)):4;
       return `<button class="af-tile ${escapeHtml(item.color)}" type="button"
           onclick="openDashboardRecord('${escapeHtml(item.page)}','${escapeHtml(item.tab||'')}')"
-          aria-label="Open ${escapeHtml(item.label)}">
-        <div class="af-tile-top">
-          <div class="af-icon">${escapeHtml(item.icon)}</div>
-          <span class="af-arrow">↗</span>
-        </div>
+          title="${escapeHtml(item.label)}: ${n.toLocaleString('en-AE')} records">
+        <div class="af-icon">${escapeHtml(item.icon)}</div>
+        <div class="af-tile-body"><div class="af-label">${escapeHtml(item.label)}</div></div>
         <div class="af-count">${n.toLocaleString('en-AE')}</div>
-        <div class="af-label">${escapeHtml(item.label)}</div>
-        <div class="af-meter"><div class="af-meter-fill" style="width:${sharePct}%"></div></div>
       </button>`;
     }).join('');
-    return `<div class="af-group">
+    return `<div class="af-group ${escapeHtml(gDef.cls)}">
       <div class="af-group-head">
-        <span class="af-group-label" style="color:${escapeHtml(gDef.color)};border-color:${escapeHtml(gDef.color)}22">${escapeHtml(groupName)}</span>
-        <div class="af-group-line"></div>
-        <span class="af-group-count">${gTotal.toLocaleString('en-AE')} records</span>
+        <span class="af-group-label">${escapeHtml(groupName)}</span>
+        <span class="af-group-count">${gTotal.toLocaleString('en-AE')}</span>
       </div>
       <div class="af-tiles">${tilesHtml}</div>
     </div>`;
@@ -3041,13 +3048,13 @@ function renderDatabaseDashboardSummary(data){
     <div class="af-header">
       <div class="af-header-left">
         <div class="af-title">App Functions</div>
-        <div class="af-sub">Live database counts · click any tile to open its module</div>
+        <div class="af-sub">Live DB counts · click to open module</div>
       </div>
       <div class="af-header-right">
-        <span class="b b-g"><span class="live-dot"></span>${escapeHtml(meta.status||'Synced')}</span>
+        <span class="b b-g" style="font-size:11px"><span class="live-dot"></span>${escapeHtml(meta.status||'Synced')}</span>
         <div class="af-total-badge">
-          <div class="af-total-num">${totalRecords.toLocaleString('en-AE')}</div>
-          <div class="af-total-lbl">${rows.length} modules</div>
+          <span class="af-total-num">${totalRecords.toLocaleString('en-AE')}</span>
+          <span class="af-total-lbl">${rows.length} modules</span>
         </div>
       </div>
     </div>
@@ -7190,6 +7197,12 @@ function appendSalesExtractedRows(invoices){
   if(tbody.querySelector('td[colspan]'))tbody.innerHTML='';
   const fmt=n=>Number(n||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
   invoices.forEach(inv=>{
+    if(inv.extraction_error){
+      const errRow=document.createElement('tr');
+      errRow.innerHTML=`<td></td><td colspan="10" style="color:#f06b6b;font-size:12.5px;padding:10px 12px"><span class="b b-r" style="margin-right:8px">Error</span>${escapeHtml(inv.error_message||'Extraction failed')}${inv.sourceFile?' — '+escapeHtml(inv.sourceFile):''}</td><td></td>`;
+      tbody.prepend(errRow);
+      return;
+    }
     if([...tbody.querySelectorAll('td.mono')].some(td=>td.textContent===inv.invoice_no)){
       toast(`Duplicate in current AI upload: ${inv.invoice_no}`,'warn');
       return;
@@ -8243,7 +8256,9 @@ async function saveQuotationLayout(){
 
 function encodePublicInvoicePayload(payload){
   try{
-    return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+    // URL-safe base64: replace + → - and / → _ so URLSearchParams and email clients don't mangle the hash
+    return btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
+      .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,'');
   }catch{
     return '';
   }
@@ -8360,7 +8375,14 @@ function renderInvoiceQrCode(value,imgId='public-invoice-qr'){
 
 function openCurrentPublicInvoice(){
   const inv=currentSalesInvoice||buildDraftInvoice();
-  window.open(publicInvoiceUrl(inv),'_blank');
+  const url=publicInvoiceUrl(inv);
+  const w=window.open(url,'_blank');
+  if(!w){
+    const link=document.getElementById('share-link');
+    if(link)link.value=url;
+    navigator.clipboard?.writeText(url);
+    toast('Popup blocked — link copied. Paste it in a new tab.','warn');
+  }
 }
 
 function currentInvoiceForShare(){
@@ -8541,10 +8563,15 @@ function copyCurrentInvoiceLink(){
   const link=publicInvoiceUrl(inv);
   const field=document.getElementById('share-link');
   if(field)field.value=link;
-  navigator.clipboard?.writeText(link).then(()=>toast('Online invoice link copied','ok')).catch(()=>{
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(link).then(()=>toast('Online invoice link copied','ok')).catch(()=>{
+      field?.select();
+      toast('Select and copy the online invoice link','info');
+    });
+  }else{
     field?.select();
-    toast('Select and copy the online invoice link','info');
-  });
+    toast('Online invoice link ready — select and copy','info');
+  }
 }
 
 function sampleLayoutInvoice(){
@@ -9063,14 +9090,16 @@ function openInvoiceShareModal(inv=currentSalesInvoice){
   const phoneEl=document.getElementById('share-phone');
   const msg=document.getElementById('share-message');
   const link=document.getElementById('share-link');
+  const onlineBtn=document.getElementById('share-online-view-btn');
   if(sub)sub.textContent=`${currentSalesInvoice.invoice_no||'Draft'} — ${currentSalesInvoice.customer||'Customer'}`;
-  // auto-fill contact from customer records
   const custName=(currentSalesInvoice.customer||'').trim().toLowerCase();
   const custRec=invoiceCustomerRecords().find(c=>c.name.toLowerCase()===custName);
   if(emailEl)emailEl.value=currentSalesInvoice.customer_email||custRec?.email||'';
   if(phoneEl)phoneEl.value=currentSalesInvoice.customer_phone||custRec?.phone||'';
   if(msg)msg.value=invoiceShareMessage(currentSalesInvoice);
-  if(link)link.value=publicInvoiceUrl(currentSalesInvoice);
+  const invoiceUrl=publicInvoiceUrl(currentSalesInvoice);
+  if(link)link.value=invoiceUrl;
+  if(onlineBtn)onlineBtn.href=invoiceUrl;
   showM('m-invoice-share');
 }
 
@@ -9082,16 +9111,17 @@ function shareCurrentInvoice(channel){
     const email=document.getElementById('share-email')?.value||'';
     const subject=encodeURIComponent(`${docLabel} ${inv.invoice_no||'Draft'} from ${getInvoiceLayout().company}`);
     const body=encodeURIComponent(msg);
-    window.open(`mailto:${encodeURIComponent(email)}?subject=${subject}&body=${body}`,'_blank');
+    window.open(`mailto:${email}?subject=${subject}&body=${body}`,'_blank');
     toast(`Email opened with PDF note and online invoice link`, 'ok');
     audit('Shared invoice by email',inv.invoice_no||'Draft','Sent');
     return;
   }
   if(channel==='whatsapp'){
+    const phone=(document.getElementById('share-phone')?.value||'').replace(/\D/g,'');
+    const encoded=encodeURIComponent(msg);
+    window.open(`https://wa.me/${phone}?text=${encoded}`,'_blank');
     toast(`WhatsApp message prepared for ${inv.invoice_no||'Draft'}`, 'ok');
     audit('Shared invoice by WhatsApp',inv.invoice_no||'Draft','Sent');
-    const encoded=encodeURIComponent(msg);
-    window.open(`https://wa.me/?text=${encoded}`,'_blank');
   }
 }
 
@@ -10587,20 +10617,7 @@ function openPurchaseAiView(btn){
 }
 
 function purchaseLedgerCategoryOptions(selected=''){
-  const byId={};
-  _coaFlatAccounts.forEach(a=>{byId[a.id]=a;});
-  const isPurchaseNode=a=>/purchase/i.test(a.name||'')||/purchase/i.test(String(a.type||a.account_type||''));
-  const isUnderPurchase=acc=>{
-    let cur=acc;
-    while(cur){
-      if(isPurchaseNode(cur))return true;
-      cur=cur.parent_account_id?byId[cur.parent_account_id]:null;
-    }
-    return false;
-  };
-  // Posting ledgers whose own type OR any ancestor name/type contains "purchase"
-  let accounts=_coaFlatAccounts.filter(a=>!a.is_group&&a.status!=='inactive'&&isUnderPurchase(a));
-  if(!accounts.length)accounts=_coaFlatAccounts.filter(a=>!a.is_group&&a.status!=='inactive');
+  const accounts=_coaFlatAccounts.filter(a=>!a.is_group&&a.status!=='inactive');
   const extra=selected&&!accounts.find(a=>a.name===selected)?`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`:'';
   const opts=accounts.map(a=>`<option value="${escapeHtml(a.name)}"${a.name===selected?' selected':''}>${escapeHtml((a.code?a.code+' — ':'')+a.name)}</option>`).join('');
   return `<option value="">— Select Category —</option>${extra}${opts}`;
@@ -12580,27 +12597,96 @@ function saveProd(){
 }
 
 // -- ACCOUNTING ---------------------------------------------------
-function accountLabelFromRow(row){
-  const cells=row?.querySelectorAll('td')||[];
-  return `${cells[1]?.textContent.trim()||'Account'} (${cells[0]?.textContent.trim()||'0000'})`;
-}
-
-function accountRowById(id){
-  return [...document.querySelectorAll('#account-tbody tr')].find(row=>row.dataset.accountId===String(id||''));
-}
-
 function accountLabelFromId(id){
-  const row=accountRowById(id);
-  return row?accountLabelFromRow(row):String(id||'Account');
+  const acc=_coaFlatAccounts.find(a=>a.id===String(id||''));
+  return acc?`${acc.code} — ${acc.name}`:String(id||'Account');
 }
 
 function accountOptionsHtml(){
-  const rows=[...document.querySelectorAll('#account-tbody tr:not([data-empty-state])')];
-  return '<option>Select Account...</option>'+rows.map(row=>{
-    const id=row.dataset.accountId||accountLabelFromRow(row);
-    const label=accountLabelFromRow(row);
-    return `<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`;
-  }).join('');
+  const posting=_coaFlatAccounts.filter(a=>!a.is_group&&a.status!=='inactive'&&a.is_active!==false);
+  posting.sort((a,b)=>String(a.code||'').localeCompare(String(b.code||'')));
+  return '<option>Select Account...</option>'+posting.map(a=>`<option value="${escapeHtml(a.id)}">${escapeHtml(a.code+' — '+a.name)}</option>`).join('');
+}
+
+function _voucherAccountSuggest(voucherType,narration,accounts){
+  const vt=voucherType.toLowerCase();
+  const nar=narration.toLowerCase();
+  function byTypeKw(type,kws=[]){
+    const pool=accounts.filter(a=>(a.type||'').toLowerCase()===type.toLowerCase());
+    if(kws.length){const hit=pool.find(a=>kws.some(k=>(a.name||'').toLowerCase().includes(k)));if(hit)return hit;}
+    return pool[0]||null;
+  }
+  const cashBank=()=>accounts.find(a=>a.is_bank_cash)||byTypeKw('asset',['cash','bank','petty cash'])||byTypeKw('asset');
+  const ar=()=>byTypeKw('asset',['receivable','debtor','trade receivable']);
+  const ap=()=>byTypeKw('liability',['payable','creditor','supplier payable','trade payable'])||byTypeKw('liability');
+  const rev=(kws=[])=>byTypeKw('revenue',[...kws,'sales','revenue','income','service income'])||byTypeKw('revenue');
+  const exp=(kws=[])=>byTypeKw('expense',kws)||byTypeKw('expense');
+  const inv=()=>byTypeKw('asset',['inventory','stock','goods','raw material','merchandise']);
+
+  let dr=null,cr=null,expl='';
+  if(vt.includes('payment')){
+    cr=cashBank();
+    if(nar.match(/supplier|vendor|payable|bill/)){dr=ap();expl='Payable settled via Cash/Bank';}
+    else if(nar.match(/salary|payroll|wps|wage/)){dr=exp(['salary','payroll','wage','staff']);expl='Salary expense paid';}
+    else if(nar.match(/rent|lease/)){dr=exp(['rent','lease']);expl='Rent expense paid';}
+    else if(nar.match(/utility|dewa|electric|water|internet|telecom/)){dr=exp(['utility','utilities','electric','water','telecom','communication']);expl='Utility expense paid';}
+    else if(nar.match(/insurance/)){dr=exp(['insurance']);expl='Insurance paid';}
+    else if(nar.match(/asset|equipment|machinery|vehicle|furniture/)){dr=byTypeKw('asset',['fixed asset','equipment','machinery','vehicle','furniture','property'])||exp([]);expl='Asset acquired via Cash/Bank';}
+    else{dr=exp([]);expl='Expense paid via Cash/Bank';}
+  }else if(vt.includes('receipt')){
+    dr=cashBank();
+    if(nar.match(/customer|invoice|receivable|debtor/)){cr=ar()||rev();expl='Customer payment collected';}
+    else if(nar.match(/advance|deposit/)){cr=byTypeKw('liability',['advance','deposit','customer deposit'])||ap();expl='Customer advance received';}
+    else{cr=rev()||ar();expl='Income received into Cash/Bank';}
+  }else if(vt.includes('sales')){
+    dr=ar()||cashBank();cr=rev(nar.match(/service/)?['service']:[]);expl='Sales billed to customer';
+  }else if(vt.includes('purchase')){
+    cr=ap();
+    if(nar.match(/inventory|stock|goods|material/)){dr=inv()||exp(['purchase','cost of goods','cost of sales']);expl='Inventory purchased on credit';}
+    else if(nar.match(/asset|equipment|machinery|vehicle/)){dr=byTypeKw('asset',['fixed asset','equipment','machinery','vehicle'])||exp([]);expl='Asset purchased on credit';}
+    else{dr=exp(['purchase','expense'])||inv();expl='Purchase on credit from supplier';}
+  }else{
+    // Journal Voucher — narration driven, then generic fallback
+    if(nar.match(/depreciation/)){dr=exp(['depreciation']);cr=accounts.find(a=>(a.name||'').toLowerCase().includes('accumulated depreciation'))||byTypeKw('asset',['depreciation']);expl='Depreciation charge';}
+    else if(nar.match(/accrual|accrued/)){dr=exp([]);cr=byTypeKw('liability',['accrual','accrued','provision'])||ap();expl='Accrued expense provision';}
+    else if(nar.match(/prepaid|prepayment/)){dr=byTypeKw('asset',['prepaid','prepayment'])||byTypeKw('asset');cr=cashBank();expl='Prepayment recognised';}
+    else if(nar.match(/provision/)){dr=exp(['provision'])||exp([]);cr=byTypeKw('liability',['provision'])||ap();expl='Provision created';}
+    else if(nar.match(/salary|payroll/)){dr=exp(['salary','payroll','wage'])||exp([]);cr=cashBank();expl='Salary journal entry';}
+    else if(nar.match(/vat|tax/)){dr=byTypeKw('asset',['input vat','vat receivable','tax receivable'])||byTypeKw('asset');cr=byTypeKw('liability',['output vat','vat payable','tax payable'])||ap();expl='VAT journal entry';}
+    else if(nar.match(/rent|lease/)){dr=exp(['rent','lease'])||exp([]);cr=cashBank();expl='Rent/lease entry';}
+    else if(nar.match(/bank|cash|transfer/)){dr=cashBank();cr=cashBank()||byTypeKw('liability');expl='Cash/bank transfer — review accounts';}
+    else{dr=exp([]);cr=cashBank();expl='Journal entry — review accounts before posting';}
+  }
+  return{debit:dr||null,credit:cr||null,explanation:expl};
+}
+
+async function aiSuggestVoucherAccounts(){
+  const btn=document.getElementById('ai-suggest-btn');
+  if(btn){btn.disabled=true;btn.textContent='...';}
+  try{
+    const voucherType=document.getElementById('journal-source')?.value||'Journal Voucher';
+    const narration=(document.getElementById('journal-desc')?.value||'').trim();
+    if(!narration){toast('Enter a narration first','warn');return;}
+    if(!_coaFlatAccounts.length){
+      try{const accs=await moduleApi('/accounts');if(Array.isArray(accs)){_coaFlatAccounts=accs;updateAccountSelectors();}}catch(e){console.warn('AI suggest: account load failed',e);}
+    }
+    const posting=_coaFlatAccounts.filter(a=>!a.is_group&&a.status!=='inactive'&&a.is_active!==false);
+    if(!posting.length){toast('No posting accounts found — set up Chart of Accounts first','warn');return;}
+    const result=_voucherAccountSuggest(voucherType,narration,posting);
+    const wrap=document.getElementById('journal-lines');
+    if(wrap)wrap.innerHTML='';
+    updateAccountSelectors();
+    if(result.debit)addJournalLine(result.debit.id,'','');else addJournalLine();
+    if(result.credit)addJournalLine(result.credit.id,'','');else addJournalLine();
+    const drName=result.debit?`${result.debit.code} ${result.debit.name}`:'?';
+    const crName=result.credit?`${result.credit.code} ${result.credit.name}`:'?';
+    toast(`AI: ${result.explanation} · DR ${drName} / CR ${crName}`,'ok');
+  }catch(e){
+    console.error('AI suggest error:',e);
+    toast('AI suggest failed — '+e.message,'err');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='✨ AI Suggest';}
+  }
 }
 
 function addJournalLine(account='',debit='',credit=''){

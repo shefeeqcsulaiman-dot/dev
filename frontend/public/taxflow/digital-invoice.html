@@ -63,9 +63,14 @@
       return Number(value || 0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
     }
     function decodePayload(){
-      const hash = new URLSearchParams(location.hash.replace(/^#/,''));
-      const raw = hash.get('invoice');
-      if(!raw) throw new Error('Invoice data missing from QR link.');
+      // Do NOT use URLSearchParams — it converts + to space, corrupting standard base64
+      const hash = location.hash.slice(1);
+      const m = hash.match(/(?:^|[&])invoice=([^&]*)/);
+      if(!m) throw new Error('Invoice data missing from QR link.');
+      // Decode percent-encoding in the hash, then normalise both URL-safe and standard base64
+      let raw = decodeURIComponent(m[1]);
+      raw = raw.replace(/-/g,'+').replace(/_/g,'/');
+      while(raw.length % 4) raw += '=';
       return JSON.parse(decodeURIComponent(escape(atob(raw))));
     }
     function render(){

@@ -830,8 +830,9 @@ async def app_data_action(
 
     if action == "invoices.import":
         file = payload.get("file", {})
-        invoices: list[dict[str, Any]] = []
-        log_action(db, current_user, "salesInvoices", "invoice_import_requested", {"file": file.get("name"), "result": "no_demo_data"})
+        invoices = ingest_sales_invoice_document(db, current_user, file)
+        non_error = [inv for inv in invoices if not inv.get("extraction_error")]
+        log_action(db, current_user, "salesInvoices", "invoice_import_requested", {"file": file.get("name"), "invoices": len(non_error)})
         db.commit()
         return {"ok": True, "invoices": invoices}
 
@@ -1291,8 +1292,12 @@ def ingest_purchase_document(db: Session, current_user: User, file: dict[str, An
         elif ext == "xls":
             rows = parse_excel_html_rows(content)
         elif ext == "pdf":
+            if not _has_ai_key():
+                return [purchase_extraction_error(name, "AI extraction not configured — add ANTHROPIC_API_KEY or OPENAI_API_KEY to your .env file to enable PDF reading")]
             rows = parse_pdf_purchase_rows(content)
         elif ext in PURCHASE_IMAGE_EXTENSIONS:
+            if not _has_ai_key():
+                return [purchase_extraction_error(name, "AI extraction not configured — add ANTHROPIC_API_KEY or OPENAI_API_KEY to your .env file to enable image reading")]
             rows = parse_image_purchase_rows(content, ext)
         else:
             return [purchase_extraction_error(name, f"Unsupported purchase upload format: .{ext or 'unknown'}")]
@@ -1777,35 +1782,47 @@ Rules:
 - Do not guess or invent values."""
 
 
+def _has_ai_key() -> bool:
+    return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip())
+
+
 def extract_purchase_rows_with_openai(content: bytes, ext: str) -> list[dict[str, Any]]:
-    # Try Anthropic Claude first (preferred), fall back to OpenAI if configured
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if anthropic_key:
         parts = openai_purchase_content_parts(content, ext)
         if parts:
             try:
                 data = call_claude_invoice_extractor(anthropic_key, parts)
+                _log.info("Claude returned keys: %s", list(data.keys()) if isinstance(data, dict) else type(data))
                 rows = openai_invoice_to_purchase_rows(data)
+                _log.info("Claude extraction yielded %d rows", len(rows))
                 if rows:
                     return rows
             except Exception as exc:
-                import logging
-                logging.getLogger(__name__).warning("Claude extraction failed, trying fallback: %s", exc)
+                _log.warning("Claude extraction failed, trying OpenAI: %s", exc)
 
     openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not openai_key:
+        if not anthropic_key:
+            _log.warning("AI extraction skipped: neither ANTHROPIC_API_KEY nor OPENAI_API_KEY is set in environment")
         return []
     parts = openai_purchase_content_parts(content, ext)
     if not parts:
+        _log.warning("AI extraction: no content parts generated for ext=%s", ext)
         return []
     parts.append({"type": "text", "text": OPENAI_PURCHASE_EXTRACTION_PROMPT})
     try:
         data = call_openai_invoice_extractor(openai_key, parts)
+        _log.info("OpenAI returned keys: %s", list(data.keys()) if isinstance(data, dict) else type(data))
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning("OpenAI extraction failed, falling back to Tesseract: %s", exc)
+        _log.warning("OpenAI extraction failed: %s", exc)
         return []
-    return openai_invoice_to_purchase_rows(data)
+    rows = openai_invoice_to_purchase_rows(data)
+    _log.info("OpenAI extraction yielded %d rows", len(rows))
+    return rows
 
 
 def openai_purchase_content_parts(content: bytes, ext: str) -> list[dict[str, Any]]:
@@ -1822,10 +1839,18 @@ def openai_purchase_content_parts(content: bytes, ext: str) -> list[dict[str, An
         return []
 
     if ext == "pdf":
+        # Images preserve visual table layout — always prefer them over raw text
+        image_parts = openai_pdf_page_image_parts(content)
+        if image_parts:
+            # Append extracted text as supplemental context alongside the images
+            text = extract_pdf_text_with_pdfplumber(content) or extract_pdf_text(content)
+            if text and len(text.strip()) > 50:
+                image_parts.append({"type": "text", "text": f"Supplemental text extracted from PDF (use images as primary source):\n\n{text[:4000]}"})
+            return image_parts
+        # Fallback: text-only if pdftoppm is unavailable
         text = extract_pdf_text_with_pdfplumber(content) or extract_pdf_text(content)
         if text and len(text.strip()) > 100:
             return [{"type": "text", "text": f"Invoice text content:\n\n{text}"}]
-        return openai_pdf_page_image_parts(content)
     return []
 
 
@@ -1844,14 +1869,27 @@ def openai_image_parts_with_pillow(content: bytes, ext: str) -> list[dict[str, A
     except Exception:
         return []
     try:
-        with Image.open(io.BytesIO(content)) as image:
-            frame = image.copy().convert("RGB")
+        image = Image.open(io.BytesIO(content))
+        # Collect all frames (handles multi-frame TIFFs and animated images)
+        frames: list[Any] = []
+        try:
+            while True:
+                frames.append(image.copy().convert("RGB"))
+                image.seek(image.tell() + 1)
+        except EOFError:
+            pass
+        if not frames:
+            frames = [image.convert("RGB")]
+        image.close()
+
+        parts: list[dict[str, Any]] = []
+        for frame in frames:
             # Downscale if either dimension exceeds the safe maximum
             w, h = frame.size
             if max(w, h) > _MAX_IMAGE_DIMENSION:
                 scale = _MAX_IMAGE_DIMENSION / max(w, h)
                 frame = frame.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
-            # Save as JPEG (much smaller than PNG for photos); reduce quality until within limit
+            # Save as JPEG with quality reduction until within size limit
             data = b""
             for quality in (85, 70, 55, 40):
                 output = io.BytesIO()
@@ -1860,8 +1898,9 @@ def openai_image_parts_with_pillow(content: bytes, ext: str) -> list[dict[str, A
                 if len(data) <= _MAX_IMAGE_BYTES:
                     break
             if len(data) > _MAX_IMAGE_BYTES:
-                return []  # give up — too large even at lowest quality
-            return [openai_image_part(data, "image/jpeg")]
+                continue  # skip frames that can't be compressed small enough
+            parts.append(openai_image_part(data, "image/jpeg"))
+        return parts
     except Exception:
         return []
 
@@ -1875,14 +1914,17 @@ def openai_pdf_page_image_parts(content: bytes) -> list[dict[str, Any]]:
         pdf_path = Path(tmp) / "upload.pdf"
         output_prefix = Path(tmp) / "page"
         pdf_path.write_bytes(content)
-        command = [pdftoppm, "-png", "-r", "200", "-f", "1"]
+        command = [pdftoppm, "-png", "-r", "250", "-f", "1"]
         if max_pages > 0:
             command.extend(["-l", str(max_pages)])
         command.extend([str(pdf_path), str(output_prefix)])
         result = subprocess.run(command, capture_output=True, text=True, timeout=90, check=False)
         if result.returncode != 0:
             return []
-        return [openai_image_part(path.read_bytes(), "image/png") for path in sorted(Path(tmp).glob("page-*.png"))]
+        parts: list[dict[str, Any]] = []
+        for page_path in sorted(Path(tmp).glob("page-*.png")):
+            parts.extend(openai_image_parts_with_pillow(page_path.read_bytes(), "png"))
+        return parts
 
 
 def openai_purchase_pdf_max_pages() -> int:
@@ -1976,6 +2018,280 @@ def call_openai_invoice_extractor(api_key: str, parts: list[dict[str, Any]]) -> 
     raw = re.sub(r"\s*```$", "", raw)
     parsed = json.loads(raw)
     return parsed if isinstance(parsed, dict) else {}
+
+
+# ── Sales invoice AI extraction ───────────────────────────────────────────────
+
+SALES_INVOICE_EXTRACTION_PROMPT = """You are an invoice data extraction expert.
+
+Read this sales invoice carefully and extract all visible data.
+Return ONLY a valid JSON object. Do not include markdown, code fences, or extra text.
+
+{
+  "invoice_date": "date as written on invoice, empty string if not found",
+  "invoice_number": "invoice or tax invoice number, empty string if not found",
+  "seller": "the company that issued this invoice (seller/issuer), empty string if not found",
+  "trn_vat": "TRN or VAT registration number of the SELLER — digits only, strip all spaces hyphens and brackets, empty string if not found",
+  "customer": "buyer or customer company name, empty string if not found",
+  "customer_trn": "TRN or VAT number of the buyer/customer — digits only, empty string if not found",
+  "currency": "3-letter currency code e.g. AED USD EUR",
+  "subtotal_excl_vat": "invoice subtotal before VAT as a plain number, empty string if not found",
+  "vat_amount": "total VAT amount as a plain number, empty string if not found",
+  "total_payable": "final grand total including VAT as a plain number, empty string if not found",
+  "payment_terms": "payment terms e.g. '30 days' 'Net 30' 'Due on receipt', empty string if not found",
+  "due_date": "payment due date as written, empty string if not found",
+  "line_items": [
+    {
+      "description": "product or service name exactly as written",
+      "qty": "quantity as a plain number",
+      "unit": "unit of measure e.g. PCS KG BOX ML, empty string if not shown",
+      "unit_price": "unit price before VAT as a plain number",
+      "line_total_excl_vat": "line amount excluding VAT as a plain number",
+      "vat_amount": "VAT amount for this line as a plain number, empty string if not shown per line",
+      "line_total": "line total including VAT as a plain number, empty string if not shown"
+    }
+  ]
+}
+
+Rules:
+- Numbers must be plain digits with decimal point — no currency symbols, spaces, or commas.
+- Extract ALL line items.
+- Use empty string for any field not visible on the invoice.
+- Do not guess or invent values."""
+
+
+def _sfloat(val: Any) -> float:
+    try:
+        return float(str(val or "").replace(",", "").strip() or "0")
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def ingest_sales_invoice_document(db: Session, current_user: User, file: dict[str, Any]) -> list[dict[str, Any]]:
+    name = str(file.get("name") or "sales-upload").strip()
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    content = decode_uploaded_file(file)
+    if not content:
+        return [{"extraction_error": True, "error_message": "Uploaded file content was empty", "sourceFile": name}]
+    try:
+        if ext in PURCHASE_IMAGE_EXTENSIONS or ext == "pdf":
+            if not _has_ai_key():
+                return [{"extraction_error": True, "error_message": "AI extraction not configured — add ANTHROPIC_API_KEY or OPENAI_API_KEY to your .env file to enable PDF/image reading", "sourceFile": name}]
+            result = _extract_sales_with_ai(content, ext, name)
+            if result:
+                return result
+            return [{"extraction_error": True, "error_message": "Could not extract data from image/PDF. Try a clearer file or CSV/Excel.", "sourceFile": name}]
+        elif ext == "csv":
+            return _parse_sales_csv(content, name)
+        elif ext in {"xlsx", "xlsm"}:
+            return _parse_sales_xlsx(content, name)
+        else:
+            return [{"extraction_error": True, "error_message": f"Unsupported format: .{ext or 'unknown'}. Use PDF, image, CSV, or Excel.", "sourceFile": name}]
+    except Exception as exc:
+        return [{"extraction_error": True, "error_message": f"Could not parse file: {exc}", "sourceFile": name}]
+
+
+def _extract_sales_with_ai(content: bytes, ext: str, name: str) -> list[dict[str, Any]]:
+    parts = openai_purchase_content_parts(content, ext)
+    if not parts:
+        return []
+    data: dict[str, Any] = {}
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if anthropic_key:
+        try:
+            anthropic_content: list[dict[str, Any]] = []
+            for part in parts:
+                if part.get("type") == "image_url":
+                    url = part["image_url"]["url"]
+                    if url.startswith("data:"):
+                        mime, b64 = url.split(";base64,", 1)
+                        anthropic_content.append({"type": "image", "source": {"type": "base64", "media_type": mime[5:], "data": b64}})
+                elif part.get("type") == "text":
+                    anthropic_content.append({"type": "text", "text": part["text"]})
+            anthropic_content.append({"type": "text", "text": SALES_INVOICE_EXTRACTION_PROMPT})
+            model = os.environ.get("ANTHROPIC_PURCHASE_MODEL", "claude-sonnet-4-6").strip() or "claude-sonnet-4-6"
+            payload = {"model": model, "max_tokens": 4096, "temperature": 0, "messages": [{"role": "user", "content": anthropic_content}]}
+            import time as _time
+            for attempt in range(3):
+                req = urllib.request.Request(
+                    "https://api.anthropic.com/v1/messages",
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={"x-api-key": anthropic_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"},
+                    method="POST",
+                )
+                try:
+                    with urllib.request.urlopen(req, timeout=90) as resp:
+                        result = json.loads(resp.read().decode("utf-8"))
+                    break
+                except urllib.error.HTTPError as exc:
+                    if exc.code == 429 and attempt < 2:
+                        _time.sleep(30)
+                        continue
+                    raise
+            raw = re.sub(r"^```(?:json)?\s*", "", str(result["content"][0]["text"] or "").strip(), flags=re.IGNORECASE)
+            raw = re.sub(r"\s*```$", "", raw)
+            data = json.loads(raw)
+            if not isinstance(data, dict):
+                data = {}
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("Claude sales extraction failed, trying OpenAI: %s", exc)
+    if not data:
+        openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
+        if openai_key:
+            try:
+                data = call_openai_invoice_extractor(openai_key, parts + [{"type": "text", "text": SALES_INVOICE_EXTRACTION_PROMPT}])
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).warning("OpenAI sales extraction failed: %s", exc)
+    if not data:
+        return []
+    return [_ai_to_sales_invoice(data, name)]
+
+
+def _ai_to_sales_invoice(data: dict[str, Any], source_file: str) -> dict[str, Any]:
+    raw_lines = data.get("line_items") or []
+    lines = []
+    for item in raw_lines:
+        if not isinstance(item, dict):
+            continue
+        desc = str(item.get("description") or "").strip()
+        if not desc:
+            continue
+        qty = _sfloat(item.get("qty") or 1)
+        unit_price = _sfloat(item.get("unit_price"))
+        line_excl = _sfloat(item.get("line_total_excl_vat") or item.get("line_total")) or round(qty * unit_price, 2)
+        lines.append({
+            "description": desc,
+            "qty": qty,
+            "unit": str(item.get("unit") or "PCS").strip(),
+            "unit_price": unit_price,
+            "total": line_excl,
+            "vat": _sfloat(item.get("vat_amount")),
+        })
+    subtotal = _sfloat(data.get("subtotal_excl_vat")) or round(sum(ln["total"] for ln in lines), 2)
+    vat_amount = _sfloat(data.get("vat_amount")) or round(sum(ln["vat"] for ln in lines), 2)
+    total = _sfloat(data.get("total_payable")) or round(subtotal + vat_amount, 2)
+    invoice_no = str(data.get("invoice_number") or data.get("invoice_no") or "").strip() or f"AI-{source_file[:12].upper()}"
+    return {
+        "invoice_no": invoice_no,
+        "customer": str(data.get("customer") or data.get("bill_to") or "").strip(),
+        "date": str(data.get("invoice_date") or "").strip(),
+        "due_date": str(data.get("due_date") or data.get("payment_terms") or "30 days").strip(),
+        "subtotal": round(subtotal, 2),
+        "vat_amount": round(vat_amount, 2),
+        "vat": round(vat_amount, 2),
+        "total": round(total, 2),
+        "seller": str(data.get("seller") or "").strip(),
+        "trn": str(data.get("trn_vat") or "").strip(),
+        "customer_trn": str(data.get("customer_trn") or "").strip(),
+        "currency": str(data.get("currency") or "AED").strip(),
+        "lines": lines,
+        "status": "Draft",
+        "source": "AI Upload",
+        "sourceFile": source_file,
+        "confidence": 85,
+    }
+
+
+def _parse_sales_csv(content: bytes, name: str) -> list[dict[str, Any]]:
+    try:
+        text = content.decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(text))
+        rows = list(reader)
+    except Exception as exc:
+        return [{"extraction_error": True, "error_message": f"Could not read CSV: {exc}", "sourceFile": name}]
+    if not rows:
+        return [{"extraction_error": True, "error_message": "CSV file is empty.", "sourceFile": name}]
+
+    def _col(row: dict[str, str], *keys: str) -> str:
+        lk = {k.strip().lower(): v for k, v in row.items()}
+        for key in keys:
+            if key.lower() in lk:
+                return str(lk[key.lower()] or "").strip()
+        return ""
+
+    invoices: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        inv_no = _col(row, "invoice_no", "invoice_number", "invoice number", "inv_no", "ref", "reference")
+        if not inv_no:
+            continue
+        if inv_no not in invoices:
+            invoices[inv_no] = {
+                "invoice_no": inv_no,
+                "customer": _col(row, "customer", "customer_name", "client", "bill_to"),
+                "date": _col(row, "date", "invoice_date", "issue_date"),
+                "due_date": _col(row, "due_date", "payment_due", "due"),
+                "subtotal": 0.0, "vat_amount": 0.0, "vat": 0.0, "total": 0.0,
+                "lines": [],
+                "status": _col(row, "status") or "Draft",
+                "source": "CSV Upload",
+                "sourceFile": name,
+            }
+        desc = _col(row, "description", "item", "product", "service")
+        if desc:
+            qty = _sfloat(_col(row, "qty", "quantity")) or 1.0
+            unit_price = _sfloat(_col(row, "unit_price", "price", "rate", "unit price"))
+            line_total = _sfloat(_col(row, "total", "line_total", "amount")) or round(qty * unit_price, 2)
+            line_vat = _sfloat(_col(row, "vat", "vat_amount", "tax"))
+            invoices[inv_no]["lines"].append({
+                "description": desc,
+                "qty": qty,
+                "unit": _col(row, "unit", "uom") or "PCS",
+                "unit_price": unit_price,
+                "total": line_total,
+                "vat": line_vat,
+            })
+    result = []
+    for inv in invoices.values():
+        subtotal = round(sum(ln["total"] for ln in inv["lines"]), 2)
+        vat_amt = round(sum(ln["vat"] for ln in inv["lines"]), 2)
+        inv.update(subtotal=subtotal, vat_amount=vat_amt, vat=vat_amt, total=round(subtotal + vat_amt, 2))
+        result.append(inv)
+    if not result:
+        return [{"extraction_error": True, "error_message": "No invoice rows found. Ensure columns 'invoice_no' and 'description' exist.", "sourceFile": name}]
+    return result
+
+
+def _parse_sales_xlsx(content: bytes, name: str) -> list[dict[str, Any]]:
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as workbook:
+            shared_strings = read_xlsx_shared_strings(workbook)
+            sheet_xmls = [workbook.read(s) for s in xlsx_sheet_names(workbook)]
+        table_rows: list[list[str]] = []
+        for sheet_xml in sheet_xmls:
+            root = ElementTree.fromstring(sheet_xml)
+            ns = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+            for row_el in root.findall(".//x:sheetData/x:row", ns):
+                cells: list[str] = []
+                expected_idx = 0
+                for cell in row_el.findall("x:c", ns):
+                    ref = str(cell.attrib.get("r") or "")
+                    col_idx = xlsx_column_index("".join(ch for ch in ref if ch.isalpha()))
+                    while expected_idx < col_idx:
+                        cells.append("")
+                        expected_idx += 1
+                    cells.append(read_xlsx_cell(cell, shared_strings, ns))
+                    expected_idx += 1
+                if any(v.strip() for v in cells):
+                    table_rows.append(cells)
+        if not table_rows:
+            return [{"extraction_error": True, "error_message": "Excel file appears empty.", "sourceFile": name}]
+        headers = [str(h or "").strip().lower() for h in table_rows[0]]
+        dict_rows: list[dict[str, str]] = []
+        for raw in table_rows[1:]:
+            row = {headers[i]: (raw[i] if i < len(raw) else "") for i in range(len(headers)) if headers[i]}
+            if any(str(v or "").strip() for v in row.values()):
+                dict_rows.append(row)
+        if not dict_rows:
+            return [{"extraction_error": True, "error_message": "No data rows in Excel file.", "sourceFile": name}]
+        buf = io.StringIO()
+        writer = csv.DictWriter(buf, fieldnames=list(dict_rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(dict_rows)
+        return _parse_sales_csv(buf.getvalue().encode("utf-8"), name)
+    except Exception as exc:
+        return [{"extraction_error": True, "error_message": f"Could not read Excel file: {exc}", "sourceFile": name}]
 
 
 _JUNK_PRODUCT_RE = re.compile(
@@ -2334,6 +2650,14 @@ def find_pdftoppm_executable() -> str | None:
         r"C:\Program Files\poppler\Library\bin\pdftoppm.exe",
         r"C:\Program Files\poppler\bin\pdftoppm.exe",
     ]
+    # WinGet installs Poppler under a versioned subfolder — scan for any version
+    winget_base = Path(r"C:\Users") / (os.environ.get("USERNAME") or "")
+    winget_poppler = winget_base / "AppData" / "Local" / "Microsoft" / "WinGet" / "Packages"
+    if winget_poppler.exists():
+        for pkg in winget_poppler.glob("oschwartz10612.Poppler_*"):
+            candidate = next(pkg.glob("**/pdftoppm.exe"), None)
+            if candidate:
+                return str(candidate)
     for candidate in candidates:
         if Path(candidate).exists():
             return candidate
