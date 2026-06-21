@@ -21,4 +21,4 @@ COPY frontend/public ./frontend/public
 
 EXPOSE 8000
 # WORKERS defaults to 2 — set to 4 on Render standard/pro plans (2+ vCPU)
-CMD uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WORKERS:-2}
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WORKERS:-2}
