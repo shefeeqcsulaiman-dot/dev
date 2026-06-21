@@ -5,11 +5,12 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app ./app
+COPY backend/app ./app
+COPY frontend/public ./frontend/public
 
 EXPOSE 8000
 # WORKERS defaults to 4; override with -e WORKERS=8 for higher-traffic deployments
-CMD uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WORKERS:-4}
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WORKERS:-4}
