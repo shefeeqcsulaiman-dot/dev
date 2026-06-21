@@ -5,333 +5,398 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>TaxFlow POS</title>
 <style>
-/* ── Variables ── */
 :root{
-  --bg:#f0f2f7;--sf:#ffffff;--sf2:#f7f8fc;--sf3:#eef0f8;
-  --bd:#e5e7ef;--bd2:#d0d4e8;
-  --t1:#111827;--t2:#4b5563;--t3:#9ca3af;
-  --acc:#4f5df2;--acc2:#3a4ad8;
-  --grn:#16a34a;--grn2:#15803d;
-  --teal:#0d9488;
-  --red:#dc2626;--red2:#b91c1c;
-  --amb:#d97706;--pur:#7c3aed;
+  --bg:#f1f5f9;--sf:#ffffff;--sf2:#f8fafc;--sf3:#f1f5f9;
+  --bd:#e2e8f0;--bd2:#cbd5e1;
+  --t1:#0f172a;--t2:#475569;--t3:#94a3b8;
+  --acc:#6366f1;--acc2:#4f46e5;--acc-bg:#eef2ff;
+  --grn:#22c55e;--grn2:#16a34a;
+  --teal:#14b8a6;--teal2:#0d9488;
+  --red:#ef4444;--red2:#dc2626;
+  --amb:#f59e0b;--pur:#8b5cf6;
+  --cart:#0f172a;--cart2:#1e293b;--cart3:#334155;
+  --cart-bd:#334155;--cart-t1:#f8fafc;--cart-t2:#94a3b8;--cart-t3:#64748b;
   --fn:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.05);
+  --shadow:0 4px 16px rgba(0,0,0,.10);
+  --shadow-lg:0 20px 50px rgba(0,0,0,.18);
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;overflow:hidden;font-family:var(--fn);background:var(--bg);color:var(--t1);font-size:13px;}
-input,select,button{font-family:var(--fn);}
-button{cursor:pointer;}
+input,select,button,textarea{font-family:var(--fn);}
+button{cursor:pointer;border:none;background:none;}
 ::-webkit-scrollbar{width:4px;height:4px;}
 ::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:4px;}
 
-/* ══ App shell ══════════════════════════════════════ */
-#pos-app{display:flex;flex-direction:column;height:100vh;}
+/* ══ App shell ══════════════════════════════════════════════ */
+#pos-app{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
 
-/* ══ Top bar ════════════════════════════════════════ */
+/* ══ Top bar ════════════════════════════════════════════════ */
 .ptop{
-  display:flex;align-items:center;gap:8px;height:54px;padding:0 16px;
-  background:var(--sf);border-bottom:1px solid var(--bd);flex-shrink:0;
+  display:flex;align-items:center;gap:10px;height:52px;padding:0 16px;
+  background:var(--cart);border-bottom:1px solid var(--cart-bd);
+  flex-shrink:0;
 }
-.ptop-brand{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.ptop-brand{display:flex;align-items:center;gap:10px;flex-shrink:0;}
 .ptop-brand-ico{
-  width:32px;height:32px;border-radius:9px;
-  background:var(--acc);display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  width:34px;height:34px;border-radius:10px;
+  background:var(--acc);display:flex;align-items:center;justify-content:center;
 }
-.ptop-brand-ico svg{width:16px;height:16px;color:#fff;}
-.ptop-brand-name{font-size:15px;font-weight:800;color:var(--t1);letter-spacing:-.3px;}
+.ptop-brand-ico svg{width:17px;height:17px;color:#fff;}
+.ptop-brand-name{font-size:15px;font-weight:800;color:#fff;letter-spacing:-.3px;}
 .ptop-brand-tag{
-  font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;
-  background:var(--sf3);color:var(--acc);border:1px solid var(--bd2);
-  border-radius:4px;padding:2px 6px;flex-shrink:0;
+  font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;
+  background:rgba(99,102,241,.25);color:#a5b4fc;border:1px solid rgba(99,102,241,.4);
+  border-radius:5px;padding:2px 7px;flex-shrink:0;
 }
-.ptop-div{width:1px;height:28px;background:var(--bd);flex-shrink:0;margin:0 4px;}
-.ptop-loc{
-  display:flex;align-items:center;gap:5px;flex-shrink:0;
-  padding:5px 10px;border-radius:7px;background:var(--sf2);border:1px solid var(--bd);
+.ptop-div{width:1px;height:24px;background:var(--cart3);flex-shrink:0;margin:0 2px;}
+.ptop-pill{
+  display:flex;align-items:center;gap:6px;flex-shrink:0;
+  padding:5px 11px;border-radius:8px;background:rgba(255,255,255,.07);
+  border:1px solid var(--cart-bd);
 }
-.ptop-loc svg{width:12px;height:12px;color:var(--t3);flex-shrink:0;}
-.ptop-loc-val{font-size:12px;font-weight:600;color:var(--t2);}
+.ptop-pill svg{width:12px;height:12px;color:var(--cart-t2);flex-shrink:0;}
+.ptop-pill span{font-size:12px;font-weight:600;color:var(--cart-t1);}
 .ptop-clock{
-  font-size:12.5px;font-weight:700;color:var(--t2);font-variant-numeric:tabular-nums;
-  flex-shrink:0;padding:5px 10px;border-radius:7px;background:var(--sf2);border:1px solid var(--bd);
+  font-size:12px;font-weight:700;color:var(--cart-t1);font-variant-numeric:tabular-nums;
+  flex-shrink:0;padding:5px 11px;border-radius:8px;
+  background:rgba(255,255,255,.07);border:1px solid var(--cart-bd);
 }
 .ptop-spacer{flex:1;}
 .ptop-actions{display:flex;align-items:center;gap:6px;}
 .ptop-icon{
-  width:34px;height:34px;border-radius:8px;border:1px solid var(--bd);
-  background:var(--sf2);display:flex;align-items:center;justify-content:center;
-  transition:all .12s;flex-shrink:0;color:var(--t2);
+  width:34px;height:34px;border-radius:9px;border:1px solid var(--cart-bd);
+  background:rgba(255,255,255,.07);display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0;color:var(--cart-t2);
 }
-.ptop-icon:hover{border-color:var(--bd2);background:var(--sf3);color:var(--t1);}
-.ptop-icon.red:hover{border-color:var(--red);color:var(--red);background:rgba(220,38,38,.06);}
-.ptop-icon.grn:hover{border-color:var(--grn);color:var(--grn);background:rgba(22,163,74,.06);}
-.ptop-icon.amb:hover{border-color:var(--amb);color:var(--amb);background:rgba(217,119,6,.06);}
+.ptop-icon:hover{border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.14);color:#fff;}
+.ptop-icon.clr:hover{border-color:var(--red);background:rgba(239,68,68,.15);color:var(--red);}
+.ptop-icon.sav:hover{border-color:var(--grn);background:rgba(34,197,94,.12);color:var(--grn);}
+.ptop-icon.ref:hover{border-color:var(--amb);background:rgba(245,158,11,.12);color:var(--amb);}
+.ptop-icon.calc-on{background:rgba(99,102,241,.25);border-color:rgba(99,102,241,.5);color:#a5b4fc;}
 .ptop-icon svg{width:15px;height:15px;}
 .ptop-btn{
   display:flex;align-items:center;gap:6px;
-  padding:7px 14px;border-radius:8px;border:1px solid var(--bd);
-  background:var(--sf2);color:var(--t1);font-size:12px;font-weight:700;
-  transition:all .12s;flex-shrink:0;
+  padding:7px 14px;border-radius:9px;
+  background:rgba(255,255,255,.1);border:1px solid var(--cart-bd);
+  color:var(--cart-t1);font-size:12px;font-weight:700;
+  transition:all .15s;flex-shrink:0;
 }
-.ptop-btn:hover{background:var(--sf3);border-color:var(--bd2);}
+.ptop-btn:hover{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.25);}
 .ptop-btn svg{width:13px;height:13px;}
-.ptop-btn.dark{background:var(--t1);color:#fff;border-color:var(--t1);}
-.ptop-btn.dark:hover{opacity:.85;}
+.ptop-btn.accent{background:var(--acc);border-color:var(--acc2);color:#fff;}
+.ptop-btn.accent:hover{background:var(--acc2);}
 
-/* ══ Main split ═════════════════════════════════════ */
-.pmain{display:flex;flex:1;min-height:0;}
+/* ══ Main split ═════════════════════════════════════════════ */
+.pmain{display:flex;flex:1;min-height:0;overflow:hidden;}
 
-/* ══ Left panel — Cart ══════════════════════════════ */
+/* ══ LEFT — Cart panel (dark) ═══════════════════════════════ */
 .pleft{
   display:flex;flex-direction:column;
-  width:42%;border-right:1px solid var(--bd);
-  overflow:hidden;background:var(--sf);
+  width:420px;flex-shrink:0;
+  background:var(--cart);overflow:hidden;
 }
 
-/* Controls */
-.pctrl{border-bottom:1px solid var(--bd);flex-shrink:0;}
+/* Customer / Controls */
+.pctrl{border-bottom:1px solid var(--cart-bd);flex-shrink:0;}
 .pctrl-row{
   display:flex;align-items:center;gap:8px;
-  padding:8px 12px;border-bottom:1px solid var(--bd);
+  padding:8px 14px;border-bottom:1px solid var(--cart-bd);
 }
 .pctrl-row:last-child{border-bottom:none;}
 .pctrl-ico{
-  width:30px;height:30px;border-radius:8px;background:var(--sf2);
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--t3);
+  width:28px;height:28px;border-radius:7px;background:rgba(255,255,255,.08);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
 }
-.pctrl-ico svg{width:14px;height:14px;}
+.pctrl-ico svg{width:13px;height:13px;color:var(--cart-t2);}
 .pctrl-inp{
   flex:1;background:transparent;border:none;
-  color:var(--t1);font-size:12.5px;font-weight:500;height:30px;
+  color:var(--cart-t1);font-size:13px;font-weight:500;height:28px;
 }
 .pctrl-inp:focus{outline:none;}
-.pctrl-inp::placeholder{color:var(--t3);}
+.pctrl-inp::placeholder{color:var(--cart-t3);}
 .pctrl-sel{
-  flex:1;height:30px;background:transparent;border:none;
-  color:var(--t1);font-size:12px;appearance:none;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239ca3af' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
-  background-repeat:no-repeat;background-position:right 4px center;padding-right:18px;cursor:pointer;
+  flex:1;height:28px;background:transparent;border:none;
+  color:var(--cart-t1);font-size:12px;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 2px center;padding-right:16px;cursor:pointer;
 }
 .pctrl-sel:focus{outline:none;}
+.pctrl-sel option{background:#1e293b;color:#f8fafc;}
 .pctrl-add{
-  width:28px;height:28px;border-radius:50%;border:none;
-  background:var(--acc);color:#fff;font-size:18px;font-weight:700;
+  width:26px;height:26px;border-radius:50%;
+  background:var(--acc);color:#fff;font-size:17px;font-weight:700;
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  transition:opacity .12s;line-height:1;
+  transition:background .12s;line-height:1;
 }
-.pctrl-add:hover{opacity:.8;}
+.pctrl-add:hover{background:var(--acc2);}
 
-/* Cart */
+/* Cart list */
 .pcart{flex:1;display:flex;flex-direction:column;overflow:hidden;}
 .pcart-hd{
-  display:grid;grid-template-columns:1fr 104px 96px 32px;
-  padding:7px 12px;border-bottom:1px solid var(--bd);
-  font-size:10.5px;font-weight:700;color:var(--t3);
-  background:var(--sf2);flex-shrink:0;text-transform:uppercase;letter-spacing:.5px;
+  display:grid;grid-template-columns:1fr 100px 88px 30px;
+  padding:8px 14px;border-bottom:1px solid var(--cart-bd);
+  font-size:10px;font-weight:700;color:var(--cart-t3);
+  text-transform:uppercase;letter-spacing:.6px;flex-shrink:0;
 }
 .pcart-hd .r{text-align:right;}
 .pcart-hd-x{
-  background:none;border:none;color:var(--t3);font-size:14px;
+  color:var(--cart-t3);font-size:13px;
   display:flex;align-items:center;justify-content:center;
-  border-radius:6px;transition:all .1s;padding:2px;
+  border-radius:5px;transition:all .12s;padding:2px;
 }
-.pcart-hd-x:hover{color:var(--red);background:rgba(220,38,38,.08);}
+.pcart-hd-x:hover{color:var(--red);}
 .pcart-body{flex:1;overflow-y:auto;}
 .pcart-empty{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  height:100%;color:var(--t3);font-size:13px;gap:10px;
+  height:100%;color:var(--cart-t3);font-size:12.5px;gap:12px;
 }
+.pcart-empty svg{opacity:.3;}
 .pcart-row{
-  display:grid;grid-template-columns:1fr 104px 96px 32px;
-  padding:10px 12px;border-bottom:1px solid var(--bd);
+  display:grid;grid-template-columns:1fr 100px 88px 30px;
+  padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.05);
   align-items:center;transition:background .1s;
 }
-.pcart-row:hover{background:rgba(79,93,242,.03);}
-.pcart-name{font-size:13px;font-weight:600;line-height:1.3;}
-.pcart-sub{font-size:10.5px;color:var(--t3);margin-top:2px;}
+.pcart-row:hover{background:rgba(255,255,255,.04);}
+.pcart-name{font-size:13px;font-weight:600;color:var(--cart-t1);line-height:1.3;}
+.pcart-sub{font-size:10.5px;color:var(--cart-t3);margin-top:3px;}
 .pcart-qty{display:flex;align-items:center;gap:4px;justify-content:center;}
 .pcart-qty button{
-  width:24px;height:24px;border-radius:50%;border:1px solid var(--bd);
-  background:var(--sf2);font-size:15px;font-weight:700;
+  width:26px;height:26px;border-radius:50%;border:1px solid var(--cart3);
+  background:var(--cart2);color:var(--cart-t1);font-size:15px;font-weight:700;
   display:flex;align-items:center;justify-content:center;padding:0;
-  transition:all .1s;line-height:1;
+  transition:all .12s;line-height:1;
 }
-.pcart-qty button:hover{background:var(--acc);color:#fff;border-color:var(--acc);}
+.pcart-qty button:hover{background:var(--acc);border-color:var(--acc);color:#fff;}
 .pcart-qty input{
-  width:36px;text-align:center;background:var(--sf2);border:1px solid var(--bd);
-  border-radius:6px;padding:2px 0;font-size:12px;color:var(--t1);height:26px;
+  width:34px;text-align:center;background:var(--cart2);border:1px solid var(--cart3);
+  border-radius:6px;padding:2px 0;font-size:12px;color:var(--cart-t1);height:26px;
 }
 .pcart-qty input:focus{outline:none;border-color:var(--acc);}
-.pcart-amt{text-align:right;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--t1);}
+.pcart-amt{text-align:right;font-size:13px;font-weight:700;color:var(--cart-t1);font-variant-numeric:tabular-nums;}
 .pcart-del{
-  background:none;border:none;color:var(--t3);font-size:13px;
-  padding:3px;border-radius:5px;transition:all .1s;
+  color:var(--cart-t3);font-size:13px;
+  padding:4px;border-radius:5px;transition:all .12s;
   display:flex;align-items:center;justify-content:center;
 }
-.pcart-del:hover{background:rgba(220,38,38,.1);color:var(--red);}
+.pcart-del:hover{background:rgba(239,68,68,.15);color:var(--red);}
 
-/* Summary */
-.psum{padding:10px 12px;border-top:1px solid var(--bd);background:var(--sf);flex-shrink:0;}
-.psum-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px;}
+/* Summary & Totals */
+.psum{padding:12px 14px;border-top:1px solid var(--cart-bd);background:var(--cart);flex-shrink:0;}
+
+.psum-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;}
 .psum-stat{
-  background:var(--sf2);border:1px solid var(--bd);border-radius:8px;
+  background:rgba(255,255,255,.06);border:1px solid var(--cart-bd);border-radius:10px;
   padding:8px 10px;display:flex;flex-direction:column;gap:2px;
 }
-.psum-stat label{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);}
-.psum-stat b{font-size:14px;font-weight:800;color:var(--t1);font-variant-numeric:tabular-nums;}
-.psum-stat.hi b{color:var(--acc);}
-.psum-adjs{
-  display:flex;gap:12px;padding-top:12px;border-top:1px solid var(--bd);
-  overflow-x:auto;scrollbar-width:none;flex-wrap:wrap;
-}
-.psum-adjs::-webkit-scrollbar{display:none;}
-.psum-adj{display:flex;flex-direction:column;gap:5px;flex-shrink:0;}
-.psum-adj label{font-size:13px;font-weight:600;color:var(--t2);white-space:nowrap;}
-.psum-adj input{
-  width:110px;background:var(--sf);border:1.5px solid var(--bd);border-radius:10px;
-  padding:10px 12px;font-size:17px;font-weight:700;color:var(--t1);text-align:right;transition:border-color .12s;
-}
-.psum-adj input:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px #4f5df215;}
+.psum-stat label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--cart-t3);}
+.psum-stat b{font-size:15px;font-weight:800;color:var(--cart-t1);font-variant-numeric:tabular-nums;}
+.psum-stat.hi{background:rgba(99,102,241,.18);border-color:rgba(99,102,241,.3);}
+.psum-stat.hi b{color:#a5b4fc;}
 
-/* ══ Right panel — Products ═════════════════════════ */
+.psum-adjs{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;
+  padding-top:10px;border-top:1px solid var(--cart-bd);
+}
+.psum-adj{display:flex;flex-direction:column;gap:4px;}
+.psum-adj label{
+  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--cart-t3);
+}
+.psum-adj input{
+  width:100%;background:var(--cart2);border:1.5px solid var(--cart-bd);border-radius:9px;
+  padding:9px 12px;font-size:16px;font-weight:700;color:var(--cart-t1);
+  text-align:right;transition:border-color .12s;
+}
+.psum-adj input:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px rgba(99,102,241,.2);}
+
+/* Payment bar */
+.pbot{
+  padding:12px 14px;background:var(--cart);
+  border-top:1px solid var(--cart-bd);flex-shrink:0;
+}
+.pbot-total{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--acc);border-radius:12px;padding:12px 16px;margin-bottom:10px;
+}
+.pbot-total-lbl{font-size:11px;font-weight:700;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px;}
+.pbot-total-val{font-size:30px;font-weight:900;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:-.5px;}
+.pbot-methods{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:7px;}
+.pbtn{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:4px;padding:10px 6px;border-radius:11px;border:1px solid transparent;
+  font-size:11px;font-weight:700;height:56px;
+  transition:all .15s;
+}
+.pbtn svg{width:18px;height:18px;flex-shrink:0;}
+.pbtn:disabled{opacity:.28;cursor:not-allowed;}
+.pbtn:not(:disabled):active{transform:scale(.96);}
+.pbtn.cancel{background:rgba(239,68,68,.12);color:#f87171;border-color:rgba(239,68,68,.2);}
+.pbtn.cancel:not(:disabled):hover{background:var(--red);color:#fff;border-color:var(--red);}
+.pbtn.credit{background:rgba(139,92,246,.12);color:#a78bfa;border-color:rgba(139,92,246,.22);}
+.pbtn.credit:not(:disabled):hover{background:var(--pur);color:#fff;border-color:var(--pur);}
+.pbtn.card{background:rgba(99,102,241,.12);color:#818cf8;border-color:rgba(99,102,241,.22);}
+.pbtn.card:not(:disabled):hover{background:var(--acc);color:#fff;border-color:var(--acc);}
+.pbtn.multi{background:rgba(20,184,166,.1);color:#5eead4;border-color:rgba(20,184,166,.22);}
+.pbtn.multi:not(:disabled):hover{background:var(--teal);color:#fff;border-color:var(--teal);}
+.pbtn.cash{
+  background:var(--grn);color:#fff;border-color:var(--grn2);
+  box-shadow:0 4px 18px rgba(34,197,94,.3);
+}
+.pbtn.cash:not(:disabled):hover{background:var(--grn2);box-shadow:0 6px 24px rgba(34,197,94,.4);}
+
+/* ══ RIGHT — Products panel ═════════════════════════════════ */
 .pright{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);}
 
-/* Filter tabs + search */
 .pright-top{
-  display:flex;align-items:center;gap:8px;padding:8px 12px;
+  display:flex;align-items:center;gap:8px;padding:10px 14px;
   background:var(--sf);border-bottom:1px solid var(--bd);flex-shrink:0;
+  box-shadow:var(--shadow-sm);
 }
 .pftab{
-  padding:5px 14px;border-radius:7px;border:1px solid var(--bd);
+  padding:6px 16px;border-radius:8px;border:1.5px solid var(--bd);
   background:var(--sf2);color:var(--t2);font-size:12px;font-weight:700;
-  transition:all .12s;white-space:nowrap;flex-shrink:0;
+  transition:all .14s;white-space:nowrap;flex-shrink:0;
 }
-.pftab:hover{border-color:var(--acc);color:var(--acc);}
-.pftab.active{background:var(--acc);color:#fff;border-color:var(--acc);}
+.pftab:hover{border-color:var(--acc);color:var(--acc);background:var(--acc-bg);}
+.pftab.active{background:var(--acc);color:#fff;border-color:var(--acc);box-shadow:0 2px 8px rgba(99,102,241,.3);}
 .pright-sep{width:1px;height:22px;background:var(--bd);flex-shrink:0;}
 .psearch{
-  flex:1;display:flex;align-items:center;gap:6px;
-  background:var(--sf2);border:1px solid var(--bd);border-radius:8px;
-  padding:0 10px;height:32px;transition:border-color .12s;
+  flex:1;display:flex;align-items:center;gap:8px;
+  background:var(--sf2);border:1.5px solid var(--bd);border-radius:10px;
+  padding:0 12px;height:36px;transition:all .14s;
 }
-.psearch:focus-within{border-color:var(--acc);background:#fff;}
+.psearch:focus-within{border-color:var(--acc);background:#fff;box-shadow:0 0 0 3px rgba(99,102,241,.12);}
 .psearch svg{color:var(--t3);flex-shrink:0;}
-.psearch input{flex:1;background:transparent;border:none;font-size:12.5px;color:var(--t1);}
+.psearch input{flex:1;background:transparent;border:none;font-size:13px;color:var(--t1);}
 .psearch input::placeholder{color:var(--t3);}
 .psearch input:focus{outline:none;}
 .pright-add{
-  width:32px;height:32px;border-radius:8px;border:1px solid var(--bd);
+  width:36px;height:36px;border-radius:10px;border:1.5px solid var(--bd);
   background:var(--sf2);display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;color:var(--t2);transition:all .12s;
+  flex-shrink:0;color:var(--t2);transition:all .14s;
 }
-.pright-add:hover{background:var(--acc);border-color:var(--acc);color:#fff;}
-.pright-add svg{width:14px;height:14px;}
+.pright-add:hover{background:var(--acc);border-color:var(--acc);color:#fff;box-shadow:0 2px 8px rgba(99,102,241,.3);}
+.pright-add svg{width:15px;height:15px;}
 
 /* Category chips */
 .pchips{
-  display:flex;gap:6px;padding:7px 12px;
+  display:flex;gap:6px;padding:8px 14px;
   overflow-x:auto;flex-shrink:0;background:var(--sf);
   border-bottom:1px solid var(--bd);scrollbar-width:none;
 }
 .pchips::-webkit-scrollbar{display:none;}
 .pchip{
-  padding:4px 12px;border-radius:20px;border:1px solid var(--bd);
+  padding:5px 14px;border-radius:20px;border:1.5px solid var(--bd);
   background:var(--sf2);color:var(--t2);font-size:11.5px;font-weight:600;
-  white-space:nowrap;transition:all .12s;
+  white-space:nowrap;transition:all .14s;flex-shrink:0;
 }
-.pchip.on{background:var(--acc);color:#fff;border-color:var(--acc);}
-.pchip:hover:not(.on){border-color:var(--acc);color:var(--acc);}
+.pchip.on{background:var(--acc);color:#fff;border-color:var(--acc);box-shadow:0 2px 8px rgba(99,102,241,.25);}
+.pchip:hover:not(.on){border-color:var(--acc);color:var(--acc);background:var(--acc-bg);}
 
 /* Product grid */
 .pgrid{
   flex:1;overflow-y:auto;
-  display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
-  gap:10px;padding:12px;align-content:start;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));
+  gap:12px;padding:14px;align-content:start;
 }
 .ptile{
-  background:var(--sf);border:1px solid var(--bd);border-radius:12px;
-  padding:14px 10px 12px;cursor:pointer;text-align:center;
-  transition:border-color .15s,transform .12s,box-shadow .12s;
-  display:flex;flex-direction:column;align-items:center;gap:7px;
+  background:var(--sf);border:1.5px solid var(--bd);border-radius:16px;
+  padding:16px 12px 14px;cursor:pointer;text-align:center;
+  transition:all .18s;
+  display:flex;flex-direction:column;align-items:center;gap:8px;
   position:relative;overflow:hidden;
 }
-.ptile:hover{border-color:var(--acc);transform:translateY(-2px);box-shadow:0 6px 22px rgba(79,93,242,.14);}
-.ptile:active{transform:none;box-shadow:none;}
+.ptile::before{
+  content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.08),transparent);
+  opacity:0;transition:opacity .18s;
+}
+.ptile:hover{border-color:var(--acc);transform:translateY(-3px);box-shadow:0 12px 32px rgba(99,102,241,.18);}
+.ptile:hover::before{opacity:1;}
+.ptile:active{transform:translateY(-1px);box-shadow:0 4px 16px rgba(99,102,241,.14);}
 .ptile-img{
-  width:56px;height:56px;border-radius:12px;
+  width:64px;height:64px;border-radius:16px;
   display:flex;align-items:center;justify-content:center;
-  font-size:18px;font-weight:800;color:#fff;flex-shrink:0;
+  font-size:20px;font-weight:900;color:#fff;flex-shrink:0;
+  box-shadow:0 4px 14px rgba(0,0,0,.2);
 }
-.ptile-name{font-size:11.5px;font-weight:600;color:var(--t1);line-height:1.3;word-break:break-word;}
-.ptile-price{font-size:14px;font-weight:900;color:#fff;background:var(--acc);border-radius:6px;padding:3px 9px;letter-spacing:-.2px;}
-.ptile-vat{font-size:9.5px;color:var(--t3);background:var(--sf2);border-radius:4px;padding:1px 6px;border:1px solid var(--bd);}
-.pgrid-empty{grid-column:1/-1;text-align:center;padding:48px 16px;color:var(--t3);line-height:2;}
+.ptile-name{font-size:12px;font-weight:700;color:var(--t1);line-height:1.35;word-break:break-word;}
+.ptile-price{
+  font-size:15px;font-weight:900;color:#fff;
+  background:var(--acc);border-radius:8px;padding:4px 12px;
+  letter-spacing:-.2px;box-shadow:0 2px 8px rgba(99,102,241,.3);
+}
+.ptile-vat{
+  font-size:9.5px;color:var(--t3);background:var(--sf3);
+  border-radius:5px;padding:2px 7px;border:1px solid var(--bd);
+}
+.pgrid-empty{grid-column:1/-1;text-align:center;padding:60px 16px;color:var(--t3);line-height:2.2;}
+.pgrid-empty svg{opacity:.25;margin-bottom:6px;}
 
-/* ══ Bottom bar ═════════════════════════════════════ */
-.pbot{
-  display:flex;align-items:center;gap:6px;height:72px;padding:0 14px;
-  background:var(--sf);border-top:1px solid var(--bd);flex-shrink:0;
+/* ══ Overlays ═══════════════════════════════════════════════ */
+.ov{
+  position:fixed;inset:0;background:rgba(15,23,42,.6);
+  display:flex;align-items:center;justify-content:center;z-index:100;
+  backdrop-filter:blur(6px);
 }
-.pbtn{
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:3px;padding:0 10px;border-radius:10px;border:1px solid transparent;
-  font-size:11px;font-weight:700;height:54px;min-width:58px;
-  transition:all .13s;flex-shrink:0;
+.ov-box{
+  background:var(--sf);border:1px solid var(--bd2);border-radius:20px;padding:26px;
+  width:380px;max-width:calc(100vw - 24px);box-shadow:var(--shadow-lg);
 }
-.pbtn svg{width:15px;height:15px;flex-shrink:0;}
-.pbtn:disabled{opacity:.3;cursor:not-allowed;}
-.pbtn:not(:disabled):hover{transform:translateY(-1px);}
-.pbtn.cancel{background:rgba(220,38,38,.08);color:var(--red);border-color:rgba(220,38,38,.2);}
-.pbtn.cancel:not(:disabled):hover{background:var(--red);color:#fff;border-color:var(--red);}
-.pbtn.credit{background:rgba(124,58,237,.09);color:var(--pur);border-color:rgba(124,58,237,.22);}
-.pbtn.credit:not(:disabled):hover{background:var(--pur);color:#fff;border-color:var(--pur);}
-.pbtn.card{background:rgba(79,93,242,.09);color:var(--acc);border-color:rgba(79,93,242,.22);}
-.pbtn.card:not(:disabled):hover{background:var(--acc);color:#fff;border-color:var(--acc);}
-.pbtn.multi{background:rgba(13,148,136,.09);color:var(--teal);border-color:rgba(13,148,136,.25);}
-.pbtn.multi:not(:disabled):hover{background:var(--teal);color:#fff;border-color:var(--teal);}
-.pbtn.cash{
-  background:var(--grn);color:#fff;border-color:var(--grn);
-  min-width:96px;font-size:13px;font-weight:800;
-  box-shadow:0 2px 14px rgba(22,163,74,.28);
+.ov-title{font-size:17px;font-weight:800;margin-bottom:3px;color:var(--t1);}
+.ov-sub{font-size:12px;color:var(--t3);margin-bottom:18px;}
+.ov-total{
+  background:linear-gradient(135deg,var(--acc),var(--acc2));
+  border-radius:14px;padding:16px;text-align:center;
+  font-size:34px;font-weight:900;color:#fff;
+  margin-bottom:16px;font-variant-numeric:tabular-nums;
+  box-shadow:0 8px 24px rgba(99,102,241,.3);
 }
-.pbtn.cash:not(:disabled):hover{background:var(--grn2);box-shadow:0 4px 22px rgba(22,163,74,.38);}
-.pbot-sep{width:1px;height:44px;background:var(--bd);flex-shrink:0;margin:0 2px;}
-.pbot-total{
-  margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;
-  background:linear-gradient(135deg,#eef0ff,#e6e9ff);
-  border:1px solid #c8cef5;border-radius:12px;
-  padding:8px 16px;flex-shrink:0;min-width:180px;
+.ov label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);display:block;margin-bottom:5px;}
+.ov input{
+  width:100%;height:42px;background:var(--sf2);border:1.5px solid var(--bd);
+  border-radius:10px;padding:0 14px;color:var(--t1);font-size:16px;margin-bottom:12px;
+  transition:all .14s;font-family:var(--fn);
 }
-.pbot-total-lbl{font-size:9.5px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;}
-.pbot-total-val{font-size:28px;font-weight:900;color:var(--acc);font-variant-numeric:tabular-nums;letter-spacing:-.5px;line-height:1;}
-
-/* ══ Overlays ═══════════════════════════════════════ */
-.ov{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px);}
-.ov-box{background:var(--sf);border:1px solid var(--bd2);border-radius:16px;padding:24px;width:360px;max-width:calc(100vw - 24px);box-shadow:0 24px 60px rgba(0,0,0,.3);}
-.ov-title{font-size:16px;font-weight:800;margin-bottom:3px;}
-.ov-sub{font-size:12px;color:var(--t3);margin-bottom:16px;}
-.ov-total{background:var(--sf2);border-radius:12px;padding:14px;text-align:center;font-size:32px;font-weight:900;color:var(--acc);margin-bottom:14px;font-variant-numeric:tabular-nums;border:1px solid var(--bd);}
-.ov label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);display:block;margin-bottom:4px;}
-.ov input{width:100%;height:40px;background:var(--sf2);border:1px solid var(--bd);border-radius:8px;padding:0 12px;color:var(--t1);font-size:16px;margin-bottom:10px;transition:border-color .15s;}
-.ov input:focus{outline:none;border-color:var(--acc);}
-.ov-quick{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;}
-.ov-qbtn{padding:6px 12px;border-radius:8px;border:1px solid var(--bd);background:var(--sf2);color:var(--t1);font-size:12px;font-weight:600;transition:all .12s;}
+.ov input:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px rgba(99,102,241,.12);}
+.ov-quick{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+.ov-qbtn{
+  padding:6px 14px;border-radius:8px;border:1.5px solid var(--bd);
+  background:var(--sf2);color:var(--t1);font-size:12px;font-weight:700;
+  transition:all .14s;
+}
 .ov-qbtn:hover{background:var(--acc);color:#fff;border-color:var(--acc);}
-.ov-change{display:flex;justify-content:space-between;align-items:center;background:var(--sf2);border-radius:8px;padding:10px 14px;margin-bottom:14px;border:1px solid var(--bd);}
-.ov-change span:first-child{font-size:12px;color:var(--t3);}
-.ov-change span:last-child{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;}
+.ov-change{
+  display:flex;justify-content:space-between;align-items:center;
+  background:var(--sf2);border-radius:10px;padding:11px 14px;
+  margin-bottom:16px;border:1.5px solid var(--bd);
+}
+.ov-change span:first-child{font-size:12px;color:var(--t3);font-weight:600;}
+.ov-change span:last-child{font-size:16px;font-weight:800;font-variant-numeric:tabular-nums;}
 .ov-btns{display:grid;grid-template-columns:1fr 2fr;gap:8px;}
-.ov-cancel{padding:12px;border-radius:10px;border:1px solid var(--bd);background:var(--sf2);color:var(--t2);font-size:13px;font-weight:700;transition:all .12s;}
-.ov-cancel:hover{border-color:var(--red);color:var(--red);}
-.ov-confirm{padding:12px;border-radius:10px;border:none;background:var(--grn);color:#fff;font-size:14px;font-weight:800;transition:opacity .15s;}
-.ov-confirm:hover{opacity:.86;}
-.ov-confirm:disabled{opacity:.35;cursor:not-allowed;}
+.ov-cancel{
+  padding:13px;border-radius:11px;border:1.5px solid var(--bd);
+  background:var(--sf2);color:var(--t2);font-size:13px;font-weight:700;
+  transition:all .14s;
+}
+.ov-cancel:hover{border-color:var(--red);color:var(--red);background:rgba(239,68,68,.06);}
+.ov-confirm{
+  padding:13px;border-radius:11px;border:none;
+  background:var(--grn);color:#fff;font-size:14px;font-weight:800;
+  transition:all .15s;box-shadow:0 4px 14px rgba(34,197,94,.3);
+}
+.ov-confirm:hover{background:var(--grn2);box-shadow:0 6px 20px rgba(34,197,94,.38);}
+.ov-confirm:disabled{opacity:.35;cursor:not-allowed;box-shadow:none;}
 
-/* receipt */
-.ov-rcpt{width:420px;max-height:calc(100vh - 80px);overflow-y:auto;}
-.rcpt{font-family:'Courier New',monospace;font-size:12px;border:1px dashed var(--bd2);border-radius:8px;padding:14px;margin-bottom:14px;background:var(--bg);line-height:1.7;}
-.rcpt-hd{text-align:center;margin-bottom:10px;}
-.rcpt-hd h2{font-size:14px;margin:0;}
+/* Receipt modal */
+.ov-rcpt{width:440px;max-height:calc(100vh - 80px);overflow-y:auto;}
+.rcpt{
+  font-family:'Courier New',monospace;font-size:12px;
+  border:1px dashed var(--bd2);border-radius:12px;padding:16px;
+  margin-bottom:16px;background:var(--sf2);line-height:1.75;
+}
+.rcpt-hd{text-align:center;margin-bottom:12px;}
+.rcpt-hd h2{font-size:14px;margin:0;font-weight:800;}
 .rcpt-hd p{font-size:11px;color:var(--t3);}
 .rcpt-hr{border:none;border-top:1px dashed var(--bd2);margin:8px 0;}
 .rcpt-row{display:flex;justify-content:space-between;font-size:11px;padding:1px 0;}
@@ -340,52 +405,79 @@ button{cursor:pointer;}
 .rcpt-tbl td:last-child{text-align:right;}
 .rcpt-total{display:flex;justify-content:space-between;font-weight:700;font-size:13px;padding:5px 0 0;}
 .rcpt-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-.rcpt-btn{padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--sf2);color:var(--t1);font-size:12px;font-weight:600;transition:all .12s;}
+.rcpt-btn{
+  padding:11px;border-radius:11px;border:1.5px solid var(--bd);
+  background:var(--sf2);color:var(--t1);font-size:12px;font-weight:700;
+  transition:all .14s;
+}
 .rcpt-btn:hover{border-color:var(--acc);color:var(--acc);}
 .rcpt-btn-new{grid-column:span 2;background:var(--acc);color:#fff;border-color:var(--acc);}
-.rcpt-btn-new:hover{opacity:.86;color:#fff;}
+.rcpt-btn-new:hover{background:var(--acc2);color:#fff;}
 
-/* recent */
-.ov-recent{width:500px;max-height:calc(100vh - 80px);display:flex;flex-direction:column;}
+/* Recent transactions */
+.ov-recent{width:520px;max-height:calc(100vh - 80px);display:flex;flex-direction:column;}
 .ov-recent-body{flex:1;overflow-y:auto;max-height:60vh;}
-.ov-recent table{width:100%;border-collapse:collapse;font-size:12px;}
-.ov-recent th{padding:8px 10px;text-align:left;border-bottom:1px solid var(--bd);font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--t3);}
-.ov-recent td{padding:8px 10px;border-bottom:1px solid var(--bd);}
-
-/* auth */
-.pos-auth{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:200;}
-.pos-auth-box{background:var(--sf);border:1px solid var(--bd2);border-radius:16px;padding:36px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.1);}
-.pos-auth-logo{font-size:22px;font-weight:900;color:var(--acc);margin-bottom:6px;letter-spacing:-.5px;}
-.pos-auth-box h2{font-size:16px;font-weight:700;margin-bottom:4px;color:var(--t1);}
-.pos-auth-box p{color:var(--t3);font-size:12px;margin-bottom:20px;}
-.pos-auth-box label{display:block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:4px;}
-.pos-auth-box input{width:100%;height:42px;background:var(--sf2);border:1px solid var(--bd);border-radius:9px;padding:0 14px;color:var(--t1);font-size:13px;margin-bottom:12px;transition:border-color .15s;font-family:var(--fn);}
-.pos-auth-box input:focus{outline:none;border-color:var(--acc);}
-.pos-auth-err{font-size:12px;color:var(--red);margin-bottom:8px;display:none;background:rgba(220,38,38,.07);border-radius:6px;padding:6px 10px;}
-.pos-auth-btn{width:100%;height:44px;border:none;border-radius:10px;background:var(--acc);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--fn);transition:opacity .15s;}
-.pos-auth-btn:hover{opacity:.86;}
-.pos-auth-btn:disabled{opacity:.5;cursor:not-allowed;}
-
-/* calculator */
-.cbtn{
-  background:var(--sf2);border:1.5px solid var(--bd);border-radius:9px;
-  padding:10px 4px;font-size:15px;font-weight:700;color:var(--t1);cursor:pointer;
-  transition:background .1s,transform .06s;text-align:center;line-height:1;
+.ov-recent table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.ov-recent th{
+  padding:10px 12px;text-align:left;border-bottom:1.5px solid var(--bd);
+  font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);font-weight:700;
+  background:var(--sf2);
 }
-.cbtn:hover{background:var(--sf3);}
-.cbtn:active{transform:scale(.93);}
-.cbtn.op{color:var(--acc);border-color:#c8cef5;background:#f0f1ff;}
-.cbtn.accent{background:var(--acc);border-color:var(--acc2);color:#fff;}
+.ov-recent td{padding:10px 12px;border-bottom:1px solid var(--bd);}
+.ov-recent tr:hover td{background:var(--sf2);}
+
+/* Auth gate */
+.pos-auth{position:fixed;inset:0;background:var(--cart);display:flex;align-items:center;justify-content:center;z-index:200;}
+.pos-auth-box{
+  background:var(--cart2);border:1px solid var(--cart-bd);border-radius:20px;
+  padding:40px;width:360px;box-shadow:0 30px 80px rgba(0,0,0,.4);
+}
+.pos-auth-logo{font-size:13px;font-weight:800;color:#a5b4fc;letter-spacing:.5px;margin-bottom:20px;
+  text-transform:uppercase;display:flex;align-items:center;gap:8px;}
+.pos-auth-logo svg{width:22px;height:22px;background:var(--acc);border-radius:8px;padding:4px;color:#fff;}
+.pos-auth-box h2{font-size:22px;font-weight:800;margin-bottom:4px;color:var(--cart-t1);}
+.pos-auth-box p{color:var(--cart-t3);font-size:12.5px;margin-bottom:24px;}
+.pos-auth-box label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--cart-t3);margin-bottom:5px;}
+.pos-auth-box input{
+  width:100%;height:44px;background:var(--cart3);border:1.5px solid var(--cart-bd);
+  border-radius:10px;padding:0 14px;color:var(--cart-t1);font-size:14px;margin-bottom:14px;
+  transition:border-color .15s;font-family:var(--fn);
+}
+.pos-auth-box input:focus{outline:none;border-color:var(--acc);}
+.pos-auth-err{font-size:12px;color:#fca5a5;margin-bottom:10px;display:none;background:rgba(239,68,68,.12);border-radius:8px;padding:8px 12px;}
+.pos-auth-btn{
+  width:100%;height:46px;border:none;border-radius:11px;
+  background:var(--acc);color:#fff;font-size:14px;font-weight:800;cursor:pointer;
+  font-family:var(--fn);transition:all .15s;box-shadow:0 4px 18px rgba(99,102,241,.4);
+}
+.pos-auth-btn:hover{background:var(--acc2);}
+.pos-auth-btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none;}
+
+/* Calculator */
+.cbtn{
+  background:var(--sf2);border:1.5px solid var(--bd);border-radius:10px;
+  padding:11px 4px;font-size:15px;font-weight:700;color:var(--t1);cursor:pointer;
+  transition:all .1s;text-align:center;line-height:1;
+}
+.cbtn:hover{background:var(--sf3);border-color:var(--bd2);}
+.cbtn:active{transform:scale(.91);}
+.cbtn.op{color:var(--acc);border-color:#c7d2fe;background:#eef2ff;}
+.cbtn.accent{background:var(--acc);border-color:var(--acc2);color:#fff;box-shadow:0 2px 8px rgba(99,102,241,.3);}
 .cbtn.accent:hover{background:var(--acc2);}
-.cbtn.accent2{background:#fee2e2;border-color:#fca5a5;color:var(--red);font-size:13px;}
+.cbtn.accent2{background:#fee2e2;border-color:#fca5a5;color:var(--red);}
 .cbtn.accent2:hover{background:#fecaca;}
 
-/* toast */
-.ptost{position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:var(--sf);border:1px solid var(--bd2);border-radius:10px;padding:10px 20px;font-size:12.5px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:999;animation:tin .2s ease;pointer-events:none;display:none;white-space:nowrap;}
-.ptost.ok{border-color:var(--teal);color:var(--teal);}
-.ptost.err{border-color:var(--red);color:var(--red);}
-.ptost.warn{border-color:var(--amb);color:var(--amb);}
-@keyframes tin{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+/* Toast */
+.ptost{
+  position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+  background:var(--t1);border-radius:12px;padding:11px 22px;
+  font-size:13px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.25);
+  z-index:999;animation:tin .2s ease;pointer-events:none;display:none;white-space:nowrap;color:#f8fafc;
+}
+.ptost.ok{background:#14532d;color:#86efac;box-shadow:0 10px 30px rgba(34,197,94,.25);}
+.ptost.err{background:#7f1d1d;color:#fca5a5;box-shadow:0 10px 30px rgba(239,68,68,.25);}
+.ptost.warn{background:#78350f;color:#fcd34d;box-shadow:0 10px 30px rgba(245,158,11,.25);}
+@keyframes tin{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 </style>
 </head>
 <body>
@@ -393,7 +485,10 @@ button{cursor:pointer;}
 <!-- ── Auth gate ── -->
 <div class="pos-auth" id="pos-auth" style="display:none">
   <div class="pos-auth-box">
-    <div class="pos-auth-logo">TaxFlow POS</div>
+    <div class="pos-auth-logo">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1" y="3" width="14" height="10" rx="1.5"/><circle cx="8" cy="8" r="2.5"/></svg>
+      TaxFlow POS
+    </div>
     <h2>Sign in to continue</h2>
     <p>Enter your credentials to open the POS terminal.</p>
     <form onsubmit="posLogin(event)">
@@ -419,23 +514,23 @@ button{cursor:pointer;}
       <span class="ptop-brand-tag">POS</span>
     </div>
     <div class="ptop-div"></div>
-    <div class="ptop-loc">
+    <div class="ptop-pill">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 1.5a4 4 0 014 4c0 3-4 9-4 9S4 8.5 4 5.5a4 4 0 014-4z"/><circle cx="8" cy="5.5" r="1.5"/></svg>
-      <span class="ptop-loc-val" id="pos-loc">Main Store</span>
+      <span id="pos-loc">Main Store</span>
     </div>
     <span class="ptop-clock" id="pos-clock">--/--/---- --:--</span>
     <div class="ptop-spacer"></div>
     <div class="ptop-actions">
-      <button class="ptop-icon" title="Calculator" onclick="toggleCalc()" id="calc-btn" style="color:var(--pur);border-color:#c4b5fd;">
+      <button class="ptop-icon" title="Calculator" onclick="toggleCalc()" id="calc-btn">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 5h2M9 5h2M5 8h2M9 8h2M5 11h2M9 11h2"/></svg>
       </button>
-      <button class="ptop-icon grn" title="Save as Draft" onclick="saveAs('draft')">
+      <button class="ptop-icon sav" title="Save as Draft" onclick="saveAs('draft')">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h8l2 2v10H3z"/><path d="M5 8h6M5 11h4"/></svg>
       </button>
-      <button class="ptop-icon amb" title="Refresh products" onclick="loadProducts()">
+      <button class="ptop-icon ref" title="Refresh products" onclick="loadProducts()">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13.5 8A5.5 5.5 0 112.5 5"/><path d="M2.5 2v3h3"/></svg>
       </button>
-      <button class="ptop-icon red" title="Clear order" onclick="clearCart()">
+      <button class="ptop-icon clr" title="Clear order" onclick="clearCart()">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 3l10 10M13 3L3 13"/></svg>
       </button>
       <div class="ptop-div"></div>
@@ -443,7 +538,7 @@ button{cursor:pointer;}
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
         Transactions
       </button>
-      <button class="ptop-btn dark" onclick="window.location.href='/'">
+      <button class="ptop-btn accent" onclick="window.location.href='/'">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
         Dashboard
       </button>
@@ -453,12 +548,11 @@ button{cursor:pointer;}
   <!-- ── Main content ── -->
   <div class="pmain">
 
-    <!-- LEFT: Cart panel -->
+    <!-- LEFT: Cart panel (dark) -->
     <div class="pleft">
 
       <!-- Controls -->
       <div class="pctrl">
-        <!-- Customer -->
         <div class="pctrl-row">
           <div class="pctrl-ico">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 13c0-3 2-5 6-5s6 2 6 5"/></svg>
@@ -466,7 +560,6 @@ button{cursor:pointer;}
           <input class="pctrl-inp" id="pos-cust" value="Walk-In Customer" placeholder="Customer name">
           <button class="pctrl-add" title="New customer" onclick="openAddCustomer()">+</button>
         </div>
-        <!-- Service / Table / Staff -->
         <div class="pctrl-row" style="gap:6px">
           <div class="pctrl-ico" style="flex-shrink:0">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M5 6h6M5 10h4"/></svg>
@@ -481,7 +574,7 @@ button{cursor:pointer;}
           <div class="pctrl-ico" style="flex-shrink:0">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="7" width="14" height="2"/><path d="M3 9v4M13 9v4M2 7V4a1 1 0 011-1h10a1 1 0 011 1v3"/></svg>
           </div>
-          <select class="pctrl-sel" id="pos-table" style="max-width:90px">
+          <select class="pctrl-sel" id="pos-table" style="max-width:80px">
             <option value="">Table</option>
             <option>Table 1</option><option>Table 2</option><option>Table 3</option>
             <option>Table 4</option><option>Table 5</option>
@@ -489,7 +582,7 @@ button{cursor:pointer;}
           <div class="pctrl-ico" style="flex-shrink:0">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 9a3 3 0 100-6 3 3 0 000 6z"/><path d="M2 14s1-4 6-4 6 4 6 4"/></svg>
           </div>
-          <select class="pctrl-sel" id="pos-staff" style="max-width:90px">
+          <select class="pctrl-sel" id="pos-staff" style="max-width:80px">
             <option value="">Staff</option>
           </select>
         </div>
@@ -500,13 +593,14 @@ button{cursor:pointer;}
         <div class="pcart-hd">
           <span>Product</span>
           <span style="text-align:center">Qty</span>
-          <span class="r">Amount</span>
+          <span class="r">Total</span>
           <button class="pcart-hd-x" onclick="clearCart()" title="Clear all">✕</button>
         </div>
         <div class="pcart-body" id="pcart-body">
           <div class="pcart-empty">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" width="44" height="44" style="color:var(--bd2)"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a4 4 0 00-8 0v2"/></svg>
-            <span>Cart is empty — tap a product to add</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="52" height="52" style="color:#475569"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a4 4 0 00-8 0v2"/></svg>
+            <span>Cart is empty</span>
+            <span style="font-size:11px;color:var(--cart-t3)">Tap a product on the right to add</span>
           </div>
         </div>
       </div>
@@ -522,13 +616,9 @@ button{cursor:pointer;}
             <label>Subtotal</label>
             <b id="s-sub">0.00</b>
           </div>
-          <div class="psum-stat">
+          <div class="psum-stat hi">
             <label id="s-vat-lbl">VAT</label>
             <b id="s-vat">0.00</b>
-          </div>
-          <div class="psum-stat hi">
-            <label>Total Payable</label>
-            <b id="s-total">0.00</b>
           </div>
         </div>
         <div class="psum-adjs">
@@ -551,18 +641,50 @@ button{cursor:pointer;}
         </div>
       </div>
 
+      <!-- Payment bar -->
+      <div class="pbot">
+        <div class="pbot-total">
+          <div>
+            <div class="pbot-total-lbl">Total Payable</div>
+            <div class="pbot-total-val" id="bot-total">AED 0.00</div>
+          </div>
+          <svg viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="1.5" width="36" height="36"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 12h.01M18 12h.01"/></svg>
+        </div>
+        <div class="pbot-methods">
+          <button class="pbtn cancel" onclick="clearCart()">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3l10 10M13 3L3 13"/></svg>
+            Cancel
+          </button>
+          <button class="pbtn credit" onclick="creditSale()">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="4" width="14" height="9" rx="1"/><path d="M1 7h14M4 11h3"/></svg>
+            Credit
+          </button>
+          <button class="pbtn card" id="btn-card" disabled onclick="openPay('card')">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="4" width="14" height="9" rx="1"/><path d="M1 7h14M10 11h2"/></svg>
+            Card
+          </button>
+          <button class="pbtn cash" id="btn-cash" disabled onclick="openPay('cash')">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="3" width="14" height="10" rx="1"/><circle cx="8" cy="8" r="2.5"/></svg>
+            Cash
+          </button>
+        </div>
+        <button class="pbtn multi" id="btn-multi" disabled onclick="openPay('multi')" style="width:100%;margin-top:7px;height:40px;flex-direction:row;gap:8px;font-size:12px;">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 5h10M1 8h7M1 11h4"/><rect x="9" y="6" width="6" height="8" rx="1"/></svg>
+          Split Payment (Cash + Card)
+        </button>
+      </div>
+
     </div>
 
     <!-- RIGHT: Product panel -->
     <div class="pright">
 
-      <!-- Filter tabs + search -->
       <div class="pright-top">
         <button class="pftab active" id="fb-cat" onclick="toggleFilter('cat')">Category</button>
         <button class="pftab" id="fb-brd" onclick="toggleFilter('brd')">Brands</button>
         <div class="pright-sep"></div>
         <div class="psearch">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5l3 3"/></svg>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5l3 3"/></svg>
           <input id="pos-search2" placeholder="Search by name or code…" oninput="syncSearch(this.value)">
         </div>
         <button class="pright-add" title="Add new product" onclick="openAddProduct()">
@@ -570,56 +692,20 @@ button{cursor:pointer;}
         </button>
       </div>
 
-      <!-- Category chips -->
       <div class="pchips" id="pchips">
         <button class="pchip on" onclick="filterChip('',this)">All</button>
       </div>
 
-      <!-- Product grid -->
       <div class="pgrid" id="pgrid">
-        <div class="pgrid-empty">Loading products…</div>
+        <div class="pgrid-empty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="48" height="48"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <div>Loading products…</div>
+        </div>
       </div>
 
     </div>
 
   </div><!-- /pmain -->
-
-  <!-- ── Bottom action bar ── -->
-  <div class="pbot">
-
-    <button class="pbtn cancel" onclick="clearCart()">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 3l10 10M13 3L3 13"/></svg>
-      Cancel
-    </button>
-
-    <div class="pbot-sep"></div>
-
-    <button class="pbtn credit" onclick="creditSale()">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="4" width="14" height="9" rx="1"/><path d="M1 7h14M4 11h3"/></svg>
-      Credit
-    </button>
-    <button class="pbtn card" id="btn-card" disabled onclick="openPay('card')">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="4" width="14" height="9" rx="1"/><path d="M1 7h14M10 11h2"/></svg>
-      Card
-    </button>
-    <button class="pbtn multi" id="btn-multi" disabled onclick="openPay('multi')">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 5h10M1 8h7M1 11h4"/><rect x="9" y="6" width="6" height="8" rx="1"/></svg>
-      Split Pay
-    </button>
-
-    <div class="pbot-sep"></div>
-
-    <button class="pbtn cash" id="btn-cash" disabled onclick="openPay('cash')">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="3" width="14" height="10" rx="1"/><circle cx="8" cy="8" r="2.5"/><path d="M4 8h.01M12 8h.01"/></svg>
-      Cash
-    </button>
-
-    <div class="pbot-total">
-      <div class="pbot-total-lbl">Total Payable</div>
-      <div class="pbot-total-val" id="bot-total">AED 0.00</div>
-    </div>
-
-  </div>
 
 </div><!-- /pos-app -->
 
@@ -677,35 +763,35 @@ button{cursor:pointer;}
 <!-- ── Recent Transactions modal ── -->
 <div class="ov" id="ov-recent" style="display:none">
   <div class="ov-box ov-recent">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
       <div class="ov-title">Recent Transactions</div>
-      <button onclick="closeRecent()" style="background:none;border:none;font-size:18px;color:var(--t3);line-height:1;cursor:pointer">✕</button>
+      <button onclick="closeRecent()" style="background:none;border:none;font-size:18px;color:var(--t3);line-height:1;cursor:pointer;padding:4px;border-radius:6px;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--t3)'">✕</button>
     </div>
     <div class="ov-recent-body" id="ov-recent-body">
-      <div style="padding:30px;text-align:center;color:var(--t3)">Loading…</div>
+      <div style="padding:40px;text-align:center;color:var(--t3)">Loading…</div>
     </div>
-    <div style="margin-top:12px">
+    <div style="margin-top:14px">
       <button class="rcpt-btn" style="width:100%" onclick="closeRecent()">Close</button>
     </div>
   </div>
 </div>
 
 <!-- ── Calculator Panel ── -->
-<div id="calc-panel" style="display:none;position:fixed;top:58px;right:16px;z-index:900;
-  background:#fff;border:1.5px solid var(--bd2);border-radius:16px;
-  box-shadow:0 12px 40px rgba(0,0,0,.18);padding:14px;width:228px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-    <span style="font-size:12px;font-weight:700;color:var(--t3);letter-spacing:.5px;text-transform:uppercase;">Calculator</span>
-    <button onclick="toggleCalc()" style="background:none;border:none;cursor:pointer;color:var(--t3);padding:0;line-height:1;">
+<div id="calc-panel" style="display:none;position:fixed;top:60px;right:16px;z-index:900;
+  background:#fff;border:1.5px solid var(--bd2);border-radius:18px;
+  box-shadow:0 20px 50px rgba(0,0,0,.2);padding:16px;width:236px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <span style="font-size:11px;font-weight:800;color:var(--t3);letter-spacing:.6px;text-transform:uppercase;">Calculator</span>
+    <button onclick="toggleCalc()" style="background:none;border:none;cursor:pointer;color:var(--t3);padding:2px;line-height:1;border-radius:5px;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--t3)'">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"/></svg>
     </button>
   </div>
   <div id="calc-disp" style="
-    background:var(--sf3);border:1.5px solid var(--bd);border-radius:10px;
-    padding:10px 12px;margin-bottom:10px;text-align:right;min-height:52px;
+    background:var(--sf3);border:1.5px solid var(--bd);border-radius:12px;
+    padding:12px 14px;margin-bottom:12px;text-align:right;min-height:56px;
     display:flex;flex-direction:column;justify-content:flex-end;gap:2px;">
     <div id="calc-expr" style="font-size:11px;color:var(--t3);min-height:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
-    <div id="calc-val" style="font-size:26px;font-weight:900;color:var(--t1);font-variant-numeric:tabular-nums;letter-spacing:-.5px;">0</div>
+    <div id="calc-val" style="font-size:28px;font-weight:900;color:var(--t1);font-variant-numeric:tabular-nums;letter-spacing:-.5px;">0</div>
   </div>
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
     <button class="cbtn accent2" onclick="calcOp('clear')" style="grid-column:span 2;">C</button>
@@ -731,7 +817,7 @@ button{cursor:pointer;}
 
 <!-- ── Add Customer Modal ── -->
 <div class="ov" id="ov-add-cust" style="display:none">
-  <div class="ov-box" style="width:400px">
+  <div class="ov-box" style="width:410px">
     <div class="ov-title">Add Customer</div>
     <div class="ov-sub">New customer will be saved to the database</div>
     <label>Full Name *</label>
@@ -753,10 +839,10 @@ button{cursor:pointer;}
 
 <!-- ── Add Product Modal ── -->
 <div class="ov" id="ov-add-prod" style="display:none">
-  <div class="ov-box" style="width:440px;max-height:calc(100vh - 60px);overflow-y:auto">
+  <div class="ov-box" style="width:460px;max-height:calc(100vh - 60px);overflow-y:auto">
     <div class="ov-title">Add Product</div>
     <div class="ov-sub">New product will be saved to Inventory</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 14px">
       <div>
         <label>Product Name *</label>
         <input type="text" id="ap-name" placeholder="e.g. Laptop Stand">
@@ -775,7 +861,7 @@ button{cursor:pointer;}
       </div>
       <div>
         <label>VAT Rate</label>
-        <select id="ap-vat" style="width:100%;height:40px;background:var(--sf2);border:1px solid var(--bd);border-radius:8px;padding:0 10px;color:var(--t1);font-size:13px;margin-bottom:10px;font-family:var(--fn)">
+        <select id="ap-vat" style="width:100%;height:42px;background:var(--sf2);border:1.5px solid var(--bd);border-radius:10px;padding:0 12px;color:var(--t1);font-size:13px;margin-bottom:12px;font-family:var(--fn)">
           <option value="5%">5%</option>
           <option value="0%">0% (Zero-rated)</option>
           <option value="Exempt">Exempt</option>
@@ -818,7 +904,7 @@ const APIBASE = (()=>{
 const TOKEN   = () => localStorage.getItem('taxflow_token') || '';
 const CONAME  = () => localStorage.getItem('taxflow_company_name') || 'TaxFlow';
 
-const COLORS  = ['#4f5df2','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#ea580c'];
+const COLORS  = ['#6366f1','#22c55e','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#f97316'];
 function tileColor(name){ let h=0; for(let i=0;i<name.length;i++) h=name.charCodeAt(i)+((h<<5)-h); return COLORS[Math.abs(h)%COLORS.length]; }
 function tileInit(name){ return (name||'?').split(/\s+/).map(w=>w[0]||'').join('').slice(0,2).toUpperCase()||'??'; }
 function parseVat(v){ const m=String(v||'').match(/(\d+)/); return m?Number(m[1]):0; }
@@ -897,7 +983,7 @@ function tickClock(){
 
 // ── Products ──────────────────────────────────────────────────────────
 async function loadProducts(){
-  document.getElementById('pgrid').innerHTML = '<div class="pgrid-empty">Loading products…</div>';
+  document.getElementById('pgrid').innerHTML = '<div class="pgrid-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="48" height="48"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><div>Loading products…</div></div>';
   try{
     const data = await api('/app-data/records/products?limit=500');
     _products = (data.records||[]).filter(p=>!['inactive','discontinued'].includes((p.status||'').toLowerCase()));
@@ -951,7 +1037,10 @@ function syncSearch(val){
 let _calcExpr = '', _calcVal = '0', _calcJustEvaled = false;
 function toggleCalc(){
   const p = document.getElementById('calc-panel');
-  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  const btn = document.getElementById('calc-btn');
+  const showing = p.style.display !== 'none';
+  p.style.display = showing ? 'none' : 'block';
+  btn.classList.toggle('calc-on', !showing);
 }
 function _calcRefresh(){
   document.getElementById('calc-expr').textContent = _calcExpr;
@@ -1004,7 +1093,7 @@ function renderGrid(){
 
   const grid = document.getElementById('pgrid');
   if(!prods.length){
-    grid.innerHTML = `<div class="pgrid-empty">${q||_activeChip?'No products match.':'No products yet — add them in Inventory.'}</div>`;
+    grid.innerHTML = `<div class="pgrid-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="48" height="48"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><div>${q||_activeChip?'No products match your search.':'No products yet — add them in Inventory.'}</div></div>`;
     return;
   }
   grid.innerHTML = prods.map((p,idx)=>{
@@ -1076,7 +1165,7 @@ function recalc(){ renderSummary(); }
 function renderCart(){
   const body = document.getElementById('pcart-body');
   if(!_cart.length){
-    body.innerHTML = '<div class="pcart-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" width="44" height="44" style="color:var(--bd2)"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a4 4 0 00-8 0v2"/></svg><span>Cart is empty — tap a product to add</span></div>';
+    body.innerHTML = '<div class="pcart-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="52" height="52" style="color:#475569"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a4 4 0 00-8 0v2"/></svg><span>Cart is empty</span><span style="font-size:11px;color:var(--cart-t3)">Tap a product on the right to add</span></div>';
   }else{
     body.innerHTML = _cart.map((item)=>{
       const lineEx  = item.price * item.qty;
@@ -1106,7 +1195,6 @@ function renderSummary(){
   setText('s-items', items);
   setText('s-sub',   sub.toFixed(2));
   setText('s-vat',   vat.toFixed(2));
-  setText('s-total', total.toFixed(2));
   setText('bot-total', 'AED '+total.toFixed(2));
   const lbl = document.getElementById('s-vat-lbl');
   if(lbl) lbl.textContent = vatLabel + ':';
@@ -1377,25 +1465,22 @@ function newSale(){
 async function openRecent(){
   document.getElementById('ov-recent').style.display='flex';
   const body=document.getElementById('ov-recent-body');
-  body.innerHTML='<div style="padding:30px;text-align:center;color:var(--t3)">Loading…</div>';
+  body.innerHTML='<div style="padding:40px;text-align:center;color:var(--t3)">Loading…</div>';
   try{
     const data=await api('/app-data/records/posSales?limit=50');
     const sales=(data.records||[]).filter(s=>s.status!=='draft'&&s.status!=='suspended').sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
     if(!sales.length){body.innerHTML='<div style="padding:40px;text-align:center;color:var(--t3)">No transactions yet.</div>';return;}
     body.innerHTML=`<table><thead><tr><th>Receipt</th><th>Date</th><th>Customer</th><th>Total</th><th>Payment</th></tr></thead>
       <tbody>${sales.map(s=>`<tr>
-        <td style="color:var(--acc);font-weight:600">${esc(s.receipt_no||'')}</td>
+        <td style="color:var(--acc);font-weight:700">${esc(s.receipt_no||'')}</td>
         <td style="color:var(--t2)">${esc(s.date||'')}</td>
         <td>${esc(s.customer||'Walk-in')}</td>
         <td style="font-weight:700;font-variant-numeric:tabular-nums">AED ${Number(s.total||0).toFixed(2)}</td>
         <td style="text-transform:capitalize">${esc(s.payment_method||'—')}</td>
       </tr>`).join('')}</tbody></table>`;
-  }catch{body.innerHTML='<div style="padding:30px;text-align:center;color:var(--t3)">Failed to load.</div>';}
+  }catch{body.innerHTML='<div style="padding:40px;text-align:center;color:var(--t3)">Failed to load.</div>';}
 }
 function closeRecent(){ document.getElementById('ov-recent').style.display='none'; }
-
-// ── Calculator ────────────────────────────────────────────────────────
-function openCalc(){ toast('Use your device calculator','warn'); }
 
 // ── Utils ─────────────────────────────────────────────────────────────
 function esc(v){ return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -1506,6 +1591,7 @@ document.addEventListener('click', e => {
   const btn   = document.getElementById('calc-btn');
   if(panel && panel.style.display !== 'none' && !panel.contains(e.target) && e.target !== btn && !btn.contains(e.target)){
     panel.style.display = 'none';
+    btn.classList.remove('calc-on');
   }
 });
 </script>
