@@ -212,20 +212,21 @@ button{cursor:pointer;border:none;background:none;}
 
 /* Payment bar */
 .pbot{
-  padding:12px 14px;background:var(--cart);
+  display:flex;align-items:center;gap:8px;
+  padding:10px 14px;background:var(--cart);
   border-top:1px solid var(--cart-bd);flex-shrink:0;
 }
 .pbot-total{
-  display:flex;align-items:center;justify-content:space-between;
-  background:var(--acc);border-radius:12px;padding:12px 16px;margin-bottom:10px;
+  display:flex;flex-direction:column;justify-content:center;flex-shrink:0;
+  background:var(--acc);border-radius:12px;padding:10px 14px;
 }
-.pbot-total-lbl{font-size:11px;font-weight:700;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px;}
-.pbot-total-val{font-size:30px;font-weight:900;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:-.5px;}
-.pbot-methods{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:7px;}
+.pbot-total-lbl{font-size:10px;font-weight:700;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px;}
+.pbot-total-val{font-size:22px;font-weight:900;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:-.5px;white-space:nowrap;}
+.pbot-methods{display:flex;gap:6px;flex:1;}
 .pbtn{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:4px;padding:10px 6px;border-radius:11px;border:1px solid transparent;
-  font-size:11px;font-weight:700;height:56px;
+  gap:3px;padding:8px 6px;border-radius:11px;border:1px solid transparent;
+  font-size:11px;font-weight:700;flex:1;height:52px;
   transition:all .15s;
 }
 .pbtn svg{width:18px;height:18px;flex-shrink:0;}
@@ -644,11 +645,8 @@ button{cursor:pointer;border:none;background:none;}
       <!-- Payment bar -->
       <div class="pbot">
         <div class="pbot-total">
-          <div>
-            <div class="pbot-total-lbl">Total Payable</div>
-            <div class="pbot-total-val" id="bot-total">AED 0.00</div>
-          </div>
-          <svg viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="1.5" width="36" height="36"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 12h.01M18 12h.01"/></svg>
+          <div class="pbot-total-lbl">Total Payable</div>
+          <div class="pbot-total-val" id="bot-total">AED 0.00</div>
         </div>
         <div class="pbot-methods">
           <button class="pbtn cancel" onclick="clearCart()">
@@ -663,15 +661,15 @@ button{cursor:pointer;border:none;background:none;}
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="4" width="14" height="9" rx="1"/><path d="M1 7h14M10 11h2"/></svg>
             Card
           </button>
+          <button class="pbtn multi" id="btn-multi" disabled onclick="openPay('multi')">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 5h10M1 8h7M1 11h4"/><rect x="9" y="6" width="6" height="8" rx="1"/></svg>
+            Split
+          </button>
           <button class="pbtn cash" id="btn-cash" disabled onclick="openPay('cash')">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="3" width="14" height="10" rx="1"/><circle cx="8" cy="8" r="2.5"/></svg>
             Cash
           </button>
         </div>
-        <button class="pbtn multi" id="btn-multi" disabled onclick="openPay('multi')" style="width:100%;margin-top:7px;height:40px;flex-direction:row;gap:8px;font-size:12px;">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 5h10M1 8h7M1 11h4"/><rect x="9" y="6" width="6" height="8" rx="1"/></svg>
-          Split Payment (Cash + Card)
-        </button>
       </div>
 
     </div>
