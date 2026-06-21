@@ -156,6 +156,7 @@ function go(page){
     topAction.onclick=m.ao||null;
     topAction.classList.toggle('hidden',!m.a);
   }
+  localStorage.setItem('taxflow_current_page',page);
   closeSidebar();
   if(page==='reports')syncReportsFromDatabase();
   if(page==='exception')loadExceptionCenter();
@@ -1514,6 +1515,7 @@ function saveInventoryItem(){
 
 function logout(){
   localStorage.removeItem('taxflow_token');
+  localStorage.removeItem('taxflow_current_page');
   window.location.replace('/login');
 }
 
@@ -17156,6 +17158,8 @@ function initApp(){
   enhancePageTables('page-dashboard');
   syncDashboardFromDatabase().catch(err=>console.warn('Dashboard sync failed during init:',err));
   hydrateFromServer().catch(err=>console.warn('Database hydrate failed during init:',err));
+  const _lastPage=localStorage.getItem('taxflow_current_page');
+  if(_lastPage&&_lastPage!=='dashboard'){setTimeout(()=>go(_lastPage),400);}
   scheduleIdleTask(()=>{
     updateAccountSelectors();
     recalcJournal();
