@@ -66,17 +66,26 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     def startup() -> None:
+        import logging
+        log = logging.getLogger("taxflow")
         settings.assert_production_secrets()
-        Base.metadata.create_all(bind=engine)
-        ensure_schema_updates()
-        seed_initial_data()
+        try:
+            Base.metadata.create_all(bind=engine)
+            ensure_schema_updates()
+            seed_initial_data()
+        except Exception as exc:
+            log.error("Startup DB init failed (app will still serve traffic): %s", exc)
 
     static_dir = pathlib.Path(__file__).parent.parent / "frontend" / "public"
     site_dir = static_dir / "site"
 
     @app.get("/", response_model=None)
     def root():
-        return FileResponse(str(static_dir / "taxflow" / "index.html"))
+        from fastapi.responses import RedirectResponse
+        index = static_dir / "taxflow" / "index.html"
+        if index.exists():
+            return FileResponse(str(index))
+        return RedirectResponse(url="/login", status_code=302)
 
     @app.get("/health")
     def health() -> dict[str, str]:
