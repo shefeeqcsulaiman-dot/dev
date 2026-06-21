@@ -70,7 +70,7 @@ services:
       # ── Workers & pool ────────────────────────────────────────────────
       - key: WORKERS
         scope: RUN_TIME
-        value: "4"
+        value: "6"
 
       - key: DB_POOL_SIZE
         scope: RUN_TIME
