@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import (
@@ -166,6 +167,23 @@ def create_gl_entries_from_journal(
     if existing:
         return
     for journal_line in journal.lines:
+        # Compute running balance: opening_balance + sum of all prior GL entries for this account
+        account = db.query(Account).filter(Account.id == journal_line.account_id).first()
+        ob = money(account.opening_balance if account else 0)
+        ob_type = (account.opening_balance_type or "DR") if account else "DR"
+        running = ob if ob_type == "DR" else -ob
+        prior = (
+            db.query(
+                func.coalesce(func.sum(GeneralLedgerEntry.debit - GeneralLedgerEntry.credit), Decimal("0.00"))
+            )
+            .filter(
+                GeneralLedgerEntry.account_id == journal_line.account_id,
+                GeneralLedgerEntry.company_id == journal.company_id,
+            )
+            .scalar()
+        )
+        running += money(prior or 0)
+        line_net = money(journal_line.debit) - money(journal_line.credit)
         db.add(
             GeneralLedgerEntry(
                 company_id=journal.company_id,
@@ -177,7 +195,7 @@ def create_gl_entries_from_journal(
                 journal_line_id=journal_line.id,
                 debit=money(journal_line.debit),
                 credit=money(journal_line.credit),
-                balance=money(journal_line.debit) - money(journal_line.credit),
+                balance=running + line_net,
                 party=party,
                 cost_center=cost_center,
                 narration=journal_line.description or journal.description,

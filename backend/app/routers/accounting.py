@@ -698,13 +698,85 @@ def approve_voucher(
 @router.get("/general-ledger", response_model=list[GeneralLedgerEntryOut])
 def list_general_ledger(
     account_id: str | None = None,
+    skip: int = 0,
+    limit: int = 500,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[GeneralLedgerEntry]:
-    query = db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == current_user.company_id)
+    query = (
+        db.query(GeneralLedgerEntry)
+        .filter(GeneralLedgerEntry.company_id == current_user.company_id)
+    )
     if account_id:
         query = query.filter(GeneralLedgerEntry.account_id == account_id)
-    return query.order_by(GeneralLedgerEntry.entry_date.desc(), GeneralLedgerEntry.created_at.desc()).all()
+    return (
+        query
+        .order_by(GeneralLedgerEntry.entry_date.asc(), GeneralLedgerEntry.created_at.asc())
+        .offset(skip)
+        .limit(min(limit, 2000))
+        .all()
+    )
+
+
+@router.post("/journal/{journal_id}/reverse", response_model=JournalOut)
+def reverse_journal(
+    journal_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> JournalEntry:
+    original = (
+        db.query(JournalEntry)
+        .options(joinedload(JournalEntry.lines))
+        .filter(JournalEntry.company_id == current_user.company_id, JournalEntry.id == journal_id)
+        .first()
+    )
+    if not original:
+        raise HTTPException(status_code=404, detail="Journal entry not found")
+    if original.source_module == "reversal":
+        raise HTTPException(status_code=400, detail="Cannot reverse a reversal entry")
+    already = db.query(JournalEntry).filter(
+        JournalEntry.company_id == current_user.company_id,
+        JournalEntry.source_module == "reversal",
+        JournalEntry.source_id == original.id,
+    ).first()
+    if already:
+        raise HTTPException(status_code=400, detail="This journal entry has already been reversed")
+    reversal = JournalEntry(
+        company_id=current_user.company_id,
+        entry_number=f"REV-{original.entry_number}",
+        source_module="reversal",
+        source_id=original.id,
+        entry_date=datetime.now(timezone.utc),
+        description=f"Reversal of {original.entry_number}: {original.description}",
+        status="posted",
+    )
+    reversal.lines = [
+        JournalLine(
+            account_id=l.account_id,
+            description=f"Reversal: {l.description or ''}",
+            debit=money(l.credit),
+            credit=money(l.debit),
+        )
+        for l in original.lines
+    ]
+    db.add(reversal)
+    db.flush()
+    create_gl_entries_from_journal(
+        db, reversal,
+        voucher_no=f"REV-{original.entry_number}",
+        voucher_type="reversal",
+    )
+    db.add(AuditLog(
+        company_id=current_user.company_id,
+        user_id=current_user.id,
+        module="accounting",
+        action="journal_reversed",
+        record_id=original.id,
+        detail=reversal.entry_number,
+    ))
+    db.commit()
+    db.refresh(reversal)
+    return reversal
 
 
 @router.get("/posting-jobs", response_model=list[PostingJobOut])

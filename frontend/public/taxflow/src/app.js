@@ -2638,7 +2638,39 @@ function renderTrialBalanceReport(rows){
 function renderGeneralLedger(rows){
   const body=document.getElementById('rep-gl-body');
   if(!body)return;
-  body.innerHTML=rows.length?rows.map(r=>`<tr><td class="mono" style="white-space:nowrap">${escapeHtml(r.date)}</td><td class="mono">${escapeHtml(r.reference)}</td><td>${escapeHtml(r.account_code)} <span style="color:var(--text3)">${escapeHtml(r.account_name)}</span></td><td>${escapeHtml(r.description)}</td><td class="mono" style="text-align:right">${reportAmount(r.debit)}</td><td class="mono" style="text-align:right">${reportAmount(r.credit)}</td></tr>`).join(''):`<tr><td colspan="6" style="color:var(--text3);text-align:center">No posted journal entries in database.</td></tr>`;
+  if(!rows.length){
+    body.innerHTML='<tr><td colspan="8" style="color:var(--text3);text-align:center">No posted journal entries in database.</td></tr>';
+    return;
+  }
+  let lastAccount='';
+  let html='';
+  rows.forEach(r=>{
+    const isNewAccount=r.account_code!==lastAccount;
+    if(isNewAccount&&lastAccount){
+      html+=`<tr style="background:var(--surface2)"><td colspan="8" style="height:6px;border:none"></td></tr>`;
+    }
+    if(isNewAccount){
+      lastAccount=r.account_code;
+      html+=`<tr style="background:var(--surface2);font-weight:700">
+        <td colspan="8" style="padding:8px 10px;font-size:12px;letter-spacing:.4px">
+          ${escapeHtml(r.account_code)} — ${escapeHtml(r.account_name)}
+        </td></tr>`;
+    }
+    const isOpening=r.row_type==='opening';
+    const balNum=parseFloat(r.balance||0);
+    const balColor=balNum>=0?'var(--green)':'var(--red,#ef4444)';
+    html+=`<tr style="${isOpening?'font-style:italic;color:var(--text3)':''}">
+      <td class="mono" style="white-space:nowrap;font-size:12px">${escapeHtml(r.date||'')}</td>
+      <td class="mono" style="font-size:12px">${escapeHtml(r.reference||'')}</td>
+      <td style="font-size:11px;color:var(--text3)">${escapeHtml(r.voucher_type||'')}</td>
+      <td style="font-size:12px">${escapeHtml(r.description||'')}</td>
+      <td style="font-size:11px;color:var(--text3)">${escapeHtml(r.party||'')}</td>
+      <td class="mono" style="text-align:right;font-size:12px">${r.debit&&parseFloat(r.debit)?reportAmount(r.debit):''}</td>
+      <td class="mono" style="text-align:right;font-size:12px">${r.credit&&parseFloat(r.credit)?reportAmount(r.credit):''}</td>
+      <td class="mono" style="text-align:right;font-weight:700;font-size:12px;color:${balColor}">${reportAmount(Math.abs(balNum))} ${balNum<0?'Cr':'Dr'}</td>
+    </tr>`;
+  });
+  body.innerHTML=html;
 }
 
 function renderPartyLedger(tbodyId,rows,label,key){
@@ -12844,6 +12876,14 @@ function postLedgerLine({date,ref,description,debit=0,credit=0,account='',accoun
 
 function renderJournalEntry(entry){
   const date=(entry.entry_date||entry.created_at||'').slice(0,10)||'Today';
+  const tbody=document.getElementById('ledger-tbody');
+  if(tbody&&entry.id){
+    removeEmptyState(tbody);
+    const hdr=document.createElement('tr');
+    hdr.style.cssText='background:var(--surface2);font-weight:600;font-size:12px';
+    hdr.innerHTML=`<td colspan="5" style="padding:6px 10px;color:var(--text2)">${escapeHtml(date)} — ${escapeHtml(entry.entry_number||'JE')}: ${escapeHtml(entry.description||'')}</td><td style="text-align:right;padding:6px 10px"><button class="btn btn-g btn-sm" style="font-size:11px;padding:2px 8px" onclick="reverseJournal('${escapeHtml(entry.id)}')">Reverse</button></td>`;
+    tbody.prepend(hdr);
+  }
   (entry.lines||[]).forEach(line=>postLedgerLine({
     date,
     ref:entry.entry_number||entry.ref||'JE',
@@ -12853,6 +12893,17 @@ function renderJournalEntry(entry){
     account_id:line.account_id,
     account:line.account||accountLabelFromId(line.account_id)
   },{persist:false}));
+}
+
+async function reverseJournal(journalId){
+  if(!confirm('Create a reversal entry for this journal? This cannot be undone.'))return;
+  try{
+    const r=await apiFetch('/api/v1/accounting/journal/'+journalId+'/reverse',{method:'POST'});
+    toast('Reversal entry '+r.entry_number+' created','ok');
+    loadAccountingFromDb();
+  }catch(e){
+    toast('Reversal failed: '+(e.message||e),'error');
+  }
 }
 
 async function loadAccountingFromDb(){

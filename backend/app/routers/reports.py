@@ -27,6 +27,7 @@ from app.models import (
     Employee,
     ExceptionEvent,
     FixedAssetRecord,
+    GeneralLedgerEntry,
     Invoice,
     Job,
     JournalEntry,
@@ -999,30 +1000,68 @@ def report_ai_text(revenue: Decimal, gross_margin: Decimal, net_vat: Decimal, ov
 
 def general_ledger_rows(db: Session, company_id: str) -> list[dict[str, str]]:
     rows = (
-        db.query(Account.code, Account.name, JournalEntry.entry_date, JournalEntry.entry_number, JournalLine.description, JournalLine.debit, JournalLine.credit)
-        .join(JournalLine, JournalLine.account_id == Account.id)
-        .join(JournalEntry, JournalEntry.id == JournalLine.journal_id)
-        .filter(Account.company_id == company_id, JournalEntry.company_id == company_id, JournalEntry.status == "posted")
-        .order_by(Account.code, JournalEntry.entry_date)
-        .limit(500)
+        db.query(
+            Account.code,
+            Account.name,
+            Account.opening_balance,
+            Account.opening_balance_type,
+            GeneralLedgerEntry.entry_date,
+            GeneralLedgerEntry.voucher_no,
+            GeneralLedgerEntry.voucher_type,
+            GeneralLedgerEntry.narration,
+            GeneralLedgerEntry.debit,
+            GeneralLedgerEntry.credit,
+            GeneralLedgerEntry.balance,
+            GeneralLedgerEntry.party,
+        )
+        .join(Account, Account.id == GeneralLedgerEntry.account_id)
+        .filter(GeneralLedgerEntry.company_id == company_id)
+        .order_by(Account.code, GeneralLedgerEntry.entry_date, GeneralLedgerEntry.created_at)
+        .limit(2000)
         .all()
     )
-    return [
-        {
+    result = []
+    seen_accounts: dict[str, dict] = {}
+    for code, name, ob, ob_type, entry_date, voucher_no, voucher_type, narration, debit, credit, balance, party in rows:
+        if code not in seen_accounts:
+            ob_val = money(ob or 0)
+            ob_dr = money(ob_val) if ob_type == "DR" else Decimal("0.00")
+            ob_cr = money(ob_val) if ob_type == "CR" else Decimal("0.00")
+            ob_bal = ob_dr - ob_cr
+            seen_accounts[code] = {"name": name, "ob_bal": ob_bal}
+            if ob_val:
+                result.append({
+                    "account_code": code,
+                    "account_name": name,
+                    "date": "",
+                    "reference": "Opening Balance",
+                    "voucher_type": "",
+                    "description": "Balance brought forward",
+                    "debit": amount(ob_dr),
+                    "credit": amount(ob_cr),
+                    "balance": amount(ob_bal),
+                    "party": "",
+                    "row_type": "opening",
+                })
+        result.append({
             "account_code": code,
             "account_name": name,
-            "date": str(entry_date or ""),
-            "reference": str(entry_no or ""),
-            "description": str(desc or ""),
+            "date": str(entry_date.date() if entry_date else ""),
+            "reference": str(voucher_no or ""),
+            "voucher_type": str(voucher_type or ""),
+            "description": str(narration or ""),
             "debit": amount(money(debit)),
             "credit": amount(money(credit)),
-        }
-        for code, name, entry_date, entry_no, desc, debit, credit in rows
-    ]
+            "balance": amount(money(balance)),
+            "party": str(party or ""),
+            "row_type": "entry",
+        })
+    return result
 
 
 def customer_ledger_rows(db: Session, company_id: str, app_sales: list[dict[str, Any]]) -> list[dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
+    # Single source of truth: Invoice table only
     for name, total, cnt in (
         db.query(Invoice.customer_name, func.coalesce(func.sum(Invoice.total), 0), func.count(Invoice.id))
         .filter(Invoice.company_id == company_id)
@@ -1031,20 +1070,21 @@ def customer_ledger_rows(db: Session, company_id: str, app_sales: list[dict[str,
     ):
         key = str(name or "Unknown").strip() or "Unknown"
         e = result.setdefault(key, {"total": Decimal("0"), "count": 0})
-        e["total"] += money(total); e["count"] += int(cnt)
-    for name, total, cnt in (
-        db.query(SourceTransaction.party_name, func.coalesce(func.sum(SourceTransaction.total), 0), func.count(SourceTransaction.id))
-        .filter(SourceTransaction.company_id == company_id, SourceTransaction.module.in_(["sales", "sales_invoice"]))
-        .group_by(SourceTransaction.party_name)
-        .all()
-    ):
-        key = str(name or "Unknown").strip() or "Unknown"
-        e = result.setdefault(key, {"total": Decimal("0"), "count": 0})
-        e["total"] += money(total); e["count"] += int(cnt)
+        e["total"] += money(total)
+        e["count"] += int(cnt)
+    # Include app_sales only if not already in Invoice table (check by reference)
+    invoice_refs = {
+        str(r[0] or "").strip()
+        for r in db.query(Invoice.invoice_number).filter(Invoice.company_id == company_id).all()
+    }
     for row in app_sales:
+        ref = str(row.get("invoice_no") or row.get("invoice_number") or row.get("reference") or "").strip()
+        if ref and ref in invoice_refs:
+            continue
         key = str(row.get("customer") or row.get("customer_name") or "Unknown").strip() or "Unknown"
         e = result.setdefault(key, {"total": Decimal("0"), "count": 0})
-        e["total"] += record_amount(row, "total", "amount", "net_amount"); e["count"] += 1
+        e["total"] += record_amount(row, "total", "amount", "net_amount")
+        e["count"] += 1
     return sorted(
         [{"party": k, "customer": k, "total": amount(v["total"]), "transactions": v["count"]} for k, v in result.items()],
         key=lambda x: -money(x["total"])
@@ -1053,19 +1093,33 @@ def customer_ledger_rows(db: Session, company_id: str, app_sales: list[dict[str,
 
 def supplier_ledger_rows(db: Session, company_id: str, app_purchases: list[dict[str, Any]]) -> list[dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
+    # Single source of truth: SourceTransaction only (purchase modules)
     for name, total, cnt in (
         db.query(SourceTransaction.party_name, func.coalesce(func.sum(SourceTransaction.total), 0), func.count(SourceTransaction.id))
-        .filter(SourceTransaction.company_id == company_id, SourceTransaction.module.in_(["purchase", "purchase_bill"]))
+        .filter(SourceTransaction.company_id == company_id, SourceTransaction.module.in_(["purchase", "purchase_bill", "expense", "expenses"]))
         .group_by(SourceTransaction.party_name)
         .all()
     ):
         key = str(name or "Unknown").strip() or "Unknown"
         e = result.setdefault(key, {"total": Decimal("0"), "count": 0})
-        e["total"] += money(total); e["count"] += int(cnt)
+        e["total"] += money(total)
+        e["count"] += int(cnt)
+    # Include app_purchases only if not already in SourceTransaction (check by reference)
+    st_refs = {
+        str(r[0] or "").strip()
+        for r in db.query(SourceTransaction.reference).filter(
+            SourceTransaction.company_id == company_id,
+            SourceTransaction.module.in_(["purchase", "purchase_bill", "expense", "expenses"])
+        ).all()
+    }
     for row in app_purchases:
+        ref = str(row.get("invoice_no") or row.get("reference") or "").strip()
+        if ref and ref in st_refs:
+            continue
         key = str(row.get("supplier") or row.get("vendor") or "Unknown").strip() or "Unknown"
         e = result.setdefault(key, {"total": Decimal("0"), "count": 0})
-        e["total"] += record_amount(row, "total", "amount", "net_amount"); e["count"] += 1
+        e["total"] += record_amount(row, "total", "amount", "net_amount")
+        e["count"] += 1
     return sorted(
         [{"party": k, "supplier": k, "total": amount(v["total"]), "transactions": v["count"]} for k, v in result.items()],
         key=lambda x: -money(x["total"])
