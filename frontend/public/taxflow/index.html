@@ -2045,8 +2045,12 @@
             <select class="fi" id="expense-category"><option>Supplies</option><option>Transport</option><option>Utilities</option><option>Travel</option><option>Entertainment</option><option>Communication</option><option>Maintenance</option></select>
           </div>
         </div>
+        <div class="fg">
+          <label class="fl">Vendor / Supplier</label>
+          <input class="fi" id="expense-vendor" placeholder="Search or type vendor name..." list="expense-vendor-list" autocomplete="off">
+          <datalist id="expense-vendor-list"></datalist>
+        </div>
         <div class="fg"><label class="fl">Description</label><input class="fi" id="expense-description" placeholder="What was this expense for?"></div>
-        <div class="fg"><label class="fl">AI Suggestion</label><div class="chip on" style="width:100%;justify-content:center">Utilities</div></div>
       </div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Upload Receipt</div></div>

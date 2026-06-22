@@ -160,6 +160,7 @@ function go(page){
   closeSidebar();
   if(page==='reports')syncReportsFromDatabase();
   if(page==='exception')loadExceptionCenter();
+  if(page==='expense')loadExpenseVendors();
   if(page==='staff')scheduleIdleTask(()=>renderLeaveCalendar(),300);
   if(page==='inventory'){
     ensurePurchaseRecordsLoadedForStock();
@@ -5554,6 +5555,7 @@ function buildExpenseRecord(status='Pending'){
     ref:`EXP-${Date.now()}`,
     date:document.getElementById('expense-date')?.value||new Date().toISOString().split('T')[0],
     category:document.getElementById('expense-category')?.value||'Expense',
+    vendor:document.getElementById('expense-vendor')?.value?.trim()||'',
     description:document.getElementById('expense-description')?.value?.trim()||'Expense',
     amount,
     vat_amount:vat,
@@ -5563,7 +5565,17 @@ function buildExpenseRecord(status='Pending'){
 }
 
 function clearExpenseForm(){
-  ['expense-description','expense-amount','expense-vat','expense-total'].forEach(id=>setFieldValue(document.getElementById(id),''));
+  ['expense-vendor','expense-description','expense-amount','expense-vat','expense-total'].forEach(id=>setFieldValue(document.getElementById(id),''));
+}
+
+async function loadExpenseVendors(){
+  const dl=document.getElementById('expense-vendor-list');
+  if(!dl)return;
+  try{
+    const names=await moduleApi('/vendors');
+    if(!Array.isArray(names))return;
+    dl.innerHTML=names.map(n=>`<option value="${escapeHtml(n)}">`).join('');
+  }catch{}
 }
 
 function saveExpense(status='Pending'){

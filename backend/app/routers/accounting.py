@@ -25,6 +25,7 @@ from app.models import (
     PeriodLock,
     PostingJob,
     Receipt,
+    SourceTransaction,
     User,
     Voucher,
     VoucherLine,
@@ -716,6 +717,38 @@ def list_general_ledger(
         .limit(min(limit, 2000))
         .all()
     )
+
+
+@router.get("/vendors", response_model=list[str])
+def list_vendors(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[str]:
+    rows = (
+        db.query(SourceTransaction.party_name)
+        .filter(
+            SourceTransaction.company_id == current_user.company_id,
+            SourceTransaction.party_name.isnot(None),
+            SourceTransaction.party_name != "",
+            SourceTransaction.module.in_(["purchase", "purchase_bill", "expense", "expenses"]),
+        )
+        .distinct()
+        .order_by(SourceTransaction.party_name)
+        .all()
+    )
+    # Also pull from Payment payee_name
+    pay_rows = (
+        db.query(Payment.payee_name)
+        .filter(
+            Payment.company_id == current_user.company_id,
+            Payment.payee_name.isnot(None),
+            Payment.payee_name != "",
+        )
+        .distinct()
+        .all()
+    )
+    names = sorted({str(r[0]).strip() for r in rows + pay_rows if r[0] and str(r[0]).strip()})
+    return names
 
 
 @router.post("/journal/{journal_id}/reverse", response_model=JournalOut)
