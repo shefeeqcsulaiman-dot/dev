@@ -10653,10 +10653,42 @@ function openPurchaseAiView(btn){
 }
 
 function purchaseLedgerCategoryOptions(selected=''){
-  const accounts=_coaFlatAccounts.filter(a=>!a.is_group&&a.status!=='inactive');
-  const extra=selected&&!accounts.find(a=>a.name===selected)?`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`:'';
-  const opts=accounts.map(a=>`<option value="${escapeHtml(a.name)}"${a.name===selected?' selected':''}>${escapeHtml((a.code?a.code+' — ':'')+a.name)}</option>`).join('');
-  return `<option value="">— Select Category —</option>${extra}${opts}`;
+  const all=_coaFlatAccounts.filter(a=>a.is_active!==false&&a.status!=='inactive');
+
+  // Build id→account map for parent lookup
+  const byId={};
+  all.forEach(a=>{byId[a.id]=a;});
+
+  // Group posting accounts under their parent ledger name
+  const groups={};
+  const ungrouped=[];
+  all.filter(a=>!a.is_group).forEach(a=>{
+    const parent=byId[a.parent_account_id];
+    if(parent){
+      const grp=(parent.code?parent.code+' — ':'')+parent.name;
+      (groups[grp]=groups[grp]||[]).push(a);
+    }else{
+      ungrouped.push(a);
+    }
+  });
+
+  // Preserve existing selected value if not in list
+  const allPosting=all.filter(a=>!a.is_group);
+  const extra=selected&&!allPosting.find(a=>a.name===selected)
+    ?`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`:'';
+
+  const label=a=>`${a.code?a.code+' — ':''}${a.name}`;
+  const opt=a=>`<option value="${escapeHtml(a.name)}"${a.name===selected?' selected':''}>${escapeHtml(label(a))}</option>`;
+
+  const groupHtml=Object.entries(groups)
+    .sort(([a],[b])=>a.localeCompare(b))
+    .map(([grpName,accs])=>`<optgroup label="${escapeHtml(grpName)}">${accs.sort((a,b)=>a.code?.localeCompare(b.code||'')||0).map(opt).join('')}</optgroup>`)
+    .join('');
+
+  const ungroupedHtml=ungrouped.length
+    ?`<optgroup label="Other">${ungrouped.map(opt).join('')}</optgroup>`:'';
+
+  return `<option value="">— Select Category —</option>${extra}${groupHtml}${ungroupedHtml}`;
 }
 
 function addPurchaseAiEditLine(line={}){
