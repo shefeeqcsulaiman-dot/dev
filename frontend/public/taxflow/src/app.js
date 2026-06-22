@@ -10653,41 +10653,10 @@ function openPurchaseAiView(btn){
 }
 
 function purchaseLedgerCategoryOptions(selected=''){
-  const PURCHASE_TYPES=new Set(['purchase','direct expense','indirect expense','expense','cost of goods sold','cogs','overhead']);
-  const all=_coaFlatAccounts.filter(a=>a.is_active!==false&&a.status!=='inactive');
-
-  // Build id→name map for group account headers
-  const groupNames={};
-  all.filter(a=>a.is_group).forEach(a=>{groupNames[a.id]=a.name;});
-
-  // Only posting accounts (non-group) that are purchase/expense type or under a purchase/expense parent
-  const purchaseAccounts=all.filter(a=>{
-    if(a.is_group)return false;
-    const t=(a.type||'').toLowerCase();
-    if(PURCHASE_TYPES.has(t))return true;
-    const parentName=(groupNames[a.parent_account_id]||'').toLowerCase();
-    return parentName.includes('purchase')||parentName.includes('expense')||parentName.includes('cost');
-  });
-
-  // Group by parent ledger for optgroups
-  const groups={};
-  purchaseAccounts.forEach(a=>{
-    const grp=groupNames[a.parent_account_id]||(a.type?(a.type.charAt(0).toUpperCase()+a.type.slice(1)):'Other');
-    (groups[grp]=groups[grp]||[]).push(a);
-  });
-
-  // Preserve previously selected value even if not in filtered list
-  const allNames=new Set(purchaseAccounts.map(a=>a.name));
-  const extra=selected&&!allNames.has(selected)
-    ?`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`
-    :'';
-
-  const groupHtml=Object.entries(groups).map(([grpName,accs])=>{
-    const opts=accs.map(a=>`<option value="${escapeHtml(a.name)}"${a.name===selected?' selected':''}>${escapeHtml((a.code?a.code+' — ':'')+a.name)}</option>`).join('');
-    return `<optgroup label="${escapeHtml(grpName)}">${opts}</optgroup>`;
-  }).join('');
-
-  return `<option value="">— Select Category —</option>${extra}${groupHtml}`;
+  const accounts=_coaFlatAccounts.filter(a=>!a.is_group&&a.status!=='inactive');
+  const extra=selected&&!accounts.find(a=>a.name===selected)?`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`:'';
+  const opts=accounts.map(a=>`<option value="${escapeHtml(a.name)}"${a.name===selected?' selected':''}>${escapeHtml((a.code?a.code+' — ':'')+a.name)}</option>`).join('');
+  return `<option value="">— Select Category —</option>${extra}${opts}`;
 }
 
 function addPurchaseAiEditLine(line={}){
