@@ -9947,11 +9947,17 @@ function purchaseAiRowHtml(inv,line,index,validation,filename){
     <div class="ai-invoice-divider"></div>
     <div class="ai-invoice-fields" style="cursor:pointer" onclick="openPurchaseAiEdit(this)" title="Click to edit">
       ${(()=>{const srcEntry=inv._source_entry_id?uploadedFiles.find(f=>f.id===inv._source_entry_id):null;const imgSrc=srcEntry?.base64||inv.source_image||'';return isImage&&imgSrc?`<div style="grid-column:1/-1;text-align:center;margin-bottom:4px"><img src="${imgSrc}" alt="Invoice" style="max-width:100%;max-height:140px;border-radius:6px;border:1px solid var(--border);object-fit:contain"></div>`:'';})()}
-      ${filename?`<div><span>Filename</span><strong style="font-size:11px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(filename)}</strong></div>`:''}
+      ${productSummary?`<div><span>Product</span><strong style="font-size:11px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(productSummary)}</strong></div>`:''}
+      <div><span>Location</span><strong>${escapeHtml(inv.location||'Dubai HQ')}</strong></div>
+      <div><span>Items</span><strong class="mono">${itemCount||0}</strong></div>
       <div><span>TRN / VAT #</span><strong class="mono" style="${trnInvalid?'color:var(--red)':''}" title="${trnInvalid?'Invalid TRN — must be 15 digits':''}">${escapeHtml(trnVal||'-')}${trnInvalid?' ⚠':''}</strong></div>
-      <div><span>Subtotal (excl. VAT)</span><strong class="mono">${cur} ${fmt(net)}</strong></div>
-      <div><span>VAT Amount</span><strong class="mono">${cur} ${fmt(vat)}</strong></div>
-      <div><span>Total Payable</span><strong class="mono" style="color:var(--accent)">${cur} ${fmt(total)}</strong></div>
+      <div><span>Net Amount</span><strong class="mono">${cur} ${fmt(net)}</strong></div>
+      <div><span>Tax (VAT)</span><strong class="mono">${cur} ${fmt(vat)}</strong></div>
+      <div><span>Shipping</span><strong class="mono">${cur} ${fmt(shipping)}</strong></div>
+      <div><span>Total</span><strong class="mono" style="color:var(--accent)">${cur} ${fmt(total)}</strong></div>
+      <div><span>Paid</span><strong class="mono">${cur} ${fmt(paid)}</strong></div>
+      <div><span>Due</span><strong class="mono" style="${due>0?'color:var(--red)':''}">${cur} ${fmt(due)}</strong></div>
+      ${filename?`<div style="grid-column:1/-1"><span>File</span><strong style="font-size:10px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(filename)}</strong></div>`:''}
     </div>
     <div class="ai-card-foot">
       <span class="purchase-ai-details">${escapeHtml(details)}</span>
