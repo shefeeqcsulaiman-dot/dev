@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260618h" as="style">
-<link rel="preload" href="src/app.js?v=20260618h" as="script">
+<link rel="preload" href="src/styles.css?v=20260623e" as="style">
+<link rel="preload" href="src/app.js?v=20260623e" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260618h">
+<link rel="stylesheet" href="src/styles.css?v=20260623e">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -2108,7 +2108,7 @@
           <div class="card-title" style="display:flex;align-items:center;gap:8px">
             <span style="font-size:18px">✦</span> AI Ledger Generator
           </div>
-          <div class="card-sub">Describe your ledger structure — AI will create a 4-level hierarchy for your review</div>
+          <div class="card-sub">Describe your account structure — AI will create a 3-level hierarchy for your review</div>
         </div>
         <button class="btn btn-g btn-sm" onclick="toggleAiPanel()">Hide</button>
       </div>
@@ -2176,21 +2176,20 @@
       <div class="card-hd" style="flex-wrap:wrap;gap:8px">
         <div>
           <div class="card-title">Chart of Accounts</div>
-          <div class="card-sub">Tally-style 4-level hierarchy: Primary Group → Secondary Group → Sub-Group → Ledger</div>
+          <div class="card-sub">3-level hierarchy: L1 Ledger → L2 Ledger → L3 Sub-Group</div>
         </div>
         <div class="flx" style="gap:8px">
           <button class="btn btn-g btn-sm" onclick="expandAllGroups()">Expand All</button>
           <button class="btn btn-g btn-sm" onclick="collapseAllGroups()">Collapse All</button>
           <button class="btn btn-danger btn-sm" onclick="clearAllAccounts()">Clear All</button>
-          <button class="btn btn-g" onclick="openCreateAccount('group')">+ Primary Group</button>
-          <button class="btn btn-p" onclick="openCreateAccount('ledger')">+ Ledger</button>
+          <button class="btn btn-g" onclick="openCreateAccount('group')">+ Ledger</button>
+          <button class="btn btn-p" onclick="openCreateAccount('ledger')">+ Account</button>
         </div>
       </div>
       <div class="coa-legend">
-        <span class="coa-badge coa-l1">L1 Primary</span>
-        <span class="coa-badge coa-l2">L2 Secondary</span>
+        <span class="coa-badge coa-l1">L1 Ledger</span>
+        <span class="coa-badge coa-l2">L2 Ledger</span>
         <span class="coa-badge coa-l3">L3 Sub-Group</span>
-        <span class="coa-badge coa-ledger">Ledger</span>
       </div>
       <div id="coa-tree" class="coa-tree">
         <div id="account-tbody">
@@ -5164,10 +5163,10 @@ period_locks ─&lt; audit_logs
 <div class="overlay" id="m-acc" onclick="closeOvBg(event,'m-acc')">
   <div class="modal" style="max-width:540px">
     <div class="modal-title" id="acc-modal-title">New Account</div>
-    <div class="modal-sub" id="acc-modal-sub">Ledger — transactions post here</div>
+    <div class="modal-sub" id="acc-modal-sub">Account — transactions post here</div>
     <div class="coa-modal-type-bar">
       <button class="coa-type-btn" id="acc-type-group-btn" onclick="setAccModalType('group')">Group</button>
-      <button class="coa-type-btn on" id="acc-type-ledger-btn" onclick="setAccModalType('ledger')">Ledger</button>
+      <button class="coa-type-btn on" id="acc-type-ledger-btn" onclick="setAccModalType('ledger')">Account</button>
     </div>
     <div class="fr2">
       <div class="fg"><label class="fl">Account Code</label><input class="fi mono" id="acc-code" placeholder="e.g. 1110"></div>
@@ -5209,7 +5208,7 @@ period_locks ─&lt; audit_logs
       <div class="fg">
         <label class="fl">Parent <span style="color:var(--text3);font-weight:400">(blank = Primary Group)</span></label>
         <select class="fi" id="acc-parent">
-          <option value="">— None (Primary Group, Level 1) —</option>
+          <option value="">— None (Ledger, Level 1) —</option>
         </select>
       </div>
       <div class="fg" id="acc-normal-balance-wrap"><label class="fl">Normal Balance</label>
@@ -5239,7 +5238,7 @@ period_locks ─&lt; audit_logs
     </div>
     <div class="modal-foot">
       <button class="btn btn-g" onclick="closeM('m-acc')">Cancel</button>
-      <button class="btn btn-p" id="acc-save-btn" onclick="saveAccount()">Create Ledger</button>
+      <button class="btn btn-p" id="acc-save-btn" onclick="saveAccount()">Create Account</button>
     </div>
   </div>
 </div>
@@ -5261,7 +5260,7 @@ period_locks ─&lt; audit_logs
         </select>
       </div>
     </div>
-    <p class="modal-sub" style="margin-top:8px">Only Posting Ledger accounts hold opening balances. Parent totals are auto-calculated.</p>
+    <p class="modal-sub" style="margin-top:8px">Only posting accounts hold opening balances. Parent group totals are auto-calculated.</p>
     <div class="modal-foot">
       <button class="btn btn-g" onclick="closeM('m-ob')">Cancel</button>
       <button class="btn btn-p" onclick="saveOpeningBalance()">Save Opening Balance</button>
@@ -5449,6 +5448,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260618h" defer></script>
+<script src="src/app.js?v=20260623e" defer></script>
 </body>
 </html>

@@ -110,7 +110,7 @@
   function apiBase(){
     if(window.TAXFLOW_API_BASE_URL)return window.TAXFLOW_API_BASE_URL;
     var h=window.location.hostname;
-    if(['localhost','127.0.0.1','::1',''].includes(h))return 'http://localhost:8000/api/v1';
+    if(['localhost','127.0.0.1','::1',''].includes(h))return window.location.protocol+'//'+window.location.host+'/api/v1';
     return window.location.protocol+'//'+h+'/api/v1';
   }
 

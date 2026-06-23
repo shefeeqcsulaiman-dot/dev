@@ -1,7 +1,18 @@
+import logging
 import os
 import pathlib
 
 from fastapi import FastAPI, Request
+
+_log = logging.getLogger("taxflow")
+_env_static = os.environ.get("STATIC_DIR", "")
+_default_static = pathlib.Path(__file__).parent.parent / "frontend" / "public"
+_repo_static = pathlib.Path(__file__).parent.parent.parent / "frontend" / "public"
+static_dir: pathlib.Path = (
+    pathlib.Path(_env_static)
+    if _env_static
+    else (_default_static if _default_static.exists() else _repo_static)
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
@@ -76,7 +87,6 @@ def create_app() -> FastAPI:
         except Exception as exc:
             log.error("Startup DB init failed (app will still serve traffic): %s", exc)
 
-    static_dir = pathlib.Path(__file__).parent.parent / "frontend" / "public"
     site_dir = static_dir / "site"
 
     @app.get("/", response_model=None)
