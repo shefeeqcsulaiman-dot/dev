@@ -12930,7 +12930,7 @@ function renderJournalEntry(entry){
     removeEmptyState(tbody);
     const hdr=document.createElement('tr');
     hdr.style.cssText='background:var(--surface2);font-weight:600;font-size:12px';
-    hdr.innerHTML=`<td colspan="5" style="padding:6px 10px;color:var(--text2)">${escapeHtml(date)} — ${escapeHtml(entry.entry_number||'JE')}: ${escapeHtml(entry.description||'')}</td><td style="text-align:right;padding:6px 10px"><button class="btn btn-g btn-sm" style="font-size:11px;padding:2px 8px" onclick="reverseJournal('${escapeHtml(entry.id)}')">Reverse</button></td>`;
+    hdr.innerHTML=`<td colspan="5" style="padding:6px 10px;color:var(--text2)">${escapeHtml(date)} — ${escapeHtml(entry.entry_number||'JE')}: ${escapeHtml(entry.description||'')}</td><td style="text-align:right;padding:6px 10px;display:flex;gap:4px;justify-content:flex-end"><button class="btn btn-g btn-sm" style="font-size:11px;padding:2px 8px" onclick="reverseJournal('${escapeHtml(entry.id)}')">Reverse</button><button class="btn btn-r btn-sm" style="font-size:11px;padding:2px 8px" onclick="deleteJournalEntry('${escapeHtml(entry.id)}')">Delete</button></td>`;
     tbody.prepend(hdr);
   }
   (entry.lines||[]).forEach(line=>postLedgerLine({
@@ -12947,11 +12947,23 @@ function renderJournalEntry(entry){
 async function reverseJournal(journalId){
   if(!confirm('Create a reversal entry for this journal? This cannot be undone.'))return;
   try{
-    const r=await apiFetch('/api/v1/accounting/journal/'+journalId+'/reverse',{method:'POST'});
-    toast('Reversal entry '+r.entry_number+' created','ok');
+    const r=await moduleApi('/journal/'+journalId+'/reverse',{method:'POST'});
+    toast('Reversal entry '+(r.entry_number||'')+ ' created','ok');
     loadAccountingFromDb();
   }catch(e){
-    toast('Reversal failed: '+(e.message||e),'error');
+    toast('Reversal failed: '+(e.message||e),'err');
+  }
+}
+
+async function deleteJournalEntry(journalId){
+  const ok=await appConfirm({title:'Delete Journal Entry',message:'Permanently delete this journal entry and its GL lines? This cannot be undone.',okText:'Delete'});
+  if(!ok)return;
+  try{
+    await moduleApi('/journal/'+journalId,{method:'DELETE'});
+    toast('Journal entry deleted','ok');
+    loadAccountingFromDb();
+  }catch(e){
+    toast('Delete failed: '+(e.message||e),'err');
   }
 }
 
@@ -13133,21 +13145,16 @@ function filterLedger(){
 }
 
 async function clearLedgerRecords(){
-  const ok=await appConfirm({title:'Clear Ledger Records',message:'Remove all ledger entries? This cannot be undone.',okText:'Clear Records'});
+  const ok=await appConfirm({title:'Clear Ledger Records',message:'Remove all journal entries from the General Ledger? This cannot be undone.',okText:'Clear Records'});
   if(!ok)return;
   let failed=0;
   try{
-    const resp=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/ledger?limit=1000&offset=0`);
-    if(resp.ok){
-      const data=await resp.json();
-      const records=Array.isArray(data)?data:(data.records||[]);
-      for(const rec of records){
-        const result=await deleteServer('ledger',rec);
-        if(result===null)failed++;
-      }
+    const journals=await moduleApi('/journal');
+    for(const j of (journals||[])){
+      try{await moduleApi('/journal/'+j.id,{method:'DELETE'});}catch{failed++;}
     }
-  }catch(e){console.warn('Clear ledger error:',e);}
-  clearTableBody('ledger-tbody','No ledger entries in database yet.');
+  }catch(e){console.warn('Clear ledger error:',e);failed++;}
+  clearTableBody('ledger-tbody','No journal entries in database yet.');
   toast(`Ledger cleared${failed?`; ${failed} failed`:''}`,failed?'warn':'ok');
   audit('Cleared ledger entries','All','Deleted');
 }

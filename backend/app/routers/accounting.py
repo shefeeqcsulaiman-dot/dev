@@ -591,6 +591,24 @@ def list_journals(db: Session = Depends(get_db), current_user: User = Depends(ge
     )
 
 
+@router.delete("/journal/{journal_id}", status_code=204)
+def delete_journal(
+    journal_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    journal = (
+        db.query(JournalEntry)
+        .filter(JournalEntry.id == journal_id, JournalEntry.company_id == current_user.company_id)
+        .first()
+    )
+    if not journal:
+        raise HTTPException(status_code=404, detail="Journal entry not found")
+    db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.journal_entry_id == journal_id).delete()
+    db.delete(journal)
+    db.commit()
+
+
 @router.get("/voucher-types", response_model=list[VoucherTypeOut])
 def list_voucher_types(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[VoucherType]:
     return db.query(VoucherType).filter(VoucherType.company_id == current_user.company_id).order_by(VoucherType.code).all()
