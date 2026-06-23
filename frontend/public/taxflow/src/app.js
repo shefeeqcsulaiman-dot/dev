@@ -10026,6 +10026,34 @@ function discountAmountFromExtractedInvoice(inv){
   return inv.discount_type==='Percentage'?net*(value/100):inv.discount_type==='Fixed'?value:0;
 }
 
+function autoSyncUnitsAndCategoriesFromPurchaseLines(records){
+  const unitTbody=document.getElementById('sales-unit-tbody');
+  const catTbody=document.getElementById('sales-category-tbody');
+  const seenUnits=new Set();
+  const seenCats=new Set();
+  records.forEach(record=>{
+    (Array.isArray(record.lines)?record.lines:[]).forEach(line=>{
+      const unit=(line.unit||line.unit_of_measure||line.uom||'').trim();
+      if(unit&&!seenUnits.has(unit.toLowerCase())){
+        seenUnits.add(unit.toLowerCase());
+        const code=unit.slice(0,6).toUpperCase();
+        if(unitTbody&&!hasFirstCellValue(unitTbody,code)){
+          renderSalesUnitRecord({code,name:unit,type:'Quantity',decimals:'2',status:'Active'});
+          saveServer('salesUnits',{code,name:unit,type:'Quantity',decimals:'2',status:'Active'});
+        }
+      }
+      const cat=(line.category||'').trim();
+      if(cat&&!seenCats.has(cat.toLowerCase())){
+        seenCats.add(cat.toLowerCase());
+        if(catTbody&&!hasFirstCellValue(catTbody,cat)){
+          renderSalesCategoryRecord({name:cat,scope:'Sales & Purchase',vat:'Standard 5%',status:'Active'});
+          saveServer('salesCategories',{name:cat,scope:'Sales & Purchase',vat:'Standard 5%',status:'Active'});
+        }
+      }
+    });
+  });
+}
+
 async function storeExtractedPurchaseRecords(){
   const rows=purchaseAiRows();
   const visibleInvoiceNos=new Set(rows.map(row=>String(row.dataset.invoiceNo||'')));
@@ -10144,6 +10172,7 @@ async function storeExtractedPurchaseRecords(){
       });
       renderPurchaseRecordWindow();
       syncStockLevelsFromProducts();
+      autoSyncUnitsAndCategoriesFromPurchaseLines(recordsToSave.map(item=>item.record));
       markExtractedInvoicesUploaded(savedInvoiceNos);
       markPurchaseAiInvoicesBulk(recordsToSave.map(item=>({
         invoiceNo:item.invoiceNo,
