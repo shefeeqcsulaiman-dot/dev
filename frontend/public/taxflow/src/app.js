@@ -2357,15 +2357,41 @@ function renderMonthlyRevenueVat(rows){
 function renderRecentActivity(rows){
   const target=document.getElementById('dash-recent-activity');
   if(!target)return;
-  const tones={ok:['var(--green-bg)','var(--green)','?'],warn:['var(--amber-bg)','var(--amber)','!'],info:['var(--accent-glow)','var(--accent)','?']};
   if(!rows.length){
-    target.innerHTML='<div style="font-size:12px;color:var(--text3)">No database activity yet.</div>';
+    target.innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 0;gap:10px">
+      <svg viewBox="0 0 48 48" width="40" height="40" fill="none" stroke="var(--border)" stroke-width="2.5"><circle cx="24" cy="24" r="20"/><line x1="24" y1="14" x2="24" y2="24"/><line x1="24" y1="30" x2="24" y2="33"/></svg>
+      <div style="font-size:12px;color:var(--text3)">No activity yet</div>
+    </div>`;
     return;
   }
-  target.innerHTML=rows.map((row,index)=>{
-    const tone=tones[row.tone]||tones.info;
-    return `<div class="tline-item" style="${index===rows.length-1?'padding-bottom:0':''}"><div class="tline-dot" style="background:${tone[0]};color:${tone[1]}">${tone[2]}</div><div><div style="font-size:13px;font-weight:500">${escapeHtml(row.title||'Activity')}</div><div style="font-size:11.5px;color:var(--text3);margin-top:2px">${escapeHtml(row.module||'System')} - ${escapeHtml(row.time||'Now')}</div></div></div>`;
-  }).join('');
+  const iconMap={
+    'Record Saved':`<svg viewBox="0 0 20 20" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3H7L3 7v10a1 1 0 001 1h13a1 1 0 001-1V4a1 1 0 00-1-1z"/><polyline points="13,3 13,8 7,8"/><rect x="6" y="13" width="8" height="4" rx=".5"/></svg>`,
+    'Record Deleted':`<svg viewBox="0 0 20 20" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,6 4,6 17,6"/><path d="M8 6V4h4v2m3 0l-1 12H6L5 6"/></svg>`,
+    'Record Updated':`<svg viewBox="0 0 20 20" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H5a2 2 0 00-2 2v8a2 2 0 002 2h10a2 2 0 002-2v-4"/><path d="M17.5 2.5a2.121 2.121 0 013 3L12 14l-4 1 1-4 8.5-8.5z"/></svg>`,
+    default:`<svg viewBox="0 0 20 20" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="8"/><line x1="10" y1="6" x2="10" y2="10"/><line x1="10" y1="14" x2="10" y2="14.5" stroke-linecap="round" stroke-width="2.5"/></svg>`
+  };
+  const colorMap={
+    'Record Saved':['#10b981','rgba(16,185,129,.1)'],
+    'Record Deleted':['#ef4444','rgba(239,68,68,.1)'],
+    'Record Updated':['#f59e0b','rgba(245,158,11,.1)'],
+    default:['#4f8ef0','rgba(79,142,240,.1)']
+  };
+  target.innerHTML=`<div style="display:flex;flex-direction:column;gap:0">
+    ${rows.map((row,i)=>{
+      const title=row.title||'Activity';
+      const [col,bg]=colorMap[title]||colorMap.default;
+      const icon=iconMap[title]||iconMap.default;
+      const isLast=i===rows.length-1;
+      return `<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;${!isLast?'border-bottom:1px solid var(--border)':''}">
+        <div style="width:28px;height:28px;border-radius:8px;background:${bg};color:${col};display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">${icon}</div>
+        <div style="min-width:0;flex:1">
+          <div style="font-size:12.5px;font-weight:600;color:var(--text);line-height:1.3">${escapeHtml(title)}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(row.module||'System')} · ${escapeHtml(row.time||'Now')}</div>
+        </div>
+        <div style="width:6px;height:6px;border-radius:50%;background:${col};flex-shrink:0;margin-top:6px"></div>
+      </div>`;
+    }).join('')}
+  </div>`;
 }
 
 function renderTopCustomers(rows){
@@ -2416,15 +2442,54 @@ function renderInvoiceStatus(status){
 function renderStaffToday(staff){
   const target=document.getElementById('dash-staff-today');
   if(!target)return;
+  const present=Number(staff.present||0);
+  const total=Number(staff.total||0);
+  const leave=Number(staff.leave||0);
+  const absent=Number(staff.absent||0);
+  const pct=total>0?Math.round(present/total*100):0;
+  const r=32;const circ=2*Math.PI*r;
+  const arc=circ*(pct/100);
+  const personSvg=(col)=>`<svg viewBox="0 0 20 20" width="14" height="14" fill="${col}" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="6" r="3.5"/><path d="M3 17c0-3.87 3.13-7 7-7s7 3.13 7 7" stroke="none"/></svg>`;
+  const avatars=Array.from({length:Math.min(total,10)},(_,i)=>{
+    const col=i<present?'#10b981':i<present+leave?'#f59e0b':'#ef4444';
+    const bg=i<present?'rgba(16,185,129,.12)':i<present+leave?'rgba(245,158,11,.12)':'rgba(239,68,68,.12)';
+    return `<div style="width:26px;height:26px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;">${personSvg(col)}</div>`;
+  }).join('');
   target.innerHTML=`
-    <div style="font-size:28px;font-weight:700;color:var(--green);font-family:'DM Mono',monospace;margin-bottom:4px">${Number(staff.present||0)} <span style="font-size:16px;color:var(--text3)">/${Number(staff.total||0)}</span></div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Present - ${escapeHtml(staff.source||'Employees database')}</div>
-    <div class="flx" style="flex-wrap:wrap;gap:6px">
-      <span class="b b-g">${Number(staff.present||0)} Present</span>
-      <span class="b b-a">${Number(staff.leave||0)} Leave</span>
-      <span class="b b-r">${Number(staff.absent||0)} Absent</span>
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
+      <div style="position:relative;width:76px;height:76px;flex-shrink:0">
+        <svg viewBox="0 0 80 80" width="76" height="76" style="transform:rotate(-90deg);overflow:visible">
+          <circle cx="40" cy="40" r="${r}" fill="none" stroke="var(--border)" stroke-width="9"/>
+          <circle cx="40" cy="40" r="${r}" fill="none" stroke="#10b981" stroke-width="9"
+            stroke-dasharray="${arc.toFixed(1)} ${circ.toFixed(1)}" stroke-linecap="round"
+            style="transition:stroke-dasharray .7s ease;filter:drop-shadow(0 0 4px rgba(16,185,129,.4))"/>
+        </svg>
+        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0">
+          <div style="font-size:20px;font-weight:800;color:#10b981;font-family:'DM Mono',monospace;line-height:1">${present}</div>
+          <div style="font-size:10px;color:var(--text3);line-height:1">/${total}</div>
+        </div>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:2px">Attendance</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px">${escapeHtml(staff.source||'Employees database')}</div>
+        <div style="font-size:22px;font-weight:800;color:#10b981;font-family:'DM Mono',monospace">${pct}%</div>
+      </div>
     </div>
-  `;
+    ${total>0?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px">${avatars}${total>10?`<div style="width:26px;height:26px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text3);font-weight:700">+${total-10}</div>`:''}</div>`:''}
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+      <div style="text-align:center;padding:8px 4px;background:rgba(16,185,129,.08);border-radius:10px;border:1px solid rgba(16,185,129,.18)">
+        <div style="font-size:20px;font-weight:800;color:#10b981;font-family:'DM Mono',monospace">${present}</div>
+        <div style="font-size:9.5px;color:var(--text3);margin-top:2px;font-weight:600;letter-spacing:.3px">PRESENT</div>
+      </div>
+      <div style="text-align:center;padding:8px 4px;background:rgba(245,158,11,.08);border-radius:10px;border:1px solid rgba(245,158,11,.18)">
+        <div style="font-size:20px;font-weight:800;color:#f59e0b;font-family:'DM Mono',monospace">${leave}</div>
+        <div style="font-size:9.5px;color:var(--text3);margin-top:2px;font-weight:600;letter-spacing:.3px">ON LEAVE</div>
+      </div>
+      <div style="text-align:center;padding:8px 4px;background:rgba(239,68,68,.08);border-radius:10px;border:1px solid rgba(239,68,68,.18)">
+        <div style="font-size:20px;font-weight:800;color:#ef4444;font-family:'DM Mono',monospace">${absent}</div>
+        <div style="font-size:9.5px;color:var(--text3);margin-top:2px;font-weight:600;letter-spacing:.3px">ABSENT</div>
+      </div>
+    </div>`;
 }
 
 function showReport(id){
