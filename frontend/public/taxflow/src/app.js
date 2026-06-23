@@ -3192,7 +3192,11 @@ async function moduleApi(path,options={}){
     method:options.method||'GET',
     body:options.body?JSON.stringify(options.body):undefined
   });
-  if(!response.ok)throw new Error(`FastAPI ${path} returned ${response.status}`);
+  if(!response.ok){
+    let detail=`Request failed (${response.status})`;
+    try{const j=await response.json();detail=j.detail||j.message||detail;}catch{}
+    throw new Error(detail);
+  }
   if(response.status===204)return null;
   return response.json();
 }
@@ -13069,7 +13073,7 @@ async function deleteAccountById(accountId){
   const label=`${account.code} — ${account.name}`;
   const hasChildren=_coaFlatAccounts.some(a=>a.parent_account_id===accountId);
   if(hasChildren){toast(`Cannot delete "${label}": delete child accounts first`,'warn');return;}
-  const confirmed=await appConfirm({title:'Delete Account',message:`Delete ${account.is_group?'group':'ledger'} "${label}"?`,okText:'Delete'});
+  const confirmed=await appConfirm({title:'Delete Account',message:`Delete ${account.is_group?'ledger':'account'} "${label}"?`,okText:'Delete'});
   if(!confirmed)return;
   try{
     await moduleApi(`/accounts/${encodeURIComponent(accountId)}`,{method:'DELETE'});
