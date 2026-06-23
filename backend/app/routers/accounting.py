@@ -605,6 +605,7 @@ def delete_journal(
     if not journal:
         raise HTTPException(status_code=404, detail="Journal entry not found")
     db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.journal_entry_id == journal_id).delete()
+    db.query(Voucher).filter(Voucher.posted_journal_id == journal_id).update({"posted_journal_id": None})
     db.delete(journal)
     db.commit()
 
