@@ -2,6 +2,13 @@ import logging
 import os
 import pathlib
 
+# Load .env into os.environ so os.environ.get() works for AI keys
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv(dotenv_path=pathlib.Path(__file__).parent.parent / ".env", override=False)
+except ImportError:
+    pass
+
 from fastapi import FastAPI, Request
 
 _log = logging.getLogger("taxflow")

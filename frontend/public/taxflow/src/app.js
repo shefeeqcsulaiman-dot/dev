@@ -10145,27 +10145,71 @@ function discountAmountFromExtractedInvoice(inv){
 }
 
 function autoSyncUnitsAndCategoriesFromPurchaseLines(records){
+  // Only called after purchase records are confirmed saved to DB
   const unitTbody=document.getElementById('sales-unit-tbody');
   const catTbody=document.getElementById('sales-category-tbody');
   const seenUnits=new Set();
   const seenCats=new Set();
+  const seenProducts=new Set();
+
   records.forEach(record=>{
     (Array.isArray(record.lines)?record.lines:[]).forEach(line=>{
+
+      // ── Units ──────────────────────────────────────────────────────────────
       const unit=(line.unit||line.unit_of_measure||line.uom||'').trim();
-      if(unit&&!seenUnits.has(unit.toLowerCase())){
-        seenUnits.add(unit.toLowerCase());
-        const code=unit.slice(0,6).toUpperCase();
-        if(unitTbody&&!hasFirstCellValue(unitTbody,code)){
-          renderSalesUnitRecord({code,name:unit,type:'Quantity',decimals:'2',status:'Active'});
-          saveServer('salesUnits',{code,name:unit,type:'Quantity',decimals:'2',status:'Active'});
+      if(unit){
+        const unitKey=unit.toLowerCase();
+        if(!seenUnits.has(unitKey)){
+          seenUnits.add(unitKey);
+          const code=unit.slice(0,6).toUpperCase();
+          // Duplicate check: skip if code already in table
+          if(unitTbody&&!hasFirstCellValue(unitTbody,code)){
+            renderSalesUnitRecord({code,name:unit,type:'Quantity',decimals:'2',status:'Active'});
+            saveServer('salesUnits',{code,name:unit,type:'Quantity',decimals:'2',status:'Active'});
+          }
         }
       }
+
+      // ── Categories ─────────────────────────────────────────────────────────
       const cat=(line.category||'').trim();
-      if(cat&&!seenCats.has(cat.toLowerCase())){
-        seenCats.add(cat.toLowerCase());
-        if(catTbody&&!hasFirstCellValue(catTbody,cat)){
-          renderSalesCategoryRecord({name:cat,scope:'Sales & Purchase',vat:'Standard 5%',status:'Active'});
-          saveServer('salesCategories',{name:cat,scope:'Sales & Purchase',vat:'Standard 5%',status:'Active'});
+      if(cat){
+        const catKey=cat.toLowerCase();
+        if(!seenCats.has(catKey)){
+          seenCats.add(catKey);
+          // Duplicate check: skip if name already in table
+          if(catTbody&&!hasFirstCellValue(catTbody,cat)){
+            renderSalesCategoryRecord({name:cat,scope:'Sales & Purchase',vat:'Standard 5%',status:'Active'});
+            saveServer('salesCategories',{name:cat,scope:'Sales & Purchase',vat:'Standard 5%',status:'Active'});
+          }
+        }
+      }
+
+      // ── Products / Items ───────────────────────────────────────────────────
+      const productName=(line.product||line.name||line.description||line.item||'').trim();
+      if(productName){
+        const nameKey=productName.toLowerCase();
+        const rawCode=(line.sku||line.code||'').trim();
+        const codeKey=rawCode.toLowerCase();
+        // Duplicate check: skip if name or code already in product sets
+        if(!seenProducts.has(nameKey)&&!_productNameSet.has(nameKey)&&!(codeKey&&_productCodeSet.has(codeKey))){
+          seenProducts.add(nameKey);
+          const productCode=rawCode||productName.slice(0,8).toUpperCase().replace(/[^A-Z0-9]/g,'-');
+          const cost=purchaseAiNumber(line.unit_price||line.price||line.unit_cost||line.cost||0);
+          const product={
+            code:productCode,
+            name:productName,
+            type:'Stock Item',
+            category:cat||'General',
+            unit:unit||'PCS',
+            cost,
+            selling_price:cost,
+            vat:'Standard 5%',
+            tracking:'Yes',
+            status:'Active',
+            description:line.description||''
+          };
+          renderProductRecord(product);
+          saveServer('products',product);
         }
       }
     });
@@ -10654,10 +10698,134 @@ function countPurchaseAiInvoiceNo(invoiceNo){
 
 function purchaseAiUploadActionsHtml(){
   return `<div class="row-actions">
+    <button class="ai-card-action detail" type="button" title="View full details" aria-label="View full invoice details" onclick="showPurchaseAiDetail(this)">Details</button>
     <button class="ai-card-action view" type="button" title="Edit" aria-label="Edit purchase AI invoice" onclick="openPurchaseAiEdit(this)">${viewIconSvg()}</button>
     <button class="ai-card-action approve" type="button" title="Approve" aria-label="Approve purchase AI row" onclick="approvePurchaseAiRow(this)">Approve</button>
     <button class="ai-card-action delete" type="button" title="Delete" aria-label="Delete purchase AI row" onclick="deletePurchaseAiRow(this)">${deleteIconSvg()}</button>
   </div>`;
+}
+
+function showPurchaseAiDetail(btn){
+  const row=purchaseAiRowFromButton(btn);
+  if(!row)return;
+  let inv={};
+  try{inv=JSON.parse(row.dataset.inv||'{}');}catch{return;}
+  const filename=row.dataset.filename||'';
+  const fmt=n=>purchaseAiNumber(n).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const cur=escapeHtml(inv.currency||'AED');
+  const lines=Array.isArray(inv.lines)?inv.lines:[];
+  const net=purchaseAiNumber(inv.net_amount||inv.subtotal);
+  const discount=purchaseAiNumber(inv.discount_value||inv.discount);
+  const vat=purchaseAiNumber(inv.vat_amount||inv.tax_amount);
+  const total=purchaseAiNumber(inv.total)||(net-discount+vat);
+  const trnVal=inv.supplier_trn||inv.trn||'';
+  const trnInvalid=trnVal&&trnVal.replace(/\D/g,'').length!==15;
+
+  const field=(label,val,warn=false)=>val||val===0?`
+    <div class="paid-detail-field">
+      <span class="paid-label">${label}</span>
+      <span class="paid-val${warn?' paid-warn':''}">${val}</span>
+    </div>`:'' ;
+
+  const linesHtml=lines.length?`
+    <div style="margin-top:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Line Items</div>
+      <div style="overflow-x:auto">
+        <table class="paid-lines-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Item Description</th>
+              <th>Qty</th>
+              <th>Unit Price</th>
+              <th>Discount %</th>
+              <th>Discount Amt</th>
+              <th>Line Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${lines.map((l,i)=>{
+              const qty=purchaseAiNumber(l.quantity||l.qty||0);
+              const uPrice=purchaseAiNumber(l.unit_price||l.price||l.unit_cost||l.cost||0);
+              const discPct=purchaseAiNumber(l.discount_percent||l.discount_pct||l.discount||0);
+              const discAmt=discPct?uPrice*qty*(discPct/100):purchaseAiNumber(l.discount_amount||0);
+              const lTotal=purchaseAiNumber(l.line_total||l.total||l.amount||(uPrice*qty-discAmt));
+              const desc=escapeHtml(l.product||l.name||l.description||l.item||'-');
+              return `<tr>
+                <td class="mono">${i+1}</td>
+                <td>${desc}</td>
+                <td class="mono">${qty||''}</td>
+                <td class="mono">${cur} ${fmt(uPrice)}</td>
+                <td class="mono">${discPct?discPct+'%':'-'}</td>
+                <td class="mono">${discAmt?cur+' '+fmt(discAmt):'-'}</td>
+                <td class="mono" style="font-weight:700">${cur} ${fmt(lTotal)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`:'<div style="color:var(--text3);font-size:12px;margin-top:12px">No line items extracted</div>';
+
+  const existing=document.getElementById('m-purchase-ai-detail');
+  if(existing)existing.remove();
+  const overlay=document.createElement('div');
+  overlay.className='overlay';
+  overlay.id='m-purchase-ai-detail';
+  overlay.onclick=e=>closeOvBg(e,'m-purchase-ai-detail');
+  overlay.innerHTML=`
+    <div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto">
+      <div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--border);margin-bottom:16px">
+        <div>
+          <div style="font-size:15px;font-weight:700;color:var(--text)">${escapeHtml(inv.invoice_no||'Invoice Details')}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">${escapeHtml(filename)}</div>
+        </div>
+        <button class="icon-btn" type="button" onclick="closeM('m-purchase-ai-detail')" style="font-size:18px;line-height:1">&times;</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 20px">
+        ${field('Filename',escapeHtml(filename))}
+        ${field('Invoice Date',escapeHtml(inv.date||inv.invoice_date||''))}
+        ${field('Invoice Number',escapeHtml(inv.invoice_no||''))}
+        ${field('Supplier',escapeHtml(inv.supplier||inv.vendor||''))}
+        ${field('TRN / VAT #',`<span style="${trnInvalid?'color:var(--red)':''}">${escapeHtml(trnVal||'-')}${trnInvalid?' ⚠ Invalid':''}</span>`)}
+        ${field('Bill To',escapeHtml(inv.bill_to||inv.buyer||''))}
+        ${field('Due Date',escapeHtml(inv.due_date||''))}
+        ${field('Payment Method',escapeHtml(inv.payment_method||''))}
+        ${field('Location',escapeHtml(inv.location||''))}
+        ${field('Currency',escapeHtml(inv.currency||'AED'))}
+        ${field('Notes',escapeHtml(inv.notes||inv.additional_notes||''))}
+      </div>
+
+      <div style="margin-top:16px;padding:12px 14px;background:var(--bg2,var(--bg));border:1px solid var(--border);border-radius:10px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">Subtotal (excl. VAT)</div>
+          <div class="mono" style="font-size:14px;font-weight:700;color:var(--text);margin-top:4px">${cur} ${fmt(net)}</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">Total Discount</div>
+          <div class="mono" style="font-size:14px;font-weight:700;color:var(--red);margin-top:4px">${cur} ${fmt(discount)}</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">VAT Amount</div>
+          <div class="mono" style="font-size:14px;font-weight:700;color:#8b5cf6;margin-top:4px">${cur} ${fmt(vat)}</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">Total Payable</div>
+          <div class="mono" style="font-size:15px;font-weight:800;color:var(--accent);margin-top:4px">${cur} ${fmt(total)}</div>
+        </div>
+      </div>
+
+      ${linesHtml}
+
+      <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-g btn-sm" type="button" id="paid-edit-btn">Edit</button>
+        <button class="btn btn-p btn-sm" type="button" onclick="closeM('m-purchase-ai-detail')">Close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  showM('m-purchase-ai-detail');
+  const editBtn=overlay.querySelector('#paid-edit-btn');
+  if(editBtn)editBtn.onclick=()=>{closeM('m-purchase-ai-detail');openPurchaseAiEdit(row);};
 }
 
 function purchaseAiDragHandleHtml(){
@@ -13079,22 +13247,30 @@ function postLedgerLine({date,ref,description,debit=0,credit=0,account='',accoun
 function renderJournalEntry(entry){
   const date=(entry.entry_date||entry.created_at||'').slice(0,10)||'Today';
   const tbody=document.getElementById('ledger-tbody');
-  if(tbody&&entry.id){
-    removeEmptyState(tbody);
+  if(!tbody)return;
+  removeEmptyState(tbody);
+  // Build header + lines as a fragment so prepend keeps correct order
+  const frag=document.createDocumentFragment();
+  if(entry.id){
     const hdr=document.createElement('tr');
     hdr.style.cssText='background:var(--surface2);font-weight:600;font-size:12px';
     hdr.innerHTML=`<td colspan="5" style="padding:6px 10px;color:var(--text2)">${escapeHtml(date)} — ${escapeHtml(entry.entry_number||'JE')}: ${escapeHtml(entry.description||'')}</td><td style="text-align:right;padding:6px 10px;display:flex;gap:4px;justify-content:flex-end"><button class="btn btn-g btn-sm" style="font-size:11px;padding:2px 8px" onclick="reverseJournal('${escapeHtml(entry.id)}')">Reverse</button><button class="btn btn-r btn-sm" style="font-size:11px;padding:2px 8px" onclick="deleteJournalEntry('${escapeHtml(entry.id)}')">Delete</button></td>`;
-    tbody.prepend(hdr);
+    frag.appendChild(hdr);
   }
-  (entry.lines||[]).forEach(line=>postLedgerLine({
-    date,
-    ref:entry.entry_number||entry.ref||'JE',
-    description:line.description||entry.description||'Journal',
-    debit:Number(line.debit||0),
-    credit:Number(line.credit||0),
-    account_id:line.account_id,
-    account:line.account||accountLabelFromId(line.account_id)
-  },{persist:false}));
+  const fmt=n=>Number(n||0).toLocaleString('en-AE',{maximumFractionDigits:2});
+  (entry.lines||[]).forEach(line=>{
+    const label=line.account||accountLabelFromId(line.account_id)||'';
+    const debit=Number(line.debit||0);
+    const credit=Number(line.credit||0);
+    const balance=debit-credit;
+    const desc=line.description||entry.description||'Journal';
+    const row=document.createElement('tr');
+    row.dataset.account=label.replace(/\s*\(\d+\)\s*$/,'');
+    row.dataset.accountId=line.account_id||'';
+    row.innerHTML=`<td>${escapeHtml(date)}</td><td class="mono">${escapeHtml(entry.entry_number||'JE')}</td><td>${escapeHtml(desc)}${label?' — '+escapeHtml(label):''}</td><td class="mono">${debit?fmt(debit):'-'}</td><td class="mono">${credit?fmt(credit):'-'}</td><td class="mono">${fmt(balance)}</td>`;
+    frag.appendChild(row);
+  });
+  tbody.prepend(frag);
 }
 
 async function reverseJournal(journalId){
@@ -13253,11 +13429,11 @@ async function deleteAccountById(accountId){
 }
 
 function viewAccountLedgerById(accountId){
-  const account=_coaFlatAccounts.find(a=>a.id===accountId);
-  if(account){
-    const fakeBtn={closest:()=>({dataset:{account:JSON.stringify(account),accountId:accountId}})};
-    viewAccountLedger(fakeBtn);
-  }
+  const tab=document.querySelector('#page-accounting .tab:nth-child(3)');
+  if(tab)stab(tab,'acc-ledger');
+  const filter=document.getElementById('ledger-account-filter');
+  if(filter)filter.value=accountId||'';
+  filterLedger();
 }
 
 function updateAccountSelectors(){
@@ -13290,10 +13466,12 @@ function viewAccountLedger(btn){
 }
 
 function filterLedger(){
-  const filter=document.getElementById('ledger-account-filter')?.value||'All Accounts';
+  const filter=document.getElementById('ledger-account-filter')?.value||'';
   document.querySelectorAll('#ledger-tbody tr').forEach(row=>{
-    const account=row.dataset.account||row.querySelector('td:nth-child(3)')?.textContent||'';
-    row.style.display=filter==='All Accounts'||account.includes(filter)?'':'none';
+    if(!filter){row.style.display='';return;}
+    const accountId=row.dataset.accountId;
+    // Header rows (no accountId) — hide during account filter
+    row.style.display=accountId!==undefined&&accountId===filter?'':'none';
   });
 }
 
