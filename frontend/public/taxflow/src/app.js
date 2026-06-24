@@ -9819,6 +9819,58 @@ function purchaseAiRowFromButton(btn){
   return btn?.closest?.('[data-inv]');
 }
 
+async function exportPurchaseAiToExcel(){
+  const rows=purchaseAiRows();
+  if(!rows.length){toast('No extracted invoices to export','warn');return;}
+  toast('Preparing Excel…','info');
+  try{
+    await _loadSheetJs();
+    const data=[];
+    rows.forEach(row=>{
+      let inv={};
+      try{inv=JSON.parse(row.dataset.inv||'{}');}catch{}
+      const lines=Array.isArray(inv.lines)&&inv.lines.length?inv.lines:[{}];
+      lines.forEach((line,i)=>{
+        data.push({
+          'Invoice No':inv.invoice_no||'',
+          'Supplier':inv.supplier||inv.vendor||'',
+          'TRN / VAT No':inv.trn||inv.supplier_trn||inv.vendor_trn||'',
+          'Purchase Date':inv.date||'',
+          'Due Date':inv.due_date||'',
+          'Location':inv.location||'',
+          'Currency':inv.currency||'AED',
+          'Line #':i+1,
+          'Product / Description':line.product||line.name||line.description||line.item||'',
+          'SKU / Code':line.sku||line.code||'',
+          'Quantity':line.quantity||line.qty||'',
+          'Unit':line.unit||line.unit_of_measure||line.uom||'',
+          'Unit Price':line.unit_price||line.price||'',
+          'Discount':line.discount||'',
+          'Category':line.category||'',
+          'Net Amount':inv.subtotal??inv.net_amount??'',
+          'VAT Amount':inv.vat_amount??inv.tax_amount??'',
+          'Shipping':inv.shipping??'',
+          'Total':inv.total??'',
+          'Paid':inv.paid??'',
+          'Due':((Number(inv.total)||0)-(Number(inv.paid)||0))||'',
+          'Payment Method':inv.payment_method||'',
+          'Notes':inv.notes||inv.additional_notes||'',
+          'Source File':row.dataset.filename||'',
+          'Validation':row.dataset.validation||'',
+        });
+      });
+    });
+    const ws=window.XLSX.utils.json_to_sheet(data);
+    const wb=window.XLSX.utils.book_new();
+    window.XLSX.utils.book_append_sheet(wb,'Purchase AI Upload',ws);
+    const today=new Date().toISOString().slice(0,10);
+    window.XLSX.writeFile(wb,`purchase-ai-upload-${today}.xlsx`);
+    toast(`Exported ${data.length} row${data.length===1?'':'s'} to Excel`,'ok');
+  }catch(e){
+    toast('Excel export failed: '+(e.message||e),'err');
+  }
+}
+
 function purchaseAiUploadTileHtml(){
   return `<div class="ai-upload-more-tile">
     <div class="ai-upload-more-icon">${uploadIconSvg()}</div>

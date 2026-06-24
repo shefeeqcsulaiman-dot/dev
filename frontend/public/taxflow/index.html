@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260623k" as="style">
-<link rel="preload" href="src/app.js?v=20260623k" as="script">
+<link rel="preload" href="src/styles.css?v=20260624a" as="style">
+<link rel="preload" href="src/app.js?v=20260624a" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260623k">
+<link rel="stylesheet" href="src/styles.css?v=20260624a">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -920,10 +920,6 @@
       <div class="ai-card-toolbar flx-b mb12">
         <label class="flx" style="gap:8px"><input type="checkbox" aria-label="Select all purchase AI invoices" onchange="togglePurchaseAiSelection(this.checked)"> Select extracted invoices</label>
         <div class="ai-card-controls">
-          <div class="segmented ai-view-toggle">
-            <button class="seg on" type="button" data-ai-view="grid" onclick="setPurchaseAiCardView('grid',this)">Grid</button>
-            <button class="seg" type="button" data-ai-view="gallery" onclick="setPurchaseAiCardView('gallery',this)">Gallery</button>
-          </div>
           <select class="fi ai-sort-select" id="purchase-ai-sort" onchange="applyPurchaseAiSort(true)">
             <option value="manual">Manual order</option>
             <option value="invoice">Invoice No.</option>
@@ -933,6 +929,7 @@
             <option value="validation">Validation</option>
           </select>
           <button class="btn btn-g btn-sm" type="button" id="purchase-ai-sort-dir" data-dir="asc" onclick="togglePurchaseAiSortDirection()">Asc</button>
+          <button class="btn btn-g btn-sm" type="button" onclick="exportPurchaseAiToExcel()">⬇ Excel</button>
         </div>
       </div>
       <div id="ext-tbody" class="ai-card-grid">
@@ -5465,6 +5462,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260623k" defer></script>
+<script src="src/app.js?v=20260624a" defer></script>
 </body>
 </html>
