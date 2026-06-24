@@ -9825,6 +9825,9 @@ async function exportPurchaseAiToExcel(){
   toast('Preparing Excel…','info');
   try{
     await _loadSheetJs();
+    // Sanitise helpers — SheetJS requires primitives only (no objects/arrays)
+    const str=v=>{if(v===null||v===undefined)return'';if(typeof v==='object')return JSON.stringify(v);return String(v);};
+    const num=v=>{const n=Number(v);return isFinite(n)?n:'';};
     const data=[];
     rows.forEach(row=>{
       let inv={};
@@ -9832,31 +9835,35 @@ async function exportPurchaseAiToExcel(){
       const lines=Array.isArray(inv.lines)&&inv.lines.length?inv.lines:[{}];
       lines.forEach((line,i)=>{
         data.push({
-          'Invoice No':inv.invoice_no||'',
-          'Supplier':inv.supplier||inv.vendor||'',
-          'TRN / VAT No':inv.trn||inv.supplier_trn||inv.vendor_trn||'',
-          'Purchase Date':inv.date||'',
-          'Due Date':inv.due_date||'',
-          'Location':inv.location||'',
-          'Currency':inv.currency||'AED',
+          'Invoice No':str(inv.invoice_no),
+          'Supplier':str(inv.supplier||inv.vendor),
+          'TRN / VAT No':str(inv.trn||inv.supplier_trn||inv.vendor_trn),
+          'Purchase Date':str(inv.date),
+          'Due Date':str(inv.due_date),
+          'Location':str(inv.location),
+          'Currency':str(inv.currency||'AED'),
           'Line #':i+1,
-          'Product / Description':line.product||line.name||line.description||line.item||'',
-          'SKU / Code':line.sku||line.code||'',
-          'Quantity':line.quantity||line.qty||'',
-          'Unit':line.unit||line.unit_of_measure||line.uom||'',
-          'Unit Price':line.unit_price||line.price||'',
-          'Discount':line.discount||'',
-          'Category':line.category||'',
-          'Net Amount':inv.subtotal??inv.net_amount??'',
-          'VAT Amount':inv.vat_amount??inv.tax_amount??'',
-          'Shipping':inv.shipping??'',
-          'Total':inv.total??'',
-          'Paid':inv.paid??'',
-          'Due':((Number(inv.total)||0)-(Number(inv.paid)||0))||'',
-          'Payment Method':inv.payment_method||'',
-          'Notes':inv.notes||inv.additional_notes||'',
-          'Source File':row.dataset.filename||'',
-          'Validation':row.dataset.validation||'',
+          'Product / Description':str(line.product||line.name||line.description||line.item),
+          'SKU / Code':str(line.sku||line.code),
+          'Quantity':num(line.quantity??line.qty),
+          'Unit':str(line.unit||line.unit_of_measure||line.uom),
+          'Unit Price':num(line.unit_price||line.price||line.unit_cost||line.cost),
+          'Discount %':num(line.discount_percent||line.discount_pct||line.discount),
+          'Discount Amount':num(line.discount_amount||(line.unit_cost||line.unit_price||0)*(line.quantity||line.qty||1)*((line.discount_percent||line.discount_pct||0)/100)),
+          'Line Total':num(line.line_total||line.total||line.amount),
+          'Category':str(line.category),
+          'Bill To':str(inv.bill_to||inv.buyer),
+          'Subtotal (excl VAT)':num(inv.subtotal??inv.net_amount),
+          'Total Discount':num(inv.discount_value||inv.discount),
+          'VAT Amount':num(inv.vat_amount??inv.tax_amount),
+          'Shipping':num(inv.shipping),
+          'Total Payable':num(inv.total),
+          'Paid':num(inv.paid),
+          'Due':num((Number(inv.total)||0)-(Number(inv.paid)||0)),
+          'Payment Method':str(inv.payment_method),
+          'Notes':str(inv.notes||inv.additional_notes),
+          'Source File':str(row.dataset.filename),
+          'Validation':str(row.dataset.validation),
         });
       });
     });
