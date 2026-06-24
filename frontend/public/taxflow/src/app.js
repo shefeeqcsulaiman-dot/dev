@@ -161,7 +161,7 @@ function go(page){
   if(page==='reports')syncReportsFromDatabase();
   if(page==='exception')loadExceptionCenter();
   if(page==='expense')loadExpenseVendors();
-  if(page==='staff')scheduleIdleTask(()=>renderLeaveCalendar(),300);
+  if(page==='staff'){scheduleIdleTask(()=>renderLeaveCalendar(),300);scheduleIdleTask(updateLeaveBalance,500);}
   if(page==='inventory'){
     ensurePurchaseRecordsLoadedForStock();
     setTimeout(()=>ensureInventoryBulkSelection(),80);
@@ -188,6 +188,7 @@ function stab(el,target){
   if(target==='inv-movement')loadStockMovements();
   if(String(target||'').startsWith('inv-'))setTimeout(()=>ensureInventoryBulkSelection(),80);
   if(target==='p-records')ensurePurchaseRecordsLoaded();
+  if(target==='hr-leave')scheduleIdleTask(updateLeaveBalance,50);
   if(target==='acc-voucher')prepareJournalForm();
   if(target==='acc-ledger')loadAccountingFromDb();
   if(target==='set-backup')loadBackupTab();
@@ -490,7 +491,9 @@ function saveEmployee(){
   renderPayrollEmployeeRecord(employee);
   saveServer('employees',employee);
   closeM('m-emp');
-  document.querySelectorAll('#m-emp input').forEach(input=>input.value='');
+  document.querySelectorAll('#m-emp input').forEach(inp=>{if(inp.type!=='file')inp.value='';});
+  document.querySelectorAll('#m-emp select').forEach(sel=>sel.selectedIndex=0);
+  document.querySelectorAll('#m-emp textarea').forEach(ta=>ta.value='');
   toast('Employee added to table','ok');
   audit('Created employee',employee.id,'Saved');
 }
@@ -668,6 +671,31 @@ function renderPayrollEmployeeRecord(employee){
   row.style.display='';
   row.hidden=false;
   refreshEnhancedTable(table);
+  renderPayrollRunRow(employee);
+}
+
+function renderPayrollRunRow(employee){
+  const tbody=document.getElementById('payroll-tbody');
+  if(!tbody)return;
+  const existing=[...tbody.querySelectorAll('tr:not([data-empty-state])')].find(r=>r.dataset.employeeId===employee.id);
+  if(existing)existing.remove();
+  const salary=Number(employee.salary||0);
+  const row=document.createElement('tr');
+  row.dataset.employeeId=employee.id;
+  row.dataset.wps=employee.iban?'ok':'missing';
+  const fmt=n=>Number(n||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  row.innerHTML=`
+    <td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px">${escapeHtml(initialsFromName(employee.name))}</div><div>${escapeHtml(employee.name)}<div class="card-sub">${escapeHtml(employee.department||'')}</div></div></div></td>
+    <td><input class="fi mono pay-basic" style="width:90px;padding:4px 6px;font-size:12px" value="${salary.toFixed(2)}" onchange="recalcPayroll()"></td>
+    <td><input class="fi mono pay-allow" style="width:90px;padding:4px 6px;font-size:12px" value="0.00" onchange="recalcPayroll()"></td>
+    <td><input class="fi mono pay-ot" style="width:70px;padding:4px 6px;font-size:12px" value="0.00" onchange="recalcPayroll()"></td>
+    <td><input class="fi mono pay-ded" style="width:70px;padding:4px 6px;font-size:12px" value="0.00" onchange="recalcPayroll()"></td>
+    <td class="mono pay-net">${fmt(salary)}</td>
+    <td><span class="b ${employee.iban?'b-g':'b-a'}">${employee.iban?'OK':'Review'}</span></td>
+    <td><span class="b b-b pay-status">Ready</span></td>
+    <td><button class="btn btn-g btn-sm" onclick="previewPayslip(this)">Payslip</button></td>`;
+  removeEmptyState(tbody);
+  tbody.prepend(row);
 }
 
 let currentStockMapRow=null;
@@ -6897,6 +6925,7 @@ function hydrateFromServer(){
         renderStats.attendanceCorrections=renderRecordList(_deferred2.attendanceCorrections,renderCorrectionRecord,'correction');
         renderStats.ledger=renderRecordList(_deferred2.ledger,line=>postLedgerLine(line,{persist:false}),'ledger');
       }finally{isHydratingFromServer=false;}
+      updateLeaveBalance();
       filterLedger();
     },1400);
     const totalLoaded=[
@@ -13741,6 +13770,7 @@ function approveLeave(btn){
   const id=row.dataset.recordId;
   if(id)saveServer('leaveRequests',{id,status:'Approved'});
   audit('Leave approved',row.children[0]?.textContent||'','Approved');
+  scheduleIdleTask(updateLeaveBalance,100);
 }
 function rejectLeave(btn){
   const row=btn.closest('tr');
@@ -13750,6 +13780,7 @@ function rejectLeave(btn){
   const id=row.dataset.recordId;
   if(id)saveServer('leaveRequests',{id,status:'Rejected'});
   audit('Leave rejected',row.children[0]?.textContent||'','Rejected');
+  scheduleIdleTask(updateLeaveBalance,100);
 }
 
 function saveLeaveRequest(){
@@ -13768,6 +13799,7 @@ function saveLeaveRequest(){
   document.getElementById('leave-reason').value='';
   toast('Leave request submitted ✓','ok');
   audit('Leave request submitted',employee,'Pending');
+  scheduleIdleTask(updateLeaveBalance,100);
 }
 
 function renderLeaveRecord(rec){
@@ -13868,6 +13900,38 @@ function renderLeaveCalendar(){
   cal.innerHTML=html;
 }
 // ─────────────────────────────────────────────────────────────────────────────
+
+function updateLeaveBalance(){
+  const tbody=document.getElementById('leave-balance-tbody');
+  if(!tbody)return;
+  const empRows=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')];
+  if(!empRows.length){emptyTableMessage(tbody,'No employees in database yet.');return;}
+  const leaveRows=[...document.querySelectorAll('#leave-tbody tr:not([data-empty-state])')];
+  const usedMap={};
+  leaveRows.forEach(row=>{
+    const cells=[...row.cells];
+    if(cells.length<6)return;
+    const emp=cells[0]?.textContent.trim();
+    const days=parseInt(cells[4]?.textContent||'0')||0;
+    const status=cells[5]?.textContent.trim();
+    if(status==='Rejected'||!emp)return;
+    usedMap[emp]=(usedMap[emp]||0)+days;
+  });
+  tbody.innerHTML='';
+  empRows.forEach(row=>{
+    const emp=employeeFromDirectoryRow(row);
+    if(!emp.name)return;
+    const policy=emp.leave_policy||'UAE Standard';
+    const annualDays=policy==='Executive'?30:21;
+    const sickDays=90;
+    const used=usedMap[emp.name]||0;
+    const remaining=Math.max(0,annualDays-used);
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${escapeHtml(emp.name)}</td><td class="mono">${annualDays}</td><td class="mono">${sickDays}</td><td class="mono">${used}</td><td class="mono" ${remaining<5?'style="color:var(--red)"':''}>${remaining}</td>`;
+    tbody.appendChild(tr);
+  });
+  if(!tbody.children.length)emptyTableMessage(tbody,'No employees in database yet.');
+}
 
 function submitOTRequest(){
   const employee=document.getElementById('ot-employee')?.value.trim()||'';
