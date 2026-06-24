@@ -1177,6 +1177,7 @@ input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;}
 .coa-l1{background:#dbeafe;color:#1d4ed8;}
 .coa-l2{background:#ede9fe;color:#5b21b6;}
 .coa-l3{background:#fce7f3;color:#9d174d;}
+.coa-l4{background:#dcfce7;color:#166534;}
 .coa-ledger{background:#dcfce7;color:#166534;}
 .coa-tree{border:1px solid var(--border);border-radius:8px;overflow:hidden;}
 .coa-empty{padding:24px;text-align:center;color:var(--text3);font-size:13px;}
