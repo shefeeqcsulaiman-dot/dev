@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260624a" as="style">
-<link rel="preload" href="src/app.js?v=20260624a" as="script">
+<link rel="preload" href="src/styles.css?v=20260624b" as="style">
+<link rel="preload" href="src/app.js?v=20260624b" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260624a">
+<link rel="stylesheet" href="src/styles.css?v=20260624b">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -194,39 +194,67 @@
       <div class="mb3-kpi-row mb16">
 
         <!-- Total Revenue card -->
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);display:flex;flex-direction:column">
-          <div style="height:4px;background:linear-gradient(90deg,#10b981,#34d399)"></div>
-          <div style="padding:18px 20px 16px;display:flex;flex-direction:column;gap:0;flex:1">
-            <!-- Header -->
-            <div style="display:flex;align-items:center;gap:11px;margin-bottom:14px">
-              <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#059669,#34d399);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(16,185,129,.28);flex-shrink:0">
-                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" width="18" height="18"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-              </div>
-              <div style="min-width:0;flex:1">
-                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--text3)">Total Revenue + VAT</div>
-                <div style="font-size:11.5px;color:var(--text3);margin-top:1px" id="dash-revenue-sub">0 Invoices</div>
-              </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 4px 18px rgba(16,185,129,.10);display:flex;flex-direction:column">
+          <!-- Illustration banner -->
+          <div style="background:linear-gradient(135deg,#d1fae5 0%,#a7f3d0 60%,#6ee7b7 100%);padding:20px 20px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:120px;position:relative;overflow:hidden">
+            <!-- background glow -->
+            <div style="position:absolute;top:-20px;right:-20px;width:100px;height:100px;border-radius:50%;background:rgba(16,185,129,.18);filter:blur(24px)"></div>
+            <!-- Label -->
+            <div style="z-index:1;padding-bottom:14px">
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#065f46;opacity:.7">Total Revenue</div>
+              <div style="font-size:15px;font-weight:800;color:#065f46">+ VAT</div>
+            </div>
+            <!-- SVG Illustration: money stack + arrow + VAT coin -->
+            <svg viewBox="0 0 120 100" width="120" height="100" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
+              <!-- money bills stack -->
+              <ellipse cx="52" cy="80" rx="34" ry="7" fill="#059669" opacity=".25"/>
+              <rect x="18" y="56" width="68" height="20" rx="5" fill="#34d399"/>
+              <rect x="20" y="50" width="68" height="20" rx="5" fill="#10b981"/>
+              <rect x="22" y="44" width="68" height="20" rx="5" fill="#059669"/>
+              <line x1="32" y1="54" x2="80" y2="54" stroke="#fff" stroke-width="1.2" stroke-opacity=".5"/>
+              <line x1="32" y1="59" x2="80" y2="59" stroke="#fff" stroke-width="1.2" stroke-opacity=".3"/>
+              <!-- AED circle coin left -->
+              <circle cx="28" cy="72" r="11" fill="#f59e0b" opacity=".9"/>
+              <circle cx="28" cy="72" r="8.5" fill="none" stroke="#fbbf24" stroke-width="1.2"/>
+              <text x="28" y="76.5" text-anchor="middle" fill="#78350f" font-size="8" font-weight="800">د.إ</text>
+              <!-- small coin -->
+              <circle cx="80" cy="70" r="7" fill="#fbbf24"/>
+              <circle cx="80" cy="70" r="5" fill="none" stroke="#f59e0b" stroke-width="1"/>
+              <text x="80" y="73.5" text-anchor="middle" fill="#78350f" font-size="5.5" font-weight="800">د.إ</text>
+              <!-- VAT badge -->
+              <rect x="62" y="30" width="30" height="14" rx="5" fill="#059669"/>
+              <text x="77" y="41" text-anchor="middle" fill="#fff" font-size="8" font-weight="800">VAT</text>
+              <!-- upward arrow -->
+              <polyline points="88,68 95,54 102,60 102,42 84,42" fill="none" stroke="#059669" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+              <polygon points="102,38 106,46 98,46" fill="#059669"/>
+              <!-- sparkle -->
+              <circle cx="14" cy="44" r="2" fill="#34d399" opacity=".7"/>
+              <circle cx="108" cy="70" r="1.5" fill="#10b981" opacity=".6"/>
+            </svg>
+          </div>
+          <div style="padding:14px 20px 16px;display:flex;flex-direction:column;gap:0;flex:1">
+            <!-- Header row -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div id="dash-revenue-sub" style="font-size:11.5px;color:var(--text3)">0 Invoices</div>
               <span id="dash-rev-trend" class="dv2-kpi-badge up" style="font-size:10.5px">—</span>
             </div>
             <!-- Main value -->
-            <div class="mono" style="font-size:22px;font-weight:700;color:#10b981;letter-spacing:-0.5px;margin-bottom:14px" id="dash-revenue">AED 0.00</div>
-            <div style="border-top:1px solid var(--border);margin-bottom:12px"></div>
+            <div class="mono" style="font-size:22px;font-weight:700;color:#10b981;letter-spacing:-0.5px;margin-bottom:12px" id="dash-revenue">AED 0.00</div>
+            <div style="border-top:1px solid var(--border);margin-bottom:10px"></div>
             <!-- Stats row -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
               <div style="background:rgba(16,185,129,.07);border-radius:10px;padding:8px 10px">
                 <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Collected</div>
-                <div class="mono" style="font-size:13px;font-weight:700;color:var(--text)" id="dash-rev-collected">AED 0.00</div>
+                <div class="mono" style="font-size:12px;font-weight:700;color:var(--text)" id="dash-rev-collected">AED 0.00</div>
               </div>
               <div style="background:var(--surface2);border-radius:10px;padding:8px 10px">
                 <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Paid Invoices</div>
-                <div class="mono" style="font-size:13px;font-weight:700;color:var(--text)" id="dash-rev-paid-count">0</div>
+                <div class="mono" style="font-size:12px;font-weight:700;color:var(--text)" id="dash-rev-paid-count">0</div>
               </div>
             </div>
-            <!-- Progress bar -->
-            <div style="background:var(--surface2);border-radius:99px;height:5px;margin-bottom:8px;overflow:hidden">
+            <div style="background:var(--surface2);border-radius:99px;height:5px;margin-bottom:7px;overflow:hidden">
               <div id="dash-rev-rate-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#10b981,#34d399);border-radius:99px;transition:width .5s ease"></div>
             </div>
-            <!-- Footer -->
             <div style="display:flex;align-items:center;justify-content:space-between">
               <span style="font-size:11px;color:var(--text3)">Collection Rate</span>
               <div style="display:flex;align-items:center;gap:8px">
@@ -238,39 +266,71 @@
         </div>
 
         <!-- Total Purchase card -->
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);display:flex;flex-direction:column">
-          <div style="height:4px;background:linear-gradient(90deg,#4f8ef0,#818cf8)"></div>
-          <div style="padding:18px 20px 16px;display:flex;flex-direction:column;gap:0;flex:1">
-            <!-- Header -->
-            <div style="display:flex;align-items:center;gap:11px;margin-bottom:14px">
-              <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#3b82f6,#818cf8);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(79,142,240,.28);flex-shrink:0">
-                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" width="18" height="18"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
-              </div>
-              <div style="min-width:0;flex:1">
-                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--text3)">Total Purchase + VAT</div>
-                <div style="font-size:11.5px;color:var(--text3);margin-top:1px" id="dash-purchases-sub">0 Bills</div>
-              </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 4px 18px rgba(79,142,240,.10);display:flex;flex-direction:column">
+          <!-- Illustration banner -->
+          <div style="background:linear-gradient(135deg,#dbeafe 0%,#bfdbfe 55%,#a5b4fc 100%);padding:20px 20px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:120px;position:relative;overflow:hidden">
+            <div style="position:absolute;top:-20px;right:-20px;width:100px;height:100px;border-radius:50%;background:rgba(99,102,241,.18);filter:blur(24px)"></div>
+            <div style="z-index:1;padding-bottom:14px">
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#1e3a8a;opacity:.7">Total Purchases</div>
+              <div style="font-size:15px;font-weight:800;color:#1e3a8a">+ VAT</div>
+            </div>
+            <!-- SVG Illustration: shopping bag + receipt + VAT + coins -->
+            <svg viewBox="0 0 120 100" width="120" height="100" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
+              <!-- shadow -->
+              <ellipse cx="60" cy="92" rx="38" ry="6" fill="#3b82f6" opacity=".15"/>
+              <!-- shopping bag body -->
+              <path d="M35,42 L28,86 Q28,90 33,90 L87,90 Q92,90 92,86 L85,42 Z" fill="#f59e0b"/>
+              <path d="M35,42 L28,86 Q28,90 33,90 L87,90 Q92,90 92,86 L85,42 Z" fill="url(#bag-grad)"/>
+              <defs>
+                <linearGradient id="bag-grad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#fbbf24"/>
+                  <stop offset="100%" stop-color="#d97706"/>
+                </linearGradient>
+              </defs>
+              <!-- bag highlight -->
+              <path d="M40,44 L36,78" stroke="#fcd34d" stroke-width="2" stroke-linecap="round" opacity=".5"/>
+              <!-- bag handles -->
+              <path d="M48,42 Q48,24 60,24 Q72,24 72,42" fill="none" stroke="#0284c7" stroke-width="4" stroke-linecap="round"/>
+              <!-- receipt -->
+              <rect x="44" y="48" width="28" height="36" rx="3" fill="#fff" opacity=".95"/>
+              <line x1="48" y1="56" x2="68" y2="56" stroke="#94a3b8" stroke-width="1.5"/>
+              <line x1="48" y1="61" x2="68" y2="61" stroke="#e2e8f0" stroke-width="1"/>
+              <line x1="48" y1="66" x2="68" y2="66" stroke="#e2e8f0" stroke-width="1"/>
+              <line x1="48" y1="71" x2="68" y2="71" stroke="#e2e8f0" stroke-width="1"/>
+              <rect x="48" y="77" width="12" height="4" rx="1" fill="#10b981"/>
+              <!-- VAT tag on bag -->
+              <rect x="76" y="36" width="28" height="13" rx="5" fill="#059669"/>
+              <text x="90" y="46.5" text-anchor="middle" fill="#fff" font-size="7.5" font-weight="800">VAT</text>
+              <!-- string for tag -->
+              <line x1="76" y1="42" x2="71" y2="38" stroke="#059669" stroke-width="1.2"/>
+              <!-- coins -->
+              <circle cx="22" cy="76" r="10" fill="#f59e0b"/>
+              <circle cx="22" cy="76" r="7.5" fill="none" stroke="#fbbf24" stroke-width="1.2"/>
+              <text x="22" y="80" text-anchor="middle" fill="#78350f" font-size="7" font-weight="800">د.إ</text>
+              <circle cx="100" cy="78" r="7" fill="#fbbf24" opacity=".9"/>
+              <text x="100" y="82" text-anchor="middle" fill="#78350f" font-size="5.5" font-weight="800">د.إ</text>
+            </svg>
+          </div>
+          <div style="padding:14px 20px 16px;display:flex;flex-direction:column;gap:0;flex:1">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div id="dash-purchases-sub" style="font-size:11.5px;color:var(--text3)">0 Bills</div>
               <span id="dash-pur-trend" class="dv2-kpi-badge up" style="font-size:10.5px">—</span>
             </div>
-            <!-- Main value -->
-            <div class="mono" style="font-size:22px;font-weight:700;color:#4f8ef0;letter-spacing:-0.5px;margin-bottom:14px" id="dash-total-purchases">AED 0.00</div>
-            <div style="border-top:1px solid var(--border);margin-bottom:12px"></div>
-            <!-- Stats row -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+            <div class="mono" style="font-size:22px;font-weight:700;color:#4f8ef0;letter-spacing:-0.5px;margin-bottom:12px" id="dash-total-purchases">AED 0.00</div>
+            <div style="border-top:1px solid var(--border);margin-bottom:10px"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
               <div style="background:rgba(79,142,240,.07);border-radius:10px;padding:8px 10px">
                 <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Amount Paid</div>
-                <div class="mono" style="font-size:13px;font-weight:700;color:var(--text)" id="dash-pur-paid-amount">AED 0.00</div>
+                <div class="mono" style="font-size:12px;font-weight:700;color:var(--text)" id="dash-pur-paid-amount">AED 0.00</div>
               </div>
               <div style="background:var(--surface2);border-radius:10px;padding:8px 10px">
                 <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Paid Bills</div>
-                <div class="mono" style="font-size:13px;font-weight:700;color:var(--text)" id="dash-pur-paid-count">0</div>
+                <div class="mono" style="font-size:12px;font-weight:700;color:var(--text)" id="dash-pur-paid-count">0</div>
               </div>
             </div>
-            <!-- Progress bar -->
-            <div style="background:var(--surface2);border-radius:99px;height:5px;margin-bottom:8px;overflow:hidden">
+            <div style="background:var(--surface2);border-radius:99px;height:5px;margin-bottom:7px;overflow:hidden">
               <div id="dash-pur-rate-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#4f8ef0,#818cf8);border-radius:99px;transition:width .5s ease"></div>
             </div>
-            <!-- Footer -->
             <div style="display:flex;align-items:center;justify-content:space-between">
               <span style="font-size:11px;color:var(--text3)">Payment Rate</span>
               <div style="display:flex;align-items:center;gap:8px">
@@ -281,29 +341,50 @@
           </div>
         </div>
 
-        <!-- Total Profit card -->
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);display:flex;flex-direction:column">
-          <div style="height:4px;background:linear-gradient(90deg,#8b5cf6,#c084fc)"></div>
-          <div style="padding:18px 20px 16px;display:flex;flex-direction:column;gap:0;flex:1">
-            <!-- Header -->
-            <div style="display:flex;align-items:center;gap:11px;margin-bottom:14px">
-              <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#7c3aed,#c084fc);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(139,92,246,.28);flex-shrink:0">
-                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" width="18" height="18"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-              </div>
-              <div style="min-width:0;flex:1">
-                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--text3)">Net Profit</div>
-                <div style="font-size:11px;color:var(--text3);margin-top:1px" id="dash-profit-sub">Revenue − Purchases</div>
-              </div>
+        <!-- Net Profit card -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 4px 18px rgba(139,92,246,.10);display:flex;flex-direction:column">
+          <!-- Illustration banner -->
+          <div style="background:linear-gradient(135deg,#ede9fe 0%,#ddd6fe 55%,#c4b5fd 100%);padding:20px 20px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:120px;position:relative;overflow:hidden">
+            <div style="position:absolute;top:-20px;right:-20px;width:100px;height:100px;border-radius:50%;background:rgba(139,92,246,.18);filter:blur(24px)"></div>
+            <div style="z-index:1;padding-bottom:14px">
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#4c1d95;opacity:.7">Net Profit</div>
+              <div style="font-size:15px;font-weight:800;color:#4c1d95">Margin</div>
+            </div>
+            <!-- SVG Illustration: bar chart + trend arrow + star + coins -->
+            <svg viewBox="0 0 120 100" width="120" height="100" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
+              <!-- shadow -->
+              <ellipse cx="60" cy="92" rx="38" ry="5" fill="#7c3aed" opacity=".15"/>
+              <!-- chart bars -->
+              <rect x="18" y="70" width="14" height="18" rx="3" fill="#4f8ef0"/>
+              <rect x="36" y="58" width="14" height="30" rx="3" fill="#6366f1"/>
+              <rect x="54" y="46" width="14" height="42" rx="3" fill="#7c3aed"/>
+              <rect x="72" y="34" width="14" height="54" rx="3" fill="#8b5cf6"/>
+              <!-- bar shine -->
+              <rect x="74" y="36" width="3" height="50" rx="2" fill="#fff" opacity=".2"/>
+              <!-- trend line + arrow -->
+              <polyline points="24,68 42,56 60,44 78,30 95,16" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <polygon points="95,11 102,20 88,20" fill="#10b981"/>
+              <!-- star -->
+              <polygon points="98,8 100,14 106,14 101,18 103,24 98,20 93,24 95,18 90,14 96,14" fill="#f59e0b"/>
+              <!-- coin -->
+              <circle cx="104" cy="76" r="11" fill="#f59e0b"/>
+              <circle cx="104" cy="76" r="8.5" fill="none" stroke="#fbbf24" stroke-width="1.2"/>
+              <text x="104" y="80.5" text-anchor="middle" fill="#78350f" font-size="8" font-weight="800">د.إ</text>
+              <!-- small sparkles -->
+              <circle cx="14" cy="34" r="2" fill="#a78bfa" opacity=".7"/>
+              <circle cx="16" cy="56" r="1.5" fill="#8b5cf6" opacity=".5"/>
+            </svg>
+          </div>
+          <div style="padding:14px 20px 16px;display:flex;flex-direction:column;gap:0;flex:1">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div id="dash-profit-sub" style="font-size:11px;color:var(--text3)">Revenue − Purchases</div>
               <span id="dash-profit-trend" class="dv2-kpi-badge up" style="font-size:10.5px">—</span>
             </div>
-            <!-- Main value -->
-            <div class="mono" style="font-size:22px;font-weight:700;color:#8b5cf6;letter-spacing:-0.5px;margin-bottom:14px" id="dash-gross-profit">AED 0</div>
-            <div style="border-top:1px solid var(--border);margin-bottom:12px"></div>
-            <!-- Margin progress bar -->
-            <div style="background:var(--surface2);border-radius:99px;height:5px;margin-bottom:8px;overflow:hidden">
+            <div class="mono" style="font-size:22px;font-weight:700;color:#8b5cf6;letter-spacing:-0.5px;margin-bottom:12px" id="dash-gross-profit">AED 0</div>
+            <div style="border-top:1px solid var(--border);margin-bottom:10px"></div>
+            <div style="background:var(--surface2);border-radius:99px;height:5px;margin-bottom:7px;overflow:hidden">
               <div id="dash-profit-margin-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#8b5cf6,#c084fc);border-radius:99px;transition:width .5s ease"></div>
             </div>
-            <!-- Footer -->
             <div style="display:flex;align-items:center;justify-content:space-between">
               <span style="font-size:11px;color:var(--text3)">Net Profit Margin</span>
               <div style="display:flex;align-items:center;gap:8px">
@@ -5462,6 +5543,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260624a" defer></script>
+<script src="src/app.js?v=20260624b" defer></script>
 </body>
 </html>
