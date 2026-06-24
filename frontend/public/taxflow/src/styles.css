@@ -23,6 +23,9 @@ body.theme-light{
   --teal:#0f8f8f;--teal-bg:rgba(15,143,143,0.1);
   --pink:#cc4d91;--pink-bg:rgba(204,77,145,0.1);
 }
+/* Dashboard: text 20% darker than global vars */
+body.theme-light #page-dashboard{--text:#091126;--text2:#2e3d58;--text3:#61708a;}
+body:not(.theme-light) #page-dashboard{--text:#b0b6c0;--text2:#6c788f;--text3:#3d485b;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;overflow:hidden;font-size:13.5px;}
 .hidden{display:none!important;}
