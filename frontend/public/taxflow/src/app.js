@@ -161,6 +161,7 @@ function go(page){
   if(page==='reports')syncReportsFromDatabase();
   if(page==='exception')loadExceptionCenter();
   if(page==='expense')loadExpenseVendors();
+  if(page==='hrms')scheduleIdleTask(refreshHrmsKpis,100);
   if(page==='staff'){scheduleIdleTask(()=>renderLeaveCalendar(),300);scheduleIdleTask(updateLeaveBalance,500);}
   if(page==='inventory'){
     ensurePurchaseRecordsLoadedForStock();
@@ -13760,6 +13761,35 @@ function addCorporateApprovalRule(){
     {key:'status',label:'Status',defaultValue:'Active'}
   ]);
   saveCorporateRecord('approvalMatrix',record,renderCorporateApprovals,'Approval rule saved to database');
+}
+
+function refreshHrmsKpis(){
+  const empCount=document.querySelectorAll('#employee-tbody tr:not([data-empty-state])').length;
+  const leaveRows=[...document.querySelectorAll('#leave-tbody tr:not([data-empty-state])')];
+  const otRows=[...document.querySelectorAll('#ot-tbody tr:not([data-empty-state])')];
+  const corrRows=[...document.querySelectorAll('#corrections-tbody tr:not([data-empty-state])')];
+  const today=new Date().toISOString().slice(0,10);
+  const onLeaveToday=leaveRows.filter(r=>{
+    const cells=[...r.cells];
+    const from=cells[2]?.textContent.trim();
+    const to=cells[3]?.textContent.trim();
+    const status=cells[5]?.textContent.trim();
+    return status==='Approved'&&from&&to&&from<=today&&today<=to;
+  }).length;
+  const pendingLeave=leaveRows.filter(r=>r.cells[5]?.textContent.trim()==='Pending').length;
+  const pendingOT=otRows.filter(r=>r.cells[5]?.textContent.trim()==='Pending').length;
+  const pendingCorr=corrRows.filter(r=>r.cells[5]?.textContent.trim()==='Pending').length;
+  const payrollRuns=document.querySelectorAll('#payroll-tbody tr:not([data-empty-state])').length;
+  const set=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
+  set('hrms-kpi-emp',empCount||'0');
+  set('hrms-kpi-leave',onLeaveToday||'0');
+  set('hrms-kpi-pending',(pendingLeave+pendingOT+pendingCorr)||'0');
+  set('hrms-kpi-payroll',payrollRuns||'0');
+  const badge=(id,val,unit)=>{const el=document.getElementById(id);if(el)el.textContent=val+' '+unit;};
+  badge('hrms-badge-emp',empCount||'0','employees');
+  badge('hrms-badge-leave',pendingLeave||'0','pending');
+  badge('hrms-badge-ot',pendingOT||'0','pending');
+  badge('hrms-badge-corr',pendingCorr||'0','pending');
 }
 
 function approveLeave(btn){

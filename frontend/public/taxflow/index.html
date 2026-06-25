@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260624n" as="style">
-<link rel="preload" href="src/app.js?v=20260624n" as="script">
+<link rel="preload" href="src/styles.css?v=20260625a" as="style">
+<link rel="preload" href="src/app.js?v=20260625a" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260624n">
+<link rel="stylesheet" href="src/styles.css?v=20260625a">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -87,6 +87,10 @@
 
   <div class="sb-section">
     <div class="sb-lbl">People</div>
+    <div class="nav" onclick="go('hrms')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="2" width="14" height="12" rx="1.5"/><path d="M4 6h8M4 9h5M10 9h2"/><circle cx="6" cy="5" r="1.5" fill="currentColor" stroke="none" opacity=".4"/></svg>
+      HRMS
+    </div>
     <div class="nav" onclick="go('staff')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="5" r="3"/><path d="M1 14c0-3 2.5-5 5-5s5 2 5 5"/><circle cx="13" cy="6" r="2"/><path d="M15 14c0-2-1-3.5-2-4"/></svg>
       Staff Management
@@ -1423,6 +1427,193 @@
       <button class="btn btn-p" onclick="matchSelected()">Match Selected</button>
       <button class="btn btn-g" onclick="unmatchSelected()">Unmatch</button>
       <span style="font-size:12px;color:var(--muted);align-self:center">Select one row from each side, then click Match</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ HRMS HUB ═══════════════════ -->
+<div class="page" id="page-hrms">
+  <!-- Header banner -->
+  <div style="background:linear-gradient(135deg,#1e1b4b 0%,#312e81 55%,#4338ca 100%);border-radius:14px;padding:28px 32px;margin-bottom:24px;position:relative;overflow:hidden">
+    <div style="position:absolute;inset:0;background:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 120%22><circle cx=%22160%22 cy=%2230%22 r=%2260%22 fill=%22rgba(255,255,255,.04)%22/><circle cx=%2210%22 cy=%22100%22 r=%2240%22 fill=%22rgba(255,255,255,.03)%22/></svg>');pointer-events:none"></div>
+    <div style="position:relative;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px">
+      <div>
+        <div style="font-size:22px;font-weight:700;color:#fff;letter-spacing:-.3px">Human Resource Management</div>
+        <div style="font-size:13px;color:rgba(255,255,255,.65);margin-top:4px">Employees · Attendance · Leave · Payroll · Rota · Compliance</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2)" onclick="go('staff')">+ Add Employee</button>
+        <button class="btn btn-sm" style="background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.15)" onclick="go('payroll')">Run Payroll</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI row -->
+  <div class="g4 mb16">
+    <div class="stat"><div class="stat-lbl">Total Employees</div><div class="stat-val" id="hrms-kpi-emp" style="color:var(--accent)">—</div><div class="stat-delta">active headcount</div></div>
+    <div class="stat"><div class="stat-lbl">On Leave Today</div><div class="stat-val" id="hrms-kpi-leave" style="color:var(--amber)">—</div><div class="stat-delta">approved leaves</div></div>
+    <div class="stat"><div class="stat-lbl">Pending Approvals</div><div class="stat-val" id="hrms-kpi-pending" style="color:var(--red)">—</div><div class="stat-delta">OT + leave + corrections</div></div>
+    <div class="stat"><div class="stat-lbl">Payroll Runs</div><div class="stat-val" id="hrms-kpi-payroll" style="color:var(--green)">—</div><div class="stat-delta">this year</div></div>
+  </div>
+
+  <!-- Module cards grid -->
+  <div class="g3 mb16">
+    <div class="card hrms-mod-card" onclick="go('staff')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(99,102,241,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#6366f1" stroke-width="1.6"><circle cx="8" cy="7" r="3.5"/><path d="M2 17c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="15" cy="7" r="2.5"/><path d="M18 17c0-2.5-1.5-4-3-4.5"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">Employee Directory</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Manage profiles, contracts, documents, and bank details</div>
+          <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+            <span class="b b-b" style="font-size:10px" id="hrms-badge-emp">— employees</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(2)'),'hr-att');go('staff')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(16,185,129,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#10b981" stroke-width="1.6"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/><circle cx="7" cy="12" r="1" fill="#10b981" stroke="none"/><circle cx="10" cy="12" r="1" fill="#10b981" stroke="none"/><circle cx="13" cy="12" r="1" fill="#10b981" stroke="none"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">Attendance</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Daily logs, biometric sync, corrections, and calendar view</div>
+          <div style="margin-top:10px"><span class="b b-g" style="font-size:10px">Live calendar</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(4)'),'hr-leave');go('staff')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(245,158,11,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#f59e0b" stroke-width="1.6"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2z"/><path d="M10 6v5l3 2"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">Leave Management</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Annual, sick, emergency leave requests and approvals</div>
+          <div style="margin-top:10px"><span class="b b-a" style="font-size:10px" id="hrms-badge-leave">— pending</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(3)'),'hr-ot');go('staff')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(239,68,68,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#ef4444" stroke-width="1.6"><circle cx="10" cy="10" r="8"/><path d="M10 6v4l2.5 2.5"/><path d="M14 3l2-1.5M6 3L4 1.5"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">Overtime</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">OT requests, supervisor approval, and payroll sync</div>
+          <div style="margin-top:10px"><span class="b b-r" style="font-size:10px" id="hrms-badge-ot">— pending</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hrms-mod-card" onclick="go('rota')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(6,182,212,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#06b6d4" stroke-width="1.6"><rect x="2" y="3" width="16" height="14" rx="2"/><path d="M2 7h16M6 3v2M14 3v2M6 11h2M10 11h2M6 14h2"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">Rota Planning</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Shifts, weekly/monthly rotas, swaps, and approvals</div>
+          <div style="margin-top:10px"><span class="b b-t" style="font-size:10px">Weekly &amp; Monthly</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hrms-mod-card" onclick="go('payroll')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(139,92,246,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#8b5cf6" stroke-width="1.6"><rect x="2" y="4" width="16" height="12" rx="2"/><path d="M2 8h16"/><circle cx="10" cy="13" r="2" stroke="#8b5cf6"/><path d="M6 13h1M13 13h1"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">Payroll &amp; WPS</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Salary runs, payslips, SIF export, and WPS compliance</div>
+          <div style="margin-top:10px"><span class="b b-p" style="font-size:10px">UAE WPS Ready</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(5)'),'hr-corrections');go('staff')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(251,146,60,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#fb923c" stroke-width="1.6"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2z"/><path d="M10 7v4M10 13v.5"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">Corrections</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Attendance fix requests, break adjustments, and audit trail</div>
+          <div style="margin-top:10px"><span class="b b-a" style="font-size:10px" id="hrms-badge-corr">— pending</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(6)'),'hr-policy');go('staff')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(20,184,166,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#14b8a6" stroke-width="1.6"><path d="M10 2l1.5 4.5h4.5l-3.5 2.5 1.5 4.5L10 11l-4 2.5 1.5-4.5L4 6.5h4.5z"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">HR Settings</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Leave policies, holiday calendar, approval hierarchy</div>
+          <div style="margin-top:10px"><span class="b b-t" style="font-size:10px">UAE Labour Law</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(7)'),'hr-bio');go('staff')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(99,102,241,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#6366f1" stroke-width="1.6"><rect x="4" y="2" width="12" height="16" rx="2"/><path d="M7 7c.5-1 1.5-1.5 3-1.5s2.5.5 3 1.5"/><path d="M7 10c.5 1 1.5 1.5 3 1.5s2.5-.5 3-1.5"/><circle cx="10" cy="8.5" r="1" fill="#6366f1" stroke="none"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">Biometric Integration</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">ZKTeco / Suprema · TCP/IP sync and live log</div>
+          <div style="margin-top:10px"><div class="flx" style="gap:6px;align-items:center"><div class="bio-pulse"></div><span style="font-size:10px;color:var(--green)">Live</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick actions + compliance info -->
+  <div class="g2">
+    <div class="card">
+      <div class="card-hd"><div class="card-title">Quick Actions</div></div>
+      <div style="display:flex;flex-direction:column;gap:8px;padding-top:4px">
+        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="go('staff');setTimeout(()=>showM('m-emp'),50)">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/><line x1="13" y1="2" x2="13" y2="6"/><line x1="11" y1="4" x2="15" y2="4"/></svg>
+          Add New Employee
+        </button>
+        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="go('staff');setTimeout(()=>{stab(document.querySelector('#page-staff .tab:nth-child(4)'),'hr-leave');showM('m-leave');},50)">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M2 6h12M5 1.5v3M11 1.5v3"/></svg>
+          Apply for Leave
+        </button>
+        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="go('staff');setTimeout(()=>showM('m-att-correction'),50)">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v4l2.5 1.5"/></svg>
+          Attendance Correction
+        </button>
+        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="go('payroll')">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6h12M5 10h3M10 10h1"/></svg>
+          Run Payroll
+        </button>
+        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="go('rota')">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1.5v3M11 1.5v3M2 6h12M5 9h2M9 9h2M5 12h2"/></svg>
+          Plan Rota
+        </button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><div class="card-title">UAE Compliance</div></div>
+      <div style="display:flex;flex-direction:column;gap:10px;padding-top:4px">
+        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">✓</div><div><div style="font-size:13px;font-weight:500">WPS / SIF Export</div><div class="card-sub">CBUAE-compliant salary file generation</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">✓</div><div><div style="font-size:13px;font-weight:500">EOSB / Gratuity</div><div class="card-sub">UAE Labour Law gratuity calculator</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">✓</div><div><div style="font-size:13px;font-weight:500">Leave Entitlement</div><div class="card-sub">21-day annual · 90-day sick (UAE Federal Law)</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">→</div><div><div style="font-size:13px;font-weight:500">ESS Portal</div><div class="card-sub">Employee self-service — coming soon</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">→</div><div><div style="font-size:13px;font-weight:500">Recruitment ATS</div><div class="card-sub">Job posts, candidates, interviews — planned</div></div></div>
+      </div>
     </div>
   </div>
 </div>
@@ -5640,6 +5831,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260624n" defer></script>
+<script src="src/app.js?v=20260625a" defer></script>
 </body>
 </html>

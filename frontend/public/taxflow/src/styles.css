@@ -603,6 +603,10 @@ textarea.fi{resize:vertical;min-height:80px;}
 .cal-day.leave{background:var(--amber-bg);}
 .cal-day.wknd{color:var(--text3);}
 
+/* ── HRMS HUB ── */
+.hrms-mod-card{cursor:pointer;transition:transform .15s,box-shadow .15s;}
+.hrms-mod-card:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(0,0,0,.1);}
+
 /* ── BIOMETRIC ── */
 .bio-pulse{width:10px;height:10px;border-radius:50%;background:var(--green);animation:pulse 1.5s infinite;}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
