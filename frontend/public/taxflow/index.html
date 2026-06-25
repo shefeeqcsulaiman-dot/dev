@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260625a" as="style">
-<link rel="preload" href="src/app.js?v=20260625a" as="script">
+<link rel="preload" href="src/styles.css?v=20260625e" as="style">
+<link rel="preload" href="src/app.js?v=20260625e" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260625a">
+<link rel="stylesheet" href="src/styles.css?v=20260625e">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -86,22 +86,11 @@
   </div>
 
   <div class="sb-section">
-    <div class="sb-lbl">People</div>
-    <div class="nav" onclick="go('hrms')">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="2" width="14" height="12" rx="1.5"/><path d="M4 6h8M4 9h5M10 9h2"/><circle cx="6" cy="5" r="1.5" fill="currentColor" stroke="none" opacity=".4"/></svg>
+    <div class="sb-lbl">People &amp; HR</div>
+    <div class="nav" id="nav-hrms" onclick="window.open('/hrms.html','_blank')" title="Opens HRMS Portal in a new tab">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2a3 3 0 100 6 3 3 0 000-6z"/><path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/><path d="M12 7l1.5-1.5"/><circle cx="13.5" cy="4.5" r="1.5"/></svg>
       HRMS
-    </div>
-    <div class="nav" onclick="go('staff')">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="5" r="3"/><path d="M1 14c0-3 2.5-5 5-5s5 2 5 5"/><circle cx="13" cy="6" r="2"/><path d="M15 14c0-2-1-3.5-2-4"/></svg>
-      Staff Management
-    </div>
-    <div class="nav" onclick="go('rota')">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1.5v3M11 1.5v3M2 6h12M5 9h2M9 9h2M5 12h2"/></svg>
-      Rota Planning
-    </div>
-    <div class="nav" onclick="go('payroll')">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6h12"/><path d="M5 10h3M10 10h1"/></svg>
-      Payroll
+      <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.45"><path d="M2 2h8v8M10 2L2 10"/></svg>
     </div>
   </div>
 
@@ -1456,129 +1445,274 @@
     <div class="stat"><div class="stat-lbl">Payroll Runs</div><div class="stat-val" id="hrms-kpi-payroll" style="color:var(--green)">—</div><div class="stat-delta">this year</div></div>
   </div>
 
-  <!-- Module cards grid -->
+  <!-- Alerts + Quick Actions row -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+    <div class="card">
+      <div class="card-hd"><div class="card-title">Alerts &amp; Pipeline</div><div class="card-sub">Live counts</div></div>
+      <div class="g2" style="padding:4px 0 0">
+        <div class="dash-alert-tile" onclick="goHrmsTab(7,'hr-expiry');scheduleIdleTask(refreshExpiryAlerts,100)">
+          <div id="hrms-dash-expiry" style="font-size:24px;font-weight:700;color:var(--red);line-height:1">—</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">Docs Expiring (30d)</div>
+        </div>
+        <div class="dash-alert-tile" onclick="goHrmsTab(3,'hr-ot')">
+          <div id="hrms-dash-ot" style="font-size:24px;font-weight:700;color:var(--amber);line-height:1">—</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">OT Pending</div>
+        </div>
+        <div class="dash-alert-tile" onclick="go('recruitment')">
+          <div id="hrms-dash-recs" style="font-size:24px;font-weight:700;color:var(--accent);line-height:1">—</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">Open Positions</div>
+        </div>
+        <div class="dash-alert-tile" onclick="goHrmsTab(6,'hr-loans')">
+          <div id="hrms-dash-loans" style="font-size:24px;font-weight:700;color:var(--green);line-height:1">—</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">Loan Requests</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><div class="card-title">Quick Actions</div><div class="card-sub">Common HR tasks</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:4px 0 0">
+        <button class="btn btn-p" onclick="go('staff');setTimeout(()=>showM('m-emp'),50)">+ Add Employee</button>
+        <button class="btn btn-g" onclick="goHrmsTab(4,'hr-leave');setTimeout(()=>showM('m-leave'),50)">Apply Leave</button>
+        <button class="btn btn-g" onclick="goHrmsTab(3,'hr-ot');setTimeout(()=>showM('m-ot'),50)">Submit OT</button>
+        <button class="btn btn-g" onclick="go('recruitment');setTimeout(()=>showM('m-recruitment'),50)">Post Job</button>
+        <button class="btn btn-g" onclick="go('payroll')">Run Payroll</button>
+        <button class="btn btn-g" onclick="goHrmsTab(7,'hr-expiry');scheduleIdleTask(refreshExpiryAlerts,100)">Check Expiry</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Module cards grid — Core HR -->
+  <div style="font-weight:700;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Core HR Modules</div>
   <div class="g3 mb16">
-    <div class="card hrms-mod-card" onclick="go('staff')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+    <div class="card hrms-mod-card" onclick="go('staff')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(99,102,241,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#6366f1" stroke-width="1.6"><circle cx="8" cy="7" r="3.5"/><path d="M2 17c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="15" cy="7" r="2.5"/><path d="M18 17c0-2.5-1.5-4-3-4.5"/></svg>
         </div>
         <div>
           <div style="font-weight:700;font-size:14px;color:var(--text)">Employee Directory</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:3px">Manage profiles, contracts, documents, and bank details</div>
-          <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
-            <span class="b b-b" style="font-size:10px" id="hrms-badge-emp">— employees</span>
-          </div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Profiles, contracts, insurance, documents, bank details</div>
+          <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap"><span class="b b-b" style="font-size:10px" id="hrms-badge-emp">— employees</span><span class="b" style="font-size:10px;background:var(--bg3)">12 types</span></div>
         </div>
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(2)'),'hr-att');go('staff')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(2)'),'hr-att');go('staff')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(16,185,129,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#10b981" stroke-width="1.6"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/><circle cx="7" cy="12" r="1" fill="#10b981" stroke="none"/><circle cx="10" cy="12" r="1" fill="#10b981" stroke="none"/><circle cx="13" cy="12" r="1" fill="#10b981" stroke="none"/></svg>
         </div>
         <div>
           <div style="font-weight:700;font-size:14px;color:var(--text)">Attendance</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:3px">Daily logs, biometric sync, corrections, and calendar view</div>
-          <div style="margin-top:10px"><span class="b b-g" style="font-size:10px">Live calendar</span></div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Daily logs, biometric, corrections, calendar</div>
+          <div style="margin-top:10px;display:flex;gap:6px"><span class="b b-g" style="font-size:10px">Live</span><span class="b" style="font-size:10px;background:var(--bg3)">Biometric</span></div>
         </div>
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(4)'),'hr-leave');go('staff')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(4)'),'hr-leave');go('staff')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(245,158,11,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#f59e0b" stroke-width="1.6"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2z"/><path d="M10 6v5l3 2"/></svg>
         </div>
         <div>
           <div style="font-weight:700;font-size:14px;color:var(--text)">Leave Management</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:3px">Annual, sick, emergency leave requests and approvals</div>
-          <div style="margin-top:10px"><span class="b b-a" style="font-size:10px" id="hrms-badge-leave">— pending</span></div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">10 types: Annual, Sick, Casual, Maternity, Paternity…</div>
+          <div style="margin-top:10px;display:flex;gap:6px"><span class="b b-a" style="font-size:10px" id="hrms-badge-leave">— pending</span><span class="b" style="font-size:10px;background:var(--bg3)">21-day UAE</span></div>
         </div>
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(3)'),'hr-ot');go('staff')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(3)'),'hr-ot');go('staff')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(239,68,68,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#ef4444" stroke-width="1.6"><circle cx="10" cy="10" r="8"/><path d="M10 6v4l2.5 2.5"/><path d="M14 3l2-1.5M6 3L4 1.5"/></svg>
         </div>
         <div>
           <div style="font-weight:700;font-size:14px;color:var(--text)">Overtime</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:3px">OT requests, supervisor approval, and payroll sync</div>
-          <div style="margin-top:10px"><span class="b b-r" style="font-size:10px" id="hrms-badge-ot">— pending</span></div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Normal · Ramadan · Weekend · Holiday OT</div>
+          <div style="margin-top:10px;display:flex;gap:6px"><span class="b b-r" style="font-size:10px" id="hrms-badge-ot">— pending</span><span class="b" style="font-size:10px;background:var(--bg3)">1.25× / 1.5×</span></div>
         </div>
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="go('rota')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+    <div class="card hrms-mod-card" onclick="go('rota')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(6,182,212,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#06b6d4" stroke-width="1.6"><rect x="2" y="3" width="16" height="14" rx="2"/><path d="M2 7h16M6 3v2M14 3v2M6 11h2M10 11h2M6 14h2"/></svg>
         </div>
         <div>
-          <div style="font-weight:700;font-size:14px;color:var(--text)">Rota Planning</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:3px">Shifts, weekly/monthly rotas, swaps, and approvals</div>
-          <div style="margin-top:10px"><span class="b b-t" style="font-size:10px">Weekly &amp; Monthly</span></div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">Rota &amp; Shift Planning</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Morning / Evening / Night / Split shifts, swap requests</div>
+          <div style="margin-top:10px;display:flex;gap:6px"><span class="b b-t" style="font-size:10px">Weekly &amp; Monthly</span></div>
         </div>
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="go('payroll')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+    <div class="card hrms-mod-card" onclick="go('payroll')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(139,92,246,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#8b5cf6" stroke-width="1.6"><rect x="2" y="4" width="16" height="12" rx="2"/><path d="M2 8h16"/><circle cx="10" cy="13" r="2" stroke="#8b5cf6"/><path d="M6 13h1M13 13h1"/></svg>
         </div>
         <div>
           <div style="font-weight:700;font-size:14px;color:var(--text)">Payroll &amp; WPS</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:3px">Salary runs, payslips, SIF export, and WPS compliance</div>
-          <div style="margin-top:10px"><span class="b b-p" style="font-size:10px">UAE WPS Ready</span></div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Monthly · Daily Wage · Hourly · Weekly · Contract</div>
+          <div style="margin-top:10px;display:flex;gap:6px"><span class="b b-p" style="font-size:10px">WPS / SIF</span><span class="b" style="font-size:10px;background:var(--bg3)">EOSB</span></div>
         </div>
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(5)'),'hr-corrections');go('staff')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(6)'),'hr-loans');go('staff')">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(34,197,94,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#22c55e" stroke-width="1.6"><rect x="2" y="5" width="16" height="11" rx="2"/><path d="M2 9h16"/><path d="M6 13h4M14 13h1"/><path d="M6 2l-1 3M14 2l1 3"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">Loans &amp; Advances</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Employee loans with EMI and salary advance requests</div>
+          <div style="margin-top:10px;display:flex;gap:6px"><span class="b b-g" style="font-size:10px">Auto EMI</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(7)'),'hr-expiry');refreshExpiryAlerts();go('staff')">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(239,68,68,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#ef4444" stroke-width="1.6"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2z"/><path d="M10 7v4M10 13v.5"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">Expiry Alerts</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Visa · Passport · EID · Insurance · Driving License</div>
+          <div style="margin-top:10px"><span class="b b-r" style="font-size:10px" id="hrms-badge-expiry">— alerts</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(5)'),'hr-corrections');go('staff')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(251,146,60,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#fb923c" stroke-width="1.6"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2z"/><path d="M10 7v4M10 13v.5"/></svg>
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#fb923c" stroke-width="1.6"><path d="M4 10h12M10 4v12" stroke-linecap="round"/><rect x="3" y="3" width="14" height="14" rx="3"/></svg>
         </div>
         <div>
           <div style="font-weight:700;font-size:14px;color:var(--text)">Corrections</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:3px">Attendance fix requests, break adjustments, and audit trail</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Attendance fix requests and audit trail</div>
           <div style="margin-top:10px"><span class="b b-a" style="font-size:10px" id="hrms-badge-corr">— pending</span></div>
         </div>
       </div>
     </div>
+  </div>
 
-    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(6)'),'hr-policy');go('staff')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+  <!-- Extended HR Modules -->
+  <div style="font-weight:700;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Extended Modules</div>
+  <div class="g3 mb16">
+    <div class="card hrms-mod-card" onclick="go('recruitment')">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(16,185,129,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#10b981" stroke-width="1.6"><circle cx="10" cy="7" r="4"/><path d="M3 18c0-4 3-7 7-7s7 3 7 7"/><path d="M15 4l1 1-3 3-1.5-1.5"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">Recruitment ATS</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Job postings, candidates, interviews, offer letters, onboarding</div>
+          <div style="margin-top:10px;display:flex;gap:6px"><span class="b b-g" style="font-size:10px" id="hrms-badge-recs">—</span><span class="b" style="font-size:10px;background:var(--bg3)">Visa Tracking</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hrms-mod-card" onclick="go('hrms-ext')">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(245,158,11,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#f59e0b" stroke-width="1.6"><path d="M10 2l1.5 4.5H17l-4.5 3 1.5 4.5L10 11.5 6 14l1.5-4.5L3 6.5h5.5z"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">Performance Management</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">KPIs, goal setting, appraisals, and performance scores</div>
+          <div style="margin-top:10px"><span class="b b-a" style="font-size:10px">KPI Tracking</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hrms-mod-card" onclick="go('hrms-ext');setTimeout(()=>stab(document.querySelector('#page-hrms-ext .tab:nth-child(2)'),'hrext-train'),50)">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(6,182,212,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#06b6d4" stroke-width="1.6"><path d="M4 4h12v10a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2"/><path d="M8 9h4M8 12h2"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">Training Management</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Programs, skill tracking, certifications, training calendar</div>
+          <div style="margin-top:10px"><span class="b b-t" style="font-size:10px">Cert Tracker</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hrms-mod-card" onclick="go('hrms-ext');setTimeout(()=>stab(document.querySelector('#page-hrms-ext .tab:nth-child(3)'),'hrext-assets'),50)">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(139,92,246,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#8b5cf6" stroke-width="1.6"><rect x="3" y="5" width="14" height="10" rx="2"/><path d="M7 5V3h6v2"/><path d="M7 10h2M11 10h2M7 13h2"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">Asset Management</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Laptop · Mobile · Vehicle · Uniform · Tools tracking</div>
+          <div style="margin-top:10px"><span class="b b-p" style="font-size:10px">Issue &amp; Return</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hrms-mod-card" onclick="go('hrms-ext');setTimeout(()=>stab(document.querySelector('#page-hrms-ext .tab:nth-child(4)'),'hrext-ess'),50)">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(20,184,166,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#14b8a6" stroke-width="1.6"><circle cx="10" cy="8" r="4"/><rect x="4" y="14" width="12" height="5" rx="2"/><path d="M8 14v2M12 14v2"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">ESS Portal</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Payslips, leave requests, attendance, document downloads</div>
+          <div style="margin-top:10px"><span class="b b-t" style="font-size:10px">Self Service</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hrms-mod-card" onclick="go('hrms-ext');setTimeout(()=>stab(document.querySelector('#page-hrms-ext .tab:nth-child(5)'),'hrext-mgr'),50)">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(99,102,241,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#6366f1" stroke-width="1.6"><circle cx="7" cy="7" r="3"/><circle cx="14" cy="5" r="2.5"/><path d="M1 17c0-3 2.5-5 6-5M12 15c0-2 1.5-4 2-4s2 2 2 4"/><path d="M9 13h5"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">Manager Portal</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Team approvals, reports, and workforce visibility</div>
+          <div style="margin-top:10px"><span class="b b-b" style="font-size:10px">Line Manager</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings + Biometric -->
+  <div class="g2 mb16">
+    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(8)'),'hr-policy');go('staff')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(20,184,166,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#14b8a6" stroke-width="1.6"><path d="M10 2l1.5 4.5h4.5l-3.5 2.5 1.5 4.5L10 11l-4 2.5 1.5-4.5L4 6.5h4.5z"/></svg>
         </div>
         <div>
           <div style="font-weight:700;font-size:14px;color:var(--text)">HR Settings</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:3px">Leave policies, holiday calendar, approval hierarchy</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Leave policies, holiday calendar, pay components, approval hierarchy</div>
           <div style="margin-top:10px"><span class="b b-t" style="font-size:10px">UAE Labour Law</span></div>
         </div>
       </div>
     </div>
-
-    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(7)'),'hr-bio');go('staff')" style="cursor:pointer;transition:transform .15s,box-shadow .15s">
+    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(9)'),'hr-bio');go('staff')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(99,102,241,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#6366f1" stroke-width="1.6"><rect x="4" y="2" width="12" height="16" rx="2"/><path d="M7 7c.5-1 1.5-1.5 3-1.5s2.5.5 3 1.5"/><path d="M7 10c.5 1 1.5 1.5 3 1.5s2.5-.5 3-1.5"/><circle cx="10" cy="8.5" r="1" fill="#6366f1" stroke="none"/></svg>
         </div>
         <div>
           <div style="font-weight:700;font-size:14px;color:var(--text)">Biometric Integration</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:3px">ZKTeco / Suprema · TCP/IP sync and live log</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">ZKTeco / Suprema · TCP/IP sync, QR, Face ID</div>
           <div style="margin-top:10px"><div class="flx" style="gap:6px;align-items:center"><div class="bio-pulse"></div><span style="font-size:10px;color:var(--green)">Live</span></div></div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Quick actions + compliance info -->
+  <!-- Quick actions + UAE compliance -->
   <div class="g2">
     <div class="card">
       <div class="card-hd"><div class="card-title">Quick Actions</div></div>
@@ -1591,9 +1725,13 @@
           <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M2 6h12M5 1.5v3M11 1.5v3"/></svg>
           Apply for Leave
         </button>
-        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="go('staff');setTimeout(()=>showM('m-att-correction'),50)">
-          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v4l2.5 1.5"/></svg>
-          Attendance Correction
+        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="go('recruitment');setTimeout(()=>showM('m-recruitment'),50)">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/><path d="M12 2l1 1-2.5 2.5-1-1"/></svg>
+          Open Job Requisition
+        </button>
+        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="go('staff');setTimeout(()=>showM('m-loan'),50)">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="9" rx="1"/><path d="M2 7h12M5 11h3M10 11h1"/></svg>
+          New Loan Request
         </button>
         <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="go('payroll')">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6h12M5 10h3M10 10h1"/></svg>
@@ -1606,13 +1744,15 @@
       </div>
     </div>
     <div class="card">
-      <div class="card-hd"><div class="card-title">UAE Compliance</div></div>
+      <div class="card-hd"><div class="card-title">UAE Compliance &amp; Status</div></div>
       <div style="display:flex;flex-direction:column;gap:10px;padding-top:4px">
         <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">✓</div><div><div style="font-size:13px;font-weight:500">WPS / SIF Export</div><div class="card-sub">CBUAE-compliant salary file generation</div></div></div>
-        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">✓</div><div><div style="font-size:13px;font-weight:500">EOSB / Gratuity</div><div class="card-sub">UAE Labour Law gratuity calculator</div></div></div>
-        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">✓</div><div><div style="font-size:13px;font-weight:500">Leave Entitlement</div><div class="card-sub">21-day annual · 90-day sick (UAE Federal Law)</div></div></div>
-        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">→</div><div><div style="font-size:13px;font-weight:500">ESS Portal</div><div class="card-sub">Employee self-service — coming soon</div></div></div>
-        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">→</div><div><div style="font-size:13px;font-weight:500">Recruitment ATS</div><div class="card-sub">Job posts, candidates, interviews — planned</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">✓</div><div><div style="font-size:13px;font-weight:500">EOSB / Gratuity</div><div class="card-sub">UAE Labour Law gratuity calculator (Article 132)</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">✓</div><div><div style="font-size:13px;font-weight:500">Leave Entitlement</div><div class="card-sub">21-day annual · 90-day sick · 45-day maternity (UAE Federal Law)</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">✓</div><div><div style="font-size:13px;font-weight:500">OT Rate Compliance</div><div class="card-sub">1.25× normal · 1.5× weekend/holiday per UAE Labour Law</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">✓</div><div><div style="font-size:13px;font-weight:500">Document Expiry Alerts</div><div class="card-sub">Visa · Passport · EID · Labor Card · Insurance tracking</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">⚙</div><div><div style="font-size:13px;font-weight:500">MOL Contract Tracking</div><div class="card-sub">Ministry of Labour contract upload and expiry management</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">⚙</div><div><div style="font-size:13px;font-weight:500">Public Holiday Calendar</div><div class="card-sub">UAE official holiday auto-sync and OT rate adjustment</div></div></div>
       </div>
     </div>
   </div>
@@ -1626,6 +1766,8 @@
     <div class="tab" onclick="stab(this,'hr-ot')">Overtime</div>
     <div class="tab" onclick="stab(this,'hr-leave')">Leave Management</div>
     <div class="tab" onclick="stab(this,'hr-corrections')">Corrections</div>
+    <div class="tab" onclick="stab(this,'hr-loans')">Loans &amp; Advances</div>
+    <div class="tab" onclick="stab(this,'hr-expiry');scheduleIdleTask(refreshExpiryAlerts,100)">Expiry Alerts</div>
     <div class="tab" onclick="stab(this,'hr-policy')">HR Settings</div>
     <div class="tab" onclick="stab(this,'hr-bio')">Biometric Integration</div>
   </div>
@@ -1752,6 +1894,80 @@
     </div>
   </div>
 
+  <div class="tab-body" id="hr-loans">
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Employee Loans</div><div class="card-sub">Request, approval, EMI schedule, and auto payroll deduction</div></div><button class="btn btn-p btn-sm" onclick="showM('m-loan')">+ New Loan</button></div>
+        <table class="tbl">
+          <thead><tr><th>Employee</th><th>Type</th><th>Amount (AED)</th><th>EMI / Month</th><th>Balance</th><th>Status</th><th></th></tr></thead>
+          <tbody id="loans-tbody">
+            <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No loan records. Click <strong>+ New Loan</strong> to create one.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Salary Advances</div><div class="card-sub">One-time advance deducted from next salary</div></div><button class="btn btn-g btn-sm" onclick="showM('m-loan-advance')">+ Request Advance</button></div>
+        <table class="tbl">
+          <thead><tr><th>Employee</th><th>Month</th><th>Amount (AED)</th><th>Requested</th><th>Status</th><th></th></tr></thead>
+          <tbody id="advances-tbody">
+            <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No salary advance requests yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="g2">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Loan Approval Workflow</div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">1</div><div><div>Employee Submits Request</div><div class="card-sub">Loan amount, purpose, and preferred EMI schedule</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">2</div><div><div>HR Reviews</div><div class="card-sub">Checks existing loans, outstanding balance, and policy limits</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)">3</div><div><div>Management Approval</div><div class="card-sub">Finance head or MD approves based on amount threshold</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--purple-bg);color:var(--purple)">4</div><div><div>Auto EMI Deduction</div><div class="card-sub">Monthly installment auto-deducted from payroll until cleared</div></div></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Loan Policy Settings</div></div>
+        <div class="toggle-row"><div><div>Allow employee loans</div><div class="toggle-copy">Enable loan request module for all employees.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Max loan: 3× basic salary</div><div class="toggle-copy">System blocks requests exceeding 3 months base salary.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Auto EMI payroll deduction</div><div class="toggle-copy">Monthly installment auto-deducted from net salary.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Require MD approval above AED 10,000</div><div class="toggle-copy">Loans above threshold need MD or Finance Director sign-off.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Allow salary advances</div><div class="toggle-copy">Employees may request one advance per month (max 50% of salary).</div></div><input type="checkbox" checked></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="hr-expiry">
+    <div class="g4 mb16">
+      <div class="stat"><div class="stat-lbl">Critical (≤30 Days)</div><div class="stat-val" id="expiry-30" style="color:var(--red)">—</div><div class="stat-delta">immediate action</div></div>
+      <div class="stat"><div class="stat-lbl">Warning (≤90 Days)</div><div class="stat-val" id="expiry-90" style="color:var(--amber)">—</div><div class="stat-delta">plan renewal</div></div>
+      <div class="stat"><div class="stat-lbl">Valid Documents</div><div class="stat-val" id="expiry-valid" style="color:var(--green)">—</div><div class="stat-delta">no action needed</div></div>
+      <div class="stat"><div class="stat-lbl">Missing Data</div><div class="stat-val" id="expiry-missing" style="color:var(--text3)">—</div><div class="stat-delta">expiry not recorded</div></div>
+    </div>
+    <div class="card mb16">
+      <div class="card-hd"><div><div class="card-title">Document Expiry Tracker</div><div class="card-sub">Visa · Passport · Emirates ID · Insurance · Driving License · Labor Card</div></div><button class="btn btn-g btn-sm" onclick="refreshExpiryAlerts()">⟳ Refresh</button></div>
+      <table class="tbl">
+        <thead><tr><th>Employee</th><th>Document</th><th>Expiry Date</th><th>Days Left</th><th>Status</th><th></th></tr></thead>
+        <tbody id="expiry-tbody">
+          <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">Add employees with document expiry dates to see alerts here.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="g2">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Alert Configuration</div></div>
+        <div class="toggle-row"><div><div>Alert HR 90 days before expiry</div><div class="toggle-copy">Dashboard warning for visa, passport, and Emirates ID.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Critical badge at 30 days</div><div class="toggle-copy">Show red badge on HRMS hub for documents expiring within 30 days.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Track Insurance expiry</div><div class="toggle-copy">Alert when medical insurance policy is near expiry.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Block payroll on expired visa</div><div class="toggle-copy">Prevent salary processing for employees with expired entry permit.</div></div><input type="checkbox"></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">UAE Document Requirements</div></div>
+        <div class="setting-tile"><strong>Visa / Entry Permit</strong><p>UAE Labour Law requires valid entry permit for all expatriate employees. Alert HR 90 and 30 days before expiry.</p></div>
+        <div class="setting-tile"><strong>Emirates ID (EID)</strong><p>Federal Identity Authority mandatory. System alerts at 60-day and 30-day pre-expiry milestones.</p></div>
+        <div class="setting-tile"><strong>Passport</strong><p>Most UAE contracts require 6+ months passport validity. Alert triggered when less than 6 months remain.</p></div>
+        <div class="setting-tile"><strong>Labor Card / Work Permit</strong><p>MOL Work Permit must be renewed before expiry. Linked to employment contract validity.</p></div>
+      </div>
+    </div>
+  </div>
+
   <div class="tab-body" id="hr-policy">
     <div class="g2 mb16">
       <div class="card">
@@ -1815,6 +2031,274 @@
           <div><span style="color:var(--green)">✓ 09:12:44</span> — Rania Abboud — Check-in</div>
           <div><span style="color:var(--green)">✓ 08:55:19</span> — Mohamed Jaber — Check-in</div>
           <div><span style="color:var(--green)">✓ 08:47:33</span> — Sara Al Mansouri — Check-in</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ RECRUITMENT MODULE ═══════════════════ -->
+<div class="page" id="page-recruitment">
+  <div class="tabs">
+    <div class="tab on" onclick="stab(this,'rec-requisitions')">Job Requisitions</div>
+    <div class="tab" onclick="stab(this,'rec-candidates')">Candidates</div>
+    <div class="tab" onclick="stab(this,'rec-interviews')">Interviews</div>
+    <div class="tab" onclick="stab(this,'rec-offers')">Offer Letters</div>
+    <div class="tab" onclick="stab(this,'rec-onboarding')">Onboarding</div>
+  </div>
+
+  <div class="tab-body on" id="rec-requisitions">
+    <div class="g4 mb16">
+      <div class="stat"><div class="stat-lbl">Open Positions</div><div class="stat-val" id="rec-open" style="color:var(--accent)">—</div><div class="stat-delta">active requisitions</div></div>
+      <div class="stat"><div class="stat-lbl">Total Candidates</div><div class="stat-val" id="rec-cands" style="color:var(--green)">—</div><div class="stat-delta">in pipeline</div></div>
+      <div class="stat"><div class="stat-lbl">Interviews Scheduled</div><div class="stat-val" id="rec-interviews-cnt" style="color:var(--amber)">—</div><div class="stat-delta">this week</div></div>
+      <div class="stat"><div class="stat-lbl">Offers Sent</div><div class="stat-val" id="rec-offers-cnt" style="color:var(--purple)">—</div><div class="stat-delta">awaiting acceptance</div></div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">Job Requisitions</div><div class="card-sub">Approved positions open for hiring</div></div><button class="btn btn-p" onclick="showM('m-recruitment')">+ New Requisition</button></div>
+      <table class="tbl">
+        <thead><tr><th>Job Title</th><th>Department</th><th>Type</th><th>Location</th><th>Positions</th><th>Salary Range</th><th>Target Date</th><th>Status</th><th></th></tr></thead>
+        <tbody id="requisitions-tbody">
+          <tr data-empty-state><td colspan="9" style="text-align:center;color:var(--text3);padding:32px">No open requisitions. Click <strong>+ New Requisition</strong> to start hiring.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-body" id="rec-candidates">
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">Candidate Pipeline</div><div class="card-sub">All applicants across all open positions</div></div><button class="btn btn-p" onclick="showM('m-candidate')">+ Add Candidate</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="btn btn-g btn-sm cand-filter-btn active" onclick="filterCandidates('all',this)">All</button>
+        <button class="btn btn-g btn-sm cand-filter-btn" onclick="filterCandidates('Applied',this)">Applied</button>
+        <button class="btn btn-g btn-sm cand-filter-btn" onclick="filterCandidates('Screening',this)">Screening</button>
+        <button class="btn btn-g btn-sm cand-filter-btn" onclick="filterCandidates('Interview Scheduled',this)">Interview</button>
+        <button class="btn btn-g btn-sm cand-filter-btn" onclick="filterCandidates('Offer Sent',this)">Offer Sent</button>
+        <button class="btn btn-g btn-sm cand-filter-btn" onclick="filterCandidates('Hired',this)">Hired</button>
+      </div>
+      <table class="tbl">
+        <thead><tr><th>Name</th><th>Position</th><th>Nationality</th><th>Experience</th><th>Expected Salary</th><th>Source</th><th>Stage</th><th></th></tr></thead>
+        <tbody id="candidates-tbody">
+          <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No candidates yet. Click <strong>+ Add Candidate</strong> or import CVs.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-body" id="rec-interviews">
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">Interview Schedule</div><div class="card-sub">Manage interview slots and feedback</div></div><button class="btn btn-g btn-sm" onclick="toast('Interview scheduling feature coming soon','info')">+ Schedule Interview</button></div>
+      <table class="tbl">
+        <thead><tr><th>Candidate</th><th>Position</th><th>Interviewer</th><th>Date &amp; Time</th><th>Mode</th><th>Result</th><th></th></tr></thead>
+        <tbody id="interviews-tbody">
+          <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No interviews scheduled. Schedule interviews from the Candidates tab.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card mt16">
+      <div class="card-hd"><div class="card-title">Interview Stages</div></div>
+      <div class="g3">
+        <div class="setting-tile"><strong>Stage 1 — HR Screening</strong><p>Initial phone screen by HR to verify basics: skills, salary expectation, notice period, visa status.</p></div>
+        <div class="setting-tile"><strong>Stage 2 — Technical / Department</strong><p>Panel interview with department head and senior team member. Skill assessment may apply.</p></div>
+        <div class="setting-tile"><strong>Stage 3 — Final / MD Round</strong><p>Final interview with MD or CEO for senior positions. Offer discussion and start date.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="rec-offers">
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">Offer Letters</div><div class="card-sub">Draft, send, and track offer acceptance</div></div><button class="btn btn-g btn-sm" onclick="toast('Generate offer letter from candidate profile','info')">+ Generate Offer</button></div>
+      <table class="tbl">
+        <thead><tr><th>Candidate</th><th>Position</th><th>Offered Salary</th><th>Sent Date</th><th>Response Date</th><th>Status</th><th></th></tr></thead>
+        <tbody id="offers-tbody">
+          <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No offers generated yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-body" id="rec-onboarding">
+    <div class="card mb16">
+      <div class="card-hd"><div><div class="card-title">Onboarding Checklist</div><div class="card-sub">New employee onboarding workflow and task tracker</div></div></div>
+      <table class="tbl">
+        <thead><tr><th>Employee</th><th>Start Date</th><th>Dept</th><th>Documents</th><th>IT Setup</th><th>Training</th><th>Induction</th><th>Status</th></tr></thead>
+        <tbody id="onboarding-tbody">
+          <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No active onboarding processes. Hire candidates to start onboarding.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="g2">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Standard Onboarding Steps</div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">1</div><div><div>Offer Accepted</div><div class="card-sub">Counter-signed offer letter, start date confirmed</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">2</div><div><div>Documents Collection</div><div class="card-sub">Passport, visa, EID, bank details, certificates</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)">3</div><div><div>System Access Setup</div><div class="card-sub">Email, HR system login, biometric enrollment</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--purple-bg);color:var(--purple)">4</div><div><div>Department Induction</div><div class="card-sub">Team intro, workspace, SOPs, reporting line</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--teal-bg,#ccfbf1);color:var(--teal,#0d9488)">5</div><div><div>Probation Start</div><div class="card-sub">3-month probation tracking with KPI goals</div></div></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">VISA &amp; MOL Process</div></div>
+        <div class="setting-tile"><strong>Employment Visa Application</strong><p>Submit new hire for UAE employment visa after offer acceptance. Track MOHRE and GDRFA processing.</p></div>
+        <div class="setting-tile"><strong>Labor Card (Work Permit)</strong><p>Apply for work permit and labor card via MOL portal. Link expiry date to employee record.</p></div>
+        <div class="setting-tile"><strong>Emirates ID Enrollment</strong><p>Register biometrics at ICA/GDRFA service center. EID number stored in employee profile.</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ HR EXTENDED MODULES ═══════════════════ -->
+<div class="page" id="page-hrms-ext">
+  <div class="tabs">
+    <div class="tab on" onclick="stab(this,'hrext-perf')">Performance</div>
+    <div class="tab" onclick="stab(this,'hrext-train')">Training</div>
+    <div class="tab" onclick="stab(this,'hrext-assets')">Asset Management</div>
+    <div class="tab" onclick="stab(this,'hrext-ess')">ESS Portal</div>
+    <div class="tab" onclick="stab(this,'hrext-mgr')">Manager Portal</div>
+  </div>
+
+  <!-- Performance Management -->
+  <div class="tab-body on" id="hrext-perf">
+    <div class="g4 mb16">
+      <div class="stat"><div class="stat-lbl">Employees Rated</div><div class="stat-val" style="color:var(--accent)">—</div><div class="stat-delta">current cycle</div></div>
+      <div class="stat"><div class="stat-lbl">Avg. Score</div><div class="stat-val" style="color:var(--green)">—</div><div class="stat-delta">out of 5.0</div></div>
+      <div class="stat"><div class="stat-lbl">Pending Reviews</div><div class="stat-val" style="color:var(--amber)">—</div><div class="stat-delta">awaiting submission</div></div>
+      <div class="stat"><div class="stat-lbl">KPIs Defined</div><div class="stat-val" style="color:var(--purple)">—</div><div class="stat-delta">active KPI goals</div></div>
+    </div>
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">KPI &amp; Goal Setup</div><div class="card-sub">Define measurable targets per employee or department</div></div><button class="btn btn-g btn-sm" onclick="toast('KPI setup module coming soon','info')">+ Add KPI</button></div>
+        <table class="tbl">
+          <thead><tr><th>Employee / Dept</th><th>KPI</th><th>Target</th><th>Current</th><th>Weight %</th><th>Score</th></tr></thead>
+          <tbody id="kpi-tbody">
+            <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No KPIs defined yet. Click <strong>+ Add KPI</strong> to start.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Appraisal Cycle</div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">1</div><div><div>Goal Setting</div><div class="card-sub">Employee and manager agree on KPIs and objectives</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">2</div><div><div>Mid-Year Review</div><div class="card-sub">Progress check, course corrections, updated targets</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)">3</div><div><div>Self Assessment</div><div class="card-sub">Employee rates own performance against KPIs</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--purple-bg);color:var(--purple)">4</div><div><div>Manager Appraisal</div><div class="card-sub">Line manager submits final score and comments</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--teal-bg,#ccfbf1);color:var(--teal,#0d9488)">5</div><div><div>HR Calibration &amp; Letter</div><div class="card-sub">Final score, increment or promotion recommendation</div></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">Performance Reviews</div></div><button class="btn btn-g btn-sm" onclick="toast('Performance review form coming soon','info')">+ New Review</button></div>
+      <table class="tbl">
+        <thead><tr><th>Employee</th><th>Reviewer</th><th>Review Period</th><th>KPI Score</th><th>Overall Score</th><th>Status</th><th></th></tr></thead>
+        <tbody id="perf-reviews-tbody">
+          <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No performance reviews recorded yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Training Management -->
+  <div class="tab-body" id="hrext-train">
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Training Programs</div><div class="card-sub">Internal and external training sessions</div></div><button class="btn btn-p btn-sm" onclick="toast('Add training program','info')">+ New Program</button></div>
+        <table class="tbl">
+          <thead><tr><th>Program</th><th>Type</th><th>Trainer</th><th>Date</th><th>Duration</th><th>Dept</th><th>Status</th><th></th></tr></thead>
+          <tbody id="training-tbody">
+            <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No training programs added. Click <strong>+ New Program</strong>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Skill &amp; Certification Tracker</div></div><button class="btn btn-g btn-sm" onclick="toast('Add certification record','info')">+ Add Cert</button></div>
+        <table class="tbl">
+          <thead><tr><th>Employee</th><th>Skill / Cert</th><th>Issued By</th><th>Issue Date</th><th>Expiry</th><th>Status</th></tr></thead>
+          <tbody id="certs-tbody">
+            <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No certifications recorded.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><div class="card-title">Training Categories</div></div>
+      <div class="g3">
+        <div class="setting-tile"><strong>Technical Skills</strong><p>Job-specific technical training, software tools, machinery operation, and professional certifications.</p></div>
+        <div class="setting-tile"><strong>Soft Skills</strong><p>Communication, leadership, customer service, time management, and teamwork workshops.</p></div>
+        <div class="setting-tile"><strong>Compliance &amp; Safety</strong><p>UAE Labour Law, fire safety, first aid, OSHA standards, and mandatory regulatory training.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Asset Management -->
+  <div class="tab-body" id="hrext-assets">
+    <div class="card mb16">
+      <div class="card-hd"><div><div class="card-title">Asset Assignments</div><div class="card-sub">Laptop · Mobile · SIM · Vehicle · Uniform · Tools</div></div><button class="btn btn-p btn-sm" onclick="toast('Assign asset to employee','info')">+ Assign Asset</button></div>
+      <table class="tbl">
+        <thead><tr><th>Asset</th><th>Category</th><th>Serial / ID</th><th>Assigned To</th><th>Issue Date</th><th>Return Date</th><th>Condition</th><th>Status</th></tr></thead>
+        <tbody id="assets-tbody">
+          <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No assets assigned. Click <strong>+ Assign Asset</strong> to begin tracking.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="g3">
+      <div class="setting-tile"><strong>IT Assets</strong><p>Laptop, desktop, monitor, keyboard, mouse, headset, USB dongle — tracked by serial number and employee ID.</p></div>
+      <div class="setting-tile"><strong>Communication</strong><p>Company mobile phone, SIM card, internet dongles — linked to employee and department cost center.</p></div>
+      <div class="setting-tile"><strong>Vehicle &amp; Other</strong><p>Company car, motorbike, uniform, tools, safety equipment — track issue date, return, and condition report.</p></div>
+    </div>
+  </div>
+
+  <!-- ESS Portal -->
+  <div class="tab-body" id="hrext-ess">
+    <div style="background:linear-gradient(135deg,#0f766e 0%,#0d9488 60%,#14b8a6 100%);border-radius:14px;padding:28px 32px;margin-bottom:24px">
+      <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:6px">Employee Self-Service Portal</div>
+      <div style="font-size:13px;color:rgba(255,255,255,.7)">Empower employees to manage their own HR tasks independently</div>
+    </div>
+    <div class="g3 mb16">
+      <div class="card" style="border-left:3px solid var(--green)"><div style="font-weight:700;margin-bottom:6px">View Payslips</div><div style="font-size:12.5px;color:var(--text3)">Download monthly salary slips, year-to-date earnings, and tax summaries.</div><div style="margin-top:10px"><span class="b b-g" style="font-size:10px">Active</span></div></div>
+      <div class="card" style="border-left:3px solid var(--accent)"><div style="font-weight:700;margin-bottom:6px">Apply for Leave</div><div style="font-size:12.5px;color:var(--text3)">Submit leave requests, view balance, and track approval status.</div><div style="margin-top:10px"><span class="b b-b" style="font-size:10px">Active</span></div></div>
+      <div class="card" style="border-left:3px solid var(--amber)"><div style="font-weight:700;margin-bottom:6px">Attendance &amp; Rota</div><div style="font-size:12.5px;color:var(--text3)">View personal attendance log, shift schedule, and submit OT requests.</div><div style="margin-top:10px"><span class="b b-a" style="font-size:10px">Active</span></div></div>
+      <div class="card" style="border-left:3px solid var(--purple)"><div style="font-weight:700;margin-bottom:6px">Download Documents</div><div style="font-size:12.5px;color:var(--text3)">Download salary certificates, NOC letters, and experience letters.</div><div style="margin-top:10px"><span class="b b-p" style="font-size:10px">Active</span></div></div>
+      <div class="card" style="border-left:3px solid var(--text3)"><div style="font-weight:700;margin-bottom:6px">Update Profile</div><div style="font-size:12.5px;color:var(--text3)">Update mobile number, emergency contact, bank details, and address.</div><div style="margin-top:10px"><span class="b" style="font-size:10px;background:var(--bg3)">Coming Soon</span></div></div>
+      <div class="card" style="border-left:3px solid var(--text3)"><div style="font-weight:700;margin-bottom:6px">Loan Requests</div><div style="font-size:12.5px;color:var(--text3)">Submit loan or salary advance requests and track disbursement status.</div><div style="margin-top:10px"><span class="b" style="font-size:10px;background:var(--bg3)">Coming Soon</span></div></div>
+    </div>
+  </div>
+
+  <!-- Manager Portal -->
+  <div class="tab-body" id="hrext-mgr">
+    <div style="background:linear-gradient(135deg,#1e1b4b 0%,#3730a3 60%,#4f46e5 100%);border-radius:14px;padding:28px 32px;margin-bottom:24px">
+      <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:6px">Manager Portal</div>
+      <div style="font-size:13px;color:rgba(255,255,255,.7)">Team approvals, reporting, and workforce visibility for line managers</div>
+    </div>
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Pending Approvals</div></div>
+        <div id="mgr-pending-list" style="display:flex;flex-direction:column;gap:10px;padding-top:4px">
+          <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)" id="mgr-leave-cnt">—</div><div><div>Leave Requests</div><div class="card-sub">Annual, sick, casual, and emergency leaves pending approval</div></div><button class="btn btn-g btn-sm" onclick="go('staff');setTimeout(()=>stab(document.querySelector('#page-staff .tab:nth-child(4)'),'hr-leave'),50)">View</button></div>
+          <div class="tline-item"><div class="tline-dot" style="background:var(--red-bg,#fee2e2);color:var(--red)" id="mgr-ot-cnt">—</div><div><div>Overtime Requests</div><div class="card-sub">OT submitted by team members awaiting approval</div></div><button class="btn btn-g btn-sm" onclick="go('staff');setTimeout(()=>stab(document.querySelector('#page-staff .tab:nth-child(3)'),'hr-ot'),50)">View</button></div>
+          <div class="tline-item"><div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)" id="mgr-corr-cnt">—</div><div><div>Attendance Corrections</div><div class="card-sub">Check-in/out corrections from team members</div></div><button class="btn btn-g btn-sm" onclick="go('staff');setTimeout(()=>stab(document.querySelector('#page-staff .tab:nth-child(5)'),'hr-corrections'),50)">View</button></div>
+          <div class="tline-item"><div class="tline-dot" style="background:var(--purple-bg);color:var(--purple)">—</div><div><div>Loan Requests</div><div class="card-sub">Employee loan applications awaiting manager approval</div></div><button class="btn btn-g btn-sm" onclick="go('staff');setTimeout(()=>stab(document.querySelector('#page-staff .tab:nth-child(6)'),'hr-loans'),50)">View</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Team Reports</div></div>
+        <div style="display:flex;flex-direction:column;gap:8px;padding-top:4px">
+          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" onclick="toast('Generating team attendance report...','info')">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M2 6h12M5 9h2M9 9h2M5 12h2"/></svg>
+            Team Attendance Report
+          </button>
+          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" onclick="toast('Loading team leave utilization...','info')">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v4l2.5 1.5"/></svg>
+            Leave Utilization by Employee
+          </button>
+          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" onclick="toast('Fetching OT summary...','info')">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 4v4.5l3 1.5M4 2l-1.5-1.5M12 2l1.5-1.5"/></svg>
+            Overtime Summary
+          </button>
+          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" onclick="toast('Opening headcount report...','info')">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="5" r="3"/><path d="M1 14c0-3 2-5 4-5s4 2 4 5"/><circle cx="12" cy="6" r="2"/><path d="M14 14c0-2.5-1.5-4-2-4.5"/></svg>
+            Headcount Report
+          </button>
+          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" onclick="go('payroll')">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6h12M5 10h3M10 10h1"/></svg>
+            Team Payroll Summary
+          </button>
         </div>
       </div>
     </div>
@@ -5394,22 +5878,40 @@ period_locks ─&lt; audit_logs
 <div class="overlay" id="m-emp" onclick="closeOvBg(event,'m-emp')">
   <div class="modal modal-lg"><div class="modal-title">Add Employee</div><div class="modal-sub">Register new employee details</div>
     <div class="section-hd">Personal Information</div>
-    <div class="fr2"><div class="fg"><label class="fl">Full Name</label><input class="fi" id="emp-name"></div><div class="fg"><label class="fl">Emirates ID</label><input class="fi mono" id="emp-emirates-id" placeholder="784-XXXX-XXXXXXX-X"></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Nationality</label><select class="fi" id="emp-nationality"><option>United Arab Emirates</option><option>India</option><option>Pakistan</option><option>Bangladesh</option><option>Philippines</option><option>Nepal</option><option>Sri Lanka</option><option>Egypt</option><option>Jordan</option><option>Lebanon</option><option>Syria</option><option>Sudan</option><option>United Kingdom</option><option>United States</option><option>Other</option></select></div><div class="fg"><label class="fl">Date of Birth</label><input class="fi" id="emp-dob" type="date"></div><div class="fg"><label class="fl">Gender</label><select class="fi" id="emp-gender"><option>Male</option><option>Female</option></select></div></div>
-    <div class="fg"><label class="fl">Personal Email</label><input class="fi" id="emp-email" type="email"></div>
+    <div style="display:flex;gap:16px;align-items:flex-start">
+      <div style="flex:1">
+        <div class="fr2"><div class="fg"><label class="fl">Full Name</label><input class="fi" id="emp-name"></div><div class="fg"><label class="fl">Emirates ID</label><input class="fi mono" id="emp-emirates-id" placeholder="784-XXXX-XXXXXXX-X"></div></div>
+        <div class="fr3"><div class="fg"><label class="fl">Nationality</label><select class="fi" id="emp-nationality"><option>United Arab Emirates</option><option>India</option><option>Pakistan</option><option>Bangladesh</option><option>Philippines</option><option>Nepal</option><option>Sri Lanka</option><option>Egypt</option><option>Jordan</option><option>Lebanon</option><option>Syria</option><option>Sudan</option><option>United Kingdom</option><option>United States</option><option>Other</option></select></div><div class="fg"><label class="fl">Date of Birth</label><input class="fi" id="emp-dob" type="date"></div><div class="fg"><label class="fl">Gender</label><select class="fi" id="emp-gender"><option>Male</option><option>Female</option></select></div></div>
+        <div class="fr3"><div class="fg"><label class="fl">Marital Status</label><select class="fi" id="emp-marital"><option>Single</option><option>Married</option><option>Divorced</option><option>Widowed</option></select></div><div class="fg"><label class="fl">Mobile Number</label><input class="fi mono" id="emp-mobile" placeholder="+971 50 XXX XXXX"></div><div class="fg"><label class="fl">Personal Email</label><input class="fi" id="emp-email" type="email"></div></div>
+        <div class="fg"><label class="fl">Residential Address</label><textarea class="fi" id="emp-address" rows="2" placeholder="UAE residential address"></textarea></div>
+      </div>
+      <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:20px">
+        <div id="emp-photo-preview" style="width:88px;height:88px;border-radius:12px;background:var(--bg3);border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden">
+          <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="var(--text3)" stroke-width="1.4"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        </div>
+        <label style="font-size:11px;color:var(--accent);cursor:pointer;text-align:center">
+          <input type="file" id="emp-photo-file" accept="image/*" style="display:none" onchange="previewEmpPhoto(this)">Upload Photo
+        </label>
+      </div>
+    </div>
     <div class="section-hd">Employment Details</div>
-    <div class="fr3"><div class="fg"><label class="fl">Employee ID</label><input class="fi mono" id="emp-id" placeholder="EMP-005"></div><div class="fg"><label class="fl">Department</label><select class="fi" id="emp-department"><option>Management</option><option>Finance</option><option>Operations</option><option>Sales</option><option>HR</option></select></div><div class="fg"><label class="fl">Designation</label><input class="fi" id="emp-designation"></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Join Date</label><input class="fi" id="emp-join-date" type="date"></div><div class="fg"><label class="fl">Basic Salary (AED)</label><input class="fi mono" id="emp-salary"></div><div class="fg"><label class="fl">Contract Type</label><select class="fi" id="emp-contract"><option>Full-time</option><option>Part-time</option><option>Contract</option></select></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Supervisor</label><select class="fi" id="emp-supervisor"><option>Sara Al Mansouri</option><option>Ahmed Rashid</option><option>Rania Abboud</option></select></div><div class="fg"><label class="fl">Default Shift</label><select class="fi" id="emp-shift"><option>09:00-18:00</option><option>08:00-17:00</option><option>10:00-19:00</option></select></div><div class="fg"><label class="fl">Work Location</label><select class="fi" id="emp-location"><option>Dubai HQ</option><option>Abu Dhabi Warehouse</option><option>Sharjah Sales Office</option></select></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Overtime Rate / Hour</label><input class="fi mono" id="emp-ot-rate" placeholder="45.00"></div><div class="fg"><label class="fl">Leave Policy</label><select class="fi" id="emp-leave-policy"><option>UAE Standard</option><option>Executive</option><option>Contractor</option></select></div><div class="fg"><label class="fl">Emergency Contact</label><input class="fi" id="emp-emergency" placeholder="+971..."></div></div>
-    <div class="fr2"><div class="fg"><label class="fl">Work Permit No.</label><input class="fi mono" id="emp-work-permit"></div><div class="fg"><label class="fl">Visa Expiry</label><input class="fi" id="emp-visa-expiry" type="date"></div></div>
-    <div class="section-hd">Bank Details (Salary)</div>
-    <div class="fr2"><div class="fg"><label class="fl">Salary Bank</label><select class="fi" id="emp-bank"><option>Emirates NBD</option><option>FAB</option><option>ADCB</option></select></div><div class="fg"><label class="fl">IBAN</label><input class="fi mono" id="emp-iban" placeholder="AE..."></div></div>
-    <div class="section-hd">Document Uploads</div>
+    <div class="fr3"><div class="fg"><label class="fl">Employee ID</label><input class="fi mono" id="emp-id" placeholder="EMP-005"></div><div class="fg"><label class="fl">Employment Type</label><select class="fi" id="emp-contract"><option>Full-Time</option><option>Part-Time</option><option>Contract</option><option>Probation</option><option>Intern / Trainee</option><option>Daily Wage</option><option>Hourly</option><option>Weekly</option><option>Short-Term</option><option>Freelance / Consultant</option><option>Seasonal</option><option>Project-Based</option></select></div><div class="fg"><label class="fl">Join Date</label><input class="fi" id="emp-join-date" type="date"></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Department</label><select class="fi" id="emp-department"><option>Management</option><option>Finance</option><option>Operations</option><option>Sales</option><option>HR</option><option>IT</option><option>Marketing</option><option>Procurement</option><option>Logistics</option></select></div><div class="fg"><label class="fl">Designation</label><input class="fi" id="emp-designation" placeholder="e.g. Sales Executive"></div><div class="fg"><label class="fl">Branch</label><select class="fi" id="emp-branch"><option>Dubai HQ</option><option>Abu Dhabi</option><option>Sharjah</option><option>Ajman</option><option>Ras Al Khaimah</option><option>Fujairah</option></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Basic Salary (AED)</label><input class="fi mono" id="emp-salary"></div><div class="fg"><label class="fl">OT Rate / Hour</label><input class="fi mono" id="emp-ot-rate" placeholder="45.00"></div><div class="fg"><label class="fl">Leave Policy</label><select class="fi" id="emp-leave-policy"><option value="UAE Standard">UAE Standard (21 days)</option><option value="Executive">Executive (30 days)</option><option value="Contractor">Contractor (14 days)</option><option value="Part-Time">Part-Time Pro-Rata</option></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Reporting Manager</label><select class="fi" id="emp-supervisor"><option>Sara Al Mansouri</option><option>Ahmed Rashid</option><option>Rania Abboud</option></select></div><div class="fg"><label class="fl">Default Shift</label><select class="fi" id="emp-shift"><option>09:00-18:00</option><option>08:00-17:00</option><option>10:00-19:00</option><option>Night 22:00-06:00</option><option>Split Shift</option></select></div><div class="fg"><label class="fl">Work Location</label><select class="fi" id="emp-location"><option>Dubai HQ</option><option>Abu Dhabi Warehouse</option><option>Sharjah Sales Office</option><option>Remote</option><option>Field / Site</option></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Work Permit No.</label><input class="fi mono" id="emp-work-permit"></div><div class="fg"><label class="fl">Visa Expiry</label><input class="fi" id="emp-visa-expiry" type="date"></div><div class="fg"><label class="fl">Cost Center</label><input class="fi" id="emp-cost-center" placeholder="e.g. CC-01-OPS"></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Emergency Contact Name</label><input class="fi" id="emp-emergency" placeholder="Full name"></div><div class="fg"><label class="fl">Emergency Contact Mobile</label><input class="fi mono" id="emp-emergency-mobile" placeholder="+971..."></div></div>
+    <div class="section-hd">Insurance Details</div>
+    <div class="fr3"><div class="fg"><label class="fl">Insurance Type</label><select class="fi" id="emp-insurance-type"><option>Company Provided</option><option>Self-Paid</option><option>None</option></select></div><div class="fg"><label class="fl">Policy Number</label><input class="fi mono" id="emp-insurance-policy" placeholder="INS-XXXX"></div><div class="fg"><label class="fl">Insurance Expiry</label><input class="fi" id="emp-insurance-expiry" type="date"></div></div>
+    <div class="section-hd">Bank Details (WPS Salary)</div>
+    <div class="fr2"><div class="fg"><label class="fl">Salary Bank</label><select class="fi" id="emp-bank"><option>Emirates NBD</option><option>FAB</option><option>ADCB</option><option>Mashreq</option><option>Dubai Islamic Bank</option><option>RAKBANK</option><option>CBD</option><option>Wio Bank</option></select></div><div class="fg"><label class="fl">IBAN</label><input class="fi mono" id="emp-iban" placeholder="AE07 0331 2345 6789 0123 456"></div></div>
+    <div class="section-hd">Documents &amp; Expiry Tracking</div>
+    <div class="fr3"><div class="fg"><label class="fl">Passport Number</label><input class="fi mono" id="emp-passport-no" placeholder="A12345678"></div><div class="fg"><label class="fl">Passport Expiry</label><input class="fi" id="emp-passport-expiry" type="date"></div><div class="fg"><label class="fl">Emirates ID Expiry</label><input class="fi" id="emp-eid-expiry" type="date"></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Labor Card No.</label><input class="fi mono" id="emp-labor-card" placeholder="LC-XXXX"></div><div class="fg"><label class="fl">Driving License No.</label><input class="fi mono" id="emp-driving-license" placeholder="DL-XXXX"></div><div class="fg"><label class="fl">Driving License Expiry</label><input class="fi" id="emp-driving-expiry" type="date"></div></div>
     <div class="fr3">
-      <div class="fg"><label class="fl">Passport</label><input class="fi" id="emp-passport-file" type="file" accept=".pdf,.jpg,.jpeg,.png"></div>
-      <div class="fg"><label class="fl">Work Permit</label><input class="fi" id="emp-work-permit-file" type="file" accept=".pdf,.jpg,.jpeg,.png"></div>
-      <div class="fg"><label class="fl">Medical Report</label><input class="fi" id="emp-medical-file" type="file" accept=".pdf,.jpg,.jpeg,.png"></div>
+      <div class="fg"><label class="fl">Passport Upload</label><input class="fi" id="emp-passport-file" type="file" accept=".pdf,.jpg,.jpeg,.png"></div>
+      <div class="fg"><label class="fl">Visa / Work Permit</label><input class="fi" id="emp-work-permit-file" type="file" accept=".pdf,.jpg,.jpeg,.png"></div>
+      <div class="fg"><label class="fl">Other Documents</label><input class="fi" id="emp-medical-file" type="file" accept=".pdf,.jpg,.jpeg,.png" multiple></div>
     </div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-emp')">Cancel</button><button class="btn btn-p" onclick="saveEmployee()">Add Employee</button></div>
   </div>
@@ -5418,7 +5920,7 @@ period_locks ─&lt; audit_logs
 <div class="overlay" id="m-leave" onclick="closeOvBg(event,'m-leave')">
   <div class="modal"><div class="modal-title">Apply for Leave</div><div class="modal-sub">Submit leave request for approval</div>
     <div class="fg"><label class="fl">Employee</label><select class="fi" id="leave-employee"><option>Sara Al Mansouri</option><option>Ahmed Rashid</option><option>Rania Abboud</option><option>Mohamed Jaber</option></select></div>
-    <div class="fg"><label class="fl">Leave Type</label><select class="fi" id="leave-type"><option>Annual Leave</option><option>Sick Leave</option><option>Emergency Leave</option><option>Unpaid Leave</option><option>Hajj Leave</option></select></div>
+    <div class="fg"><label class="fl">Leave Type</label><select class="fi" id="leave-type"><option>Annual Leave</option><option>Sick Leave</option><option>Casual Leave</option><option>Emergency Leave</option><option>Maternity Leave</option><option>Paternity Leave</option><option>Unpaid Leave</option><option>Lieu Days</option><option>Hajj Leave</option><option>Work From Home</option></select></div>
     <div class="fr2"><div class="fg"><label class="fl">From Date</label><input class="fi" id="leave-from" type="date"></div><div class="fg"><label class="fl">To Date</label><input class="fi" id="leave-to" type="date"></div></div>
     <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="leave-reason" rows="3"></textarea></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-leave')">Cancel</button><button class="btn btn-p" onclick="saveLeaveRequest()">Submit Request</button></div>
@@ -5426,12 +5928,16 @@ period_locks ─&lt; audit_logs
 </div>
 
 <div class="overlay" id="m-ot" onclick="closeOvBg(event,'m-ot')">
-  <div class="modal"><div class="modal-title">Overtime Request</div><div class="modal-sub">Submit detected overtime for approval</div>
-    <div class="fr2"><div class="fg"><label class="fl">Employee</label><input class="fi" id="ot-employee" value="Ahmed Rashid" readonly></div><div class="fg"><label class="fl">Department</label><input class="fi" id="ot-dept" value="Operations" readonly></div></div>
-    <div class="fr2"><div class="fg"><label class="fl">Date</label><input class="fi mono" id="ot-date" value="03 May 2026" readonly></div><div class="fg"><label class="fl">Shift Time</label><input class="fi mono" id="ot-shift" value="09:00-18:00" readonly></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Login Time</label><input class="fi mono" id="ot-login" value="09:00" readonly></div><div class="fg"><label class="fl">Logout Time</label><input class="fi mono" id="ot-logout" value="19:30" readonly></div><div class="fg"><label class="fl">Overtime Hours</label><input class="fi mono" id="ot-hours" value="1.5" readonly></div></div>
+  <div class="modal"><div class="modal-title">Overtime Request</div><div class="modal-sub">Submit overtime for supervisor approval</div>
+    <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="ot-employee-sel"><option>Ahmed Rashid</option><option>Sara Al Mansouri</option><option>Rania Abboud</option><option>Mohamed Jaber</option></select></div><div class="fg"><label class="fl">Department</label><input class="fi" id="ot-dept" value="Operations"></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Date</label><input class="fi mono" id="ot-date" type="date"></div><div class="fg"><label class="fl">Shift Time</label><input class="fi mono" id="ot-shift" value="09:00-18:00"></div></div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">OT Type</label><select class="fi" id="ot-type" onchange="updateOtMultiplier()"><option value="normal">Normal OT</option><option value="ramadan">Ramadan OT</option><option value="weekend">Weekend OT</option><option value="holiday">Public Holiday OT</option></select></div>
+      <div class="fg"><label class="fl">Rate Multiplier</label><div style="display:flex;align-items:center;gap:10px"><input class="fi mono" id="ot-multiplier" value="1.25×" readonly style="color:var(--accent);font-weight:700;flex:1"><span id="ot-mult-note" style="font-size:11px;color:var(--text3)">UAE Labour Law</span></div></div>
+    </div>
+    <div class="fr3"><div class="fg"><label class="fl">OT Start Time</label><input class="fi mono" id="ot-login" type="time" value="18:00"></div><div class="fg"><label class="fl">OT End Time</label><input class="fi mono" id="ot-logout" type="time" value="19:30"></div><div class="fg"><label class="fl">Overtime Hours</label><input class="fi mono" id="ot-hours" placeholder="1.5" oninput="updateOtMultiplier()"></div></div>
     <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="ot-reason" rows="3" placeholder="Stock count, client delivery, urgent closing..."></textarea></div>
-    <div class="fg"><label class="fl">Attachment</label><div class="drop-zone" style="padding:18px" onclick="toast('Choose overtime attachment...','info')"><div style="font-size:12.5px;color:var(--text2)">Drop files or click to attach</div></div></div>
+    <div class="fg"><label class="fl">Attachment (optional)</label><div class="drop-zone" style="padding:14px" onclick="toast('Choose overtime attachment...','info')"><div style="font-size:12px;color:var(--text2)">Drop file or click to attach</div></div></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-ot')">Cancel</button><button class="btn btn-p" onclick="submitOTRequest()">Submit for Approval</button></div>
   </div>
 </div>
@@ -5452,6 +5958,48 @@ period_locks ─&lt; audit_logs
     <div class="fr3"><div class="fg"><label class="fl">Break Minutes</label><input class="fi mono" id="shift-break" value="60"></div><div class="fg"><label class="fl">Grace Period</label><input class="fi mono" id="shift-grace" value="10 minutes"></div><div class="fg"><label class="fl">Overtime After</label><input class="fi mono" id="shift-ot-after" value="8 hours"></div></div>
     <div class="fg"><label class="fl">Status</label><select class="fi" id="shift-status"><option>Active</option><option>Inactive</option></select></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-shift')">Cancel</button><button class="btn btn-p" onclick="saveShift()">Save Shift</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-loan" onclick="closeOvBg(event,'m-loan')">
+  <div class="modal"><div class="modal-title">New Loan Request</div><div class="modal-sub">Employee loan with EMI and auto payroll deduction</div>
+    <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="loan-employee"><option>Ahmed Rashid</option><option>Sara Al Mansouri</option><option>Rania Abboud</option><option>Mohamed Jaber</option></select></div><div class="fg"><label class="fl">Loan Type</label><select class="fi" id="loan-type"><option>Personal Loan</option><option>Emergency Loan</option><option>Medical Loan</option><option>Home Furnishing Loan</option><option>Education Loan</option><option>Vehicle Loan</option></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Loan Amount (AED)</label><input class="fi mono" id="loan-amount" placeholder="5000.00" oninput="calcLoanEmi()"></div><div class="fg"><label class="fl">Repayment (Months)</label><input class="fi mono" id="loan-months" value="6" oninput="calcLoanEmi()"></div><div class="fg"><label class="fl">Monthly EMI (AED)</label><input class="fi mono" id="loan-emi" readonly style="color:var(--accent);font-weight:600"></div></div>
+    <div class="fg"><label class="fl">Purpose / Reason</label><textarea class="fi" id="loan-reason" rows="3" placeholder="Describe the purpose of this loan request"></textarea></div>
+    <div class="fr2"><div class="fg"><label class="fl">Requested Date</label><input class="fi" id="loan-date" type="date"></div><div class="fg"><label class="fl">First Deduction Month</label><input class="fi" id="loan-deduct-from" type="month"></div></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-loan')">Cancel</button><button class="btn btn-p" onclick="saveLoan()">Submit Loan Request</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-loan-advance" onclick="closeOvBg(event,'m-loan-advance')">
+  <div class="modal"><div class="modal-title">Salary Advance Request</div><div class="modal-sub">One-time advance deducted from next salary run</div>
+    <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="advance-employee"><option>Ahmed Rashid</option><option>Sara Al Mansouri</option><option>Rania Abboud</option><option>Mohamed Jaber</option></select></div><div class="fg"><label class="fl">Advance Month</label><input class="fi" id="advance-month" type="month"></div></div>
+    <div class="fg"><label class="fl">Advance Amount (AED)</label><input class="fi mono" id="advance-amount" placeholder="Max 50% of basic salary"></div>
+    <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="advance-reason" rows="3" placeholder="Brief reason for salary advance request"></textarea></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-loan-advance')">Cancel</button><button class="btn btn-p" onclick="saveLoanAdvance()">Submit Advance</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-recruitment" onclick="closeOvBg(event,'m-recruitment')">
+  <div class="modal modal-lg"><div class="modal-title">New Job Requisition</div><div class="modal-sub">Open a position and begin the hiring process</div>
+    <div class="fr3"><div class="fg"><label class="fl">Job Title</label><input class="fi" id="req-title" placeholder="e.g. Sales Executive"></div><div class="fg"><label class="fl">Department</label><select class="fi" id="req-dept"><option>Management</option><option>Finance</option><option>Operations</option><option>Sales</option><option>HR</option><option>IT</option><option>Marketing</option></select></div><div class="fg"><label class="fl">No. of Positions</label><input class="fi mono" id="req-positions" value="1"></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Employment Type</label><select class="fi" id="req-emp-type"><option>Full-Time</option><option>Part-Time</option><option>Contract</option><option>Internship</option><option>Freelance</option></select></div><div class="fg"><label class="fl">Location</label><select class="fi" id="req-location"><option>Dubai HQ</option><option>Abu Dhabi</option><option>Sharjah</option><option>Remote</option></select></div><div class="fg"><label class="fl">Target Date</label><input class="fi" id="req-date" type="date"></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Salary Range From (AED)</label><input class="fi mono" id="req-sal-from" placeholder="3000"></div><div class="fg"><label class="fl">Salary Range To (AED)</label><input class="fi mono" id="req-sal-to" placeholder="6000"></div></div>
+    <div class="fg"><label class="fl">Job Description</label><textarea class="fi" id="req-description" rows="4" placeholder="Responsibilities, requirements, and key skills"></textarea></div>
+    <div class="fg"><label class="fl">Approval Required</label><select class="fi" id="req-approval"><option>HR Manager Only</option><option>Department Head + HR</option><option>MD Approval Required</option></select></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-recruitment')">Cancel</button><button class="btn btn-p" onclick="saveJobRequisition()">Create Requisition</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-candidate" onclick="closeOvBg(event,'m-candidate')">
+  <div class="modal modal-lg"><div class="modal-title">Add Candidate</div><div class="modal-sub">Register applicant for a job opening</div>
+    <div class="fr3"><div class="fg"><label class="fl">Full Name</label><input class="fi" id="cand-name"></div><div class="fg"><label class="fl">Mobile</label><input class="fi mono" id="cand-mobile" placeholder="+971..."></div><div class="fg"><label class="fl">Email</label><input class="fi" id="cand-email" type="email"></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Applied Position</label><input class="fi" id="cand-position" placeholder="Job title"></div><div class="fg"><label class="fl">Nationality</label><select class="fi" id="cand-nationality"><option>UAE</option><option>India</option><option>Pakistan</option><option>Philippines</option><option>Other</option></select></div><div class="fg"><label class="fl">Experience (Years)</label><input class="fi mono" id="cand-exp" placeholder="3"></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Expected Salary (AED)</label><input class="fi mono" id="cand-salary" placeholder="5000"></div><div class="fg"><label class="fl">Visa Status</label><select class="fi" id="cand-visa"><option>Visit Visa</option><option>Employment Visa</option><option>Residence Visa</option><option>Freelance Permit</option><option>Requires Sponsorship</option></select></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Source</label><select class="fi" id="cand-source"><option>LinkedIn</option><option>Bayt.com</option><option>Indeed</option><option>GulfTalent</option><option>Walk-in</option><option>Referral</option><option>Agency</option></select></div><div class="fg"><label class="fl">Stage</label><select class="fi" id="cand-stage"><option>Applied</option><option>Screening</option><option>Interview Scheduled</option><option>Offer Sent</option><option>Hired</option><option>Rejected</option></select></div></div>
+    <div class="fg"><label class="fl">CV / Resume</label><input class="fi" id="cand-cv" type="file" accept=".pdf,.doc,.docx"></div>
+    <div class="fg"><label class="fl">Notes</label><textarea class="fi" id="cand-notes" rows="3" placeholder="Recruiter notes, interview feedback..."></textarea></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-candidate')">Cancel</button><button class="btn btn-p" onclick="saveCandidate()">Add Candidate</button></div>
   </div>
 </div>
 
@@ -5831,6 +6379,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260625a" defer></script>
+<script src="src/app.js?v=20260625e" defer></script>
 </body>
 </html>

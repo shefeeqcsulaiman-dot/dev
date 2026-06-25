@@ -10,6 +10,9 @@ META.payments={t:'Bank & Payments',s:'Accounts - transactions - receipts - payme
 META.documents={t:'Documents',s:'Receipts - PDFs - Audit files - Attachments',a:'Upload Document',ao:()=>toast('Choose files to upload...','info')};
 META.notifications={t:'Notifications',s:'Email - WhatsApp - SMS - Push - In-app alerts',a:'+ New Rule',ao:()=>toast('Notification rule builder opened','info')};
 META.rota={t:'Rota Planning',s:'Shift setup - Weekly rota - Coverage - Swap requests',a:'Publish Rota',ao:()=>publishRota()};
+META.hrms={t:'HRMS Dashboard',s:'Employees · Attendance · Leave · OT · Payroll · Compliance Overview',a:'+ Add Employee',ao:()=>{go('staff');setTimeout(()=>showM('m-emp'),50)}};
+META.recruitment={t:'Recruitment ATS',s:'Job Requisitions - Candidates - Interviews - Offer Letters - Onboarding',a:'+ New Requisition',ao:()=>showM('m-recruitment')};
+META['hrms-ext']={t:'HR Modules',s:'Performance - Training - Asset Management - ESS - Manager Portal',a:'',ao:null};
 META.accounting={t:'Accounting',s:'Chart - Vouchers - Ledger - Filing - Bank Recon',a:'+ Voucher',ao:()=>{go('accounting');setTimeout(()=>stab(document.querySelectorAll('#page-accounting .tab')[1],'acc-voucher'),50)}};
 META.corporate={t:'Corporate Accounting',s:'Corporate tax - Assets - Accruals - Cost centers - Budgets',a:'Tax Report',ao:()=>{go('corporate');setTimeout(()=>stab(document.querySelectorAll('#page-corporate .tab')[0],'corp-tax'),50)}};
 META.reports={t:'Reports',s:'VAT - P&L - Balance Sheet - Trial Balance',a:'Export PDF',ao:()=>exportActiveReportPdf()};
@@ -156,6 +159,20 @@ function go(page){
     topAction.onclick=m.ao||null;
     topAction.classList.toggle('hidden',!m.a);
   }
+  // Keep HRMS parent nav highlighted for all HR sub-pages
+  if(['staff','hrms','recruitment','hrms-ext'].includes(page)){
+    document.getElementById('nav-hrms')?.classList.add('on');
+  }
+  // Highlight nav-sub for staff tab pages
+  document.querySelectorAll('.nav-sub').forEach(s=>s.classList.remove('on'));
+  if(page==='staff'){
+    const activeTab=document.querySelector('#page-staff .tab.on');
+    const tabId=activeTab?.getAttribute('onclick')?.match(/'([^']+)'\)/)?.[1]||'';
+    document.querySelectorAll('.nav-sub').forEach(s=>{
+      if((s.getAttribute('onclick')||'').includes("'"+tabId+"'"))s.classList.add('on');
+    });
+    if(!tabId)document.querySelector('.nav-sub[onclick*="go(\'staff\'"]')?.classList.add('on');
+  }
   localStorage.setItem('taxflow_current_page',page);
   closeSidebar();
   if(page==='reports')syncReportsFromDatabase();
@@ -163,6 +180,8 @@ function go(page){
   if(page==='expense')loadExpenseVendors();
   if(page==='hrms')scheduleIdleTask(refreshHrmsKpis,100);
   if(page==='staff'){scheduleIdleTask(()=>renderLeaveCalendar(),300);scheduleIdleTask(updateLeaveBalance,500);}
+  if(page==='recruitment')scheduleIdleTask(refreshRecruitmentStats,100);
+  if(page==='hrms-ext')scheduleIdleTask(refreshManagerPortalCounts,100);
   if(page==='inventory'){
     ensurePurchaseRecordsLoadedForStock();
     setTimeout(()=>ensureInventoryBulkSelection(),80);
@@ -239,6 +258,26 @@ function closeSidebar(){
   if(window.innerWidth<=1100)toggleSidebar(false);
 }
 
+function goHrmsTab(n,id){
+  const tab=document.querySelector('#page-staff .tab:nth-child('+n+')');
+  if(tab)stab(tab,id);
+  go('staff');
+}
+
+function populateHrEmployeeSelect(id){
+  const sel=document.getElementById(id);
+  if(!sel)return;
+  sel.innerHTML='<option value="">— select employee —</option>';
+  document.querySelectorAll('#employee-tbody tr:not([data-empty-state])').forEach(row=>{
+    const emp=employeeFromDirectoryRow(row);
+    if(!emp||!emp.name||emp.name==='Employee')return;
+    const opt=document.createElement('option');
+    opt.value=emp.name;
+    opt.textContent=emp.name+(emp.id?' ('+emp.id+')':'');
+    sel.appendChild(opt);
+  });
+}
+
 function showM(id){
   const modal=document.getElementById(id);
   if(!modal)return;
@@ -247,6 +286,9 @@ function showM(id){
   if(id==='m-user')applyUserRolePermissions();
   if(id==='m-emp'&&!document.getElementById('emp-id')?.value)setFieldValue(document.getElementById('emp-id'),nextEmployeeId());
   if(id==='m-payment')setTimeout(()=>syncPaymentFormOptions(),0);
+  if(id==='m-loan')populateHrEmployeeSelect('loan-employee');
+  if(id==='m-loan-advance')populateHrEmployeeSelect('advance-employee');
+  if(id==='m-ot')populateHrEmployeeSelect('ot-employee-sel');
   setTimeout(()=>modal.querySelector('input,select,textarea,button:not(.modal-x)')?.focus(),30);
 }
 
@@ -453,35 +495,52 @@ function saveEmployee(){
   const passportFile=document.getElementById('emp-passport-file')?.files?.[0];
   const workPermitFile=document.getElementById('emp-work-permit-file')?.files?.[0];
   const medicalFile=document.getElementById('emp-medical-file')?.files?.[0];
+  const photoPreview=document.getElementById('emp-photo-preview')?.querySelector('img')?.src||'';
   const employee={
     id:employeeFormValue('emp-id',nextEmployeeId()),
     name:employeeFormValue('emp-name'),
     email:employeeFormValue('emp-email'),
+    mobile:employeeFormValue('emp-mobile'),
     department:employeeFormValue('emp-department','Management'),
     designation:employeeFormValue('emp-designation','Employee'),
     supervisor:employeeFormValue('emp-supervisor',''),
     shift:employeeFormValue('emp-shift','09:00-18:00'),
     salary:parseAmount(employeeFormValue('emp-salary','0')),
-    contract:employeeFormValue('emp-contract','Full-time'),
+    contract:employeeFormValue('emp-contract','Full-Time'),
     location:employeeFormValue('emp-location','Dubai HQ'),
+    branch:employeeFormValue('emp-branch','Dubai HQ'),
+    cost_center:employeeFormValue('emp-cost-center'),
     status:'Active',
     created_at:new Date().toISOString(),
     emirates_id:employeeFormValue('emp-emirates-id'),
     nationality:employeeFormValue('emp-nationality'),
     dob:employeeFormValue('emp-dob'),
     gender:employeeFormValue('emp-gender'),
+    marital_status:employeeFormValue('emp-marital'),
+    address:employeeFormValue('emp-address'),
     join_date:employeeFormValue('emp-join-date'),
     overtime_rate:employeeFormValue('emp-ot-rate'),
     leave_policy:employeeFormValue('emp-leave-policy'),
     emergency_contact:employeeFormValue('emp-emergency'),
+    emergency_mobile:employeeFormValue('emp-emergency-mobile'),
     work_permit_no:employeeFormValue('emp-work-permit'),
     visa_expiry:employeeFormValue('emp-visa-expiry'),
+    passport_no:employeeFormValue('emp-passport-no'),
+    passport_expiry:employeeFormValue('emp-passport-expiry'),
+    eid_expiry:employeeFormValue('emp-eid-expiry'),
+    labor_card:employeeFormValue('emp-labor-card'),
+    driving_license:employeeFormValue('emp-driving-license'),
+    driving_expiry:employeeFormValue('emp-driving-expiry'),
+    insurance_type:employeeFormValue('emp-insurance-type'),
+    insurance_policy:employeeFormValue('emp-insurance-policy'),
+    insurance_expiry:employeeFormValue('emp-insurance-expiry'),
     salary_bank:employeeFormValue('emp-bank'),
     iban:employeeFormValue('emp-iban'),
+    photo:photoPreview,
     documents:{
       passport:passportFile?.name||'',
       work_permit:workPermitFile?.name||'',
-      medical_report:medicalFile?.name||''
+      other:medicalFile?.name||''
     }
   };
   if(!employee.name){
@@ -495,6 +554,8 @@ function saveEmployee(){
   document.querySelectorAll('#m-emp input').forEach(inp=>{if(inp.type!=='file')inp.value='';});
   document.querySelectorAll('#m-emp select').forEach(sel=>sel.selectedIndex=0);
   document.querySelectorAll('#m-emp textarea').forEach(ta=>ta.value='');
+  const photoEl=document.getElementById('emp-photo-preview');
+  if(photoEl)photoEl.innerHTML='<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="var(--text3)" stroke-width="1.4"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
   toast('Employee added to table','ok');
   audit('Created employee',employee.id,'Saved');
 }
@@ -13780,16 +13841,31 @@ function refreshHrmsKpis(){
   const pendingOT=otRows.filter(r=>r.cells[5]?.textContent.trim()==='Pending').length;
   const pendingCorr=corrRows.filter(r=>r.cells[5]?.textContent.trim()==='Pending').length;
   const payrollRuns=document.querySelectorAll('#payroll-tbody tr:not([data-empty-state])').length;
+  const loanRows=document.querySelectorAll('#loans-tbody tr:not([data-empty-state])').length;
+  const openRecs=document.querySelectorAll('#requisitions-tbody tr:not([data-empty-state])').length;
+  // Count docs expiring within 30 days from expiry-tbody
+  const expiryRows=[...document.querySelectorAll('#expiry-tbody tr:not([data-empty-state])')];
+  const criticalExpiry=expiryRows.filter(r=>{
+    const d=parseInt(r.cells[3]?.textContent)||999;
+    return d>=0&&d<=30;
+  }).length;
   const set=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
   set('hrms-kpi-emp',empCount||'0');
   set('hrms-kpi-leave',onLeaveToday||'0');
   set('hrms-kpi-pending',(pendingLeave+pendingOT+pendingCorr)||'0');
   set('hrms-kpi-payroll',payrollRuns||'0');
+  // Dashboard alert tiles
+  set('hrms-dash-expiry',criticalExpiry||'0');
+  set('hrms-dash-ot',pendingOT||'0');
+  set('hrms-dash-recs',openRecs||'0');
+  set('hrms-dash-loans',loanRows||'0');
   const badge=(id,val,unit)=>{const el=document.getElementById(id);if(el)el.textContent=val+' '+unit;};
   badge('hrms-badge-emp',empCount||'0','employees');
   badge('hrms-badge-leave',pendingLeave||'0','pending');
   badge('hrms-badge-ot',pendingOT||'0','pending');
   badge('hrms-badge-corr',pendingCorr||'0','pending');
+  refreshRecruitmentStats();
+  refreshManagerPortalCounts();
 }
 
 function approveLeave(btn){
@@ -13963,8 +14039,210 @@ function updateLeaveBalance(){
   if(!tbody.children.length)emptyTableMessage(tbody,'No employees in database yet.');
 }
 
+function updateOtMultiplier(){
+  const type=document.getElementById('ot-type')?.value||'normal';
+  const multEl=document.getElementById('ot-multiplier');
+  const noteEl=document.getElementById('ot-mult-note');
+  if(!multEl)return;
+  let mult='1.25×',note='UAE Labour Law';
+  if(type==='weekend'||type==='holiday'){mult='1.5×';note='Weekend / Holiday rate';}
+  else if(type==='ramadan'){mult='1.25×';note='Ramadan OT rate';}
+  multEl.value=mult;
+  if(noteEl)noteEl.textContent=note;
+  const start=document.getElementById('ot-login')?.value||'';
+  const end=document.getElementById('ot-logout')?.value||'';
+  const hoursEl=document.getElementById('ot-hours');
+  if(hoursEl&&start&&end&&!hoursEl.value){
+    const [sh,sm]=start.split(':').map(Number);
+    const [eh,em]=end.split(':').map(Number);
+    let mins=(eh*60+em)-(sh*60+sm);
+    if(mins<0)mins+=24*60;
+    hoursEl.value=(mins/60).toFixed(2);
+  }
+}
+
+function previewEmpPhoto(input){
+  const preview=document.getElementById('emp-photo-preview');
+  if(!preview||!input.files||!input.files[0])return;
+  const reader=new FileReader();
+  reader.onload=e=>{preview.innerHTML=`<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`};
+  reader.readAsDataURL(input.files[0]);
+}
+
+function refreshExpiryAlerts(){
+  const tbody=document.getElementById('expiry-tbody');
+  if(!tbody)return;
+  const empRows=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')];
+  if(!empRows.length){
+    tbody.innerHTML='<tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">Add employees with document expiry dates to see alerts here.</td></tr>';
+    ['expiry-30','expiry-90','expiry-valid','expiry-missing'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='0';});
+    return;
+  }
+  const today=new Date();today.setHours(0,0,0,0);
+  const docs=[];
+  empRows.forEach(row=>{
+    const emp=employeeFromDirectoryRow(row);
+    if(!emp.name)return;
+    const add=(label,dateStr)=>{
+      if(!dateStr)return docs.push({emp:emp.name,label,date:null,days:null});
+      const d=new Date(dateStr);if(isNaN(d))return docs.push({emp:emp.name,label,date:null,days:null});
+      const days=Math.ceil((d-today)/86400000);
+      docs.push({emp:emp.name,label,date:d,days,dateStr});
+    };
+    add('Visa / Work Permit',emp.visa_expiry||emp.visaExpiry);
+    add('Passport',emp.passport_expiry||emp.passportExpiry);
+    add('Emirates ID',emp.eid_expiry||emp.eidExpiry);
+    add('Insurance',emp.insurance_expiry||emp.insuranceExpiry);
+  });
+  let cnt30=0,cnt90=0,cntValid=0,cntMissing=0;
+  docs.forEach(d=>{
+    if(d.days===null){cntMissing++;return;}
+    if(d.days<=30)cnt30++;
+    else if(d.days<=90)cnt90++;
+    else cntValid++;
+  });
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  set('expiry-30',cnt30);set('expiry-90',cnt90);set('expiry-valid',cntValid);set('expiry-missing',cntMissing);
+  const badge=document.getElementById('hrms-badge-expiry');
+  if(badge)badge.textContent=(cnt30+cnt90)+' alerts';
+  const toShow=docs.filter(d=>d.days!==null&&d.days<=90).sort((a,b)=>a.days-b.days);
+  if(!toShow.length){
+    tbody.innerHTML='<tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No documents expiring within 90 days.</td></tr>';
+    return;
+  }
+  tbody.innerHTML='';
+  toShow.forEach(d=>{
+    const cls=d.days<=30?'b-r':d.days<=60?'b-a':'b-g';
+    const status=d.days<=0?'Expired':d.days<=30?'Critical':d.days<=60?'Warning':'Due Soon';
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${escapeHtml(d.emp)}</td><td>${escapeHtml(d.label)}</td><td class="mono">${d.dateStr}</td><td class="mono" ${d.days<=30?'style="color:var(--red);font-weight:600"':d.days<=60?'style="color:var(--amber)"':''}>${d.days} days</td><td><span class="b ${cls}">${status}</span></td><td><button class="btn btn-g btn-sm" onclick="toast('Open employee record to update document','info')">Update</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function calcLoanEmi(){
+  const amount=parseFloat(document.getElementById('loan-amount')?.value)||0;
+  const months=parseInt(document.getElementById('loan-months')?.value)||1;
+  const emiEl=document.getElementById('loan-emi');
+  if(emiEl&&amount&&months)emiEl.value=(amount/months).toFixed(2);
+}
+
+function saveLoan(){
+  const emp=document.getElementById('loan-employee')?.value||'';
+  const type=document.getElementById('loan-type')?.value||'Personal Loan';
+  const amount=parseFloat(document.getElementById('loan-amount')?.value)||0;
+  const months=parseInt(document.getElementById('loan-months')?.value)||1;
+  const reason=document.getElementById('loan-reason')?.value.trim()||'';
+  const date=document.getElementById('loan-date')?.value||new Date().toISOString().slice(0,10);
+  if(!emp||!amount){toast('Employee and amount are required','warn');return;}
+  const emi=(amount/months).toFixed(2);
+  const record={id:`LN-${Date.now()}`,employee:emp,type,amount,emi:parseFloat(emi),months,balance:amount,reason,date,status:'Pending'};
+  const tbody=document.getElementById('loans-tbody');
+  if(tbody){
+    removeEmptyState(tbody);
+    const tr=document.createElement('tr');
+    tr.dataset.recordId=record.id;
+    tr.innerHTML=`<td>${escapeHtml(emp)}</td><td>${escapeHtml(type)}</td><td class="mono">AED ${amount.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td class="mono">AED ${emi}</td><td class="mono">AED ${amount.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td><span class="b b-a">Pending</span></td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="this.closest('tr').querySelector('.b').className='b b-g';this.closest('tr').querySelector('.b').textContent='Approved';this.closest('td').innerHTML='<button class=\\'btn btn-g btn-sm\\' onclick=\\'toast(\\'Loan detail\\',\\'info\\')\\'>View</button>';toast('Loan approved ✓','ok')">Approve</button><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove();toast('Loan rejected','warn')">Reject</button></div></td>`;
+    tbody.prepend(tr);
+  }
+  closeM('m-loan');
+  toast(`Loan request for ${emp} submitted ✓`,'ok');
+}
+
+function saveLoanAdvance(){
+  const emp=document.getElementById('advance-employee')?.value||'';
+  const amount=parseFloat(document.getElementById('advance-amount')?.value)||0;
+  const month=document.getElementById('advance-month')?.value||'';
+  const reason=document.getElementById('advance-reason')?.value.trim()||'';
+  if(!emp||!amount){toast('Employee and amount are required','warn');return;}
+  const tbody=document.getElementById('advances-tbody');
+  if(tbody){
+    removeEmptyState(tbody);
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${escapeHtml(emp)}</td><td class="mono">${escapeHtml(month)}</td><td class="mono">AED ${amount.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td>${new Date().toLocaleDateString('en-GB')}</td><td><span class="b b-a">Pending</span></td><td><button class="btn btn-success btn-sm" onclick="this.closest('tr').querySelector('.b').className='b b-g';this.closest('tr').querySelector('.b').textContent='Approved';toast('Advance approved ✓','ok')">Approve</button></td>`;
+    tbody.prepend(tr);
+  }
+  closeM('m-loan-advance');
+  toast(`Salary advance for ${emp} submitted ✓`,'ok');
+}
+
+function saveJobRequisition(){
+  const title=document.getElementById('req-title')?.value.trim()||'';
+  const dept=document.getElementById('req-dept')?.value||'';
+  const positions=document.getElementById('req-positions')?.value||'1';
+  const empType=document.getElementById('req-emp-type')?.value||'Full-Time';
+  const location=document.getElementById('req-location')?.value||'Dubai HQ';
+  const date=document.getElementById('req-date')?.value||'';
+  const salFrom=document.getElementById('req-sal-from')?.value||'';
+  const salTo=document.getElementById('req-sal-to')?.value||'';
+  if(!title){toast('Job title is required','warn');return;}
+  const tbody=document.getElementById('requisitions-tbody');
+  if(tbody){
+    removeEmptyState(tbody);
+    const tr=document.createElement('tr');
+    const salRange=salFrom&&salTo?`AED ${Number(salFrom).toLocaleString()}–${Number(salTo).toLocaleString()}`:(salFrom?`AED ${Number(salFrom).toLocaleString()}+`:'—');
+    tr.innerHTML=`<td>${escapeHtml(title)}</td><td>${escapeHtml(dept)}</td><td><span class="b b-b">${escapeHtml(empType)}</span></td><td>${escapeHtml(location)}</td><td class="mono">${escapeHtml(positions)}</td><td class="mono">${salRange}</td><td>${escapeHtml(date)||'—'}</td><td><span class="b b-a">Pending Approval</span></td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="this.closest('tr').querySelector('.b').className='b b-g';this.closest('tr').querySelector('.b').textContent='Open';toast('Requisition approved ✓','ok')">Approve</button><button class="btn btn-g btn-sm" onclick="toast('Posting to job boards','info')">Post</button></div></td>`;
+    tbody.prepend(tr);
+  }
+  const cnt=document.getElementById('rec-open');
+  if(cnt)cnt.textContent=document.querySelectorAll('#requisitions-tbody tr:not([data-empty-state])').length;
+  closeM('m-recruitment');
+  toast(`Requisition "${title}" created ✓`,'ok');
+}
+
+function saveCandidate(){
+  const name=document.getElementById('cand-name')?.value.trim()||'';
+  const position=document.getElementById('cand-position')?.value.trim()||'';
+  const mobile=document.getElementById('cand-mobile')?.value.trim()||'';
+  const nationality=document.getElementById('cand-nationality')?.value||'';
+  const exp=document.getElementById('cand-exp')?.value||'0';
+  const salary=document.getElementById('cand-salary')?.value||'0';
+  const source=document.getElementById('cand-source')?.value||'';
+  const stage=document.getElementById('cand-stage')?.value||'Applied';
+  if(!name){toast('Candidate name is required','warn');return;}
+  const tbody=document.getElementById('candidates-tbody');
+  if(tbody){
+    removeEmptyState(tbody);
+    const stageCls=stage==='Hired'?'b-g':stage==='Rejected'?'b-r':stage==='Offer Sent'?'b-p':stage==='Interview Scheduled'?'b-b':'b-a';
+    const tr=document.createElement('tr');
+    tr.dataset.stage=stage;
+    tr.innerHTML=`<td>${escapeHtml(name)}</td><td>${escapeHtml(position)}</td><td>${escapeHtml(nationality)}</td><td class="mono">${escapeHtml(exp)} yrs</td><td class="mono">AED ${Number(salary||0).toLocaleString()}</td><td>${escapeHtml(source)}</td><td><span class="b ${stageCls}">${escapeHtml(stage)}</span></td><td><div class="flx"><button class="btn btn-g btn-sm" onclick="toast('Scheduling interview for '+${JSON.stringify(name)},'info')">Interview</button><button class="btn btn-g btn-sm" onclick="toast('Sending offer letter','info')">Offer</button></div></td>`;
+    tbody.prepend(tr);
+  }
+  closeM('m-candidate');
+  refreshRecruitmentStats();
+  toast(`Candidate "${name}" added ✓`,'ok');
+}
+
+function filterCandidates(stage,btn){
+  document.querySelectorAll('.cand-filter-btn').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  document.querySelectorAll('#candidates-tbody tr:not([data-empty-state])').forEach(tr=>{
+    tr.style.display=(stage==='all'||tr.dataset.stage===stage)?'':'none';
+  });
+}
+
+function refreshRecruitmentStats(){
+  const open=document.querySelectorAll('#requisitions-tbody tr:not([data-empty-state])').length;
+  const cands=document.querySelectorAll('#candidates-tbody tr:not([data-empty-state])').length;
+  const interviews=document.querySelectorAll('#interviews-tbody tr:not([data-empty-state])').length;
+  const offers=document.querySelectorAll('#offers-tbody tr:not([data-empty-state])').length;
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v||'0';};
+  set('rec-open',open);set('rec-cands',cands);set('rec-interviews-cnt',interviews);set('rec-offers-cnt',offers);
+  const badge=document.getElementById('hrms-badge-recs');
+  if(badge)badge.textContent=open+' open';
+}
+
+function refreshManagerPortalCounts(){
+  const pendingLeave=document.querySelectorAll('#leave-tbody tr:not([data-empty-state])').length;
+  const pendingOT=document.querySelectorAll('#ot-tbody tr:not([data-empty-state])').length;
+  const pendingCorr=document.querySelectorAll('#corrections-tbody tr:not([data-empty-state])').length;
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v||'0';};
+  set('mgr-leave-cnt',pendingLeave);set('mgr-ot-cnt',pendingOT);set('mgr-corr-cnt',pendingCorr);
+}
+
 function submitOTRequest(){
-  const employee=document.getElementById('ot-employee')?.value.trim()||'';
+  const employee=(document.getElementById('ot-employee-sel')?.value||document.getElementById('ot-employee')?.value||'').trim();
   const dept=document.getElementById('ot-dept')?.value.trim()||'';
   const date=document.getElementById('ot-date')?.value.trim()||'';
   const shift=document.getElementById('ot-shift')?.value.trim()||'';
@@ -13972,8 +14250,10 @@ function submitOTRequest(){
   const logout=document.getElementById('ot-logout')?.value.trim()||'';
   const hours=document.getElementById('ot-hours')?.value.trim()||'0';
   const reason=document.getElementById('ot-reason')?.value.trim()||'';
+  const otType=document.getElementById('ot-type')?.value||'normal';
+  const multiplier=document.getElementById('ot-multiplier')?.value||'1.25×';
   if(!employee){toast('Employee name is required','warn');return;}
-  const record={id:`OT-${Date.now()}`,employee,department:dept,date,shift,login,logout,ot_hours:hours,reason,status:'Pending',submitted:new Date().toISOString()};
+  const record={id:`OT-${Date.now()}`,employee,department:dept,date,shift,login,logout,ot_hours:hours,ot_type:otType,multiplier,reason,status:'Pending',submitted:new Date().toISOString()};
   renderOTRecord(record);
   saveServer('overtimeRequests',record);
   closeM('m-ot');

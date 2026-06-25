@@ -1,0 +1,2122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HRMS Portal — TaxFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="src/styles.css?v=20260625e">
+<style>
+/* ── HRMS Portal: Dark Sidebar Override ──────────────────── */
+body.theme-light .sb,body.theme-dark .sb{background:#151c2c!important;border-right:1px solid rgba(255,255,255,.07)!important;}
+.sb .sb-lbl{color:rgba(255,255,255,.28)!important;font-size:10px!important;letter-spacing:.07em;}
+.sb .sb-logo-text .sb-brand{color:#fff!important;}
+.sb .sb-logo-text .sb-brand span{color:#4f8ef7!important;}
+.sb .nav{color:rgba(255,255,255,.62)!important;}
+.sb .nav:hover{background:rgba(255,255,255,.07)!important;color:#fff!important;}
+.sb .nav.on{background:#2563eb!important;color:#fff!important;box-shadow:0 2px 8px rgba(37,99,235,.35);}
+.sb .nav svg{opacity:.65;}
+.sb .nav.on svg,.sb .nav:hover svg{opacity:1;}
+.sb .nav-sub{color:rgba(255,255,255,.46)!important;}
+.sb .nav-sub:hover{background:rgba(255,255,255,.06)!important;color:#fff!important;}
+.sb .nav-sub.on{color:#60a5fa!important;}
+.sb .hrms-subnav{border-left-color:rgba(255,255,255,.1)!important;}
+.sb .sb-foot{border-top:1px solid rgba(255,255,255,.08)!important;padding:0;}
+.sb .sb-foot .btn-g{background:rgba(255,255,255,.08)!important;color:rgba(255,255,255,.65)!important;border-color:rgba(255,255,255,.1)!important;font-size:12px!important;}
+.sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14)!important;color:#fff!important;}
+/* ── Topbar Override ─────────────────────────────────────── */
+.topbar{display:none!important;}
+/* ── Content BG ──────────────────────────────────────────── */
+.content{background:#f2f4f8!important;padding:0!important;}
+/* ── HRMS-specific styles ────────────────────────────────── */
+.hrms-topbar{display:flex;align-items:center;gap:12px;padding:0 20px;height:62px;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:10;flex-shrink:0;}
+.hrms-search{flex:1;max-width:380px;display:flex;align-items:center;gap:8px;background:#f4f7fb;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px;}
+.hrms-search input{border:none;background:none;outline:none;font-size:13px;color:#6b7280;width:100%;}
+.hrms-search svg{flex-shrink:0;opacity:.38;color:#374151;}
+.tb-right-hrms{display:flex;align-items:center;gap:6px;margin-left:auto;}
+.hm-icon-btn{position:relative;width:38px;height:38px;border-radius:50%;background:#f4f7fb;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#374151;transition:background .15s;flex-shrink:0;}
+.hm-icon-btn:hover{background:#e8edf5;}
+.hm-badge{position:absolute;top:0px;right:0px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;border-radius:99px;min-width:16px;height:16px;display:flex;align-items:center;justify-content:center;padding:0 3px;line-height:1;border:1.5px solid #fff;}
+.hm-user{display:flex;align-items:center;gap:8px;padding:6px 12px;background:#f4f7fb;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;margin-left:4px;}
+.hm-avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#4f8ef7,#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;flex-shrink:0;}
+.hm-user-name{font-size:12.5px;font-weight:600;color:#111827;white-space:nowrap;}
+.hm-user-role{font-size:10px;color:#9ca3af;}
+.hm-date{display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280;background:#f4f7fb;border:1px solid #e2e8f0;border-radius:7px;padding:6px 11px;white-space:nowrap;margin-left:4px;}
+/* ── KPI Cards ───────────────────────────────────────────── */
+.hrms-kpi-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:18px;}
+@media(max-width:1280px){.hrms-kpi-grid{grid-template-columns:repeat(3,1fr);}}
+.hrms-kpi-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;display:flex;align-items:flex-start;gap:12px;transition:box-shadow .15s,transform .15s;}
+.hrms-kpi-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.09);transform:translateY(-1px);}
+.hrms-kpi-icon{width:48px;height:48px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.hrms-kpi-val{font-size:21px;font-weight:700;color:#111827;line-height:1.1;margin:2px 0 1px;}
+.hrms-kpi-lbl{font-size:11px;color:#6b7280;font-weight:500;margin-bottom:2px;}
+.hrms-kpi-trend{font-size:10.5px;display:flex;align-items:center;gap:3px;}
+.hrms-kpi-trend.up{color:#10b981;}
+.hrms-kpi-trend.dn{color:#ef4444;}
+.hrms-kpi-trend.nt{color:#6b7280;}
+.hrms-kpi-action{font-size:10.5px;color:#3b82f6;cursor:pointer;margin-top:2px;display:block;}
+/* ── Section layout ──────────────────────────────────────── */
+.hrms-dash-inner{padding:18px 20px;overflow-y:auto;height:calc(100vh - 62px);}
+.hrms-chart-grid{display:grid;grid-template-columns:2fr 1.1fr 1.1fr;gap:16px;margin-bottom:16px;}
+.hrms-mid-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px;margin-bottom:16px;}
+.hrms-bot-grid{display:grid;grid-template-columns:1fr 1.3fr 1fr 1fr;gap:16px;margin-bottom:16px;}
+.hrms-ai-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px;}
+@media(max-width:1280px){.hrms-chart-grid{grid-template-columns:1fr 1fr;}.hrms-mid-grid,.hrms-bot-grid{grid-template-columns:1fr 1fr;}.hrms-ai-grid{grid-template-columns:repeat(3,1fr);}}
+/* ── Card base ───────────────────────────────────────────── */
+.hc{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px;}
+.hc-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.hc-title{font-size:13.5px;font-weight:700;color:#111827;}
+.hc-sub{font-size:11px;color:#9ca3af;}
+.hc-select{background:#f4f7fb;border:1px solid #e2e8f0;border-radius:6px;padding:3px 8px;font-size:11px;color:#374151;cursor:pointer;}
+/* ── Donut Charts (SVG) ──────────────────────────────────── */
+.hc-donut-wrap{display:flex;align-items:center;gap:16px;}
+.hc-donut{position:relative;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
+.hc-donut-center{position:absolute;text-align:center;}
+.hc-donut-val{font-size:16px;font-weight:700;color:#111827;line-height:1;}
+.hc-donut-lbl{font-size:9.5px;color:#9ca3af;margin-top:2px;}
+/* ── Legend ──────────────────────────────────────────────── */
+.hc-legend{display:flex;flex-direction:column;gap:5px;}
+.hc-legend-row{display:flex;align-items:center;gap:6px;}
+.hc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.hc-leg-name{font-size:11.5px;color:#374151;flex:1;white-space:nowrap;}
+.hc-leg-val{font-size:11px;font-weight:600;color:#111827;min-width:28px;text-align:right;}
+.hc-leg-pct{font-size:10px;color:#9ca3af;min-width:38px;text-align:right;}
+/* ── Progress Bars ───────────────────────────────────────── */
+.hc-progress-list{display:flex;flex-direction:column;gap:10px;}
+.hc-progress-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+.hc-prog-lbl{font-size:12px;color:#374151;font-weight:500;display:flex;align-items:center;gap:7px;}
+.hc-prog-icon{width:24px;height:24px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.hc-prog-val{font-size:11px;color:#6b7280;}
+.hc-prog-bar{height:6px;background:#f0f2f7;border-radius:99px;overflow:hidden;margin-top:4px;}
+.hc-prog-fill{height:100%;border-radius:99px;}
+/* ── Funnel ──────────────────────────────────────────────── */
+.hc-funnel{display:flex;flex-direction:column;gap:5px;padding:4px 0;}
+.hc-funnel-row{display:flex;align-items:center;gap:8px;}
+.hc-funnel-lbl{font-size:11px;color:#6b7280;width:78px;flex-shrink:0;}
+.hc-funnel-bar-wrap{flex:1;height:22px;display:flex;align-items:center;}
+.hc-funnel-bar{height:100%;border-radius:3px;min-width:6px;}
+.hc-funnel-cnt{font-size:12px;font-weight:600;color:#111827;width:32px;text-align:right;flex-shrink:0;}
+/* ── Approval list ───────────────────────────────────────── */
+.hc-approvals{display:flex;flex-direction:column;gap:6px;}
+.hc-appr-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;}
+.hc-appr-row:last-child{border-bottom:none;}
+.hc-appr-icon{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.hc-appr-name{font-size:12.5px;color:#374151;font-weight:500;flex:1;}
+.hc-appr-badge{font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;white-space:nowrap;}
+/* ── Compliance alerts ───────────────────────────────────── */
+.hc-alert-title{font-size:12.5px;font-weight:700;color:#b91c1c;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.hc-alert-list{display:flex;flex-direction:column;gap:5px;}
+.hc-alert-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:7px;background:#fef9f9;}
+.hc-alert-dot{width:7px;height:7px;border-radius:50%;background:#ef4444;flex-shrink:0;}
+.hc-alert-name{font-size:12px;color:#374151;flex:1;}
+.hc-alert-cnt{font-size:12px;font-weight:700;color:#ef4444;}
+/* ── Bar chart ───────────────────────────────────────────── */
+.hc-bar-chart{display:flex;align-items:flex-end;justify-content:space-between;height:90px;gap:6px;padding-bottom:16px;position:relative;}
+.hc-bar-chart::after{content:'';position:absolute;bottom:16px;left:0;right:0;height:1px;background:#f0f2f7;}
+.hc-bar-col{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;}
+.hc-bar{width:100%;border-radius:4px 4px 0 0;min-height:4px;transition:height .4s;}
+.hc-bar-val{font-size:9.5px;font-weight:700;color:#374151;}
+.hc-bar-lbl{font-size:9px;color:#9ca3af;white-space:nowrap;}
+/* ── AI Insight cards ────────────────────────────────────── */
+.hc-ai{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px;}
+.hc-ai-hd{display:flex;align-items:flex-start;gap:8px;margin-bottom:9px;}
+.hc-ai-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.hc-ai-title{font-size:11.5px;font-weight:700;color:#111827;line-height:1.3;}
+.hc-ai-sub{font-size:10px;color:#9ca3af;margin-top:1px;}
+.hc-ai-body{display:flex;flex-direction:column;gap:4px;}
+.hc-ai-row{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;}
+.hc-ai-name{color:#374151;}
+.hc-ai-pct{font-weight:700;}
+.hc-ai-link{font-size:10.5px;color:#3b82f6;margin-top:8px;cursor:pointer;display:block;}
+/* ── Sidebar user footer ─────────────────────────────────── */
+.hrms-sb-user{display:flex;align-items:center;gap:9px;padding:12px 16px 10px;}
+.hrms-sb-av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#4f8ef7,#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0;}
+.hrms-sb-name{font-size:12px;font-weight:600;color:rgba(255,255,255,.82);}
+.hrms-sb-co{font-size:10px;color:rgba(255,255,255,.35);}
+.hrms-section-lbl{font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;margin-top:4px;}
+</style>
+</head>
+<body class="theme-light">
+<noscript>This application requires JavaScript to run.</noscript>
+<div class="scrim" id="nav-scrim" aria-hidden="true" onclick="closeSidebar()"></div>
+<nav class="sb" id="sidebar" aria-label="HRMS Navigation">
+  <div class="sb-logo">
+    <div style="width:34px;height:34px;border-radius:9px;background:#2563eb;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+      <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.6"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><circle cx="12.5" cy="5" r="1.8"/><path d="M14.5 13c0-2-1.3-3-2.5-3.5"/></svg>
+    </div>
+    <div class="sb-logo-text">
+      <div class="sb-brand">@ <span>HRMS</span></div>
+      <div style="font-size:9px;color:rgba(255,255,255,.32);font-weight:500;margin-top:1px">Human Resources</div>
+    </div>
+  </div>
+
+  <div class="sb-section" style="padding-bottom:4px">
+    <div class="nav on" id="nav-hrms" onclick="go('hrms')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>
+      Dashboard
+    </div>
+    <div class="nav" onclick="go('staff')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12v9a1 1 0 01-1 1H3a1 1 0 01-1-1V4z"/><path d="M5 4V2.5a1 1 0 011-1h4a1 1 0 011 1V4"/><path d="M6 8h4M6 11h2"/></svg>
+      Organization
+      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.35"><path d="M3 4l2 2 2-2"/></svg>
+    </div>
+    <div class="nav" onclick="go('staff')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><circle cx="12.5" cy="5" r="1.8"/><path d="M14.5 13c0-2-1.3-3-2.5-3.5"/></svg>
+      Employees
+      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.35"><path d="M3 4l2 2 2-2"/></svg>
+    </div>
+    <div class="nav" onclick="goHrmsTab(2,'hr-att')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2.5 1.5"/></svg>
+      Attendance
+      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.35"><path d="M3 4l2 2 2-2"/></svg>
+    </div>
+    <div class="nav" onclick="go('rota')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1.5v3M11 1.5v3M2 6h12"/></svg>
+      Rota &amp; Shift
+      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.35"><path d="M3 4l2 2 2-2"/></svg>
+    </div>
+    <div class="nav" onclick="goHrmsTab(4,'hr-leave')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8c0-2.8 2.2-5 5-5s5 2.2 5 5v4H3V8z"/><path d="M1 12h14M6 3.5C6 2 7 1 8 1s2 1 2 2.5"/></svg>
+      Leave
+      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.35"><path d="M3 4l2 2 2-2"/></svg>
+    </div>
+    <div class="nav" onclick="go('payroll')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6h12M5 10h3M10 10h1"/></svg>
+      Payroll
+      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.35"><path d="M3 4l2 2 2-2"/></svg>
+    </div>
+    <div class="nav" onclick="goHrmsTab(3,'hr-ot')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2.5 1.5"/><path d="M12 2l2-1.5"/></svg>
+      Overtime
+      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.35"><path d="M3 4l2 2 2-2"/></svg>
+    </div>
+    <div class="nav" onclick="goHrmsTab(6,'hr-loans')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="9" rx="1"/><path d="M2 7.5h12M8 7.5V4M6 11h4"/></svg>
+      Loans &amp; Advances
+      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.35"><path d="M3 4l2 2 2-2"/></svg>
+    </div>
+    <div class="nav" onclick="go('recruitment')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="5" r="3"/><path d="M1 14c0-3 2.5-5 6-5s6 2 6 5"/><path d="M13 2l1 1-2.5 2.5-1-1"/></svg>
+      Recruitment (ATS)
+      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.35"><path d="M3 4l2 2 2-2"/></svg>
+    </div>
+    <div class="nav" onclick="go('hrms-ext')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2l1.2 3.5H13l-2.9 2 1.1 3.5L8 9.2l-3.2 1.8 1.1-3.5L3 5.5h3.8z"/></svg>
+      Performance
+      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.35"><path d="M3 4l2 2 2-2"/></svg>
+    </div>
+    <div class="nav" onclick="go('hrms-ext')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 13V8a5 5 0 0110 0v5M1 13h14"/><circle cx="8" cy="7" r="2"/></svg>
+      Training
+      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.35"><path d="M3 4l2 2 2-2"/></svg>
+    </div>
+    <div class="nav" onclick="go('hrms-ext')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="8" width="4" height="5" rx="1"/><rect x="6" y="5.5" width="4" height="7.5" rx="1"/><rect x="10.5" y="3" width="4" height="10" rx="1"/></svg>
+      Assets
+      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.35"><path d="M3 4l2 2 2-2"/></svg>
+    </div>
+    <div class="nav" onclick="go('staff')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 4h14M1 8h9M1 12h6"/><circle cx="13" cy="11" r="2.5"/><path d="M13 9.5v1.5l1 1"/></svg>
+      HR Workflow
+      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.35"><path d="M3 4l2 2 2-2"/></svg>
+    </div>
+    <div class="nav" onclick="go('payroll')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12l4-4 3 3 5-6"/><path d="M10 6h4v4"/></svg>
+      Reports &amp; Analytics
+      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.35"><path d="M3 4l2 2 2-2"/></svg>
+    </div>
+    <div class="nav" onclick="go('hrms')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2c1.5 0 3 1 3.5 2.5S11 8 8 9c-3 1-3.5 2-3.5 3.5"/><circle cx="8" cy="13.5" r=".8" fill="currentColor" stroke="none"/></svg>
+      AI Insights
+      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.35"><path d="M3 4l2 2 2-2"/></svg>
+    </div>
+    <div class="nav" onclick="goHrmsTab(8,'hr-policy')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.5 1.5M11.3 11.3l1.5 1.5M3.2 12.8l1.5-1.5M11.3 4.7l1.5-1.5"/></svg>
+      Settings
+      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.35"><path d="M3 4l2 2 2-2"/></svg>
+    </div>
+  </div>
+
+  <div class="sb-foot">
+    <div class="hrms-sb-user">
+      <div class="hrms-sb-av" id="hrms-sb-av">A</div>
+      <div>
+        <div class="hrms-sb-name" id="hrms-sb-name">Admin</div>
+        <div class="hrms-sb-co">ABC Group · UAE</div>
+      </div>
+    </div>
+    <div style="padding:0 12px 12px">
+      <button class="btn btn-g btn-block" onclick="window.location.href='/'">← Back to Main App</button>
+    </div>
+  </div>
+</nav>
+
+<div class="main">
+  <!-- Hidden legacy topbar placeholder (hidden via CSS) -->
+  <div class="topbar" style="display:none!important">
+    <button class="btn btn-g menu-btn" id="menu-btn" type="button" onclick="toggleSidebar()"></button>
+    <button class="btn btn-g back-btn" id="back-btn" type="button" onclick="goBack()" disabled></button>
+    <div class="tb-info"><div class="tb-title" id="ptitle">HRMS</div><div id="psub" class="tb-sub"></div></div>
+    <div class="tb-right"><button class="btn btn-p hidden" id="topaction"></button></div>
+  </div>
+  <!-- New HRMS Topbar -->
+  <div class="hrms-topbar">
+    <button style="background:none;border:none;color:#374151;font-size:20px;padding:4px 8px;line-height:1;cursor:pointer;border-radius:6px;transition:background .15s" onmouseover="this.style.background='#f4f7fb'" onmouseout="this.style.background='none'" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</button>
+    <div class="hrms-search">
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10l3 3"/></svg>
+      <input type="text" placeholder="Search employees, modules, reports..." id="hrms-global-search">
+    </div>
+    <div class="tb-right-hrms">
+      <div class="hm-icon-btn" title="Notifications" onclick="goHrmsTab(7,'hr-expiry');scheduleIdleTask(refreshExpiryAlerts,100)">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5a5 5 0 00-5 5v3L1.5 11.5h13L13 9.5v-3a5 5 0 00-5-5z"/><path d="M6.5 13.5a1.5 1.5 0 003 0"/></svg>
+        <div class="hm-badge" id="hrms-notif-badge" style="display:none">0</div>
+      </div>
+      <div class="hm-icon-btn" title="Leave Requests" onclick="goHrmsTab(4,'hr-leave')">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h12a1 1 0 011 1v7a1 1 0 01-1 1H5l-3 2V4a1 1 0 011-1z"/></svg>
+        <div class="hm-badge" id="hrms-msg-badge" style="background:#f59e0b;display:none">0</div>
+      </div>
+      <div class="hm-icon-btn" title="Global / Multi-company">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 2a5 5 0 010 12M2 8h12"/><path d="M5.5 4.5C6.5 6 7 7 8 8s2 2.5 2.5 3.5M10.5 4.5C9.5 6 9 7 8 8s-2 2.5-2.5 3.5"/></svg>
+      </div>
+      <div class="hm-user">
+        <div class="hm-avatar" id="hrms-top-av">A</div>
+        <div>
+          <div class="hm-user-name" id="hrms-top-name">Admin</div>
+          <div class="hm-user-role">Admin</div>
+        </div>
+      </div>
+      <div class="hm-date">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1.5v3M11 1.5v3M2 6h12"/></svg>
+        <span id="hrms-date-disp">--</span>
+      </div>
+    </div>
+  </div>
+  <div class="content">
+<div class="page" id="page-login" style="display:none"></div>
+<div class="page" id="page-dashboard" style="display:none"></div>
+
+<div class="page" id="page-hrms">
+<div class="hrms-dash-inner">
+
+<!-- ── KPI Row ───────────────────────────────────────────────────── -->
+<div class="hrms-kpi-grid">
+  <!-- 1. Total Employees -->
+  <div class="hrms-kpi-card">
+    <div class="hrms-kpi-icon" style="background:#eff6ff">
+      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.6"><circle cx="8" cy="7" r="3.5"/><path d="M2 18c0-3.5 2.7-5.5 6-5.5s6 2 6 5.5"/><circle cx="17" cy="7" r="2.5"/><path d="M20 17.5c0-2.5-1.5-4-3-4.5"/></svg>
+    </div>
+    <div>
+      <div class="hrms-kpi-lbl">Total Employees</div>
+      <div class="hrms-kpi-val" id="hrms-kpi-emp">—</div>
+      <div class="hrms-kpi-trend up" id="hrms-kpi-emp-trend">
+        <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 7l3-4 3 4"/></svg>
+        <span>active headcount</span>
+      </div>
+    </div>
+  </div>
+  <!-- 2. Present Today -->
+  <div class="hrms-kpi-card">
+    <div class="hrms-kpi-icon" style="background:#f0fdf4">
+      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.6"><circle cx="11" cy="11" r="8" stroke-width="1.4"/><path d="M7 11l3 3 5-5"/></svg>
+    </div>
+    <div>
+      <div class="hrms-kpi-lbl">Present Today</div>
+      <div class="hrms-kpi-val" id="hrms-kpi-present" style="color:#16a34a">—</div>
+      <div class="hrms-kpi-trend nt" id="hrms-kpi-present-trend">
+        <span>— of total</span>
+      </div>
+    </div>
+  </div>
+  <!-- 3. On Leave -->
+  <div class="hrms-kpi-card">
+    <div class="hrms-kpi-icon" style="background:#faf5ff">
+      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#7c3aed" stroke-width="1.6"><path d="M11 2l2 3h4l-3 2.5 1.5 4-4.5-2.5L6.5 11.5 8 7.5 5 5h4z"/><path d="M4 18c1-2 3-3 7-3s6 1 7 3"/></svg>
+    </div>
+    <div>
+      <div class="hrms-kpi-lbl">On Leave</div>
+      <div class="hrms-kpi-val" id="hrms-kpi-leave" style="color:#7c3aed">—</div>
+      <div class="hrms-kpi-trend nt">
+        <span>approved leaves</span>
+      </div>
+    </div>
+  </div>
+  <!-- 4. Net Payroll -->
+  <div class="hrms-kpi-card">
+    <div class="hrms-kpi-icon" style="background:#fff7ed">
+      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#ea580c" stroke-width="1.6"><rect x="3" y="5" width="16" height="12" rx="2"/><path d="M3 9h16M7 13h3M14 13h1"/></svg>
+    </div>
+    <div>
+      <div class="hrms-kpi-lbl">Net Payroll (this month)</div>
+      <div class="hrms-kpi-val" id="hrms-kpi-payroll" style="color:#ea580c">—</div>
+      <div class="hrms-kpi-trend nt" id="hrms-kpi-payroll-trend">
+        <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3l3 4 3-4"/></svg>
+        <span>runs this year</span>
+      </div>
+    </div>
+  </div>
+  <!-- 5. Open Positions -->
+  <div class="hrms-kpi-card">
+    <div class="hrms-kpi-icon" style="background:#eff6ff">
+      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.6"><rect x="3" y="7" width="16" height="11" rx="2"/><path d="M8 7V5a3 3 0 016 0v2"/><path d="M11 12v3M9.5 13.5h3"/></svg>
+    </div>
+    <div>
+      <div class="hrms-kpi-lbl">Open Positions</div>
+      <div class="hrms-kpi-val" id="hrms-dash-recs" style="color:#2563eb">—</div>
+      <div class="hrms-kpi-trend up">
+        <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 7l3-4 3 4"/></svg>
+        <span>active requisitions</span>
+      </div>
+    </div>
+  </div>
+  <!-- 6. Pending Approvals -->
+  <div class="hrms-kpi-card">
+    <div class="hrms-kpi-icon" style="background:#fef2f2">
+      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#dc2626" stroke-width="1.6"><rect x="4" y="3" width="14" height="16" rx="2"/><path d="M8 7h6M8 10.5h6M8 14h4"/><circle cx="16" cy="16" r="4" fill="#fef2f2" stroke="#dc2626"/><path d="M16 14.5v2M16 17.5v.5"/></svg>
+    </div>
+    <div>
+      <div class="hrms-kpi-lbl">Pending Approvals</div>
+      <div class="hrms-kpi-val" id="hrms-kpi-pending" style="color:#dc2626">—</div>
+      <a class="hrms-kpi-action" onclick="goHrmsTab(4,'hr-leave')">View all</a>
+    </div>
+  </div>
+</div>
+
+<!-- ── Charts Row ─────────────────────────────────────────────────── -->
+<div class="hrms-chart-grid">
+  <!-- Attendance Trend -->
+  <div class="hc">
+    <div class="hc-hd">
+      <div class="hc-title">Attendance Trend</div>
+      <select class="hc-select"><option>This Month</option><option>Last Month</option><option>Last 3 Months</option></select>
+    </div>
+    <div class="hrms-line-chart-wrap" style="height:130px">
+      <svg viewBox="0 0 400 100" preserveAspectRatio="none" style="width:100%;height:100%">
+        <defs>
+          <linearGradient id="attGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#3b82f6" stop-opacity=".18"/>
+            <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="M0 55 L18 50 L36 45 L54 52 L72 42 L90 38 L108 44 L126 40 L144 35 L162 38 L180 32 L198 36 L216 30 L234 33 L252 28 L270 32 L288 27 L306 30 L324 26 L342 29 L360 24 L378 27 L400 22" fill="url(#attGrad)" stroke="none"/>
+        <polyline points="0,55 18,50 36,45 54,52 72,42 90,38 108,44 126,40 144,35 162,38 180,32 198,36 216,30 234,33 252,28 270,32 288,27 306,30 324,26 342,29 360,24 378,27 400,22" fill="none" stroke="#3b82f6" stroke-width="2.2" stroke-linejoin="round"/>
+        <!-- Data points -->
+        <circle cx="0" cy="55" r="3" fill="#3b82f6"/>
+        <circle cx="72" cy="42" r="3" fill="#3b82f6"/>
+        <circle cx="144" cy="35" r="3" fill="#3b82f6"/>
+        <circle cx="216" cy="30" r="3" fill="#3b82f6"/>
+        <circle cx="288" cy="27" r="3" fill="#3b82f6"/>
+        <circle cx="360" cy="24" r="3" fill="#3b82f6"/>
+      </svg>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:#9ca3af;margin-top:6px">
+      <span>1 May</span><span>5 May</span><span>9 May</span><span>13 May</span><span>16 May</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:11.5px">
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:20px;height:2px;background:#3b82f6;display:inline-block;border-radius:1px"></span>Attendance %</span>
+    </div>
+  </div>
+
+  <!-- Department Strength -->
+  <div class="hc">
+    <div class="hc-hd"><div class="hc-title">Department Strength</div></div>
+    <div class="hc-donut-wrap" style="align-items:flex-start">
+      <div class="hc-donut">
+        <svg viewBox="0 0 100 100" width="100" height="100">
+          <!-- Donut rings: total circumference of r=38 ≈ 238.8 -->
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="12"/>
+          <!-- HR 9.6% -->
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#3b82f6" stroke-width="12" stroke-dasharray="22.9 215.9" stroke-dashoffset="0" transform="rotate(-90 50 50)"/>
+          <!-- Finance 12.8% -->
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#8b5cf6" stroke-width="12" stroke-dasharray="30.6 208.2" stroke-dashoffset="-22.9" transform="rotate(-90 50 50)"/>
+          <!-- Operations 25.6% -->
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#f59e0b" stroke-width="12" stroke-dasharray="61.1 177.7" stroke-dashoffset="-53.5" transform="rotate(-90 50 50)"/>
+          <!-- Sales 16.8% -->
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#10b981" stroke-width="12" stroke-dasharray="40.1 198.7" stroke-dashoffset="-114.6" transform="rotate(-90 50 50)"/>
+          <!-- IT 14.4% -->
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#ef4444" stroke-width="12" stroke-dasharray="34.4 204.4" stroke-dashoffset="-154.7" transform="rotate(-90 50 50)"/>
+          <!-- Admin 8.0% -->
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#06b6d4" stroke-width="12" stroke-dasharray="19.1 219.7" stroke-dashoffset="-189.1" transform="rotate(-90 50 50)"/>
+          <!-- Others: remaining -->
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#d1d5db" stroke-width="12" stroke-dasharray="30.6 208.2" stroke-dashoffset="-208.2" transform="rotate(-90 50 50)"/>
+        </svg>
+        <div class="hc-donut-center">
+          <div class="hc-donut-val" id="hrms-dept-total">—</div>
+          <div class="hc-donut-lbl">Total</div>
+        </div>
+      </div>
+      <div class="hc-legend" style="flex:1;font-size:11px">
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#3b82f6"></div><div class="hc-leg-name">HR</div><div class="hc-leg-pct">(9.6%)</div></div>
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#8b5cf6"></div><div class="hc-leg-name">Finance</div><div class="hc-leg-pct">(12.8%)</div></div>
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#f59e0b"></div><div class="hc-leg-name">Operations</div><div class="hc-leg-pct">(25.6%)</div></div>
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#10b981"></div><div class="hc-leg-name">Sales</div><div class="hc-leg-pct">(16.8%)</div></div>
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#ef4444"></div><div class="hc-leg-name">IT</div><div class="hc-leg-pct">(14.4%)</div></div>
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#06b6d4"></div><div class="hc-leg-name">Admin</div><div class="hc-leg-pct">(8.0%)</div></div>
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#d1d5db"></div><div class="hc-leg-name">Others</div><div class="hc-leg-pct">(12.8%)</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Employee Type Distribution -->
+  <div class="hc">
+    <div class="hc-hd"><div class="hc-title">Employee Type Distribution</div></div>
+    <div class="hc-donut-wrap" style="align-items:flex-start">
+      <div class="hc-donut">
+        <svg viewBox="0 0 100 100" width="100" height="100">
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="12"/>
+          <!-- Full-Time 52% -->
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#3b82f6" stroke-width="12" stroke-dasharray="124.2 114.6" stroke-dashoffset="0" transform="rotate(-90 50 50)"/>
+          <!-- Part-Time 9.6% -->
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#8b5cf6" stroke-width="12" stroke-dasharray="22.9 215.9" stroke-dashoffset="-124.2" transform="rotate(-90 50 50)"/>
+          <!-- Contract 16% -->
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#f59e0b" stroke-width="12" stroke-dasharray="38.2 200.6" stroke-dashoffset="-147.1" transform="rotate(-90 50 50)"/>
+          <!-- Daily Wage 8% -->
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#10b981" stroke-width="12" stroke-dasharray="19.1 219.7" stroke-dashoffset="-185.3" transform="rotate(-90 50 50)"/>
+          <!-- Others remaining -->
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#d1d5db" stroke-width="12" stroke-dasharray="34.4 204.4" stroke-dashoffset="-204.4" transform="rotate(-90 50 50)"/>
+        </svg>
+        <div class="hc-donut-center">
+          <div class="hc-donut-val" id="hrms-type-total">—</div>
+          <div class="hc-donut-lbl">Total</div>
+        </div>
+      </div>
+      <div class="hc-legend" style="flex:1;font-size:11px">
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#3b82f6"></div><div class="hc-leg-name">Full-Time</div><div class="hc-leg-pct">(52%)</div></div>
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#8b5cf6"></div><div class="hc-leg-name">Part-Time</div><div class="hc-leg-pct">(9.6%)</div></div>
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#f59e0b"></div><div class="hc-leg-name">Contract</div><div class="hc-leg-pct">(16%)</div></div>
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#10b981"></div><div class="hc-leg-name">Daily Wage</div><div class="hc-leg-pct">(8%)</div></div>
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#06b6d4"></div><div class="hc-leg-name">Hourly</div><div class="hc-leg-pct">(6.4%)</div></div>
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#d1d5db"></div><div class="hc-leg-name">Others</div><div class="hc-leg-pct">(8%)</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Mid Section: Payroll | Leave | Funnel | Approvals ─────────── -->
+<div class="hrms-mid-grid">
+  <!-- Payroll Summary -->
+  <div class="hc">
+    <div class="hc-hd"><div class="hc-title">Payroll Summary</div><div class="hc-sub" id="hrms-payroll-month">This Month</div></div>
+    <div style="display:flex;align-items:center;gap:14px">
+      <div class="hc-donut" style="flex-shrink:0">
+        <svg viewBox="0 0 100 100" width="90" height="90">
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="13"/>
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#3b82f6" stroke-width="13" stroke-dasharray="185.7 53.1" stroke-dashoffset="0" transform="rotate(-90 50 50)"/>
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#f59e0b" stroke-width="13" stroke-dasharray="31.4 207.4" stroke-dashoffset="-185.7" transform="rotate(-90 50 50)"/>
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#10b981" stroke-width="13" stroke-dasharray="9.4 229.4" stroke-dashoffset="-217.1" transform="rotate(-90 50 50)"/>
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#ef4444" stroke-width="13" stroke-dasharray="12.6 226.2" stroke-dashoffset="-226.5" transform="rotate(-90 50 50)"/>
+        </svg>
+        <div class="hc-donut-center">
+          <div style="font-size:10px;font-weight:700;color:#111827">AED</div>
+          <div style="font-size:14px;font-weight:700;color:#111827;line-height:1" id="hrms-payroll-total">—</div>
+        </div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:5px;font-size:11.5px">
+        <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#3b82f6;display:inline-block"></span>Gross Salary</span><span style="font-weight:600" id="hrms-pay-gross">—</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block"></span>Allowances</span><span style="font-weight:600">—</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#10b981;display:inline-block"></span>Overtime</span><span style="font-weight:600">—</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block"></span>Deductions</span><span style="font-weight:600">—</span></div>
+        <div style="border-top:1px solid #f0f2f7;margin-top:4px;padding-top:4px;display:flex;justify-content:space-between;font-weight:700"><span>Net Payroll</span><span id="hrms-pay-net">—</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leave Summary -->
+  <div class="hc">
+    <div class="hc-hd">
+      <div class="hc-title">Leave Summary</div>
+      <select class="hc-select"><option>This Month</option><option>This Year</option></select>
+    </div>
+    <div class="hc-progress-list">
+      <div>
+        <div class="hc-progress-hd">
+          <div class="hc-prog-lbl">
+            <div class="hc-prog-icon" style="background:#eff6ff"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="#3b82f6" stroke-width="1.4"><path d="M7 1v3M7 10v3M1 7h3M10 7h3"/></svg></div>
+            Annual Leave
+          </div>
+          <div class="hc-prog-val">320 / 480 Available</div>
+        </div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" style="width:66%;background:#3b82f6"></div></div>
+      </div>
+      <div>
+        <div class="hc-progress-hd">
+          <div class="hc-prog-lbl">
+            <div class="hc-prog-icon" style="background:#fef9c3"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="#ca8a04" stroke-width="1.4"><circle cx="7" cy="7" r="5"/><path d="M7 4v3l2 2"/></svg></div>
+            Sick Leave
+          </div>
+          <div class="hc-prog-val">125 / 200 Available</div>
+        </div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" style="width:62%;background:#eab308"></div></div>
+      </div>
+      <div>
+        <div class="hc-progress-hd">
+          <div class="hc-prog-lbl">
+            <div class="hc-prog-icon" style="background:#fdf4ff"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="#9333ea" stroke-width="1.4"><path d="M7 1.5a3.5 3.5 0 110 7 3.5 3.5 0 010-7z"/><path d="M2 12.5c0-2.5 2-4 5-4s5 1.5 5 4"/></svg></div>
+            Casual Leave
+          </div>
+          <div class="hc-prog-val">85 / 120 Available</div>
+        </div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" style="width:71%;background:#a855f7"></div></div>
+      </div>
+      <div>
+        <div class="hc-progress-hd">
+          <div class="hc-prog-lbl">
+            <div class="hc-prog-icon" style="background:#fff1f2"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="#e11d48" stroke-width="1.4"><path d="M7 2v5l3 3"/><path d="M2 7a5 5 0 1010 0A5 5 0 002 7z"/></svg></div>
+            Emergency Leave
+          </div>
+          <div class="hc-prog-val">25 / 60 Available</div>
+        </div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" style="width:42%;background:#f43f5e"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recruitment Funnel -->
+  <div class="hc">
+    <div class="hc-hd"><div class="hc-title">Recruitment Funnel</div></div>
+    <div class="hc-funnel">
+      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Applicants</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" style="width:100%;background:#dbeafe"></div></div><div class="hc-funnel-cnt">320</div></div>
+      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Screened</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" style="width:65%;background:#bfdbfe"></div></div><div class="hc-funnel-cnt">210</div></div>
+      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Interviewed</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" style="width:30%;background:#93c5fd"></div></div><div class="hc-funnel-cnt">95</div></div>
+      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Shortlisted</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" style="width:14%;background:#60a5fa"></div></div><div class="hc-funnel-cnt">45</div></div>
+      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Offered</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" style="width:6%;background:#3b82f6"></div></div><div class="hc-funnel-cnt">20</div></div>
+      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Joined</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" style="width:5%;background:#2563eb"></div></div><div class="hc-funnel-cnt">15</div></div>
+    </div>
+  </div>
+
+  <!-- Pending Approvals -->
+  <div class="hc">
+    <div class="hc-hd"><div class="hc-title">Pending Approvals</div></div>
+    <div class="hc-approvals">
+      <div class="hc-appr-row" style="cursor:pointer" onclick="goHrmsTab(4,'hr-leave')">
+        <div class="hc-appr-icon" style="background:#eff6ff"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="#2563eb" stroke-width="1.4"><rect x="2" y="2" width="10" height="11" rx="1"/><path d="M4 5h6M4 7.5h6M4 10h3"/></svg></div>
+        <div class="hc-appr-name">Leave Requests</div>
+        <div class="hc-appr-badge" style="background:#dbeafe;color:#1d4ed8" id="hrms-appr-leave">—</div>
+      </div>
+      <div class="hc-appr-row" style="cursor:pointer" onclick="goHrmsTab(3,'hr-ot')">
+        <div class="hc-appr-icon" style="background:#fff7ed"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="#ea580c" stroke-width="1.4"><circle cx="7" cy="7" r="5"/><path d="M7 4v3.5l2 1.5"/></svg></div>
+        <div class="hc-appr-name">OT Requests</div>
+        <div class="hc-appr-badge" style="background:#fed7aa;color:#c2410c" id="hrms-appr-ot">—</div>
+      </div>
+      <div class="hc-appr-row" style="cursor:pointer" onclick="goHrmsTab(5,'hr-corrections')">
+        <div class="hc-appr-icon" style="background:#f0fdf4"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="#16a34a" stroke-width="1.4"><path d="M2 7l3 3 7-6"/></svg></div>
+        <div class="hc-appr-name">Attendance Corrections</div>
+        <div class="hc-appr-badge" style="background:#dcfce7;color:#15803d" id="hrms-appr-corr">—</div>
+      </div>
+      <div class="hc-appr-row" style="cursor:pointer" onclick="goHrmsTab(6,'hr-loans')">
+        <div class="hc-appr-icon" style="background:#fdf4ff"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="#9333ea" stroke-width="1.4"><rect x="2" y="4" width="10" height="7" rx="1"/><path d="M2 6.5h10M5 9h3"/></svg></div>
+        <div class="hc-appr-name">Loan Requests</div>
+        <div class="hc-appr-badge" style="background:#f3e8ff;color:#7e22ce" id="hrms-appr-loans">—</div>
+      </div>
+      <div class="hc-appr-row" style="cursor:pointer" onclick="goHrmsTab(6,'hr-loans')">
+        <div class="hc-appr-icon" style="background:#fff1f2"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="#e11d48" stroke-width="1.4"><rect x="2" y="3" width="10" height="9" rx="1"/><path d="M2 6h10M5 9h2M8.5 9h1.5"/></svg></div>
+        <div class="hc-appr-name">Salary Advances</div>
+        <div class="hc-appr-badge" style="background:#ffe4e6;color:#be123c" id="hrms-appr-advances">—</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Bottom Section: Compliance | Expiry Chart | Assets | Training ── -->
+<div class="hrms-bot-grid">
+  <!-- UAE Compliance Alerts -->
+  <div class="hc">
+    <div class="hc-alert-title">
+      <svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M7 1.5L1 12.5h12L7 1.5z"/><path d="M7 6v3M7 10.5v.5"/></svg>
+      UAE Compliance Alerts
+    </div>
+    <div class="hc-alert-list">
+      <div class="hc-alert-row">
+        <div class="hc-alert-dot"></div>
+        <div class="hc-alert-name">Passport Expiring (≤ 30 Days)</div>
+        <div class="hc-alert-cnt" id="hrms-compl-passport">—</div>
+      </div>
+      <div class="hc-alert-row">
+        <div class="hc-alert-dot" style="background:#f59e0b"></div>
+        <div class="hc-alert-name">Visa Expiring (≤ 30 Days)</div>
+        <div class="hc-alert-cnt" style="color:#d97706" id="hrms-compl-visa">—</div>
+      </div>
+      <div class="hc-alert-row">
+        <div class="hc-alert-dot" style="background:#8b5cf6"></div>
+        <div class="hc-alert-name">Emirates ID Expiring (≤ 30 Days)</div>
+        <div class="hc-alert-cnt" style="color:#7c3aed" id="hrms-compl-eid">—</div>
+      </div>
+      <div class="hc-alert-row">
+        <div class="hc-alert-dot" style="background:#ef4444"></div>
+        <div class="hc-alert-name">Contract Expiring (≤ 30 Days)</div>
+        <div class="hc-alert-cnt" id="hrms-dash-expiry">—</div>
+      </div>
+      <div class="hc-alert-row">
+        <div class="hc-alert-dot" style="background:#06b6d4"></div>
+        <div class="hc-alert-name">Insurance Expiring (≤ 30 Days)</div>
+        <div class="hc-alert-cnt" style="color:#0891b2" id="hrms-compl-ins">—</div>
+      </div>
+    </div>
+    <div style="margin-top:10px"><a style="font-size:11px;color:#3b82f6;cursor:pointer" onclick="goHrmsTab(7,'hr-expiry');scheduleIdleTask(refreshExpiryAlerts,100)">View all →</a></div>
+  </div>
+
+  <!-- Document Expiry Bar Chart -->
+  <div class="hc">
+    <div class="hc-hd">
+      <div class="hc-title">Document Expiry Summary</div>
+      <select class="hc-select"><option>This Month</option><option>Next 3 Months</option></select>
+    </div>
+    <div class="hc-bar-chart" style="align-items:flex-end;height:100px">
+      <div class="hc-bar-col">
+        <div class="hc-bar-val">18</div>
+        <div class="hc-bar" style="height:60px;background:#ef4444;width:100%"></div>
+        <div class="hc-bar-lbl">Passport</div>
+      </div>
+      <div class="hc-bar-col">
+        <div class="hc-bar-val">22</div>
+        <div class="hc-bar" style="height:73px;background:#f59e0b;width:100%"></div>
+        <div class="hc-bar-lbl">Visa</div>
+      </div>
+      <div class="hc-bar-col">
+        <div class="hc-bar-val">15</div>
+        <div class="hc-bar" style="height:50px;background:#8b5cf6;width:100%"></div>
+        <div class="hc-bar-lbl">Emirates ID</div>
+      </div>
+      <div class="hc-bar-col">
+        <div class="hc-bar-val">8</div>
+        <div class="hc-bar" style="height:27px;background:#06b6d4;width:100%"></div>
+        <div class="hc-bar-lbl">Labor Card</div>
+      </div>
+      <div class="hc-bar-col">
+        <div class="hc-bar-val">10</div>
+        <div class="hc-bar" style="height:33px;background:#10b981;width:100%"></div>
+        <div class="hc-bar-lbl">Insurance</div>
+      </div>
+      <div class="hc-bar-col">
+        <div class="hc-bar-val">30</div>
+        <div class="hc-bar" style="height:100px;background:#2563eb;width:100%"></div>
+        <div class="hc-bar-lbl">Contract</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Assets Overview -->
+  <div class="hc">
+    <div class="hc-hd"><div class="hc-title">Assets Overview</div></div>
+    <div class="hc-donut-wrap">
+      <div class="hc-donut" style="flex-shrink:0">
+        <svg viewBox="0 0 100 100" width="90" height="90">
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="12"/>
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#3b82f6" stroke-width="12" stroke-dasharray="124.1 114.7" stroke-dashoffset="0" transform="rotate(-90 50 50)"/>
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#8b5cf6" stroke-width="12" stroke-dasharray="42.1 196.7" stroke-dashoffset="-124.1" transform="rotate(-90 50 50)"/>
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#f59e0b" stroke-width="12" stroke-dasharray="34.4 204.4" stroke-dashoffset="-166.2" transform="rotate(-90 50 50)"/>
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#10b981" stroke-width="12" stroke-dasharray="22.9 215.9" stroke-dashoffset="-200.6" transform="rotate(-90 50 50)"/>
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#d1d5db" stroke-width="12" stroke-dasharray="15.3 223.5" stroke-dashoffset="-223.5" transform="rotate(-90 50 50)"/>
+        </svg>
+        <div class="hc-donut-center">
+          <div class="hc-donut-val">1,250</div>
+          <div class="hc-donut-lbl">Assets</div>
+        </div>
+      </div>
+      <div class="hc-legend" style="font-size:11px">
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#3b82f6"></div><div class="hc-leg-name">Laptop</div><div class="hc-leg-pct">(52%)</div></div>
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#8b5cf6"></div><div class="hc-leg-name">Mobile</div><div class="hc-leg-pct">(17.6%)</div></div>
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#f59e0b"></div><div class="hc-leg-name">SIM</div><div class="hc-leg-pct">(14.4%)</div></div>
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#10b981"></div><div class="hc-leg-name">Vehicle</div><div class="hc-leg-pct">(9.6%)</div></div>
+        <div class="hc-legend-row"><div class="hc-dot" style="background:#d1d5db"></div><div class="hc-leg-name">Others</div><div class="hc-leg-pct">(6.4%)</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Training Overview -->
+  <div class="hc">
+    <div class="hc-hd">
+      <div class="hc-title">Training Overview</div>
+      <select class="hc-select"><option>This Month</option><option>This Quarter</option></select>
+    </div>
+    <div class="hc-progress-list">
+      <div>
+        <div class="hc-progress-hd">
+          <div class="hc-prog-lbl">Training Completion</div>
+          <div class="hc-prog-val">78%</div>
+        </div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" style="width:78%;background:#10b981"></div></div>
+      </div>
+      <div>
+        <div class="hc-progress-hd">
+          <div class="hc-prog-lbl">Certifications Expiring</div>
+          <div class="hc-prog-val" style="color:#ef4444">16</div>
+        </div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" style="width:55%;background:#f59e0b"></div></div>
+      </div>
+      <div>
+        <div class="hc-progress-hd">
+          <div class="hc-prog-lbl">Upcoming Training</div>
+          <div class="hc-prog-val" style="color:#8b5cf6">8</div>
+        </div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" style="width:30%;background:#8b5cf6"></div></div>
+      </div>
+      <div>
+        <div class="hc-progress-hd">
+          <div class="hc-prog-lbl">Employees Trained</div>
+          <div class="hc-prog-val">520</div>
+        </div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" style="width:42%;background:#3b82f6"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── AI Insights ─────────────────────────────────────────────────── -->
+<div class="hrms-section-lbl" style="margin-top:4px">AI Insights</div>
+<div class="hrms-ai-grid">
+  <div class="hc-ai">
+    <div class="hc-ai-hd">
+      <div class="hc-ai-icon" style="background:#eff6ff"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#2563eb" stroke-width="1.4"><path d="M8 2c2 0 4 1 4 3s-2 2.5-4 3c-2 .5-4 1-4 3"/><circle cx="8" cy="13.5" r=".8" fill="#2563eb" stroke="none"/></svg></div>
+      <div><div class="hc-ai-title">AI Attrition Prediction</div><div class="hc-ai-sub">Employees at risk of leaving</div></div>
+    </div>
+    <div class="hc-ai-body">
+      <div class="hc-ai-row"><div class="hc-ai-name">Ahmed Khan</div><div class="hc-ai-pct" style="color:#ef4444">85%</div></div>
+      <div class="hc-ai-row"><div class="hc-ai-name">John Smith</div><div class="hc-ai-pct" style="color:#f59e0b">78%</div></div>
+      <div class="hc-ai-row"><div class="hc-ai-name">Fatima Ali</div><div class="hc-ai-pct" style="color:#f59e0b">72%</div></div>
+    </div>
+    <a class="hc-ai-link" onclick="go('hrms-ext')">View all →</a>
+  </div>
+  <div class="hc-ai">
+    <div class="hc-ai-hd">
+      <div class="hc-ai-icon" style="background:#fff7ed"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#ea580c" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/></svg></div>
+      <div><div class="hc-ai-title">AI Attendance Anomalies</div><div class="hc-ai-sub">Detected anomalies</div></div>
+    </div>
+    <div class="hc-ai-body">
+      <div class="hc-ai-row"><div class="hc-ai-name">Missed Punches</div><div class="hc-ai-pct" style="color:#111827">12</div></div>
+      <div class="hc-ai-row"><div class="hc-ai-name">Unusual Late Arrivals</div><div class="hc-ai-pct" style="color:#111827">18</div></div>
+      <div class="hc-ai-row"><div class="hc-ai-name">Early Departures</div><div class="hc-ai-pct" style="color:#111827">9</div></div>
+    </div>
+    <a class="hc-ai-link" onclick="goHrmsTab(2,'hr-att')">View all →</a>
+  </div>
+  <div class="hc-ai">
+    <div class="hc-ai-hd">
+      <div class="hc-ai-icon" style="background:#f0fdf4"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#16a34a" stroke-width="1.4"><rect x="2" y="4" width="12" height="9" rx="1"/><path d="M2 7h12M5 10.5h4"/></svg></div>
+      <div><div class="hc-ai-title">AI Payroll Verification</div><div class="hc-ai-sub">Discrepancies found</div></div>
+    </div>
+    <div class="hc-ai-body">
+      <div class="hc-ai-row"><div class="hc-ai-name">Employees Affected</div><div class="hc-ai-pct" style="color:#ef4444">3</div></div>
+      <div class="hc-ai-row"><div class="hc-ai-name">Records Checked</div><div class="hc-ai-pct" style="color:#111827">1,250</div></div>
+      <div class="hc-ai-row"><div class="hc-ai-name">Accuracy Rate</div><div class="hc-ai-pct" style="color:#16a34a">99.2%</div></div>
+    </div>
+    <a class="hc-ai-link" onclick="go('payroll')">View details →</a>
+  </div>
+  <div class="hc-ai">
+    <div class="hc-ai-hd">
+      <div class="hc-ai-icon" style="background:#fdf4ff"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#9333ea" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M5.5 8a2.5 2.5 0 005 0M6 6h.5M9.5 6h.5"/></svg></div>
+      <div><div class="hc-ai-title">AI Sentiment Analysis</div><div class="hc-ai-sub">Overall Sentiment</div></div>
+    </div>
+    <div class="hc-ai-body">
+      <div class="hc-ai-row"><div class="hc-ai-name">Positive</div><div class="hc-ai-pct" style="color:#16a34a">68%</div></div>
+      <div class="hc-ai-row"><div class="hc-ai-name">Neutral</div><div class="hc-ai-pct" style="color:#f59e0b">20%</div></div>
+      <div class="hc-ai-row"><div class="hc-ai-name">Negative</div><div class="hc-ai-pct" style="color:#ef4444">12%</div></div>
+    </div>
+    <a class="hc-ai-link" onclick="go('hrms-ext')">View details →</a>
+  </div>
+  <div class="hc-ai">
+    <div class="hc-ai-hd">
+      <div class="hc-ai-icon" style="background:#fff1f2"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#e11d48" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M2 6h12M5 9h2M9 9h2M5 12h4"/></svg></div>
+      <div><div class="hc-ai-title">AI Shift Optimization</div><div class="hc-ai-sub">Recommendations</div></div>
+    </div>
+    <div class="hc-ai-body">
+      <div class="hc-ai-row"><div class="hc-ai-name">3 Departments</div></div>
+      <div class="hc-ai-row"><div class="hc-ai-name">5 Shift Changes</div></div>
+      <div class="hc-ai-row"><div class="hc-ai-name">Potential Savings</div><div class="hc-ai-pct" style="color:#16a34a">AED 12.5K</div></div>
+    </div>
+    <a class="hc-ai-link" onclick="go('rota')">View report →</a>
+  </div>
+  <div class="hc-ai">
+    <div class="hc-ai-hd">
+      <div class="hc-ai-icon" style="background:#ecfdf5"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#059669" stroke-width="1.4"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><path d="M12 2l1 1-2.5 2.5-1-1"/></svg></div>
+      <div><div class="hc-ai-title">AI Recruitment Ranking</div><div class="hc-ai-sub">Top Candidates</div></div>
+    </div>
+    <div class="hc-ai-body">
+      <div class="hc-ai-row"><div class="hc-ai-name">1. Sara Ali</div><div class="hc-ai-pct" style="color:#059669">94%</div></div>
+      <div class="hc-ai-row"><div class="hc-ai-name">2. Michael Brown</div><div class="hc-ai-pct" style="color:#16a34a">91%</div></div>
+      <div class="hc-ai-row"><div class="hc-ai-name">3. Priya Sharma</div><div class="hc-ai-pct" style="color:#22c55e">88%</div></div>
+    </div>
+    <a class="hc-ai-link" onclick="go('recruitment')">View all →</a>
+  </div>
+</div>
+
+</div><!-- /hrms-dash-inner -->
+</div><!-- /page-hrms -->
+
+
+<!-- ═══════════════════ STAFF MANAGEMENT ═══════════════════ -->
+<div class="page" id="page-staff">
+  <div class="tabs">
+    <div class="tab on" onclick="stab(this,'hr-emp')">Employees</div>
+    <div class="tab" onclick="stab(this,'hr-att')">Attendance</div>
+    <div class="tab" onclick="stab(this,'hr-ot')">Overtime</div>
+    <div class="tab" onclick="stab(this,'hr-leave')">Leave Management</div>
+    <div class="tab" onclick="stab(this,'hr-corrections')">Corrections</div>
+    <div class="tab" onclick="stab(this,'hr-loans')">Loans &amp; Advances</div>
+    <div class="tab" onclick="stab(this,'hr-expiry');scheduleIdleTask(refreshExpiryAlerts,100)">Expiry Alerts</div>
+    <div class="tab" onclick="stab(this,'hr-policy')">HR Settings</div>
+    <div class="tab" onclick="stab(this,'hr-bio')">Biometric Integration</div>
+  </div>
+
+  <div class="tab-body on" id="hr-emp">
+    <div class="card mb16">
+      <div class="card-hd"><div class="card-title">Employee Directory</div><div class="flx" style="gap:6px"><button class="btn btn-g btn-sm" onclick="exportNearestTable(this,'employees.csv')">⬇ CSV</button><button class="btn btn-p" onclick="showM('m-emp')">+ Add Employee</button></div></div>
+      <table class="tbl">
+        <thead><tr><th>ID</th><th>Name</th><th>Department</th><th>Designation</th><th>Supervisor</th><th>Shift</th><th>Salary (AED)</th><th>Status</th><th></th></tr></thead>
+        <tbody id="employee-tbody">
+        </tbody>
+      </table>
+    </div>
+    <div class="g3">
+      <div class="setting-tile"><strong>Departments</strong><p>Management, Finance, Operations, Sales, and HR are available for reporting and approval routing.</p></div>
+      <div class="setting-tile"><strong>Designation Setup</strong><p>Job titles are linked to department, supervisor, payroll group, and default shift rules.</p></div>
+      <div class="setting-tile"><strong>Employee Documents</strong><p>Emirates ID, visa, work permit, contract, bank details, and emergency contact are tracked from the employee profile.</p></div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="hr-att">
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd">
+          <div class="card-title" id="att-cal-title">Attendance Calendar</div>
+          <div class="flx">
+            <span class="b b-g" style="font-size:10px">Present</span>
+            <span class="b b-r" style="font-size:10px">Absent</span>
+            <span class="b b-a" style="font-size:10px">Leave</span>
+          </div>
+        </div>
+        <div id="att-cal-grid" class="cal-grid">
+          <div class="cal-day-name">Sun</div><div class="cal-day-name">Mon</div><div class="cal-day-name">Tue</div><div class="cal-day-name">Wed</div><div class="cal-day-name">Thu</div><div class="cal-day-name">Fri</div><div class="cal-day-name">Sat</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Today's Attendance</div><span id="att-time" class="mono" style="font-size:12px;color:var(--accent)">Live</span></div>
+        <table class="tbl">
+          <thead><tr><th>Employee</th><th>In</th><th>Out</th><th>Hours</th><th>Late</th><th>OT</th><th>Status</th></tr></thead>
+          <tbody id="att-today-tbody">
+          </tbody>
+        </table>
+        <div class="divider"></div>
+        <div class="flx" style="gap:8px;flex-wrap:wrap"><button class="btn btn-g" onclick="showM('m-att-correction')">+ Correction Request</button><button class="btn btn-p" onclick="toast('Daily attendance recalculated','ok')">Recalculate Hours</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="hr-ot">
+    <div class="g4 mb16">
+      <div class="stat"><div class="stat-lbl">Pending OT</div><div class="stat-val" style="color:var(--amber)">4</div><div class="stat-delta">supervisor review</div></div>
+      <div class="stat"><div class="stat-lbl">Approved Hours</div><div class="stat-val" style="color:var(--green)">18.5</div><div class="stat-delta">June 2024</div></div>
+      <div class="stat"><div class="stat-lbl">Payroll Value</div><div class="stat-val" style="color:var(--accent)">AED 1.2k</div><div class="stat-delta">approved OT only</div></div>
+      <div class="stat"><div class="stat-lbl">Rejected</div><div class="stat-val" style="color:var(--red)">1</div><div class="stat-delta">needs reason</div></div>
+    </div>
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Overtime Requests</div><div class="card-sub">Detected from attendance after checkout</div></div><button class="btn btn-p btn-sm" onclick="showM('m-ot')">+ Submit OT</button></div>
+        <table class="tbl">
+          <thead><tr><th>Employee</th><th>Date</th><th>Shift</th><th>Worked</th><th>OT</th><th>Status</th><th></th></tr></thead>
+          <tbody id="ot-tbody">
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Approval Workflow</div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">1</div><div><div>Employee Submit</div><div class="card-sub">Reason and optional attachment required</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">2</div><div><div>Supervisor Approval</div><div class="card-sub">Supervisor cannot approve own overtime</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)">3</div><div><div>HR Final Approval</div><div class="card-sub">HR may adjust hours with audit remarks</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--purple-bg);color:var(--purple)">4</div><div><div>Payroll Sync</div><div class="card-sub">Approved OT hours flow into payroll variable pay</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="hr-leave">
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Leave Requests</div><button class="btn btn-p" onclick="showM('m-leave')">+ Apply Leave</button></div>
+        <table class="tbl">
+          <thead><tr><th>Employee</th><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Status</th><th></th></tr></thead>
+          <tbody id="leave-tbody">
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Leave Balance Summary</div></div>
+        <table class="tbl">
+          <thead><tr><th>Employee</th><th>Annual</th><th>Sick</th><th>Used</th><th>Remaining</th></tr></thead>
+          <tbody id="leave-balance-tbody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <!-- Leave Calendar -->
+    <div class="card">
+      <div class="card-hd">
+        <div><div class="card-title">Leave Calendar</div><div class="card-sub">Visual monthly overview of all leave</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-g btn-sm" onclick="leaveCalNav(-1)">&#8592;</button>
+          <span id="leave-cal-label" style="font-weight:600;min-width:120px;text-align:center"></span>
+          <button class="btn btn-g btn-sm" onclick="leaveCalNav(1)">&#8594;</button>
+        </div>
+      </div>
+      <div id="leave-calendar" style="overflow-x:auto"></div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="hr-corrections">
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Attendance Corrections</div><div class="card-sub">Forgotten check-in, checkout, and break fixes</div></div><button class="btn btn-p btn-sm" onclick="showM('m-att-correction')">+ New Request</button></div>
+        <table class="tbl">
+          <thead><tr><th>Employee</th><th>Date</th><th>Requested In</th><th>Requested Out</th><th>Reason</th><th>Status</th><th></th></tr></thead>
+          <tbody id="corrections-tbody">
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Break Time</div><button class="btn btn-g btn-sm" onclick="toast('Break policy saved','ok')">Save</button></div>
+        <div class="toggle-row"><div><div>Deduct lunch break automatically</div><div class="toggle-copy">Subtract 60 minutes when total work exceeds 6 hours.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Allow multiple breaks</div><div class="toggle-copy">Capture start and end time for each break segment.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Require approval for attendance edits</div><div class="toggle-copy">Approved corrections update attendance and create an audit log.</div></div><input type="checkbox" checked></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="hr-loans">
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Employee Loans</div><div class="card-sub">Request, approval, EMI schedule, and auto payroll deduction</div></div><button class="btn btn-p btn-sm" onclick="showM('m-loan')">+ New Loan</button></div>
+        <table class="tbl">
+          <thead><tr><th>Employee</th><th>Type</th><th>Amount (AED)</th><th>EMI / Month</th><th>Balance</th><th>Status</th><th></th></tr></thead>
+          <tbody id="loans-tbody">
+            <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No loan records. Click <strong>+ New Loan</strong> to create one.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Salary Advances</div><div class="card-sub">One-time advance deducted from next salary</div></div><button class="btn btn-g btn-sm" onclick="showM('m-loan-advance')">+ Request Advance</button></div>
+        <table class="tbl">
+          <thead><tr><th>Employee</th><th>Month</th><th>Amount (AED)</th><th>Requested</th><th>Status</th><th></th></tr></thead>
+          <tbody id="advances-tbody">
+            <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No salary advance requests yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="g2">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Loan Approval Workflow</div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">1</div><div><div>Employee Submits Request</div><div class="card-sub">Loan amount, purpose, and preferred EMI schedule</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">2</div><div><div>HR Reviews</div><div class="card-sub">Checks existing loans, outstanding balance, and policy limits</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)">3</div><div><div>Management Approval</div><div class="card-sub">Finance head or MD approves based on amount threshold</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--purple-bg);color:var(--purple)">4</div><div><div>Auto EMI Deduction</div><div class="card-sub">Monthly installment auto-deducted from payroll until cleared</div></div></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Loan Policy Settings</div></div>
+        <div class="toggle-row"><div><div>Allow employee loans</div><div class="toggle-copy">Enable loan request module for all employees.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Max loan: 3× basic salary</div><div class="toggle-copy">System blocks requests exceeding 3 months base salary.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Auto EMI payroll deduction</div><div class="toggle-copy">Monthly installment auto-deducted from net salary.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Require MD approval above AED 10,000</div><div class="toggle-copy">Loans above threshold need MD or Finance Director sign-off.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Allow salary advances</div><div class="toggle-copy">Employees may request one advance per month (max 50% of salary).</div></div><input type="checkbox" checked></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="hr-expiry">
+    <div class="g4 mb16">
+      <div class="stat"><div class="stat-lbl">Critical (≤30 Days)</div><div class="stat-val" id="expiry-30" style="color:var(--red)">—</div><div class="stat-delta">immediate action</div></div>
+      <div class="stat"><div class="stat-lbl">Warning (≤90 Days)</div><div class="stat-val" id="expiry-90" style="color:var(--amber)">—</div><div class="stat-delta">plan renewal</div></div>
+      <div class="stat"><div class="stat-lbl">Valid Documents</div><div class="stat-val" id="expiry-valid" style="color:var(--green)">—</div><div class="stat-delta">no action needed</div></div>
+      <div class="stat"><div class="stat-lbl">Missing Data</div><div class="stat-val" id="expiry-missing" style="color:var(--text3)">—</div><div class="stat-delta">expiry not recorded</div></div>
+    </div>
+    <div class="card mb16">
+      <div class="card-hd"><div><div class="card-title">Document Expiry Tracker</div><div class="card-sub">Visa · Passport · Emirates ID · Insurance · Driving License · Labor Card</div></div><button class="btn btn-g btn-sm" onclick="refreshExpiryAlerts()">⟳ Refresh</button></div>
+      <table class="tbl">
+        <thead><tr><th>Employee</th><th>Document</th><th>Expiry Date</th><th>Days Left</th><th>Status</th><th></th></tr></thead>
+        <tbody id="expiry-tbody">
+          <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">Add employees with document expiry dates to see alerts here.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="g2">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Alert Configuration</div></div>
+        <div class="toggle-row"><div><div>Alert HR 90 days before expiry</div><div class="toggle-copy">Dashboard warning for visa, passport, and Emirates ID.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Critical badge at 30 days</div><div class="toggle-copy">Show red badge on HRMS hub for documents expiring within 30 days.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Track Insurance expiry</div><div class="toggle-copy">Alert when medical insurance policy is near expiry.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Block payroll on expired visa</div><div class="toggle-copy">Prevent salary processing for employees with expired entry permit.</div></div><input type="checkbox"></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">UAE Document Requirements</div></div>
+        <div class="setting-tile"><strong>Visa / Entry Permit</strong><p>UAE Labour Law requires valid entry permit for all expatriate employees. Alert HR 90 and 30 days before expiry.</p></div>
+        <div class="setting-tile"><strong>Emirates ID (EID)</strong><p>Federal Identity Authority mandatory. System alerts at 60-day and 30-day pre-expiry milestones.</p></div>
+        <div class="setting-tile"><strong>Passport</strong><p>Most UAE contracts require 6+ months passport validity. Alert triggered when less than 6 months remain.</p></div>
+        <div class="setting-tile"><strong>Labor Card / Work Permit</strong><p>MOL Work Permit must be renewed before expiry. Linked to employment contract validity.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="hr-policy">
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">HR Rules</div><button class="btn btn-p btn-sm" onclick="toast('HR rules saved','ok')">Save Rules</button></div>
+        <div class="fr2">
+          <div class="fg"><label class="fl">Late Grace Period</label><input class="fi mono" value="10 minutes"></div>
+          <div class="fg"><label class="fl">Minimum OT</label><input class="fi mono" value="30 minutes"></div>
+        </div>
+        <div class="fr2">
+          <div class="fg"><label class="fl">Maximum Daily OT</label><input class="fi mono" value="4 hours"></div>
+          <div class="fg"><label class="fl">Weekend Policy</label><select class="fi"><option>Saturday-Sunday Off</option><option>Friday Off</option><option>Custom by rota</option></select></div>
+        </div>
+        <div class="fg"><label class="fl">Approval Hierarchy</label><select class="fi"><option>Employee - Supervisor - HR - Payroll</option><option>Employee - HR - Payroll</option><option>Department based</option></select></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Holiday Calendar</div><button class="btn btn-g btn-sm" onclick="toast('Holiday added','ok')">+ Add Holiday</button></div>
+        <table class="tbl">
+          <thead><tr><th>Date</th><th>Holiday</th><th>Location</th><th>Paid</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>16 Jun</td><td>Eid Al Adha</td><td>All branches</td><td><span class="b b-g">Yes</span></td><td><span class="b b-g">Active</span></td></tr>
+            <tr><td>07 Jul</td><td>Islamic New Year</td><td>All branches</td><td><span class="b b-g">Yes</span></td><td><span class="b b-a">Planned</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="g3">
+      <div class="setting-tile"><strong>Payroll Lock</strong><p>Attendance and overtime cannot be edited after payroll is finalized unless HR reopens the month.</p></div>
+      <div class="setting-tile"><strong>Notifications</strong><p>Send alerts for overtime submission, leave approval, missing checkout, and payroll generation.</p></div>
+      <div class="setting-tile"><strong>Audit Log</strong><p>Track HR overrides, attendance corrections, salary edits, role changes, and payroll regeneration.</p></div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="hr-bio">
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Biometric Machine Integration</div><div class="card-sub">ZKTeco / Suprema · TCP/IP API</div></div><div class="flx"><div class="bio-pulse"></div><span style="font-size:12px;color:var(--green);margin-left:6px">Live</span></div></div>
+        <div class="divider"></div>
+        <div class="fg"><label class="fl">Device IP Address</label><input class="fi mono" value="192.168.1.100"></div>
+        <div class="fr2">
+          <div class="fg"><label class="fl">Port</label><input class="fi mono" value="4370"></div>
+          <div class="fg"><label class="fl">Device Model</label><select class="fi"><option selected>ZKTeco F22</option><option>ZKTeco K40</option><option>Suprema BioStation</option><option>HikVision DS-K1T</option></select></div>
+        </div>
+        <div class="fr2">
+          <div class="fg"><label class="fl">Communication Key</label><input class="fi mono" value="0" type="password"></div>
+          <div class="fg"><label class="fl">Sync Interval</label><select class="fi"><option>Every 5 minutes</option><option>Real-time</option><option>Every 15 minutes</option></select></div>
+        </div>
+        <div class="flx" style="gap:8px;flex-wrap:wrap">
+          <button class="btn btn-success btn-sm" onclick="testBio()">Test Connection</button>
+          <button class="btn btn-p btn-sm" onclick="toast('Syncing attendance from device...','info')">Sync Now</button>
+          <button class="btn btn-g btn-sm" onclick="toast('Pulling employee list from device...','info')">Pull Users</button>
+          <button class="btn btn-g btn-sm" onclick="toast('Pushing employees to device...','info')">Push Users</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Live Sync Log</div></div>
+        <div style="font-family:'DM Mono',monospace;font-size:11.5px;color:var(--text3);line-height:1.8" id="bio-log">
+          <div><span style="color:var(--green)">✓ 17:31:02</span> — Synced 8 records from device</div>
+          <div><span style="color:var(--green)">✓ 17:26:02</span> — Synced 2 records from device</div>
+          <div><span style="color:var(--amber)">⚠ 17:21:05</span> — Retry after timeout, reconnected</div>
+          <div><span style="color:var(--green)">✓ 17:16:02</span> — Synced 5 records from device</div>
+          <div><span style="color:var(--green)">✓ 09:12:44</span> — Rania Abboud — Check-in</div>
+          <div><span style="color:var(--green)">✓ 08:55:19</span> — Mohamed Jaber — Check-in</div>
+          <div><span style="color:var(--green)">✓ 08:47:33</span> — Sara Al Mansouri — Check-in</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ RECRUITMENT MODULE ═══════════════════ -->
+<div class="page" id="page-recruitment">
+  <div class="tabs">
+    <div class="tab on" onclick="stab(this,'rec-requisitions')">Job Requisitions</div>
+    <div class="tab" onclick="stab(this,'rec-candidates')">Candidates</div>
+    <div class="tab" onclick="stab(this,'rec-interviews')">Interviews</div>
+    <div class="tab" onclick="stab(this,'rec-offers')">Offer Letters</div>
+    <div class="tab" onclick="stab(this,'rec-onboarding')">Onboarding</div>
+  </div>
+
+  <div class="tab-body on" id="rec-requisitions">
+    <div class="g4 mb16">
+      <div class="stat"><div class="stat-lbl">Open Positions</div><div class="stat-val" id="rec-open" style="color:var(--accent)">—</div><div class="stat-delta">active requisitions</div></div>
+      <div class="stat"><div class="stat-lbl">Total Candidates</div><div class="stat-val" id="rec-cands" style="color:var(--green)">—</div><div class="stat-delta">in pipeline</div></div>
+      <div class="stat"><div class="stat-lbl">Interviews Scheduled</div><div class="stat-val" id="rec-interviews-cnt" style="color:var(--amber)">—</div><div class="stat-delta">this week</div></div>
+      <div class="stat"><div class="stat-lbl">Offers Sent</div><div class="stat-val" id="rec-offers-cnt" style="color:var(--purple)">—</div><div class="stat-delta">awaiting acceptance</div></div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">Job Requisitions</div><div class="card-sub">Approved positions open for hiring</div></div><button class="btn btn-p" onclick="showM('m-recruitment')">+ New Requisition</button></div>
+      <table class="tbl">
+        <thead><tr><th>Job Title</th><th>Department</th><th>Type</th><th>Location</th><th>Positions</th><th>Salary Range</th><th>Target Date</th><th>Status</th><th></th></tr></thead>
+        <tbody id="requisitions-tbody">
+          <tr data-empty-state><td colspan="9" style="text-align:center;color:var(--text3);padding:32px">No open requisitions. Click <strong>+ New Requisition</strong> to start hiring.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-body" id="rec-candidates">
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">Candidate Pipeline</div><div class="card-sub">All applicants across all open positions</div></div><button class="btn btn-p" onclick="showM('m-candidate')">+ Add Candidate</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="btn btn-g btn-sm cand-filter-btn active" onclick="filterCandidates('all',this)">All</button>
+        <button class="btn btn-g btn-sm cand-filter-btn" onclick="filterCandidates('Applied',this)">Applied</button>
+        <button class="btn btn-g btn-sm cand-filter-btn" onclick="filterCandidates('Screening',this)">Screening</button>
+        <button class="btn btn-g btn-sm cand-filter-btn" onclick="filterCandidates('Interview Scheduled',this)">Interview</button>
+        <button class="btn btn-g btn-sm cand-filter-btn" onclick="filterCandidates('Offer Sent',this)">Offer Sent</button>
+        <button class="btn btn-g btn-sm cand-filter-btn" onclick="filterCandidates('Hired',this)">Hired</button>
+      </div>
+      <table class="tbl">
+        <thead><tr><th>Name</th><th>Position</th><th>Nationality</th><th>Experience</th><th>Expected Salary</th><th>Source</th><th>Stage</th><th></th></tr></thead>
+        <tbody id="candidates-tbody">
+          <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No candidates yet. Click <strong>+ Add Candidate</strong> or import CVs.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-body" id="rec-interviews">
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">Interview Schedule</div><div class="card-sub">Manage interview slots and feedback</div></div><button class="btn btn-g btn-sm" onclick="toast('Interview scheduling feature coming soon','info')">+ Schedule Interview</button></div>
+      <table class="tbl">
+        <thead><tr><th>Candidate</th><th>Position</th><th>Interviewer</th><th>Date &amp; Time</th><th>Mode</th><th>Result</th><th></th></tr></thead>
+        <tbody id="interviews-tbody">
+          <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No interviews scheduled. Schedule interviews from the Candidates tab.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card mt16">
+      <div class="card-hd"><div class="card-title">Interview Stages</div></div>
+      <div class="g3">
+        <div class="setting-tile"><strong>Stage 1 — HR Screening</strong><p>Initial phone screen by HR to verify basics: skills, salary expectation, notice period, visa status.</p></div>
+        <div class="setting-tile"><strong>Stage 2 — Technical / Department</strong><p>Panel interview with department head and senior team member. Skill assessment may apply.</p></div>
+        <div class="setting-tile"><strong>Stage 3 — Final / MD Round</strong><p>Final interview with MD or CEO for senior positions. Offer discussion and start date.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="rec-offers">
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">Offer Letters</div><div class="card-sub">Draft, send, and track offer acceptance</div></div><button class="btn btn-g btn-sm" onclick="toast('Generate offer letter from candidate profile','info')">+ Generate Offer</button></div>
+      <table class="tbl">
+        <thead><tr><th>Candidate</th><th>Position</th><th>Offered Salary</th><th>Sent Date</th><th>Response Date</th><th>Status</th><th></th></tr></thead>
+        <tbody id="offers-tbody">
+          <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No offers generated yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-body" id="rec-onboarding">
+    <div class="card mb16">
+      <div class="card-hd"><div><div class="card-title">Onboarding Checklist</div><div class="card-sub">New employee onboarding workflow and task tracker</div></div></div>
+      <table class="tbl">
+        <thead><tr><th>Employee</th><th>Start Date</th><th>Dept</th><th>Documents</th><th>IT Setup</th><th>Training</th><th>Induction</th><th>Status</th></tr></thead>
+        <tbody id="onboarding-tbody">
+          <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No active onboarding processes. Hire candidates to start onboarding.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="g2">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Standard Onboarding Steps</div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">1</div><div><div>Offer Accepted</div><div class="card-sub">Counter-signed offer letter, start date confirmed</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">2</div><div><div>Documents Collection</div><div class="card-sub">Passport, visa, EID, bank details, certificates</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)">3</div><div><div>System Access Setup</div><div class="card-sub">Email, HR system login, biometric enrollment</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--purple-bg);color:var(--purple)">4</div><div><div>Department Induction</div><div class="card-sub">Team intro, workspace, SOPs, reporting line</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--teal-bg,#ccfbf1);color:var(--teal,#0d9488)">5</div><div><div>Probation Start</div><div class="card-sub">3-month probation tracking with KPI goals</div></div></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">VISA &amp; MOL Process</div></div>
+        <div class="setting-tile"><strong>Employment Visa Application</strong><p>Submit new hire for UAE employment visa after offer acceptance. Track MOHRE and GDRFA processing.</p></div>
+        <div class="setting-tile"><strong>Labor Card (Work Permit)</strong><p>Apply for work permit and labor card via MOL portal. Link expiry date to employee record.</p></div>
+        <div class="setting-tile"><strong>Emirates ID Enrollment</strong><p>Register biometrics at ICA/GDRFA service center. EID number stored in employee profile.</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ HR EXTENDED MODULES ═══════════════════ -->
+<div class="page" id="page-hrms-ext">
+  <div class="tabs">
+    <div class="tab on" onclick="stab(this,'hrext-perf')">Performance</div>
+    <div class="tab" onclick="stab(this,'hrext-train')">Training</div>
+    <div class="tab" onclick="stab(this,'hrext-assets')">Asset Management</div>
+    <div class="tab" onclick="stab(this,'hrext-ess')">ESS Portal</div>
+    <div class="tab" onclick="stab(this,'hrext-mgr')">Manager Portal</div>
+  </div>
+
+  <!-- Performance Management -->
+  <div class="tab-body on" id="hrext-perf">
+    <div class="g4 mb16">
+      <div class="stat"><div class="stat-lbl">Employees Rated</div><div class="stat-val" style="color:var(--accent)">—</div><div class="stat-delta">current cycle</div></div>
+      <div class="stat"><div class="stat-lbl">Avg. Score</div><div class="stat-val" style="color:var(--green)">—</div><div class="stat-delta">out of 5.0</div></div>
+      <div class="stat"><div class="stat-lbl">Pending Reviews</div><div class="stat-val" style="color:var(--amber)">—</div><div class="stat-delta">awaiting submission</div></div>
+      <div class="stat"><div class="stat-lbl">KPIs Defined</div><div class="stat-val" style="color:var(--purple)">—</div><div class="stat-delta">active KPI goals</div></div>
+    </div>
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">KPI &amp; Goal Setup</div><div class="card-sub">Define measurable targets per employee or department</div></div><button class="btn btn-g btn-sm" onclick="toast('KPI setup module coming soon','info')">+ Add KPI</button></div>
+        <table class="tbl">
+          <thead><tr><th>Employee / Dept</th><th>KPI</th><th>Target</th><th>Current</th><th>Weight %</th><th>Score</th></tr></thead>
+          <tbody id="kpi-tbody">
+            <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No KPIs defined yet. Click <strong>+ Add KPI</strong> to start.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Appraisal Cycle</div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">1</div><div><div>Goal Setting</div><div class="card-sub">Employee and manager agree on KPIs and objectives</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">2</div><div><div>Mid-Year Review</div><div class="card-sub">Progress check, course corrections, updated targets</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)">3</div><div><div>Self Assessment</div><div class="card-sub">Employee rates own performance against KPIs</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--purple-bg);color:var(--purple)">4</div><div><div>Manager Appraisal</div><div class="card-sub">Line manager submits final score and comments</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--teal-bg,#ccfbf1);color:var(--teal,#0d9488)">5</div><div><div>HR Calibration &amp; Letter</div><div class="card-sub">Final score, increment or promotion recommendation</div></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">Performance Reviews</div></div><button class="btn btn-g btn-sm" onclick="toast('Performance review form coming soon','info')">+ New Review</button></div>
+      <table class="tbl">
+        <thead><tr><th>Employee</th><th>Reviewer</th><th>Review Period</th><th>KPI Score</th><th>Overall Score</th><th>Status</th><th></th></tr></thead>
+        <tbody id="perf-reviews-tbody">
+          <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No performance reviews recorded yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Training Management -->
+  <div class="tab-body" id="hrext-train">
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Training Programs</div><div class="card-sub">Internal and external training sessions</div></div><button class="btn btn-p btn-sm" onclick="toast('Add training program','info')">+ New Program</button></div>
+        <table class="tbl">
+          <thead><tr><th>Program</th><th>Type</th><th>Trainer</th><th>Date</th><th>Duration</th><th>Dept</th><th>Status</th><th></th></tr></thead>
+          <tbody id="training-tbody">
+            <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No training programs added. Click <strong>+ New Program</strong>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Skill &amp; Certification Tracker</div></div><button class="btn btn-g btn-sm" onclick="toast('Add certification record','info')">+ Add Cert</button></div>
+        <table class="tbl">
+          <thead><tr><th>Employee</th><th>Skill / Cert</th><th>Issued By</th><th>Issue Date</th><th>Expiry</th><th>Status</th></tr></thead>
+          <tbody id="certs-tbody">
+            <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No certifications recorded.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><div class="card-title">Training Categories</div></div>
+      <div class="g3">
+        <div class="setting-tile"><strong>Technical Skills</strong><p>Job-specific technical training, software tools, machinery operation, and professional certifications.</p></div>
+        <div class="setting-tile"><strong>Soft Skills</strong><p>Communication, leadership, customer service, time management, and teamwork workshops.</p></div>
+        <div class="setting-tile"><strong>Compliance &amp; Safety</strong><p>UAE Labour Law, fire safety, first aid, OSHA standards, and mandatory regulatory training.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Asset Management -->
+  <div class="tab-body" id="hrext-assets">
+    <div class="card mb16">
+      <div class="card-hd"><div><div class="card-title">Asset Assignments</div><div class="card-sub">Laptop · Mobile · SIM · Vehicle · Uniform · Tools</div></div><button class="btn btn-p btn-sm" onclick="toast('Assign asset to employee','info')">+ Assign Asset</button></div>
+      <table class="tbl">
+        <thead><tr><th>Asset</th><th>Category</th><th>Serial / ID</th><th>Assigned To</th><th>Issue Date</th><th>Return Date</th><th>Condition</th><th>Status</th></tr></thead>
+        <tbody id="assets-tbody">
+          <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No assets assigned. Click <strong>+ Assign Asset</strong> to begin tracking.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="g3">
+      <div class="setting-tile"><strong>IT Assets</strong><p>Laptop, desktop, monitor, keyboard, mouse, headset, USB dongle — tracked by serial number and employee ID.</p></div>
+      <div class="setting-tile"><strong>Communication</strong><p>Company mobile phone, SIM card, internet dongles — linked to employee and department cost center.</p></div>
+      <div class="setting-tile"><strong>Vehicle &amp; Other</strong><p>Company car, motorbike, uniform, tools, safety equipment — track issue date, return, and condition report.</p></div>
+    </div>
+  </div>
+
+  <!-- ESS Portal -->
+  <div class="tab-body" id="hrext-ess">
+    <div style="background:linear-gradient(135deg,#0f766e 0%,#0d9488 60%,#14b8a6 100%);border-radius:14px;padding:28px 32px;margin-bottom:24px">
+      <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:6px">Employee Self-Service Portal</div>
+      <div style="font-size:13px;color:rgba(255,255,255,.7)">Empower employees to manage their own HR tasks independently</div>
+    </div>
+    <div class="g3 mb16">
+      <div class="card" style="border-left:3px solid var(--green)"><div style="font-weight:700;margin-bottom:6px">View Payslips</div><div style="font-size:12.5px;color:var(--text3)">Download monthly salary slips, year-to-date earnings, and tax summaries.</div><div style="margin-top:10px"><span class="b b-g" style="font-size:10px">Active</span></div></div>
+      <div class="card" style="border-left:3px solid var(--accent)"><div style="font-weight:700;margin-bottom:6px">Apply for Leave</div><div style="font-size:12.5px;color:var(--text3)">Submit leave requests, view balance, and track approval status.</div><div style="margin-top:10px"><span class="b b-b" style="font-size:10px">Active</span></div></div>
+      <div class="card" style="border-left:3px solid var(--amber)"><div style="font-weight:700;margin-bottom:6px">Attendance &amp; Rota</div><div style="font-size:12.5px;color:var(--text3)">View personal attendance log, shift schedule, and submit OT requests.</div><div style="margin-top:10px"><span class="b b-a" style="font-size:10px">Active</span></div></div>
+      <div class="card" style="border-left:3px solid var(--purple)"><div style="font-weight:700;margin-bottom:6px">Download Documents</div><div style="font-size:12.5px;color:var(--text3)">Download salary certificates, NOC letters, and experience letters.</div><div style="margin-top:10px"><span class="b b-p" style="font-size:10px">Active</span></div></div>
+      <div class="card" style="border-left:3px solid var(--text3)"><div style="font-weight:700;margin-bottom:6px">Update Profile</div><div style="font-size:12.5px;color:var(--text3)">Update mobile number, emergency contact, bank details, and address.</div><div style="margin-top:10px"><span class="b" style="font-size:10px;background:var(--bg3)">Coming Soon</span></div></div>
+      <div class="card" style="border-left:3px solid var(--text3)"><div style="font-weight:700;margin-bottom:6px">Loan Requests</div><div style="font-size:12.5px;color:var(--text3)">Submit loan or salary advance requests and track disbursement status.</div><div style="margin-top:10px"><span class="b" style="font-size:10px;background:var(--bg3)">Coming Soon</span></div></div>
+    </div>
+  </div>
+
+  <!-- Manager Portal -->
+  <div class="tab-body" id="hrext-mgr">
+    <div style="background:linear-gradient(135deg,#1e1b4b 0%,#3730a3 60%,#4f46e5 100%);border-radius:14px;padding:28px 32px;margin-bottom:24px">
+      <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:6px">Manager Portal</div>
+      <div style="font-size:13px;color:rgba(255,255,255,.7)">Team approvals, reporting, and workforce visibility for line managers</div>
+    </div>
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Pending Approvals</div></div>
+        <div id="mgr-pending-list" style="display:flex;flex-direction:column;gap:10px;padding-top:4px">
+          <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)" id="mgr-leave-cnt">—</div><div><div>Leave Requests</div><div class="card-sub">Annual, sick, casual, and emergency leaves pending approval</div></div><button class="btn btn-g btn-sm" onclick="go('staff');setTimeout(()=>stab(document.querySelector('#page-staff .tab:nth-child(4)'),'hr-leave'),50)">View</button></div>
+          <div class="tline-item"><div class="tline-dot" style="background:var(--red-bg,#fee2e2);color:var(--red)" id="mgr-ot-cnt">—</div><div><div>Overtime Requests</div><div class="card-sub">OT submitted by team members awaiting approval</div></div><button class="btn btn-g btn-sm" onclick="go('staff');setTimeout(()=>stab(document.querySelector('#page-staff .tab:nth-child(3)'),'hr-ot'),50)">View</button></div>
+          <div class="tline-item"><div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)" id="mgr-corr-cnt">—</div><div><div>Attendance Corrections</div><div class="card-sub">Check-in/out corrections from team members</div></div><button class="btn btn-g btn-sm" onclick="go('staff');setTimeout(()=>stab(document.querySelector('#page-staff .tab:nth-child(5)'),'hr-corrections'),50)">View</button></div>
+          <div class="tline-item"><div class="tline-dot" style="background:var(--purple-bg);color:var(--purple)">—</div><div><div>Loan Requests</div><div class="card-sub">Employee loan applications awaiting manager approval</div></div><button class="btn btn-g btn-sm" onclick="go('staff');setTimeout(()=>stab(document.querySelector('#page-staff .tab:nth-child(6)'),'hr-loans'),50)">View</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Team Reports</div></div>
+        <div style="display:flex;flex-direction:column;gap:8px;padding-top:4px">
+          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" onclick="toast('Generating team attendance report...','info')">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M2 6h12M5 9h2M9 9h2M5 12h2"/></svg>
+            Team Attendance Report
+          </button>
+          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" onclick="toast('Loading team leave utilization...','info')">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v4l2.5 1.5"/></svg>
+            Leave Utilization by Employee
+          </button>
+          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" onclick="toast('Fetching OT summary...','info')">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 4v4.5l3 1.5M4 2l-1.5-1.5M12 2l1.5-1.5"/></svg>
+            Overtime Summary
+          </button>
+          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" onclick="toast('Opening headcount report...','info')">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="5" r="3"/><path d="M1 14c0-3 2-5 4-5s4 2 4 5"/><circle cx="12" cy="6" r="2"/><path d="M14 14c0-2.5-1.5-4-2-4.5"/></svg>
+            Headcount Report
+          </button>
+          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" onclick="go('payroll')">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6h12M5 10h3M10 10h1"/></svg>
+            Team Payroll Summary
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ ROTA PLANNING MODULE ═══════════════════ -->
+<div class="page" id="page-rota">
+  <div class="tabs">
+    <div class="tab on" onclick="stab(this,'rota-shifts')">Shift Setup</div>
+    <div class="tab" onclick="stab(this,'rota-weekly')">Weekly Rota</div>
+    <div class="tab" onclick="stab(this,'rota-monthly')">Monthly Rota</div>
+    <div class="tab" onclick="stab(this,'rota-dept')">Department Rota</div>
+    <div class="tab" onclick="stab(this,'rota-swap')">Swap Requests</div>
+    <div class="tab" onclick="stab(this,'rota-approval')">Rota Approval</div>
+  </div>
+
+  <div class="tab-body on" id="rota-shifts">
+    <div class="g4 mb16">
+      <div class="stat"><div class="stat-lbl">Active Shifts</div><div class="stat-val" style="color:var(--accent)">4</div><div class="stat-delta">morning · evening · night</div></div>
+      <div class="stat"><div class="stat-lbl">Departments</div><div class="stat-val" style="color:var(--green)">5</div><div class="stat-delta">shift rules assigned</div></div>
+      <div class="stat"><div class="stat-lbl">Open Conflicts</div><div class="stat-val" style="color:var(--red)">3</div><div class="stat-delta">before publish</div></div>
+      <div class="stat"><div class="stat-lbl">Pending Swaps</div><div class="stat-val" style="color:var(--amber)">2</div><div class="stat-delta">need approval</div></div>
+    </div>
+    <div class="card mb16">
+      <div class="card-hd"><div><div class="card-title">Shift Setup</div><div class="card-sub">Define shift timing, break, grace period, and overtime threshold</div></div><button class="btn btn-p btn-sm" onclick="showM('m-shift')">+ Add Shift</button></div>
+      <table class="tbl">
+        <thead><tr><th>Shift Name</th><th>Code</th><th>Start</th><th>End</th><th>Break</th><th>Hours</th><th>Grace</th><th>OT After</th><th>Status</th><th></th></tr></thead>
+        <tbody id="rota-shift-tbody">
+          <tr data-empty-state="1"><td colspan="10" style="color:var(--text3);text-align:center">No shifts in database yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="g3">
+      <div class="setting-tile"><strong>Shift Assignment</strong><p>Shifts can be assigned to departments, locations, employee groups, or individual staff.</p></div>
+      <div class="setting-tile"><strong>Night Shift</strong><p>Checkout after midnight is supported and linked to the original rota work date.</p></div>
+      <div class="setting-tile"><strong>Overtime Rule</strong><p>Overtime starts after the configured standard hours or pre-approved rota OT block.</p></div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="rota-weekly">
+    <div class="card mb16">
+      <div class="card-hd">
+        <div><div class="card-title">Weekly Rota</div><div class="card-sub">Assign staff shifts and save the schedule to database</div></div>
+        <span class="b b-gray" id="rota-weekly-status">Draft</span>
+      </div>
+      <div class="fr4">
+        <div class="fg"><label class="fl">Department</label><select class="fi" id="rota-week-department" onchange="renderRotaBoards()"><option>All Departments</option><option>Sales</option><option>Warehouse</option><option>Finance</option><option>Management</option></select></div>
+        <div class="fg"><label class="fl">Week Start</label><input class="fi mono" id="rota-week-start" type="date" value="2026-05-04" onchange="renderRotaBoards()"></div>
+        <div class="fg"><label class="fl">Location</label><select class="fi" id="rota-week-location" onchange="renderRotaBoards()"><option>All Locations</option><option>Branch</option><option>Dubai HQ</option><option>Warehouse</option></select></div>
+        <div class="fg"><label class="fl">Search</label><input class="fi" id="rota-staff-search" placeholder="Employee name" oninput="renderRotaBoards()"></div>
+      </div>
+      <div class="flx" style="gap:8px;flex-wrap:wrap">
+        <button class="btn btn-g btn-sm" onclick="copyPreviousRota()">Copy Previous</button>
+        <button class="btn btn-g btn-sm" onclick="autoGenerateRota()">Auto Fill 4 Staff</button>
+        <button class="btn btn-g btn-sm" onclick="saveRotaDraft()">Save Draft</button>
+        <button class="btn btn-warn btn-sm" onclick="submitRotaApproval()">Submit Approval</button>
+        <button class="btn btn-p btn-sm" onclick="publishRota()">Publish Rota</button>
+      </div>
+    </div>
+
+    <div class="g2 mb16" style="grid-template-columns:2fr 1fr">
+      <div class="card">
+        <div class="card-hd">
+          <div><div class="card-title">Staff Schedule</div><div class="card-sub">Click a cell to edit. Saved cells update weekly, monthly, and department views.</div></div>
+          <button class="btn btn-g btn-sm" onclick="renderRotaBoards()">Refresh</button>
+        </div>
+        <div class="rota-board" id="rota-weekly-board"></div>
+        <div class="divider"></div>
+        <div class="flx" style="gap:8px;flex-wrap:wrap"><button class="btn btn-g btn-sm" onclick="autoGenerateRota()">Bulk Assign</button><button class="btn btn-g btn-sm" onclick="toast('Employee notifications queued','ok')">Notify Employees</button></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Weekly Summary</div></div>
+        <table class="tbl">
+          <tbody id="rota-weekly-summary-tbody"></tbody>
+        </table>
+        <div class="divider"></div>
+        <div class="rota-code-row" id="rota-code-row"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="rota-monthly">
+    <div class="card mb16">
+      <div class="card-hd"><div><div class="card-title">Monthly Rota</div><div class="card-sub">Monthly overview built from saved weekly rota records</div></div><span class="b b-gray" id="rota-monthly-status">Draft</span></div>
+      <div class="fr3">
+        <div class="fg"><label class="fl">Month</label><input class="fi mono" id="rota-month-value" type="month" value="2026-05" onchange="renderRotaBoards()"></div>
+        <div class="fg"><label class="fl">Department</label><select class="fi" id="rota-month-department" onchange="renderRotaBoards()"><option>All Departments</option><option>Sales</option><option>Warehouse</option><option>Finance</option><option>Management</option></select></div>
+        <div class="fg"><label class="fl">Employee</label><input class="fi" id="rota-month-search" placeholder="Search employee" oninput="renderRotaBoards()"></div>
+      </div>
+      <div class="flx" style="gap:8px;flex-wrap:wrap">
+        <button class="btn btn-g btn-sm" onclick="copyPreviousMonthRota()">Copy Previous Month</button>
+        <button class="btn btn-g btn-sm" onclick="autoGenerateMonthlyRota()">Auto Fill Month</button>
+        <button class="btn btn-g btn-sm" onclick="saveRotaDraft()">Save Status</button>
+        <button class="btn btn-warn btn-sm" onclick="submitRotaApproval()">Submit Approval</button>
+        <button class="btn btn-p btn-sm" onclick="publishRota()">Publish</button>
+      </div>
+    </div>
+
+    <div class="g2 mb16" style="grid-template-columns:2fr 1fr">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Monthly Staff Overview</div><div class="card-sub">Shows saved assignments for the selected month</div></div></div>
+        <div class="rota-month-grid" id="rota-monthly-board"></div>
+        <div class="divider"></div>
+        <div class="flx" style="gap:8px;flex-wrap:wrap"><button class="btn btn-g btn-sm" onclick="autoGenerateMonthlyRota()">Bulk Assign</button><button class="btn btn-g btn-sm" onclick="toast('Employees notified','ok')">Notify Employees</button></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Monthly Summary</div></div>
+        <table class="tbl">
+          <tbody id="rota-monthly-summary-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="rota-dept">
+    <div class="card mb16">
+      <div class="card-hd">
+        <div><div class="card-title">Department Rota</div><div class="card-sub">Simple department coverage from saved weekly rota records</div></div>
+        <span class="b b-a" id="rota-dept-status">Needs Coverage Review</span>
+      </div>
+      <div class="fr3">
+        <div class="fg"><label class="fl">Department</label><select class="fi" id="rota-dept-department" onchange="renderRotaBoards()"><option>All Departments</option><option>Sales</option><option>Warehouse</option><option>Finance</option><option>Management</option></select></div>
+        <div class="fg"><label class="fl">Week Start</label><input class="fi mono" id="rota-dept-week-start" type="date" value="2026-05-04" onchange="syncRotaWeekFromDept()"></div>
+        <div class="fg"><label class="fl">Supervisor</label><input class="fi" id="rota-dept-supervisor" value="HR Manager"></div>
+      </div>
+      <div class="flx" style="gap:8px;flex-wrap:wrap">
+        <button class="btn btn-g btn-sm" onclick="autoGenerateRota()">Auto Fill Gaps</button>
+        <button class="btn btn-g btn-sm" onclick="saveRotaDraft()">Save Draft</button>
+        <button class="btn btn-warn btn-sm" onclick="submitRotaApproval()">Submit Approval</button>
+        <button class="btn btn-p btn-sm" onclick="publishRota()">Publish</button>
+      </div>
+    </div>
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Coverage By Shift</div><div class="card-sub" id="rota-dept-sub">Selected department</div></div><button class="btn btn-g btn-sm" onclick="toast('Extra staff requested','warn')">Request Staff</button></div>
+        <div class="rota-coverage-grid" id="rota-dept-coverage"></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Department Staff</div></div>
+        <table class="tbl">
+          <thead><tr><th>Employee</th><th>Department</th><th>Hours</th><th>Status</th></tr></thead>
+          <tbody id="rota-dept-staff-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="rota-swap">
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Shift Swap Requests</div><div class="card-sub">Employee request, peer acceptance, supervisor approval</div></div><button class="btn btn-p btn-sm" onclick="showM('m-shift-swap')">+ Swap Request</button></div>
+        <table class="tbl">
+          <thead><tr><th>Requester</th><th>My Shift</th><th>Swap With</th><th>Target Shift</th><th>Status</th><th></th></tr></thead>
+          <tbody id="rota-swap-tbody">
+            <tr><td>Ahmed Rashid</td><td>Mon Morning</td><td>Sara</td><td>Tue Evening</td><td><span class="b b-a">Peer Pending</span></td><td><button class="btn btn-g btn-sm">View</button></td></tr>
+            <tr><td>Rania Abboud</td><td>Fri OT</td><td>Mohamed</td><td>Sat Morning</td><td><span class="b b-a">Supervisor Review</span></td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="approveRotaRow(this,'Swap approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="rejectRotaRow(this,'Swap rejected')">Reject</button></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Swap Flow</div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)">1</div><div><div>Employee requests swap</div><div class="card-sub">Reason is required</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">2</div><div><div>Other employee accepts</div><div class="card-sub">Target employee must confirm</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">3</div><div><div>Supervisor approves</div><div class="card-sub">Rota updates and audit log is created</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="rota-approval">
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Rota Approval Workflow</div></div>
+        <table class="tbl">
+          <thead><tr><th>Department</th><th>Period</th><th>Supervisor</th><th>Status</th><th></th></tr></thead>
+          <tbody id="rota-approval-tbody">
+            <tr><td>Sales</td><td>03-09 May</td><td>Sara</td><td><span class="b b-a">Pending Supervisor Review</span></td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="approveRotaRow(this,'Rota approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="rejectRotaRow(this,'Rota rejected')">Reject</button></div></td></tr>
+            <tr><td>Warehouse</td><td>03-09 May</td><td>John</td><td><span class="b b-g">Approved</span></td><td><button class="btn btn-p btn-sm" onclick="publishRota()">Publish</button></td></tr>
+            <tr><td>Finance</td><td>03-09 May</td><td>Rania</td><td><span class="b b-gray">Draft</span></td><td><button class="btn btn-g btn-sm">Review</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Critical Rules</div></div>
+        <div class="toggle-row"><div><div>Block edits after payroll lock date</div><div class="toggle-copy">Payroll finalized periods cannot be changed.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Require approval for published rota changes</div><div class="toggle-copy">Every published change needs remarks and audit logging.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Prevent leave conflicts before publish</div><div class="toggle-copy">Approved leave blocks shift assignment.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div>Send rota overtime to approval</div><div class="toggle-copy">Pre-approved overtime appears in OT workflow.</div></div><input type="checkbox" checked></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="rota-reports">
+    <div class="card mb16">
+      <div class="card-hd"><div class="card-title">Rota Reports</div><button class="btn btn-g btn-sm" onclick="toast('Rota reports exported','ok')">Export</button></div>
+      <table class="tbl">
+        <thead><tr><th>Report</th><th>Purpose</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Weekly Rota Report</td><td>Staff schedule by week</td><td><span class="b b-g">Ready</span></td></tr>
+          <tr><td>Monthly Rota Report</td><td>Full month planning</td><td><span class="b b-g">Ready</span></td></tr>
+          <tr><td>Department Coverage</td><td>Staff shortage by shift</td><td><span class="b b-a">3 warnings</span></td></tr>
+          <tr><td>Employee Working Hours</td><td>Total planned hours</td><td><span class="b b-g">Ready</span></td></tr>
+          <tr><td>Shift Conflict Report</td><td>Leave, double shift, overlap issues</td><td><span class="b b-r">3 conflicts</span></td></tr>
+          <tr><td>Published Rota History</td><td>Audit tracking</td><td><span class="b b-g">Ready</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="g3">
+      <div class="setting-tile"><strong>Green</strong><p>Approved or published rota entry.</p></div>
+      <div class="setting-tile"><strong>Yellow</strong><p>Warning, staff shortage, or supervisor review.</p></div>
+      <div class="setting-tile"><strong>Red</strong><p>Conflict, blocked assignment, or rejected rota change.</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ PAYROLL MODULE ═══════════════════ -->
+<div class="page" id="page-payroll">
+  <div class="tabs">
+    <div class="tab on" onclick="stab(this,'pay-run')">Run Payroll</div>
+    <div class="tab" onclick="stab(this,'pay-emp')">Salary Register</div>
+    <div class="tab" onclick="stab(this,'pay-benefits')">Benefits / EOS</div>
+    <div class="tab" onclick="stab(this,'pay-wps')">WPS / SIF</div>
+    <div class="tab" onclick="stab(this,'pay-payslips')">Payslips</div>
+    <div class="tab" onclick="stab(this,'pay-approvals')">Approvals</div>
+    <div class="tab" onclick="stab(this,'pay-posting')">Accounting</div>
+  </div>
+
+  <div class="tab-body on" id="pay-run">
+    <div class="g4 mb16">
+      <div class="stat"><div class="stat-lbl">Gross Payroll</div><div class="stat-val" id="pay-stat-gross" style="color:var(--accent)">AED 0</div><div class="stat-delta">June 2024</div></div>
+      <div class="stat"><div class="stat-lbl">Deductions</div><div class="stat-val" id="pay-stat-ded" style="color:var(--amber)">AED 0</div><div class="stat-delta">loans · absence · penalties</div></div>
+      <div class="stat"><div class="stat-lbl">Net Pay</div><div class="stat-val" id="pay-stat-net" style="color:var(--green)">AED 0</div><div class="stat-delta">ready for WPS</div></div>
+      <div class="stat"><div class="stat-lbl">Exceptions</div><div class="stat-val" id="pay-stat-exc" style="color:var(--red)">0</div><div class="stat-delta">need review</div></div>
+    </div>
+
+    <div class="card mb16">
+      <div class="card-hd">
+        <div><div class="card-title">Payroll Run — June 2024</div><div class="card-sub">Attendance, leave, overtime, advances, and WPS validation</div></div>
+        <div class="flx">
+          <select class="fi" style="width:140px" id="pay-period" onchange="toast('Payroll period changed','info')"><option>June 2024</option><option>May 2024</option><option>April 2024</option></select>
+          <button class="btn btn-g btn-sm" onclick="recalcPayroll()">Recalculate</button>
+          <button class="btn btn-p btn-sm" onclick="runPayroll()">Run Payroll</button>
+        </div>
+      </div>
+      <table class="tbl">
+        <thead><tr><th>Employee</th><th>Basic</th><th>Allowances</th><th>OT</th><th>Deductions</th><th>Net Pay</th><th>WPS</th><th>Status</th><th></th></tr></thead>
+        <tbody id="payroll-tbody">
+        </tbody>
+      </table>
+    </div>
+
+    <div class="g3">
+      <div class="card">
+        <div class="card-title mb12">Payroll Checks</div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">✓</div><div><div>Attendance synced</div><div class="card-sub">108 attendance records included</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">!</div><div><div>One WPS exception</div><div class="card-sub">Rania Abboud needs IBAN before SIF export</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">✓</div><div><div>Leave deductions applied</div><div class="card-sub">Approved leaves excluded from unpaid days</div></div></div>
+      </div>
+      <div class="card">
+        <div class="card-title mb12">Quick Adjustments</div>
+        <div class="fr2">
+          <div class="fg"><label class="fl">Employee</label><select class="fi" id="pay-adj-emp"><option>Ahmed Rashid</option><option>Mohamed Jaber</option><option>Rania Abboud</option></select></div>
+          <div class="fg"><label class="fl">Type</label><select class="fi" id="pay-adj-type"><option>Overtime</option><option>Deduction</option><option>Advance</option><option>Bonus</option></select></div>
+        </div>
+        <div class="fr2">
+          <div class="fg"><label class="fl">Amount</label><input class="fi mono" id="pay-adj-amount" placeholder="0.00"></div>
+          <div class="fg"><label class="fl">Reason</label><input class="fi" id="pay-adj-reason" placeholder="Reason"></div>
+        </div>
+        <button class="btn btn-p btn-sm" onclick="addPayrollAdjustment()">Add Adjustment</button>
+      </div>
+      <div class="card">
+        <div class="card-title mb12">Run Controls</div>
+        <div class="fg"><label class="fl">Prepared By</label><input class="fi" id="pay-prepared-by" value="Rania Abboud"></div>
+        <div class="fg"><label class="fl">Payment Date</label><input class="fi" id="pay-date" type="date" value="2024-06-30"></div>
+        <div class="flx" style="flex-wrap:wrap"><button class="btn btn-g btn-sm" onclick="toast('Payroll draft locked','ok')">Lock Draft</button><button class="btn btn-success btn-sm" onclick="approvePayroll()">Approve</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="pay-emp">
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">Salary Register</div><div class="card-sub">Contract salary, bank routing, WPS identifiers, and benefit setup</div></div><button class="btn btn-p" onclick="showM('m-emp')">+ Add Employee</button></div>
+      <table class="tbl">
+        <thead><tr><th>Employee</th><th>Pay Group</th><th>Basic</th><th>Housing</th><th>Transport</th><th>Bank / IBAN</th><th>WPS ID</th><th>Status</th></tr></thead>
+        <tbody id="payroll-employee-tbody">
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-body" id="pay-benefits">
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">End of Service Gratuity (EOSB)</div><div class="card-sub">UAE Labour Law — Federal Decree-Law No.33 of 2021</div></div></div>
+        <div class="fr2">
+          <div class="fg"><label class="fl">Contract Type</label><select class="fi" id="eos-contract" onchange="calcGratuity()"><option value="unlimited">Unlimited / Open-ended</option><option value="limited">Limited (Fixed-term)</option></select></div>
+          <div class="fg"><label class="fl">Reason for Termination</label><select class="fi" id="eos-reason" onchange="calcGratuity()"><option value="dismissal">Dismissal / Redundancy</option><option value="resignation">Resignation</option></select></div>
+        </div>
+        <div class="fr3">
+          <div class="fg"><label class="fl">Basic Monthly Salary</label><input class="fi mono" id="eos-basic" value="8500" oninput="calcGratuity()"></div>
+          <div class="fg"><label class="fl">Years of Service</label><input class="fi mono" id="eos-years" value="5" oninput="calcGratuity()"></div>
+          <div class="fg"><label class="fl">Additional Months</label><input class="fi mono" id="eos-months" value="3" oninput="calcGratuity()"></div>
+        </div>
+        <div class="inv-total-box" style="width:100%;min-width:0">
+          <div class="tot-row"><span style="color:var(--text3)">Daily Basic Rate</span><span class="mono" id="eos-daily">AED 283.33</span></div>
+          <div class="tot-row"><span style="color:var(--text3)">Eligible Gratuity Days</span><span class="mono" id="eos-days">110.25</span></div>
+          <div class="tot-final"><span>Estimated EOSB</span><span class="mono" id="eos-total" style="color:var(--green)">AED 31,237.50</span></div>
+        </div>
+        <div id="eos-note" style="font-size:12px;color:var(--muted);margin-top:8px;padding:8px;background:var(--surface2);border-radius:6px"></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Leave Salary & Air Ticket</div></div>
+        <table class="tbl">
+          <thead><tr><th>Employee</th><th>Accrued Days</th><th>Leave Salary</th><th>Ticket</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Sara Al Mansouri</td><td class="mono">26.0</td><td class="mono">19,067</td><td class="mono">3,500</td><td><span class="b b-g">Accrued</span></td></tr>
+            <tr><td>Ahmed Rashid</td><td class="mono">18.5</td><td class="mono">5,242</td><td class="mono">2,200</td><td><span class="b b-a">Due Soon</span></td></tr>
+            <tr><td>Rania Abboud</td><td class="mono">24.0</td><td class="mono">5,760</td><td class="mono">2,000</td><td><span class="b b-g">Accrued</span></td></tr>
+            <tr><td>Mohamed Jaber</td><td class="mono">22.0</td><td class="mono">4,987</td><td class="mono">2,000</td><td><span class="b b-g">Accrued</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">Loans, Advances & Recurring Deductions</div><div class="card-sub">Amounts can feed directly into the monthly payroll run</div></div><button class="btn btn-p btn-sm" onclick="toast('New advance request opened','info')">+ New Advance</button></div>
+      <table class="tbl">
+        <thead><tr><th>Employee</th><th>Type</th><th>Original Amount</th><th>Monthly Deduction</th><th>Balance</th><th>Start</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Ahmed Rashid</td><td><span class="b b-a">Salary Advance</span></td><td class="mono">3,000</td><td class="mono">500</td><td class="mono">1,500</td><td>Apr 2024</td><td><span class="b b-g">Active</span></td></tr>
+          <tr><td>Rania Abboud</td><td><span class="b b-p">Training Deduction</span></td><td class="mono">1,200</td><td class="mono">300</td><td class="mono">600</td><td>May 2024</td><td><span class="b b-g">Active</span></td></tr>
+          <tr><td>Mohamed Jaber</td><td><span class="b b-b">Commission Offset</span></td><td class="mono">2,400</td><td class="mono">0</td><td class="mono">0</td><td>Jun 2024</td><td><span class="b b-gray">Closed</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-body" id="pay-wps">
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">WPS / SIF File</div><div class="card-sub">Salary Information File preparation</div></div><span class="b b-a" id="wps-status">Pending validation</span></div>
+        <div class="fr2">
+          <div class="fg"><label class="fl">Employer MOL ID</label><input class="fi mono" value="MOL-7845129"></div>
+          <div class="fg"><label class="fl">Routing Bank</label><select class="fi"><option>ADCB</option><option>Emirates NBD</option><option>FAB</option></select></div>
+        </div>
+        <div class="fr2">
+          <div class="fg"><label class="fl">File Sequence</label><input class="fi mono" value="SIF-2024-06-001"></div>
+          <div class="fg"><label class="fl">Salary Month</label><input class="fi" value="June 2024"></div>
+        </div>
+        <div class="divider"></div>
+        <div class="flx" style="flex-wrap:wrap"><button class="btn btn-g" onclick="validateWPS()">Validate WPS</button><button class="btn btn-p" onclick="generateSIF()">Generate SIF</button><button class="btn btn-g" onclick="toast('SIF download prepared','ok')">Download</button></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">WPS Validation Results</div></div>
+        <div id="wps-results" style="font-size:12.5px;line-height:1.9">
+          <div><span style="color:var(--green)">✓</span> 3 employees have valid IBAN and WPS IDs</div>
+          <div><span style="color:var(--amber)">⚠</span> Rania Abboud missing IBAN</div>
+          <div><span style="color:var(--green)">✓</span> Net salary totals match payroll run</div>
+          <div><span style="color:var(--green)">✓</span> Payment date is within current cycle</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><div class="card-title">SIF Preview</div></div>
+      <table class="tbl">
+        <thead><tr><th>Record</th><th>Employee ID</th><th>Bank</th><th>IBAN</th><th>Fixed Salary</th><th>Variable Pay</th><th>Days</th><th>Net</th></tr></thead>
+        <tbody>
+          <tr><td>SCR</td><td class="mono">EMP-001</td><td>ADCB</td><td class="mono">AE070...</td><td class="mono">28,500</td><td class="mono">0</td><td class="mono">30</td><td class="mono">28,500</td></tr>
+          <tr><td>SCR</td><td class="mono">EMP-002</td><td>ENBD</td><td class="mono">AE150...</td><td class="mono">10,300</td><td class="mono">-100</td><td class="mono">30</td><td class="mono">10,200</td></tr>
+          <tr><td>SCR</td><td class="mono">EMP-003</td><td style="color:var(--amber)">Missing</td><td style="color:var(--amber)">Missing</td><td class="mono">8,400</td><td class="mono">-300</td><td class="mono">30</td><td class="mono">8,100</td></tr>
+          <tr><td>SCR</td><td class="mono">EMP-004</td><td>FAB</td><td class="mono">AE460...</td><td class="mono">8,200</td><td class="mono">350</td><td class="mono">30</td><td class="mono">8,550</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-body" id="pay-payslips">
+    <div class="g2">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Payslip Batch</div><button class="btn btn-p btn-sm" onclick="publishPayslips()">Publish All</button></div>
+        <table class="tbl">
+          <thead><tr><th>Employee</th><th>Net Pay</th><th>Channel</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>Sara Al Mansouri</td><td class="mono">AED 28,500</td><td>Email + Mobile</td><td><span class="b b-gray">Draft</span></td><td><button class="btn btn-g btn-sm" onclick="previewStaticPayslip('Sara Al Mansouri','28,500')">Preview</button></td></tr>
+            <tr><td>Ahmed Rashid</td><td class="mono">AED 10,200</td><td>Email + Mobile</td><td><span class="b b-gray">Draft</span></td><td><button class="btn btn-g btn-sm" onclick="previewStaticPayslip('Ahmed Rashid','10,200')">Preview</button></td></tr>
+            <tr><td>Rania Abboud</td><td class="mono">AED 8,100</td><td>Hold</td><td><span class="b b-a">Blocked</span></td><td><button class="btn btn-g btn-sm" onclick="previewStaticPayslip('Rania Abboud','8,100')">Preview</button></td></tr>
+            <tr><td>Mohamed Jaber</td><td class="mono">AED 8,550</td><td>Email + Mobile</td><td><span class="b b-gray">Draft</span></td><td><button class="btn btn-g btn-sm" onclick="previewStaticPayslip('Mohamed Jaber','8,550')">Preview</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card" id="payslip-preview">
+        <div class="card-hd"><div><div class="card-title">Payslip Preview</div><div class="card-sub">Select an employee to preview</div></div></div>
+        <div style="border:1px solid var(--border);border-radius:10px;padding:18px;background:var(--bg3)">
+          <div class="flx-b mb16"><div><div class="card-title">Acme Trading LLC</div><div class="card-sub">June 2024 Payslip</div></div><span class="b b-gray">Draft</span></div>
+          <div id="payslip-body" style="font-size:13px;line-height:1.9;color:var(--text2)">No payslip selected.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="pay-approvals">
+    <div class="card">
+      <div class="card-hd"><div class="card-title">Payroll Approval Workflow</div><button class="btn btn-success btn-sm" onclick="approvePayroll()">Approve Payroll</button></div>
+      <table class="tbl">
+        <thead><tr><th>Step</th><th>Owner</th><th>Status</th><th>Completed</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Prepared</td><td>Payroll Officer</td><td><span class="b b-g">Done</span></td><td>28 Jun 17:20</td><td>Attendance and adjustments imported</td></tr>
+          <tr><td>Finance Review</td><td>Finance Manager</td><td><span class="b b-a" id="pay-fin-status">Pending</span></td><td>—</td><td>Review WPS exception before approval</td></tr>
+          <tr><td>Management Approval</td><td>General Manager</td><td><span class="b b-gray" id="pay-mgmt-status">Waiting</span></td><td>—</td><td>Required before SIF release</td></tr>
+          <tr><td>Bank Upload</td><td>Treasury</td><td><span class="b b-gray">Waiting</span></td><td>—</td><td>Upload SIF after approval</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-body" id="pay-posting">
+    <div class="g2">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Payroll Journal Preview</div><button class="btn btn-p btn-sm" onclick="postPayrollJournal()">Post Journal</button></div>
+        <table class="tbl">
+          <thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead>
+          <tbody>
+            <tr><td>Salary Expense</td><td class="mono" id="pay-je-gross">AED 0.00</td><td></td></tr>
+            <tr><td>Employee Deductions Payable</td><td></td><td class="mono" id="pay-je-ded">AED 0.00</td></tr>
+            <tr><td>Salaries Payable / Bank</td><td></td><td class="mono" id="pay-je-net">AED 0.00</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Controls</div></div>
+        <div class="fg"><label class="fl">Journal Reference</label><input class="fi mono" value="PAY-JE-2024-06"></div>
+        <div class="fg"><label class="fl">Cost Center Split</label><select class="fi"><option>By Department</option><option>Single Payroll Cost Center</option><option>By Employee</option></select></div>
+        <div class="fg"><label class="fl">Posting Date</label><input class="fi" type="date" value="2024-06-30"></div>
+        <button class="btn btn-g" onclick="toast('Payroll accrual reversal scheduled','ok')">Schedule Reversal</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<div class="overlay" id="m-emp" onclick="closeOvBg(event,'m-emp')">
+  <div class="modal modal-lg"><div class="modal-title">Add Employee</div><div class="modal-sub">Register new employee details</div>
+    <div class="section-hd">Personal Information</div>
+    <div style="display:flex;gap:16px;align-items:flex-start">
+      <div style="flex:1">
+        <div class="fr2"><div class="fg"><label class="fl">Full Name</label><input class="fi" id="emp-name"></div><div class="fg"><label class="fl">Emirates ID</label><input class="fi mono" id="emp-emirates-id" placeholder="784-XXXX-XXXXXXX-X"></div></div>
+        <div class="fr3"><div class="fg"><label class="fl">Nationality</label><select class="fi" id="emp-nationality"><option>United Arab Emirates</option><option>India</option><option>Pakistan</option><option>Bangladesh</option><option>Philippines</option><option>Nepal</option><option>Sri Lanka</option><option>Egypt</option><option>Jordan</option><option>Lebanon</option><option>Syria</option><option>Sudan</option><option>United Kingdom</option><option>United States</option><option>Other</option></select></div><div class="fg"><label class="fl">Date of Birth</label><input class="fi" id="emp-dob" type="date"></div><div class="fg"><label class="fl">Gender</label><select class="fi" id="emp-gender"><option>Male</option><option>Female</option></select></div></div>
+        <div class="fr3"><div class="fg"><label class="fl">Marital Status</label><select class="fi" id="emp-marital"><option>Single</option><option>Married</option><option>Divorced</option><option>Widowed</option></select></div><div class="fg"><label class="fl">Mobile Number</label><input class="fi mono" id="emp-mobile" placeholder="+971 50 XXX XXXX"></div><div class="fg"><label class="fl">Personal Email</label><input class="fi" id="emp-email" type="email"></div></div>
+        <div class="fg"><label class="fl">Residential Address</label><textarea class="fi" id="emp-address" rows="2" placeholder="UAE residential address"></textarea></div>
+      </div>
+      <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:20px">
+        <div id="emp-photo-preview" style="width:88px;height:88px;border-radius:12px;background:var(--bg3);border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden">
+          <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="var(--text3)" stroke-width="1.4"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        </div>
+        <label style="font-size:11px;color:var(--accent);cursor:pointer;text-align:center">
+          <input type="file" id="emp-photo-file" accept="image/*" style="display:none" onchange="previewEmpPhoto(this)">Upload Photo
+        </label>
+      </div>
+    </div>
+    <div class="section-hd">Employment Details</div>
+    <div class="fr3"><div class="fg"><label class="fl">Employee ID</label><input class="fi mono" id="emp-id" placeholder="EMP-005"></div><div class="fg"><label class="fl">Employment Type</label><select class="fi" id="emp-contract"><option>Full-Time</option><option>Part-Time</option><option>Contract</option><option>Probation</option><option>Intern / Trainee</option><option>Daily Wage</option><option>Hourly</option><option>Weekly</option><option>Short-Term</option><option>Freelance / Consultant</option><option>Seasonal</option><option>Project-Based</option></select></div><div class="fg"><label class="fl">Join Date</label><input class="fi" id="emp-join-date" type="date"></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Department</label><select class="fi" id="emp-department"><option>Management</option><option>Finance</option><option>Operations</option><option>Sales</option><option>HR</option><option>IT</option><option>Marketing</option><option>Procurement</option><option>Logistics</option></select></div><div class="fg"><label class="fl">Designation</label><input class="fi" id="emp-designation" placeholder="e.g. Sales Executive"></div><div class="fg"><label class="fl">Branch</label><select class="fi" id="emp-branch"><option>Dubai HQ</option><option>Abu Dhabi</option><option>Sharjah</option><option>Ajman</option><option>Ras Al Khaimah</option><option>Fujairah</option></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Basic Salary (AED)</label><input class="fi mono" id="emp-salary"></div><div class="fg"><label class="fl">OT Rate / Hour</label><input class="fi mono" id="emp-ot-rate" placeholder="45.00"></div><div class="fg"><label class="fl">Leave Policy</label><select class="fi" id="emp-leave-policy"><option value="UAE Standard">UAE Standard (21 days)</option><option value="Executive">Executive (30 days)</option><option value="Contractor">Contractor (14 days)</option><option value="Part-Time">Part-Time Pro-Rata</option></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Reporting Manager</label><select class="fi" id="emp-supervisor"><option>Sara Al Mansouri</option><option>Ahmed Rashid</option><option>Rania Abboud</option></select></div><div class="fg"><label class="fl">Default Shift</label><select class="fi" id="emp-shift"><option>09:00-18:00</option><option>08:00-17:00</option><option>10:00-19:00</option><option>Night 22:00-06:00</option><option>Split Shift</option></select></div><div class="fg"><label class="fl">Work Location</label><select class="fi" id="emp-location"><option>Dubai HQ</option><option>Abu Dhabi Warehouse</option><option>Sharjah Sales Office</option><option>Remote</option><option>Field / Site</option></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Work Permit No.</label><input class="fi mono" id="emp-work-permit"></div><div class="fg"><label class="fl">Visa Expiry</label><input class="fi" id="emp-visa-expiry" type="date"></div><div class="fg"><label class="fl">Cost Center</label><input class="fi" id="emp-cost-center" placeholder="e.g. CC-01-OPS"></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Emergency Contact Name</label><input class="fi" id="emp-emergency" placeholder="Full name"></div><div class="fg"><label class="fl">Emergency Contact Mobile</label><input class="fi mono" id="emp-emergency-mobile" placeholder="+971..."></div></div>
+    <div class="section-hd">Insurance Details</div>
+    <div class="fr3"><div class="fg"><label class="fl">Insurance Type</label><select class="fi" id="emp-insurance-type"><option>Company Provided</option><option>Self-Paid</option><option>None</option></select></div><div class="fg"><label class="fl">Policy Number</label><input class="fi mono" id="emp-insurance-policy" placeholder="INS-XXXX"></div><div class="fg"><label class="fl">Insurance Expiry</label><input class="fi" id="emp-insurance-expiry" type="date"></div></div>
+    <div class="section-hd">Bank Details (WPS Salary)</div>
+    <div class="fr2"><div class="fg"><label class="fl">Salary Bank</label><select class="fi" id="emp-bank"><option>Emirates NBD</option><option>FAB</option><option>ADCB</option><option>Mashreq</option><option>Dubai Islamic Bank</option><option>RAKBANK</option><option>CBD</option><option>Wio Bank</option></select></div><div class="fg"><label class="fl">IBAN</label><input class="fi mono" id="emp-iban" placeholder="AE07 0331 2345 6789 0123 456"></div></div>
+    <div class="section-hd">Documents &amp; Expiry Tracking</div>
+    <div class="fr3"><div class="fg"><label class="fl">Passport Number</label><input class="fi mono" id="emp-passport-no" placeholder="A12345678"></div><div class="fg"><label class="fl">Passport Expiry</label><input class="fi" id="emp-passport-expiry" type="date"></div><div class="fg"><label class="fl">Emirates ID Expiry</label><input class="fi" id="emp-eid-expiry" type="date"></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Labor Card No.</label><input class="fi mono" id="emp-labor-card" placeholder="LC-XXXX"></div><div class="fg"><label class="fl">Driving License No.</label><input class="fi mono" id="emp-driving-license" placeholder="DL-XXXX"></div><div class="fg"><label class="fl">Driving License Expiry</label><input class="fi" id="emp-driving-expiry" type="date"></div></div>
+    <div class="fr3">
+      <div class="fg"><label class="fl">Passport Upload</label><input class="fi" id="emp-passport-file" type="file" accept=".pdf,.jpg,.jpeg,.png"></div>
+      <div class="fg"><label class="fl">Visa / Work Permit</label><input class="fi" id="emp-work-permit-file" type="file" accept=".pdf,.jpg,.jpeg,.png"></div>
+      <div class="fg"><label class="fl">Other Documents</label><input class="fi" id="emp-medical-file" type="file" accept=".pdf,.jpg,.jpeg,.png" multiple></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-emp')">Cancel</button><button class="btn btn-p" onclick="saveEmployee()">Add Employee</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-leave" onclick="closeOvBg(event,'m-leave')">
+  <div class="modal"><div class="modal-title">Apply for Leave</div><div class="modal-sub">Submit leave request for approval</div>
+    <div class="fg"><label class="fl">Employee</label><select class="fi" id="leave-employee"><option>Sara Al Mansouri</option><option>Ahmed Rashid</option><option>Rania Abboud</option><option>Mohamed Jaber</option></select></div>
+    <div class="fg"><label class="fl">Leave Type</label><select class="fi" id="leave-type"><option>Annual Leave</option><option>Sick Leave</option><option>Casual Leave</option><option>Emergency Leave</option><option>Maternity Leave</option><option>Paternity Leave</option><option>Unpaid Leave</option><option>Lieu Days</option><option>Hajj Leave</option><option>Work From Home</option></select></div>
+    <div class="fr2"><div class="fg"><label class="fl">From Date</label><input class="fi" id="leave-from" type="date"></div><div class="fg"><label class="fl">To Date</label><input class="fi" id="leave-to" type="date"></div></div>
+    <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="leave-reason" rows="3"></textarea></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-leave')">Cancel</button><button class="btn btn-p" onclick="saveLeaveRequest()">Submit Request</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-ot" onclick="closeOvBg(event,'m-ot')">
+  <div class="modal"><div class="modal-title">Overtime Request</div><div class="modal-sub">Submit overtime for supervisor approval</div>
+    <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="ot-employee-sel"><option>Ahmed Rashid</option><option>Sara Al Mansouri</option><option>Rania Abboud</option><option>Mohamed Jaber</option></select></div><div class="fg"><label class="fl">Department</label><input class="fi" id="ot-dept" value="Operations"></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Date</label><input class="fi mono" id="ot-date" type="date"></div><div class="fg"><label class="fl">Shift Time</label><input class="fi mono" id="ot-shift" value="09:00-18:00"></div></div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">OT Type</label><select class="fi" id="ot-type" onchange="updateOtMultiplier()"><option value="normal">Normal OT</option><option value="ramadan">Ramadan OT</option><option value="weekend">Weekend OT</option><option value="holiday">Public Holiday OT</option></select></div>
+      <div class="fg"><label class="fl">Rate Multiplier</label><div style="display:flex;align-items:center;gap:10px"><input class="fi mono" id="ot-multiplier" value="1.25×" readonly style="color:var(--accent);font-weight:700;flex:1"><span id="ot-mult-note" style="font-size:11px;color:var(--text3)">UAE Labour Law</span></div></div>
+    </div>
+    <div class="fr3"><div class="fg"><label class="fl">OT Start Time</label><input class="fi mono" id="ot-login" type="time" value="18:00"></div><div class="fg"><label class="fl">OT End Time</label><input class="fi mono" id="ot-logout" type="time" value="19:30"></div><div class="fg"><label class="fl">Overtime Hours</label><input class="fi mono" id="ot-hours" placeholder="1.5" oninput="updateOtMultiplier()"></div></div>
+    <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="ot-reason" rows="3" placeholder="Stock count, client delivery, urgent closing..."></textarea></div>
+    <div class="fg"><label class="fl">Attachment (optional)</label><div class="drop-zone" style="padding:14px" onclick="toast('Choose overtime attachment...','info')"><div style="font-size:12px;color:var(--text2)">Drop file or click to attach</div></div></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-ot')">Cancel</button><button class="btn btn-p" onclick="submitOTRequest()">Submit for Approval</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-att-correction" onclick="closeOvBg(event,'m-att-correction')">
+  <div class="modal"><div class="modal-title">Attendance Correction</div><div class="modal-sub">Request check-in or checkout adjustment</div>
+    <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="corr-employee"><option>Rania Abboud</option><option>Sara Al Mansouri</option><option>Ahmed Rashid</option><option>Mohamed Jaber</option></select></div><div class="fg"><label class="fl">Date</label><input class="fi" id="corr-date" type="date"></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Requested Check-in</label><input class="fi mono" id="corr-checkin" type="time"></div><div class="fg"><label class="fl">Requested Check-out</label><input class="fi mono" id="corr-checkout" type="time"></div></div>
+    <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="corr-reason" rows="3" placeholder="Biometric device issue, client visit, missed checkout..."></textarea></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-att-correction')">Cancel</button><button class="btn btn-p" onclick="saveCorrectionRequest()">Submit Request</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-shift" onclick="closeOvBg(event,'m-shift')">
+  <div class="modal"><div class="modal-title">Add Shift</div><div class="modal-sub">Create rota shift timing and overtime rules</div>
+    <div class="fr2"><div class="fg"><label class="fl">Shift Name</label><input class="fi" id="shift-name" placeholder="Morning Shift"></div><div class="fg"><label class="fl">Shift Code</label><input class="fi mono" id="shift-code" placeholder="MOR"></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Start Time</label><input class="fi mono" id="shift-start" type="time" value="09:00"></div><div class="fg"><label class="fl">End Time</label><input class="fi mono" id="shift-end" type="time" value="18:00"></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Break Minutes</label><input class="fi mono" id="shift-break" value="60"></div><div class="fg"><label class="fl">Grace Period</label><input class="fi mono" id="shift-grace" value="10 minutes"></div><div class="fg"><label class="fl">Overtime After</label><input class="fi mono" id="shift-ot-after" value="8 hours"></div></div>
+    <div class="fg"><label class="fl">Status</label><select class="fi" id="shift-status"><option>Active</option><option>Inactive</option></select></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-shift')">Cancel</button><button class="btn btn-p" onclick="saveShift()">Save Shift</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-loan" onclick="closeOvBg(event,'m-loan')">
+  <div class="modal"><div class="modal-title">New Loan Request</div><div class="modal-sub">Employee loan with EMI and auto payroll deduction</div>
+    <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="loan-employee"><option>Ahmed Rashid</option><option>Sara Al Mansouri</option><option>Rania Abboud</option><option>Mohamed Jaber</option></select></div><div class="fg"><label class="fl">Loan Type</label><select class="fi" id="loan-type"><option>Personal Loan</option><option>Emergency Loan</option><option>Medical Loan</option><option>Home Furnishing Loan</option><option>Education Loan</option><option>Vehicle Loan</option></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Loan Amount (AED)</label><input class="fi mono" id="loan-amount" placeholder="5000.00" oninput="calcLoanEmi()"></div><div class="fg"><label class="fl">Repayment (Months)</label><input class="fi mono" id="loan-months" value="6" oninput="calcLoanEmi()"></div><div class="fg"><label class="fl">Monthly EMI (AED)</label><input class="fi mono" id="loan-emi" readonly style="color:var(--accent);font-weight:600"></div></div>
+    <div class="fg"><label class="fl">Purpose / Reason</label><textarea class="fi" id="loan-reason" rows="3" placeholder="Describe the purpose of this loan request"></textarea></div>
+    <div class="fr2"><div class="fg"><label class="fl">Requested Date</label><input class="fi" id="loan-date" type="date"></div><div class="fg"><label class="fl">First Deduction Month</label><input class="fi" id="loan-deduct-from" type="month"></div></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-loan')">Cancel</button><button class="btn btn-p" onclick="saveLoan()">Submit Loan Request</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-loan-advance" onclick="closeOvBg(event,'m-loan-advance')">
+  <div class="modal"><div class="modal-title">Salary Advance Request</div><div class="modal-sub">One-time advance deducted from next salary run</div>
+    <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="advance-employee"><option>Ahmed Rashid</option><option>Sara Al Mansouri</option><option>Rania Abboud</option><option>Mohamed Jaber</option></select></div><div class="fg"><label class="fl">Advance Month</label><input class="fi" id="advance-month" type="month"></div></div>
+    <div class="fg"><label class="fl">Advance Amount (AED)</label><input class="fi mono" id="advance-amount" placeholder="Max 50% of basic salary"></div>
+    <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="advance-reason" rows="3" placeholder="Brief reason for salary advance request"></textarea></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-loan-advance')">Cancel</button><button class="btn btn-p" onclick="saveLoanAdvance()">Submit Advance</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-recruitment" onclick="closeOvBg(event,'m-recruitment')">
+  <div class="modal modal-lg"><div class="modal-title">New Job Requisition</div><div class="modal-sub">Open a position and begin the hiring process</div>
+    <div class="fr3"><div class="fg"><label class="fl">Job Title</label><input class="fi" id="req-title" placeholder="e.g. Sales Executive"></div><div class="fg"><label class="fl">Department</label><select class="fi" id="req-dept"><option>Management</option><option>Finance</option><option>Operations</option><option>Sales</option><option>HR</option><option>IT</option><option>Marketing</option></select></div><div class="fg"><label class="fl">No. of Positions</label><input class="fi mono" id="req-positions" value="1"></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Employment Type</label><select class="fi" id="req-emp-type"><option>Full-Time</option><option>Part-Time</option><option>Contract</option><option>Internship</option><option>Freelance</option></select></div><div class="fg"><label class="fl">Location</label><select class="fi" id="req-location"><option>Dubai HQ</option><option>Abu Dhabi</option><option>Sharjah</option><option>Remote</option></select></div><div class="fg"><label class="fl">Target Date</label><input class="fi" id="req-date" type="date"></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Salary Range From (AED)</label><input class="fi mono" id="req-sal-from" placeholder="3000"></div><div class="fg"><label class="fl">Salary Range To (AED)</label><input class="fi mono" id="req-sal-to" placeholder="6000"></div></div>
+    <div class="fg"><label class="fl">Job Description</label><textarea class="fi" id="req-description" rows="4" placeholder="Responsibilities, requirements, and key skills"></textarea></div>
+    <div class="fg"><label class="fl">Approval Required</label><select class="fi" id="req-approval"><option>HR Manager Only</option><option>Department Head + HR</option><option>MD Approval Required</option></select></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-recruitment')">Cancel</button><button class="btn btn-p" onclick="saveJobRequisition()">Create Requisition</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-candidate" onclick="closeOvBg(event,'m-candidate')">
+  <div class="modal modal-lg"><div class="modal-title">Add Candidate</div><div class="modal-sub">Register applicant for a job opening</div>
+    <div class="fr3"><div class="fg"><label class="fl">Full Name</label><input class="fi" id="cand-name"></div><div class="fg"><label class="fl">Mobile</label><input class="fi mono" id="cand-mobile" placeholder="+971..."></div><div class="fg"><label class="fl">Email</label><input class="fi" id="cand-email" type="email"></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Applied Position</label><input class="fi" id="cand-position" placeholder="Job title"></div><div class="fg"><label class="fl">Nationality</label><select class="fi" id="cand-nationality"><option>UAE</option><option>India</option><option>Pakistan</option><option>Philippines</option><option>Other</option></select></div><div class="fg"><label class="fl">Experience (Years)</label><input class="fi mono" id="cand-exp" placeholder="3"></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Expected Salary (AED)</label><input class="fi mono" id="cand-salary" placeholder="5000"></div><div class="fg"><label class="fl">Visa Status</label><select class="fi" id="cand-visa"><option>Visit Visa</option><option>Employment Visa</option><option>Residence Visa</option><option>Freelance Permit</option><option>Requires Sponsorship</option></select></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Source</label><select class="fi" id="cand-source"><option>LinkedIn</option><option>Bayt.com</option><option>Indeed</option><option>GulfTalent</option><option>Walk-in</option><option>Referral</option><option>Agency</option></select></div><div class="fg"><label class="fl">Stage</label><select class="fi" id="cand-stage"><option>Applied</option><option>Screening</option><option>Interview Scheduled</option><option>Offer Sent</option><option>Hired</option><option>Rejected</option></select></div></div>
+    <div class="fg"><label class="fl">CV / Resume</label><input class="fi" id="cand-cv" type="file" accept=".pdf,.doc,.docx"></div>
+    <div class="fg"><label class="fl">Notes</label><textarea class="fi" id="cand-notes" rows="3" placeholder="Recruiter notes, interview feedback..."></textarea></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-candidate')">Cancel</button><button class="btn btn-p" onclick="saveCandidate()">Add Candidate</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-shift-swap" onclick="closeOvBg(event,'m-shift-swap')">
+  <div class="modal"><div class="modal-title">Shift Swap Request</div><div class="modal-sub">Request swap with another employee</div>
+    <div class="fg"><label class="fl">My Shift</label><input class="fi" id="swap-my-shift" placeholder="Mon Morning"></div>
+    <div class="fr2"><div class="fg"><label class="fl">Swap With</label><input class="fi" id="swap-with" placeholder="Employee name"></div><div class="fg"><label class="fl">Target Shift</label><input class="fi" id="swap-target-shift" placeholder="Tue Evening"></div></div>
+    <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="swap-reason" rows="3" placeholder="Explain why this swap is needed"></textarea></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-shift-swap')">Cancel</button><button class="btn btn-p" onclick="saveRotaSwap()">Submit Request</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-edit-shift" onclick="closeOvBg(event,'m-edit-shift')">
+  <div class="modal"><div class="modal-title">Edit Shift</div><div class="modal-sub" id="rota-edit-sub">Select a rota cell</div>
+    <div class="fg"><label class="fl">Shift Type</label><select class="fi" id="rota-edit-type" onchange="applyRotaEditTypeDefaults()"><option>Morning</option><option>Evening</option><option>Night</option><option>Off</option><option>Leave</option><option>Overtime</option></select></div>
+    <div class="fr3"><div class="fg"><label class="fl">Start Time</label><input class="fi mono" id="rota-edit-start" type="time" value="09:00"></div><div class="fg"><label class="fl">End Time</label><input class="fi mono" id="rota-edit-end" type="time" value="18:00"></div><div class="fg"><label class="fl">Break Minutes</label><input class="fi mono" id="rota-edit-break" value="60"></div></div>
+    <div class="fg"><label class="fl">Mark As</label><select class="fi" id="rota-edit-mark"><option>Shift</option><option>Off</option><option>Leave</option><option>OT</option><option>Holiday</option><option>Training</option></select></div>
+    <div class="fg"><label class="fl">Notes</label><textarea class="fi" id="rota-edit-notes" rows="3" placeholder="Optional rota note"></textarea></div>
+    <div class="modal-foot"><button class="btn btn-danger" onclick="removeRotaCellShift()">Remove Shift</button><button class="btn btn-g" onclick="closeM('m-edit-shift')">Cancel</button><button class="btn btn-p" onclick="saveRotaCellShift()">Save</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-edit-month-shift" onclick="closeOvBg(event,'m-edit-month-shift')">
+  <div class="modal"><div class="modal-title">Edit Monthly Rota Cell</div><div class="modal-sub">Ahmed Rashid · 05 May 2026 · Sales</div>
+    <div class="fr2"><div class="fg"><label class="fl">Day Type</label><select class="fi"><option>Shift</option><option>Off</option><option>Leave</option><option>Holiday</option><option>Training</option></select></div><div class="fg"><label class="fl">Shift</label><select class="fi"><option>Morning</option><option>Evening</option><option>Night</option><option>Overtime</option></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Start Time</label><input class="fi mono" type="time" value="09:00"></div><div class="fg"><label class="fl">End Time</label><input class="fi mono" type="time" value="18:00"></div><div class="fg"><label class="fl">Break Minutes</label><input class="fi mono" value="60"></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Overtime</label><select class="fi"><option>No</option><option>Yes</option></select></div><div class="fg"><label class="fl">OT Start Time</label><input class="fi mono" type="time" value="18:00"></div><div class="fg"><label class="fl">OT End Time</label><input class="fi mono" type="time" value="20:00"></div></div>
+    <div class="fg"><label class="fl">Notes</label><textarea class="fi" rows="3" placeholder="Optional monthly rota note"></textarea></div>
+    <div class="modal-foot"><button class="btn btn-danger" onclick="closeM('m-edit-month-shift');toast('Monthly cell removed','warn')">Remove</button><button class="btn btn-g" onclick="toast('Copied to selected days','ok')">Copy to Other Days</button><button class="btn btn-p" onclick="saveM('m-edit-month-shift','Monthly rota cell updated ✓')">Save</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-newreview" onclick="closeOvBg(event,'m-newreview')">
+  <div class="modal"><div class="modal-title">Request Expert Review</div><div class="modal-sub">Get professional CA/Tax expert help</div>
+    <div class="fg"><label class="fl">Select Expert</label><select class="fi"><option>Mohammed Al Hamdan — AED 450/hr</option><option>Layla Hussain — AED 380/hr</option><option>Khalid Al Rashidi — AED 650/hr</option></select></div>
+    <div class="fg"><label class="fl">Review Topic</label><select class="fi"><option>VAT Return Review</option><option>FTA Audit Support</option><option>Penalty Dispute</option><option>Corporate Tax Advice</option><option>General Tax Query</option></select></div>
+    <div class="fg"><label class="fl">Description</label><textarea class="fi" rows="4" placeholder="Describe what you need the expert to review..."></textarea></div>
+    <div class="fg"><label class="fl">Attach Documents (optional)</label><div class="drop-zone" style="padding:18px" onclick="toast('Choose files to attach...','info')"><div style="font-size:12.5px;color:var(--text2)">Drop files or click to attach</div></div></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-newreview')">Cancel</button><button class="btn btn-p" onclick="saveM('m-newreview','Review request sent to expert ✓')">Send Request</button></div>
+  </div>
+  </div>
+</div>
+<script>
+(function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
+window.HRMS_STANDALONE=true;
+</script>
+<script src="src/app.js?v=20260625e" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+  setTimeout(function(){
+    if(typeof go==='function'){
+      go('hrms');
+      // First refresh after Phase 2 hydration (~600ms delay in hydrateFromServer)
+      setTimeout(function(){if(typeof refreshHrmsKpis==='function')refreshHrmsKpis();},900);
+      // Second refresh after Phase 3 HR data hydration (~1400ms delay)
+      setTimeout(function(){if(typeof refreshHrmsKpis==='function')refreshHrmsKpis();},2000);
+    }
+  },300);
+});
+</script>
+<script>
+(function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
+window.HRMS_STANDALONE=true;
+</script>
+<script src="src/app.js?v=20260625e" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+  // Populate date display
+  var d=new Date();
+  var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var el=document.getElementById('hrms-date-disp');
+  if(el)el.textContent=months[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
+
+  // Populate username from DB/token after app.js loads
+  setTimeout(function(){
+    var nameEl=document.getElementById('hrms-sb-name');
+    var avEl=document.getElementById('hrms-sb-av');
+    var topNameEl=document.getElementById('hrms-top-name');
+    var topAvEl=document.getElementById('hrms-top-av');
+    var companyName=document.getElementById('company-name');
+    if(companyName&&nameEl){
+      var cname=companyName.textContent||'';
+      if(cname&&cname!=='Company Name'&&cname!=='—'){}
+    }
+    // Try to get user name from the app
+    var userNameInput=document.getElementById('settings-name')||document.getElementById('user-name');
+    if(userNameInput&&userNameInput.value){
+      var n=userNameInput.value.trim().split(' ')[0];
+      if(nameEl)nameEl.textContent=userNameInput.value.trim();
+      if(avEl)avEl.textContent=n[0]||'A';
+      if(topNameEl)topNameEl.textContent=userNameInput.value.trim();
+      if(topAvEl)topAvEl.textContent=n[0]||'A';
+    }
+  },800);
+
+  // Navigate to HRMS dashboard
+  setTimeout(function(){
+    if(typeof go==='function'){
+      go('hrms');
+      // Update donut centers with real employee count
+      setTimeout(function(){
+        var empEl=document.getElementById('hrms-kpi-emp');
+        var empCount=empEl?empEl.textContent:'—';
+        var deptTotal=document.getElementById('hrms-dept-total');
+        var typeTotal=document.getElementById('hrms-type-total');
+        if(deptTotal&&empCount!=='—')deptTotal.textContent=empCount;
+        if(typeTotal&&empCount!=='—')typeTotal.textContent=empCount;
+        // Update approval counts
+        var pendEl=document.getElementById('hrms-kpi-pending');
+        var pendCount=pendEl?parseInt(pendEl.textContent)||0:0;
+        var otEl=document.getElementById('hrms-dash-ot');
+        var otCount=otEl?parseInt(otEl.textContent)||0:0;
+        var loanEl=document.getElementById('hrms-dash-loans');
+        var loanCount=loanEl?parseInt(loanEl.textContent)||0:0;
+        if(document.getElementById('hrms-appr-leave'))document.getElementById('hrms-appr-leave').textContent=pendCount||'0';
+        if(document.getElementById('hrms-appr-ot'))document.getElementById('hrms-appr-ot').textContent=otCount||'0';
+        if(document.getElementById('hrms-appr-corr'))document.getElementById('hrms-appr-corr').textContent='0';
+        if(document.getElementById('hrms-appr-loans'))document.getElementById('hrms-appr-loans').textContent=loanCount||'0';
+        if(document.getElementById('hrms-appr-advances'))document.getElementById('hrms-appr-advances').textContent='0';
+        // Notification badge
+        var totalAlerts=(parseInt(otCount)||0)+(parseInt(loanCount)||0);
+        var notifBadge=document.getElementById('hrms-notif-badge');
+        if(notifBadge){
+          if(totalAlerts>0){notifBadge.textContent=totalAlerts;notifBadge.style.display='flex';}
+          else{notifBadge.style.display='none';}
+        }
+        // Expiry into compliance rows
+        var expiryVal=document.getElementById('hrms-dash-expiry');
+        var exVal=expiryVal?expiryVal.textContent:'0';
+        ['hrms-compl-passport','hrms-compl-visa','hrms-compl-eid','hrms-compl-ins'].forEach(function(id){
+          var el=document.getElementById(id);
+          if(el)el.textContent='0';
+        });
+        if(document.getElementById('hrms-dash-expiry'))document.getElementById('hrms-dash-expiry').textContent=exVal;
+      },2200);
+    }
+  },300);
+
+  // KPI refresh schedule
+  setTimeout(function(){if(typeof refreshHrmsKpis==='function')refreshHrmsKpis();},900);
+  setTimeout(function(){if(typeof refreshHrmsKpis==='function')refreshHrmsKpis();},2000);
+  setTimeout(function(){
+    if(typeof refreshHrmsKpis==='function')refreshHrmsKpis();
+    // Also update present count
+    var empCount=parseInt((document.getElementById('hrms-kpi-emp')||{}).textContent)||0;
+    var presentEl=document.getElementById('hrms-kpi-present');
+    if(presentEl&&empCount>0){
+      var att=Math.round(empCount*0.789);
+      presentEl.textContent=att;
+      var trend=document.getElementById('hrms-kpi-present-trend');
+      if(trend)trend.innerHTML='<span>'+Math.round(att/empCount*100)+'% of total</span>';
+    }
+    var payrollEl=document.getElementById('hrms-kpi-payroll');
+    var payTotal=document.getElementById('hrms-payroll-total');
+    var payNet=document.getElementById('hrms-pay-net');
+    if(payrollEl&&payTotal){
+      payTotal.textContent=payrollEl.textContent;
+      if(payNet)payNet.textContent=payrollEl.textContent;
+    }
+    // Sync emp count to donut centers
+    var empEl=document.getElementById('hrms-kpi-emp');
+    var empVal=empEl?empEl.textContent:'—';
+    var deptTotal=document.getElementById('hrms-dept-total');
+    var typeTotal=document.getElementById('hrms-type-total');
+    if(deptTotal)deptTotal.textContent=empVal;
+    if(typeTotal)typeTotal.textContent=empVal;
+  },2500);
+});
+</script>
+</body>
+</html>

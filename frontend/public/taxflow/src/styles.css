@@ -65,6 +65,13 @@ body:not(.theme-light) .sb{--sb-bg:#575b6d;}
 .nbadge{margin-left:auto;background:var(--accent);color:#fff;font-size:9.5px;padding:1px 5px;border-radius:99px;font-weight:600;}
 .nbadge.warn{background:var(--amber);}
 .nbadge.red{background:var(--red);}
+.hrms-subnav{padding:2px 0 6px 0;border-left:2px solid var(--border);margin:2px 0 4px 18px;}
+.nav-sub{display:flex;align-items:center;gap:8px;padding:5px 10px 5px 12px;border-radius:6px;cursor:pointer;color:var(--text3);font-size:12.5px;font-weight:400;transition:all .15s;margin-bottom:0;line-height:1.4;}
+.nav-sub:hover{background:var(--surface);color:var(--text2);}
+.nav-sub.on{color:var(--accent);font-weight:500;}
+.nav-sub svg{width:13px;height:13px;flex-shrink:0;opacity:.6;}
+.dash-alert-tile{text-align:center;padding:12px 8px;background:var(--bg3);border-radius:10px;cursor:pointer;transition:background .15s;}
+.dash-alert-tile:hover{background:var(--surface);}
 .sb-foot{margin-top:auto;padding:14px;border-top:1px solid var(--border);}
 .co-card{display:flex;align-items:center;gap:9px;background:var(--surface);border-radius:10px;padding:9px 11px;cursor:pointer;border:1px solid var(--border);}
 .co-av{width:30px;height:30px;border-radius:7px;background:var(--accent2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;}
@@ -606,6 +613,8 @@ textarea.fi{resize:vertical;min-height:80px;}
 /* ── HRMS HUB ── */
 .hrms-mod-card{cursor:pointer;transition:transform .15s,box-shadow .15s;}
 .hrms-mod-card:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(0,0,0,.1);}
+.cand-filter-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.mt16{margin-top:16px;}
 
 /* ── BIOMETRIC ── */
 .bio-pulse{width:10px;height:10px;border-radius:50%;background:var(--green);animation:pulse 1.5s infinite;}
