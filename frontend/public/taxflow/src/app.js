@@ -1290,7 +1290,8 @@ function renderStockMappingRecord(mapping){
   const name=mapping.name||mapping.taxflow_name||mapping.sku;
   const supplier=mapping.supplier_name||'Not assigned';
   const taxflowName=mapping.taxflow_name||mapping.name||mapping.sku;
-  const isMapped=Boolean(mapping.taxflow_name&&mapping.taxflow_name.trim());
+  const tfn=(mapping.taxflow_name||'').trim();
+  const isMapped=Boolean(tfn&&tfn!==mapping.name&&tfn!==mapping.sku);
   tr.dataset.mappingId=mapping.id||'';
   tr.dataset.stockSku=mapping.sku;
   tr.dataset.salesAccountCode=mapping.sales_account_code||'3000';
@@ -10212,10 +10213,10 @@ function purchaseRecordFromExtractedInvoice(inv){
     tax_amount:purchaseAiNumber(inv.tax_amount||inv.vat_amount),
     shipping:purchaseAiNumber(inv.shipping),
     total,
-    paid,
-    due:purchaseAiNumber(inv.due)||Math.max(0,total-paid),
+    paid:0,
+    due:total,
     source:'AI Upload',
-    status:status==='Valid'?'Received':status,
+    status:'Pending Payment',
     extraction_status:status,
     supplier_trn:inv.supplier_trn||'',
     bill_to:inv.bill_to||'',
@@ -10225,10 +10226,10 @@ function purchaseRecordFromExtractedInvoice(inv){
     discount_value:purchaseAiNumber(inv.discount_value),
     tax_type:inv.tax_type||(purchaseAiNumber(inv.vat_amount)>0?'VAT 5%':'None'),
     lines,
-    payment_method:inv.payment_method||'Cash',
-    payment_account:inv.payment_account||'None',
-    payment_note:inv.payment_note||'',
-    paid_on:inv.paid_on||'',
+    payment_method:'',
+    payment_account:'',
+    payment_note:'',
+    paid_on:'',
     shipping_details:inv.shipping_details||'',
     notes:inv.notes||'',
     source_image,
@@ -10796,8 +10797,7 @@ function countPurchaseAiInvoiceNo(invoiceNo){
 
 function purchaseAiUploadActionsHtml(){
   return `<div class="row-actions">
-    <button class="ai-card-action detail" type="button" title="View full details" aria-label="View full invoice details" onclick="showPurchaseAiDetail(this)">Details</button>
-    <button class="ai-card-action view" type="button" title="Edit" aria-label="Edit purchase AI invoice" onclick="openPurchaseAiEdit(this)">${viewIconSvg()}</button>
+    <button class="ai-card-action view" type="button" title="View / Edit invoice" aria-label="View and edit purchase AI invoice" onclick="openPurchaseAiEdit(this)">View / Edit</button>
     <button class="ai-card-action approve" type="button" title="Approve" aria-label="Approve purchase AI row" onclick="approvePurchaseAiRow(this)">Approve</button>
     <button class="ai-card-action delete" type="button" title="Delete" aria-label="Delete purchase AI row" onclick="deletePurchaseAiRow(this)">${deleteIconSvg()}</button>
   </div>`;
@@ -12312,6 +12312,10 @@ function purchasePreviewLines(purchase){
 
 function renderPurchaseRecordPreview(purchase,options={}){
   ensurePurchasePreviewModal();
+  if(!_coaFlatAccounts.length){
+    moduleApi('/accounts').then(accs=>{if(Array.isArray(accs)){_coaFlatAccounts=accs;renderPurchaseRecordPreview(purchase,options);}}).catch(()=>{});
+    return;
+  }
   const editable=Boolean(options.editable);
   currentPurchaseViewRef=purchase.ref||purchase.invoice_no||purchase.reference||'';
   const title=document.getElementById('purchase-view-title');
@@ -12373,7 +12377,7 @@ function renderPurchaseRecordPreview(purchase,options={}){
       </div>
       <div class="purchase-edit-table-wrap">
         <table class="tbl purchase-edit-lines">
-          <thead><tr><th>#</th><th>Item Description</th><th>SKU</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th style="display:none">Disc %</th><th>Disc Amt</th><th>VAT</th><th>Line Total</th><th></th></tr></thead>
+          <thead><tr><th>#</th><th>Item Description</th><th>SKU</th><th>Ledger / Category</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th style="display:none">Disc %</th><th>Disc Amt</th><th>VAT</th><th>Line Total</th><th></th></tr></thead>
           <tbody>
             ${lines.map((line,index)=>{
               const lQty=parseAmount(line.qty||line.quantity||1);
@@ -12385,6 +12389,7 @@ function renderPurchaseRecordPreview(purchase,options={}){
                 <td>${index+1}</td>
                 <td><input class="fi pv-product" value="${escapeHtml(line.product)}" ${editable?'':'readonly'}></td>
                 <td><input class="fi mono pv-sku" value="${escapeHtml(line.sku||'')}" ${editable?'':'readonly'}></td>
+                <td><select class="fi pv-category" ${editable?'':'disabled'}>${purchaseLedgerCategoryOptions(line.category||'')}</select></td>
                 <td><input class="fi mono pv-qty" value="${fmt(lQty)}" oninput="calcPurchasePreviewEdit()" ${editable?'':'readonly'}></td>
                 <td><input class="fi pv-unit" value="${escapeHtml(line.unit||'PCS')}" ${editable?'':'readonly'}></td>
                 <td><input class="fi mono pv-cost" value="${fmt(lCost)}" oninput="calcPurchasePreviewEdit()" ${editable?'':'readonly'}></td>
@@ -12458,6 +12463,7 @@ function collectPurchasePreviewLines(){
   return [...document.querySelectorAll('#purchase-view-body .pv-line')].map(row=>({
     product:row.querySelector('.pv-product')?.value?.trim()||'Purchase item',
     sku:row.querySelector('.pv-sku')?.value?.trim()||'',
+    category:row.querySelector('.pv-category')?.value?.trim()||'',
     quantity:parseAmount(row.querySelector('.pv-qty')?.value),
     unit:row.querySelector('.pv-unit')?.value?.trim()||'PCS',
     unit_cost:parseAmount(row.querySelector('.pv-cost')?.value),
@@ -14067,6 +14073,136 @@ function previewEmpPhoto(input){
   const reader=new FileReader();
   reader.onload=e=>{preview.innerHTML=`<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`};
   reader.readAsDataURL(input.files[0]);
+}
+
+// ── OT Rules & Department/Branch management ──────────────────────────
+function selectOtRate(type){
+  ['fixed','monthly','other'].forEach(t=>{
+    const lbl=document.getElementById('ot-lbl-'+t)||(t==='other'?document.getElementById('ot-lbl-rate-other'):null);
+    if(lbl)lbl.classList.toggle('active',t===type);
+    const radio=document.querySelector(`input[name="ot-rate-type"][value="${t}"]`);
+    if(radio)radio.checked=(t===type);
+  });
+  const cfgs={fixed:'ot-rate-fixed-cfg',monthly:'ot-rate-monthly-cfg',other:'ot-rate-other-cfg'};
+  Object.entries(cfgs).forEach(([t,id])=>{
+    const el=document.getElementById(id);
+    if(el)el.style.display=(t===type?'':'none');
+  });
+  // Update monthly example when days/hours change
+  if(type==='monthly'){
+    const upd=()=>{
+      const d=parseFloat(document.getElementById('ot-work-days')?.value||22);
+      const h=parseFloat(document.getElementById('ot-work-hours')?.value||8);
+      const rate=(5000/(d*h)).toFixed(2);
+      const ex=document.getElementById('ot-monthly-example');
+      if(ex)ex.value=`5000 ÷ (${d} × ${h}) = AED ${rate}/hr base × multiplier`;
+    };
+    ['ot-work-days','ot-work-hours'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el&&!el._otListener){el._otListener=true;el.addEventListener('input',upd);}
+    });
+  }
+}
+function selectOtHours(type){
+  ['hours','days','other'].forEach(t=>{
+    const idMap={hours:'ot-lbl-hrs',days:'ot-lbl-days',other:'ot-lbl-hrs-other'};
+    const lbl=document.getElementById(idMap[t]);
+    if(lbl)lbl.classList.toggle('active',t===type);
+    const radio=document.querySelector(`input[name="ot-hours-type"][value="${t}"]`);
+    if(radio)radio.checked=(t===type);
+  });
+  const cfgs={hours:null,days:'ot-hours-days-cfg',other:'ot-hours-other-cfg'};
+  Object.entries(cfgs).forEach(([t,id])=>{
+    if(!id)return;
+    const el=document.getElementById(id);
+    if(el)el.style.display=(t===type?'':'none');
+  });
+}
+function saveOtRules(){
+  const rateType=document.querySelector('input[name="ot-rate-type"]:checked')?.value||'fixed';
+  const hoursType=document.querySelector('input[name="ot-hours-type"]:checked')?.value||'hours';
+  const rule={rateType,hoursType,fixedRate:document.getElementById('ot-fixed-rate')?.value,workDays:document.getElementById('ot-work-days')?.value,workHours:document.getElementById('ot-work-hours')?.value,multNormal:document.getElementById('ot-mult-normal')?.value,multWeekend:document.getElementById('ot-mult-weekend')?.value,multHoliday:document.getElementById('ot-mult-holiday')?.value,multRamadan:document.getElementById('ot-mult-ramadan')?.value};
+  localStorage.setItem('taxflow_ot_rules',JSON.stringify(rule));
+  // Refresh OT policy selects
+  _syncOtPolicySelects(rateType);
+  toast('OT Rules saved','ok');
+}
+function _syncOtPolicySelects(rateType){
+  // Update emp-ot-rate select to reflect named rules from tbody
+  const rows=document.querySelectorAll('#ot-rules-tbody tr');
+  document.querySelectorAll('#emp-ot-rate').forEach(sel=>{
+    const cur=sel.value;
+    // Keep base options, add named rules
+    while(sel.options.length>4)sel.remove(4);
+    rows.forEach(row=>{
+      const name=row.cells?.[0]?.textContent?.trim();
+      if(name){const opt=document.createElement('option');opt.value=name;opt.textContent=name;sel.appendChild(opt);}
+    });
+    sel.value=cur||'system-default';
+  });
+}
+function addNamedOtRule(){
+  const name=prompt('Rule Name (e.g. "Weekend Premium OT"):');
+  if(!name?.trim())return;
+  const rateType=document.querySelector('input[name="ot-rate-type"]:checked')?.value||'fixed';
+  const hoursType=document.querySelector('input[name="ot-hours-type"]:checked')?.value||'hours';
+  const mn=document.getElementById('ot-mult-normal')?.value||'1.25';
+  const mw=document.getElementById('ot-mult-weekend')?.value||'1.50';
+  const mh=document.getElementById('ot-mult-holiday')?.value||'1.50';
+  const tbody=document.getElementById('ot-rules-tbody');
+  if(!tbody)return;
+  const rateLabel=rateType==='fixed'?'<span class="b b-g">Fixed</span>':rateType==='monthly'?'<span class="b b-b">Monthly-Based</span>':'<span class="b" style="background:var(--bg3)">Other</span>';
+  const hoursLabel=hoursType==='hours'?'<span class="b" style="background:var(--bg3)">Based on Hours</span>':hoursType==='days'?'<span class="b b-a">Based on Days</span>':'<span class="b" style="background:var(--bg3)">Other</span>';
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td>${escapeHtml(name.trim())}</td><td>${rateLabel}</td><td>${hoursLabel}</td><td>${mn}</td><td>${mw}</td><td>${mh}</td><td>All Employees</td><td><button class="btn btn-g btn-sm" onclick="this.closest('tr').remove();_syncOtPolicySelects()">Delete</button></td>`;
+  tbody.appendChild(tr);
+  _syncOtPolicySelects();
+  toast(`OT rule "${name.trim()}" added`,'ok');
+}
+function addHrDepartment(){
+  const name=prompt('New Department Name:');
+  if(!name?.trim())return;
+  const wrap=document.getElementById('dept-tags-wrap');
+  if(!wrap)return;
+  const span=document.createElement('span');
+  span.className='dept-tag';
+  span.innerHTML=`${escapeHtml(name.trim())}<button onclick="removeHrDept(this,'${escapeHtml(name.trim())}')" title="Remove">×</button>`;
+  wrap.appendChild(span);
+  // Add to emp-department selects
+  document.querySelectorAll('#emp-department').forEach(sel=>{
+    const opt=document.createElement('option');
+    opt.value=name.trim();
+    opt.textContent=name.trim();
+    sel.appendChild(opt);
+  });
+  toast(`Department "${name.trim()}" added`,'ok');
+}
+function removeHrDept(btn,name){
+  if(!confirm(`Remove department "${name}"?`))return;
+  btn.closest('.dept-tag')?.remove();
+  document.querySelectorAll('#emp-department option').forEach(opt=>{if(opt.value===name||opt.textContent===name)opt.remove();});
+}
+function addHrBranch(){
+  const name=prompt('New Branch Name:');
+  if(!name?.trim())return;
+  const wrap=document.getElementById('branch-tags-wrap');
+  if(!wrap)return;
+  const span=document.createElement('span');
+  span.className='dept-tag';
+  span.innerHTML=`${escapeHtml(name.trim())}<button onclick="removeHrBranch(this,'${escapeHtml(name.trim())}')" title="Remove">×</button>`;
+  wrap.appendChild(span);
+  document.querySelectorAll('#emp-branch').forEach(sel=>{
+    const opt=document.createElement('option');
+    opt.value=name.trim();
+    opt.textContent=name.trim();
+    sel.appendChild(opt);
+  });
+  toast(`Branch "${name.trim()}" added`,'ok');
+}
+function removeHrBranch(btn,name){
+  if(!confirm(`Remove branch "${name}"?`))return;
+  btn.closest('.dept-tag')?.remove();
+  document.querySelectorAll('#emp-branch option').forEach(opt=>{if(opt.value===name||opt.textContent===name)opt.remove();});
 }
 
 function refreshExpiryAlerts(){

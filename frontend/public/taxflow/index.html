@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260625e" as="style">
-<link rel="preload" href="src/app.js?v=20260625e" as="script">
+<link rel="preload" href="src/styles.css?v=20260626b" as="style">
+<link rel="preload" href="src/app.js?v=20260626b" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260625e">
+<link rel="stylesheet" href="src/styles.css?v=20260626b">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -1969,6 +1969,121 @@
   </div>
 
   <div class="tab-body" id="hr-policy">
+    <!-- Departments & Branches -->
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Departments</div><div class="card-sub">Manage company departments</div></div><button class="btn btn-g btn-sm" onclick="addHrDepartment()">+ Add Department</button></div>
+        <div class="dept-branch-wrap" id="dept-tags-wrap">
+          <span class="dept-tag">Management<button onclick="removeHrDept(this,'Management')" title="Remove">×</button></span>
+          <span class="dept-tag">Finance<button onclick="removeHrDept(this,'Finance')" title="Remove">×</button></span>
+          <span class="dept-tag">Operations<button onclick="removeHrDept(this,'Operations')" title="Remove">×</button></span>
+          <span class="dept-tag">Sales<button onclick="removeHrDept(this,'Sales')" title="Remove">×</button></span>
+          <span class="dept-tag">HR<button onclick="removeHrDept(this,'HR')" title="Remove">×</button></span>
+          <span class="dept-tag">IT<button onclick="removeHrDept(this,'IT')" title="Remove">×</button></span>
+          <span class="dept-tag">Marketing<button onclick="removeHrDept(this,'Marketing')" title="Remove">×</button></span>
+          <span class="dept-tag">Procurement<button onclick="removeHrDept(this,'Procurement')" title="Remove">×</button></span>
+          <span class="dept-tag">Logistics<button onclick="removeHrDept(this,'Logistics')" title="Remove">×</button></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Branches</div><div class="card-sub">Manage company branches / locations</div></div><button class="btn btn-g btn-sm" onclick="addHrBranch()">+ Add Branch</button></div>
+        <div class="dept-branch-wrap" id="branch-tags-wrap">
+          <span class="dept-tag">Dubai HQ<button onclick="removeHrBranch(this,'Dubai HQ')" title="Remove">×</button></span>
+          <span class="dept-tag">Abu Dhabi<button onclick="removeHrBranch(this,'Abu Dhabi')" title="Remove">×</button></span>
+          <span class="dept-tag">Sharjah<button onclick="removeHrBranch(this,'Sharjah')" title="Remove">×</button></span>
+          <span class="dept-tag">Ajman<button onclick="removeHrBranch(this,'Ajman')" title="Remove">×</button></span>
+          <span class="dept-tag">Ras Al Khaimah<button onclick="removeHrBranch(this,'Ras Al Khaimah')" title="Remove">×</button></span>
+          <span class="dept-tag">Fujairah<button onclick="removeHrBranch(this,'Fujairah')" title="Remove">×</button></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- OT Rules -->
+    <div class="card mb16">
+      <div class="card-hd"><div><div class="card-title">OT Rules &amp; Configuration</div><div class="card-sub">Define how overtime is calculated for all employees</div></div><button class="btn btn-p btn-sm" onclick="saveOtRules()">Save OT Rules</button></div>
+      <div class="g2 mb12" style="align-items:flex-start">
+        <!-- OT Rate -->
+        <div>
+          <div class="fl" style="font-weight:600;margin-bottom:8px">OT Rate</div>
+          <div class="ot-rule-options">
+            <label class="ot-rule-opt active" id="ot-lbl-fixed" onclick="selectOtRate('fixed')">
+              <input type="radio" name="ot-rate-type" value="fixed" checked>
+              <div><div class="ot-rule-opt-title">1. Fixed</div><div class="ot-rule-opt-sub">Fixed AED/hour amount regardless of employee salary</div></div>
+            </label>
+            <label class="ot-rule-opt" id="ot-lbl-monthly" onclick="selectOtRate('monthly')">
+              <input type="radio" name="ot-rate-type" value="monthly">
+              <div><div class="ot-rule-opt-title">2. Monthly-Based</div><div class="ot-rule-opt-sub">Hourly rate derived from monthly basic salary — updates automatically when salary changes</div></div>
+            </label>
+            <label class="ot-rule-opt" id="ot-lbl-rate-other" onclick="selectOtRate('other')">
+              <input type="radio" name="ot-rate-type" value="other">
+              <div><div class="ot-rule-opt-title">3. Other</div><div class="ot-rule-opt-sub">Custom formula or manual rate entry per employee</div></div>
+            </label>
+          </div>
+          <div id="ot-rate-fixed-cfg" class="ot-rule-config">
+            <div class="fr2">
+              <div class="fg"><label class="fl">Default OT Rate (AED/hour)</label><input class="fi mono" id="ot-fixed-rate" value="45.00" placeholder="45.00"></div>
+              <div class="fg"><label class="fl">Weekend/Holiday OT Rate (AED/hour)</label><input class="fi mono" id="ot-fixed-rate-wknd" value="67.50" placeholder="67.50"></div>
+            </div>
+          </div>
+          <div id="ot-rate-monthly-cfg" class="ot-rule-config" style="display:none">
+            <div class="card-sub mb8" style="padding:6px 8px;background:var(--accent-glow);border-radius:6px;color:var(--text2)">Formula: Basic Salary ÷ (Working Days/Month × Hours/Day) × OT Multiplier</div>
+            <div class="fr2">
+              <div class="fg"><label class="fl">Working Days per Month</label><input class="fi mono" id="ot-work-days" value="22" placeholder="22"></div>
+              <div class="fg"><label class="fl">Working Hours per Day</label><input class="fi mono" id="ot-work-hours" value="8" placeholder="8"></div>
+            </div>
+            <div class="fg"><label class="fl">Example — AED 5,000 salary</label><input class="fi mono" id="ot-monthly-example" readonly value="5000 ÷ (22 × 8) = AED 28.41/hr base × multiplier" style="background:var(--bg3);color:var(--text3)"></div>
+          </div>
+          <div id="ot-rate-other-cfg" class="ot-rule-config" style="display:none">
+            <div class="fg"><label class="fl">Custom Rate Formula / Notes</label><textarea class="fi" id="ot-rate-formula" rows="2" placeholder="Describe how the OT rate should be calculated..."></textarea></div>
+          </div>
+        </div>
+        <!-- OT Hours -->
+        <div>
+          <div class="fl" style="font-weight:600;margin-bottom:8px">OT Hours Calculation</div>
+          <div class="ot-rule-options">
+            <label class="ot-rule-opt active" id="ot-lbl-hrs" onclick="selectOtHours('hours')">
+              <input type="radio" name="ot-hours-type" value="hours" checked>
+              <div><div class="ot-rule-opt-title">1. Calculated Based on Hours</div><div class="ot-rule-opt-sub">Count actual clock-in/out overtime hours from biometric/attendance</div></div>
+            </label>
+            <label class="ot-rule-opt" id="ot-lbl-days" onclick="selectOtHours('days')">
+              <input type="radio" name="ot-hours-type" value="days">
+              <div><div class="ot-rule-opt-title">2. Calculated Based on Days</div><div class="ot-rule-opt-sub">Count OT days and multiply by daily working hours</div></div>
+            </label>
+            <label class="ot-rule-opt" id="ot-lbl-hrs-other" onclick="selectOtHours('other')">
+              <input type="radio" name="ot-hours-type" value="other">
+              <div><div class="ot-rule-opt-title">3. Other</div><div class="ot-rule-opt-sub">Custom hours calculation method</div></div>
+            </label>
+          </div>
+          <div id="ot-hours-days-cfg" class="ot-rule-config" style="display:none">
+            <div class="fg"><label class="fl">Hours per OT Day</label><input class="fi mono" id="ot-hrs-per-day" value="8" placeholder="8"></div>
+          </div>
+          <div id="ot-hours-other-cfg" class="ot-rule-config" style="display:none">
+            <div class="fg"><label class="fl">Custom Hours Calculation Notes</label><textarea class="fi" rows="2" placeholder="Describe the custom OT hours calculation method..."></textarea></div>
+          </div>
+        </div>
+      </div>
+      <!-- OT Multipliers -->
+      <div class="section-hd" style="margin:4px 0 10px">OT Multipliers (UAE Labour Law)</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
+        <div class="fg"><label class="fl">Normal OT</label><div style="position:relative"><input class="fi mono" id="ot-mult-normal" value="1.25" placeholder="1.25"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text3)">×</span></div></div>
+        <div class="fg"><label class="fl">Weekend OT</label><div style="position:relative"><input class="fi mono" id="ot-mult-weekend" value="1.50" placeholder="1.50"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text3)">×</span></div></div>
+        <div class="fg"><label class="fl">Public Holiday OT</label><div style="position:relative"><input class="fi mono" id="ot-mult-holiday" value="1.50" placeholder="1.50"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text3)">×</span></div></div>
+        <div class="fg"><label class="fl">Ramadan OT</label><div style="position:relative"><input class="fi mono" id="ot-mult-ramadan" value="1.25" placeholder="1.25"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text3)">×</span></div></div>
+      </div>
+      <!-- Named OT Rules table -->
+      <div class="card-hd" style="margin-bottom:8px">
+        <div class="card-title" style="font-size:13px">Named OT Rules</div>
+        <button class="btn btn-g btn-sm" onclick="addNamedOtRule()">+ Add Rule</button>
+      </div>
+      <table class="tbl">
+        <thead><tr><th>Rule Name</th><th>Rate Type</th><th>Hours Type</th><th>Normal ×</th><th>Weekend ×</th><th>Holiday ×</th><th>Applies To</th><th></th></tr></thead>
+        <tbody id="ot-rules-tbody">
+          <tr><td>UAE Standard OT</td><td><span class="b b-b">Monthly-Based</span></td><td><span class="b" style="background:var(--bg3)">Based on Hours</span></td><td>1.25</td><td>1.50</td><td>1.50</td><td>All Employees</td><td><button class="btn btn-g btn-sm" onclick="toast('Edit OT rule','info')">Edit</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- HR General Rules + Holiday Calendar -->
     <div class="g2 mb16">
       <div class="card">
         <div class="card-hd"><div class="card-title">HR Rules</div><button class="btn btn-p btn-sm" onclick="toast('HR rules saved','ok')">Save Rules</button></div>
@@ -5896,8 +6011,8 @@ period_locks ─&lt; audit_logs
     </div>
     <div class="section-hd">Employment Details</div>
     <div class="fr3"><div class="fg"><label class="fl">Employee ID</label><input class="fi mono" id="emp-id" placeholder="EMP-005"></div><div class="fg"><label class="fl">Employment Type</label><select class="fi" id="emp-contract"><option>Full-Time</option><option>Part-Time</option><option>Contract</option><option>Probation</option><option>Intern / Trainee</option><option>Daily Wage</option><option>Hourly</option><option>Weekly</option><option>Short-Term</option><option>Freelance / Consultant</option><option>Seasonal</option><option>Project-Based</option></select></div><div class="fg"><label class="fl">Join Date</label><input class="fi" id="emp-join-date" type="date"></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Department</label><select class="fi" id="emp-department"><option>Management</option><option>Finance</option><option>Operations</option><option>Sales</option><option>HR</option><option>IT</option><option>Marketing</option><option>Procurement</option><option>Logistics</option></select></div><div class="fg"><label class="fl">Designation</label><input class="fi" id="emp-designation" placeholder="e.g. Sales Executive"></div><div class="fg"><label class="fl">Branch</label><select class="fi" id="emp-branch"><option>Dubai HQ</option><option>Abu Dhabi</option><option>Sharjah</option><option>Ajman</option><option>Ras Al Khaimah</option><option>Fujairah</option></select></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Basic Salary (AED)</label><input class="fi mono" id="emp-salary"></div><div class="fg"><label class="fl">OT Rate / Hour</label><input class="fi mono" id="emp-ot-rate" placeholder="45.00"></div><div class="fg"><label class="fl">Leave Policy</label><select class="fi" id="emp-leave-policy"><option value="UAE Standard">UAE Standard (21 days)</option><option value="Executive">Executive (30 days)</option><option value="Contractor">Contractor (14 days)</option><option value="Part-Time">Part-Time Pro-Rata</option></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Department <span style="color:var(--red)">*</span></label><select class="fi" id="emp-department" required><option value="">— Select Department —</option><option>Management</option><option>Finance</option><option>Operations</option><option>Sales</option><option>HR</option><option>IT</option><option>Marketing</option><option>Procurement</option><option>Logistics</option></select></div><div class="fg"><label class="fl">Designation</label><input class="fi" id="emp-designation" placeholder="e.g. Sales Executive"></div><div class="fg"><label class="fl">Branch <span style="color:var(--red)">*</span></label><select class="fi" id="emp-branch" required><option value="">— Select Branch —</option><option>Dubai HQ</option><option>Abu Dhabi</option><option>Sharjah</option><option>Ajman</option><option>Ras Al Khaimah</option><option>Fujairah</option></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Basic Salary (AED)</label><input class="fi mono" id="emp-salary"></div><div class="fg"><label class="fl">OT Policy</label><select class="fi" id="emp-ot-rate"><option value="system-default">— System Default (from HR Settings) —</option><option value="fixed">Fixed Rate</option><option value="monthly">Monthly-Based Rate</option><option value="other">Other / Custom</option></select></div><div class="fg"><label class="fl">Leave Policy</label><select class="fi" id="emp-leave-policy"><optgroup label="UAE Policy (Calendar Days)"><option value="UAE 30 Calendar">UAE Policy — 30 Calendar Days</option><option value="UAE Standard">UAE Standard — 21 Calendar Days</option></optgroup><optgroup label="Internal Policy (Working Days)"><option value="Internal 22 Working">Internal — 22 Working Days</option><option value="Internal 29 Working">Internal — 29 Working Days</option><option value="Executive 30 Working">Executive — 30 Working Days</option></optgroup><optgroup label="Other"><option value="Contractor">Contractor — 14 Calendar Days</option><option value="Part-Time">Part-Time Pro-Rata</option><option value="Custom">Custom (per contract)</option></optgroup></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Reporting Manager</label><select class="fi" id="emp-supervisor"><option>Sara Al Mansouri</option><option>Ahmed Rashid</option><option>Rania Abboud</option></select></div><div class="fg"><label class="fl">Default Shift</label><select class="fi" id="emp-shift"><option>09:00-18:00</option><option>08:00-17:00</option><option>10:00-19:00</option><option>Night 22:00-06:00</option><option>Split Shift</option></select></div><div class="fg"><label class="fl">Work Location</label><select class="fi" id="emp-location"><option>Dubai HQ</option><option>Abu Dhabi Warehouse</option><option>Sharjah Sales Office</option><option>Remote</option><option>Field / Site</option></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Work Permit No.</label><input class="fi mono" id="emp-work-permit"></div><div class="fg"><label class="fl">Visa Expiry</label><input class="fi" id="emp-visa-expiry" type="date"></div><div class="fg"><label class="fl">Cost Center</label><input class="fi" id="emp-cost-center" placeholder="e.g. CC-01-OPS"></div></div>
     <div class="fr2"><div class="fg"><label class="fl">Emergency Contact Name</label><input class="fi" id="emp-emergency" placeholder="Full name"></div><div class="fg"><label class="fl">Emergency Contact Mobile</label><input class="fi mono" id="emp-emergency-mobile" placeholder="+971..."></div></div>
@@ -6379,6 +6494,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260625e" defer></script>
+<script src="src/app.js?v=20260626b" defer></script>
 </body>
 </html>

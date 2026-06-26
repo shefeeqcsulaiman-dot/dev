@@ -72,6 +72,20 @@ body:not(.theme-light) .sb{--sb-bg:#575b6d;}
 .nav-sub svg{width:13px;height:13px;flex-shrink:0;opacity:.6;}
 .dash-alert-tile{text-align:center;padding:12px 8px;background:var(--bg3);border-radius:10px;cursor:pointer;transition:background .15s;}
 .dash-alert-tile:hover{background:var(--surface);}
+/* OT Rules */
+.ot-rule-options{display:flex;flex-direction:column;gap:7px;}
+.ot-rule-opt{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:9px;border:1.5px solid var(--border);cursor:pointer;transition:all .15s;background:var(--bg2);}
+.ot-rule-opt:hover{border-color:var(--accent);background:var(--accent-glow);}
+.ot-rule-opt.active{border-color:var(--accent);background:var(--accent-glow);}
+.ot-rule-opt input[type=radio]{margin-top:2px;flex-shrink:0;accent-color:var(--accent);}
+.ot-rule-opt-title{font-weight:600;font-size:13px;color:var(--text);}
+.ot-rule-opt-sub{font-size:11.5px;color:var(--text3);margin-top:1px;}
+.ot-rule-config{margin-top:10px;padding:12px;background:var(--bg3);border-radius:8px;border:1px solid var(--border);}
+/* Dept/Branch tags */
+.dept-tag{display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:4px 8px 4px 10px;font-size:12px;color:var(--text2);}
+.dept-tag button{background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;line-height:1;padding:0 0 0 2px;}
+.dept-tag button:hover{color:var(--red);}
+.dept-branch-wrap{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0 4px;}
 .sb-foot{margin-top:auto;padding:14px;border-top:1px solid var(--border);}
 .co-card{display:flex;align-items:center;gap:9px;background:var(--surface);border-radius:10px;padding:9px 11px;cursor:pointer;border:1px solid var(--border);}
 .co-av{width:30px;height:30px;border-radius:7px;background:var(--accent2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;}
