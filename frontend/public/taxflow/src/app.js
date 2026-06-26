@@ -14075,6 +14075,350 @@ function previewEmpPhoto(input){
   reader.readAsDataURL(input.files[0]);
 }
 
+// ── HRMS AI ASSISTANT ────────────────────────────────────────────────
+
+function _hrmsAiBtn(id,label,loading){
+  const btn=document.getElementById(id);
+  if(btn){btn.disabled=loading;btn.textContent=loading?'Analysing…':label;}
+}
+
+function _hrmsAiResultHtml(container,html){
+  const el=document.getElementById(container);
+  if(el)el.innerHTML=html;
+}
+
+function _hrmsAiErrorHtml(container,err){
+  _hrmsAiResultHtml(container,`<div style="color:var(--red);font-size:12px">${escapeHtml(String(err))}</div>`);
+}
+
+// 1. CV Parser
+async function hrmsAiCvParse(){
+  const text=(document.getElementById('hrms-ai-cv-text')?.value||'').trim();
+  if(!text){toast('Paste CV text first','warn');return;}
+  _hrmsAiBtn('hrms-ai-cv-btn','Parse CV',true);
+  _hrmsAiResultHtml('hrms-ai-cv-result','<div style="color:var(--text3);text-align:center;padding:20px">Extracting…</div>');
+  try{
+    const res=await moduleApi('/ai/hr/cv-parse',{method:'POST',body:{text}});
+    if(res.error){_hrmsAiErrorHtml('hrms-ai-cv-result',res.error);return;}
+    const fields=[
+      ['Name',res.full_name],['Email',res.email],['Phone',res.phone],
+      ['Nationality',res.nationality],['Visa',res.visa_type],
+      ['Department',res.department_suggestion],['Designation',res.designation],
+      ['Salary Suggestion',res.basic_salary_suggestion?'AED '+res.basic_salary_suggestion:'—'],
+      ['Experience',res.years_experience?res.years_experience+' yrs':'—'],
+      ['Skills',(res.skills||[]).slice(0,5).join(', ')],
+      ['Languages',(res.languages||[]).join(', ')],
+    ].filter(([,v])=>v).map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text3)">${k}</span><strong style="color:var(--text);text-align:right;max-width:60%">${escapeHtml(String(v))}</strong></div>`).join('');
+    const useBtn=`<button class="btn btn-p btn-sm" style="width:100%;margin-top:8px" onclick="hrmsAiCvFillForm(${JSON.stringify(JSON.stringify(res))})">Use in Employee Form</button>`;
+    _hrmsAiResultHtml('hrms-ai-cv-result',`<div>${fields}</div>${useBtn}`);
+  }catch(e){_hrmsAiErrorHtml('hrms-ai-cv-result','AI call failed: '+e.message);}
+  finally{_hrmsAiBtn('hrms-ai-cv-btn','Parse CV',false);}
+}
+
+function hrmsAiCvUpload(input){
+  const file=input?.files?.[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const text=e.target?.result||'';
+    const el=document.getElementById('hrms-ai-cv-text');
+    if(el)el.value=typeof text==='string'?text:'[Binary file — paste text version instead]';
+  };
+  reader.readAsText(file);
+}
+
+function hrmsAiCvFillForm(jsonStr){
+  try{
+    const data=JSON.parse(jsonStr);
+    const field=(id,val)=>{const el=document.getElementById(id);if(el&&val)el.value=val;};
+    const sel=(id,val)=>{const el=document.getElementById(id);if(el&&val)setSelectValue(el,val);};
+    go('staff');
+    setTimeout(()=>{
+      document.querySelector('#page-staff .tab:first-child')?.click();
+      setTimeout(()=>{
+        showM('m-emp');
+        setTimeout(()=>{
+          field('emp-name',data.full_name);
+          field('emp-email',data.email);
+          field('emp-phone',data.phone);
+          field('emp-designation',data.designation);
+          sel('emp-department',data.department_suggestion);
+          field('emp-salary',data.basic_salary_suggestion||'');
+          toast('CV data filled into employee form','ok');
+        },300);
+      },200);
+    },300);
+  }catch{}
+}
+
+// 2. Payroll Anomaly Detector
+async function hrmsAiPayrollAnomaly(){
+  _hrmsAiBtn('hrms-ai-payroll-btn','Run Anomaly Scan',true);
+  _hrmsAiResultHtml('hrms-ai-payroll-result','<div style="color:var(--text3)">Scanning payroll records from database…</div>');
+  try{
+    const res=await moduleApi('/ai/hr/payroll-anomaly',{method:'POST',body:{}});
+    if(res.error){_hrmsAiErrorHtml('hrms-ai-payroll-result',res.error);return;}
+    const anomalies=res.anomalies||[];
+    const badges={High:'b-r',Medium:'b-a',Low:'b-g',Critical:'b-r'};
+    const rows=anomalies.map(a=>`
+      <div style="padding:8px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <strong style="font-size:12px">${escapeHtml(a.employee_name||a.employee_no||'—')}</strong>
+          <span class="b ${badges[a.severity]||'b-a'}" style="font-size:10px">${escapeHtml(a.severity||'')}</span>
+          <span class="b b-g" style="font-size:10px;margin-left:auto">${escapeHtml(a.type||'')}</span>
+        </div>
+        <div style="font-size:11.5px;color:var(--text2)">${escapeHtml(a.description||'')}</div>
+        ${a.action?`<div style="font-size:11px;color:var(--accent);margin-top:3px">→ ${escapeHtml(a.action)}</div>`:''}
+      </div>`).join('');
+    const summary=`<div style="background:var(--bg2);border-radius:8px;padding:8px;margin-bottom:8px;font-size:12px">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px">
+        <span>Checked: <strong>${res.db_employees||0}</strong> employees</span>
+        <span>Anomalies: <strong style="color:var(--red)">${anomalies.length}</strong></span>
+        <span>Payroll records: <strong>${res.db_payroll_records||0}</strong></span>
+      </div>
+      <div style="color:var(--text2)">${escapeHtml(res.summary||'')}</div>
+    </div>`;
+    _hrmsAiResultHtml('hrms-ai-payroll-result',anomalies.length?summary+rows:`${summary}<div style="color:var(--green);font-size:12px;text-align:center;padding:8px">✓ No anomalies detected</div>`);
+  }catch(e){_hrmsAiErrorHtml('hrms-ai-payroll-result','Scan failed: '+e.message);}
+  finally{_hrmsAiBtn('hrms-ai-payroll-btn','Run Anomaly Scan',false);}
+}
+
+// 3. Attrition Risk Score
+async function hrmsAiAttritionRisk(){
+  _hrmsAiBtn('hrms-ai-attr-btn','Score All Employees',true);
+  _hrmsAiResultHtml('hrms-ai-attr-result','<div style="color:var(--text3)">Scoring employees from database…</div>');
+  try{
+    const res=await moduleApi('/ai/hr/attrition-risk',{method:'POST',body:{}});
+    if(res.error){_hrmsAiErrorHtml('hrms-ai-attr-result',res.error);return;}
+    const scores=(res.scores||[]).sort((a,b)=>b.risk_score-a.risk_score);
+    const riskColor={Critical:'var(--red)',High:'#f97316',Medium:'var(--amber)',Low:'var(--green)'};
+    const rows=scores.map(s=>{
+      const color=riskColor[s.risk_level]||'var(--text3)';
+      const pct=Math.min(100,s.risk_score||0);
+      return `<div style="padding:8px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <strong style="font-size:12px">${escapeHtml(s.name||s.employee_no||'—')}</strong>
+          <span style="font-size:10.5px;color:var(--text3)">${escapeHtml(s.department||'')} · ${escapeHtml(s.designation||'')}</span>
+          <span style="margin-left:auto;font-size:13px;font-weight:700;color:${color}">${pct}%</span>
+        </div>
+        <div style="height:4px;border-radius:2px;background:var(--bg3);margin-bottom:4px">
+          <div style="height:4px;border-radius:2px;background:${color};width:${pct}%;transition:width .5s"></div>
+        </div>
+        ${(s.risk_factors||[]).length?`<div style="font-size:11px;color:var(--text3)">${s.risk_factors.map(f=>escapeHtml(f)).join(' · ')}</div>`:''}
+      </div>`;
+    }).join('');
+    const summary=`<div style="background:var(--bg2);border-radius:8px;padding:8px;margin-bottom:8px;font-size:12px">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px">
+        <span style="color:var(--red)">Critical/High: <strong>${(res.high_risk_count||0)}</strong></span>
+        <span style="color:var(--amber)">Medium: <strong>${(res.medium_risk_count||0)}</strong></span>
+        <span style="color:var(--green)">Low: <strong>${(res.low_risk_count||0)}</strong></span>
+      </div>
+      <div style="color:var(--text2)">${escapeHtml(res.summary||'')}</div>
+    </div>`;
+    _hrmsAiResultHtml('hrms-ai-attr-result',summary+rows);
+  }catch(e){_hrmsAiErrorHtml('hrms-ai-attr-result','Score failed: '+e.message);}
+  finally{_hrmsAiBtn('hrms-ai-attr-btn','Score All Employees',false);}
+}
+
+// 4. UAE Compliance Check
+async function hrmsAiComplianceCheck(){
+  _hrmsAiBtn('hrms-ai-comp-btn','Run Compliance Audit',true);
+  _hrmsAiResultHtml('hrms-ai-comp-result','<div style="color:var(--text3)">Checking compliance against UAE Labor Law…</div>');
+  try{
+    const res=await moduleApi('/ai/hr/compliance-check',{method:'POST',body:{}});
+    if(res.error){_hrmsAiErrorHtml('hrms-ai-comp-result',res.error);return;}
+    const issues=res.issues||[];
+    const sevColor={Critical:'var(--red)',High:'#f97316',Medium:'var(--amber)',Low:'var(--green)'};
+    const rows=issues.map(i=>`
+      <div style="padding:8px;border-left:3px solid ${sevColor[i.severity]||'var(--border)'};background:var(--bg2);border-radius:0 7px 7px 0;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+          <strong style="font-size:12px">${escapeHtml(i.name||i.employee_no||'—')}</strong>
+          <span class="b" style="font-size:10px;background:${sevColor[i.severity]||'var(--bg3)'}22;color:${sevColor[i.severity]||'var(--text3)'}">${escapeHtml(i.severity||'')}</span>
+          <span style="font-size:10px;color:var(--text3);margin-left:auto">${escapeHtml(i.law_reference||'')}</span>
+        </div>
+        <div style="font-size:11.5px;color:var(--text)">${escapeHtml(i.description||'')}</div>
+        ${i.recommended_action?`<div style="font-size:11px;color:var(--accent);margin-top:2px">→ ${escapeHtml(i.recommended_action)}</div>`:''}
+      </div>`).join('');
+    const score=res.overall_compliance_score||0;
+    const scoreColor=score>=90?'var(--green)':score>=70?'var(--amber)':'var(--red)';
+    const summary=`<div style="background:var(--bg2);border-radius:8px;padding:10px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+        <div style="font-size:28px;font-weight:800;color:${scoreColor}">${score}%</div>
+        <div><div style="font-size:12px;font-weight:600">Compliance Score</div><div style="font-size:11px;color:var(--text3)">${res.compliant_count||0} compliant · ${res.non_compliant_count||0} with issues · ${res.critical_count||0} critical</div></div>
+      </div>
+      <div style="font-size:12px;color:var(--text2)">${escapeHtml(res.summary||'')}</div>
+    </div>`;
+    _hrmsAiResultHtml('hrms-ai-comp-result',summary+(issues.length?rows:'<div style="color:var(--green);font-size:12px;text-align:center;padding:8px">✓ All employees fully compliant</div>'));
+  }catch(e){_hrmsAiErrorHtml('hrms-ai-comp-result','Audit failed: '+e.message);}
+  finally{_hrmsAiBtn('hrms-ai-comp-btn','Run Compliance Audit',false);}
+}
+
+// 5. Leave Pattern Analysis
+async function hrmsAiLeaveAnalysis(){
+  _hrmsAiBtn('hrms-ai-leave-btn','Analyse Leave Patterns',true);
+  _hrmsAiResultHtml('hrms-ai-leave-result','<div style="color:var(--text3)">Collecting leave data…</div>');
+  try{
+    // Gather leave data from HR module DOM
+    const leaveRows=[...document.querySelectorAll('#hr-leave-tbody tr:not([data-empty-state])')].map(row=>{
+      const cells=[...row.querySelectorAll('td')].map(td=>td.textContent.trim());
+      return {employee:cells[0]||'',type:cells[1]||'',from:cells[2]||'',to:cells[3]||'',days:cells[4]||'',status:cells[5]||''};
+    }).filter(r=>r.employee);
+    const res=await moduleApi('/ai/hr/leave-analysis',{method:'POST',body:{leave_data:leaveRows}});
+    if(res.error){_hrmsAiErrorHtml('hrms-ai-leave-result',res.error);return;}
+    const patterns=res.patterns||[];
+    const sevColor={Alert:'var(--red)',Watch:'var(--amber)',Info:'var(--accent)'};
+    const rows=patterns.map(p=>`
+      <div style="padding:8px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+          <span class="b" style="font-size:10px;color:${sevColor[p.severity]||'var(--text3)'};background:${sevColor[p.severity]||'var(--bg3)'}22">${escapeHtml(p.severity||'')}</span>
+          <strong style="font-size:12px">${escapeHtml(p.pattern_type||'')}</strong>
+        </div>
+        <div style="font-size:11.5px;color:var(--text2)">${escapeHtml(p.description||'')}</div>
+        ${(p.affected_employees||[]).length?`<div style="font-size:11px;color:var(--text3);margin-top:2px">Employees: ${p.affected_employees.map(e=>escapeHtml(e)).join(', ')}</div>`:''}
+        ${p.recommendation?`<div style="font-size:11px;color:var(--accent);margin-top:2px">→ ${escapeHtml(p.recommendation)}</div>`:''}
+      </div>`).join('');
+    const burnout=(res.burnout_risk_employees||[]);
+    const summary=`<div style="background:var(--bg2);border-radius:8px;padding:8px;margin-bottom:8px;font-size:12px">
+      <div style="margin-bottom:4px">${escapeHtml(res.summary||'')}</div>
+      ${(res.insights||[]).map(i=>`<div style="color:var(--text3);margin-top:2px">• ${escapeHtml(i)}</div>`).join('')}
+      ${burnout.length?`<div style="color:var(--red);margin-top:4px;font-weight:600">Burnout risk: ${burnout.map(e=>escapeHtml(e)).join(', ')}</div>`:''}
+    </div>`;
+    _hrmsAiResultHtml('hrms-ai-leave-result',summary+(patterns.length?rows:'<div style="color:var(--green);font-size:12px;text-align:center;padding:8px">No concerning leave patterns detected</div>'));
+  }catch(e){_hrmsAiErrorHtml('hrms-ai-leave-result','Analysis failed: '+e.message);}
+  finally{_hrmsAiBtn('hrms-ai-leave-btn','Analyse Leave Patterns',false);}
+}
+
+// 6. JD Generator
+async function hrmsAiJdGenerate(){
+  const title=(document.getElementById('hrms-ai-jd-title')?.value||'').trim();
+  const dept=(document.getElementById('hrms-ai-jd-dept')?.value||'').trim();
+  if(!title){toast('Enter job title first','warn');return;}
+  _hrmsAiBtn('hrms-ai-jd-btn','Generate JD',true);
+  _hrmsAiResultHtml('hrms-ai-jd-result','<div style="color:var(--text3)">Generating job description…</div>');
+  try{
+    const res=await moduleApi('/ai/hr/jd-generate',{method:'POST',body:{
+      title,department:dept,
+      salary_range:document.getElementById('hrms-ai-jd-salary')?.value||'',
+      experience_years:document.getElementById('hrms-ai-jd-exp')?.value||'',
+      requirements:document.getElementById('hrms-ai-jd-req')?.value||''
+    }});
+    if(res.error){_hrmsAiErrorHtml('hrms-ai-jd-result',res.error);return;}
+    const section=(label,items)=>Array.isArray(items)&&items.length?`<div style="margin-top:8px"><div style="font-size:10.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">${label}</div>${items.map(i=>`<div style="font-size:11.5px;color:var(--text2);padding:2px 0">• ${escapeHtml(String(i))}</div>`).join('')}</div>`:'';
+    const html=`<div style="padding:8px;background:var(--bg2);border-radius:8px">
+      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:2px">${escapeHtml(res.job_title||title)}</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:6px">${escapeHtml(res.department||dept)} · ${escapeHtml(res.location||'UAE')} · ${escapeHtml(res.employment_type||'Full-Time')}</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:4px">${escapeHtml(res.job_summary||'')}</div>
+      ${section('Key Responsibilities',res.key_responsibilities)}
+      ${section('Required Qualifications',res.required_qualifications)}
+      ${section('Technical Skills',res.technical_skills)}
+      ${section('Benefits',res.benefits)}
+      ${section('UAE Requirements',res.uae_requirements)}
+      <div style="margin-top:10px">
+        <button class="btn btn-g btn-sm" onclick="hrmsAiJdCopy(${JSON.stringify(JSON.stringify(res))})">Copy Full JD</button>
+        <button class="btn btn-g btn-sm" onclick="hrmsAiJdToRecruitment(${JSON.stringify(JSON.stringify(res))})">Add to Recruitment</button>
+      </div>
+    </div>`;
+    _hrmsAiResultHtml('hrms-ai-jd-result',html);
+  }catch(e){_hrmsAiErrorHtml('hrms-ai-jd-result','Generation failed: '+e.message);}
+  finally{_hrmsAiBtn('hrms-ai-jd-btn','Generate JD',false);}
+}
+
+function hrmsAiJdCopy(jsonStr){
+  try{
+    const d=JSON.parse(jsonStr);
+    const text=[
+      d.job_title,'',d.department+' | '+d.location+' | '+d.employment_type,'',
+      d.job_summary,'',
+      'KEY RESPONSIBILITIES:',...(d.key_responsibilities||[]).map(r=>'• '+r),'',
+      'REQUIRED QUALIFICATIONS:',...(d.required_qualifications||[]).map(q=>'• '+q),'',
+      'TECHNICAL SKILLS:',...(d.technical_skills||[]).map(s=>'• '+s),'',
+      'BENEFITS:',...(d.benefits||[]).map(b=>'• '+b),'',
+      'UAE REQUIREMENTS:',...(d.uae_requirements||[]).map(u=>'• '+u),
+    ].join('\n');
+    navigator.clipboard.writeText(text).then(()=>toast('JD copied to clipboard','ok'));
+  }catch{}
+}
+
+function hrmsAiJdToRecruitment(jsonStr){
+  try{
+    const d=JSON.parse(jsonStr);
+    go('recruitment');
+    setTimeout(()=>{
+      const pos=document.getElementById('recruit-position');
+      const dept=document.getElementById('recruit-dept');
+      const desc=document.getElementById('recruit-desc');
+      if(pos)pos.value=d.job_title||'';
+      if(dept)dept.value=d.department||'';
+      if(desc)desc.value=d.job_summary||'';
+      toast('JD pre-filled in Recruitment form','ok');
+    },400);
+  }catch{}
+}
+
+// 7. HR Chatbot
+const _hrmsAiChatHistory=[];
+
+function hrmsAiChatSuggest(question){
+  const el=document.getElementById('hrms-ai-chat-input');
+  if(el)el.value=question;
+  hrmsAiChatSend();
+}
+
+async function hrmsAiChatSend(){
+  const input=document.getElementById('hrms-ai-chat-input');
+  const question=(input?.value||'').trim();
+  if(!question)return;
+  if(input)input.value='';
+  _hrmsAiChatHistory.push({role:'user',content:question});
+  _hrmsAiChatAppend('user',question);
+  const btn=document.getElementById('hrms-ai-chat-btn');
+  if(btn){btn.disabled=true;btn.textContent='…';}
+  try{
+    const res=await moduleApi('/ai/hr/chatbot',{method:'POST',body:{question}});
+    if(res.error){_hrmsAiChatAppend('ai','Error: '+res.error);return;}
+    _hrmsAiChatHistory.push({role:'assistant',content:res.answer});
+    _hrmsAiChatAppend('ai',res.answer||'No response',res.follow_up_questions||[]);
+  }catch(e){
+    _hrmsAiChatAppend('ai','Sorry, I could not reach the AI service. Check that the backend is running and API key is configured.');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='Send';}
+  }
+}
+
+function _hrmsAiChatAppend(role,text,followUps=[]){
+  const log=document.getElementById('hrms-ai-chat-log');
+  if(!log)return;
+  // Remove empty placeholder
+  const ph=log.querySelector('div[style*="text-align:center"]');
+  if(ph)ph.remove();
+  const isUser=role==='user';
+  const div=document.createElement('div');
+  div.style.cssText=`margin-bottom:8px;display:flex;gap:6px;${isUser?'flex-direction:row-reverse':''}`;
+  const av=document.createElement('div');
+  av.style.cssText=`width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;${isUser?'background:var(--accent);color:#fff':'background:var(--purple);color:#fff'}`;
+  av.textContent=isUser?'You':'AI';
+  const bubble=document.createElement('div');
+  bubble.style.cssText=`background:${isUser?'var(--accent)':'var(--bg3)'};color:${isUser?'#fff':'var(--text)'};padding:6px 10px;border-radius:${isUser?'12px 12px 2px 12px':'12px 12px 12px 2px'};font-size:12px;max-width:85%;line-height:1.5`;
+  bubble.textContent=text;
+  div.appendChild(av);
+  div.appendChild(bubble);
+  log.appendChild(div);
+  if(followUps.length){
+    const fqDiv=document.createElement('div');
+    fqDiv.style.cssText='display:flex;flex-wrap:wrap;gap:4px;margin-left:30px;margin-bottom:4px';
+    followUps.forEach(q=>{
+      const btn=document.createElement('button');
+      btn.className='btn btn-g btn-sm';
+      btn.style.fontSize='10.5px';
+      btn.textContent=q;
+      btn.onclick=()=>hrmsAiChatSuggest(q);
+      fqDiv.appendChild(btn);
+    });
+    log.appendChild(fqDiv);
+  }
+  log.scrollTop=log.scrollHeight;
+}
+
 // ── OT Rules & Department/Branch management ──────────────────────────
 function selectOtRate(type){
   ['fixed','monthly','other'].forEach(t=>{
