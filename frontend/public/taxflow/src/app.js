@@ -13995,6 +13995,162 @@ function addCorporateApprovalRule(){
   saveCorporateRecord('approvalMatrix',record,renderCorporateApprovals,'Approval rule saved to database');
 }
 
+// -- ORGANIZATION PAGE -------------------------------------------
+function refreshOrgPage(){
+  const empRows=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')];
+  const emps=empRows.map(r=>employeeFromDirectoryRow(r)).filter(e=>e&&e.name&&e.name!=='Employee');
+  const total=emps.length;
+  const active=emps.filter(e=>(e.status||'Active').toLowerCase()==='active').length;
+
+  // KPIs
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  set('org-kpi-total',total||'0');
+  set('org-kpi-active',active||'0');
+
+  // Dept breakdown
+  const deptMap={};
+  const deptHead={};
+  emps.forEach(e=>{
+    const d=e.department||'Unassigned';
+    deptMap[d]=(deptMap[d]||0)+1;
+    if(!deptHead[d]&&(e.designation||'').match(/manager|head|director|vp|chief|ceo|coo|cfo/i))deptHead[d]=e.name;
+  });
+  const depts=Object.keys(deptMap).sort((a,b)=>deptMap[b]-deptMap[a]);
+  set('org-kpi-depts',depts.length||'0');
+  const deptCount=document.getElementById('org-dept-count');
+  if(deptCount)deptCount.textContent=depts.length+' department'+(depts.length===1?'':'s');
+  const deptTbody=document.getElementById('org-dept-tbody');
+  if(deptTbody){
+    if(!depts.length){
+      deptTbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">No employees added yet</td></tr>';
+    } else {
+      deptTbody.innerHTML=depts.map(d=>{
+        const pct=total>0?Math.round(deptMap[d]/total*100):0;
+        return `<tr>
+          <td><strong>${escapeHtml(d)}</strong></td>
+          <td style="text-align:right"><span class="b b-b">${deptMap[d]}</span></td>
+          <td style="text-align:right">
+            <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+              <div style="width:60px;height:6px;border-radius:3px;background:var(--surface2)"><div style="width:${pct}%;height:100%;border-radius:3px;background:var(--accent)"></div></div>
+              <span style="font-size:11px;color:var(--text3);min-width:28px">${pct}%</span>
+            </div>
+          </td>
+          <td style="font-size:12px;color:var(--text2)">${escapeHtml(deptHead[d]||'—')}</td>
+        </tr>`;
+      }).join('');
+    }
+  }
+
+  // Branch breakdown — read from HR branches tags
+  const branchTags=[...document.querySelectorAll('#branch-tags-wrap .dept-tag')].map(t=>t.childNodes[0]?.textContent?.trim()).filter(Boolean);
+  const branchMap={};
+  emps.forEach(e=>{const b=e.branch||e.location||'Dubai HQ';branchMap[b]=(branchMap[b]||0)+1;});
+  // Also include defined branches with 0 headcount
+  branchTags.forEach(b=>{if(!(b in branchMap))branchMap[b]=0;});
+  const branches=Object.keys(branchMap).sort((a,b)=>branchMap[b]-branchMap[a]);
+  set('org-kpi-branches',branches.length||'0');
+  const branchCount=document.getElementById('org-branch-count');
+  if(branchCount)branchCount.textContent=branches.length+' branch'+(branches.length===1?'':'es');
+  const branchTbody=document.getElementById('org-branch-tbody');
+  if(branchTbody){
+    if(!branches.length){
+      branchTbody.innerHTML='<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:20px">No branches configured</td></tr>';
+    } else {
+      branchTbody.innerHTML=branches.map(b=>{
+        const cnt=branchMap[b]||0;
+        const pct=total>0?Math.round(cnt/total*100):0;
+        return `<tr>
+          <td><strong>${escapeHtml(b)}</strong></td>
+          <td style="text-align:right"><span class="b b-b">${cnt}</span></td>
+          <td style="text-align:right">
+            <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+              <div style="width:60px;height:6px;border-radius:3px;background:var(--surface2)"><div style="width:${pct}%;height:100%;border-radius:3px;background:#f59e0b"></div></div>
+              <span style="font-size:11px;color:var(--text3);min-width:28px">${pct}%</span>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+  }
+
+  // Contract/employment type breakdown
+  const typeMap={};
+  emps.forEach(e=>{const t=e.contract||'Full-Time';typeMap[t]=(typeMap[t]||0)+1;});
+  const typeGrid=document.getElementById('org-type-grid');
+  if(typeGrid){
+    const types=Object.keys(typeMap).sort((a,b)=>typeMap[b]-typeMap[a]);
+    if(!types.length){
+      typeGrid.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;grid-column:1/-1">No data</div>';
+    } else {
+      const colors=['#2563eb','#10b981','#8b5cf6','#f59e0b','#ef4444','#06b6d4','#f97316','#84cc16'];
+      typeGrid.innerHTML=types.map((t,i)=>`
+        <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;text-align:center">
+          <div style="font-size:22px;font-weight:700;color:${colors[i%colors.length]}">${typeMap[t]}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:3px">${escapeHtml(t)}</div>
+        </div>`).join('');
+    }
+  }
+
+  // Populate dept filter in org chart
+  const deptSel=document.getElementById('org-chart-dept');
+  if(deptSel){
+    const cur=deptSel.value;
+    deptSel.innerHTML='<option value="">All Departments</option>'+depts.map(d=>`<option value="${escapeHtml(d)}"${d===cur?' selected':''}>${escapeHtml(d)}</option>`).join('');
+  }
+
+  renderOrgChart();
+}
+
+function renderOrgChart(){
+  const wrap=document.getElementById('org-chart-wrap');
+  if(!wrap)return;
+  const filterDept=(document.getElementById('org-chart-dept')?.value||'').toLowerCase();
+  const empRows=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')];
+  let emps=empRows.map(r=>employeeFromDirectoryRow(r)).filter(e=>e&&e.name&&e.name!=='Employee');
+  if(filterDept)emps=emps.filter(e=>(e.department||'').toLowerCase()===filterDept);
+  if(!emps.length){
+    wrap.innerHTML='<div style="text-align:center;color:var(--text3);padding:32px;font-size:13px">No employees to display.</div>';
+    return;
+  }
+  // Build tree: find roots (no supervisor or supervisor not in list)
+  const nameSet=new Set(emps.map(e=>e.name));
+  const roots=emps.filter(e=>!e.supervisor||!nameSet.has(e.supervisor));
+  const childMap={};
+  emps.forEach(e=>{
+    if(e.supervisor&&nameSet.has(e.supervisor)){
+      if(!childMap[e.supervisor])childMap[e.supervisor]=[];
+      childMap[e.supervisor].push(e);
+    }
+  });
+  const avatarColors=['#2563eb','#10b981','#8b5cf6','#f59e0b','#ef4444','#06b6d4'];
+  const nodeHtml=(emp,depth=0)=>{
+    const col=avatarColors[depth%avatarColors.length];
+    const ini=initialsFromName(emp.name);
+    const children=childMap[emp.name]||[];
+    const sub=`<div style="font-size:10px;color:var(--text3)">${escapeHtml(emp.designation||emp.department||'')}</div>`;
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:0;min-width:110px">
+      <div style="display:flex;flex-direction:column;align-items:center;cursor:default" title="${escapeHtml(emp.name)} · ${escapeHtml(emp.department||'')}">
+        <div style="width:38px;height:38px;border-radius:50%;background:${col};display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0">${escapeHtml(ini)}</div>
+        <div style="margin-top:5px;text-align:center;max-width:100px">
+          <div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px">${escapeHtml(emp.name.split(' ')[0])}</div>
+          ${sub}
+        </div>
+      </div>
+      ${children.length?`
+        <div style="width:1px;height:16px;background:var(--border)"></div>
+        <div style="display:flex;gap:16px;padding-top:0;position:relative">
+          <div style="position:absolute;top:0;left:50%;height:1px;width:calc(100% - 40px);background:var(--border);transform:translateX(-50%)"></div>
+          ${children.map(c=>`
+            <div style="display:flex;flex-direction:column;align-items:center">
+              <div style="width:1px;height:16px;background:var(--border)"></div>
+              ${nodeHtml(c,depth+1)}
+            </div>`).join('')}
+        </div>`:''}
+    </div>`;
+  };
+  wrap.innerHTML=`<div style="display:flex;gap:32px;justify-content:center;padding:12px 16px;flex-wrap:wrap">${roots.map(r=>nodeHtml(r,0)).join('<div style="width:1px;background:transparent"></div>')}</div>`;
+}
+
 function refreshHrmsKpis(){
   const empCount=document.querySelectorAll('#employee-tbody tr:not([data-empty-state])').length;
   const leaveRows=[...document.querySelectorAll('#leave-tbody tr:not([data-empty-state])')];

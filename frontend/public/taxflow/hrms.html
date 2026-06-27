@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260627q">
+<link rel="stylesheet" href="src/styles.css?v=20260627r">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -174,10 +174,9 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>
       Dashboard
     </div>
-    <div class="nav" onclick="go('staff')">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12v9a1 1 0 01-1 1H3a1 1 0 01-1-1V4z"/><path d="M5 4V2.5a1 1 0 011-1h4a1 1 0 011 1V4"/><path d="M6 8h4M6 11h2"/></svg>
+    <div class="nav" id="nav-hrms-org" onclick="go('hrms-org');setTimeout(refreshOrgPage,200)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="1" width="5" height="3.5" rx="1"/><rect x="1" y="10.5" width="4.5" height="3.5" rx="1"/><rect x="5.5" y="10.5" width="4.5" height="3.5" rx="1"/><rect x="10.5" y="10.5" width="4.5" height="3.5" rx="1"/><path d="M8 4.5v2.5M8 7h-5v3.5M8 7h5v3.5M8 7v3.5"/></svg>
       Organization
-      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.35"><path d="M3 4l2 2 2-2"/></svg>
     </div>
     <div class="nav" onclick="go('staff')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><circle cx="12.5" cy="5" r="1.8"/><path d="M14.5 13c0-2-1.3-3-2.5-3.5"/></svg>
@@ -2123,7 +2122,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260627q" defer></script>
+<script src="src/app.js?v=20260627r" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded',function(){
   setTimeout(function(){
@@ -2141,7 +2140,7 @@ document.addEventListener('DOMContentLoaded',function(){
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260627q" defer></script>
+<script src="src/app.js?v=20260627r" defer></script>
 <!-- HRMS AI ASSISTANT PAGE -->
 <div class="page" id="page-hrms-ai">
   <div style="max-width:1100px;margin:0 auto;padding:0 4px">
@@ -2295,6 +2294,93 @@ window.HRMS_STANDALONE=true;
   </div>
 </div>
 <!-- END HRMS AI PAGE -->
+
+<!-- ORGANIZATION PAGE -->
+<div class="page" id="page-hrms-org">
+  <div style="max-width:1200px;margin:0 auto;padding:0 4px">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#2563eb,#0f9f6e);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="#fff" stroke-width="1.5"><rect x="5.5" y="1" width="5" height="3.5" rx="1"/><rect x="1" y="10.5" width="4.5" height="3.5" rx="1"/><rect x="5.5" y="10.5" width="4.5" height="3.5" rx="1"/><rect x="10.5" y="10.5" width="4.5" height="3.5" rx="1"/><path d="M8 4.5v2.5M8 7h-5v3.5M8 7h5v3.5M8 7v3.5"/></svg>
+        </div>
+        <div>
+          <div style="font-size:18px;font-weight:700;color:var(--text)">Organization</div>
+          <div style="font-size:12px;color:var(--text3)">Structure · Departments · Branches · Headcount</div>
+        </div>
+      </div>
+      <button class="btn btn-g btn-sm" onclick="refreshOrgPage()">⟳ Refresh</button>
+    </div>
+
+    <!-- KPI row -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px" id="org-kpi-row">
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px">Total Employees</div>
+        <div style="font-size:26px;font-weight:700;color:var(--accent)" id="org-kpi-total">—</div>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px">Active</div>
+        <div style="font-size:26px;font-weight:700;color:#10b981" id="org-kpi-active">—</div>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px">Departments</div>
+        <div style="font-size:26px;font-weight:700;color:#8b5cf6" id="org-kpi-depts">—</div>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px">Branches</div>
+        <div style="font-size:26px;font-weight:700;color:#f59e0b" id="org-kpi-branches">—</div>
+      </div>
+    </div>
+
+    <!-- Departments + Branches -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Departments</div><span class="b b-b" id="org-dept-count" style="font-size:11px">0 departments</span></div>
+        <table class="tbl" data-no-table-tools="1" id="org-dept-table">
+          <thead><tr><th>Department</th><th style="text-align:right">Headcount</th><th style="text-align:right">% of Total</th><th>Head</th></tr></thead>
+          <tbody id="org-dept-tbody">
+            <tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">No data yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Branches &amp; Locations</div><span class="b b-b" id="org-branch-count" style="font-size:11px">0 branches</span></div>
+        <table class="tbl" data-no-table-tools="1" id="org-branch-table">
+          <thead><tr><th>Branch / Location</th><th style="text-align:right">Headcount</th><th style="text-align:right">% of Total</th></tr></thead>
+          <tbody id="org-branch-tbody">
+            <tr><td colspan="3" style="text-align:center;color:var(--text3);padding:20px">No data yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Org Chart -->
+    <div class="card mb16">
+      <div class="card-hd">
+        <div class="card-title">Org Chart</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="fi" id="org-chart-dept" onchange="renderOrgChart()" style="height:30px;font-size:12px;padding:4px 8px;min-width:160px">
+            <option value="">All Departments</option>
+          </select>
+        </div>
+      </div>
+      <div id="org-chart-wrap" style="overflow-x:auto;padding:8px 0;min-height:120px">
+        <div style="text-align:center;color:var(--text3);padding:32px;font-size:13px">No employees added yet. Add employees with supervisors to see the org chart.</div>
+      </div>
+    </div>
+
+    <!-- Contract type breakdown -->
+    <div class="card">
+      <div class="card-hd"><div class="card-title">Headcount by Employment Type</div></div>
+      <div id="org-type-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;padding:4px 0">
+        <div style="text-align:center;color:var(--text3);padding:20px;grid-column:1/-1">No data</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+<!-- END ORGANIZATION PAGE -->
 
 <script>
 document.addEventListener('DOMContentLoaded',function(){
