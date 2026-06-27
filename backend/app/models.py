@@ -55,6 +55,8 @@ class Company(Base, TimestampMixin):
     subscription_expires_at: Mapped[str | None] = mapped_column(String(20), nullable=True)
     logo: Mapped[str | None] = mapped_column(Text, nullable=True)
     fta_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    departments: Mapped[str | None] = mapped_column(Text, nullable=True)
+    branches: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     users: Mapped[list["User"]] = relationship(back_populates="company")
     invoices: Mapped[list["Invoice"]] = relationship(back_populates="company")

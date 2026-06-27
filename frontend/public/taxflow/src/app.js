@@ -1971,6 +1971,7 @@ function applyCompanyToUi(company){
   _applyLogoEverywhere();
   updateInvoiceLayoutPreview?.();
   renderBusinessLocationRows();
+  applyDeptsBranchesFromCompany(company);
 }
 
 async function syncCompanyFromDatabase(){
@@ -14841,6 +14842,63 @@ function removeHrJobGrade(btn){
   if(!confirm(`Remove grade "${name}"?`))return;
   tag?.remove();
 }
+// Read current tag names from DOM
+function _getDeptNames(){
+  return [...document.querySelectorAll('#dept-tags-wrap .dept-tag')]
+    .map(t=>t.childNodes[0]?.textContent?.trim()).filter(Boolean);
+}
+function _getBranchNames(){
+  return [...document.querySelectorAll('#branch-tags-wrap .dept-tag')]
+    .map(t=>t.childNodes[0]?.textContent?.trim()).filter(Boolean);
+}
+
+// Persist both lists to DB (fire-and-forget)
+async function _saveDeptsBranchesToDb(){
+  if(!currentCompany)return;
+  try{
+    await authenticatedFetch(`${apiBaseUrl()}/companies/current`,{
+      method:'PUT',
+      body:JSON.stringify({
+        ...currentCompany,
+        departments:JSON.stringify(_getDeptNames()),
+        branches:JSON.stringify(_getBranchNames()),
+      })
+    });
+  }catch(e){console.warn('dept/branch save failed',e);}
+}
+
+// Render tags from arrays and sync dropdowns
+function applyDeptsBranchesFromCompany(company){
+  if(!company)return;
+  const deptWrap=document.getElementById('dept-tags-wrap');
+  const branchWrap=document.getElementById('branch-tags-wrap');
+  const DEFAULT_DEPTS=['Management','Finance','Operations','Sales','HR','IT','Marketing','Procurement','Logistics'];
+  const DEFAULT_BRANCHES=['Dubai HQ','Abu Dhabi','Sharjah','Ajman','Ras Al Khaimah','Fujairah'];
+  let depts=DEFAULT_DEPTS;
+  let branches=DEFAULT_BRANCHES;
+  try{if(company.departments){const p=JSON.parse(company.departments);if(Array.isArray(p)&&p.length)depts=p;}}catch{}
+  try{if(company.branches){const p=JSON.parse(company.branches);if(Array.isArray(p)&&p.length)branches=p;}}catch{}
+  if(deptWrap){
+    deptWrap.innerHTML=depts.map(n=>`<span class="dept-tag">${escapeHtml(n)}<button onclick="removeHrDept(this,'${escapeHtml(n)}')" title="Remove">×</button></span>`).join('');
+  }
+  if(branchWrap){
+    branchWrap.innerHTML=branches.map(n=>`<span class="dept-tag">${escapeHtml(n)}<button onclick="removeHrBranch(this,'${escapeHtml(n)}')" title="Remove">×</button></span>`).join('');
+  }
+  // Sync employee form dropdowns
+  _syncDeptBranchSelects(depts,branches);
+}
+
+function _syncDeptBranchSelects(depts,branches){
+  document.querySelectorAll('#emp-department').forEach(sel=>{
+    const cur=sel.value;
+    sel.innerHTML='<option value="">— Select Department —</option>'+depts.map(d=>`<option${d===cur?' selected':''}>${escapeHtml(d)}</option>`).join('');
+  });
+  document.querySelectorAll('#emp-branch').forEach(sel=>{
+    const cur=sel.value;
+    sel.innerHTML='<option value="">— Select Branch —</option>'+branches.map(b=>`<option${b===cur?' selected':''}>${escapeHtml(b)}</option>`).join('');
+  });
+}
+
 function addHrDepartment(){
   const name=prompt('New Department Name:');
   if(!name?.trim())return;
@@ -14850,19 +14908,18 @@ function addHrDepartment(){
   span.className='dept-tag';
   span.innerHTML=`${escapeHtml(name.trim())}<button onclick="removeHrDept(this,'${escapeHtml(name.trim())}')" title="Remove">×</button>`;
   wrap.appendChild(span);
-  // Add to emp-department selects
   document.querySelectorAll('#emp-department').forEach(sel=>{
     const opt=document.createElement('option');
-    opt.value=name.trim();
-    opt.textContent=name.trim();
-    sel.appendChild(opt);
+    opt.value=name.trim();opt.textContent=name.trim();sel.appendChild(opt);
   });
+  _saveDeptsBranchesToDb();
   toast(`Department "${name.trim()}" added`,'ok');
 }
 function removeHrDept(btn,name){
   if(!confirm(`Remove department "${name}"?`))return;
   btn.closest('.dept-tag')?.remove();
   document.querySelectorAll('#emp-department option').forEach(opt=>{if(opt.value===name||opt.textContent===name)opt.remove();});
+  _saveDeptsBranchesToDb();
 }
 function addHrBranch(){
   const name=prompt('New Branch Name:');
@@ -14875,16 +14932,16 @@ function addHrBranch(){
   wrap.appendChild(span);
   document.querySelectorAll('#emp-branch').forEach(sel=>{
     const opt=document.createElement('option');
-    opt.value=name.trim();
-    opt.textContent=name.trim();
-    sel.appendChild(opt);
+    opt.value=name.trim();opt.textContent=name.trim();sel.appendChild(opt);
   });
+  _saveDeptsBranchesToDb();
   toast(`Branch "${name.trim()}" added`,'ok');
 }
 function removeHrBranch(btn,name){
   if(!confirm(`Remove branch "${name}"?`))return;
   btn.closest('.dept-tag')?.remove();
   document.querySelectorAll('#emp-branch option').forEach(opt=>{if(opt.value===name||opt.textContent===name)opt.remove();});
+  _saveDeptsBranchesToDb();
 }
 
 function refreshExpiryAlerts(){

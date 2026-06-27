@@ -47,6 +47,8 @@ class CompanyOut(BaseModel):
     website: str | None = None
     logo: str | None = None
     fta_username: str | None = None
+    departments: str | None = None
+    branches: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -70,6 +72,8 @@ class CompanyUpdate(BaseModel):
     website: str | None = None
     logo: str | None = None
     fta_username: str | None = None
+    departments: str | None = None
+    branches: str | None = None
 
 
 class UserOut(BaseModel):
