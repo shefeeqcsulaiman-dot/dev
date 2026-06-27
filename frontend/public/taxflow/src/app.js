@@ -11570,18 +11570,22 @@ function setPurchaseAiView(view){
 function renderPurchaseAiFlatTable(){
   const tbody=document.getElementById('ext-flat-tbody');
   if(!tbody)return;
-  const fmt=n=>purchaseAiNumber(n).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const all=uploadedFiles.flatMap(f=>(f.invoices||[]).map(inv=>({inv,filename:f.name||''})));
-  const validInvoices=all.filter(({inv})=>!isPurchaseExtractionError(inv));
-  if(!validInvoices.length){
-    tbody.innerHTML=`<tr><td colspan="18" style="text-align:center;color:var(--text3);padding:24px">No invoices extracted yet.</td></tr>`;
+  const cardRows=purchaseAiRows();
+  if(!cardRows.length){
+    tbody.innerHTML=`<tr><td colspan="19" style="text-align:center;color:var(--text3);padding:24px">No invoices extracted yet — upload files and run extraction first.</td></tr>`;
     return;
   }
+  const fmt=n=>purchaseAiNumber(n).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
   const rows=[];
-  for(const {inv,filename} of validInvoices){
+  cardRows.forEach(cardRow=>{
+    let inv={};
+    try{inv=JSON.parse(cardRow.dataset.inv||'{}');}catch{}
+    if(isPurchaseExtractionError(inv))return;
+    const filename=cardRow.dataset.filename||'';
+    const invoiceNo=escapeHtml(inv.invoice_no||'');
     const validation=validatePurchaseAiInvoice(inv);
-    const statusCls=validation.valid?'b-g':'b-a';
-    const statusLabel=validation.valid?'Valid':'Review';
+    const statusCls=validation.valid?'b-g':validation.isDuplicate?'b-v':'b-a';
+    const statusLabel=validation.valid?'Valid':validation.isDuplicate?'Duplicate':'Review';
     const cur=escapeHtml(inv.currency||'AED');
     const net=purchaseAiNumber(inv.net_amount||inv.subtotal)||purchaseAiInvoiceLineTotal(inv);
     const disc=purchaseAiNumber(inv.discount_value||inv.discount);
@@ -11595,14 +11599,14 @@ function renderPurchaseAiFlatTable(){
       const discPct=purchaseAiNumber(line.discount_percent||line.discount_pct||line.discount);
       const discAmt=purchaseAiNumber(line.discount_amount)||(unitPrice*qty*(discPct/100));
       const lineTotal=purchaseAiNumber(line.line_total||line.amount||line.net_amount)||(qty*unitPrice-discAmt);
-      const desc=escapeHtml(line.product||line.description||line.item||inv.invoice_no||'');
-      rows.push(`<tr class="ext-flat-row${isFirst?' ext-flat-first':' ext-flat-sub'}" data-invoice-no="${escapeHtml(inv.invoice_no||'')}">
-        <td style="text-align:center">${isFirst?`<input type="checkbox" class="purchase-ai-tbl-select" data-inv='${escapeHtml(JSON.stringify(inv))}' data-invoice-no="${escapeHtml(inv.invoice_no||'')}" ${validation.valid?'checked':''}>`:'&nbsp;'}</td>
+      const desc=escapeHtml(line.product||line.description||line.item||'');
+      rows.push(`<tr class="ext-flat-row${isFirst?' ext-flat-first':' ext-flat-sub'}" data-invoice-no="${invoiceNo}">
+        <td style="text-align:center">${isFirst?`<input type="checkbox" class="purchase-ai-tbl-select" data-invoice-no="${invoiceNo}" ${cardRow.querySelector('.purchase-ai-select')?.checked?'checked':''}>`:'&nbsp;'}</td>
         <td style="font-size:11px;color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${isFirst?escapeHtml(filename):''}</td>
         <td>${isFirst?escapeHtml(inv.date||'-'):''}</td>
         <td class="mono">${isFirst?escapeHtml(inv.invoice_no||'-'):''}</td>
         <td>${isFirst?escapeHtml(inv.supplier||'-'):''}</td>
-        <td class="mono" style="${inv.supplier_trn&&inv.supplier_trn.length!==15?'color:var(--red)':''}">${isFirst?escapeHtml(inv.supplier_trn||'-'):''}</td>
+        <td class="mono" style="${inv.supplier_trn&&String(inv.supplier_trn).length!==15?'color:var(--red)':''}">${isFirst?escapeHtml(inv.supplier_trn||'-'):''}</td>
         <td>${isFirst?escapeHtml(inv.bill_to||'-'):''}</td>
         <td class="mono" style="text-align:right">${isFirst?`${cur} ${fmt(net)}`:''}</td>
         <td class="mono" style="text-align:right">${isFirst&&disc>0?`${cur} ${fmt(disc)}`:''}</td>
@@ -11615,10 +11619,16 @@ function renderPurchaseAiFlatTable(){
         <td class="mono" style="text-align:right">${discAmt>0?`${cur} ${fmt(discAmt)}`:''}</td>
         <td class="mono" style="text-align:right;color:var(--accent);font-weight:700">${lineTotal>0?`${cur} ${fmt(lineTotal)}`:''}</td>
         <td>${isFirst?`<span class="b ${statusCls}">${escapeHtml(statusLabel)}</span>`:''}</td>
+        <td>${isFirst?`<button class="btn btn-g btn-xs" onclick="openPurchaseAiEditByInvoiceNo('${invoiceNo}')">Edit</button>`:'&nbsp;'}</td>
       </tr>`);
     });
-  }
-  tbody.innerHTML=rows.join('');
+  });
+  tbody.innerHTML=rows.length?rows.join(''):`<tr><td colspan="19" style="text-align:center;color:var(--text3);padding:24px">No invoices extracted yet.</td></tr>`;
+}
+
+function openPurchaseAiEditByInvoiceNo(invoiceNo){
+  const row=purchaseAiRows().find(r=>r.dataset.invoiceNo===invoiceNo);
+  if(row)openPurchaseAiEdit(row);
 }
 
 function purchaseAiTableSelectAll(checked){

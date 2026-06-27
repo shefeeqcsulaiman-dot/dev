@@ -1377,6 +1377,14 @@ input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;}
 .pmt-cancel-btn{background:#fff;border:1.5px solid #cdd5e8;color:#4a6090;padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .13s;font-family:inherit;}
 .pmt-cancel-btn:hover{background:#f0f4ff;border-color:#3b6ef5;color:#1e3a6e;}
 .mt8{margin-top:8px;}.mb8{margin-bottom:8px;}
+.pvt-btn{padding:4px 12px;font-size:12px;font-weight:600;border:1px solid var(--border);background:var(--surface);color:var(--text2);border-radius:0;cursor:pointer;line-height:1.4;transition:background .15s,color .15s;}
+.pvt-btn:first-child{border-radius:6px 0 0 6px;}
+.pvt-btn:last-child{border-radius:0 6px 6px 0;}
+.pvt-btn.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+.pvt-btn:hover:not(.on){background:var(--hover);}
+.ext-flat-row.ext-flat-sub td{background:var(--surface-2,var(--surface));border-top:none;}
+.ext-flat-first td{border-top:1px solid var(--border);}
+.btn-xs{padding:2px 8px;font-size:11px;}
 
 /* ══ SUPPLIER PAYMENT CARDS ══ */
 .pay-card-list{display:flex;flex-direction:column;gap:12px;padding:4px 0 8px;}
