@@ -14824,6 +14824,23 @@ function addNamedOtRule(){
   _syncOtPolicySelects();
   toast(`OT rule "${name.trim()}" added`,'ok');
 }
+function addHrJobGrade(){
+  const name=prompt('New Job Grade (e.g. Grade E — Intern):');
+  if(!name?.trim())return;
+  const wrap=document.getElementById('job-grade-tags-wrap');
+  if(!wrap)return;
+  const span=document.createElement('span');
+  span.className='dept-tag';
+  span.innerHTML=`${escapeHtml(name.trim())}<button onclick="removeHrJobGrade(this)" title="Remove">×</button>`;
+  wrap.appendChild(span);
+  toast(`Job grade "${name.trim()}" added`,'ok');
+}
+function removeHrJobGrade(btn){
+  const tag=btn.closest('.dept-tag');
+  const name=tag?.childNodes[0]?.textContent?.trim()||'';
+  if(!confirm(`Remove grade "${name}"?`))return;
+  tag?.remove();
+}
 function addHrDepartment(){
   const name=prompt('New Department Name:');
   if(!name?.trim())return;

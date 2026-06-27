@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260627r" as="style">
-<link rel="preload" href="src/app.js?v=20260627r" as="script">
+<link rel="preload" href="src/styles.css?v=20260627s" as="style">
+<link rel="preload" href="src/app.js?v=20260627s" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260627r">
+<link rel="stylesheet" href="src/styles.css?v=20260627s">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -2002,32 +2002,11 @@
   </div>
 
   <div class="tab-body" id="hr-policy">
-    <!-- Departments & Branches -->
-    <div class="g2 mb16">
-      <div class="card">
-        <div class="card-hd"><div><div class="card-title">Departments</div><div class="card-sub">Manage company departments</div></div><button class="btn btn-g btn-sm" onclick="addHrDepartment()">+ Add Department</button></div>
-        <div class="dept-branch-wrap" id="dept-tags-wrap">
-          <span class="dept-tag">Management<button onclick="removeHrDept(this,'Management')" title="Remove">×</button></span>
-          <span class="dept-tag">Finance<button onclick="removeHrDept(this,'Finance')" title="Remove">×</button></span>
-          <span class="dept-tag">Operations<button onclick="removeHrDept(this,'Operations')" title="Remove">×</button></span>
-          <span class="dept-tag">Sales<button onclick="removeHrDept(this,'Sales')" title="Remove">×</button></span>
-          <span class="dept-tag">HR<button onclick="removeHrDept(this,'HR')" title="Remove">×</button></span>
-          <span class="dept-tag">IT<button onclick="removeHrDept(this,'IT')" title="Remove">×</button></span>
-          <span class="dept-tag">Marketing<button onclick="removeHrDept(this,'Marketing')" title="Remove">×</button></span>
-          <span class="dept-tag">Procurement<button onclick="removeHrDept(this,'Procurement')" title="Remove">×</button></span>
-          <span class="dept-tag">Logistics<button onclick="removeHrDept(this,'Logistics')" title="Remove">×</button></span>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div><div class="card-title">Branches</div><div class="card-sub">Manage company branches / locations</div></div><button class="btn btn-g btn-sm" onclick="addHrBranch()">+ Add Branch</button></div>
-        <div class="dept-branch-wrap" id="branch-tags-wrap">
-          <span class="dept-tag">Dubai HQ<button onclick="removeHrBranch(this,'Dubai HQ')" title="Remove">×</button></span>
-          <span class="dept-tag">Abu Dhabi<button onclick="removeHrBranch(this,'Abu Dhabi')" title="Remove">×</button></span>
-          <span class="dept-tag">Sharjah<button onclick="removeHrBranch(this,'Sharjah')" title="Remove">×</button></span>
-          <span class="dept-tag">Ajman<button onclick="removeHrBranch(this,'Ajman')" title="Remove">×</button></span>
-          <span class="dept-tag">Ras Al Khaimah<button onclick="removeHrBranch(this,'Ras Al Khaimah')" title="Remove">×</button></span>
-          <span class="dept-tag">Fujairah<button onclick="removeHrBranch(this,'Fujairah')" title="Remove">×</button></span>
-        </div>
+    <!-- Dept/Branch shortcut -->
+    <div class="card mb16" style="border:1px dashed var(--border)">
+      <div class="card-hd">
+        <div><div class="card-title">Departments &amp; Branches</div><div class="card-sub">Managed in Settings → HR Structure</div></div>
+        <button class="btn btn-g btn-sm" onclick="go('settings');setTimeout(()=>stab(document.querySelector('#page-settings .tab:nth-child(2)'),'set-hr-structure'),80)">Open HR Structure →</button>
       </div>
     </div>
 
@@ -4219,6 +4198,7 @@
 <div class="page" id="page-settings">
   <div class="tabs">
     <div class="tab on" onclick="stab(this,'set-company')">Company Registration</div>
+    <div class="tab" onclick="stab(this,'set-hr-structure')">HR Structure</div>
     <div class="tab" onclick="stab(this,'set-users')">Users & Roles</div>
     <div class="tab" onclick="stab(this,'set-tax')">Tax Settings</div>
     <div class="tab" onclick="stab(this,'set-notif')">Notifications</div>
@@ -4321,6 +4301,46 @@
         <div class="fg" style="margin:0"><label class="fl">Location Name</label><input class="fi" id="biz-loc-name" placeholder="e.g. Dubai HQ, Abu Dhabi Branch"></div>
         <div class="fg" style="margin:0"><label class="fl">Address / Description</label><input class="fi" id="biz-loc-address" placeholder="Building, area, emirate"></div>
         <button class="btn btn-g btn-sm" style="flex:0 0 auto;margin-bottom:1px" onclick="addBusinessLocation()">+ Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HR Structure tab -->
+  <div class="tab-body" id="set-hr-structure">
+    <div class="g2 mb16">
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Departments</div><div class="card-sub">Manage company departments used in employee profiles</div></div><button class="btn btn-g btn-sm" onclick="addHrDepartment()">+ Add Department</button></div>
+        <div class="dept-branch-wrap" id="dept-tags-wrap">
+          <span class="dept-tag">Management<button onclick="removeHrDept(this,'Management')" title="Remove">×</button></span>
+          <span class="dept-tag">Finance<button onclick="removeHrDept(this,'Finance')" title="Remove">×</button></span>
+          <span class="dept-tag">Operations<button onclick="removeHrDept(this,'Operations')" title="Remove">×</button></span>
+          <span class="dept-tag">Sales<button onclick="removeHrDept(this,'Sales')" title="Remove">×</button></span>
+          <span class="dept-tag">HR<button onclick="removeHrDept(this,'HR')" title="Remove">×</button></span>
+          <span class="dept-tag">IT<button onclick="removeHrDept(this,'IT')" title="Remove">×</button></span>
+          <span class="dept-tag">Marketing<button onclick="removeHrDept(this,'Marketing')" title="Remove">×</button></span>
+          <span class="dept-tag">Procurement<button onclick="removeHrDept(this,'Procurement')" title="Remove">×</button></span>
+          <span class="dept-tag">Logistics<button onclick="removeHrDept(this,'Logistics')" title="Remove">×</button></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div><div class="card-title">Branches</div><div class="card-sub">Manage company branches / locations</div></div><button class="btn btn-g btn-sm" onclick="addHrBranch()">+ Add Branch</button></div>
+        <div class="dept-branch-wrap" id="branch-tags-wrap">
+          <span class="dept-tag">Dubai HQ<button onclick="removeHrBranch(this,'Dubai HQ')" title="Remove">×</button></span>
+          <span class="dept-tag">Abu Dhabi<button onclick="removeHrBranch(this,'Abu Dhabi')" title="Remove">×</button></span>
+          <span class="dept-tag">Sharjah<button onclick="removeHrBranch(this,'Sharjah')" title="Remove">×</button></span>
+          <span class="dept-tag">Ajman<button onclick="removeHrBranch(this,'Ajman')" title="Remove">×</button></span>
+          <span class="dept-tag">Ras Al Khaimah<button onclick="removeHrBranch(this,'Ras Al Khaimah')" title="Remove">×</button></span>
+          <span class="dept-tag">Fujairah<button onclick="removeHrBranch(this,'Fujairah')" title="Remove">×</button></span>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">Job Grades</div><div class="card-sub">Define salary grades and levels for employee classification</div></div><button class="btn btn-g btn-sm" onclick="addHrJobGrade()">+ Add Grade</button></div>
+      <div class="dept-branch-wrap" id="job-grade-tags-wrap">
+        <span class="dept-tag">Grade A — Executive<button onclick="removeHrJobGrade(this)" title="Remove">×</button></span>
+        <span class="dept-tag">Grade B — Senior<button onclick="removeHrJobGrade(this)" title="Remove">×</button></span>
+        <span class="dept-tag">Grade C — Mid-Level<button onclick="removeHrJobGrade(this)" title="Remove">×</button></span>
+        <span class="dept-tag">Grade D — Junior<button onclick="removeHrJobGrade(this)" title="Remove">×</button></span>
       </div>
     </div>
   </div>
@@ -6546,6 +6566,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260627r" defer></script>
+<script src="src/app.js?v=20260627s" defer></script>
 </body>
 </html>
