@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260627s" as="style">
-<link rel="preload" href="src/app.js?v=20260627s" as="script">
+<link rel="preload" href="src/styles.css?v=20260627t" as="style">
+<link rel="preload" href="src/app.js?v=20260627t" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260627s">
+<link rel="stylesheet" href="src/styles.css?v=20260627t">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -2006,7 +2006,7 @@
     <div class="card mb16" style="border:1px dashed var(--border)">
       <div class="card-hd">
         <div><div class="card-title">Departments &amp; Branches</div><div class="card-sub">Managed in Settings → HR Structure</div></div>
-        <button class="btn btn-g btn-sm" onclick="go('settings');setTimeout(()=>stab(document.querySelector('#page-settings .tab:nth-child(2)'),'set-hr-structure'),80)">Open HR Structure →</button>
+        <button class="btn btn-g btn-sm" onclick="go('settings')">Open Company &amp; Settings →</button>
       </div>
     </div>
 
@@ -4198,7 +4198,6 @@
 <div class="page" id="page-settings">
   <div class="tabs">
     <div class="tab on" onclick="stab(this,'set-company')">Company Registration</div>
-    <div class="tab" onclick="stab(this,'set-hr-structure')">HR Structure</div>
     <div class="tab" onclick="stab(this,'set-users')">Users & Roles</div>
     <div class="tab" onclick="stab(this,'set-tax')">Tax Settings</div>
     <div class="tab" onclick="stab(this,'set-notif')">Notifications</div>
@@ -4303,10 +4302,8 @@
         <button class="btn btn-g btn-sm" style="flex:0 0 auto;margin-bottom:1px" onclick="addBusinessLocation()">+ Add</button>
       </div>
     </div>
-  </div>
 
-  <!-- HR Structure tab -->
-  <div class="tab-body" id="set-hr-structure">
+    <!-- Departments & Branches -->
     <div class="g2 mb16">
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Departments</div><div class="card-sub">Manage company departments used in employee profiles</div></div><button class="btn btn-g btn-sm" onclick="addHrDepartment()">+ Add Department</button></div>
@@ -4332,15 +4329,6 @@
           <span class="dept-tag">Ras Al Khaimah<button onclick="removeHrBranch(this,'Ras Al Khaimah')" title="Remove">×</button></span>
           <span class="dept-tag">Fujairah<button onclick="removeHrBranch(this,'Fujairah')" title="Remove">×</button></span>
         </div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-hd"><div><div class="card-title">Job Grades</div><div class="card-sub">Define salary grades and levels for employee classification</div></div><button class="btn btn-g btn-sm" onclick="addHrJobGrade()">+ Add Grade</button></div>
-      <div class="dept-branch-wrap" id="job-grade-tags-wrap">
-        <span class="dept-tag">Grade A — Executive<button onclick="removeHrJobGrade(this)" title="Remove">×</button></span>
-        <span class="dept-tag">Grade B — Senior<button onclick="removeHrJobGrade(this)" title="Remove">×</button></span>
-        <span class="dept-tag">Grade C — Mid-Level<button onclick="removeHrJobGrade(this)" title="Remove">×</button></span>
-        <span class="dept-tag">Grade D — Junior<button onclick="removeHrJobGrade(this)" title="Remove">×</button></span>
       </div>
     </div>
   </div>
@@ -6566,6 +6554,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260627s" defer></script>
+<script src="src/app.js?v=20260627t" defer></script>
 </body>
 </html>
