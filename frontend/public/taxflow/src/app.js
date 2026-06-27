@@ -17975,14 +17975,19 @@ async function downloadExcelBackup(){
     sheetMap.forEach(([sheetName,keys])=>{
       const rows=keys.flatMap(k=>Array.isArray(data[k])?data[k]:[]);
       if(!rows.length)return;
-      // Flatten nested objects one level deep
+      // Flatten nested objects one level deep; sanitize all values to primitives for SheetJS
+      const toCell=v=>{
+        if(v===null||v===undefined)return'';
+        if(typeof v==='object'||Array.isArray(v))return JSON.stringify(v);
+        return v;
+      };
       const flat=rows.map(row=>{
         const out={};
         Object.entries(row).forEach(([k,v])=>{
           if(v!==null&&v!==undefined&&typeof v==='object'&&!Array.isArray(v)){
-            Object.entries(v).forEach(([ik,iv])=>out[`${k}.${ik}`]=iv);
-          }else if(!Array.isArray(v)){
-            out[k]=v;
+            Object.entries(v).forEach(([ik,iv])=>out[`${k}.${ik}`]=toCell(iv));
+          }else{
+            out[k]=toCell(v);
           }
         });
         return out;
