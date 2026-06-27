@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" href="src/styles.css?v=20260627x" as="style">
-<link rel="preload" href="src/app.js?v=20260627z" as="script">
+<link rel="preload" href="src/app.js?v=20260628a" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=20260627x">
 </head>
@@ -3196,25 +3196,24 @@
       <div class="card-hd" style="flex-wrap:wrap;gap:8px">
         <div>
           <div class="card-title">Chart of Accounts</div>
-          <div class="card-sub">4-level hierarchy: Account Type → Group → Ledger → Sub Ledger</div>
+          <div class="card-sub">3-level hierarchy: Group → Ledger → Sub Ledger</div>
         </div>
         <div class="flx" style="gap:8px">
           <button class="btn btn-g btn-sm" onclick="expandAllGroups()">Expand All</button>
           <button class="btn btn-g btn-sm" onclick="collapseAllGroups()">Collapse All</button>
           <button class="btn btn-danger btn-sm" onclick="clearAllAccounts()">Clear All</button>
-          <button class="btn btn-g" onclick="openCreateAccount('group')">+ Account Type</button>
+          <button class="btn btn-g" onclick="openCreateAccount('group')">+ Group</button>
           <button class="btn btn-p" onclick="openCreateAccount('ledger')">+ Sub Ledger</button>
         </div>
       </div>
       <div class="coa-legend">
-        <span class="coa-badge coa-l1">L1 Account Type</span>
-        <span class="coa-badge coa-l2">L2 Group</span>
-        <span class="coa-badge coa-l3">L3 Ledger</span>
-        <span class="coa-badge coa-l4">L4 Sub Ledger</span>
+        <span class="coa-badge coa-l2">L1 Group</span>
+        <span class="coa-badge coa-l3">L2 Ledger</span>
+        <span class="coa-badge coa-l4">L3 Sub Ledger</span>
       </div>
       <div id="coa-tree" class="coa-tree">
         <div id="account-tbody">
-          <div class="coa-empty">No accounts yet. Create an Account Type to start.</div>
+          <div class="coa-empty">No accounts yet. Create a Group to start.</div>
         </div>
       </div>
     </div>
@@ -6326,7 +6325,7 @@ period_locks ─&lt; audit_logs
       <div class="fg">
         <label class="fl">Parent <span style="color:var(--text3);font-weight:400">(blank = Primary Group)</span></label>
         <select class="fi" id="acc-parent">
-          <option value="">— None (Account Type, Level 1) —</option>
+          <option value="">— None (Group, Level 1) —</option>
         </select>
       </div>
       <div class="fg" id="acc-normal-balance-wrap"><label class="fl">Normal Balance</label>
@@ -6566,6 +6565,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260627z" defer></script>
+<script src="src/app.js?v=20260628a" defer></script>
 </body>
 </html>
