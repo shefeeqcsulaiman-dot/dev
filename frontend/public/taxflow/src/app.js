@@ -14827,6 +14827,58 @@ function addNamedOtRule(){
   _syncOtPolicySelects();
   toast(`OT rule "${name.trim()}" added`,'ok');
 }
+// -- LEAVE POLICY --------------------------------------------------
+function saveLeavePolicies(){
+  const types=[...document.querySelectorAll('#leave-types-tbody tr[data-leave-type]')].map(tr=>{
+    const cells=[...tr.querySelectorAll('input,select')];
+    return{
+      type:tr.dataset.leaveType,
+      days:cells[0]?.value||'',
+      paid:cells[1]?.value||'Yes',
+      basis:cells[2]?.value||'Calendar',
+      carry_forward:cells[3]?.value||'No',
+      max_carry:cells[4]?.value||'0',
+      encash:cells[5]?.value||'No',
+    };
+  });
+  const policies=[...document.querySelectorAll('#leave-policies-tbody tr')].map(tr=>{
+    const cells=[...tr.querySelectorAll('input,select')];
+    const name=tr.querySelector('strong')?.textContent?.trim()||'';
+    return{
+      name,
+      days:cells[0]?.value||'',
+      basis:cells[1]?.value||'Calendar',
+      encash:cells[2]?.value||'No',
+      carry_forward:cells[3]?.value||'No',
+    };
+  });
+  const yearStart=document.getElementById('leave-year-start')?.value||'January';
+  const accrual=document.getElementById('leave-accrual')?.value||'Monthly (1/12 per month)';
+  const carryDeadline=document.getElementById('leave-carry-deadline')?.value||'End of March';
+  const encashTiming=document.getElementById('leave-encash-timing')?.value||'On resignation / gratuity';
+  const data={leave_types:types,leave_policies:policies,year_start:yearStart,accrual,carry_deadline:carryDeadline,encash_timing:encashTiming};
+  saveServer('hrLeavePolicy',{id:'leave-policy',...data});
+  toast('Leave policy saved','ok');
+}
+
+function addLeavePolicy(){
+  const name=prompt('Policy Name (e.g. "Part-Time Pro-Rata"):');
+  if(!name?.trim())return;
+  const tbody=document.getElementById('leave-policies-tbody');
+  if(!tbody)return;
+  const tr=document.createElement('tr');
+  tr.innerHTML=`
+    <td><strong>${escapeHtml(name.trim())}</strong></td>
+    <td><input class="fi mono" style="width:80px;padding:3px 6px" value="21"></td>
+    <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
+    <td><span style="font-size:12px">All Staff</span></td>
+    <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+    <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+    <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>`;
+  tbody.appendChild(tr);
+  toast(`Policy "${name.trim()}" added`,'ok');
+}
+
 function addHrJobGrade(){
   const name=prompt('New Job Grade (e.g. Grade E — Intern):');
   if(!name?.trim())return;

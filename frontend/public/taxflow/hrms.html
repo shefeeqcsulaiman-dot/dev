@@ -1196,6 +1196,225 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       </table>
     </div>
 
+    <!-- Leave Policy -->
+    <div class="card mb16">
+      <div class="card-hd">
+        <div><div class="card-title">Leave Policy</div><div class="card-sub">Define leave types, entitlements, and named policies for employee assignment</div></div>
+        <button class="btn btn-p btn-sm" onclick="saveLeavePolicies()">Save Leave Policy</button>
+      </div>
+
+      <!-- Leave Types Table -->
+      <div class="section-hd" style="margin:0 0 10px">Leave Types &amp; Entitlements</div>
+      <div style="overflow-x:auto">
+        <table class="tbl" id="leave-types-tbl">
+          <thead>
+            <tr>
+              <th>Leave Type</th>
+              <th style="width:90px">Days/Year</th>
+              <th style="width:70px">Paid</th>
+              <th style="width:90px">Basis</th>
+              <th style="width:90px">Carry Fwd</th>
+              <th style="width:90px">Max Carry</th>
+              <th style="width:80px">Encash</th>
+              <th style="width:70px">Status</th>
+              <th style="width:40px"></th>
+            </tr>
+          </thead>
+          <tbody id="leave-types-tbody">
+            <tr data-leave-type="Annual Leave">
+              <td><strong>Annual Leave</strong></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="30"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="15" placeholder="days"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td></td>
+            </tr>
+            <tr data-leave-type="Sick Leave">
+              <td><strong>Sick Leave</strong></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="90"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="0" placeholder="days"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td></td>
+            </tr>
+            <tr data-leave-type="Emergency Leave">
+              <td><strong>Emergency Leave</strong></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="5"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="0" placeholder="days"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td></td>
+            </tr>
+            <tr data-leave-type="Maternity Leave">
+              <td><strong>Maternity Leave</strong></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="60"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="0" placeholder="days"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td></td>
+            </tr>
+            <tr data-leave-type="Paternity Leave">
+              <td><strong>Paternity Leave</strong></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="5"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="0" placeholder="days"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td></td>
+            </tr>
+            <tr data-leave-type="Hajj / Pilgrimage">
+              <td><strong>Hajj / Pilgrimage</strong></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="30"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="0" placeholder="days"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td></td>
+            </tr>
+            <tr data-leave-type="Unpaid Leave">
+              <td><strong>Unpaid Leave</strong></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="—" placeholder="Unlimited"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="0" placeholder="days"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td></td>
+            </tr>
+            <tr data-leave-type="Study Leave">
+              <td><strong>Study Leave</strong></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="10"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="0" placeholder="days"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td></td>
+            </tr>
+            <tr data-leave-type="Compassionate Leave">
+              <td><strong>Compassionate Leave</strong></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="3"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="0" placeholder="days"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td></td>
+            </tr>
+            <tr data-leave-type="Compensatory Leave">
+              <td><strong>Compensatory Leave</strong></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="—" placeholder="As earned"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><input class="fi mono" style="width:70px;padding:3px 6px" value="30" placeholder="days"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Named Leave Policies -->
+      <div class="section-hd" style="margin:18px 0 10px">Named Leave Policies</div>
+      <div class="card-sub" style="margin-bottom:12px">Assign a named policy to each employee from their profile. Each policy can override the default leave type entitlements.</div>
+      <div style="overflow-x:auto">
+        <table class="tbl" id="leave-policies-tbl">
+          <thead>
+            <tr>
+              <th>Policy Name</th>
+              <th style="width:100px">Annual Days</th>
+              <th style="width:80px">Basis</th>
+              <th style="width:100px">Applies To</th>
+              <th style="width:60px">Encash</th>
+              <th style="width:60px">Carry Fwd</th>
+              <th style="width:40px"></th>
+            </tr>
+          </thead>
+          <tbody id="leave-policies-tbody">
+            <tr>
+              <td><strong>UAE Policy — 30 Calendar Days</strong><div class="card-sub" style="font-size:10px">UAE Labour Law Article 29 — standard entitlement</div></td>
+              <td><input class="fi mono" style="width:80px;padding:3px 6px" value="30"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
+              <td><span style="font-size:12px">All Staff</span></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
+            </tr>
+            <tr>
+              <td><strong>UAE Standard — 21 Calendar Days</strong><div class="card-sub" style="font-size:10px">After 6 months and before 1 year of service</div></td>
+              <td><input class="fi mono" style="width:80px;padding:3px 6px" value="21"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
+              <td><span style="font-size:12px">Probation / &lt;1 yr</span></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
+            </tr>
+            <tr>
+              <td><strong>Internal — 22 Working Days</strong><div class="card-sub" style="font-size:10px">Internal company policy, working days only</div></td>
+              <td><input class="fi mono" style="width:80px;padding:3px 6px" value="22"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Calendar</option><option selected>Working</option></select></td>
+              <td><span style="font-size:12px">Operations</span></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
+            </tr>
+            <tr>
+              <td><strong>Executive — 30 Working Days</strong><div class="card-sub" style="font-size:10px">Senior management and executive tier</div></td>
+              <td><input class="fi mono" style="width:80px;padding:3px 6px" value="30"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Calendar</option><option selected>Working</option></select></td>
+              <td><span style="font-size:12px">Management</span></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
+            </tr>
+            <tr>
+              <td><strong>Contractor — 14 Calendar Days</strong><div class="card-sub" style="font-size:10px">Short-term and contract employees</div></td>
+              <td><input class="fi mono" style="width:80px;padding:3px 6px" value="14"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
+              <td><span style="font-size:12px">Contractors</span></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-g btn-sm" onclick="addLeavePolicy()">+ Add Policy</button>
+        <div class="card-sub" style="align-self:center">Policies appear in the Leave Policy dropdown when adding employees</div>
+      </div>
+
+      <!-- Leave Year Settings -->
+      <div class="section-hd" style="margin:18px 0 10px">Leave Year &amp; Accrual Settings</div>
+      <div class="fr4">
+        <div class="fg"><label class="fl">Leave Year Start</label><select class="fi" id="leave-year-start"><option selected>January</option><option>April</option><option>July</option><option>October</option><option>Joining Date (rolling)</option></select></div>
+        <div class="fg"><label class="fl">Accrual Method</label><select class="fi" id="leave-accrual"><option selected>Monthly (1/12 per month)</option><option>Upfront (full year on start)</option><option>Quarterly</option></select></div>
+        <div class="fg"><label class="fl">Carry-Forward Deadline</label><select class="fi" id="leave-carry-deadline"><option selected>End of March</option><option>End of January</option><option>End of Leave Year</option><option>No deadline</option></select></div>
+        <div class="fg"><label class="fl">Encashment Timing</label><select class="fi" id="leave-encash-timing"><option selected>On resignation / gratuity</option><option>Annual (year-end)</option><option>On request</option></select></div>
+      </div>
+    </div>
+
     <!-- HR General Rules + Holiday Calendar -->
     <div class="g2 mb16">
       <div class="card">
@@ -2137,7 +2356,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260628d" defer></script>
+<script src="src/app.js?v=20260628e" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded',function(){
   setTimeout(function(){
@@ -2155,7 +2374,7 @@ document.addEventListener('DOMContentLoaded',function(){
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260628d" defer></script>
+<script src="src/app.js?v=20260628e" defer></script>
 <!-- HRMS AI ASSISTANT PAGE -->
 <div class="page" id="page-hrms-ai">
   <div style="max-width:1100px;margin:0 auto;padding:0 4px">
