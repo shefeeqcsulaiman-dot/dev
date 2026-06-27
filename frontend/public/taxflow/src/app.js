@@ -10208,7 +10208,6 @@ function purchaseAiRowHtml(inv,line,index,validation,filename){
           <div class="ai-card-kicker mono">${escapeHtml(inv.invoice_no||'Missing invoice no')}${inv.date?` · <span style="font-weight:400;color:var(--fg-3)">${escapeHtml(inv.date)}</span>`:''}</div>
         </div>
       </div>
-      <span class="ai-status-pill ${status.cls} purchase-ai-validation" title="Confidence ${purchaseAiNumber(inv.confidence).toFixed(0)}%">${escapeHtml(status.label)}</span>
     </div>
     <div class="ai-invoice-divider"></div>
     <div class="ai-invoice-fields" style="cursor:pointer" onclick="openPurchaseAiEdit(this)" title="Click to edit">
@@ -10226,6 +10225,7 @@ function purchaseAiRowHtml(inv,line,index,validation,filename){
     <div class="ai-card-foot">
       ${issueText?`<span class="purchase-ai-details">${escapeHtml(issueText)}</span>`:''}
       <div class="ai-card-foot-meta">
+        <span class="ai-status-pill ${status.cls} purchase-ai-validation" title="Confidence ${purchaseAiNumber(inv.confidence).toFixed(0)}%">${escapeHtml(status.label)}</span>
         ${itemCount>0?`<span class="ai-item-count-badge">${itemCount} item${itemCount!==1?'s':''}</span>`:''}
       </div>
       ${purchaseAiUploadActionsHtml()}
