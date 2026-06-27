@@ -10005,15 +10005,16 @@ async function exportPurchaseAiToExcel(){
         });
       });
     });
-    // Final guard — ensure every cell is a primitive SheetJS can write
-    const toCell=v=>{
+    // Build aoa (array-of-arrays) with explicit primitive typing — more reliable than json_to_sheet
+    const safe=v=>{
       if(v===null||v===undefined)return'';
       if(typeof v==='object')return JSON.stringify(v);
-      if(typeof v==='number'&&!isFinite(v))return'';
-      return v;
+      if(typeof v==='number')return isFinite(v)?v:'';
+      return String(v);
     };
-    data.forEach(r=>Object.keys(r).forEach(k=>{r[k]=toCell(r[k]);}));
-    const ws=window.XLSX.utils.json_to_sheet(data);
+    const headers=data.length?Object.keys(data[0]):[];
+    const aoa=[headers,...data.map(r=>headers.map(h=>safe(r[h])))];
+    const ws=window.XLSX.utils.aoa_to_sheet(aoa);
     const wb=window.XLSX.utils.book_new();
     window.XLSX.utils.book_append_sheet(wb,'Purchase AI Upload',ws);
     const today=new Date().toISOString().slice(0,10);
@@ -17983,27 +17984,28 @@ async function downloadExcelBackup(){
     sheetMap.forEach(([sheetName,keys])=>{
       const rows=keys.flatMap(k=>Array.isArray(data[k])?data[k]:[]);
       if(!rows.length)return;
-      // Flatten nested objects one level deep; sanitize all values to primitives for SheetJS
-      const toCell=v=>{
+      // Flatten and sanitize — use aoa_to_sheet for reliable primitive handling
+      const safe=v=>{
         if(v===null||v===undefined)return'';
-        if(typeof v==='object'||Array.isArray(v))return JSON.stringify(v);
-        return v;
+        if(typeof v==='object')return JSON.stringify(v);
+        if(typeof v==='number')return isFinite(v)?v:'';
+        return String(v);
       };
       const flat=rows.map(row=>{
         const out={};
         Object.entries(row).forEach(([k,v])=>{
           if(v!==null&&v!==undefined&&typeof v==='object'&&!Array.isArray(v)){
-            Object.entries(v).forEach(([ik,iv])=>out[`${k}.${ik}`]=toCell(iv));
+            Object.entries(v).forEach(([ik,iv])=>out[`${k}.${ik}`]=safe(iv));
           }else{
-            out[k]=toCell(v);
+            out[k]=safe(v);
           }
         });
         return out;
       });
-      const ws=XLSX.utils.json_to_sheet(flat);
-      // Auto column widths
-      const cols=Object.keys(flat[0]||{});
-      ws['!cols']=cols.map(c=>({wch:Math.min(40,Math.max(10,c.length+2))}));
+      const flatHeaders=flat.length?Object.keys(flat[0]):[];
+      const aoa=[flatHeaders,...flat.map(r=>flatHeaders.map(h=>safe(r[h])))];
+      const ws=XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols']=flatHeaders.map(c=>({wch:Math.min(40,Math.max(10,c.length+2))}));
       XLSX.utils.book_append_sheet(wb,ws,sheetName.slice(0,31));
     });
 
