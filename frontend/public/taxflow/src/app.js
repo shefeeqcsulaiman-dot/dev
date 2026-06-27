@@ -10035,10 +10035,9 @@ function exportPurchaseAiToCsv(){
     const s=String(v===null||v===undefined?'':v);
     return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s;
   };
-  const headers=['Filename','Invoice Date','Invoice Number','Supplier','Supplier TRN','Bill To','Location',
-    'Subtotal (excl VAT)','Total Discount','VAT Amount','Total Payable',
-    'Line #','Item Description','SKU','Unit','Qty','Unit Price','Disc %','Disc Amount','Line Total',
-    'Pay Term','Payment Method','Notes','Status','Confidence %'];
+  const headers=['Filename','Invoice Date','Invoice Number','Supplier','TRN / VAT #','Bill To',
+    'Subtotal (excl. VAT)','Total Discount','VAT Amount','Total Payable',
+    'Item Description','Qty','Unit Price','Discount %','Discount Amount','Line Total','Status'];
   const rows=[headers.map(csvCell).join(',')];
   cardRows.forEach(cardRow=>{
     let inv={};
@@ -10052,7 +10051,7 @@ function exportPurchaseAiToCsv(){
     const vat=purchaseAiNumber(inv.vat_amount);
     const total=purchaseAiNumber(inv.total)||(net+vat+purchaseAiNumber(inv.shipping));
     const lines=Array.isArray(inv.lines)&&inv.lines.length?inv.lines:[{}];
-    lines.forEach((line,li)=>{
+    lines.forEach((line)=>{
       const qty=purchaseAiNumber(line.quantity??line.qty);
       const unitPrice=purchaseAiNumber(line.unit_cost||line.unit_cost_before_tax||line.unit_price||line.cost||line.price);
       const discPct=purchaseAiNumber(line.discount_percent||line.discount_pct);
@@ -10062,28 +10061,20 @@ function exportPurchaseAiToCsv(){
         filename,
         inv.date||'',
         inv.invoice_no||'',
-        inv.supplier||'',
-        inv.supplier_trn||'',
-        inv.bill_to||'',
-        inv.location||'',
+        inv.supplier||inv.vendor||'',
+        inv.supplier_trn||inv.trn||inv.vendor_trn||'',
+        inv.bill_to||inv.buyer||'',
         fmt(net),
         disc?fmt(disc):'',
         fmt(vat),
         fmt(total),
-        li+1,
         purchaseAiProductName(line),
-        line.sku||line.code||'',
-        line.unit||line.unit_of_measure||line.uom||'',
         qty||'',
         unitPrice?fmt(unitPrice):'',
         discPct?fmt(discPct):'',
         discAmt?fmt(discAmt):'',
         lineTotal?fmt(lineTotal):'',
-        inv.pay_term||'',
-        inv.payment_method||'',
-        inv.notes||'',
         statusLabel,
-        purchaseAiNumber(inv.confidence)||'',
       ].map(csvCell).join(','));
     });
   });
