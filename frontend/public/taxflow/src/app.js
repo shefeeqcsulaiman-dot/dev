@@ -10204,8 +10204,8 @@ function purchaseAiRowHtml(inv,line,index,validation,filename){
         <input type="checkbox" class="purchase-ai-select" ${validation.valid?'checked':''} aria-label="Select ${escapeHtml(inv.invoice_no)} line ${index+1}">
         <div class="ai-pdf-icon"><span>${fileTypeLabel}</span></div>
         <div>
-          <div class="ai-card-title mono">${escapeHtml(inv.invoice_no||'Missing invoice no')}</div>
-          <div class="ai-card-kicker">${escapeHtml(inv.supplier||'Supplier missing')}${inv.date?` · <span style="font-weight:400;color:var(--fg-3)">${escapeHtml(inv.date)}</span>`:''}</div>
+          <div class="ai-card-title">${escapeHtml(inv.supplier||'Supplier missing')}</div>
+          <div class="ai-card-kicker mono">${escapeHtml(inv.invoice_no||'Missing invoice no')}${inv.date?` · <span style="font-weight:400;color:var(--fg-3)">${escapeHtml(inv.date)}</span>`:''}</div>
         </div>
       </div>
       <span class="ai-status-pill ${status.cls} purchase-ai-validation" title="Confidence ${purchaseAiNumber(inv.confidence).toFixed(0)}%">${escapeHtml(status.label)}</span>
@@ -10214,10 +10214,8 @@ function purchaseAiRowHtml(inv,line,index,validation,filename){
     <div class="ai-invoice-fields" style="cursor:pointer" onclick="openPurchaseAiEdit(this)" title="Click to edit">
       ${(()=>{const srcEntry=inv._source_entry_id?uploadedFiles.find(f=>f.id===inv._source_entry_id):null;const imgSrc=srcEntry?.base64||inv.source_image||'';return isImage&&imgSrc?`<div style="grid-column:1/-1;text-align:center;margin-bottom:4px"><img src="${imgSrc}" alt="Invoice" style="max-width:100%;max-height:140px;border-radius:6px;border:1px solid var(--border);object-fit:contain"></div>`:'';})()}
       ${productSummary?`<div><span>Product</span><strong style="font-size:11px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(productSummary)}</strong></div>`:''}
-      <div><span>Location</span><strong>${escapeHtml(inv.location||'Dubai HQ')}</strong></div>
       ${itemCount>0?`<div><span>Items</span><strong class="mono">${itemCount}</strong></div>`:''}
       ${trnVal?`<div><span>TRN / VAT #</span><strong class="mono" style="${trnInvalid?'color:var(--red)':''}" title="${trnInvalid?'Invalid TRN — must be 15 digits':''}">${escapeHtml(trnVal)}${trnInvalid?' ⚠':''}</strong></div>`:''}
-      ${filename?`<div style="grid-column:1/-1"><span>File</span><strong style="font-size:10px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(filename)}</strong></div>`:''}
     </div>
     <div class="ai-fin-strip">
       <div class="ai-fin-cell"><span>Net</span><strong>${cur} ${fmt(net)}</strong></div>
