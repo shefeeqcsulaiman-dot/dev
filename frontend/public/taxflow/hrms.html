@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260626f">
+<link rel="stylesheet" href="src/styles.css?v=20260627q">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -2123,7 +2123,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260626c" defer></script>
+<script src="src/app.js?v=20260627q" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded',function(){
   setTimeout(function(){
@@ -2141,7 +2141,7 @@ document.addEventListener('DOMContentLoaded',function(){
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260626c" defer></script>
+<script src="src/app.js?v=20260627q" defer></script>
 <!-- HRMS AI ASSISTANT PAGE -->
 <div class="page" id="page-hrms-ai">
   <div style="max-width:1100px;margin:0 auto;padding:0 4px">
@@ -2357,14 +2357,8 @@ document.addEventListener('DOMContentLoaded',function(){
           if(totalAlerts>0){notifBadge.textContent=totalAlerts;notifBadge.style.display='flex';}
           else{notifBadge.style.display='none';}
         }
-        // Expiry into compliance rows
-        var expiryVal=document.getElementById('hrms-dash-expiry');
-        var exVal=expiryVal?expiryVal.textContent:'0';
-        ['hrms-compl-passport','hrms-compl-visa','hrms-compl-eid','hrms-compl-ins'].forEach(function(id){
-          var el=document.getElementById(id);
-          if(el)el.textContent='0';
-        });
-        if(document.getElementById('hrms-dash-expiry'))document.getElementById('hrms-dash-expiry').textContent=exVal;
+        // Populate compliance alert counters from real employee expiry data
+        if(typeof refreshExpiryAlerts==='function')refreshExpiryAlerts();
       },2200);
     }
   },300);

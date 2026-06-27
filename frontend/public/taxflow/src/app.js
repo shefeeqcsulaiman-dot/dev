@@ -14740,14 +14740,27 @@ function refreshExpiryAlerts(){
     add('Insurance',emp.insurance_expiry||emp.insuranceExpiry);
   });
   let cnt30=0,cnt90=0,cntValid=0,cntMissing=0;
+  const typeCnt30={passport:0,visa:0,eid:0,insurance:0,contract:0};
   docs.forEach(d=>{
     if(d.days===null){cntMissing++;return;}
-    if(d.days<=30)cnt30++;
-    else if(d.days<=90)cnt90++;
+    if(d.days<=30){
+      cnt30++;
+      if(d.label==='Passport')typeCnt30.passport++;
+      else if(d.label==='Visa / Work Permit')typeCnt30.visa++;
+      else if(d.label==='Emirates ID')typeCnt30.eid++;
+      else if(d.label==='Insurance')typeCnt30.insurance++;
+      else if(d.label==='Contract')typeCnt30.contract++;
+    } else if(d.days<=90)cnt90++;
     else cntValid++;
   });
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
   set('expiry-30',cnt30);set('expiry-90',cnt90);set('expiry-valid',cntValid);set('expiry-missing',cntMissing);
+  // Update dashboard compliance alert counters
+  set('hrms-compl-passport',typeCnt30.passport);
+  set('hrms-compl-visa',typeCnt30.visa);
+  set('hrms-compl-eid',typeCnt30.eid);
+  set('hrms-compl-ins',typeCnt30.insurance);
+  set('hrms-dash-expiry',typeCnt30.contract||cnt30);
   const badge=document.getElementById('hrms-badge-expiry');
   if(badge)badge.textContent=(cnt30+cnt90)+' alerts';
   const toShow=docs.filter(d=>d.days!==null&&d.days<=90).sort((a,b)=>a.days-b.days);
