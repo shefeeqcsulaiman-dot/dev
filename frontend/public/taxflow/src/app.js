@@ -11592,6 +11592,7 @@ function renderPurchaseAiFlatTable(){
     const vat=purchaseAiNumber(inv.vat_amount);
     const total=purchaseAiNumber(inv.total)||(net+vat+purchaseAiNumber(inv.shipping));
     const lines=Array.isArray(inv.lines)&&inv.lines.length?inv.lines:[{}];
+    const trnBad=inv.supplier_trn&&String(inv.supplier_trn).replace(/\D/g,'').length!==15;
     lines.forEach((line,li)=>{
       const isFirst=li===0;
       const qty=purchaseAiNumber(line.quantity??line.qty);
@@ -11599,23 +11600,24 @@ function renderPurchaseAiFlatTable(){
       const discPct=purchaseAiNumber(line.discount_percent||line.discount_pct);
       const discAmt=purchaseAiNumber(line.discount_amount)||(unitPrice*qty*(discPct/100));
       const lineTotal=purchaseAiNumber(line.line_total||line.amount||line.net_amount)||(qty*unitPrice-discAmt);
-      const desc=escapeHtml(purchaseAiProductName(line)||inv.invoice_no||'—');
-      const skuTag=line.sku||line.code?` <span style="color:var(--text3);font-size:10px">${escapeHtml(line.sku||line.code||'')}</span>`:'';
-      const unitStr=line.unit||line.unit_of_measure||line.uom?` <span style="color:var(--text3);font-size:10px">${escapeHtml(line.unit||line.unit_of_measure||line.uom||'')}</span>`:'';
+      const desc=escapeHtml(purchaseAiProductName(line)||'—');
+      const sku=escapeHtml(line.sku||line.code||'');
+      const unit=escapeHtml(line.unit||line.unit_of_measure||line.uom||'');
+      const lineNo=li+1;
       rows.push(`<tr class="ext-flat-row${isFirst?' ext-flat-first':' ext-flat-sub'}" data-invoice-no="${invoiceNo}">
-        <td style="text-align:center">${isFirst?`<input type="checkbox" class="purchase-ai-tbl-select" data-invoice-no="${invoiceNo}" ${cardRow.querySelector('.purchase-ai-select')?.checked?'checked':''}>`:'&nbsp;'}</td>
-        <td style="font-size:11px;color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(filename)}">${isFirst?escapeHtml(filename):''}</td>
-        <td style="white-space:nowrap">${isFirst?escapeHtml(inv.date||'—'):''}</td>
-        <td class="mono">${isFirst?escapeHtml(inv.invoice_no||'—'):''}</td>
-        <td>${isFirst?escapeHtml(inv.supplier||'—'):''}</td>
-        <td class="mono" style="${inv.supplier_trn&&String(inv.supplier_trn).replace(/\D/g,'').length!==15?'color:var(--red)':''}">${isFirst?escapeHtml(inv.supplier_trn||'—'):''}</td>
-        <td>${isFirst?escapeHtml(inv.bill_to||inv.location||'—'):''}</td>
-        <td class="mono" style="text-align:right">${isFirst?`${cur} ${fmt(net)}`:''}</td>
-        <td class="mono" style="text-align:right">${isFirst&&disc?`${cur} ${fmt(disc)}`:''}</td>
-        <td class="mono" style="text-align:right">${isFirst?`${cur} ${fmt(vat)}`:''}</td>
-        <td class="mono" style="text-align:right;font-weight:700;color:var(--accent)">${isFirst?`${cur} ${fmt(total)}`:''}</td>
-        <td style="max-width:220px">${desc}${skuTag}</td>
-        <td class="mono" style="text-align:right">${qty?`${fmt(qty)}${unitStr}`:'—'}</td>
+        <td style="text-align:center">${isFirst?`<input type="checkbox" class="purchase-ai-tbl-select" data-invoice-no="${invoiceNo}" ${cardRow.querySelector('.purchase-ai-select')?.checked?'checked':''}>`:`<span style="font-size:10px;color:var(--text3)">${lineNo}</span>`}</td>
+        <td style="font-size:11px;color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(filename)}">${escapeHtml(filename)}</td>
+        <td style="white-space:nowrap">${escapeHtml(inv.date||'—')}</td>
+        <td class="mono">${escapeHtml(inv.invoice_no||'—')}</td>
+        <td>${escapeHtml(inv.supplier||'—')}</td>
+        <td class="mono" style="${trnBad?'color:var(--red)':''}">${escapeHtml(inv.supplier_trn||'—')}</td>
+        <td>${escapeHtml(inv.bill_to||inv.location||'—')}</td>
+        <td class="mono" style="text-align:right">${cur} ${fmt(net)}</td>
+        <td class="mono" style="text-align:right">${disc?`${cur} ${fmt(disc)}`:''}</td>
+        <td class="mono" style="text-align:right">${cur} ${fmt(vat)}</td>
+        <td class="mono" style="text-align:right;font-weight:700;color:var(--accent)">${cur} ${fmt(total)}</td>
+        <td style="max-width:220px">${desc}${sku?` <span class="mono" style="color:var(--text3);font-size:10px">${sku}</span>`:''}</td>
+        <td class="mono" style="text-align:right">${qty?fmt(qty):'—'}${unit?` <span style="color:var(--text3);font-size:10px">${unit}</span>`:''}</td>
         <td class="mono" style="text-align:right">${unitPrice?`${cur} ${fmt(unitPrice)}`:'—'}</td>
         <td class="mono" style="text-align:right">${discPct?`${fmt(discPct)}%`:''}</td>
         <td class="mono" style="text-align:right">${discAmt?`${cur} ${fmt(discAmt)}`:''}</td>

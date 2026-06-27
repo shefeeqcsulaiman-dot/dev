@@ -1382,7 +1382,8 @@ input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;}
 .pvt-btn:last-child{border-radius:0 6px 6px 0;}
 .pvt-btn.on{background:var(--accent);color:#fff;border-color:var(--accent);}
 .pvt-btn:hover:not(.on){background:var(--hover);}
-.ext-flat-row.ext-flat-sub td{background:var(--surface-2,var(--surface));border-top:none;}
+.ext-flat-row.ext-flat-sub td{background:var(--surface-2,var(--surface));border-top:none;opacity:.88;}
+.ext-flat-row.ext-flat-sub td:nth-child(-n+11){opacity:.6;}
 .ext-flat-first td{border-top:1px solid var(--border);}
 .btn-xs{padding:2px 8px;font-size:11px;}
 
