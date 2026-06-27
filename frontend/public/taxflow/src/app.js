@@ -1970,6 +1970,7 @@ function applyCompanyToUi(company){
   if(company.name)localStorage.setItem('taxflow_company_name',company.name);
   _applyLogoEverywhere();
   updateInvoiceLayoutPreview?.();
+  renderBusinessLocationRows();
 }
 
 async function syncCompanyFromDatabase(){
@@ -11072,7 +11073,7 @@ function ensurePurchaseAiEditModal(){
             <label>Supplier TRN<input class="fi mono" id="pai-supplier-trn" placeholder="15-digit TRN"></label>
             <label>Status<select class="fi" id="pai-status"><option>Valid</option><option>Review</option><option>Error</option></select></label>
             <label>Date<input class="fi" id="pai-date" placeholder="YYYY-MM-DD"></label>
-            <label>Location<input class="fi" id="pai-location" placeholder="e.g. Dubai HQ"></label>
+            <label>Location<input class="fi" id="pai-location" placeholder="e.g. Dubai HQ" list="pai-location-list"><datalist id="pai-location-list"></datalist></label>
           </div>
         </div>
         <div class="purchase-party-grid">
@@ -11164,6 +11165,12 @@ async function openPurchaseAiEdit(btn){
     try{const accs=await moduleApi('/accounts');if(Array.isArray(accs))_coaFlatAccounts=accs;}catch{}
   }
   ensurePurchaseAiEditModal();
+  // Populate location datalist from saved business locations
+  const locDl=document.getElementById('pai-location-list');
+  if(locDl){
+    const locs=getBusinessLocationNames();
+    locDl.innerHTML=locs.map(n=>`<option value="${escapeHtml(n)}">`).join('');
+  }
   document.getElementById('pai-invoice').value=inv.invoice_no||'';
   document.getElementById('pai-date').value=inv.date||'';
   document.getElementById('pai-supplier').value=inv.supplier||'';
@@ -17862,6 +17869,62 @@ function savePayment(){
   audit('Recorded payment',ref,'Posted');
 }
 
+// -- BUSINESS LOCATIONS ------------------------------------------
+const BIZ_LOC_KEY='taxflow_biz_locations';
+
+function getBusinessLocations(){
+  try{return JSON.parse(localStorage.getItem(BIZ_LOC_KEY)||'[]');}catch{return[];}
+}
+
+function renderBusinessLocationRows(){
+  const tbody=document.getElementById('biz-loc-tbody');
+  if(!tbody)return;
+  const locs=getBusinessLocations();
+  if(!locs.length){
+    tbody.innerHTML='<tr id="biz-loc-empty"><td colspan="3" style="color:var(--text3);text-align:center;padding:16px">No locations added yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML=locs.map((loc,i)=>`
+    <tr>
+      <td style="font-weight:600">${escapeHtml(loc.name)}</td>
+      <td style="color:var(--text2)">${escapeHtml(loc.address||'')}</td>
+      <td><button class="btn btn-r btn-sm btn-xs" onclick="removeBusinessLocation(${i})">✕</button></td>
+    </tr>`).join('');
+}
+
+function addBusinessLocation(){
+  const nameEl=document.getElementById('biz-loc-name');
+  const addrEl=document.getElementById('biz-loc-address');
+  const name=(nameEl?.value||'').trim();
+  if(!name){toast('Enter a location name','warn');nameEl?.focus();return;}
+  const locs=getBusinessLocations();
+  if(locs.some(l=>l.name.toLowerCase()===name.toLowerCase())){toast('Location already exists','warn');return;}
+  locs.push({name,address:(addrEl?.value||'').trim()});
+  localStorage.setItem(BIZ_LOC_KEY,JSON.stringify(locs));
+  if(nameEl)nameEl.value='';
+  if(addrEl)addrEl.value='';
+  renderBusinessLocationRows();
+  toast('Location added — click Save to keep','info');
+}
+
+function removeBusinessLocation(index){
+  const locs=getBusinessLocations();
+  locs.splice(index,1);
+  localStorage.setItem(BIZ_LOC_KEY,JSON.stringify(locs));
+  renderBusinessLocationRows();
+}
+
+function saveBusinessLocations(){
+  // already persisted in localStorage on add/remove — just confirm
+  const locs=getBusinessLocations();
+  audit('Saved business locations','Settings','Saved');
+  toast(`${locs.length} location${locs.length===1?'':'s'} saved`,'ok');
+}
+
+function getBusinessLocationNames(){
+  return getBusinessLocations().map(l=>l.name);
+}
+
 // -- SETTINGS ----------------------------------------------------
 function saveSettings(message='Settings saved'){
   audit(message,'Settings','Saved');
@@ -18618,6 +18681,7 @@ function initApp(){
   configureSalesFormMode();
   configureManualPurchaseMode();
   syncCompanyFromDatabase();
+  renderBusinessLocationRows();
   loadUsersIntoTable();
   enhancePageTables('page-dashboard');
   syncDashboardFromDatabase().catch(err=>console.warn('Dashboard sync failed during init:',err));
