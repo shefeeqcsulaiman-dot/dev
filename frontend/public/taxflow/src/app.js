@@ -9531,7 +9531,7 @@ function readAndAddFile(file){
     entry.base64=base64;
     entry.uploadedAt=entry.uploadedAt||new Date().toISOString();
     entry.status='Queued';
-    persistPurchaseDocumentRecord(entry);
+    // Do NOT save to DB here — wait for successful upload completion in animateUpload
     animateUpload(file.name,file.size,entry);
   };
   reader.onerror=function(){
