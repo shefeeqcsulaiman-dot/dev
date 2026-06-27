@@ -338,8 +338,10 @@ button{cursor:pointer;border:none;background:none;}
 }
 .ov-box{
   background:var(--sf);border:1px solid var(--bd2);border-radius:20px;padding:26px;
-  width:380px;max-width:calc(100vw - 24px);box-shadow:var(--shadow-lg);
+  width:380px;max-width:calc(100vw - 24px);box-shadow:var(--shadow-lg);position:relative;
 }
+.ov-close{position:absolute;top:16px;right:16px;width:30px;height:30px;border-radius:50%;border:1px solid var(--bd2);background:var(--sf2);color:var(--t2);font-size:15px;cursor:pointer;display:grid;place-items:center;line-height:1;transition:all .14s;padding:0;}
+.ov-close:hover{background:var(--sf3,var(--sf2));color:var(--t1);border-color:var(--bd3,var(--bd));}
 .ov-title{font-size:17px;font-weight:800;margin-bottom:3px;color:var(--t1);}
 .ov-sub{font-size:12px;color:var(--t3);margin-bottom:18px;}
 .ov-total{
@@ -743,6 +745,7 @@ button{cursor:pointer;border:none;background:none;}
 <!-- ── Receipt modal ── -->
 <div class="ov" id="ov-rcpt" style="display:none">
   <div class="ov-box ov-rcpt">
+    <button class="ov-close" onclick="closeRcpt()" title="Close">✕</button>
     <div class="ov-title" style="margin-bottom:12px">Sale Complete ✓</div>
     <div class="rcpt" id="rcpt-body"></div>
     <div class="rcpt-actions">
@@ -1478,6 +1481,10 @@ function shareRcpt(channel){
     `PDF: please attach the PDF printed from TaxFlow.`+linkLine].join('\n');
   if(channel==='whatsapp')window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');
   else window.open('mailto:?subject='+encodeURIComponent('Invoice '+sale.receipt_no)+'&body='+encodeURIComponent(msg),'_blank');
+}
+
+function closeRcpt(){
+  document.getElementById('ov-rcpt').style.display='none';
 }
 
 function newSale(){
