@@ -10990,38 +10990,42 @@ function ensurePurchaseAiEditModal(){
       <div class="purchase-edit-top">
         <div>
           <div class="modal-title">Edit Extracted Purchase</div>
-          <div class="modal-sub" id="pai-edit-sub">Correct the extracted supplier invoice before saving</div>
+          <div class="modal-sub" id="pai-edit-sub">Review and correct the extracted supplier invoice before saving</div>
         </div>
-        <span class="b b-b">Invoice View</span>
       </div>
       <div class="purchase-invoice-sheet">
         <div class="purchase-invoice-head">
           <div>
             <div class="purchase-invoice-kicker">Supplier Invoice</div>
             <input class="purchase-invoice-title mono" id="pai-invoice" placeholder="Invoice No.">
+            <div class="card-sub">AI Extracted · <span class="mono">AED</span></div>
           </div>
           <div class="purchase-invoice-meta">
-            <label>Purchase Date<input class="fi" id="pai-date"></label>
-            <label>Pay Term<select class="fi" id="pai-term"><option value="">Please Select</option><option>Due on receipt</option><option>Net 15</option><option>Net 30</option><option>Net 45</option></select></label>
+            <label>Supplier<input class="fi" id="pai-supplier" placeholder="Supplier name"></label>
+            <label>Supplier TRN<input class="fi mono" id="pai-supplier-trn" placeholder="15-digit TRN"></label>
+            <label>Status<select class="fi" id="pai-status"><option>Valid</option><option>Review</option><option>Error</option></select></label>
+            <label>Date<input class="fi" id="pai-date" placeholder="YYYY-MM-DD"></label>
+            <label>Location<input class="fi" id="pai-location" placeholder="e.g. Dubai HQ"></label>
           </div>
         </div>
         <div class="purchase-party-grid">
           <div class="purchase-party-box">
-            <div class="section-hd">Supplier</div>
-            <input class="fi" id="pai-supplier" placeholder="Supplier name">
-            <textarea class="fi" id="pai-address" rows="3" placeholder="Supplier address"></textarea>
+            <div class="section-hd">Supplier Details</div>
+            <input class="fi mb8" id="pai-address" placeholder="Supplier address">
+            <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px">Bill To</label>
+            <input class="fi" id="pai-bill-to" placeholder="Bill to">
           </div>
           <div class="purchase-party-box">
             <div class="section-hd">Payment</div>
-            <div class="fr3">
-              <input class="fi mono" id="pai-paid" placeholder="Paid amount" oninput="calcPurchaseAiEditInvoice()">
-              <input class="fi" id="pai-paid-on" placeholder="Paid on">
+            <div class="fr2 mb8">
+              <input class="fi" id="pai-term" placeholder="Pay term">
               <select class="fi" id="pai-pay-method"><option>Cash</option><option>Bank Transfer</option><option>Card</option><option>Cheque</option><option>Online</option></select>
             </div>
-            <div class="fr2">
+            <div class="fr2 mb8">
               <input class="fi" id="pai-pay-account" placeholder="Payment account">
-              <input class="fi" id="pai-pay-note" placeholder="Payment note">
+              <input class="fi" id="pai-paid-on" placeholder="Paid on date">
             </div>
+            <input class="fi" id="pai-pay-note" placeholder="Payment reference / note">
           </div>
         </div>
         <div class="purchase-lines-head">
@@ -11030,37 +11034,46 @@ function ensurePurchaseAiEditModal(){
         </div>
         <div class="purchase-edit-table-wrap">
           <table class="tbl purchase-edit-lines">
-            <thead><tr><th>#</th><th>Product</th><th>Category</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th style="display:none">Disc %</th><th>Before Tax</th><th>Line Total</th><th></th></tr></thead>
+            <thead><tr><th>#</th><th>Item Description</th><th>SKU</th><th>Ledger / Category</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th style="display:none">Disc %</th><th>Disc Amt</th><th>VAT</th><th>Line Total</th><th></th></tr></thead>
             <tbody id="pai-lines"></tbody>
           </table>
         </div>
         <div class="purchase-invoice-bottom">
-          <div>
-            <div class="section-hd">Notes & Validation</div>
-            <textarea class="fi" id="pai-notes" rows="4" placeholder="Additional notes"></textarea>
-            <div class="fr3">
-              <input class="fi mono" id="pai-confidence" type="number" min="0" max="100" placeholder="Confidence %">
-              <select class="fi" id="pai-status"><option>Valid</option><option>Review</option><option>Error</option></select>
-              <input class="fi" id="pai-issues" placeholder="Issues">
+          <div class="purchase-party-box">
+            <div class="section-hd">Notes</div>
+            <textarea class="fi" id="pai-notes" rows="3" placeholder="Additional notes"></textarea>
+            <div class="pv-meta-row mt8">
+              <span class="pv-meta-label">Tax Type</span>
+              <select class="fi" id="pai-tax-type" onchange="calcPurchaseAiEditInvoice(true)" style="font-size:12px;max-width:160px"><option>None</option><option>VAT 5%</option><option>Reverse Charge 5%</option><option>Exempt</option></select>
+            </div>
+            <div class="pv-meta-row">
+              <span class="pv-meta-label">Discount</span>
+              <div style="display:flex;gap:6px;align-items:center">
+                <select class="fi" id="pai-discount-type" onchange="calcPurchaseAiEditInvoice()" style="font-size:12px;width:100px"><option>None</option><option>Fixed</option><option>Percentage</option></select>
+                <input class="fi mono" id="pai-discount-value" placeholder="0" oninput="calcPurchaseAiEditInvoice()" style="width:80px">
+              </div>
+            </div>
+            <div class="pv-meta-row">
+              <span class="pv-meta-label">Shipping details</span>
+              <input class="fi" id="pai-shipping-details" placeholder="Details" style="font-size:12px;max-width:160px">
+            </div>
+            <div class="pv-meta-row">
+              <span class="pv-meta-label" style="color:var(--text3)">Confidence %</span>
+              <input class="fi mono" id="pai-confidence" type="number" min="0" max="100" style="font-size:12px;max-width:80px">
+            </div>
+            <div class="pv-meta-row">
+              <span class="pv-meta-label" style="color:var(--red)">Issues</span>
+              <input class="fi" id="pai-issues" placeholder="Validation issues" style="font-size:12px;max-width:160px">
             </div>
           </div>
           <div class="purchase-summary-box">
-            <div class="fr2">
-              <select class="fi" id="pai-discount-type" onchange="calcPurchaseAiEditInvoice()"><option>None</option><option>Fixed</option><option>Percentage</option></select>
-              <input class="fi mono" id="pai-discount-value" placeholder="Discount" oninput="calcPurchaseAiEditInvoice()">
-            </div>
-            <div class="fr2">
-              <select class="fi" id="pai-tax-type" onchange="calcPurchaseAiEditInvoice(true)"><option>None</option><option>VAT 5%</option><option>Reverse Charge 5%</option><option>Exempt</option></select>
-              <input class="fi mono" id="pai-vat" placeholder="Tax amount" oninput="calcPurchaseAiEditInvoice()">
-            </div>
-            <input class="fi" id="pai-shipping-details" placeholder="Shipping details">
-            <input class="fi mono" id="pai-shipping" placeholder="Shipping charges" oninput="calcPurchaseAiEditInvoice()">
-            <div class="tot-row"><span>Net Amount</span><span class="mono" id="pai-net-label">0.00</span></div>
-            <div class="tot-row"><span>Discount (-)</span><span class="mono" id="pai-discount-label">0.00</span></div>
-            <div class="tot-row"><span>Purchase Tax (+)</span><span class="mono" id="pai-tax-label">0.00</span></div>
-            <div class="tot-row"><span>Shipping (+)</span><span class="mono" id="pai-shipping-label">0.00</span></div>
+            <div class="tot-row"><span>Net Amount</span><input class="fi mono" id="pai-net" readonly></div>
+            <div class="tot-row"><span>Discount (-)</span><input class="fi mono" id="pai-discount-label" readonly></div>
+            <div class="tot-row"><span>VAT (+)</span><input class="fi mono" id="pai-vat" placeholder="Tax amount" oninput="calcPurchaseAiEditInvoice()"></div>
+            <div class="tot-row"><span>Shipping (+)</span><input class="fi mono" id="pai-shipping" placeholder="Shipping charges" oninput="calcPurchaseAiEditInvoice()"></div>
             <div class="tot-final"><span>Purchase Total</span><input class="fi mono" id="pai-total" readonly></div>
-            <div class="tot-row"><span>Payment Due</span><input class="fi mono" id="pai-due" readonly></div>
+            <div class="tot-row"><span>Paid</span><input class="fi mono" id="pai-paid" placeholder="0.00" oninput="calcPurchaseAiEditInvoice()"></div>
+            <div class="tot-row"><span>Balance Due</span><input class="fi mono" id="pai-due" readonly></div>
           </div>
         </div>
       </div>
@@ -11087,7 +11100,10 @@ async function openPurchaseAiEdit(btn){
   document.getElementById('pai-invoice').value=inv.invoice_no||'';
   document.getElementById('pai-date').value=inv.date||'';
   document.getElementById('pai-supplier').value=inv.supplier||'';
+  document.getElementById('pai-supplier-trn').value=inv.supplier_trn||'';
   document.getElementById('pai-address').value=inv.address||'';
+  document.getElementById('pai-bill-to').value=inv.bill_to||'';
+  document.getElementById('pai-location').value=inv.location||'Dubai HQ';
   document.getElementById('pai-term').value=inv.pay_term||'';
   const body=document.getElementById('pai-lines');
   if(body)body.innerHTML='';
@@ -11177,16 +11193,24 @@ function addPurchaseAiEditLine(line={}){
   const body=document.getElementById('pai-lines');
   if(!body)return;
   const row=document.createElement('tr');
+  const qty=purchaseAiNumber(line.quantity||line.qty||0);
+  const cost=purchaseAiNumber(line.unit_cost||line.cost||line.unitCost||0);
+  const discPct=purchaseAiNumber(line.discount_percent||line.discountPct||0);
+  const discAmt=purchaseAiNumber(line.discount_amount)||(qty*cost*(discPct/100));
+  const lineVat=purchaseAiNumber(line.vat_amount||0);
+  const lineTotal=purchaseAiNumber(line.line_total||line.amount)||(qty*cost-discAmt);
   row.innerHTML=`
     <td class="mono pai-line-no">1</td>
-    <td><input class="fi pai-product" value="${escapeHtml(purchaseAiProductName(line))}" placeholder="Product name"></td>
+    <td><input class="fi pai-product" value="${escapeHtml(purchaseAiProductName(line))}" placeholder="Item description"></td>
+    <td><input class="fi mono pai-sku" value="${escapeHtml(line.sku||line.code||'')}" placeholder="SKU" style="min-width:70px"></td>
     <td><select class="fi pai-category">${purchaseLedgerCategoryOptions(line.category||'')}</select></td>
-    <td><input class="fi mono pai-qty" value="${escapeHtml(line.quantity||line.qty||0)}" oninput="calcPurchaseAiEditLine(this)"></td>
+    <td><input class="fi mono pai-qty" value="${qty||''}" oninput="calcPurchaseAiEditLine(this)" style="min-width:55px"></td>
     <td><select class="fi pai-unit">${unitOptionsHtml(line.unit||line.unit_of_measure||line.uom||'PCS')}</select></td>
-    <td><input class="fi mono pai-cost" value="${escapeHtml(line.unit_cost||line.cost||line.unitCost||0)}" oninput="calcPurchaseAiEditLine(this)"></td>
-    <td style="display:none"><input class="fi mono pai-line-discount" value="${escapeHtml(line.discount_percent||line.discountPct||0)}" oninput="calcPurchaseAiEditLine(this)"></td>
-    <td><input class="fi mono pai-cost-before-tax" value="${escapeHtml(line.unit_cost_before_tax||line.unit_cost||line.cost||0)}" readonly></td>
-    <td><input class="fi mono pai-line-total" value="${escapeHtml(line.line_total||line.amount||0)}" oninput="calcPurchaseAiEditInvoice()"></td>
+    <td><input class="fi mono pai-cost" value="${cost||''}" oninput="calcPurchaseAiEditLine(this)"></td>
+    <td style="display:none"><input class="fi mono pai-line-discount" value="${discPct||''}" oninput="calcPurchaseAiEditLine(this)"></td>
+    <td><input class="fi mono pai-disc-amt" value="${discAmt>0?discAmt.toFixed(2):''}" readonly style="min-width:70px"></td>
+    <td><input class="fi mono pai-line-vat" value="${lineVat>0?lineVat.toFixed(2):''}" readonly style="min-width:60px"></td>
+    <td><input class="fi mono pai-line-total" value="${lineTotal>0?lineTotal.toFixed(2):''}" oninput="calcPurchaseAiEditInvoice()" style="font-weight:700;color:var(--accent)"></td>
     <td><button class="icon-btn danger" type="button" title="Remove line" onclick="removePurchaseAiEditLine(this)">${deleteIconSvg()}</button></td>`;
   body.appendChild(row);
   calcPurchaseAiEditLine(row);
@@ -11205,11 +11229,12 @@ function calcPurchaseAiEditLine(source){
   const qty=parseAmount(row.querySelector('.pai-qty')?.value);
   const cost=parseAmount(row.querySelector('.pai-cost')?.value);
   const discountPct=parseAmount(row.querySelector('.pai-line-discount')?.value);
-  const beforeTax=cost*(1-(discountPct/100));
-  const beforeTaxField=row.querySelector('.pai-cost-before-tax');
+  const discAmt=qty*cost*(discountPct/100);
+  const lineTotal=qty*cost-discAmt;
+  const discAmtField=row.querySelector('.pai-disc-amt');
   const totalField=row.querySelector('.pai-line-total');
-  if(beforeTaxField)beforeTaxField.value=beforeTax.toFixed(2);
-  if(totalField)totalField.value=(qty*beforeTax).toFixed(2);
+  if(discAmtField)discAmtField.value=discAmt>0?discAmt.toFixed(2):'';
+  if(totalField)totalField.value=lineTotal.toFixed(2);
   calcPurchaseAiEditInvoice();
 }
 
@@ -11232,10 +11257,10 @@ function calcPurchaseAiEditInvoice(forceTaxRecalc=false){
   const shipping=parseAmount(document.getElementById('pai-shipping')?.value);
   const paid=parseAmount(document.getElementById('pai-paid')?.value);
   const gross=taxable+vat+shipping;
-  setText('pai-net-label',lineTotal.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}));
-  setText('pai-discount-label',discount.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}));
-  setText('pai-tax-label',vat.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}));
-  setText('pai-shipping-label',shipping.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}));
+  const netInput=document.getElementById('pai-net');
+  if(netInput)netInput.value=lineTotal.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const discLabelInput=document.getElementById('pai-discount-label');
+  if(discLabelInput)discLabelInput.value=discount.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
   const total=document.getElementById('pai-total');
   if(total)total.value=gross.toFixed(2);
   const due=document.getElementById('pai-due');
@@ -11247,12 +11272,14 @@ function collectPurchaseAiEditLines(){
   return [...document.querySelectorAll('#pai-lines tr')]
     .map(row=>({
       product:row.querySelector('.pai-product')?.value.trim()||'Purchase item',
+      sku:row.querySelector('.pai-sku')?.value.trim()||'',
       category:row.querySelector('.pai-category')?.value.trim()||'',
       unit:row.querySelector('.pai-unit')?.value.trim()||'PCS',
       quantity:parseAmount(row.querySelector('.pai-qty')?.value),
       unit_cost:parseAmount(row.querySelector('.pai-cost')?.value),
       discount_percent:parseAmount(row.querySelector('.pai-line-discount')?.value),
-      unit_cost_before_tax:parseAmount(row.querySelector('.pai-cost-before-tax')?.value),
+      discount_amount:parseAmount(row.querySelector('.pai-disc-amt')?.value),
+      vat_amount:parseAmount(row.querySelector('.pai-line-vat')?.value),
       line_total:parseAmount(row.querySelector('.pai-line-total')?.value),
     }))
     .filter(line=>line.product||line.quantity||line.unit_cost||line.line_total);
@@ -11275,7 +11302,10 @@ function savePurchaseAiEdit(next=false){
     invoice_no:document.getElementById('pai-invoice').value.trim(),
     date:document.getElementById('pai-date').value.trim(),
     supplier:document.getElementById('pai-supplier').value.trim(),
+    supplier_trn:(document.getElementById('pai-supplier-trn')?.value||'').trim(),
     address:document.getElementById('pai-address').value.trim(),
+    bill_to:(document.getElementById('pai-bill-to')?.value||'').trim(),
+    location:(document.getElementById('pai-location')?.value||'').trim()||'Dubai HQ',
     pay_term:document.getElementById('pai-term').value,
     subtotal,
     net_amount:subtotal,

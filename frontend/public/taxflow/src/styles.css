@@ -1376,7 +1376,7 @@ input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;}
 .pmt-pay-btn:hover{background:#0d47a1;}
 .pmt-cancel-btn{background:#fff;border:1.5px solid #cdd5e8;color:#4a6090;padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .13s;font-family:inherit;}
 .pmt-cancel-btn:hover{background:#f0f4ff;border-color:#3b6ef5;color:#1e3a6e;}
-.mt8{margin-top:8px;}
+.mt8{margin-top:8px;}.mb8{margin-bottom:8px;}
 
 /* ══ SUPPLIER PAYMENT CARDS ══ */
 .pay-card-list{display:flex;flex-direction:column;gap:12px;padding:4px 0 8px;}
