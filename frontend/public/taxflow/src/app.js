@@ -8584,9 +8584,9 @@ function renderInvoiceQrCode(value,imgId='public-invoice-qr'){
   img.src=fallback;
 }
 
-function openCurrentPublicInvoice(){
+async function openCurrentPublicInvoice(){
   const inv=currentSalesInvoice||buildDraftInvoice();
-  const url=publicInvoiceUrl(inv);
+  const url=await createShortInvoiceUrl(inv);
   const w=window.open(url,'_blank');
   if(!w){
     const link=document.getElementById('share-link');
@@ -8691,7 +8691,8 @@ function invoicePdfTextLines(inv){
   output.push(`VAT:      AED ${fmt(inv?.vat_amount)}`);
   output.push(`Total:    AED ${fmt(inv?.total)}`);
   output.push('');
-  output.push(`Online view: ${publicInvoiceUrl(inv)}`);
+  const cachedShort=_shortUrlCache.get(inv?.invoice_no||'draft');
+  output.push(`Online view: ${cachedShort||publicInvoiceUrl(inv)}`);
   output.push('');
   output.push(layout.footer||'');
   return output.flatMap(line=>wrapPdfLine(line)).slice(0,54);
@@ -8991,13 +8992,13 @@ function renderSalesInvoicePreview(inv){
           ${layout.showBankDetails?bankRows.map(([label,value])=>`<div class="invoice-meta-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join(''):''}
           <div class="invoice-muted">${escapeHtml(layout.footer)}</div>
           ${layout.qr?`<div class="invoice-qr-row">
-            <a class="invoice-qr" href="${escapeHtml(digitalUrl)}" target="_blank" rel="noopener" title="Open digital invoice">
+            <a class="invoice-qr" href="${escapeHtml(digitalUrl)}" data-digital-link target="_blank" rel="noopener" title="Open digital invoice">
               <img id="public-invoice-qr" alt="QR code for digital invoice">
             </a>
             <div>
               <strong>${escapeHtml(labels.scanQr)} (${escapeHtml(qrType)})</strong>
               <span>${escapeHtml(invoiceBilingualLabel(layout,'Anyone with this QR can open the online invoice format.','يمكن لأي شخص لديه هذا الرمز فتح الفاتورة الرقمية.'))}</span>
-              <a href="${escapeHtml(digitalUrl)}" target="_blank" rel="noopener">${escapeHtml(labels.openDigitalInvoice)}</a>
+              <a href="${escapeHtml(digitalUrl)}" data-digital-link target="_blank" rel="noopener">${escapeHtml(labels.openDigitalInvoice)}</a>
             </div>
           </div>`:''}
         </div>
@@ -9014,6 +9015,11 @@ function renderSalesInvoicePreview(inv){
       </div>`:''}
     </div>`;
   renderInvoiceQrCode(qrValue);
+  // Async: swap long URL to short URL in QR links
+  createShortInvoiceUrl(inv).then(shortUrl=>{
+    document.querySelectorAll('[data-digital-link]').forEach(a=>{a.href=shortUrl;});
+    if(qrType==='invoice_url')renderInvoiceQrCode(shortUrl);
+  });
 }
 
 let currentSalesInvoice=null;
@@ -9299,11 +9305,18 @@ function invoiceShareMessage(inv=currentSalesInvoice,url=null){
   return `Dear ${inv?.customer||'Customer'}, please find ${label} ${inv?.invoice_no||'Draft'} for AED ${total}. Due date: ${inv?.due_date||'-'}.\n\nView document online: ${link}\nPDF document: please attach the PDF opened from TaxFlow.`;
 }
 
+const _shortUrlCache=new Map();
 async function createShortInvoiceUrl(inv){
+  const key=inv?.invoice_no||'draft';
+  if(_shortUrlCache.has(key))return _shortUrlCache.get(key);
   try{
     const payload=publicInvoicePayload(inv);
     const r=await moduleApi('/share/invoice',{method:'POST',body:{payload}});
-    if(r?.code)return `${window.location.origin}/i/${r.code}`;
+    if(r?.code){
+      const url=`${window.location.origin}/i/${r.code}`;
+      _shortUrlCache.set(key,url);
+      return url;
+    }
   }catch{}
   return publicInvoiceUrl(inv);
 }
