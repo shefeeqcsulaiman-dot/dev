@@ -7,25 +7,42 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260626c">
+<link rel="stylesheet" href="src/styles.css?v=20260626f">
 <style>
-/* ── HRMS Portal: Dark Sidebar Override ──────────────────── */
-body.theme-light .sb,body.theme-dark .sb{background:#151c2c!important;border-right:1px solid rgba(255,255,255,.07)!important;}
-.sb .sb-lbl{color:rgba(255,255,255,.28)!important;font-size:10px!important;letter-spacing:.07em;}
-.sb .sb-logo-text .sb-brand{color:#fff!important;}
-.sb .sb-logo-text .sb-brand span{color:#4f8ef7!important;}
-.sb .nav{color:rgba(255,255,255,.62)!important;}
-.sb .nav:hover{background:rgba(255,255,255,.07)!important;color:#fff!important;}
-.sb .nav.on{background:#2563eb!important;color:#fff!important;box-shadow:0 2px 8px rgba(37,99,235,.35);}
-.sb .nav svg{opacity:.65;}
-.sb .nav.on svg,.sb .nav:hover svg{opacity:1;}
-.sb .nav-sub{color:rgba(255,255,255,.46)!important;}
-.sb .nav-sub:hover{background:rgba(255,255,255,.06)!important;color:#fff!important;}
-.sb .nav-sub.on{color:#60a5fa!important;}
-.sb .hrms-subnav{border-left-color:rgba(255,255,255,.1)!important;}
-.sb .sb-foot{border-top:1px solid rgba(255,255,255,.08)!important;padding:0;}
-.sb .sb-foot .btn-g{background:rgba(255,255,255,.08)!important;color:rgba(255,255,255,.65)!important;border-color:rgba(255,255,255,.1)!important;font-size:12px!important;}
-.sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14)!important;color:#fff!important;}
+/* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
+body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
+body.theme-light .sb .sb-lbl{color:#9ca3af!important;font-size:10px!important;letter-spacing:.07em;}
+body.theme-light .sb .sb-logo-text .sb-brand{color:#111827!important;}
+body.theme-light .sb .sb-logo-text .sb-brand span{color:#2563eb!important;}
+body.theme-light .sb .nav{color:#374151!important;}
+body.theme-light .sb .nav:hover{background:rgba(0,0,0,.05)!important;color:#111827!important;}
+body.theme-light .sb .nav.on{background:#2563eb!important;color:#fff!important;box-shadow:0 2px 8px rgba(37,99,235,.25);}
+body.theme-light .sb .nav svg{opacity:.6;}
+body.theme-light .sb .nav.on svg,body.theme-light .sb .nav:hover svg{opacity:1;}
+body.theme-light .sb .nav-sub{color:#6b7280!important;}
+body.theme-light .sb .nav-sub:hover{background:rgba(0,0,0,.04)!important;color:#111827!important;}
+body.theme-light .sb .nav-sub.on{color:#2563eb!important;}
+body.theme-light .sb .hrms-subnav{border-left-color:#d1d5db!important;}
+body.theme-light .sb .sb-foot{border-top:1px solid #dde2eb!important;padding:0;}
+body.theme-light .sb .sb-foot .btn-g{background:#e5e9f0!important;color:#374151!important;border-color:#d1d5db!important;font-size:12px!important;}
+body.theme-light .sb .sb-foot .btn-g:hover{background:#d1d5db!important;color:#111827!important;}
+/* ── HRMS Sidebar: Dark Mode ──────────────────────────────── */
+body:not(.theme-light) .sb{background:#0f1724!important;border-right:1px solid rgba(255,255,255,.07)!important;}
+body:not(.theme-light) .sb .sb-lbl{color:rgba(255,255,255,.3)!important;font-size:10px!important;letter-spacing:.07em;}
+body:not(.theme-light) .sb .sb-logo-text .sb-brand{color:#fff!important;}
+body:not(.theme-light) .sb .sb-logo-text .sb-brand span{color:#60a5fa!important;}
+body:not(.theme-light) .sb .nav{color:rgba(255,255,255,.65)!important;}
+body:not(.theme-light) .sb .nav:hover{background:rgba(255,255,255,.07)!important;color:#fff!important;}
+body:not(.theme-light) .sb .nav.on{background:#2563eb!important;color:#fff!important;box-shadow:0 2px 8px rgba(37,99,235,.4);}
+body:not(.theme-light) .sb .nav svg{opacity:.65;}
+body:not(.theme-light) .sb .nav.on svg,body:not(.theme-light) .sb .nav:hover svg{opacity:1;}
+body:not(.theme-light) .sb .nav-sub{color:rgba(255,255,255,.45)!important;}
+body:not(.theme-light) .sb .nav-sub:hover{background:rgba(255,255,255,.06)!important;color:#fff!important;}
+body:not(.theme-light) .sb .nav-sub.on{color:#93c5fd!important;}
+body:not(.theme-light) .sb .hrms-subnav{border-left-color:rgba(255,255,255,.1)!important;}
+body:not(.theme-light) .sb .sb-foot{border-top:1px solid rgba(255,255,255,.08)!important;padding:0;}
+body:not(.theme-light) .sb .sb-foot .btn-g{background:rgba(255,255,255,.08)!important;color:rgba(255,255,255,.65)!important;border-color:rgba(255,255,255,.1)!important;font-size:12px!important;}
+body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14)!important;color:#fff!important;}
 /* ── Topbar Override ─────────────────────────────────────── */
 .topbar{display:none!important;}
 /* ── Content BG ──────────────────────────────────────────── */

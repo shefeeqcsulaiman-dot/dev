@@ -8769,10 +8769,14 @@ function downloadSalesInvoiceRowPdf(btn){
   downloadInvoicePdf(inv);
 }
 
-function copyCurrentInvoiceLink(){
-  const inv=currentInvoiceForShare();
-  const link=publicInvoiceUrl(inv);
+async function copyCurrentInvoiceLink(){
   const field=document.getElementById('share-link');
+  // Use already-generated short URL from the field if available
+  let link=(field?.value||'').trim();
+  if(!link){
+    const inv=currentInvoiceForShare();
+    link=await createShortInvoiceUrl(inv);
+  }
   if(field)field.value=link;
   if(navigator.clipboard){
     navigator.clipboard.writeText(link).then(()=>toast('Online invoice link copied','ok')).catch(()=>{
@@ -9288,13 +9292,23 @@ function openDraftInvoiceShare(){
   if(inv)openInvoiceShareModal(inv);
 }
 
-function invoiceShareMessage(inv=currentSalesInvoice){
+function invoiceShareMessage(inv=currentSalesInvoice,url=null){
   const total=Number(inv?.total||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
   const label=isSalesReturn(inv)?'sales return':'invoice';
-  return `Dear ${inv?.customer||'Customer'}, please find ${label} ${inv?.invoice_no||'Draft'} for AED ${total}. Due date: ${inv?.due_date||'-'}.\n\nView document online: ${publicInvoiceUrl(inv)}\nPDF document: please attach the PDF opened from TaxFlow.`;
+  const link=url||publicInvoiceUrl(inv);
+  return `Dear ${inv?.customer||'Customer'}, please find ${label} ${inv?.invoice_no||'Draft'} for AED ${total}. Due date: ${inv?.due_date||'-'}.\n\nView document online: ${link}\nPDF document: please attach the PDF opened from TaxFlow.`;
 }
 
-function openInvoiceShareModal(inv=currentSalesInvoice){
+async function createShortInvoiceUrl(inv){
+  try{
+    const payload=publicInvoicePayload(inv);
+    const r=await moduleApi('/share/invoice',{method:'POST',body:{payload}});
+    if(r?.code)return `${window.location.origin}/i/${r.code}`;
+  }catch{}
+  return publicInvoiceUrl(inv);
+}
+
+async function openInvoiceShareModal(inv=currentSalesInvoice){
   currentSalesInvoice=inv||currentSalesInvoice||buildDraftInvoice();
   const sub=document.getElementById('invoice-share-sub');
   const emailEl=document.getElementById('share-email');
@@ -9307,11 +9321,19 @@ function openInvoiceShareModal(inv=currentSalesInvoice){
   const custRec=invoiceCustomerRecords().find(c=>c.name.toLowerCase()===custName);
   if(emailEl)emailEl.value=currentSalesInvoice.customer_email||custRec?.email||'';
   if(phoneEl)phoneEl.value=currentSalesInvoice.customer_phone||custRec?.phone||'';
-  if(msg)msg.value=invoiceShareMessage(currentSalesInvoice);
-  const invoiceUrl=publicInvoiceUrl(currentSalesInvoice);
-  if(link)link.value=invoiceUrl;
-  if(onlineBtn)onlineBtn.href=invoiceUrl;
+  // Show long URL immediately so the modal opens without waiting
+  const longUrl=publicInvoiceUrl(currentSalesInvoice);
+  if(msg)msg.value=invoiceShareMessage(currentSalesInvoice,longUrl);
+  if(link)link.value=longUrl;
+  if(onlineBtn)onlineBtn.href=longUrl;
   showM('m-invoice-share');
+  // Async: swap to short URL once ready
+  const shortUrl=await createShortInvoiceUrl(currentSalesInvoice);
+  if(shortUrl!==longUrl){
+    if(link)link.value=shortUrl;
+    if(onlineBtn)onlineBtn.href=shortUrl;
+    if(msg)msg.value=invoiceShareMessage(currentSalesInvoice,shortUrl);
+  }
 }
 
 function shareCurrentInvoice(channel){
@@ -9963,7 +9985,9 @@ async function exportPurchaseAiToExcel(){
     const wb=window.XLSX.utils.book_new();
     window.XLSX.utils.book_append_sheet(wb,'Purchase AI Upload',ws);
     const today=new Date().toISOString().slice(0,10);
-    window.XLSX.writeFile(wb,`purchase-ai-upload-${today}.xlsx`);
+    const wbout=window.XLSX.write(wb,{bookType:'xlsx',type:'array'});
+    const xlsxBlob=new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    triggerRawDownload(xlsxBlob,`purchase-ai-upload-${today}.xlsx`);
     toast(`Exported ${data.length} row${data.length===1?'':'s'} to Excel`,'ok');
   }catch(e){
     toast('Excel export failed: '+(e.message||e),'err');

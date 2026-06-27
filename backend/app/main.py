@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.models import Account, Company, TaxCode, User, VoucherType
-from app.routers import accounting, ai, app_data, audit, auth, companies, corporate_accounting, documents, events, exception_center, hr_ai, inventory, invoices, jobs, module_records, payroll, reports, source_transactions, superadmin, tax
+from app.routers import accounting, ai, app_data, audit, auth, companies, corporate_accounting, documents, events, exception_center, hr_ai, inventory, invoice_share, invoices, jobs, module_records, payroll, reports, source_transactions, superadmin, tax
 from app.security import hash_password
 
 
@@ -140,6 +140,10 @@ def create_app() -> FastAPI:
     def digital_invoice() -> FileResponse:
         return FileResponse(str(static_dir / "taxflow" / "digital-invoice.html"))
 
+    @app.get("/i/{code}", include_in_schema=False)
+    def short_invoice_link(code: str) -> FileResponse:
+        return FileResponse(str(static_dir / "taxflow" / "digital-invoice.html"))
+
     @app.get("/pos", include_in_schema=False)
     def pos_terminal() -> FileResponse:
         return FileResponse(str(static_dir / "taxflow" / "pos.html"))
@@ -194,6 +198,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(ai.router, prefix="/api/v1")
     app.include_router(hr_ai.router, prefix="/api/v1")
+    app.include_router(invoice_share.router, prefix="/api/v1")
     app.include_router(companies.router, prefix="/api/v1")
     app.include_router(invoices.router, prefix="/api/v1")
     app.include_router(documents.router, prefix="/api/v1")
