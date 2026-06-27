@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260627c" as="style">
-<link rel="preload" href="src/app.js?v=20260627c" as="script">
+<link rel="preload" href="src/styles.css?v=20260627d" as="style">
+<link rel="preload" href="src/app.js?v=20260627d" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260627c">
+<link rel="stylesheet" href="src/styles.css?v=20260627d">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -1091,6 +1091,10 @@
       <div class="ai-card-toolbar flx-b mb12">
         <label class="flx" style="gap:8px"><input type="checkbox" aria-label="Select all purchase AI invoices" onchange="togglePurchaseAiSelection(this.checked)"> Select extracted invoices</label>
         <div class="ai-card-controls">
+          <div class="segmented" style="display:inline-flex;gap:2px">
+            <button class="pvt-btn seg on" id="pvt-card" type="button" onclick="setPurchaseAiView('card')">Cards</button>
+            <button class="pvt-btn seg" id="pvt-table" type="button" onclick="setPurchaseAiView('table')">Table</button>
+          </div>
           <select class="fi ai-sort-select" id="purchase-ai-sort" onchange="applyPurchaseAiSort(true)">
             <option value="manual">Manual order</option>
             <option value="invoice">Invoice No.</option>
@@ -1103,8 +1107,37 @@
           <button class="btn btn-g btn-sm" type="button" onclick="exportPurchaseAiToExcel()">⬇ Excel</button>
         </div>
       </div>
-      <div id="ext-tbody" class="ai-card-grid">
-        <div class="ai-empty-state">AI uploaded purchase data will appear here for validation.</div>
+      <div id="ext-card-view">
+        <div id="ext-tbody" class="ai-card-grid">
+          <div class="ai-empty-state">AI uploaded purchase data will appear here for validation.</div>
+        </div>
+      </div>
+      <div id="ext-table-view" style="display:none;overflow-x:auto">
+        <table class="tbl" style="min-width:1400px;font-size:12px">
+          <thead><tr>
+            <th style="width:34px"><input type="checkbox" onchange="purchaseAiTableSelectAll(this.checked)" aria-label="Select all"></th>
+            <th>Filename</th>
+            <th>Invoice Date</th>
+            <th>Invoice Number</th>
+            <th>Supplier</th>
+            <th>TRN / VAT #</th>
+            <th>Bill To</th>
+            <th style="text-align:right">Subtotal (excl. VAT)</th>
+            <th style="text-align:right">Total Discount</th>
+            <th style="text-align:right">VAT Amount</th>
+            <th style="text-align:right">Total Payable</th>
+            <th>Item Description</th>
+            <th style="text-align:right">Qty</th>
+            <th style="text-align:right">Unit Price</th>
+            <th style="text-align:right">Discount %</th>
+            <th style="text-align:right">Discount Amount</th>
+            <th style="text-align:right">Line Total</th>
+            <th>Status</th>
+          </tr></thead>
+          <tbody id="ext-flat-tbody">
+            <tr><td colspan="18" style="text-align:center;color:var(--text3);padding:24px">Switch to Table view to load records.</td></tr>
+          </tbody>
+        </table>
       </div>
       <div id="ext-prog" style="display:none;margin-top:14px">
         <div class="flx-b mb12"><span style="font-size:13px;color:var(--text2)">Extracting...</span><span id="ext-pct" class="mono" style="color:var(--accent)">0%</span></div>
@@ -6494,6 +6527,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260627c" defer></script>
+<script src="src/app.js?v=20260627d" defer></script>
 </body>
 </html>
