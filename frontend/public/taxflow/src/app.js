@@ -16205,6 +16205,8 @@ function addPayrollAdjustment(){
 
 // -- DAILY ATTENDANCE CHECK --------------------------------------
 function openAttendanceCheck(){
+  // Fill table with all Present immediately — modal is only for marking absences
+  markAllPresent();
   const today=new Date().toLocaleDateString('en-AE',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const el=document.getElementById('att-check-date');
   if(el)el.textContent=today;
@@ -16248,9 +16250,13 @@ function confirmAbsences(){
   const absent=[...document.querySelectorAll('#absence-picker-list input[type=checkbox]:checked')]
     .map(cb=>cb.dataset.emp);
   closeM('m-absence-picker');
+  // Re-render full table with absent set (all others stay Present)
   _renderAttendanceRows(emps,absent);
   const presentCount=emps.length-absent.length;
-  toast(`${presentCount} Present · ${absent.length} Absent — attendance saved`,'ok');
+  if(absent.length)
+    toast(`${presentCount} Present · ${absent.length} Absent — attendance saved`,'ok');
+  else
+    toast(`All ${emps.length} employees marked Present`,'ok');
 }
 
 function _renderAttendanceRows(emps,absentNames){
