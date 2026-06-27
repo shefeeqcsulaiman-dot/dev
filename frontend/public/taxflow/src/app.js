@@ -10005,6 +10005,14 @@ async function exportPurchaseAiToExcel(){
         });
       });
     });
+    // Final guard — ensure every cell is a primitive SheetJS can write
+    const toCell=v=>{
+      if(v===null||v===undefined)return'';
+      if(typeof v==='object')return JSON.stringify(v);
+      if(typeof v==='number'&&!isFinite(v))return'';
+      return v;
+    };
+    data.forEach(r=>Object.keys(r).forEach(k=>{r[k]=toCell(r[k]);}));
     const ws=window.XLSX.utils.json_to_sheet(data);
     const wb=window.XLSX.utils.book_new();
     window.XLSX.utils.book_append_sheet(wb,'Purchase AI Upload',ws);
