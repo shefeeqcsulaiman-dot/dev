@@ -10027,6 +10027,73 @@ async function exportPurchaseAiToExcel(){
   }
 }
 
+function exportPurchaseAiToCsv(){
+  const cardRows=purchaseAiRows();
+  if(!cardRows.length){toast('No extracted invoices to export','warn');return;}
+  const fmt=n=>purchaseAiNumber(n).toFixed(2);
+  const csvCell=v=>{
+    const s=String(v===null||v===undefined?'':v);
+    return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s;
+  };
+  const headers=['Filename','Invoice Date','Invoice Number','Supplier','Supplier TRN','Bill To','Location',
+    'Subtotal (excl VAT)','Total Discount','VAT Amount','Total Payable',
+    'Line #','Item Description','SKU','Unit','Qty','Unit Price','Disc %','Disc Amount','Line Total',
+    'Pay Term','Payment Method','Notes','Status','Confidence %'];
+  const rows=[headers.map(csvCell).join(',')];
+  cardRows.forEach(cardRow=>{
+    let inv={};
+    try{inv=JSON.parse(cardRow.dataset.inv||'{}');}catch{}
+    if(isPurchaseExtractionError(inv))return;
+    const filename=cardRow.dataset.filename||'';
+    const validation=validatePurchaseAiInvoice(inv);
+    const statusLabel=validation.valid?'Valid':validation.isDuplicate?'Duplicate':'Review';
+    const net=purchaseAiNumber(inv.net_amount||inv.subtotal)||purchaseAiInvoiceLineTotal(inv);
+    const disc=purchaseAiNumber(inv.discount_value||inv.discount);
+    const vat=purchaseAiNumber(inv.vat_amount);
+    const total=purchaseAiNumber(inv.total)||(net+vat+purchaseAiNumber(inv.shipping));
+    const lines=Array.isArray(inv.lines)&&inv.lines.length?inv.lines:[{}];
+    lines.forEach((line,li)=>{
+      const qty=purchaseAiNumber(line.quantity??line.qty);
+      const unitPrice=purchaseAiNumber(line.unit_cost||line.unit_cost_before_tax||line.unit_price||line.cost||line.price);
+      const discPct=purchaseAiNumber(line.discount_percent||line.discount_pct);
+      const discAmt=purchaseAiNumber(line.discount_amount)||(unitPrice*qty*(discPct/100));
+      const lineTotal=purchaseAiNumber(line.line_total||line.amount||line.net_amount)||(qty*unitPrice-discAmt);
+      rows.push([
+        filename,
+        inv.date||'',
+        inv.invoice_no||'',
+        inv.supplier||'',
+        inv.supplier_trn||'',
+        inv.bill_to||'',
+        inv.location||'',
+        fmt(net),
+        disc?fmt(disc):'',
+        fmt(vat),
+        fmt(total),
+        li+1,
+        purchaseAiProductName(line),
+        line.sku||line.code||'',
+        line.unit||line.unit_of_measure||line.uom||'',
+        qty||'',
+        unitPrice?fmt(unitPrice):'',
+        discPct?fmt(discPct):'',
+        discAmt?fmt(discAmt):'',
+        lineTotal?fmt(lineTotal):'',
+        inv.pay_term||'',
+        inv.payment_method||'',
+        inv.notes||'',
+        statusLabel,
+        purchaseAiNumber(inv.confidence)||'',
+      ].map(csvCell).join(','));
+    });
+  });
+  const csv=rows.join('\r\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const today=new Date().toISOString().slice(0,10);
+  triggerRawDownload(blob,`purchase-ai-upload-${today}.csv`);
+  toast(`Exported ${rows.length-1} row${rows.length===2?'':'s'} to CSV`,'ok');
+}
+
 function purchaseAiUploadTileHtml(){
   return `<div class="ai-upload-more-tile">
     <div class="ai-upload-more-icon">${uploadIconSvg()}</div>
