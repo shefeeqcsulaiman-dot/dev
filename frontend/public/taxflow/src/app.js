@@ -537,6 +537,8 @@ function saveEmployee(){
     insurance_expiry:employeeFormValue('emp-insurance-expiry'),
     salary_bank:employeeFormValue('emp-bank'),
     iban:employeeFormValue('emp-iban'),
+    personal_code:employeeFormValue('emp-personal-code'),
+    routing_code:employeeFormValue('emp-routing-code'),
     photo:photoPreview,
     documents:{
       passport:passportFile?.name||'',
@@ -694,6 +696,8 @@ function openEmployeeProfile(btn){
           <div class="invoice-meta-row"><span>Email</span><strong>${escapeHtml(employee.email||'-')}</strong></div>
           <div class="invoice-meta-row"><span>Bank</span><strong>${escapeHtml(employee.salary_bank||'-')}</strong></div>
           <div class="invoice-meta-row"><span>IBAN</span><strong class="mono">${escapeHtml(employee.iban||'Missing')}</strong></div>
+          ${employee.personal_code?`<div class="invoice-meta-row"><span>Personal Code</span><strong class="mono">${escapeHtml(employee.personal_code)}</strong></div>`:''}
+          ${employee.routing_code?`<div class="invoice-meta-row"><span>Routing Code</span><strong class="mono">${escapeHtml(employee.routing_code)}</strong></div>`:''}
         </div>
       </div>
       <div class="section-hd">Documents</div>
