@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260627t" as="style">
-<link rel="preload" href="src/app.js?v=20260627t" as="script">
+<link rel="preload" href="src/styles.css?v=20260627u" as="style">
+<link rel="preload" href="src/app.js?v=20260627u" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260627t">
+<link rel="stylesheet" href="src/styles.css?v=20260627u">
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
@@ -2006,7 +2006,7 @@
     <div class="card mb16" style="border:1px dashed var(--border)">
       <div class="card-hd">
         <div><div class="card-title">Departments &amp; Branches</div><div class="card-sub">Managed in Settings → HR Structure</div></div>
-        <button class="btn btn-g btn-sm" onclick="go('settings')">Open Company &amp; Settings →</button>
+        <button class="btn btn-g btn-sm" onclick="go('settings');setTimeout(()=>stab(document.querySelector('#page-settings .tab:nth-child(2)'),'set-depts'),80)">Open Departments &amp; Branches →</button>
       </div>
     </div>
 
@@ -4198,6 +4198,7 @@
 <div class="page" id="page-settings">
   <div class="tabs">
     <div class="tab on" onclick="stab(this,'set-company')">Company Registration</div>
+    <div class="tab" onclick="stab(this,'set-depts')">Departments &amp; Branches</div>
     <div class="tab" onclick="stab(this,'set-users')">Users & Roles</div>
     <div class="tab" onclick="stab(this,'set-tax')">Tax Settings</div>
     <div class="tab" onclick="stab(this,'set-notif')">Notifications</div>
@@ -4303,7 +4304,10 @@
       </div>
     </div>
 
-    <!-- Departments & Branches -->
+  </div>
+
+  <!-- Departments & Branches tab -->
+  <div class="tab-body" id="set-depts">
     <div class="g2 mb16">
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Departments</div><div class="card-sub">Manage company departments used in employee profiles</div></div><button class="btn btn-g btn-sm" onclick="addHrDepartment()">+ Add Department</button></div>
@@ -6554,6 +6558,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260627t" defer></script>
+<script src="src/app.js?v=20260627u" defer></script>
 </body>
 </html>
