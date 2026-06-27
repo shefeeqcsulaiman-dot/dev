@@ -16203,6 +16203,90 @@ function addPayrollAdjustment(){
   audit('Payroll adjustment',`${employee} ${type} ${amount}`,'Saved');
 }
 
+// -- DAILY ATTENDANCE CHECK --------------------------------------
+function openAttendanceCheck(){
+  const today=new Date().toLocaleDateString('en-AE',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const el=document.getElementById('att-check-date');
+  if(el)el.textContent=today;
+  showM('m-att-check');
+}
+
+function _getAttendanceEmployees(){
+  return [...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')]
+    .map(r=>employeeFromDirectoryRow(r))
+    .filter(e=>e&&e.name&&e.name!=='Employee'&&(e.status||'Active').toLowerCase()==='active');
+}
+
+function markAllPresent(){
+  const emps=_getAttendanceEmployees();
+  _renderAttendanceRows(emps,[]);
+  toast(`${emps.length} employee${emps.length===1?'':'s'} marked Present`,'ok');
+}
+
+function openAbsencePicker(){
+  const emps=_getAttendanceEmployees();
+  const list=document.getElementById('absence-picker-list');
+  if(!list)return;
+  if(!emps.length){
+    list.innerHTML='<div style="color:var(--text3);text-align:center;padding:20px">No active employees found. Add employees first.</div>';
+  } else {
+    list.innerHTML=emps.map(e=>`
+      <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;cursor:pointer;transition:background .12s" onmouseenter="this.style.background='var(--hover)'" onmouseleave="this.style.background=''">
+        <input type="checkbox" data-emp="${escapeHtml(e.name)}" style="width:16px;height:16px;accent-color:var(--red)">
+        <div class="co-av" style="width:28px;height:28px;font-size:10px;flex-shrink:0">${escapeHtml(initialsFromName(e.name))}</div>
+        <div>
+          <div style="font-weight:600;font-size:13px">${escapeHtml(e.name)}</div>
+          <div style="font-size:11px;color:var(--text3)">${escapeHtml(e.department||'')}${e.designation?' · '+escapeHtml(e.designation):''}</div>
+        </div>
+      </label>`).join('');
+  }
+  showM('m-absence-picker');
+}
+
+function confirmAbsences(){
+  const emps=_getAttendanceEmployees();
+  const absent=[...document.querySelectorAll('#absence-picker-list input[type=checkbox]:checked')]
+    .map(cb=>cb.dataset.emp);
+  closeM('m-absence-picker');
+  _renderAttendanceRows(emps,absent);
+  const presentCount=emps.length-absent.length;
+  toast(`${presentCount} Present · ${absent.length} Absent — attendance saved`,'ok');
+}
+
+function _renderAttendanceRows(emps,absentNames){
+  const tbody=document.getElementById('att-today-tbody');
+  if(!tbody)return;
+  const now=new Date();
+  const timeStr=now.toLocaleTimeString('en-AE',{hour:'2-digit',minute:'2-digit',hour12:true});
+  const absentSet=new Set(absentNames.map(n=>n.toLowerCase()));
+  if(!emps.length){
+    tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">No active employees. Add employees to track attendance.</td></tr>';
+    return;
+  }
+  tbody.innerHTML=emps.map(e=>{
+    const isAbsent=absentSet.has(e.name.toLowerCase());
+    const statusCls=isAbsent?'b-r':'b-g';
+    const statusLabel=isAbsent?'Absent':'Present';
+    const checkIn=isAbsent?'—':timeStr;
+    const checkOut='—';
+    const hours=isAbsent?'—':'—';
+    const late=isAbsent?'—':'0 min';
+    const ot='—';
+    return `<tr>
+      <td><div style="display:flex;align-items:center;gap:8px">
+        <div class="co-av" style="width:26px;height:26px;font-size:10px">${escapeHtml(initialsFromName(e.name))}</div>
+        <div><div style="font-weight:600;font-size:12px">${escapeHtml(e.name)}</div><div style="font-size:10px;color:var(--text3)">${escapeHtml(e.department||'')}</div></div>
+      </div></td>
+      <td class="mono" style="font-size:12px">${checkIn}</td>
+      <td class="mono" style="font-size:12px">${checkOut}</td>
+      <td class="mono" style="font-size:12px">${hours}</td>
+      <td style="font-size:12px">${late}</td>
+      <td style="font-size:12px">${ot}</td>
+      <td><span class="b ${statusCls}">${statusLabel}</span></td>
+    </tr>`;
+  }).join('');
+}
+
 function renderAttendanceCalendar(){
   const grid=document.getElementById('att-cal-grid');
   const title=document.getElementById('att-cal-title');
