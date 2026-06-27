@@ -12361,8 +12361,7 @@ function purchasePreviewLines(purchase){
 function renderPurchaseRecordPreview(purchase,options={}){
   ensurePurchasePreviewModal();
   if(!_coaFlatAccounts.length){
-    moduleApi('/accounts').then(accs=>{if(Array.isArray(accs)){_coaFlatAccounts=accs;renderPurchaseRecordPreview(purchase,options);}}).catch(()=>{});
-    return;
+    moduleApi('/accounts').then(accs=>{if(Array.isArray(accs)&&accs.length){_coaFlatAccounts=accs;renderPurchaseRecordPreview(purchase,options);}}).catch(()=>{});
   }
   const editable=Boolean(options.editable);
   currentPurchaseViewRef=purchase.ref||purchase.invoice_no||purchase.reference||'';
