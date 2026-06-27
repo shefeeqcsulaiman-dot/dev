@@ -14840,6 +14840,135 @@ function addNamedOtRule(){
   _syncOtPolicySelects();
   toast(`OT rule "${name.trim()}" added`,'ok');
 }
+// -- HR USERS & ROLES ----------------------------------------------
+const _hrUsers=[];
+
+function openAddHrUserModal(editId){
+  const modal=document.getElementById('m-hr-user');
+  if(!modal)return;
+  modal.dataset.editId=editId||'';
+  document.getElementById('hr-user-modal-title').textContent=editId?'Edit User':'Add User';
+
+  // Populate employee select from employee-tbody
+  const empSel=document.getElementById('hr-user-employee');
+  if(empSel){
+    const emps=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')].map(r=>employeeFromDirectoryRow(r)).filter(e=>e&&e.name&&e.name!=='Employee');
+    empSel.innerHTML='<option value="">— Select Employee —</option>'+emps.map(e=>`<option value="${escapeHtml(e.id||e.name)}" data-dept="${escapeHtml(e.department||'')}">${escapeHtml(e.name)}${e.department?' — '+escapeHtml(e.department):''}</option>`).join('');
+    empSel.onchange=()=>{
+      const opt=empSel.selectedOptions[0];
+      const dept=opt?.dataset?.dept||'';
+      const deptSel=document.getElementById('hr-user-department');
+      if(deptSel&&dept){
+        // set or add option
+        let found=[...deptSel.options].find(o=>o.value===dept);
+        if(!found){const o=new Option(dept,dept);deptSel.appendChild(o);found=o;}
+        deptSel.value=dept;
+      }
+      // Auto-fill username from employee name
+      const usernameEl=document.getElementById('hr-user-username');
+      if(usernameEl&&!usernameEl.value&&opt?.value){
+        const empName=opt.textContent.split('—')[0].trim().toLowerCase().replace(/\s+/g,'.');
+        usernameEl.value=empName;
+      }
+    };
+  }
+
+  // Populate department select
+  const deptSel=document.getElementById('hr-user-department');
+  if(deptSel){
+    const depts=_getDeptNames&&_getDeptNames()||['Management','Finance','Operations','Sales','HR','IT','Marketing','Procurement','Logistics'];
+    deptSel.innerHTML='<option value="">— Auto from Employee —</option>'+depts.map(d=>`<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  }
+
+  if(editId){
+    const u=_hrUsers.find(u=>u.id===editId);
+    if(u){
+      document.getElementById('hr-user-id').value=u.userId||'';
+      document.getElementById('hr-user-username').value=u.username||'';
+      document.getElementById('hr-user-employee').value=u.employeeId||'';
+      document.getElementById('hr-user-department').value=u.department||'';
+      document.getElementById('hr-user-role').value=u.role||'employee';
+      document.getElementById('hr-user-status').value=u.status||'active';
+      document.getElementById('hr-user-password').value='';
+    }
+  } else {
+    // Auto-generate next user ID
+    const nextId='USR-'+String(_hrUsers.length+1).padStart(3,'0');
+    document.getElementById('hr-user-id').value=nextId;
+    document.getElementById('hr-user-username').value='';
+    document.getElementById('hr-user-employee').value='';
+    if(deptSel)deptSel.value='';
+    document.getElementById('hr-user-role').value='employee';
+    document.getElementById('hr-user-status').value='active';
+    document.getElementById('hr-user-password').value='';
+  }
+  showM('m-hr-user');
+}
+
+function saveHrUser(){
+  const userId=document.getElementById('hr-user-id')?.value.trim();
+  const username=document.getElementById('hr-user-username')?.value.trim();
+  const employeeId=document.getElementById('hr-user-employee')?.value;
+  const employeeName=document.getElementById('hr-user-employee')?.selectedOptions[0]?.textContent.split('—')[0].trim()||'';
+  const department=document.getElementById('hr-user-department')?.value||'';
+  const role=document.getElementById('hr-user-role')?.value||'employee';
+  const status=document.getElementById('hr-user-status')?.value||'active';
+  const password=document.getElementById('hr-user-password')?.value||'';
+  const modal=document.getElementById('m-hr-user');
+  const editId=modal?.dataset.editId||'';
+
+  if(!username){toast('Enter a username','warn');return;}
+  if(!employeeId){toast('Select an employee','warn');return;}
+
+  const roleLabels={employee:'Employee',supervisor:'Supervisor',hr_manager:'HR Manager',payroll_admin:'Payroll Admin',department_head:'Dept Head',admin:'Admin'};
+  const roleLabel=roleLabels[role]||role;
+  const roleCls={employee:'b-g',supervisor:'b-b',hr_manager:'b-p',payroll_admin:'b-a',department_head:'b-t',admin:'b-r'}[role]||'b-g';
+
+  const user={id:editId||userId,userId,username,employeeId,employeeName,department,role,status,password,createdAt:new Date().toISOString()};
+
+  const existing=editId?_hrUsers.findIndex(u=>u.id===editId):-1;
+  if(existing>=0)_hrUsers.splice(existing,1,user);
+  else _hrUsers.push(user);
+
+  _renderHrUsersTable();
+  saveServer('hrUsers',user);
+  closeM('m-hr-user');
+  toast(`User "${username}" ${editId?'updated':'added'}`,'ok');
+}
+
+function _renderHrUsersTable(){
+  const tbody=document.getElementById('hr-users-tbody');
+  if(!tbody)return;
+  if(!_hrUsers.length){
+    tbody.innerHTML='<tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">No users added yet. Click + Add User to assign roles.</td></tr>';
+    return;
+  }
+  const roleLabels={employee:'Employee',supervisor:'Supervisor',hr_manager:'HR Manager',payroll_admin:'Payroll Admin',department_head:'Dept Head',admin:'Admin'};
+  const roleCls={employee:'b-g',supervisor:'b-b',hr_manager:'b-p',payroll_admin:'b-a',department_head:'b-t',admin:'b-r'};
+  tbody.innerHTML=_hrUsers.map(u=>`
+    <tr>
+      <td class="mono" style="font-size:12px">${escapeHtml(u.userId||u.id||'')}</td>
+      <td><strong style="font-size:12px">${escapeHtml(u.username||'')}</strong></td>
+      <td style="font-size:12px">${escapeHtml(u.employeeName||u.employeeId||'')}</td>
+      <td style="font-size:12px">${escapeHtml(u.department||'—')}</td>
+      <td><span class="b ${roleCls[u.role]||'b-g'}" style="font-size:11px">${escapeHtml(roleLabels[u.role]||u.role||'Employee')}</span></td>
+      <td><span class="b ${u.status==='active'?'b-g':'b-r'}" style="font-size:11px">${u.status==='active'?'Active':'Inactive'}</span></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-g btn-xs" onclick="openAddHrUserModal('${escapeHtml(u.id||u.userId)}')">Edit</button>
+        <button class="btn btn-r btn-xs" onclick="deleteHrUser('${escapeHtml(u.id||u.userId)}')">×</button>
+      </td>
+    </tr>`).join('');
+}
+
+function deleteHrUser(id){
+  const idx=_hrUsers.findIndex(u=>(u.id||u.userId)===id);
+  if(idx<0)return;
+  const name=_hrUsers[idx].username||id;
+  _hrUsers.splice(idx,1);
+  _renderHrUsersTable();
+  toast(`User "${name}" removed`,'ok');
+}
+
 // -- LEAVE POLICY --------------------------------------------------
 function saveLeavePolicies(){
   const types=[...document.querySelectorAll('#leave-types-tbody tr[data-leave-type]')].map(tr=>{

@@ -1445,6 +1445,74 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div class="setting-tile"><strong>Notifications</strong><p>Send alerts for overtime submission, leave approval, missing checkout, and payroll generation.</p></div>
       <div class="setting-tile"><strong>Audit Log</strong><p>Track HR overrides, attendance corrections, salary edits, role changes, and payroll regeneration.</p></div>
     </div>
+
+    <!-- Users & Roles -->
+    <div class="card mb16">
+      <div class="card-hd">
+        <div><div class="card-title">Users &amp; Roles</div><div class="card-sub">Assign system roles and portal access to employees</div></div>
+        <button class="btn btn-p btn-sm" onclick="openAddHrUserModal()">+ Add User</button>
+      </div>
+      <table class="tbl" id="hr-users-tbl">
+        <thead>
+          <tr>
+            <th>User ID</th>
+            <th>Username</th>
+            <th>Employee</th>
+            <th>Department</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="hr-users-tbody">
+          <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">No users added yet. Click + Add User to assign roles.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Add / Edit HR User Modal -->
+    <div class="overlay" id="m-hr-user" style="display:none" onclick="closeOvBg(event,'m-hr-user')">
+      <div class="modal" style="max-width:520px">
+        <div class="modal-hd">
+          <div>
+            <div class="modal-title" id="hr-user-modal-title">Add User</div>
+            <div class="modal-sub">Assign portal access and role to an employee</div>
+          </div>
+          <button class="modal-close" onclick="closeM('m-hr-user')">×</button>
+        </div>
+        <div class="fr2">
+          <div class="fg"><label class="fl">User ID</label><input class="fi mono" id="hr-user-id" placeholder="USR-001" autocomplete="off"></div>
+          <div class="fg"><label class="fl">Username</label><input class="fi mono" id="hr-user-username" placeholder="e.g. john.smith" autocomplete="off"></div>
+        </div>
+        <div class="fg" style="margin-bottom:14px">
+          <label class="fl">Select Employee</label>
+          <select class="fi" id="hr-user-employee">
+            <option value="">— Select Employee —</option>
+          </select>
+        </div>
+        <div class="fr2">
+          <div class="fg"><label class="fl">Department</label><select class="fi" id="hr-user-department"><option value="">— Auto from Employee —</option></select></div>
+          <div class="fg"><label class="fl">Role</label>
+            <select class="fi" id="hr-user-role">
+              <option value="employee">Employee (Self-Service)</option>
+              <option value="supervisor">Supervisor</option>
+              <option value="hr_manager">HR Manager</option>
+              <option value="payroll_admin">Payroll Admin</option>
+              <option value="department_head">Department Head</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+        </div>
+        <div class="fr2">
+          <div class="fg"><label class="fl">Password</label><input class="fi mono" id="hr-user-password" type="password" placeholder="Set password" autocomplete="new-password"></div>
+          <div class="fg"><label class="fl">Status</label><select class="fi" id="hr-user-status"><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-g" onclick="closeM('m-hr-user')">Cancel</button>
+          <button class="btn btn-p" onclick="saveHrUser()">Save User</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="tab-body" id="hr-bio">
@@ -2362,7 +2430,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260628h" defer></script>
+<script src="src/app.js?v=20260628i" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded',function(){
   setTimeout(function(){
@@ -2380,7 +2448,7 @@ document.addEventListener('DOMContentLoaded',function(){
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260628h" defer></script>
+<script src="src/app.js?v=20260628i" defer></script>
 <!-- HRMS AI ASSISTANT PAGE -->
 <div class="page" id="page-hrms-ai">
   <div style="max-width:1100px;margin:0 auto;padding:0 4px">
