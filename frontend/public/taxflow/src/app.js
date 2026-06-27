@@ -10194,7 +10194,7 @@ function purchaseAiRowHtml(inv,line,index,validation,filename){
   const trnVal=inv.supplier_trn||'';
   const trnInvalid=trnVal&&trnVal.replace(/\D/g,'').length!==15;
   const status=purchaseAiStatusMeta(inv,validation);
-  const details=validation.issues.join('; ')||purchaseAiRawDetails(line)||'Ready to save';
+  const issueText=validation.issues.join('; ');
   const lines=Array.isArray(inv.lines)?inv.lines:[];
   const itemCount=lines.length||0;
   const productSummary=lines.slice(0,2).map(l=>purchaseAiProductName(l)||l.description||'').filter(Boolean).join(', ')+(itemCount>2?` +${itemCount-2} more`:'');
@@ -10208,26 +10208,26 @@ function purchaseAiRowHtml(inv,line,index,validation,filename){
           <div class="ai-card-kicker">${escapeHtml(inv.supplier||'Supplier missing')}${inv.date?` · <span style="font-weight:400;color:var(--fg-3)">${escapeHtml(inv.date)}</span>`:''}</div>
         </div>
       </div>
+      <span class="ai-status-pill ${status.cls} purchase-ai-validation" title="Confidence ${purchaseAiNumber(inv.confidence).toFixed(0)}%">${escapeHtml(status.label)}</span>
     </div>
     <div class="ai-invoice-divider"></div>
     <div class="ai-invoice-fields" style="cursor:pointer" onclick="openPurchaseAiEdit(this)" title="Click to edit">
       ${(()=>{const srcEntry=inv._source_entry_id?uploadedFiles.find(f=>f.id===inv._source_entry_id):null;const imgSrc=srcEntry?.base64||inv.source_image||'';return isImage&&imgSrc?`<div style="grid-column:1/-1;text-align:center;margin-bottom:4px"><img src="${imgSrc}" alt="Invoice" style="max-width:100%;max-height:140px;border-radius:6px;border:1px solid var(--border);object-fit:contain"></div>`:'';})()}
       ${productSummary?`<div><span>Product</span><strong style="font-size:11px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(productSummary)}</strong></div>`:''}
       <div><span>Location</span><strong>${escapeHtml(inv.location||'Dubai HQ')}</strong></div>
-      <div><span>Items</span><strong class="mono">${itemCount||0}</strong></div>
-      <div><span>TRN / VAT #</span><strong class="mono" style="${trnInvalid?'color:var(--red)':''}" title="${trnInvalid?'Invalid TRN — must be 15 digits':''}">${escapeHtml(trnVal||'-')}${trnInvalid?' ⚠':''}</strong></div>
-      <div><span>Net Amount</span><strong class="mono">${cur} ${fmt(net)}</strong></div>
-      <div><span>Tax (VAT)</span><strong class="mono">${cur} ${fmt(vat)}</strong></div>
-      <div><span>Shipping</span><strong class="mono">${cur} ${fmt(shipping)}</strong></div>
-      <div><span>Total</span><strong class="mono" style="color:var(--accent)">${cur} ${fmt(total)}</strong></div>
-      <div><span>Paid</span><strong class="mono">${cur} ${fmt(paid)}</strong></div>
-      <div><span>Due</span><strong class="mono" style="${due>0?'color:var(--red)':''}">${cur} ${fmt(due)}</strong></div>
+      ${itemCount>0?`<div><span>Items</span><strong class="mono">${itemCount}</strong></div>`:''}
+      ${trnVal?`<div><span>TRN / VAT #</span><strong class="mono" style="${trnInvalid?'color:var(--red)':''}" title="${trnInvalid?'Invalid TRN — must be 15 digits':''}">${escapeHtml(trnVal)}${trnInvalid?' ⚠':''}</strong></div>`:''}
       ${filename?`<div style="grid-column:1/-1"><span>File</span><strong style="font-size:10px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(filename)}</strong></div>`:''}
     </div>
+    <div class="ai-fin-strip">
+      <div class="ai-fin-cell"><span>Net</span><strong>${cur} ${fmt(net)}</strong></div>
+      <div class="ai-fin-cell"><span>VAT</span><strong>${cur} ${fmt(vat)}</strong></div>
+      <div class="ai-fin-cell ai-fin-total"><span>Total</span><strong>${cur} ${fmt(total)}</strong></div>
+    </div>
+    ${due>0?`<div class="ai-fin-due"><span>Amount Due</span><strong>${cur} ${fmt(due)}</strong></div>`:''}
     <div class="ai-card-foot">
-      <span class="purchase-ai-details">${escapeHtml(details)}</span>
+      ${issueText?`<span class="purchase-ai-details">${escapeHtml(issueText)}</span>`:''}
       <div class="ai-card-foot-meta">
-        <span class="purchase-ai-validation"><span class="ai-status-pill ${status.cls}" title="Confidence ${purchaseAiNumber(inv.confidence).toFixed(0)}%">${escapeHtml(status.label)}</span></span>
         ${itemCount>0?`<span class="ai-item-count-badge">${itemCount} item${itemCount!==1?'s':''}</span>`:''}
       </div>
       ${purchaseAiUploadActionsHtml()}
@@ -11446,9 +11446,11 @@ function revalidatePurchaseAiRows(){
     const checkbox=row.querySelector('.purchase-ai-select');
     if(validationCell){
       const status=purchaseAiStatusMeta(inv,validation);
-      validationCell.innerHTML=purchaseAiStatusPillHtml(status.label,status.cls);
+      validationCell.textContent=status.label;
+      validationCell.className=`ai-status-pill ${status.cls} purchase-ai-validation`;
+      validationCell.title=`Confidence ${purchaseAiNumber(inv.confidence).toFixed(0)}%`;
     }
-    if(detailsCell)detailsCell.textContent=validation.issues.join('; ')||purchaseAiRawDetails(inv.lines?.[0]||{})||'Ready to save';
+    if(detailsCell)detailsCell.textContent=validation.issues.join('; ')||'';
   });
 }
 
