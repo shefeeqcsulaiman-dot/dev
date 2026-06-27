@@ -499,6 +499,7 @@ function saveEmployee(){
   const employee={
     id:employeeFormValue('emp-id',nextEmployeeId()),
     name:employeeFormValue('emp-name'),
+    nickname:employeeFormValue('emp-nickname'),
     email:employeeFormValue('emp-email'),
     mobile:employeeFormValue('emp-mobile'),
     department:employeeFormValue('emp-department','Management'),
@@ -573,7 +574,7 @@ function renderEmployeeRecord(employee){
   row.dataset.employee=JSON.stringify(employee);
   row.innerHTML=`
     <td class="mono">${escapeHtml(employee.id)}</td>
-    <td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px">${escapeHtml(initialsFromName(employee.name))}</div><div>${escapeHtml(employee.name)}<div class="card-sub">${escapeHtml(employee.contract||'Full-time')} · ${escapeHtml(employee.location||'Dubai HQ')}</div></div></div></td>
+    <td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px">${escapeHtml(initialsFromName(employee.name))}</div><div>${escapeHtml(employee.name)}${employee.nickname?` <span style="color:var(--text3);font-size:11px">(${escapeHtml(employee.nickname)})</span>`:''}<div class="card-sub">${escapeHtml(employee.contract||'Full-time')} · ${escapeHtml(employee.location||'Dubai HQ')}</div></div></div></td>
     <td>${escapeHtml(employee.department)}</td>
     <td>${escapeHtml(employee.designation)}</td>
     <td>${escapeHtml(employee.supervisor)}</td>
@@ -662,7 +663,7 @@ function openEmployeeProfile(btn){
         <div class="invoice-brand">
           <div class="invoice-logo">${escapeHtml(initialsFromName(employee.name))}</div>
           <div>
-            <div class="invoice-company">${escapeHtml(employee.name||'Employee')}</div>
+            <div class="invoice-company">${escapeHtml(employee.name||'Employee')}${employee.nickname?` <span style="font-size:13px;font-weight:400;color:var(--text3)">("${escapeHtml(employee.nickname)}")</span>`:''}</div>
             <div class="invoice-muted">${escapeHtml(employee.designation||'Designation')} · ${escapeHtml(employee.department||'Department')}</div>
             <div class="invoice-muted mono">${escapeHtml(employee.id||'-')}</div>
           </div>
@@ -688,6 +689,7 @@ function openEmployeeProfile(btn){
         </div>
         <div class="invoice-panel">
           <div class="invoice-kicker">Personal & Payroll</div>
+          ${employee.nickname?`<div class="invoice-meta-row"><span>Nick Name</span><strong>${escapeHtml(employee.nickname)}</strong></div>`:''}
           <div class="invoice-meta-row"><span>Nationality</span><strong>${escapeHtml(employee.nationality||'-')}</strong></div>
           <div class="invoice-meta-row"><span>Email</span><strong>${escapeHtml(employee.email||'-')}</strong></div>
           <div class="invoice-meta-row"><span>Bank</span><strong>${escapeHtml(employee.salary_bank||'-')}</strong></div>
