@@ -687,7 +687,7 @@ function openEmployeeProfile(btn){
       <div class="g4 mb16">
         <div class="stat"><div class="stat-lbl">Department</div><div class="stat-val" style="font-size:18px;color:var(--accent)">${escapeHtml(employee.department||'-')}</div></div>
         <div class="stat"><div class="stat-lbl">Shift</div><div class="stat-val" style="font-size:18px;color:var(--green)">${escapeHtml(employee.shift||'-')}</div></div>
-        <div class="stat"><div class="stat-lbl">Basic Salary</div><div class="stat-val" style="font-size:18px;color:var(--purple)">${'AED'} ${Number(employee.salary||0).toLocaleString('en-AE')}</div></div>
+        <div class="stat"><div class="stat-lbl">Total Salary</div><div class="stat-val" style="font-size:18px;color:var(--purple)">${'AED'} ${Number(employee.salary||0).toLocaleString('en-AE')}</div></div>
         <div class="stat"><div class="stat-lbl">Supervisor</div><div class="stat-val" style="font-size:18px;color:var(--amber)">${escapeHtml(employee.supervisor||'-')}</div></div>
       </div>
       <div class="g2 mb16">
@@ -16593,7 +16593,7 @@ function renderPayslipPreview(info){
   if(!body)return;
   body.innerHTML=`
     <div class="flx-b"><span>Employee</span><strong style="color:var(--text)">${info.name}</strong></div>
-    <div class="flx-b"><span>Basic Salary</span><span class="mono">${money(info.basic)}</span></div>
+    <div class="flx-b"><span>Total Salary</span><span class="mono">${money(info.basic)}</span></div>
     <div class="flx-b"><span>Allowances</span><span class="mono">${money(info.allow)}</span></div>
     <div class="flx-b"><span>Overtime / Variable Pay</span><span class="mono">${money(info.ot)}</span></div>
     <div class="flx-b"><span>Deductions</span><span class="mono" style="color:var(--red)">${money(info.ded)}</span></div>
