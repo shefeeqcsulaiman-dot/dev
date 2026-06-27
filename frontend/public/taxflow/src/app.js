@@ -539,6 +539,8 @@ function saveEmployee(){
     iban:employeeFormValue('emp-iban'),
     personal_code:employeeFormValue('emp-personal-code'),
     routing_code:employeeFormValue('emp-routing-code'),
+    username:employeeFormValue('emp-username'),
+    password:employeeFormValue('emp-password'),
     photo:photoPreview,
     documents:{
       passport:passportFile?.name||'',
@@ -548,6 +550,13 @@ function saveEmployee(){
   };
   if(!employee.name){
     toast('Enter employee name','warn');
+    return;
+  }
+  const pwd=employeeFormValue('emp-password');
+  const pwdConfirm=employeeFormValue('emp-password-confirm');
+  if(pwd&&pwd!==pwdConfirm){
+    toast('Passwords do not match','warn');
+    document.getElementById('emp-password-confirm')?.focus();
     return;
   }
   renderEmployeeRecord(employee);

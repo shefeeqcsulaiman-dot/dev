@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" href="src/styles.css?v=20260627x" as="style">
-<link rel="preload" href="src/app.js?v=20260628f" as="script">
+<link rel="preload" href="src/app.js?v=20260628g" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=20260627x">
 </head>
@@ -6099,6 +6099,12 @@ period_locks ─&lt; audit_logs
       <div class="fg"><label class="fl">Visa / Work Permit</label><input class="fi" id="emp-work-permit-file" type="file" accept=".pdf,.jpg,.jpeg,.png"></div>
       <div class="fg"><label class="fl">Other Documents</label><input class="fi" id="emp-medical-file" type="file" accept=".pdf,.jpg,.jpeg,.png" multiple></div>
     </div>
+    <div class="section-hd">Portal Access (Employee Self-Service)</div>
+    <div class="fr3">
+      <div class="fg"><label class="fl">Username</label><input class="fi mono" id="emp-username" placeholder="e.g. john.smith or emp005" autocomplete="off"></div>
+      <div class="fg"><label class="fl">Password</label><input class="fi mono" id="emp-password" type="password" placeholder="Set login password" autocomplete="new-password"></div>
+      <div class="fg"><label class="fl">Confirm Password</label><input class="fi mono" id="emp-password-confirm" type="password" placeholder="Re-enter password" autocomplete="new-password"></div>
+    </div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-emp')">Cancel</button><button class="btn btn-p" onclick="saveEmployee()">Add Employee</button></div>
   </div>
 </div>
@@ -6565,6 +6571,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260628f" defer></script>
+<script src="src/app.js?v=20260628g" defer></script>
 </body>
 </html>
