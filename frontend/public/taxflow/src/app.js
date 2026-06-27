@@ -8616,7 +8616,7 @@ function invoicePdfHtml(inv=currentInvoiceForShare()){
       <section class="head" dir="${company.enableRtl?'rtl':'ltr'}"><div class="brand">${_logoPdfHtml(initials)}<div><div class="company">${escapeHtml(company.name||'TaxFlow')}</div><div class="muted">${escapeHtml(company.address||'')}</div><div class="muted">${escapeHtml(company.trnLabel||'TRN')} ${escapeHtml(company.trn||'not set')}</div></div></div><div class="right"><div class="label">${escapeHtml(company.taxLabel||'Tax Invoice')}</div><div>${escapeHtml(invoice.invoice_no||'Draft')}</div><span class="badge">${escapeHtml(invoice.status||'Draft')}</span></div></section>
       <section class="grid" dir="${company.enableRtl?'rtl':'ltr'}"><div class="panel"><div class="kicker">${escapeHtml(labels.billTo||'Bill To')}</div><div class="party">${escapeHtml(invoice.customer||'Customer')}</div><div class="muted">${escapeHtml(company.customerTrnLabel||'Customer TRN')} ${escapeHtml(invoice.customer_trn||'not provided')}</div><div class="muted">${escapeHtml(invoice.customer_address||'')}</div></div><div class="panel"><div class="row"><span>${escapeHtml(labels.issueDate||'Issue Date')}</span><strong>${escapeHtml(invoice.date||'-')}</strong></div><div class="row"><span>${escapeHtml(labels.dueDate||'Due Date')}</span><strong>${escapeHtml(invoice.due_date||'-')}</strong></div><div class="row"><span>${escapeHtml(labels.paymentTerms||'Terms')}</span><strong>${escapeHtml(invoice.terms||'Net 30')}</strong></div><div class="row"><span>${escapeHtml(labels.currency||'Currency')}</span><strong>AED</strong></div></div></section>
       <table dir="${company.enableRtl?'rtl':'ltr'}"><thead><tr><th>#</th><th>${escapeHtml(labels.product||'Product')}</th><th>${escapeHtml(labels.unit||'Unit')}</th><th class="num">${escapeHtml(labels.quantity||'Qty')}</th><th class="num">${escapeHtml(labels.unitPrice||'Unit Price')}</th><th class="num">${escapeHtml(labels.amount||'Amount')}</th></tr></thead><tbody>${lines.map((line,index)=>`<tr><td>${index+1}</td><td><strong>${escapeHtml(line.description||'Item')}</strong></td><td>${escapeHtml(line.unit||'PCS')}</td><td class="num">${escapeHtml(line.qty||1)}</td><td class="num">${fmt(line.price)}</td><td class="num">${fmt(line.amount)}</td></tr>`).join('')}</tbody></table>
-      <section class="summary" dir="${company.enableRtl?'rtl':'ltr'}"><div class="notes"><div class="kicker">${escapeHtml(labels.paymentDetails||'Payment Details')}</div><div style="margin-top:8px">${escapeHtml(company.footer||'')}</div><div class="link">Online view: ${escapeHtml(publicInvoiceUrl(inv))}</div></div><div class="totals"><div class="total"><span>${escapeHtml(labels.subtotal||'Subtotal')}</span><strong>AED ${fmt(invoice.subtotal)}</strong></div><div class="total"><span>${escapeHtml(labels.vat||'VAT')}</span><strong>AED ${fmt(invoice.vat_amount)}</strong></div><div class="grand"><span>${escapeHtml(labels.total||'Total')}</span><strong>AED ${fmt(invoice.total)}</strong></div></div></section>
+      <section class="summary" dir="${company.enableRtl?'rtl':'ltr'}"><div class="notes"><div class="kicker">${escapeHtml(labels.paymentDetails||'Payment Details')}</div><div style="margin-top:8px">${escapeHtml(company.footer||'')}</div><div class="link">Online view: ${escapeHtml(_shortUrlCache.get(inv?.invoice_no||'draft')||publicInvoiceUrl(inv))}</div></div><div class="totals"><div class="total"><span>${escapeHtml(labels.subtotal||'Subtotal')}</span><strong>AED ${fmt(invoice.subtotal)}</strong></div><div class="total"><span>${escapeHtml(labels.vat||'VAT')}</span><strong>AED ${fmt(invoice.vat_amount)}</strong></div><div class="grand"><span>${escapeHtml(labels.total||'Total')}</span><strong>AED ${fmt(invoice.total)}</strong></div></div></section>
     </main><script>window.onload=()=>setTimeout(()=>window.print(),250);<\/script></body></html>`;
 }
 
@@ -8729,13 +8729,19 @@ function invoicePdfFilename(inv){
 function invoiceViewPrintHtml(inv=currentInvoiceForShare()){
   renderSalesInvoicePreview(inv);
   const body=document.getElementById('sales-view-body');
+  // Patch any [data-digital-link] anchors with cached short URL before capture
+  const shortUrl=_shortUrlCache.get(inv?.invoice_no||'draft');
+  if(shortUrl&&body){
+    body.querySelectorAll('[data-digital-link]').forEach(a=>{a.href=shortUrl;});
+  }
   const invoiceHtml=body?.innerHTML||invoicePdfHtml(inv);
   const title=escapeHtml(inv?.invoice_no||'Invoice');
+  const styleBase=window.location.origin;
   return `<!doctype html><html><head><meta charset="utf-8"><title>${title} - TaxFlow</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
-    <link rel="stylesheet" href="/src/styles.css">
+    <link rel="stylesheet" href="${styleBase}/src/styles.css">
     <style>
       body{margin:0;background:#fff;color:#172033;padding:24px;height:auto;overflow:auto;}
       .invoice-print-shell{max-width:980px;margin:0 auto;}
@@ -8744,16 +8750,19 @@ function invoiceViewPrintHtml(inv=currentInvoiceForShare()){
         body{padding:0;print-color-adjust:exact;-webkit-print-color-adjust:exact;}
         .invoice-print-shell{max-width:none;margin:0;}
         .invoice-sheet{border:0!important;border-radius:0!important;}
+        .invoice-qr-row a[data-digital-link]{word-break:break-all;font-size:10px;}
       }
-    </style></head><body class="theme-light"><main class="invoice-print-shell">${invoiceHtml}</main><script>window.onload=()=>setTimeout(()=>window.print(),600);<\/script></body></html>`;
+    </style></head><body class="theme-light"><main class="invoice-print-shell">${invoiceHtml}</main><script>window.onload=()=>setTimeout(()=>window.print(),800);<\/script></body></html>`;
 }
 
-function downloadInvoicePdf(inv=currentInvoiceForShare()){
+async function downloadInvoicePdf(inv=currentInvoiceForShare()){
   const printWindow=window.open('','_blank','width=980,height=780');
   if(!printWindow){
     toast('Allow popups to open the invoice PDF view','warn');
     return;
   }
+  // Ensure short URL is cached before rendering so PDF links are short
+  await createShortInvoiceUrl(inv);
   printWindow.document.open();
   printWindow.document.write(invoiceViewPrintHtml(inv));
   printWindow.document.close();
