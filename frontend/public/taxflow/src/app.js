@@ -11594,32 +11594,34 @@ function renderPurchaseAiFlatTable(){
     const lines=Array.isArray(inv.lines)&&inv.lines.length?inv.lines:[{}];
     lines.forEach((line,li)=>{
       const isFirst=li===0;
-      const qty=purchaseAiNumber(line.quantity||line.qty||1);
+      const qty=purchaseAiNumber(line.quantity??line.qty);
       const unitPrice=purchaseAiNumber(line.unit_cost||line.unit_cost_before_tax||line.unit_price||line.cost||line.price);
-      const discPct=purchaseAiNumber(line.discount_percent||line.discount_pct||line.discount);
+      const discPct=purchaseAiNumber(line.discount_percent||line.discount_pct);
       const discAmt=purchaseAiNumber(line.discount_amount)||(unitPrice*qty*(discPct/100));
       const lineTotal=purchaseAiNumber(line.line_total||line.amount||line.net_amount)||(qty*unitPrice-discAmt);
-      const desc=escapeHtml(line.product||line.description||line.item||'');
+      const desc=escapeHtml(purchaseAiProductName(line)||inv.invoice_no||'—');
+      const skuTag=line.sku||line.code?` <span style="color:var(--text3);font-size:10px">${escapeHtml(line.sku||line.code||'')}</span>`:'';
+      const unitStr=line.unit||line.unit_of_measure||line.uom?` <span style="color:var(--text3);font-size:10px">${escapeHtml(line.unit||line.unit_of_measure||line.uom||'')}</span>`:'';
       rows.push(`<tr class="ext-flat-row${isFirst?' ext-flat-first':' ext-flat-sub'}" data-invoice-no="${invoiceNo}">
         <td style="text-align:center">${isFirst?`<input type="checkbox" class="purchase-ai-tbl-select" data-invoice-no="${invoiceNo}" ${cardRow.querySelector('.purchase-ai-select')?.checked?'checked':''}>`:'&nbsp;'}</td>
-        <td style="font-size:11px;color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${isFirst?escapeHtml(filename):''}</td>
-        <td>${isFirst?escapeHtml(inv.date||'-'):''}</td>
-        <td class="mono">${isFirst?escapeHtml(inv.invoice_no||'-'):''}</td>
-        <td>${isFirst?escapeHtml(inv.supplier||'-'):''}</td>
-        <td class="mono" style="${inv.supplier_trn&&String(inv.supplier_trn).length!==15?'color:var(--red)':''}">${isFirst?escapeHtml(inv.supplier_trn||'-'):''}</td>
-        <td>${isFirst?escapeHtml(inv.bill_to||'-'):''}</td>
+        <td style="font-size:11px;color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(filename)}">${isFirst?escapeHtml(filename):''}</td>
+        <td style="white-space:nowrap">${isFirst?escapeHtml(inv.date||'—'):''}</td>
+        <td class="mono">${isFirst?escapeHtml(inv.invoice_no||'—'):''}</td>
+        <td>${isFirst?escapeHtml(inv.supplier||'—'):''}</td>
+        <td class="mono" style="${inv.supplier_trn&&String(inv.supplier_trn).replace(/\D/g,'').length!==15?'color:var(--red)':''}">${isFirst?escapeHtml(inv.supplier_trn||'—'):''}</td>
+        <td>${isFirst?escapeHtml(inv.bill_to||inv.location||'—'):''}</td>
         <td class="mono" style="text-align:right">${isFirst?`${cur} ${fmt(net)}`:''}</td>
-        <td class="mono" style="text-align:right">${isFirst&&disc>0?`${cur} ${fmt(disc)}`:''}</td>
+        <td class="mono" style="text-align:right">${isFirst&&disc?`${cur} ${fmt(disc)}`:''}</td>
         <td class="mono" style="text-align:right">${isFirst?`${cur} ${fmt(vat)}`:''}</td>
-        <td class="mono" style="text-align:right;font-weight:700">${isFirst?`${cur} ${fmt(total)}`:''}</td>
-        <td style="max-width:200px">${desc}</td>
-        <td class="mono" style="text-align:right">${qty>0?fmt(qty):''}</td>
-        <td class="mono" style="text-align:right">${unitPrice>0?`${cur} ${fmt(unitPrice)}`:''}</td>
-        <td class="mono" style="text-align:right">${discPct>0?`${fmt(discPct)}%`:''}</td>
-        <td class="mono" style="text-align:right">${discAmt>0?`${cur} ${fmt(discAmt)}`:''}</td>
-        <td class="mono" style="text-align:right;color:var(--accent);font-weight:700">${lineTotal>0?`${cur} ${fmt(lineTotal)}`:''}</td>
+        <td class="mono" style="text-align:right;font-weight:700;color:var(--accent)">${isFirst?`${cur} ${fmt(total)}`:''}</td>
+        <td style="max-width:220px">${desc}${skuTag}</td>
+        <td class="mono" style="text-align:right">${qty?`${fmt(qty)}${unitStr}`:'—'}</td>
+        <td class="mono" style="text-align:right">${unitPrice?`${cur} ${fmt(unitPrice)}`:'—'}</td>
+        <td class="mono" style="text-align:right">${discPct?`${fmt(discPct)}%`:''}</td>
+        <td class="mono" style="text-align:right">${discAmt?`${cur} ${fmt(discAmt)}`:''}</td>
+        <td class="mono" style="text-align:right;font-weight:700;color:var(--accent)">${lineTotal?`${cur} ${fmt(lineTotal)}`:'—'}</td>
         <td>${isFirst?`<span class="b ${statusCls}">${escapeHtml(statusLabel)}</span>`:''}</td>
-        <td>${isFirst?`<button class="btn btn-g btn-xs" onclick="openPurchaseAiEditByInvoiceNo('${invoiceNo}')">Edit</button>`:'&nbsp;'}</td>
+        <td style="white-space:nowrap">${isFirst?`<button class="btn btn-g btn-xs" onclick="openPurchaseAiEditByInvoiceNo('${invoiceNo}')">Edit</button>`:'&nbsp;'}</td>
       </tr>`);
     });
   });
