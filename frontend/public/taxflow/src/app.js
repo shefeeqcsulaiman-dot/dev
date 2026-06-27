@@ -9334,19 +9334,21 @@ async function openInvoiceShareModal(inv=currentSalesInvoice){
   const custRec=invoiceCustomerRecords().find(c=>c.name.toLowerCase()===custName);
   if(emailEl)emailEl.value=currentSalesInvoice.customer_email||custRec?.email||'';
   if(phoneEl)phoneEl.value=currentSalesInvoice.customer_phone||custRec?.phone||'';
-  // Show long URL immediately so the modal opens without waiting
-  const longUrl=publicInvoiceUrl(currentSalesInvoice);
-  if(msg)msg.value=invoiceShareMessage(currentSalesInvoice,longUrl);
-  if(link)link.value=longUrl;
-  if(onlineBtn)onlineBtn.href=longUrl;
+  // Show loading state — disable share buttons until short URL is ready
+  if(link){link.value='Generating short link…';link.disabled=true;}
+  if(msg)msg.value='Preparing message…';
+  if(onlineBtn)onlineBtn.removeAttribute('href');
+  // Disable send buttons while generating
+  const shareModal=document.getElementById('m-invoice-share');
+  const shareBtns=shareModal?.querySelectorAll('button[onclick*="shareCurrentInvoice"],button[onclick*="copyCurrentInvoiceLink"],button[onclick*="shareInvoicePdfAndLink"]')||[];
+  shareBtns.forEach(b=>{b.disabled=true;});
   showM('m-invoice-share');
-  // Async: swap to short URL once ready
+  // Get short URL, then populate everything
   const shortUrl=await createShortInvoiceUrl(currentSalesInvoice);
-  if(shortUrl!==longUrl){
-    if(link)link.value=shortUrl;
-    if(onlineBtn)onlineBtn.href=shortUrl;
-    if(msg)msg.value=invoiceShareMessage(currentSalesInvoice,shortUrl);
-  }
+  if(link){link.value=shortUrl;link.disabled=false;}
+  if(onlineBtn)onlineBtn.href=shortUrl;
+  if(msg)msg.value=invoiceShareMessage(currentSalesInvoice,shortUrl);
+  shareBtns.forEach(b=>{b.disabled=false;});
 }
 
 function shareCurrentInvoice(channel){
