@@ -561,6 +561,8 @@ function saveEmployee(){
     salary:parseAmount(employeeFormValue('emp-salary','0')),
     contract:employeeFormValue('emp-contract','Full-Time'),
     location:employeeFormValue('emp-location','Dubai HQ'),
+    weekly_hours:parseAmount(employeeFormValue('emp-weekly-hours','0'))||0,
+    monthly_hours:parseAmount(employeeFormValue('emp-monthly-hours','0'))||0,
     branch:employeeFormValue('emp-branch','Dubai HQ'),
     cost_center:employeeFormValue('emp-cost-center'),
     status:'Active',
