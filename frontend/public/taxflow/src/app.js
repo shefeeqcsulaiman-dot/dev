@@ -325,14 +325,6 @@ function populateRotaEditTypeSelect(restoreVal){
     });
   }
   sel.appendChild(shiftGrp);
-  const statusGrp=document.createElement('optgroup');
-  statusGrp.label='Status';
-  ['Off','Leave','OT','Holiday','Training'].forEach(s=>{
-    const opt=document.createElement('option');
-    opt.value=s;opt.textContent=s;
-    statusGrp.appendChild(opt);
-  });
-  sel.appendChild(statusGrp);
   if(current)sel.value=current;
 }
 
