@@ -337,6 +337,7 @@ function showM(id){
   if(id==='m-emp'&&!document.getElementById('emp-id')?.value)setFieldValue(document.getElementById('emp-id'),nextEmployeeId());
   if(id==='m-edit-shift')populateRotaEditTypeSelect();
   if(id==='m-payment')setTimeout(()=>syncPaymentFormOptions(),0);
+  if(id==='m-leave')populateHrEmployeeSelect('leave-employee');
   if(id==='m-loan')populateHrEmployeeSelect('loan-employee');
   if(id==='m-loan-advance')populateHrEmployeeSelect('advance-employee');
   if(id==='m-ot')populateHrEmployeeSelect('ot-employee-sel');
