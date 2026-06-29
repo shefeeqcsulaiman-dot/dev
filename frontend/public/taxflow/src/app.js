@@ -304,6 +304,9 @@ function populateRotaEditTypeSelect(restoreVal){
   const shiftRows=[...document.querySelectorAll('#rota-shift-tbody tr:not([data-empty-state])')];
   const shiftGrp=document.createElement('optgroup');
   shiftGrp.label='Shifts';
+  const blankOpt=document.createElement('option');
+  blankOpt.value='';blankOpt.textContent='— Select Shift —';
+  shiftGrp.appendChild(blankOpt);
   shiftRows.forEach(row=>{
     let shift=null;
     try{shift=JSON.parse(row.dataset.shift||'{}');}catch{}
@@ -643,7 +646,7 @@ function renderEmployeeRecord(employee){
     <td>${escapeHtml(employee.department)}</td>
     <td>${escapeHtml(employee.designation)}</td>
     <td>${escapeHtml(employee.supervisor)}</td>
-    <td><span class="b b-b">${escapeHtml(employee.shift)}</span></td>
+    <td>${(()=>{const h=Number(employee.shift_hours||0);if(h>0){const t=(employee.shift_hours_type||'weekly');const label=t.charAt(0).toUpperCase()+t.slice(1)+' · '+h+'h';return `<span class="b b-b">${escapeHtml(label)}</span>`;}return employee.shift?`<span class="b b-b">${escapeHtml(employee.shift)}</span>`:'<span style="color:var(--text3)">—</span>';})()}</td>
     <td class="mono">${Number(employee.salary||0).toLocaleString('en-AE',{minimumFractionDigits:0,maximumFractionDigits:0})}</td>
     <td><span class="b b-g">${escapeHtml(employee.status)}</span></td>
     <td><button class="btn btn-g btn-sm" onclick="openEmployeeProfile(this)">View</button></td>`;
@@ -741,7 +744,7 @@ function openEmployeeProfile(btn){
       </div>
       <div class="g4 mb16">
         <div class="stat"><div class="stat-lbl">Department</div><div class="stat-val" style="font-size:18px;color:var(--accent)">${escapeHtml(employee.department||'-')}</div></div>
-        <div class="stat"><div class="stat-lbl">Shift</div><div class="stat-val" style="font-size:18px;color:var(--green)">${escapeHtml(employee.shift||'-')}</div></div>
+        <div class="stat"><div class="stat-lbl">Shift Hours</div><div class="stat-val" style="font-size:18px;color:var(--green)">${(()=>{const h=Number(employee.shift_hours||0);if(h>0){const t=(employee.shift_hours_type||'weekly');return escapeHtml(t.charAt(0).toUpperCase()+t.slice(1)+' · '+h+'h');}return escapeHtml(employee.shift||'—');})()}</div></div>
         <div class="stat"><div class="stat-lbl">Total Salary</div><div class="stat-val" style="font-size:18px;color:var(--purple)">${'AED'} ${Number(employee.salary||0).toLocaleString('en-AE')}</div></div>
         <div class="stat"><div class="stat-lbl">Supervisor</div><div class="stat-val" style="font-size:18px;color:var(--amber)">${escapeHtml(employee.supervisor||'-')}</div></div>
       </div>
