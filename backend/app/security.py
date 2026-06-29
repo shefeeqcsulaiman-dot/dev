@@ -12,6 +12,10 @@ settings = get_settings()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 ALGORITHM = "HS256"
 
+# Pre-computed dummy hash used when email not found — ensures constant-time
+# response regardless of whether the email exists (prevents timing enumeration)
+_DUMMY_HASH = "$2b$12$QmNqX3Yv8pK2LmRtW1uZe.dummyhashfortimingnormalization.X"
+
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -28,7 +32,11 @@ def create_access_token(subject: str) -> str:
 
 def authenticate_user(db: Session, email: str, password: str) -> User | None:
     user = db.query(User).filter(User.email == email.lower()).first()
-    if not user or not verify_password(password, user.password_hash):
+    # Always run bcrypt verify so response time is identical whether
+    # the email exists or not — prevents timing-based email enumeration
+    candidate_hash = user.password_hash if user else _DUMMY_HASH
+    password_ok = verify_password(password, candidate_hash)
+    if not user or not password_ok:
         return None
     if not getattr(user, "is_active", True):
         return None

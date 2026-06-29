@@ -13,7 +13,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=Token)
-@limiter.limit("15/minute")
+@limiter.limit("10/minute")
 def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)) -> Token:
     user = authenticate_user(db, payload.email, payload.password)
     if not user:
@@ -22,10 +22,10 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
 
 
 @router.post("/register", response_model=Token, status_code=201)
-@limiter.limit("10/minute")
+@limiter.limit("5/hour")
 def register(request: Request, payload: RegisterRequest, db: Session = Depends(get_db)) -> Token:
     if db.query(User).filter(User.email == payload.email.lower()).first():
-        raise HTTPException(status_code=409, detail="Email already registered")
+        raise HTTPException(status_code=409, detail="Registration failed")
     company = Company(
         name=payload.company_name,
         trn=payload.trn or None,
