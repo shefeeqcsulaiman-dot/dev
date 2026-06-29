@@ -302,21 +302,29 @@ function populateRotaEditTypeSelect(restoreVal){
   const current=restoreVal!==undefined?restoreVal:sel.value;
   sel.innerHTML='';
   const shiftRows=[...document.querySelectorAll('#rota-shift-tbody tr:not([data-empty-state])')];
-  if(shiftRows.length){
-    const grp=document.createElement('optgroup');
-    grp.label='Shifts';
-    shiftRows.forEach(row=>{
-      const shift=row.dataset.shift?JSON.parse(row.dataset.shift):null;
-      if(!shift||!shift.name)return;
-      if((shift.status||'Active').toLowerCase()==='inactive')return;
+  const shiftGrp=document.createElement('optgroup');
+  shiftGrp.label='Shifts';
+  shiftRows.forEach(row=>{
+    let shift=null;
+    try{shift=JSON.parse(row.dataset.shift||'{}');}catch{}
+    const shiftName=shift?.name||shift?.shift_name||(row.children[0]?.textContent||'').trim();
+    if(!shiftName)return;
+    if((shift?.status||'Active').toLowerCase()==='inactive')return;
+    const start=shift?.start||shift?.start_time||'';
+    const end=shift?.end||shift?.end_time||'';
+    const opt=document.createElement('option');
+    opt.value=shiftName;
+    opt.textContent=shiftName+(start&&end?` · ${start}–${end}`:'');
+    shiftGrp.appendChild(opt);
+  });
+  if(!shiftGrp.children.length){
+    ['Morning','Evening','Night'].forEach(s=>{
       const opt=document.createElement('option');
-      opt.value=shift.name;
-      const timeRange=shift.start&&shift.end?` · ${shift.start}–${shift.end}`:'';
-      opt.textContent=`${shift.name}${timeRange}`;
-      grp.appendChild(opt);
+      opt.value=s;opt.textContent=s;
+      shiftGrp.appendChild(opt);
     });
-    if(grp.children.length)sel.appendChild(grp);
   }
+  sel.appendChild(shiftGrp);
   const statusGrp=document.createElement('optgroup');
   statusGrp.label='Status';
   ['Off','Leave','OT','Holiday','Training'].forEach(s=>{
@@ -336,6 +344,7 @@ function showM(id){
   if(id==='m-user')applyUserRolePermissions();
   if(id==='m-emp'&&!document.getElementById('emp-id')?.value)setFieldValue(document.getElementById('emp-id'),nextEmployeeId());
   if(id==='m-emp')populateEmpShiftSelect();
+  if(id==='m-edit-shift')populateRotaEditTypeSelect();
   if(id==='m-payment')setTimeout(()=>syncPaymentFormOptions(),0);
   if(id==='m-loan')populateHrEmployeeSelect('loan-employee');
   if(id==='m-loan-advance')populateHrEmployeeSelect('advance-employee');
