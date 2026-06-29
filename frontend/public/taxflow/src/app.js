@@ -335,7 +335,6 @@ function showM(id){
   modal.classList.add('on');
   if(id==='m-user')applyUserRolePermissions();
   if(id==='m-emp'&&!document.getElementById('emp-id')?.value)setFieldValue(document.getElementById('emp-id'),nextEmployeeId());
-  if(id==='m-emp')populateEmpShiftSelect();
   if(id==='m-edit-shift')populateRotaEditTypeSelect();
   if(id==='m-payment')setTimeout(()=>syncPaymentFormOptions(),0);
   if(id==='m-loan')populateHrEmployeeSelect('loan-employee');
@@ -557,12 +556,11 @@ function saveEmployee(){
     department:employeeFormValue('emp-department','Management'),
     designation:employeeFormValue('emp-designation','Employee'),
     supervisor:employeeFormValue('emp-supervisor',''),
-    shift:employeeFormValue('emp-shift','09:00-18:00'),
+    shift_hours_type:employeeFormValue('emp-shift-hours-type','weekly'),
+    shift_hours:parseAmount(employeeFormValue('emp-shift-hours','0'))||0,
     salary:parseAmount(employeeFormValue('emp-salary','0')),
     contract:employeeFormValue('emp-contract','Full-Time'),
     location:employeeFormValue('emp-location','Dubai HQ'),
-    weekly_hours:parseAmount(employeeFormValue('emp-weekly-hours','0'))||0,
-    monthly_hours:parseAmount(employeeFormValue('emp-monthly-hours','0'))||0,
     branch:employeeFormValue('emp-branch','Dubai HQ'),
     cost_center:employeeFormValue('emp-cost-center'),
     status:'Active',
