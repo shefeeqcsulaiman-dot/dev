@@ -278,6 +278,24 @@ function populateHrEmployeeSelect(id){
   });
 }
 
+function populateEmpShiftSelect(){
+  const sel=document.getElementById('emp-shift');
+  if(!sel)return;
+  const current=sel.value;
+  sel.innerHTML='<option value="">— Select Shift —</option>';
+  const shiftRows=[...document.querySelectorAll('#rota-shift-tbody tr:not([data-empty-state])')];
+  shiftRows.forEach(row=>{
+    const shift=row.dataset.shift?JSON.parse(row.dataset.shift):null;
+    if(!shift||!shift.code)return;
+    const opt=document.createElement('option');
+    opt.value=shift.name||shift.code;
+    const timeRange=shift.start&&shift.end?` · ${shift.start}–${shift.end}`:'';
+    opt.textContent=`${shift.name||shift.code} (${shift.code})${timeRange}`;
+    sel.appendChild(opt);
+  });
+  if(current)sel.value=current;
+}
+
 function showM(id){
   const modal=document.getElementById(id);
   if(!modal)return;
@@ -285,6 +303,7 @@ function showM(id){
   modal.classList.add('on');
   if(id==='m-user')applyUserRolePermissions();
   if(id==='m-emp'&&!document.getElementById('emp-id')?.value)setFieldValue(document.getElementById('emp-id'),nextEmployeeId());
+  if(id==='m-emp')populateEmpShiftSelect();
   if(id==='m-payment')setTimeout(()=>syncPaymentFormOptions(),0);
   if(id==='m-loan')populateHrEmployeeSelect('loan-employee');
   if(id==='m-loan-advance')populateHrEmployeeSelect('advance-employee');
@@ -585,7 +604,8 @@ function renderEmployeeRecord(employee){
   row.dataset.employee=JSON.stringify(employee);
   row.innerHTML=`
     <td class="mono">${escapeHtml(employee.id)}</td>
-    <td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px">${escapeHtml(initialsFromName(employee.name))}</div><div>${escapeHtml(employee.name)}${employee.nickname?` <span style="color:var(--text3);font-size:11px">(${escapeHtml(employee.nickname)})</span>`:''}<div class="card-sub">${escapeHtml(employee.contract||'Full-time')} · ${escapeHtml(employee.location||'Dubai HQ')}</div></div></div></td>
+    <td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px">${escapeHtml(initialsFromName(employee.name))}</div><div>${escapeHtml(employee.name)}<div class="card-sub">${escapeHtml(employee.contract||'Full-time')} · ${escapeHtml(employee.location||'Dubai HQ')}</div></div></div></td>
+    <td>${employee.nickname?escapeHtml(employee.nickname):'<span style="color:var(--text3)">—</span>'}</td>
     <td>${escapeHtml(employee.department)}</td>
     <td>${escapeHtml(employee.designation)}</td>
     <td>${escapeHtml(employee.supervisor)}</td>
@@ -622,12 +642,13 @@ function employeeFromDirectoryRow(row){
     name:fallbackName||'Employee',
     contract:parts[0]||'Full-time',
     location:parts[1]||'Dubai HQ',
-    department:cells[2]?.textContent.trim()||'-',
-    designation:cells[3]?.textContent.trim()||'-',
-    supervisor:cells[4]?.textContent.trim()||'-',
-    shift:cells[5]?.textContent.trim()||'-',
-    salary:parseAmount(cells[6]?.textContent),
-    status:cells[7]?.textContent.trim()||'Active',
+    nickname:cells[2]?.textContent.trim()||'',
+    department:cells[3]?.textContent.trim()||'-',
+    designation:cells[4]?.textContent.trim()||'-',
+    supervisor:cells[5]?.textContent.trim()||'-',
+    shift:cells[6]?.textContent.trim()||'-',
+    salary:parseAmount(cells[7]?.textContent),
+    status:cells[8]?.textContent.trim()||'Active',
     documents:{}
   };
 }
@@ -15495,13 +15516,10 @@ function weekDateFromStart(start,offset){
 }
 
 function currentRotaStaff(){
-  const rows=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')].map(row=>({
-    id:(row.children[0]?.textContent||'').trim(),
-    name:(row.children[1]?.textContent||'').trim(),
-    department:(row.children[2]?.textContent||'').trim()||'Management',
-    role:(row.children[3]?.textContent||'').trim()||'Employee',
-    location:(row.children[7]?.textContent||'').trim()||'Dubai HQ'
-  })).filter(staff=>staff.id&&staff.name);
+  const rows=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')].map(row=>{
+    const emp=employeeFromDirectoryRow(row);
+    return {id:emp.id||'',name:emp.name||'',department:emp.department||'Management',role:emp.designation||'Employee',location:emp.location||'Dubai HQ'};
+  }).filter(staff=>staff.id&&staff.name);
   return rows.length?rows.slice(0,24):ROTA_DEFAULT_STAFF;
 }
 
