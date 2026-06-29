@@ -296,6 +296,38 @@ function populateEmpShiftSelect(){
   if(current)sel.value=current;
 }
 
+function populateRotaEditTypeSelect(restoreVal){
+  const sel=document.getElementById('rota-edit-type');
+  if(!sel)return;
+  const current=restoreVal!==undefined?restoreVal:sel.value;
+  sel.innerHTML='';
+  const shiftRows=[...document.querySelectorAll('#rota-shift-tbody tr:not([data-empty-state])')];
+  if(shiftRows.length){
+    const grp=document.createElement('optgroup');
+    grp.label='Shifts';
+    shiftRows.forEach(row=>{
+      const shift=row.dataset.shift?JSON.parse(row.dataset.shift):null;
+      if(!shift||!shift.name)return;
+      if((shift.status||'Active').toLowerCase()==='inactive')return;
+      const opt=document.createElement('option');
+      opt.value=shift.name;
+      const timeRange=shift.start&&shift.end?` · ${shift.start}–${shift.end}`:'';
+      opt.textContent=`${shift.name}${timeRange}`;
+      grp.appendChild(opt);
+    });
+    if(grp.children.length)sel.appendChild(grp);
+  }
+  const statusGrp=document.createElement('optgroup');
+  statusGrp.label='Status';
+  ['Off','Leave','OT','Holiday','Training'].forEach(s=>{
+    const opt=document.createElement('option');
+    opt.value=s;opt.textContent=s;
+    statusGrp.appendChild(opt);
+  });
+  sel.appendChild(statusGrp);
+  if(current)sel.value=current;
+}
+
 function showM(id){
   const modal=document.getElementById(id);
   if(!modal)return;
@@ -15587,7 +15619,7 @@ function openRotaCellEditor(cell){
   const [start='',end='']=time.includes('-')?time.split('-').map(part=>part.trim()):['',''];
   const type=rotaCellTypeFromCode(code);
   setText('rota-edit-sub',`${employee} - ${day}`);
-  setSelectValue(document.getElementById('rota-edit-type'),type);
+  populateRotaEditTypeSelect(type);
   setFieldValue(document.getElementById('rota-edit-start'),start&&start!=='-'?start:'');
   setFieldValue(document.getElementById('rota-edit-end'),end&&end!=='-'?end:'');
   setFieldValue(document.getElementById('rota-edit-break'),'60');
@@ -15597,8 +15629,19 @@ function openRotaCellEditor(cell){
 }
 
 function applyRotaEditTypeDefaults(){
-  const type=document.getElementById('rota-edit-type')?.value||'Morning';
-  const defaults=ROTA_EDIT_DEFAULTS[type]||ROTA_EDIT_DEFAULTS.Morning;
+  const type=document.getElementById('rota-edit-type')?.value||'';
+  const shiftRow=[...document.querySelectorAll('#rota-shift-tbody tr:not([data-empty-state])')].find(row=>{
+    try{const s=JSON.parse(row.dataset.shift||'{}');return s.name===type;}catch{return false;}
+  });
+  if(shiftRow){
+    const shift=JSON.parse(shiftRow.dataset.shift);
+    setFieldValue(document.getElementById('rota-edit-start'),shift.start||'');
+    setFieldValue(document.getElementById('rota-edit-end'),shift.end||'');
+    setFieldValue(document.getElementById('rota-edit-break'),String(shift.break_minutes||60));
+    setSelectValue(document.getElementById('rota-edit-mark'),'Shift');
+    return;
+  }
+  const defaults=ROTA_EDIT_DEFAULTS[type]||ROTA_EDIT_DEFAULTS.Off;
   setFieldValue(document.getElementById('rota-edit-start'),defaults.start);
   setFieldValue(document.getElementById('rota-edit-end'),defaults.end);
   setSelectValue(document.getElementById('rota-edit-mark'),defaults.mark);
