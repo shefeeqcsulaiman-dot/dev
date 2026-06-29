@@ -400,7 +400,13 @@ function appConfirm({title='Confirm Action',message='Please confirm this action.
   const cancel=overlay.querySelector('#app-confirm-cancel');
   overlay.querySelector('#app-confirm-title').textContent=title;
   const msgEl=overlay.querySelector('#app-confirm-message');
-  if(messageHtml){msgEl.innerHTML=messageHtml;}else{msgEl.textContent=message;}
+  if(messageHtml){
+    const _tmp=document.createElement('div');
+    _tmp.innerHTML=messageHtml;
+    _tmp.querySelectorAll('script,style,iframe,object,embed').forEach(el=>el.remove());
+    _tmp.querySelectorAll('*').forEach(el=>{[...el.attributes].forEach(a=>{if(/^on/i.test(a.name)||(a.name==='href'&&/^javascript:/i.test(a.value)))el.removeAttribute(a.name);});});
+    msgEl.innerHTML=_tmp.innerHTML;
+  }else{msgEl.textContent=message;}
   ok.textContent=okText;
   ok.className=`btn ${tone==='danger'?'btn-danger':'btn-p'}`;
   overlay.classList.add('on');

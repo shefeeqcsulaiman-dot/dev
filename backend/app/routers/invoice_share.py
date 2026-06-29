@@ -1,20 +1,20 @@
 import json
-import random
-import string
+import secrets
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.limiter import limiter
 from app.models import AppDataRecord
 
 router = APIRouter(tags=["invoice-share"])
 
 
-def _gen_code(n: int = 8) -> str:
-    return "".join(random.choices(string.ascii_letters + string.digits, k=n))
+def _gen_code() -> str:
+    return secrets.token_urlsafe(12)
 
 
 class SharePayload(BaseModel):
@@ -29,7 +29,7 @@ def create_invoice_share(
 ):
     code = ""
     for _ in range(10):
-        code = _gen_code(8)
+        code = _gen_code()
         exists = (
             db.query(AppDataRecord)
             .filter(
@@ -52,7 +52,8 @@ def create_invoice_share(
 
 
 @router.get("/share/invoice/{code}")
-def get_invoice_share(code: str, db: Session = Depends(get_db)):
+@limiter.limit("20/minute")
+def get_invoice_share(request: Request, code: str, db: Session = Depends(get_db)):
     record = (
         db.query(AppDataRecord)
         .filter(

@@ -50,8 +50,8 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Accept"],
     )
 
     @app.middleware("http")
@@ -265,8 +265,6 @@ def ensure_schema_updates() -> None:
                     connection.execute(text(f"ALTER TABLE companies ADD COLUMN {col} {typedef}"))
         if "users" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("users")}
-            if "password_plain" not in existing_columns:
-                connection.execute(text("ALTER TABLE users ADD COLUMN password_plain VARCHAR(255)"))
             if "is_active" not in existing_columns:
                 connection.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT TRUE NOT NULL"))
         if "stock_product_mappings" in table_names:

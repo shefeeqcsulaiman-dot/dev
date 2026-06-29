@@ -156,7 +156,6 @@ def create_company(
         email=email,
         full_name=full_name,
         password_hash=hash_password(body.password),
-        password_plain=body.password,
         role="admin",
     )
     db.add(user)
@@ -203,7 +202,6 @@ def add_user(
         email=email,
         full_name=body.full_name.strip() or email,
         password_hash=hash_password(body.password),
-        password_plain=body.password,
         role=role,
     )
     db.add(user)

@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     app_name: str = "TaxFlow"
     app_env: str = "development"
     secret_key: str = "change-me-in-production"
-    access_token_expire_minutes: int = 1440
+    access_token_expire_minutes: int = 480
     database_url: str = "sqlite:///./taxflow.db"
     redis_url: str = "memory://"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
