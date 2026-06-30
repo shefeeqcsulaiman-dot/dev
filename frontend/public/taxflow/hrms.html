@@ -394,32 +394,10 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   <div class="hc">
     <div class="hc-hd">
       <div class="hc-title">Attendance Trend</div>
-      <select class="hc-select"><option>This Month</option><option>Last Month</option><option>Last 3 Months</option></select>
     </div>
-    <div class="hrms-line-chart-wrap" style="height:130px">
-      <svg viewBox="0 0 400 100" preserveAspectRatio="none" style="width:100%;height:100%">
-        <defs>
-          <linearGradient id="attGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#3b82f6" stop-opacity=".18"/>
-            <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
-          </linearGradient>
-        </defs>
-        <path d="M0 55 L18 50 L36 45 L54 52 L72 42 L90 38 L108 44 L126 40 L144 35 L162 38 L180 32 L198 36 L216 30 L234 33 L252 28 L270 32 L288 27 L306 30 L324 26 L342 29 L360 24 L378 27 L400 22" fill="url(#attGrad)" stroke="none"/>
-        <polyline points="0,55 18,50 36,45 54,52 72,42 90,38 108,44 126,40 144,35 162,38 180,32 198,36 216,30 234,33 252,28 270,32 288,27 306,30 324,26 342,29 360,24 378,27 400,22" fill="none" stroke="#3b82f6" stroke-width="2.2" stroke-linejoin="round"/>
-        <!-- Data points -->
-        <circle cx="0" cy="55" r="3" fill="#3b82f6"/>
-        <circle cx="72" cy="42" r="3" fill="#3b82f6"/>
-        <circle cx="144" cy="35" r="3" fill="#3b82f6"/>
-        <circle cx="216" cy="30" r="3" fill="#3b82f6"/>
-        <circle cx="288" cy="27" r="3" fill="#3b82f6"/>
-        <circle cx="360" cy="24" r="3" fill="#3b82f6"/>
-      </svg>
-    </div>
-    <div style="display:flex;justify-content:space-between;font-size:10px;color:#9ca3af;margin-top:6px">
-      <span>1 May</span><span>5 May</span><span>9 May</span><span>13 May</span><span>16 May</span>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:11.5px">
-      <span style="display:flex;align-items:center;gap:4px"><span style="width:20px;height:2px;background:#3b82f6;display:inline-block;border-radius:1px"></span>Attendance %</span>
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:130px;gap:8px">
+      <svg viewBox="0 0 32 32" width="32" height="32" fill="none" stroke="#d1d5db" stroke-width="2"><circle cx="16" cy="16" r="12"/><path d="M16 9v7l4 4"/></svg>
+      <div style="font-size:12px;color:var(--text3);text-align:center">No attendance log data yet.<br>Daily check-in tracking not yet enabled.</div>
     </div>
   </div>
 
@@ -428,37 +406,15 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="hc-hd"><div class="hc-title">Department Strength</div></div>
     <div class="hc-donut-wrap" style="align-items:flex-start">
       <div class="hc-donut">
-        <svg viewBox="0 0 100 100" width="100" height="100">
-          <!-- Donut rings: total circumference of r=38 ≈ 238.8 -->
+        <svg id="hrms-dept-svg" viewBox="0 0 100 100" width="100" height="100">
           <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="12"/>
-          <!-- HR 9.6% -->
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#3b82f6" stroke-width="12" stroke-dasharray="22.9 215.9" stroke-dashoffset="0" transform="rotate(-90 50 50)"/>
-          <!-- Finance 12.8% -->
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#8b5cf6" stroke-width="12" stroke-dasharray="30.6 208.2" stroke-dashoffset="-22.9" transform="rotate(-90 50 50)"/>
-          <!-- Operations 25.6% -->
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#f59e0b" stroke-width="12" stroke-dasharray="61.1 177.7" stroke-dashoffset="-53.5" transform="rotate(-90 50 50)"/>
-          <!-- Sales 16.8% -->
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#10b981" stroke-width="12" stroke-dasharray="40.1 198.7" stroke-dashoffset="-114.6" transform="rotate(-90 50 50)"/>
-          <!-- IT 14.4% -->
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#ef4444" stroke-width="12" stroke-dasharray="34.4 204.4" stroke-dashoffset="-154.7" transform="rotate(-90 50 50)"/>
-          <!-- Admin 8.0% -->
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#06b6d4" stroke-width="12" stroke-dasharray="19.1 219.7" stroke-dashoffset="-189.1" transform="rotate(-90 50 50)"/>
-          <!-- Others: remaining -->
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#d1d5db" stroke-width="12" stroke-dasharray="30.6 208.2" stroke-dashoffset="-208.2" transform="rotate(-90 50 50)"/>
         </svg>
         <div class="hc-donut-center">
           <div class="hc-donut-val" id="hrms-dept-total">—</div>
           <div class="hc-donut-lbl">Total</div>
         </div>
       </div>
-      <div class="hc-legend" style="flex:1;font-size:11px">
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#3b82f6"></div><div class="hc-leg-name">HR</div><div class="hc-leg-pct">(9.6%)</div></div>
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#8b5cf6"></div><div class="hc-leg-name">Finance</div><div class="hc-leg-pct">(12.8%)</div></div>
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#f59e0b"></div><div class="hc-leg-name">Operations</div><div class="hc-leg-pct">(25.6%)</div></div>
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#10b981"></div><div class="hc-leg-name">Sales</div><div class="hc-leg-pct">(16.8%)</div></div>
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#ef4444"></div><div class="hc-leg-name">IT</div><div class="hc-leg-pct">(14.4%)</div></div>
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#06b6d4"></div><div class="hc-leg-name">Admin</div><div class="hc-leg-pct">(8.0%)</div></div>
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#d1d5db"></div><div class="hc-leg-name">Others</div><div class="hc-leg-pct">(12.8%)</div></div>
+      <div class="hc-legend" id="hrms-dept-legend" style="flex:1;font-size:11px">
       </div>
     </div>
   </div>
@@ -468,31 +424,15 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="hc-hd"><div class="hc-title">Employee Type Distribution</div></div>
     <div class="hc-donut-wrap" style="align-items:flex-start">
       <div class="hc-donut">
-        <svg viewBox="0 0 100 100" width="100" height="100">
+        <svg id="hrms-type-svg" viewBox="0 0 100 100" width="100" height="100">
           <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="12"/>
-          <!-- Full-Time 52% -->
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#3b82f6" stroke-width="12" stroke-dasharray="124.2 114.6" stroke-dashoffset="0" transform="rotate(-90 50 50)"/>
-          <!-- Part-Time 9.6% -->
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#8b5cf6" stroke-width="12" stroke-dasharray="22.9 215.9" stroke-dashoffset="-124.2" transform="rotate(-90 50 50)"/>
-          <!-- Contract 16% -->
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#f59e0b" stroke-width="12" stroke-dasharray="38.2 200.6" stroke-dashoffset="-147.1" transform="rotate(-90 50 50)"/>
-          <!-- Daily Wage 8% -->
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#10b981" stroke-width="12" stroke-dasharray="19.1 219.7" stroke-dashoffset="-185.3" transform="rotate(-90 50 50)"/>
-          <!-- Others remaining -->
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#d1d5db" stroke-width="12" stroke-dasharray="34.4 204.4" stroke-dashoffset="-204.4" transform="rotate(-90 50 50)"/>
         </svg>
         <div class="hc-donut-center">
           <div class="hc-donut-val" id="hrms-type-total">—</div>
           <div class="hc-donut-lbl">Total</div>
         </div>
       </div>
-      <div class="hc-legend" style="flex:1;font-size:11px">
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#3b82f6"></div><div class="hc-leg-name">Full-Time</div><div class="hc-leg-pct">(52%)</div></div>
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#8b5cf6"></div><div class="hc-leg-name">Part-Time</div><div class="hc-leg-pct">(9.6%)</div></div>
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#f59e0b"></div><div class="hc-leg-name">Contract</div><div class="hc-leg-pct">(16%)</div></div>
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#10b981"></div><div class="hc-leg-name">Daily Wage</div><div class="hc-leg-pct">(8%)</div></div>
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#06b6d4"></div><div class="hc-leg-name">Hourly</div><div class="hc-leg-pct">(6.4%)</div></div>
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#d1d5db"></div><div class="hc-leg-name">Others</div><div class="hc-leg-pct">(8%)</div></div>
+      <div class="hc-legend" id="hrms-type-legend" style="flex:1;font-size:11px">
       </div>
     </div>
   </div>
@@ -519,9 +459,9 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       </div>
       <div style="flex:1;display:flex;flex-direction:column;gap:5px;font-size:11.5px">
         <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#3b82f6;display:inline-block"></span>Gross Salary</span><span style="font-weight:600" id="hrms-pay-gross">—</span></div>
-        <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block"></span>Allowances</span><span style="font-weight:600">—</span></div>
-        <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#10b981;display:inline-block"></span>Overtime</span><span style="font-weight:600">—</span></div>
-        <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block"></span>Deductions</span><span style="font-weight:600">—</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block"></span>Allowances</span><span style="font-weight:600" id="hrms-pay-allow">—</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#10b981;display:inline-block"></span>Overtime</span><span style="font-weight:600" id="hrms-pay-ot-total">—</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block"></span>Deductions</span><span style="font-weight:600" id="hrms-pay-ded">—</span></div>
         <div style="border-top:1px solid #f0f2f7;margin-top:4px;padding-top:4px;display:flex;justify-content:space-between;font-weight:700"><span>Net Payroll</span><span id="hrms-pay-net">—</span></div>
       </div>
     </div>
@@ -540,9 +480,9 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
             <div class="hc-prog-icon" style="background:#eff6ff"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="#3b82f6" stroke-width="1.4"><path d="M7 1v3M7 10v3M1 7h3M10 7h3"/></svg></div>
             Annual Leave
           </div>
-          <div class="hc-prog-val">320 / 480 Available</div>
+          <div class="hc-prog-val" id="hrms-ls-annual-val">— / — days</div>
         </div>
-        <div class="hc-prog-bar"><div class="hc-prog-fill" style="width:66%;background:#3b82f6"></div></div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-ls-annual-fill" style="width:0%;background:#3b82f6"></div></div>
       </div>
       <div>
         <div class="hc-progress-hd">
@@ -550,9 +490,9 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
             <div class="hc-prog-icon" style="background:#fef9c3"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="#ca8a04" stroke-width="1.4"><circle cx="7" cy="7" r="5"/><path d="M7 4v3l2 2"/></svg></div>
             Sick Leave
           </div>
-          <div class="hc-prog-val">125 / 200 Available</div>
+          <div class="hc-prog-val" id="hrms-ls-sick-val">— / — days</div>
         </div>
-        <div class="hc-prog-bar"><div class="hc-prog-fill" style="width:62%;background:#eab308"></div></div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-ls-sick-fill" style="width:0%;background:#eab308"></div></div>
       </div>
       <div>
         <div class="hc-progress-hd">
@@ -560,9 +500,9 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
             <div class="hc-prog-icon" style="background:#fdf4ff"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="#9333ea" stroke-width="1.4"><path d="M7 1.5a3.5 3.5 0 110 7 3.5 3.5 0 010-7z"/><path d="M2 12.5c0-2.5 2-4 5-4s5 1.5 5 4"/></svg></div>
             Casual Leave
           </div>
-          <div class="hc-prog-val">85 / 120 Available</div>
+          <div class="hc-prog-val" id="hrms-ls-casual-val">— / — days</div>
         </div>
-        <div class="hc-prog-bar"><div class="hc-prog-fill" style="width:71%;background:#a855f7"></div></div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-ls-casual-fill" style="width:0%;background:#a855f7"></div></div>
       </div>
       <div>
         <div class="hc-progress-hd">
@@ -570,9 +510,9 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
             <div class="hc-prog-icon" style="background:#fff1f2"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="#e11d48" stroke-width="1.4"><path d="M7 2v5l3 3"/><path d="M2 7a5 5 0 1010 0A5 5 0 002 7z"/></svg></div>
             Emergency Leave
           </div>
-          <div class="hc-prog-val">25 / 60 Available</div>
+          <div class="hc-prog-val" id="hrms-ls-emerg-val">— / — days</div>
         </div>
-        <div class="hc-prog-bar"><div class="hc-prog-fill" style="width:42%;background:#f43f5e"></div></div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-ls-emerg-fill" style="width:0%;background:#f43f5e"></div></div>
       </div>
     </div>
   </div>
@@ -581,12 +521,11 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   <div class="hc">
     <div class="hc-hd"><div class="hc-title">Recruitment Funnel</div></div>
     <div class="hc-funnel">
-      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Applicants</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" style="width:100%;background:#dbeafe"></div></div><div class="hc-funnel-cnt">320</div></div>
-      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Screened</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" style="width:65%;background:#bfdbfe"></div></div><div class="hc-funnel-cnt">210</div></div>
-      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Interviewed</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" style="width:30%;background:#93c5fd"></div></div><div class="hc-funnel-cnt">95</div></div>
-      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Shortlisted</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" style="width:14%;background:#60a5fa"></div></div><div class="hc-funnel-cnt">45</div></div>
-      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Offered</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" style="width:6%;background:#3b82f6"></div></div><div class="hc-funnel-cnt">20</div></div>
-      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Joined</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" style="width:5%;background:#2563eb"></div></div><div class="hc-funnel-cnt">15</div></div>
+      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Applied</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" id="hrms-funnel-bar-applied" style="width:100%;background:#dbeafe"></div></div><div class="hc-funnel-cnt" id="hrms-funnel-applied">0</div></div>
+      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Screening</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" id="hrms-funnel-bar-screening" style="width:0%;background:#bfdbfe"></div></div><div class="hc-funnel-cnt" id="hrms-funnel-screening">0</div></div>
+      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Interview</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" id="hrms-funnel-bar-interview" style="width:0%;background:#93c5fd"></div></div><div class="hc-funnel-cnt" id="hrms-funnel-interview">0</div></div>
+      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Offer Sent</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" id="hrms-funnel-bar-offer" style="width:0%;background:#3b82f6"></div></div><div class="hc-funnel-cnt" id="hrms-funnel-offer">0</div></div>
+      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Hired</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" id="hrms-funnel-bar-hired" style="width:0%;background:#2563eb"></div></div><div class="hc-funnel-cnt" id="hrms-funnel-hired">0</div></div>
     </div>
   </div>
 
@@ -669,34 +608,29 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     </div>
     <div class="hc-bar-chart" style="align-items:flex-end;height:100px">
       <div class="hc-bar-col">
-        <div class="hc-bar-val">18</div>
-        <div class="hc-bar" style="height:60px;background:#ef4444;width:100%"></div>
+        <div class="hc-bar-val" id="hrms-expbar-passport-val">0</div>
+        <div class="hc-bar" id="hrms-expbar-passport-bar" style="height:0px;background:#ef4444;width:100%"></div>
         <div class="hc-bar-lbl">Passport</div>
       </div>
       <div class="hc-bar-col">
-        <div class="hc-bar-val">22</div>
-        <div class="hc-bar" style="height:73px;background:#f59e0b;width:100%"></div>
+        <div class="hc-bar-val" id="hrms-expbar-visa-val">0</div>
+        <div class="hc-bar" id="hrms-expbar-visa-bar" style="height:0px;background:#f59e0b;width:100%"></div>
         <div class="hc-bar-lbl">Visa</div>
       </div>
       <div class="hc-bar-col">
-        <div class="hc-bar-val">15</div>
-        <div class="hc-bar" style="height:50px;background:#8b5cf6;width:100%"></div>
+        <div class="hc-bar-val" id="hrms-expbar-eid-val">0</div>
+        <div class="hc-bar" id="hrms-expbar-eid-bar" style="height:0px;background:#8b5cf6;width:100%"></div>
         <div class="hc-bar-lbl">Emirates ID</div>
       </div>
       <div class="hc-bar-col">
-        <div class="hc-bar-val">8</div>
-        <div class="hc-bar" style="height:27px;background:#06b6d4;width:100%"></div>
-        <div class="hc-bar-lbl">Labor Card</div>
-      </div>
-      <div class="hc-bar-col">
-        <div class="hc-bar-val">10</div>
-        <div class="hc-bar" style="height:33px;background:#10b981;width:100%"></div>
+        <div class="hc-bar-val" id="hrms-expbar-ins-val">0</div>
+        <div class="hc-bar" id="hrms-expbar-ins-bar" style="height:0px;background:#10b981;width:100%"></div>
         <div class="hc-bar-lbl">Insurance</div>
       </div>
       <div class="hc-bar-col">
-        <div class="hc-bar-val">30</div>
-        <div class="hc-bar" style="height:100px;background:#2563eb;width:100%"></div>
-        <div class="hc-bar-lbl">Contract</div>
+        <div class="hc-bar-val" id="hrms-expbar-drv-val">0</div>
+        <div class="hc-bar" id="hrms-expbar-drv-bar" style="height:0px;background:#06b6d4;width:100%"></div>
+        <div class="hc-bar-lbl">Driving Lic.</div>
       </div>
     </div>
   </div>
@@ -706,25 +640,16 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="hc-hd"><div class="hc-title">Assets Overview</div></div>
     <div class="hc-donut-wrap">
       <div class="hc-donut" style="flex-shrink:0">
-        <svg viewBox="0 0 100 100" width="90" height="90">
+        <svg id="hrms-assets-svg" viewBox="0 0 100 100" width="90" height="90">
           <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="12"/>
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#3b82f6" stroke-width="12" stroke-dasharray="124.1 114.7" stroke-dashoffset="0" transform="rotate(-90 50 50)"/>
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#8b5cf6" stroke-width="12" stroke-dasharray="42.1 196.7" stroke-dashoffset="-124.1" transform="rotate(-90 50 50)"/>
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#f59e0b" stroke-width="12" stroke-dasharray="34.4 204.4" stroke-dashoffset="-166.2" transform="rotate(-90 50 50)"/>
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#10b981" stroke-width="12" stroke-dasharray="22.9 215.9" stroke-dashoffset="-200.6" transform="rotate(-90 50 50)"/>
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#d1d5db" stroke-width="12" stroke-dasharray="15.3 223.5" stroke-dashoffset="-223.5" transform="rotate(-90 50 50)"/>
         </svg>
         <div class="hc-donut-center">
-          <div class="hc-donut-val">1,250</div>
+          <div class="hc-donut-val" id="hrms-assets-total">0</div>
           <div class="hc-donut-lbl">Assets</div>
         </div>
       </div>
-      <div class="hc-legend" style="font-size:11px">
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#3b82f6"></div><div class="hc-leg-name">Laptop</div><div class="hc-leg-pct">(52%)</div></div>
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#8b5cf6"></div><div class="hc-leg-name">Mobile</div><div class="hc-leg-pct">(17.6%)</div></div>
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#f59e0b"></div><div class="hc-leg-name">SIM</div><div class="hc-leg-pct">(14.4%)</div></div>
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#10b981"></div><div class="hc-leg-name">Vehicle</div><div class="hc-leg-pct">(9.6%)</div></div>
-        <div class="hc-legend-row"><div class="hc-dot" style="background:#d1d5db"></div><div class="hc-leg-name">Others</div><div class="hc-leg-pct">(6.4%)</div></div>
+      <div class="hc-legend" id="hrms-assets-legend" style="font-size:11px">
+        <div style="font-size:11px;color:var(--text3)">No assets assigned yet.<br><a style="color:#3b82f6;cursor:pointer" onclick="goHrmsTab(8,'hrext-assets')">Go to Asset Management →</a></div>
       </div>
     </div>
   </div>
@@ -733,36 +658,24 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   <div class="hc">
     <div class="hc-hd">
       <div class="hc-title">Training Overview</div>
-      <select class="hc-select"><option>This Month</option><option>This Quarter</option></select>
     </div>
     <div class="hc-progress-list">
       <div>
         <div class="hc-progress-hd">
-          <div class="hc-prog-lbl">Training Completion</div>
-          <div class="hc-prog-val">78%</div>
+          <div class="hc-prog-lbl">Training Programs</div>
+          <div class="hc-prog-val" id="hrms-train-programs">0</div>
         </div>
-        <div class="hc-prog-bar"><div class="hc-prog-fill" style="width:78%;background:#10b981"></div></div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-train-programs-fill" style="width:0%;background:#10b981"></div></div>
       </div>
       <div>
         <div class="hc-progress-hd">
-          <div class="hc-prog-lbl">Certifications Expiring</div>
-          <div class="hc-prog-val" style="color:#ef4444">16</div>
+          <div class="hc-prog-lbl">Certifications Tracked</div>
+          <div class="hc-prog-val" id="hrms-train-certs">0</div>
         </div>
-        <div class="hc-prog-bar"><div class="hc-prog-fill" style="width:55%;background:#f59e0b"></div></div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-train-certs-fill" style="width:0%;background:#f59e0b"></div></div>
       </div>
-      <div>
-        <div class="hc-progress-hd">
-          <div class="hc-prog-lbl">Upcoming Training</div>
-          <div class="hc-prog-val" style="color:#8b5cf6">8</div>
-        </div>
-        <div class="hc-prog-bar"><div class="hc-prog-fill" style="width:30%;background:#8b5cf6"></div></div>
-      </div>
-      <div>
-        <div class="hc-progress-hd">
-          <div class="hc-prog-lbl">Employees Trained</div>
-          <div class="hc-prog-val">520</div>
-        </div>
-        <div class="hc-prog-bar"><div class="hc-prog-fill" style="width:42%;background:#3b82f6"></div></div>
+      <div style="margin-top:8px">
+        <div style="font-size:11px;color:var(--text3)"><a style="color:#3b82f6;cursor:pointer" onclick="goHrmsTab(8,'hrext-train')">Go to Training Management →</a></div>
       </div>
     </div>
   </div>
@@ -776,72 +689,60 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div class="hc-ai-icon" style="background:#eff6ff"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#2563eb" stroke-width="1.4"><path d="M8 2c2 0 4 1 4 3s-2 2.5-4 3c-2 .5-4 1-4 3"/><circle cx="8" cy="13.5" r=".8" fill="#2563eb" stroke="none"/></svg></div>
       <div><div class="hc-ai-title">AI Attrition Prediction</div><div class="hc-ai-sub">Employees at risk of leaving</div></div>
     </div>
-    <div class="hc-ai-body">
-      <div class="hc-ai-row"><div class="hc-ai-name">Ahmed Khan</div><div class="hc-ai-pct" style="color:#ef4444">85%</div></div>
-      <div class="hc-ai-row"><div class="hc-ai-name">John Smith</div><div class="hc-ai-pct" style="color:#f59e0b">78%</div></div>
-      <div class="hc-ai-row"><div class="hc-ai-name">Fatima Ali</div><div class="hc-ai-pct" style="color:#f59e0b">72%</div></div>
+    <div class="hc-ai-body" id="hrms-ai-attrition-body">
+      <div style="font-size:11px;color:var(--text3);padding:6px 0">Not yet analyzed. Click below to run.</div>
     </div>
-    <a class="hc-ai-link" onclick="go('hrms-ext')">View all →</a>
+    <a class="hc-ai-link" onclick="runHrmsAiAttrition()">Run Analysis →</a>
   </div>
   <div class="hc-ai">
     <div class="hc-ai-hd">
       <div class="hc-ai-icon" style="background:#fff7ed"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#ea580c" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/></svg></div>
-      <div><div class="hc-ai-title">AI Attendance Anomalies</div><div class="hc-ai-sub">Detected anomalies</div></div>
+      <div><div class="hc-ai-title">AI Attendance Anomalies</div><div class="hc-ai-sub">Requires daily check-in data</div></div>
     </div>
     <div class="hc-ai-body">
-      <div class="hc-ai-row"><div class="hc-ai-name">Missed Punches</div><div class="hc-ai-pct" style="color:#111827">12</div></div>
-      <div class="hc-ai-row"><div class="hc-ai-name">Unusual Late Arrivals</div><div class="hc-ai-pct" style="color:#111827">18</div></div>
-      <div class="hc-ai-row"><div class="hc-ai-name">Early Departures</div><div class="hc-ai-pct" style="color:#111827">9</div></div>
+      <div style="font-size:11px;color:var(--text3);padding:6px 0">No attendance log available yet. Enable daily check-in tracking to use this feature.</div>
     </div>
-    <a class="hc-ai-link" onclick="goHrmsTab(2,'hr-att')">View all →</a>
+    <a class="hc-ai-link" onclick="goHrmsTab(2,'hr-att')">View Attendance →</a>
   </div>
   <div class="hc-ai">
     <div class="hc-ai-hd">
       <div class="hc-ai-icon" style="background:#f0fdf4"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#16a34a" stroke-width="1.4"><rect x="2" y="4" width="12" height="9" rx="1"/><path d="M2 7h12M5 10.5h4"/></svg></div>
-      <div><div class="hc-ai-title">AI Payroll Verification</div><div class="hc-ai-sub">Discrepancies found</div></div>
+      <div><div class="hc-ai-title">AI Payroll Verification</div><div class="hc-ai-sub">Anomaly detection</div></div>
     </div>
-    <div class="hc-ai-body">
-      <div class="hc-ai-row"><div class="hc-ai-name">Employees Affected</div><div class="hc-ai-pct" style="color:#ef4444">3</div></div>
-      <div class="hc-ai-row"><div class="hc-ai-name">Records Checked</div><div class="hc-ai-pct" style="color:#111827">1,250</div></div>
-      <div class="hc-ai-row"><div class="hc-ai-name">Accuracy Rate</div><div class="hc-ai-pct" style="color:#16a34a">99.2%</div></div>
+    <div class="hc-ai-body" id="hrms-ai-payroll-body">
+      <div style="font-size:11px;color:var(--text3);padding:6px 0">Not yet analyzed. Click below to run.</div>
     </div>
-    <a class="hc-ai-link" onclick="go('payroll')">View details →</a>
+    <a class="hc-ai-link" onclick="runHrmsAiPayroll()">Run Analysis →</a>
   </div>
   <div class="hc-ai">
     <div class="hc-ai-hd">
-      <div class="hc-ai-icon" style="background:#fdf4ff"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#9333ea" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M5.5 8a2.5 2.5 0 005 0M6 6h.5M9.5 6h.5"/></svg></div>
-      <div><div class="hc-ai-title">AI Sentiment Analysis</div><div class="hc-ai-sub">Overall Sentiment</div></div>
+      <div class="hc-ai-icon" style="background:#f0fdf4"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#16a34a" stroke-width="1.4"><path d="M2 4h12M2 8h8M2 12h5"/><path d="M12 9l1.5 1.5L16 8" stroke-width="1.4"/></svg></div>
+      <div><div class="hc-ai-title">AI Compliance Check</div><div class="hc-ai-sub">UAE Labour Law</div></div>
     </div>
-    <div class="hc-ai-body">
-      <div class="hc-ai-row"><div class="hc-ai-name">Positive</div><div class="hc-ai-pct" style="color:#16a34a">68%</div></div>
-      <div class="hc-ai-row"><div class="hc-ai-name">Neutral</div><div class="hc-ai-pct" style="color:#f59e0b">20%</div></div>
-      <div class="hc-ai-row"><div class="hc-ai-name">Negative</div><div class="hc-ai-pct" style="color:#ef4444">12%</div></div>
+    <div class="hc-ai-body" id="hrms-ai-compliance-body">
+      <div style="font-size:11px;color:var(--text3);padding:6px 0">Not yet analyzed. Click below to run.</div>
     </div>
-    <a class="hc-ai-link" onclick="go('hrms-ext')">View details →</a>
+    <a class="hc-ai-link" onclick="runHrmsAiCompliance()">Run Analysis →</a>
   </div>
   <div class="hc-ai">
     <div class="hc-ai-hd">
-      <div class="hc-ai-icon" style="background:#fff1f2"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#e11d48" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M2 6h12M5 9h2M9 9h2M5 12h4"/></svg></div>
-      <div><div class="hc-ai-title">AI Shift Optimization</div><div class="hc-ai-sub">Recommendations</div></div>
+      <div class="hc-ai-icon" style="background:#fef9c3"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#ca8a04" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M5 8h6M8 5v6"/></svg></div>
+      <div><div class="hc-ai-title">AI Leave Analysis</div><div class="hc-ai-sub">Patterns &amp; trends</div></div>
     </div>
-    <div class="hc-ai-body">
-      <div class="hc-ai-row"><div class="hc-ai-name">3 Departments</div></div>
-      <div class="hc-ai-row"><div class="hc-ai-name">5 Shift Changes</div></div>
-      <div class="hc-ai-row"><div class="hc-ai-name">Potential Savings</div><div class="hc-ai-pct" style="color:#16a34a">AED 12.5K</div></div>
+    <div class="hc-ai-body" id="hrms-ai-leave-body">
+      <div style="font-size:11px;color:var(--text3);padding:6px 0">Not yet analyzed. Click below to run.</div>
     </div>
-    <a class="hc-ai-link" onclick="go('rota')">View report →</a>
+    <a class="hc-ai-link" onclick="runHrmsAiLeave()">Run Analysis →</a>
   </div>
   <div class="hc-ai">
     <div class="hc-ai-hd">
       <div class="hc-ai-icon" style="background:#ecfdf5"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#059669" stroke-width="1.4"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><path d="M12 2l1 1-2.5 2.5-1-1"/></svg></div>
       <div><div class="hc-ai-title">AI Recruitment Ranking</div><div class="hc-ai-sub">Top Candidates</div></div>
     </div>
-    <div class="hc-ai-body">
-      <div class="hc-ai-row"><div class="hc-ai-name">1. Sara Ali</div><div class="hc-ai-pct" style="color:#059669">94%</div></div>
-      <div class="hc-ai-row"><div class="hc-ai-name">2. Michael Brown</div><div class="hc-ai-pct" style="color:#16a34a">91%</div></div>
-      <div class="hc-ai-row"><div class="hc-ai-name">3. Priya Sharma</div><div class="hc-ai-pct" style="color:#22c55e">88%</div></div>
+    <div class="hc-ai-body" id="hrms-ai-recruitment-body">
+      <div style="font-size:11px;color:var(--text3);padding:6px 0">Not yet analyzed. Add candidates then click below.</div>
     </div>
-    <a class="hc-ai-link" onclick="go('recruitment')">View all →</a>
+    <a class="hc-ai-link" onclick="go('recruitment')">Go to Recruitment →</a>
   </div>
 </div>
 
@@ -2762,29 +2663,7 @@ document.addEventListener('DOMContentLoaded',function(){
   setTimeout(function(){if(typeof refreshHrmsKpis==='function')refreshHrmsKpis();},2000);
   setTimeout(function(){
     if(typeof refreshHrmsKpis==='function')refreshHrmsKpis();
-    // Also update present count
-    var empCount=parseInt((document.getElementById('hrms-kpi-emp')||{}).textContent)||0;
-    var presentEl=document.getElementById('hrms-kpi-present');
-    if(presentEl&&empCount>0){
-      var att=Math.round(empCount*0.789);
-      presentEl.textContent=att;
-      var trend=document.getElementById('hrms-kpi-present-trend');
-      if(trend)trend.innerHTML='<span>'+Math.round(att/empCount*100)+'% of total</span>';
-    }
-    var payrollEl=document.getElementById('hrms-kpi-payroll');
-    var payTotal=document.getElementById('hrms-payroll-total');
-    var payNet=document.getElementById('hrms-pay-net');
-    if(payrollEl&&payTotal){
-      payTotal.textContent=payrollEl.textContent;
-      if(payNet)payNet.textContent=payrollEl.textContent;
-    }
-    // Sync emp count to donut centers
-    var empEl=document.getElementById('hrms-kpi-emp');
-    var empVal=empEl?empEl.textContent:'—';
-    var deptTotal=document.getElementById('hrms-dept-total');
-    var typeTotal=document.getElementById('hrms-type-total');
-    if(deptTotal)deptTotal.textContent=empVal;
-    if(typeTotal)typeTotal.textContent=empVal;
+    if(typeof refreshHrmsDashboard==='function')refreshHrmsDashboard();
   },2500);
 });
 </script>

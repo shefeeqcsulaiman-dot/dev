@@ -14256,11 +14256,22 @@ function refreshHrmsKpis(){
     const d=parseInt(r.cells[3]?.textContent)||999;
     return d>=0&&d<=30;
   }).length;
+  // Compute net payroll AED total from payroll-tbody .pay-net cells
+  let payrollNetTotal=0;
+  document.querySelectorAll('#payroll-tbody tr:not([data-empty-state]) .pay-net').forEach(cell=>{
+    payrollNetTotal+=parseAmount(cell.textContent);
+  });
+  const fmtAed=n=>n>=1000?'AED '+(n/1000).toFixed(1)+'K':'AED '+n.toFixed(0);
   const set=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
   set('hrms-kpi-emp',empCount||'0');
   set('hrms-kpi-leave',onLeaveToday||'0');
   set('hrms-kpi-pending',(pendingLeave+pendingOT+pendingCorr)||'0');
-  set('hrms-kpi-payroll',payrollRuns||'0');
+  set('hrms-kpi-payroll',payrollNetTotal>0?fmtAed(payrollNetTotal):'—');
+  // Present Today = total employees minus those on approved leave today
+  const presentToday=Math.max(0,empCount-onLeaveToday);
+  set('hrms-kpi-present',presentToday||'0');
+  const trendEl=document.getElementById('hrms-kpi-present-trend');
+  if(trendEl&&empCount>0)trendEl.innerHTML='<span>'+Math.round(presentToday/empCount*100)+'% of total</span>';
   // Dashboard alert tiles
   set('hrms-dash-expiry',criticalExpiry||'0');
   set('hrms-dash-ot',pendingOT||'0');
@@ -14273,6 +14284,210 @@ function refreshHrmsKpis(){
   badge('hrms-badge-corr',pendingCorr||'0','pending');
   refreshRecruitmentStats();
   refreshManagerPortalCounts();
+}
+
+function refreshHrmsDashboard(){
+  const CIRC=238.76; // 2π × r=38
+  const DEPT_COLORS=['#3b82f6','#8b5cf6','#f59e0b','#10b981','#ef4444','#06b6d4','#e879f9','#f97316'];
+  const TYPE_COLORS={'Full-Time':'#3b82f6','Part-Time':'#8b5cf6','Contract':'#f59e0b','Daily Wage':'#10b981','Hourly':'#06b6d4','Others':'#d1d5db'};
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+
+  // ── Department Strength donut ─────────────────────────────────────
+  const empRows=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')];
+  const deptMap={};
+  empRows.forEach(row=>{
+    let emp={};try{emp=JSON.parse(row.dataset.employee||'{}');}catch{}
+    const dept=(emp.department||row.children[3]?.textContent||'Others').trim()||'Others';
+    deptMap[dept]=(deptMap[dept]||0)+1;
+  });
+  const deptTotal=empRows.length;
+  set('hrms-dept-total',deptTotal||'0');
+  const deptSvg=document.getElementById('hrms-dept-svg');
+  const deptLeg=document.getElementById('hrms-dept-legend');
+  if(deptSvg&&deptLeg){
+    // Remove existing segments (keep background circle)
+    [...deptSvg.querySelectorAll('circle[data-seg]')].forEach(c=>c.remove());
+    deptLeg.innerHTML='';
+    if(deptTotal>0){
+      const sorted=Object.entries(deptMap).sort((a,b)=>b[1]-a[1]);
+      let offset=0,ci=0;
+      sorted.forEach(([name,cnt])=>{
+        const pct=cnt/deptTotal;
+        const dash=pct*CIRC;
+        const color=DEPT_COLORS[ci%DEPT_COLORS.length];
+        const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+        c.setAttribute('cx','50');c.setAttribute('cy','50');c.setAttribute('r','38');
+        c.setAttribute('fill','none');c.setAttribute('stroke',color);c.setAttribute('stroke-width','12');
+        c.setAttribute('stroke-dasharray',dash.toFixed(1)+' '+(CIRC-dash).toFixed(1));
+        c.setAttribute('stroke-dashoffset',(-offset).toFixed(1));
+        c.setAttribute('transform','rotate(-90 50 50)');c.setAttribute('data-seg','1');
+        deptSvg.appendChild(c);
+        deptLeg.innerHTML+=`<div class="hc-legend-row"><div class="hc-dot" style="background:${color}"></div><div class="hc-leg-name">${escapeHtml(name)}</div><div class="hc-leg-pct">(${Math.round(pct*100)}%)</div></div>`;
+        offset+=dash;ci++;
+      });
+    } else {
+      deptLeg.innerHTML='<div style="font-size:11px;color:var(--text3)">No employees yet.</div>';
+    }
+  }
+
+  // ── Employee Type Distribution donut ─────────────────────────────
+  const typeMap={};
+  empRows.forEach(row=>{
+    let emp={};try{emp=JSON.parse(row.dataset.employee||'{}');}catch{}
+    const raw=(emp.contract||'Full-Time').trim();
+    const key=Object.keys(TYPE_COLORS).find(k=>raw.toLowerCase().includes(k.toLowerCase()))||'Others';
+    typeMap[key]=(typeMap[key]||0)+1;
+  });
+  set('hrms-type-total',deptTotal||'0');
+  const typeSvg=document.getElementById('hrms-type-svg');
+  const typeLeg=document.getElementById('hrms-type-legend');
+  if(typeSvg&&typeLeg){
+    [...typeSvg.querySelectorAll('circle[data-seg]')].forEach(c=>c.remove());
+    typeLeg.innerHTML='';
+    if(deptTotal>0){
+      let offset=0;
+      Object.entries(typeMap).forEach(([name,cnt])=>{
+        const pct=cnt/deptTotal;
+        const dash=pct*CIRC;
+        const color=TYPE_COLORS[name]||'#d1d5db';
+        const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+        c.setAttribute('cx','50');c.setAttribute('cy','50');c.setAttribute('r','38');
+        c.setAttribute('fill','none');c.setAttribute('stroke',color);c.setAttribute('stroke-width','12');
+        c.setAttribute('stroke-dasharray',dash.toFixed(1)+' '+(CIRC-dash).toFixed(1));
+        c.setAttribute('stroke-dashoffset',(-offset).toFixed(1));
+        c.setAttribute('transform','rotate(-90 50 50)');c.setAttribute('data-seg','1');
+        typeSvg.appendChild(c);
+        typeLeg.innerHTML+=`<div class="hc-legend-row"><div class="hc-dot" style="background:${color}"></div><div class="hc-leg-name">${escapeHtml(name)}</div><div class="hc-leg-pct">(${Math.round(pct*100)}%)</div></div>`;
+        offset+=dash;
+      });
+    } else {
+      typeLeg.innerHTML='<div style="font-size:11px;color:var(--text3)">No employees yet.</div>';
+    }
+  }
+
+  // ── Payroll Summary donut + sub-values ───────────────────────────
+  let gross=0,allow=0,ot=0,ded=0;
+  document.querySelectorAll('#payroll-tbody tr:not([data-empty-state])').forEach(row=>{
+    gross+=parseAmount(row.querySelector('.pay-basic')?.value);
+    allow+=parseAmount(row.querySelector('.pay-allow')?.value);
+    ot+=parseAmount(row.querySelector('.pay-ot')?.value);
+    ded+=parseAmount(row.querySelector('.pay-ded')?.value);
+  });
+  const net=Math.max(0,gross+allow+ot-ded);
+  const fmt2=n=>'AED '+n.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmtK=n=>n>=1000?'AED '+(n/1000).toFixed(1)+'K':'AED '+n.toFixed(0);
+  set('hrms-pay-gross',gross>0?fmt2(gross):'—');
+  set('hrms-pay-allow',allow>0?fmt2(allow):'—');
+  set('hrms-pay-ot-total',ot>0?fmt2(ot):'—');
+  set('hrms-pay-ded',ded>0?fmt2(ded):'—');
+  set('hrms-pay-net',net>0?fmtK(net):'—');
+  set('hrms-payroll-total',net>0?fmtK(net):'—');
+
+  // ── Leave Summary by type ────────────────────────────────────────
+  const thisYear=new Date().getFullYear();
+  const leaveDays={Annual:0,Sick:0,Casual:0,Emergency:0};
+  document.querySelectorAll('#leave-tbody tr:not([data-empty-state])').forEach(row=>{
+    const cells=[...row.cells];
+    const typeText=(cells[1]?.textContent||'').trim();
+    const status=(cells[5]?.textContent||'').trim();
+    if(status==='Rejected')return;
+    // Check year (from date cell)
+    const fromStr=cells[2]?.textContent.trim()||'';
+    if(fromStr&&!fromStr.startsWith(thisYear))return;
+    const days=parseInt(cells[4]?.textContent)||1;
+    if(typeText.includes('Annual'))leaveDays.Annual+=days;
+    else if(typeText.includes('Sick'))leaveDays.Sick+=days;
+    else if(typeText.includes('Casual'))leaveDays.Casual+=days;
+    else if(typeText.includes('Emergency'))leaveDays.Emergency+=days;
+  });
+  // Entitlement: sum across all employees
+  let annualEnt=0,sickEnt=0;
+  empRows.forEach(row=>{
+    let emp={};try{emp=JSON.parse(row.dataset.employee||'{}');}catch{}
+    annualEnt+=emp.leave_policy==='Executive'?30:21;
+    sickEnt+=90;
+  });
+  const casualEnt=empRows.length*6;   // 6 days per employee (UAE standard)
+  const emergEnt=empRows.length*5;    // 5 days per employee
+  const setLeave=(valId,fillId,used,total)=>{
+    const el=document.getElementById(valId);if(el)el.textContent=total>0?used+' / '+total+' days used':used+' days used';
+    const fill=document.getElementById(fillId);if(fill)fill.style.width=(total>0?Math.min(100,Math.round(used/total*100)):0)+'%';
+  };
+  setLeave('hrms-ls-annual-val','hrms-ls-annual-fill',leaveDays.Annual,annualEnt);
+  setLeave('hrms-ls-sick-val','hrms-ls-sick-fill',leaveDays.Sick,sickEnt);
+  setLeave('hrms-ls-casual-val','hrms-ls-casual-fill',leaveDays.Casual,casualEnt);
+  setLeave('hrms-ls-emerg-val','hrms-ls-emerg-fill',leaveDays.Emergency,emergEnt);
+
+  // ── Recruitment Funnel ──────────────────────────────────────────
+  const candRows=[...document.querySelectorAll('#candidates-tbody tr:not([data-empty-state])')];
+  const stageOrder=['Applied','Screening','Interview Scheduled','Offer Sent','Hired'];
+  const stageCnt={};stageOrder.forEach(s=>stageCnt[s]=0);
+  candRows.forEach(row=>{
+    const stg=row.dataset.stage||row.cells[6]?.querySelector('.b')?.textContent.trim()||'Applied';
+    if(stageCnt.hasOwnProperty(stg))stageCnt[stg]++;
+    else stageCnt['Applied']++;
+  });
+  // Cumulative funnel: each stage includes all beyond it
+  const cumApplied=candRows.length;
+  const cumScreening=stageCnt['Screening']+(stageCnt['Interview Scheduled']||0)+(stageCnt['Offer Sent']||0)+(stageCnt['Hired']||0);
+  const cumInterview=(stageCnt['Interview Scheduled']||0)+(stageCnt['Offer Sent']||0)+(stageCnt['Hired']||0);
+  const cumOffer=(stageCnt['Offer Sent']||0)+(stageCnt['Hired']||0);
+  const cumHired=stageCnt['Hired']||0;
+  const setFunnel=(cntId,barId,val,max)=>{
+    set(cntId,val);
+    const bar=document.getElementById(barId);
+    if(bar)bar.style.width=(max>0?Math.round(val/max*100):0)+'%';
+  };
+  setFunnel('hrms-funnel-applied','hrms-funnel-bar-applied',cumApplied,cumApplied||1);
+  setFunnel('hrms-funnel-screening','hrms-funnel-bar-screening',cumScreening,cumApplied||1);
+  setFunnel('hrms-funnel-interview','hrms-funnel-bar-interview',cumInterview,cumApplied||1);
+  setFunnel('hrms-funnel-offer','hrms-funnel-bar-offer',cumOffer,cumApplied||1);
+  setFunnel('hrms-funnel-hired','hrms-funnel-bar-hired',cumHired,cumApplied||1);
+
+  // ── Assets Overview ─────────────────────────────────────────────
+  const assetRows=[...document.querySelectorAll('#assets-tbody tr:not([data-empty-state])')];
+  const assetTotal=assetRows.length;
+  set('hrms-assets-total',assetTotal||'0');
+  const assetsSvg=document.getElementById('hrms-assets-svg');
+  const assetsLeg=document.getElementById('hrms-assets-legend');
+  if(assetsSvg&&assetsLeg){
+    [...assetsSvg.querySelectorAll('circle[data-seg]')].forEach(c=>c.remove());
+    if(assetTotal>0){
+      const catMap={};
+      assetRows.forEach(row=>{
+        const cat=(row.cells[1]?.textContent||'Others').trim()||'Others';
+        catMap[cat]=(catMap[cat]||0)+1;
+      });
+      assetsLeg.innerHTML='';
+      let offset=0,ci=0;
+      Object.entries(catMap).sort((a,b)=>b[1]-a[1]).forEach(([name,cnt])=>{
+        const pct=cnt/assetTotal;
+        const dash=pct*CIRC;
+        const color=DEPT_COLORS[ci%DEPT_COLORS.length];
+        const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+        c.setAttribute('cx','50');c.setAttribute('cy','50');c.setAttribute('r','38');
+        c.setAttribute('fill','none');c.setAttribute('stroke',color);c.setAttribute('stroke-width','12');
+        c.setAttribute('stroke-dasharray',dash.toFixed(1)+' '+(CIRC-dash).toFixed(1));
+        c.setAttribute('stroke-dashoffset',(-offset).toFixed(1));
+        c.setAttribute('transform','rotate(-90 50 50)');c.setAttribute('data-seg','1');
+        assetsSvg.appendChild(c);
+        assetsLeg.innerHTML+=`<div class="hc-legend-row"><div class="hc-dot" style="background:${color}"></div><div class="hc-leg-name">${escapeHtml(name)}</div><div class="hc-leg-pct">(${cnt})</div></div>`;
+        offset+=dash;ci++;
+      });
+    } else {
+      assetsLeg.innerHTML='<div style="font-size:11px;color:var(--text3)">No assets assigned yet.<br><a style="color:#3b82f6;cursor:pointer" onclick="goHrmsTab(8,\'hrext-assets\')">Go to Asset Management →</a></div>';
+    }
+  }
+
+  // ── Training Overview ────────────────────────────────────────────
+  const trainCount=document.querySelectorAll('#training-tbody tr:not([data-empty-state])').length;
+  const certCount=document.querySelectorAll('#certs-tbody tr:not([data-empty-state])').length;
+  set('hrms-train-programs',trainCount||'0');
+  set('hrms-train-certs',certCount||'0');
+  const fill1=document.getElementById('hrms-train-programs-fill');
+  const fill2=document.getElementById('hrms-train-certs-fill');
+  if(fill1)fill1.style.width=(trainCount>0?Math.min(100,trainCount*10):0)+'%';
+  if(fill2)fill2.style.width=(certCount>0?Math.min(100,certCount*10):0)+'%';
 }
 
 function approveLeave(btn){
@@ -14490,6 +14705,56 @@ function _hrmsAiResultHtml(container,html){
 
 function _hrmsAiErrorHtml(container,err){
   _hrmsAiResultHtml(container,`<div style="color:var(--red);font-size:12px">${escapeHtml(String(err))}</div>`);
+}
+
+// Dashboard AI quick-run buttons
+async function runHrmsAiAttrition(){
+  const el=document.getElementById('hrms-ai-attrition-body');
+  if(!el)return;
+  el.innerHTML='<div style="font-size:11px;color:var(--text3);padding:6px 0">Analyzing…</div>';
+  try{
+    const res=await moduleApi('/ai/hr/attrition-risk',{method:'POST',body:{}});
+    if(res.error){el.innerHTML=`<div style="font-size:11px;color:var(--red)">${escapeHtml(res.error)}</div>`;return;}
+    const risks=(res.at_risk||[]).slice(0,3);
+    if(!risks.length){el.innerHTML='<div style="font-size:11px;color:var(--text3)">No high-risk employees detected.</div>';return;}
+    el.innerHTML=risks.map(r=>`<div class="hc-ai-row"><div class="hc-ai-name">${escapeHtml(r.name||r.employee||'')}</div><div class="hc-ai-pct" style="color:${(r.risk_score||0)>=80?'#ef4444':'#f59e0b'}">${r.risk_score||'—'}%</div></div>`).join('');
+  }catch(e){el.innerHTML=`<div style="font-size:11px;color:var(--red)">${escapeHtml(String(e))}</div>`;}
+}
+async function runHrmsAiPayroll(){
+  const el=document.getElementById('hrms-ai-payroll-body');
+  if(!el)return;
+  el.innerHTML='<div style="font-size:11px;color:var(--text3);padding:6px 0">Analyzing…</div>';
+  try{
+    const res=await moduleApi('/ai/hr/payroll-anomaly',{method:'POST',body:{}});
+    if(res.error){el.innerHTML=`<div style="font-size:11px;color:var(--red)">${escapeHtml(res.error)}</div>`;return;}
+    const total=document.querySelectorAll('#payroll-tbody tr:not([data-empty-state])').length;
+    const issues=(res.anomalies||[]).length;
+    el.innerHTML=`<div class="hc-ai-row"><div class="hc-ai-name">Records Checked</div><div class="hc-ai-pct">${total}</div></div>`
+      +`<div class="hc-ai-row"><div class="hc-ai-name">Issues Found</div><div class="hc-ai-pct" style="color:${issues?'#ef4444':'#16a34a'}">${issues}</div></div>`
+      +(res.summary?`<div style="font-size:10.5px;color:var(--text3);margin-top:4px">${escapeHtml(String(res.summary).slice(0,80))}</div>`:'');
+  }catch(e){el.innerHTML=`<div style="font-size:11px;color:var(--red)">${escapeHtml(String(e))}</div>`;}
+}
+async function runHrmsAiCompliance(){
+  const el=document.getElementById('hrms-ai-compliance-body');
+  if(!el)return;
+  el.innerHTML='<div style="font-size:11px;color:var(--text3);padding:6px 0">Checking…</div>';
+  try{
+    const res=await moduleApi('/ai/hr/compliance-check',{method:'POST',body:{}});
+    if(res.error){el.innerHTML=`<div style="font-size:11px;color:var(--red)">${escapeHtml(res.error)}</div>`;return;}
+    const issues=(res.issues||[]).length;
+    el.innerHTML=`<div class="hc-ai-row"><div class="hc-ai-name">Compliance Issues</div><div class="hc-ai-pct" style="color:${issues?'#ef4444':'#16a34a'}">${issues}</div></div>`
+      +(res.summary?`<div style="font-size:10.5px;color:var(--text3);margin-top:4px">${escapeHtml(String(res.summary).slice(0,80))}</div>`:'');
+  }catch(e){el.innerHTML=`<div style="font-size:11px;color:var(--red)">${escapeHtml(String(e))}</div>`;}
+}
+async function runHrmsAiLeave(){
+  const el=document.getElementById('hrms-ai-leave-body');
+  if(!el)return;
+  el.innerHTML='<div style="font-size:11px;color:var(--text3);padding:6px 0">Analyzing…</div>';
+  try{
+    const res=await moduleApi('/ai/hr/leave-analysis',{method:'POST',body:{}});
+    if(res.error){el.innerHTML=`<div style="font-size:11px;color:var(--red)">${escapeHtml(res.error)}</div>`;return;}
+    el.innerHTML=(res.summary?`<div style="font-size:10.5px;color:var(--text2)">${escapeHtml(String(res.summary).slice(0,120))}</div>`:'<div style="font-size:11px;color:var(--text3)">Analysis complete.</div>');
+  }catch(e){el.innerHTML=`<div style="font-size:11px;color:var(--red)">${escapeHtml(String(e))}</div>`;}
 }
 
 // 1. CV Parser
@@ -15228,9 +15493,10 @@ function refreshExpiryAlerts(){
     add('Passport',emp.passport_expiry||emp.passportExpiry);
     add('Emirates ID',emp.eid_expiry||emp.eidExpiry);
     add('Insurance',emp.insurance_expiry||emp.insuranceExpiry);
+    add('Driving License',emp.driving_expiry||emp.drivingExpiry);
   });
   let cnt30=0,cnt90=0,cntValid=0,cntMissing=0;
-  const typeCnt30={passport:0,visa:0,eid:0,insurance:0,contract:0};
+  const typeCnt30={passport:0,visa:0,eid:0,insurance:0,driving:0};
   docs.forEach(d=>{
     if(d.days===null){cntMissing++;return;}
     if(d.days<=30){
@@ -15239,7 +15505,7 @@ function refreshExpiryAlerts(){
       else if(d.label==='Visa / Work Permit')typeCnt30.visa++;
       else if(d.label==='Emirates ID')typeCnt30.eid++;
       else if(d.label==='Insurance')typeCnt30.insurance++;
-      else if(d.label==='Contract')typeCnt30.contract++;
+      else if(d.label==='Driving License')typeCnt30.driving++;
     } else if(d.days<=90)cnt90++;
     else cntValid++;
   });
@@ -15250,7 +15516,23 @@ function refreshExpiryAlerts(){
   set('hrms-compl-visa',typeCnt30.visa);
   set('hrms-compl-eid',typeCnt30.eid);
   set('hrms-compl-ins',typeCnt30.insurance);
-  set('hrms-dash-expiry',typeCnt30.contract||cnt30);
+  set('hrms-dash-expiry',cnt30);
+  // Update document expiry bar chart (counts expiring within 90 days)
+  const typeAll={passport:0,visa:0,eid:0,insurance:0,driving:0};
+  docs.forEach(d=>{if(d.days!==null&&d.days<=90){
+    if(d.label==='Passport')typeAll.passport++;
+    else if(d.label==='Visa / Work Permit')typeAll.visa++;
+    else if(d.label==='Emirates ID')typeAll.eid++;
+    else if(d.label==='Insurance')typeAll.insurance++;
+    else if(d.label==='Driving License')typeAll.driving++;
+  }});
+  const maxBar=Math.max(1,typeAll.passport,typeAll.visa,typeAll.eid,typeAll.insurance,typeAll.driving);
+  const setBar=(valId,barId,n)=>{set(valId,n);const el=document.getElementById(barId);if(el)el.style.height=Math.round(n/maxBar*90)+'px';};
+  setBar('hrms-expbar-passport-val','hrms-expbar-passport-bar',typeAll.passport);
+  setBar('hrms-expbar-visa-val','hrms-expbar-visa-bar',typeAll.visa);
+  setBar('hrms-expbar-eid-val','hrms-expbar-eid-bar',typeAll.eid);
+  setBar('hrms-expbar-ins-val','hrms-expbar-ins-bar',typeAll.insurance);
+  setBar('hrms-expbar-drv-val','hrms-expbar-drv-bar',typeAll.driving);
   const badge=document.getElementById('hrms-badge-expiry');
   if(badge)badge.textContent=(cnt30+cnt90)+' alerts';
   const toShow=docs.filter(d=>d.days!==null&&d.days<=90).sort((a,b)=>a.days-b.days);
