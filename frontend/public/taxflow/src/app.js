@@ -11487,7 +11487,7 @@ function savePurchaseAiEdit(next=false){
     issues:document.getElementById('pai-issues').value.trim(),
     lines
   };
-  replacePurchaseAiInvoiceRows(oldInvoiceNo,inv,oldInvoiceUid);
+  updatePurchaseAiInvoiceRows(oldInvoiceNo,inv);
   updateUploadedPurchaseInvoice(oldInvoiceNo,inv);
   revalidatePurchaseAiRows();
   toast('Extracted purchase updated','ok');
@@ -11541,14 +11541,16 @@ function updatePurchaseAiInvoiceRows(oldInvoiceNo,inv){
   const validation=validatePurchaseAiInvoice(inv);
   purchaseAiRows().forEach(row=>{
     if((row.dataset.invoiceNo||'')!==String(oldInvoiceNo||''))return;
+    const filename=row.dataset.filename||'';
     row.dataset.invoiceNo=inv.invoice_no||'';
     row.dataset.inv=JSON.stringify(inv);
     row.dataset.lineIndex='0';
-    row.dataset.validation=validation.valid?'valid':'review';
-    row.innerHTML=purchaseAiRowHtml(inv,(Array.isArray(inv.lines)&&inv.lines[0])||{},0,validation,row.dataset.filename||'');
+    row.dataset.validation=validation.isDuplicate?'duplicate':validation.valid?'valid':'review';
+    row.innerHTML=purchaseAiRowHtml(inv,(Array.isArray(inv.lines)&&inv.lines[0])||{},0,validation,filename);
   });
   enablePurchaseAiDragDrop();
   applyPurchaseAiSort(false);
+  if(_purchaseAiView==='table')renderPurchaseAiFlatTable();
 }
 
 function togglePurchaseAiSelection(checked){
@@ -16633,8 +16635,10 @@ function saveEditedInvoice(){
 
   const fmt = n => Number(n).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
 
-  // update data attribute
-  const newData = {invoice_no:invNo,date,supplier,supplier_trn:trn,subtotal:sub,vat_amount:vat,total,confidence:conf,status,issues};
+  // update data attribute — preserve existing fields (esp. lines) not in this form
+  let _existingInv={};
+  try{_existingInv=JSON.parse(_editRow.getAttribute('data-inv')||'{}');}catch{}
+  const newData={..._existingInv,invoice_no:invNo,date,supplier,supplier_trn:trn,subtotal:sub,vat_amount:vat,total,confidence:conf,status,issues};
   _editRow.setAttribute('data-inv',JSON.stringify(newData));
 
   // update cells
