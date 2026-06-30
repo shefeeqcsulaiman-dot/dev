@@ -16775,9 +16775,39 @@ async function loadBiometricDevices(){
   }catch(e){toast('Failed to load devices: '+e,'warn');}
 }
 
+const BIO_TCP_TYPES=new Set(['ZKTeco F Series','ZKTeco K Series','ZKTeco iClock','ZKTeco SpeedFace','ZKTeco ProFace','ZKTeco G Series','ZKTeco UA Series','ZKTeco IN Series','ZKTeco MB Series','ZKTeco','Anviz']);
+const BIO_PUSH_TYPES=new Set(['ZKTeco ADMS','Suprema','Hikvision']);
+
+function onBioDevTypeChange(val){
+  const hint=document.getElementById('bio-dev-mode-hint');
+  const netRow=document.getElementById('bio-dev-net-row');
+  const portEl=document.getElementById('bio-dev-port');
+  if(!hint)return;
+  if(val==='Manual'){
+    hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--bg2);color:var(--text3)';
+    hint.innerHTML='<strong>Mode: Manual / CSV</strong> — No device connection needed. Use the <em>Import CSV</em> button to upload attendance records.';
+    if(netRow)netRow.style.display='none';
+  } else if(val==='ZKTeco ADMS'){
+    hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--amber-bg);color:var(--amber)';
+    hint.innerHTML='<strong>Mode: ADMS Cloud Push</strong> — On the device panel, set: <em>ADMS Server → this server\'s URL</em>. The device pushes punches automatically. No bridge script needed.';
+    if(netRow)netRow.style.display='none';
+  } else if(BIO_PUSH_TYPES.has(val)){
+    hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--amber-bg);color:var(--amber)';
+    hint.innerHTML='<strong>Mode: HTTP Webhook Push</strong> — Configure the device to POST punches to <code>/api/v1/attendance/punch</code> with header <code>X-Device-Key: &lt;key&gt;</code>.';
+    if(netRow)netRow.style.display='none';
+  } else {
+    hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--blue-bg);color:var(--blue)';
+    const isAnviz=val==='Anviz';
+    const defPort=isAnviz?'5010':'4370';
+    hint.innerHTML=`<strong>Mode: TCP/IP Pull</strong> — Run <code>zk_bridge.py</code> on the same LAN as this device. It polls every 30 s and forwards punches to the API. Default port ${defPort}.`;
+    if(netRow)netRow.style.display='';
+    if(portEl&&(portEl.value==='4370'||portEl.value==='5010'))portEl.value=defPort;
+  }
+}
+
 async function saveBiometricDevice(){
   const name=(document.getElementById('bio-dev-name')?.value||'').trim();
-  const type=document.getElementById('bio-dev-type')?.value||'ZKTeco';
+  const type=document.getElementById('bio-dev-type')?.value||'ZKTeco F Series';
   const ip=(document.getElementById('bio-dev-ip')?.value||'').trim();
   const port=parseInt(document.getElementById('bio-dev-port')?.value)||4370;
   const loc=(document.getElementById('bio-dev-location')?.value||'').trim();

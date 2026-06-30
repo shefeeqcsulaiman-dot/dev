@@ -41,7 +41,7 @@ class PunchIn(BaseModel):
 
 class DeviceCreate(BaseModel):
     name: str
-    device_type: str = "ZKTeco"         # ZKTeco | Suprema | Hikvision | Anviz | Manual
+    device_type: str = "ZKTeco F Series"  # ZKTeco F/K/iClock/SpeedFace/ProFace/G/UA/IN/MB Series | ZKTeco ADMS | Suprema | Hikvision | Anviz | Manual
     ip_address: str | None = None
     port: int = 4370
     location: str | None = None

@@ -2291,10 +2291,46 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 </div>
 
 <div class="overlay" id="m-bio-device" onclick="closeOvBg(event,'m-bio-device')">
-  <div class="modal"><div class="modal-title">Add Biometric Device</div><div class="modal-sub">ZKTeco · Suprema · Hikvision · Anviz · Manual</div>
-    <div class="fr2"><div class="fg"><label class="fl">Device Name</label><input class="fi" id="bio-dev-name" placeholder="Main Entrance Scanner"></div><div class="fg"><label class="fl">Device Type</label><select class="fi" id="bio-dev-type"><option>ZKTeco</option><option>Suprema</option><option>Hikvision</option><option>Anviz</option><option>Manual</option></select></div></div>
-    <div class="fr2"><div class="fg"><label class="fl">IP Address</label><input class="fi mono" id="bio-dev-ip" placeholder="192.168.1.201"></div><div class="fg"><label class="fl">Port</label><input class="fi mono" id="bio-dev-port" value="4370" type="number"></div></div>
-    <div class="fg"><label class="fl">Location</label><input class="fi" id="bio-dev-location" placeholder="Reception, Factory Gate, Office Door…"></div>
+  <div class="modal" style="max-width:520px">
+    <div class="modal-title">Add Biometric Device</div>
+    <div class="modal-sub">ZKTeco · Suprema · Hikvision · Anviz · ADMS · Manual</div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Device Name</label><input class="fi" id="bio-dev-name" placeholder="Main Entrance Scanner"></div>
+      <div class="fg">
+        <label class="fl">Device Model</label>
+        <select class="fi" id="bio-dev-type" onchange="onBioDevTypeChange(this.value)">
+          <optgroup label="ZKTeco — TCP/IP Pull (pyzk bridge)">
+            <option value="ZKTeco F Series">F Series — F18, F22, F28 (Fingerprint)</option>
+            <option value="ZKTeco K Series">K Series — K40, K50, K60 (Fingerprint + Card)</option>
+            <option value="ZKTeco iClock">iClock — 360, 580, 680, 880, 990</option>
+            <option value="ZKTeco SpeedFace">SpeedFace — V4L, V5L, V5 Pro (Face)</option>
+            <option value="ZKTeco ProFace">ProFace — X, XS, XD, TD (Face + Palm)</option>
+            <option value="ZKTeco G Series">G Series — G3, G3 Pro, G4 (Face)</option>
+            <option value="ZKTeco UA Series">UA Series — UA760, UA400 (Fingerprint + Card)</option>
+            <option value="ZKTeco IN Series">IN Series — IN05, IN02 (Face + Fingerprint + Card)</option>
+            <option value="ZKTeco MB Series">MB Series — MB360, MB460 (Multi-biometric)</option>
+            <option value="ZKTeco">ZKTeco — Other / Generic TCP/IP</option>
+          </optgroup>
+          <optgroup label="ZKTeco — ADMS Cloud Push">
+            <option value="ZKTeco ADMS">ZKTeco ADMS (Push Mode — device calls server)</option>
+          </optgroup>
+          <optgroup label="Other Brands — HTTP Push">
+            <option value="Suprema">Suprema — BioStation A2, CoreStation</option>
+            <option value="Hikvision">Hikvision — DS-K1T Series, MinMoe</option>
+            <option value="Anviz">Anviz — C2 Pro, OA1000 (TCP/IP)</option>
+          </optgroup>
+          <option value="Manual">Manual / CSV Import Only</option>
+        </select>
+      </div>
+    </div>
+    <div id="bio-dev-mode-hint" style="margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--blue-bg);color:var(--blue)">
+      <strong>Mode: TCP/IP Pull</strong> — Run <code>zk_bridge.py</code> on the same LAN as this device to sync punches every 30 s. Default port 4370.
+    </div>
+    <div id="bio-dev-net-row" class="fr2">
+      <div class="fg"><label class="fl">IP Address</label><input class="fi mono" id="bio-dev-ip" placeholder="192.168.1.201"></div>
+      <div class="fg"><label class="fl">Port</label><input class="fi mono" id="bio-dev-port" value="4370" type="number"></div>
+    </div>
+    <div class="fg"><label class="fl">Location / Description</label><input class="fi" id="bio-dev-location" placeholder="Reception, Factory Gate, Office Door…"></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-bio-device')">Cancel</button><button class="btn btn-p" onclick="saveBiometricDevice()">Add Device &amp; Get API Key</button></div>
   </div>
 </div>
