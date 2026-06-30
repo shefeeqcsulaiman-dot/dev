@@ -833,6 +833,10 @@ textarea.fi{resize:vertical;min-height:80px;}
 .mb3-hdr-btn:hover{background:var(--surface2);color:var(--text);}
 .mb3-hdr-btn.accent{background:linear-gradient(135deg,var(--purple),var(--accent));color:#fff;border-color:transparent;box-shadow:0 4px 14px var(--accent-glow);}
 .mb3-hdr-btn.accent:hover{filter:brightness(1.1);}
+.dash-lang-toggle{display:inline-flex;align-items:center;border:1px solid var(--border2);border-radius:999px;overflow:hidden;background:var(--surface);gap:0;}
+.dash-lang-btn{padding:5px 12px;font-size:12px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--text3);transition:all .15s;white-space:nowrap;}
+.dash-lang-btn.active{background:var(--accent);color:#fff;}
+.dash-lang-btn:not(.active):hover{background:var(--surface2);color:var(--text);}
 .btn-block{width:100%;justify-content:center;}
 /* 2-column grid */
 .mb3-main-grid{display:grid;grid-template-columns:1fr 290px;gap:18px;align-items:start;}

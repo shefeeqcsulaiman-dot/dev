@@ -2336,8 +2336,7 @@ function renderDashboardHero(data,kpis={},counts={}){
   if(dateEl)dateEl.textContent=new Date().toLocaleDateString('en-AE',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const periodEl=document.getElementById('dash-period-label');
   if(periodEl)periodEl.textContent=`Live · ${data.period||new Date().toLocaleDateString('en-AE',{month:'long',year:'numeric'})}`;
-  const greet=document.getElementById('dash-greeting');
-  if(greet){const h=new Date().getHours();greet.textContent=h<12?'Good morning':h<17?'Good afternoon':'Good evening';}
+  applyAppLang(_appLang);
 
   // Revenue card: collection metrics from invoice_status
   const invStat=data.invoice_status||{};
@@ -8273,7 +8272,7 @@ function renderInvoiceLayoutGallery(){
         <button class="inv-lgal-act${isActive?' inv-lgal-act-primary':''}" onclick="selectInvoiceLayout('${l.id}')">&#9998; Edit</button>
         ${!l.isDefault?`<button class="inv-lgal-act" onclick="setDefaultInvoiceLayout('${l.id}')">&#9733;</button>`:''}
         <button class="inv-lgal-act" onclick="duplicateInvoiceLayout('${l.id}')">Copy</button>
-        ${_invoiceLayouts.length>1&&!l.isDefault?`<button class="inv-lgal-act danger" onclick="deleteInvoiceLayout('${l.id}')">Del</button>`:''}
+        ${_invoiceLayouts.length>1&&!l.isDefault&&l.template!=='Statement (Pay Online)'?`<button class="inv-lgal-act danger" onclick="deleteInvoiceLayout('${l.id}')">Del</button>`:''}
       </div>
     </div>`;
   }).join('')+`<button class="inv-lgal-add" onclick="addInvoiceLayout()">
@@ -8340,7 +8339,7 @@ function duplicateInvoiceLayout(id){
 
 function deleteInvoiceLayout(id){
   const l=_invoiceLayouts.find(x=>x.id===id);
-  if(!l||l.isDefault){toast('Cannot delete the default layout','err');return;}
+  if(!l||l.isDefault||l.template==='Statement (Pay Online)'){toast('Cannot delete the default layout','err');return;}
   if(_invoiceLayouts.length<=1){toast('Cannot delete the last layout','err');return;}
   if(!confirm(`Delete layout "${l.name}"?`))return;
   _invoiceLayouts=_invoiceLayouts.filter(x=>x.id!==id);
@@ -19998,6 +19997,44 @@ function mergeBankAndPaymentsModule(){
 })();
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── App Language (EN / AR) ────────────────────────────────────────────────────
+const _LANG_KEY='taxflow_app_lang';
+let _appLang=localStorage.getItem(_LANG_KEY)||'en';
+
+const _LANG={
+  en:{greeting_am:'Good morning',greeting_pm:'Good afternoon',greeting_eve:'Good evening',
+      subtitle:'Manage your finances now',new_invoice:'New Invoice',add_purchase:'Add Purchase'},
+  ar:{greeting_am:'صباح الخير',greeting_pm:'مساء الخير',greeting_eve:'مساء الخير',
+      subtitle:'أدر شؤونك المالية الآن',new_invoice:'فاتورة جديدة',add_purchase:'إضافة مشتريات'}
+};
+
+function applyAppLang(lang){
+  _appLang=lang||'en';
+  localStorage.setItem(_LANG_KEY,_appLang);
+  const isAr=_appLang==='ar';
+  document.documentElement.setAttribute('dir',isAr?'rtl':'ltr');
+  document.documentElement.setAttribute('lang',isAr?'ar':'en');
+  // Toggle button active states
+  const enBtn=document.getElementById('dash-lang-en');
+  const arBtn=document.getElementById('dash-lang-ar');
+  if(enBtn)enBtn.classList.toggle('active',!isAr);
+  if(arBtn)arBtn.classList.toggle('active',isAr);
+  // Update dashboard text
+  const t=_LANG[_appLang]||_LANG.en;
+  const h=new Date().getHours();
+  const greetKey=h<12?'greeting_am':h<17?'greeting_pm':'greeting_eve';
+  const greet=document.getElementById('dash-greeting');
+  if(greet)greet.textContent=t[greetKey];
+  const sub=document.getElementById('dash-subtitle');
+  if(sub)sub.textContent=t.subtitle;
+  const niLabel=document.getElementById('dash-btn-new-invoice-label');
+  if(niLabel)niLabel.textContent=t.new_invoice;
+  const apLabel=document.getElementById('dash-btn-add-purchase-label');
+  if(apLabel)apLabel.textContent=t.add_purchase;
+}
+
+function setAppLang(lang){applyAppLang(lang);}
+
 function initApp(){
   if(window.__taxflowAppInitialized)return;
   window.__taxflowAppInitialized=true;
@@ -20026,6 +20063,7 @@ function initApp(){
       document.querySelectorAll('.overlay.on').forEach(modal=>modal.classList.remove('on'));
     }
   });
+  applyAppLang(_appLang);
   mergeBankAndPaymentsModule();
   separateCorporateAccountingModule();
   clearStaticDemoData();
