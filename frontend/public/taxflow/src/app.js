@@ -12531,6 +12531,7 @@ function ensurePurchasePreviewModal(){
       <div id="purchase-view-body"></div>
       <div class="modal-foot">
         <button class="btn btn-g" onclick="toast('Preparing purchase PDF...','info')">Export PDF</button>
+        <button class="btn btn-s hidden" id="purchase-view-add-line" onclick="addPurchasePreviewLine()">+ Add Line</button>
         <button class="btn btn-p hidden" id="purchase-view-save" onclick="savePurchasePreviewEdit()">Save Changes</button>
       </div>
     </div>`;
@@ -12584,6 +12585,8 @@ function renderPurchaseRecordPreview(purchase,options={}){
   if(title)title.textContent=(editable?'Edit Purchase ':'Purchase ')+ref;
   if(sub)sub.textContent=`${purchase.supplier||'Supplier'} - ${purchase.status||'Draft'}`;
   if(saveBtn)saveBtn.classList.toggle('hidden',!editable);
+  const addLineBtn=document.getElementById('purchase-view-add-line');
+  if(addLineBtn)addLineBtn.classList.toggle('hidden',!editable);
   const cur=purchase.currency||'AED';
   const discount=parseAmount(purchase.discount_value||purchase.discount);
   const discountType=purchase.discount_type||'None';
@@ -12689,23 +12692,30 @@ function openPurchaseRecordPreview(btn){
 
 function calcPurchasePreviewEdit(){
   let net=0;
+  const loc=n=>Number(n||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
   document.querySelectorAll('#purchase-view-body .pv-line').forEach(row=>{
     const qty=parseAmount(row.querySelector('.pv-qty')?.value);
     const cost=parseAmount(row.querySelector('.pv-cost')?.value);
-    const total=qty*cost;
+    const discPct=parseAmount(row.querySelector('.pv-disc-pct')?.value)||0;
+    const gross=qty*cost;
+    const discAmt=gross*(discPct/100);
+    const total=gross-discAmt;
     net+=total;
+    const discAmtEl=row.querySelector('.pv-disc-amt');
+    if(discAmtEl)discAmtEl.value=discAmt>0?loc(discAmt):'';
     const lineTotal=row.querySelector('.pv-line-total');
-    if(lineTotal)lineTotal.value=total.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+    if(lineTotal)lineTotal.value=loc(total);
   });
+  const discount=parseAmount(document.getElementById('pv-discount')?.value)||0;
   const vat=parseAmount(document.getElementById('pv-vat')?.value);
   const shipping=parseAmount(document.getElementById('pv-shipping')?.value);
   const paid=parseAmount(document.getElementById('pv-paid')?.value);
-  const total=net+vat+shipping;
+  const total=net-discount+vat+shipping;
   const due=Math.max(0,total-paid);
-  setFieldValue(document.getElementById('pv-net'),net.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}));
-  setFieldValue(document.getElementById('pv-total'),total.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}));
-  setFieldValue(document.getElementById('pv-due'),due.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}));
-  return {net,vat,shipping,paid,total,due};
+  setFieldValue(document.getElementById('pv-net'),loc(net));
+  setFieldValue(document.getElementById('pv-total'),loc(total));
+  setFieldValue(document.getElementById('pv-due'),loc(due));
+  return {net,discount,vat,shipping,paid,total,due};
 }
 
 function collectPurchasePreviewLines(){
@@ -12716,6 +12726,7 @@ function collectPurchasePreviewLines(){
     quantity:parseAmount(row.querySelector('.pv-qty')?.value),
     unit:row.querySelector('.pv-unit')?.value?.trim()||'PCS',
     unit_cost:parseAmount(row.querySelector('.pv-cost')?.value),
+    discount_percent:parseAmount(row.querySelector('.pv-disc-pct')?.value)||0,
     line_total:parseAmount(row.querySelector('.pv-line-total')?.value)
   })).filter(line=>line.product||line.quantity||line.unit_cost);
 }
@@ -12729,6 +12740,29 @@ function deletePurchasePreviewLine(btn){
   calcPurchasePreviewEdit();
 }
 
+function addPurchasePreviewLine(){
+  const tbody=document.querySelector('#purchase-view-body .purchase-edit-lines tbody');
+  if(!tbody)return;
+  const idx=tbody.querySelectorAll('tr.pv-line').length;
+  const fmt=n=>Number(n||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const tr=document.createElement('tr');
+  tr.className='pv-line';
+  tr.innerHTML=`<td>${idx+1}</td>
+    <td><input class="fi pv-product" value="" placeholder="Item description"></td>
+    <td><input class="fi mono pv-sku" value="" placeholder="SKU"></td>
+    <td><select class="fi pv-category">${purchaseLedgerCategoryOptions('')}</select></td>
+    <td><input class="fi mono pv-qty" value="${fmt(1)}" oninput="calcPurchasePreviewEdit()"></td>
+    <td><input class="fi pv-unit" value="PCS"></td>
+    <td><input class="fi mono pv-cost" value="${fmt(0)}" oninput="calcPurchasePreviewEdit()"></td>
+    <td style="display:none"><input class="fi mono pv-disc-pct" value="" placeholder="0" oninput="calcPurchasePreviewEdit()" style="width:60px"></td>
+    <td><input class="fi mono pv-disc-amt" value="" placeholder="0" readonly style="width:80px"></td>
+    <td><input class="fi mono pv-line-vat" value="" placeholder="0" readonly style="width:70px"></td>
+    <td><input class="fi mono pv-line-total" value="${fmt(0)}" readonly style="font-weight:700;color:var(--accent)"></td>
+    <td><button class="icon-btn danger" type="button" title="Delete row" onclick="deletePurchasePreviewLine(this)">${deleteIconSvg()}</button></td>`;
+  tbody.appendChild(tr);
+  tr.querySelector('.pv-product')?.focus();
+}
+
 function savePurchasePreviewEdit(){
   const existing=purchaseRecordCache.get(currentPurchaseViewRef)||{};
   const totals=calcPurchasePreviewEdit();
@@ -12738,14 +12772,20 @@ function savePurchasePreviewEdit(){
     ...existing,
     ref,
     supplier:document.getElementById('pv-supplier')?.value?.trim()||'Supplier',
+    supplier_trn:document.getElementById('pv-supplier-trn')?.value?.trim()||'',
     date:document.getElementById('pv-date')?.value||'',
     location:document.getElementById('pv-location')?.value||'Main Store',
     address:document.getElementById('pv-address')?.value||'',
+    bill_to:document.getElementById('pv-bill-to')?.value||'',
     status:document.getElementById('pv-status')?.value||'Draft',
     pay_term:document.getElementById('pv-pay-term')?.value||'',
     payment_method:document.getElementById('pv-pay-method')?.value||'',
     payment_account:document.getElementById('pv-pay-account')?.value||'',
+    paid_on:document.getElementById('pv-paid-on')?.value||'',
+    payment_note:document.getElementById('pv-pay-note')?.value||'',
     notes:document.getElementById('pv-notes')?.value||'',
+    discount_value:totals.discount,
+    discount:totals.discount,
     items:purchaseLinesTotalQuantity(lines)||lines.length,
     net_amount:totals.net,
     tax_amount:totals.vat,
@@ -12788,39 +12828,6 @@ function editPurchaseRecord(btn){
   renderPurchaseRecordPreview(purchase,{editable:true});
   showM('m-purchase-view');
   audit('Editing purchase order',purchase.ref,'Opened');
-  return;
-  resetManualPurchase();
-  manualPurchaseEditingRef=purchase.ref;
-  setSelectValue(document.getElementById('mp-supplier'),purchase.supplier);
-  setFieldValue(document.getElementById('mp-ref'),purchase.ref);
-  setFieldValue(document.getElementById('mp-date'),purchase.date);
-  setFieldValue(document.getElementById('mp-address'),purchase.address||'');
-  setSelectValue(document.getElementById('mp-term'),purchase.pay_term||'');
-  setSelectValue(document.getElementById('mp-discount-type'),purchase.discount_type||'None');
-  setFieldValue(document.getElementById('mp-discount'),purchase.discount_value||purchase.discount||0);
-  setSelectValue(document.getElementById('mp-tax'),purchase.tax_type||'None');
-  setFieldValue(document.getElementById('mp-notes'),purchase.notes||'');
-  setFieldValue(document.getElementById('mp-shipping-details'),purchase.shipping_details||'');
-  setFieldValue(document.getElementById('mp-shipping'),purchase.shipping||0);
-  const expensesBox=document.getElementById('mp-expenses');
-  if(expensesBox)expensesBox.innerHTML='';
-  (purchase.additional_expenses||[]).forEach(addManualPurchaseExpense);
-  setFieldValue(document.getElementById('mp-pay-amount'),purchase.paid||0);
-  setFieldValue(document.getElementById('mp-paid-on'),purchase.paid_on||'');
-  setSelectValue(document.getElementById('mp-pay-method'),purchase.payment_method||'Cash');
-  setSelectValue(document.getElementById('mp-pay-account'),purchase.payment_account||'None');
-  setFieldValue(document.getElementById('mp-pay-note'),purchase.payment_note||'');
-  const tbody=document.getElementById('mp-lines');
-  if(tbody)tbody.innerHTML='';
-  const lines=Array.isArray(purchase.lines)&&purchase.lines.length?purchase.lines:[{product:'Purchase item',quantity:purchase.items||1,unit_cost:Number(purchase.net_amount||purchase.total||0)/Math.max(1,Number(purchase.items||1)),discount_percent:0,profit_margin:0}];
-  lines.forEach(addManualPurchaseLineFromData);
-  const ref=document.getElementById('mp-ref');
-  if(ref)ref.disabled=true;
-  setText('mp-form-title','Edit Purchase');
-  setText('mp-form-sub','Update purchase details. Reference is locked to prevent duplicate database records.');
-  setText('mp-save-btn','Update Purchase');
-  calcManualPurchase();
-  stab(document.querySelector('#page-purchase .tab:nth-child(4)'),'p-manual');
 }
 
 function copyPurchaseRecord(btn){
