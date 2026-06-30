@@ -754,14 +754,14 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 <div class="page" id="page-staff">
   <div class="tabs">
     <div class="tab on" onclick="stab(this,'hr-emp')">Employees</div>
-    <div class="tab" onclick="stab(this,'hr-att');openAttendanceCheck();refreshAttendanceToday();loadAttendanceTrend();loadBiometricDevices()">Attendance</div>
+    <div class="tab" onclick="stab(this,'hr-att');openAttendanceCheck();refreshAttendanceToday();loadAttendanceTrend()">Attendance</div>
     <div class="tab" onclick="stab(this,'hr-ot')">Overtime</div>
     <div class="tab" onclick="stab(this,'hr-leave')">Leave Management</div>
     <div class="tab" onclick="stab(this,'hr-corrections')">Corrections</div>
     <div class="tab" onclick="stab(this,'hr-loans')">Loans &amp; Advances</div>
     <div class="tab" onclick="stab(this,'hr-expiry');scheduleIdleTask(refreshExpiryAlerts,100)">Expiry Alerts</div>
     <div class="tab" onclick="stab(this,'hr-policy')">HR Settings</div>
-    <div class="tab" onclick="stab(this,'hr-bio');loadBiometricDevices()">Biometric Integration</div>
+    <div class="tab" onclick="stab(this,'hr-bio');loadBiometricDevices();loadBioSyncLog()">Biometric Integration</div>
   </div>
 
   <div class="tab-body on" id="hr-emp">
@@ -863,19 +863,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       </div>
     </div>
 
-    <!-- Biometric Devices Management -->
-    <div class="card mb16">
-      <div class="card-hd">
-        <div><div class="card-title">Biometric Devices</div><div class="card-sub">ZKTeco · Suprema · Hikvision · Anviz · Manual</div></div>
-        <button class="btn btn-p btn-sm" onclick="showM('m-bio-device')">+ Add Device</button>
-      </div>
-      <table class="tbl">
-        <thead><tr><th>Device Name</th><th>Type</th><th>IP Address</th><th>Port</th><th>Location</th><th>Status</th><th>Last Sync</th><th></th></tr></thead>
-        <tbody id="bio-devices-tbody">
-          <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No biometric devices configured. Click <strong>+ Add Device</strong> to connect your first device.</td></tr>
-        </tbody>
-      </table>
-    </div>
+    <!-- Biometric devices managed in Biometric Integration tab -->
 
     <!-- Setup Guide -->
     <div class="card mb16">
@@ -1480,36 +1468,54 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   </div>
 
   <div class="tab-body" id="hr-bio">
-    <div class="g2 mb16">
-      <div class="card">
-        <div class="card-hd"><div><div class="card-title">Biometric Machine Integration</div><div class="card-sub">ZKTeco / Suprema · TCP/IP API</div></div><div class="flx"><div class="bio-pulse"></div><span style="font-size:12px;color:var(--green);margin-left:6px">Live</span></div></div>
-        <div class="divider"></div>
-        <div class="fg"><label class="fl">Device IP Address</label><input class="fi mono" value="192.168.1.100"></div>
-        <div class="fr2">
-          <div class="fg"><label class="fl">Port</label><input class="fi mono" value="4370"></div>
-          <div class="fg"><label class="fl">Device Model</label><select class="fi"><option selected>ZKTeco F22</option><option>ZKTeco K40</option><option>Suprema BioStation</option><option>HikVision DS-K1T</option></select></div>
-        </div>
-        <div class="fr2">
-          <div class="fg"><label class="fl">Communication Key</label><input class="fi mono" value="0" type="password"></div>
-          <div class="fg"><label class="fl">Sync Interval</label><select class="fi"><option>Every 5 minutes</option><option>Real-time</option><option>Every 15 minutes</option></select></div>
-        </div>
-        <div class="flx" style="gap:8px;flex-wrap:wrap">
-          <button class="btn btn-success btn-sm" onclick="testBio()">Test Connection</button>
-          <button class="btn btn-p btn-sm" onclick="toast('Syncing attendance from device...','info')">Sync Now</button>
-          <button class="btn btn-g btn-sm" onclick="toast('Pulling employee list from device...','info')">Pull Users</button>
-          <button class="btn btn-g btn-sm" onclick="toast('Pushing employees to device...','info')">Push Users</button>
-        </div>
+    <!-- Device KPI row -->
+    <div class="g4 mb16">
+      <div class="stat"><div class="stat-lbl">Total Devices</div><div class="stat-val" id="bio-kpi-total">—</div><div class="stat-delta">configured</div></div>
+      <div class="stat"><div class="stat-lbl">Active</div><div class="stat-val" style="color:var(--green)" id="bio-kpi-active">—</div><div class="stat-delta">status: active</div></div>
+      <div class="stat"><div class="stat-lbl">Punches Today</div><div class="stat-val" style="color:var(--accent)" id="bio-kpi-punches">—</div><div class="stat-delta">all sources</div></div>
+      <div class="stat"><div class="stat-lbl">Last Activity</div><div class="stat-val" style="font-size:12px;color:var(--text2)" id="bio-kpi-last">—</div><div class="stat-delta">most recent punch</div></div>
+    </div>
+
+    <!-- Device Management -->
+    <div class="card mb16">
+      <div class="card-hd">
+        <div><div class="card-title">Biometric Devices</div><div class="card-sub">ZKTeco · X Face Pro · SpeedFace · Suprema · Hikvision · Anviz · ADMS</div></div>
+        <button class="btn btn-p btn-sm" onclick="showM('m-bio-device')">+ Add Device</button>
       </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Live Sync Log</div></div>
-        <div style="font-family:'DM Mono',monospace;font-size:11.5px;color:var(--text3);line-height:1.8" id="bio-log">
-          <div><span style="color:var(--green)">✓ 17:31:02</span> — Synced 8 records from device</div>
-          <div><span style="color:var(--green)">✓ 17:26:02</span> — Synced 2 records from device</div>
-          <div><span style="color:var(--amber)">⚠ 17:21:05</span> — Retry after timeout, reconnected</div>
-          <div><span style="color:var(--green)">✓ 17:16:02</span> — Synced 5 records from device</div>
-          <div><span style="color:var(--green)">✓ 09:12:44</span> — Rania Abboud — Check-in</div>
-          <div><span style="color:var(--green)">✓ 08:55:19</span> — Mohamed Jaber — Check-in</div>
-          <div><span style="color:var(--green)">✓ 08:47:33</span> — Sara Al Mansouri — Check-in</div>
+      <table class="tbl">
+        <thead><tr><th>Device Name</th><th>Model</th><th>IP Address</th><th>Port</th><th>Location</th><th>Status</th><th>Last Sync</th><th></th></tr></thead>
+        <tbody id="bio-devices-tbody">
+          <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No biometric devices configured. Click <strong>+ Add Device</strong> to connect your first device.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Real Sync Activity Log -->
+    <div class="card mb16">
+      <div class="card-hd">
+        <div><div class="card-title">Sync Activity Log</div><div class="card-sub">Last 50 punch records from all sources</div></div>
+        <button class="btn btn-g btn-sm" onclick="loadBioSyncLog()">⟳ Refresh</button>
+      </div>
+      <div id="bio-sync-log" style="font-family:'DM Mono',monospace;font-size:11.5px;line-height:2;max-height:320px;overflow-y:auto">
+        <div style="color:var(--text3);padding:32px;text-align:center">No punch records yet — connect a device or import CSV.</div>
+      </div>
+    </div>
+
+    <!-- Setup Guide -->
+    <div class="card mb16">
+      <div class="card-hd"><div class="card-title">Connection Setup Guide</div></div>
+      <div class="g3">
+        <div class="setting-tile">
+          <strong>ZKTeco TCP/IP (F/K/iClock/SpeedFace/X Face Pro/ProFace)</strong>
+          <p>1. Click <strong>+ Add Device</strong> → select model → copy the API key.<br>2. On the server/PC on the same LAN as the device, run:<br><code>pip install pyzk requests</code><br><code>ZK_DEVICE_IP=192.168.1.x DEVICE_API_KEY=xxx python zk_bridge.py</code><br>3. Punches sync automatically every 30 s.</p>
+        </div>
+        <div class="setting-tile">
+          <strong>ZKTeco ADMS / Cloud Push</strong>
+          <p>On the device panel:<br>→ <em>Comm → Cloud Server Settings</em><br>→ Set <strong>Server Address</strong> to this app's domain<br>→ Set <strong>Device ID</strong> and enter the API key as the password.<br>No bridge script needed — the device calls the server directly.</p>
+        </div>
+        <div class="setting-tile">
+          <strong>Suprema / Hikvision / HTTP Push</strong>
+          <p>Configure the device webhook to POST to:<br><code style="word-break:break-all">/api/v1/attendance/punch</code><br>Header: <code>X-Device-Key: &lt;your_key&gt;</code><br>Body: <code>{"employee_id":"EMP001","punch_time":"2026-01-15 08:30:00","direction":"in"}</code></p>
         </div>
       </div>
     </div>

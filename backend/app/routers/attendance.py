@@ -342,6 +342,32 @@ def attendance_trend(
     return {"dates": dates, "counts": counts}
 
 
+@router.get("/punches")
+def recent_punches(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Return the most recent punch records for the sync activity log."""
+    limit = max(1, min(limit, 200))
+    rows = db.query(AttendancePunch).filter(
+        AttendancePunch.company_id == current_user.company_id,
+    ).order_by(AttendancePunch.punch_time.desc()).limit(limit).all()
+    return {"punches": [
+        {
+            "id": r.id,
+            "employee_id": r.employee_id,
+            "employee_name": r.employee_name,
+            "punch_time": r.punch_time.isoformat(),
+            "punch_date": r.punch_date,
+            "direction": r.direction,
+            "device_name": r.device_name,
+            "source": r.source,
+        }
+        for r in rows
+    ]}
+
+
 @router.get("/summary")
 def attendance_summary(
     db: Session = Depends(get_db),

@@ -16761,18 +16761,58 @@ async function loadBiometricDevices(){
   if(!tbody)return;
   try{
     const res=await moduleApi('/attendance/devices');
+    const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
     if(!res||!Array.isArray(res)){tbody.innerHTML='<tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No devices configured.</td></tr>';return;}
+    // KPIs
+    set('bio-kpi-total',res.length);
+    set('bio-kpi-active',res.filter(d=>d.status==='active').length);
     if(!res.length){tbody.innerHTML='<tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No biometric devices configured. Click <strong>+ Add Device</strong> to connect your first device.</td></tr>';return;}
     tbody.innerHTML='';
+    let latestSync=null;
     res.forEach(d=>{
+      if(d.last_sync&&(!latestSync||d.last_sync>latestSync))latestSync=d.last_sync;
       const tr=document.createElement('tr');
       tr.dataset.deviceId=d.id;
       const statusCls=d.status==='active'?'b-g':'b-r';
       const lastSync=d.last_sync?new Date(d.last_sync).toLocaleString('en-AE'):'Never';
-      tr.innerHTML=`<td>${escapeHtml(d.name)}</td><td><span class="b b-b">${escapeHtml(d.device_type)}</span></td><td class="mono">${escapeHtml(d.ip_address||'—')}</td><td class="mono">${d.port}</td><td>${escapeHtml(d.location||'—')}</td><td><span class="b ${statusCls}">${escapeHtml(d.status)}</span></td><td class="mono" style="font-size:11px">${lastSync}</td><td><div class="flx"><button class="btn btn-g btn-sm" onclick="testBiometricDevice('${escapeHtml(d.id)}',this)">Test</button><button class="btn btn-danger btn-sm" onclick="deleteBiometricDevice('${escapeHtml(d.id)}',this)">Remove</button></div></td>`;
+      tr.innerHTML=`<td>${escapeHtml(d.name)}</td><td><span class="b b-b" style="font-size:10px">${escapeHtml(d.device_type)}</span></td><td class="mono">${escapeHtml(d.ip_address||'—')}</td><td class="mono">${d.port||'—'}</td><td>${escapeHtml(d.location||'—')}</td><td><span class="b ${statusCls}">${escapeHtml(d.status)}</span></td><td class="mono" style="font-size:11px">${lastSync}</td><td><div class="flx"><button class="btn btn-g btn-sm" onclick="testBiometricDevice('${escapeHtml(d.id)}',this)">Test</button><button class="btn btn-danger btn-sm" onclick="deleteBiometricDevice('${escapeHtml(d.id)}',this)">Remove</button></div></td>`;
       tbody.appendChild(tr);
     });
+    if(latestSync)set('bio-kpi-last',new Date(latestSync).toLocaleTimeString('en-AE'));
   }catch(e){toast('Failed to load devices: '+e,'warn');}
+}
+
+async function loadBioSyncLog(){
+  const log=document.getElementById('bio-sync-log');
+  if(!log)return;
+  log.innerHTML='<div style="color:var(--text3);padding:16px;text-align:center">Loading…</div>';
+  try{
+    const res=await moduleApi('/attendance/punches?limit=50');
+    const punches=res.punches||[];
+    const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+    set('bio-kpi-punches',punches.length);
+    if(!punches.length){
+      log.innerHTML='<div style="color:var(--text3);padding:32px;text-align:center">No punch records yet — connect a device or import CSV.</div>';
+      return;
+    }
+    if(punches[0])set('bio-kpi-last',new Date(punches[0].punch_time).toLocaleTimeString('en-AE'));
+    log.innerHTML='';
+    punches.forEach(p=>{
+      const dt=new Date(p.punch_time);
+      const timeStr=dt.toLocaleString('en-AE',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      const dirClr=p.direction==='out'?'var(--amber)':'var(--green)';
+      const dirIcon=p.direction==='out'?'↖':'→';
+      const srcBadge=p.source==='csv'?'<span style="color:var(--purple)">CSV</span>':p.source==='device'?'<span style="color:var(--blue)">BIO</span>':'<span style="color:var(--text3)">MAN</span>';
+      const name=escapeHtml(p.employee_name||p.employee_id);
+      const dev=p.device_name?` · ${escapeHtml(p.device_name)}`:'';
+      const row=document.createElement('div');
+      row.style.cssText='padding:3px 6px;border-bottom:1px solid var(--divider)';
+      row.innerHTML=`<span style="color:${dirClr}">${dirIcon} ${timeStr}</span>  ${srcBadge}  <strong>${name}</strong>${dev}  <span style="color:var(--text3)">${escapeHtml(p.direction)}</span>`;
+      log.appendChild(row);
+    });
+  }catch(e){
+    log.innerHTML='<div style="color:var(--text3);padding:32px;text-align:center">Unable to load sync log.</div>';
+  }
 }
 
 const BIO_TCP_TYPES=new Set(['ZKTeco F Series','ZKTeco K Series','ZKTeco iClock','ZKTeco X Face Pro','ZKTeco SpeedFace','ZKTeco ProFace','ZKTeco G Series','ZKTeco UA Series','ZKTeco IN Series','ZKTeco MB Series','ZKTeco','Anviz']);
