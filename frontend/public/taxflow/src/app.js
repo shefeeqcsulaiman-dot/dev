@@ -16775,7 +16775,7 @@ async function loadBiometricDevices(){
   }catch(e){toast('Failed to load devices: '+e,'warn');}
 }
 
-const BIO_TCP_TYPES=new Set(['ZKTeco F Series','ZKTeco K Series','ZKTeco iClock','ZKTeco SpeedFace','ZKTeco ProFace','ZKTeco G Series','ZKTeco UA Series','ZKTeco IN Series','ZKTeco MB Series','ZKTeco','Anviz']);
+const BIO_TCP_TYPES=new Set(['ZKTeco F Series','ZKTeco K Series','ZKTeco iClock','ZKTeco X Face Pro','ZKTeco SpeedFace','ZKTeco ProFace','ZKTeco G Series','ZKTeco UA Series','ZKTeco IN Series','ZKTeco MB Series','ZKTeco','Anviz']);
 const BIO_PUSH_TYPES=new Set(['ZKTeco ADMS','Suprema','Hikvision']);
 
 function onBioDevTypeChange(val){
