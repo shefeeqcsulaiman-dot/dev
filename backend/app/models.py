@@ -927,6 +927,37 @@ class ConsolidationRecord(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(30), default="draft")
 
 
+class BiometricDevice(Base, TimestampMixin):
+    __tablename__ = "biometric_devices"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    device_type: Mapped[str] = mapped_column(String(40), default="ZKTeco")
+    ip_address: Mapped[str | None] = mapped_column(String(60))
+    port: Mapped[int] = mapped_column(Integer, default=4370)
+    location: Mapped[str | None] = mapped_column(String(120))
+    api_key_hash: Mapped[str | None] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(30), default="active")
+    last_sync: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AttendancePunch(Base, TimestampMixin):
+    __tablename__ = "attendance_punches"
+    __table_args__ = (Index("ix_att_punch_company_date", "company_id", "punch_date"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    employee_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    employee_name: Mapped[str | None] = mapped_column(String(255))
+    punch_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    punch_date: Mapped[str] = mapped_column(String(10), nullable=False)
+    direction: Mapped[str] = mapped_column(String(10), default="in")
+    device_id: Mapped[str | None] = mapped_column(String(36))
+    device_name: Mapped[str | None] = mapped_column(String(120))
+    source: Mapped[str] = mapped_column(String(32), default="manual")
+
+
 class ApprovalMatrixRecord(Base, TimestampMixin):
     __tablename__ = "approval_matrix_records"
 

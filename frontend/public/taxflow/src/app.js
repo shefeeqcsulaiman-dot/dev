@@ -16754,6 +16754,180 @@ function addPayrollAdjustment(){
 }
 
 // -- DAILY ATTENDANCE CHECK --------------------------------------
+// ── Biometric Device Management ───────────────────────────────────────────────
+
+async function loadBiometricDevices(){
+  const tbody=document.getElementById('bio-devices-tbody');
+  if(!tbody)return;
+  try{
+    const res=await moduleApi('/attendance/devices');
+    if(!res||!Array.isArray(res)){tbody.innerHTML='<tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No devices configured.</td></tr>';return;}
+    if(!res.length){tbody.innerHTML='<tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No biometric devices configured. Click <strong>+ Add Device</strong> to connect your first device.</td></tr>';return;}
+    tbody.innerHTML='';
+    res.forEach(d=>{
+      const tr=document.createElement('tr');
+      tr.dataset.deviceId=d.id;
+      const statusCls=d.status==='active'?'b-g':'b-r';
+      const lastSync=d.last_sync?new Date(d.last_sync).toLocaleString('en-AE'):'Never';
+      tr.innerHTML=`<td>${escapeHtml(d.name)}</td><td><span class="b b-b">${escapeHtml(d.device_type)}</span></td><td class="mono">${escapeHtml(d.ip_address||'—')}</td><td class="mono">${d.port}</td><td>${escapeHtml(d.location||'—')}</td><td><span class="b ${statusCls}">${escapeHtml(d.status)}</span></td><td class="mono" style="font-size:11px">${lastSync}</td><td><div class="flx"><button class="btn btn-g btn-sm" onclick="testBiometricDevice('${escapeHtml(d.id)}',this)">Test</button><button class="btn btn-danger btn-sm" onclick="deleteBiometricDevice('${escapeHtml(d.id)}',this)">Remove</button></div></td>`;
+      tbody.appendChild(tr);
+    });
+  }catch(e){toast('Failed to load devices: '+e,'warn');}
+}
+
+async function saveBiometricDevice(){
+  const name=(document.getElementById('bio-dev-name')?.value||'').trim();
+  const type=document.getElementById('bio-dev-type')?.value||'ZKTeco';
+  const ip=(document.getElementById('bio-dev-ip')?.value||'').trim();
+  const port=parseInt(document.getElementById('bio-dev-port')?.value)||4370;
+  const loc=(document.getElementById('bio-dev-location')?.value||'').trim();
+  if(!name){toast('Device name is required','warn');return;}
+  try{
+    const res=await moduleApi('/attendance/devices',{method:'POST',body:{name,device_type:type,ip_address:ip||null,port,location:loc||null}});
+    if(res.api_key){
+      closeM('m-bio-device');
+      document.getElementById('bio-key-val').value=res.api_key;
+      showM('m-bio-key');
+      ['bio-dev-name','bio-dev-ip','bio-dev-location'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    } else {
+      toast('Device added','ok');closeM('m-bio-device');loadBiometricDevices();
+    }
+  }catch(e){toast('Failed to add device: '+e,'warn');}
+}
+
+async function testBiometricDevice(id,btn){
+  const orig=btn.textContent;
+  btn.textContent='Testing…';btn.disabled=true;
+  try{
+    const res=await moduleApi(`/attendance/devices/${encodeURIComponent(id)}/test`,{method:'POST',body:{}});
+    toast(res.message||'Done',res.ok?'ok':'warn');
+  }catch(e){toast('Test failed: '+e,'warn');}
+  btn.textContent=orig;btn.disabled=false;
+}
+
+async function deleteBiometricDevice(id,btn){
+  if(!confirm('Remove this device?'))return;
+  try{
+    await moduleApi(`/attendance/devices/${encodeURIComponent(id)}`,{method:'DELETE'});
+    btn.closest('tr').remove();
+    toast('Device removed','ok');
+  }catch(e){toast('Failed: '+e,'warn');}
+}
+
+// ── Attendance: Today's data from API ─────────────────────────────────────────
+
+async function refreshAttendanceToday(){
+  const tbody=document.getElementById('att-today-tbody');
+  try{
+    const res=await moduleApi('/attendance/today');
+    const count=res.present_count||0;
+    const ids=res.employee_ids||[];
+    const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+    set('att-stat-present',count);
+    set('att-stat-sync',new Date().toLocaleTimeString('en-AE'));
+    const kpiEl=document.getElementById('hrms-kpi-present');
+    if(kpiEl&&count>0)kpiEl.textContent=count;
+    if(!tbody)return;
+    if(!ids.length){
+      tbody.innerHTML='<tr data-empty-state><td colspan="4" style="text-align:center;color:var(--text3);padding:32px">No punch-ins recorded for today yet.</td></tr>';
+      return;
+    }
+    const empTotal=document.querySelectorAll('#employee-tbody tr:not([data-empty-state])').length;
+    set('att-stat-total',empTotal||'—');
+    tbody.innerHTML='';
+    ids.forEach(empId=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${escapeHtml(empId)}</td><td class="mono">${res.date||'—'}</td><td><span class="b b-g">Biometric</span></td><td><span class="b b-g">Present</span></td>`;
+      tbody.appendChild(tr);
+    });
+  }catch(e){
+    if(tbody)tbody.innerHTML='<tr data-empty-state><td colspan="4" style="text-align:center;color:var(--text3);padding:32px">Biometric not connected yet. Import CSV or connect a device.</td></tr>';
+  }
+}
+
+// ── Attendance Trend Chart from API ───────────────────────────────────────────
+
+async function loadAttendanceTrend(){
+  const container=document.getElementById('att-trend-chart');
+  const sub=document.getElementById('att-trend-sub');
+  if(!container)return;
+  try{
+    const res=await moduleApi('/attendance/trend?days=30');
+    const dates=res.dates||[];
+    const counts=res.counts||[];
+    if(!dates.length||counts.every(c=>c===0)){
+      container.innerHTML='<div style="height:100px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12px">No attendance data yet — connect a device or import CSV.</div>';
+      if(sub)sub.textContent='No data';
+      return;
+    }
+    const max=Math.max(1,...counts);
+    const W=400,H=80,PAD=4;
+    const xs=dates.map((_,i)=>Math.round(PAD+(i/(dates.length-1||1))*(W-PAD*2)));
+    const ys=counts.map(c=>Math.round(H-PAD-(c/max)*(H-PAD*2)));
+    const pts=xs.map((x,i)=>x+','+ys[i]).join(' ');
+    // Fill area
+    const fillPts=`${xs[0]},${H} `+pts+` ${xs[xs.length-1]},${H}`;
+    const avg=Math.round(counts.reduce((a,b)=>a+b,0)/counts.length);
+    const avgY=Math.round(H-PAD-(avg/max)*(H-PAD*2));
+    const circles=xs.map((x,i)=>`<circle cx="${x}" cy="${ys[i]}" r="2.5" fill="#3b82f6"/>`).join('');
+    const labels=[];
+    [0,Math.floor(dates.length/2),dates.length-1].forEach(i=>{
+      if(dates[i])labels.push(`<text x="${xs[i]}" y="${H+14}" text-anchor="middle" font-size="9" fill="#9ca3af">${dates[i].slice(5)}</text>`);
+    });
+    container.innerHTML=`<svg viewBox="0 0 ${W} ${H+18}" width="100%" style="overflow:visible">
+      <defs><linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3b82f6" stop-opacity=".15"/><stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/></linearGradient></defs>
+      <polygon points="${fillPts}" fill="url(#trendGrad)" stroke="none"/>
+      <line x1="${PAD}" y1="${avgY}" x2="${W-PAD}" y2="${avgY}" stroke="#f59e0b" stroke-width="1" stroke-dasharray="3,3"/>
+      <polyline points="${pts}" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linejoin="round"/>
+      ${circles}${labels.join('')}
+    </svg>`;
+    if(sub)sub.textContent=`Avg ${avg} employees/day over last 30 days`;
+    // Also update dashboard Attendance Trend card
+    _updateDashboardAttTrend(dates,counts,max,pts,fillPts);
+  }catch(e){
+    container.innerHTML='<div style="height:100px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12px">Unable to load trend data.</div>';
+  }
+}
+
+function _updateDashboardAttTrend(dates,counts,max,pts,fillPts){
+  const wrap=document.querySelector('.hrms-line-chart-wrap');
+  if(!wrap)return;
+  const W=400,H=100,PAD=4;
+  const xs=dates.map((_,i)=>Math.round(PAD+(i/(dates.length-1||1))*(W-PAD*2)));
+  const ys=counts.map(c=>Math.round(H-PAD-(c/max)*(H-PAD*2)));
+  const pts2=xs.map((x,i)=>x+','+ys[i]).join(' ');
+  const fill2=`${xs[0]},${H} `+pts2+` ${xs[xs.length-1]},${H}`;
+  wrap.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:100%">
+    <defs><linearGradient id="attGrad2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3b82f6" stop-opacity=".18"/><stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/></linearGradient></defs>
+    <polygon points="${fill2}" fill="url(#attGrad2)" stroke="none"/>
+    <polyline points="${pts2}" fill="none" stroke="#3b82f6" stroke-width="2.2" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+// ── CSV Import ────────────────────────────────────────────────────────────────
+
+async function importAttendanceCsv(input){
+  const file=input.files?.[0];
+  if(!file)return;
+  if(!file.name.endsWith('.csv')){toast('Please select a .csv file','warn');return;}
+  const formData=new FormData();
+  formData.append('file',file);
+  try{
+    const token=localStorage.getItem('taxflow_token')||'';
+    const base=(window.TAXFLOW_API_BASE_URL||'').replace(/\/$/, '')||'http://localhost:8000';
+    const resp=await fetch(`${base}/api/v1/attendance/import-csv`,{method:'POST',headers:{Authorization:`Bearer ${token}`},body:formData});
+    const res=await resp.json();
+    if(resp.ok){
+      toast(`Imported ${res.imported} records (${res.skipped} skipped)`,'ok');
+      refreshAttendanceToday();
+      loadAttendanceTrend();
+    } else {
+      toast(res.detail||'Import failed','warn');
+    }
+  }catch(e){toast('Import error: '+e,'warn');}
+  input.value='';
+}
+
 function openAttendanceCheck(){
   // Fill table with all Present immediately — modal is only for marking absences
   markAllPresent();

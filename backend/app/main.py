@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.models import Account, Company, TaxCode, User, VoucherType
-from app.routers import accounting, ai, app_data, audit, auth, companies, corporate_accounting, documents, events, exception_center, hr_ai, inventory, invoice_share, invoices, jobs, module_records, payroll, reports, source_transactions, superadmin, tax
+from app.routers import accounting, ai, app_data, attendance, audit, auth, companies, corporate_accounting, documents, events, exception_center, hr_ai, inventory, invoice_share, invoices, jobs, module_records, payroll, reports, source_transactions, superadmin, tax
 from app.security import hash_password
 
 
@@ -196,6 +196,7 @@ def create_app() -> FastAPI:
         return Response(content=content, media_type="application/javascript")
 
     app.include_router(auth.router, prefix="/api/v1")
+    app.include_router(attendance.router, prefix="/api/v1")
     app.include_router(ai.router, prefix="/api/v1")
     app.include_router(hr_ai.router, prefix="/api/v1")
     app.include_router(invoice_share.router, prefix="/api/v1")

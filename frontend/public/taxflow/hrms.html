@@ -754,14 +754,14 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 <div class="page" id="page-staff">
   <div class="tabs">
     <div class="tab on" onclick="stab(this,'hr-emp')">Employees</div>
-    <div class="tab" onclick="stab(this,'hr-att');openAttendanceCheck()">Attendance</div>
+    <div class="tab" onclick="stab(this,'hr-att');openAttendanceCheck();refreshAttendanceToday();loadAttendanceTrend();loadBiometricDevices()">Attendance</div>
     <div class="tab" onclick="stab(this,'hr-ot')">Overtime</div>
     <div class="tab" onclick="stab(this,'hr-leave')">Leave Management</div>
     <div class="tab" onclick="stab(this,'hr-corrections')">Corrections</div>
     <div class="tab" onclick="stab(this,'hr-loans')">Loans &amp; Advances</div>
     <div class="tab" onclick="stab(this,'hr-expiry');scheduleIdleTask(refreshExpiryAlerts,100)">Expiry Alerts</div>
     <div class="tab" onclick="stab(this,'hr-policy')">HR Settings</div>
-    <div class="tab" onclick="stab(this,'hr-bio')">Biometric Integration</div>
+    <div class="tab" onclick="stab(this,'hr-bio');loadBiometricDevices()">Biometric Integration</div>
   </div>
 
   <div class="tab-body on" id="hr-emp">
@@ -807,6 +807,13 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   </div>
 
   <div class="tab-body" id="hr-att">
+    <!-- Attendance KPI row -->
+    <div class="g4 mb16">
+      <div class="stat"><div class="stat-lbl">Present Today</div><div class="stat-val" style="color:var(--green)" id="att-stat-present">—</div><div class="stat-delta">from biometric</div></div>
+      <div class="stat"><div class="stat-lbl">Total Employees</div><div class="stat-val" id="att-stat-total">—</div><div class="stat-delta">active headcount</div></div>
+      <div class="stat"><div class="stat-lbl">On Leave Today</div><div class="stat-val" style="color:var(--amber)" id="att-stat-leave">—</div><div class="stat-delta">approved leaves</div></div>
+      <div class="stat"><div class="stat-lbl">Last Sync</div><div class="stat-val" style="font-size:13px;color:var(--text2)" id="att-stat-sync">—</div><div class="stat-delta">biometric device</div></div>
+    </div>
     <div class="g2 mb16">
       <div class="card">
         <div class="card-hd">
@@ -822,14 +829,70 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         </div>
       </div>
       <div class="card">
-        <div class="card-hd"><div class="card-title">Today's Attendance</div><span id="att-time" class="mono" style="font-size:12px;color:var(--accent)">Live</span></div>
+        <div class="card-hd">
+          <div class="card-title">Today's Attendance</div>
+          <div class="flx" style="gap:6px">
+            <span id="att-time" class="mono" style="font-size:12px;color:var(--accent)">Live</span>
+            <button class="btn btn-g btn-sm" onclick="refreshAttendanceToday()">⟳ Refresh</button>
+          </div>
+        </div>
         <table class="tbl">
-          <thead><tr><th>Employee</th><th>In</th><th>Out</th><th>Hours</th><th>Late</th><th>OT</th><th>Status</th></tr></thead>
+          <thead><tr><th>Employee</th><th>Check In</th><th>Source</th><th>Status</th></tr></thead>
           <tbody id="att-today-tbody">
+            <tr data-empty-state><td colspan="4" style="text-align:center;color:var(--text3);padding:32px">No attendance records for today yet.<br>Connect a biometric device or import CSV to begin.</td></tr>
           </tbody>
         </table>
         <div class="divider"></div>
-        <div class="flx" style="gap:8px;flex-wrap:wrap"><button class="btn btn-g" onclick="showM('m-att-correction')">+ Correction Request</button><button class="btn btn-p" onclick="toast('Daily attendance recalculated','ok')">Recalculate Hours</button></div>
+        <div class="flx" style="gap:8px;flex-wrap:wrap">
+          <button class="btn btn-g" onclick="showM('m-att-correction')">+ Correction</button>
+          <button class="btn btn-g" onclick="document.getElementById('att-csv-input').click()">↑ Import CSV</button>
+          <input type="file" id="att-csv-input" accept=".csv" style="display:none" onchange="importAttendanceCsv(this)">
+          <button class="btn btn-p" onclick="refreshAttendanceToday()">⟳ Sync Now</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Attendance Trend Chart (from API) -->
+    <div class="card mb16">
+      <div class="card-hd">
+        <div><div class="card-title">30-Day Attendance Trend</div><div class="card-sub" id="att-trend-sub">Loading…</div></div>
+        <button class="btn btn-g btn-sm" onclick="loadAttendanceTrend()">⟳ Refresh</button>
+      </div>
+      <div id="att-trend-chart" style="padding:8px 0">
+        <div style="height:100px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12px">No data yet. Data appears once biometric punches are recorded.</div>
+      </div>
+    </div>
+
+    <!-- Biometric Devices Management -->
+    <div class="card mb16">
+      <div class="card-hd">
+        <div><div class="card-title">Biometric Devices</div><div class="card-sub">ZKTeco · Suprema · Hikvision · Anviz · Manual</div></div>
+        <button class="btn btn-p btn-sm" onclick="showM('m-bio-device')">+ Add Device</button>
+      </div>
+      <table class="tbl">
+        <thead><tr><th>Device Name</th><th>Type</th><th>IP Address</th><th>Port</th><th>Location</th><th>Status</th><th>Last Sync</th><th></th></tr></thead>
+        <tbody id="bio-devices-tbody">
+          <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No biometric devices configured. Click <strong>+ Add Device</strong> to connect your first device.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Setup Guide -->
+    <div class="card mb16">
+      <div class="card-hd"><div class="card-title">Setup Guide</div></div>
+      <div class="g3">
+        <div class="setting-tile">
+          <strong>ZKTeco / iClock (TCP/IP)</strong>
+          <p>1. Add device here to get an API key.<br>2. Download <code>zk_bridge.py</code> from the server.<br>3. Run: <code>DEVICE_API_KEY=xxx ZK_DEVICE_IP=192.168.1.x python zk_bridge.py</code><br>4. Punches stream automatically every 30 seconds.</p>
+        </div>
+        <div class="setting-tile">
+          <strong>HTTP Push (Suprema / Hikvision)</strong>
+          <p>Configure the device's webhook to POST to:<br><code style="word-break:break-all">/api/v1/attendance/punch</code><br>with header <code>X-Device-Key: &lt;your_key&gt;</code> and JSON body: <code>{"employee_id":"…","punch_time":"…","direction":"in"}</code></p>
+        </div>
+        <div class="setting-tile">
+          <strong>CSV Import (any device)</strong>
+          <p>Export attendance log from your device software. Required columns: <code>employee_id, punch_time</code> (YYYY-MM-DD HH:MM:SS). Optional: <code>employee_name, direction</code>. Click <strong>↑ Import CSV</strong> in the Today's Attendance card.</p>
+        </div>
       </div>
     </div>
   </div>
@@ -2224,6 +2287,25 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="ot-reason" rows="3" placeholder="Stock count, client delivery, urgent closing..."></textarea></div>
     <div class="fg"><label class="fl">Attachment (optional)</label><div class="drop-zone" style="padding:14px" onclick="toast('Choose overtime attachment...','info')"><div style="font-size:12px;color:var(--text2)">Drop file or click to attach</div></div></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-ot')">Cancel</button><button class="btn btn-p" onclick="submitOTRequest()">Submit for Approval</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-bio-device" onclick="closeOvBg(event,'m-bio-device')">
+  <div class="modal"><div class="modal-title">Add Biometric Device</div><div class="modal-sub">ZKTeco · Suprema · Hikvision · Anviz · Manual</div>
+    <div class="fr2"><div class="fg"><label class="fl">Device Name</label><input class="fi" id="bio-dev-name" placeholder="Main Entrance Scanner"></div><div class="fg"><label class="fl">Device Type</label><select class="fi" id="bio-dev-type"><option>ZKTeco</option><option>Suprema</option><option>Hikvision</option><option>Anviz</option><option>Manual</option></select></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">IP Address</label><input class="fi mono" id="bio-dev-ip" placeholder="192.168.1.201"></div><div class="fg"><label class="fl">Port</label><input class="fi mono" id="bio-dev-port" value="4370" type="number"></div></div>
+    <div class="fg"><label class="fl">Location</label><input class="fi" id="bio-dev-location" placeholder="Reception, Factory Gate, Office Door…"></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-bio-device')">Cancel</button><button class="btn btn-p" onclick="saveBiometricDevice()">Add Device &amp; Get API Key</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-bio-key" onclick="closeOvBg(event,'m-bio-key')">
+  <div class="modal"><div class="modal-title">Device API Key</div><div class="modal-sub">Save this key — it is shown only once</div>
+    <div class="fg"><label class="fl">API Key</label><div style="display:flex;gap:6px"><input class="fi mono" id="bio-key-val" readonly style="flex:1"><button class="btn btn-g btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('bio-key-val').value);toast('Copied','ok')">Copy</button></div></div>
+    <div style="background:var(--amber-bg);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--amber);margin-top:8px">
+      Use this key in <code>zk_bridge.py</code> as the <code>DEVICE_API_KEY</code> environment variable.
+    </div>
+    <div class="modal-foot"><button class="btn btn-p" onclick="closeM('m-bio-key');loadBiometricDevices()">Done</button></div>
   </div>
 </div>
 
