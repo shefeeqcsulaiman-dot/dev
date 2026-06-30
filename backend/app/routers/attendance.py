@@ -7,8 +7,6 @@ Supported punch sources:
   - Manual entry
 """
 
-from __future__ import annotations
-
 import csv
 import io
 import secrets
@@ -143,7 +141,7 @@ def add_device(
     }
 
 
-@router.delete("/devices/{device_id}", status_code=204)
+@router.delete("/devices/{device_id}", status_code=204, response_model=None)
 def delete_device(
     device_id: str,
     db: Session = Depends(get_db),
@@ -187,6 +185,19 @@ def test_device(
         return {"ok": False, "message": str(e)}
 
 
+def _optional_user(request: Request, db: Session = Depends(get_db)) -> User | None:
+    """FastAPI dependency: extract user from Bearer token without raising if missing."""
+    from app.security import user_id_from_token
+    auth = request.headers.get("authorization", "")
+    if not auth.startswith("Bearer "):
+        return None
+    token = auth.removeprefix("Bearer ").strip()
+    uid = user_id_from_token(token)
+    if not uid:
+        return None
+    return db.query(User).filter(User.id == uid).first()
+
+
 # ── Punch recording ───────────────────────────────────────────────────────────
 
 @router.post("/punch", status_code=201)
@@ -196,7 +207,7 @@ def record_punch(
     body: PunchIn,
     x_device_key: str | None = Header(default=None),
     db: Session = Depends(get_db),
-    current_user: User | None = Depends(lambda db=Depends(get_db): _optional_user(db, request)),
+    current_user: User | None = Depends(_optional_user),
 ) -> dict[str, Any]:
     """Accept a punch from the ZK bridge (X-Device-Key) or an authenticated user (manual entry)."""
     if current_user:
@@ -228,19 +239,6 @@ def record_punch(
     db.add(punch)
     db.commit()
     return {"ok": True, "id": punch.id}
-
-
-def _optional_user(db: Session, request: Request) -> User | None:
-    """Extract user from Bearer token without raising if missing."""
-    from app.security import user_id_from_token
-    auth = request.headers.get("authorization", "")
-    if not auth.startswith("Bearer "):
-        return None
-    token = auth.removeprefix("Bearer ").strip()
-    uid = user_id_from_token(token)
-    if not uid:
-        return None
-    return db.query(User).filter(User.id == uid).first()
 
 
 # ── CSV Import ────────────────────────────────────────────────────────────────
