@@ -7102,6 +7102,7 @@ function hydrateFromServer(){
         const serverLayouts=JSON.parse(packRecord.layouts);
         if(Array.isArray(serverLayouts)&&serverLayouts.length){
           _invoiceLayouts=serverLayouts;
+          if(!_invoiceLayouts.some(l=>l.template==='Statement (Pay Online)'))_invoiceLayouts.push(statementInvoiceLayoutPreset());
           _activeLayoutId=(_invoiceLayouts.find(l=>l.isDefault)||_invoiceLayouts[0])?.id;
           _ilSave();
           renderInvoiceLayoutGallery();
@@ -8204,10 +8205,23 @@ const _IL_KEY='tf_invoice_layouts';
 
 function _ilSave(){try{localStorage.setItem(_IL_KEY,JSON.stringify(_invoiceLayouts));}catch{}}
 
+function statementInvoiceLayoutPreset(){
+  return {
+    id:'layout-statement',name:'Statement (Pay Online)',isDefault:false,
+    ...defaultInvoiceLayout(),
+    template:'Statement (Pay Online)',
+    color:'#1a8754'
+  };
+}
+
 function initInvoiceLayouts(){
   try{_invoiceLayouts=JSON.parse(localStorage.getItem(_IL_KEY)||'null')||[];}catch{_invoiceLayouts=[];}
   if(!_invoiceLayouts.length){
-    _invoiceLayouts=[{id:'layout-default',name:'Default',isDefault:true,...defaultInvoiceLayout()}];
+    _invoiceLayouts=[{id:'layout-default',name:'Default',isDefault:true,...defaultInvoiceLayout()},statementInvoiceLayoutPreset()];
+    _ilSave();
+  }else if(!_invoiceLayouts.some(l=>l.template==='Statement (Pay Online)')){
+    // one-time migration: add the new built-in design as a 2nd, non-default option without touching existing layouts
+    _invoiceLayouts.push(statementInvoiceLayoutPreset());
     _ilSave();
   }
   _activeLayoutId=(_invoiceLayouts.find(l=>l.isDefault)||_invoiceLayouts[0])?.id;
@@ -8930,6 +8944,24 @@ function updateInvoiceLayoutPreview(){
   const qrType=layout.qrCodeType==='payment_url'?'invoice_url':layout.qrCodeType;
   const labels=invoiceLabels(layout);
   const heading=salesDocumentHeading(sampleInvoice,layout);
+  if((layout.template||'').trim()==='Statement (Pay Online)'){
+    const bankRows=[
+      layout.bankName&&['Bank Name',layout.bankName],
+      layout.accountName&&['Account Name',layout.accountName],
+      layout.accountNumber&&['Account Number',layout.accountNumber],
+      layout.iban&&['IBAN',layout.iban],
+      layout.swiftCode&&['SWIFT',layout.swiftCode]
+    ].filter(Boolean);
+    preview.innerHTML=salesInvoiceClassicStatementHtml(sampleInvoice,{
+      layout,companyTrn:trn,subtotal:sampleSubtotal,vat:sampleVat,total:sampleTotal,
+      lines:sampleInvoice.lines,fmt:n=>Number(n||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}),
+      status:sampleInvoice.status,customerAddress:sampleInvoice.customer_address,
+      accent:escapeHtml(layout.color),initials,vatRate:sampleSubtotal>0?Math.round((sampleVat/sampleSubtotal)*100):5,
+      issueDate:sampleInvoice.date,dueDate:sampleInvoice.due_date,digitalUrl,qrValue,labels,heading,bankRows
+    });
+    if(layout.qr)renderInvoiceQrCode(qrValue,'public-invoice-qr');
+    return;
+  }
   preview.innerHTML=`
     <div class="invoice-layout-live" dir="${layout.enableRtl?'rtl':'ltr'}" style="--invoice-accent:${escapeHtml(layout.color)}">
       <div class="invoice-topbar"></div>
@@ -8986,6 +9018,159 @@ function updateInvoiceLayoutPreview(){
   if(layout.qr)renderInvoiceQrCode(qrValue,'layout-preview-qr');
 }
 
+// ── "Statement (Pay Online)" invoice design — 2nd selectable layout, added alongside the
+// default "Modern Tax Invoice" design without altering or removing it.
+function salesInvoiceClassicStatementHtml(inv,ctx){
+  const {layout,companyTrn,subtotal,vat,total,lines,fmt,status,customerAddress,accent,initials,
+    vatRate,issueDate,dueDate,digitalUrl,qrValue,labels,heading,bankRows}=ctx;
+  const paidAmount=status==='Paid'?total:Number(inv.paid||inv.amount_paid||0);
+  const balanceDue=Math.max(0,total-paidAmount);
+  const rtl=layout.enableRtl;
+  const lineTax=line=>{
+    const amt=Number(line.amount||0);
+    if(layout.vatMode==='inclusive')return 'Incl';
+    return vatRate>0?`${vatRate}%`:'N-T';
+  };
+  return `
+    <div class="icx-sheet" dir="${rtl?'rtl':'ltr'}" style="--invoice-accent:${accent}">
+      <style>
+        .icx-sheet{background:#fff;color:#1a2230;font-family:Arial,Helvetica,sans-serif;font-size:12.5px;line-height:1.5;border:1px solid #e2e6ec;border-radius:10px;padding:28px;}
+        .icx-sheet *{box-sizing:border-box;}
+        .icx-top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;}
+        .icx-company{font-size:18px;font-weight:800;}
+        .icx-muted{color:#667085;font-size:11.5px;margin-top:2px;}
+        .icx-title-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:26px;padding-bottom:14px;border-bottom:2px solid #1a2230;flex-wrap:wrap;gap:12px;}
+        .icx-title{font-size:21px;font-weight:800;}
+        .icx-meta{display:flex;gap:26px;flex-wrap:wrap;}
+        .icx-meta span{display:block;font-size:10.5px;color:#667085;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;}
+        .icx-meta strong{font-size:13px;}
+        .icx-meta .icx-due strong{background:#f1f3f6;padding:3px 8px;border-radius:4px;display:inline-block;}
+        .icx-billto{margin-top:18px;}
+        .icx-kicker{font-size:10.5px;color:#667085;text-transform:uppercase;letter-spacing:.4px;font-weight:700;margin-bottom:4px;}
+        .icx-billto-name{font-weight:700;font-size:13.5px;}
+        table.icx-table{width:100%;border-collapse:collapse;margin-top:20px;}
+        .icx-table thead th{background:#f4f6f8;text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:#475467;padding:9px 10px;border-bottom:1px solid #e2e6ec;}
+        .icx-table thead th.num{text-align:right;}
+        .icx-table thead .icx-sub{display:block;font-weight:400;font-style:italic;text-transform:none;font-size:9.5px;color:#98a2b3;}
+        .icx-table td{padding:9px 10px;border-bottom:1px solid #eef1f4;font-size:12px;}
+        .icx-table td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}
+        .icx-foot-grid{display:grid;grid-template-columns:1fr 280px;gap:24px;margin-top:18px;}
+        .icx-notes p{margin:0 0 8px;font-size:11.5px;color:#475467;}
+        .icx-totals .row{display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:#475467;}
+        .icx-totals .row strong{color:#1a2230;}
+        .icx-totals .grand{border-top:1px solid #e2e6ec;margin-top:4px;padding-top:8px;font-weight:800;font-size:13.5px;color:#1a2230;}
+        .icx-totals .due{margin-top:8px;background:#f4f6f8;border-radius:6px;padding:9px 12px;display:flex;justify-content:space-between;font-weight:800;font-size:13.5px;}
+        .icx-online{margin-top:26px;}
+        .icx-online a{color:var(--invoice-accent);font-weight:600;text-decoration:none;font-size:12px;}
+        .icx-pay-bar{margin-top:22px;border-top:2px solid #1a2230;padding-top:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;}
+        .icx-pay-bar strong{font-size:13px;}
+        .icx-pay-bar span{font-size:11.5px;color:#475467;}
+        .icx-pay-cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:14px;}
+        .icx-pay-col{border-top:1px solid #eef1f4;padding-top:12px;}
+        .icx-pay-col-h{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12.5px;margin-bottom:8px;}
+        .icx-qr-box img{width:88px;height:88px;border:1px solid #e2e6ec;border-radius:6px;}
+        .icx-pay-btn{display:inline-block;margin-top:10px;background:var(--invoice-accent);color:#fff;font-size:11.5px;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:6px;}
+        .icx-bank-row{font-size:11.5px;color:#475467;display:flex;justify-content:space-between;gap:8px;padding:2px 0;}
+        .icx-bank-row strong{color:#1a2230;}
+        .icx-ref-box{border:1px solid #1a2230;border-radius:6px;padding:8px 10px;margin:6px 0;}
+        .icx-ref-box div{font-size:11.5px;display:flex;justify-content:space-between;padding:1px 0;}
+        .icx-pay-info{font-size:10.5px;color:#98a2b3;margin-top:8px;word-break:break-all;}
+        .icx-footer-bar{margin-top:18px;border-top:1px solid #e2e6ec;padding-top:8px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:10.5px;color:#98a2b3;}
+        [dir=rtl] .icx-top,[dir=rtl] .icx-title-row,[dir=rtl] .icx-pay-bar,[dir=rtl] .icx-bank-row,[dir=rtl] .icx-footer-bar{flex-direction:row-reverse;}
+        [dir=rtl] .icx-table th,[dir=rtl] .icx-table td{text-align:right;}
+        [dir=rtl] .icx-table th.num,[dir=rtl] .icx-table td.num{text-align:left;}
+      </style>
+
+      <div class="icx-top">
+        <div>
+          <div class="icx-company">${escapeHtml(layout.company||'Company Name')}</div>
+          ${layout.address?`<div class="icx-muted">${escapeHtml(layout.address)}</div>`:''}
+          ${layout.trnMode==='show'&&layout.showTrn?`<div class="icx-muted">${escapeHtml(layout.trnLabel||'TRN')}: ${escapeHtml(companyTrn||'not set')}</div>`:''}
+        </div>
+        ${_logoHtml(initials)}
+      </div>
+
+      <div class="icx-title-row">
+        <div class="icx-title">${escapeHtml(heading||'Tax Invoice')}</div>
+        <div class="icx-meta">
+          <div><span>Invoice Number</span><strong>${escapeHtml(inv.invoice_no||'Draft')}</strong></div>
+          <div><span>${escapeHtml(labels.issueDate||'Issue Date')}</span><strong>${escapeHtml(issueDate)}</strong></div>
+          <div class="icx-due"><span>${escapeHtml(labels.dueDate||'Due Date')}</span><strong>${escapeHtml(dueDate)}</strong></div>
+        </div>
+      </div>
+
+      <div class="icx-billto">
+        <div class="icx-kicker">${escapeHtml(labels.billTo||'Bill To')}</div>
+        <div class="icx-billto-name">${escapeHtml(inv.customer||'Customer')}</div>
+        ${customerAddress?`<div class="icx-muted">${escapeHtml(customerAddress)}</div>`:''}
+        ${layout.showCustomerTrn?`<div class="icx-muted">${escapeHtml(layout.customerTrnLabel||'Customer TRN')}: ${escapeHtml(inv.customer_trn||'not provided')}</div>`:''}
+      </div>
+
+      <table class="icx-table">
+        <thead><tr>
+          <th>${escapeHtml(labels.product||'Description')}</th>
+          <th class="num">${escapeHtml(labels.vat||'Tax')}</th>
+          <th class="num">${escapeHtml(labels.amount||'Amount')}<span class="icx-sub">excluding tax</span></th>
+        </tr></thead>
+        <tbody>
+          ${lines.map(line=>`<tr><td>${escapeHtml(line.description||'Item')}</td><td class="num">${escapeHtml(lineTax(line))}</td><td class="num">${fmt(line.amount)}</td></tr>`).join('')}
+        </tbody>
+      </table>
+
+      <div class="icx-foot-grid">
+        <div class="icx-notes">
+          <div class="icx-kicker">Notes</div>
+          ${layout.footer?`<p>${escapeHtml(layout.footer)}</p>`:''}
+        </div>
+        <div class="icx-totals">
+          <div class="row"><span>${escapeHtml(labels.subtotal||'Subtotal')} (exc. tax)</span><strong>AED ${fmt(subtotal)}</strong></div>
+          <div class="row"><span>${escapeHtml(labels.vat||'Tax')}</span><strong>AED ${fmt(vat)}</strong></div>
+          <div class="row grand"><span>Total Amount (inc. tax)</span><strong>AED ${fmt(total)}</strong></div>
+          <div class="row"><span>Total paid</span><strong>AED ${fmt(paidAmount)}</strong></div>
+          <div class="due"><span>${escapeHtml(labels.balanceDue||'Balance due')}</span><strong>AED ${fmt(balanceDue)}</strong></div>
+        </div>
+      </div>
+
+      ${layout.qr?`<div class="icx-online">
+        <div class="icx-kicker">View your invoice online</div>
+        <a href="${escapeHtml(digitalUrl)}" data-digital-link target="_blank" rel="noopener">Click here to view</a>
+      </div>`:''}
+
+      <div class="icx-pay-bar">
+        <strong>How to pay</strong>
+        <span>Invoice number: ${escapeHtml(inv.invoice_no||'Draft')}</span>
+        <span>${escapeHtml(labels.dueDate||'Due date')}: ${escapeHtml(dueDate)}</span>
+        <span>Balance due: AED ${fmt(balanceDue)}</span>
+      </div>
+
+      <div class="icx-pay-cols">
+        ${layout.qr?`<div class="icx-pay-col">
+          <div class="icx-pay-col-h">Pay online</div>
+          <div class="icx-qr-box"><img id="public-invoice-qr" alt="QR code for digital invoice"></div>
+          <div class="icx-muted">Scan the QR code or click the link to view this invoice online.</div>
+          <a class="icx-pay-btn" href="${escapeHtml(digitalUrl)}" data-digital-link target="_blank" rel="noopener">Pay securely</a>
+        </div>`:''}
+        ${layout.showBankDetails&&bankRows.length?`<div class="icx-pay-col">
+          <div class="icx-pay-col-h">Bank deposit</div>
+          ${bankRows.map(([l,v])=>`<div class="icx-bank-row"><span>${escapeHtml(l)}</span><strong>${escapeHtml(v)}</strong></div>`).join('')}
+          <div class="icx-bank-row"><span>Ref#</span><strong>${escapeHtml(inv.invoice_no||'')}</strong></div>
+        </div>`:''}
+        ${layout.paymentLink?`<div class="icx-pay-col">
+          <div class="icx-pay-col-h">Online Payment Link</div>
+          <div class="icx-ref-box"><div><span>Ref</span><strong>${escapeHtml(inv.invoice_no||'')}</strong></div></div>
+          <div class="icx-pay-info">Pay via the secure payment link: ${escapeHtml(layout.paymentLink)}</div>
+        </div>`:''}
+      </div>
+
+      <div class="icx-footer-bar">
+        <span>Page 1 of 1</span>
+        <span>Invoice no: ${escapeHtml(inv.invoice_no||'Draft')}</span>
+        <span>${escapeHtml(labels.dueDate||'Due date')}: ${escapeHtml(dueDate)}</span>
+        <span>Balance due: AED ${fmt(balanceDue)}</span>
+      </div>
+    </div>`;
+}
+
 function renderSalesInvoicePreview(inv){
   currentSalesInvoice=inv;
   const title=document.getElementById('sales-view-title');
@@ -9037,6 +9222,20 @@ function renderSalesInvoicePreview(inv){
 
   if(title)title.textContent=(isSalesReturn(inv)?'Sales Return ':'Invoice ')+(inv.invoice_no||'Draft');
   if(sub)sub.textContent=(inv.customer||'Customer')+' - '+status;
+
+  if((layout.template||'').trim()==='Statement (Pay Online)'){
+    body.innerHTML=salesInvoiceClassicStatementHtml(inv,{
+      layout,companyTrn,subtotal,vat,total,lines,fmt,status,customerAddress,accent,initials,
+      vatRate,issueDate,dueDate,digitalUrl,textAlign,brandJustify,fontFamily,qrValue,qrType,
+      labels,heading,invoiceRefs,bankRows
+    });
+    renderInvoiceQrCode(qrValue);
+    createShortInvoiceUrl(inv).then(shortUrl=>{
+      document.querySelectorAll('[data-digital-link]').forEach(a=>{a.href=shortUrl;});
+      if(qrType==='invoice_url')renderInvoiceQrCode(shortUrl);
+    });
+    return;
+  }
 
   body.innerHTML=`
     <div class="invoice-sheet" dir="${layout.enableRtl?'rtl':'ltr'}" style="--invoice-accent:${accent}">
