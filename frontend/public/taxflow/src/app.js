@@ -2410,6 +2410,10 @@ function renderDashboardHero(data,kpis={},counts={}){
   const revBar=document.getElementById('dash-rev-rate-bar');
   if(revBar)revBar.style.width=Math.min(colRate,100)+'%';
 
+  // Revenue slider slide-1 big number
+  const revOnly=document.getElementById('dash-rev-only');
+  if(revOnly)revOnly.textContent=formatAed(revenueNet||0);
+
   // Purchase card detail rows
   const purRate=purchasesNet>0?Math.round(parseAmount(purSum.paid||0)/purchasesNet*100):0;
   set('dash-pur-paid-amount',formatAed(parseAmount(purSum.paid||0)));
@@ -16754,6 +16758,29 @@ function addPayrollAdjustment(){
 }
 
 // -- DAILY ATTENDANCE CHECK --------------------------------------
+
+// ── Revenue Card Slider ───────────────────────────────────────────────────────
+let _revSwipeX=0,_revSlideIdx=0;
+
+function revSlide(idx){
+  const track=document.getElementById('rev-slide-track');
+  if(track)track.style.transform=`translateX(${-idx*100}%)`;
+  _revSlideIdx=idx;
+  [0,1].forEach(i=>{
+    const dot=document.getElementById('rev-dot-'+i);
+    if(!dot)return;
+    dot.style.width=i===idx?'18px':'4px';
+    dot.style.background=i===idx?'#10b981':'var(--border)';
+    dot.style.borderRadius=i===idx?'2px':'50%';
+  });
+}
+
+function revTouchStart(e){_revSwipeX=e.touches[0].clientX;}
+function revTouchEnd(e){
+  const dx=e.changedTouches[0].clientX-_revSwipeX;
+  if(Math.abs(dx)>40)revSlide(dx<0?1:0);
+}
+
 // ── Biometric Device Management ───────────────────────────────────────────────
 
 async function loadBiometricDevices(){
