@@ -171,18 +171,19 @@ def test_device(
         raise HTTPException(404, "Device not found")
     if not device.ip_address:
         return {"ok": False, "message": "No IP address configured"}
+    import socket
     try:
-        import socket
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(3)
-        result = s.connect_ex((device.ip_address, device.port))
+        s.connect((device.ip_address, device.port))
         s.close()
-        if result == 0:
-            return {"ok": True, "message": f"TCP port {device.port} is open on {device.ip_address}"}
-        else:
-            return {"ok": False, "message": f"Cannot reach {device.ip_address}:{device.port} (error {result})"}
-    except Exception as e:
-        return {"ok": False, "message": str(e)}
+        return {"ok": True, "message": f"TCP port {device.port} is open on {device.ip_address}"}
+    except socket.timeout:
+        return {"ok": False, "message": f"Timeout connecting to {device.ip_address}:{device.port} — device may be offline"}
+    except ConnectionRefusedError:
+        return {"ok": False, "message": f"Connection refused on {device.ip_address}:{device.port} — check IP/port"}
+    except OSError as e:
+        return {"ok": False, "message": f"Cannot reach {device.ip_address}:{device.port} — {e.strerror}"}
 
 
 def _optional_user(request: Request, db: Session = Depends(get_db)) -> User | None:
