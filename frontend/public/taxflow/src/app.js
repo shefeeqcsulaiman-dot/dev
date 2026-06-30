@@ -20002,10 +20002,50 @@ const _LANG_KEY='taxflow_app_lang';
 let _appLang=localStorage.getItem(_LANG_KEY)||'en';
 
 const _LANG={
-  en:{greeting_am:'Good morning',greeting_pm:'Good afternoon',greeting_eve:'Good evening',
-      subtitle:'Manage your finances now',new_invoice:'New Invoice',add_purchase:'Add Purchase'},
-  ar:{greeting_am:'صباح الخير',greeting_pm:'مساء الخير',greeting_eve:'مساء الخير',
-      subtitle:'أدر شؤونك المالية الآن',new_invoice:'فاتورة جديدة',add_purchase:'إضافة مشتريات'}
+  en:{
+    greeting_am:'Good morning',greeting_pm:'Good afternoon',greeting_eve:'Good evening',
+    subtitle:'Manage your finances now',new_invoice:'New Invoice',add_purchase:'Add Purchase',
+    sb_home:'Home',sb_dashboard:'Dashboard',
+    sb_sales:'Sales',sb_sales_invoices:'Sales & Invoices',sb_quotations:'Quotations',sb_pos:'Point of Sale',
+    sb_purchasing:'Purchasing',sb_purchases:'Purchases',sb_inventory:'Inventory',sb_expenses:'Expenses',
+    sb_finance:'Finance',sb_bank:'Bank & Payments',sb_accounting:'Accounting',sb_corporate:'Corporate Accounting',sb_reports:'Reports',
+    sb_hr:'People & HR',sb_hrms:'HRMS',
+    sb_compliance:'Compliance',sb_notifications:'Notifications',sb_expert:'Expert Review',sb_exception:'Exception Center',
+    sb_company:'Company',sb_settings:'Company & Settings',sb_logout:'Logout',
+    dash_total_revenue:'Total Revenue',dash_plus_vat:'+ VAT',
+    dash_collected:'Collected',dash_paid_invoices:'Paid Invoices',dash_collection_rate:'Collection Rate',
+    dash_total_purchases:'Total Purchases',dash_payment_rate:'Payment Rate',
+    dash_net_profit:'Net Profit',dash_margin:'Margin',dash_net_profit_margin:'Net Profit Margin',
+    dash_transactions:'Transactions',dash_last_activity:'Last Activity',
+    dash_recent_transactions:'Recent transactions',dash_view_all:'View All',
+    dash_human_resources:'Human Resources',dash_staff_today:'Staff Today',dash_active_employees:'Active employees',
+    dash_uae_federal:'UAE Federal',dash_vat_position:'VAT Position',
+    dash_quick_actions:'Quick Actions',dash_top_customers:'Top Customers',
+    qa_invoice:'Invoice',qa_purchase:'Purchase',qa_quote:'Quote',
+    qa_ledger:'Ledger',qa_reports:'Reports',qa_alerts:'Alerts'
+  },
+  ar:{
+    greeting_am:'صباح الخير',greeting_pm:'مساء الخير',greeting_eve:'مساء الخير',
+    subtitle:'أدِر شؤونك المالية الآن',new_invoice:'فاتورة جديدة',add_purchase:'إضافة مشتريات',
+    sb_home:'الرئيسية',sb_dashboard:'لوحة التحكم',
+    sb_sales:'المبيعات',sb_sales_invoices:'المبيعات والفواتير',sb_quotations:'عروض الأسعار',sb_pos:'نقطة البيع',
+    sb_purchasing:'المشتريات',sb_purchases:'المشتريات',sb_inventory:'المخزون',sb_expenses:'المصروفات',
+    sb_finance:'المالية',sb_bank:'البنك والمدفوعات',sb_accounting:'المحاسبة',sb_corporate:'محاسبة الشركات',sb_reports:'التقارير',
+    sb_hr:'الموارد البشرية',sb_hrms:'نظام الموارد البشرية',
+    sb_compliance:'الامتثال',sb_notifications:'الإشعارات',sb_expert:'المراجعة المتخصصة',sb_exception:'مركز الاستثناءات',
+    sb_company:'الشركة',sb_settings:'الشركة والإعدادات',sb_logout:'تسجيل الخروج',
+    dash_total_revenue:'إجمالي الإيرادات',dash_plus_vat:'+ ضريبة',
+    dash_collected:'المحصّل',dash_paid_invoices:'الفواتير المدفوعة',dash_collection_rate:'معدل التحصيل',
+    dash_total_purchases:'إجمالي المشتريات',dash_payment_rate:'معدل الدفع',
+    dash_net_profit:'صافي الربح',dash_margin:'الهامش',dash_net_profit_margin:'هامش صافي الربح',
+    dash_transactions:'المعاملات',dash_last_activity:'آخر نشاط',
+    dash_recent_transactions:'المعاملات الأخيرة',dash_view_all:'عرض الكل',
+    dash_human_resources:'الموارد البشرية',dash_staff_today:'الموظفون اليوم',dash_active_employees:'الموظفون النشطون',
+    dash_uae_federal:'الإمارات الاتحادية',dash_vat_position:'وضع ضريبة القيمة المضافة',
+    dash_quick_actions:'الإجراءات السريعة',dash_top_customers:'أهم العملاء',
+    qa_invoice:'فاتورة',qa_purchase:'مشتريات',qa_quote:'عرض سعر',
+    qa_ledger:'دفتر الأستاذ',qa_reports:'التقارير',qa_alerts:'التنبيهات'
+  }
 };
 
 function applyAppLang(lang){
@@ -20014,12 +20054,10 @@ function applyAppLang(lang){
   const isAr=_appLang==='ar';
   document.documentElement.setAttribute('dir',isAr?'rtl':'ltr');
   document.documentElement.setAttribute('lang',isAr?'ar':'en');
-  // Toggle button active states
   const enBtn=document.getElementById('dash-lang-en');
   const arBtn=document.getElementById('dash-lang-ar');
   if(enBtn)enBtn.classList.toggle('active',!isAr);
   if(arBtn)arBtn.classList.toggle('active',isAr);
-  // Update dashboard text
   const t=_LANG[_appLang]||_LANG.en;
   const h=new Date().getHours();
   const greetKey=h<12?'greeting_am':h<17?'greeting_pm':'greeting_eve';
@@ -20031,6 +20069,11 @@ function applyAppLang(lang){
   if(niLabel)niLabel.textContent=t.new_invoice;
   const apLabel=document.getElementById('dash-btn-add-purchase-label');
   if(apLabel)apLabel.textContent=t.add_purchase;
+  // Translate all data-i18n elements
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const key=el.dataset.i18n;
+    if(t[key]!==undefined)el.textContent=t[key];
+  });
 }
 
 function setAppLang(lang){applyAppLang(lang);}
