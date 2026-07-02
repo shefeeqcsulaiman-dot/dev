@@ -151,8 +151,9 @@ function go(page){
     document.getElementById('corp-tax')?.classList.add('on');
   }
   const m=META[page];
-  document.getElementById('ptitle').textContent=m.t;
-  document.getElementById('psub').textContent=m.s;
+  const mAr=_appLang==='ar'?(_META_AR[page]||{}):null;
+  document.getElementById('ptitle').textContent=mAr?.t||m.t;
+  document.getElementById('psub').textContent=mAr?.s||m.s;
   const topAction=document.getElementById('topaction');
   if(topAction){
     topAction.textContent=m.a||'';
@@ -2238,8 +2239,9 @@ function renderDashboardMeta(data){
   if(dashboardVisible){
     const title=document.getElementById('ptitle');
     const sub=document.getElementById('psub');
-    if(title)title.textContent=meta.title||'Dashboard';
-    if(sub)sub.textContent=meta.subtitle||'Dashboard loaded from database records';
+    const arDash=_appLang==='ar'?_META_AR.dashboard:null;
+    if(title)title.textContent=arDash?.t||(meta.title||'Dashboard');
+    if(sub)sub.textContent=arDash?.s||(meta.subtitle||'Dashboard loaded from database records');
   }
 }
 
@@ -19997,6 +19999,34 @@ function mergeBankAndPaymentsModule(){
 })();
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Page-title Arabic translations (mirrors META keys) ────────────────────────
+const _META_AR={
+  dashboard: {t:'لوحة التحكم',          s:'جارٍ تحميل لوحة التحكم من قاعدة البيانات'},
+  sales:     {t:'المبيعات والفواتير',   s:'رفع - استخراج - تحقق - فواتير'},
+  quotations:{t:'عروض الأسعار',         s:'إنشاء - مشاركة - تحويل إلى فاتورة'},
+  purchase:  {t:'المشتريات',            s:'رفع - استخراج - تحقق - يدوي - إعدادات'},
+  bank:      {t:'البنك والمدفوعات',     s:'الحسابات - المعاملات - المقبوضات - التسوية'},
+  inventory: {t:'المخزون',              s:'المخزون - الأصناف - الحركات'},
+  expense:   {t:'المصروفات',            s:'رفع - إنشاء - الموافقات - القائمة'},
+  accounting:{t:'المحاسبة',             s:'الدليل - القيود - دفتر الأستاذ - تسوية البنك'},
+  corporate: {t:'محاسبة الشركات',       s:'ضريبة الشركات - الأصول - مراكز التكلفة - الميزانيات'},
+  reports:   {t:'التقارير',             s:'ضريبة القيمة المضافة - الأرباح والخسائر - الميزانية - ميزان المراجعة'},
+  settings:  {t:'الإعدادات',            s:'الشركة - المستخدمون - الضريبة - الأمان - تصميم الفاتورة'},
+  notifications:{t:'الإشعارات',        s:'البريد - واتساب - رسائل قصيرة - تنبيهات'},
+  expert:    {t:'مراجعة متخصصة',        s:'البحث عن خبراء محاسبة - إرسال للمراجعة'},
+  exception: {t:'مركز الاستثناءات',     s:'فشل الترحيل - المكررات - مشاكل المخزون والرواتب'},
+  payroll:   {t:'الرواتب',              s:'تشغيل الراتب - WPS/SIF - كشوف الرواتب - الترحيل'},
+  staff:     {t:'إدارة الموظفين',       s:'الحضور - الإجازات - التصحيحات - البيومترية'},
+  hrms:      {t:'لوحة تحكم الموارد البشرية', s:'الموظفون · الحضور · الإجازات · العمل الإضافي · الرواتب'},
+  recruitment:{t:'نظام تتبع المتقدمين', s:'طلبات التوظيف - المرشحون - المقابلات - عروض العمل'},
+  'hrms-ext':{t:'وحدات الموارد البشرية',s:'الأداء - التدريب - إدارة الأصول - بوابة الموظف'},
+  pos:       {t:'نقطة البيع',           s:'بيع سريع - المنتجات - الإيصالات - النقد والبطاقة'},
+  ai:        {t:'المساعد الذكي',        s:'اسأل أسئلة حول وحدات TaxFlow'},
+  documents: {t:'المستندات',            s:'الإيصالات - ملفات PDF - مرفقات'},
+  rota:      {t:'تخطيط الجدول',         s:'إعداد الوردية - الجدول الأسبوعي - طلبات التبديل'},
+  bills:     {t:'الفواتير',             s:'فواتير الموردين - أوامر الشراء - مدفوعات الموردين'},
+};
+
 // ── App Language (EN / AR) ────────────────────────────────────────────────────
 const _LANG_KEY='taxflow_app_lang';
 let _appLang=localStorage.getItem(_LANG_KEY)||'en';
@@ -20074,6 +20104,16 @@ function applyAppLang(lang){
     const key=el.dataset.i18n;
     if(t[key]!==undefined)el.textContent=t[key];
   });
+  // Refresh active page title / subtitle
+  const activePage=(document.querySelector('.page.on')?.id||'').replace(/^page-/,'')||'dashboard';
+  const activeMeta=META[activePage];
+  if(activeMeta){
+    const arMeta=isAr?(_META_AR[activePage]||{}):null;
+    const ptitle=document.getElementById('ptitle');
+    const psubtitle=document.getElementById('psub');
+    if(ptitle)ptitle.textContent=arMeta?.t||activeMeta.t;
+    if(psubtitle)psubtitle.textContent=arMeta?.s||activeMeta.s;
+  }
 }
 
 function setAppLang(lang){applyAppLang(lang);}
