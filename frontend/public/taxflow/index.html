@@ -139,6 +139,10 @@
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" width="13" height="13"><rect x="1" y="3" width="14" height="11" rx="1"/><path d="M1 7h14"/><path d="M5 11h2M10 11h1"/><path d="M8 1v2"/></svg>
         POS Terminal
       </button>
+      <div class="dash-lang-toggle" id="dash-lang-toggle" title="Switch language / تغيير اللغة">
+        <button class="dash-lang-btn active" id="dash-lang-en" onclick="setAppLang('en')">EN</button>
+        <button class="dash-lang-btn" id="dash-lang-ar" onclick="setAppLang('ar')">عربي</button>
+      </div>
       <button class="btn btn-g" id="calc-toggle-btn" onclick="toggleCalc(event)" title="Calculator">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13" style="margin-right:4px"><rect x="1" y="1" width="14" height="14" rx="2"/><path d="M4 4h2M10 4h2M4 8h2M10 8h2M4 12h2M10 12h2"/></svg>
         Calc
@@ -168,10 +172,6 @@
         <span>Search transactions…</span>
       </div>
       <div class="dv2-live-badge"><span class="live-dot"></span><span id="dash-period-label">Live</span></div>
-      <div class="dash-lang-toggle" id="dash-lang-toggle" title="Switch language / تغيير اللغة">
-        <button class="dash-lang-btn active" id="dash-lang-en" onclick="setAppLang('en')">EN</button>
-        <button class="dash-lang-btn" id="dash-lang-ar" onclick="setAppLang('ar')">عربي</button>
-      </div>
       <button class="mb3-hdr-btn" id="dash-btn-new-invoice" onclick="go('sales')">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13"><path d="M2 4h12l-1 8H3L2 4z"/></svg><span id="dash-btn-new-invoice-label">New Invoice</span>
       </button>
