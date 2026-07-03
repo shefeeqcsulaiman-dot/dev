@@ -15718,7 +15718,7 @@ function renderDeptTable(){
       <td style="color:var(--text3);font-size:12px">${escapeHtml(d.description||'—')}</td>
       <td class="mono">${cnt}</td>
       <td><span class="b ${statusCls}">${escapeHtml(d.status)}</span></td>
-      <td><button class="btn btn-g btn-sm" onclick="showDeptModal('${d.id}')">Edit</button></td>
+      <td><button class="icon-btn edit" title="Edit department" onclick="showDeptModal('${d.id}')">${editIconSvg()}</button></td>
     </tr>`;
   };
   const empty='<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">No departments yet. Click + Add Department.</td></tr>';
