@@ -17237,10 +17237,11 @@ function addPayrollAdjustment(){
 let _revSwipeX=0,_revSlideIdx=0,_revWithVat='AED 0.00',_revNet='AED 0.00';
 
 function revSlide(idx){
-  const track=document.getElementById('rev-slide-track');
-  if(track)track.style.transform=`translateX(${-idx*50}%)`;
   _revSlideIdx=idx;
-  // Update main revenue value and banner label to match slide context
+  const s0=document.getElementById('rev-slide-0');
+  const s1=document.getElementById('rev-slide-1');
+  if(s0)s0.style.display=idx===0?'':'none';
+  if(s1)s1.style.display=idx===1?'flex':'none';
   const revEl=document.getElementById('dash-revenue');
   if(revEl)revEl.textContent=idx===1?_revNet:_revWithVat;
   const vatLabel=document.getElementById('rev-banner-vat');
@@ -17248,17 +17249,16 @@ function revSlide(idx){
   [0,1].forEach(i=>{
     const dot=document.getElementById('rev-dot-'+i);
     if(!dot)return;
-    dot.style.width=i===idx?'18px':'6px';
-    dot.style.height=i===idx?'6px':'6px';
+    dot.style.width=i===idx?'20px':'7px';
     dot.style.background=i===idx?'#10b981':'var(--border)';
-    dot.style.borderRadius=i===idx?'3px':'50%';
+    dot.style.borderRadius=i===idx?'99px':'50%';
   });
 }
 
 function revTouchStart(e){_revSwipeX=e.touches[0].clientX;}
 function revTouchEnd(e){
   const dx=e.changedTouches[0].clientX-_revSwipeX;
-  if(Math.abs(dx)>40)revSlide(dx<0?1:0);
+  if(Math.abs(dx)>40)revSlide(_revSlideIdx===0?1:0);
 }
 
 // ── Biometric Device Management ───────────────────────────────────────────────
