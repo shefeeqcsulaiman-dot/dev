@@ -2211,9 +2211,7 @@
           <div><span style="color:var(--green)">✓ 17:26:02</span> — Synced 2 records from device</div>
           <div><span style="color:var(--amber)">⚠ 17:21:05</span> — Retry after timeout, reconnected</div>
           <div><span style="color:var(--green)">✓ 17:16:02</span> — Synced 5 records from device</div>
-          <div><span style="color:var(--green)">✓ 09:12:44</span> — Rania Abboud — Check-in</div>
-          <div><span style="color:var(--green)">✓ 08:55:19</span> — Mohamed Jaber — Check-in</div>
-          <div><span style="color:var(--green)">✓ 08:47:33</span> — Sara Al Mansouri — Check-in</div>
+          <div style="color:var(--text3)">No activity today.</div>
         </div>
       </div>
     </div>
@@ -2637,8 +2635,7 @@
         <table class="tbl">
           <thead><tr><th>Requester</th><th>My Shift</th><th>Swap With</th><th>Target Shift</th><th>Status</th><th></th></tr></thead>
           <tbody id="rota-swap-tbody">
-            <tr><td>Ahmed Rashid</td><td>Mon Morning</td><td>Sara</td><td>Tue Evening</td><td><span class="b b-a">Peer Pending</span></td><td><button class="btn btn-g btn-sm">View</button></td></tr>
-            <tr><td>Rania Abboud</td><td>Fri OT</td><td>Mohamed</td><td>Sat Morning</td><td><span class="b b-a">Supervisor Review</span></td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="approveRotaRow(this,'Swap approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="rejectRotaRow(this,'Swap rejected')">Reject</button></div></td></tr>
+            <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No records yet.</td></tr>
           </tbody>
         </table>
       </div>
@@ -2737,13 +2734,13 @@
       <div class="card">
         <div class="card-title mb12">Payroll Checks</div>
         <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">✓</div><div><div>Attendance synced</div><div class="card-sub">108 attendance records included</div></div></div>
-        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">!</div><div><div>One WPS exception</div><div class="card-sub">Rania Abboud needs IBAN before SIF export</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">!</div><div><div>One WPS exception</div><div class="card-sub">Employee needs IBAN before SIF export</div></div></div>
         <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">✓</div><div><div>Leave deductions applied</div><div class="card-sub">Approved leaves excluded from unpaid days</div></div></div>
       </div>
       <div class="card">
         <div class="card-title mb12">Quick Adjustments</div>
         <div class="fr2">
-          <div class="fg"><label class="fl">Employee</label><select class="fi" id="pay-adj-emp"><option>Ahmed Rashid</option><option>Mohamed Jaber</option><option>Rania Abboud</option></select></div>
+          <div class="fg"><label class="fl">Employee</label><select class="fi" id="pay-adj-emp"><option value="">— Select Employee —</option></select></div>
           <div class="fg"><label class="fl">Type</label><select class="fi" id="pay-adj-type"><option>Overtime</option><option>Deduction</option><option>Advance</option><option>Bonus</option></select></div>
         </div>
         <div class="fr2">
@@ -2754,7 +2751,7 @@
       </div>
       <div class="card">
         <div class="card-title mb12">Run Controls</div>
-        <div class="fg"><label class="fl">Prepared By</label><input class="fi" id="pay-prepared-by" value="Rania Abboud"></div>
+        <div class="fg"><label class="fl">Prepared By</label><input class="fi" id="pay-prepared-by"></div>
         <div class="fg"><label class="fl">Payment Date</label><input class="fi" id="pay-date" type="date" value="2024-06-30"></div>
         <div class="flx" style="flex-wrap:wrap"><button class="btn btn-g btn-sm" onclick="toast('Payroll draft locked','ok')">Lock Draft</button><button class="btn btn-success btn-sm" onclick="approvePayroll()">Approve</button></div>
       </div>
@@ -2797,10 +2794,7 @@
         <table class="tbl">
           <thead><tr><th>Employee</th><th>Accrued Days</th><th>Leave Salary</th><th>Ticket</th><th>Status</th></tr></thead>
           <tbody>
-            <tr><td>Sara Al Mansouri</td><td class="mono">26.0</td><td class="mono">19,067</td><td class="mono">3,500</td><td><span class="b b-g">Accrued</span></td></tr>
-            <tr><td>Ahmed Rashid</td><td class="mono">18.5</td><td class="mono">5,242</td><td class="mono">2,200</td><td><span class="b b-a">Due Soon</span></td></tr>
-            <tr><td>Rania Abboud</td><td class="mono">24.0</td><td class="mono">5,760</td><td class="mono">2,000</td><td><span class="b b-g">Accrued</span></td></tr>
-            <tr><td>Mohamed Jaber</td><td class="mono">22.0</td><td class="mono">4,987</td><td class="mono">2,000</td><td><span class="b b-g">Accrued</span></td></tr>
+            <tr data-empty-state><td colspan="5" style="text-align:center;color:var(--text3);padding:32px">No records yet.</td></tr>
           </tbody>
         </table>
       </div>
@@ -2810,9 +2804,7 @@
       <table class="tbl">
         <thead><tr><th>Employee</th><th>Type</th><th>Original Amount</th><th>Monthly Deduction</th><th>Balance</th><th>Start</th><th>Status</th></tr></thead>
         <tbody>
-          <tr><td>Ahmed Rashid</td><td><span class="b b-a">Salary Advance</span></td><td class="mono">3,000</td><td class="mono">500</td><td class="mono">1,500</td><td>Apr 2024</td><td><span class="b b-g">Active</span></td></tr>
-          <tr><td>Rania Abboud</td><td><span class="b b-p">Training Deduction</span></td><td class="mono">1,200</td><td class="mono">300</td><td class="mono">600</td><td>May 2024</td><td><span class="b b-g">Active</span></td></tr>
-          <tr><td>Mohamed Jaber</td><td><span class="b b-b">Commission Offset</span></td><td class="mono">2,400</td><td class="mono">0</td><td class="mono">0</td><td>Jun 2024</td><td><span class="b b-gray">Closed</span></td></tr>
+          <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No records yet.</td></tr>
         </tbody>
       </table>
     </div>
@@ -2837,7 +2829,7 @@
         <div class="card-hd"><div class="card-title">WPS Validation Results</div></div>
         <div id="wps-results" style="font-size:12.5px;line-height:1.9">
           <div><span style="color:var(--green)">✓</span> 3 employees have valid IBAN and WPS IDs</div>
-          <div><span style="color:var(--amber)">⚠</span> Rania Abboud missing IBAN</div>
+          <div><span style="color:var(--amber)">⚠</span> One employee missing IBAN</div>
           <div><span style="color:var(--green)">✓</span> Net salary totals match payroll run</div>
           <div><span style="color:var(--green)">✓</span> Payment date is within current cycle</div>
         </div>
@@ -2864,10 +2856,7 @@
         <table class="tbl">
           <thead><tr><th>Employee</th><th>Net Pay</th><th>Channel</th><th>Status</th><th></th></tr></thead>
           <tbody>
-            <tr><td>Sara Al Mansouri</td><td class="mono">AED 28,500</td><td>Email + Mobile</td><td><span class="b b-gray">Draft</span></td><td><button class="btn btn-g btn-sm" onclick="previewStaticPayslip('Sara Al Mansouri','28,500')">Preview</button></td></tr>
-            <tr><td>Ahmed Rashid</td><td class="mono">AED 10,200</td><td>Email + Mobile</td><td><span class="b b-gray">Draft</span></td><td><button class="btn btn-g btn-sm" onclick="previewStaticPayslip('Ahmed Rashid','10,200')">Preview</button></td></tr>
-            <tr><td>Rania Abboud</td><td class="mono">AED 8,100</td><td>Hold</td><td><span class="b b-a">Blocked</span></td><td><button class="btn btn-g btn-sm" onclick="previewStaticPayslip('Rania Abboud','8,100')">Preview</button></td></tr>
-            <tr><td>Mohamed Jaber</td><td class="mono">AED 8,550</td><td>Email + Mobile</td><td><span class="b b-gray">Draft</span></td><td><button class="btn btn-g btn-sm" onclick="previewStaticPayslip('Mohamed Jaber','8,550')">Preview</button></td></tr>
+            <tr data-empty-state><td colspan="5" style="text-align:center;color:var(--text3);padding:32px">No records yet.</td></tr>
           </tbody>
         </table>
       </div>
@@ -3711,7 +3700,7 @@
     </div>
     <div class="card">
       <div class="card-hd"><div class="card-title">Document Library</div><input class="fi" style="width:220px" placeholder="Search documents..."></div>
-      <table class="tbl"><thead><tr><th>Document</th><th>Type</th><th>Linked Record</th><th>Uploaded By</th><th>Status</th><th></th></tr></thead><tbody><tr><td>INV-2024-0848.pdf</td><td>Sales Invoice</td><td class="mono">INV-2024-0848</td><td>Sara</td><td><span class="b b-g">Stored</span></td><td><button class="btn btn-g btn-sm" onclick="toast('Document preview opened','info')">View</button></td></tr><tr><td>VAT201_June_Workpaper.xlsx</td><td>Audit File</td><td>VAT June 2024</td><td>Rania</td><td><span class="b b-b">Retained</span></td><td><button class="btn btn-g btn-sm" onclick="toast('Document preview opened','info')">View</button></td></tr></tbody></table>
+      <table class="tbl"><thead><tr><th>Document</th><th>Type</th><th>Linked Record</th><th>Uploaded By</th><th>Status</th><th></th></tr></thead><tbody><tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No records yet.</td></tr></tbody></table>
     </div>
   </div>
   <div class="tab-body" id="doc-receipts">
@@ -5025,9 +5014,7 @@
           <table class="tbl">
             <thead><tr><th>Employee</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr></thead>
             <tbody>
-              <tr><td>Sara Al Mansouri</td><td><span class="b b-g">09-18</span></td><td><span class="b b-g">09-18</span></td><td><span class="b b-g">09-18</span></td><td><span class="b b-g">09-18</span></td><td><span class="b b-g">09-14</span></td><td><span class="b b-gray">Off</span></td><td><span class="b b-gray">Off</span></td></tr>
-              <tr><td>Ahmed Rashid</td><td><span class="b b-a">Leave</span></td><td><span class="b b-a">Leave</span></td><td><span class="b b-g">08-17</span></td><td><span class="b b-g">08-17</span></td><td><span class="b b-g">08-14</span></td><td><span class="b b-gray">Off</span></td><td><span class="b b-gray">Off</span></td></tr>
-              <tr><td>Rania Abboud</td><td><span class="b b-b">09-18</span></td><td><span class="b b-b">09-18</span></td><td><span class="b b-b">09-18</span></td><td><span class="b b-b">09-18</span></td><td><span class="b b-b">09-14</span></td><td><span class="b b-gray">Off</span></td><td><span class="b b-gray">Off</span></td></tr>
+              <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No records yet.</td></tr>
             </tbody>
           </table>
         </div>
@@ -6136,7 +6123,7 @@ period_locks ─&lt; audit_logs
 
 <div class="overlay" id="m-leave" onclick="closeOvBg(event,'m-leave')">
   <div class="modal"><div class="modal-title">Apply for Leave</div><div class="modal-sub">Submit leave request for approval</div>
-    <div class="fg"><label class="fl">Employee</label><select class="fi" id="leave-employee"><option>Sara Al Mansouri</option><option>Ahmed Rashid</option><option>Rania Abboud</option><option>Mohamed Jaber</option></select></div>
+    <div class="fg"><label class="fl">Employee</label><select class="fi" id="leave-employee"><option value="">— Select Employee —</option></select></div>
     <div class="fg"><label class="fl">Leave Type</label><select class="fi" id="leave-type"><option>Annual Leave</option><option>Sick Leave</option><option>Casual Leave</option><option>Emergency Leave</option><option>Maternity Leave</option><option>Paternity Leave</option><option>Unpaid Leave</option><option>Lieu Days</option><option>Hajj Leave</option><option>Work From Home</option></select></div>
     <div class="fr2"><div class="fg"><label class="fl">From Date</label><input class="fi" id="leave-from" type="date"></div><div class="fg"><label class="fl">To Date</label><input class="fi" id="leave-to" type="date"></div></div>
     <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="leave-reason" rows="3"></textarea></div>
@@ -6146,7 +6133,7 @@ period_locks ─&lt; audit_logs
 
 <div class="overlay" id="m-ot" onclick="closeOvBg(event,'m-ot')">
   <div class="modal"><div class="modal-title">Overtime Request</div><div class="modal-sub">Submit overtime for supervisor approval</div>
-    <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="ot-employee-sel"><option>Ahmed Rashid</option><option>Sara Al Mansouri</option><option>Rania Abboud</option><option>Mohamed Jaber</option></select></div><div class="fg"><label class="fl">Department</label><input class="fi" id="ot-dept" value="Operations"></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="ot-employee-sel"><option value="">— Select Employee —</option></select></div><div class="fg"><label class="fl">Department</label><input class="fi" id="ot-dept"></div></div>
     <div class="fr2"><div class="fg"><label class="fl">Date</label><input class="fi mono" id="ot-date" type="date"></div><div class="fg"><label class="fl">Shift Time</label><input class="fi mono" id="ot-shift" value="09:00-18:00"></div></div>
     <div class="fr2">
       <div class="fg"><label class="fl">OT Type</label><select class="fi" id="ot-type" onchange="updateOtMultiplier()"><option value="normal">Normal OT</option><option value="ramadan">Ramadan OT</option><option value="weekend">Weekend OT</option><option value="holiday">Public Holiday OT</option></select></div>
@@ -6161,7 +6148,7 @@ period_locks ─&lt; audit_logs
 
 <div class="overlay" id="m-att-correction" onclick="closeOvBg(event,'m-att-correction')">
   <div class="modal"><div class="modal-title">Attendance Correction</div><div class="modal-sub">Request check-in or checkout adjustment</div>
-    <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="corr-employee"><option>Rania Abboud</option><option>Sara Al Mansouri</option><option>Ahmed Rashid</option><option>Mohamed Jaber</option></select></div><div class="fg"><label class="fl">Date</label><input class="fi" id="corr-date" type="date"></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="corr-employee"><option value="">— Select Employee —</option></select></div><div class="fg"><label class="fl">Date</label><input class="fi" id="corr-date" type="date"></div></div>
     <div class="fr2"><div class="fg"><label class="fl">Requested Check-in</label><input class="fi mono" id="corr-checkin" type="time"></div><div class="fg"><label class="fl">Requested Check-out</label><input class="fi mono" id="corr-checkout" type="time"></div></div>
     <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="corr-reason" rows="3" placeholder="Biometric device issue, client visit, missed checkout..."></textarea></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-att-correction')">Cancel</button><button class="btn btn-p" onclick="saveCorrectionRequest()">Submit Request</button></div>
@@ -6180,7 +6167,7 @@ period_locks ─&lt; audit_logs
 
 <div class="overlay" id="m-loan" onclick="closeOvBg(event,'m-loan')">
   <div class="modal"><div class="modal-title">New Loan Request</div><div class="modal-sub">Employee loan with EMI and auto payroll deduction</div>
-    <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="loan-employee"><option>Ahmed Rashid</option><option>Sara Al Mansouri</option><option>Rania Abboud</option><option>Mohamed Jaber</option></select></div><div class="fg"><label class="fl">Loan Type</label><select class="fi" id="loan-type"><option>Personal Loan</option><option>Emergency Loan</option><option>Medical Loan</option><option>Home Furnishing Loan</option><option>Education Loan</option><option>Vehicle Loan</option></select></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="loan-employee"><option value="">— Select Employee —</option></select></div><div class="fg"><label class="fl">Loan Type</label><select class="fi" id="loan-type"><option>Personal Loan</option><option>Emergency Loan</option><option>Medical Loan</option><option>Home Furnishing Loan</option><option>Education Loan</option><option>Vehicle Loan</option></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Loan Amount (AED)</label><input class="fi mono" id="loan-amount" placeholder="5000.00" oninput="calcLoanEmi()"></div><div class="fg"><label class="fl">Repayment (Months)</label><input class="fi mono" id="loan-months" value="6" oninput="calcLoanEmi()"></div><div class="fg"><label class="fl">Monthly EMI (AED)</label><input class="fi mono" id="loan-emi" readonly style="color:var(--accent);font-weight:600"></div></div>
     <div class="fg"><label class="fl">Purpose / Reason</label><textarea class="fi" id="loan-reason" rows="3" placeholder="Describe the purpose of this loan request"></textarea></div>
     <div class="fr2"><div class="fg"><label class="fl">Requested Date</label><input class="fi" id="loan-date" type="date"></div><div class="fg"><label class="fl">First Deduction Month</label><input class="fi" id="loan-deduct-from" type="month"></div></div>
@@ -6190,7 +6177,7 @@ period_locks ─&lt; audit_logs
 
 <div class="overlay" id="m-loan-advance" onclick="closeOvBg(event,'m-loan-advance')">
   <div class="modal"><div class="modal-title">Salary Advance Request</div><div class="modal-sub">One-time advance deducted from next salary run</div>
-    <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="advance-employee"><option>Ahmed Rashid</option><option>Sara Al Mansouri</option><option>Rania Abboud</option><option>Mohamed Jaber</option></select></div><div class="fg"><label class="fl">Advance Month</label><input class="fi" id="advance-month" type="month"></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="advance-employee"><option value="">— Select Employee —</option></select></div><div class="fg"><label class="fl">Advance Month</label><input class="fi" id="advance-month" type="month"></div></div>
     <div class="fg"><label class="fl">Advance Amount (AED)</label><input class="fi mono" id="advance-amount" placeholder="Max 50% of basic salary"></div>
     <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="advance-reason" rows="3" placeholder="Brief reason for salary advance request"></textarea></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-loan-advance')">Cancel</button><button class="btn btn-p" onclick="saveLoanAdvance()">Submit Advance</button></div>
@@ -6240,7 +6227,7 @@ period_locks ─&lt; audit_logs
 </div>
 
 <div class="overlay" id="m-edit-month-shift" onclick="closeOvBg(event,'m-edit-month-shift')">
-  <div class="modal"><div class="modal-title">Edit Monthly Rota Cell</div><div class="modal-sub">Ahmed Rashid · 05 May 2026 · Sales</div>
+  <div class="modal"><div class="modal-title">Edit Monthly Rota Cell</div><div class="modal-sub" id="rota-edit-sub">Select a cell to edit</div>
     <div class="fr2"><div class="fg"><label class="fl">Day Type</label><select class="fi"><option>Shift</option><option>Off</option><option>Leave</option><option>Holiday</option><option>Training</option></select></div><div class="fg"><label class="fl">Shift</label><select class="fi"><option>Morning</option><option>Evening</option><option>Night</option><option>Overtime</option></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Start Time</label><input class="fi mono" type="time" value="09:00"></div><div class="fg"><label class="fl">End Time</label><input class="fi mono" type="time" value="18:00"></div><div class="fg"><label class="fl">Break Minutes</label><input class="fi mono" value="60"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Overtime</label><select class="fi"><option>No</option><option>Yes</option></select></div><div class="fg"><label class="fl">OT Start Time</label><input class="fi mono" type="time" value="18:00"></div><div class="fg"><label class="fl">OT End Time</label><input class="fi mono" type="time" value="20:00"></div></div>
