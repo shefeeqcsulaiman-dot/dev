@@ -2450,7 +2450,9 @@ function renderDashboardHero(data,kpis={},counts={}){
 
   // KPI cards
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
-  set('dash-revenue',formatAed(revenue));
+  _revWithVat=formatAed(revenue);
+  _revNet=formatAed(revenueNet);
+  set('dash-revenue',_revSlideIdx===1?_revNet:_revWithVat);
   set('dash-revenue-sub',`${invCount} invoice${invCount===1?'':'s'}`);
   set('dash-total-purchases',formatAed(purchases));
   set('dash-purchases-sub',`${purCount} bill${purCount===1?'':'s'}`);
@@ -17232,12 +17234,17 @@ function addPayrollAdjustment(){
 // -- DAILY ATTENDANCE CHECK --------------------------------------
 
 // ── Revenue Card Slider ───────────────────────────────────────────────────────
-let _revSwipeX=0,_revSlideIdx=0;
+let _revSwipeX=0,_revSlideIdx=0,_revWithVat='AED 0.00',_revNet='AED 0.00';
 
 function revSlide(idx){
   const track=document.getElementById('rev-slide-track');
   if(track)track.style.transform=`translateX(${-idx*100}%)`;
   _revSlideIdx=idx;
+  // Update main revenue value and banner label to match slide context
+  const revEl=document.getElementById('dash-revenue');
+  if(revEl)revEl.textContent=idx===1?_revNet:_revWithVat;
+  const vatLabel=document.getElementById('rev-banner-vat');
+  if(vatLabel)vatLabel.style.opacity=idx===1?'0':'1';
   [0,1].forEach(i=>{
     const dot=document.getElementById('rev-dot-'+i);
     if(!dot)return;
