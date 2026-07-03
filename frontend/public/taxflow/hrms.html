@@ -1024,31 +1024,27 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 
   <div class="tab-body" id="hr-policy">
     <!-- Departments & Branches -->
-    <div class="g2 mb16">
-      <div class="card">
-        <div class="card-hd"><div><div class="card-title">Departments</div><div class="card-sub">Manage company departments</div></div><button class="btn btn-g btn-sm" onclick="addHrDepartment()">+ Add Department</button></div>
-        <div class="dept-branch-wrap" id="dept-tags-wrap">
-          <span class="dept-tag">Management<button onclick="removeHrDept(this,'Management')" title="Remove">×</button></span>
-          <span class="dept-tag">Finance<button onclick="removeHrDept(this,'Finance')" title="Remove">×</button></span>
-          <span class="dept-tag">Operations<button onclick="removeHrDept(this,'Operations')" title="Remove">×</button></span>
-          <span class="dept-tag">Sales<button onclick="removeHrDept(this,'Sales')" title="Remove">×</button></span>
-          <span class="dept-tag">HR<button onclick="removeHrDept(this,'HR')" title="Remove">×</button></span>
-          <span class="dept-tag">IT<button onclick="removeHrDept(this,'IT')" title="Remove">×</button></span>
-          <span class="dept-tag">Marketing<button onclick="removeHrDept(this,'Marketing')" title="Remove">×</button></span>
-          <span class="dept-tag">Procurement<button onclick="removeHrDept(this,'Procurement')" title="Remove">×</button></span>
-          <span class="dept-tag">Logistics<button onclick="removeHrDept(this,'Logistics')" title="Remove">×</button></span>
-        </div>
+    <div class="card mb16">
+      <div class="card-hd">
+        <div><div class="card-title">Departments</div><div class="card-sub">Manage company departments used in employee profiles, payroll, and reporting</div></div>
+        <button class="btn btn-p btn-sm" onclick="showDeptModal()">+ Add Department</button>
       </div>
-      <div class="card">
-        <div class="card-hd"><div><div class="card-title">Branches</div><div class="card-sub">Manage company branches / locations</div></div><button class="btn btn-g btn-sm" onclick="addHrBranch()">+ Add Branch</button></div>
-        <div class="dept-branch-wrap" id="branch-tags-wrap">
-          <span class="dept-tag">Dubai HQ<button onclick="removeHrBranch(this,'Dubai HQ')" title="Remove">×</button></span>
-          <span class="dept-tag">Abu Dhabi<button onclick="removeHrBranch(this,'Abu Dhabi')" title="Remove">×</button></span>
-          <span class="dept-tag">Sharjah<button onclick="removeHrBranch(this,'Sharjah')" title="Remove">×</button></span>
-          <span class="dept-tag">Ajman<button onclick="removeHrBranch(this,'Ajman')" title="Remove">×</button></span>
-          <span class="dept-tag">Ras Al Khaimah<button onclick="removeHrBranch(this,'Ras Al Khaimah')" title="Remove">×</button></span>
-          <span class="dept-tag">Fujairah<button onclick="removeHrBranch(this,'Fujairah')" title="Remove">×</button></span>
-        </div>
+      <table class="tbl" id="dept-table">
+        <thead><tr><th>Code</th><th>Department Name</th><th>Head / Manager</th><th>Description</th><th>Employees</th><th>Status</th><th></th></tr></thead>
+        <tbody id="dept-tbody">
+          <tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">Loading departments…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card mb16">
+      <div class="card-hd"><div><div class="card-title">Branches / Locations</div><div class="card-sub">Manage company branches and office locations</div></div><button class="btn btn-g btn-sm" onclick="addHrBranch()">+ Add Branch</button></div>
+      <div class="dept-branch-wrap" id="branch-tags-wrap">
+        <span class="dept-tag">Dubai HQ<button onclick="removeHrBranch(this,'Dubai HQ')" title="Remove">×</button></span>
+        <span class="dept-tag">Abu Dhabi<button onclick="removeHrBranch(this,'Abu Dhabi')" title="Remove">×</button></span>
+        <span class="dept-tag">Sharjah<button onclick="removeHrBranch(this,'Sharjah')" title="Remove">×</button></span>
+        <span class="dept-tag">Ajman<button onclick="removeHrBranch(this,'Ajman')" title="Remove">×</button></span>
+        <span class="dept-tag">Ras Al Khaimah<button onclick="removeHrBranch(this,'Ras Al Khaimah')" title="Remove">×</button></span>
+        <span class="dept-tag">Fujairah<button onclick="removeHrBranch(this,'Fujairah')" title="Remove">×</button></span>
       </div>
     </div>
 
@@ -2437,11 +2433,34 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   </div>
   </div>
 </div>
+
+<!-- ═══════════════════ DEPARTMENT MODAL ═══════════════════ -->
+<div class="overlay" id="m-dept" onclick="closeOvBg(event,'m-dept')">
+  <div class="modal">
+    <div class="modal-title" id="dept-modal-title">Add Department</div>
+    <div class="modal-sub">Department details used in employee profiles and reporting</div>
+    <input type="hidden" id="dept-edit-id">
+    <div class="fr2">
+      <div class="fg"><label class="fl">Department Name <span style="color:var(--red)">*</span></label><input class="fi" id="dept-name" placeholder="e.g. Finance"></div>
+      <div class="fg"><label class="fl">Short Code</label><input class="fi" id="dept-code" placeholder="e.g. FIN" maxlength="6" style="text-transform:uppercase"></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Department Head / Manager</label><input class="fi" id="dept-head" placeholder="e.g. Ahmed Al Mansouri"></div>
+      <div class="fg"><label class="fl">Status</label><select class="fi" id="dept-status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
+    </div>
+    <div class="fg"><label class="fl">Description</label><input class="fi" id="dept-desc" placeholder="Brief description of this department's function"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="hideM('m-dept')">Cancel</button>
+      <button class="btn btn-p" onclick="saveDeptModal()">Save Department</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260628j" defer></script>
+<script src="src/app.js?v=20260703a" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded',function(){
   setTimeout(function(){
@@ -2459,7 +2478,7 @@ document.addEventListener('DOMContentLoaded',function(){
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260628j" defer></script>
+<script src="src/app.js?v=20260703a" defer></script>
 <!-- HRMS AI ASSISTANT PAGE -->
 <div class="page" id="page-hrms-ai">
   <div style="max-width:1100px;margin:0 auto;padding:0 4px">

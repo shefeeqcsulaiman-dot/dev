@@ -2052,12 +2052,18 @@
   </div>
 
   <div class="tab-body" id="hr-policy">
-    <!-- Dept/Branch shortcut -->
-    <div class="card mb16" style="border:1px dashed var(--border)">
+    <!-- Dept table (same data as Settings → Departments & Branches) -->
+    <div class="card mb16">
       <div class="card-hd">
-        <div><div class="card-title">Departments &amp; Branches</div><div class="card-sub">Managed in Settings → HR Structure</div></div>
-        <button class="btn btn-g btn-sm" onclick="go('settings');setTimeout(()=>stab(document.querySelector('#page-settings .tab:nth-child(2)'),'set-depts'),80)">Open Departments &amp; Branches →</button>
+        <div><div class="card-title">Departments</div><div class="card-sub">Company departments — changes sync with Settings</div></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-p btn-sm" onclick="showDeptModal()">+ Add Department</button>
+          <button class="btn btn-g btn-sm" onclick="go('settings');setTimeout(()=>stab(document.querySelector('#page-settings .tab:nth-child(2)'),'set-depts'),80)">Settings →</button>
+        </div>
       </div>
+      <table class="tbl"><thead><tr><th>Code</th><th>Department Name</th><th>Head / Manager</th><th>Employees</th><th>Status</th><th></th></tr></thead>
+        <tbody id="hr-policy-dept-tbody"><tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
+      </table>
     </div>
 
     <!-- OT Rules -->

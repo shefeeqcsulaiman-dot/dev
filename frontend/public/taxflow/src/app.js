@@ -14374,7 +14374,7 @@ function refreshOrgPage(){
   set('org-kpi-total',total||'0');
   set('org-kpi-active',active||'0');
 
-  // Dept breakdown
+  // Dept breakdown — use _deptList as source of truth, enrich with employee counts
   const deptMap={};
   const deptHead={};
   emps.forEach(e=>{
@@ -14382,6 +14382,13 @@ function refreshOrgPage(){
     deptMap[d]=(deptMap[d]||0)+1;
     if(!deptHead[d]&&(e.designation||'').match(/manager|head|director|vp|chief|ceo|coo|cfo/i))deptHead[d]=e.name;
   });
+  // Include all defined departments (even with 0 employees), and set head from _deptList
+  if(typeof _deptList!=='undefined'){
+    _deptList.filter(d=>d.status!=='Inactive').forEach(d=>{
+      if(!(d.name in deptMap))deptMap[d.name]=0;
+      if(d.head&&!deptHead[d.name])deptHead[d.name]=d.head;
+    });
+  }
   const depts=Object.keys(deptMap).sort((a,b)=>deptMap[b]-deptMap[a]);
   set('org-kpi-depts',depts.length||'0');
   const deptCount=document.getElementById('org-dept-count');
@@ -14408,8 +14415,8 @@ function refreshOrgPage(){
     }
   }
 
-  // Branch breakdown — read from HR branches tags
-  const branchTags=[...document.querySelectorAll('#branch-tags-wrap .dept-tag')].map(t=>t.childNodes[0]?.textContent?.trim()).filter(Boolean);
+  // Branch breakdown — use _getBranchNames() as source of truth
+  const branchTags=typeof _getBranchNames==='function'?_getBranchNames():[...document.querySelectorAll('#branch-tags-wrap .dept-tag')].map(t=>t.childNodes[0]?.textContent?.trim()).filter(Boolean);
   const branchMap={};
   emps.forEach(e=>{const b=e.branch||e.location||'Dubai HQ';branchMap[b]=(branchMap[b]||0)+1;});
   // Also include defined branches with 0 headcount
@@ -15701,13 +15708,7 @@ function _deptEmployeeCount(name){
 }
 
 function renderDeptTable(){
-  const tbody=document.getElementById('dept-tbody');
-  if(!tbody)return;
-  if(!_deptList.length){
-    tbody.innerHTML='<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">No departments yet. Click + Add Department.</td></tr>';
-    return;
-  }
-  tbody.innerHTML=_deptList.map(d=>{
+  const fullRow=d=>{
     const cnt=_deptEmployeeCount(d.name);
     const statusCls=d.status==='Active'?'b-g':'b-gray';
     return `<tr>
@@ -15719,7 +15720,29 @@ function renderDeptTable(){
       <td><span class="b ${statusCls}">${escapeHtml(d.status)}</span></td>
       <td><button class="btn btn-g btn-sm" style="margin-right:4px" onclick="showDeptModal('${d.id}')">Edit</button><button class="btn btn-sm" style="background:var(--red-bg);color:var(--red);border-color:var(--red)" onclick="deleteDept('${d.id}')">Del</button></td>
     </tr>`;
-  }).join('');
+  };
+  const shortRow=d=>{
+    const cnt=_deptEmployeeCount(d.name);
+    const statusCls=d.status==='Active'?'b-g':'b-gray';
+    return `<tr>
+      <td class="mono" style="font-size:11px">${escapeHtml(d.code||'—')}</td>
+      <td style="font-weight:600">${escapeHtml(d.name)}</td>
+      <td>${escapeHtml(d.head||'—')}</td>
+      <td class="mono">${cnt}</td>
+      <td><span class="b ${statusCls}">${escapeHtml(d.status)}</span></td>
+      <td><button class="btn btn-g btn-sm" style="margin-right:4px" onclick="showDeptModal('${d.id}')">Edit</button><button class="btn btn-sm" style="background:var(--red-bg);color:var(--red);border-color:var(--red)" onclick="deleteDept('${d.id}')">Del</button></td>
+    </tr>`;
+  };
+  const empty7='<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">No departments yet. Click + Add Department.</td></tr>';
+  const empty6='<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">No departments configured.</td></tr>';
+
+  // Main Settings / HRMS policy table (7 cols including description)
+  const tbody=document.getElementById('dept-tbody');
+  if(tbody)tbody.innerHTML=_deptList.length?_deptList.map(fullRow).join(''):empty7;
+
+  // Staff page HR Policy secondary table (6 cols, no description)
+  const tbody2=document.getElementById('hr-policy-dept-tbody');
+  if(tbody2)tbody2.innerHTML=_deptList.length?_deptList.map(shortRow).join(''):empty6;
 }
 
 function showDeptModal(id){
