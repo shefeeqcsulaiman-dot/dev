@@ -4242,7 +4242,7 @@
 <div class="page" id="page-settings">
   <div class="tabs">
     <div class="tab on" onclick="stab(this,'set-company')">Company Registration</div>
-    <div class="tab" onclick="stab(this,'set-depts');renderDeptTable()">Departments &amp; Branches</div>
+    <div class="tab" onclick="stab(this,'set-depts');renderDeptTable();renderBranchTable()">Departments &amp; Branches</div>
     <div class="tab" onclick="stab(this,'set-users')">Users & Roles</div>
     <div class="tab" onclick="stab(this,'set-tax')">Tax Settings</div>
     <div class="tab" onclick="stab(this,'set-notif')">Notifications</div>
@@ -4346,15 +4346,14 @@
       </table>
     </div>
     <div class="card">
-      <div class="card-hd"><div><div class="card-title">Branches / Locations</div><div class="card-sub">Manage company branches and office locations</div></div><button class="btn btn-g btn-sm" onclick="addHrBranch()">+ Add Branch</button></div>
-      <div class="dept-branch-wrap" id="branch-tags-wrap">
-        <span class="dept-tag">Dubai HQ<button onclick="removeHrBranch(this,'Dubai HQ')" title="Remove">×</button></span>
-        <span class="dept-tag">Abu Dhabi<button onclick="removeHrBranch(this,'Abu Dhabi')" title="Remove">×</button></span>
-        <span class="dept-tag">Sharjah<button onclick="removeHrBranch(this,'Sharjah')" title="Remove">×</button></span>
-        <span class="dept-tag">Ajman<button onclick="removeHrBranch(this,'Ajman')" title="Remove">×</button></span>
-        <span class="dept-tag">Ras Al Khaimah<button onclick="removeHrBranch(this,'Ras Al Khaimah')" title="Remove">×</button></span>
-        <span class="dept-tag">Fujairah<button onclick="removeHrBranch(this,'Fujairah')" title="Remove">×</button></span>
+      <div class="card-hd">
+        <div><div class="card-title">Branches / Locations</div><div class="card-sub">Manage company branches and office locations</div></div>
+        <button class="btn btn-p btn-sm" onclick="showBranchModal()">+ Add Branch</button>
       </div>
+      <table class="tbl">
+        <thead><tr><th>Code</th><th>Branch Name</th><th>City / Emirate</th><th>Status</th><th></th></tr></thead>
+        <tbody id="branch-tbody"><tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px">Loading branches…</td></tr></tbody>
+      </table>
     </div>
   </div>
 
@@ -6605,7 +6604,29 @@ period_locks ─&lt; audit_logs
   </div>
 </div>
 
+<!-- ═══════════════════ BRANCH MODAL ═══════════════════ -->
+<div class="overlay" id="m-branch" onclick="closeOvBg(event,'m-branch')">
+  <div class="modal">
+    <div class="modal-title" id="branch-modal-title">Add Branch</div>
+    <div class="modal-sub">Branch / office location details</div>
+    <input type="hidden" id="branch-edit-id">
+    <div class="fr2">
+      <div class="fg"><label class="fl">Branch Name <span style="color:var(--red)">*</span></label><input class="fi" id="branch-name" placeholder="e.g. Dubai HQ"></div>
+      <div class="fg"><label class="fl">Short Code</label><input class="fi" id="branch-code" placeholder="e.g. DXB" maxlength="6" style="text-transform:uppercase"></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">City / Emirate</label><input class="fi" id="branch-city" placeholder="e.g. Dubai"></div>
+      <div class="fg"><label class="fl">Status</label><select class="fi" id="branch-status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
+    </div>
+    <div class="modal-actions">
+      <button id="branch-delete-btn" class="btn btn-sm" style="display:none;background:var(--red-bg);color:var(--red);border-color:var(--red);margin-right:auto" onclick="deleteBranchFromModal()">Delete</button>
+      <button class="btn btn-ghost" onclick="hideM('m-branch')">Cancel</button>
+      <button class="btn btn-p" onclick="saveBranchModal()">Save Branch</button>
+    </div>
+  </div>
+</div>
+
 <script src="config.js"></script>
-<script src="src/app.js?v=20260703a" defer></script>
+<script src="src/app.js?v=20260703b" defer></script>
 </body>
 </html>

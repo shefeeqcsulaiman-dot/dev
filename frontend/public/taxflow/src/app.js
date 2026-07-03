@@ -15669,6 +15669,7 @@ function _getDeptNames(){
     .map(t=>t.childNodes[0]?.textContent?.trim()).filter(Boolean);
 }
 function _getBranchNames(){
+  if(typeof _branchList!=='undefined'&&_branchList.length)return _branchList.map(b=>b.name);
   return [...document.querySelectorAll('#branch-tags-wrap .dept-tag')]
     .map(t=>t.childNodes[0]?.textContent?.trim()).filter(Boolean);
 }
@@ -15682,7 +15683,7 @@ async function _saveDeptsBranchesToDb(){
       body:JSON.stringify({
         ...currentCompany,
         departments:JSON.stringify(_deptList),
-        branches:JSON.stringify(_getBranchNames()),
+        branches:JSON.stringify(_branchList),
       })
     });
   }catch(e){console.warn('dept/branch save failed',e);}
@@ -15792,9 +15793,6 @@ function deleteDeptFromModal(){
 // Load/save departments from company record
 function applyDeptsBranchesFromCompany(company){
   if(!company)return;
-  const branchWrap=document.getElementById('branch-tags-wrap');
-  const DEFAULT_BRANCHES=['Dubai HQ','Abu Dhabi','Sharjah','Ajman','Ras Al Khaimah','Fujairah'];
-  let branches=DEFAULT_BRANCHES;
   try{
     if(company.departments){
       const p=JSON.parse(company.departments);
@@ -15808,13 +15806,22 @@ function applyDeptsBranchesFromCompany(company){
       }
     }
   }catch{}
-  try{if(company.branches){const p=JSON.parse(company.branches);if(Array.isArray(p)&&p.length)branches=p;}}catch{}
-  if(branchWrap){
-    branchWrap.innerHTML=branches.map(n=>`<span class="dept-tag">${escapeHtml(n)}<button onclick="removeHrBranch(this,'${escapeHtml(n)}')" title="Remove">×</button></span>`).join('');
-  }
+  try{
+    if(company.branches){
+      const p=JSON.parse(company.branches);
+      if(Array.isArray(p)&&p.length){
+        if(typeof p[0]==='string'){
+          _branchList=p.map((n,i)=>({id:'br-'+(i+1),name:n,code:n.slice(0,3).toUpperCase(),city:n,status:'Active'}));
+        } else {
+          _branchList=p;
+        }
+      }
+    }
+  }catch{}
   renderDeptTable();
+  renderBranchTable();
   _syncDeptBranchSelectsFromList();
-  _syncBranchSelects(branches);
+  _syncBranchSelects(_branchList.filter(b=>b.status!=='Inactive').map(b=>b.name));
 }
 
 function _syncDeptBranchSelectsFromList(){
@@ -15846,27 +15853,94 @@ function _syncDeptBranchSelects(depts,branches){
   _syncBranchSelects(branches);
 }
 
-function addHrBranch(){
-  const name=prompt('New Branch Name:');
-  if(!name?.trim())return;
-  const wrap=document.getElementById('branch-tags-wrap');
-  if(!wrap)return;
-  const span=document.createElement('span');
-  span.className='dept-tag';
-  span.innerHTML=`${escapeHtml(name.trim())}<button onclick="removeHrBranch(this,'${escapeHtml(name.trim())}')" title="Remove">×</button>`;
-  wrap.appendChild(span);
-  document.querySelectorAll('#emp-branch').forEach(sel=>{
-    const opt=document.createElement('option');
-    opt.value=name.trim();opt.textContent=name.trim();sel.appendChild(opt);
-  });
-  _saveDeptsBranchesToDb();
-  toast(`Branch "${name.trim()}" added`,'ok');
+// ── Branch data store ─────────────────────────────────────────────────
+let _branchList=[
+  {id:'br-1',name:'Dubai HQ',code:'DXB',city:'Dubai',status:'Active'},
+  {id:'br-2',name:'Abu Dhabi',code:'AUH',city:'Abu Dhabi',status:'Active'},
+  {id:'br-3',name:'Sharjah',code:'SHJ',city:'Sharjah',status:'Active'},
+  {id:'br-4',name:'Ajman',code:'AJM',city:'Ajman',status:'Active'},
+  {id:'br-5',name:'Ras Al Khaimah',code:'RAK',city:'Ras Al Khaimah',status:'Active'},
+  {id:'br-6',name:'Fujairah',code:'FUJ',city:'Fujairah',status:'Active'},
+];
+
+function renderBranchTable(){
+  const row=b=>{
+    const statusCls=b.status==='Active'?'b-g':'b-gray';
+    return `<tr>
+      <td class="mono" style="font-size:11px">${escapeHtml(b.code||'—')}</td>
+      <td style="font-weight:600">${escapeHtml(b.name)}</td>
+      <td style="color:var(--text3);font-size:12px">${escapeHtml(b.city||'—')}</td>
+      <td><span class="b ${statusCls}">${escapeHtml(b.status)}</span></td>
+      <td><button class="icon-btn edit" title="Edit branch" onclick="showBranchModal('${b.id}')">${editIconSvg()}</button></td>
+    </tr>`;
+  };
+  const empty='<tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px">No branches yet. Click + Add Branch.</td></tr>';
+  const html=_branchList.length?_branchList.map(row).join(''):empty;
+  document.querySelectorAll('#branch-tbody').forEach(tb=>{tb.innerHTML=html;});
 }
-function removeHrBranch(btn,name){
-  if(!confirm(`Remove branch "${name}"?`))return;
-  btn.closest('.dept-tag')?.remove();
-  document.querySelectorAll('#emp-branch option').forEach(opt=>{if(opt.value===name||opt.textContent===name)opt.remove();});
+
+function showBranchModal(id){
+  const titleEl=document.getElementById('branch-modal-title');
+  const b=id?_branchList.find(x=>x.id===id):null;
+  if(titleEl)titleEl.textContent=b?'Edit Branch':'Add Branch';
+  document.getElementById('branch-edit-id').value=id||'';
+  document.getElementById('branch-name').value=b?.name||'';
+  document.getElementById('branch-code').value=b?.code||'';
+  document.getElementById('branch-city').value=b?.city||'';
+  document.getElementById('branch-status').value=b?.status||'Active';
+  const delBtn=document.getElementById('branch-delete-btn');
+  if(delBtn)delBtn.style.display=id?'':'none';
+  showM('m-branch');
+  setTimeout(()=>document.getElementById('branch-name').focus(),120);
+}
+
+function saveBranchModal(){
+  const name=(document.getElementById('branch-name')?.value||'').trim();
+  if(!name){toast('Branch name is required','err');return;}
+  const id=document.getElementById('branch-edit-id')?.value;
+  const obj={
+    id:id||('br-'+Date.now()),
+    name,
+    code:(document.getElementById('branch-code')?.value||'').trim().toUpperCase().slice(0,6)||name.slice(0,3).toUpperCase(),
+    city:(document.getElementById('branch-city')?.value||'').trim(),
+    status:document.getElementById('branch-status')?.value||'Active',
+  };
+  if(id){
+    const idx=_branchList.findIndex(x=>x.id===id);
+    if(idx>=0)_branchList[idx]=obj;
+  } else {
+    if(_branchList.find(x=>x.name.toLowerCase()===name.toLowerCase())){toast('Branch already exists','err');return;}
+    _branchList.push(obj);
+  }
+  hideM('m-branch');
+  renderBranchTable();
+  _syncBranchSelects(_branchList.filter(b=>b.status!=='Inactive').map(b=>b.name));
   _saveDeptsBranchesToDb();
+  toast(`Branch "${name}" ${id?'updated':'added'}`,'ok');
+}
+
+function deleteBranch(id){
+  const b=_branchList.find(x=>x.id===id);
+  if(!b)return;
+  if(!confirm(`Remove branch "${b.name}"?`))return;
+  _branchList=_branchList.filter(x=>x.id!==id);
+  renderBranchTable();
+  _syncBranchSelects(_branchList.filter(x=>x.status!=='Inactive').map(x=>x.name));
+  _saveDeptsBranchesToDb();
+  toast(`Branch "${b.name}" removed`,'ok');
+}
+
+function deleteBranchFromModal(){
+  const id=document.getElementById('branch-edit-id')?.value;
+  if(!id)return;
+  hideM('m-branch');
+  deleteBranch(id);
+}
+
+function addHrBranch(){showBranchModal();}
+function removeHrBranch(btn,name){
+  const b=_branchList.find(x=>x.name===name);
+  if(b)deleteBranch(b.id);
 }
 
 function refreshExpiryAlerts(){
