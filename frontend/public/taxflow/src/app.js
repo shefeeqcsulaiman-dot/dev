@@ -17238,7 +17238,7 @@ let _revSwipeX=0,_revSlideIdx=0,_revWithVat='AED 0.00',_revNet='AED 0.00';
 
 function revSlide(idx){
   const track=document.getElementById('rev-slide-track');
-  if(track)track.style.transform=`translateX(${-idx*100}%)`;
+  if(track)track.style.transform=`translateX(${-idx*50}%)`;
   _revSlideIdx=idx;
   // Update main revenue value and banner label to match slide context
   const revEl=document.getElementById('dash-revenue');
@@ -17248,9 +17248,10 @@ function revSlide(idx){
   [0,1].forEach(i=>{
     const dot=document.getElementById('rev-dot-'+i);
     if(!dot)return;
-    dot.style.width=i===idx?'18px':'4px';
+    dot.style.width=i===idx?'18px':'6px';
+    dot.style.height=i===idx?'6px':'6px';
     dot.style.background=i===idx?'#10b981':'var(--border)';
-    dot.style.borderRadius=i===idx?'2px':'50%';
+    dot.style.borderRadius=i===idx?'3px':'50%';
   });
 }
 
