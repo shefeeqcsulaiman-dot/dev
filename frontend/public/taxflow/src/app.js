@@ -364,6 +364,7 @@ function ensureModalCloseButton(overlay,id){
   panel.prepend(close);
 }
 
+const hideM=id=>closeM(id);
 function closeM(id){
   document.getElementById(id)?.classList.remove('on');
   if(id==='m-emp'){
