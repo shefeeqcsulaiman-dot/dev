@@ -366,6 +366,14 @@ function ensureModalCloseButton(overlay,id){
 
 function closeM(id){
   document.getElementById(id)?.classList.remove('on');
+  if(id==='m-emp'){
+    const titleEl=document.querySelector('#m-emp .modal-title');
+    const subEl=document.querySelector('#m-emp .modal-sub');
+    const btnEl=document.querySelector('#m-emp .btn-p');
+    if(titleEl)titleEl.textContent='Add Employee';
+    if(subEl)subEl.textContent='Register new employee details';
+    if(btnEl)btnEl.textContent='Add Employee';
+  }
   if(id==='m-customer'){
     customerReturnToInvoice=false;
     customerReturnToQuotation=false;
@@ -553,6 +561,60 @@ function employeeFormValue(id,fallback=''){
   return document.getElementById(id)?.value.trim()||fallback;
 }
 
+function openEmpEdit(emp){
+  // Pre-fill all m-emp fields with existing employee data
+  const setV=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val||'';};
+  const setSel=(id,val)=>{const el=document.getElementById(id);if(el&&val){const opt=[...el.options].find(o=>o.value===val||o.textContent===val);if(opt)el.value=opt.value;}};
+  setV('emp-id',emp.id);
+  setV('emp-name',emp.name);
+  setV('emp-nickname',emp.nickname);
+  setV('emp-email',emp.email);
+  setV('emp-mobile',emp.mobile);
+  setSel('emp-department',emp.department);
+  setV('emp-designation',emp.designation);
+  setV('emp-salary',emp.salary);
+  setSel('emp-contract',emp.contract);
+  setSel('emp-branch',emp.branch||emp.location);
+  setSel('emp-location',emp.location);
+  setV('emp-cost-center',emp.cost_center);
+  setSel('emp-nationality',emp.nationality);
+  setV('emp-dob',emp.dob);
+  setSel('emp-gender',emp.gender);
+  setSel('emp-marital',emp.marital_status);
+  setV('emp-address',emp.address);
+  setV('emp-join-date',emp.join_date);
+  setSel('emp-ot-rate',emp.overtime_rate);
+  setSel('emp-leave-policy',emp.leave_policy);
+  setSel('emp-shift',emp.shift);
+  setV('emp-emergency',emp.emergency_contact);
+  setV('emp-emergency-mobile',emp.emergency_mobile);
+  setV('emp-work-permit',emp.work_permit_no);
+  setV('emp-visa-expiry',emp.visa_expiry);
+  setV('emp-emirates-id',emp.emirates_id);
+  setV('emp-eid-expiry',emp.eid_expiry);
+  setV('emp-passport-no',emp.passport_no);
+  setV('emp-passport-expiry',emp.passport_expiry);
+  setV('emp-labor-card',emp.labor_card);
+  setV('emp-driving-license',emp.driving_license);
+  setV('emp-driving-expiry',emp.driving_expiry);
+  setSel('emp-insurance-type',emp.insurance_type);
+  setV('emp-insurance-policy',emp.insurance_policy);
+  setV('emp-insurance-expiry',emp.insurance_expiry);
+  setSel('emp-bank',emp.salary_bank);
+  setV('emp-iban',emp.iban);
+  setV('emp-personal-code',emp.personal_code);
+  setV('emp-routing-code',emp.routing_code);
+  setV('emp-username',emp.username);
+  // Update modal title and button for edit mode
+  const titleEl=document.querySelector('#m-emp .modal-title');
+  const subEl=document.querySelector('#m-emp .modal-sub');
+  const btnEl=document.querySelector('#m-emp .btn-p');
+  if(titleEl)titleEl.textContent='Edit Employee';
+  if(subEl)subEl.textContent=`Editing ${emp.name||'employee'} — ${emp.id||''}`;
+  if(btnEl)btnEl.textContent='Save Changes';
+  showM('m-emp');
+}
+
 function saveEmployee(){
   const passportFile=document.getElementById('emp-passport-file')?.files?.[0];
   const workPermitFile=document.getElementById('emp-work-permit-file')?.files?.[0];
@@ -622,6 +684,7 @@ function saveEmployee(){
     document.getElementById('emp-password-confirm')?.focus();
     return;
   }
+  const isEdit=document.querySelector('#m-emp .modal-title')?.textContent==='Edit Employee';
   renderEmployeeRecord(employee);
   renderPayrollEmployeeRecord(employee);
   saveServer('employees',employee);
@@ -631,8 +694,15 @@ function saveEmployee(){
   document.querySelectorAll('#m-emp textarea').forEach(ta=>ta.value='');
   const photoEl=document.getElementById('emp-photo-preview');
   if(photoEl)photoEl.innerHTML='<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="var(--text3)" stroke-width="1.4"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
-  toast('Employee added to table','ok');
-  audit('Created employee',employee.id,'Saved');
+  // Reset modal title back to Add for next use
+  const titleEl=document.querySelector('#m-emp .modal-title');
+  const subEl=document.querySelector('#m-emp .modal-sub');
+  const btnEl=document.querySelector('#m-emp .btn-p');
+  if(titleEl)titleEl.textContent='Add Employee';
+  if(subEl)subEl.textContent='Register new employee details';
+  if(btnEl)btnEl.textContent='Add Employee';
+  toast(isEdit?`${employee.name} updated`:'Employee added to table','ok');
+  audit(isEdit?'Updated employee':'Created employee',employee.id,'Saved');
 }
 
 function renderEmployeeRecord(employee){
@@ -710,7 +780,7 @@ function ensureEmployeeProfileModal(){
       <div class="modal-sub" id="employee-profile-sub">Employee directory detail</div>
       <div id="employee-profile-body"></div>
       <div class="modal-foot">
-        <button class="btn btn-g" onclick="toast('Employee edit opened','info')">Edit Profile</button>
+        <button class="btn btn-p" id="emp-profile-edit-btn" onclick="">Edit Profile</button>
         <button class="btn btn-g" onclick="toast('Employee document checklist exported','ok')">Export Documents</button>
       </div>
     </div>`;
@@ -781,6 +851,10 @@ function openEmployeeProfile(btn){
         ${employeeDocumentBadge('Medical Report',docs.medical_report)}
       </div>
     </div>`;
+  const editBtn=document.getElementById('emp-profile-edit-btn');
+  if(editBtn){
+    editBtn.onclick=()=>{closeM('m-employee-profile');openEmpEdit(employee);};
+  }
   showM('m-employee-profile');
   audit('Viewed employee profile',employee.id||employee.name,'Opened');
 }
@@ -15580,8 +15654,9 @@ function removeHrJobGrade(btn){
   if(!confirm(`Remove grade "${name}"?`))return;
   tag?.remove();
 }
-// Read current tag names from DOM
+// Read current department names from data store
 function _getDeptNames(){
+  if(typeof _deptList!=='undefined'&&_deptList.length)return _deptList.map(d=>d.name);
   return [...document.querySelectorAll('#dept-tags-wrap .dept-tag')]
     .map(t=>t.childNodes[0]?.textContent?.trim()).filter(Boolean);
 }
@@ -15598,67 +15673,163 @@ async function _saveDeptsBranchesToDb(){
       method:'PUT',
       body:JSON.stringify({
         ...currentCompany,
-        departments:JSON.stringify(_getDeptNames()),
+        departments:JSON.stringify(_deptList),
         branches:JSON.stringify(_getBranchNames()),
       })
     });
   }catch(e){console.warn('dept/branch save failed',e);}
 }
 
-// Render tags from arrays and sync dropdowns
+// ── Department data store ─────────────────────────────────────────────
+let _deptList=[
+  {id:'dept-1',name:'Management',code:'MGT',head:'',description:'',status:'Active'},
+  {id:'dept-2',name:'Finance',code:'FIN',head:'',description:'',status:'Active'},
+  {id:'dept-3',name:'Operations',code:'OPS',head:'',description:'',status:'Active'},
+  {id:'dept-4',name:'Sales',code:'SLS',head:'',description:'',status:'Active'},
+  {id:'dept-5',name:'HR',code:'HR',head:'',description:'',status:'Active'},
+  {id:'dept-6',name:'IT',code:'IT',head:'',description:'',status:'Active'},
+  {id:'dept-7',name:'Marketing',code:'MKT',head:'',description:'',status:'Active'},
+  {id:'dept-8',name:'Procurement',code:'PRO',head:'',description:'',status:'Active'},
+  {id:'dept-9',name:'Logistics',code:'LOG',head:'',description:'',status:'Active'},
+];
+
+function _deptEmployeeCount(name){
+  return [...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')].filter(r=>{
+    const cells=[...r.querySelectorAll('td')];
+    return (cells[3]?.textContent||'').trim()===name;
+  }).length;
+}
+
+function renderDeptTable(){
+  const tbody=document.getElementById('dept-tbody');
+  if(!tbody)return;
+  if(!_deptList.length){
+    tbody.innerHTML='<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">No departments yet. Click + Add Department.</td></tr>';
+    return;
+  }
+  tbody.innerHTML=_deptList.map(d=>{
+    const cnt=_deptEmployeeCount(d.name);
+    const statusCls=d.status==='Active'?'b-g':'b-gray';
+    return `<tr>
+      <td class="mono" style="font-size:11px">${escapeHtml(d.code||'—')}</td>
+      <td style="font-weight:600">${escapeHtml(d.name)}</td>
+      <td>${escapeHtml(d.head||'—')}</td>
+      <td style="color:var(--text3);font-size:12px">${escapeHtml(d.description||'—')}</td>
+      <td class="mono">${cnt}</td>
+      <td><span class="b ${statusCls}">${escapeHtml(d.status)}</span></td>
+      <td><button class="btn btn-g btn-sm" style="margin-right:4px" onclick="showDeptModal('${d.id}')">Edit</button><button class="btn btn-sm" style="background:var(--red-bg);color:var(--red);border-color:var(--red)" onclick="deleteDept('${d.id}')">Del</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function showDeptModal(id){
+  const titleEl=document.getElementById('dept-modal-title');
+  const d=id?_deptList.find(x=>x.id===id):null;
+  if(titleEl)titleEl.textContent=d?'Edit Department':'Add Department';
+  document.getElementById('dept-edit-id').value=id||'';
+  document.getElementById('dept-name').value=d?.name||'';
+  document.getElementById('dept-code').value=d?.code||'';
+  document.getElementById('dept-head').value=d?.head||'';
+  document.getElementById('dept-desc').value=d?.description||'';
+  document.getElementById('dept-status').value=d?.status||'Active';
+  showM('m-dept');
+  setTimeout(()=>document.getElementById('dept-name').focus(),120);
+}
+
+function saveDeptModal(){
+  const name=(document.getElementById('dept-name')?.value||'').trim();
+  if(!name){toast('Department name is required','err');return;}
+  const id=document.getElementById('dept-edit-id')?.value;
+  const obj={
+    id:id||('dept-'+Date.now()),
+    name,
+    code:(document.getElementById('dept-code')?.value||'').trim().toUpperCase().slice(0,6)||name.slice(0,3).toUpperCase(),
+    head:(document.getElementById('dept-head')?.value||'').trim(),
+    description:(document.getElementById('dept-desc')?.value||'').trim(),
+    status:document.getElementById('dept-status')?.value||'Active',
+  };
+  if(id){
+    const idx=_deptList.findIndex(x=>x.id===id);
+    if(idx>=0)_deptList[idx]=obj;
+  } else {
+    if(_deptList.find(x=>x.name.toLowerCase()===name.toLowerCase())){toast('Department already exists','err');return;}
+    _deptList.push(obj);
+  }
+  hideM('m-dept');
+  renderDeptTable();
+  _syncDeptBranchSelectsFromList();
+  _saveDeptsBranchesToDb();
+  toast(`Department "${name}" ${id?'updated':'added'}`,'ok');
+}
+
+function deleteDept(id){
+  const d=_deptList.find(x=>x.id===id);
+  if(!d)return;
+  if(!confirm(`Remove department "${d.name}"?`))return;
+  _deptList=_deptList.filter(x=>x.id!==id);
+  renderDeptTable();
+  _syncDeptBranchSelectsFromList();
+  _saveDeptsBranchesToDb();
+  toast(`Department "${d.name}" removed`,'ok');
+}
+
+// Load/save departments from company record
 function applyDeptsBranchesFromCompany(company){
   if(!company)return;
-  const deptWrap=document.getElementById('dept-tags-wrap');
   const branchWrap=document.getElementById('branch-tags-wrap');
-  const DEFAULT_DEPTS=['Management','Finance','Operations','Sales','HR','IT','Marketing','Procurement','Logistics'];
   const DEFAULT_BRANCHES=['Dubai HQ','Abu Dhabi','Sharjah','Ajman','Ras Al Khaimah','Fujairah'];
-  let depts=DEFAULT_DEPTS;
   let branches=DEFAULT_BRANCHES;
-  try{if(company.departments){const p=JSON.parse(company.departments);if(Array.isArray(p)&&p.length)depts=p;}}catch{}
+  try{
+    if(company.departments){
+      const p=JSON.parse(company.departments);
+      if(Array.isArray(p)&&p.length){
+        // Support both old format (string[]) and new format (object[])
+        if(typeof p[0]==='string'){
+          _deptList=p.map((n,i)=>({id:'dept-'+(i+1),name:n,code:n.slice(0,3).toUpperCase(),head:'',description:'',status:'Active'}));
+        } else {
+          _deptList=p;
+        }
+      }
+    }
+  }catch{}
   try{if(company.branches){const p=JSON.parse(company.branches);if(Array.isArray(p)&&p.length)branches=p;}}catch{}
-  if(deptWrap){
-    deptWrap.innerHTML=depts.map(n=>`<span class="dept-tag">${escapeHtml(n)}<button onclick="removeHrDept(this,'${escapeHtml(n)}')" title="Remove">×</button></span>`).join('');
-  }
   if(branchWrap){
     branchWrap.innerHTML=branches.map(n=>`<span class="dept-tag">${escapeHtml(n)}<button onclick="removeHrBranch(this,'${escapeHtml(n)}')" title="Remove">×</button></span>`).join('');
   }
-  // Sync employee form dropdowns
-  _syncDeptBranchSelects(depts,branches);
+  renderDeptTable();
+  _syncDeptBranchSelectsFromList();
+  _syncBranchSelects(branches);
 }
 
-function _syncDeptBranchSelects(depts,branches){
+function _syncDeptBranchSelectsFromList(){
+  const names=_deptList.filter(d=>d.status!=='Inactive').map(d=>d.name);
   document.querySelectorAll('#emp-department').forEach(sel=>{
     const cur=sel.value;
-    sel.innerHTML='<option value="">— Select Department —</option>'+depts.map(d=>`<option${d===cur?' selected':''}>${escapeHtml(d)}</option>`).join('');
+    sel.innerHTML='<option value="">— Select Department —</option>'+names.map(d=>`<option${d===cur?' selected':''}>${escapeHtml(d)}</option>`).join('');
   });
+  // also sync dept filter selects in HRMS
+  document.querySelectorAll('[id$="-department-filter"],[id="hrms-dept-filter"]').forEach(sel=>{
+    const cur=sel.value;
+    sel.innerHTML='<option value="">All Departments</option>'+names.map(d=>`<option${d===cur?' selected':''}>${escapeHtml(d)}</option>`).join('');
+  });
+}
+
+function _syncBranchSelects(branches){
   document.querySelectorAll('#emp-branch').forEach(sel=>{
     const cur=sel.value;
     sel.innerHTML='<option value="">— Select Branch —</option>'+branches.map(b=>`<option${b===cur?' selected':''}>${escapeHtml(b)}</option>`).join('');
   });
 }
 
-function addHrDepartment(){
-  const name=prompt('New Department Name:');
-  if(!name?.trim())return;
-  const wrap=document.getElementById('dept-tags-wrap');
-  if(!wrap)return;
-  const span=document.createElement('span');
-  span.className='dept-tag';
-  span.innerHTML=`${escapeHtml(name.trim())}<button onclick="removeHrDept(this,'${escapeHtml(name.trim())}')" title="Remove">×</button>`;
-  wrap.appendChild(span);
+// Keep legacy sync signature working (called in a few places)
+function _syncDeptBranchSelects(depts,branches){
   document.querySelectorAll('#emp-department').forEach(sel=>{
-    const opt=document.createElement('option');
-    opt.value=name.trim();opt.textContent=name.trim();sel.appendChild(opt);
+    const cur=sel.value;
+    sel.innerHTML='<option value="">— Select Department —</option>'+depts.map(d=>`<option${d===cur?' selected':''}>${escapeHtml(d)}</option>`).join('');
   });
-  _saveDeptsBranchesToDb();
-  toast(`Department "${name.trim()}" added`,'ok');
+  _syncBranchSelects(branches);
 }
-function removeHrDept(btn,name){
-  if(!confirm(`Remove department "${name}"?`))return;
-  btn.closest('.dept-tag')?.remove();
-  document.querySelectorAll('#emp-department option').forEach(opt=>{if(opt.value===name||opt.textContent===name)opt.remove();});
-  _saveDeptsBranchesToDb();
-}
+
 function addHrBranch(){
   const name=prompt('New Branch Name:');
   if(!name?.trim())return;
