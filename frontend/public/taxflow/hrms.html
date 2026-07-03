@@ -2450,6 +2450,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     </div>
     <div class="fg"><label class="fl">Description</label><input class="fi" id="dept-desc" placeholder="Brief description of this department's function"></div>
     <div class="modal-actions">
+      <button id="dept-delete-btn" class="btn btn-sm" style="display:none;background:var(--red-bg);color:var(--red);border-color:var(--red);margin-right:auto" onclick="deleteDeptFromModal()">Delete</button>
       <button class="btn btn-ghost" onclick="hideM('m-dept')">Cancel</button>
       <button class="btn btn-p" onclick="saveDeptModal()">Save Department</button>
     </div>

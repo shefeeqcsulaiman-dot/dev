@@ -15708,7 +15708,7 @@ function _deptEmployeeCount(name){
 }
 
 function renderDeptTable(){
-  const fullRow=d=>{
+  const row=d=>{
     const cnt=_deptEmployeeCount(d.name);
     const statusCls=d.status==='Active'?'b-g':'b-gray';
     return `<tr>
@@ -15718,31 +15718,14 @@ function renderDeptTable(){
       <td style="color:var(--text3);font-size:12px">${escapeHtml(d.description||'—')}</td>
       <td class="mono">${cnt}</td>
       <td><span class="b ${statusCls}">${escapeHtml(d.status)}</span></td>
-      <td><button class="btn btn-g btn-sm" style="margin-right:4px" onclick="showDeptModal('${d.id}')">Edit</button><button class="btn btn-sm" style="background:var(--red-bg);color:var(--red);border-color:var(--red)" onclick="deleteDept('${d.id}')">Del</button></td>
+      <td><button class="btn btn-g btn-sm" onclick="showDeptModal('${d.id}')">Edit</button></td>
     </tr>`;
   };
-  const shortRow=d=>{
-    const cnt=_deptEmployeeCount(d.name);
-    const statusCls=d.status==='Active'?'b-g':'b-gray';
-    return `<tr>
-      <td class="mono" style="font-size:11px">${escapeHtml(d.code||'—')}</td>
-      <td style="font-weight:600">${escapeHtml(d.name)}</td>
-      <td>${escapeHtml(d.head||'—')}</td>
-      <td class="mono">${cnt}</td>
-      <td><span class="b ${statusCls}">${escapeHtml(d.status)}</span></td>
-      <td><button class="btn btn-g btn-sm" style="margin-right:4px" onclick="showDeptModal('${d.id}')">Edit</button><button class="btn btn-sm" style="background:var(--red-bg);color:var(--red);border-color:var(--red)" onclick="deleteDept('${d.id}')">Del</button></td>
-    </tr>`;
-  };
-  const empty7='<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">No departments yet. Click + Add Department.</td></tr>';
-  const empty6='<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">No departments configured.</td></tr>';
+  const empty='<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">No departments yet. Click + Add Department.</td></tr>';
+  const html=_deptList.length?_deptList.map(row).join(''):empty;
 
-  // Main Settings / HRMS policy table (7 cols including description)
-  const tbody=document.getElementById('dept-tbody');
-  if(tbody)tbody.innerHTML=_deptList.length?_deptList.map(fullRow).join(''):empty7;
-
-  // Staff page HR Policy secondary table (6 cols, no description)
-  const tbody2=document.getElementById('hr-policy-dept-tbody');
-  if(tbody2)tbody2.innerHTML=_deptList.length?_deptList.map(shortRow).join(''):empty6;
+  // Populate every dept table on the page
+  document.querySelectorAll('#dept-tbody,#hr-policy-dept-tbody').forEach(tb=>{tb.innerHTML=html;});
 }
 
 function showDeptModal(id){
@@ -15755,6 +15738,9 @@ function showDeptModal(id){
   document.getElementById('dept-head').value=d?.head||'';
   document.getElementById('dept-desc').value=d?.description||'';
   document.getElementById('dept-status').value=d?.status||'Active';
+  // Show Delete button only in edit mode
+  const delBtn=document.getElementById('dept-delete-btn');
+  if(delBtn)delBtn.style.display=id?'':'none';
   showM('m-dept');
   setTimeout(()=>document.getElementById('dept-name').focus(),120);
 }
@@ -15794,6 +15780,12 @@ function deleteDept(id){
   _syncDeptBranchSelectsFromList();
   _saveDeptsBranchesToDb();
   toast(`Department "${d.name}" removed`,'ok');
+}
+function deleteDeptFromModal(){
+  const id=document.getElementById('dept-edit-id')?.value;
+  if(!id)return;
+  hideM('m-dept');
+  deleteDept(id);
 }
 
 // Load/save departments from company record
