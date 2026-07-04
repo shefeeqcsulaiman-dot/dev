@@ -430,58 +430,87 @@
         <div id="dash-monthly-bars"></div><div id="dash-monthly-summary"></div>
       </div>
 
-      <!-- ROW 3: Last Transactions + Staff Today -->
+      <!-- ROW 3: Liquid Position + Staff Today -->
       <div class="mb3-bottom-row">
 
-        <!-- Last Activity card -->
+        <!-- Liquid Position card -->
         <div class="mb3-card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
           <!-- Illustrated banner -->
-          <div style="background:linear-gradient(135deg,#e0f2fe 0%,#bae6fd 55%,#a5f3fc 100%);padding:16px 18px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:100px;position:relative;overflow:hidden">
-            <div style="position:absolute;top:-15px;right:-15px;width:80px;height:80px;border-radius:50%;background:rgba(14,165,233,.18);filter:blur(20px)"></div>
+          <div style="background:linear-gradient(135deg,#ecfeff 0%,#cffafe 55%,#a5f3fc 100%);padding:16px 18px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:100px;position:relative;overflow:hidden">
+            <div style="position:absolute;top:-15px;right:-15px;width:80px;height:80px;border-radius:50%;background:rgba(8,145,178,.18);filter:blur(20px)"></div>
             <div style="z-index:1;padding-bottom:12px">
-              <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#0369a1;opacity:.75" data-i18n="dash_transactions">Transactions</div>
-              <div style="font-size:14px;font-weight:800;color:#0369a1" data-i18n="dash_last_activity">Last Activity</div>
+              <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#164e63;opacity:.75">Finance</div>
+              <div style="font-size:14px;font-weight:800;color:#164e63">Liquid Position</div>
             </div>
             <svg viewBox="0 0 110 90" width="110" height="90" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
-              <!-- shadow -->
-              <ellipse cx="55" cy="84" rx="32" ry="5" fill="#0284c7" opacity=".12"/>
-              <!-- back document -->
-              <rect x="30" y="14" width="52" height="64" rx="5" fill="#bfdbfe" opacity=".8"/>
-              <!-- main invoice -->
-              <rect x="22" y="8" width="52" height="66" rx="5" fill="#fff" opacity=".97"/>
-              <rect x="22" y="8" width="52" height="14" rx="5" fill="#0284c7" opacity=".9"/>
-              <rect x="22" y="16" width="52" height="6" rx="0" fill="#0284c7" opacity=".9"/>
-              <!-- header text lines -->
-              <rect x="28" y="11" width="20" height="3" rx="1.5" fill="#fff" opacity=".8"/>
-              <rect x="52" y="11" width="14" height="3" rx="1.5" fill="#bae6fd" opacity=".6"/>
-              <!-- body lines -->
-              <rect x="28" y="28" width="38" height="2.5" rx="1.2" fill="#e2e8f0"/>
-              <rect x="28" y="34" width="30" height="2.5" rx="1.2" fill="#e2e8f0"/>
-              <rect x="28" y="40" width="34" height="2.5" rx="1.2" fill="#e2e8f0"/>
-              <rect x="28" y="46" width="22" height="2.5" rx="1.2" fill="#e2e8f0"/>
-              <!-- divider -->
-              <line x1="28" y1="54" x2="66" y2="54" stroke="#e2e8f0" stroke-width="1"/>
-              <!-- total row -->
-              <rect x="28" y="58" width="14" height="3" rx="1.5" fill="#0284c7" opacity=".5"/>
-              <rect x="52" y="58" width="14" height="3" rx="1.5" fill="#0284c7" opacity=".8"/>
-              <!-- green check badge -->
-              <circle cx="72" cy="26" r="10" fill="#10b981"/>
-              <polyline points="67,26 71,30 77,22" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-              <!-- arrow up-right -->
-              <line x1="84" y1="60" x2="97" y2="42" stroke="#0284c7" stroke-width="2.2" stroke-linecap="round"/>
-              <polygon points="97,38 102,46 92,46" fill="#0284c7"/>
-              <!-- coin -->
-              <circle cx="94" cy="72" r="9" fill="#f59e0b"/>
-              <circle cx="94" cy="72" r="7" fill="none" stroke="#fbbf24" stroke-width="1"/>
-              <text x="94" y="76" text-anchor="middle" fill="#78350f" font-size="6.5" font-weight="800">د.إ</text>
+              <ellipse cx="55" cy="84" rx="32" ry="5" fill="#0891b2" opacity=".12"/>
+              <!-- safe/bank base -->
+              <rect x="18" y="28" width="60" height="50" rx="6" fill="#0891b2" opacity=".85"/>
+              <rect x="18" y="28" width="60" height="50" rx="6" fill="url(#liq-grad)"/>
+              <defs>
+                <linearGradient id="liq-grad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#22d3ee" stop-opacity=".3"/>
+                  <stop offset="100%" stop-color="#0891b2" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <!-- safe door circle -->
+              <circle cx="48" cy="53" r="16" fill="none" stroke="#cffafe" stroke-width="3" opacity=".6"/>
+              <circle cx="48" cy="53" r="9" fill="#cffafe" opacity=".35"/>
+              <circle cx="48" cy="53" r="4" fill="#fff" opacity=".7"/>
+              <!-- handle -->
+              <line x1="58" y1="53" x2="68" y2="53" stroke="#cffafe" stroke-width="2.5" stroke-linecap="round" opacity=".8"/>
+              <circle cx="68" cy="53" r="3" fill="#cffafe" opacity=".7"/>
+              <!-- lock bolts -->
+              <rect x="20" y="38" width="4" height="10" rx="2" fill="#cffafe" opacity=".4"/>
+              <rect x="20" y="52" width="4" height="10" rx="2" fill="#cffafe" opacity=".4"/>
+              <rect x="72" y="38" width="4" height="10" rx="2" fill="#cffafe" opacity=".4"/>
+              <rect x="72" y="52" width="4" height="10" rx="2" fill="#cffafe" opacity=".4"/>
+              <!-- water waves at top inside -->
+              <path d="M22,34 Q30,30 38,34 Q46,38 54,34 Q62,30 70,34 Q76,37 76,40 L22,40 Z" fill="#22d3ee" opacity=".35"/>
+              <!-- coin stack -->
+              <ellipse cx="90" cy="70" rx="10" ry="3.5" fill="#f59e0b" opacity=".9"/>
+              <rect x="80" y="55" width="20" height="15" rx="0" fill="#f59e0b" opacity=".85"/>
+              <ellipse cx="90" cy="55" rx="10" ry="3.5" fill="#fbbf24"/>
+              <ellipse cx="90" cy="50" rx="10" ry="3.5" fill="#fcd34d"/>
+              <text x="90" y="64" text-anchor="middle" fill="#78350f" font-size="6" font-weight="800">د.إ</text>
+              <!-- up arrow -->
+              <polyline points="96,30 103,18 110,24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <polygon points="103,14 108,22 98,22" fill="#10b981"/>
             </svg>
           </div>
           <div style="padding:12px 18px 14px;flex:1">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-              <span style="font-size:12px;font-weight:600;color:var(--text2)" data-i18n="dash_recent_transactions">Recent transactions</span>
-              <button class="btn btn-g btn-sm" onclick="go('sales')" data-i18n="dash_view_all">View All</button>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <span style="font-size:11.5px;color:var(--text3)">Net Liquid Position</span>
+              <span id="dash-liquid-badge" class="dv2-kpi-badge up" style="font-size:10.5px">—</span>
             </div>
-            <div id="dash-recent-activity"><div class="dv2-loading">Reading database…</div></div>
+            <div class="mono" style="font-size:22px;font-weight:700;color:#0891b2;letter-spacing:-0.5px;margin-bottom:12px" id="dash-liquid-net">AED 0.00</div>
+            <div style="border-top:1px solid var(--border);margin-bottom:10px"></div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <div style="width:8px;height:8px;border-radius:50%;background:#10b981;flex-shrink:0"></div>
+                  <span style="font-size:11px;color:var(--text3)">Cash & Bank</span>
+                </div>
+                <span class="mono" style="font-size:12px;font-weight:700;color:#10b981" id="dash-liquid-cash">AED 0.00</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <div style="width:8px;height:8px;border-radius:50%;background:#6366f1;flex-shrink:0"></div>
+                  <span style="font-size:11px;color:var(--text3)">Trade Receivables</span>
+                </div>
+                <span class="mono" style="font-size:12px;font-weight:700;color:#6366f1" id="dash-liquid-ar">AED 0.00</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <div style="width:8px;height:8px;border-radius:50%;background:#ef4444;flex-shrink:0"></div>
+                  <span style="font-size:11px;color:var(--text3)">Trade Payables</span>
+                </div>
+                <span class="mono" style="font-size:12px;font-weight:700;color:#ef4444" id="dash-liquid-ap">AED 0.00</span>
+              </div>
+            </div>
+            <div style="background:var(--surface2);border-radius:99px;height:5px;margin-top:12px;overflow:hidden">
+              <div id="dash-liquid-bar" style="height:100%;width:50%;background:linear-gradient(90deg,#0891b2,#22d3ee);border-radius:99px;transition:width .5s ease"></div>
+            </div>
           </div>
         </div>
 
@@ -633,6 +662,15 @@
           <button class="btn btn-g btn-sm" onclick="go('sales')" data-i18n="dash_view_all">View All</button>
         </div>
         <div id="dash-top-customers-v2"></div>
+      </div>
+
+      <!-- Last Activity (Transactions) -->
+      <div class="mb3-side-card">
+        <div class="mb3-card-hd mb12">
+          <div class="mb3-card-title" data-i18n="dash_recent_transactions">Recent Transactions</div>
+          <button class="btn btn-g btn-sm" onclick="go('sales')" data-i18n="dash_view_all">View All</button>
+        </div>
+        <div id="dash-recent-activity"><div class="dv2-loading">Reading database…</div></div>
       </div>
 
     </div><!-- end .mb3-sidebar -->
@@ -6635,6 +6673,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260703f" defer></script>
+<script src="src/app.js?v=20260704a" defer></script>
 </body>
 </html>

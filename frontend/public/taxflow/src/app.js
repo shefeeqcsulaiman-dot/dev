@@ -2495,9 +2495,24 @@ function renderDashboardHero(data,kpis={},counts={}){
   const revOnly=document.getElementById('dash-rev-only');
   if(revOnly)revOnly.textContent=formatAed(revenueNet||0);
 
+  // Liquid Position card
+  const purPaidAmt=parseAmount(purSum.paid||0);
+  const liqCash=Math.max(0,paidAmt-purPaidAmt);
+  const liqAR=Math.max(0,revenueNet-paidAmt);
+  const liqAP=Math.max(0,purchasesNet-purPaidAmt);
+  const liqNet=liqCash+liqAR-liqAP;
+  set('dash-liquid-net',formatAed(liqNet));
+  set('dash-liquid-cash',formatAed(liqCash));
+  set('dash-liquid-ar',formatAed(liqAR));
+  set('dash-liquid-ap',formatAed(liqAP));
+  const liqBadge=document.getElementById('dash-liquid-badge');
+  if(liqBadge){liqBadge.textContent=liqNet>=0?'Positive':'Negative';liqBadge.className='dv2-kpi-badge '+(liqNet>=0?'up':'down');}
+  const liqBar=document.getElementById('dash-liquid-bar');
+  if(liqBar){const liqTotal=Math.max(1,liqCash+liqAR+liqAP);liqBar.style.width=Math.min(100,Math.max(4,Math.round((liqCash+liqAR)/liqTotal*100)))+'%';}
+
   // Purchase card detail rows
-  const purRate=purchasesNet>0?Math.round(parseAmount(purSum.paid||0)/purchasesNet*100):0;
-  set('dash-pur-paid-amount',formatAed(parseAmount(purSum.paid||0)));
+  const purRate=purchasesNet>0?Math.round(purPaidAmt/purchasesNet*100):0;
+  set('dash-pur-paid-amount',formatAed(purPaidAmt));
   set('dash-pur-paid-count',Number(purSum.paid_count||0));
   set('dash-pur-rate',purRate+'%');
   set('dash-pur-pending',Number(purSum.pending_count||0)+' Bills');
