@@ -2465,6 +2465,8 @@ function renderDashboardHero(data,kpis={},counts={}){
   // Profit card: margin bar
   const marginPct=revenueNet>0?Math.max(0,Math.round(grossProfit/revenueNet*100)):0;
   set('dash-margin-pct',`${marginPct}%`);
+  set('dash-margin-pct-big',`${marginPct}%`);
+  set('dash-gross-profit-sub',formatAed(grossProfit));
   const marginBar=document.getElementById('dash-profit-margin-bar');
   if(marginBar)marginBar.style.width=Math.min(Math.max(marginPct,0),100)+'%';
 
@@ -17147,6 +17149,7 @@ function addPayrollAdjustment(){
 // ── Revenue Card Slider ───────────────────────────────────────────────────────
 let _revSwipeX=0,_revSlideIdx=0,_revWithVat='AED 0.00',_revNet='AED 0.00';
 let _purSlideIdx=0,_purWithVat='AED 0.00',_purNet='AED 0.00';
+let _profSlideIdx=0;
 
 function revSlide(idx){
   _revSlideIdx=idx;
@@ -17171,6 +17174,23 @@ function revTouchStart(e){_revSwipeX=e.touches[0].clientX;}
 function revTouchEnd(e){
   const dx=e.changedTouches[0].clientX-_revSwipeX;
   if(Math.abs(dx)>40)revSlide(_revSlideIdx===0?1:0);
+}
+
+function profSlide(idx){
+  _profSlideIdx=idx;
+  const s0=document.getElementById('prof-slide-0');
+  const s1=document.getElementById('prof-slide-1');
+  if(s0)s0.style.display=idx===0?'':'none';
+  if(s1)s1.style.display=idx===1?'flex':'none';
+  const bannerLabel=document.getElementById('prof-banner-label');
+  if(bannerLabel)bannerLabel.textContent=idx===1?'Gross Profit':'Margin';
+  [0,1].forEach(i=>{
+    const dot=document.getElementById('prof-dot-'+i);
+    if(!dot)return;
+    dot.style.width=i===idx?'20px':'7px';
+    dot.style.background=i===idx?'#8b5cf6':'var(--border)';
+    dot.style.borderRadius=i===idx?'99px':'50%';
+  });
 }
 
 function purSlide(idx){
