@@ -4372,41 +4372,17 @@
     <div class="stat"><div class="stat-lbl">Medium</div><div class="stat-val" id="exc-medium" style="color:var(--purple)">0</div><div class="stat-delta">needs review</div></div>
     <div class="stat"><div class="stat-lbl">Low</div><div class="stat-val" id="exc-low" style="color:var(--green)">0</div><div class="stat-delta">monitor</div></div>
   </div>
-  <div class="g2 mb16">
-    <div class="card">
-      <div class="card-hd">
-        <div><div class="card-title">System Problems</div><div class="card-sub">Failed postings, duplicates, stock gaps, VAT/OCR/payroll issues</div></div>
-        <button class="btn btn-g btn-sm" onclick="loadExceptionCenter()">Refresh</button>
-      </div>
-      <table class="tbl">
-        <thead><tr><th>Module</th><th>Issue</th><th>Source</th><th>Severity</th><th>Status</th><th>Action</th></tr></thead>
-        <tbody id="exception-tbody">
-          <tr><td colspan="6" style="color:var(--text3);text-align:center">Reading exception center...</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="card">
-      <div class="card-hd"><div><div class="card-title">Production Readiness</div><div class="card-sub">Architecture items now tracked in the live app</div></div><span class="b b-b">MVP</span></div>
-      <table class="tbl">
-        <tbody>
-          <tr><td>Module APIs</td><td><span class="b b-g">Added</span></td><td class="mono">/purchases /items /units /settings</td></tr>
-          <tr><td>Exception Center</td><td><span class="b b-g">Added</span></td><td>DB-backed problem queue</td></tr>
-          <tr><td>Stock Tables</td><td><span class="b b-g">Added</span></td><td>Units, valuation layers, approvals</td></tr>
-          <tr><td>Event System</td><td><span class="b b-g">Added</span></td><td>Domain events + outbox</td></tr>
-          <tr><td>Audit Detail</td><td><span class="b b-g">Added</span></td><td>Old/new/reason/IP/device/correlation</td></tr>
-          <tr><td>Report Snapshots</td><td><span class="b b-g">Added</span></td><td>GL, inventory, aging, VAT snapshots</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
   <div class="card">
-    <div class="card-hd"><div><div class="card-title">Exception Types</div><div class="card-sub">One place for admins to fix operational blockers</div></div></div>
-    <div class="g4">
-      <div class="stat"><div class="stat-lbl">Accounting</div><div class="stat-val" style="font-size:18px;color:var(--accent)">Postings</div><div class="stat-delta">failed or blocked jobs</div></div>
-      <div class="stat"><div class="stat-lbl">Invoices</div><div class="stat-val" style="font-size:18px;color:var(--amber)">Duplicates</div><div class="stat-delta">sales and purchase refs</div></div>
-      <div class="stat"><div class="stat-lbl">Inventory</div><div class="stat-val" style="font-size:18px;color:var(--purple)">Mappings</div><div class="stat-delta">unmapped stock items</div></div>
-      <div class="stat"><div class="stat-lbl">Compliance</div><div class="stat-val" style="font-size:18px;color:var(--green)">VAT/OCR</div><div class="stat-delta">validation failures</div></div>
+    <div class="card-hd">
+      <div><div class="card-title">System Problems</div><div class="card-sub">Failed postings, duplicates, stock gaps, VAT/OCR/payroll issues</div></div>
+      <button class="btn btn-g btn-sm" onclick="loadExceptionCenter()">Refresh</button>
     </div>
+    <table class="tbl">
+      <thead><tr><th>Module</th><th>Issue</th><th>Source</th><th>Severity</th><th>Status</th><th>Action</th></tr></thead>
+      <tbody id="exception-tbody">
+        <tr><td colspan="6" style="color:var(--text3);text-align:center">Reading exception center...</td></tr>
+      </tbody>
+    </table>
   </div>
 </div>
 
@@ -6799,6 +6775,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260704e" defer></script>
+<script src="src/app.js?v=20260704f" defer></script>
 </body>
 </html>
