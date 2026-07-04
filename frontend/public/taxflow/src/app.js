@@ -2454,7 +2454,10 @@ function renderDashboardHero(data,kpis={},counts={}){
   _revNet=formatAed(revenueNet);
   set('dash-revenue',_revSlideIdx===1?_revNet:_revWithVat);
   set('dash-revenue-sub',`${invCount} invoice${invCount===1?'':'s'}`);
-  set('dash-total-purchases',formatAed(purchases));
+  _purWithVat=formatAed(purchases);
+  _purNet=formatAed(purchasesNet);
+  set('dash-total-purchases',_purSlideIdx===1?_purNet:_purWithVat);
+  set('dash-pur-only',_purNet);
   set('dash-purchases-sub',`${purCount} bill${purCount===1?'':'s'}`);
   set('dash-vat',formatAed(vatPayable));
   set('dash-vat-sub',vatPayable>0?'Payable to FTA':'Credit position');
@@ -17235,6 +17238,7 @@ function addPayrollAdjustment(){
 
 // ── Revenue Card Slider ───────────────────────────────────────────────────────
 let _revSwipeX=0,_revSlideIdx=0,_revWithVat='AED 0.00',_revNet='AED 0.00';
+let _purSlideIdx=0,_purWithVat='AED 0.00',_purNet='AED 0.00';
 
 function revSlide(idx){
   _revSlideIdx=idx;
@@ -17259,6 +17263,25 @@ function revTouchStart(e){_revSwipeX=e.touches[0].clientX;}
 function revTouchEnd(e){
   const dx=e.changedTouches[0].clientX-_revSwipeX;
   if(Math.abs(dx)>40)revSlide(_revSlideIdx===0?1:0);
+}
+
+function purSlide(idx){
+  _purSlideIdx=idx;
+  const s0=document.getElementById('pur-slide-0');
+  const s1=document.getElementById('pur-slide-1');
+  if(s0)s0.style.display=idx===0?'':'none';
+  if(s1)s1.style.display=idx===1?'flex':'none';
+  const purEl=document.getElementById('dash-total-purchases');
+  if(purEl)purEl.textContent=idx===1?_purNet:_purWithVat;
+  const vatLabel=document.getElementById('pur-banner-vat');
+  if(vatLabel)vatLabel.style.opacity=idx===1?'0':'1';
+  [0,1].forEach(i=>{
+    const dot=document.getElementById('pur-dot-'+i);
+    if(!dot)return;
+    dot.style.width=i===idx?'20px':'7px';
+    dot.style.background=i===idx?'#4f8ef0':'var(--border)';
+    dot.style.borderRadius=i===idx?'99px':'50%';
+  });
 }
 
 // ── Biometric Device Management ───────────────────────────────────────────────
