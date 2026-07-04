@@ -1047,6 +1047,20 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       </table>
     </div>
 
+    <!-- Roles & Permissions -->
+    <div class="card mb16">
+      <div class="card-hd">
+        <div><div class="card-title">Roles &amp; Permissions</div><div class="card-sub">Define roles per branch and department — employees are assigned roles during creation</div></div>
+        <button class="btn btn-p btn-sm" onclick="showRoleModal()">+ Add Role</button>
+      </div>
+      <table class="tbl">
+        <thead><tr><th>Branch</th><th>Department</th><th>Role Name</th><th>Permissions</th><th>Status</th><th></th></tr></thead>
+        <tbody id="role-tbody">
+          <tr><td colspan="6" style="color:var(--text3);text-align:center;padding:24px">Loading roles…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
     <!-- OT Rules -->
     <div class="card mb16">
       <div class="card-hd"><div><div class="card-title">OT Rules &amp; Configuration</div><div class="card-sub">Define how overtime is calculated for all employees</div></div><button class="btn btn-p btn-sm" onclick="saveOtRules()">Save OT Rules</button></div>
@@ -2215,7 +2229,8 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     </div>
     <div class="section-hd">Employment Details</div>
     <div class="fr3"><div class="fg"><label class="fl">Employee ID</label><input class="fi mono" id="emp-id" placeholder="EMP-005"></div><div class="fg"><label class="fl">Employment Type</label><select class="fi" id="emp-contract"><option>Full-Time</option><option>Part-Time</option><option>Contract</option><option>Probation</option><option>Intern / Trainee</option><option>Daily Wage</option><option>Hourly</option><option>Weekly</option><option>Short-Term</option><option>Freelance / Consultant</option><option>Seasonal</option><option>Project-Based</option></select></div><div class="fg"><label class="fl">Join Date</label><input class="fi" id="emp-join-date" type="date"></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Department <span style="color:var(--red)">*</span></label><select class="fi" id="emp-department" required><option value="">— Select Department —</option><option>Management</option><option>Finance</option><option>Operations</option><option>Sales</option><option>HR</option><option>IT</option><option>Marketing</option><option>Procurement</option><option>Logistics</option></select></div><div class="fg"><label class="fl">Designation</label><input class="fi" id="emp-designation" placeholder="e.g. Sales Executive"></div><div class="fg"><label class="fl">Branch <span style="color:var(--red)">*</span></label><select class="fi" id="emp-branch" required><option value="">— Select Branch —</option><option>Dubai HQ</option><option>Abu Dhabi</option><option>Sharjah</option><option>Ajman</option><option>Ras Al Khaimah</option><option>Fujairah</option></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Department <span style="color:var(--red)">*</span></label><select class="fi" id="emp-department" required onchange="filterEmpRoles()"><option value="">— Select Department —</option><option>Management</option><option>Finance</option><option>Operations</option><option>Sales</option><option>HR</option><option>IT</option><option>Marketing</option><option>Procurement</option><option>Logistics</option></select></div><div class="fg"><label class="fl">Designation</label><input class="fi" id="emp-designation" placeholder="e.g. Sales Executive"></div><div class="fg"><label class="fl">Branch <span style="color:var(--red)">*</span></label><select class="fi" id="emp-branch" required onchange="filterEmpRoles()"><option value="">— Select Branch —</option><option>Dubai HQ</option><option>Abu Dhabi</option><option>Sharjah</option><option>Ajman</option><option>Ras Al Khaimah</option><option>Fujairah</option></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Role <span style="color:var(--red)">*</span></label><select class="fi" id="emp-role"><option value="">— Select Branch &amp; Department first —</option></select></div><div class="fg" style="align-self:flex-end"><div style="font-size:11px;color:var(--text3);padding-bottom:6px">Role options update automatically when Branch and Department are selected.</div></div><div class="fg"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Total Salary (AED)</label><input class="fi mono" id="emp-salary"></div><div class="fg"><label class="fl">OT Policy</label><select class="fi" id="emp-ot-rate"><option value="system-default">— System Default (from HR Settings) —</option><option value="fixed">Fixed Rate</option><option value="monthly">Monthly-Based Rate</option><option value="other">Other / Custom</option></select></div><div class="fg"><label class="fl">Leave Policy</label><select class="fi" id="emp-leave-policy"><optgroup label="UAE Policy (Calendar Days)"><option value="UAE 30 Calendar">UAE Policy — 30 Calendar Days</option><option value="UAE Standard">UAE Standard — 21 Calendar Days</option></optgroup><optgroup label="Internal Policy (Working Days)"><option value="Internal 22 Working">Internal — 22 Working Days</option><option value="Internal 29 Working">Internal — 29 Working Days</option><option value="Executive 30 Working">Executive — 30 Working Days</option></optgroup><optgroup label="Other"><option value="Contractor">Contractor — 14 Calendar Days</option><option value="Part-Time">Part-Time Pro-Rata</option><option value="Custom">Custom (per contract)</option></optgroup></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Shift Hours</label><select class="fi" id="emp-shift-hours-type"><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div><div class="fg"><label class="fl">Hours</label><input class="fi mono" id="emp-shift-hours" type="number" min="0" placeholder="e.g. 40"></div><div class="fg"><label class="fl">Work Location</label><select class="fi" id="emp-location"><option>Dubai HQ</option><option>Abu Dhabi Warehouse</option><option>Sharjah Sales Office</option><option>Remote</option><option>Field / Site</option></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Work Permit No.</label><input class="fi mono" id="emp-work-permit"></div><div class="fg"><label class="fl">Visa Expiry</label><input class="fi" id="emp-visa-expiry" type="date"></div><div class="fg"><label class="fl">Cost Center</label><input class="fi" id="emp-cost-center" placeholder="e.g. CC-01-OPS"></div></div>
@@ -2473,7 +2488,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260703a" defer></script>
+<script src="src/app.js?v=20260704g" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded',function(){
   setTimeout(function(){
@@ -2491,7 +2506,7 @@ document.addEventListener('DOMContentLoaded',function(){
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260703a" defer></script>
+<script src="src/app.js?v=20260704g" defer></script>
 <!-- HRMS AI ASSISTANT PAGE -->
 <div class="page" id="page-hrms-ai">
   <div style="max-width:1100px;margin:0 auto;padding:0 4px">
@@ -2809,5 +2824,59 @@ document.addEventListener('DOMContentLoaded',function(){
   },2500);
 });
 </script>
+
+<!-- m-role: Add / Edit Role modal -->
+<div class="modal-overlay" id="m-role" style="display:none" onclick="if(event.target===this)hideM('m-role')">
+  <div class="modal" style="max-width:560px;width:95%">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="role-modal-title">Add Role</div>
+        <div class="modal-sub" style="font-size:12px;color:var(--text3);margin-top:2px">Define permissions for a new role</div>
+      </div>
+      <button class="modal-close" onclick="hideM('m-role')">&#10005;</button>
+    </div>
+    <div class="modal-body" style="padding:20px 24px;display:flex;flex-direction:column;gap:14px">
+      <div class="fr3">
+        <div class="fg">
+          <label class="fl">Branch</label>
+          <select class="fi" id="role-branch"><option value="">All Branches</option></select>
+        </div>
+        <div class="fg">
+          <label class="fl">Department <span style="color:var(--red)">*</span></label>
+          <select class="fi" id="role-department"><option value="">— Select Department —</option><option>Management</option><option>Finance</option><option>Operations</option><option>Sales</option><option>HR</option><option>IT</option><option>Marketing</option><option>Procurement</option><option>Logistics</option></select>
+        </div>
+        <div class="fg">
+          <label class="fl">Status</label>
+          <select class="fi" id="role-status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select>
+        </div>
+      </div>
+      <div class="fg">
+        <label class="fl">Role Name <span style="color:var(--red)">*</span></label>
+        <input class="fi" id="role-name" placeholder="e.g. Finance Manager" style="width:100%">
+      </div>
+      <div>
+        <label class="fl" style="margin-bottom:8px">Permissions</label>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="View"> View</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Create"> Create</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Edit"> Edit</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Delete"> Delete</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Approve"> Approve</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Export"> Export</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Import"> Import</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Manage"> Manage</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Full Access"> Full Access</label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center">
+      <button class="btn btn-danger" id="role-delete-btn" style="display:none" onclick="deleteRoleFromModal()">Delete Role</button>
+      <div style="display:flex;gap:10px;margin-left:auto">
+        <button class="btn btn-ghost" onclick="hideM('m-role')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveRoleModal()">Save Role</button>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
