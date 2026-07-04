@@ -679,12 +679,50 @@
       </div>
 
       <!-- Last Activity (Transactions) -->
-      <div class="mb3-side-card">
-        <div class="mb3-card-hd mb12">
-          <div class="mb3-card-title" data-i18n="dash_recent_transactions">Recent Transactions</div>
-          <button class="btn btn-g btn-sm" onclick="go('sales')" data-i18n="dash_view_all">View All</button>
+      <div class="mb3-side-card" style="padding:0;overflow:hidden">
+        <!-- Illustrated mini banner -->
+        <div style="background:linear-gradient(135deg,#e0f2fe 0%,#bae6fd 55%,#a5f3fc 100%);padding:14px 16px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:80px;position:relative;overflow:hidden">
+          <div style="position:absolute;top:-10px;right:-10px;width:60px;height:60px;border-radius:50%;background:rgba(14,165,233,.18);filter:blur(16px)"></div>
+          <div style="z-index:1;padding-bottom:10px">
+            <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#0369a1;opacity:.75" data-i18n="dash_transactions">Transactions</div>
+            <div style="font-size:13px;font-weight:800;color:#0369a1" data-i18n="dash_last_activity">Last Activity</div>
+          </div>
+          <svg viewBox="0 0 80 70" width="80" height="70" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="40" cy="64" rx="24" ry="4" fill="#0284c7" opacity=".10"/>
+            <!-- back doc -->
+            <rect x="22" y="10" width="38" height="48" rx="4" fill="#bfdbfe" opacity=".75"/>
+            <!-- main invoice -->
+            <rect x="16" y="6" width="38" height="50" rx="4" fill="#fff" opacity=".96"/>
+            <rect x="16" y="6" width="38" height="10" rx="4" fill="#0284c7" opacity=".85"/>
+            <rect x="16" y="12" width="38" height="4" rx="0" fill="#0284c7" opacity=".85"/>
+            <rect x="21" y="8" width="14" height="2" rx="1" fill="#fff" opacity=".8"/>
+            <rect x="39" y="8" width="10" height="2" rx="1" fill="#bae6fd" opacity=".6"/>
+            <rect x="21" y="20" width="27" height="2" rx="1" fill="#e2e8f0"/>
+            <rect x="21" y="25" width="22" height="2" rx="1" fill="#e2e8f0"/>
+            <rect x="21" y="30" width="24" height="2" rx="1" fill="#e2e8f0"/>
+            <rect x="21" y="35" width="16" height="2" rx="1" fill="#e2e8f0"/>
+            <line x1="21" y1="41" x2="47" y2="41" stroke="#e2e8f0" stroke-width="1"/>
+            <rect x="21" y="44" width="10" height="2" rx="1" fill="#0284c7" opacity=".5"/>
+            <rect x="37" y="44" width="10" height="2" rx="1" fill="#0284c7" opacity=".8"/>
+            <!-- check badge -->
+            <circle cx="53" cy="20" r="8" fill="#10b981"/>
+            <polyline points="49,20 52,23 57,17" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- arrow -->
+            <line x1="60" y1="44" x2="70" y2="32" stroke="#0284c7" stroke-width="1.8" stroke-linecap="round"/>
+            <polygon points="70,29 73,35 67,35" fill="#0284c7"/>
+            <!-- coin -->
+            <circle cx="68" cy="56" r="7" fill="#f59e0b"/>
+            <circle cx="68" cy="56" r="5.2" fill="none" stroke="#fbbf24" stroke-width="1"/>
+            <text x="68" y="59.5" text-anchor="middle" fill="#78350f" font-size="5.5" font-weight="800">د.إ</text>
+          </svg>
         </div>
-        <div id="dash-recent-activity"><div class="dv2-loading">Reading database…</div></div>
+        <div style="padding:12px 16px 14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <span style="font-size:11.5px;font-weight:600;color:var(--text2)" data-i18n="dash_recent_transactions">Recent transactions</span>
+            <button class="btn btn-g btn-sm" onclick="go('sales')" data-i18n="dash_view_all">View All</button>
+          </div>
+          <div id="dash-recent-activity"><div class="dv2-loading">Reading database…</div></div>
+        </div>
       </div>
 
     </div><!-- end .mb3-sidebar -->
@@ -6687,6 +6725,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260704c" defer></script>
+<script src="src/app.js?v=20260704d" defer></script>
 </body>
 </html>
