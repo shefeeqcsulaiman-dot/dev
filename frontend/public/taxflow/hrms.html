@@ -2548,7 +2548,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260704j" defer></script>
+<script src="src/app.js?v=20260704k" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
@@ -2574,7 +2574,7 @@ document.addEventListener('DOMContentLoaded',function(){
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260704j" defer></script>
+<script src="src/app.js?v=20260704k" defer></script>
 <!-- HRMS AI ASSISTANT PAGE -->
 <div class="page" id="page-hrms-ai">
   <div style="max-width:1100px;margin:0 auto;padding:0 4px">
@@ -2896,53 +2896,45 @@ document.addEventListener('DOMContentLoaded',function(){
 <!-- m-role: Add / Edit Role modal -->
 <div class="overlay" id="m-role" onclick="closeOvBg(event,'m-role')">
   <div class="modal" style="max-width:560px;width:95%">
-    <div class="modal-header">
-      <div>
-        <div class="modal-title" id="role-modal-title">Add Role</div>
-        <div class="modal-sub" style="font-size:12px;color:var(--text3);margin-top:2px">Define permissions for a new role</div>
-      </div>
-      <button class="modal-close" onclick="hideM('m-role')">&#10005;</button>
-    </div>
-    <div class="modal-body" style="padding:20px 24px;display:flex;flex-direction:column;gap:14px">
-      <div class="fr3">
-        <div class="fg">
-          <label class="fl">Branch</label>
-          <select class="fi" id="role-branch"><option value="">All Branches</option></select>
-        </div>
-        <div class="fg">
-          <label class="fl">Department <span style="color:var(--red)">*</span></label>
-          <select class="fi" id="role-department"><option value="">— Select Department —</option><option>Management</option><option>Finance</option><option>Operations</option><option>Sales</option><option>HR</option><option>IT</option><option>Marketing</option><option>Procurement</option><option>Logistics</option></select>
-        </div>
-        <div class="fg">
-          <label class="fl">Status</label>
-          <select class="fi" id="role-status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select>
-        </div>
+    <button class="modal-x" onclick="closeM('m-role')">×</button>
+    <div class="modal-title" id="role-modal-title">Add Role</div>
+    <div class="modal-sub" id="role-modal-sub">Define permissions for a new role</div>
+    <div class="fr3">
+      <div class="fg">
+        <label class="fl">Branch</label>
+        <select class="fi" id="role-branch"><option value="">All Branches</option></select>
       </div>
       <div class="fg">
-        <label class="fl">Role Name <span style="color:var(--red)">*</span></label>
-        <input class="fi" id="role-name" placeholder="e.g. Finance Manager" style="width:100%">
+        <label class="fl">Department <span style="color:var(--red)">*</span></label>
+        <select class="fi" id="role-department"><option value="">— Select Department —</option><option>Management</option><option>Finance</option><option>Operations</option><option>Sales</option><option>HR</option><option>IT</option><option>Marketing</option><option>Procurement</option><option>Logistics</option></select>
       </div>
-      <div>
-        <label class="fl" style="margin-bottom:8px">Permissions</label>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="View"> View</label>
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Create"> Create</label>
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Edit"> Edit</label>
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Delete"> Delete</label>
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Approve"> Approve</label>
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Export"> Export</label>
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Import"> Import</label>
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Manage"> Manage</label>
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Full Access"> Full Access</label>
-        </div>
+      <div class="fg">
+        <label class="fl">Status</label>
+        <select class="fi" id="role-status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select>
       </div>
     </div>
-    <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center">
-      <button class="btn btn-danger" id="role-delete-btn" style="display:none" onclick="deleteRoleFromModal()">Delete Role</button>
-      <div style="display:flex;gap:10px;margin-left:auto">
-        <button class="btn btn-ghost" onclick="hideM('m-role')">Cancel</button>
-        <button class="btn btn-primary" onclick="saveRoleModal()">Save Role</button>
+    <div class="fg" style="margin-top:10px">
+      <label class="fl">Role Name <span style="color:var(--red)">*</span></label>
+      <input class="fi" id="role-name" placeholder="e.g. Finance Manager" style="width:100%">
+    </div>
+    <div style="margin-top:14px">
+      <label class="fl" style="margin-bottom:10px">Permissions</label>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:6px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="View"> View</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Create"> Create</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Edit"> Edit</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Delete"> Delete</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Approve"> Approve</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Export"> Export</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Import"> Import</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Manage"> Manage</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Full Access"> Full Access</label>
       </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-r" id="role-delete-btn" style="display:none;margin-right:auto" onclick="deleteRoleFromModal()">Delete Role</button>
+      <button class="btn btn-g" onclick="closeM('m-role')">Cancel</button>
+      <button class="btn btn-p" onclick="saveRoleModal()">Save Role</button>
     </div>
   </div>
 </div>

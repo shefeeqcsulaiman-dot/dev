@@ -15875,7 +15875,7 @@ function showRoleModal(id){
   modal.dataset.editId=id||'';
   const titleEl=modal.querySelector('.modal-title');
   if(titleEl)titleEl.textContent=isEdit?'Edit Role':'Add Role';
-  const subEl=modal.querySelector('.modal-sub');
+  const subEl=document.getElementById('role-modal-sub')||modal.querySelector('.modal-sub');
   if(subEl)subEl.textContent=isEdit?`Editing role: ${role?.roleName||''}`:'Define permissions for a new role';
   // Branch select
   const branchSel=document.getElementById('role-branch');
