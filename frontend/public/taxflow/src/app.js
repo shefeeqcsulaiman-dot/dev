@@ -2390,6 +2390,7 @@ function renderFullDashboardFromDatabase(data){
   renderTopCustomers(data.top_customers||[]);
   renderInvoiceStatus(data.invoice_status||{});
   renderStaffToday(data.staff_today||{present:kpis.staff_present||0,total:kpis.staff_total||0,leave:0,absent:0,source:'Employees database'});
+  renderDashBankRecon();
 }
 
 function _refreshPurchaseDashboardCard(){
@@ -5324,10 +5325,35 @@ function updateFinanceFromDatabaseRecords(){
   if(stats[2])stats[2].textContent=formatAed(outflow);
   renderBankTransactions(payments,openingBalance);
   updateBankReconciliation(openingBalance,bookBalance,payments.length);
+  renderDashBankRecon();
 }
 
 function updateBankAccountSummary(){
   updateFinanceFromDatabaseRecords();
+}
+
+function renderDashBankRecon(){
+  const payments=currentFinancePayments();
+  const bankAccounts=currentFinanceBankAccounts();
+  const openingBalance=bankAccounts.reduce((s,a)=>s+Number(a.balance??a.opening_balance??0),0);
+  const inflow=payments.filter(p=>String(p.type||'Customer Receipt').toLowerCase()!=='supplier payment').reduce((s,p)=>s+Number(p.amount||0),0);
+  const outflow=payments.filter(p=>String(p.type||'').toLowerCase()==='supplier payment').reduce((s,p)=>s+Number(p.amount||0),0);
+  const bookBalance=openingBalance+inflow-outflow;
+  const net=inflow-outflow;
+  const balanced=bankAccounts.length===0||Math.abs(openingBalance-bookBalance)<=0.01;
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  set('dash-bank-book',formatAed(bookBalance));
+  set('dash-bank-inflow',formatAed(inflow));
+  set('dash-bank-outflow',formatAed(outflow));
+  set('dash-bank-net',formatAed(net));
+  const badge=document.getElementById('dash-bank-recon-status');
+  if(badge){
+    if(!payments.length&&!bankAccounts.length){badge.textContent='No data';badge.className='b b-b';}
+    else if(balanced){badge.textContent='Balanced';badge.className='b b-g';}
+    else{badge.textContent='Unmatched';badge.className='b b-r';}
+  }
+  const bar=document.getElementById('dash-bank-bar');
+  if(bar){const total=Math.max(1,inflow+outflow);bar.style.width=Math.min(100,Math.round(inflow/total*100))+'%';}
 }
 
 function renderBankTransactions(payments=currentFinancePayments(),openingBalance=0){
