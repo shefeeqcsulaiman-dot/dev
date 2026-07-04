@@ -230,9 +230,9 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2c1.5 0 3 1 3.5 2.5S11 8 8 9c-3 1-3.5 2-3.5 3.5"/><circle cx="8" cy="13.5" r=".8" fill="currentColor" stroke="none"/></svg>
       AI Insights
     </div>
-    <div class="nav" onclick="goHrmsTab(8,'hr-policy')">
+    <div class="nav" id="nav-hr-settings" onclick="go('hr-settings')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.5 1.5M11.3 11.3l1.5 1.5M3.2 12.8l1.5-1.5M11.3 4.7l1.5-1.5"/></svg>
-      Settings
+      HR Settings
     </div>
   </div>
 
@@ -745,7 +745,6 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="tab" onclick="stab(this,'hr-corrections')">Corrections</div>
     <div class="tab" onclick="stab(this,'hr-loans')">Loans &amp; Advances</div>
     <div class="tab" onclick="stab(this,'hr-expiry');scheduleIdleTask(refreshExpiryAlerts,100)">Expiry Alerts</div>
-    <div class="tab" onclick="stab(this,'hr-policy')">HR Settings</div>
     <div class="tab" onclick="stab(this,'hr-bio');loadBiometricDevices();loadBioSyncLog()">Biometric Integration</div>
   </div>
 
@@ -2549,7 +2548,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260704i" defer></script>
+<script src="src/app.js?v=20260704j" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
@@ -2575,7 +2574,7 @@ document.addEventListener('DOMContentLoaded',function(){
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260704i" defer></script>
+<script src="src/app.js?v=20260704j" defer></script>
 <!-- HRMS AI ASSISTANT PAGE -->
 <div class="page" id="page-hrms-ai">
   <div style="max-width:1100px;margin:0 auto;padding:0 4px">

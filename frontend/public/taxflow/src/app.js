@@ -135,6 +135,23 @@ function go(page){
     toast('System Design is hidden','info');
     return;
   }
+  if(page==='hr-settings'){
+    const fromState=getCurrentNavState();
+    if(!restoringNavigation&&fromState.page!=='hr-settings')rememberNavState(fromState);
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+    document.querySelectorAll('.nav').forEach(n=>n.classList.remove('on'));
+    const staffPage=document.getElementById('page-staff');
+    if(staffPage){
+      staffPage.classList.add('on');
+      staffPage.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+      staffPage.querySelectorAll('.tab-body').forEach(b=>b.classList.remove('on'));
+      document.getElementById('hr-policy')?.classList.add('on');
+    }
+    document.getElementById('ptitle').textContent='HR Settings';
+    document.getElementById('psub').textContent='Configure departments, roles, OT rules, leave policy, and user access';
+    document.getElementById('nav-hr-settings')?.classList.add('on');
+    return;
+  }
   const target=document.getElementById('page-'+page);
   if(!target)return;
   const fromState=getCurrentNavState();
@@ -576,6 +593,9 @@ function openEmpEdit(emp){
   setV('emp-salary',emp.salary);
   setSel('emp-contract',emp.contract);
   setSel('emp-branch',emp.branch||emp.location);
+  // pre-filter roles then set saved role
+  filterEmpRoles();
+  setV('emp-role',emp.role_id||'');
   setSel('emp-location',emp.location);
   setV('emp-cost-center',emp.cost_center);
   setSel('emp-nationality',emp.nationality);
@@ -636,6 +656,8 @@ function saveEmployee(){
     contract:employeeFormValue('emp-contract','Full-Time'),
     location:employeeFormValue('emp-location','Dubai HQ'),
     branch:employeeFormValue('emp-branch','Dubai HQ'),
+    role_id:employeeFormValue('emp-role'),
+    role_name:(()=>{const rid=employeeFormValue('emp-role');const r=_roleList.find(x=>x.id===rid);return r?r.roleName:'';})(),
     cost_center:employeeFormValue('emp-cost-center'),
     status:'Active',
     created_at:new Date().toISOString(),
@@ -15625,6 +15647,7 @@ async function _saveDeptsBranchesToDb(){
         ...currentCompany,
         departments:JSON.stringify(_deptList),
         branches:JSON.stringify(_branchList),
+        roles:JSON.stringify(_roleList),
       })
     });
   }catch(e){console.warn('dept/branch save failed',e);}
@@ -15759,8 +15782,15 @@ function applyDeptsBranchesFromCompany(company){
       }
     }
   }catch{}
+  try{
+    if(company.roles){
+      const p=JSON.parse(company.roles);
+      if(Array.isArray(p)&&p.length)_roleList=p;
+    }
+  }catch{}
   renderDeptTable();
   renderBranchTable();
+  renderRoleTable();
   _syncDeptBranchSelectsFromList();
   _syncBranchSelects(_branchList.filter(b=>b.status!=='Inactive').map(b=>b.name));
 }
@@ -15803,6 +15833,126 @@ let _branchList=[
   {id:'br-5',name:'Ras Al Khaimah',code:'RAK',city:'Ras Al Khaimah',status:'Active'},
   {id:'br-6',name:'Fujairah',code:'FUJ',city:'Fujairah',status:'Active'},
 ];
+
+// ── Roles & Permissions data store ───────────────────────────────────────────
+let _roleList=[
+  {id:'role-1',branch:'',department:'Management',roleName:'CEO / Managing Director',permissions:['View','Create','Edit','Delete','Approve','Export','Import','Manage'],status:'Active'},
+  {id:'role-2',branch:'',department:'HR',roleName:'HR Manager',permissions:['View','Create','Edit','Approve','Export','Import'],status:'Active'},
+  {id:'role-3',branch:'',department:'HR',roleName:'HR Executive',permissions:['View','Create','Edit'],status:'Active'},
+  {id:'role-4',branch:'',department:'HR',roleName:'HR Assistant',permissions:['View','Create'],status:'Active'},
+  {id:'role-5',branch:'',department:'Finance',roleName:'Finance Manager',permissions:['View','Create','Edit','Approve','Export','Import'],status:'Active'},
+  {id:'role-6',branch:'',department:'Finance',roleName:'Accountant',permissions:['View','Create','Edit'],status:'Active'},
+  {id:'role-7',branch:'',department:'IT',roleName:'System Administrator',permissions:['View','Create','Edit','Delete','Approve','Export','Import','Manage'],status:'Active'},
+  {id:'role-8',branch:'',department:'Sales',roleName:'Sales Manager',permissions:['View','Create','Edit','Approve','Export'],status:'Active'},
+  {id:'role-9',branch:'',department:'Sales',roleName:'Sales Executive',permissions:['View','Create'],status:'Active'},
+  {id:'role-10',branch:'',department:'Operations',roleName:'Operations Manager',permissions:['View','Create','Edit','Approve'],status:'Active'},
+];
+
+const _PERM_COLORS={View:'b-b',Create:'b-g',Edit:'b-a',Delete:'b-r',Approve:'b-p',Export:'b-t',Import:'b-t',Manage:'b-b','Full Access':'b-p'};
+
+function renderRoleTable(){
+  const html=_roleList.length===0
+    ?'<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">No roles defined. Click + Add Role to create one.</td></tr>'
+    :_roleList.map(r=>{
+      const permBadges=(r.permissions||[]).map(p=>`<span class="b ${_PERM_COLORS[p]||'b-b'}" style="margin:1px 2px;font-size:9px">${escapeHtml(p)}</span>`).join('');
+      return `<tr>
+        <td style="font-size:12px;color:var(--text3)">${escapeHtml(r.branch||'All')}</td>
+        <td style="font-weight:600">${escapeHtml(r.department||'—')}</td>
+        <td>${escapeHtml(r.roleName)}</td>
+        <td style="max-width:240px;line-height:1.8">${permBadges}</td>
+        <td><span class="b ${r.status==='Active'?'b-g':'b-gray'}">${escapeHtml(r.status)}</span></td>
+        <td><button class="icon-btn edit" title="Edit role" onclick="showRoleModal('${r.id}')">${editIconSvg()}</button></td>
+      </tr>`;
+    }).join('');
+  document.querySelectorAll('#role-tbody').forEach(tb=>{tb.innerHTML=html;});
+}
+
+function showRoleModal(id){
+  const isEdit=!!id;
+  const role=id?_roleList.find(r=>r.id===id):null;
+  const modal=document.getElementById('m-role');
+  if(!modal)return;
+  modal.dataset.editId=id||'';
+  const titleEl=modal.querySelector('.modal-title');
+  if(titleEl)titleEl.textContent=isEdit?'Edit Role':'Add Role';
+  const subEl=modal.querySelector('.modal-sub');
+  if(subEl)subEl.textContent=isEdit?`Editing role: ${role?.roleName||''}`:'Define permissions for a new role';
+  // Branch select
+  const branchSel=document.getElementById('role-branch');
+  if(branchSel){
+    branchSel.innerHTML='<option value="">All Branches</option>'+
+      _branchList.filter(b=>b.status!=='Inactive').map(b=>`<option value="${escapeHtml(b.name)}">${escapeHtml(b.name)}</option>`).join('');
+    branchSel.value=role?.branch||'';
+  }
+  // Department select
+  const deptSel=document.getElementById('role-department');
+  if(deptSel){
+    deptSel.innerHTML='<option value="">— Select Department —</option>'+
+      _deptList.filter(d=>d.status!=='Inactive').map(d=>`<option value="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`).join('');
+    deptSel.value=role?.department||'';
+  }
+  const roleNameEl=document.getElementById('role-name');
+  if(roleNameEl)roleNameEl.value=role?.roleName||'';
+  const statusEl=document.getElementById('role-status');
+  if(statusEl)statusEl.value=role?.status||'Active';
+  const perms=role?.permissions||[];
+  modal.querySelectorAll('input[type="checkbox"]').forEach(cb=>{cb.checked=perms.includes(cb.value);});
+  const delBtn=document.getElementById('role-delete-btn');
+  if(delBtn)delBtn.style.display=isEdit?'':'none';
+  showM('m-role');
+}
+
+function saveRoleModal(){
+  const modal=document.getElementById('m-role');
+  const editId=modal?.dataset.editId||'';
+  const branch=document.getElementById('role-branch')?.value||'';
+  const department=document.getElementById('role-department')?.value||'';
+  const roleName=(document.getElementById('role-name')?.value||'').trim();
+  const status=document.getElementById('role-status')?.value||'Active';
+  const permissions=[...document.querySelectorAll('#m-role input[type="checkbox"]:checked')].map(cb=>cb.value);
+  if(!department){toast('Select a department','warn');return;}
+  if(!roleName){toast('Enter a role name','warn');return;}
+  if(editId){
+    const idx=_roleList.findIndex(r=>r.id===editId);
+    if(idx>=0)_roleList[idx]={..._roleList[idx],branch,department,roleName,permissions,status};
+  }else{
+    _roleList.push({id:'role-'+Date.now(),branch,department,roleName,permissions,status});
+  }
+  renderRoleTable();
+  _saveDeptsBranchesToDb();
+  hideM('m-role');
+  toast(editId?'Role updated':'Role created','ok');
+}
+
+function deleteRoleFromModal(){
+  const modal=document.getElementById('m-role');
+  const id=modal?.dataset.editId;
+  if(!id)return;
+  _roleList=_roleList.filter(r=>r.id!==id);
+  renderRoleTable();
+  _saveDeptsBranchesToDb();
+  hideM('m-role');
+  toast('Role deleted','ok');
+}
+
+function filterEmpRoles(){
+  const branch=document.getElementById('emp-branch')?.value||'';
+  const dept=document.getElementById('emp-department')?.value||'';
+  const roleEl=document.getElementById('emp-role');
+  if(!roleEl)return;
+  if(!branch&&!dept){
+    roleEl.innerHTML='<option value="">— Select Branch &amp; Department first —</option>';
+    return;
+  }
+  const filtered=_roleList.filter(r=>{
+    if(r.status==='Inactive')return false;
+    const bMatch=!r.branch||r.branch===branch;
+    const dMatch=!r.department||r.department===dept;
+    return bMatch&&dMatch;
+  });
+  roleEl.innerHTML='<option value="">— Select Role —</option>'+
+    filtered.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.roleName)}</option>`).join('');
+}
 
 function renderBranchTable(){
   const row=b=>{
