@@ -2390,7 +2390,6 @@ function renderFullDashboardFromDatabase(data){
   renderTopCustomers(data.top_customers||[]);
   renderInvoiceStatus(data.invoice_status||{});
   renderStaffToday(data.staff_today||{present:kpis.staff_present||0,total:kpis.staff_total||0,leave:0,absent:0,source:'Employees database'});
-  renderDatabaseDashboardSummary(data);
 }
 
 function _refreshPurchaseDashboardCard(){
@@ -3341,112 +3340,6 @@ ${rowsXml}
   audit('Exported report Excel',safeTitle,'Prepared');
 }
 
-function renderDatabaseDashboardSummary(data){
-  const page=document.getElementById('page-dashboard');
-  if(!page)return;
-  const counts=data.module_counts||data;
-  const meta=data.dashboard_meta||{};
-  let card=document.getElementById('db-dashboard-summary');
-  if(!card){
-    card=document.createElement('div');
-    card.id='db-dashboard-summary';
-    card.className='af-card mb20';
-    page.appendChild(card);
-  }
-
-  const rows=[
-    {label:'Invoices',      count:counts.invoice_count,             page:'sales',      tab:'s-invoices',   icon:'INV', color:'c-accent', group:'Revenue'},
-    {label:'Customers',     count:counts.customer_count,            page:'sales',      tab:'s-customers',  icon:'CUS', color:'c-green',  group:'Revenue'},
-    {label:'Products',      count:counts.product_count,             page:'sales',      tab:'s-products',   icon:'SKU', color:'c-teal',   group:'Revenue'},
-    {label:'Quotations',    count:counts.quotation_count,           page:'quotations', tab:'q-list',       icon:'QTN', color:'c-purple', group:'Revenue'},
-    {label:'Purchases',     count:counts.purchase_record_count,     page:'purchase',   tab:'p-records',    icon:'PUR', color:'c-amber',  group:'Operations'},
-    {label:'Vendors',       count:counts.vendor_count,              page:'purchase',   tab:'p-vendors',    icon:'VEN', color:'c-green',  group:'Operations'},
-    {label:'Inv. Mappings', count:counts.inventory_mapping_count,   page:'inventory',  tab:'inv-mapping',  icon:'MAP', color:'c-teal',   group:'Operations'},
-    {label:'Payments',      count:counts.payment_count,             page:'payments',   tab:'',             icon:'PAY', color:'c-accent', group:'Cash'},
-    {label:'Accounts',      count:counts.account_count,             page:'accounting', tab:'acc-chart',    icon:'COA', color:'c-teal',   group:'Finance'},
-    {label:'Vouchers',      count:counts.journal_count,             page:'accounting', tab:'acc-voucher',  icon:'JV',  color:'c-purple', group:'Finance'},
-    {label:'Transactions',  count:counts.source_transaction_count,  page:'purchase',   tab:'p-records',    icon:'SRC', color:'c-amber',  group:'Finance'},
-    {label:'Tax Codes',     count:counts.tax_code_count,            page:'settings',   tab:'set-tax',      icon:'VAT', color:'c-green',  group:'Compliance'},
-    {label:'Tax Lines',     count:counts.tax_line_count,            page:'reports',    tab:'rep-vat',      icon:'TAX', color:'c-red',    group:'Compliance'},
-    {label:'Employees',     count:counts.employee_count,            page:'staff',      tab:'staff-list',   icon:'HR',  color:'c-purple', group:'People'},
-    {label:'Documents',     count:counts.document_count,            page:'documents',  tab:'',             icon:'DOC', color:'c-green',  group:'Control'},
-    {label:'Audit Logs',    count:counts.audit_count,               page:'settings',   tab:'set-backup',   icon:'LOG', color:'c-red',    group:'Control'}
-  ];
-
-  const totalRecords=rows.reduce((s,r)=>s+Number(r.count||0),0);
-
-  // Group config: label, color, dist-bar color
-  const groupDef={
-    Revenue:   {color:'#6366f1', cls:'g-revenue'},
-    Operations:{color:'#f59e0b', cls:'g-operations'},
-    Cash:      {color:'#10b981', cls:'g-cash'},
-    Finance:   {color:'#2eb8b8', cls:'g-finance'},
-    Compliance:{color:'#3ecf8e', cls:'g-compliance'},
-    People:    {color:'#9b72f0', cls:'g-people'},
-    Control:   {color:'#f06b6b', cls:'g-control'},
-  };
-
-  const groupTotals={};
-  rows.forEach(r=>{groupTotals[r.group]=(groupTotals[r.group]||0)+Number(r.count||0);});
-  const distBar=Object.entries(groupTotals).map(([g,n])=>{
-    const pct=totalRecords?Math.max(1,Math.round(n/totalRecords*100)):Math.round(100/Object.keys(groupTotals).length);
-    const color=(groupDef[g]||{}).color||'#888';
-    return `<div class="af-dist-seg" style="flex:${pct};background:${color}" title="${escapeHtml(g)}: ${n.toLocaleString('en-AE')} records"></div>`;
-  }).join('');
-
-  const grouped={};
-  rows.forEach(r=>{(grouped[r.group]=grouped[r.group]||[]).push(r);});
-
-  const groupsHtml=Object.entries(grouped).map(([groupName,items])=>{
-    const gDef=groupDef[groupName]||{color:'#888',cls:''};
-    const gTotal=items.reduce((s,r)=>s+Number(r.count||0),0);
-    const tilesHtml=items.map(item=>{
-      const n=Number(item.count||0);
-      return `<button class="af-tile ${escapeHtml(item.color)}" type="button"
-          onclick="openDashboardRecord('${escapeHtml(item.page)}','${escapeHtml(item.tab||'')}')"
-          title="${escapeHtml(item.label)}: ${n.toLocaleString('en-AE')} records">
-        <div class="af-icon">${escapeHtml(item.icon)}</div>
-        <div class="af-tile-body"><div class="af-label">${escapeHtml(item.label)}</div></div>
-        <div class="af-count">${n.toLocaleString('en-AE')}</div>
-      </button>`;
-    }).join('');
-    return `<div class="af-group ${escapeHtml(gDef.cls)}">
-      <div class="af-group-head">
-        <span class="af-group-label">${escapeHtml(groupName)}</span>
-        <span class="af-group-count">${gTotal.toLocaleString('en-AE')}</span>
-      </div>
-      <div class="af-tiles">${tilesHtml}</div>
-    </div>`;
-  }).join('');
-
-  card.innerHTML=`
-    <div class="af-header">
-      <div class="af-header-left">
-        <div class="af-title">App Functions</div>
-        <div class="af-sub">Live DB counts · click to open module</div>
-      </div>
-      <div class="af-header-right">
-        <span class="b b-g" style="font-size:11px"><span class="live-dot"></span>${escapeHtml(meta.status||'Synced')}</span>
-        <div class="af-total-badge">
-          <span class="af-total-num">${totalRecords.toLocaleString('en-AE')}</span>
-          <span class="af-total-lbl">${rows.length} modules</span>
-        </div>
-      </div>
-    </div>
-    <div class="af-dist-bar">${distBar}</div>
-    <div class="af-groups">${groupsHtml}</div>
-  `;
-}
-
-function openDashboardRecord(page,tabTarget=''){
-  go(page);
-  if(tabTarget){
-    setTimeout(()=>{
-      const tab=[...document.querySelectorAll(`#page-${page} .tab`)].find(item=>(item.getAttribute('onclick')||'').includes(`'${tabTarget}'`));
-      if(tab)stab(tab,tabTarget);
-    },40);
-  }
-}
 
 function applyTheme(mode){
   const nightMode=mode!=='light';
