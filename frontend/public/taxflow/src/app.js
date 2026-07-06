@@ -10,7 +10,7 @@ META.payments={t:'Bank & Payments',s:'Accounts - transactions - receipts - payme
 META.documents={t:'Documents',s:'Receipts - PDFs - Audit files - Attachments',a:'Upload Document',ao:()=>toast('Choose files to upload...','info')};
 META.notifications={t:'Notifications',s:'Email - WhatsApp - SMS - Push - In-app alerts',a:'+ New Rule',ao:()=>toast('Notification rule builder opened','info')};
 META.rota={t:'Rota Planning',s:'Shift setup - Weekly rota - Coverage - Swap requests',a:'Publish Rota',ao:()=>publishRota()};
-META.hrms={t:'HRMS Dashboard',s:'Employees · Attendance · Leave · OT · Payroll · Compliance Overview',a:'+ Add Employee',ao:()=>{go('staff');setTimeout(()=>showM('m-emp'),50)}};
+META.hrms={t:'HRMS Dashboard',s:'Employees · Attendance · Leave · OT · Payroll · Compliance Overview',a:'Open HRMS',ao:()=>{window.open('/hrms.html','_blank')}};
 META.recruitment={t:'Recruitment ATS',s:'Job Requisitions - Candidates - Interviews - Offer Letters - Onboarding',a:'+ New Requisition',ao:()=>showM('m-recruitment')};
 META['hrms-ext']={t:'HR Modules',s:'Performance - Training - Asset Management - ESS - Manager Portal',a:'',ao:null};
 META.accounting={t:'Accounting',s:'Chart - Vouchers - Ledger - Filing - Bank Recon',a:'+ Voucher',ao:()=>{go('accounting');setTimeout(()=>stab(document.querySelectorAll('#page-accounting .tab')[1],'acc-voucher'),50)}};
@@ -136,20 +136,7 @@ function go(page){
     return;
   }
   if(page==='hr-settings'){
-    const fromState=getCurrentNavState();
-    if(!restoringNavigation&&fromState.page!=='hr-settings')rememberNavState(fromState);
-    document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
-    document.querySelectorAll('.nav').forEach(n=>n.classList.remove('on'));
-    const staffPage=document.getElementById('page-staff');
-    if(staffPage){
-      staffPage.classList.add('on');
-      staffPage.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
-      staffPage.querySelectorAll('.tab-body').forEach(b=>b.classList.remove('on'));
-      document.getElementById('hr-policy')?.classList.add('on');
-    }
-    document.getElementById('ptitle').textContent='HR Settings';
-    document.getElementById('psub').textContent='Configure departments, roles, OT rules, leave policy, and user access';
-    document.getElementById('nav-hr-settings')?.classList.add('on');
+    window.open('/hrms.html','_blank');
     return;
   }
   const target=document.getElementById('page-'+page);
@@ -181,23 +168,13 @@ function go(page){
   if(['staff','hrms','recruitment','hrms-ext'].includes(page)){
     document.getElementById('nav-hrms')?.classList.add('on');
   }
-  // Highlight nav-sub for staff tab pages
   document.querySelectorAll('.nav-sub').forEach(s=>s.classList.remove('on'));
-  if(page==='staff'){
-    const activeTab=document.querySelector('#page-staff .tab.on');
-    const tabId=activeTab?.getAttribute('onclick')?.match(/'([^']+)'\)/)?.[1]||'';
-    document.querySelectorAll('.nav-sub').forEach(s=>{
-      if((s.getAttribute('onclick')||'').includes("'"+tabId+"'"))s.classList.add('on');
-    });
-    if(!tabId)document.querySelector('.nav-sub[onclick*="go(\'staff\'"]')?.classList.add('on');
-  }
   localStorage.setItem('taxflow_current_page',page);
   closeSidebar();
   if(page==='reports')syncReportsFromDatabase();
   if(page==='exception')loadExceptionCenter();
   if(page==='expense')loadExpenseVendors();
   if(page==='hrms')scheduleIdleTask(refreshHrmsKpis,100);
-  if(page==='staff'){scheduleIdleTask(()=>renderLeaveCalendar(),300);scheduleIdleTask(updateLeaveBalance,500);}
   if(page==='recruitment')scheduleIdleTask(refreshRecruitmentStats,100);
   if(page==='hrms-ext')scheduleIdleTask(refreshManagerPortalCounts,100);
   if(page==='inventory'){
@@ -277,9 +254,7 @@ function closeSidebar(){
 }
 
 function goHrmsTab(n,id){
-  const tab=document.querySelector('#page-staff .tab:nth-child('+n+')');
-  if(tab)stab(tab,id);
-  go('staff');
+  window.open('/hrms.html','_blank');
 }
 
 function populateHrEmployeeSelect(id){
@@ -633,6 +608,11 @@ function openEmpEdit(emp){
   if(titleEl)titleEl.textContent='Edit Employee';
   if(subEl)subEl.textContent=`Editing ${emp.name||'employee'} — ${emp.id||''}`;
   if(btnEl)btnEl.textContent='Save Changes';
+  _populateEmpSelects();
+  setSel('emp-department',emp.department);
+  setSel('emp-branch',emp.branch||emp.location);
+  filterEmpRoles();
+  setV('emp-role',emp.role_id||'');
   showM('m-emp');
 }
 
@@ -2412,6 +2392,7 @@ function renderFullDashboardFromDatabase(data){
   renderTopCustomers(data.top_customers||[]);
   renderInvoiceStatus(data.invoice_status||{});
   renderStaffToday(data.staff_today||{present:kpis.staff_present||0,total:kpis.staff_total||0,leave:0,absent:0,source:'Employees database'});
+  renderCfoRecommendations(data);
   renderDashBankRecon();
 }
 
@@ -2786,6 +2767,52 @@ function renderStaffToday(staff){
         <div style="font-size:9.5px;color:var(--text3);margin-top:2px;font-weight:600;letter-spacing:.3px">ABSENT</div>
       </div>
     </div>`;
+}
+
+function renderCfoRecommendations(data){
+  const target=document.getElementById('dash-cfo-recommendations');
+  if(!target)return;
+  const kpis=data.kpis||{};
+  const status=data.invoice_status||{};
+  const recs=[];
+
+  const ar=parseAmount(kpis.open_invoice_amount||0);
+  const ap=parseAmount(kpis.total_payable||0);
+  if(ar>0&&ap>0&&ar>ap*1.5){
+    recs.push({color:'#f59e0b',bg:'rgba(245,158,11,.1)',icon:'⚠',title:'High receivables exposure',desc:`AED ${formatAed(ar)} AR vs AED ${formatAed(ap)} AP — chase collections`});
+  }
+
+  const overdue=Number((status.overdue||{}).count||0);
+  if(overdue>0){
+    recs.push({color:'#ef4444',bg:'rgba(239,68,68,.1)',icon:'!',title:`${overdue} overdue invoice${overdue>1?'s':''}`,desc:'Aged receivables may impact cash flow'});
+  }
+
+  const vatPayable=parseAmount(kpis.vat_payable||0);
+  if(vatPayable>0){
+    recs.push({color:'#6366f1',bg:'rgba(99,102,241,.1)',icon:'$',title:'VAT liability outstanding',desc:`Net VAT due: AED ${formatAed(vatPayable)} — plan for filing`});
+  }
+
+  const revTrend=Number(kpis.revenue_trend||0);
+  if(revTrend<-2){
+    recs.push({color:'#ef4444',bg:'rgba(239,68,68,.1)',icon:'↓',title:'Revenue declining',desc:`${Math.abs(revTrend).toFixed(1)}% drop vs prior period — review pipeline`});
+  } else if(revTrend>10){
+    recs.push({color:'#10b981',bg:'rgba(16,185,129,.1)',icon:'↑',title:'Strong revenue growth',desc:`+${revTrend.toFixed(1)}% vs prior period — sustain momentum`});
+  }
+
+  if(!recs.length){
+    recs.push({color:'#10b981',bg:'rgba(16,185,129,.1)',icon:'✓',title:'Financials look healthy',desc:'No immediate action items detected'});
+    recs.push({color:'#8b5cf6',bg:'rgba(139,92,246,.1)',icon:'★',title:'Review bank reconciliation',desc:'Ensure all statements are matched monthly'});
+  }
+
+  target.innerHTML=recs.slice(0,4).map((r,i,a)=>`
+    <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0${i<a.length-1?';border-bottom:1px solid var(--border)':''}">
+      <div style="width:26px;height:26px;border-radius:8px;background:${r.bg};color:${r.color};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;font-weight:800">${r.icon}</div>
+      <div style="min-width:0;flex:1">
+        <div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.3">${escapeHtml(r.title)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:1px">${escapeHtml(r.desc)}</div>
+      </div>
+    </div>
+  `).join('');
 }
 
 function showReport(id){
@@ -7111,6 +7138,31 @@ function hydrateFromServer(){
         renderStats.leaveRequests=renderRecordList(_deferred2.leaveRequests,renderLeaveRecord,'leave request');
         renderStats.attendanceCorrections=renderRecordList(_deferred2.attendanceCorrections,renderCorrectionRecord,'correction');
         renderStats.ledger=renderRecordList(_deferred2.ledger,line=>postLedgerLine(line,{persist:false}),'ledger');
+        if(Array.isArray(_deferred2.hrUsers)&&_deferred2.hrUsers.length){
+          _hrUsers.length=0;
+          _hrUsers.push(..._deferred2.hrUsers);
+          _renderHrUsersTable();
+        }
+        // Load dept/branch/role config saved via _saveDeptsBranchesToDb (hr_settings collection)
+        const hrCfg=Array.isArray(_deferred2.hr_settings)
+          ?_deferred2.hr_settings.find(x=>x.id==='dept-branch-role-config')
+          :null;
+        if(hrCfg){
+          if(Array.isArray(hrCfg.departments)&&hrCfg.departments.length){
+            _deptList=hrCfg.departments;
+            renderDeptTable();
+            _syncDeptBranchSelectsFromList();
+          }
+          if(Array.isArray(hrCfg.branches)&&hrCfg.branches.length){
+            _branchList=hrCfg.branches;
+            renderBranchTable();
+            _syncBranchSelects(_branchList.filter(b=>b.status!=='Inactive').map(b=>b.name));
+          }
+          if(Array.isArray(hrCfg.roles)&&hrCfg.roles.length){
+            _roleList=hrCfg.roles;
+            renderRoleTable();
+          }
+        }
       }finally{isHydratingFromServer=false;}
       updateLeaveBalance();
       filterLedger();
@@ -14733,7 +14785,7 @@ function refreshHrmsDashboard(){
         offset+=dash;ci++;
       });
     } else {
-      assetsLeg.innerHTML='<div style="font-size:11px;color:var(--text3)">No assets assigned yet.<br><a style="color:#3b82f6;cursor:pointer" onclick="goHrmsTab(8,\'hrext-assets\')">Go to Asset Management →</a></div>';
+      assetsLeg.innerHTML='<div style="font-size:11px;color:var(--text3)">No assets assigned yet.<br><a style="color:#3b82f6;cursor:pointer" onclick="window.open(\'/hrms.html\',\'_blank\')">Go to Asset Management →</a></div>';
     }
   }
 
@@ -15056,12 +15108,10 @@ function hrmsAiCvFillForm(jsonStr){
     const data=JSON.parse(jsonStr);
     const field=(id,val)=>{const el=document.getElementById(id);if(el&&val)el.value=val;};
     const sel=(id,val)=>{const el=document.getElementById(id);if(el&&val)setSelectValue(el,val);};
-    go('staff');
+    window.open('/hrms.html','_blank');
     setTimeout(()=>{
-      document.querySelector('#page-staff .tab:first-child')?.click();
+      showM('m-emp');
       setTimeout(()=>{
-        showM('m-emp');
-        setTimeout(()=>{
           field('emp-name',data.full_name);
           field('emp-email',data.email);
           field('emp-phone',data.phone);
@@ -15071,7 +15121,6 @@ function hrmsAiCvFillForm(jsonStr){
           toast('CV data filled into employee form','ok');
         },300);
       },200);
-    },300);
   }catch{}
 }
 
@@ -15637,20 +15686,49 @@ function _getBranchNames(){
     .map(t=>t.childNodes[0]?.textContent?.trim()).filter(Boolean);
 }
 
-// Persist both lists to DB (fire-and-forget)
-async function _saveDeptsBranchesToDb(){
-  if(!currentCompany)return;
-  try{
-    await authenticatedFetch(`${apiBaseUrl()}/companies/current`,{
-      method:'PUT',
-      body:JSON.stringify({
-        ...currentCompany,
-        departments:JSON.stringify(_deptList),
-        branches:JSON.stringify(_branchList),
-        roles:JSON.stringify(_roleList),
-      })
-    });
-  }catch(e){console.warn('dept/branch save failed',e);}
+function _populateEmpSelects(){
+  const deptSel=document.getElementById('emp-department');
+  if(deptSel){
+    const cur=deptSel.value;
+    const depts=_getDeptNames();
+    deptSel.innerHTML='<option value="">— Select Department —</option>'+
+      (depts.length
+        ?depts.map(d=>`<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('')
+        :'<option disabled>No departments — add in HR Settings</option>');
+    if(cur)deptSel.value=cur;
+  }
+  const branchSel=document.getElementById('emp-branch');
+  if(branchSel){
+    const cur=branchSel.value;
+    const branches=_getBranchNames();
+    branchSel.innerHTML='<option value="">— Select Branch —</option>'+
+      (branches.length
+        ?branches.map(b=>`<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('')
+        :'<option disabled>No branches — add in HR Settings</option>');
+    if(cur)branchSel.value=cur;
+  }
+}
+
+function openEmpModal(){
+  _populateEmpSelects();
+  // Reset title/button for "add" mode
+  const titleEl=document.querySelector('#m-emp .modal-title');
+  const subEl=document.querySelector('#m-emp .modal-sub');
+  const btnEl=document.querySelector('#m-emp .btn-p');
+  if(titleEl)titleEl.textContent='Add Employee';
+  if(subEl)subEl.textContent='Register new employee details';
+  if(btnEl)btnEl.textContent='Save Employee';
+  showM('m-emp');
+}
+
+// Persist dept/branch/role lists as one document in hr_settings collection
+function _saveDeptsBranchesToDb(){
+  saveServer('hr_settings',{
+    id:'dept-branch-role-config',
+    departments:_deptList,
+    branches:_branchList,
+    roles:_roleList,
+  });
 }
 
 // ── Department data store ─────────────────────────────────────────────
@@ -15684,7 +15762,7 @@ function renderDeptTable(){
       <td style="color:var(--text3);font-size:12px">${escapeHtml(d.description||'—')}</td>
       <td class="mono">${cnt}</td>
       <td><span class="b ${statusCls}">${escapeHtml(d.status)}</span></td>
-      <td><button class="icon-btn edit" title="Edit department" onclick="showDeptModal('${d.id}')">${editIconSvg()}</button></td>
+      <td style="white-space:nowrap"><button class="icon-btn edit" title="Edit department" onclick="showDeptModal('${d.id}')">${editIconSvg()}</button><button class="btn btn-r btn-xs" title="Delete department" onclick="deleteDept('${d.id}')" style="margin-left:4px">×</button></td>
     </tr>`;
   };
   const empty='<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">No departments yet. Click + Add Department.</td></tr>';
@@ -15962,7 +16040,7 @@ function renderBranchTable(){
       <td style="font-weight:600">${escapeHtml(b.name)}</td>
       <td style="color:var(--text3);font-size:12px">${escapeHtml(b.city||'—')}</td>
       <td><span class="b ${statusCls}">${escapeHtml(b.status)}</span></td>
-      <td><button class="icon-btn edit" title="Edit branch" onclick="showBranchModal('${b.id}')">${editIconSvg()}</button></td>
+      <td style="white-space:nowrap"><button class="icon-btn edit" title="Edit branch" onclick="showBranchModal('${b.id}')">${editIconSvg()}</button><button class="btn btn-r btn-xs" title="Delete branch" onclick="deleteBranch('${b.id}')" style="margin-left:4px">×</button></td>
     </tr>`;
   };
   const empty='<tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px">No branches yet. Click + Add Branch.</td></tr>';

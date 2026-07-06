@@ -528,7 +528,65 @@
           </div>
         </div>
 
-        <!-- Staff Today card -->
+        <!-- AI CFO Recommendations card -->
+        <div class="mb3-card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
+          <!-- Illustrated banner -->
+          <div style="background:linear-gradient(135deg,#ede9fe 0%,#ddd6fe 55%,#c4b5fd 100%);padding:16px 18px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:100px;position:relative;overflow:hidden">
+            <div style="position:absolute;top:-15px;right:-15px;width:80px;height:80px;border-radius:50%;background:rgba(139,92,246,.18);filter:blur(20px)"></div>
+            <div style="z-index:1;padding-bottom:12px">
+              <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#4c1d95;opacity:.75">AI Insights</div>
+              <div style="font-size:14px;font-weight:800;color:#4c1d95">CFO Recommendations</div>
+            </div>
+            <svg viewBox="0 0 110 90" width="110" height="90" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="ai-cfo-grad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#c4b5fd" stop-opacity=".45"/>
+                  <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <ellipse cx="55" cy="84" rx="32" ry="5" fill="#7c3aed" opacity=".12"/>
+              <!-- brain shape -->
+              <ellipse cx="44" cy="34" rx="22" ry="18" fill="#8b5cf6" opacity=".8"/>
+              <ellipse cx="44" cy="34" rx="22" ry="18" fill="url(#ai-cfo-grad)"/>
+              <!-- circuit lines -->
+              <line x1="34" y1="30" x2="54" y2="30" stroke="#e9d5ff" stroke-width="1.5" opacity=".8"/>
+              <line x1="36" y1="25" x2="36" y2="42" stroke="#e9d5ff" stroke-width="1.5" opacity=".8"/>
+              <line x1="52" y1="23" x2="52" y2="40" stroke="#e9d5ff" stroke-width="1.5" opacity=".8"/>
+              <circle cx="36" cy="30" r="2.5" fill="#ede9fe" opacity=".95"/>
+              <circle cx="52" cy="30" r="2.5" fill="#ede9fe" opacity=".95"/>
+              <circle cx="36" cy="42" r="2" fill="#c4b5fd" opacity=".9"/>
+              <circle cx="52" cy="23" r="2" fill="#c4b5fd" opacity=".9"/>
+              <circle cx="44" cy="25" r="2" fill="#ddd6fe" opacity=".85"/>
+              <!-- stem to chart -->
+              <line x1="44" y1="52" x2="44" y2="62" stroke="#8b5cf6" stroke-width="2" opacity=".5"/>
+              <!-- chart bars -->
+              <rect x="60" y="62" width="8" height="18" rx="2" fill="#8b5cf6" opacity=".55"/>
+              <rect x="72" y="52" width="8" height="28" rx="2" fill="#7c3aed" opacity=".7"/>
+              <rect x="84" y="42" width="8" height="38" rx="2" fill="#6d28d9" opacity=".8"/>
+              <rect x="86" y="44" width="2.5" height="34" rx="1.5" fill="#fff" opacity=".2"/>
+              <!-- up trend arrow -->
+              <polyline points="88,28 95,16 102,22" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <polygon points="95,12 100,20 90,20" fill="#10b981"/>
+              <!-- star sparkle -->
+              <polygon points="100,42 102,47 107,47 103,50 105,55 100,52 95,55 97,50 93,47 98,47" fill="#f59e0b" opacity=".85"/>
+              <!-- ambient dots -->
+              <circle cx="14" cy="20" r="2.5" fill="#a78bfa" opacity=".55"/>
+              <circle cx="10" cy="52" r="1.8" fill="#c4b5fd" opacity=".5"/>
+            </svg>
+          </div>
+          <div style="padding:12px 18px 14px;flex:1">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+              <span style="font-size:12px;font-weight:600;color:var(--text2)">Smart Insights</span>
+              <span class="bio-pulse" style="background:#8b5cf6"></span>
+            </div>
+            <div id="dash-cfo-recommendations"><div class="dv2-loading">Analyzing financials…</div></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ROW 4: Staff Today (Human Resources) -->
+      <div style="margin-top:14px">
         <div class="mb3-card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
           <!-- Illustrated banner -->
           <div style="background:linear-gradient(135deg,#d1fae5 0%,#a7f3d0 55%,#99f6e4 100%);padding:16px 18px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:100px;position:relative;overflow:hidden">
@@ -539,28 +597,22 @@
             </div>
             <svg viewBox="0 0 110 90" width="110" height="90" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
               <ellipse cx="55" cy="84" rx="32" ry="5" fill="#059669" opacity=".12"/>
-              <!-- person 1 (left) -->
               <circle cx="30" cy="28" r="11" fill="#34d399"/>
               <circle cx="30" cy="28" r="8" fill="#fff" opacity=".3"/>
               <circle cx="30" cy="26" r="5" fill="#065f46" opacity=".8"/>
               <path d="M14,58 Q14,44 30,44 Q46,44 46,58" fill="#10b981" opacity=".85"/>
-              <!-- person 2 (center, taller) -->
               <circle cx="55" cy="22" r="13" fill="#059669"/>
               <circle cx="55" cy="22" r="9.5" fill="#fff" opacity=".3"/>
               <circle cx="55" cy="20" r="6" fill="#064e3b" opacity=".8"/>
               <path d="M37,62 Q37,46 55,46 Q73,46 73,62" fill="#059669" opacity=".9"/>
-              <!-- person 3 (right) -->
               <circle cx="80" cy="28" r="11" fill="#34d399"/>
               <circle cx="80" cy="28" r="8" fill="#fff" opacity=".3"/>
               <circle cx="80" cy="26" r="5" fill="#065f46" opacity=".8"/>
               <path d="M64,58 Q64,44 80,44 Q96,44 96,58" fill="#10b981" opacity=".85"/>
-              <!-- active green badge -->
               <circle cx="96" cy="22" r="8" fill="#10b981"/>
               <circle cx="96" cy="22" r="5.5" fill="#fff" opacity=".25"/>
               <circle cx="96" cy="22" r="3" fill="#fff"/>
-              <!-- pulse ring -->
               <circle cx="96" cy="22" r="8" fill="none" stroke="#34d399" stroke-width="2" opacity=".5"/>
-              <!-- calendar icon bottom left -->
               <rect x="10" y="68" width="24" height="18" rx="3" fill="#fff" opacity=".8"/>
               <rect x="10" y="68" width="24" height="6" rx="3" fill="#059669" opacity=".8"/>
               <rect x="10" y="71" width="24" height="3" rx="0" fill="#059669" opacity=".8"/>
@@ -577,7 +629,6 @@
             <div id="dash-staff-today"><div class="dv2-loading">Reading database…</div></div>
           </div>
         </div>
-
       </div>
 
     </div><!-- end .mb3-main -->
@@ -1659,7 +1710,7 @@
         <div style="font-size:13px;color:rgba(255,255,255,.65);margin-top:4px">Employees · Attendance · Leave · Payroll · Rota · Compliance</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2)" onclick="go('staff')">+ Add Employee</button>
+        <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2)" onclick="window.open('/hrms.html','_blank')">+ Add Employee</button>
         <button class="btn btn-sm" style="background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.15)" onclick="go('payroll')">Run Payroll</button>
       </div>
     </div>
@@ -1678,11 +1729,11 @@
     <div class="card">
       <div class="card-hd"><div class="card-title">Alerts &amp; Pipeline</div><div class="card-sub">Live counts</div></div>
       <div class="g2" style="padding:4px 0 0">
-        <div class="dash-alert-tile" onclick="goHrmsTab(7,'hr-expiry');scheduleIdleTask(refreshExpiryAlerts,100)">
+        <div class="dash-alert-tile" onclick="window.open('/hrms.html','_blank')">
           <div id="hrms-dash-expiry" style="font-size:24px;font-weight:700;color:var(--red);line-height:1">—</div>
           <div style="font-size:11px;color:var(--text3);margin-top:3px">Docs Expiring (30d)</div>
         </div>
-        <div class="dash-alert-tile" onclick="goHrmsTab(3,'hr-ot')">
+        <div class="dash-alert-tile" onclick="window.open('/hrms.html','_blank')">
           <div id="hrms-dash-ot" style="font-size:24px;font-weight:700;color:var(--amber);line-height:1">—</div>
           <div style="font-size:11px;color:var(--text3);margin-top:3px">OT Pending</div>
         </div>
@@ -1690,7 +1741,7 @@
           <div id="hrms-dash-recs" style="font-size:24px;font-weight:700;color:var(--accent);line-height:1">—</div>
           <div style="font-size:11px;color:var(--text3);margin-top:3px">Open Positions</div>
         </div>
-        <div class="dash-alert-tile" onclick="goHrmsTab(6,'hr-loans')">
+        <div class="dash-alert-tile" onclick="window.open('/hrms.html','_blank')">
           <div id="hrms-dash-loans" style="font-size:24px;font-weight:700;color:var(--green);line-height:1">—</div>
           <div style="font-size:11px;color:var(--text3);margin-top:3px">Loan Requests</div>
         </div>
@@ -1699,12 +1750,12 @@
     <div class="card">
       <div class="card-hd"><div class="card-title">Quick Actions</div><div class="card-sub">Common HR tasks</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:4px 0 0">
-        <button class="btn btn-p" onclick="go('staff');setTimeout(()=>showM('m-emp'),50)">+ Add Employee</button>
-        <button class="btn btn-g" onclick="goHrmsTab(4,'hr-leave');setTimeout(()=>showM('m-leave'),50)">Apply Leave</button>
-        <button class="btn btn-g" onclick="goHrmsTab(3,'hr-ot');setTimeout(()=>showM('m-ot'),50)">Submit OT</button>
+        <button class="btn btn-p" onclick="window.open('/hrms.html','_blank')">+ Add Employee</button>
+        <button class="btn btn-g" onclick="window.open('/hrms.html','_blank')">Apply Leave</button>
+        <button class="btn btn-g" onclick="window.open('/hrms.html','_blank')">Submit OT</button>
         <button class="btn btn-g" onclick="go('recruitment');setTimeout(()=>showM('m-recruitment'),50)">Post Job</button>
         <button class="btn btn-g" onclick="go('payroll')">Run Payroll</button>
-        <button class="btn btn-g" onclick="goHrmsTab(7,'hr-expiry');scheduleIdleTask(refreshExpiryAlerts,100)">Check Expiry</button>
+        <button class="btn btn-g" onclick="window.open('/hrms.html','_blank')">Check Expiry</button>
       </div>
     </div>
   </div>
@@ -1712,7 +1763,7 @@
   <!-- Module cards grid — Core HR -->
   <div style="font-weight:700;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Core HR Modules</div>
   <div class="g3 mb16">
-    <div class="card hrms-mod-card" onclick="go('staff')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(99,102,241,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#6366f1" stroke-width="1.6"><circle cx="8" cy="7" r="3.5"/><path d="M2 17c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="15" cy="7" r="2.5"/><path d="M18 17c0-2.5-1.5-4-3-4.5"/></svg>
@@ -1725,7 +1776,7 @@
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(2)'),'hr-att');go('staff')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(16,185,129,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#10b981" stroke-width="1.6"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/><circle cx="7" cy="12" r="1" fill="#10b981" stroke="none"/><circle cx="10" cy="12" r="1" fill="#10b981" stroke="none"/><circle cx="13" cy="12" r="1" fill="#10b981" stroke="none"/></svg>
@@ -1738,7 +1789,7 @@
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(4)'),'hr-leave');go('staff')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(245,158,11,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#f59e0b" stroke-width="1.6"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2z"/><path d="M10 6v5l3 2"/></svg>
@@ -1751,7 +1802,7 @@
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(3)'),'hr-ot');go('staff')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(239,68,68,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#ef4444" stroke-width="1.6"><circle cx="10" cy="10" r="8"/><path d="M10 6v4l2.5 2.5"/><path d="M14 3l2-1.5M6 3L4 1.5"/></svg>
@@ -1790,7 +1841,7 @@
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(6)'),'hr-loans');go('staff')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(34,197,94,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#22c55e" stroke-width="1.6"><rect x="2" y="5" width="16" height="11" rx="2"/><path d="M2 9h16"/><path d="M6 13h4M14 13h1"/><path d="M6 2l-1 3M14 2l1 3"/></svg>
@@ -1803,7 +1854,7 @@
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(7)'),'hr-expiry');refreshExpiryAlerts();go('staff')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(239,68,68,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#ef4444" stroke-width="1.6"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2z"/><path d="M10 7v4M10 13v.5"/></svg>
@@ -1816,7 +1867,7 @@
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(5)'),'hr-corrections');go('staff')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(251,146,60,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#fb923c" stroke-width="1.6"><path d="M4 10h12M10 4v12" stroke-linecap="round"/><rect x="3" y="3" width="14" height="14" rx="3"/></svg>
@@ -1914,7 +1965,7 @@
 
   <!-- Settings + Biometric -->
   <div class="g2 mb16">
-    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(8)'),'hr-policy');go('staff')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(20,184,166,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#14b8a6" stroke-width="1.6"><path d="M10 2l1.5 4.5h4.5l-3.5 2.5 1.5 4.5L10 11l-4 2.5 1.5-4.5L4 6.5h4.5z"/></svg>
@@ -1926,7 +1977,7 @@
         </div>
       </div>
     </div>
-    <div class="card hrms-mod-card" onclick="stab(document.querySelector('#page-staff .tab:nth-child(9)'),'hr-bio');go('staff')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(99,102,241,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#6366f1" stroke-width="1.6"><rect x="4" y="2" width="12" height="16" rx="2"/><path d="M7 7c.5-1 1.5-1.5 3-1.5s2.5.5 3 1.5"/><path d="M7 10c.5 1 1.5 1.5 3 1.5s2.5-.5 3-1.5"/><circle cx="10" cy="8.5" r="1" fill="#6366f1" stroke="none"/></svg>
@@ -1945,11 +1996,11 @@
     <div class="card">
       <div class="card-hd"><div class="card-title">Quick Actions</div></div>
       <div style="display:flex;flex-direction:column;gap:8px;padding-top:4px">
-        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="go('staff');setTimeout(()=>showM('m-emp'),50)">
+        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="window.open('/hrms.html','_blank')">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/><line x1="13" y1="2" x2="13" y2="6"/><line x1="11" y1="4" x2="15" y2="4"/></svg>
           Add New Employee
         </button>
-        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="go('staff');setTimeout(()=>{stab(document.querySelector('#page-staff .tab:nth-child(4)'),'hr-leave');showM('m-leave');},50)">
+        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="window.open('/hrms.html','_blank')">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M2 6h12M5 1.5v3M11 1.5v3"/></svg>
           Apply for Leave
         </button>
@@ -1957,7 +2008,7 @@
           <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/><path d="M12 2l1 1-2.5 2.5-1-1"/></svg>
           Open Job Requisition
         </button>
-        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="go('staff');setTimeout(()=>showM('m-loan'),50)">
+        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="window.open('/hrms.html','_blank')">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="9" rx="1"/><path d="M2 7h12M5 11h3M10 11h1"/></svg>
           New Loan Request
         </button>
@@ -1981,410 +2032,6 @@
         <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">✓</div><div><div style="font-size:13px;font-weight:500">Document Expiry Alerts</div><div class="card-sub">Visa · Passport · EID · Labor Card · Insurance tracking</div></div></div>
         <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">⚙</div><div><div style="font-size:13px;font-weight:500">MOL Contract Tracking</div><div class="card-sub">Ministry of Labour contract upload and expiry management</div></div></div>
         <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">⚙</div><div><div style="font-size:13px;font-weight:500">Public Holiday Calendar</div><div class="card-sub">UAE official holiday auto-sync and OT rate adjustment</div></div></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════ STAFF MANAGEMENT ═══════════════════ -->
-<div class="page" id="page-staff">
-  <div class="tabs">
-    <div class="tab on" onclick="stab(this,'hr-emp')">Employees</div>
-    <div class="tab" onclick="stab(this,'hr-att');openAttendanceCheck()">Attendance</div>
-    <div class="tab" onclick="stab(this,'hr-ot')">Overtime</div>
-    <div class="tab" onclick="stab(this,'hr-leave')">Leave Management</div>
-    <div class="tab" onclick="stab(this,'hr-corrections')">Corrections</div>
-    <div class="tab" onclick="stab(this,'hr-loans')">Loans &amp; Advances</div>
-    <div class="tab" onclick="stab(this,'hr-expiry');scheduleIdleTask(refreshExpiryAlerts,100)">Expiry Alerts</div>
-    <div class="tab" onclick="stab(this,'hr-policy')">HR Settings</div>
-    <div class="tab" onclick="stab(this,'hr-bio')">Biometric Integration</div>
-  </div>
-
-  <div class="tab-body on" id="hr-emp">
-    <div class="card mb16">
-      <div class="card-hd"><div class="card-title">Employee Directory</div><div class="flx" style="gap:6px"><button class="btn btn-g btn-sm" onclick="exportNearestTable(this,'employees.csv')">⬇ CSV</button><button class="btn btn-p" onclick="showM('m-emp')">+ Add Employee</button></div></div>
-      <table class="tbl">
-        <thead><tr><th>ID</th><th>Name</th><th>Department</th><th>Designation</th><th>Supervisor</th><th>Shift</th><th>Salary (AED)</th><th>Status</th><th></th></tr></thead>
-        <tbody id="employee-tbody">
-        </tbody>
-      </table>
-    </div>
-    <div class="g3">
-      <div class="setting-tile"><strong>Departments</strong><p>Management, Finance, Operations, Sales, and HR are available for reporting and approval routing.</p></div>
-      <div class="setting-tile"><strong>Designation Setup</strong><p>Job titles are linked to department, supervisor, payroll group, and default shift rules.</p></div>
-      <div class="setting-tile"><strong>Employee Documents</strong><p>Emirates ID, visa, work permit, contract, bank details, and emergency contact are tracked from the employee profile.</p></div>
-    </div>
-  </div>
-
-  <!-- Daily Attendance Check Modal -->
-  <div class="overlay" id="m-att-check" style="display:none">
-    <div class="modal" style="max-width:420px;text-align:center">
-      <div style="font-size:32px;margin-bottom:10px">📋</div>
-      <div style="font-size:17px;font-weight:700;margin-bottom:6px">Daily Attendance Check</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:24px" id="att-check-date"></div>
-      <div style="font-size:15px;font-weight:600;margin-bottom:20px">Do you have any absences today?</div>
-      <div style="display:flex;gap:12px;justify-content:center">
-        <button class="btn btn-r" style="min-width:110px;font-size:15px" onclick="closeM('m-att-check');openAbsencePicker()">Yes — Mark Absent</button>
-        <button class="btn btn-p" style="min-width:110px;font-size:15px" onclick="closeM('m-att-check')">No — All Present</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Absence Picker Modal -->
-  <div class="overlay" id="m-absence-picker" style="display:none">
-    <div class="modal" style="max-width:540px">
-      <div class="modal-hd"><div class="modal-title">Mark Absent Employees</div><button class="modal-close" onclick="closeM('m-absence-picker')">×</button></div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">Select employees who are absent today. The rest will be marked <strong>Present</strong>.</div>
-      <div id="absence-picker-list" style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto;margin-bottom:16px"></div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button class="btn btn-g" onclick="closeM('m-absence-picker')">Cancel</button>
-        <button class="btn btn-p" onclick="confirmAbsences()">Confirm &amp; Save Attendance</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="tab-body" id="hr-att">
-    <div class="g2 mb16">
-      <div class="card">
-        <div class="card-hd">
-          <div class="card-title" id="att-cal-title">Attendance Calendar</div>
-          <div class="flx">
-            <span class="b b-g" style="font-size:10px">Present</span>
-            <span class="b b-r" style="font-size:10px">Absent</span>
-            <span class="b b-a" style="font-size:10px">Leave</span>
-          </div>
-        </div>
-        <div id="att-cal-grid" class="cal-grid">
-          <div class="cal-day-name">Sun</div><div class="cal-day-name">Mon</div><div class="cal-day-name">Tue</div><div class="cal-day-name">Wed</div><div class="cal-day-name">Thu</div><div class="cal-day-name">Fri</div><div class="cal-day-name">Sat</div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Today's Attendance</div><span id="att-time" class="mono" style="font-size:12px;color:var(--accent)">Live</span></div>
-        <table class="tbl">
-          <thead><tr><th>Employee</th><th>In</th><th>Out</th><th>Hours</th><th>Late</th><th>OT</th><th>Status</th></tr></thead>
-          <tbody id="att-today-tbody">
-          </tbody>
-        </table>
-        <div class="divider"></div>
-        <div class="flx" style="gap:8px;flex-wrap:wrap"><button class="btn btn-g" onclick="showM('m-att-correction')">+ Correction Request</button><button class="btn btn-p" onclick="toast('Daily attendance recalculated','ok')">Recalculate Hours</button></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="tab-body" id="hr-ot">
-    <div class="g4 mb16">
-      <div class="stat"><div class="stat-lbl">Pending OT</div><div class="stat-val" style="color:var(--amber)">4</div><div class="stat-delta">supervisor review</div></div>
-      <div class="stat"><div class="stat-lbl">Approved Hours</div><div class="stat-val" style="color:var(--green)">18.5</div><div class="stat-delta">June 2024</div></div>
-      <div class="stat"><div class="stat-lbl">Payroll Value</div><div class="stat-val" style="color:var(--accent)">AED 1.2k</div><div class="stat-delta">approved OT only</div></div>
-      <div class="stat"><div class="stat-lbl">Rejected</div><div class="stat-val" style="color:var(--red)">1</div><div class="stat-delta">needs reason</div></div>
-    </div>
-    <div class="g2 mb16">
-      <div class="card">
-        <div class="card-hd"><div><div class="card-title">Overtime Requests</div><div class="card-sub">Detected from attendance after checkout</div></div><button class="btn btn-p btn-sm" onclick="showM('m-ot')">+ Submit OT</button></div>
-        <table class="tbl">
-          <thead><tr><th>Employee</th><th>Date</th><th>Shift</th><th>Worked</th><th>OT</th><th>Status</th><th></th></tr></thead>
-          <tbody id="ot-tbody">
-          </tbody>
-        </table>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Approval Workflow</div></div>
-        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">1</div><div><div>Employee Submit</div><div class="card-sub">Reason and optional attachment required</div></div></div>
-        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">2</div><div><div>Supervisor Approval</div><div class="card-sub">Supervisor cannot approve own overtime</div></div></div>
-        <div class="tline-item"><div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)">3</div><div><div>HR Final Approval</div><div class="card-sub">HR may adjust hours with audit remarks</div></div></div>
-        <div class="tline-item"><div class="tline-dot" style="background:var(--purple-bg);color:var(--purple)">4</div><div><div>Payroll Sync</div><div class="card-sub">Approved OT hours flow into payroll variable pay</div></div></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="tab-body" id="hr-leave">
-    <div class="g2 mb16">
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Leave Requests</div><button class="btn btn-p" onclick="showM('m-leave')">+ Apply Leave</button></div>
-        <table class="tbl">
-          <thead><tr><th>Employee</th><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Status</th><th></th></tr></thead>
-          <tbody id="leave-tbody">
-          </tbody>
-        </table>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Leave Balance Summary</div></div>
-        <table class="tbl">
-          <thead><tr><th>Employee</th><th>Annual</th><th>Sick</th><th>Used</th><th>Remaining</th></tr></thead>
-          <tbody id="leave-balance-tbody">
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <!-- Leave Calendar -->
-    <div class="card">
-      <div class="card-hd">
-        <div><div class="card-title">Leave Calendar</div><div class="card-sub">Visual monthly overview of all leave</div></div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn btn-g btn-sm" onclick="leaveCalNav(-1)">&#8592;</button>
-          <span id="leave-cal-label" style="font-weight:600;min-width:120px;text-align:center"></span>
-          <button class="btn btn-g btn-sm" onclick="leaveCalNav(1)">&#8594;</button>
-        </div>
-      </div>
-      <div id="leave-calendar" style="overflow-x:auto"></div>
-    </div>
-  </div>
-
-  <div class="tab-body" id="hr-corrections">
-    <div class="g2 mb16">
-      <div class="card">
-        <div class="card-hd"><div><div class="card-title">Attendance Corrections</div><div class="card-sub">Forgotten check-in, checkout, and break fixes</div></div><button class="btn btn-p btn-sm" onclick="showM('m-att-correction')">+ New Request</button></div>
-        <table class="tbl">
-          <thead><tr><th>Employee</th><th>Date</th><th>Requested In</th><th>Requested Out</th><th>Reason</th><th>Status</th><th></th></tr></thead>
-          <tbody id="corrections-tbody">
-          </tbody>
-        </table>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Break Time</div><button class="btn btn-g btn-sm" onclick="toast('Break policy saved','ok')">Save</button></div>
-        <div class="toggle-row"><div><div>Deduct lunch break automatically</div><div class="toggle-copy">Subtract 60 minutes when total work exceeds 6 hours.</div></div><input type="checkbox" checked></div>
-        <div class="toggle-row"><div><div>Allow multiple breaks</div><div class="toggle-copy">Capture start and end time for each break segment.</div></div><input type="checkbox" checked></div>
-        <div class="toggle-row"><div><div>Require approval for attendance edits</div><div class="toggle-copy">Approved corrections update attendance and create an audit log.</div></div><input type="checkbox" checked></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="tab-body" id="hr-loans">
-    <div class="g2 mb16">
-      <div class="card">
-        <div class="card-hd"><div><div class="card-title">Employee Loans</div><div class="card-sub">Request, approval, EMI schedule, and auto payroll deduction</div></div><button class="btn btn-p btn-sm" onclick="showM('m-loan')">+ New Loan</button></div>
-        <table class="tbl">
-          <thead><tr><th>Employee</th><th>Type</th><th>Amount (AED)</th><th>EMI / Month</th><th>Balance</th><th>Status</th><th></th></tr></thead>
-          <tbody id="loans-tbody">
-            <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No loan records. Click <strong>+ New Loan</strong> to create one.</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div><div class="card-title">Salary Advances</div><div class="card-sub">One-time advance deducted from next salary</div></div><button class="btn btn-g btn-sm" onclick="showM('m-loan-advance')">+ Request Advance</button></div>
-        <table class="tbl">
-          <thead><tr><th>Employee</th><th>Month</th><th>Amount (AED)</th><th>Requested</th><th>Status</th><th></th></tr></thead>
-          <tbody id="advances-tbody">
-            <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No salary advance requests yet.</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <div class="g2">
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Loan Approval Workflow</div></div>
-        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">1</div><div><div>Employee Submits Request</div><div class="card-sub">Loan amount, purpose, and preferred EMI schedule</div></div></div>
-        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">2</div><div><div>HR Reviews</div><div class="card-sub">Checks existing loans, outstanding balance, and policy limits</div></div></div>
-        <div class="tline-item"><div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)">3</div><div><div>Management Approval</div><div class="card-sub">Finance head or MD approves based on amount threshold</div></div></div>
-        <div class="tline-item"><div class="tline-dot" style="background:var(--purple-bg);color:var(--purple)">4</div><div><div>Auto EMI Deduction</div><div class="card-sub">Monthly installment auto-deducted from payroll until cleared</div></div></div>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Loan Policy Settings</div></div>
-        <div class="toggle-row"><div><div>Allow employee loans</div><div class="toggle-copy">Enable loan request module for all employees.</div></div><input type="checkbox" checked></div>
-        <div class="toggle-row"><div><div>Max loan: 3× basic salary</div><div class="toggle-copy">System blocks requests exceeding 3 months base salary.</div></div><input type="checkbox" checked></div>
-        <div class="toggle-row"><div><div>Auto EMI payroll deduction</div><div class="toggle-copy">Monthly installment auto-deducted from net salary.</div></div><input type="checkbox" checked></div>
-        <div class="toggle-row"><div><div>Require MD approval above AED 10,000</div><div class="toggle-copy">Loans above threshold need MD or Finance Director sign-off.</div></div><input type="checkbox" checked></div>
-        <div class="toggle-row"><div><div>Allow salary advances</div><div class="toggle-copy">Employees may request one advance per month (max 50% of salary).</div></div><input type="checkbox" checked></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="tab-body" id="hr-expiry">
-    <div class="g4 mb16">
-      <div class="stat"><div class="stat-lbl">Critical (≤30 Days)</div><div class="stat-val" id="expiry-30" style="color:var(--red)">—</div><div class="stat-delta">immediate action</div></div>
-      <div class="stat"><div class="stat-lbl">Warning (≤90 Days)</div><div class="stat-val" id="expiry-90" style="color:var(--amber)">—</div><div class="stat-delta">plan renewal</div></div>
-      <div class="stat"><div class="stat-lbl">Valid Documents</div><div class="stat-val" id="expiry-valid" style="color:var(--green)">—</div><div class="stat-delta">no action needed</div></div>
-      <div class="stat"><div class="stat-lbl">Missing Data</div><div class="stat-val" id="expiry-missing" style="color:var(--text3)">—</div><div class="stat-delta">expiry not recorded</div></div>
-    </div>
-    <div class="card mb16">
-      <div class="card-hd"><div><div class="card-title">Document Expiry Tracker</div><div class="card-sub">Visa · Passport · Emirates ID · Insurance · Driving License · Labor Card</div></div><button class="btn btn-g btn-sm" onclick="refreshExpiryAlerts()">⟳ Refresh</button></div>
-      <table class="tbl">
-        <thead><tr><th>Employee</th><th>Document</th><th>Expiry Date</th><th>Days Left</th><th>Status</th><th></th></tr></thead>
-        <tbody id="expiry-tbody">
-          <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">Add employees with document expiry dates to see alerts here.</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="g2">
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Alert Configuration</div></div>
-        <div class="toggle-row"><div><div>Alert HR 90 days before expiry</div><div class="toggle-copy">Dashboard warning for visa, passport, and Emirates ID.</div></div><input type="checkbox" checked></div>
-        <div class="toggle-row"><div><div>Critical badge at 30 days</div><div class="toggle-copy">Show red badge on HRMS hub for documents expiring within 30 days.</div></div><input type="checkbox" checked></div>
-        <div class="toggle-row"><div><div>Track Insurance expiry</div><div class="toggle-copy">Alert when medical insurance policy is near expiry.</div></div><input type="checkbox" checked></div>
-        <div class="toggle-row"><div><div>Block payroll on expired visa</div><div class="toggle-copy">Prevent salary processing for employees with expired entry permit.</div></div><input type="checkbox"></div>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">UAE Document Requirements</div></div>
-        <div class="setting-tile"><strong>Visa / Entry Permit</strong><p>UAE Labour Law requires valid entry permit for all expatriate employees. Alert HR 90 and 30 days before expiry.</p></div>
-        <div class="setting-tile"><strong>Emirates ID (EID)</strong><p>Federal Identity Authority mandatory. System alerts at 60-day and 30-day pre-expiry milestones.</p></div>
-        <div class="setting-tile"><strong>Passport</strong><p>Most UAE contracts require 6+ months passport validity. Alert triggered when less than 6 months remain.</p></div>
-        <div class="setting-tile"><strong>Labor Card / Work Permit</strong><p>MOL Work Permit must be renewed before expiry. Linked to employment contract validity.</p></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="tab-body" id="hr-policy">
-    <!-- Dept table (same data as Settings → Departments & Branches) -->
-    <div class="card mb16">
-      <div class="card-hd">
-        <div><div class="card-title">Departments</div><div class="card-sub">Company departments — changes sync with Settings</div></div>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-p btn-sm" onclick="showDeptModal()">+ Add Department</button>
-          <button class="btn btn-g btn-sm" onclick="go('settings');setTimeout(()=>stab(document.querySelector('#page-settings .tab:nth-child(2)'),'set-depts'),80)">Settings →</button>
-        </div>
-      </div>
-      <table class="tbl"><thead><tr><th>Code</th><th>Department Name</th><th>Head / Manager</th><th>Description</th><th>Employees</th><th>Status</th><th></th></tr></thead>
-        <tbody id="hr-policy-dept-tbody"><tr><td colspan="7" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
-      </table>
-    </div>
-
-    <!-- OT Rules -->
-    <div class="card mb16">
-      <div class="card-hd"><div><div class="card-title">OT Rules &amp; Configuration</div><div class="card-sub">Define how overtime is calculated for all employees</div></div><button class="btn btn-p btn-sm" onclick="saveOtRules()">Save OT Rules</button></div>
-      <div class="g2 mb12" style="align-items:flex-start">
-        <!-- OT Rate -->
-        <div>
-          <div class="fl" style="font-weight:600;margin-bottom:8px">OT Rate</div>
-          <div class="ot-rule-options">
-            <label class="ot-rule-opt active" id="ot-lbl-fixed" onclick="selectOtRate('fixed')">
-              <input type="radio" name="ot-rate-type" value="fixed" checked>
-              <div><div class="ot-rule-opt-title">1. Fixed</div><div class="ot-rule-opt-sub">Fixed AED/hour amount regardless of employee salary</div></div>
-            </label>
-            <label class="ot-rule-opt" id="ot-lbl-monthly" onclick="selectOtRate('monthly')">
-              <input type="radio" name="ot-rate-type" value="monthly">
-              <div><div class="ot-rule-opt-title">2. Monthly-Based</div><div class="ot-rule-opt-sub">Hourly rate derived from monthly basic salary — updates automatically when salary changes</div></div>
-            </label>
-            <label class="ot-rule-opt" id="ot-lbl-rate-other" onclick="selectOtRate('other')">
-              <input type="radio" name="ot-rate-type" value="other">
-              <div><div class="ot-rule-opt-title">3. Other</div><div class="ot-rule-opt-sub">Custom formula or manual rate entry per employee</div></div>
-            </label>
-          </div>
-          <div id="ot-rate-fixed-cfg" class="ot-rule-config">
-            <div class="fr2">
-              <div class="fg"><label class="fl">Default OT Rate (AED/hour)</label><input class="fi mono" id="ot-fixed-rate" value="45.00" placeholder="45.00"></div>
-              <div class="fg"><label class="fl">Weekend/Holiday OT Rate (AED/hour)</label><input class="fi mono" id="ot-fixed-rate-wknd" value="67.50" placeholder="67.50"></div>
-            </div>
-          </div>
-          <div id="ot-rate-monthly-cfg" class="ot-rule-config" style="display:none">
-            <div class="card-sub mb8" style="padding:6px 8px;background:var(--accent-glow);border-radius:6px;color:var(--text2)">Formula: Basic Salary ÷ (Working Days/Month × Hours/Day) × OT Multiplier</div>
-            <div class="fr2">
-              <div class="fg"><label class="fl">Working Days per Month</label><input class="fi mono" id="ot-work-days" value="22" placeholder="22"></div>
-              <div class="fg"><label class="fl">Working Hours per Day</label><input class="fi mono" id="ot-work-hours" value="8" placeholder="8"></div>
-            </div>
-            <div class="fg"><label class="fl">Example — AED 5,000 salary</label><input class="fi mono" id="ot-monthly-example" readonly value="5000 ÷ (22 × 8) = AED 28.41/hr base × multiplier" style="background:var(--bg3);color:var(--text3)"></div>
-          </div>
-          <div id="ot-rate-other-cfg" class="ot-rule-config" style="display:none">
-            <div class="fg"><label class="fl">Custom Rate Formula / Notes</label><textarea class="fi" id="ot-rate-formula" rows="2" placeholder="Describe how the OT rate should be calculated..."></textarea></div>
-          </div>
-        </div>
-        <!-- OT Hours -->
-        <div>
-          <div class="fl" style="font-weight:600;margin-bottom:8px">OT Hours Calculation</div>
-          <div class="ot-rule-options">
-            <label class="ot-rule-opt active" id="ot-lbl-hrs" onclick="selectOtHours('hours')">
-              <input type="radio" name="ot-hours-type" value="hours" checked>
-              <div><div class="ot-rule-opt-title">1. Calculated Based on Hours</div><div class="ot-rule-opt-sub">Count actual clock-in/out overtime hours from biometric/attendance</div></div>
-            </label>
-            <label class="ot-rule-opt" id="ot-lbl-days" onclick="selectOtHours('days')">
-              <input type="radio" name="ot-hours-type" value="days">
-              <div><div class="ot-rule-opt-title">2. Calculated Based on Days</div><div class="ot-rule-opt-sub">Count OT days and multiply by daily working hours</div></div>
-            </label>
-            <label class="ot-rule-opt" id="ot-lbl-hrs-other" onclick="selectOtHours('other')">
-              <input type="radio" name="ot-hours-type" value="other">
-              <div><div class="ot-rule-opt-title">3. Other</div><div class="ot-rule-opt-sub">Custom hours calculation method</div></div>
-            </label>
-          </div>
-          <div id="ot-hours-days-cfg" class="ot-rule-config" style="display:none">
-            <div class="fg"><label class="fl">Hours per OT Day</label><input class="fi mono" id="ot-hrs-per-day" value="8" placeholder="8"></div>
-          </div>
-          <div id="ot-hours-other-cfg" class="ot-rule-config" style="display:none">
-            <div class="fg"><label class="fl">Custom Hours Calculation Notes</label><textarea class="fi" rows="2" placeholder="Describe the custom OT hours calculation method..."></textarea></div>
-          </div>
-        </div>
-      </div>
-      <!-- OT Multipliers -->
-      <div class="section-hd" style="margin:4px 0 10px">OT Multipliers (UAE Labour Law)</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
-        <div class="fg"><label class="fl">Normal OT</label><div style="position:relative"><input class="fi mono" id="ot-mult-normal" value="1.25" placeholder="1.25"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text3)">×</span></div></div>
-        <div class="fg"><label class="fl">Weekend OT</label><div style="position:relative"><input class="fi mono" id="ot-mult-weekend" value="1.50" placeholder="1.50"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text3)">×</span></div></div>
-        <div class="fg"><label class="fl">Public Holiday OT</label><div style="position:relative"><input class="fi mono" id="ot-mult-holiday" value="1.50" placeholder="1.50"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text3)">×</span></div></div>
-        <div class="fg"><label class="fl">Ramadan OT</label><div style="position:relative"><input class="fi mono" id="ot-mult-ramadan" value="1.25" placeholder="1.25"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text3)">×</span></div></div>
-      </div>
-      <!-- Named OT Rules table -->
-      <div class="card-hd" style="margin-bottom:8px">
-        <div class="card-title" style="font-size:13px">Named OT Rules</div>
-        <button class="btn btn-g btn-sm" onclick="addNamedOtRule()">+ Add Rule</button>
-      </div>
-      <table class="tbl">
-        <thead><tr><th>Rule Name</th><th>Rate Type</th><th>Hours Type</th><th>Normal ×</th><th>Weekend ×</th><th>Holiday ×</th><th>Applies To</th><th></th></tr></thead>
-        <tbody id="ot-rules-tbody">
-          <tr><td>UAE Standard OT</td><td><span class="b b-b">Monthly-Based</span></td><td><span class="b" style="background:var(--bg3)">Based on Hours</span></td><td>1.25</td><td>1.50</td><td>1.50</td><td>All Employees</td><td><button class="btn btn-g btn-sm" onclick="toast('Edit OT rule','info')">Edit</button></td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- HR General Rules + Holiday Calendar -->
-    <div class="g2 mb16">
-      <div class="card">
-        <div class="card-hd"><div class="card-title">HR Rules</div><button class="btn btn-p btn-sm" onclick="toast('HR rules saved','ok')">Save Rules</button></div>
-        <div class="fr2">
-          <div class="fg"><label class="fl">Late Grace Period</label><input class="fi mono" value="10 minutes"></div>
-          <div class="fg"><label class="fl">Minimum OT</label><input class="fi mono" value="30 minutes"></div>
-        </div>
-        <div class="fr2">
-          <div class="fg"><label class="fl">Maximum Daily OT</label><input class="fi mono" value="4 hours"></div>
-          <div class="fg"><label class="fl">Weekend Policy</label><select class="fi"><option>Saturday-Sunday Off</option><option>Friday Off</option><option>Custom by rota</option></select></div>
-        </div>
-        <div class="fg"><label class="fl">Approval Hierarchy</label><select class="fi"><option>Employee - Supervisor - HR - Payroll</option><option>Employee - HR - Payroll</option><option>Department based</option></select></div>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Holiday Calendar</div><button class="btn btn-g btn-sm" onclick="toast('Holiday added','ok')">+ Add Holiday</button></div>
-        <table class="tbl">
-          <thead><tr><th>Date</th><th>Holiday</th><th>Location</th><th>Paid</th><th>Status</th></tr></thead>
-          <tbody>
-            <tr><td>16 Jun</td><td>Eid Al Adha</td><td>All branches</td><td><span class="b b-g">Yes</span></td><td><span class="b b-g">Active</span></td></tr>
-            <tr><td>07 Jul</td><td>Islamic New Year</td><td>All branches</td><td><span class="b b-g">Yes</span></td><td><span class="b b-a">Planned</span></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <div class="g3">
-      <div class="setting-tile"><strong>Payroll Lock</strong><p>Attendance and overtime cannot be edited after payroll is finalized unless HR reopens the month.</p></div>
-      <div class="setting-tile"><strong>Notifications</strong><p>Send alerts for overtime submission, leave approval, missing checkout, and payroll generation.</p></div>
-      <div class="setting-tile"><strong>Audit Log</strong><p>Track HR overrides, attendance corrections, salary edits, role changes, and payroll regeneration.</p></div>
-    </div>
-  </div>
-
-  <div class="tab-body" id="hr-bio">
-    <div class="g2 mb16">
-      <div class="card">
-        <div class="card-hd"><div><div class="card-title">Biometric Machine Integration</div><div class="card-sub">ZKTeco / Suprema · TCP/IP API</div></div><div class="flx"><div class="bio-pulse"></div><span style="font-size:12px;color:var(--green);margin-left:6px">Live</span></div></div>
-        <div class="divider"></div>
-        <div class="fg"><label class="fl">Device IP Address</label><input class="fi mono" value="192.168.1.100"></div>
-        <div class="fr2">
-          <div class="fg"><label class="fl">Port</label><input class="fi mono" value="4370"></div>
-          <div class="fg"><label class="fl">Device Model</label><select class="fi"><option selected>ZKTeco F22</option><option>ZKTeco K40</option><option>Suprema BioStation</option><option>HikVision DS-K1T</option></select></div>
-        </div>
-        <div class="fr2">
-          <div class="fg"><label class="fl">Communication Key</label><input class="fi mono" value="0" type="password"></div>
-          <div class="fg"><label class="fl">Sync Interval</label><select class="fi"><option>Every 5 minutes</option><option>Real-time</option><option>Every 15 minutes</option></select></div>
-        </div>
-        <div class="flx" style="gap:8px;flex-wrap:wrap">
-          <button class="btn btn-success btn-sm" onclick="testBio()">Test Connection</button>
-          <button class="btn btn-p btn-sm" onclick="toast('Syncing attendance from device...','info')">Sync Now</button>
-          <button class="btn btn-g btn-sm" onclick="toast('Pulling employee list from device...','info')">Pull Users</button>
-          <button class="btn btn-g btn-sm" onclick="toast('Pushing employees to device...','info')">Push Users</button>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Live Sync Log</div></div>
-        <div style="font-family:'DM Mono',monospace;font-size:11.5px;color:var(--text3);line-height:1.8" id="bio-log">
-          <div><span style="color:var(--green)">✓ 17:31:02</span> — Synced 8 records from device</div>
-          <div><span style="color:var(--green)">✓ 17:26:02</span> — Synced 2 records from device</div>
-          <div><span style="color:var(--amber)">⚠ 17:21:05</span> — Retry after timeout, reconnected</div>
-          <div><span style="color:var(--green)">✓ 17:16:02</span> — Synced 5 records from device</div>
-          <div style="color:var(--text3)">No activity today.</div>
-        </div>
       </div>
     </div>
   </div>
@@ -2623,10 +2270,10 @@
       <div class="card">
         <div class="card-hd"><div class="card-title">Pending Approvals</div></div>
         <div id="mgr-pending-list" style="display:flex;flex-direction:column;gap:10px;padding-top:4px">
-          <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)" id="mgr-leave-cnt">—</div><div><div>Leave Requests</div><div class="card-sub">Annual, sick, casual, and emergency leaves pending approval</div></div><button class="btn btn-g btn-sm" onclick="go('staff');setTimeout(()=>stab(document.querySelector('#page-staff .tab:nth-child(4)'),'hr-leave'),50)">View</button></div>
-          <div class="tline-item"><div class="tline-dot" style="background:var(--red-bg,#fee2e2);color:var(--red)" id="mgr-ot-cnt">—</div><div><div>Overtime Requests</div><div class="card-sub">OT submitted by team members awaiting approval</div></div><button class="btn btn-g btn-sm" onclick="go('staff');setTimeout(()=>stab(document.querySelector('#page-staff .tab:nth-child(3)'),'hr-ot'),50)">View</button></div>
-          <div class="tline-item"><div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)" id="mgr-corr-cnt">—</div><div><div>Attendance Corrections</div><div class="card-sub">Check-in/out corrections from team members</div></div><button class="btn btn-g btn-sm" onclick="go('staff');setTimeout(()=>stab(document.querySelector('#page-staff .tab:nth-child(5)'),'hr-corrections'),50)">View</button></div>
-          <div class="tline-item"><div class="tline-dot" style="background:var(--purple-bg);color:var(--purple)">—</div><div><div>Loan Requests</div><div class="card-sub">Employee loan applications awaiting manager approval</div></div><button class="btn btn-g btn-sm" onclick="go('staff');setTimeout(()=>stab(document.querySelector('#page-staff .tab:nth-child(6)'),'hr-loans'),50)">View</button></div>
+          <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)" id="mgr-leave-cnt">—</div><div><div>Leave Requests</div><div class="card-sub">Annual, sick, casual, and emergency leaves pending approval</div></div><button class="btn btn-g btn-sm" onclick="window.open('/hrms.html','_blank')">View</button></div>
+          <div class="tline-item"><div class="tline-dot" style="background:var(--red-bg,#fee2e2);color:var(--red)" id="mgr-ot-cnt">—</div><div><div>Overtime Requests</div><div class="card-sub">OT submitted by team members awaiting approval</div></div><button class="btn btn-g btn-sm" onclick="window.open('/hrms.html','_blank')">View</button></div>
+          <div class="tline-item"><div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)" id="mgr-corr-cnt">—</div><div><div>Attendance Corrections</div><div class="card-sub">Check-in/out corrections from team members</div></div><button class="btn btn-g btn-sm" onclick="window.open('/hrms.html','_blank')">View</button></div>
+          <div class="tline-item"><div class="tline-dot" style="background:var(--purple-bg);color:var(--purple)">—</div><div><div>Loan Requests</div><div class="card-sub">Employee loan applications awaiting manager approval</div></div><button class="btn btn-g btn-sm" onclick="window.open('/hrms.html','_blank')">View</button></div>
         </div>
       </div>
       <div class="card">
