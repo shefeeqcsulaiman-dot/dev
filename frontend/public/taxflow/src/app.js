@@ -10,7 +10,7 @@ META.payments={t:'Bank & Payments',s:'Accounts - transactions - receipts - payme
 META.documents={t:'Documents',s:'Receipts - PDFs - Audit files - Attachments',a:'Upload Document',ao:()=>toast('Choose files to upload...','info')};
 META.notifications={t:'Notifications',s:'Email - WhatsApp - SMS - Push - In-app alerts',a:'+ New Rule',ao:()=>toast('Notification rule builder opened','info')};
 META.rota={t:'Rota Planning',s:'Shift setup - Weekly rota - Coverage - Swap requests',a:'Publish Rota',ao:()=>publishRota()};
-META.hrms={t:'HRMS Dashboard',s:'Employees · Attendance · Leave · OT · Payroll · Compliance Overview',a:'+ Add Employee',ao:()=>{if(window.HRMS_STANDALONE){go('staff');setTimeout(()=>openEmpModal(),50);}else{window.open('/hrms.html','_blank');}}};
+META.hrms={t:'HRMS Dashboard',s:'Employees · Attendance · Leave · OT · Payroll · Compliance Overview',a:'+ Add Employee',ao:()=>{if(window.HRMS_STANDALONE){go('staff');setTimeout(()=>openEmpModal(),50);}else{window.open('/hrms','_blank');}}};
 META.recruitment={t:'Recruitment ATS',s:'Job Requisitions - Candidates - Interviews - Offer Letters - Onboarding',a:'+ New Requisition',ao:()=>showM('m-recruitment')};
 META['hrms-ext']={t:'HR Modules',s:'Performance - Training - Asset Management - ESS - Manager Portal',a:'',ao:null};
 META.accounting={t:'Accounting',s:'Chart - Vouchers - Ledger - Filing - Bank Recon',a:'+ Voucher',ao:()=>{go('accounting');setTimeout(()=>stab(document.querySelectorAll('#page-accounting .tab')[1],'acc-voucher'),50)}};
@@ -152,7 +152,7 @@ function go(page){
       document.getElementById('psub').textContent='Configure departments, roles, OT rules, leave policy, and user access';
       document.getElementById('nav-hr-settings')?.classList.add('on');
     }else{
-      window.open('/hrms.html','_blank');
+      window.open('/hrms','_blank');
     }
     return;
   }
@@ -276,7 +276,7 @@ function goHrmsTab(n,id){
     if(tab)stab(tab,id);
     go('staff');
   }else{
-    window.open('/hrms.html','_blank');
+    window.open('/hrms','_blank');
   }
 }
 
@@ -1905,6 +1905,10 @@ async function applyRoleBasedNav(){
     const user=await resp.json();
     const role=(user.role||'admin').toLowerCase();
     localStorage.setItem('taxflow_user_role',role);
+    const topName=document.getElementById('hrms-top-name');
+    const topAv=document.getElementById('hrms-top-av');
+    if(topName)topName.textContent=user.name||user.email||'Admin';
+    if(topAv)topAv.textContent=initialsFromName(user.name||user.email||'Admin');
     if(role==='admin'||role==='superadmin')return; // full access
     const allowed=new Set(_NAV_ROLE_MAP[role]||[]);
     document.querySelectorAll('.nav[onclick]').forEach(nav=>{
@@ -2041,7 +2045,9 @@ function _applyLogoEverywhere(){
   const sbImg=document.getElementById('sb-logo-img');
   const sbBrand=document.querySelector('.sb-brand');
   const sbName=document.getElementById('sb-company-name');
+  const sbIcon=document.getElementById('sb-logo-icon');
   if(sbImg){sbImg.src=logo||'';sbImg.style.display=logo?'block':'none';}
+  if(sbIcon)sbIcon.style.display=logo?'none':'';
   if(sbBrand)sbBrand.style.display=logo?'none':'';
   if(sbName){
     const name=currentCompany?.name||localStorage.getItem('taxflow_company_name')||'';
@@ -5418,14 +5424,25 @@ function renderDashBankRecon(){
   set('dash-bank-inflow',formatAed(inflow));
   set('dash-bank-outflow',formatAed(outflow));
   set('dash-bank-net',formatAed(net));
-  const badge=document.getElementById('dash-bank-recon-status');
-  if(badge){
+  set('dash-bankm-book',formatAed(bookBalance));
+  set('dash-bankm-inflow',formatAed(inflow));
+  set('dash-bankm-outflow',formatAed(outflow));
+  set('dash-bankm-net',formatAed(net));
+  const netEl=document.getElementById('dash-bankm-net');
+  if(netEl)netEl.style.color=net<0?'var(--red)':net>0?'var(--green)':'var(--text)';
+  const unmatched=Math.abs(openingBalance-bookBalance);
+  const unmatchedEl=document.getElementById('dash-bankm-unmatched');
+  if(unmatchedEl)unmatchedEl.textContent=!payments.length&&!bankAccounts.length?'د.إ —':formatAed(unmatched);
+  const statusLabels=['dash-bank-recon-status','dash-bankm-status'];
+  statusLabels.forEach(sid=>{
+    const badge=document.getElementById(sid);
+    if(!badge)return;
     if(!payments.length&&!bankAccounts.length){badge.textContent='No data';badge.className='b b-b';}
     else if(balanced){badge.textContent='Balanced';badge.className='b b-g';}
     else{badge.textContent='Unmatched';badge.className='b b-r';}
-  }
-  const bar=document.getElementById('dash-bank-bar');
-  if(bar){const total=Math.max(1,inflow+outflow);bar.style.width=Math.min(100,Math.round(inflow/total*100))+'%';}
+  });
+  const bars=[['dash-bank-bar',inflow,outflow],['dash-bankm-bar',inflow,outflow]];
+  bars.forEach(([bid,i,o])=>{const bar=document.getElementById(bid);if(bar){const total=Math.max(1,i+o);bar.style.width=Math.min(100,Math.round(i/total*100))+'%';}});
 }
 
 function renderBankTransactions(payments=currentFinancePayments(),openingBalance=0){
@@ -14808,7 +14825,7 @@ function refreshHrmsDashboard(){
         offset+=dash;ci++;
       });
     } else {
-      assetsLeg.innerHTML='<div style="font-size:11px;color:var(--text3)">No assets assigned yet.<br><a style="color:#3b82f6;cursor:pointer" onclick="window.open(\'/hrms.html\',\'_blank\')">Go to Asset Management →</a></div>';
+      assetsLeg.innerHTML='<div style="font-size:11px;color:var(--text3)">No assets assigned yet.<br><a style="color:#3b82f6;cursor:pointer" onclick="window.open(\'/hrms\',\'_blank\')">Go to Asset Management →</a></div>';
     }
   }
 
@@ -15127,23 +15144,24 @@ function hrmsAiCvUpload(input){
 }
 
 function hrmsAiCvFillForm(jsonStr){
+  if(!window.HRMS_STANDALONE){window.open('/hrms','_blank');return;}
   try{
     const data=JSON.parse(jsonStr);
     const field=(id,val)=>{const el=document.getElementById(id);if(el&&val)el.value=val;};
     const sel=(id,val)=>{const el=document.getElementById(id);if(el&&val)setSelectValue(el,val);};
-    window.open('/hrms.html','_blank');
+    go('staff');
     setTimeout(()=>{
-      showM('m-emp');
+      openEmpModal();
       setTimeout(()=>{
-          field('emp-name',data.full_name);
-          field('emp-email',data.email);
-          field('emp-phone',data.phone);
-          field('emp-designation',data.designation);
-          sel('emp-department',data.department_suggestion);
-          field('emp-salary',data.basic_salary_suggestion||'');
-          toast('CV data filled into employee form','ok');
-        },300);
-      },200);
+        field('emp-name',data.full_name);
+        field('emp-email',data.email);
+        field('emp-phone',data.phone);
+        field('emp-designation',data.designation);
+        sel('emp-department',data.department_suggestion);
+        field('emp-salary',data.basic_salary_suggestion||'');
+        toast('CV data filled into employee form','ok');
+      },300);
+    },200);
   }catch{}
 }
 

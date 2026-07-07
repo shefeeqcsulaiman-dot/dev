@@ -160,12 +160,13 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 <div class="scrim" id="nav-scrim" aria-hidden="true" onclick="closeSidebar()"></div>
 <nav class="sb" id="sidebar" aria-label="HRMS Navigation">
   <div class="sb-logo">
-    <div style="width:34px;height:34px;border-radius:9px;background:#2563eb;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+    <img id="sb-logo-img" class="sb-logo-img" alt="Company Logo" style="display:none">
+    <div id="sb-logo-icon" style="width:34px;height:34px;border-radius:9px;background:#2563eb;display:flex;align-items:center;justify-content:center;flex-shrink:0">
       <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.6"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><circle cx="12.5" cy="5" r="1.8"/><path d="M14.5 13c0-2-1.3-3-2.5-3.5"/></svg>
     </div>
     <div class="sb-logo-text">
-      <div class="sb-brand">@ <span>HRMS</span></div>
-      <div style="font-size:9px;color:rgba(255,255,255,.32);font-weight:500;margin-top:1px">Human Resources</div>
+      <div class="sb-brand">Tax<span>Flow</span></div>
+      <div id="sb-company-name" class="sb-company-name" style="display:none"></div>
     </div>
   </div>
 
@@ -1076,7 +1077,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         <div><div class="card-title">Departments</div><div class="card-sub">Manage company departments used in employee profiles, payroll, and reporting</div></div>
         <button class="btn btn-p btn-sm" onclick="showDeptModal()">+ Add Department</button>
       </div>
-      <table class="tbl" id="dept-table">
+      <table class="tbl" id="dept-table" data-delete-actions-bound="skip">
         <thead><tr><th>Code</th><th>Department Name</th><th>Head / Manager</th><th>Description</th><th>Employees</th><th>Status</th><th></th></tr></thead>
         <tbody id="dept-tbody">
           <tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">Loading departments…</td></tr>
@@ -1088,7 +1089,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         <div><div class="card-title">Branches / Locations</div><div class="card-sub">Manage company branches and office locations</div></div>
         <button class="btn btn-p btn-sm" onclick="showBranchModal()">+ Add Branch</button>
       </div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Code</th><th>Branch Name</th><th>City / Emirate</th><th>Status</th><th></th></tr></thead>
         <tbody id="branch-tbody"><tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px">Loading branches…</td></tr></tbody>
       </table>
@@ -1102,7 +1103,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         <div><div class="card-title">Roles &amp; Permissions</div><div class="card-sub">Define roles per branch and department — employees are assigned roles during creation</div></div>
         <button class="btn btn-p btn-sm" onclick="showRoleModal()">+ Add Role</button>
       </div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Branch</th><th>Department</th><th>Role Name</th><th>Permissions</th><th>Status</th><th></th></tr></thead>
         <tbody id="role-tbody">
           <tr><td colspan="6" style="color:var(--text3);text-align:center;padding:24px">Loading roles…</td></tr>

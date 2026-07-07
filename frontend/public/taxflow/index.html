@@ -87,7 +87,7 @@
 
   <div class="sb-section">
     <div class="sb-lbl" data-i18n="sb_hr">People &amp; HR</div>
-    <div class="nav" id="nav-hrms" onclick="window.open('/hrms.html','_blank')" title="Opens HRMS Portal in a new tab">
+    <div class="nav" id="nav-hrms" onclick="window.open('/hrms','_blank')" title="Opens HRMS Portal in a new tab">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2a3 3 0 100 6 3 3 0 000-6z"/><path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/><path d="M12 7l1.5-1.5"/><circle cx="13.5" cy="4.5" r="1.5"/></svg>
       <span data-i18n="sb_hrms">HRMS</span>
       <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.45"><path d="M2 2h8v8M10 2L2 10"/></svg>
@@ -585,8 +585,10 @@
 
       </div>
 
-      <!-- ROW 4: Staff Today (Human Resources) -->
-      <div style="margin-top:14px">
+      <!-- ROW 4: Staff Today + Bank Reconciliation -->
+      <div class="mb3-bottom-row" style="margin-top:14px">
+
+        <!-- Staff Today (Human Resources) -->
         <div class="mb3-card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
           <!-- Illustrated banner -->
           <div style="background:linear-gradient(135deg,#d1fae5 0%,#a7f3d0 55%,#99f6e4 100%);padding:16px 18px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:100px;position:relative;overflow:hidden">
@@ -629,6 +631,78 @@
             <div id="dash-staff-today"><div class="dv2-loading">Reading database…</div></div>
           </div>
         </div>
+
+        <!-- Bank Reconciliation -->
+        <div class="mb3-card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
+          <!-- Illustrated banner -->
+          <div style="background:linear-gradient(135deg,#eef2ff 0%,#e0e7ff 55%,#c7d2fe 100%);padding:16px 18px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:100px;position:relative;overflow:hidden">
+            <div style="position:absolute;top:-15px;right:-15px;width:80px;height:80px;border-radius:50%;background:rgba(99,102,241,.18);filter:blur(20px)"></div>
+            <div style="z-index:1;padding-bottom:12px">
+              <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#312e81;opacity:.75">Bank</div>
+              <div style="font-size:14px;font-weight:800;color:#312e81">Reconciliation <span id="dash-bankm-status" class="b b-g" style="margin-left:4px;font-size:10px;background:rgba(255,255,255,.6);border:none;color:#312e81">—</span></div>
+            </div>
+            <svg viewBox="0 0 110 90" width="110" height="90" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
+              <ellipse cx="55" cy="84" rx="32" ry="5" fill="#4338ca" opacity=".12"/>
+              <rect x="15" y="38" width="80" height="46" rx="4" fill="#6366f1" opacity=".85"/>
+              <rect x="15" y="38" width="80" height="46" rx="4" fill="url(#bankm-g)"/>
+              <defs><linearGradient id="bankm-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#818cf8" stop-opacity=".4"/><stop offset="100%" stop-color="#4338ca" stop-opacity="0"/></linearGradient></defs>
+              <rect x="23" y="44" width="8" height="36" rx="2.5" fill="#c7d2fe" opacity=".7"/>
+              <rect x="36" y="44" width="8" height="36" rx="2.5" fill="#c7d2fe" opacity=".7"/>
+              <rect x="64" y="44" width="8" height="36" rx="2.5" fill="#c7d2fe" opacity=".7"/>
+              <rect x="77" y="44" width="8" height="36" rx="2.5" fill="#c7d2fe" opacity=".7"/>
+              <rect x="45" y="58" width="18" height="26" rx="2.5" fill="#4338ca"/>
+              <circle cx="56" cy="71" r="2" fill="#c7d2fe"/>
+              <polygon points="8,38 55,10 102,38" fill="#4338ca"/>
+              <polygon points="8,38 55,10 102,38" fill="#6366f1" opacity=".45"/>
+              <rect x="12" y="82" width="84" height="5" rx="2.5" fill="#4338ca"/>
+              <circle cx="88" cy="26" r="10" fill="#f59e0b"/>
+              <text x="88" y="30" text-anchor="middle" fill="#78350f" font-size="8" font-weight="800">د.إ</text>
+              <circle cx="22" cy="20" r="10" fill="#10b981"/>
+              <polyline points="18,20 21,23 27,16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div style="padding:12px 18px 14px;flex:1">
+            <!-- Unmatched highlight -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <span style="font-size:12px;font-weight:600;color:var(--text2)">Unmatched</span>
+              <span class="mono" style="font-size:15px;font-weight:700;color:#f59e0b" id="dash-bankm-unmatched">د.إ —</span>
+            </div>
+            <div style="border-top:1px solid var(--border);margin-bottom:10px"></div>
+            <!-- Book Balance -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:11px;color:var(--text3)">Book Balance</span>
+              <span class="mono" style="font-size:13px;font-weight:700;color:#6366f1" id="dash-bankm-book">AED 0.00</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="display:flex;align-items:center;gap:5px">
+                  <div style="width:7px;height:7px;border-radius:50%;background:#10b981"></div>
+                  <span style="font-size:11px;color:var(--text3)">Receipts</span>
+                </div>
+                <span class="mono" style="font-size:11.5px;font-weight:600;color:#10b981" id="dash-bankm-inflow">AED 0.00</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="display:flex;align-items:center;gap:5px">
+                  <div style="width:7px;height:7px;border-radius:50%;background:#ef4444"></div>
+                  <span style="font-size:11px;color:var(--text3)">Payments</span>
+                </div>
+                <span class="mono" style="font-size:11.5px;font-weight:600;color:#ef4444" id="dash-bankm-outflow">AED 0.00</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="display:flex;align-items:center;gap:5px">
+                  <div style="width:7px;height:7px;border-radius:50%;background:#6366f1"></div>
+                  <span style="font-size:11px;color:var(--text3)">Net Cash Flow</span>
+                </div>
+                <span class="mono" style="font-size:11.5px;font-weight:600" id="dash-bankm-net">AED 0.00</span>
+              </div>
+            </div>
+            <div style="background:var(--surface2);border-radius:99px;height:4px;margin-bottom:10px;overflow:hidden">
+              <div id="dash-bankm-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#10b981,#6366f1);border-radius:99px;transition:width .5s ease"></div>
+            </div>
+            <button class="btn btn-g btn-sm" style="width:100%" onclick="go('bank')">Open Bank Module →</button>
+          </div>
+        </div>
+
       </div>
 
     </div><!-- end .mb3-main -->
@@ -1710,7 +1784,7 @@
         <div style="font-size:13px;color:rgba(255,255,255,.65);margin-top:4px">Employees · Attendance · Leave · Payroll · Rota · Compliance</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2)" onclick="window.open('/hrms.html','_blank')">+ Add Employee</button>
+        <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2)" onclick="window.open('/hrms','_blank')">+ Add Employee</button>
         <button class="btn btn-sm" style="background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.15)" onclick="go('payroll')">Run Payroll</button>
       </div>
     </div>
@@ -1729,11 +1803,11 @@
     <div class="card">
       <div class="card-hd"><div class="card-title">Alerts &amp; Pipeline</div><div class="card-sub">Live counts</div></div>
       <div class="g2" style="padding:4px 0 0">
-        <div class="dash-alert-tile" onclick="window.open('/hrms.html','_blank')">
+        <div class="dash-alert-tile" onclick="window.open('/hrms','_blank')">
           <div id="hrms-dash-expiry" style="font-size:24px;font-weight:700;color:var(--red);line-height:1">—</div>
           <div style="font-size:11px;color:var(--text3);margin-top:3px">Docs Expiring (30d)</div>
         </div>
-        <div class="dash-alert-tile" onclick="window.open('/hrms.html','_blank')">
+        <div class="dash-alert-tile" onclick="window.open('/hrms','_blank')">
           <div id="hrms-dash-ot" style="font-size:24px;font-weight:700;color:var(--amber);line-height:1">—</div>
           <div style="font-size:11px;color:var(--text3);margin-top:3px">OT Pending</div>
         </div>
@@ -1741,7 +1815,7 @@
           <div id="hrms-dash-recs" style="font-size:24px;font-weight:700;color:var(--accent);line-height:1">—</div>
           <div style="font-size:11px;color:var(--text3);margin-top:3px">Open Positions</div>
         </div>
-        <div class="dash-alert-tile" onclick="window.open('/hrms.html','_blank')">
+        <div class="dash-alert-tile" onclick="window.open('/hrms','_blank')">
           <div id="hrms-dash-loans" style="font-size:24px;font-weight:700;color:var(--green);line-height:1">—</div>
           <div style="font-size:11px;color:var(--text3);margin-top:3px">Loan Requests</div>
         </div>
@@ -1750,12 +1824,12 @@
     <div class="card">
       <div class="card-hd"><div class="card-title">Quick Actions</div><div class="card-sub">Common HR tasks</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:4px 0 0">
-        <button class="btn btn-p" onclick="window.open('/hrms.html','_blank')">+ Add Employee</button>
-        <button class="btn btn-g" onclick="window.open('/hrms.html','_blank')">Apply Leave</button>
-        <button class="btn btn-g" onclick="window.open('/hrms.html','_blank')">Submit OT</button>
+        <button class="btn btn-p" onclick="window.open('/hrms','_blank')">+ Add Employee</button>
+        <button class="btn btn-g" onclick="window.open('/hrms','_blank')">Apply Leave</button>
+        <button class="btn btn-g" onclick="window.open('/hrms','_blank')">Submit OT</button>
         <button class="btn btn-g" onclick="go('recruitment');setTimeout(()=>showM('m-recruitment'),50)">Post Job</button>
         <button class="btn btn-g" onclick="go('payroll')">Run Payroll</button>
-        <button class="btn btn-g" onclick="window.open('/hrms.html','_blank')">Check Expiry</button>
+        <button class="btn btn-g" onclick="window.open('/hrms','_blank')">Check Expiry</button>
       </div>
     </div>
   </div>
@@ -1763,7 +1837,7 @@
   <!-- Module cards grid — Core HR -->
   <div style="font-weight:700;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Core HR Modules</div>
   <div class="g3 mb16">
-    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(99,102,241,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#6366f1" stroke-width="1.6"><circle cx="8" cy="7" r="3.5"/><path d="M2 17c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="15" cy="7" r="2.5"/><path d="M18 17c0-2.5-1.5-4-3-4.5"/></svg>
@@ -1776,7 +1850,7 @@
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(16,185,129,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#10b981" stroke-width="1.6"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/><circle cx="7" cy="12" r="1" fill="#10b981" stroke="none"/><circle cx="10" cy="12" r="1" fill="#10b981" stroke="none"/><circle cx="13" cy="12" r="1" fill="#10b981" stroke="none"/></svg>
@@ -1789,7 +1863,7 @@
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(245,158,11,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#f59e0b" stroke-width="1.6"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2z"/><path d="M10 6v5l3 2"/></svg>
@@ -1802,7 +1876,7 @@
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(239,68,68,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#ef4444" stroke-width="1.6"><circle cx="10" cy="10" r="8"/><path d="M10 6v4l2.5 2.5"/><path d="M14 3l2-1.5M6 3L4 1.5"/></svg>
@@ -1841,7 +1915,7 @@
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(34,197,94,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#22c55e" stroke-width="1.6"><rect x="2" y="5" width="16" height="11" rx="2"/><path d="M2 9h16"/><path d="M6 13h4M14 13h1"/><path d="M6 2l-1 3M14 2l1 3"/></svg>
@@ -1854,7 +1928,7 @@
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(239,68,68,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#ef4444" stroke-width="1.6"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2z"/><path d="M10 7v4M10 13v.5"/></svg>
@@ -1867,7 +1941,7 @@
       </div>
     </div>
 
-    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(251,146,60,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#fb923c" stroke-width="1.6"><path d="M4 10h12M10 4v12" stroke-linecap="round"/><rect x="3" y="3" width="14" height="14" rx="3"/></svg>
@@ -1965,7 +2039,7 @@
 
   <!-- Settings + Biometric -->
   <div class="g2 mb16">
-    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(20,184,166,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#14b8a6" stroke-width="1.6"><path d="M10 2l1.5 4.5h4.5l-3.5 2.5 1.5 4.5L10 11l-4 2.5 1.5-4.5L4 6.5h4.5z"/></svg>
@@ -1977,7 +2051,7 @@
         </div>
       </div>
     </div>
-    <div class="card hrms-mod-card" onclick="window.open('/hrms.html','_blank')">
+    <div class="card hrms-mod-card" onclick="window.open('/hrms','_blank')">
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="width:44px;height:44px;border-radius:12px;background:rgba(99,102,241,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="#6366f1" stroke-width="1.6"><rect x="4" y="2" width="12" height="16" rx="2"/><path d="M7 7c.5-1 1.5-1.5 3-1.5s2.5.5 3 1.5"/><path d="M7 10c.5 1 1.5 1.5 3 1.5s2.5-.5 3-1.5"/><circle cx="10" cy="8.5" r="1" fill="#6366f1" stroke="none"/></svg>
@@ -1996,11 +2070,11 @@
     <div class="card">
       <div class="card-hd"><div class="card-title">Quick Actions</div></div>
       <div style="display:flex;flex-direction:column;gap:8px;padding-top:4px">
-        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="window.open('/hrms.html','_blank')">
+        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="window.open('/hrms','_blank')">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/><line x1="13" y1="2" x2="13" y2="6"/><line x1="11" y1="4" x2="15" y2="4"/></svg>
           Add New Employee
         </button>
-        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="window.open('/hrms.html','_blank')">
+        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="window.open('/hrms','_blank')">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M2 6h12M5 1.5v3M11 1.5v3"/></svg>
           Apply for Leave
         </button>
@@ -2008,7 +2082,7 @@
           <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/><path d="M12 2l1 1-2.5 2.5-1-1"/></svg>
           Open Job Requisition
         </button>
-        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="window.open('/hrms.html','_blank')">
+        <button class="btn btn-g" style="justify-content:flex-start;gap:10px;text-align:left" onclick="window.open('/hrms','_blank')">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="9" rx="1"/><path d="M2 7h12M5 11h3M10 11h1"/></svg>
           New Loan Request
         </button>
@@ -2270,10 +2344,10 @@
       <div class="card">
         <div class="card-hd"><div class="card-title">Pending Approvals</div></div>
         <div id="mgr-pending-list" style="display:flex;flex-direction:column;gap:10px;padding-top:4px">
-          <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)" id="mgr-leave-cnt">—</div><div><div>Leave Requests</div><div class="card-sub">Annual, sick, casual, and emergency leaves pending approval</div></div><button class="btn btn-g btn-sm" onclick="window.open('/hrms.html','_blank')">View</button></div>
-          <div class="tline-item"><div class="tline-dot" style="background:var(--red-bg,#fee2e2);color:var(--red)" id="mgr-ot-cnt">—</div><div><div>Overtime Requests</div><div class="card-sub">OT submitted by team members awaiting approval</div></div><button class="btn btn-g btn-sm" onclick="window.open('/hrms.html','_blank')">View</button></div>
-          <div class="tline-item"><div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)" id="mgr-corr-cnt">—</div><div><div>Attendance Corrections</div><div class="card-sub">Check-in/out corrections from team members</div></div><button class="btn btn-g btn-sm" onclick="window.open('/hrms.html','_blank')">View</button></div>
-          <div class="tline-item"><div class="tline-dot" style="background:var(--purple-bg);color:var(--purple)">—</div><div><div>Loan Requests</div><div class="card-sub">Employee loan applications awaiting manager approval</div></div><button class="btn btn-g btn-sm" onclick="window.open('/hrms.html','_blank')">View</button></div>
+          <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)" id="mgr-leave-cnt">—</div><div><div>Leave Requests</div><div class="card-sub">Annual, sick, casual, and emergency leaves pending approval</div></div><button class="btn btn-g btn-sm" onclick="window.open('/hrms','_blank')">View</button></div>
+          <div class="tline-item"><div class="tline-dot" style="background:var(--red-bg,#fee2e2);color:var(--red)" id="mgr-ot-cnt">—</div><div><div>Overtime Requests</div><div class="card-sub">OT submitted by team members awaiting approval</div></div><button class="btn btn-g btn-sm" onclick="window.open('/hrms','_blank')">View</button></div>
+          <div class="tline-item"><div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)" id="mgr-corr-cnt">—</div><div><div>Attendance Corrections</div><div class="card-sub">Check-in/out corrections from team members</div></div><button class="btn btn-g btn-sm" onclick="window.open('/hrms','_blank')">View</button></div>
+          <div class="tline-item"><div class="tline-dot" style="background:var(--purple-bg);color:var(--purple)">—</div><div><div>Loan Requests</div><div class="card-sub">Employee loan applications awaiting manager approval</div></div><button class="btn btn-g btn-sm" onclick="window.open('/hrms','_blank')">View</button></div>
         </div>
       </div>
       <div class="card">
