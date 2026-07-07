@@ -137,24 +137,26 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
   display:none;
   position:fixed;bottom:0;left:0;right:0;
   height:calc(var(--nav-h) + var(--safe-bottom));
-  background:var(--surface);border-top:1px solid var(--border);
+  background:var(--surface);border-top:1.5px solid var(--border);
   padding-bottom:var(--safe-bottom);
-  z-index:200;box-shadow:0 -4px 16px rgba(0,0,0,.07);
+  z-index:9000;box-shadow:0 -2px 20px rgba(0,0,0,.1);
 }
 .mob-nav-inner{
   display:flex;height:var(--nav-h);
 }
 .mnav{
   flex:1;display:flex;flex-direction:column;align-items:center;
-  justify-content:center;gap:3px;border:none;background:none;
+  justify-content:center;gap:4px;border:none;background:none;
   cursor:pointer;color:var(--text3);font-family:var(--font);
   font-size:10px;font-weight:500;padding:0;transition:color .12s;
+  -webkit-tap-highlight-color:transparent;
 }
 .mnav.on{color:var(--blue)}
-.mnav svg{flex-shrink:0}
+.mnav.on svg{stroke:var(--blue)}
+.mnav svg{flex-shrink:0;transition:stroke .12s}
 .mnav-dot{
   width:4px;height:4px;border-radius:50%;
-  background:var(--blue);margin-top:1px;
+  background:var(--blue);
   opacity:0;transition:opacity .15s;
 }
 .mnav.on .mnav-dot{opacity:1}
@@ -453,37 +455,43 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
           </div>
         </div>
         <!-- Module quick-access tiles (always visible after login) -->
-        <div class="mod-grid">
-          <button class="mod-tile" onclick="essTab('attendance')">
-            <div class="mod-icon" style="background:#dcfce7">
-              <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/></svg>
-            </div>
-            <div class="mod-label">Attendance</div>
-          </button>
-          <button class="mod-tile" onclick="essTab('payslips')">
-            <div class="mod-icon" style="background:#ffedd5">
-              <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#ea580c" stroke-width="1.4"><rect x="2" y="2" width="12" height="13" rx="1.5"/><path d="M5 6h6M5 9h4M5 12h3"/></svg>
-            </div>
-            <div class="mod-label">Payslips</div>
-          </button>
-          <button class="mod-tile" onclick="essTab('leave')">
-            <div class="mod-icon" style="background:#dbeafe">
-              <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/></svg>
-            </div>
-            <div class="mod-label">Leave</div>
-          </button>
-          <button class="mod-tile" onclick="essTab('overtime')">
-            <div class="mod-icon" style="background:#e0e7ff">
-              <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#4f46e5" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
-            </div>
-            <div class="mod-label">Overtime</div>
-          </button>
-          <button class="mod-tile" onclick="essTab('documents')">
-            <div class="mod-icon" style="background:#f3e8ff">
-              <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#7c3aed" stroke-width="1.4"><path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/></svg>
-            </div>
-            <div class="mod-label">Documents</div>
-          </button>
+        <div class="ess-card" style="padding:16px 14px">
+          <div class="ess-card-title" style="margin-bottom:12px;font-size:13px;color:var(--text2)">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>
+            My Modules
+          </div>
+          <div class="mod-grid">
+            <button class="mod-tile" onclick="essTab('attendance')">
+              <div class="mod-icon" style="background:#dcfce7">
+                <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/></svg>
+              </div>
+              <div class="mod-label">Attendance</div>
+            </button>
+            <button class="mod-tile" onclick="essTab('payslips')">
+              <div class="mod-icon" style="background:#ffedd5">
+                <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#ea580c" stroke-width="1.4"><rect x="2" y="2" width="12" height="13" rx="1.5"/><path d="M5 6h6M5 9h4M5 12h3"/></svg>
+              </div>
+              <div class="mod-label">Payslips</div>
+            </button>
+            <button class="mod-tile" onclick="essTab('leave')">
+              <div class="mod-icon" style="background:#dbeafe">
+                <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/></svg>
+              </div>
+              <div class="mod-label">Leave</div>
+            </button>
+            <button class="mod-tile" onclick="essTab('overtime')">
+              <div class="mod-icon" style="background:#e0e7ff">
+                <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#4f46e5" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
+              </div>
+              <div class="mod-label">Overtime</div>
+            </button>
+            <button class="mod-tile" onclick="essTab('documents')">
+              <div class="mod-icon" style="background:#f3e8ff">
+                <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#7c3aed" stroke-width="1.4"><path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/></svg>
+              </div>
+              <div class="mod-label">Documents</div>
+            </button>
+          </div>
         </div>
 
         <div class="ess-card">
