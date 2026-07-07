@@ -510,7 +510,14 @@ def clear_all_accounts(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Delete all accounts for the company that are not used in journal lines."""
-    used_ids = {row[0] for row in db.query(JournalLine.account_id).distinct().all()}
+    used_ids = {
+        row[0]
+        for row in db.query(JournalLine.account_id)
+        .join(JournalEntry, JournalLine.journal_id == JournalEntry.id)
+        .filter(JournalEntry.company_id == current_user.company_id)
+        .distinct()
+        .all()
+    }
     accounts = db.query(Account).filter(Account.company_id == current_user.company_id).all()
     deleted, skipped = 0, 0
     for acc in accounts:

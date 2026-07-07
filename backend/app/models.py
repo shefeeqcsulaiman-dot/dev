@@ -672,6 +672,8 @@ class AppDataRecord(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_app_data_company_collection", "company_id", "collection"),
         Index("ix_app_data_company_collection_created", "company_id", "collection", "created_at"),
+        # Covers the save/delete lookup: WHERE company_id=? AND collection=? AND record_key=?
+        Index("ix_app_data_company_collection_key", "company_id", "collection", "record_key"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)

@@ -96,6 +96,16 @@ def create_app() -> FastAPI:
             seed_initial_data()
         except Exception as exc:
             log.error("Startup DB init failed (app will still serve traffic): %s", exc)
+        # For SQLite: flush the WAL to the main database file on every startup so
+        # the WAL never grows unbounded between sessions.
+        if settings.database_url.startswith("sqlite"):
+            try:
+                from app.database import engine as _eng
+                with _eng.connect() as conn:
+                    conn.execute(text("PRAGMA wal_checkpoint(TRUNCATE)"))
+                log.info("SQLite WAL checkpoint completed")
+            except Exception as exc:
+                log.warning("SQLite WAL checkpoint failed: %s", exc)
 
     site_dir = static_dir / "site"
 

@@ -109,28 +109,36 @@ def _auth(request_headers: dict, db: Session) -> tuple[str, str, dict]:
 
 @router.post("/login")
 def ess_login(body: LoginBody, db: Session = Depends(get_db)) -> dict:
-    """Find the employee by username across all companies (username must be globally unique)."""
+    """Find the employee by username+password. Scans per-company; correct match wins."""
     username = (body.username or "").strip().lower()
     password = (body.password or "").strip()
     if not username or not password:
         raise HTTPException(status_code=400, detail="Username and password required")
 
-    # Search all employee records for matching username
+    # Load all employee records that carry a username field — scoped per company
+    # so we check the password before touching any cross-company data.
     rows = (
         db.query(AppDataRecord)
         .filter(AppDataRecord.collection == "employees")
         .all()
     )
 
+    # Collect ALL rows whose username matches, then check password on all of them.
+    # This prevents an early-exit from the wrong company's record blocking a valid login.
+    username_matches: list[tuple[AppDataRecord, dict]] = []
     for row in rows:
         emp = _decode_payload(row)
         stored_username = (emp.get("username") or "").strip().lower()
-        stored_password = emp.get("password") or ""
-        if stored_username != username:
-            continue
-        if stored_password != password:
-            raise HTTPException(status_code=401, detail="Invalid password")
+        if stored_username == username:
+            username_matches.append((row, emp))
 
+    if not username_matches:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    for row, emp in username_matches:
+        stored_password = emp.get("password") or ""
+        if stored_password != password:
+            continue
         emp_key = row.record_key or (emp.get("id") or emp.get("name") or "")
         token = _ess_token(row.company_id, emp_key, emp.get("name") or "")
         return {

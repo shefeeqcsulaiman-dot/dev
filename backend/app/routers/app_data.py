@@ -64,24 +64,28 @@ _REPORT_AFFECTING_COLLECTIONS = frozenset({
 })
 
 # Per-collection caps for bootstrap to prevent memory spikes on large accounts.
-# Heavy transactional collections are capped at recent N; reference data is uncapped.
+# Sized to cover ~1 year of data for a 50-employee UAE SME without truncation:
+#   salesInvoices/payments: ~1 200/year → 1 500 cap covers a full year + buffer
+#   purchaseDocuments: base64 stripped on bootstrap so each payload is small
+#   leaveRequests/overtimeRequests: ~500-1 500/year → cap 500
+#   payrollRuns: 12/year, cap 50 keeps 4 years of history
 _BOOTSTRAP_COLLECTION_CAPS: dict[str, int] = {
     "products": 500,
     "salesCategories": 200,
     "salesUnits": 200,
-    "salesInvoices": 500,
-    "quotations": 300,
-    "bills": 500,
-    "payments": 500,
-    "ledger": 1000,
-    "expenses": 300,
-    "purchaseDocuments": 300,
-    "journalDrafts": 200,
-    "overtimeRequests": 200,
-    "leaveRequests": 200,
-    "attendanceCorrections": 200,
+    "salesInvoices": 1500,
+    "quotations": 500,
+    "bills": 1000,
+    "payments": 1500,
+    "ledger": 2000,
+    "expenses": 500,
+    "purchaseDocuments": 500,
+    "journalDrafts": 300,
+    "overtimeRequests": 500,
+    "leaveRequests": 500,
+    "attendanceCorrections": 500,
     "payrollRuns": 50,
-    "payrollAdjustments": 200,
+    "payrollAdjustments": 300,
     "audit": 50,
 }
 

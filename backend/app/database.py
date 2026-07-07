@@ -22,6 +22,11 @@ if _is_sqlite:
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")
+        # Keep WAL from growing unbounded — checkpoint whenever it exceeds ~4MB (1000 pages × 4KB).
+        # Without this the WAL accumulates indefinitely and slows every read.
+        cursor.execute("PRAGMA wal_autocheckpoint=1000")
+        cursor.execute("PRAGMA cache_size=-32000")   # 32MB page cache
+        cursor.execute("PRAGMA busy_timeout=5000")   # 5s wait instead of SQLITE_BUSY error
         cursor.close()
 
 else:

@@ -1818,8 +1818,21 @@ function saveInventoryItem(){
 }
 
 function logout(){
-  localStorage.removeItem('taxflow_token');
-  localStorage.removeItem('taxflow_current_page');
+  // Remove auth token and all company-specific cached data so a different company's
+  // user logging in on the same browser never sees stale data from the previous session.
+  const keysToRemove=[
+    'taxflow_token',
+    'taxflow_current_page',
+    'taxflow_dashboard_snapshot',
+    'taxflow_company_name',
+    'taxflow_ot_rules',
+    'tf_company_logo',
+    'tf_invoice_layouts',
+    'taxflow_inventory_table_cleared',
+    'taxflow_biz_locations',
+    'taxflow_user_role',
+  ];
+  keysToRemove.forEach(k=>localStorage.removeItem(k));
   window.location.replace('/login');
 }
 
