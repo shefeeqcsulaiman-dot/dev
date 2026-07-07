@@ -751,7 +751,7 @@ function renderEmployeeRecord(employee){
     <td>${(()=>{const h=Number(employee.shift_hours||0);if(h>0){const t=(employee.shift_hours_type||'weekly');const label=t.charAt(0).toUpperCase()+t.slice(1)+' · '+h+'h';return `<span class="b b-b">${escapeHtml(label)}</span>`;}return employee.shift?`<span class="b b-b">${escapeHtml(employee.shift)}</span>`:'<span style="color:var(--text3)">—</span>';})()}</td>
     <td class="mono">${Number(employee.salary||0).toLocaleString('en-AE',{minimumFractionDigits:0,maximumFractionDigits:0})}</td>
     <td><span class="b b-g">${escapeHtml(employee.status)}</span></td>
-    <td><button class="btn btn-g btn-sm" onclick="openEmployeeProfile(this)">View</button></td>`;
+    <td data-action-col="1"><div class="row-actions"><button class="btn btn-g btn-sm" onclick="openEmployeeProfile(this)">View</button> <button class="icon-btn edit" type="button" title="Edit" onclick="editEmployeeFromRow(this)">${editIconSvg()}</button> <button class="icon-btn danger" type="button" title="Delete" onclick="deleteEmployeeFromRow(this)">${deleteIconSvg()}</button></div></td>`;
   tbody.prepend(row);
   const table=tbody.closest('table');
   const state=tableEnhanceState.get(table);
@@ -763,6 +763,30 @@ function renderEmployeeRecord(employee){
   row.style.display='';
   row.hidden=false;
   refreshEnhancedTable(table);
+}
+
+function editEmployeeFromRow(btn){
+  const row=btn.closest('tr');
+  if(!row)return;
+  let emp={};
+  try{emp=JSON.parse(row.dataset.employee||'{}');}catch{}
+  if(!emp.id)emp=employeeFromDirectoryRow(row);
+  openEmpEdit(emp);
+}
+
+function deleteEmployeeFromRow(btn){
+  const row=btn.closest('tr');
+  if(!row)return;
+  let emp={};
+  try{emp=JSON.parse(row.dataset.employee||'{}');}catch{}
+  const name=emp.name||row.querySelector('td:nth-child(2)')?.textContent.trim()||'this employee';
+  if(!confirm(`Delete ${name}? This cannot be undone.`))return;
+  deleteServer('employees',emp);
+  const table=row.closest('table');
+  row.remove();
+  if(table)refreshEnhancedTable(table);
+  toast(`${name} deleted`,'ok');
+  audit('Deleted employee',emp.id||'','Removed');
 }
 
 function employeeFromDirectoryRow(row){
