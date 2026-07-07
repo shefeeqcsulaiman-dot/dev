@@ -78,6 +78,9 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        from fastapi import HTTPException as _HTTPEx
+        if isinstance(exc, _HTTPEx):
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
         import logging
         logging.getLogger("taxflow").error("Unhandled error on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
         return JSONResponse(status_code=500, content={"detail": "An internal error occurred."})
