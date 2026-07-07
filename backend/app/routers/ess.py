@@ -3,14 +3,15 @@
 Employees log in with their username + password (set by HR admin in the
 employee form).  After login they receive a short-lived JWT whose `sub`
 is  "ess:<company_id>:<employee_key>"  and can use it to read their own
-attendance, payslips, leave history and submit new leave / OT requests.
+attendance, payslips, leave history and submit requests.
 """
 
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
-from typing import Any  # used in _decode_payload and _get_emp_record
+import time as _time
+from datetime import UTC, date as _date, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from jose import JWTError, jwt
@@ -46,7 +47,6 @@ def _ess_token(company_id: str, emp_key: str, emp_name: str) -> str:
 
 
 def _resolve_ess_token(token: str) -> tuple[str, str]:
-    """Return (company_id, emp_key) from a valid ESS JWT, or raise 401."""
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGORITHM])
         sub: str = payload.get("sub", "")
@@ -74,29 +74,6 @@ def _get_emp_record(db: Session, company_id: str, emp_key: str) -> dict[str, Any
     return _decode_payload(row)
 
 
-# ── schemas ───────────────────────────────────────────────────────────────────
-
-class LoginBody(BaseModel):
-    username: str
-    password: str
-
-
-class LeaveApplyBody(BaseModel):
-    type: str = "Annual"
-    from_date: str
-    to_date: str
-    reason: str = ""
-
-
-class OTApplyBody(BaseModel):
-    date: str
-    ot_hours: str
-    reason: str = ""
-    department: str = ""
-
-
-# ── auth helper (used by all protected routes) ────────────────────────────────
-
 def _auth(request_headers: dict, db: Session) -> tuple[str, str, dict]:
     auth_header = request_headers.get("authorization", "")
     token = auth_header.removeprefix("Bearer ").strip()
@@ -107,19 +84,27 @@ def _auth(request_headers: dict, db: Session) -> tuple[str, str, dict]:
 
 # ── module resolution ─────────────────────────────────────────────────────────
 
+# Exact checkbox values from the HRMS role modal → ESS tab IDs
 _HRMS_TO_ESS: dict[str, str] = {
-    "Attendance":     "attendance",
+    "Attendance":       "attendance",
     "Leave Management": "leave",
-    "Overtime":       "overtime",
-    "Payroll":        "payslips",
+    "Overtime":         "overtime",
+    "Payroll":          "payslips",
+    "Corrections":      "corrections",
     "Loans & Advances": "loans",
-    "Corrections":    "corrections",
+    "Expiry Alerts":    "expiry",
+    "Biometric":        "biometric",
+    "Recruitment":      "recruitment",
+    "Performance":      "performance",
 }
-_ALL_ESS: list[str] = ["attendance", "payslips", "leave", "overtime", "documents"]
+_ALL_ESS: list[str] = [
+    "attendance", "payslips", "leave", "overtime",
+    "corrections", "loans", "expiry", "biometric",
+    "recruitment", "performance", "documents",
+]
 
 
 def _resolve_ess_modules(company_id: str, emp: dict[str, Any], db: Session) -> list[str]:
-    """Return the list of ESS module IDs this employee is allowed to access."""
     emp_role_id   = (emp.get("role_id")   or "").strip()
     emp_role_name = (emp.get("role_name") or "").strip()
     if not emp_role_id and not emp_role_name:
@@ -137,8 +122,8 @@ def _resolve_ess_modules(company_id: str, emp: dict[str, Any], db: Session) -> l
     if not settings_row:
         return _ALL_ESS[:]
 
-    hr_cfg = _decode_payload(settings_row)
-    roles  = hr_cfg.get("roles") or []
+    hr_cfg   = _decode_payload(settings_row)
+    roles    = hr_cfg.get("roles") or []
     role_obj = next(
         (r for r in roles if
          (emp_role_id   and r.get("id")       == emp_role_id) or
@@ -149,53 +134,71 @@ def _resolve_ess_modules(company_id: str, emp: dict[str, Any], db: Session) -> l
         return _ALL_ESS[:]
 
     hrms_mods = role_obj.get("modules") or []
-    # "ESS Portal" or "Full Access" = unrestricted ESS access
     if "ESS Portal" in hrms_mods or "Full Access" in hrms_mods:
         return _ALL_ESS[:]
 
     mapped = [_HRMS_TO_ESS[m] for m in hrms_mods if m in _HRMS_TO_ESS]
     if not mapped:
-        return _ALL_ESS[:]          # role has no ESS-relevant modules → full access
+        return _ALL_ESS[:]
 
-    # Documents always accessible (employee's own personal docs)
     if "documents" not in mapped:
         mapped.append("documents")
     return mapped
+
+
+# ── schemas ───────────────────────────────────────────────────────────────────
+
+class LoginBody(BaseModel):
+    username: str
+    password: str
+
+class LeaveApplyBody(BaseModel):
+    type: str = "Annual"
+    from_date: str
+    to_date: str
+    reason: str = ""
+
+class OTApplyBody(BaseModel):
+    date: str
+    ot_hours: str
+    reason: str = ""
+    department: str = ""
+
+class CorrectionApplyBody(BaseModel):
+    date: str
+    in_time: str = ""
+    out_time: str = ""
+    reason: str = ""
+
+class LoanApplyBody(BaseModel):
+    type: str = "Salary Advance"
+    amount: str
+    purpose: str = ""
+    period: str = "1 Month"
 
 
 # ── routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/login")
 def ess_login(body: LoginBody, db: Session = Depends(get_db)) -> dict:
-    """Find the employee by username+password. Scans per-company; correct match wins."""
     username = (body.username or "").strip().lower()
     password = (body.password or "").strip()
     if not username or not password:
         raise HTTPException(status_code=400, detail="Username and password required")
 
-    # Load all employee records that carry a username field — scoped per company
-    # so we check the password before touching any cross-company data.
-    rows = (
-        db.query(AppDataRecord)
-        .filter(AppDataRecord.collection == "employees")
-        .all()
-    )
+    rows = db.query(AppDataRecord).filter(AppDataRecord.collection == "employees").all()
 
-    # Collect ALL rows whose username matches, then check password on all of them.
-    # This prevents an early-exit from the wrong company's record blocking a valid login.
     username_matches: list[tuple[AppDataRecord, dict]] = []
     for row in rows:
         emp = _decode_payload(row)
-        stored_username = (emp.get("username") or "").strip().lower()
-        if stored_username == username:
+        if (emp.get("username") or "").strip().lower() == username:
             username_matches.append((row, emp))
 
     if not username_matches:
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
     for row, emp in username_matches:
-        stored_password = emp.get("password") or ""
-        if stored_password != password:
+        if (emp.get("password") or "") != password:
             continue
         emp_key = row.record_key or (emp.get("id") or emp.get("name") or "")
         token   = _ess_token(row.company_id, emp_key, emp.get("name") or "")
@@ -230,8 +233,6 @@ def ess_profile(request: Request, db: Session = Depends(get_db)) -> dict:
 def ess_attendance(request: Request, db: Session = Depends(get_db)) -> dict:
     company_id, emp_key, emp = _auth(dict(request.headers), db)
     emp_id = emp.get("id") or emp_key
-    emp_name = (emp.get("name") or "").lower()
-
     punches = (
         db.query(AttendancePunch)
         .filter(
@@ -246,8 +247,8 @@ def ess_attendance(request: Request, db: Session = Depends(get_db)) -> dict:
         "ok": True,
         "records": [
             {
-                "date": p.punch_time[:10] if p.punch_time else "",
-                "time": p.punch_time[11:16] if p.punch_time and len(p.punch_time) > 10 else "",
+                "date":      p.punch_time[:10]    if p.punch_time else "",
+                "time":      p.punch_time[11:16]  if p.punch_time and len(p.punch_time) > 10 else "",
                 "direction": p.direction,
             }
             for p in punches
@@ -258,7 +259,7 @@ def ess_attendance(request: Request, db: Session = Depends(get_db)) -> dict:
 @router.get("/payslips")
 def ess_payslips(request: Request, db: Session = Depends(get_db)) -> dict:
     company_id, emp_key, emp = _auth(dict(request.headers), db)
-    emp_id = emp.get("id") or emp_key
+    emp_id   = emp.get("id") or emp_key
     emp_name = (emp.get("name") or "").strip().lower()
 
     runs = (
@@ -271,24 +272,20 @@ def ess_payslips(request: Request, db: Session = Depends(get_db)) -> dict:
         .limit(24)
         .all()
     )
-
     slips = []
     for row in runs:
         run = _decode_payload(row)
-        items = run.get("items") or []
-        if not isinstance(items, list):
-            items = []
-        for item in items:
+        for item in (run.get("items") or []):
             if (item.get("employee_id") or "").lower() == emp_id.lower() or \
                (item.get("employee") or "").strip().lower() == emp_name:
                 slips.append({
-                    "period": run.get("period") or "",
-                    "basic": item.get("basic") or 0,
+                    "period":     run.get("period") or "",
+                    "basic":      item.get("basic")      or 0,
                     "allowances": item.get("allowances") or 0,
-                    "overtime": item.get("overtime") or 0,
+                    "overtime":   item.get("overtime")   or 0,
                     "deductions": item.get("deductions") or 0,
-                    "net_pay": item.get("net_pay") or item.get("net") or 0,
-                    "status": run.get("status") or "draft",
+                    "net_pay":    item.get("net_pay") or item.get("net") or 0,
+                    "status":     run.get("status") or "draft",
                 })
     return {"ok": True, "payslips": slips}
 
@@ -297,7 +294,6 @@ def ess_payslips(request: Request, db: Session = Depends(get_db)) -> dict:
 def ess_leave(request: Request, db: Session = Depends(get_db)) -> dict:
     company_id, emp_key, emp = _auth(dict(request.headers), db)
     emp_name = (emp.get("name") or "").strip().lower()
-
     rows = (
         db.query(AppDataRecord)
         .filter(
@@ -308,21 +304,37 @@ def ess_leave(request: Request, db: Session = Depends(get_db)) -> dict:
         .limit(100)
         .all()
     )
-
-    records = []
-    for row in rows:
-        rec = _decode_payload(row)
-        if (rec.get("employee") or "").strip().lower() == emp_name:
-            records.append(rec)
-
+    records = [r for rec in [_decode_payload(r) for r in rows]
+               if (rec.get("employee") or "").strip().lower() == emp_name
+               for r in [rec]]
     return {"ok": True, "records": records}
+
+
+@router.post("/leave/apply")
+def ess_leave_apply(body: LeaveApplyBody, request: Request, db: Session = Depends(get_db)) -> dict:
+    company_id, emp_key, emp = _auth(dict(request.headers), db)
+    emp_name = emp.get("name") or ""
+    try:
+        days = max(1, (_date.fromisoformat(body.to_date) - _date.fromisoformat(body.from_date)).days + 1)
+    except Exception:
+        days = 1
+    record_id = f"LVE-{int(_time.time() * 1000)}"
+    record = {
+        "id": record_id, "employee": emp_name, "type": body.type,
+        "from": body.from_date, "to": body.to_date, "days": days,
+        "reason": body.reason, "status": "Pending",
+        "submitted": datetime.now(UTC).isoformat(), "source": "ess",
+    }
+    db.add(AppDataRecord(company_id=company_id, collection="leaveRequests",
+                         record_key=record_id, payload=json.dumps(record)))
+    db.commit()
+    return {"ok": True, "record": record}
 
 
 @router.get("/overtime")
 def ess_overtime(request: Request, db: Session = Depends(get_db)) -> dict:
     company_id, emp_key, emp = _auth(dict(request.headers), db)
     emp_name = (emp.get("name") or "").strip().lower()
-
     rows = (
         db.query(AppDataRecord)
         .filter(
@@ -333,86 +345,168 @@ def ess_overtime(request: Request, db: Session = Depends(get_db)) -> dict:
         .limit(100)
         .all()
     )
-
-    records = []
-    for row in rows:
-        rec = _decode_payload(row)
-        if (rec.get("employee") or "").strip().lower() == emp_name:
-            records.append(rec)
-
+    records = [rec for rec in [_decode_payload(r) for r in rows]
+               if (rec.get("employee") or "").strip().lower() == emp_name]
     return {"ok": True, "records": records}
-
-
-@router.get("/documents")
-def ess_documents(request: Request, db: Session = Depends(get_db)) -> dict:
-    company_id, emp_key, emp = _auth(dict(request.headers), db)
-    docs = emp.get("documents") or {}
-    return {"ok": True, "documents": docs}
-
-
-@router.post("/leave/apply")
-def ess_leave_apply(body: LeaveApplyBody, request: Request, db: Session = Depends(get_db)) -> dict:
-    company_id, emp_key, emp = _auth(dict(request.headers), db)
-    emp_name = emp.get("name") or ""
-
-    from_date = body.from_date
-    to_date = body.to_date
-    try:
-        d1 = datetime.fromisoformat(from_date)
-        d2 = datetime.fromisoformat(to_date)
-        days = max(1, (d2 - d1).days + 1)
-    except Exception:
-        days = 1
-
-    import time as _time
-    record_id = f"LVE-{int(_time.time() * 1000)}"
-    record = {
-        "id": record_id,
-        "employee": emp_name,
-        "type": body.type,
-        "from": from_date,
-        "to": to_date,
-        "days": days,
-        "reason": body.reason,
-        "status": "Pending",
-        "submitted": datetime.now(UTC).isoformat(),
-        "source": "ess",
-    }
-
-    db.add(AppDataRecord(
-        company_id=company_id,
-        collection="leaveRequests",
-        record_key=record_id,
-        payload=json.dumps(record),
-    ))
-    db.commit()
-    return {"ok": True, "record": record}
 
 
 @router.post("/overtime/apply")
 def ess_overtime_apply(body: OTApplyBody, request: Request, db: Session = Depends(get_db)) -> dict:
     company_id, emp_key, emp = _auth(dict(request.headers), db)
     emp_name = emp.get("name") or ""
-
-    import time as _time
     record_id = f"OT-{int(_time.time() * 1000)}"
     record = {
-        "id": record_id,
-        "employee": emp_name,
+        "id": record_id, "employee": emp_name,
         "department": body.department or (emp.get("department") or ""),
-        "date": body.date,
-        "ot_hours": body.ot_hours,
-        "reason": body.reason,
-        "status": "Pending",
-        "submitted": datetime.now(UTC).isoformat(),
-        "source": "ess",
+        "date": body.date, "ot_hours": body.ot_hours, "reason": body.reason,
+        "status": "Pending", "submitted": datetime.now(UTC).isoformat(), "source": "ess",
     }
-
-    db.add(AppDataRecord(
-        company_id=company_id,
-        collection="overtimeRequests",
-        record_key=record_id,
-        payload=json.dumps(record),
-    ))
+    db.add(AppDataRecord(company_id=company_id, collection="overtimeRequests",
+                         record_key=record_id, payload=json.dumps(record)))
     db.commit()
     return {"ok": True, "record": record}
+
+
+@router.get("/documents")
+def ess_documents(request: Request, db: Session = Depends(get_db)) -> dict:
+    company_id, emp_key, emp = _auth(dict(request.headers), db)
+    return {"ok": True, "documents": emp.get("documents") or {}}
+
+
+@router.get("/corrections")
+def ess_corrections(request: Request, db: Session = Depends(get_db)) -> dict:
+    company_id, emp_key, emp = _auth(dict(request.headers), db)
+    emp_name = (emp.get("name") or "").strip().lower()
+    rows = (
+        db.query(AppDataRecord)
+        .filter(
+            AppDataRecord.company_id == company_id,
+            AppDataRecord.collection == "attendanceCorrections",
+        )
+        .order_by(AppDataRecord.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    records = [rec for rec in [_decode_payload(r) for r in rows]
+               if (rec.get("employee") or "").strip().lower() == emp_name]
+    return {"ok": True, "records": records}
+
+
+@router.post("/corrections/apply")
+def ess_corrections_apply(body: CorrectionApplyBody, request: Request, db: Session = Depends(get_db)) -> dict:
+    company_id, emp_key, emp = _auth(dict(request.headers), db)
+    emp_name = emp.get("name") or ""
+    record_id = f"COR-{int(_time.time() * 1000)}"
+    record = {
+        "id": record_id, "employee": emp_name,
+        "date": body.date, "in_time": body.in_time, "out_time": body.out_time,
+        "reason": body.reason, "status": "Pending",
+        "submitted": datetime.now(UTC).isoformat(), "source": "ess",
+        "department": emp.get("department") or "",
+    }
+    db.add(AppDataRecord(company_id=company_id, collection="attendanceCorrections",
+                         record_key=record_id, payload=json.dumps(record)))
+    db.commit()
+    return {"ok": True, "record": record}
+
+
+@router.get("/loans")
+def ess_loans(request: Request, db: Session = Depends(get_db)) -> dict:
+    company_id, emp_key, emp = _auth(dict(request.headers), db)
+    emp_name = (emp.get("name") or "").strip().lower()
+    rows = (
+        db.query(AppDataRecord)
+        .filter(
+            AppDataRecord.company_id == company_id,
+            AppDataRecord.collection == "loanRequests",
+        )
+        .order_by(AppDataRecord.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    records = [rec for rec in [_decode_payload(r) for r in rows]
+               if (rec.get("employee") or "").strip().lower() == emp_name]
+    return {"ok": True, "records": records}
+
+
+@router.post("/loans/apply")
+def ess_loans_apply(body: LoanApplyBody, request: Request, db: Session = Depends(get_db)) -> dict:
+    company_id, emp_key, emp = _auth(dict(request.headers), db)
+    emp_name = emp.get("name") or ""
+    record_id = f"LOAN-{int(_time.time() * 1000)}"
+    record = {
+        "id": record_id, "employee": emp_name, "type": body.type,
+        "amount": body.amount, "purpose": body.purpose, "period": body.period,
+        "status": "Pending", "submitted": datetime.now(UTC).isoformat(), "source": "ess",
+        "department": emp.get("department") or "",
+    }
+    db.add(AppDataRecord(company_id=company_id, collection="loanRequests",
+                         record_key=record_id, payload=json.dumps(record)))
+    db.commit()
+    return {"ok": True, "record": record}
+
+
+@router.get("/expiry")
+def ess_expiry(request: Request, db: Session = Depends(get_db)) -> dict:
+    company_id, emp_key, emp = _auth(dict(request.headers), db)
+    today = _date.today()
+    doc_fields = [
+        ("Passport",          emp.get("passport_expiry")    or ""),
+        ("Emirates ID",       emp.get("eid_expiry")         or ""),
+        ("Work Permit / Visa",emp.get("work_permit_expiry") or emp.get("visa_expiry") or ""),
+        ("Driving License",   emp.get("driving_expiry")     or ""),
+        ("Health Insurance",  emp.get("insurance_expiry")   or ""),
+        ("Labor Card",        emp.get("labor_card_expiry")  or ""),
+    ]
+    result = []
+    for label, expiry in doc_fields:
+        if not expiry:
+            continue
+        try:
+            exp_date  = _date.fromisoformat(expiry)
+            days_left = (exp_date - today).days
+            status    = "Expired" if days_left < 0 else "Expiring Soon" if days_left <= 30 else "Due Soon" if days_left <= 90 else "Valid"
+        except Exception:
+            days_left = None
+            status    = "Unknown"
+        result.append({"label": label, "expiry": expiry, "status": status, "days_left": days_left})
+    return {"ok": True, "documents": result}
+
+
+@router.get("/recruitment")
+def ess_recruitment(request: Request, db: Session = Depends(get_db)) -> dict:
+    company_id, emp_key, emp = _auth(dict(request.headers), db)
+    rows = (
+        db.query(AppDataRecord)
+        .filter(
+            AppDataRecord.company_id == company_id,
+            AppDataRecord.collection == "recruitment",
+        )
+        .order_by(AppDataRecord.created_at.desc())
+        .limit(30)
+        .all()
+    )
+    return {"ok": True, "jobs": [_decode_payload(r) for r in rows]}
+
+
+@router.get("/performance")
+def ess_performance(request: Request, db: Session = Depends(get_db)) -> dict:
+    company_id, emp_key, emp = _auth(dict(request.headers), db)
+    emp_name = (emp.get("name") or "").strip().lower()
+    result = []
+    for col in ("performanceReviews", "trainingRecords"):
+        rows = (
+            db.query(AppDataRecord)
+            .filter(
+                AppDataRecord.company_id == company_id,
+                AppDataRecord.collection == col,
+            )
+            .order_by(AppDataRecord.created_at.desc())
+            .limit(30)
+            .all()
+        )
+        for row in rows:
+            rec = _decode_payload(row)
+            if (rec.get("employee") or "").strip().lower() == emp_name:
+                result.append({**rec, "_type": col})
+    return {"ok": True, "records": result}

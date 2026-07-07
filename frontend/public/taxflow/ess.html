@@ -143,9 +143,11 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 }
 .mob-nav-inner{
   display:flex;height:var(--nav-h);
+  overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
 }
+.mob-nav-inner::-webkit-scrollbar{display:none}
 .mnav{
-  flex:1;display:flex;flex-direction:column;align-items:center;
+  flex:0 0 62px;display:flex;flex-direction:column;align-items:center;
   justify-content:center;gap:4px;border:none;background:none;
   cursor:pointer;color:var(--text3);font-family:var(--font);
   font-size:10px;font-weight:500;padding:0;transition:color .12s;
@@ -440,6 +442,30 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
         <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
         Overtime
       </button>
+      <button class="enav" id="enav-corrections" data-module="corrections" onclick="essTab('corrections')">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 8h12M8 2v12"/><circle cx="8" cy="8" r="6"/></svg>
+        Corrections
+      </button>
+      <button class="enav" id="enav-loans" data-module="loans" onclick="essTab('loans')">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1" y="4" width="14" height="9" rx="1.5"/><path d="M4 4V3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1M8 8v2m-2-1h4"/></svg>
+        Loans
+      </button>
+      <button class="enav" id="enav-expiry" data-module="expiry" onclick="essTab('expiry')">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2l.5 5h-1L8 2z"/><circle cx="8" cy="10" r="1"/><circle cx="8" cy="8" r="6"/></svg>
+        Expiry Alerts
+      </button>
+      <button class="enav" id="enav-biometric" data-module="biometric" onclick="essTab('biometric')">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 2a3 3 0 0 0-3 3M11 2a3 3 0 0 1 3 3M5 14a3 3 0 0 1-3-3M11 14a3 3 0 0 0 3-3"/><circle cx="8" cy="8" r="2"/></svg>
+        Biometric
+      </button>
+      <button class="enav" id="enav-recruitment" data-module="recruitment" onclick="essTab('recruitment')">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><path d="M12 7l2 2-2 2M14 9h-4"/></svg>
+        Recruitment
+      </button>
+      <button class="enav" id="enav-performance" data-module="performance" onclick="essTab('performance')">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 12l3-4 3 2 3-5 3 3"/></svg>
+        Performance
+      </button>
     </nav>
 
     <!-- Pages -->
@@ -490,6 +516,42 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
                 <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#7c3aed" stroke-width="1.4"><path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/></svg>
               </div>
               <div class="mod-label">Documents</div>
+            </button>
+            <button class="mod-tile" data-module="corrections" onclick="essTab('corrections')">
+              <div class="mod-icon" style="background:#fef9c3">
+                <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#ca8a04" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4v4M8 11v1"/></svg>
+              </div>
+              <div class="mod-label">Corrections</div>
+            </button>
+            <button class="mod-tile" data-module="loans" onclick="essTab('loans')">
+              <div class="mod-icon" style="background:#d1fae5">
+                <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#059669" stroke-width="1.4"><rect x="1" y="4" width="14" height="9" rx="1.5"/><path d="M5 7h6M5 10h4"/></svg>
+              </div>
+              <div class="mod-label">Loans</div>
+            </button>
+            <button class="mod-tile" data-module="expiry" onclick="essTab('expiry')">
+              <div class="mod-icon" style="background:#fee2e2">
+                <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#dc2626" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 11v.5"/></svg>
+              </div>
+              <div class="mod-label">Expiry Alerts</div>
+            </button>
+            <button class="mod-tile" data-module="biometric" onclick="essTab('biometric')">
+              <div class="mod-icon" style="background:#e0f2fe">
+                <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#0284c7" stroke-width="1.4"><path d="M5 2a3 3 0 0 0-3 3M11 2a3 3 0 0 1 3 3M5 14a3 3 0 0 1-3-3M11 14a3 3 0 0 0 3-3"/><circle cx="8" cy="8" r="2"/></svg>
+              </div>
+              <div class="mod-label">Biometric</div>
+            </button>
+            <button class="mod-tile" data-module="recruitment" onclick="essTab('recruitment')">
+              <div class="mod-icon" style="background:#ede9fe">
+                <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#7c3aed" stroke-width="1.4"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4"/><path d="M11 8l2 2-2 2M13 10H9"/></svg>
+              </div>
+              <div class="mod-label">Recruitment</div>
+            </button>
+            <button class="mod-tile" data-module="performance" onclick="essTab('performance')">
+              <div class="mod-icon" style="background:#fdf4ff">
+                <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#a21caf" stroke-width="1.4"><path d="M2 12l3-4 3 2 3-5 3 3"/></svg>
+              </div>
+              <div class="mod-label">Performance</div>
             </button>
           </div>
         </div>
@@ -625,6 +687,118 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
         </div>
       </div>
 
+      <!-- Corrections -->
+      <div class="ess-page" id="ep-corrections">
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#ca8a04" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 11v.5"/></svg>
+            Submit Attendance Correction
+          </div>
+          <div class="form-grid">
+            <div class="fg"><label class="fl">Date</label><input class="fi" type="date" id="cor-date"></div>
+            <div class="fg"><label class="fl">Expected In Time</label><input class="fi" type="time" id="cor-in"></div>
+            <div class="fg"><label class="fl">Expected Out Time</label><input class="fi" type="time" id="cor-out"></div>
+            <div class="fg"><label class="fl">Reason</label><input class="fi" id="cor-reason" placeholder="Brief reason for correction"></div>
+          </div>
+          <button class="btn-submit" onclick="essSubmitCorrection()">Submit Correction</button>
+        </div>
+        <div class="ess-card">
+          <div class="ess-card-title">Correction History</div>
+          <div id="corrections-history"><div class="empty"><div class="spinner"></div></div></div>
+        </div>
+      </div>
+
+      <!-- Loans & Advances -->
+      <div class="ess-page" id="ep-loans">
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#059669" stroke-width="1.5"><rect x="1" y="4" width="14" height="9" rx="1.5"/><path d="M5 7h6M5 10h4"/></svg>
+            Apply for Loan / Advance
+          </div>
+          <div class="form-grid">
+            <div class="fg">
+              <label class="fl">Type</label>
+              <select class="select-input" id="loan-type">
+                <option>Salary Advance</option>
+                <option>Personal Loan</option>
+                <option>Emergency Advance</option>
+                <option>Medical Advance</option>
+              </select>
+            </div>
+            <div class="fg"><label class="fl">Amount (AED)</label><input class="fi" type="number" id="loan-amount" placeholder="0.00" min="0" step="100"></div>
+            <div class="fg"><label class="fl">Purpose</label><input class="fi" id="loan-purpose" placeholder="Brief description"></div>
+            <div class="fg">
+              <label class="fl">Repayment Period</label>
+              <select class="select-input" id="loan-period">
+                <option>1 Month</option>
+                <option>3 Months</option>
+                <option>6 Months</option>
+                <option>12 Months</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn-submit" onclick="essApplyLoan()">Submit Request</button>
+        </div>
+        <div class="ess-card">
+          <div class="ess-card-title">Loan / Advance History</div>
+          <div id="loans-history"><div class="empty"><div class="spinner"></div></div></div>
+        </div>
+      </div>
+
+      <!-- Expiry Alerts -->
+      <div class="ess-page" id="ep-expiry">
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#dc2626" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 11v.5"/></svg>
+            Document Expiry Status
+          </div>
+          <div id="expiry-content"><div class="empty"><div class="spinner"></div></div></div>
+        </div>
+      </div>
+
+      <!-- Biometric -->
+      <div class="ess-page" id="ep-biometric">
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#0284c7" stroke-width="1.5"><path d="M5 2a3 3 0 0 0-3 3M11 2a3 3 0 0 1 3 3M5 14a3 3 0 0 1-3-3M11 14a3 3 0 0 0 3-3"/><circle cx="8" cy="8" r="2"/></svg>
+            Biometric Registration
+          </div>
+          <div id="biometric-content">
+            <div style="display:flex;align-items:center;gap:14px;padding:16px 0;border-bottom:1px solid var(--border)">
+              <div style="width:44px;height:44px;border-radius:12px;background:#e0f2fe;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#0284c7" stroke-width="1.4"><path d="M5 2a3 3 0 0 0-3 3M11 2a3 3 0 0 1 3 3M5 14a3 3 0 0 1-3-3M11 14a3 3 0 0 0 3-3"/><circle cx="8" cy="8" r="2"/></svg>
+              </div>
+              <div>
+                <div style="font-weight:600;font-size:14px">Fingerprint / Face Registration</div>
+                <div style="font-size:12px;color:var(--text2);margin-top:3px">Contact HR to update your biometric data on the attendance device.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recruitment -->
+      <div class="ess-page" id="ep-recruitment">
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#7c3aed" stroke-width="1.5"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4"/><path d="M11 8l2 2-2 2M13 10H9"/></svg>
+            Open Positions
+          </div>
+          <div id="recruitment-content"><div class="empty"><div class="spinner"></div></div></div>
+        </div>
+      </div>
+
+      <!-- Performance & Training -->
+      <div class="ess-page" id="ep-performance">
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#a21caf" stroke-width="1.5"><path d="M2 12l3-4 3 2 3-5 3 3"/></svg>
+            Performance &amp; Training
+          </div>
+          <div id="performance-content"><div class="empty"><div class="spinner"></div></div></div>
+        </div>
+      </div>
+
     </div><!-- /ess-content -->
   </div><!-- /ess-body -->
 
@@ -659,6 +833,36 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
       <button class="mnav" id="mnav-documents" data-module="documents" onclick="essTab('documents')">
         <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/></svg>
         Docs
+        <div class="mnav-dot"></div>
+      </button>
+      <button class="mnav" id="mnav-corrections" data-module="corrections" onclick="essTab('corrections')">
+        <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 11v.5"/></svg>
+        Correct
+        <div class="mnav-dot"></div>
+      </button>
+      <button class="mnav" id="mnav-loans" data-module="loans" onclick="essTab('loans')">
+        <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1" y="4" width="14" height="9" rx="1.5"/><path d="M5 7h6M5 10h4"/></svg>
+        Loans
+        <div class="mnav-dot"></div>
+      </button>
+      <button class="mnav" id="mnav-expiry" data-module="expiry" onclick="essTab('expiry')">
+        <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4v4M8 11v.5"/></svg>
+        Expiry
+        <div class="mnav-dot"></div>
+      </button>
+      <button class="mnav" id="mnav-biometric" data-module="biometric" onclick="essTab('biometric')">
+        <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 2a3 3 0 0 0-3 3M11 2a3 3 0 0 1 3 3M5 14a3 3 0 0 1-3-3M11 14a3 3 0 0 0 3-3"/><circle cx="8" cy="8" r="2"/></svg>
+        Biomet.
+        <div class="mnav-dot"></div>
+      </button>
+      <button class="mnav" id="mnav-recruitment" data-module="recruitment" onclick="essTab('recruitment')">
+        <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4"/><path d="M11 8l2 2-2 2M13 10H9"/></svg>
+        Jobs
+        <div class="mnav-dot"></div>
+      </button>
+      <button class="mnav" id="mnav-performance" data-module="performance" onclick="essTab('performance')">
+        <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 12l3-4 3 2 3-5 3 3"/></svg>
+        Perform.
         <div class="mnav-dot"></div>
       </button>
     </div>
@@ -816,6 +1020,11 @@ function essTab(tab) {
   else if (tab === 'documents') loadDocuments();
   else if (tab === 'leave') loadLeave();
   else if (tab === 'overtime') loadOT();
+  else if (tab === 'corrections') loadCorrections();
+  else if (tab === 'loans') loadLoans();
+  else if (tab === 'expiry') loadExpiry();
+  else if (tab === 'recruitment') loadRecruitment();
+  else if (tab === 'performance') loadPerformance();
 }
 
 // ── Data loaders ───────────────────────────────────────
@@ -1042,6 +1251,123 @@ async function essApplyOT() {
   } catch (e) {
     toast(e.message || 'Failed to submit');
   }
+}
+
+// ── Corrections ────────────────────────────────────────
+async function loadCorrections() {
+  document.getElementById('corrections-history').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+  try {
+    const data = await essApi('/corrections');
+    const recs = data.records || [];
+    if (!recs.length) { document.getElementById('corrections-history').innerHTML = '<div class="empty">No corrections submitted yet.</div>'; return; }
+    document.getElementById('corrections-history').innerHTML = `<div class="table-scroll"><table class="ess-table"><thead><tr><th>Date</th><th>In</th><th>Out</th><th>Reason</th><th>Status</th></tr></thead><tbody>${recs.map(r=>`<tr><td>${r.date||''}</td><td>${r.in_time||'—'}</td><td>${r.out_time||'—'}</td><td>${r.reason||'—'}</td><td>${badge(r.status||'Pending')}</td></tr>`).join('')}</tbody></table></div>`;
+  } catch(e) { document.getElementById('corrections-history').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+async function essSubmitCorrection() {
+  const date = document.getElementById('cor-date').value;
+  const in_time = document.getElementById('cor-in').value;
+  const out_time = document.getElementById('cor-out').value;
+  const reason = document.getElementById('cor-reason').value.trim();
+  if (!date) { toast('Please select a date'); return; }
+  try {
+    await essApi('/corrections/apply', { method:'POST', body:{ date, in_time, out_time, reason } });
+    toast('Correction submitted');
+    document.getElementById('cor-date').value = '';
+    document.getElementById('cor-in').value = '';
+    document.getElementById('cor-out').value = '';
+    document.getElementById('cor-reason').value = '';
+    loadCorrections();
+  } catch(e) { toast(e.message || 'Failed to submit'); }
+}
+
+// ── Loans ───────────────────────────────────────────────
+async function loadLoans() {
+  document.getElementById('loans-history').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+  try {
+    const data = await essApi('/loans');
+    const recs = data.records || [];
+    if (!recs.length) { document.getElementById('loans-history').innerHTML = '<div class="empty">No loan or advance requests yet.</div>'; return; }
+    document.getElementById('loans-history').innerHTML = `<div class="table-scroll"><table class="ess-table"><thead><tr><th>Type</th><th>Amount</th><th>Period</th><th>Purpose</th><th>Status</th></tr></thead><tbody>${recs.map(r=>`<tr><td style="font-weight:600">${r.type||''}</td><td style="font-weight:700;color:var(--green)">${fmtAed(r.amount)}</td><td>${r.period||'—'}</td><td>${r.purpose||'—'}</td><td>${badge(r.status||'Pending')}</td></tr>`).join('')}</tbody></table></div>`;
+  } catch(e) { document.getElementById('loans-history').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+async function essApplyLoan() {
+  const type = document.getElementById('loan-type').value;
+  const amount = document.getElementById('loan-amount').value;
+  const purpose = document.getElementById('loan-purpose').value.trim();
+  const period = document.getElementById('loan-period').value;
+  if (!amount || parseFloat(amount) <= 0) { toast('Please enter a valid amount'); return; }
+  try {
+    await essApi('/loans/apply', { method:'POST', body:{ type, amount, purpose, period } });
+    toast('Loan request submitted');
+    document.getElementById('loan-amount').value = '';
+    document.getElementById('loan-purpose').value = '';
+    loadLoans();
+  } catch(e) { toast(e.message || 'Failed to submit'); }
+}
+
+// ── Expiry Alerts ───────────────────────────────────────
+async function loadExpiry() {
+  document.getElementById('expiry-content').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+  try {
+    const data = await essApi('/expiry');
+    const docs = data.documents || [];
+    if (!docs.length) { document.getElementById('expiry-content').innerHTML = '<div class="empty">No document expiry dates on record. Ask HR to update your profile.</div>'; return; }
+    const statusColor = { 'Expired':'#dc2626', 'Expiring Soon':'#ea580c', 'Due Soon':'#ca8a04', 'Valid':'#16a34a', 'Unknown':'#6b7280' };
+    const statusBg   = { 'Expired':'#fee2e2', 'Expiring Soon':'#ffedd5', 'Due Soon':'#fef9c3', 'Valid':'#dcfce7', 'Unknown':'#f3f4f6' };
+    document.getElementById('expiry-content').innerHTML = docs.map(d => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid #f3f4f6">
+        <div>
+          <div style="font-weight:600;font-size:13.5px">${d.label}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px">Expires: ${d.expiry}${d.days_left!=null?' · '+(d.days_left<0?Math.abs(d.days_left)+' days ago':d.days_left+' days left'):''}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;background:${statusBg[d.status]||'#f3f4f6'};color:${statusColor[d.status]||'#6b7280'}">${d.status}</span>
+      </div>`).join('');
+  } catch(e) { document.getElementById('expiry-content').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+// ── Recruitment ─────────────────────────────────────────
+async function loadRecruitment() {
+  document.getElementById('recruitment-content').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+  try {
+    const data = await essApi('/recruitment');
+    const jobs = data.jobs || [];
+    if (!jobs.length) { document.getElementById('recruitment-content').innerHTML = '<div class="empty">No open positions at this time.</div>'; return; }
+    document.getElementById('recruitment-content').innerHTML = jobs.map(j => `
+      <div style="padding:14px 0;border-bottom:1px solid #f3f4f6">
+        <div style="font-weight:700;font-size:14px">${j.title||j.position||'Open Position'}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px;display:flex;gap:14px;flex-wrap:wrap">
+          ${j.department?`<span>Dept: ${j.department}</span>`:''}
+          ${j.location||j.branch?`<span>Location: ${j.location||j.branch}</span>`:''}
+          ${j.type?`<span>Type: ${j.type}</span>`:''}
+          ${j.status?`<span>${badge(j.status)}</span>`:''}
+        </div>
+        ${j.description?`<div style="font-size:12.5px;color:var(--text);margin-top:6px">${j.description}</div>`:''}
+      </div>`).join('');
+  } catch(e) { document.getElementById('recruitment-content').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+// ── Performance & Training ──────────────────────────────
+async function loadPerformance() {
+  document.getElementById('performance-content').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+  try {
+    const data = await essApi('/performance');
+    const recs = data.records || [];
+    if (!recs.length) { document.getElementById('performance-content').innerHTML = '<div class="empty">No performance or training records found.</div>'; return; }
+    document.getElementById('performance-content').innerHTML = recs.map(r => `
+      <div style="padding:14px 0;border-bottom:1px solid #f3f4f6">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="font-weight:700;font-size:13.5px">${r.title||r.type||r._type==='trainingRecords'?'Training':'Performance Review'}</div>
+          ${r.rating?`<span style="font-size:12px;font-weight:700;color:var(--blue)">${r.rating}</span>`:''}
+        </div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px;display:flex;gap:14px;flex-wrap:wrap">
+          ${r.date||r.period?`<span>${r.date||r.period}</span>`:''}
+          ${r.status?`<span>${badge(r.status)}</span>`:''}
+        </div>
+        ${r.comments||r.notes?`<div style="font-size:12.5px;color:var(--text);margin-top:6px">${r.comments||r.notes}</div>`:''}
+      </div>`).join('');
+  } catch(e) { document.getElementById('performance-content').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
 // ── Auto-login ─────────────────────────────────────────
