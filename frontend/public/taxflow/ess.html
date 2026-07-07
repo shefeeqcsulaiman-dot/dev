@@ -335,6 +335,49 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
   .login-card{padding:24px 16px 20px}
   .mnav{font-size:9px}
 }
+
+/* ── KPI Stat Cards ── */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.kpi-lbl{font-size:10.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+.kpi-val{font-size:22px;font-weight:700;color:var(--text);margin:4px 0 2px;line-height:1}
+.kpi-sub{font-size:11px;color:var(--text3)}
+@media(max-width:767px){.kpi-row{grid-template-columns:repeat(2,1fr);gap:8px}.kpi-val{font-size:19px}}
+
+/* ── Approval Timeline ── */
+.tline{display:flex;flex-direction:column;gap:14px;padding:2px 0}
+.tline-item{display:flex;align-items:flex-start;gap:12px}
+.tline-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.tline-info{font-size:13px;font-weight:600;color:var(--text)}
+.tline-sub{font-size:12px;color:var(--text2);margin-top:2px}
+
+/* ── Progress Bars (Leave Balance) ── */
+.prog-block{margin-bottom:12px}
+.prog-hd{display:flex;justify-content:space-between;margin-bottom:5px}
+.prog-lbl{font-size:12.5px;font-weight:500;color:var(--text);display:flex;align-items:center;gap:7px}
+.prog-icon{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.prog-val{font-size:11.5px;color:var(--text2)}
+.prog-bar{height:6px;background:#f0f2f7;border-radius:99px;overflow:hidden}
+.prog-fill{height:100%;border-radius:99px;transition:width .4s}
+
+/* ── Info Tiles ── */
+.info-tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.info-tile{background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:13px}
+.info-tile strong{display:block;font-size:12.5px;font-weight:700;color:var(--text);margin-bottom:5px}
+.info-tile p{font-size:12px;color:var(--text2);line-height:1.5;margin:0}
+@media(max-width:480px){.info-tiles{grid-template-columns:1fr}}
+
+/* ── Attendance Calendar ── */
+.att-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:10px}
+.att-cal-hdr{font-size:9.5px;font-weight:700;color:var(--text3);text-align:center;padding:4px 0;text-transform:uppercase}
+.att-cal-day{aspect-ratio:1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;cursor:default}
+.att-cal-day.present{background:#dcfce7;color:#15803d}
+.att-cal-day.leave{background:#dbeafe;color:#1d4ed8}
+.att-cal-day.other{background:#f3f4f6;color:#9ca3af}
+.att-cal-day.today{outline:2px solid var(--blue);outline-offset:1px}
+.att-cal-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px}
+.att-cal-legend span{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px}
+.att-cal-legend span::before{content:'';display:inline-block;width:10px;height:10px;border-radius:3px}
 </style>
 </head>
 <body>
@@ -576,15 +619,34 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
 
       <!-- Attendance -->
       <div class="ess-page" id="ep-attendance">
+        <div class="kpi-row" id="att-kpi-row">
+          <div class="kpi-card"><div class="kpi-lbl">Present Days</div><div class="kpi-val" id="att-kpi-present" style="color:#16a34a">—</div><div class="kpi-sub">this month</div></div>
+          <div class="kpi-card"><div class="kpi-lbl">Total Punches</div><div class="kpi-val" id="att-kpi-total">—</div><div class="kpi-sub">all records</div></div>
+          <div class="kpi-card"><div class="kpi-lbl">Check-In Days</div><div class="kpi-val" id="att-kpi-in" style="color:#2563eb">—</div><div class="kpi-sub">in punches</div></div>
+          <div class="kpi-card"><div class="kpi-lbl">Last Punch</div><div class="kpi-val" id="att-kpi-last" style="font-size:14px;margin-top:6px">—</div><div class="kpi-sub">most recent</div></div>
+        </div>
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#2563eb" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/></svg>
+            Attendance Calendar
+            <span id="att-cal-month-label" style="margin-left:auto;font-size:12px;color:var(--text2);font-weight:500"></span>
+          </div>
+          <div class="att-cal" id="att-cal-grid">
+            <div class="att-cal-hdr">Sun</div><div class="att-cal-hdr">Mon</div><div class="att-cal-hdr">Tue</div><div class="att-cal-hdr">Wed</div><div class="att-cal-hdr">Thu</div><div class="att-cal-hdr">Fri</div><div class="att-cal-hdr">Sat</div>
+          </div>
+          <div class="att-cal-legend">
+            <span style="--c:#dcfce7"><span style="background:#dcfce7;width:10px;height:10px;border-radius:3px;display:inline-block"></span>Present</span>
+            <span><span style="background:#dbeafe;width:10px;height:10px;border-radius:3px;display:inline-block"></span>Leave</span>
+            <span><span style="background:#f3f4f6;width:10px;height:10px;border-radius:3px;display:inline-block"></span>No Record</span>
+          </div>
+        </div>
         <div class="ess-card">
           <div class="ess-card-title">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#16a34a" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/></svg>
-            Attendance Records
+            Punch Log
             <button onclick="loadAttendance()" style="margin-left:auto;font-size:11px;color:var(--blue);cursor:pointer;border:none;background:none;font-weight:600">Refresh</button>
           </div>
-          <div id="attendance-content">
-            <div class="empty"><div class="spinner"></div></div>
-          </div>
+          <div id="attendance-content"><div class="empty"><div class="spinner"></div></div></div>
         </div>
       </div>
 
@@ -618,6 +680,13 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
       <div class="ess-page" id="ep-leave">
         <div class="ess-card">
           <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#7c3aed" stroke-width="1.5"><rect x="1.5" y="3.5" width="13" height="10" rx="1.5"/><path d="M5.5 1.5v4M10.5 1.5v4M1.5 7.5h13"/></svg>
+            Leave Balance
+          </div>
+          <div id="leave-balance-content"><div class="empty"><div class="spinner"></div></div></div>
+        </div>
+        <div class="ess-card">
+          <div class="ess-card-title">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#2563eb" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/></svg>
             Request Leave
           </div>
@@ -627,62 +696,71 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
               <select class="select-input" id="ess-leave-type">
                 <option>Annual Leave</option>
                 <option>Sick Leave</option>
-                <option>Casual Leave</option>
                 <option>Emergency Leave</option>
-                <option>Maternity/Paternity Leave</option>
+                <option>Sick Leave</option>
+                <option>Maternity Leave</option>
+                <option>Paternity Leave</option>
+                <option>Hajj / Pilgrimage</option>
                 <option>Unpaid Leave</option>
+                <option>Study Leave</option>
+                <option>Compassionate Leave</option>
+                <option>Compensatory Leave</option>
               </select>
             </div>
-            <div class="fg">
-              <label class="fl">From Date</label>
-              <input class="fi" type="date" id="ess-leave-from">
-            </div>
-            <div class="fg">
-              <label class="fl">To Date</label>
-              <input class="fi" type="date" id="ess-leave-to">
-            </div>
-            <div class="fg">
-              <label class="fl">Reason</label>
-              <input class="fi" id="ess-leave-reason" placeholder="Brief reason (optional)">
-            </div>
+            <div class="fg"><label class="fl">From Date</label><input class="fi" type="date" id="ess-leave-from"></div>
+            <div class="fg"><label class="fl">To Date</label><input class="fi" type="date" id="ess-leave-to"></div>
+            <div class="fg"><label class="fl">Reason</label><input class="fi" id="ess-leave-reason" placeholder="Brief reason (optional)"></div>
           </div>
           <button class="btn-submit" onclick="essApplyLeave()">Submit Request</button>
         </div>
         <div class="ess-card">
           <div class="ess-card-title">Leave History</div>
-          <div id="leave-history-content">
-            <div class="empty"><div class="spinner"></div></div>
+          <div id="leave-history-content"><div class="empty"><div class="spinner"></div></div></div>
+        </div>
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#2563eb" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12"/></svg>
+            Leave Calendar
+            <span id="leave-cal-label" style="margin-left:auto;font-size:12px;color:var(--text2);font-weight:500"></span>
           </div>
+          <div id="leave-cal-content" style="overflow-x:auto"></div>
         </div>
       </div>
 
       <!-- Overtime -->
       <div class="ess-page" id="ep-overtime">
+        <div class="kpi-row">
+          <div class="kpi-card"><div class="kpi-lbl">Pending</div><div class="kpi-val" id="ot-kpi-pending" style="color:#ea580c">—</div><div class="kpi-sub">awaiting approval</div></div>
+          <div class="kpi-card"><div class="kpi-lbl">Approved Hours</div><div class="kpi-val" id="ot-kpi-hours" style="color:#16a34a">—</div><div class="kpi-sub">total approved</div></div>
+          <div class="kpi-card"><div class="kpi-lbl">Payroll Value</div><div class="kpi-val" id="ot-kpi-value" style="font-size:15px;margin-top:6px">—</div><div class="kpi-sub">AED approved</div></div>
+          <div class="kpi-card"><div class="kpi-lbl">Rejected</div><div class="kpi-val" id="ot-kpi-rejected" style="color:#dc2626">—</div><div class="kpi-sub">this year</div></div>
+        </div>
         <div class="ess-card">
           <div class="ess-card-title">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#ea580c" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
             Report Overtime
           </div>
           <div class="form-grid">
-            <div class="fg">
-              <label class="fl">Date</label>
-              <input class="fi" type="date" id="ess-ot-date">
-            </div>
-            <div class="fg">
-              <label class="fl">OT Hours</label>
-              <input class="fi" type="number" id="ess-ot-hours" placeholder="e.g. 2.5" min="0.5" step="0.5">
-            </div>
-            <div class="fg" style="grid-column:1/-1">
-              <label class="fl">Reason / Task Description</label>
-              <input class="fi" id="ess-ot-reason" placeholder="Brief description of work done">
-            </div>
+            <div class="fg"><label class="fl">Date</label><input class="fi" type="date" id="ess-ot-date"></div>
+            <div class="fg"><label class="fl">OT Hours</label><input class="fi" type="number" id="ess-ot-hours" placeholder="e.g. 2.5" min="0.5" step="0.5"></div>
+            <div class="fg" style="grid-column:1/-1"><label class="fl">Reason / Task Description</label><input class="fi" id="ess-ot-reason" placeholder="Brief description of work done"></div>
           </div>
           <button class="btn-submit" onclick="essApplyOT()">Submit OT Report</button>
         </div>
         <div class="ess-card">
           <div class="ess-card-title">OT History</div>
-          <div id="ot-history-content">
-            <div class="empty"><div class="spinner"></div></div>
+          <div id="ot-history-content"><div class="empty"><div class="spinner"></div></div></div>
+        </div>
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#2563eb" stroke-width="1.5"><path d="M8 1.5l5.5 2v3.5C13.5 10.5 11 13 8 14 5 13 2.5 10.5 2.5 7V3.5z"/></svg>
+            Approval Workflow
+          </div>
+          <div class="tline">
+            <div class="tline-item"><div class="tline-dot" style="background:#dcfce7;color:#16a34a">1</div><div><div class="tline-info">Employee Submit</div><div class="tline-sub">Reason and task description required</div></div></div>
+            <div class="tline-item"><div class="tline-dot" style="background:#fef9c3;color:#92400e">2</div><div><div class="tline-info">Supervisor Approval</div><div class="tline-sub">Supervisor cannot approve own overtime</div></div></div>
+            <div class="tline-item"><div class="tline-dot" style="background:#dbeafe;color:#1d4ed8">3</div><div><div class="tline-info">HR Final Approval</div><div class="tline-sub">HR may adjust hours with audit remarks</div></div></div>
+            <div class="tline-item"><div class="tline-dot" style="background:#f3e8ff;color:#7e22ce">4</div><div><div class="tline-info">Payroll Sync</div><div class="tline-sub">Approved OT hours flow into payroll variable pay</div></div></div>
           </div>
         </div>
       </div>
@@ -706,6 +784,26 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
           <div class="ess-card-title">Correction History</div>
           <div id="corrections-history"><div class="empty"><div class="spinner"></div></div></div>
         </div>
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#2563eb" stroke-width="1.5"><path d="M8 1.5l5.5 2v3.5C13.5 10.5 11 13 8 14 5 13 2.5 10.5 2.5 7V3.5z"/></svg>
+            Approval Workflow
+          </div>
+          <div class="tline">
+            <div class="tline-item"><div class="tline-dot" style="background:#dcfce7;color:#16a34a">1</div><div><div class="tline-info">Employee Submit</div><div class="tline-sub">Forgotten check-in, checkout, or break fix</div></div></div>
+            <div class="tline-item"><div class="tline-dot" style="background:#fef9c3;color:#92400e">2</div><div><div class="tline-info">HR Review</div><div class="tline-sub">HR verifies against biometric records</div></div></div>
+            <div class="tline-item"><div class="tline-dot" style="background:#dcfce7;color:#16a34a">3</div><div><div class="tline-info">Approved &amp; Updated</div><div class="tline-sub">Approved corrections update attendance and create an audit log</div></div></div>
+          </div>
+        </div>
+        <div class="ess-card">
+          <div class="ess-card-title">Break Policy</div>
+          <div class="info-tiles">
+            <div class="info-tile"><strong>Lunch Break</strong><p>60 minutes deducted automatically when total work exceeds 6 hours.</p></div>
+            <div class="info-tile"><strong>Multiple Breaks</strong><p>HR captures start and end time for each break segment when needed.</p></div>
+            <div class="info-tile"><strong>Approval Required</strong><p>All attendance edits require HR approval and are audit-logged.</p></div>
+            <div class="info-tile"><strong>Payroll Impact</strong><p>Approved corrections reflect in the same period's payroll run.</p></div>
+          </div>
+        </div>
       </div>
 
       <!-- Loans & Advances -->
@@ -713,6 +811,22 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
         <div class="ess-card">
           <div class="ess-card-title">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#059669" stroke-width="1.5"><rect x="1" y="4" width="14" height="9" rx="1.5"/><path d="M5 7h6M5 10h4"/></svg>
+            Employee Loans
+            <span style="font-size:11px;color:var(--text3);font-weight:400;margin-left:4px">Request, approval &amp; EMI schedule</span>
+          </div>
+          <div id="loans-history"><div class="empty"><div class="spinner"></div></div></div>
+        </div>
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#e11d48" stroke-width="1.5"><rect x="2" y="3" width="12" height="9" rx="1.5"/><path d="M2 6h12M5 9h2M8.5 9h1.5"/></svg>
+            Salary Advances
+            <span style="font-size:11px;color:var(--text3);font-weight:400;margin-left:4px">One-time advance deducted from next salary</span>
+          </div>
+          <div id="advances-history"><div class="empty"><div class="spinner"></div></div></div>
+        </div>
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#059669" stroke-width="1.5"><rect x="1" y="4" width="14" height="9" rx="1.5"/><path d="M1 7h14M4 4V3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1"/></svg>
             Apply for Loan / Advance
           </div>
           <div class="form-grid">
@@ -740,19 +854,52 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
           <button class="btn-submit" onclick="essApplyLoan()">Submit Request</button>
         </div>
         <div class="ess-card">
-          <div class="ess-card-title">Loan / Advance History</div>
-          <div id="loans-history"><div class="empty"><div class="spinner"></div></div></div>
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#2563eb" stroke-width="1.5"><path d="M8 1.5l5.5 2v3.5C13.5 10.5 11 13 8 14 5 13 2.5 10.5 2.5 7V3.5z"/></svg>
+            Loan Approval Workflow
+          </div>
+          <div class="tline">
+            <div class="tline-item"><div class="tline-dot" style="background:#dcfce7;color:#16a34a">1</div><div><div class="tline-info">Employee Submits Request</div><div class="tline-sub">Loan amount, purpose, and preferred repayment period</div></div></div>
+            <div class="tline-item"><div class="tline-dot" style="background:#fef9c3;color:#92400e">2</div><div><div class="tline-info">HR Reviews</div><div class="tline-sub">Checks existing loans, outstanding balance, and policy limits</div></div></div>
+            <div class="tline-item"><div class="tline-dot" style="background:#dbeafe;color:#1d4ed8">3</div><div><div class="tline-info">Management Approval</div><div class="tline-sub">Finance head or MD approves based on amount threshold</div></div></div>
+            <div class="tline-item"><div class="tline-dot" style="background:#f3e8ff;color:#7e22ce">4</div><div><div class="tline-info">Auto EMI Deduction</div><div class="tline-sub">Monthly installment auto-deducted from payroll until cleared</div></div></div>
+          </div>
+        </div>
+        <div class="ess-card">
+          <div class="ess-card-title">Loan Policy</div>
+          <div class="info-tiles">
+            <div class="info-tile"><strong>Maximum Loan</strong><p>System limits loan requests to 3× your basic salary.</p></div>
+            <div class="info-tile"><strong>Salary Advance</strong><p>One advance per month, maximum 50% of your monthly salary.</p></div>
+            <div class="info-tile"><strong>Auto EMI</strong><p>Monthly installment is auto-deducted from your net salary.</p></div>
+            <div class="info-tile"><strong>MD Approval</strong><p>Loans above AED 10,000 require Management Director sign-off.</p></div>
+          </div>
         </div>
       </div>
 
       <!-- Expiry Alerts -->
       <div class="ess-page" id="ep-expiry">
+        <div class="kpi-row">
+          <div class="kpi-card"><div class="kpi-lbl">Critical ≤30 Days</div><div class="kpi-val" id="exp-kpi-30" style="color:#dc2626">—</div><div class="kpi-sub">immediate action</div></div>
+          <div class="kpi-card"><div class="kpi-lbl">Warning ≤90 Days</div><div class="kpi-val" id="exp-kpi-90" style="color:#ea580c">—</div><div class="kpi-sub">plan renewal</div></div>
+          <div class="kpi-card"><div class="kpi-lbl">Valid</div><div class="kpi-val" id="exp-kpi-valid" style="color:#16a34a">—</div><div class="kpi-sub">no action needed</div></div>
+          <div class="kpi-card"><div class="kpi-lbl">Missing</div><div class="kpi-val" id="exp-kpi-missing" style="color:var(--text3)">—</div><div class="kpi-sub">not recorded</div></div>
+        </div>
         <div class="ess-card">
           <div class="ess-card-title">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#dc2626" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 11v.5"/></svg>
-            Document Expiry Status
+            Document Expiry Tracker
+            <span style="font-size:11px;color:var(--text3);font-weight:400;margin-left:4px">Visa · Passport · Emirates ID · Insurance · Driving License</span>
           </div>
           <div id="expiry-content"><div class="empty"><div class="spinner"></div></div></div>
+        </div>
+        <div class="ess-card">
+          <div class="ess-card-title">UAE Document Requirements</div>
+          <div class="info-tiles">
+            <div class="info-tile"><strong>Visa / Entry Permit</strong><p>UAE Labour Law requires valid entry permit. HR alerts at 90-day and 30-day pre-expiry.</p></div>
+            <div class="info-tile"><strong>Emirates ID (EID)</strong><p>Federal Identity Authority mandatory. Alerts at 60-day and 30-day milestones.</p></div>
+            <div class="info-tile"><strong>Passport</strong><p>Most UAE contracts require 6+ months validity. Alert when less than 6 months remain.</p></div>
+            <div class="info-tile"><strong>Work Permit / Labour Card</strong><p>MOL Work Permit must be renewed before expiry. Linked to employment contract validity.</p></div>
+          </div>
         </div>
       </div>
 
@@ -793,9 +940,16 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
         <div class="ess-card">
           <div class="ess-card-title">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#a21caf" stroke-width="1.5"><path d="M2 12l3-4 3 2 3-5 3 3"/></svg>
-            Performance &amp; Training
+            Performance Reviews
           </div>
           <div id="performance-content"><div class="empty"><div class="spinner"></div></div></div>
+        </div>
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#0284c7" stroke-width="1.5"><path d="M3 13V8a5 5 0 0110 0v5M1 13h14"/><circle cx="8" cy="7" r="2"/></svg>
+            Training Records
+          </div>
+          <div id="training-content"><div class="empty"><div class="spinner"></div></div></div>
         </div>
       </div>
 
@@ -1072,8 +1226,29 @@ async function loadAttendance() {
   try {
     const data = await essApi('/attendance');
     const rows = data.records || [];
+
+    // KPIs
+    const now = new Date();
+    const thisMonth = now.getMonth();
+    const thisYear = now.getFullYear();
+    const presentDates = new Set(
+      rows.filter(r => {
+        const d = new Date(r.date);
+        return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+      }).map(r => r.date)
+    );
+    const inPunches = rows.filter(r => r.direction === 'in');
+    const last = rows[0];
+    document.getElementById('att-kpi-present').textContent = presentDates.size;
+    document.getElementById('att-kpi-total').textContent = rows.length;
+    document.getElementById('att-kpi-in').textContent = inPunches.length;
+    document.getElementById('att-kpi-last').textContent = last ? last.date : '—';
+
+    // Build calendar for current month
+    buildAttCal(rows, now);
+
     if (!rows.length) {
-      document.getElementById('attendance-content').innerHTML = '<div class="empty"><svg viewBox="0 0 32 32" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="16" cy="16" r="12"/><path d="M16 10v6l4 4"/></svg>No attendance records found.</div>';
+      document.getElementById('attendance-content').innerHTML = '<div class="empty">No attendance records found.</div>';
       return;
     }
     document.getElementById('attendance-content').innerHTML = `
@@ -1090,6 +1265,27 @@ async function loadAttendance() {
   } catch (e) {
     document.getElementById('attendance-content').innerHTML = `<div class="empty">${e.message}</div>`;
   }
+}
+
+function buildAttCal(rows, ref) {
+  const year = ref.getFullYear();
+  const month = ref.getMonth();
+  const presentDates = new Set(rows.filter(r => r.date && r.date.startsWith(`${year}-${String(month+1).padStart(2,'0')}`)).map(r => r.date));
+  const today = new Date().toISOString().slice(0, 10);
+  const label = ref.toLocaleString('en', { month: 'long', year: 'numeric' });
+  document.getElementById('att-cal-month-label').textContent = label;
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const hdrs = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let html = hdrs.map(h => `<div class="att-cal-hdr">${h}</div>`).join('');
+  for (let i = 0; i < firstDay; i++) html += '<div></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const cls = presentDates.has(dateStr) ? 'present' : (new Date(dateStr) <= new Date() ? 'other' : '');
+    const todayCls = dateStr === today ? ' today' : '';
+    html += `<div class="att-cal-day ${cls}${todayCls}">${d}</div>`;
+  }
+  document.getElementById('att-cal-grid').innerHTML = html;
 }
 
 async function loadPayslips() {
@@ -1166,9 +1362,38 @@ async function loadDocuments() {
 
 async function loadLeave() {
   document.getElementById('leave-history-content').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+  document.getElementById('leave-balance-content').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
   try {
     const data = await essApi('/leave');
     const rows = data.records || [];
+
+    // Leave balance by type (approved days used)
+    const leaveTypes = [
+      { label:'Annual Leave', days:30, color:'#3b82f6', icon:'#eff6ff' },
+      { label:'Sick Leave', days:90, color:'#eab308', icon:'#fef9c3' },
+      { label:'Emergency Leave', days:5, color:'#f43f5e', icon:'#fff1f2' },
+      { label:'Maternity Leave', days:60, color:'#a855f7', icon:'#fdf4ff' },
+    ];
+    const usedMap = {};
+    rows.filter(r => (r.status||'').toLowerCase() === 'approved').forEach(r => {
+      const t = r.type || '';
+      usedMap[t] = (usedMap[t] || 0) + (parseFloat(r.days) || 0);
+    });
+    document.getElementById('leave-balance-content').innerHTML = leaveTypes.map(lt => {
+      const used = usedMap[lt.label] || 0;
+      const pct = Math.min(100, lt.days > 0 ? (used / lt.days) * 100 : 0);
+      return `<div class="prog-block">
+        <div class="prog-hd">
+          <div class="prog-lbl"><div class="prog-icon" style="background:${lt.icon}"><svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="${lt.color}" stroke-width="1.4"><rect x="1" y="2" width="10" height="9" rx="1"/><path d="M1 5h10M4 1v2M8 1v2"/></svg></div>${lt.label}</div>
+          <div class="prog-val">${used} / ${lt.days} days used</div>
+        </div>
+        <div class="prog-bar"><div class="prog-fill" style="width:${pct}%;background:${lt.color}"></div></div>
+      </div>`;
+    }).join('') || '<div class="empty">No balance data. Leave records will appear once approved.</div>';
+
+    // Leave calendar
+    buildLeaveCalendar(rows);
+
     if (!rows.length) {
       document.getElementById('leave-history-content').innerHTML = '<div class="empty">No leave requests yet.</div>';
       return;
@@ -1188,7 +1413,39 @@ async function loadLeave() {
       </div>`;
   } catch (e) {
     document.getElementById('leave-history-content').innerHTML = `<div class="empty">${e.message}</div>`;
+    document.getElementById('leave-balance-content').innerHTML = `<div class="empty">${e.message}</div>`;
   }
+}
+
+function buildLeaveCalendar(rows) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  document.getElementById('leave-cal-label').textContent = now.toLocaleString('en', { month:'long', year:'numeric' });
+  // Build set of leave dates this month
+  const leaveDates = new Set();
+  rows.forEach(r => {
+    const from = new Date(r.from || r.from_date || '');
+    const to = new Date(r.to || r.to_date || '');
+    if (isNaN(from) || isNaN(to)) return;
+    for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+      if (d.getMonth() === month && d.getFullYear() === year)
+        leaveDates.add(d.getDate());
+    }
+  });
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = now.getDate();
+  const hdrs = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let html = `<div class="att-cal">${hdrs.map(h=>`<div class="att-cal-hdr">${h}</div>`).join('')}`;
+  for (let i = 0; i < firstDay; i++) html += '<div></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const cls = leaveDates.has(d) ? 'leave' : 'other';
+    const todayCls = d === today ? ' today' : '';
+    html += `<div class="att-cal-day ${cls}${todayCls}">${d}</div>`;
+  }
+  html += '</div><div class="att-cal-legend"><span><span style="background:#dbeafe;width:10px;height:10px;border-radius:3px;display:inline-block"></span>On Leave</span><span><span style="background:#f3f4f6;width:10px;height:10px;border-radius:3px;display:inline-block"></span>Working Day</span></div>';
+  document.getElementById('leave-cal-content').innerHTML = html;
 }
 
 async function loadOT() {
@@ -1196,6 +1453,15 @@ async function loadOT() {
   try {
     const data = await essApi('/overtime');
     const rows = data.records || [];
+    // KPIs
+    const pending = rows.filter(r => (r.status||'').toLowerCase() === 'pending').length;
+    const approved = rows.filter(r => (r.status||'').toLowerCase() === 'approved');
+    const approvedHrs = approved.reduce((s, r) => s + (parseFloat(r.ot_hours) || 0), 0);
+    const rejected = rows.filter(r => (r.status||'').toLowerCase() === 'rejected').length;
+    document.getElementById('ot-kpi-pending').textContent = pending;
+    document.getElementById('ot-kpi-hours').textContent = approvedHrs.toFixed(1);
+    document.getElementById('ot-kpi-value').textContent = approvedHrs > 0 ? 'AED ' + (approvedHrs * 45).toLocaleString('en-AE', {maximumFractionDigits:0}) : '—';
+    document.getElementById('ot-kpi-rejected').textContent = rejected;
     if (!rows.length) {
       document.getElementById('ot-history-content').innerHTML = '<div class="empty">No overtime reports yet.</div>';
       return;
@@ -1284,12 +1550,22 @@ async function essSubmitCorrection() {
 // ── Loans ───────────────────────────────────────────────
 async function loadLoans() {
   document.getElementById('loans-history').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+  document.getElementById('advances-history').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
   try {
     const data = await essApi('/loans');
     const recs = data.records || [];
-    if (!recs.length) { document.getElementById('loans-history').innerHTML = '<div class="empty">No loan or advance requests yet.</div>'; return; }
-    document.getElementById('loans-history').innerHTML = `<div class="table-scroll"><table class="ess-table"><thead><tr><th>Type</th><th>Amount</th><th>Period</th><th>Purpose</th><th>Status</th></tr></thead><tbody>${recs.map(r=>`<tr><td style="font-weight:600">${r.type||''}</td><td style="font-weight:700;color:var(--green)">${fmtAed(r.amount)}</td><td>${r.period||'—'}</td><td>${r.purpose||'—'}</td><td>${badge(r.status||'Pending')}</td></tr>`).join('')}</tbody></table></div>`;
-  } catch(e) { document.getElementById('loans-history').innerHTML = `<div class="empty">${e.message}</div>`; }
+    const advanceTypes = ['Salary Advance','Emergency Advance','Medical Advance'];
+    const loans = recs.filter(r => !advanceTypes.includes(r.type));
+    const advances = recs.filter(r => advanceTypes.includes(r.type));
+    const loanTable = recs => recs.length
+      ? `<div class="table-scroll"><table class="ess-table"><thead><tr><th>Type</th><th>Amount</th><th>Period</th><th>Purpose</th><th>Status</th></tr></thead><tbody>${recs.map(r=>`<tr><td style="font-weight:600">${r.type||''}</td><td style="font-weight:700;color:var(--green)">${fmtAed(r.amount)}</td><td>${r.period||'—'}</td><td>${r.purpose||'—'}</td><td>${badge(r.status||'Pending')}</td></tr>`).join('')}</tbody></table></div>`
+      : '<div class="empty">No records yet.</div>';
+    document.getElementById('loans-history').innerHTML = loanTable(loans);
+    document.getElementById('advances-history').innerHTML = loanTable(advances);
+  } catch(e) {
+    document.getElementById('loans-history').innerHTML = `<div class="empty">${e.message}</div>`;
+    document.getElementById('advances-history').innerHTML = `<div class="empty">${e.message}</div>`;
+  }
 }
 
 async function essApplyLoan() {
@@ -1313,17 +1589,24 @@ async function loadExpiry() {
   try {
     const data = await essApi('/expiry');
     const docs = data.documents || [];
+    // KPIs
+    const critical = docs.filter(d => d.days_left != null && d.days_left <= 30).length;
+    const warning = docs.filter(d => d.days_left != null && d.days_left > 30 && d.days_left <= 90).length;
+    const valid = docs.filter(d => d.status === 'Valid').length;
+    const missing = docs.filter(d => !d.expiry || d.status === 'Unknown').length;
+    document.getElementById('exp-kpi-30').textContent = critical;
+    document.getElementById('exp-kpi-90').textContent = warning;
+    document.getElementById('exp-kpi-valid').textContent = valid;
+    document.getElementById('exp-kpi-missing').textContent = missing;
     if (!docs.length) { document.getElementById('expiry-content').innerHTML = '<div class="empty">No document expiry dates on record. Ask HR to update your profile.</div>'; return; }
     const statusColor = { 'Expired':'#dc2626', 'Expiring Soon':'#ea580c', 'Due Soon':'#ca8a04', 'Valid':'#16a34a', 'Unknown':'#6b7280' };
     const statusBg   = { 'Expired':'#fee2e2', 'Expiring Soon':'#ffedd5', 'Due Soon':'#fef9c3', 'Valid':'#dcfce7', 'Unknown':'#f3f4f6' };
-    document.getElementById('expiry-content').innerHTML = docs.map(d => `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid #f3f4f6">
-        <div>
-          <div style="font-weight:600;font-size:13.5px">${d.label}</div>
-          <div style="font-size:12px;color:var(--text2);margin-top:2px">Expires: ${d.expiry}${d.days_left!=null?' · '+(d.days_left<0?Math.abs(d.days_left)+' days ago':d.days_left+' days left'):''}</div>
-        </div>
-        <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;background:${statusBg[d.status]||'#f3f4f6'};color:${statusColor[d.status]||'#6b7280'}">${d.status}</span>
-      </div>`).join('');
+    document.getElementById('expiry-content').innerHTML = `<div class="table-scroll"><table class="ess-table"><thead><tr><th>Document</th><th>Expiry Date</th><th>Days Left</th><th>Status</th></tr></thead><tbody>${docs.map(d=>`<tr>
+      <td style="font-weight:600">${d.label}</td>
+      <td>${d.expiry||'—'}</td>
+      <td>${d.days_left!=null?(d.days_left<0?`<span style="color:#dc2626;font-weight:700">${Math.abs(d.days_left)} days ago</span>`:`<span style="font-weight:600">${d.days_left} days</span>`):'—'}</td>
+      <td><span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:${statusBg[d.status]||'#f3f4f6'};color:${statusColor[d.status]||'#6b7280'}">${d.status}</span></td>
+    </tr>`).join('')}</tbody></table></div>`;
   } catch(e) { document.getElementById('expiry-content').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
@@ -1351,23 +1634,30 @@ async function loadRecruitment() {
 // ── Performance & Training ──────────────────────────────
 async function loadPerformance() {
   document.getElementById('performance-content').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+  document.getElementById('training-content').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
   try {
     const data = await essApi('/performance');
     const recs = data.records || [];
-    if (!recs.length) { document.getElementById('performance-content').innerHTML = '<div class="empty">No performance or training records found.</div>'; return; }
-    document.getElementById('performance-content').innerHTML = recs.map(r => `
+    const reviews = recs.filter(r => r._type !== 'trainingRecords');
+    const training = recs.filter(r => r._type === 'trainingRecords');
+    const renderCard = r => `
       <div style="padding:14px 0;border-bottom:1px solid #f3f4f6">
         <div style="display:flex;align-items:center;justify-content:space-between">
-          <div style="font-weight:700;font-size:13.5px">${r.title||r.type||r._type==='trainingRecords'?'Training':'Performance Review'}</div>
-          ${r.rating?`<span style="font-size:12px;font-weight:700;color:var(--blue)">${r.rating}</span>`:''}
+          <div style="font-weight:700;font-size:13.5px">${r.title||r.type||'Record'}</div>
+          ${r.rating?`<span style="font-size:12px;font-weight:700;padding:3px 9px;border-radius:20px;background:#dbeafe;color:#1d4ed8">${r.rating}</span>`:''}
         </div>
         <div style="font-size:12px;color:var(--text2);margin-top:4px;display:flex;gap:14px;flex-wrap:wrap">
           ${r.date||r.period?`<span>${r.date||r.period}</span>`:''}
           ${r.status?`<span>${badge(r.status)}</span>`:''}
         </div>
         ${r.comments||r.notes?`<div style="font-size:12.5px;color:var(--text);margin-top:6px">${r.comments||r.notes}</div>`:''}
-      </div>`).join('');
-  } catch(e) { document.getElementById('performance-content').innerHTML = `<div class="empty">${e.message}</div>`; }
+      </div>`;
+    document.getElementById('performance-content').innerHTML = reviews.length ? reviews.map(renderCard).join('') : '<div class="empty">No performance reviews found.</div>';
+    document.getElementById('training-content').innerHTML = training.length ? training.map(renderCard).join('') : '<div class="empty">No training records found.</div>';
+  } catch(e) {
+    document.getElementById('performance-content').innerHTML = `<div class="empty">${e.message}</div>`;
+    document.getElementById('training-content').innerHTML = `<div class="empty">${e.message}</div>`;
+  }
 }
 
 // ── Auto-login ─────────────────────────────────────────
