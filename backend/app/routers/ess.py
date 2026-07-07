@@ -135,12 +135,14 @@ def ess_login(body: LoginBody, db: Session = Depends(get_db)) -> dict:
     if not username_matches:
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
+    # Exact checkbox values saved by the HRMS role modal → ESS tab IDs
     _HRMS_TO_ESS = {
         "Attendance": "attendance",
         "Leave Management": "leave",
-        "Payroll": "payslips",
         "Overtime": "overtime",
-        "Documents": "documents",
+        "Payroll": "payslips",
+        "Loans & Advances": "loans",
+        "Corrections": "corrections",
     }
     _ALL_ESS = ["attendance", "payslips", "leave", "overtime", "documents"]
 
@@ -176,10 +178,17 @@ def ess_login(body: LoginBody, db: Session = Depends(get_db)) -> dict:
                 )
                 if role_obj:
                     hrms_mods = role_obj.get("modules") or []
-                    if "Full Access" not in hrms_mods:
+                    # "ESS Portal" checkbox = full ESS access
+                    if "ESS Portal" in hrms_mods or "Full Access" in hrms_mods:
+                        allowed_modules = _ALL_ESS[:]
+                    else:
                         mapped = [_HRMS_TO_ESS[m] for m in hrms_mods if m in _HRMS_TO_ESS]
                         if mapped:
+                            # Documents always accessible regardless of role
+                            if "documents" not in mapped:
+                                mapped.append("documents")
                             allowed_modules = mapped
+                        # else: no ESS-relevant modules → default full access
 
         return {
             "access_token": token,
