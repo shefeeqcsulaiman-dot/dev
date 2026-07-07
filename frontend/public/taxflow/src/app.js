@@ -15805,17 +15805,7 @@ function _saveDeptsBranchesToDb(){
 }
 
 // ── Department data store ─────────────────────────────────────────────
-let _deptList=[
-  {id:'dept-1',name:'Management',code:'MGT',head:'',description:'',status:'Active'},
-  {id:'dept-2',name:'Finance',code:'FIN',head:'',description:'',status:'Active'},
-  {id:'dept-3',name:'Operations',code:'OPS',head:'',description:'',status:'Active'},
-  {id:'dept-4',name:'Sales',code:'SLS',head:'',description:'',status:'Active'},
-  {id:'dept-5',name:'HR',code:'HR',head:'',description:'',status:'Active'},
-  {id:'dept-6',name:'IT',code:'IT',head:'',description:'',status:'Active'},
-  {id:'dept-7',name:'Marketing',code:'MKT',head:'',description:'',status:'Active'},
-  {id:'dept-8',name:'Procurement',code:'PRO',head:'',description:'',status:'Active'},
-  {id:'dept-9',name:'Logistics',code:'LOG',head:'',description:'',status:'Active'},
-];
+let _deptList=[];
 
 function _deptEmployeeCount(name){
   return [...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')].filter(r=>{
@@ -15948,21 +15938,24 @@ function applyDeptsBranchesFromCompany(company){
 
 function _syncDeptBranchSelectsFromList(){
   const names=_deptList.filter(d=>d.status!=='Inactive').map(d=>d.name);
-  document.querySelectorAll('#emp-department').forEach(sel=>{
-    const cur=sel.value;
-    sel.innerHTML='<option value="">— Select Department —</option>'+names.map(d=>`<option${d===cur?' selected':''}>${escapeHtml(d)}</option>`).join('');
+  const deptOpts='<option value="">— Select Department —</option>'+names.map(d=>`<option>${escapeHtml(d)}</option>`).join('');
+  const deptAllOpts='<option value="">All Departments</option>'+names.map(d=>`<option>${escapeHtml(d)}</option>`).join('');
+  document.querySelectorAll('#emp-department,#req-dept').forEach(sel=>{
+    const cur=sel.value; sel.innerHTML=deptOpts; if(cur)sel.value=cur;
   });
-  // also sync dept filter selects in HRMS
-  document.querySelectorAll('[id$="-department-filter"],[id="hrms-dept-filter"]').forEach(sel=>{
-    const cur=sel.value;
-    sel.innerHTML='<option value="">All Departments</option>'+names.map(d=>`<option${d===cur?' selected':''}>${escapeHtml(d)}</option>`).join('');
+  document.querySelectorAll('[id$="-department-filter"],[id="hrms-dept-filter"],#rota-week-department,#rota-month-department,#rota-dept-department').forEach(sel=>{
+    const cur=sel.value; sel.innerHTML=deptAllOpts; if(cur)sel.value=cur;
   });
 }
 
 function _syncBranchSelects(branches){
-  document.querySelectorAll('#emp-branch').forEach(sel=>{
-    const cur=sel.value;
-    sel.innerHTML='<option value="">— Select Branch —</option>'+branches.map(b=>`<option${b===cur?' selected':''}>${escapeHtml(b)}</option>`).join('');
+  const opts='<option value="">— Select Branch —</option>'+branches.map(b=>`<option>${escapeHtml(b)}</option>`).join('');
+  const locOpts='<option value="">All Locations</option>'+branches.map(b=>`<option>${escapeHtml(b)}</option>`).join('');
+  document.querySelectorAll('#emp-branch,#emp-location,#req-location').forEach(sel=>{
+    const cur=sel.value; sel.innerHTML=opts; if(cur)sel.value=cur;
+  });
+  document.querySelectorAll('#rota-week-location').forEach(sel=>{
+    const cur=sel.value; sel.innerHTML=locOpts; if(cur)sel.value=cur;
   });
 }
 
@@ -15976,28 +15969,10 @@ function _syncDeptBranchSelects(depts,branches){
 }
 
 // ── Branch data store ─────────────────────────────────────────────────
-let _branchList=[
-  {id:'br-1',name:'Dubai HQ',code:'DXB',city:'Dubai',status:'Active'},
-  {id:'br-2',name:'Abu Dhabi',code:'AUH',city:'Abu Dhabi',status:'Active'},
-  {id:'br-3',name:'Sharjah',code:'SHJ',city:'Sharjah',status:'Active'},
-  {id:'br-4',name:'Ajman',code:'AJM',city:'Ajman',status:'Active'},
-  {id:'br-5',name:'Ras Al Khaimah',code:'RAK',city:'Ras Al Khaimah',status:'Active'},
-  {id:'br-6',name:'Fujairah',code:'FUJ',city:'Fujairah',status:'Active'},
-];
+let _branchList=[];
 
 // ── Roles & Permissions data store ───────────────────────────────────────────
-let _roleList=[
-  {id:'role-1',branch:'',department:'Management',roleName:'CEO / Managing Director',permissions:['View','Create','Edit','Delete','Approve','Export','Import','Manage'],status:'Active'},
-  {id:'role-2',branch:'',department:'HR',roleName:'HR Manager',permissions:['View','Create','Edit','Approve','Export','Import'],status:'Active'},
-  {id:'role-3',branch:'',department:'HR',roleName:'HR Executive',permissions:['View','Create','Edit'],status:'Active'},
-  {id:'role-4',branch:'',department:'HR',roleName:'HR Assistant',permissions:['View','Create'],status:'Active'},
-  {id:'role-5',branch:'',department:'Finance',roleName:'Finance Manager',permissions:['View','Create','Edit','Approve','Export','Import'],status:'Active'},
-  {id:'role-6',branch:'',department:'Finance',roleName:'Accountant',permissions:['View','Create','Edit'],status:'Active'},
-  {id:'role-7',branch:'',department:'IT',roleName:'System Administrator',permissions:['View','Create','Edit','Delete','Approve','Export','Import','Manage'],status:'Active'},
-  {id:'role-8',branch:'',department:'Sales',roleName:'Sales Manager',permissions:['View','Create','Edit','Approve','Export'],status:'Active'},
-  {id:'role-9',branch:'',department:'Sales',roleName:'Sales Executive',permissions:['View','Create'],status:'Active'},
-  {id:'role-10',branch:'',department:'Operations',roleName:'Operations Manager',permissions:['View','Create','Edit','Approve'],status:'Active'},
-];
+let _roleList=[];
 
 const _PERM_COLORS={View:'b-b',Create:'b-g',Edit:'b-a',Delete:'b-r',Approve:'b-p',Export:'b-t',Import:'b-t',Manage:'b-b','Full Access':'b-p'};
 
