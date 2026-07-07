@@ -420,23 +420,23 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
         <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="6" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/></svg>
         My Profile
       </button>
-      <button class="enav" id="enav-attendance" onclick="essTab('attendance')">
+      <button class="enav" id="enav-attendance" data-module="attendance" onclick="essTab('attendance')">
         <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/></svg>
         Attendance
       </button>
-      <button class="enav" id="enav-payslips" onclick="essTab('payslips')">
+      <button class="enav" id="enav-payslips" data-module="payslips" onclick="essTab('payslips')">
         <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="12" height="13" rx="1.5"/><path d="M5 6h6M5 9h4M5 12h3"/></svg>
         Payslips
       </button>
-      <button class="enav" id="enav-documents" onclick="essTab('documents')">
+      <button class="enav" id="enav-documents" data-module="documents" onclick="essTab('documents')">
         <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/><path d="M6 8h4M6 11h4"/></svg>
         Documents
       </button>
-      <button class="enav" id="enav-leave" onclick="essTab('leave')">
+      <button class="enav" id="enav-leave" data-module="leave" onclick="essTab('leave')">
         <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/></svg>
         Leave
       </button>
-      <button class="enav" id="enav-overtime" onclick="essTab('overtime')">
+      <button class="enav" id="enav-overtime" data-module="overtime" onclick="essTab('overtime')">
         <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
         Overtime
       </button>
@@ -461,31 +461,31 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
             My Modules
           </div>
           <div class="mod-grid">
-            <button class="mod-tile" onclick="essTab('attendance')">
+            <button class="mod-tile" data-module="attendance" onclick="essTab('attendance')">
               <div class="mod-icon" style="background:#dcfce7">
                 <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/></svg>
               </div>
               <div class="mod-label">Attendance</div>
             </button>
-            <button class="mod-tile" onclick="essTab('payslips')">
+            <button class="mod-tile" data-module="payslips" onclick="essTab('payslips')">
               <div class="mod-icon" style="background:#ffedd5">
                 <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#ea580c" stroke-width="1.4"><rect x="2" y="2" width="12" height="13" rx="1.5"/><path d="M5 6h6M5 9h4M5 12h3"/></svg>
               </div>
               <div class="mod-label">Payslips</div>
             </button>
-            <button class="mod-tile" onclick="essTab('leave')">
+            <button class="mod-tile" data-module="leave" onclick="essTab('leave')">
               <div class="mod-icon" style="background:#dbeafe">
                 <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/></svg>
               </div>
               <div class="mod-label">Leave</div>
             </button>
-            <button class="mod-tile" onclick="essTab('overtime')">
+            <button class="mod-tile" data-module="overtime" onclick="essTab('overtime')">
               <div class="mod-icon" style="background:#e0e7ff">
                 <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#4f46e5" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
               </div>
               <div class="mod-label">Overtime</div>
             </button>
-            <button class="mod-tile" onclick="essTab('documents')">
+            <button class="mod-tile" data-module="documents" onclick="essTab('documents')">
               <div class="mod-icon" style="background:#f3e8ff">
                 <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#7c3aed" stroke-width="1.4"><path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/></svg>
               </div>
@@ -636,27 +636,27 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
         Profile
         <div class="mnav-dot"></div>
       </button>
-      <button class="mnav" id="mnav-attendance" onclick="essTab('attendance')">
+      <button class="mnav" id="mnav-attendance" data-module="attendance" onclick="essTab('attendance')">
         <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/></svg>
         Attendance
         <div class="mnav-dot"></div>
       </button>
-      <button class="mnav" id="mnav-payslips" onclick="essTab('payslips')">
+      <button class="mnav" id="mnav-payslips" data-module="payslips" onclick="essTab('payslips')">
         <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="12" height="13" rx="1.5"/><path d="M5 6h6M5 9h4M5 12h3"/></svg>
         Payslips
         <div class="mnav-dot"></div>
       </button>
-      <button class="mnav" id="mnav-leave" onclick="essTab('leave')">
+      <button class="mnav" id="mnav-leave" data-module="leave" onclick="essTab('leave')">
         <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/></svg>
         Leave
         <div class="mnav-dot"></div>
       </button>
-      <button class="mnav" id="mnav-overtime" onclick="essTab('overtime')">
+      <button class="mnav" id="mnav-overtime" data-module="overtime" onclick="essTab('overtime')">
         <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
         Overtime
         <div class="mnav-dot"></div>
       </button>
-      <button class="mnav" id="mnav-documents" onclick="essTab('documents')">
+      <button class="mnav" id="mnav-documents" data-module="documents" onclick="essTab('documents')">
         <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/></svg>
         Docs
         <div class="mnav-dot"></div>
@@ -672,6 +672,7 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
 const ESS_API = (window.TAXFLOW_API_BASE_URL || (window.location.protocol + '//' + window.location.host)) + '/api/v1/ess';
 let _essToken = localStorage.getItem('ess_token') || '';
 let _essEmp = null;
+let _essModules = JSON.parse(localStorage.getItem('ess_modules') || 'null') || ['attendance','payslips','leave','overtime','documents'];
 
 // ── Utilities ──────────────────────────────────────────
 function toast(msg) {
@@ -723,6 +724,8 @@ async function essLogin() {
     _essToken = data.access_token;
     localStorage.setItem('ess_token', _essToken);
     _essEmp = data.employee;
+    _essModules = data.allowed_modules || ['attendance','payslips','leave','overtime','documents'];
+    localStorage.setItem('ess_modules', JSON.stringify(_essModules));
     showApp();
   } catch (e) {
     errEl.textContent = e.message || 'Login failed';
@@ -741,7 +744,9 @@ document.getElementById('ess-login-user').addEventListener('keydown', e => {
 function essLogout() {
   _essToken = '';
   _essEmp = null;
+  _essModules = ['attendance','payslips','leave','overtime','documents'];
   localStorage.removeItem('ess_token');
+  localStorage.removeItem('ess_modules');
   document.getElementById('ess-app').style.display = 'none';
   document.getElementById('ess-login').style.display = 'flex';
   document.getElementById('ess-login-user').value = '';
@@ -775,7 +780,24 @@ function showApp() {
     document.getElementById('profile-name').textContent = name;
     document.getElementById('profile-desg').textContent = [_essEmp.designation, _essEmp.department].filter(Boolean).join(' · ');
   }
+  applyModuleAccess();
   loadProfile();
+}
+
+function applyModuleAccess() {
+  const allowed = new Set(_essModules);
+  // Sidebar nav
+  document.querySelectorAll('.enav[data-module]').forEach(b => {
+    b.style.display = allowed.has(b.dataset.module) ? '' : 'none';
+  });
+  // Mobile bottom nav
+  document.querySelectorAll('.mnav[data-module]').forEach(b => {
+    b.style.display = allowed.has(b.dataset.module) ? '' : 'none';
+  });
+  // Module tiles
+  document.querySelectorAll('.mod-tile[data-module]').forEach(b => {
+    b.style.display = allowed.has(b.dataset.module) ? '' : 'none';
+  });
 }
 
 function essTab(tab) {

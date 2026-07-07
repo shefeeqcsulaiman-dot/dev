@@ -135,12 +135,52 @@ def ess_login(body: LoginBody, db: Session = Depends(get_db)) -> dict:
     if not username_matches:
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
+    _HRMS_TO_ESS = {
+        "Attendance": "attendance",
+        "Leave Management": "leave",
+        "Payroll": "payslips",
+        "Overtime": "overtime",
+        "Documents": "documents",
+    }
+    _ALL_ESS = ["attendance", "payslips", "leave", "overtime", "documents"]
+
     for row, emp in username_matches:
         stored_password = emp.get("password") or ""
         if stored_password != password:
             continue
         emp_key = row.record_key or (emp.get("id") or emp.get("name") or "")
         token = _ess_token(row.company_id, emp_key, emp.get("name") or "")
+
+        # Resolve allowed ESS modules from the employee's assigned role
+        allowed_modules = _ALL_ESS[:]
+        emp_role_id = (emp.get("role_id") or "").strip()
+        emp_role_name = (emp.get("role_name") or "").strip()
+        if emp_role_id or emp_role_name:
+            settings_row = (
+                db.query(AppDataRecord)
+                .filter(
+                    AppDataRecord.company_id == row.company_id,
+                    AppDataRecord.collection == "hr_settings",
+                    AppDataRecord.record_key == "dept-branch-role-config",
+                )
+                .first()
+            )
+            if settings_row:
+                hr_cfg = _decode_payload(settings_row)
+                roles = hr_cfg.get("roles") or []
+                role_obj = next(
+                    (r for r in roles if
+                     (emp_role_id and r.get("id") == emp_role_id) or
+                     (emp_role_name and r.get("roleName") == emp_role_name)),
+                    None,
+                )
+                if role_obj:
+                    hrms_mods = role_obj.get("modules") or []
+                    if "Full Access" not in hrms_mods:
+                        mapped = [_HRMS_TO_ESS[m] for m in hrms_mods if m in _HRMS_TO_ESS]
+                        if mapped:
+                            allowed_modules = mapped
+
         return {
             "access_token": token,
             "token_type": "bearer",
@@ -151,6 +191,7 @@ def ess_login(body: LoginBody, db: Session = Depends(get_db)) -> dict:
                 "department": emp.get("department") or "",
                 "employee_no": emp.get("id") or "",
             },
+            "allowed_modules": allowed_modules,
         }
 
     raise HTTPException(status_code=401, detail="Invalid username or password")
