@@ -105,6 +105,64 @@ def _auth(request_headers: dict, db: Session) -> tuple[str, str, dict]:
     return company_id, emp_key, emp
 
 
+# ── module resolution ─────────────────────────────────────────────────────────
+
+_HRMS_TO_ESS: dict[str, str] = {
+    "Attendance":     "attendance",
+    "Leave Management": "leave",
+    "Overtime":       "overtime",
+    "Payroll":        "payslips",
+    "Loans & Advances": "loans",
+    "Corrections":    "corrections",
+}
+_ALL_ESS: list[str] = ["attendance", "payslips", "leave", "overtime", "documents"]
+
+
+def _resolve_ess_modules(company_id: str, emp: dict[str, Any], db: Session) -> list[str]:
+    """Return the list of ESS module IDs this employee is allowed to access."""
+    emp_role_id   = (emp.get("role_id")   or "").strip()
+    emp_role_name = (emp.get("role_name") or "").strip()
+    if not emp_role_id and not emp_role_name:
+        return _ALL_ESS[:]
+
+    settings_row = (
+        db.query(AppDataRecord)
+        .filter(
+            AppDataRecord.company_id == company_id,
+            AppDataRecord.collection == "hr_settings",
+            AppDataRecord.record_key == "dept-branch-role-config",
+        )
+        .first()
+    )
+    if not settings_row:
+        return _ALL_ESS[:]
+
+    hr_cfg = _decode_payload(settings_row)
+    roles  = hr_cfg.get("roles") or []
+    role_obj = next(
+        (r for r in roles if
+         (emp_role_id   and r.get("id")       == emp_role_id) or
+         (emp_role_name and r.get("roleName") == emp_role_name)),
+        None,
+    )
+    if not role_obj:
+        return _ALL_ESS[:]
+
+    hrms_mods = role_obj.get("modules") or []
+    # "ESS Portal" or "Full Access" = unrestricted ESS access
+    if "ESS Portal" in hrms_mods or "Full Access" in hrms_mods:
+        return _ALL_ESS[:]
+
+    mapped = [_HRMS_TO_ESS[m] for m in hrms_mods if m in _HRMS_TO_ESS]
+    if not mapped:
+        return _ALL_ESS[:]          # role has no ESS-relevant modules → full access
+
+    # Documents always accessible (employee's own personal docs)
+    if "documents" not in mapped:
+        mapped.append("documents")
+    return mapped
+
+
 # ── routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/login")
@@ -135,72 +193,23 @@ def ess_login(body: LoginBody, db: Session = Depends(get_db)) -> dict:
     if not username_matches:
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
-    # Exact checkbox values saved by the HRMS role modal → ESS tab IDs
-    _HRMS_TO_ESS = {
-        "Attendance": "attendance",
-        "Leave Management": "leave",
-        "Overtime": "overtime",
-        "Payroll": "payslips",
-        "Loans & Advances": "loans",
-        "Corrections": "corrections",
-    }
-    _ALL_ESS = ["attendance", "payslips", "leave", "overtime", "documents"]
-
     for row, emp in username_matches:
         stored_password = emp.get("password") or ""
         if stored_password != password:
             continue
         emp_key = row.record_key or (emp.get("id") or emp.get("name") or "")
-        token = _ess_token(row.company_id, emp_key, emp.get("name") or "")
-
-        # Resolve allowed ESS modules from the employee's assigned role
-        allowed_modules = _ALL_ESS[:]
-        emp_role_id = (emp.get("role_id") or "").strip()
-        emp_role_name = (emp.get("role_name") or "").strip()
-        if emp_role_id or emp_role_name:
-            settings_row = (
-                db.query(AppDataRecord)
-                .filter(
-                    AppDataRecord.company_id == row.company_id,
-                    AppDataRecord.collection == "hr_settings",
-                    AppDataRecord.record_key == "dept-branch-role-config",
-                )
-                .first()
-            )
-            if settings_row:
-                hr_cfg = _decode_payload(settings_row)
-                roles = hr_cfg.get("roles") or []
-                role_obj = next(
-                    (r for r in roles if
-                     (emp_role_id and r.get("id") == emp_role_id) or
-                     (emp_role_name and r.get("roleName") == emp_role_name)),
-                    None,
-                )
-                if role_obj:
-                    hrms_mods = role_obj.get("modules") or []
-                    # "ESS Portal" checkbox = full ESS access
-                    if "ESS Portal" in hrms_mods or "Full Access" in hrms_mods:
-                        allowed_modules = _ALL_ESS[:]
-                    else:
-                        mapped = [_HRMS_TO_ESS[m] for m in hrms_mods if m in _HRMS_TO_ESS]
-                        if mapped:
-                            # Documents always accessible regardless of role
-                            if "documents" not in mapped:
-                                mapped.append("documents")
-                            allowed_modules = mapped
-                        # else: no ESS-relevant modules → default full access
-
+        token   = _ess_token(row.company_id, emp_key, emp.get("name") or "")
         return {
-            "access_token": token,
-            "token_type": "bearer",
+            "access_token":    token,
+            "token_type":      "bearer",
             "employee": {
-                "id": emp_key,
-                "name": emp.get("name") or "",
+                "id":          emp_key,
+                "name":        emp.get("name")        or "",
                 "designation": emp.get("designation") or "",
-                "department": emp.get("department") or "",
-                "employee_no": emp.get("id") or "",
+                "department":  emp.get("department")  or "",
+                "employee_no": emp.get("id")          or "",
             },
-            "allowed_modules": allowed_modules,
+            "allowed_modules": _resolve_ess_modules(row.company_id, emp, db),
         }
 
     raise HTTPException(status_code=401, detail="Invalid username or password")
@@ -209,9 +218,12 @@ def ess_login(body: LoginBody, db: Session = Depends(get_db)) -> dict:
 @router.get("/profile")
 def ess_profile(request: Request, db: Session = Depends(get_db)) -> dict:
     company_id, emp_key, emp = _auth(dict(request.headers), db)
-    # Strip sensitive fields
     safe = {k: v for k, v in emp.items() if k not in ("password", "hashed_password")}
-    return {"ok": True, "employee": safe}
+    return {
+        "ok":              True,
+        "employee":        safe,
+        "allowed_modules": _resolve_ess_modules(company_id, emp, db),
+    }
 
 
 @router.get("/attendance")

@@ -1053,9 +1053,15 @@ async function essApplyOT() {
         designation: data.employee?.designation || '',
         department: data.employee?.department || '',
       };
+      // Refresh allowed_modules from server on every page load
+      if (data.allowed_modules && data.allowed_modules.length) {
+        _essModules = data.allowed_modules;
+        localStorage.setItem('ess_modules', JSON.stringify(_essModules));
+      }
       showApp();
     }).catch(() => {
       localStorage.removeItem('ess_token');
+      localStorage.removeItem('ess_modules');
       _essToken = '';
     });
   }
