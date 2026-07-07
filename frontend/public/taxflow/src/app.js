@@ -10,7 +10,7 @@ META.payments={t:'Bank & Payments',s:'Accounts - transactions - receipts - payme
 META.documents={t:'Documents',s:'Receipts - PDFs - Audit files - Attachments',a:'Upload Document',ao:()=>toast('Choose files to upload...','info')};
 META.notifications={t:'Notifications',s:'Email - WhatsApp - SMS - Push - In-app alerts',a:'+ New Rule',ao:()=>toast('Notification rule builder opened','info')};
 META.rota={t:'Rota Planning',s:'Shift setup - Weekly rota - Coverage - Swap requests',a:'Publish Rota',ao:()=>publishRota()};
-META.hrms={t:'HRMS Dashboard',s:'Employees · Attendance · Leave · OT · Payroll · Compliance Overview',a:'Open HRMS',ao:()=>{window.open('/hrms.html','_blank')}};
+META.hrms={t:'HRMS Dashboard',s:'Employees · Attendance · Leave · OT · Payroll · Compliance Overview',a:'+ Add Employee',ao:()=>{if(window.HRMS_STANDALONE){go('staff');setTimeout(()=>openEmpModal(),50);}else{window.open('/hrms.html','_blank');}}};
 META.recruitment={t:'Recruitment ATS',s:'Job Requisitions - Candidates - Interviews - Offer Letters - Onboarding',a:'+ New Requisition',ao:()=>showM('m-recruitment')};
 META['hrms-ext']={t:'HR Modules',s:'Performance - Training - Asset Management - ESS - Manager Portal',a:'',ao:null};
 META.accounting={t:'Accounting',s:'Chart - Vouchers - Ledger - Filing - Bank Recon',a:'+ Voucher',ao:()=>{go('accounting');setTimeout(()=>stab(document.querySelectorAll('#page-accounting .tab')[1],'acc-voucher'),50)}};
@@ -136,7 +136,24 @@ function go(page){
     return;
   }
   if(page==='hr-settings'){
-    window.open('/hrms.html','_blank');
+    if(window.HRMS_STANDALONE){
+      const fromState=getCurrentNavState();
+      if(!restoringNavigation&&fromState.page!=='hr-settings')rememberNavState(fromState);
+      document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+      document.querySelectorAll('.nav').forEach(n=>n.classList.remove('on'));
+      const staffPage=document.getElementById('page-staff');
+      if(staffPage){
+        staffPage.classList.add('on');
+        staffPage.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+        staffPage.querySelectorAll('.tab-body').forEach(b=>b.classList.remove('on'));
+        document.getElementById('hr-policy')?.classList.add('on');
+      }
+      document.getElementById('ptitle').textContent='HR Settings';
+      document.getElementById('psub').textContent='Configure departments, roles, OT rules, leave policy, and user access';
+      document.getElementById('nav-hr-settings')?.classList.add('on');
+    }else{
+      window.open('/hrms.html','_blank');
+    }
     return;
   }
   const target=document.getElementById('page-'+page);
@@ -254,7 +271,13 @@ function closeSidebar(){
 }
 
 function goHrmsTab(n,id){
-  window.open('/hrms.html','_blank');
+  if(window.HRMS_STANDALONE){
+    const tab=document.querySelector('#page-staff .tab:nth-child('+n+')');
+    if(tab)stab(tab,id);
+    go('staff');
+  }else{
+    window.open('/hrms.html','_blank');
+  }
 }
 
 function populateHrEmployeeSelect(id){
