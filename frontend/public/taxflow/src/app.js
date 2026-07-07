@@ -16003,14 +16003,16 @@ const _PERM_COLORS={View:'b-b',Create:'b-g',Edit:'b-a',Delete:'b-r',Approve:'b-p
 
 function renderRoleTable(){
   const html=_roleList.length===0
-    ?'<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">No roles defined. Click + Add Role to create one.</td></tr>'
+    ?'<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:20px">No roles defined. Click + Add Role to create one.</td></tr>'
     :_roleList.map(r=>{
       const permBadges=(r.permissions||[]).map(p=>`<span class="b ${_PERM_COLORS[p]||'b-b'}" style="margin:1px 2px;font-size:9px">${escapeHtml(p)}</span>`).join('');
+      const modBadges=(r.modules||[]).map(m=>`<span class="b b-gray" style="margin:1px 2px;font-size:9px">${escapeHtml(m)}</span>`).join('');
       return `<tr>
         <td style="font-size:12px;color:var(--text3)">${escapeHtml(r.branch||'All')}</td>
         <td style="font-weight:600">${escapeHtml(r.department||'—')}</td>
         <td>${escapeHtml(r.roleName)}</td>
-        <td style="max-width:240px;line-height:1.8">${permBadges}</td>
+        <td style="max-width:200px;line-height:1.8">${permBadges||'<span style="color:var(--text3)">—</span>'}</td>
+        <td style="max-width:200px;line-height:1.8">${modBadges||'<span style="color:var(--text3)">—</span>'}</td>
         <td><span class="b ${r.status==='Active'?'b-g':'b-gray'}">${escapeHtml(r.status)}</span></td>
         <td><button class="icon-btn edit" title="Edit role" onclick="showRoleModal('${r.id}')">${editIconSvg()}</button></td>
       </tr>`;
@@ -16047,7 +16049,9 @@ function showRoleModal(id){
   const statusEl=document.getElementById('role-status');
   if(statusEl)statusEl.value=role?.status||'Active';
   const perms=role?.permissions||[];
-  modal.querySelectorAll('input[type="checkbox"]').forEach(cb=>{cb.checked=perms.includes(cb.value);});
+  modal.querySelectorAll('.role-perm').forEach(cb=>{cb.checked=perms.includes(cb.value);});
+  const mods=role?.modules||[];
+  modal.querySelectorAll('.role-mod').forEach(cb=>{cb.checked=mods.includes(cb.value);});
   const delBtn=document.getElementById('role-delete-btn');
   if(delBtn)delBtn.style.display=isEdit?'':'none';
   showM('m-role');
@@ -16060,14 +16064,15 @@ function saveRoleModal(){
   const department=document.getElementById('role-department')?.value||'';
   const roleName=(document.getElementById('role-name')?.value||'').trim();
   const status=document.getElementById('role-status')?.value||'Active';
-  const permissions=[...document.querySelectorAll('#m-role input[type="checkbox"]:checked')].map(cb=>cb.value);
+  const permissions=[...document.querySelectorAll('#m-role .role-perm:checked')].map(cb=>cb.value);
+  const modules=[...document.querySelectorAll('#m-role .role-mod:checked')].map(cb=>cb.value);
   if(!department){toast('Select a department','warn');return;}
   if(!roleName){toast('Enter a role name','warn');return;}
   if(editId){
     const idx=_roleList.findIndex(r=>r.id===editId);
-    if(idx>=0)_roleList[idx]={..._roleList[idx],branch,department,roleName,permissions,status};
+    if(idx>=0)_roleList[idx]={..._roleList[idx],branch,department,roleName,permissions,modules,status};
   }else{
-    _roleList.push({id:'role-'+Date.now(),branch,department,roleName,permissions,status});
+    _roleList.push({id:'role-'+Date.now(),branch,department,roleName,permissions,modules,status});
   }
   renderRoleTable();
   _saveDeptsBranchesToDb();

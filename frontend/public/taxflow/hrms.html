@@ -1173,7 +1173,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         <button class="btn btn-p btn-sm" onclick="showRoleModal()">+ Add Role</button>
       </div>
       <table class="tbl" data-delete-actions-bound="skip">
-        <thead><tr><th>Branch</th><th>Department</th><th>Role Name</th><th>Permissions</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Branch</th><th>Department</th><th>Role Name</th><th>Permissions</th><th>Modules</th><th>Status</th><th></th></tr></thead>
         <tbody id="role-tbody">
           <tr><td colspan="6" style="color:var(--text3);text-align:center;padding:24px">Loading roles…</td></tr>
         </tbody>
@@ -2987,15 +2987,35 @@ document.addEventListener('DOMContentLoaded',function(){
     <div style="margin-top:14px">
       <label class="fl" style="margin-bottom:10px">Permissions</label>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:6px">
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="View"> View</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Create"> Create</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Edit"> Edit</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Delete"> Delete</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Approve"> Approve</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Export"> Export</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Import"> Import</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Manage"> Manage</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" value="Full Access"> Full Access</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="View"> View</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="Create"> Create</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="Edit"> Edit</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="Delete"> Delete</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="Approve"> Approve</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="Export"> Export</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="Import"> Import</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="Manage"> Manage</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="Full Access"> Full Access</label>
+      </div>
+    </div>
+    <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <label class="fl" style="margin:0">Modules Access</label>
+        <button type="button" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;padding:0" onclick="document.querySelectorAll('#m-role .role-mod').forEach(c=>c.checked=true)">Select All</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Employees"> Employees</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Attendance"> Attendance</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Leave Management"> Leave</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Overtime"> Overtime</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Payroll"> Payroll</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Corrections"> Corrections</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Loans & Advances"> Loans</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Expiry Alerts"> Expiry Alerts</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Biometric"> Biometric</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Recruitment"> Recruitment</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="HR Settings"> HR Settings</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="ESS Portal"> ESS Portal</label>
       </div>
     </div>
     <div class="modal-foot">
