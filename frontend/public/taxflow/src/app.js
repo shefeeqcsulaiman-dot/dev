@@ -15864,11 +15864,11 @@ function saveDeptModal(){
     description:(document.getElementById('dept-desc')?.value||'').trim(),
     status:document.getElementById('dept-status')?.value||'Active',
   };
+  if(_deptList.find(x=>x.name.toLowerCase()===name.toLowerCase()&&x.id!==id)){toast('Department name already exists','warn');return;}
   if(id){
     const idx=_deptList.findIndex(x=>x.id===id);
     if(idx>=0)_deptList[idx]=obj;
   } else {
-    if(_deptList.find(x=>x.name.toLowerCase()===name.toLowerCase())){toast('Department already exists','err');return;}
     _deptList.push(obj);
   }
   hideM('m-dept');
@@ -16053,6 +16053,9 @@ function saveRoleModal(){
   const modules=[...document.querySelectorAll('#m-role .role-mod:checked')].map(cb=>cb.value);
   if(!department){toast('Select a department','warn');return;}
   if(!roleName){toast('Enter a role name','warn');return;}
+  if(_roleList.find(r=>r.roleName.toLowerCase()===roleName.toLowerCase()&&r.department.toLowerCase()===department.toLowerCase()&&r.id!==editId)){
+    toast('A role with this name already exists in the selected department','warn');return;
+  }
   if(editId){
     const idx=_roleList.findIndex(r=>r.id===editId);
     if(idx>=0)_roleList[idx]={..._roleList[idx],branch,department,roleName,permissions,modules,status};
@@ -16137,11 +16140,11 @@ function saveBranchModal(){
     city:(document.getElementById('branch-city')?.value||'').trim(),
     status:document.getElementById('branch-status')?.value||'Active',
   };
+  if(_branchList.find(x=>x.name.toLowerCase()===name.toLowerCase()&&x.id!==id)){toast('Branch name already exists','warn');return;}
   if(id){
     const idx=_branchList.findIndex(x=>x.id===id);
     if(idx>=0)_branchList[idx]=obj;
   } else {
-    if(_branchList.find(x=>x.name.toLowerCase()===name.toLowerCase())){toast('Branch already exists','err');return;}
     _branchList.push(obj);
   }
   hideM('m-branch');
