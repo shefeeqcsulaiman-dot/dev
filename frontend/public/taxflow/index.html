@@ -585,77 +585,65 @@
 
       </div>
 
-      <!-- ROW 4: Bank Reconciliation -->
+      <!-- ROW 4: Staff Attendance -->
       <div style="margin-top:14px">
 
-        <!-- Bank Reconciliation -->
+        <!-- Staff Attendance -->
         <div class="mb3-card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
           <!-- Illustrated banner -->
-          <div style="background:linear-gradient(135deg,#eef2ff 0%,#e0e7ff 55%,#c7d2fe 100%);padding:16px 18px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:100px;position:relative;overflow:hidden">
-            <div style="position:absolute;top:-15px;right:-15px;width:80px;height:80px;border-radius:50%;background:rgba(99,102,241,.18);filter:blur(20px)"></div>
+          <div style="background:linear-gradient(135deg,#f0fdf4 0%,#dcfce7 55%,#bbf7d0 100%);padding:16px 18px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:100px;position:relative;overflow:hidden">
+            <div style="position:absolute;top:-15px;right:-15px;width:80px;height:80px;border-radius:50%;background:rgba(16,185,129,.18);filter:blur(20px)"></div>
             <div style="z-index:1;padding-bottom:12px">
-              <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#312e81;opacity:.75">Bank</div>
-              <div style="font-size:14px;font-weight:800;color:#312e81">Reconciliation <span id="dash-bankm-status" class="b b-g" style="margin-left:4px;font-size:10px;background:rgba(255,255,255,.6);border:none;color:#312e81">—</span></div>
+              <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#065f46;opacity:.75">Workforce</div>
+              <div style="font-size:14px;font-weight:800;color:#065f46">Staff Attendance <span id="dash-att-status" class="b b-g" style="margin-left:4px;font-size:10px;background:rgba(255,255,255,.6);border:none;color:#065f46">Live</span></div>
             </div>
             <svg viewBox="0 0 110 90" width="110" height="90" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
-              <ellipse cx="55" cy="84" rx="32" ry="5" fill="#4338ca" opacity=".12"/>
-              <rect x="15" y="38" width="80" height="46" rx="4" fill="#6366f1" opacity=".85"/>
-              <rect x="15" y="38" width="80" height="46" rx="4" fill="url(#bankm-g)"/>
-              <defs><linearGradient id="bankm-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#818cf8" stop-opacity=".4"/><stop offset="100%" stop-color="#4338ca" stop-opacity="0"/></linearGradient></defs>
-              <rect x="23" y="44" width="8" height="36" rx="2.5" fill="#c7d2fe" opacity=".7"/>
-              <rect x="36" y="44" width="8" height="36" rx="2.5" fill="#c7d2fe" opacity=".7"/>
-              <rect x="64" y="44" width="8" height="36" rx="2.5" fill="#c7d2fe" opacity=".7"/>
-              <rect x="77" y="44" width="8" height="36" rx="2.5" fill="#c7d2fe" opacity=".7"/>
-              <rect x="45" y="58" width="18" height="26" rx="2.5" fill="#4338ca"/>
-              <circle cx="56" cy="71" r="2" fill="#c7d2fe"/>
-              <polygon points="8,38 55,10 102,38" fill="#4338ca"/>
-              <polygon points="8,38 55,10 102,38" fill="#6366f1" opacity=".45"/>
-              <rect x="12" y="82" width="84" height="5" rx="2.5" fill="#4338ca"/>
-              <circle cx="88" cy="26" r="10" fill="#f59e0b"/>
-              <text x="88" y="30" text-anchor="middle" fill="#78350f" font-size="8" font-weight="800">د.إ</text>
-              <circle cx="22" cy="20" r="10" fill="#10b981"/>
-              <polyline points="18,20 21,23 27,16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <ellipse cx="55" cy="84" rx="32" ry="5" fill="#059669" opacity=".12"/>
+              <circle cx="55" cy="40" r="28" fill="none" stroke="#059669" stroke-width="3" opacity=".3"/>
+              <circle cx="55" cy="40" r="22" fill="#10b981" opacity=".15"/>
+              <circle cx="55" cy="40" r="22" fill="none" stroke="#10b981" stroke-width="2.5" opacity=".5"/>
+              <path d="M55 22v18l10 10" stroke="#065f46" stroke-width="3" stroke-linecap="round"/>
+              <circle cx="55" cy="40" r="3" fill="#065f46"/>
+              <polyline points="18,72 28,58 38,64 52,50 65,56 80,42 95,48" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity=".7"/>
+              <circle cx="28" cy="58" r="3" fill="#10b981" opacity=".8"/>
+              <circle cx="52" cy="50" r="3" fill="#10b981" opacity=".8"/>
+              <circle cx="80" cy="42" r="3" fill="#10b981" opacity=".8"/>
             </svg>
           </div>
           <div style="padding:12px 18px 14px;flex:1">
-            <!-- Unmatched highlight -->
+            <!-- Present highlight -->
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-              <span style="font-size:12px;font-weight:600;color:var(--text2)">Unmatched</span>
-              <span class="mono" style="font-size:15px;font-weight:700;color:#f59e0b" id="dash-bankm-unmatched">د.إ —</span>
+              <span style="font-size:12px;font-weight:600;color:var(--text2)">Present Today</span>
+              <span class="mono" style="font-size:15px;font-weight:700;color:#16a34a" id="dash-att-present">—</span>
             </div>
             <div style="border-top:1px solid var(--border);margin-bottom:10px"></div>
-            <!-- Book Balance -->
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-              <span style="font-size:11px;color:var(--text3)">Book Balance</span>
-              <span class="mono" style="font-size:13px;font-weight:700;color:#6366f1" id="dash-bankm-book">AED 0.00</span>
-            </div>
             <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px">
               <div style="display:flex;align-items:center;justify-content:space-between">
                 <div style="display:flex;align-items:center;gap:5px">
-                  <div style="width:7px;height:7px;border-radius:50%;background:#10b981"></div>
-                  <span style="font-size:11px;color:var(--text3)">Receipts</span>
+                  <div style="width:7px;height:7px;border-radius:50%;background:#2563eb"></div>
+                  <span style="font-size:11px;color:var(--text3)">Total Employees</span>
                 </div>
-                <span class="mono" style="font-size:11.5px;font-weight:600;color:#10b981" id="dash-bankm-inflow">AED 0.00</span>
+                <span class="mono" style="font-size:11.5px;font-weight:600;color:#2563eb" id="dash-att-total">—</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="display:flex;align-items:center;gap:5px">
+                  <div style="width:7px;height:7px;border-radius:50%;background:#7c3aed"></div>
+                  <span style="font-size:11px;color:var(--text3)">On Leave</span>
+                </div>
+                <span class="mono" style="font-size:11.5px;font-weight:600;color:#7c3aed" id="dash-att-leave">—</span>
               </div>
               <div style="display:flex;align-items:center;justify-content:space-between">
                 <div style="display:flex;align-items:center;gap:5px">
                   <div style="width:7px;height:7px;border-radius:50%;background:#ef4444"></div>
-                  <span style="font-size:11px;color:var(--text3)">Payments</span>
+                  <span style="font-size:11px;color:var(--text3)">Absent</span>
                 </div>
-                <span class="mono" style="font-size:11.5px;font-weight:600;color:#ef4444" id="dash-bankm-outflow">AED 0.00</span>
-              </div>
-              <div style="display:flex;align-items:center;justify-content:space-between">
-                <div style="display:flex;align-items:center;gap:5px">
-                  <div style="width:7px;height:7px;border-radius:50%;background:#6366f1"></div>
-                  <span style="font-size:11px;color:var(--text3)">Net Cash Flow</span>
-                </div>
-                <span class="mono" style="font-size:11.5px;font-weight:600" id="dash-bankm-net">AED 0.00</span>
+                <span class="mono" style="font-size:11.5px;font-weight:600;color:#ef4444" id="dash-att-absent">—</span>
               </div>
             </div>
             <div style="background:var(--surface2);border-radius:99px;height:4px;margin-bottom:10px;overflow:hidden">
-              <div id="dash-bankm-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#10b981,#6366f1);border-radius:99px;transition:width .5s ease"></div>
+              <div id="dash-att-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#10b981,#2563eb);border-radius:99px;transition:width .5s ease"></div>
             </div>
-            <button class="btn btn-g btn-sm" style="width:100%" onclick="go('bank')">Open Bank Module →</button>
+            <button class="btn btn-g btn-sm" style="width:100%" onclick="go('hrms')">Open HRMS →</button>
           </div>
         </div>
 

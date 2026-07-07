@@ -14667,6 +14667,14 @@ function refreshHrmsKpis(){
   set('hrms-kpi-present',presentToday||'0');
   const trendEl=document.getElementById('hrms-kpi-present-trend');
   if(trendEl&&empCount>0)trendEl.innerHTML='<span>'+Math.round(presentToday/empCount*100)+'% of total</span>';
+  // Sync dashboard sidebar Staff Attendance card
+  set('dash-att-present',presentToday||'0');
+  set('dash-att-total',empCount||'0');
+  set('dash-att-leave',onLeaveToday||'0');
+  const absentToday=Math.max(0,empCount-presentToday-onLeaveToday);
+  set('dash-att-absent',absentToday||'0');
+  const attBar=document.getElementById('dash-att-bar');
+  if(attBar&&empCount>0)attBar.style.width=Math.min(100,Math.round(presentToday/empCount*100))+'%';
   // Dashboard alert tiles
   set('hrms-dash-expiry',criticalExpiry||'0');
   set('hrms-dash-ot',pendingOT||'0');
