@@ -2,154 +2,398 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Employee Self-Service — TaxFlow</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2563eb">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Employee Portal — TaxFlow</title>
 <link rel="icon" href="src/favicon.svg" type="image/svg+xml">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
-  --blue:#2563eb;--blue-d:#1d4ed8;--green:#16a34a;--red:#dc2626;--orange:#ea580c;
-  --purple:#7c3aed;--surface:#fff;--bg:#f8fafc;--border:#e5e7eb;
+  --blue:#2563eb;--blue-d:#1d4ed8;--blue-l:#eff6ff;
+  --green:#16a34a;--red:#dc2626;--orange:#ea580c;--purple:#7c3aed;
+  --surface:#fff;--bg:#f1f5f9;--border:#e5e7eb;
   --text:#111827;--text2:#6b7280;--text3:#9ca3af;
   --radius:14px;--font:'DM Sans',sans-serif;
+  --nav-h:64px;--top-h:56px;
+  --safe-bottom:env(safe-area-inset-bottom,0px);
 }
-body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;-webkit-font-smoothing:antialiased}
 
-/* ── login ── */
-#ess-login{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
-.login-box{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:36px 32px;width:100%;max-width:380px;box-shadow:0 4px 24px rgba(0,0,0,.08)}
-.login-logo{display:flex;align-items:center;gap:10px;margin-bottom:24px}
-.login-logo-icon{width:38px;height:38px;border-radius:10px;background:#2563eb;display:flex;align-items:center;justify-content:center}
-.login-title{font-size:18px;font-weight:700;color:#111827}
-.login-sub{font-size:12.5px;color:var(--text2);margin-top:2px}
-.fl{display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:5px}
-.fi{width:100%;border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-family:var(--font);font-size:13.5px;outline:none;color:var(--text);background:#fff}
+/* ════════════════════════════════
+   LOGIN
+════════════════════════════════ */
+#ess-login{
+  display:flex;align-items:center;justify-content:center;
+  min-height:100vh;min-height:100dvh;
+  background:linear-gradient(155deg,#1e3a8a 0%,#2563eb 55%,#4338ca 100%);
+  padding:20px;
+}
+.login-wrap{width:100%;max-width:400px}
+.login-brand{text-align:center;margin-bottom:32px}
+.login-brand-icon{
+  width:64px;height:64px;border-radius:18px;
+  background:rgba(255,255,255,.18);backdrop-filter:blur(8px);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 14px;border:1.5px solid rgba(255,255,255,.25);
+}
+.login-brand-name{font-size:22px;font-weight:700;color:#fff;letter-spacing:-.3px}
+.login-brand-sub{font-size:13px;color:rgba(255,255,255,.65);margin-top:3px}
+.login-card{
+  background:#fff;border-radius:22px;padding:32px 28px 28px;
+  box-shadow:0 24px 60px rgba(0,0,0,.22);
+}
+.login-card-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px}
+.login-card-sub{font-size:13px;color:var(--text2);margin-bottom:24px}
+.fl{display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px}
+.fi{
+  width:100%;border:1.5px solid var(--border);border-radius:10px;
+  padding:0 14px;height:50px;font-family:var(--font);font-size:15px;
+  outline:none;color:var(--text);background:#fff;transition:border-color .15s,box-shadow .15s;
+}
 .fi:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
-.fg{margin-bottom:14px}
-.btn-primary{width:100%;background:var(--blue);color:#fff;border:none;border-radius:9px;padding:11px;font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer;margin-top:4px}
+.fg{margin-bottom:16px;position:relative}
+.pw-wrap{position:relative}
+.pw-wrap .fi{padding-right:44px}
+.pw-eye{
+  position:absolute;right:14px;top:50%;transform:translateY(-50%);
+  background:none;border:none;cursor:pointer;color:var(--text3);padding:4px;
+  display:flex;align-items:center;
+}
+.pw-eye:hover{color:var(--text2)}
+.btn-primary{
+  width:100%;background:var(--blue);color:#fff;border:none;
+  border-radius:12px;height:52px;font-family:var(--font);
+  font-size:15px;font-weight:700;cursor:pointer;
+  transition:background .15s,transform .1s;margin-top:4px;
+  letter-spacing:.1px;
+}
+.btn-primary:active{transform:scale(.98);background:var(--blue-d)}
 .btn-primary:hover{background:var(--blue-d)}
-.err-msg{font-size:12px;color:var(--red);margin-top:8px;text-align:center;min-height:16px}
+.btn-primary:disabled{opacity:.6;cursor:not-allowed}
+.err-msg{font-size:12.5px;color:var(--red);margin-top:10px;text-align:center;min-height:18px;font-weight:500}
+.login-footer{text-align:center;font-size:11.5px;color:rgba(255,255,255,.5);margin-top:20px}
 
-/* ── app shell ── */
-#ess-app{display:none;min-height:100vh;flex-direction:column}
-.ess-topbar{height:56px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:14px;position:sticky;top:0;z-index:100}
+/* ════════════════════════════════
+   APP SHELL
+════════════════════════════════ */
+#ess-app{display:none;flex-direction:column;min-height:100vh;min-height:100dvh}
+
+/* ── Topbar ── */
+.ess-topbar{
+  height:var(--top-h);background:var(--surface);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 16px;gap:12px;
+  position:sticky;top:0;z-index:200;
+}
 .ess-logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;color:var(--blue)}
-.ess-logo-icon{width:30px;height:30px;background:#2563eb;border-radius:8px;display:flex;align-items:center;justify-content:center}
-.ess-user{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:13px}
-.ess-av{width:32px;height:32px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
-.logout-btn{font-size:12px;color:var(--text2);cursor:pointer;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:#fff}
+.ess-logo-icon{width:32px;height:32px;background:var(--blue);border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ess-user{margin-left:auto;display:flex;align-items:center;gap:8px}
+.ess-av{
+  width:36px;height:36px;border-radius:50%;
+  background:linear-gradient(135deg,#2563eb,#4338ca);
+  color:#fff;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;flex-shrink:0;
+}
+.ess-top-name{font-size:13px;font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.logout-btn{
+  font-size:12px;color:var(--text2);cursor:pointer;
+  padding:5px 10px;border-radius:8px;border:1px solid var(--border);
+  background:#fff;font-family:var(--font);font-weight:500;
+  transition:all .15s;white-space:nowrap;
+}
 .logout-btn:hover{border-color:var(--red);color:var(--red)}
 
-.ess-body{display:flex;flex:1}
-.ess-nav{width:200px;background:var(--surface);border-right:1px solid var(--border);padding:16px 10px;display:flex;flex-direction:column;gap:2px;flex-shrink:0}
-.enav{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;cursor:pointer;font-size:13px;color:var(--text2);font-weight:500;border:none;background:none;width:100%;text-align:left}
+/* ── Layout ── */
+.ess-body{display:flex;flex:1;overflow:hidden}
+
+/* Desktop sidebar */
+.ess-nav{
+  width:200px;background:var(--surface);border-right:1px solid var(--border);
+  padding:14px 10px;display:flex;flex-direction:column;gap:2px;
+  flex-shrink:0;overflow-y:auto;
+}
+.enav{
+  display:flex;align-items:center;gap:9px;padding:9px 12px;
+  border-radius:10px;cursor:pointer;font-size:13px;color:var(--text2);
+  font-weight:500;border:none;background:none;width:100%;text-align:left;
+  transition:all .12s;
+}
 .enav:hover{background:#f1f5f9;color:var(--text)}
-.enav.on{background:#eff6ff;color:var(--blue);font-weight:600}
+.enav.on{background:var(--blue-l);color:var(--blue);font-weight:600}
 .enav svg{flex-shrink:0}
 
-.ess-content{flex:1;padding:24px;max-width:900px}
+/* Content */
+.ess-content{
+  flex:1;padding:20px;overflow-y:auto;
+  padding-bottom:calc(20px + var(--safe-bottom));
+}
+
+/* Mobile bottom nav */
+.mob-nav{
+  display:none;
+  position:fixed;bottom:0;left:0;right:0;
+  height:calc(var(--nav-h) + var(--safe-bottom));
+  background:var(--surface);border-top:1px solid var(--border);
+  padding-bottom:var(--safe-bottom);
+  z-index:200;box-shadow:0 -4px 16px rgba(0,0,0,.07);
+}
+.mob-nav-inner{
+  display:flex;height:var(--nav-h);
+}
+.mnav{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:3px;border:none;background:none;
+  cursor:pointer;color:var(--text3);font-family:var(--font);
+  font-size:10px;font-weight:500;padding:0;transition:color .12s;
+}
+.mnav.on{color:var(--blue)}
+.mnav svg{flex-shrink:0}
+.mnav-dot{
+  width:4px;height:4px;border-radius:50%;
+  background:var(--blue);margin-top:1px;
+  opacity:0;transition:opacity .15s;
+}
+.mnav.on .mnav-dot{opacity:1}
+
+/* ── Pages ── */
 .ess-page{display:none}
 .ess-page.on{display:block}
 
-/* cards */
-.ess-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+/* ── Cards ── */
+.ess-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:18px;margin-bottom:14px;
+}
 .ess-card-title{font-size:14px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
-.ess-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+
+/* Welcome banner */
+.welcome-banner{
+  background:linear-gradient(135deg,#eff6ff,#dbeafe);
+  border:1px solid #bfdbfe;border-radius:var(--radius);
+  padding:18px 20px;margin-bottom:16px;display:flex;align-items:center;gap:14px;
+}
+.welcome-av{
+  width:52px;height:52px;border-radius:50%;
+  background:linear-gradient(135deg,#2563eb,#4338ca);
+  color:#fff;display:flex;align-items:center;justify-content:center;
+  font-size:20px;font-weight:700;flex-shrink:0;
+}
+.welcome-text-main{font-size:17px;font-weight:700;color:#1e3a8a}
+.welcome-text-sub{font-size:12px;color:#3b82f6;margin-top:3px}
+
+/* ── Badges ── */
+.ess-badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600}
 .b-g{background:#dcfce7;color:#15803d}
 .b-y{background:#fef9c3;color:#92400e}
 .b-r{background:#fee2e2;color:#991b1b}
 .b-b{background:#dbeafe;color:#1d4ed8}
+.b-p{background:#f3e8ff;color:#7e22ce}
 
-/* profile grid */
+/* ── Tables ── */
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -2px}
+.ess-table{width:100%;border-collapse:collapse;font-size:13px;min-width:420px}
+.ess-table th{
+  text-align:left;padding:8px 12px;font-size:10.5px;font-weight:700;
+  color:var(--text2);border-bottom:2px solid var(--border);
+  text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;
+}
+.ess-table td{padding:10px 12px;border-bottom:1px solid #f3f4f6;color:var(--text);vertical-align:middle}
+.ess-table tr:last-child td{border-bottom:none}
+.ess-table tr:hover td{background:#fafafa}
+
+/* Mobile card rows for payslips */
+.slip-cards{display:none;flex-direction:column;gap:10px}
+.slip-card{
+  background:#f8fafc;border:1px solid var(--border);
+  border-radius:10px;padding:14px;
+}
+.slip-card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.slip-card-period{font-weight:700;font-size:14px}
+.slip-card-net{font-weight:700;font-size:16px;color:var(--green)}
+.slip-card-row{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0}
+.slip-card-label{color:var(--text2)}
+.slip-card-val{font-weight:500}
+
+/* ── Profile grid ── */
 .profile-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-@media(max-width:600px){.profile-grid{grid-template-columns:1fr}}
 .pf-row{display:flex;flex-direction:column;gap:3px}
-.pf-lbl{font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.pf-lbl{font-size:10.5px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .pf-val{font-size:13.5px;font-weight:500;color:var(--text)}
 
-/* table */
-.ess-table{width:100%;border-collapse:collapse;font-size:13px}
-.ess-table th{text-align:left;padding:8px 12px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:2px solid var(--border);text-transform:uppercase;letter-spacing:.4px}
-.ess-table td{padding:9px 12px;border-bottom:1px solid #f3f4f6;color:var(--text)}
-.ess-table tr:last-child td{border-bottom:none}
-.ess-table tr:hover td{background:#f9fafb}
-
-/* form */
+/* ── Forms ── */
 .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-@media(max-width:600px){.form-grid{grid-template-columns:1fr}}
-.btn-submit{background:var(--blue);color:#fff;border:none;border-radius:9px;padding:10px 22px;font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;margin-top:8px}
-.btn-submit:hover{background:var(--blue-d)}
-.select-input{width:100%;border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-family:var(--font);font-size:13.5px;outline:none;color:var(--text);background:#fff}
+.select-input{
+  width:100%;border:1.5px solid var(--border);border-radius:10px;
+  padding:0 14px;height:50px;font-family:var(--font);font-size:14px;
+  outline:none;color:var(--text);background:#fff;
+  -webkit-appearance:none;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;
+}
 .select-input:focus{border-color:var(--blue)}
-textarea.fi{resize:vertical;min-height:70px}
+.btn-submit{
+  background:var(--blue);color:#fff;border:none;border-radius:10px;
+  height:48px;padding:0 24px;font-family:var(--font);font-size:14px;
+  font-weight:600;cursor:pointer;margin-top:8px;transition:background .15s;
+  min-width:160px;
+}
+.btn-submit:hover{background:var(--blue-d)}
+.btn-submit:active{transform:scale(.98)}
+textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
 
-/* empty state */
+/* ── Empty / spinner ── */
 .empty{text-align:center;padding:40px 20px;color:var(--text3)}
 .empty svg{margin:0 auto 10px;display:block;opacity:.4}
-
-/* top welcome banner */
-.welcome-banner{background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1px solid #bfdbfe;border-radius:var(--radius);padding:18px 22px;margin-bottom:20px;display:flex;align-items:center;gap:16px}
-.welcome-av{width:48px;height:48px;border-radius:50%;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;flex-shrink:0}
-.welcome-text-main{font-size:16px;font-weight:700;color:#1e3a8a}
-.welcome-text-sub{font-size:12.5px;color:#3b82f6;margin-top:2px}
-
-/* loading spinner */
-.spinner{display:inline-block;width:18px;height:18px;border:2px solid #e5e7eb;border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
+.spinner{display:inline-block;width:20px;height:20px;border:2.5px solid #e5e7eb;border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* toast */
-#ess-toast{position:fixed;bottom:24px;right:24px;background:#111;color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9999}
+/* ── Toast ── */
+#ess-toast{
+  position:fixed;bottom:calc(var(--nav-h) + var(--safe-bottom) + 12px);
+  left:50%;transform:translateX(-50%);
+  background:#111;color:#fff;padding:11px 20px;border-radius:12px;
+  font-size:13px;opacity:0;transition:opacity .25s;
+  pointer-events:none;z-index:9999;white-space:nowrap;
+  box-shadow:0 4px 16px rgba(0,0,0,.25);
+}
 #ess-toast.on{opacity:1}
+
+/* ════════════════════════════════
+   RESPONSIVE
+════════════════════════════════ */
+@media(max-width:767px){
+  /* Login */
+  .login-card{padding:28px 22px 24px}
+  .fi{height:52px;font-size:15px}
+
+  /* App */
+  .ess-top-name{display:none}
+  .ess-nav{display:none}
+  .mob-nav{display:block}
+  .ess-content{
+    padding:14px;
+    padding-bottom:calc(var(--nav-h) + var(--safe-bottom) + 14px);
+  }
+  .ess-body{overflow:visible}
+
+  /* Welcome banner compact */
+  .welcome-av{width:44px;height:44px;font-size:17px}
+  .welcome-text-main{font-size:15px}
+
+  /* Profile grid: 1 col */
+  .profile-grid{grid-template-columns:1fr}
+
+  /* Forms: 1 col */
+  .form-grid{grid-template-columns:1fr}
+  .btn-submit{width:100%}
+
+  /* Payslips: hide table, show cards */
+  .slip-table-wrap{display:none}
+  .slip-cards{display:flex}
+
+  /* Tables: scroll */
+  .table-scroll{margin:0 -4px}
+  .ess-table{min-width:380px}
+
+  /* Toast: above bottom nav */
+  #ess-toast{bottom:calc(var(--nav-h) + var(--safe-bottom) + 10px)}
+}
+
+@media(min-width:768px){
+  .mob-nav{display:none}
+  #ess-toast{bottom:24px;right:24px;left:auto;transform:none}
+}
+
+@media(max-width:380px){
+  .login-card{padding:24px 16px 20px}
+  .mnav{font-size:9px}
+}
 </style>
 </head>
 <body>
 
-<!-- ── Login ───────────────────────────────────────────────────────── -->
+<!-- ════════════════════════════════════════════════════════
+     LOGIN SCREEN
+════════════════════════════════════════════════════════ -->
 <div id="ess-login">
-  <div class="login-box">
-    <div class="login-logo">
-      <div class="login-logo-icon">
-        <svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="#fff" stroke-width="1.6"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><circle cx="12.5" cy="5" r="1.8"/><path d="M14.5 13c0-2-1.3-3-2.5-3.5"/></svg>
+  <div class="login-wrap">
+    <!-- Brand -->
+    <div class="login-brand">
+      <div class="login-brand-icon">
+        <svg viewBox="0 0 16 16" width="30" height="30" fill="none" stroke="#fff" stroke-width="1.6">
+          <circle cx="6" cy="5" r="2.5"/>
+          <path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/>
+          <circle cx="12.5" cy="5" r="1.8"/>
+          <path d="M14.5 13c0-2-1.3-3-2.5-3.5"/>
+        </svg>
       </div>
-      <div>
-        <div class="login-title">Employee Portal</div>
-        <div class="login-sub">TaxFlow HRMS Self-Service</div>
+      <div class="login-brand-name">Employee Portal</div>
+      <div class="login-brand-sub">TaxFlow HRMS Self-Service</div>
+    </div>
+
+    <!-- Card -->
+    <div class="login-card">
+      <div class="login-card-title">Welcome back</div>
+      <div class="login-card-sub">Sign in with your employee credentials</div>
+
+      <div class="fg">
+        <label class="fl">Username</label>
+        <input class="fi" id="ess-login-user" placeholder="Your username"
+          autocomplete="username" autocapitalize="off" autocorrect="off">
       </div>
+      <div class="fg">
+        <label class="fl">Password</label>
+        <div class="pw-wrap">
+          <input class="fi" id="ess-login-pass" type="password"
+            placeholder="Your password" autocomplete="current-password">
+          <button class="pw-eye" type="button" onclick="togglePw()" aria-label="Show/hide password">
+            <svg id="pw-eye-icon" viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4">
+              <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/>
+              <circle cx="8" cy="8" r="2.2"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="ess-login-btn" onclick="essLogin()">Sign In</button>
+      <div class="err-msg" id="ess-err"></div>
     </div>
-    <div class="fg">
-      <label class="fl">Username</label>
-      <input class="fi" id="ess-login-user" placeholder="Your username" autocomplete="username">
-    </div>
-    <div class="fg">
-      <label class="fl">Password</label>
-      <input class="fi" id="ess-login-pass" type="password" placeholder="Your password" autocomplete="current-password">
-    </div>
-    <button class="btn-primary" id="ess-login-btn" onclick="essLogin()">Sign In</button>
-    <div class="err-msg" id="ess-err"></div>
+
+    <div class="login-footer">Secured · TaxFlow HRMS · UAE</div>
   </div>
 </div>
 
-<!-- ── App Shell ───────────────────────────────────────────────────── -->
+<!-- ════════════════════════════════════════════════════════
+     APP SHELL
+════════════════════════════════════════════════════════ -->
 <div id="ess-app" style="display:none;flex-direction:column;min-height:100vh">
+
   <!-- Topbar -->
   <div class="ess-topbar">
     <div class="ess-logo">
       <div class="ess-logo-icon">
-        <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.6"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/></svg>
+        <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.6">
+          <circle cx="6" cy="5" r="2.5"/>
+          <path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/>
+        </svg>
       </div>
       Employee Portal
     </div>
     <div class="ess-user">
       <div class="ess-av" id="ess-top-av">?</div>
-      <span id="ess-top-name" style="font-weight:600">—</span>
+      <span class="ess-top-name" id="ess-top-name">—</span>
       <button class="logout-btn" onclick="essLogout()">Sign Out</button>
     </div>
   </div>
 
   <!-- Body -->
   <div class="ess-body">
-    <!-- Sidebar nav -->
+
+    <!-- Desktop sidebar -->
     <nav class="ess-nav">
       <button class="enav on" id="enav-profile" onclick="essTab('profile')">
         <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="6" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/></svg>
@@ -249,7 +493,6 @@ textarea.fi{resize:vertical;min-height:70px}
 
       <!-- Leave -->
       <div class="ess-page" id="ep-leave">
-        <!-- Apply form -->
         <div class="ess-card">
           <div class="ess-card-title">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#2563eb" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/></svg>
@@ -282,7 +525,6 @@ textarea.fi{resize:vertical;min-height:70px}
           </div>
           <button class="btn-submit" onclick="essApplyLeave()">Submit Request</button>
         </div>
-        <!-- History -->
         <div class="ess-card">
           <div class="ess-card-title">Leave History</div>
           <div id="leave-history-content">
@@ -293,7 +535,6 @@ textarea.fi{resize:vertical;min-height:70px}
 
       <!-- Overtime -->
       <div class="ess-page" id="ep-overtime">
-        <!-- Apply form -->
         <div class="ess-card">
           <div class="ess-card-title">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#ea580c" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
@@ -315,7 +556,6 @@ textarea.fi{resize:vertical;min-height:70px}
           </div>
           <button class="btn-submit" onclick="essApplyOT()">Submit OT Report</button>
         </div>
-        <!-- History -->
         <div class="ess-card">
           <div class="ess-card-title">OT History</div>
           <div id="ot-history-content">
@@ -326,6 +566,43 @@ textarea.fi{resize:vertical;min-height:70px}
 
     </div><!-- /ess-content -->
   </div><!-- /ess-body -->
+
+  <!-- Mobile bottom navigation -->
+  <nav class="mob-nav" id="mob-nav">
+    <div class="mob-nav-inner">
+      <button class="mnav on" id="mnav-profile" onclick="essTab('profile')">
+        <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="6" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/></svg>
+        Profile
+        <div class="mnav-dot"></div>
+      </button>
+      <button class="mnav" id="mnav-attendance" onclick="essTab('attendance')">
+        <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/></svg>
+        Attendance
+        <div class="mnav-dot"></div>
+      </button>
+      <button class="mnav" id="mnav-payslips" onclick="essTab('payslips')">
+        <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="12" height="13" rx="1.5"/><path d="M5 6h6M5 9h4M5 12h3"/></svg>
+        Payslips
+        <div class="mnav-dot"></div>
+      </button>
+      <button class="mnav" id="mnav-leave" onclick="essTab('leave')">
+        <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/></svg>
+        Leave
+        <div class="mnav-dot"></div>
+      </button>
+      <button class="mnav" id="mnav-overtime" onclick="essTab('overtime')">
+        <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
+        Overtime
+        <div class="mnav-dot"></div>
+      </button>
+      <button class="mnav" id="mnav-documents" onclick="essTab('documents')">
+        <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/></svg>
+        Docs
+        <div class="mnav-dot"></div>
+      </button>
+    </div>
+  </nav>
+
 </div><!-- /ess-app -->
 
 <div id="ess-toast"></div>
@@ -335,11 +612,24 @@ const ESS_API = (window.TAXFLOW_API_BASE_URL || (window.location.protocol + '//'
 let _essToken = localStorage.getItem('ess_token') || '';
 let _essEmp = null;
 
-function toast(msg, type) {
+// ── Utilities ──────────────────────────────────────────
+function toast(msg) {
   const el = document.getElementById('ess-toast');
   el.textContent = msg;
   el.className = 'on';
   setTimeout(() => el.className = '', 2800);
+}
+
+function togglePw() {
+  const inp = document.getElementById('ess-login-pass');
+  const icon = document.getElementById('pw-eye-icon');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    icon.innerHTML = '<path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2.2"/><line x1="2" y1="2" x2="14" y2="14"/>';
+  } else {
+    inp.type = 'password';
+    icon.innerHTML = '<path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2.2"/>';
+  }
 }
 
 async function essApi(path, opts = {}) {
@@ -347,7 +637,7 @@ async function essApi(path, opts = {}) {
     method: opts.method || 'GET',
     headers: {
       'Content-Type': 'application/json',
-      ...((_essToken) ? { Authorization: 'Bearer ' + _essToken } : {}),
+      ...(_essToken ? { Authorization: 'Bearer ' + _essToken } : {}),
     },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
@@ -358,6 +648,7 @@ async function essApi(path, opts = {}) {
   return r.json();
 }
 
+// ── Auth ───────────────────────────────────────────────
 async function essLogin() {
   const user = document.getElementById('ess-login-user').value.trim();
   const pass = document.getElementById('ess-login-pass').value;
@@ -382,6 +673,9 @@ async function essLogin() {
 document.getElementById('ess-login-pass').addEventListener('keydown', e => {
   if (e.key === 'Enter') essLogin();
 });
+document.getElementById('ess-login-user').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('ess-login-pass').focus();
+});
 
 function essLogout() {
   _essToken = '';
@@ -389,8 +683,11 @@ function essLogout() {
   localStorage.removeItem('ess_token');
   document.getElementById('ess-app').style.display = 'none';
   document.getElementById('ess-login').style.display = 'flex';
+  document.getElementById('ess-login-user').value = '';
+  document.getElementById('ess-login-pass').value = '';
 }
 
+// ── App shell ──────────────────────────────────────────
 function initials(name) {
   return (name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
@@ -401,7 +698,7 @@ function fmtAed(v) {
 }
 
 function badge(status) {
-  const cls = status === 'Approved' ? 'b-g' : status === 'Rejected' ? 'b-r' : 'b-y';
+  const cls = status === 'Approved' ? 'b-g' : status === 'Rejected' ? 'b-r' : status === 'Paid' ? 'b-b' : 'b-y';
   return `<span class="ess-badge ${cls}">${status}</span>`;
 }
 
@@ -422,10 +719,15 @@ function showApp() {
 
 function essTab(tab) {
   document.querySelectorAll('.enav').forEach(b => b.classList.remove('on'));
+  document.querySelectorAll('.mnav').forEach(b => b.classList.remove('on'));
   document.querySelectorAll('.ess-page').forEach(p => p.classList.remove('on'));
-  document.getElementById('enav-' + tab).classList.add('on');
+  const desk = document.getElementById('enav-' + tab);
+  const mob = document.getElementById('mnav-' + tab);
+  if (desk) desk.classList.add('on');
+  if (mob) mob.classList.add('on');
   document.getElementById('ep-' + tab).classList.add('on');
-
+  // scroll content to top on tab switch
+  document.querySelector('.ess-content').scrollTop = 0;
   if (tab === 'attendance') loadAttendance();
   else if (tab === 'payslips') loadPayslips();
   else if (tab === 'documents') loadDocuments();
@@ -433,6 +735,7 @@ function essTab(tab) {
   else if (tab === 'overtime') loadOT();
 }
 
+// ── Data loaders ───────────────────────────────────────
 async function loadProfile() {
   try {
     const data = await essApi('/profile');
@@ -460,11 +763,15 @@ async function loadProfile() {
     if (docEntries.length) {
       document.getElementById('profile-docs-card').style.display = 'block';
       document.getElementById('profile-docs-list').innerHTML = docEntries
-        .map(([k, v]) => `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;font-size:13px"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="#7c3aed" stroke-width="1.4"><path d="M3 1h5l3 3v9H3V1z"/></svg><span style="text-transform:capitalize;color:var(--text2)">${k}:</span><span style="font-weight:500">${v}</span></div>`)
+        .map(([k, v]) => `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:13px">
+          <svg viewBox="0 0 14 14" width="16" height="16" fill="none" stroke="#7c3aed" stroke-width="1.4"><path d="M3 1h5l3 3v9H3V1z"/></svg>
+          <span style="text-transform:capitalize;color:var(--text2)">${k.replace(/_/g,' ')}:</span>
+          <span style="font-weight:500">${v}</span>
+        </div>`)
         .join('');
     }
   } catch (e) {
-    document.getElementById('profile-grid').innerHTML = `<div class="empty">Failed to load profile</div>`;
+    document.getElementById('profile-grid').innerHTML = `<div class="empty" style="grid-column:1/-1">Failed to load profile.<br><small>${e.message}</small></div>`;
   }
 }
 
@@ -478,10 +785,16 @@ async function loadAttendance() {
       return;
     }
     document.getElementById('attendance-content').innerHTML = `
-      <table class="ess-table">
-        <thead><tr><th>Date</th><th>Time</th><th>Direction</th></tr></thead>
-        <tbody>${rows.map(r => `<tr><td>${r.date}</td><td>${r.time}</td><td><span class="ess-badge ${r.direction === 'in' ? 'b-g' : 'b-b'}">${r.direction}</span></td></tr>`).join('')}</tbody>
-      </table>`;
+      <div class="table-scroll">
+        <table class="ess-table">
+          <thead><tr><th>Date</th><th>Time</th><th>Direction</th></tr></thead>
+          <tbody>${rows.map(r => `<tr>
+            <td>${r.date}</td>
+            <td style="font-weight:500">${r.time}</td>
+            <td><span class="ess-badge ${r.direction === 'in' ? 'b-g' : 'b-b'}">${r.direction}</span></td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>`;
   } catch (e) {
     document.getElementById('attendance-content').innerHTML = `<div class="empty">${e.message}</div>`;
   }
@@ -496,19 +809,38 @@ async function loadPayslips() {
       document.getElementById('payslips-content').innerHTML = '<div class="empty">No payslips found yet.</div>';
       return;
     }
+    // Desktop table + mobile cards
     document.getElementById('payslips-content').innerHTML = `
-      <table class="ess-table">
-        <thead><tr><th>Period</th><th>Basic</th><th>Allowances</th><th>Overtime</th><th>Deductions</th><th>Net Pay</th><th>Status</th></tr></thead>
-        <tbody>${slips.map(s => `<tr>
-          <td style="font-weight:600">${s.period}</td>
-          <td>${fmtAed(s.basic)}</td>
-          <td>${fmtAed(s.allowances)}</td>
-          <td>${fmtAed(s.overtime)}</td>
-          <td style="color:var(--red)">${fmtAed(s.deductions)}</td>
-          <td style="font-weight:700;color:var(--green)">${fmtAed(s.net_pay)}</td>
-          <td>${badge(s.status === 'draft' ? 'Draft' : 'Paid')}</td>
-        </tr>`).join('')}</tbody>
-      </table>`;
+      <div class="slip-table-wrap table-scroll">
+        <table class="ess-table" style="min-width:600px">
+          <thead><tr><th>Period</th><th>Basic</th><th>Allowances</th><th>OT</th><th>Deductions</th><th>Net Pay</th><th>Status</th></tr></thead>
+          <tbody>${slips.map(s => `<tr>
+            <td style="font-weight:600">${s.period}</td>
+            <td>${fmtAed(s.basic)}</td>
+            <td>${fmtAed(s.allowances)}</td>
+            <td>${fmtAed(s.overtime)}</td>
+            <td style="color:var(--red)">${fmtAed(s.deductions)}</td>
+            <td style="font-weight:700;color:var(--green)">${fmtAed(s.net_pay)}</td>
+            <td>${badge(s.status === 'draft' ? 'Draft' : 'Paid')}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+      <div class="slip-cards">
+        ${slips.map(s => `<div class="slip-card">
+          <div class="slip-card-top">
+            <div class="slip-card-period">${s.period}</div>
+            <div class="slip-card-net">${fmtAed(s.net_pay)}</div>
+          </div>
+          <div class="slip-card-row"><span class="slip-card-label">Basic</span><span class="slip-card-val">${fmtAed(s.basic)}</span></div>
+          <div class="slip-card-row"><span class="slip-card-label">Allowances</span><span class="slip-card-val">${fmtAed(s.allowances)}</span></div>
+          <div class="slip-card-row"><span class="slip-card-label">Overtime</span><span class="slip-card-val">${fmtAed(s.overtime)}</span></div>
+          <div class="slip-card-row"><span class="slip-card-label">Deductions</span><span class="slip-card-val" style="color:var(--red)">${fmtAed(s.deductions)}</span></div>
+          <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:11px;color:var(--text3)">Net Pay</span>
+            ${badge(s.status === 'draft' ? 'Draft' : 'Paid')}
+          </div>
+        </div>`).join('')}
+      </div>`;
   } catch (e) {
     document.getElementById('payslips-content').innerHTML = `<div class="empty">${e.message}</div>`;
   }
@@ -525,9 +857,14 @@ async function loadDocuments() {
       return;
     }
     document.getElementById('documents-content').innerHTML = entries
-      .map(([k, v]) => `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f3f4f6">
-        <svg viewBox="0 0 16 16" width="28" height="28" fill="none" stroke="#7c3aed" stroke-width="1.2"><path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/></svg>
-        <div><div style="font-weight:600;text-transform:capitalize;font-size:13px">${k.replace(/_/g,' ')}</div><div style="font-size:12px;color:var(--text2)">${v}</div></div>
+      .map(([k, v]) => `<div style="display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #f3f4f6">
+        <div style="width:40px;height:40px;border-radius:10px;background:#f3e8ff;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="#7c3aed" stroke-width="1.3"><path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:600;text-transform:capitalize;font-size:13px">${k.replace(/_/g,' ')}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px">${v}</div>
+        </div>
       </div>`)
       .join('');
   } catch (e) {
@@ -545,14 +882,18 @@ async function loadLeave() {
       return;
     }
     document.getElementById('leave-history-content').innerHTML = `
-      <table class="ess-table">
-        <thead><tr><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Reason</th><th>Status</th></tr></thead>
-        <tbody>${rows.map(r => `<tr>
-          <td>${r.type || '—'}</td><td>${r.from || r.from_date || '—'}</td><td>${r.to || r.to_date || '—'}</td>
-          <td>${r.days || '—'}</td><td style="color:var(--text2)">${r.reason || '—'}</td>
-          <td>${badge(r.status || 'Pending')}</td>
-        </tr>`).join('')}</tbody>
-      </table>`;
+      <div class="table-scroll">
+        <table class="ess-table">
+          <thead><tr><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Status</th></tr></thead>
+          <tbody>${rows.map(r => `<tr>
+            <td style="font-weight:500">${r.type || '—'}</td>
+            <td>${r.from || r.from_date || '—'}</td>
+            <td>${r.to || r.to_date || '—'}</td>
+            <td>${r.days || '—'}</td>
+            <td>${badge(r.status || 'Pending')}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>`;
   } catch (e) {
     document.getElementById('leave-history-content').innerHTML = `<div class="empty">${e.message}</div>`;
   }
@@ -568,14 +909,17 @@ async function loadOT() {
       return;
     }
     document.getElementById('ot-history-content').innerHTML = `
-      <table class="ess-table">
-        <thead><tr><th>Date</th><th>Hours</th><th>Reason</th><th>Status</th></tr></thead>
-        <tbody>${rows.map(r => `<tr>
-          <td>${r.date || '—'}</td><td style="font-weight:600">${r.ot_hours || '—'} hrs</td>
-          <td style="color:var(--text2)">${r.reason || '—'}</td>
-          <td>${badge(r.status || 'Pending')}</td>
-        </tr>`).join('')}</tbody>
-      </table>`;
+      <div class="table-scroll">
+        <table class="ess-table">
+          <thead><tr><th>Date</th><th>Hours</th><th>Reason</th><th>Status</th></tr></thead>
+          <tbody>${rows.map(r => `<tr>
+            <td>${r.date || '—'}</td>
+            <td style="font-weight:600">${r.ot_hours || '—'} hrs</td>
+            <td style="color:var(--text2);max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.reason || '—'}</td>
+            <td>${badge(r.status || 'Pending')}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>`;
   } catch (e) {
     document.getElementById('ot-history-content').innerHTML = `<div class="empty">${e.message}</div>`;
   }
@@ -586,17 +930,17 @@ async function essApplyLeave() {
   const from_date = document.getElementById('ess-leave-from').value;
   const to_date = document.getElementById('ess-leave-to').value;
   const reason = document.getElementById('ess-leave-reason').value.trim();
-  if (!from_date || !to_date) { toast('Please select from and to dates', 'warn'); return; }
-  if (to_date < from_date) { toast('To date must be after from date', 'warn'); return; }
+  if (!from_date || !to_date) { toast('Please select from and to dates'); return; }
+  if (to_date < from_date) { toast('To date must be after from date'); return; }
   try {
     await essApi('/leave/apply', { method: 'POST', body: { type, from_date, to_date, reason } });
-    toast('Leave request submitted successfully');
+    toast('Leave request submitted');
     document.getElementById('ess-leave-from').value = '';
     document.getElementById('ess-leave-to').value = '';
     document.getElementById('ess-leave-reason').value = '';
     loadLeave();
   } catch (e) {
-    toast(e.message || 'Failed to submit leave request');
+    toast(e.message || 'Failed to submit');
   }
 }
 
@@ -604,7 +948,7 @@ async function essApplyOT() {
   const date = document.getElementById('ess-ot-date').value;
   const ot_hours = document.getElementById('ess-ot-hours').value;
   const reason = document.getElementById('ess-ot-reason').value.trim();
-  if (!date || !ot_hours) { toast('Date and OT hours are required', 'warn'); return; }
+  if (!date || !ot_hours) { toast('Date and OT hours are required'); return; }
   try {
     await essApi('/overtime/apply', { method: 'POST', body: { date, ot_hours, reason } });
     toast('OT report submitted for approval');
@@ -613,11 +957,11 @@ async function essApplyOT() {
     document.getElementById('ess-ot-reason').value = '';
     loadOT();
   } catch (e) {
-    toast(e.message || 'Failed to submit OT report');
+    toast(e.message || 'Failed to submit');
   }
 }
 
-// Auto-login if token exists
+// ── Auto-login ─────────────────────────────────────────
 (function init() {
   if (_essToken) {
     essApi('/profile').then(data => {
