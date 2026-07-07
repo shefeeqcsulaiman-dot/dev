@@ -710,6 +710,15 @@ function saveEmployee(){
     return;
   }
   const isEdit=document.querySelector('#m-emp .modal-title')?.textContent==='Edit Employee';
+  // On edit, keep existing password if field left blank
+  if(isEdit&&!pwd){
+    const existingRow=[...document.querySelectorAll('#employee-tbody tr')].find(r=>{
+      try{return JSON.parse(r.dataset.employee||'{}').id===employee.id;}catch{return false;}
+    });
+    if(existingRow){
+      try{const ex=JSON.parse(existingRow.dataset.employee);employee.password=ex.password||'';}catch{}
+    }
+  }
   renderEmployeeRecord(employee);
   renderPayrollEmployeeRecord(employee);
   saveServer('employees',employee);

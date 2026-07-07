@@ -331,7 +331,7 @@ textarea.fi{resize:vertical;min-height:70px}
 <div id="ess-toast"></div>
 
 <script>
-const ESS_API = (window.TAXFLOW_API_BASE_URL || 'http://127.0.0.1:8000') + '/api/v1/ess';
+const ESS_API = (window.TAXFLOW_API_BASE_URL || (window.location.protocol + '//' + window.location.host)) + '/api/v1/ess';
 let _essToken = localStorage.getItem('ess_token') || '';
 let _essEmp = null;
 
