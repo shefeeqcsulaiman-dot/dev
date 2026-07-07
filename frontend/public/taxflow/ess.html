@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Employee Self-Service — TaxFlow</title>
+<link rel="icon" href="src/favicon.svg" type="image/svg+xml">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --blue:#2563eb;--blue-d:#1d4ed8;--green:#16a34a;--red:#dc2626;--orange:#ea580c;
+  --purple:#7c3aed;--surface:#fff;--bg:#f8fafc;--border:#e5e7eb;
+  --text:#111827;--text2:#6b7280;--text3:#9ca3af;
+  --radius:14px;--font:'DM Sans',sans-serif;
+}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
+
+/* ── login ── */
+#ess-login{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.login-box{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:36px 32px;width:100%;max-width:380px;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+.login-logo{display:flex;align-items:center;gap:10px;margin-bottom:24px}
+.login-logo-icon{width:38px;height:38px;border-radius:10px;background:#2563eb;display:flex;align-items:center;justify-content:center}
+.login-title{font-size:18px;font-weight:700;color:#111827}
+.login-sub{font-size:12.5px;color:var(--text2);margin-top:2px}
+.fl{display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:5px}
+.fi{width:100%;border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-family:var(--font);font-size:13.5px;outline:none;color:var(--text);background:#fff}
+.fi:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.fg{margin-bottom:14px}
+.btn-primary{width:100%;background:var(--blue);color:#fff;border:none;border-radius:9px;padding:11px;font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer;margin-top:4px}
+.btn-primary:hover{background:var(--blue-d)}
+.err-msg{font-size:12px;color:var(--red);margin-top:8px;text-align:center;min-height:16px}
+
+/* ── app shell ── */
+#ess-app{display:none;min-height:100vh;flex-direction:column}
+.ess-topbar{height:56px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:14px;position:sticky;top:0;z-index:100}
+.ess-logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;color:var(--blue)}
+.ess-logo-icon{width:30px;height:30px;background:#2563eb;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.ess-user{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:13px}
+.ess-av{width:32px;height:32px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.logout-btn{font-size:12px;color:var(--text2);cursor:pointer;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:#fff}
+.logout-btn:hover{border-color:var(--red);color:var(--red)}
+
+.ess-body{display:flex;flex:1}
+.ess-nav{width:200px;background:var(--surface);border-right:1px solid var(--border);padding:16px 10px;display:flex;flex-direction:column;gap:2px;flex-shrink:0}
+.enav{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;cursor:pointer;font-size:13px;color:var(--text2);font-weight:500;border:none;background:none;width:100%;text-align:left}
+.enav:hover{background:#f1f5f9;color:var(--text)}
+.enav.on{background:#eff6ff;color:var(--blue);font-weight:600}
+.enav svg{flex-shrink:0}
+
+.ess-content{flex:1;padding:24px;max-width:900px}
+.ess-page{display:none}
+.ess-page.on{display:block}
+
+/* cards */
+.ess-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+.ess-card-title{font-size:14px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.ess-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.b-g{background:#dcfce7;color:#15803d}
+.b-y{background:#fef9c3;color:#92400e}
+.b-r{background:#fee2e2;color:#991b1b}
+.b-b{background:#dbeafe;color:#1d4ed8}
+
+/* profile grid */
+.profile-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+@media(max-width:600px){.profile-grid{grid-template-columns:1fr}}
+.pf-row{display:flex;flex-direction:column;gap:3px}
+.pf-lbl{font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.pf-val{font-size:13.5px;font-weight:500;color:var(--text)}
+
+/* table */
+.ess-table{width:100%;border-collapse:collapse;font-size:13px}
+.ess-table th{text-align:left;padding:8px 12px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:2px solid var(--border);text-transform:uppercase;letter-spacing:.4px}
+.ess-table td{padding:9px 12px;border-bottom:1px solid #f3f4f6;color:var(--text)}
+.ess-table tr:last-child td{border-bottom:none}
+.ess-table tr:hover td{background:#f9fafb}
+
+/* form */
+.form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+@media(max-width:600px){.form-grid{grid-template-columns:1fr}}
+.btn-submit{background:var(--blue);color:#fff;border:none;border-radius:9px;padding:10px 22px;font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;margin-top:8px}
+.btn-submit:hover{background:var(--blue-d)}
+.select-input{width:100%;border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-family:var(--font);font-size:13.5px;outline:none;color:var(--text);background:#fff}
+.select-input:focus{border-color:var(--blue)}
+textarea.fi{resize:vertical;min-height:70px}
+
+/* empty state */
+.empty{text-align:center;padding:40px 20px;color:var(--text3)}
+.empty svg{margin:0 auto 10px;display:block;opacity:.4}
+
+/* top welcome banner */
+.welcome-banner{background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1px solid #bfdbfe;border-radius:var(--radius);padding:18px 22px;margin-bottom:20px;display:flex;align-items:center;gap:16px}
+.welcome-av{width:48px;height:48px;border-radius:50%;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;flex-shrink:0}
+.welcome-text-main{font-size:16px;font-weight:700;color:#1e3a8a}
+.welcome-text-sub{font-size:12.5px;color:#3b82f6;margin-top:2px}
+
+/* loading spinner */
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid #e5e7eb;border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* toast */
+#ess-toast{position:fixed;bottom:24px;right:24px;background:#111;color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9999}
+#ess-toast.on{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- ── Login ───────────────────────────────────────────────────────── -->
+<div id="ess-login">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="login-logo-icon">
+        <svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="#fff" stroke-width="1.6"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><circle cx="12.5" cy="5" r="1.8"/><path d="M14.5 13c0-2-1.3-3-2.5-3.5"/></svg>
+      </div>
+      <div>
+        <div class="login-title">Employee Portal</div>
+        <div class="login-sub">TaxFlow HRMS Self-Service</div>
+      </div>
+    </div>
+    <div class="fg">
+      <label class="fl">Username</label>
+      <input class="fi" id="ess-login-user" placeholder="Your username" autocomplete="username">
+    </div>
+    <div class="fg">
+      <label class="fl">Password</label>
+      <input class="fi" id="ess-login-pass" type="password" placeholder="Your password" autocomplete="current-password">
+    </div>
+    <button class="btn-primary" id="ess-login-btn" onclick="essLogin()">Sign In</button>
+    <div class="err-msg" id="ess-err"></div>
+  </div>
+</div>
+
+<!-- ── App Shell ───────────────────────────────────────────────────── -->
+<div id="ess-app" style="display:none;flex-direction:column;min-height:100vh">
+  <!-- Topbar -->
+  <div class="ess-topbar">
+    <div class="ess-logo">
+      <div class="ess-logo-icon">
+        <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.6"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/></svg>
+      </div>
+      Employee Portal
+    </div>
+    <div class="ess-user">
+      <div class="ess-av" id="ess-top-av">?</div>
+      <span id="ess-top-name" style="font-weight:600">—</span>
+      <button class="logout-btn" onclick="essLogout()">Sign Out</button>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="ess-body">
+    <!-- Sidebar nav -->
+    <nav class="ess-nav">
+      <button class="enav on" id="enav-profile" onclick="essTab('profile')">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="6" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/></svg>
+        My Profile
+      </button>
+      <button class="enav" id="enav-attendance" onclick="essTab('attendance')">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/></svg>
+        Attendance
+      </button>
+      <button class="enav" id="enav-payslips" onclick="essTab('payslips')">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="12" height="13" rx="1.5"/><path d="M5 6h6M5 9h4M5 12h3"/></svg>
+        Payslips
+      </button>
+      <button class="enav" id="enav-documents" onclick="essTab('documents')">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/><path d="M6 8h4M6 11h4"/></svg>
+        Documents
+      </button>
+      <button class="enav" id="enav-leave" onclick="essTab('leave')">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/></svg>
+        Leave
+      </button>
+      <button class="enav" id="enav-overtime" onclick="essTab('overtime')">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
+        Overtime
+      </button>
+    </nav>
+
+    <!-- Pages -->
+    <div class="ess-content">
+
+      <!-- Profile -->
+      <div class="ess-page on" id="ep-profile">
+        <div id="profile-welcome" class="welcome-banner">
+          <div class="welcome-av" id="profile-av">?</div>
+          <div>
+            <div class="welcome-text-main" id="profile-name">—</div>
+            <div class="welcome-text-sub" id="profile-desg">—</div>
+          </div>
+        </div>
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#2563eb" stroke-width="1.5"><circle cx="8" cy="6" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/></svg>
+            Personal Information
+          </div>
+          <div class="profile-grid" id="profile-grid">
+            <div class="empty"><div class="spinner"></div></div>
+          </div>
+        </div>
+        <div class="ess-card" id="profile-docs-card" style="display:none">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#7c3aed" stroke-width="1.5"><path d="M4 2h5l4 4v9H4V2z"/></svg>
+            Documents on Record
+          </div>
+          <div id="profile-docs-list"></div>
+        </div>
+      </div>
+
+      <!-- Attendance -->
+      <div class="ess-page" id="ep-attendance">
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#16a34a" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/></svg>
+            Attendance Records
+            <button onclick="loadAttendance()" style="margin-left:auto;font-size:11px;color:var(--blue);cursor:pointer;border:none;background:none;font-weight:600">Refresh</button>
+          </div>
+          <div id="attendance-content">
+            <div class="empty"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Payslips -->
+      <div class="ess-page" id="ep-payslips">
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#ea580c" stroke-width="1.5"><rect x="2" y="2" width="12" height="13" rx="1.5"/><path d="M5 6h6M5 9h4M5 12h3"/></svg>
+            My Payslips
+          </div>
+          <div id="payslips-content">
+            <div class="empty"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Documents -->
+      <div class="ess-page" id="ep-documents">
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#7c3aed" stroke-width="1.5"><path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/></svg>
+            My Documents
+          </div>
+          <div id="documents-content">
+            <div class="empty"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Leave -->
+      <div class="ess-page" id="ep-leave">
+        <!-- Apply form -->
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#2563eb" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/></svg>
+            Request Leave
+          </div>
+          <div class="form-grid">
+            <div class="fg">
+              <label class="fl">Leave Type</label>
+              <select class="select-input" id="ess-leave-type">
+                <option>Annual Leave</option>
+                <option>Sick Leave</option>
+                <option>Casual Leave</option>
+                <option>Emergency Leave</option>
+                <option>Maternity/Paternity Leave</option>
+                <option>Unpaid Leave</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label class="fl">From Date</label>
+              <input class="fi" type="date" id="ess-leave-from">
+            </div>
+            <div class="fg">
+              <label class="fl">To Date</label>
+              <input class="fi" type="date" id="ess-leave-to">
+            </div>
+            <div class="fg">
+              <label class="fl">Reason</label>
+              <input class="fi" id="ess-leave-reason" placeholder="Brief reason (optional)">
+            </div>
+          </div>
+          <button class="btn-submit" onclick="essApplyLeave()">Submit Request</button>
+        </div>
+        <!-- History -->
+        <div class="ess-card">
+          <div class="ess-card-title">Leave History</div>
+          <div id="leave-history-content">
+            <div class="empty"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Overtime -->
+      <div class="ess-page" id="ep-overtime">
+        <!-- Apply form -->
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#ea580c" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
+            Report Overtime
+          </div>
+          <div class="form-grid">
+            <div class="fg">
+              <label class="fl">Date</label>
+              <input class="fi" type="date" id="ess-ot-date">
+            </div>
+            <div class="fg">
+              <label class="fl">OT Hours</label>
+              <input class="fi" type="number" id="ess-ot-hours" placeholder="e.g. 2.5" min="0.5" step="0.5">
+            </div>
+            <div class="fg" style="grid-column:1/-1">
+              <label class="fl">Reason / Task Description</label>
+              <input class="fi" id="ess-ot-reason" placeholder="Brief description of work done">
+            </div>
+          </div>
+          <button class="btn-submit" onclick="essApplyOT()">Submit OT Report</button>
+        </div>
+        <!-- History -->
+        <div class="ess-card">
+          <div class="ess-card-title">OT History</div>
+          <div id="ot-history-content">
+            <div class="empty"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /ess-content -->
+  </div><!-- /ess-body -->
+</div><!-- /ess-app -->
+
+<div id="ess-toast"></div>
+
+<script>
+const ESS_API = (window.TAXFLOW_API_BASE_URL || 'http://127.0.0.1:8000') + '/api/v1/ess';
+let _essToken = localStorage.getItem('ess_token') || '';
+let _essEmp = null;
+
+function toast(msg, type) {
+  const el = document.getElementById('ess-toast');
+  el.textContent = msg;
+  el.className = 'on';
+  setTimeout(() => el.className = '', 2800);
+}
+
+async function essApi(path, opts = {}) {
+  const r = await fetch(ESS_API + path, {
+    method: opts.method || 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...((_essToken) ? { Authorization: 'Bearer ' + _essToken } : {}),
+    },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || 'Request failed');
+  }
+  return r.json();
+}
+
+async function essLogin() {
+  const user = document.getElementById('ess-login-user').value.trim();
+  const pass = document.getElementById('ess-login-pass').value;
+  const errEl = document.getElementById('ess-err');
+  errEl.textContent = '';
+  if (!user || !pass) { errEl.textContent = 'Username and password required'; return; }
+  const btn = document.getElementById('ess-login-btn');
+  btn.textContent = 'Signing in…'; btn.disabled = true;
+  try {
+    const data = await essApi('/login', { method: 'POST', body: { username: user, password: pass } });
+    _essToken = data.access_token;
+    localStorage.setItem('ess_token', _essToken);
+    _essEmp = data.employee;
+    showApp();
+  } catch (e) {
+    errEl.textContent = e.message || 'Login failed';
+  } finally {
+    btn.textContent = 'Sign In'; btn.disabled = false;
+  }
+}
+
+document.getElementById('ess-login-pass').addEventListener('keydown', e => {
+  if (e.key === 'Enter') essLogin();
+});
+
+function essLogout() {
+  _essToken = '';
+  _essEmp = null;
+  localStorage.removeItem('ess_token');
+  document.getElementById('ess-app').style.display = 'none';
+  document.getElementById('ess-login').style.display = 'flex';
+}
+
+function initials(name) {
+  return (name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
+function fmtAed(v) {
+  const n = parseFloat(v) || 0;
+  return 'AED ' + n.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function badge(status) {
+  const cls = status === 'Approved' ? 'b-g' : status === 'Rejected' ? 'b-r' : 'b-y';
+  return `<span class="ess-badge ${cls}">${status}</span>`;
+}
+
+function showApp() {
+  document.getElementById('ess-login').style.display = 'none';
+  const app = document.getElementById('ess-app');
+  app.style.display = 'flex';
+  if (_essEmp) {
+    const name = _essEmp.name || 'Employee';
+    document.getElementById('ess-top-name').textContent = name;
+    document.getElementById('ess-top-av').textContent = initials(name);
+    document.getElementById('profile-av').textContent = initials(name);
+    document.getElementById('profile-name').textContent = name;
+    document.getElementById('profile-desg').textContent = [_essEmp.designation, _essEmp.department].filter(Boolean).join(' · ');
+  }
+  loadProfile();
+}
+
+function essTab(tab) {
+  document.querySelectorAll('.enav').forEach(b => b.classList.remove('on'));
+  document.querySelectorAll('.ess-page').forEach(p => p.classList.remove('on'));
+  document.getElementById('enav-' + tab).classList.add('on');
+  document.getElementById('ep-' + tab).classList.add('on');
+
+  if (tab === 'attendance') loadAttendance();
+  else if (tab === 'payslips') loadPayslips();
+  else if (tab === 'documents') loadDocuments();
+  else if (tab === 'leave') loadLeave();
+  else if (tab === 'overtime') loadOT();
+}
+
+async function loadProfile() {
+  try {
+    const data = await essApi('/profile');
+    const emp = data.employee || {};
+    const fields = [
+      ['Full Name', emp.name],
+      ['Employee No.', emp.id],
+      ['Department', emp.department],
+      ['Designation', emp.designation],
+      ['Email', emp.email],
+      ['Mobile', emp.mobile],
+      ['Nationality', emp.nationality],
+      ['Date of Birth', emp.dob],
+      ['Join Date', emp.join_date],
+      ['Contract Type', emp.contract],
+      ['Branch / Location', emp.branch || emp.location],
+      ['Emirates ID', emp.emirates_id],
+    ];
+    document.getElementById('profile-grid').innerHTML = fields
+      .filter(([, v]) => v)
+      .map(([l, v]) => `<div class="pf-row"><div class="pf-lbl">${l}</div><div class="pf-val">${v}</div></div>`)
+      .join('');
+    const docs = emp.documents || {};
+    const docEntries = Object.entries(docs).filter(([, v]) => v);
+    if (docEntries.length) {
+      document.getElementById('profile-docs-card').style.display = 'block';
+      document.getElementById('profile-docs-list').innerHTML = docEntries
+        .map(([k, v]) => `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;font-size:13px"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="#7c3aed" stroke-width="1.4"><path d="M3 1h5l3 3v9H3V1z"/></svg><span style="text-transform:capitalize;color:var(--text2)">${k}:</span><span style="font-weight:500">${v}</span></div>`)
+        .join('');
+    }
+  } catch (e) {
+    document.getElementById('profile-grid').innerHTML = `<div class="empty">Failed to load profile</div>`;
+  }
+}
+
+async function loadAttendance() {
+  document.getElementById('attendance-content').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+  try {
+    const data = await essApi('/attendance');
+    const rows = data.records || [];
+    if (!rows.length) {
+      document.getElementById('attendance-content').innerHTML = '<div class="empty"><svg viewBox="0 0 32 32" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="16" cy="16" r="12"/><path d="M16 10v6l4 4"/></svg>No attendance records found.</div>';
+      return;
+    }
+    document.getElementById('attendance-content').innerHTML = `
+      <table class="ess-table">
+        <thead><tr><th>Date</th><th>Time</th><th>Direction</th></tr></thead>
+        <tbody>${rows.map(r => `<tr><td>${r.date}</td><td>${r.time}</td><td><span class="ess-badge ${r.direction === 'in' ? 'b-g' : 'b-b'}">${r.direction}</span></td></tr>`).join('')}</tbody>
+      </table>`;
+  } catch (e) {
+    document.getElementById('attendance-content').innerHTML = `<div class="empty">${e.message}</div>`;
+  }
+}
+
+async function loadPayslips() {
+  document.getElementById('payslips-content').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+  try {
+    const data = await essApi('/payslips');
+    const slips = data.payslips || [];
+    if (!slips.length) {
+      document.getElementById('payslips-content').innerHTML = '<div class="empty">No payslips found yet.</div>';
+      return;
+    }
+    document.getElementById('payslips-content').innerHTML = `
+      <table class="ess-table">
+        <thead><tr><th>Period</th><th>Basic</th><th>Allowances</th><th>Overtime</th><th>Deductions</th><th>Net Pay</th><th>Status</th></tr></thead>
+        <tbody>${slips.map(s => `<tr>
+          <td style="font-weight:600">${s.period}</td>
+          <td>${fmtAed(s.basic)}</td>
+          <td>${fmtAed(s.allowances)}</td>
+          <td>${fmtAed(s.overtime)}</td>
+          <td style="color:var(--red)">${fmtAed(s.deductions)}</td>
+          <td style="font-weight:700;color:var(--green)">${fmtAed(s.net_pay)}</td>
+          <td>${badge(s.status === 'draft' ? 'Draft' : 'Paid')}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+  } catch (e) {
+    document.getElementById('payslips-content').innerHTML = `<div class="empty">${e.message}</div>`;
+  }
+}
+
+async function loadDocuments() {
+  document.getElementById('documents-content').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+  try {
+    const data = await essApi('/documents');
+    const docs = data.documents || {};
+    const entries = Object.entries(docs).filter(([, v]) => v);
+    if (!entries.length) {
+      document.getElementById('documents-content').innerHTML = '<div class="empty">No documents on record.</div>';
+      return;
+    }
+    document.getElementById('documents-content').innerHTML = entries
+      .map(([k, v]) => `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f3f4f6">
+        <svg viewBox="0 0 16 16" width="28" height="28" fill="none" stroke="#7c3aed" stroke-width="1.2"><path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/></svg>
+        <div><div style="font-weight:600;text-transform:capitalize;font-size:13px">${k.replace(/_/g,' ')}</div><div style="font-size:12px;color:var(--text2)">${v}</div></div>
+      </div>`)
+      .join('');
+  } catch (e) {
+    document.getElementById('documents-content').innerHTML = `<div class="empty">${e.message}</div>`;
+  }
+}
+
+async function loadLeave() {
+  document.getElementById('leave-history-content').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+  try {
+    const data = await essApi('/leave');
+    const rows = data.records || [];
+    if (!rows.length) {
+      document.getElementById('leave-history-content').innerHTML = '<div class="empty">No leave requests yet.</div>';
+      return;
+    }
+    document.getElementById('leave-history-content').innerHTML = `
+      <table class="ess-table">
+        <thead><tr><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Reason</th><th>Status</th></tr></thead>
+        <tbody>${rows.map(r => `<tr>
+          <td>${r.type || '—'}</td><td>${r.from || r.from_date || '—'}</td><td>${r.to || r.to_date || '—'}</td>
+          <td>${r.days || '—'}</td><td style="color:var(--text2)">${r.reason || '—'}</td>
+          <td>${badge(r.status || 'Pending')}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+  } catch (e) {
+    document.getElementById('leave-history-content').innerHTML = `<div class="empty">${e.message}</div>`;
+  }
+}
+
+async function loadOT() {
+  document.getElementById('ot-history-content').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+  try {
+    const data = await essApi('/overtime');
+    const rows = data.records || [];
+    if (!rows.length) {
+      document.getElementById('ot-history-content').innerHTML = '<div class="empty">No overtime reports yet.</div>';
+      return;
+    }
+    document.getElementById('ot-history-content').innerHTML = `
+      <table class="ess-table">
+        <thead><tr><th>Date</th><th>Hours</th><th>Reason</th><th>Status</th></tr></thead>
+        <tbody>${rows.map(r => `<tr>
+          <td>${r.date || '—'}</td><td style="font-weight:600">${r.ot_hours || '—'} hrs</td>
+          <td style="color:var(--text2)">${r.reason || '—'}</td>
+          <td>${badge(r.status || 'Pending')}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+  } catch (e) {
+    document.getElementById('ot-history-content').innerHTML = `<div class="empty">${e.message}</div>`;
+  }
+}
+
+async function essApplyLeave() {
+  const type = document.getElementById('ess-leave-type').value;
+  const from_date = document.getElementById('ess-leave-from').value;
+  const to_date = document.getElementById('ess-leave-to').value;
+  const reason = document.getElementById('ess-leave-reason').value.trim();
+  if (!from_date || !to_date) { toast('Please select from and to dates', 'warn'); return; }
+  if (to_date < from_date) { toast('To date must be after from date', 'warn'); return; }
+  try {
+    await essApi('/leave/apply', { method: 'POST', body: { type, from_date, to_date, reason } });
+    toast('Leave request submitted successfully');
+    document.getElementById('ess-leave-from').value = '';
+    document.getElementById('ess-leave-to').value = '';
+    document.getElementById('ess-leave-reason').value = '';
+    loadLeave();
+  } catch (e) {
+    toast(e.message || 'Failed to submit leave request');
+  }
+}
+
+async function essApplyOT() {
+  const date = document.getElementById('ess-ot-date').value;
+  const ot_hours = document.getElementById('ess-ot-hours').value;
+  const reason = document.getElementById('ess-ot-reason').value.trim();
+  if (!date || !ot_hours) { toast('Date and OT hours are required', 'warn'); return; }
+  try {
+    await essApi('/overtime/apply', { method: 'POST', body: { date, ot_hours, reason } });
+    toast('OT report submitted for approval');
+    document.getElementById('ess-ot-date').value = '';
+    document.getElementById('ess-ot-hours').value = '';
+    document.getElementById('ess-ot-reason').value = '';
+    loadOT();
+  } catch (e) {
+    toast(e.message || 'Failed to submit OT report');
+  }
+}
+
+// Auto-login if token exists
+(function init() {
+  if (_essToken) {
+    essApi('/profile').then(data => {
+      _essEmp = {
+        name: data.employee?.name || '',
+        designation: data.employee?.designation || '',
+        department: data.employee?.department || '',
+      };
+      showApp();
+    }).catch(() => {
+      localStorage.removeItem('ess_token');
+      _essToken = '';
+    });
+  }
+})();
+</script>
+</body>
+</html>

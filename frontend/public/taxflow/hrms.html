@@ -290,9 +290,13 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 
 <div class="page" id="page-hrms">
 <div class="hrms-dash-inner">
+<div class="mb3-main-grid" style="align-items:start">
 
-<!-- ── KPI Row ───────────────────────────────────────────────────── -->
-<div class="hrms-kpi-grid">
+<!-- ══ LEFT MAIN ══ -->
+<div class="mb3-main">
+
+<!-- ── KPI Row (3 × 2) ───────────────────────────────────────────── -->
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px">
   <!-- 1. Total Employees -->
   <div class="hrms-kpi-card">
     <div class="hrms-kpi-icon" style="background:#eff6ff">
@@ -328,9 +332,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div>
       <div class="hrms-kpi-lbl">On Leave</div>
       <div class="hrms-kpi-val" id="hrms-kpi-leave" style="color:#7c3aed">—</div>
-      <div class="hrms-kpi-trend nt">
-        <span>approved leaves</span>
-      </div>
+      <div class="hrms-kpi-trend nt"><span>approved leaves</span></div>
     </div>
   </div>
   <!-- 4. Net Payroll -->
@@ -374,150 +376,253 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   </div>
 </div>
 
-<!-- ── Charts Row ─────────────────────────────────────────────────── -->
-<div class="hrms-chart-grid">
-  <!-- Attendance Trend -->
-  <div class="hc">
-    <div class="hc-hd">
-      <div class="hc-title">Attendance Trend</div>
+<!-- ── ROW A: Attendance Trend + Dept/Type Distribution ─────────── -->
+<div class="mb3-bottom-row" style="margin-bottom:14px">
+
+  <!-- Attendance Trend with illustrated banner -->
+  <div class="mb3-card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
+    <div style="background:linear-gradient(135deg,#f0fdf4 0%,#dcfce7 55%,#bbf7d0 100%);padding:16px 18px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:90px;position:relative;overflow:hidden">
+      <div style="position:absolute;top:-15px;right:-15px;width:80px;height:80px;border-radius:50%;background:rgba(16,185,129,.18);filter:blur(20px)"></div>
+      <div style="z-index:1;padding-bottom:12px">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#065f46;opacity:.75">Workforce</div>
+        <div style="font-size:14px;font-weight:800;color:#065f46">Attendance Trend</div>
+      </div>
+      <svg viewBox="0 0 110 90" width="110" height="90" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="55" cy="84" rx="32" ry="5" fill="#059669" opacity=".12"/>
+        <circle cx="55" cy="40" r="28" fill="none" stroke="#059669" stroke-width="3" opacity=".3"/>
+        <circle cx="55" cy="40" r="22" fill="#10b981" opacity=".15"/>
+        <circle cx="55" cy="40" r="22" fill="none" stroke="#10b981" stroke-width="2.5" opacity=".5"/>
+        <path d="M55 22v18l10 10" stroke="#065f46" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="55" cy="40" r="3" fill="#065f46"/>
+        <polyline points="18,72 28,58 38,64 52,50 65,56 80,42 95,48" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity=".7"/>
+        <circle cx="28" cy="58" r="3" fill="#10b981" opacity=".8"/>
+        <circle cx="52" cy="50" r="3" fill="#10b981" opacity=".8"/>
+        <circle cx="80" cy="42" r="3" fill="#10b981" opacity=".8"/>
+      </svg>
     </div>
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:130px;gap:8px">
-      <svg viewBox="0 0 32 32" width="32" height="32" fill="none" stroke="#d1d5db" stroke-width="2"><circle cx="16" cy="16" r="12"/><path d="M16 9v7l4 4"/></svg>
-      <div style="font-size:12px;color:var(--text3);text-align:center">No attendance log data yet.<br>Daily check-in tracking not yet enabled.</div>
+    <div style="padding:14px 18px 16px;flex:1">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100px;gap:8px">
+        <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="#d1d5db" stroke-width="2"><circle cx="16" cy="16" r="12"/><path d="M16 9v7l4 4"/></svg>
+        <div style="font-size:12px;color:var(--text3);text-align:center">No attendance log data yet.<br>Daily check-in tracking not yet enabled.</div>
+      </div>
     </div>
   </div>
 
-  <!-- Department Strength -->
-  <div class="hc">
-    <div class="hc-hd"><div class="hc-title">Department Strength</div></div>
-    <div class="hc-donut-wrap" style="align-items:flex-start">
-      <div class="hc-donut">
-        <svg id="hrms-dept-svg" viewBox="0 0 100 100" width="100" height="100">
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="12"/>
-        </svg>
-        <div class="hc-donut-center">
-          <div class="hc-donut-val" id="hrms-dept-total">—</div>
-          <div class="hc-donut-lbl">Total</div>
+  <!-- Department + Employee Type stacked -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <!-- Department Strength -->
+    <div class="mb3-card" style="flex:1">
+      <div class="hc-hd"><div class="hc-title">Department Strength</div></div>
+      <div class="hc-donut-wrap" style="align-items:flex-start">
+        <div class="hc-donut">
+          <svg id="hrms-dept-svg" viewBox="0 0 100 100" width="90" height="90">
+            <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="12"/>
+          </svg>
+          <div class="hc-donut-center">
+            <div class="hc-donut-val" id="hrms-dept-total">—</div>
+            <div class="hc-donut-lbl">Total</div>
+          </div>
         </div>
-      </div>
-      <div class="hc-legend" id="hrms-dept-legend" style="flex:1;font-size:11px">
+        <div class="hc-legend" id="hrms-dept-legend" style="flex:1;font-size:11px"></div>
       </div>
     </div>
-  </div>
-
-  <!-- Employee Type Distribution -->
-  <div class="hc">
-    <div class="hc-hd"><div class="hc-title">Employee Type Distribution</div></div>
-    <div class="hc-donut-wrap" style="align-items:flex-start">
-      <div class="hc-donut">
-        <svg id="hrms-type-svg" viewBox="0 0 100 100" width="100" height="100">
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="12"/>
-        </svg>
-        <div class="hc-donut-center">
-          <div class="hc-donut-val" id="hrms-type-total">—</div>
-          <div class="hc-donut-lbl">Total</div>
+    <!-- Employee Type Distribution -->
+    <div class="mb3-card" style="flex:1">
+      <div class="hc-hd"><div class="hc-title">Employee Type Distribution</div></div>
+      <div class="hc-donut-wrap" style="align-items:flex-start">
+        <div class="hc-donut">
+          <svg id="hrms-type-svg" viewBox="0 0 100 100" width="90" height="90">
+            <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="12"/>
+          </svg>
+          <div class="hc-donut-center">
+            <div class="hc-donut-val" id="hrms-type-total">—</div>
+            <div class="hc-donut-lbl">Total</div>
+          </div>
         </div>
-      </div>
-      <div class="hc-legend" id="hrms-type-legend" style="flex:1;font-size:11px">
+        <div class="hc-legend" id="hrms-type-legend" style="flex:1;font-size:11px"></div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ── Mid Section: Payroll | Leave | Funnel | Approvals ─────────── -->
-<div class="hrms-mid-grid">
-  <!-- Payroll Summary -->
-  <div class="hc">
-    <div class="hc-hd"><div class="hc-title">Payroll Summary</div><div class="hc-sub" id="hrms-payroll-month">This Month</div></div>
-    <div style="display:flex;align-items:center;gap:14px">
-      <div class="hc-donut" style="flex-shrink:0">
-        <svg viewBox="0 0 100 100" width="90" height="90">
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="13"/>
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#3b82f6" stroke-width="13" stroke-dasharray="185.7 53.1" stroke-dashoffset="0" transform="rotate(-90 50 50)"/>
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#f59e0b" stroke-width="13" stroke-dasharray="31.4 207.4" stroke-dashoffset="-185.7" transform="rotate(-90 50 50)"/>
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#10b981" stroke-width="13" stroke-dasharray="9.4 229.4" stroke-dashoffset="-217.1" transform="rotate(-90 50 50)"/>
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#ef4444" stroke-width="13" stroke-dasharray="12.6 226.2" stroke-dashoffset="-226.5" transform="rotate(-90 50 50)"/>
-        </svg>
-        <div class="hc-donut-center">
-          <div style="font-size:10px;font-weight:700;color:#111827">AED</div>
-          <div style="font-size:14px;font-weight:700;color:#111827;line-height:1" id="hrms-payroll-total">—</div>
-        </div>
+<!-- ── ROW B: Payroll + Recruitment Funnel ───────────────────────── -->
+<div class="mb3-bottom-row" style="margin-bottom:14px">
+
+  <!-- Payroll Summary with banner -->
+  <div class="mb3-card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
+    <div style="background:linear-gradient(135deg,#fff7ed 0%,#fed7aa 55%,#fdba74 100%);padding:16px 18px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:90px;position:relative;overflow:hidden">
+      <div style="position:absolute;top:-15px;right:-15px;width:80px;height:80px;border-radius:50%;background:rgba(234,88,12,.18);filter:blur(20px)"></div>
+      <div style="z-index:1;padding-bottom:12px">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#7c2d12;opacity:.75">Finance</div>
+        <div style="font-size:14px;font-weight:800;color:#7c2d12">Payroll Summary <span style="font-size:10px;font-weight:600;opacity:.7" id="hrms-payroll-month">This Month</span></div>
       </div>
-      <div style="flex:1;display:flex;flex-direction:column;gap:5px;font-size:11.5px">
-        <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#3b82f6;display:inline-block"></span>Gross Salary</span><span style="font-weight:600" id="hrms-pay-gross">—</span></div>
-        <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block"></span>Allowances</span><span style="font-weight:600" id="hrms-pay-allow">—</span></div>
-        <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#10b981;display:inline-block"></span>Overtime</span><span style="font-weight:600" id="hrms-pay-ot-total">—</span></div>
-        <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block"></span>Deductions</span><span style="font-weight:600" id="hrms-pay-ded">—</span></div>
-        <div style="border-top:1px solid #f0f2f7;margin-top:4px;padding-top:4px;display:flex;justify-content:space-between;font-weight:700"><span>Net Payroll</span><span id="hrms-pay-net">—</span></div>
+      <svg viewBox="0 0 110 90" width="110" height="90" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="55" cy="84" rx="32" ry="5" fill="#ea580c" opacity=".12"/>
+        <rect x="18" y="28" width="60" height="42" rx="6" fill="#ea580c" opacity=".8"/>
+        <rect x="18" y="28" width="60" height="42" rx="6" fill="url(#pay-g)"/>
+        <defs><linearGradient id="pay-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fb923c" stop-opacity=".4"/><stop offset="100%" stop-color="#ea580c" stop-opacity="0"/></linearGradient></defs>
+        <path d="M22 38h52M22 46h52" stroke="#fff7ed" stroke-width="1.5" opacity=".5"/>
+        <path d="M28 54h22" stroke="#fff7ed" stroke-width="2.5" stroke-linecap="round" opacity=".7"/>
+        <circle cx="62" cy="54" r="7" fill="#fff7ed" opacity=".9"/>
+        <text x="62" y="57" text-anchor="middle" fill="#ea580c" font-size="7" font-weight="800">د.إ</text>
+        <rect x="72" y="52" width="14" height="14" rx="2" fill="#fdba74" opacity=".8"/>
+        <path d="M75 58.5h8M75 62h5" stroke="#7c2d12" stroke-width="1.5" stroke-linecap="round" opacity=".7"/>
+        <path d="M92 18l2 2-5 5-2-2" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".8"/>
+        <circle cx="100" cy="24" r="6" fill="#10b981" opacity=".7"/>
+        <text x="100" y="27" text-anchor="middle" fill="#fff" font-size="7" font-weight="800">✓</text>
+      </svg>
+    </div>
+    <div style="padding:14px 18px 16px;flex:1">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div class="hc-donut" style="flex-shrink:0">
+          <svg viewBox="0 0 100 100" width="80" height="80">
+            <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="13"/>
+            <circle cx="50" cy="50" r="38" fill="none" stroke="#3b82f6" stroke-width="13" stroke-dasharray="185.7 53.1" stroke-dashoffset="0" transform="rotate(-90 50 50)"/>
+            <circle cx="50" cy="50" r="38" fill="none" stroke="#f59e0b" stroke-width="13" stroke-dasharray="31.4 207.4" stroke-dashoffset="-185.7" transform="rotate(-90 50 50)"/>
+            <circle cx="50" cy="50" r="38" fill="none" stroke="#10b981" stroke-width="13" stroke-dasharray="9.4 229.4" stroke-dashoffset="-217.1" transform="rotate(-90 50 50)"/>
+            <circle cx="50" cy="50" r="38" fill="none" stroke="#ef4444" stroke-width="13" stroke-dasharray="12.6 226.2" stroke-dashoffset="-226.5" transform="rotate(-90 50 50)"/>
+          </svg>
+          <div class="hc-donut-center">
+            <div style="font-size:9px;font-weight:700;color:#111827">AED</div>
+            <div style="font-size:13px;font-weight:700;color:#111827;line-height:1" id="hrms-payroll-total">—</div>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:5px;font-size:11.5px">
+          <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#3b82f6;display:inline-block"></span>Gross Salary</span><span style="font-weight:600" id="hrms-pay-gross">—</span></div>
+          <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block"></span>Allowances</span><span style="font-weight:600" id="hrms-pay-allow">—</span></div>
+          <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#10b981;display:inline-block"></span>Overtime</span><span style="font-weight:600" id="hrms-pay-ot-total">—</span></div>
+          <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block"></span>Deductions</span><span style="font-weight:600" id="hrms-pay-ded">—</span></div>
+          <div style="border-top:1px solid #f0f2f7;margin-top:4px;padding-top:4px;display:flex;justify-content:space-between;font-weight:700"><span>Net Payroll</span><span id="hrms-pay-net">—</span></div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Leave Summary -->
-  <div class="hc">
-    <div class="hc-hd">
-      <div class="hc-title">Leave Summary</div>
-      <select class="hc-select"><option>This Month</option><option>This Year</option></select>
+  <!-- Recruitment Funnel with banner -->
+  <div class="mb3-card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
+    <div style="background:linear-gradient(135deg,#eff6ff 0%,#dbeafe 55%,#bfdbfe 100%);padding:16px 18px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:90px;position:relative;overflow:hidden">
+      <div style="position:absolute;top:-15px;right:-15px;width:80px;height:80px;border-radius:50%;background:rgba(37,99,235,.18);filter:blur(20px)"></div>
+      <div style="z-index:1;padding-bottom:12px">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#1e3a8a;opacity:.75">Talent</div>
+        <div style="font-size:14px;font-weight:800;color:#1e3a8a">Recruitment Funnel</div>
+      </div>
+      <svg viewBox="0 0 110 90" width="110" height="90" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="55" cy="84" rx="32" ry="5" fill="#2563eb" opacity=".12"/>
+        <path d="M20 20h70l-20 22H40z" fill="#2563eb" opacity=".7"/>
+        <path d="M40 42h30l-8 18H48z" fill="#3b82f6" opacity=".8"/>
+        <path d="M48 60h14l-5 14H53z" fill="#60a5fa" opacity=".9"/>
+        <circle cx="85" cy="25" r="10" fill="#10b981" opacity=".8"/>
+        <polyline points="81,25 84,28 90,21" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="20" cy="62" r="7" fill="#f59e0b" opacity=".8"/>
+        <path d="M17 62h6M20 59v6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>
+        <circle cx="25" cy="30" r="5" fill="#93c5fd" opacity=".6"/>
+        <circle cx="90" cy="50" r="5" fill="#93c5fd" opacity=".6"/>
+      </svg>
     </div>
-    <div class="hc-progress-list">
-      <div>
-        <div class="hc-progress-hd">
-          <div class="hc-prog-lbl">
-            <div class="hc-prog-icon" style="background:#eff6ff"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="#3b82f6" stroke-width="1.4"><path d="M7 1v3M7 10v3M1 7h3M10 7h3"/></svg></div>
-            Annual Leave
-          </div>
-          <div class="hc-prog-val" id="hrms-ls-annual-val">— / — days</div>
-        </div>
-        <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-ls-annual-fill" style="width:0%;background:#3b82f6"></div></div>
-      </div>
-      <div>
-        <div class="hc-progress-hd">
-          <div class="hc-prog-lbl">
-            <div class="hc-prog-icon" style="background:#fef9c3"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="#ca8a04" stroke-width="1.4"><circle cx="7" cy="7" r="5"/><path d="M7 4v3l2 2"/></svg></div>
-            Sick Leave
-          </div>
-          <div class="hc-prog-val" id="hrms-ls-sick-val">— / — days</div>
-        </div>
-        <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-ls-sick-fill" style="width:0%;background:#eab308"></div></div>
-      </div>
-      <div>
-        <div class="hc-progress-hd">
-          <div class="hc-prog-lbl">
-            <div class="hc-prog-icon" style="background:#fdf4ff"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="#9333ea" stroke-width="1.4"><path d="M7 1.5a3.5 3.5 0 110 7 3.5 3.5 0 010-7z"/><path d="M2 12.5c0-2.5 2-4 5-4s5 1.5 5 4"/></svg></div>
-            Casual Leave
-          </div>
-          <div class="hc-prog-val" id="hrms-ls-casual-val">— / — days</div>
-        </div>
-        <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-ls-casual-fill" style="width:0%;background:#a855f7"></div></div>
-      </div>
-      <div>
-        <div class="hc-progress-hd">
-          <div class="hc-prog-lbl">
-            <div class="hc-prog-icon" style="background:#fff1f2"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="#e11d48" stroke-width="1.4"><path d="M7 2v5l3 3"/><path d="M2 7a5 5 0 1010 0A5 5 0 002 7z"/></svg></div>
-            Emergency Leave
-          </div>
-          <div class="hc-prog-val" id="hrms-ls-emerg-val">— / — days</div>
-        </div>
-        <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-ls-emerg-fill" style="width:0%;background:#f43f5e"></div></div>
+    <div style="padding:14px 18px 16px;flex:1">
+      <div class="hc-funnel">
+        <div class="hc-funnel-row"><div class="hc-funnel-lbl">Applied</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" id="hrms-funnel-bar-applied" style="width:100%;background:#dbeafe"></div></div><div class="hc-funnel-cnt" id="hrms-funnel-applied">0</div></div>
+        <div class="hc-funnel-row"><div class="hc-funnel-lbl">Screening</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" id="hrms-funnel-bar-screening" style="width:0%;background:#bfdbfe"></div></div><div class="hc-funnel-cnt" id="hrms-funnel-screening">0</div></div>
+        <div class="hc-funnel-row"><div class="hc-funnel-lbl">Interview</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" id="hrms-funnel-bar-interview" style="width:0%;background:#93c5fd"></div></div><div class="hc-funnel-cnt" id="hrms-funnel-interview">0</div></div>
+        <div class="hc-funnel-row"><div class="hc-funnel-lbl">Offer Sent</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" id="hrms-funnel-bar-offer" style="width:0%;background:#3b82f6"></div></div><div class="hc-funnel-cnt" id="hrms-funnel-offer">0</div></div>
+        <div class="hc-funnel-row"><div class="hc-funnel-lbl">Hired</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" id="hrms-funnel-bar-hired" style="width:0%;background:#2563eb"></div></div><div class="hc-funnel-cnt" id="hrms-funnel-hired">0</div></div>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- Recruitment Funnel -->
-  <div class="hc">
-    <div class="hc-hd"><div class="hc-title">Recruitment Funnel</div></div>
-    <div class="hc-funnel">
-      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Applied</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" id="hrms-funnel-bar-applied" style="width:100%;background:#dbeafe"></div></div><div class="hc-funnel-cnt" id="hrms-funnel-applied">0</div></div>
-      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Screening</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" id="hrms-funnel-bar-screening" style="width:0%;background:#bfdbfe"></div></div><div class="hc-funnel-cnt" id="hrms-funnel-screening">0</div></div>
-      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Interview</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" id="hrms-funnel-bar-interview" style="width:0%;background:#93c5fd"></div></div><div class="hc-funnel-cnt" id="hrms-funnel-interview">0</div></div>
-      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Offer Sent</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" id="hrms-funnel-bar-offer" style="width:0%;background:#3b82f6"></div></div><div class="hc-funnel-cnt" id="hrms-funnel-offer">0</div></div>
-      <div class="hc-funnel-row"><div class="hc-funnel-lbl">Hired</div><div class="hc-funnel-bar-wrap"><div class="hc-funnel-bar" id="hrms-funnel-bar-hired" style="width:0%;background:#2563eb"></div></div><div class="hc-funnel-cnt" id="hrms-funnel-hired">0</div></div>
+<!-- ── AI Insights with illustrated banner ───────────────────────── -->
+<div class="mb3-card" style="padding:0;overflow:hidden;margin-bottom:14px">
+  <div style="background:linear-gradient(135deg,#faf5ff 0%,#ede9fe 55%,#ddd6fe 100%);padding:16px 18px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:80px;position:relative;overflow:hidden">
+    <div style="position:absolute;top:-15px;right:-15px;width:80px;height:80px;border-radius:50%;background:rgba(139,92,246,.18);filter:blur(20px)"></div>
+    <div style="z-index:1;padding-bottom:12px">
+      <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#4c1d95;opacity:.75">Intelligence</div>
+      <div style="font-size:14px;font-weight:800;color:#4c1d95">AI Insights</div>
+    </div>
+    <svg viewBox="0 0 200 70" width="200" height="70" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="40" cy="32" rx="18" ry="14" fill="#8b5cf6" opacity=".7"/>
+      <line x1="30" y1="28" x2="50" y2="28" stroke="#e9d5ff" stroke-width="1.3" opacity=".8"/><line x1="32" y1="24" x2="32" y2="38" stroke="#e9d5ff" stroke-width="1.3" opacity=".8"/><line x1="48" y1="22" x2="48" y2="36" stroke="#e9d5ff" stroke-width="1.3" opacity=".8"/>
+      <circle cx="32" cy="28" r="2" fill="#ede9fe" opacity=".9"/><circle cx="48" cy="28" r="2" fill="#ede9fe" opacity=".9"/>
+      <polyline points="60,52 75,38 90,45 108,30 126,38 144,22 162,30" fill="none" stroke="#8b5cf6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".6"/>
+      <circle cx="75" cy="38" r="3" fill="#a78bfa" opacity=".8"/><circle cx="108" cy="30" r="3" fill="#a78bfa" opacity=".8"/><circle cx="144" cy="22" r="3" fill="#a78bfa" opacity=".8"/>
+      <polygon points="180,40 184,48 188,40 184,42" fill="#f59e0b" opacity=".8"/>
+      <circle cx="184" cy="35" r="6" fill="#f59e0b" opacity=".7"/>
+    </svg>
+  </div>
+  <div style="padding:14px 18px 16px">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+      <div class="hc-ai">
+        <div class="hc-ai-hd">
+          <div class="hc-ai-icon" style="background:#eff6ff"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#2563eb" stroke-width="1.4"><path d="M8 2c2 0 4 1 4 3s-2 2.5-4 3c-2 .5-4 1-4 3"/><circle cx="8" cy="13.5" r=".8" fill="#2563eb" stroke="none"/></svg></div>
+          <div><div class="hc-ai-title">AI Attrition Prediction</div><div class="hc-ai-sub">Employees at risk of leaving</div></div>
+        </div>
+        <div class="hc-ai-body" id="hrms-ai-attrition-body">
+          <div style="font-size:11px;color:var(--text3);padding:6px 0">Not yet analyzed. Click below to run.</div>
+        </div>
+        <a class="hc-ai-link" onclick="runHrmsAiAttrition()">Run Analysis →</a>
+      </div>
+      <div class="hc-ai">
+        <div class="hc-ai-hd">
+          <div class="hc-ai-icon" style="background:#fff7ed"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#ea580c" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/></svg></div>
+          <div><div class="hc-ai-title">AI Attendance Anomalies</div><div class="hc-ai-sub">Requires daily check-in data</div></div>
+        </div>
+        <div class="hc-ai-body">
+          <div style="font-size:11px;color:var(--text3);padding:6px 0">No attendance log available yet. Enable daily check-in tracking to use this feature.</div>
+        </div>
+        <a class="hc-ai-link" onclick="goHrmsTab(2,'hr-att')">View Attendance →</a>
+      </div>
+      <div class="hc-ai">
+        <div class="hc-ai-hd">
+          <div class="hc-ai-icon" style="background:#f0fdf4"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#16a34a" stroke-width="1.4"><rect x="2" y="4" width="12" height="9" rx="1"/><path d="M2 7h12M5 10.5h4"/></svg></div>
+          <div><div class="hc-ai-title">AI Payroll Verification</div><div class="hc-ai-sub">Anomaly detection</div></div>
+        </div>
+        <div class="hc-ai-body" id="hrms-ai-payroll-body">
+          <div style="font-size:11px;color:var(--text3);padding:6px 0">Not yet analyzed. Click below to run.</div>
+        </div>
+        <a class="hc-ai-link" onclick="runHrmsAiPayroll()">Run Analysis →</a>
+      </div>
+      <div class="hc-ai">
+        <div class="hc-ai-hd">
+          <div class="hc-ai-icon" style="background:#f0fdf4"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#16a34a" stroke-width="1.4"><path d="M2 4h12M2 8h8M2 12h5"/><path d="M12 9l1.5 1.5L16 8" stroke-width="1.4"/></svg></div>
+          <div><div class="hc-ai-title">AI Compliance Check</div><div class="hc-ai-sub">UAE Labour Law</div></div>
+        </div>
+        <div class="hc-ai-body" id="hrms-ai-compliance-body">
+          <div style="font-size:11px;color:var(--text3);padding:6px 0">Not yet analyzed. Click below to run.</div>
+        </div>
+        <a class="hc-ai-link" onclick="runHrmsAiCompliance()">Run Analysis →</a>
+      </div>
+      <div class="hc-ai">
+        <div class="hc-ai-hd">
+          <div class="hc-ai-icon" style="background:#fef9c3"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#ca8a04" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M5 8h6M8 5v6"/></svg></div>
+          <div><div class="hc-ai-title">AI Leave Analysis</div><div class="hc-ai-sub">Patterns &amp; trends</div></div>
+        </div>
+        <div class="hc-ai-body" id="hrms-ai-leave-body">
+          <div style="font-size:11px;color:var(--text3);padding:6px 0">Not yet analyzed. Click below to run.</div>
+        </div>
+        <a class="hc-ai-link" onclick="runHrmsAiLeave()">Run Analysis →</a>
+      </div>
+      <div class="hc-ai">
+        <div class="hc-ai-hd">
+          <div class="hc-ai-icon" style="background:#ecfdf5"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#059669" stroke-width="1.4"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><path d="M12 2l1 1-2.5 2.5-1-1"/></svg></div>
+          <div><div class="hc-ai-title">AI Recruitment Ranking</div><div class="hc-ai-sub">Top Candidates</div></div>
+        </div>
+        <div class="hc-ai-body" id="hrms-ai-recruitment-body">
+          <div style="font-size:11px;color:var(--text3);padding:6px 0">Not yet analyzed. Add candidates then click below.</div>
+        </div>
+        <a class="hc-ai-link" onclick="go('recruitment')">Go to Recruitment →</a>
+      </div>
     </div>
   </div>
+</div>
+
+</div><!-- /mb3-main -->
+
+<!-- ══ RIGHT SIDEBAR ══ -->
+<div class="mb3-sidebar">
 
   <!-- Pending Approvals -->
-  <div class="hc">
-    <div class="hc-hd"><div class="hc-title">Pending Approvals</div></div>
+  <div class="mb3-side-card" style="padding:16px">
+    <div class="hc-hd" style="margin-bottom:12px"><div class="hc-title">Pending Approvals</div></div>
     <div class="hc-approvals">
       <div class="hc-appr-row" style="cursor:pointer" onclick="goHrmsTab(4,'hr-leave')">
         <div class="hc-appr-icon" style="background:#eff6ff"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="#2563eb" stroke-width="1.4"><rect x="2" y="2" width="10" height="11" rx="1"/><path d="M4 5h6M4 7.5h6M4 10h3"/></svg></div>
@@ -546,12 +651,9 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       </div>
     </div>
   </div>
-</div>
 
-<!-- ── Bottom Section: Compliance | Expiry Chart | Assets | Training ── -->
-<div class="hrms-bot-grid">
   <!-- UAE Compliance Alerts -->
-  <div class="hc">
+  <div class="mb3-side-card" style="padding:16px">
     <div class="hc-alert-title">
       <svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M7 1.5L1 12.5h12L7 1.5z"/><path d="M7 6v3M7 10.5v.5"/></svg>
       UAE Compliance Alerts
@@ -586,47 +688,65 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div style="margin-top:10px"><a style="font-size:11px;color:#3b82f6;cursor:pointer" onclick="goHrmsTab(7,'hr-expiry');scheduleIdleTask(refreshExpiryAlerts,100)">View all →</a></div>
   </div>
 
-  <!-- Document Expiry Bar Chart -->
-  <div class="hc">
-    <div class="hc-hd">
-      <div class="hc-title">Document Expiry Summary</div>
-      <select class="hc-select"><option>This Month</option><option>Next 3 Months</option></select>
+  <!-- Leave Summary -->
+  <div class="mb3-side-card" style="padding:16px">
+    <div class="hc-hd" style="margin-bottom:12px">
+      <div class="hc-title">Leave Summary</div>
+      <select class="hc-select"><option>This Month</option><option>This Year</option></select>
     </div>
-    <div class="hc-bar-chart" style="align-items:flex-end;height:100px">
-      <div class="hc-bar-col">
-        <div class="hc-bar-val" id="hrms-expbar-passport-val">0</div>
-        <div class="hc-bar" id="hrms-expbar-passport-bar" style="height:0px;background:#ef4444;width:100%"></div>
-        <div class="hc-bar-lbl">Passport</div>
+    <div class="hc-progress-list">
+      <div>
+        <div class="hc-progress-hd">
+          <div class="hc-prog-lbl"><div class="hc-prog-icon" style="background:#eff6ff"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="#3b82f6" stroke-width="1.4"><path d="M7 1v3M7 10v3M1 7h3M10 7h3"/></svg></div>Annual Leave</div>
+          <div class="hc-prog-val" id="hrms-ls-annual-val">— / — days</div>
+        </div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-ls-annual-fill" style="width:0%;background:#3b82f6"></div></div>
       </div>
-      <div class="hc-bar-col">
-        <div class="hc-bar-val" id="hrms-expbar-visa-val">0</div>
-        <div class="hc-bar" id="hrms-expbar-visa-bar" style="height:0px;background:#f59e0b;width:100%"></div>
-        <div class="hc-bar-lbl">Visa</div>
+      <div>
+        <div class="hc-progress-hd">
+          <div class="hc-prog-lbl"><div class="hc-prog-icon" style="background:#fef9c3"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="#ca8a04" stroke-width="1.4"><circle cx="7" cy="7" r="5"/><path d="M7 4v3l2 2"/></svg></div>Sick Leave</div>
+          <div class="hc-prog-val" id="hrms-ls-sick-val">— / — days</div>
+        </div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-ls-sick-fill" style="width:0%;background:#eab308"></div></div>
       </div>
-      <div class="hc-bar-col">
-        <div class="hc-bar-val" id="hrms-expbar-eid-val">0</div>
-        <div class="hc-bar" id="hrms-expbar-eid-bar" style="height:0px;background:#8b5cf6;width:100%"></div>
-        <div class="hc-bar-lbl">Emirates ID</div>
+      <div>
+        <div class="hc-progress-hd">
+          <div class="hc-prog-lbl"><div class="hc-prog-icon" style="background:#fdf4ff"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="#9333ea" stroke-width="1.4"><path d="M7 1.5a3.5 3.5 0 110 7 3.5 3.5 0 010-7z"/><path d="M2 12.5c0-2.5 2-4 5-4s5 1.5 5 4"/></svg></div>Casual Leave</div>
+          <div class="hc-prog-val" id="hrms-ls-casual-val">— / — days</div>
+        </div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-ls-casual-fill" style="width:0%;background:#a855f7"></div></div>
       </div>
-      <div class="hc-bar-col">
-        <div class="hc-bar-val" id="hrms-expbar-ins-val">0</div>
-        <div class="hc-bar" id="hrms-expbar-ins-bar" style="height:0px;background:#10b981;width:100%"></div>
-        <div class="hc-bar-lbl">Insurance</div>
-      </div>
-      <div class="hc-bar-col">
-        <div class="hc-bar-val" id="hrms-expbar-drv-val">0</div>
-        <div class="hc-bar" id="hrms-expbar-drv-bar" style="height:0px;background:#06b6d4;width:100%"></div>
-        <div class="hc-bar-lbl">Driving Lic.</div>
+      <div>
+        <div class="hc-progress-hd">
+          <div class="hc-prog-lbl"><div class="hc-prog-icon" style="background:#fff1f2"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="#e11d48" stroke-width="1.4"><path d="M7 2v5l3 3"/><path d="M2 7a5 5 0 1010 0A5 5 0 002 7z"/></svg></div>Emergency Leave</div>
+          <div class="hc-prog-val" id="hrms-ls-emerg-val">— / — days</div>
+        </div>
+        <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-ls-emerg-fill" style="width:0%;background:#f43f5e"></div></div>
       </div>
     </div>
   </div>
 
+  <!-- Document Expiry Summary -->
+  <div class="mb3-side-card" style="padding:16px">
+    <div class="hc-hd" style="margin-bottom:10px">
+      <div class="hc-title">Document Expiry Summary</div>
+      <select class="hc-select"><option>This Month</option><option>Next 3 Months</option></select>
+    </div>
+    <div class="hc-bar-chart" style="align-items:flex-end;height:90px">
+      <div class="hc-bar-col"><div class="hc-bar-val" id="hrms-expbar-passport-val">0</div><div class="hc-bar" id="hrms-expbar-passport-bar" style="height:0px;background:#ef4444;width:100%"></div><div class="hc-bar-lbl">Passport</div></div>
+      <div class="hc-bar-col"><div class="hc-bar-val" id="hrms-expbar-visa-val">0</div><div class="hc-bar" id="hrms-expbar-visa-bar" style="height:0px;background:#f59e0b;width:100%"></div><div class="hc-bar-lbl">Visa</div></div>
+      <div class="hc-bar-col"><div class="hc-bar-val" id="hrms-expbar-eid-val">0</div><div class="hc-bar" id="hrms-expbar-eid-bar" style="height:0px;background:#8b5cf6;width:100%"></div><div class="hc-bar-lbl">Emirates ID</div></div>
+      <div class="hc-bar-col"><div class="hc-bar-val" id="hrms-expbar-ins-val">0</div><div class="hc-bar" id="hrms-expbar-ins-bar" style="height:0px;background:#10b981;width:100%"></div><div class="hc-bar-lbl">Insurance</div></div>
+      <div class="hc-bar-col"><div class="hc-bar-val" id="hrms-expbar-drv-val">0</div><div class="hc-bar" id="hrms-expbar-drv-bar" style="height:0px;background:#06b6d4;width:100%"></div><div class="hc-bar-lbl">Driving Lic.</div></div>
+    </div>
+  </div>
+
   <!-- Assets Overview -->
-  <div class="hc">
-    <div class="hc-hd"><div class="hc-title">Assets Overview</div></div>
+  <div class="mb3-side-card" style="padding:16px">
+    <div class="hc-hd" style="margin-bottom:12px"><div class="hc-title">Assets Overview</div></div>
     <div class="hc-donut-wrap">
       <div class="hc-donut" style="flex-shrink:0">
-        <svg id="hrms-assets-svg" viewBox="0 0 100 100" width="90" height="90">
+        <svg id="hrms-assets-svg" viewBox="0 0 100 100" width="80" height="80">
           <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="12"/>
         </svg>
         <div class="hc-donut-center">
@@ -640,11 +760,22 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     </div>
   </div>
 
-  <!-- Training Overview -->
-  <div class="hc">
-    <div class="hc-hd">
-      <div class="hc-title">Training Overview</div>
+  <!-- Employee Self-Service Portal link -->
+  <div class="mb3-side-card" style="padding:16px;background:linear-gradient(135deg,#eff6ff,#dbeafe);border-color:#bfdbfe">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <div style="width:32px;height:32px;background:#2563eb;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#fff" stroke-width="1.5"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><path d="M12 7v5M9.5 9.5h5"/></svg>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:#1e3a8a">Employee Self-Service</div>
     </div>
+    <div style="font-size:12px;color:#3b82f6;margin-bottom:12px">Share with employees to view attendance, payslips, apply leave &amp; report overtime.</div>
+    <button onclick="window.open('/ess','_blank')" style="width:100%;background:#2563eb;color:#fff;border:none;border-radius:8px;padding:9px;font-size:12.5px;font-weight:600;cursor:pointer">Open Employee Portal →</button>
+    <button onclick="navigator.clipboard.writeText(location.origin+'/ess').then(()=>toast('Portal link copied!','ok'))" style="width:100%;background:#fff;color:#2563eb;border:1px solid #bfdbfe;border-radius:8px;padding:7px;font-size:12px;font-weight:600;cursor:pointer;margin-top:6px">Copy Portal Link</button>
+  </div>
+
+  <!-- Training Overview -->
+  <div class="mb3-side-card" style="padding:16px">
+    <div class="hc-hd" style="margin-bottom:12px"><div class="hc-title">Training Overview</div></div>
     <div class="hc-progress-list">
       <div>
         <div class="hc-progress-hd">
@@ -665,72 +796,10 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       </div>
     </div>
   </div>
-</div>
 
-<!-- ── AI Insights ─────────────────────────────────────────────────── -->
-<div class="hrms-section-lbl" style="margin-top:4px">AI Insights</div>
-<div class="hrms-ai-grid">
-  <div class="hc-ai">
-    <div class="hc-ai-hd">
-      <div class="hc-ai-icon" style="background:#eff6ff"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#2563eb" stroke-width="1.4"><path d="M8 2c2 0 4 1 4 3s-2 2.5-4 3c-2 .5-4 1-4 3"/><circle cx="8" cy="13.5" r=".8" fill="#2563eb" stroke="none"/></svg></div>
-      <div><div class="hc-ai-title">AI Attrition Prediction</div><div class="hc-ai-sub">Employees at risk of leaving</div></div>
-    </div>
-    <div class="hc-ai-body" id="hrms-ai-attrition-body">
-      <div style="font-size:11px;color:var(--text3);padding:6px 0">Not yet analyzed. Click below to run.</div>
-    </div>
-    <a class="hc-ai-link" onclick="runHrmsAiAttrition()">Run Analysis →</a>
-  </div>
-  <div class="hc-ai">
-    <div class="hc-ai-hd">
-      <div class="hc-ai-icon" style="background:#fff7ed"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#ea580c" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/></svg></div>
-      <div><div class="hc-ai-title">AI Attendance Anomalies</div><div class="hc-ai-sub">Requires daily check-in data</div></div>
-    </div>
-    <div class="hc-ai-body">
-      <div style="font-size:11px;color:var(--text3);padding:6px 0">No attendance log available yet. Enable daily check-in tracking to use this feature.</div>
-    </div>
-    <a class="hc-ai-link" onclick="goHrmsTab(2,'hr-att')">View Attendance →</a>
-  </div>
-  <div class="hc-ai">
-    <div class="hc-ai-hd">
-      <div class="hc-ai-icon" style="background:#f0fdf4"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#16a34a" stroke-width="1.4"><rect x="2" y="4" width="12" height="9" rx="1"/><path d="M2 7h12M5 10.5h4"/></svg></div>
-      <div><div class="hc-ai-title">AI Payroll Verification</div><div class="hc-ai-sub">Anomaly detection</div></div>
-    </div>
-    <div class="hc-ai-body" id="hrms-ai-payroll-body">
-      <div style="font-size:11px;color:var(--text3);padding:6px 0">Not yet analyzed. Click below to run.</div>
-    </div>
-    <a class="hc-ai-link" onclick="runHrmsAiPayroll()">Run Analysis →</a>
-  </div>
-  <div class="hc-ai">
-    <div class="hc-ai-hd">
-      <div class="hc-ai-icon" style="background:#f0fdf4"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#16a34a" stroke-width="1.4"><path d="M2 4h12M2 8h8M2 12h5"/><path d="M12 9l1.5 1.5L16 8" stroke-width="1.4"/></svg></div>
-      <div><div class="hc-ai-title">AI Compliance Check</div><div class="hc-ai-sub">UAE Labour Law</div></div>
-    </div>
-    <div class="hc-ai-body" id="hrms-ai-compliance-body">
-      <div style="font-size:11px;color:var(--text3);padding:6px 0">Not yet analyzed. Click below to run.</div>
-    </div>
-    <a class="hc-ai-link" onclick="runHrmsAiCompliance()">Run Analysis →</a>
-  </div>
-  <div class="hc-ai">
-    <div class="hc-ai-hd">
-      <div class="hc-ai-icon" style="background:#fef9c3"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#ca8a04" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M5 8h6M8 5v6"/></svg></div>
-      <div><div class="hc-ai-title">AI Leave Analysis</div><div class="hc-ai-sub">Patterns &amp; trends</div></div>
-    </div>
-    <div class="hc-ai-body" id="hrms-ai-leave-body">
-      <div style="font-size:11px;color:var(--text3);padding:6px 0">Not yet analyzed. Click below to run.</div>
-    </div>
-    <a class="hc-ai-link" onclick="runHrmsAiLeave()">Run Analysis →</a>
-  </div>
-  <div class="hc-ai">
-    <div class="hc-ai-hd">
-      <div class="hc-ai-icon" style="background:#ecfdf5"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#059669" stroke-width="1.4"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><path d="M12 2l1 1-2.5 2.5-1-1"/></svg></div>
-      <div><div class="hc-ai-title">AI Recruitment Ranking</div><div class="hc-ai-sub">Top Candidates</div></div>
-    </div>
-    <div class="hc-ai-body" id="hrms-ai-recruitment-body">
-      <div style="font-size:11px;color:var(--text3);padding:6px 0">Not yet analyzed. Add candidates then click below.</div>
-    </div>
-    <a class="hc-ai-link" onclick="go('recruitment')">Go to Recruitment →</a>
-  </div>
-</div>
+</div><!-- /mb3-sidebar -->
+
+</div><!-- /mb3-main-grid -->
 
 </div><!-- /hrms-dash-inner -->
 </div><!-- /page-hrms -->
@@ -752,7 +821,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   <div class="tab-body on" id="hr-emp">
     <div class="card mb16">
       <div class="card-hd"><div class="card-title">Employee Directory</div><div class="flx" style="gap:6px"><button class="btn btn-g btn-sm" onclick="exportNearestTable(this,'employees.csv')">⬇ CSV</button><button class="btn btn-p" onclick="openEmpModal()">+ Add Employee</button></div></div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>ID</th><th>Name</th><th>Nick Name</th><th>Department</th><th>Designation</th><th>Supervisor</th><th>Shift Hours</th><th>Salary (AED)</th><th>Status</th><th></th></tr></thead>
         <tbody id="employee-tbody">
         </tbody>
@@ -822,7 +891,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
             <button class="btn btn-g btn-sm" onclick="refreshAttendanceToday()">⟳ Refresh</button>
           </div>
         </div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <thead><tr><th>Employee</th><th>Check In</th><th>Source</th><th>Status</th></tr></thead>
           <tbody id="att-today-tbody">
             <tr data-empty-state><td colspan="4" style="text-align:center;color:var(--text3);padding:32px">No attendance records for today yet.<br>Connect a biometric device or import CSV to begin.</td></tr>
@@ -881,7 +950,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="g2 mb16">
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Overtime Requests</div><div class="card-sub">Detected from attendance after checkout</div></div><button class="btn btn-p btn-sm" onclick="showM('m-ot')">+ Submit OT</button></div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <thead><tr><th>Employee</th><th>Date</th><th>Shift</th><th>Worked</th><th>OT</th><th>Status</th><th></th></tr></thead>
           <tbody id="ot-tbody">
           </tbody>
@@ -901,7 +970,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="g2 mb16">
       <div class="card">
         <div class="card-hd"><div class="card-title">Leave Requests</div><button class="btn btn-p" onclick="showM('m-leave')">+ Apply Leave</button></div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <thead><tr><th>Employee</th><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Status</th><th></th></tr></thead>
           <tbody id="leave-tbody">
           </tbody>
@@ -909,7 +978,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       </div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Leave Balance Summary</div></div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <thead><tr><th>Employee</th><th>Annual</th><th>Sick</th><th>Used</th><th>Remaining</th></tr></thead>
           <tbody id="leave-balance-tbody">
           </tbody>
@@ -934,7 +1003,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="g2 mb16">
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Attendance Corrections</div><div class="card-sub">Forgotten check-in, checkout, and break fixes</div></div><button class="btn btn-p btn-sm" onclick="showM('m-att-correction')">+ New Request</button></div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <thead><tr><th>Employee</th><th>Date</th><th>Requested In</th><th>Requested Out</th><th>Reason</th><th>Status</th><th></th></tr></thead>
           <tbody id="corrections-tbody">
           </tbody>
@@ -953,7 +1022,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="g2 mb16">
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Employee Loans</div><div class="card-sub">Request, approval, EMI schedule, and auto payroll deduction</div></div><button class="btn btn-p btn-sm" onclick="showM('m-loan')">+ New Loan</button></div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <thead><tr><th>Employee</th><th>Type</th><th>Amount (AED)</th><th>EMI / Month</th><th>Balance</th><th>Status</th><th></th></tr></thead>
           <tbody id="loans-tbody">
             <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No loan records. Click <strong>+ New Loan</strong> to create one.</td></tr>
@@ -962,7 +1031,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       </div>
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Salary Advances</div><div class="card-sub">One-time advance deducted from next salary</div></div><button class="btn btn-g btn-sm" onclick="showM('m-loan-advance')">+ Request Advance</button></div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <thead><tr><th>Employee</th><th>Month</th><th>Amount (AED)</th><th>Requested</th><th>Status</th><th></th></tr></thead>
           <tbody id="advances-tbody">
             <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No salary advance requests yet.</td></tr>
@@ -998,7 +1067,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     </div>
     <div class="card mb16">
       <div class="card-hd"><div><div class="card-title">Document Expiry Tracker</div><div class="card-sub">Visa · Passport · Emirates ID · Insurance · Driving License · Labor Card</div></div><button class="btn btn-g btn-sm" onclick="refreshExpiryAlerts()">⟳ Refresh</button></div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Employee</th><th>Document</th><th>Expiry Date</th><th>Days Left</th><th>Status</th><th></th></tr></thead>
         <tbody id="expiry-tbody">
           <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">Add employees with document expiry dates to see alerts here.</td></tr>
@@ -1186,7 +1255,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         <div class="card-title" style="font-size:13px">Named OT Rules</div>
         <button class="btn btn-g btn-sm" onclick="addNamedOtRule()">+ Add Rule</button>
       </div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Rule Name</th><th>Rate Type</th><th>Hours Type</th><th>Normal ×</th><th>Weekend ×</th><th>Holiday ×</th><th>Applies To</th><th></th></tr></thead>
         <tbody id="ot-rules-tbody">
           <tr><td>UAE Standard OT</td><td><span class="b b-b">Monthly-Based</span></td><td><span class="b" style="background:var(--bg3)">Based on Hours</span></td><td>1.25</td><td>1.50</td><td>1.50</td><td>All Employees</td><td><button class="btn btn-g btn-sm" onclick="toast('Edit OT rule','info')">Edit</button></td></tr>
@@ -1206,7 +1275,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <!-- Leave Types Table -->
       <div class="section-hd" style="margin:0 0 10px">Leave Types &amp; Entitlements</div>
       <div style="overflow-x:auto">
-        <table class="tbl" id="leave-types-tbl">
+        <table class="tbl" data-delete-actions-bound="skip" id="leave-types-tbl">
           <thead>
             <tr>
               <th>Leave Type</th>
@@ -1339,7 +1408,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div class="section-hd" style="margin:18px 0 10px">Named Leave Policies</div>
       <div class="card-sub" style="margin-bottom:12px">Assign a named policy to each employee from their profile. Each policy can override the default leave type entitlements.</div>
       <div style="overflow-x:auto">
-        <table class="tbl" id="leave-policies-tbl">
+        <table class="tbl" data-delete-actions-bound="skip" id="leave-policies-tbl">
           <thead>
             <tr>
               <th>Policy Name</th>
@@ -1440,7 +1509,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <!-- Holiday Calendar -->
     <div class="card mb16">
       <div class="card-hd"><div class="card-title">Holiday Calendar</div><button class="btn btn-g btn-sm" onclick="toast('Holiday added','ok')">+ Add Holiday</button></div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Date</th><th>Holiday</th><th>Location</th><th>Paid</th><th>Status</th></tr></thead>
         <tbody id="holidays-tbody">
           <tr><td>16 Jun</td><td>Eid Al Adha</td><td>All branches</td><td><span class="b b-g">Yes</span></td><td><span class="b b-g">Active</span></td></tr>
@@ -1457,7 +1526,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         <div><div class="card-title">Users &amp; Roles</div><div class="card-sub">Assign system roles and portal access to employees</div></div>
         <button class="btn btn-p btn-sm" onclick="openAddHrUserModal()">+ Add User</button>
       </div>
-      <table class="tbl" id="hr-users-tbl">
+      <table class="tbl" data-delete-actions-bound="skip" id="hr-users-tbl">
         <thead>
           <tr>
             <th>User ID</th>
@@ -1534,7 +1603,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         <div><div class="card-title">Biometric Devices</div><div class="card-sub">ZKTeco · X Face Pro · SpeedFace · Suprema · Hikvision · Anviz · ADMS</div></div>
         <button class="btn btn-p btn-sm" onclick="showM('m-bio-device')">+ Add Device</button>
       </div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Device Name</th><th>Model</th><th>IP Address</th><th>Port</th><th>Location</th><th>Status</th><th>Last Sync</th><th></th></tr></thead>
         <tbody id="bio-devices-tbody">
           <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No biometric devices configured. Click <strong>+ Add Device</strong> to connect your first device.</td></tr>
@@ -1593,7 +1662,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     </div>
     <div class="card">
       <div class="card-hd"><div><div class="card-title">Job Requisitions</div><div class="card-sub">Approved positions open for hiring</div></div><button class="btn btn-p" onclick="showM('m-recruitment')">+ New Requisition</button></div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Job Title</th><th>Department</th><th>Type</th><th>Location</th><th>Positions</th><th>Salary Range</th><th>Target Date</th><th>Status</th><th></th></tr></thead>
         <tbody id="requisitions-tbody">
           <tr data-empty-state><td colspan="9" style="text-align:center;color:var(--text3);padding:32px">No open requisitions. Click <strong>+ New Requisition</strong> to start hiring.</td></tr>
@@ -1613,7 +1682,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         <button class="btn btn-g btn-sm cand-filter-btn" onclick="filterCandidates('Offer Sent',this)">Offer Sent</button>
         <button class="btn btn-g btn-sm cand-filter-btn" onclick="filterCandidates('Hired',this)">Hired</button>
       </div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Name</th><th>Position</th><th>Nationality</th><th>Experience</th><th>Expected Salary</th><th>Source</th><th>Stage</th><th></th></tr></thead>
         <tbody id="candidates-tbody">
           <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No candidates yet. Click <strong>+ Add Candidate</strong> or import CVs.</td></tr>
@@ -1625,7 +1694,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   <div class="tab-body" id="rec-interviews">
     <div class="card">
       <div class="card-hd"><div><div class="card-title">Interview Schedule</div><div class="card-sub">Manage interview slots and feedback</div></div><button class="btn btn-g btn-sm" onclick="toast('Interview scheduling feature coming soon','info')">+ Schedule Interview</button></div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Candidate</th><th>Position</th><th>Interviewer</th><th>Date &amp; Time</th><th>Mode</th><th>Result</th><th></th></tr></thead>
         <tbody id="interviews-tbody">
           <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No interviews scheduled. Schedule interviews from the Candidates tab.</td></tr>
@@ -1645,7 +1714,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   <div class="tab-body" id="rec-offers">
     <div class="card">
       <div class="card-hd"><div><div class="card-title">Offer Letters</div><div class="card-sub">Draft, send, and track offer acceptance</div></div><button class="btn btn-g btn-sm" onclick="toast('Generate offer letter from candidate profile','info')">+ Generate Offer</button></div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Candidate</th><th>Position</th><th>Offered Salary</th><th>Sent Date</th><th>Response Date</th><th>Status</th><th></th></tr></thead>
         <tbody id="offers-tbody">
           <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No offers generated yet.</td></tr>
@@ -1657,7 +1726,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   <div class="tab-body" id="rec-onboarding">
     <div class="card mb16">
       <div class="card-hd"><div><div class="card-title">Onboarding Checklist</div><div class="card-sub">New employee onboarding workflow and task tracker</div></div></div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Employee</th><th>Start Date</th><th>Dept</th><th>Documents</th><th>IT Setup</th><th>Training</th><th>Induction</th><th>Status</th></tr></thead>
         <tbody id="onboarding-tbody">
           <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No active onboarding processes. Hire candidates to start onboarding.</td></tr>
@@ -1704,7 +1773,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="g2 mb16">
       <div class="card">
         <div class="card-hd"><div><div class="card-title">KPI &amp; Goal Setup</div><div class="card-sub">Define measurable targets per employee or department</div></div><button class="btn btn-g btn-sm" onclick="toast('KPI setup module coming soon','info')">+ Add KPI</button></div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <thead><tr><th>Employee / Dept</th><th>KPI</th><th>Target</th><th>Current</th><th>Weight %</th><th>Score</th></tr></thead>
           <tbody id="kpi-tbody">
             <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No KPIs defined yet. Click <strong>+ Add KPI</strong> to start.</td></tr>
@@ -1722,7 +1791,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     </div>
     <div class="card">
       <div class="card-hd"><div><div class="card-title">Performance Reviews</div></div><button class="btn btn-g btn-sm" onclick="toast('Performance review form coming soon','info')">+ New Review</button></div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Employee</th><th>Reviewer</th><th>Review Period</th><th>KPI Score</th><th>Overall Score</th><th>Status</th><th></th></tr></thead>
         <tbody id="perf-reviews-tbody">
           <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No performance reviews recorded yet.</td></tr>
@@ -1736,7 +1805,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="g2 mb16">
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Training Programs</div><div class="card-sub">Internal and external training sessions</div></div><button class="btn btn-p btn-sm" onclick="toast('Add training program','info')">+ New Program</button></div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <thead><tr><th>Program</th><th>Type</th><th>Trainer</th><th>Date</th><th>Duration</th><th>Dept</th><th>Status</th><th></th></tr></thead>
           <tbody id="training-tbody">
             <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No training programs added. Click <strong>+ New Program</strong>.</td></tr>
@@ -1745,7 +1814,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       </div>
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Skill &amp; Certification Tracker</div></div><button class="btn btn-g btn-sm" onclick="toast('Add certification record','info')">+ Add Cert</button></div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <thead><tr><th>Employee</th><th>Skill / Cert</th><th>Issued By</th><th>Issue Date</th><th>Expiry</th><th>Status</th></tr></thead>
           <tbody id="certs-tbody">
             <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No certifications recorded.</td></tr>
@@ -1767,7 +1836,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   <div class="tab-body" id="hrext-assets">
     <div class="card mb16">
       <div class="card-hd"><div><div class="card-title">Asset Assignments</div><div class="card-sub">Laptop · Mobile · SIM · Vehicle · Uniform · Tools</div></div><button class="btn btn-p btn-sm" onclick="toast('Assign asset to employee','info')">+ Assign Asset</button></div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Asset</th><th>Category</th><th>Serial / ID</th><th>Assigned To</th><th>Issue Date</th><th>Return Date</th><th>Condition</th><th>Status</th></tr></thead>
         <tbody id="assets-tbody">
           <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No assets assigned. Click <strong>+ Assign Asset</strong> to begin tracking.</td></tr>
@@ -1862,7 +1931,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     </div>
     <div class="card mb16">
       <div class="card-hd"><div><div class="card-title">Shift Setup</div><div class="card-sub">Define shift timing, break, grace period, and overtime threshold</div></div><button class="btn btn-p btn-sm" onclick="showM('m-shift')">+ Add Shift</button></div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Shift Name</th><th>Code</th><th>Start</th><th>End</th><th>Break</th><th>Hours</th><th>Grace</th><th>OT After</th><th>Status</th><th></th></tr></thead>
         <tbody id="rota-shift-tbody">
           <tr data-empty-state="1"><td colspan="10" style="color:var(--text3);text-align:center">No shifts in database yet.</td></tr>
@@ -1909,7 +1978,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       </div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Weekly Summary</div></div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <tbody id="rota-weekly-summary-tbody"></tbody>
         </table>
         <div class="divider"></div>
@@ -1944,7 +2013,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       </div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Monthly Summary</div></div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <tbody id="rota-monthly-summary-tbody"></tbody>
         </table>
       </div>
@@ -1976,7 +2045,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       </div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Department Staff</div></div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <thead><tr><th>Employee</th><th>Department</th><th>Hours</th><th>Status</th></tr></thead>
           <tbody id="rota-dept-staff-tbody"></tbody>
         </table>
@@ -1988,7 +2057,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="g2 mb16">
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Shift Swap Requests</div><div class="card-sub">Employee request, peer acceptance, supervisor approval</div></div><button class="btn btn-p btn-sm" onclick="showM('m-shift-swap')">+ Swap Request</button></div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <thead><tr><th>Requester</th><th>My Shift</th><th>Swap With</th><th>Target Shift</th><th>Status</th><th></th></tr></thead>
           <tbody id="rota-swap-tbody">
             <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No records yet.</td></tr>
@@ -2008,7 +2077,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="g2 mb16">
       <div class="card">
         <div class="card-hd"><div class="card-title">Rota Approval Workflow</div></div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <thead><tr><th>Department</th><th>Period</th><th>Supervisor</th><th>Status</th><th></th></tr></thead>
           <tbody id="rota-approval-tbody">
             <tr><td>Sales</td><td>03-09 May</td><td>Sara</td><td><span class="b b-a">Pending Supervisor Review</span></td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="approveRotaRow(this,'Rota approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="rejectRotaRow(this,'Rota rejected')">Reject</button></div></td></tr>
@@ -2030,7 +2099,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   <div class="tab-body" id="rota-reports">
     <div class="card mb16">
       <div class="card-hd"><div class="card-title">Rota Reports</div><button class="btn btn-g btn-sm" onclick="toast('Rota reports exported','ok')">Export</button></div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Report</th><th>Purpose</th><th>Status</th></tr></thead>
         <tbody>
           <tr><td>Weekly Rota Report</td><td>Staff schedule by week</td><td><span class="b b-g">Ready</span></td></tr>
@@ -2079,7 +2148,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
           <button class="btn btn-p btn-sm" onclick="runPayroll()">Run Payroll</button>
         </div>
       </div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Employee</th><th>Basic</th><th>Allowances</th><th>OT</th><th>Deductions</th><th>Net Pay</th><th>WPS</th><th>Status</th><th></th></tr></thead>
         <tbody id="payroll-tbody">
         </tbody>
@@ -2117,7 +2186,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   <div class="tab-body" id="pay-emp">
     <div class="card">
       <div class="card-hd"><div><div class="card-title">Salary Register</div><div class="card-sub">Contract salary, bank routing, WPS identifiers, and benefit setup</div></div><button class="btn btn-p" onclick="openEmpModal()">+ Add Employee</button></div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Employee</th><th>Pay Group</th><th>Basic</th><th>Housing</th><th>Transport</th><th>Bank / IBAN</th><th>WPS ID</th><th>Status</th></tr></thead>
         <tbody id="payroll-employee-tbody">
         </tbody>
@@ -2147,7 +2216,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       </div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Leave Salary & Air Ticket</div></div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <thead><tr><th>Employee</th><th>Accrued Days</th><th>Leave Salary</th><th>Ticket</th><th>Status</th></tr></thead>
           <tbody>
             <tr data-empty-state><td colspan="5" style="text-align:center;color:var(--text3);padding:32px">No records yet.</td></tr>
@@ -2157,7 +2226,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     </div>
     <div class="card">
       <div class="card-hd"><div><div class="card-title">Loans, Advances & Recurring Deductions</div><div class="card-sub">Amounts can feed directly into the monthly payroll run</div></div><button class="btn btn-p btn-sm" onclick="toast('New advance request opened','info')">+ New Advance</button></div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Employee</th><th>Type</th><th>Original Amount</th><th>Monthly Deduction</th><th>Balance</th><th>Start</th><th>Status</th></tr></thead>
         <tbody>
           <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No records yet.</td></tr>
@@ -2193,7 +2262,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     </div>
     <div class="card">
       <div class="card-hd"><div class="card-title">SIF Preview</div></div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Record</th><th>Employee ID</th><th>Bank</th><th>IBAN</th><th>Fixed Salary</th><th>Variable Pay</th><th>Days</th><th>Net</th></tr></thead>
         <tbody>
           <tr><td>SCR</td><td class="mono">EMP-001</td><td>ADCB</td><td class="mono">AE070...</td><td class="mono">28,500</td><td class="mono">0</td><td class="mono">30</td><td class="mono">28,500</td></tr>
@@ -2209,7 +2278,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="g2">
       <div class="card">
         <div class="card-hd"><div class="card-title">Payslip Batch</div><button class="btn btn-p btn-sm" onclick="publishPayslips()">Publish All</button></div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <thead><tr><th>Employee</th><th>Net Pay</th><th>Channel</th><th>Status</th><th></th></tr></thead>
           <tbody>
             <tr data-empty-state><td colspan="5" style="text-align:center;color:var(--text3);padding:32px">No records yet.</td></tr>
@@ -2229,7 +2298,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   <div class="tab-body" id="pay-approvals">
     <div class="card">
       <div class="card-hd"><div class="card-title">Payroll Approval Workflow</div><button class="btn btn-success btn-sm" onclick="approvePayroll()">Approve Payroll</button></div>
-      <table class="tbl">
+      <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Step</th><th>Owner</th><th>Status</th><th>Completed</th><th>Notes</th></tr></thead>
         <tbody>
           <tr><td>Prepared</td><td>Payroll Officer</td><td><span class="b b-g">Done</span></td><td>28 Jun 17:20</td><td>Attendance and adjustments imported</td></tr>
@@ -2245,7 +2314,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="g2">
       <div class="card">
         <div class="card-hd"><div class="card-title">Payroll Journal Preview</div><button class="btn btn-p btn-sm" onclick="postPayrollJournal()">Post Journal</button></div>
-        <table class="tbl">
+        <table class="tbl" data-delete-actions-bound="skip">
           <thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead>
           <tbody>
             <tr><td>Salary Expense</td><td class="mono" id="pay-je-gross">AED 0.00</td><td></td></tr>
@@ -2769,7 +2838,7 @@ window.HRMS_STANDALONE=true;
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
       <div class="card">
         <div class="card-hd"><div class="card-title">Departments</div><span class="b b-b" id="org-dept-count" style="font-size:11px">0 departments</span></div>
-        <table class="tbl" data-no-table-tools="1" id="org-dept-table">
+        <table class="tbl" data-delete-actions-bound="skip" data-no-table-tools="1" id="org-dept-table">
           <thead><tr><th>Department</th><th style="text-align:right">Headcount</th><th style="text-align:right">% of Total</th><th>Head</th></tr></thead>
           <tbody id="org-dept-tbody">
             <tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">No data yet</td></tr>
@@ -2778,7 +2847,7 @@ window.HRMS_STANDALONE=true;
       </div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Branches &amp; Locations</div><span class="b b-b" id="org-branch-count" style="font-size:11px">0 branches</span></div>
-        <table class="tbl" data-no-table-tools="1" id="org-branch-table">
+        <table class="tbl" data-delete-actions-bound="skip" data-no-table-tools="1" id="org-branch-table">
           <thead><tr><th>Branch / Location</th><th style="text-align:right">Headcount</th><th style="text-align:right">% of Total</th></tr></thead>
           <tbody id="org-branch-tbody">
             <tr><td colspan="3" style="text-align:center;color:var(--text3);padding:20px">No data yet</td></tr>

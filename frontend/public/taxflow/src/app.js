@@ -181,8 +181,8 @@ function go(page){
     topAction.onclick=m.ao||null;
     topAction.classList.toggle('hidden',!m.a);
   }
-  // Keep HRMS parent nav highlighted for all HR sub-pages
-  if(['staff','hrms','recruitment','hrms-ext'].includes(page)){
+  // Keep staff nav highlighted for staff sub-pages
+  if(['staff'].includes(page)){
     document.getElementById('nav-hrms')?.classList.add('on');
   }
   document.querySelectorAll('.nav-sub').forEach(s=>s.classList.remove('on'));
@@ -191,7 +191,6 @@ function go(page){
   if(page==='reports')syncReportsFromDatabase();
   if(page==='exception')loadExceptionCenter();
   if(page==='expense')loadExpenseVendors();
-  if(page==='hrms')scheduleIdleTask(refreshHrmsKpis,100);
   if(page==='recruitment')scheduleIdleTask(refreshRecruitmentStats,100);
   if(page==='hrms-ext')scheduleIdleTask(refreshManagerPortalCounts,100);
   if(page==='inventory'){
@@ -2378,7 +2377,7 @@ async function syncDashboardFromDatabase(){
     setDashboardStat('Open Invoices','—','Open browser console for details');
     setDashboardStat('Staff Present','—','Retrying on next load');
     const errHtml=`<div style="font-size:12px;color:var(--text3)">Could not load data. Please refresh.</div>`;
-    ['dash-recent-activity','dash-invoice-status','dash-staff-today'].forEach(id=>{
+    ['dash-recent-activity','dash-invoice-status'].forEach(id=>{
       const el=document.getElementById(id);
       if(el)el.innerHTML=errHtml;
     });
@@ -20687,7 +20686,7 @@ function initApp(){
   syncDashboardFromDatabase().catch(err=>console.warn('Dashboard sync failed during init:',err));
   hydrateFromServer().catch(err=>console.warn('Database hydrate failed during init:',err));
   const _lastPage=localStorage.getItem('taxflow_current_page');
-  setTimeout(()=>go(_lastPage||'hrms'),400);
+  setTimeout(()=>go(_lastPage||'dashboard'),400);
   scheduleIdleTask(()=>{
     updateAccountSelectors();
     recalcJournal();
