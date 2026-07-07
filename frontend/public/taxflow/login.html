@@ -63,6 +63,17 @@
     .btn:hover{filter:brightness(1.08);}
     .btn:disabled{opacity:.6;cursor:not-allowed;filter:none;}
     .footer{text-align:center;margin-top:22px;font-size:12.5px;color:#9ca3af;}
+    .divider{display:flex;align-items:center;gap:12px;margin:20px 0}
+    .divider::before,.divider::after{content:'';flex:1;height:1px;background:#e5e7eb}
+    .divider span{font-size:11.5px;color:#9ca3af;font-weight:500;white-space:nowrap}
+    .btn-ess{
+      display:flex;align-items:center;justify-content:center;gap:9px;
+      width:100%;padding:12px;border:1.5px solid #bfdbfe;border-radius:10px;
+      background:#eff6ff;color:#1d4ed8;font-size:14px;font-weight:600;
+      font-family:inherit;cursor:pointer;text-decoration:none;
+      transition:background .15s,border-color .15s,box-shadow .15s;
+    }
+    .btn-ess:hover{background:#dbeafe;border-color:#93c5fd;box-shadow:0 2px 8px rgba(37,99,235,.12)}
     @media(max-width:480px){
       .card{padding:36px 24px 28px;}
     }
@@ -84,14 +95,12 @@
     <input id="password" type="password" placeholder="••••••••" autocomplete="current-password">
   </div>
   <button id="btn" class="btn" onclick="signIn()">Sign In</button>
-  <div style="text-align:center;margin-top:20px">
-    <a href="/ess" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;color:#4f8ef0;text-decoration:none;font-weight:500;padding:9px 18px;border:1.5px solid #bfdbfe;border-radius:9px;background:#eff6ff;transition:all .15s"
-      onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">
-      <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="6" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/></svg>
-      Employee Self-Service Portal
-    </a>
-  </div>
-  <div class="footer" style="margin-top:14px">ETaxFlow &mdash; UAE Business Management Platform</div>
+  <div class="divider"><span>or</span></div>
+  <a href="/ess" class="btn-ess">
+    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="6" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/></svg>
+    Employee Self-Service Login
+  </a>
+  <div class="footer">ETaxFlow &mdash; UAE Business Management Platform</div>
 </div>
 
 <script src="/config.js"></script>
