@@ -15989,10 +15989,20 @@ function renderRoleTable(){
         <td style="max-width:200px;line-height:1.8">${permBadges||'<span style="color:var(--text3)">—</span>'}</td>
         <td style="max-width:200px;line-height:1.8">${modBadges||'<span style="color:var(--text3)">—</span>'}</td>
         <td><span class="b ${r.status==='Active'?'b-g':'b-gray'}">${escapeHtml(r.status)}</span></td>
-        <td><button class="icon-btn edit" title="Edit role" onclick="showRoleModal('${r.id}')">${editIconSvg()}</button></td>
+        <td style="white-space:nowrap"><button class="icon-btn edit" title="Edit role" onclick="showRoleModal('${r.id}')">${editIconSvg()}</button> <button class="icon-btn danger" title="Delete role" onclick="deleteRole('${r.id}')">${deleteIconSvg()}</button></td>
       </tr>`;
     }).join('');
   document.querySelectorAll('#role-tbody').forEach(tb=>{tb.innerHTML=html;});
+}
+
+function deleteRole(id){
+  const role=_roleList.find(r=>r.id===id);
+  if(!role)return;
+  if(!confirm(`Delete role "${role.roleName}"?`))return;
+  _roleList=_roleList.filter(r=>r.id!==id);
+  renderRoleTable();
+  _saveDeptsBranchesToDb();
+  toast(`Role "${role.roleName}" deleted`,'ok');
 }
 
 function showRoleModal(id){
