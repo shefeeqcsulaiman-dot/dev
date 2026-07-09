@@ -497,6 +497,7 @@ function collectUserPermissions(){
 }
 
 function permissionSummary(permissions=[]){
+  if(!Array.isArray(permissions))permissions=[];
   const modules=[...new Set(permissions.map(item=>String(item).split(':')[0]))];
   if(permissions.some(item=>String(item).endsWith(':admin')))return 'All modules';
   if(modules.length===0)return 'No access';
@@ -2294,7 +2295,7 @@ async function loadUsersIntoTable(){
       return;
     }
     tbody.innerHTML='';
-    users.forEach(u=>renderUserRecord({status:'Active',permissions:null,...u}));
+    users.forEach(u=>{try{renderUserRecord({status:'Active',...u,permissions:Array.isArray(u.permissions)?u.permissions:[]});}catch(e){console.warn('[renderUserRecord]',e,u);}});
   }catch(err){
     tbody.innerHTML='<tr><td colspan="7" style="color:var(--text3);text-align:center">Could not load users.</td></tr>';
     console.warn('[loadUsersIntoTable]',err);
