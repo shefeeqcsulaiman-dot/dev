@@ -1086,7 +1086,8 @@ async function essLogin() {
     localStorage.setItem('ess_modules', JSON.stringify(_essModules));
     showApp();
   } catch (e) {
-    errEl.textContent = e.message || 'Login failed';
+    const msg = (typeof e.message === 'string' && e.message) ? e.message : 'Login failed';
+    errEl.textContent = msg.includes('Invalid') ? 'Incorrect username/email or password. Contact HR to verify your ESS credentials.' : msg;
   } finally {
     btn.textContent = 'Sign In'; btn.disabled = false;
   }

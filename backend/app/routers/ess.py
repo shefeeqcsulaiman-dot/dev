@@ -191,7 +191,9 @@ def ess_login(body: LoginBody, db: Session = Depends(get_db)) -> dict:
     username_matches: list[tuple[AppDataRecord, dict]] = []
     for row in rows:
         emp = _decode_payload(row)
-        if (emp.get("username") or "").strip().lower() == username:
+        emp_username = (emp.get("username") or "").strip().lower()
+        emp_email    = (emp.get("email")    or "").strip().lower()
+        if emp_username == username or emp_email == username:
             username_matches.append((row, emp))
 
     if not username_matches:
