@@ -1174,7 +1174,10 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="card mb16">
       <div class="card-hd">
         <div><div class="card-title">Roles &amp; Permissions</div><div class="card-sub">Define roles per branch and department — employees are assigned roles during creation</div></div>
-        <button class="btn btn-p btn-sm" onclick="showRoleModal()">+ Add Role</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-g btn-sm" onclick="seedDefaultRoles()" title="Load 5 common starter roles">&#10010; Default Roles</button>
+          <button class="btn btn-p btn-sm" onclick="showRoleModal()">+ Add Role</button>
+        </div>
       </div>
       <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Branch</th><th>Department</th><th>Role Name</th><th>Permissions</th><th>Modules</th><th>Status</th><th></th></tr></thead>

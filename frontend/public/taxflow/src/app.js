@@ -16089,6 +16089,30 @@ function saveRoleModal(){
   toast(editId?'Role updated':'Role created','ok');
 }
 
+function seedDefaultRoles(){
+  const allPerms=['View','Create','Edit','Delete','Approve','Export','Import','Manage','Full Access'];
+  const allMods=['Employees','Attendance','Leave Management','Overtime','Payroll','Corrections','Loans & Advances','Expiry Alerts','Biometric','Recruitment','Performance','HR Settings','ESS Portal'];
+  const defaults=[
+    {roleName:'Employee',permissions:['View'],modules:['Attendance','Leave Management','Overtime','Corrections','Loans & Advances','Expiry Alerts','ESS Portal']},
+    {roleName:'Supervisor',permissions:['View','Create','Approve'],modules:['Employees','Attendance','Leave Management','Overtime','Corrections','Loans & Advances','Expiry Alerts','Performance','ESS Portal']},
+    {roleName:'HR Manager',permissions:allPerms,modules:allMods},
+    {roleName:'Finance Manager',permissions:['View','Create','Edit','Approve','Export','Manage'],modules:['Payroll','Loans & Advances','Expiry Alerts','ESS Portal']},
+    {roleName:'Admin',permissions:allPerms,modules:allMods},
+  ];
+  let added=0;
+  defaults.forEach(d=>{
+    const exists=_roleList.some(r=>r.roleName.toLowerCase()===d.roleName.toLowerCase());
+    if(!exists){
+      _roleList.push({id:'role-'+Date.now()+'-'+Math.random().toString(36).slice(2),branch:'',department:'',roleName:d.roleName,permissions:d.permissions,modules:d.modules,status:'Active'});
+      added++;
+    }
+  });
+  if(added===0){toast('All default roles already exist','info');return;}
+  renderRoleTable();
+  _saveDeptsBranchesToDb();
+  toast(`${added} default role${added>1?'s':''} added`,'ok');
+}
+
 function deleteRoleFromModal(){
   const modal=document.getElementById('m-role');
   const id=modal?.dataset.editId;
