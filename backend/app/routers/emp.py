@@ -166,18 +166,29 @@ def emp_login(body: LoginBody, db: Session = Depends(get_db)) -> dict:
     matches: list[tuple[AppDataRecord, dict]] = []
     for row in rows:
         emp = _decode(row)
-        u = (emp.get("username") or "").strip().lower()
-        e = (emp.get("email")    or "").strip().lower()
-        if u == username or e == username:
+        u    = (emp.get("username") or "").strip().lower()
+        e    = (emp.get("email")    or "").strip().lower()
+        eid  = (emp.get("id")       or "").strip().lower()
+        mob  = (emp.get("mobile")   or "").strip().lower().replace(" ", "")
+        # match by set username, email, employee ID, or mobile
+        if u == username or e == username or eid == username or mob == username:
             matches.append((row, emp))
 
     if not matches:
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
     for row, emp in matches:
-        if (emp.get("password") or "") != password:
-            continue
-        emp_key = row.record_key or emp.get("id") or emp.get("name") or ""
+        stored_pwd = (emp.get("password") or "").strip()
+        emp_id     = (emp.get("id") or "").strip()
+        if stored_pwd:
+            # HR has set a portal password — must match exactly
+            if stored_pwd != password:
+                continue
+        else:
+            # No portal password set — accept employee ID as default password
+            if emp_id.lower() != password.lower():
+                continue
+        emp_key = row.record_key or emp_id or emp.get("name") or ""
         token   = _make_token(row.company_id, emp_key, emp.get("name") or "")
         return {
             "access_token": token,
@@ -187,7 +198,7 @@ def emp_login(body: LoginBody, db: Session = Depends(get_db)) -> dict:
                 "name":        emp.get("name")        or "",
                 "designation": emp.get("designation") or "",
                 "department":  emp.get("department")  or "",
-                "employee_no": emp.get("id")          or "",
+                "employee_no": emp_id,
             },
             "allowed_modules": _resolve_modules(row.company_id, emp, db),
         }
