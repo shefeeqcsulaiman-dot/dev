@@ -441,6 +441,14 @@ body{font-size:14px;-webkit-font-smoothing:antialiased;}
       <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 12l3-4 3 2 3-5 3 3"/></svg>
       Performance
     </div>
+    <div class="nav" id="enav-rota" data-module="rota" onclick="essTab('rota')">
+      <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1" y="3" width="14" height="11" rx="1.5"/><path d="M1 7h14M5 1v3M11 1v3M5 10h2M9 10h2"/></svg>
+      My Schedule
+    </div>
+    <div class="nav" id="enav-assets" data-module="assets" onclick="essTab('assets')">
+      <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="6" width="12" height="8" rx="1.5"/><path d="M5 6V4a3 3 0 0 1 6 0v2"/><path d="M6 10h4"/></svg>
+      My Assets
+    </div>
   </div>
 
   <!-- Employee info footer -->
@@ -587,6 +595,14 @@ body{font-size:14px;-webkit-font-smoothing:antialiased;}
               <button class="mod-tile" data-module="performance" onclick="essTab('performance')">
                 <div class="mod-icon" style="background:#fdf4ff"><svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#a21caf" stroke-width="1.4"><path d="M2 12l3-4 3 2 3-5 3 3"/></svg></div>
                 <div class="mod-label">Performance</div>
+              </button>
+              <button class="mod-tile" data-module="rota" onclick="essTab('rota')">
+                <div class="mod-icon" style="background:#ecfdf5"><svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#059669" stroke-width="1.4"><rect x="1" y="3" width="14" height="11" rx="1.5"/><path d="M1 7h14M5 1v3M11 1v3M5 10h2M9 10h2"/></svg></div>
+                <div class="mod-label">Schedule</div>
+              </button>
+              <button class="mod-tile" data-module="assets" onclick="essTab('assets')">
+                <div class="mod-icon" style="background:#fff7ed"><svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#d97706" stroke-width="1.4"><rect x="2" y="6" width="12" height="8" rx="1.5"/><path d="M5 6V4a3 3 0 0 1 6 0v2"/><path d="M6 10h4"/></svg></div>
+                <div class="mod-label">My Assets</div>
               </button>
             </div>
           </div>
@@ -987,6 +1003,64 @@ body{font-size:14px;-webkit-font-smoothing:antialiased;}
         </div>
       </div>
 
+      <!-- My Schedule / Rota -->
+      <div class="ess-page" id="ep-rota">
+        <div class="kpi-row">
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#ecfdf5"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#059669" stroke-width="1.6"><rect x="3" y="5" width="16" height="14" rx="2"/><path d="M7 2v4M15 2v4M3 9h16"/></svg></div>
+            <div><div class="kpi-lbl">This Week Shifts</div><div class="kpi-val" id="rota-kpi-week">—</div><div class="kpi-sub">scheduled</div></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#eff6ff"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4.5l3 2"/></svg></div>
+            <div><div class="kpi-lbl">Total Hours</div><div class="kpi-val" id="rota-kpi-hours">—</div><div class="kpi-sub">this week</div></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.6"><polyline points="4 12 9 17 18 6"/></svg></div>
+            <div><div class="kpi-lbl">Next Shift</div><div class="kpi-val" id="rota-kpi-next" style="font-size:13px">—</div><div class="kpi-sub">upcoming</div></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#f3e8ff"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#7c3aed" stroke-width="1.6"><rect x="3" y="5" width="16" height="14" rx="2"/><path d="M7 2v4M15 2v4M3 9h16M7 14h8"/></svg></div>
+            <div><div class="kpi-lbl">Total Assigned</div><div class="kpi-val" id="rota-kpi-total">—</div><div class="kpi-sub">all records</div></div>
+          </div>
+        </div>
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#059669" stroke-width="1.5"><rect x="1" y="3" width="14" height="11" rx="1.5"/><path d="M1 7h14M5 1v3M11 1v3"/></svg>
+            My Schedule
+          </div>
+          <div id="rota-content"><div class="empty"><div class="spinner"></div></div></div>
+        </div>
+      </div>
+
+      <!-- My Assets -->
+      <div class="ess-page" id="ep-assets">
+        <div class="kpi-row">
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#fff7ed"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#d97706" stroke-width="1.6"><rect x="3" y="7" width="16" height="12" rx="2"/><path d="M7 7V5a4 4 0 0 1 8 0v2"/></svg></div>
+            <div><div class="kpi-lbl">Total Assets</div><div class="kpi-val" id="assets-kpi-total">—</div><div class="kpi-sub">assigned to me</div></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.6"><polyline points="4 12 9 17 18 6"/></svg></div>
+            <div><div class="kpi-lbl">Active</div><div class="kpi-val" id="assets-kpi-active">—</div><div class="kpi-sub">in use</div></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#fff7ed"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#ea580c" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4M11 15v1"/></svg></div>
+            <div><div class="kpi-lbl">Under Maintenance</div><div class="kpi-val" id="assets-kpi-maint">—</div><div class="kpi-sub">being serviced</div></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#f9fafb"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#9ca3af" stroke-width="1.6"><polyline points="6 9 11 4 16 9"/><path d="M11 4v14"/></svg></div>
+            <div><div class="kpi-lbl">Returned</div><div class="kpi-val" id="assets-kpi-returned">—</div><div class="kpi-sub">handed back</div></div>
+          </div>
+        </div>
+        <div class="ess-card">
+          <div class="ess-card-title">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#d97706" stroke-width="1.5"><rect x="2" y="6" width="12" height="8" rx="1.5"/><path d="M5 6V4a3 3 0 0 1 6 0v2"/></svg>
+            Assigned Assets
+          </div>
+          <div id="assets-content"><div class="empty"><div class="spinner"></div></div></div>
+        </div>
+      </div>
+
   </div><!-- /content -->
 </div><!-- /ess-main -->
 
@@ -1053,6 +1127,16 @@ body{font-size:14px;-webkit-font-smoothing:antialiased;}
         Perform.
         <div class="mnav-dot"></div>
       </button>
+      <button class="mnav" id="mnav-rota" data-module="rota" onclick="essTab('rota')">
+        <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1" y="3" width="14" height="11" rx="1.5"/><path d="M1 7h14M5 1v3M11 1v3M5 10h2M9 10h2"/></svg>
+        Schedule
+        <div class="mnav-dot"></div>
+      </button>
+      <button class="mnav" id="mnav-assets" data-module="assets" onclick="essTab('assets')">
+        <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="6" width="12" height="8" rx="1.5"/><path d="M5 6V4a3 3 0 0 1 6 0v2"/><path d="M6 10h4"/></svg>
+        Assets
+        <div class="mnav-dot"></div>
+      </button>
     </div>
   </nav>
 
@@ -1062,7 +1146,7 @@ body{font-size:14px;-webkit-font-smoothing:antialiased;}
 const ESS_API = (window.TAXFLOW_API_BASE_URL || (window.location.protocol + '//' + window.location.host)) + '/api/v1/ess';
 let _essToken = localStorage.getItem('ess_token') || '';
 let _essEmp = null;
-let _essModules = JSON.parse(localStorage.getItem('ess_modules') || 'null') || ['attendance','payslips','leave','overtime','documents'];
+let _essModules = JSON.parse(localStorage.getItem('ess_modules') || 'null') || ['attendance','payslips','leave','overtime','documents','rota','assets'];
 
 // ── Utilities ──────────────────────────────────────────
 function toast(msg) {
@@ -1214,6 +1298,8 @@ function essTab(tab) {
   else if (tab === 'expiry') loadExpiry();
   else if (tab === 'recruitment') loadRecruitment();
   else if (tab === 'performance') loadPerformance();
+  else if (tab === 'rota') loadRota();
+  else if (tab === 'assets') loadAssets();
 }
 
 // ── Dashboard KPIs ─────────────────────────────────────
@@ -1726,6 +1812,95 @@ async function loadPerformance() {
     document.getElementById('performance-content').innerHTML = `<div class="empty">${e.message}</div>`;
     document.getElementById('training-content').innerHTML = `<div class="empty">${e.message}</div>`;
   }
+}
+
+// ── Rota / Schedule ────────────────────────────────────
+async function loadRota() {
+  document.getElementById('rota-content').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+  try {
+    const data = await essApi('/rota');
+    const recs = data.records || [];
+    // KPIs
+    const now = new Date();
+    const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay());
+    const weekEnd   = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
+    const toD = d => new Date(d + 'T00:00:00');
+    const thisWeek = recs.filter(r => { const d = toD(r.date||r.startDate||''); return d >= weekStart && d <= weekEnd; });
+    const weekHrs  = thisWeek.reduce((s, r) => {
+      const st = r.shiftStart || r.shift_start || '08:00';
+      const en = r.shiftEnd   || r.shift_end   || '17:00';
+      const brk = parseInt(r.breakMinutes || r.break_minutes || 30);
+      const [sh,sm] = st.split(':').map(Number); const [eh,em] = en.split(':').map(Number);
+      const mins = (eh*60+em) - (sh*60+sm) - brk;
+      return s + Math.max(0, mins / 60);
+    }, 0);
+    const upcoming = recs.filter(r => toD(r.date||r.startDate||'') >= now).sort((a,b) => (a.date||a.startDate||'').localeCompare(b.date||b.startDate||''));
+    document.getElementById('rota-kpi-week').textContent  = thisWeek.length;
+    document.getElementById('rota-kpi-hours').textContent = weekHrs.toFixed(1) + ' h';
+    document.getElementById('rota-kpi-next').textContent  = upcoming[0] ? (upcoming[0].date||upcoming[0].startDate||'—') + ' ' + (upcoming[0].shiftType||upcoming[0].shift_type||'') : '—';
+    document.getElementById('rota-kpi-total').textContent = recs.length;
+    if (!recs.length) { document.getElementById('rota-content').innerHTML = '<div class="empty">No schedule records found. Contact HR to assign your rota.</div>'; return; }
+    const statusColor = { 'Scheduled':'#2563eb','Published':'#16a34a','Draft':'#ca8a04','Off':'#9ca3af' };
+    const statusBg    = { 'Scheduled':'#dbeafe','Published':'#dcfce7','Draft':'#fef9c3','Off':'#f3f4f6' };
+    const sorted = [...recs].sort((a,b) => (b.date||b.startDate||'').localeCompare(a.date||a.startDate||''));
+    document.getElementById('rota-content').innerHTML = `
+      <div class="table-scroll">
+        <table class="ess-table">
+          <thead><tr><th>Date</th><th>Shift</th><th>Start</th><th>End</th><th>Break</th><th>Dept</th><th>Status</th></tr></thead>
+          <tbody>${sorted.map(r => {
+            const d = r.date || r.startDate || '—';
+            const st = r.shiftStart || r.shift_start || '—';
+            const en = r.shiftEnd   || r.shift_end   || '—';
+            const brk = r.breakMinutes || r.break_minutes || '—';
+            const dept = r.department || '—';
+            const type = r.shiftType || r.shift_type || r.shiftCode || '—';
+            const status = r.status || 'Scheduled';
+            return `<tr>
+              <td style="font-weight:600">${d}</td>
+              <td><span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:${statusBg[type]||'#eff6ff'};color:${statusColor[type]||'#2563eb'}">${type}</span></td>
+              <td>${st}</td><td>${en}</td>
+              <td>${brk} min</td><td>${dept}</td>
+              <td><span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:${statusBg[status]||'#f3f4f6'};color:${statusColor[status]||'#6b7280'}">${status}</span></td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>`;
+  } catch(e) { document.getElementById('rota-content').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+// ── Assets ──────────────────────────────────────────────
+async function loadAssets() {
+  document.getElementById('assets-content').innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+  try {
+    const data = await essApi('/assets');
+    const items = data.assets || [];
+    document.getElementById('assets-kpi-total').textContent    = items.length;
+    document.getElementById('assets-kpi-active').textContent   = items.filter(a => (a.status||'Active').toLowerCase() === 'active').length;
+    document.getElementById('assets-kpi-maint').textContent    = items.filter(a => (a.status||'').toLowerCase().includes('mainten')).length;
+    document.getElementById('assets-kpi-returned').textContent = items.filter(a => (a.status||'').toLowerCase() === 'returned').length;
+    if (!items.length) { document.getElementById('assets-content').innerHTML = '<div class="empty">No assets assigned. Contact HR if you need an asset record updated.</div>'; return; }
+    const stBg  = { 'Active':'#dcfce7','Returned':'#f3f4f6','Maintenance':'#ffedd5','Lost':'#fee2e2' };
+    const stCol = { 'Active':'#15803d','Returned':'#6b7280','Maintenance':'#ea580c','Lost':'#dc2626' };
+    document.getElementById('assets-content').innerHTML = `
+      <div class="table-scroll">
+        <table class="ess-table">
+          <thead><tr><th>Asset</th><th>Type</th><th>Serial / Code</th><th>Assigned Date</th><th>Condition</th><th>Status</th></tr></thead>
+          <tbody>${items.map(a => {
+            const name = a.name || a.assetName || a.asset_name || '—';
+            const type = a.type || a.category || a.assetType || '—';
+            const serial = a.serial || a.serialNo || a.code || a.assetCode || '—';
+            const date = a.assignedDate || a.assigned_date || a.date || '—';
+            const cond = a.condition || '—';
+            const status = a.status || 'Active';
+            return `<tr>
+              <td style="font-weight:600">${name}</td>
+              <td>${type}</td><td>${serial}</td><td>${date}</td><td>${cond}</td>
+              <td><span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:${stBg[status]||'#f3f4f6'};color:${stCol[status]||'#6b7280'}">${status}</span></td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>`;
+  } catch(e) { document.getElementById('assets-content').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
 // ── Auto-login ─────────────────────────────────────────

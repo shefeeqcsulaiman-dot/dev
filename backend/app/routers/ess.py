@@ -96,11 +96,13 @@ _HRMS_TO_ESS: dict[str, str] = {
     "Biometric":        "biometric",
     "Recruitment":      "recruitment",
     "Performance":      "performance",
+    "Rota":             "rota",
+    "Assets":           "assets",
 }
 _ALL_ESS: list[str] = [
     "attendance", "payslips", "leave", "overtime",
     "corrections", "loans", "expiry", "biometric",
-    "recruitment", "performance", "documents",
+    "recruitment", "performance", "documents", "rota", "assets",
 ]
 
 
@@ -489,6 +491,54 @@ def ess_recruitment(request: Request, db: Session = Depends(get_db)) -> dict:
         .all()
     )
     return {"ok": True, "jobs": [_decode_payload(r) for r in rows]}
+
+
+@router.get("/rota")
+def ess_rota(request: Request, db: Session = Depends(get_db)) -> dict:
+    company_id, emp_key, emp = _auth(dict(request.headers), db)
+    emp_name = (emp.get("name") or "").strip().lower()
+    emp_id   = (emp.get("id") or emp_key).strip().lower()
+    rows = (
+        db.query(AppDataRecord)
+        .filter(
+            AppDataRecord.company_id == company_id,
+            AppDataRecord.collection == "rotaAssignments",
+        )
+        .order_by(AppDataRecord.created_at.desc())
+        .limit(90)
+        .all()
+    )
+    records = []
+    for rec in [_decode_payload(r) for r in rows]:
+        n = (rec.get("employeeName") or rec.get("employee_name") or rec.get("employee") or "").strip().lower()
+        i = (rec.get("employeeId")   or rec.get("employee_id")   or "").strip().lower()
+        if n == emp_name or i == emp_id:
+            records.append(rec)
+    return {"ok": True, "records": records}
+
+
+@router.get("/assets")
+def ess_assets(request: Request, db: Session = Depends(get_db)) -> dict:
+    company_id, emp_key, emp = _auth(dict(request.headers), db)
+    emp_name = (emp.get("name") or "").strip().lower()
+    emp_id   = (emp.get("id") or emp_key).strip().lower()
+    rows = (
+        db.query(AppDataRecord)
+        .filter(
+            AppDataRecord.company_id == company_id,
+            AppDataRecord.collection.in_(["hrAssets", "employeeAssets", "assets"]),
+        )
+        .order_by(AppDataRecord.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    records = []
+    for rec in [_decode_payload(r) for r in rows]:
+        n = (rec.get("employee") or rec.get("assignedTo") or rec.get("assigned_to") or "").strip().lower()
+        i = (rec.get("employee_id") or rec.get("employeeId") or "").strip().lower()
+        if n == emp_name or i == emp_id:
+            records.append(rec)
+    return {"ok": True, "assets": records}
 
 
 @router.get("/performance")
