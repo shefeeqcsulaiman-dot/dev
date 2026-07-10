@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.models import Account, Company, TaxCode, User, VoucherType
-from app.routers import accounting, ai, app_data, attendance, audit, auth, companies, corporate_accounting, documents, events, exception_center, hr_ai, inventory, invoice_share, invoices, jobs, module_records, payroll, reports, source_transactions, superadmin, tax
+from app.routers import accounting, ai, app_data, attendance, audit, auth, companies, corporate_accounting, documents, emp, events, exception_center, hr_ai, inventory, invoice_share, invoices, jobs, module_records, payroll, reports, source_transactions, superadmin, tax
 from app.security import hash_password
 
 
@@ -229,6 +229,7 @@ def create_app() -> FastAPI:
     app.include_router(events.router, prefix="/api/v1")
     app.include_router(module_records.router, prefix="/api/v1")
     app.include_router(app_data.router, prefix="/api/v1")
+    app.include_router(emp.router, prefix="/api/v1")
 app.include_router(superadmin.router, prefix="/api/v1")
 
     # Serve frontend static files
