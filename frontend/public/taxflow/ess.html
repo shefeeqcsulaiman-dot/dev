@@ -49,22 +49,18 @@ body{font-size:14px;-webkit-font-smoothing:antialiased;}
 }
 .login-card-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px}
 .login-card-sub{font-size:13px;color:var(--text2);margin-bottom:24px}
-.fl{display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px}
-.fi{
-  width:100%;border:1.5px solid var(--border);border-radius:10px;
-  padding:0 14px;height:50px;font-family:var(--font);font-size:15px;
-  outline:none;color:var(--text);background:#fff;transition:border-color .15s,box-shadow .15s;
-}
-.fi:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
-.fg{margin-bottom:16px;position:relative}
-.pw-wrap{position:relative}
-.pw-wrap .fi{padding-right:44px}
-.pw-eye{
-  position:absolute;right:14px;top:50%;transform:translateY(-50%);
-  background:none;border:none;cursor:pointer;color:var(--text3);padding:4px;
-  display:flex;align-items:center;
-}
-.pw-eye:hover{color:var(--text2)}
+/* Login form inputs (large, 50px — scoped to login overlay only) */
+#ess-login .fl{display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px}
+#ess-login .fi{width:100%;border:1.5px solid #e5e7eb;border-radius:10px;padding:0 14px;height:50px;font-family:'DM Sans',sans-serif;font-size:15px;outline:none;color:#111827;background:#fff;transition:border-color .15s,box-shadow .15s;}
+#ess-login .fi:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+#ess-login .fg{margin-bottom:16px;position:relative}
+#ess-login .pw-wrap{position:relative}
+#ess-login .pw-wrap .fi{padding-right:44px}
+#ess-login .pw-eye{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#9ca3af;padding:4px;display:flex;align-items:center;}
+#ess-login .pw-eye:hover{color:#6b7280}
+/* Module form labels/groups — same as HRMS */
+.fl{display:block;font-size:11.5px;font-weight:600;color:var(--text2);margin-bottom:5px}
+.fg{margin-bottom:12px;position:relative}
 .btn-primary{
   width:100%;background:var(--blue);color:#fff;border:none;
   border-radius:12px;height:52px;font-family:var(--font);
@@ -213,24 +209,6 @@ body{font-size:14px;-webkit-font-smoothing:antialiased;}
 
 /* ── Forms ── */
 .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-.select-input{
-  width:100%;border:1.5px solid var(--border);border-radius:10px;
-  padding:0 14px;height:50px;font-family:var(--font);font-size:14px;
-  outline:none;color:var(--text);background:#fff;
-  -webkit-appearance:none;appearance:none;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
-  background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;
-}
-.select-input:focus{border-color:var(--blue)}
-.btn-submit{
-  background:var(--blue);color:#fff;border:none;border-radius:10px;
-  height:48px;padding:0 24px;font-family:var(--font);font-size:14px;
-  font-weight:600;cursor:pointer;margin-top:8px;transition:background .15s;
-  min-width:160px;
-}
-.btn-submit:hover{background:var(--blue-d)}
-.btn-submit:active{transform:scale(.98)}
-textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
 
 /* ── Empty / spinner ── */
 .empty{text-align:center;padding:40px 20px;color:var(--text3)}
@@ -255,7 +233,7 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
 @media(max-width:767px){
   /* Login */
   .login-card{padding:28px 22px 24px}
-  .fi{height:52px;font-size:15px}
+  #ess-login .fi{height:52px;font-size:15px}
 
   /* App — hide desktop sidebar, show mobile nav */
   .sb{display:none!important}
@@ -298,12 +276,14 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
   .mnav{font-size:9px}
 }
 
-/* ── KPI Stat Cards ── */
-.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
-.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
-.kpi-lbl{font-size:10.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
-.kpi-val{font-size:22px;font-weight:700;color:var(--text);margin:4px 0 2px;line-height:1}
-.kpi-sub{font-size:11px;color:var(--text3)}
+/* ── KPI Stat Cards (HRMS-style with icon) ── */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px;}
+.kpi-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;display:flex;align-items:flex-start;gap:12px;transition:box-shadow .15s,transform .15s;}
+.kpi-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.09);transform:translateY(-1px);}
+.kpi-icon{width:48px;height:48px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.kpi-lbl{font-size:11px;color:#6b7280;font-weight:500;margin-bottom:2px;}
+.kpi-val{font-size:22px;font-weight:700;color:#111827;line-height:1.1;margin:2px 0 1px;}
+.kpi-sub{font-size:10.5px;color:#6b7280;}
 @media(max-width:767px){.kpi-row{grid-template-columns:repeat(2,1fr);gap:8px}.kpi-val{font-size:19px}}
 
 /* ── Approval Timeline ── */
@@ -638,10 +618,22 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
       <!-- Attendance -->
       <div class="ess-page" id="ep-attendance">
         <div class="kpi-row" id="att-kpi-row">
-          <div class="kpi-card"><div class="kpi-lbl">Present Days</div><div class="kpi-val" id="att-kpi-present" style="color:#16a34a">—</div><div class="kpi-sub">this month</div></div>
-          <div class="kpi-card"><div class="kpi-lbl">Total Punches</div><div class="kpi-val" id="att-kpi-total">—</div><div class="kpi-sub">all records</div></div>
-          <div class="kpi-card"><div class="kpi-lbl">Check-In Days</div><div class="kpi-val" id="att-kpi-in" style="color:#2563eb">—</div><div class="kpi-sub">in punches</div></div>
-          <div class="kpi-card"><div class="kpi-lbl">Last Punch</div><div class="kpi-val" id="att-kpi-last" style="font-size:14px;margin-top:6px">—</div><div class="kpi-sub">most recent</div></div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4.5l3 2"/></svg></div>
+            <div><div class="kpi-lbl">Present Days</div><div class="kpi-val" id="att-kpi-present">—</div><div class="kpi-sub">this month</div></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#eff6ff"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.6"><rect x="3" y="5" width="16" height="14" rx="2"/><path d="M7 2v4M15 2v4M3 9h16"/></svg></div>
+            <div><div class="kpi-lbl">Total Punches</div><div class="kpi-val" id="att-kpi-total">—</div><div class="kpi-sub">all records</div></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#dbeafe"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#1d4ed8" stroke-width="1.6"><path d="M11 3L4 8v11h5v-5h4v5h5V8z"/></svg></div>
+            <div><div class="kpi-lbl">Check-In Days</div><div class="kpi-val" id="att-kpi-in">—</div><div class="kpi-sub">in punches</div></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#f3e8ff"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#7c3aed" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4.5l3 2"/></svg></div>
+            <div><div class="kpi-lbl">Last Punch</div><div class="kpi-val" id="att-kpi-last" style="font-size:13px">—</div><div class="kpi-sub">most recent</div></div>
+          </div>
         </div>
         <div class="ess-card">
           <div class="ess-card-title">
@@ -711,7 +703,7 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
           <div class="form-grid">
             <div class="fg">
               <label class="fl">Leave Type</label>
-              <select class="select-input" id="ess-leave-type">
+              <select class="fi" id="ess-leave-type">
                 <option>Annual Leave</option>
                 <option>Sick Leave</option>
                 <option>Emergency Leave</option>
@@ -729,7 +721,7 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
             <div class="fg"><label class="fl">To Date</label><input class="fi" type="date" id="ess-leave-to"></div>
             <div class="fg"><label class="fl">Reason</label><input class="fi" id="ess-leave-reason" placeholder="Brief reason (optional)"></div>
           </div>
-          <button class="btn-submit" onclick="essApplyLeave()">Submit Request</button>
+          <button class="btn btn-p" onclick="essApplyLeave()">Submit Request</button>
         </div>
         <div class="ess-card">
           <div class="ess-card-title">Leave History</div>
@@ -748,10 +740,22 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
       <!-- Overtime -->
       <div class="ess-page" id="ep-overtime">
         <div class="kpi-row">
-          <div class="kpi-card"><div class="kpi-lbl">Pending</div><div class="kpi-val" id="ot-kpi-pending" style="color:#ea580c">—</div><div class="kpi-sub">awaiting approval</div></div>
-          <div class="kpi-card"><div class="kpi-lbl">Approved Hours</div><div class="kpi-val" id="ot-kpi-hours" style="color:#16a34a">—</div><div class="kpi-sub">total approved</div></div>
-          <div class="kpi-card"><div class="kpi-lbl">Payroll Value</div><div class="kpi-val" id="ot-kpi-value" style="font-size:15px;margin-top:6px">—</div><div class="kpi-sub">AED approved</div></div>
-          <div class="kpi-card"><div class="kpi-lbl">Rejected</div><div class="kpi-val" id="ot-kpi-rejected" style="color:#dc2626">—</div><div class="kpi-sub">this year</div></div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#fff7ed"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#ea580c" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4l2.5 2.5"/></svg></div>
+            <div><div class="kpi-lbl">Pending</div><div class="kpi-val" id="ot-kpi-pending">—</div><div class="kpi-sub">awaiting approval</div></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.6"><polyline points="4 12 9 17 18 6"/></svg></div>
+            <div><div class="kpi-lbl">Approved Hours</div><div class="kpi-val" id="ot-kpi-hours">—</div><div class="kpi-sub">total approved</div></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#eff6ff"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.6"><rect x="3" y="7" width="16" height="12" rx="2"/><path d="M7 7V5a4 4 0 0 1 8 0v2"/></svg></div>
+            <div><div class="kpi-lbl">Payroll Value</div><div class="kpi-val" id="ot-kpi-value" style="font-size:14px">—</div><div class="kpi-sub">AED approved</div></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#fef2f2"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#dc2626" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M8 8l6 6M14 8l-6 6"/></svg></div>
+            <div><div class="kpi-lbl">Rejected</div><div class="kpi-val" id="ot-kpi-rejected">—</div><div class="kpi-sub">this year</div></div>
+          </div>
         </div>
         <div class="ess-card">
           <div class="ess-card-title">
@@ -763,7 +767,7 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
             <div class="fg"><label class="fl">OT Hours</label><input class="fi" type="number" id="ess-ot-hours" placeholder="e.g. 2.5" min="0.5" step="0.5"></div>
             <div class="fg" style="grid-column:1/-1"><label class="fl">Reason / Task Description</label><input class="fi" id="ess-ot-reason" placeholder="Brief description of work done"></div>
           </div>
-          <button class="btn-submit" onclick="essApplyOT()">Submit OT Report</button>
+          <button class="btn btn-p" onclick="essApplyOT()">Submit OT Report</button>
         </div>
         <div class="ess-card">
           <div class="ess-card-title">OT History</div>
@@ -796,7 +800,7 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
             <div class="fg"><label class="fl">Expected Out Time</label><input class="fi" type="time" id="cor-out"></div>
             <div class="fg"><label class="fl">Reason</label><input class="fi" id="cor-reason" placeholder="Brief reason for correction"></div>
           </div>
-          <button class="btn-submit" onclick="essSubmitCorrection()">Submit Correction</button>
+          <button class="btn btn-p" onclick="essSubmitCorrection()">Submit Correction</button>
         </div>
         <div class="ess-card">
           <div class="ess-card-title">Correction History</div>
@@ -850,7 +854,7 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
           <div class="form-grid">
             <div class="fg">
               <label class="fl">Type</label>
-              <select class="select-input" id="loan-type">
+              <select class="fi" id="loan-type">
                 <option>Salary Advance</option>
                 <option>Personal Loan</option>
                 <option>Emergency Advance</option>
@@ -861,7 +865,7 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
             <div class="fg"><label class="fl">Purpose</label><input class="fi" id="loan-purpose" placeholder="Brief description"></div>
             <div class="fg">
               <label class="fl">Repayment Period</label>
-              <select class="select-input" id="loan-period">
+              <select class="fi" id="loan-period">
                 <option>1 Month</option>
                 <option>3 Months</option>
                 <option>6 Months</option>
@@ -869,7 +873,7 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
               </select>
             </div>
           </div>
-          <button class="btn-submit" onclick="essApplyLoan()">Submit Request</button>
+          <button class="btn btn-p" onclick="essApplyLoan()">Submit Request</button>
         </div>
         <div class="ess-card">
           <div class="ess-card-title">
@@ -897,10 +901,22 @@ textarea.fi{resize:vertical;min-height:72px;height:auto;padding:12px 14px}
       <!-- Expiry Alerts -->
       <div class="ess-page" id="ep-expiry">
         <div class="kpi-row">
-          <div class="kpi-card"><div class="kpi-lbl">Critical ≤30 Days</div><div class="kpi-val" id="exp-kpi-30" style="color:#dc2626">—</div><div class="kpi-sub">immediate action</div></div>
-          <div class="kpi-card"><div class="kpi-lbl">Warning ≤90 Days</div><div class="kpi-val" id="exp-kpi-90" style="color:#ea580c">—</div><div class="kpi-sub">plan renewal</div></div>
-          <div class="kpi-card"><div class="kpi-lbl">Valid</div><div class="kpi-val" id="exp-kpi-valid" style="color:#16a34a">—</div><div class="kpi-sub">no action needed</div></div>
-          <div class="kpi-card"><div class="kpi-lbl">Missing</div><div class="kpi-val" id="exp-kpi-missing" style="color:var(--text3)">—</div><div class="kpi-sub">not recorded</div></div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#fef2f2"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#dc2626" stroke-width="1.6"><path d="M11 3L2 19h18L11 3z"/><path d="M11 9v5M11 16v1"/></svg></div>
+            <div><div class="kpi-lbl">Critical ≤30 Days</div><div class="kpi-val" id="exp-kpi-30">—</div><div class="kpi-sub">immediate action</div></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#fff7ed"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#ea580c" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4.5M11 15v1"/></svg></div>
+            <div><div class="kpi-lbl">Warning ≤90 Days</div><div class="kpi-val" id="exp-kpi-90">—</div><div class="kpi-sub">plan renewal</div></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.6"><polyline points="4 12 9 17 18 6"/></svg></div>
+            <div><div class="kpi-lbl">Valid</div><div class="kpi-val" id="exp-kpi-valid">—</div><div class="kpi-sub">no action needed</div></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#f9fafb"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#9ca3af" stroke-width="1.6"><rect x="5" y="3" width="12" height="16" rx="2"/><path d="M9 7h4M9 11h4M9 15h2"/></svg></div>
+            <div><div class="kpi-lbl">Missing</div><div class="kpi-val" id="exp-kpi-missing">—</div><div class="kpi-sub">not recorded</div></div>
+          </div>
         </div>
         <div class="ess-card">
           <div class="ess-card-title">
