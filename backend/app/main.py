@@ -169,6 +169,10 @@ def create_app() -> FastAPI:
     def hrms_portal() -> FileResponse:
         return FileResponse(str(static_dir / "taxflow" / "hrms.html"))  # HRMS portal
 
+    @app.get("/emp", include_in_schema=False)
+    def emp_portal() -> FileResponse:
+        return FileResponse(str(static_dir / "taxflow" / "emp.html"))  # Employee portal
+
 @app.get("/config.js", include_in_schema=False)
     def config_js() -> Response:
         api_base = os.environ.get("API_BASE_URL", "")
