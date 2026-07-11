@@ -17099,6 +17099,41 @@ function publishRota(){
   audit('Rota published','Rota Planning','Published');
 }
 
+function applyRotaRepeat(){
+  const mode=document.getElementById('rota-repeat-mode')?.value||'none';
+  if(mode==='none'){toast('Select a repeat duration first','warn');return;}
+  const start=weekStartValue();
+  const weeks=mode==='1year'?52:260;
+  const sourceAssignments=[...rotaAssignmentsById.values()].filter(a=>{
+    const diff=Math.round((new Date(`${a.date}T00:00:00`)-new Date(`${start}T00:00:00`))/86400000);
+    return diff>=0&&diff<7;
+  });
+  if(!sourceAssignments.length){toast('No assignments in the current week to repeat','warn');return;}
+  let count=0;
+  for(let w=1;w<=weeks;w++){
+    sourceAssignments.forEach(src=>{
+      const dayOffset=Math.round((new Date(`${src.date}T00:00:00`)-new Date(`${start}T00:00:00`))/86400000);
+      const newDate=weekDateFromStart(start,w*7+dayOffset);
+      const assignment=normalizeRotaAssignment({
+        ...src,
+        id:rotaAssignmentId(src.employee_id,newDate),
+        date:newDate,
+        day:ROTA_WEEK_DAYS[dayOffset%7],
+        status:'Draft',
+        updated_at:new Date().toISOString()
+      });
+      rotaAssignmentsById.set(assignment.id,assignment);
+      saveServer('rotaAssignments',assignment);
+      count++;
+    });
+  }
+  const label=mode==='1year'?'1 year (52 weeks)':'indefinitely (~5 years / 260 weeks)';
+  const info=document.getElementById('rota-repeat-info');
+  if(info)info.textContent=`✓ ${count} assignments created from ${start}`;
+  toast(`Rota repeated ${label}: ${count} assignments saved as Draft`,'ok');
+  audit(`Rota repeat applied (${mode})','Rota Planning','Draft');
+}
+
 function copyPreviousRota(){
   const start=weekStartValue();
   const priorStart=weekDateFromStart(start,-7);

@@ -1952,12 +1952,23 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         <div class="fg"><label class="fl">Location</label><select class="fi" id="rota-week-location" onchange="renderRotaBoards()"><option value="">All Locations</option></select></div>
         <div class="fg"><label class="fl">Search</label><input class="fi" id="rota-staff-search" placeholder="Employee name" oninput="renderRotaBoards()"></div>
       </div>
-      <div class="flx" style="gap:8px;flex-wrap:wrap">
+      <div class="flx" style="gap:8px;flex-wrap:wrap;align-items:center;padding-bottom:8px;border-bottom:1px solid var(--border1)">
         <button class="btn btn-g btn-sm" onclick="copyPreviousRota()">Copy Previous</button>
         <button class="btn btn-g btn-sm" onclick="autoGenerateRota()">Auto Fill 4 Staff</button>
         <button class="btn btn-g btn-sm" onclick="saveRotaDraft()">Save Draft</button>
         <button class="btn btn-warn btn-sm" onclick="submitRotaApproval()">Submit Approval</button>
         <button class="btn btn-p btn-sm" onclick="publishRota()">Publish Rota</button>
+      </div>
+      <div class="flx" style="gap:8px;align-items:center;padding-top:8px;flex-wrap:wrap">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="15" height="15" style="opacity:.45;flex-shrink:0"><path d="M2 4h9a3 3 0 0 1 0 6H4"/><path d="M4 7l-2.5 3L4 13"/></svg>
+        <span style="font-size:12px;color:var(--text3);white-space:nowrap">Repeat this rota:</span>
+        <select class="fi" id="rota-repeat-mode" style="width:180px;height:30px;padding:3px 8px;font-size:12px">
+          <option value="none">— No Repeat —</option>
+          <option value="1year">1 Year (52 weeks)</option>
+          <option value="forever">Indefinitely (∞)</option>
+        </select>
+        <button class="btn btn-p btn-sm" onclick="applyRotaRepeat()">Apply Repeat</button>
+        <span id="rota-repeat-info" style="font-size:11px;color:var(--text3)"></span>
       </div>
     </div>
 
