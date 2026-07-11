@@ -173,7 +173,7 @@ def create_app() -> FastAPI:
     def emp_portal() -> FileResponse:
         return FileResponse(str(static_dir / "taxflow" / "emp.html"))  # Employee portal
 
-@app.get("/config.js", include_in_schema=False)
+    @app.get("/config.js", include_in_schema=False)
     def config_js() -> Response:
         api_base = os.environ.get("API_BASE_URL", "")
         content = (
@@ -234,7 +234,7 @@ def create_app() -> FastAPI:
     app.include_router(module_records.router, prefix="/api/v1")
     app.include_router(app_data.router, prefix="/api/v1")
     app.include_router(emp.router, prefix="/api/v1")
-app.include_router(superadmin.router, prefix="/api/v1")
+    app.include_router(superadmin.router, prefix="/api/v1")
 
     # Serve frontend static files
     if static_dir.exists():
