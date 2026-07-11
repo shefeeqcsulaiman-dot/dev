@@ -9,201 +9,264 @@
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=20260627y">
 <style>
-/* ── Light-mode sidebar overrides (same as HRMS) ───────────── */
+/* ── Sidebar: Light Mode ──────────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
+body.theme-light .sb .sb-lbl{color:#9ca3af!important;font-size:10px!important;letter-spacing:.07em;}
+body.theme-light .sb .sb-logo-text .sb-brand{color:#111827!important;}
+body.theme-light .sb .sb-logo-text .sb-brand span{color:#2563eb!important;}
 body.theme-light .sb .nav{color:#374151!important;}
 body.theme-light .sb .nav:hover{background:rgba(0,0,0,.05)!important;color:#111827!important;}
 body.theme-light .sb .nav.on{background:#2563eb!important;color:#fff!important;box-shadow:0 2px 8px rgba(37,99,235,.25);}
 body.theme-light .sb .nav svg{opacity:.6;}
 body.theme-light .sb .nav.on svg,body.theme-light .sb .nav:hover svg{opacity:1;}
-body.theme-light .sb .sb-brand{color:#111827!important;}
-body.theme-light .sb .sb-brand span{color:#2563eb!important;}
-
-html,body{margin:0;padding:0;height:100%;overflow:hidden}
-
-/* ── Login screen ──────────────────────────────────────────── */
-#emp-login-screen{
-  position:fixed;top:0;left:0;width:100%;height:100%;
-  display:flex;align-items:center;justify-content:center;
-  background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#0f172a 100%);
-  z-index:100;
-}
-.emp-login-card{background:#fff;border-radius:20px;padding:32px 28px 28px;width:380px;max-width:92vw;box-shadow:0 32px 80px rgba(0,0,0,.4)}
-.emp-login-logo{display:flex;align-items:center;gap:10px;margin-bottom:6px}
-.emp-login-title{font-size:18px;font-weight:700;color:#111827;margin-bottom:4px}
-.emp-login-sub{font-size:13px;color:#6b7280;margin-bottom:22px}
-.emp-fl{display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px}
-.emp-fi{width:100%;border:1.5px solid #e5e7eb;border-radius:10px;padding:0 14px;height:50px;font-family:'DM Sans',sans-serif;font-size:15px;outline:none;color:#111827;background:#fff;transition:border-color .15s,box-shadow .15s;box-sizing:border-box}
-.emp-fi:focus{border-color:#6491DE;box-shadow:0 0 0 3px rgba(100,145,222,.14)}
-.emp-fg{margin-bottom:16px;position:relative}
-.emp-pw-wrap{position:relative}.emp-pw-wrap .emp-fi{padding-right:44px}
-.emp-pw-eye{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#9ca3af;padding:4px;display:flex;align-items:center}
-.emp-btn-p{width:100%;background:#6491DE;color:#fff;border:none;border-radius:12px;height:52px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer;margin-top:4px;letter-spacing:.1px;transition:background .15s}
-.emp-btn-p:hover{background:#4f78c8}.emp-btn-p:disabled{opacity:.6;cursor:not-allowed}
-.emp-err{font-size:12.5px;color:#dc2626;margin-top:10px;text-align:center;min-height:18px;font-weight:500}
-.emp-back-link{text-align:center;font-size:12px;color:rgba(255,255,255,.5);margin-top:18px;cursor:pointer}
-.emp-back-link a{color:rgba(255,255,255,.6);text-decoration:none}.emp-back-link a:hover{color:#fff}
-
-/* ── Portal layout ─────────────────────────────────────────── */
-#emp-portal{position:fixed;top:0;left:0;width:100%;height:100%;display:none}
-#emp-portal.on{display:flex}
-#emp-portal .sb{display:flex;flex-direction:column}
-#emp-portal .content{background:#f1f5f9!important}
-.emp-page{display:none}.emp-page.on{display:block}
-
-/* ── Cards / KPI grid ──────────────────────────────────────── */
-.emp-kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
-.emp-kpi-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;display:flex;align-items:flex-start;gap:12px;transition:box-shadow .15s}
-.emp-kpi-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.09)}
-.emp-kpi-icon{width:48px;height:48px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.emp-kpi-lbl{font-size:11px;color:#6b7280;font-weight:500;margin-bottom:2px}
-.emp-kpi-val{font-size:22px;font-weight:700;color:#111827;line-height:1.1;margin:2px 0 1px}
-.emp-kpi-sub{font-size:10.5px;color:#6b7280}
-.emp-hc{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px;margin-bottom:14px}
-.emp-hc-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-.emp-hc-title{font-size:13.5px;font-weight:700;color:#111827;display:flex;align-items:center;gap:8px}
-.emp-table{width:100%;border-collapse:collapse;font-size:13px;min-width:380px}
-.emp-table th{text-align:left;padding:8px 12px;font-size:10.5px;font-weight:700;color:#6b7280;border-bottom:2px solid #e5e7eb;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
-.emp-table td{padding:10px 12px;border-bottom:1px solid #f3f4f6;color:#111827;vertical-align:middle}
-.emp-table tr:last-child td{border-bottom:none}
-.emp-table tr:hover td{background:#fafafa}
-.emp-badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600}
-.emp-empty{text-align:center;padding:36px 20px;color:#9ca3af}
-.emp-spinner{display:inline-block;width:20px;height:20px;border:2.5px solid #e5e7eb;border-top-color:#6491DE;border-radius:50%;animation:empSpin .7s linear infinite}
-@keyframes empSpin{to{transform:rotate(360deg)}}
-.emp-form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-@media(max-width:900px){.emp-kpi-grid,.emp-form-grid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:600px){.emp-kpi-grid{grid-template-columns:repeat(2,1fr)}}
-.emp-signout{display:flex;align-items:center;gap:6px;padding:7px 14px;background:none;border:1px solid #e2e8f0;border-radius:8px;font-size:12.5px;font-weight:600;color:#ef4444;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .15s}
-.emp-signout:hover{background:#fef2f2}
-.emp-prog-block{margin-bottom:12px}
-.emp-prog-hd{display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px}
-.emp-prog-bar{height:6px;background:#f3f4f6;border-radius:3px;overflow:hidden}
-.emp-prog-fill{height:100%;border-radius:3px;transition:width .4s}
+body.theme-light .sb .nav-sub{color:#6b7280!important;}
+body.theme-light .sb .nav-sub:hover{background:rgba(0,0,0,.04)!important;color:#111827!important;}
+body.theme-light .sb .nav-sub.on{color:#2563eb!important;}
+body.theme-light .sb .sb-foot{border-top:1px solid #dde2eb!important;padding:0;}
+body.theme-light .sb .sb-foot .btn-g{background:#e5e9f0!important;color:#374151!important;border-color:#d1d5db!important;font-size:12px!important;}
+body.theme-light .sb .sb-foot .btn-g:hover{background:#d1d5db!important;color:#111827!important;}
+/* ── Sidebar: Dark Mode ───────────────────────────────────── */
+body:not(.theme-light) .sb{background:#0f1724!important;border-right:1px solid rgba(255,255,255,.07)!important;}
+body:not(.theme-light) .sb .sb-lbl{color:rgba(255,255,255,.3)!important;font-size:10px!important;letter-spacing:.07em;}
+body:not(.theme-light) .sb .sb-logo-text .sb-brand{color:#fff!important;}
+body:not(.theme-light) .sb .sb-logo-text .sb-brand span{color:#60a5fa!important;}
+body:not(.theme-light) .sb .nav{color:rgba(255,255,255,.65)!important;}
+body:not(.theme-light) .sb .nav:hover{background:rgba(255,255,255,.07)!important;color:#fff!important;}
+body:not(.theme-light) .sb .nav.on{background:#2563eb!important;color:#fff!important;box-shadow:0 2px 8px rgba(37,99,235,.4);}
+body:not(.theme-light) .sb .nav svg{opacity:.65;}
+body:not(.theme-light) .sb .nav.on svg,body:not(.theme-light) .sb .nav:hover svg{opacity:1;}
+body:not(.theme-light) .sb .nav-sub{color:rgba(255,255,255,.45)!important;}
+body:not(.theme-light) .sb .nav-sub:hover{background:rgba(255,255,255,.06)!important;color:#fff!important;}
+body:not(.theme-light) .sb .nav-sub.on{color:#93c5fd!important;}
+body:not(.theme-light) .sb .sb-foot{border-top:1px solid rgba(255,255,255,.08)!important;padding:0;}
+body:not(.theme-light) .sb .sb-foot .btn-g{background:rgba(255,255,255,.08)!important;color:rgba(255,255,255,.65)!important;border-color:rgba(255,255,255,.1)!important;font-size:12px!important;}
+body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14)!important;color:#fff!important;}
+/* ── Topbar / Content ─────────────────────────────────────── */
+.topbar{display:none!important;}
+.content{background:#f2f4f8!important;padding:0!important;}
+/* ── HRMS Topbar ──────────────────────────────────────────── */
+.hrms-topbar{display:flex;align-items:center;gap:12px;padding:0 20px;height:62px;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:10;flex-shrink:0;}
+.hrms-search{flex:1;max-width:380px;display:flex;align-items:center;gap:8px;background:#f4f7fb;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px;}
+.hrms-search input{border:none;background:none;outline:none;font-size:13px;color:#6b7280;width:100%;}
+.hrms-search svg{flex-shrink:0;opacity:.38;color:#374151;}
+.tb-right-hrms{display:flex;align-items:center;gap:6px;margin-left:auto;}
+.hm-icon-btn{position:relative;width:38px;height:38px;border-radius:50%;background:#f4f7fb;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#374151;transition:background .15s;flex-shrink:0;}
+.hm-icon-btn:hover{background:#e8edf5;}
+.hm-badge{position:absolute;top:0;right:0;background:#ef4444;color:#fff;font-size:9px;font-weight:700;border-radius:99px;min-width:16px;height:16px;display:flex;align-items:center;justify-content:center;padding:0 3px;line-height:1;border:1.5px solid #fff;}
+.hm-user{display:flex;align-items:center;gap:8px;padding:6px 12px;background:#f4f7fb;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;margin-left:4px;}
+.hm-avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#4f8ef7,#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;flex-shrink:0;}
+.hm-user-name{font-size:12.5px;font-weight:600;color:#111827;white-space:nowrap;}
+.hm-user-role{font-size:10px;color:#9ca3af;}
+.hm-date{display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280;background:#f4f7fb;border:1px solid #e2e8f0;border-radius:7px;padding:6px 11px;white-space:nowrap;margin-left:4px;}
+/* ── KPI Cards ────────────────────────────────────────────── */
+.hrms-kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px;}
+@media(max-width:1280px){.hrms-kpi-grid{grid-template-columns:repeat(2,1fr);}}
+.hrms-kpi-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;display:flex;align-items:flex-start;gap:12px;transition:box-shadow .15s,transform .15s;}
+.hrms-kpi-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.09);transform:translateY(-1px);}
+.hrms-kpi-icon{width:48px;height:48px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.hrms-kpi-val{font-size:21px;font-weight:700;color:#111827;line-height:1.1;margin:2px 0 1px;}
+.hrms-kpi-lbl{font-size:11px;color:#6b7280;font-weight:500;margin-bottom:2px;}
+.hrms-kpi-trend{font-size:10.5px;color:#6b7280;}
+/* ── Layout ───────────────────────────────────────────────── */
+.hrms-dash-inner{padding:18px 20px;overflow-y:auto;height:calc(100vh - 62px);}
+/* ── Card base ────────────────────────────────────────────── */
+.hc{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px;margin-bottom:16px;}
+.hc-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.hc-title{font-size:13.5px;font-weight:700;color:#111827;}
+.hc-sub{font-size:11px;color:#9ca3af;}
+.hc-select{background:#f4f7fb;border:1px solid #e2e8f0;border-radius:6px;padding:3px 8px;font-size:11px;color:#374151;cursor:pointer;}
+/* ── Progress Bars ────────────────────────────────────────── */
+.hc-progress-list{display:flex;flex-direction:column;gap:10px;}
+.hc-progress-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+.hc-prog-lbl{font-size:12px;color:#374151;font-weight:500;}
+.hc-prog-val{font-size:11px;color:#6b7280;}
+.hc-prog-bar{height:6px;background:#f0f2f7;border-radius:99px;overflow:hidden;margin-top:4px;}
+.hc-prog-fill{height:100%;border-radius:99px;}
+/* ── Sidebar footer ───────────────────────────────────────── */
+.hrms-sb-user{display:flex;align-items:center;gap:9px;padding:12px 16px 10px;}
+.hrms-sb-av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#4f8ef7,#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0;}
+.hrms-sb-name{font-size:12px;font-weight:600;}
+.hrms-sb-co{font-size:10px;color:#9ca3af;}
+/* ── Login screen ─────────────────────────────────────────── */
+#emp-login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#0f172a 100%);z-index:9999;}
+.elc{background:#fff;border-radius:20px;padding:36px 30px 30px;width:400px;max-width:92vw;box-shadow:0 32px 80px rgba(0,0,0,.4);}
+.efl{display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px;}
+.efi{width:100%;border:1.5px solid #e5e7eb;border-radius:10px;padding:0 14px;height:50px;font-family:'DM Sans',sans-serif;font-size:15px;outline:none;color:#111827;background:#fff;transition:border-color .15s,box-shadow .15s;box-sizing:border-box;}
+.efi:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.12);}
+.efg{margin-bottom:16px;position:relative;}
+.epw{position:relative;}.epw .efi{padding-right:44px;}
+.epwe{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#9ca3af;padding:4px;display:flex;align-items:center;}
+.ebtn{width:100%;background:#2563eb;color:#fff;border:none;border-radius:12px;height:52px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer;margin-top:4px;transition:background .15s;}
+.ebtn:hover{background:#1d4ed8;}.ebtn:disabled{opacity:.6;cursor:not-allowed;}
+.eerr{font-size:12.5px;color:#dc2626;margin-top:10px;text-align:center;min-height:18px;font-weight:500;}
+/* ── Portal wrapper ───────────────────────────────────────── */
+#emp-portal{position:fixed;inset:0;display:none;}
+#emp-portal.on{display:flex;}
+.emp-page{display:none;}.emp-page.on{display:block;}
+/* ── Misc ─────────────────────────────────────────────────── */
+.emp-spin{display:inline-block;width:20px;height:20px;border:2.5px solid #e5e7eb;border-top-color:#2563eb;border-radius:50%;animation:espin .7s linear infinite;}
+@keyframes espin{to{transform:rotate(360deg)}}
+.emp-empty{text-align:center;padding:40px 20px;color:#9ca3af;font-size:13px;}
 </style>
 </head>
 <body class="theme-light">
 
-<!-- ── Login Screen ─────────────────────────────────────────── -->
-<div id="emp-login-screen">
+<!-- ═══════════════════════════════════════════════════════════
+     LOGIN SCREEN
+════════════════════════════════════════════════════════════ -->
+<div id="emp-login">
   <div style="display:flex;flex-direction:column;align-items:center">
-    <div class="emp-login-card">
-      <div class="emp-login-logo">
-        <div style="width:36px;height:36px;background:#6491DE;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.5"><circle cx="8" cy="6" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/></svg>
+    <div class="elc">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px">
+        <div style="width:44px;height:44px;background:#2563eb;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.5"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><circle cx="12.5" cy="5" r="1.8"/><path d="M14.5 13c0-2-1.3-3-2.5-3.5"/></svg>
         </div>
         <div>
-          <div style="font-size:15px;font-weight:700;color:#111827">Employee Portal</div>
-          <div style="font-size:11px;color:#9ca3af">Powered by TaxFlow HRMS</div>
+          <div style="font-size:19px;font-weight:700;color:#111827;font-family:'Syne',sans-serif">Employee Portal</div>
+          <div style="font-size:11px;color:#9ca3af;margin-top:1px">TaxFlow HRMS</div>
         </div>
       </div>
-      <div class="emp-login-title">Welcome Back</div>
-      <div class="emp-login-sub">Sign in with your employee credentials</div>
-      <div class="emp-fg">
-        <label class="emp-fl">Username or Email</label>
-        <input class="emp-fi" id="emp-login-user" placeholder="Your username or email" autocomplete="username" autocapitalize="off" autocorrect="off">
+      <div class="efg">
+        <label class="efl">Username / Email / Employee ID</label>
+        <input class="efi" id="el-user" placeholder="Enter your username or email" autocomplete="username" autocapitalize="off" onkeydown="if(event.key==='Enter')document.getElementById('el-pass').focus()">
       </div>
-      <div class="emp-fg">
-        <label class="emp-fl">Password</label>
-        <div class="emp-pw-wrap">
-          <input class="emp-fi" id="emp-login-pass" type="password" placeholder="Your password" autocomplete="current-password">
-          <button class="emp-pw-eye" type="button" onclick="toggleEmpPw(this)">
+      <div class="efg">
+        <label class="efl">Password</label>
+        <div class="epw">
+          <input class="efi" id="el-pass" type="password" placeholder="Your password" autocomplete="current-password" onkeydown="if(event.key==='Enter')empLogin()">
+          <button class="epwe" type="button" onclick="var i=document.getElementById('el-pass');i.type=i.type==='password'?'text':'password'">
             <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>
           </button>
         </div>
       </div>
-      <button class="emp-btn-p" id="emp-login-btn" onclick="empLogin()">Sign In</button>
-      <div class="emp-err" id="emp-login-err"></div>
+      <button class="ebtn" id="el-btn" onclick="empLogin()">Sign In</button>
+      <div class="eerr" id="el-err"></div>
+      <div style="text-align:center;margin-top:14px;font-size:12px;color:#9ca3af">Default password is your Employee ID</div>
     </div>
-    <div class="emp-back-link"><a href="/hrms">← HR Admin Login</a></div>
+    <div style="text-align:center;margin-top:16px;font-size:12px;color:rgba(255,255,255,.45)">
+      <a href="/hrms" style="color:rgba(255,255,255,.6);text-decoration:none">← HR Admin Login</a>
+    </div>
   </div>
 </div>
 
-<!-- ── Employee Portal App ──────────────────────────────────── -->
-<div id="emp-portal" class="theme-light">
+<!-- ═══════════════════════════════════════════════════════════
+     EMPLOYEE PORTAL  (same layout as HRMS)
+════════════════════════════════════════════════════════════ -->
+<div id="emp-portal">
 
-  <!-- Sidebar -->
-  <nav class="sb" id="emp-sidebar">
+  <!-- ── Sidebar ──────────────────────────────────────────── -->
+  <nav class="sb" id="emp-sb">
     <div class="sb-logo">
-      <div class="sb-brand">Tax<span>Flow</span></div>
-      <div class="sb-tagline">Employee Portal</div>
+      <div id="ep-logo-icon" style="width:34px;height:34px;border-radius:9px;background:#2563eb;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.6"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><circle cx="12.5" cy="5" r="1.8"/><path d="M14.5 13c0-2-1.3-3-2.5-3.5"/></svg>
+      </div>
+      <div class="sb-logo-text">
+        <div class="sb-brand">Tax<span>Flow</span></div>
+        <div style="font-size:10px;color:#9ca3af;margin-top:1px">Employee Portal</div>
+      </div>
     </div>
+
     <div class="sb-section" style="flex:1;overflow-y:auto;padding-bottom:4px">
-      <div class="nav on" id="enav-profile" onclick="empTab('profile')">
-        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="6" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/></svg>
+      <div class="nav on" id="enav-dashboard" onclick="empGo('dashboard')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>
+        Dashboard
+      </div>
+      <div class="nav" id="enav-profile" data-emod="profile" onclick="empGo('profile')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="6" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/></svg>
         My Profile
       </div>
-      <div class="nav" id="enav-attendance" data-emp-module="attendance" onclick="empTab('attendance')">
-        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/></svg>
+      <div class="nav" id="enav-attendance" data-emod="attendance" onclick="empGo('attendance')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2.5 1.5"/></svg>
         Attendance
       </div>
-      <div class="nav" id="enav-leave" data-emp-module="leave" onclick="empTab('leave')">
-        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/></svg>
+      <div class="nav" id="enav-rota" data-emod="rota" onclick="empGo('rota')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1.5v3M11 1.5v3M2 6h12"/></svg>
+        Rota &amp; Shift
+      </div>
+      <div class="nav" id="enav-leave" data-emod="leave" onclick="empGo('leave')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8c0-2.8 2.2-5 5-5s5 2.2 5 5v4H3V8z"/><path d="M1 12h14"/></svg>
         Leave
       </div>
-      <div class="nav" id="enav-overtime" data-emp-module="overtime" onclick="empTab('overtime')">
-        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
-        Overtime
-      </div>
-      <div class="nav" id="enav-payslips" data-emp-module="payslips" onclick="empTab('payslips')">
-        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="12" height="13" rx="1.5"/><path d="M5 6h6M5 9h4M5 12h3"/></svg>
+      <div class="nav" id="enav-payslips" data-emod="payslips" onclick="empGo('payslips')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6h12M5 10h3M10 10h1"/></svg>
         Payslips
       </div>
-      <div class="nav" id="enav-corrections" data-emp-module="corrections" onclick="empTab('corrections')">
-        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 11v.5"/></svg>
+      <div class="nav" id="enav-overtime" data-emod="overtime" onclick="empGo('overtime')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2.5 1.5"/><path d="M12 2l2-1.5"/></svg>
+        Overtime
+      </div>
+      <div class="nav" id="enav-loans" data-emod="loans" onclick="empGo('loans')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="9" rx="1"/><path d="M2 7.5h12M8 7.5V4M6 11h4"/></svg>
+        Loans &amp; Advances
+      </div>
+      <div class="nav" id="enav-corrections" data-emod="corrections" onclick="empGo('corrections')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 11v.5"/></svg>
         Corrections
       </div>
-      <div class="nav" id="enav-loans" data-emp-module="loans" onclick="empTab('loans')">
-        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1" y="4" width="14" height="9" rx="1.5"/><path d="M4 4V3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1M8 8v2m-2-1h4"/></svg>
-        Loans
-      </div>
-      <div class="nav" id="enav-expiry" data-emp-module="expiry" onclick="empTab('expiry')">
-        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 11v.5"/></svg>
+      <div class="nav" id="enav-expiry" data-emod="expiry" onclick="empGo('expiry')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/><path d="M8 4v4.5M8 11v.5"/></svg>
         Expiry Alerts
       </div>
-      <div class="nav" id="enav-documents" data-emp-module="documents" onclick="empTab('documents')">
-        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/></svg>
+      <div class="nav" id="enav-documents" data-emod="documents" onclick="empGo('documents')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/></svg>
         Documents
       </div>
-      <div class="nav" id="enav-rota" data-emp-module="rota" onclick="empTab('rota')">
-        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1" y="3" width="14" height="11" rx="1.5"/><path d="M1 7h14M5 1v3M11 1v3M5 10h2M9 10h2"/></svg>
-        My Schedule
-      </div>
-      <div class="nav" id="enav-assets" data-emp-module="assets" onclick="empTab('assets')">
-        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="6" width="12" height="8" rx="1.5"/><path d="M5 6V4a3 3 0 0 1 6 0v2"/></svg>
-        My Assets
-      </div>
-      <div class="nav" id="enav-recruitment" data-emp-module="recruitment" onclick="empTab('recruitment')">
-        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4"/><path d="M11 8l2 2-2 2M13 10H9"/></svg>
+      <div class="nav" id="enav-recruitment" data-emod="recruitment" onclick="empGo('recruitment')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="5" r="3"/><path d="M1 14c0-3 2.5-5 6-5s6 2 6 5"/><path d="M13 2l1 1-2.5 2.5-1-1"/></svg>
         Recruitment
       </div>
-      <div class="nav" id="enav-performance" data-emp-module="performance" onclick="empTab('performance')">
-        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 12l3-4 3 2 3-5 3 3"/></svg>
+      <div class="nav" id="enav-performance" data-emod="performance" onclick="empGo('performance')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2l1.2 3.5H13l-2.9 2 1.1 3.5L8 9.2l-3.2 1.8 1.1-3.5L3 5.5h3.8z"/></svg>
         Performance
       </div>
+      <div class="nav" id="enav-assets" data-emod="assets" onclick="empGo('assets')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="8" width="4" height="5" rx="1"/><rect x="6" y="5.5" width="4" height="7.5" rx="1"/><rect x="10.5" y="3" width="4" height="10" rx="1"/></svg>
+        Assets
+      </div>
     </div>
-    <div style="display:flex;align-items:center;gap:9px;padding:12px 14px 14px;border-top:1px solid var(--border)">
-      <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#4f8ef7,#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0" id="emp-sb-av">?</div>
-      <div style="min-width:0">
-        <div style="font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="emp-sb-name">—</div>
-        <div style="font-size:10px;color:var(--text3)" id="emp-sb-role">Employee</div>
+
+    <div class="sb-foot">
+      <div class="hrms-sb-user">
+        <div class="hrms-sb-av" id="ep-sb-av">?</div>
+        <div style="min-width:0;flex:1">
+          <div class="hrms-sb-name" id="ep-sb-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
+          <div class="hrms-sb-co" id="ep-sb-role">Employee</div>
+        </div>
+      </div>
+      <div style="padding:0 12px 12px">
+        <button class="btn btn-g btn-block" onclick="empLogout()">Sign Out</button>
       </div>
     </div>
   </nav>
 
-  <!-- Main -->
+  <!-- ── Main ─────────────────────────────────────────────── -->
   <div class="main">
+    <div class="topbar" style="display:none!important"></div>
+
+    <!-- Topbar (identical to HRMS) -->
     <div class="hrms-topbar">
-      <div style="font-size:13.5px;font-weight:600;color:#374151">Employee Portal</div>
+      <button style="background:none;border:none;color:#374151;font-size:20px;padding:4px 8px;line-height:1;cursor:pointer;border-radius:6px" onclick="document.getElementById('emp-sb').classList.toggle('open')" title="Menu">&#9776;</button>
+      <div class="hrms-search">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10l3 3"/></svg>
+        <input type="text" placeholder="Search your records..." id="ep-search" oninput="empSearch(this.value)">
+      </div>
       <div class="tb-right-hrms">
+        <div class="hm-icon-btn" id="ep-notif-btn" title="Expiry Alerts" onclick="empGo('expiry')">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5a5 5 0 00-5 5v3L1.5 11.5h13L13 9.5v-3a5 5 0 00-5-5z"/><path d="M6.5 13.5a1.5 1.5 0 003 0"/></svg>
+          <div class="hm-badge" id="ep-notif-badge" style="display:none">0</div>
+        </div>
         <div class="hm-user">
-          <div class="hm-avatar" id="emp-top-av">?</div>
+          <div class="hm-avatar" id="ep-top-av">?</div>
           <div>
-            <div class="hm-user-name" id="emp-top-name">—</div>
-            <div class="hm-user-role" id="emp-top-role">Employee</div>
+            <div class="hm-user-name" id="ep-top-name">—</div>
+            <div class="hm-user-role" id="ep-top-role">Employee</div>
           </div>
         </div>
-        <button class="emp-signout" onclick="empLogout()">
+        <div class="hm-date">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1.5v3M11 1.5v3M2 6h12"/></svg>
+          <span id="ep-date">—</span>
+        </div>
+        <button onclick="empLogout()" style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:none;border:1px solid #e2e8f0;border-radius:8px;font-size:12.5px;font-weight:600;color:#ef4444;cursor:pointer;transition:background .15s" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='none'">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3"/><path d="M10 11l3-3-3-3M13 8H6"/></svg>
           Sign Out
         </button>
@@ -212,158 +275,194 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden}
 
     <div class="content">
 
-      <!-- Profile -->
-      <div class="emp-page on" id="epp-profile">
-        <div class="emp-kpi-grid">
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#eff6ff"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4.5l3 2"/></svg></div><div><div class="emp-kpi-lbl">Present Days</div><div class="emp-kpi-val" id="edash-present">—</div><div class="emp-kpi-sub">this month</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.6"><rect x="3" y="5" width="16" height="14" rx="2"/><path d="M7 2v4M15 2v4M3 9h16"/></svg></div><div><div class="emp-kpi-lbl">Leave Left</div><div class="emp-kpi-val" id="edash-leave">—</div><div class="emp-kpi-sub">annual days</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#fff7ed"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#ea580c" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4l2.5 2.5"/></svg></div><div><div class="emp-kpi-lbl">OT Pending</div><div class="emp-kpi-val" id="edash-ot">—</div><div class="emp-kpi-sub">awaiting approval</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#fef2f2"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#dc2626" stroke-width="1.6"><path d="M11 3L2 19h18L11 3z"/><path d="M11 9v5M11 16v1"/></svg></div><div><div class="emp-kpi-lbl">Docs Expiring</div><div class="emp-kpi-val" id="edash-expiry">—</div><div class="emp-kpi-sub">within 90 days</div></div></div>
+      <!-- ══ DASHBOARD ════════════════════════════════════════ -->
+      <div class="emp-page on hrms-dash-inner" id="ep-dashboard">
+        <div class="hrms-kpi-grid">
+          <div class="hrms-kpi-card">
+            <div class="hrms-kpi-icon" style="background:#eff6ff"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#2563eb" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4.5l3 2"/></svg></div>
+            <div><div class="hrms-kpi-lbl">Present Days</div><div class="hrms-kpi-val" id="kpi-present">—</div><div class="hrms-kpi-trend">this month</div></div>
+          </div>
+          <div class="hrms-kpi-card">
+            <div class="hrms-kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#16a34a" stroke-width="1.6"><rect x="3" y="5" width="16" height="14" rx="2"/><path d="M7 2v4M15 2v4M3 9h16"/></svg></div>
+            <div><div class="hrms-kpi-lbl">Leave Balance</div><div class="hrms-kpi-val" id="kpi-leave">—</div><div class="hrms-kpi-trend">annual days left</div></div>
+          </div>
+          <div class="hrms-kpi-card">
+            <div class="hrms-kpi-icon" style="background:#fff7ed"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#ea580c" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4l2.5 2.5"/></svg></div>
+            <div><div class="hrms-kpi-lbl">OT Pending</div><div class="hrms-kpi-val" id="kpi-ot">—</div><div class="hrms-kpi-trend">awaiting approval</div></div>
+          </div>
+          <div class="hrms-kpi-card">
+            <div class="hrms-kpi-icon" style="background:#fef2f2"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#dc2626" stroke-width="1.6"><path d="M11 3L2 19h18L11 3z"/><path d="M11 9v5M11 16v1"/></svg></div>
+            <div><div class="hrms-kpi-lbl">Docs Expiring</div><div class="hrms-kpi-val" id="kpi-expiry">—</div><div class="hrms-kpi-trend">within 90 days</div></div>
+          </div>
         </div>
-        <div style="display:grid;grid-template-columns:240px 1fr;gap:14px;margin-bottom:14px">
-          <div class="emp-hc" style="margin-bottom:0">
-            <div class="emp-hc-hd"><div class="emp-hc-title">Welcome Back</div></div>
-            <div style="display:flex;align-items:center;gap:12px">
-              <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#6491DE,#4338ca);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0" id="eprofile-av">?</div>
-              <div><div style="font-size:15px;font-weight:700;color:#111827" id="eprofile-name">—</div><div style="font-size:11.5px;color:#6b7280;margin-top:3px" id="eprofile-desg">—</div></div>
+        <div style="display:grid;grid-template-columns:220px 1fr;gap:16px;margin-bottom:16px">
+          <div class="hc" style="margin-bottom:0;display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:24px 18px">
+            <div style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700" id="ep-profile-av">?</div>
+            <div>
+              <div style="font-size:15px;font-weight:700;color:#111827" id="ep-profile-name">—</div>
+              <div style="font-size:12px;color:#6b7280;margin-top:3px" id="ep-profile-desg">—</div>
             </div>
+            <button class="btn btn-p" style="font-size:12px;padding:6px 16px;margin-top:4px" onclick="empGo('profile')">View Profile</button>
           </div>
-          <div class="emp-hc" style="margin-bottom:0">
-            <div class="emp-hc-hd"><div class="emp-hc-title">Quick Access</div></div>
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px" id="emp-quick-tiles"></div>
+          <div class="hc" style="margin-bottom:0">
+            <div class="hc-hd"><div class="hc-title">Quick Access</div></div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:10px" id="ep-tiles"></div>
           </div>
         </div>
-        <div class="emp-hc">
-          <div class="emp-hc-hd"><div class="emp-hc-title">Personal Information</div></div>
-          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px" id="eprofile-grid"><div class="emp-empty"><div class="emp-spinner"></div></div></div>
+      </div>
+
+      <!-- ══ MY PROFILE ════════════════════════════════════════ -->
+      <div class="emp-page hrms-dash-inner" id="ep-profile">
+        <div class="hc">
+          <div class="hc-hd"><div class="hc-title">Personal Information</div></div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px" id="ep-info-personal"><div class="emp-empty"><div class="emp-spin"></div></div></div>
+        </div>
+        <div class="hc">
+          <div class="hc-hd"><div class="hc-title">Employment Details</div></div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px" id="ep-info-emp"></div>
+        </div>
+        <div class="hc">
+          <div class="hc-hd"><div class="hc-title">Bank &amp; WPS Details</div></div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px" id="ep-info-bank"></div>
+        </div>
+        <div class="hc">
+          <div class="hc-hd"><div class="hc-title">Document Numbers</div></div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px" id="ep-info-docs"></div>
         </div>
       </div>
 
-      <!-- Attendance -->
-      <div class="emp-page" id="epp-attendance">
-        <div class="emp-kpi-grid" id="eatt-kpi">
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4.5l3 2"/></svg></div><div><div class="emp-kpi-lbl">Present Days</div><div class="emp-kpi-val" id="eatt-present">—</div><div class="emp-kpi-sub">this month</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#eff6ff"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.6"><rect x="3" y="5" width="16" height="14" rx="2"/><path d="M7 2v4M15 2v4M3 9h16"/></svg></div><div><div class="emp-kpi-lbl">Total Punches</div><div class="emp-kpi-val" id="eatt-total">—</div><div class="emp-kpi-sub">all records</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#dbeafe"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#1d4ed8" stroke-width="1.6"><path d="M11 3L4 8v11h5v-5h4v5h5V8z"/></svg></div><div><div class="emp-kpi-lbl">Check-In Days</div><div class="emp-kpi-val" id="eatt-in">—</div><div class="emp-kpi-sub">in punches</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#f3e8ff"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#7c3aed" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4.5l3 2"/></svg></div><div><div class="emp-kpi-lbl">Last Punch</div><div class="emp-kpi-val" id="eatt-last" style="font-size:13px">—</div><div class="emp-kpi-sub">most recent</div></div></div>
+      <!-- ══ ATTENDANCE ════════════════════════════════════════ -->
+      <div class="emp-page hrms-dash-inner" id="ep-attendance">
+        <div class="hrms-kpi-grid">
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#16a34a" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4.5l3 2"/></svg></div><div><div class="hrms-kpi-lbl">Present Days</div><div class="hrms-kpi-val" id="att-present">—</div><div class="hrms-kpi-trend">this month</div></div></div>
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#eff6ff"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#2563eb" stroke-width="1.6"><rect x="3" y="5" width="16" height="14" rx="2"/><path d="M7 2v4M15 2v4M3 9h16"/></svg></div><div><div class="hrms-kpi-lbl">Total Punches</div><div class="hrms-kpi-val" id="att-total">—</div><div class="hrms-kpi-trend">all records</div></div></div>
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#dbeafe"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#1d4ed8" stroke-width="1.6"><path d="M11 3L4 8v11h5v-5h4v5h5V8z"/></svg></div><div><div class="hrms-kpi-lbl">Check-In Days</div><div class="hrms-kpi-val" id="att-in">—</div><div class="hrms-kpi-trend">in punches</div></div></div>
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#f3e8ff"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#7c3aed" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4.5l3 2"/></svg></div><div><div class="hrms-kpi-lbl">Last Punch</div><div class="hrms-kpi-val" id="att-last" style="font-size:14px">—</div><div class="hrms-kpi-trend">most recent</div></div></div>
         </div>
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">Attendance Records</div></div><div id="eatt-content"><div class="emp-empty"><div class="emp-spinner"></div></div></div></div>
+        <div class="hc"><div class="hc-hd"><div class="hc-title">Attendance Records</div></div><div id="att-tbl"><div class="emp-empty"><div class="emp-spin"></div></div></div></div>
       </div>
 
-      <!-- Leave -->
-      <div class="emp-page" id="epp-leave">
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">Leave Balance</div></div><div id="eleave-balance"><div class="emp-empty"><div class="emp-spinner"></div></div></div></div>
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">Apply for Leave</div></div>
-          <div class="emp-form-grid">
-            <div><label class="fl">Leave Type</label><select class="fi" id="el-type"><option>Annual Leave</option><option>Sick Leave</option><option>Emergency Leave</option><option>Maternity Leave</option><option>Paternity Leave</option><option>Unpaid Leave</option><option>Compassionate Leave</option></select></div>
-            <div><label class="fl">From Date</label><input class="fi" type="date" id="el-from"></div>
-            <div><label class="fl">To Date</label><input class="fi" type="date" id="el-to"></div>
-            <div><label class="fl">Reason (optional)</label><input class="fi" id="el-reason" placeholder="Brief reason"></div>
+      <!-- ══ ROTA & SHIFT ══════════════════════════════════════ -->
+      <div class="emp-page hrms-dash-inner" id="ep-rota">
+        <div class="hrms-kpi-grid">
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#ecfdf5"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#059669" stroke-width="1.6"><rect x="3" y="5" width="16" height="14" rx="2"/><path d="M7 2v4M15 2v4M3 9h16"/></svg></div><div><div class="hrms-kpi-lbl">This Week Shifts</div><div class="hrms-kpi-val" id="rota-week">—</div><div class="hrms-kpi-trend">scheduled</div></div></div>
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#eff6ff"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#2563eb" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4.5l3 2"/></svg></div><div><div class="hrms-kpi-lbl">Total Hours</div><div class="hrms-kpi-val" id="rota-hrs">—</div><div class="hrms-kpi-trend">this week</div></div></div>
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#16a34a" stroke-width="1.6"><polyline points="4 12 9 17 18 6"/></svg></div><div><div class="hrms-kpi-lbl">Next Shift</div><div class="hrms-kpi-val" id="rota-next" style="font-size:13px">—</div><div class="hrms-kpi-trend">upcoming</div></div></div>
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#f3e8ff"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#7c3aed" stroke-width="1.6"><rect x="3" y="5" width="16" height="14" rx="2"/><path d="M7 2v4M15 2v4M3 9h16M7 14h8"/></svg></div><div><div class="hrms-kpi-lbl">Total Assigned</div><div class="hrms-kpi-val" id="rota-total">—</div><div class="hrms-kpi-trend">all records</div></div></div>
+        </div>
+        <div class="hc"><div class="hc-hd"><div class="hc-title">My Schedule</div></div><div id="rota-tbl"><div class="emp-empty"><div class="emp-spin"></div></div></div></div>
+      </div>
+
+      <!-- ══ LEAVE ══════════════════════════════════════════════ -->
+      <div class="emp-page hrms-dash-inner" id="ep-leave">
+        <div class="hc">
+          <div class="hc-hd"><div class="hc-title">Leave Balance</div></div>
+          <div class="hc-progress-list" id="leave-bal"><div class="emp-empty"><div class="emp-spin"></div></div></div>
+        </div>
+        <div class="hc">
+          <div class="hc-hd"><div class="hc-title">Apply for Leave</div></div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
+            <div><label class="fl">Leave Type</label><select class="fi" id="lv-type"><option>Annual Leave</option><option>Sick Leave</option><option>Casual Leave</option><option>Emergency Leave</option><option>Maternity Leave</option><option>Paternity Leave</option><option>Unpaid Leave</option><option>Compassionate Leave</option><option>Hajj Leave</option><option>Lieu Days</option></select></div>
+            <div><label class="fl">From Date</label><input class="fi" type="date" id="lv-from"></div>
+            <div><label class="fl">To Date</label><input class="fi" type="date" id="lv-to"></div>
+            <div><label class="fl">Reason (optional)</label><input class="fi" id="lv-reason" placeholder="Brief reason"></div>
           </div>
-          <button class="btn btn-p" style="margin-top:10px" onclick="empApplyLeave()">Submit Leave Request</button>
+          <div style="margin-top:14px"><button class="btn btn-p" onclick="empApplyLeave()">Submit Leave Request</button></div>
         </div>
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">Leave History</div></div><div id="eleave-history"><div class="emp-empty"><div class="emp-spinner"></div></div></div></div>
+        <div class="hc"><div class="hc-hd"><div class="hc-title">Leave History</div></div><div id="leave-tbl"><div class="emp-empty"><div class="emp-spin"></div></div></div></div>
       </div>
 
-      <!-- Overtime -->
-      <div class="emp-page" id="epp-overtime">
-        <div class="emp-kpi-grid">
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#fff7ed"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#ea580c" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4l2.5 2.5"/></svg></div><div><div class="emp-kpi-lbl">Pending</div><div class="emp-kpi-val" id="eot-pending">—</div><div class="emp-kpi-sub">awaiting approval</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.6"><polyline points="4 12 9 17 18 6"/></svg></div><div><div class="emp-kpi-lbl">Approved Hours</div><div class="emp-kpi-val" id="eot-hours">—</div><div class="emp-kpi-sub">total approved</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#eff6ff"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.6"><rect x="3" y="7" width="16" height="12" rx="2"/><path d="M7 7V5a4 4 0 0 1 8 0v2"/></svg></div><div><div class="emp-kpi-lbl">Payroll Value</div><div class="emp-kpi-val" id="eot-value" style="font-size:14px">—</div><div class="emp-kpi-sub">AED approved</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#fef2f2"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#dc2626" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M8 8l6 6M14 8l-6 6"/></svg></div><div><div class="emp-kpi-lbl">Rejected</div><div class="emp-kpi-val" id="eot-rejected">—</div><div class="emp-kpi-sub">this year</div></div></div>
+      <!-- ══ PAYSLIPS ══════════════════════════════════════════ -->
+      <div class="emp-page hrms-dash-inner" id="ep-payslips">
+        <div class="hc"><div class="hc-hd"><div class="hc-title">My Payslips</div></div><div id="pay-tbl"><div class="emp-empty"><div class="emp-spin"></div></div></div></div>
+      </div>
+
+      <!-- ══ OVERTIME ══════════════════════════════════════════ -->
+      <div class="emp-page hrms-dash-inner" id="ep-overtime">
+        <div class="hrms-kpi-grid">
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#fff7ed"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#ea580c" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4l2.5 2.5"/></svg></div><div><div class="hrms-kpi-lbl">Pending</div><div class="hrms-kpi-val" id="ot-pending">—</div><div class="hrms-kpi-trend">awaiting</div></div></div>
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#16a34a" stroke-width="1.6"><polyline points="4 12 9 17 18 6"/></svg></div><div><div class="hrms-kpi-lbl">Approved Hours</div><div class="hrms-kpi-val" id="ot-hrs">—</div><div class="hrms-kpi-trend">total approved</div></div></div>
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#eff6ff"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#2563eb" stroke-width="1.6"><rect x="3" y="7" width="16" height="12" rx="2"/><path d="M7 7V5a4 4 0 018 0v2"/></svg></div><div><div class="hrms-kpi-lbl">Payroll Value</div><div class="hrms-kpi-val" id="ot-val" style="font-size:14px">—</div><div class="hrms-kpi-trend">AED approved</div></div></div>
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#fef2f2"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#dc2626" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M8 8l6 6M14 8l-6 6"/></svg></div><div><div class="hrms-kpi-lbl">Rejected</div><div class="hrms-kpi-val" id="ot-rej">—</div><div class="hrms-kpi-trend">this year</div></div></div>
         </div>
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">Report Overtime</div></div>
-          <div class="emp-form-grid">
-            <div><label class="fl">Date</label><input class="fi" type="date" id="eot-date"></div>
-            <div><label class="fl">OT Hours</label><input class="fi" type="number" id="eot-hrs" placeholder="e.g. 2.5" min="0.5" step="0.5"></div>
-            <div style="grid-column:1/-1"><label class="fl">Reason / Work Done</label><input class="fi" id="eot-reason" placeholder="Brief description"></div>
+        <div class="hc">
+          <div class="hc-hd"><div class="hc-title">Report Overtime</div></div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
+            <div><label class="fl">Date</label><input class="fi" type="date" id="ot-date"></div>
+            <div><label class="fl">OT Hours</label><input class="fi" type="number" id="ot-hours-in" placeholder="e.g. 2.5" min="0.5" step="0.5"></div>
+            <div style="grid-column:1/-1"><label class="fl">Reason / Work Done</label><input class="fi" id="ot-reason" placeholder="Brief description"></div>
           </div>
-          <button class="btn btn-p" style="margin-top:10px" onclick="empApplyOT()">Submit OT Report</button>
+          <div style="margin-top:14px"><button class="btn btn-p" onclick="empApplyOT()">Submit OT Report</button></div>
         </div>
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">OT History</div></div><div id="eot-history"><div class="emp-empty"><div class="emp-spinner"></div></div></div></div>
+        <div class="hc"><div class="hc-hd"><div class="hc-title">OT History</div></div><div id="ot-tbl"><div class="emp-empty"><div class="emp-spin"></div></div></div></div>
       </div>
 
-      <!-- Payslips -->
-      <div class="emp-page" id="epp-payslips">
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">My Payslips</div></div><div id="epay-content"><div class="emp-empty"><div class="emp-spinner"></div></div></div></div>
-      </div>
-
-      <!-- Corrections -->
-      <div class="emp-page" id="epp-corrections">
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">Request Attendance Correction</div></div>
-          <div class="emp-form-grid">
-            <div><label class="fl">Date</label><input class="fi" type="date" id="ecor-date"></div>
-            <div><label class="fl">Correct In-Time</label><input class="fi" type="time" id="ecor-in"></div>
-            <div><label class="fl">Correct Out-Time</label><input class="fi" type="time" id="ecor-out"></div>
-            <div><label class="fl">Reason</label><input class="fi" id="ecor-reason" placeholder="Why the correction is needed"></div>
+      <!-- ══ LOANS & ADVANCES ══════════════════════════════════ -->
+      <div class="emp-page hrms-dash-inner" id="ep-loans">
+        <div class="hc">
+          <div class="hc-hd"><div class="hc-title">Apply for Loan / Advance</div></div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
+            <div><label class="fl">Type</label><select class="fi" id="loan-type"><option>Salary Advance</option><option>Personal Loan</option><option>Emergency Advance</option><option>Medical Advance</option></select></div>
+            <div><label class="fl">Amount (AED)</label><input class="fi" type="number" id="loan-amt" placeholder="0.00" min="0" step="100"></div>
+            <div><label class="fl">Purpose</label><input class="fi" id="loan-purpose" placeholder="Brief description"></div>
+            <div><label class="fl">Repayment Period</label><select class="fi" id="loan-period"><option>1 Month</option><option>3 Months</option><option>6 Months</option><option>12 Months</option></select></div>
           </div>
-          <button class="btn btn-p" style="margin-top:10px" onclick="empApplyCorrection()">Submit Correction</button>
+          <div style="margin-top:14px"><button class="btn btn-p" onclick="empApplyLoan()">Submit Request</button></div>
         </div>
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">Correction History</div></div><div id="ecor-history"><div class="emp-empty"><div class="emp-spinner"></div></div></div></div>
+        <div class="hc"><div class="hc-hd"><div class="hc-title">Loan &amp; Advance History</div></div><div id="loan-tbl"><div class="emp-empty"><div class="emp-spin"></div></div></div></div>
       </div>
 
-      <!-- Loans -->
-      <div class="emp-page" id="epp-loans">
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">Apply for Loan / Advance</div></div>
-          <div class="emp-form-grid">
-            <div><label class="fl">Type</label><select class="fi" id="eloan-type"><option>Salary Advance</option><option>Personal Loan</option><option>Emergency Advance</option><option>Medical Advance</option></select></div>
-            <div><label class="fl">Amount (AED)</label><input class="fi" type="number" id="eloan-amount" placeholder="0.00" min="0" step="100"></div>
-            <div><label class="fl">Purpose</label><input class="fi" id="eloan-purpose" placeholder="Brief description"></div>
-            <div><label class="fl">Repayment Period</label><select class="fi" id="eloan-period"><option>1 Month</option><option>3 Months</option><option>6 Months</option><option>12 Months</option></select></div>
+      <!-- ══ CORRECTIONS ════════════════════════════════════════ -->
+      <div class="emp-page hrms-dash-inner" id="ep-corrections">
+        <div class="hc">
+          <div class="hc-hd"><div class="hc-title">Request Attendance Correction</div></div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
+            <div><label class="fl">Date</label><input class="fi" type="date" id="cor-date"></div>
+            <div><label class="fl">Correct In-Time</label><input class="fi" type="time" id="cor-in"></div>
+            <div><label class="fl">Correct Out-Time</label><input class="fi" type="time" id="cor-out"></div>
+            <div><label class="fl">Reason</label><input class="fi" id="cor-reason" placeholder="Why the correction is needed"></div>
           </div>
-          <button class="btn btn-p" style="margin-top:10px" onclick="empApplyLoan()">Submit Request</button>
+          <div style="margin-top:14px"><button class="btn btn-p" onclick="empApplyCorrection()">Submit Correction</button></div>
         </div>
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">Loan / Advance History</div></div><div id="eloan-history"><div class="emp-empty"><div class="emp-spinner"></div></div></div></div>
+        <div class="hc"><div class="hc-hd"><div class="hc-title">Correction History</div></div><div id="cor-tbl"><div class="emp-empty"><div class="emp-spin"></div></div></div></div>
       </div>
 
-      <!-- Expiry Alerts -->
-      <div class="emp-page" id="epp-expiry">
-        <div class="emp-kpi-grid">
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#fef2f2"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#dc2626" stroke-width="1.6"><path d="M11 3L2 19h18L11 3z"/><path d="M11 9v5M11 16v1"/></svg></div><div><div class="emp-kpi-lbl">Critical ≤30 Days</div><div class="emp-kpi-val" id="eexp-30">—</div><div class="emp-kpi-sub">immediate action</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#fff7ed"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#ea580c" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4.5M11 15v1"/></svg></div><div><div class="emp-kpi-lbl">Warning ≤90 Days</div><div class="emp-kpi-val" id="eexp-90">—</div><div class="emp-kpi-sub">plan renewal</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.6"><polyline points="4 12 9 17 18 6"/></svg></div><div><div class="emp-kpi-lbl">Valid</div><div class="emp-kpi-val" id="eexp-valid">—</div><div class="emp-kpi-sub">no action needed</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#f9fafb"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#9ca3af" stroke-width="1.6"><rect x="5" y="3" width="12" height="16" rx="2"/><path d="M9 7h4M9 11h4M9 15h2"/></svg></div><div><div class="emp-kpi-lbl">Missing</div><div class="emp-kpi-val" id="eexp-missing">—</div><div class="emp-kpi-sub">not recorded</div></div></div>
+      <!-- ══ EXPIRY ALERTS ══════════════════════════════════════ -->
+      <div class="emp-page hrms-dash-inner" id="ep-expiry">
+        <div class="hrms-kpi-grid">
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#fef2f2"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#dc2626" stroke-width="1.6"><path d="M11 3L2 19h18L11 3z"/><path d="M11 9v5M11 16v1"/></svg></div><div><div class="hrms-kpi-lbl">Critical ≤30 Days</div><div class="hrms-kpi-val" id="exp-30">—</div><div class="hrms-kpi-trend">immediate action</div></div></div>
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#fff7ed"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#ea580c" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4.5M11 15v1"/></svg></div><div><div class="hrms-kpi-lbl">Warning ≤90 Days</div><div class="hrms-kpi-val" id="exp-90">—</div><div class="hrms-kpi-trend">plan renewal</div></div></div>
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#16a34a" stroke-width="1.6"><polyline points="4 12 9 17 18 6"/></svg></div><div><div class="hrms-kpi-lbl">Valid</div><div class="hrms-kpi-val" id="exp-valid">—</div><div class="hrms-kpi-trend">no action needed</div></div></div>
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#f9fafb"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#9ca3af" stroke-width="1.6"><rect x="5" y="3" width="12" height="16" rx="2"/><path d="M9 7h4M9 11h4M9 15h2"/></svg></div><div><div class="hrms-kpi-lbl">Missing</div><div class="hrms-kpi-val" id="exp-missing">—</div><div class="hrms-kpi-trend">not recorded</div></div></div>
         </div>
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">Document Expiry Status</div></div><div id="eexp-content"><div class="emp-empty"><div class="emp-spinner"></div></div></div></div>
+        <div class="hc"><div class="hc-hd"><div class="hc-title">Document Expiry Status</div></div><div id="exp-tbl"><div class="emp-empty"><div class="emp-spin"></div></div></div></div>
       </div>
 
-      <!-- Documents -->
-      <div class="emp-page" id="epp-documents">
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">My Documents</div></div><div id="edoc-content"><div class="emp-empty"><div class="emp-spinner"></div></div></div></div>
+      <!-- ══ DOCUMENTS ══════════════════════════════════════════ -->
+      <div class="emp-page hrms-dash-inner" id="ep-documents">
+        <div class="hc"><div class="hc-hd"><div class="hc-title">My Documents</div></div><div id="doc-tbl"><div class="emp-empty"><div class="emp-spin"></div></div></div></div>
       </div>
 
-      <!-- Schedule / Rota -->
-      <div class="emp-page" id="epp-rota">
-        <div class="emp-kpi-grid">
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#ecfdf5"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#059669" stroke-width="1.6"><rect x="3" y="5" width="16" height="14" rx="2"/><path d="M7 2v4M15 2v4M3 9h16"/></svg></div><div><div class="emp-kpi-lbl">This Week Shifts</div><div class="emp-kpi-val" id="erota-week">—</div><div class="emp-kpi-sub">scheduled</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#eff6ff"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4.5l3 2"/></svg></div><div><div class="emp-kpi-lbl">Total Hours</div><div class="emp-kpi-val" id="erota-hours">—</div><div class="emp-kpi-sub">this week</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.6"><polyline points="4 12 9 17 18 6"/></svg></div><div><div class="emp-kpi-lbl">Next Shift</div><div class="emp-kpi-val" id="erota-next" style="font-size:13px">—</div><div class="emp-kpi-sub">upcoming</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#f3e8ff"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#7c3aed" stroke-width="1.6"><rect x="3" y="5" width="16" height="14" rx="2"/><path d="M7 2v4M15 2v4M3 9h16M7 14h8"/></svg></div><div><div class="emp-kpi-lbl">Total Assigned</div><div class="emp-kpi-val" id="erota-total">—</div><div class="emp-kpi-sub">all records</div></div></div>
+      <!-- ══ RECRUITMENT ════════════════════════════════════════ -->
+      <div class="emp-page hrms-dash-inner" id="ep-recruitment">
+        <div class="hc"><div class="hc-hd"><div class="hc-title">Open Positions</div></div><div id="rec-tbl"><div class="emp-empty"><div class="emp-spin"></div></div></div></div>
+      </div>
+
+      <!-- ══ PERFORMANCE ════════════════════════════════════════ -->
+      <div class="emp-page hrms-dash-inner" id="ep-performance">
+        <div class="hc"><div class="hc-hd"><div class="hc-title">Performance Reviews</div></div><div id="perf-tbl"><div class="emp-empty"><div class="emp-spin"></div></div></div></div>
+        <div class="hc"><div class="hc-hd"><div class="hc-title">Training Records</div></div><div id="train-tbl"><div class="emp-empty"><div class="emp-spin"></div></div></div></div>
+      </div>
+
+      <!-- ══ ASSETS ════════════════════════════════════════════ -->
+      <div class="emp-page hrms-dash-inner" id="ep-assets">
+        <div class="hrms-kpi-grid">
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#fff7ed"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#d97706" stroke-width="1.6"><rect x="3" y="7" width="16" height="12" rx="2"/><path d="M7 7V5a4 4 0 018 0v2"/></svg></div><div><div class="hrms-kpi-lbl">Total Assets</div><div class="hrms-kpi-val" id="asset-total">—</div><div class="hrms-kpi-trend">assigned to me</div></div></div>
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#16a34a" stroke-width="1.6"><polyline points="4 12 9 17 18 6"/></svg></div><div><div class="hrms-kpi-lbl">Active</div><div class="hrms-kpi-val" id="asset-active">—</div><div class="hrms-kpi-trend">in use</div></div></div>
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#fff7ed"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#ea580c" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4M11 15v1"/></svg></div><div><div class="hrms-kpi-lbl">Maintenance</div><div class="hrms-kpi-val" id="asset-maint">—</div><div class="hrms-kpi-trend">being serviced</div></div></div>
+          <div class="hrms-kpi-card"><div class="hrms-kpi-icon" style="background:#f9fafb"><svg viewBox="0 0 22 22" width="24" height="24" fill="none" stroke="#9ca3af" stroke-width="1.6"><polyline points="6 9 11 4 16 9"/><path d="M11 4v14"/></svg></div><div><div class="hrms-kpi-lbl">Returned</div><div class="hrms-kpi-val" id="asset-ret">—</div><div class="hrms-kpi-trend">handed back</div></div></div>
         </div>
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">My Schedule</div></div><div id="erota-content"><div class="emp-empty"><div class="emp-spinner"></div></div></div></div>
-      </div>
-
-      <!-- Assets -->
-      <div class="emp-page" id="epp-assets">
-        <div class="emp-kpi-grid">
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#fff7ed"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#d97706" stroke-width="1.6"><rect x="3" y="7" width="16" height="12" rx="2"/><path d="M7 7V5a4 4 0 0 1 8 0v2"/></svg></div><div><div class="emp-kpi-lbl">Total Assets</div><div class="emp-kpi-val" id="easset-total">—</div><div class="emp-kpi-sub">assigned to me</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.6"><polyline points="4 12 9 17 18 6"/></svg></div><div><div class="emp-kpi-lbl">Active</div><div class="emp-kpi-val" id="easset-active">—</div><div class="emp-kpi-sub">in use</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#fff7ed"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#ea580c" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="M11 7v4M11 15v1"/></svg></div><div><div class="emp-kpi-lbl">Maintenance</div><div class="emp-kpi-val" id="easset-maint">—</div><div class="emp-kpi-sub">being serviced</div></div></div>
-          <div class="emp-kpi-card"><div class="emp-kpi-icon" style="background:#f9fafb"><svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#9ca3af" stroke-width="1.6"><polyline points="6 9 11 4 16 9"/><path d="M11 4v14"/></svg></div><div><div class="emp-kpi-lbl">Returned</div><div class="emp-kpi-val" id="easset-returned">—</div><div class="emp-kpi-sub">handed back</div></div></div>
-        </div>
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">Assigned Assets</div></div><div id="easset-content"><div class="emp-empty"><div class="emp-spinner"></div></div></div></div>
-      </div>
-
-      <!-- Recruitment -->
-      <div class="emp-page" id="epp-recruitment">
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">Open Positions</div></div><div id="erec-content"><div class="emp-empty"><div class="emp-spinner"></div></div></div></div>
-      </div>
-
-      <!-- Performance & Training -->
-      <div class="emp-page" id="epp-performance">
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">Performance Reviews</div></div><div id="eperf-content"><div class="emp-empty"><div class="emp-spinner"></div></div></div></div>
-        <div class="emp-hc"><div class="emp-hc-hd"><div class="emp-hc-title">Training Records</div></div><div id="etrain-content"><div class="emp-empty"><div class="emp-spinner"></div></div></div></div>
+        <div class="hc"><div class="hc-hd"><div class="hc-title">Assigned Assets</div></div><div id="asset-tbl"><div class="emp-empty"><div class="emp-spin"></div></div></div></div>
       </div>
 
     </div><!-- /content -->
@@ -372,316 +471,345 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden}
 
 <script>
 (function(){
-const EMP_API = (window.TAXFLOW_API_BASE_URL || (location.protocol+'//'+location.host)) + '/api/v1/emp';
-let _empTok = localStorage.getItem('emp_token') || '';
-let _empEmp = null;
-let _empMods = [];
+'use strict';
+const API=(window.TAXFLOW_API_BASE_URL||(location.protocol+'//'+location.host))+'/api/v1/emp';
+let _tok=localStorage.getItem('emp_token')||'';
+let _emp=null,_mods=[];
 
-function _ini(n){return n?n.trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,2):'?'}
-function _fmtAed(v){const n=parseFloat(v)||0;return 'AED '+n.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}
-function _badge(s){const m={'Approved':'b-g','Pending':'b-y','Rejected':'b-r','Paid':'b-g','Draft':'b-b','Active':'b-g'};return `<span class="emp-badge ${m[s]||'b-b'}">${s}</span>`}
-function _toast(msg){const t=document.createElement('div');t.textContent=msg;t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;z-index:99999;font-family:DM Sans,sans-serif';document.body.appendChild(t);setTimeout(()=>t.remove(),3000);}
+/* ── Helpers ──────────────────────────────────────────────── */
+const _M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const _ini=n=>n?n.trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,2)||'?':'?';
+const _aed=v=>'AED '+(parseFloat(v)||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+const _badge=(s)=>{const m={Approved:'b-g',Active:'b-g',Paid:'b-g',Valid:'b-g',Published:'b-g',Pending:'b-a','Due Soon':'b-a','Expiring Soon':'b-a',Draft:'b-b',Scheduled:'b-b',Rejected:'b-r',Expired:'b-r',Lost:'b-r',Unknown:'b-gray'};return `<span class="badge ${m[s]||'b-b'}">${s}</span>`;};
+const _field=(l,v)=>v?`<div><div style="font-size:10px;color:#9ca3af;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">${l}</div><div style="font-size:13px;font-weight:500;color:#111827">${v}</div></div>`:'';
+const _tbl=(cols,rows,empty='No records found.')=>{
+  if(!rows||!rows.length)return `<div class="emp-empty">${empty}</div>`;
+  return `<div class="tbl-scroll"><table class="tbl"><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+};
 
-async function _empApi(path,opts={}){
-  const headers={'Content-Type':'application/json','Authorization':'Bearer '+_empTok};
-  const res=await fetch(EMP_API+path,{method:opts.method||'GET',headers,body:opts.body?JSON.stringify(opts.body):undefined});
-  if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||res.statusText);}
-  return res.json();
+function _toast(msg,err){
+  const t=document.createElement('div');t.textContent=msg;
+  t.style.cssText=`position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:${err?'#dc2626':'#111827'};color:#fff;padding:10px 22px;border-radius:10px;font-size:13px;font-weight:500;z-index:99999;font-family:'DM Sans',sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.2)`;
+  document.body.appendChild(t);setTimeout(()=>t.remove(),3000);
 }
 
-function showLogin(){document.getElementById('emp-login-screen').style.display='flex';document.getElementById('emp-portal').classList.remove('on');}
-function hideLogin(){document.getElementById('emp-login-screen').style.display='none';}
+async function _api(path,opts={}){
+  const r=await fetch(API+path,{method:opts.method||'GET',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_tok},body:opts.body?JSON.stringify(opts.body):undefined});
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||r.statusText);}
+  return r.json();
+}
 
-function toggleEmpPw(btn){const inp=btn.previousElementSibling||btn.parentElement.querySelector('input');if(inp)inp.type=inp.type==='password'?'text':'password';}
-window.toggleEmpPw=toggleEmpPw;
-
+/* ── Login ────────────────────────────────────────────────── */
 async function empLogin(){
-  const u=(document.getElementById('emp-login-user').value||'').trim();
-  const p=(document.getElementById('emp-login-pass').value||'').trim();
-  const err=document.getElementById('emp-login-err');
-  const btn=document.getElementById('emp-login-btn');
+  const u=(document.getElementById('el-user').value||'').trim();
+  const p=(document.getElementById('el-pass').value||'').trim();
+  const err=document.getElementById('el-err');
+  const btn=document.getElementById('el-btn');
   err.textContent='';
   if(!u||!p){err.textContent='Please enter username and password';return;}
   btn.disabled=true;btn.textContent='Signing in…';
   try{
-    const data=await fetch(EMP_API+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})})
-      .then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.detail||'Login failed');return d;});
-    _empTok=data.access_token;_empEmp=data.employee;_empMods=data.allowed_modules||[];
-    localStorage.setItem('emp_token',_empTok);localStorage.setItem('emp_modules',JSON.stringify(_empMods));
-    hideLogin();showEmpPortal();
+    const d=await fetch(API+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})})
+      .then(async r=>{const j=await r.json();if(!r.ok)throw new Error(j.detail||'Login failed');return j;});
+    _tok=d.access_token;_emp=d.employee;_mods=d.allowed_modules||[];
+    localStorage.setItem('emp_token',_tok);localStorage.setItem('emp_mods',JSON.stringify(_mods));
+    document.getElementById('emp-login').style.display='none';
+    _boot();
   }catch(e){err.textContent=e.message||'Login failed';}
   finally{btn.disabled=false;btn.textContent='Sign In';}
 }
 window.empLogin=empLogin;
 
 function empLogout(){
-  _empTok='';_empEmp=null;_empMods=[];
-  localStorage.removeItem('emp_token');localStorage.removeItem('emp_modules');
-  document.getElementById('emp-login-user').value='';
-  document.getElementById('emp-login-pass').value='';
-  document.getElementById('emp-login-err').textContent='';
-  showLogin();
+  _tok='';_emp=null;_mods=[];
+  localStorage.removeItem('emp_token');localStorage.removeItem('emp_mods');
+  document.getElementById('el-user').value='';
+  document.getElementById('el-pass').value='';
+  document.getElementById('el-err').textContent='';
+  document.getElementById('emp-portal').classList.remove('on');
+  document.getElementById('emp-login').style.display='flex';
 }
 window.empLogout=empLogout;
 
-function showEmpPortal(){
-  const name=_empEmp?(_empEmp.name||'Employee'):'Employee';
+/* ── Portal boot ──────────────────────────────────────────── */
+function _boot(){
+  const name=_emp?(_emp.name||'Employee'):'Employee';
   const ini=_ini(name);
-  ['emp-sb-av','emp-top-av','eprofile-av'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=ini;});
-  ['emp-sb-name','emp-top-name','eprofile-name'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=name;});
-  if(_empEmp){
-    const desg=[_empEmp.designation,_empEmp.department].filter(Boolean).join(' · ');
-    const d=document.getElementById('eprofile-desg');if(d)d.textContent=desg||'—';
-    const r=document.getElementById('emp-sb-role');if(r)r.textContent=_empEmp.designation||'Employee';
-    const tr=document.getElementById('emp-top-role');if(tr)tr.textContent=_empEmp.designation||'Employee';
+  // topbar / sidebar identity
+  ['ep-sb-av','ep-top-av','ep-profile-av'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=ini;});
+  ['ep-sb-name','ep-top-name','ep-profile-name'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=name;});
+  if(_emp){
+    const d=[_emp.designation,_emp.department].filter(Boolean).join(' · ');
+    const r=_emp.designation||'Employee';
+    const el=document.getElementById('ep-sb-role');if(el)el.textContent=r;
+    const el2=document.getElementById('ep-top-role');if(el2)el2.textContent=r;
+    const el3=document.getElementById('ep-profile-desg');if(el3)el3.textContent=d||'Employee';
   }
-  const allowed=new Set(_empMods);
-  document.querySelectorAll('#emp-sidebar .nav[data-emp-module]').forEach(el=>{
-    el.style.display=allowed.has(el.dataset.empModule)?'':'none';
+  // date
+  const now=new Date();
+  const de=document.getElementById('ep-date');
+  if(de)de.textContent=_M[now.getMonth()]+' '+now.getDate()+', '+now.getFullYear();
+  // sidebar permission filter
+  const allowed=new Set(_mods);
+  document.querySelectorAll('#emp-sb .nav[data-emod]').forEach(el=>{
+    el.style.display=allowed.has(el.dataset.emod)?'':'none';
   });
-  const tiles=[
-    {mod:'attendance',label:'Attendance',bg:'#dcfce7',ic:'#16a34a',svg:'<circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/>'},
-    {mod:'leave',label:'Leave',bg:'#dbeafe',ic:'#2563eb',svg:'<rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/>'},
-    {mod:'overtime',label:'Overtime',bg:'#e0e7ff',ic:'#4f46e5',svg:'<circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/>'},
-    {mod:'payslips',label:'Payslips',bg:'#ffedd5',ic:'#ea580c',svg:'<rect x="2" y="2" width="12" height="13" rx="1.5"/><path d="M5 6h6M5 9h4M5 12h3"/>'},
-    {mod:'corrections',label:'Corrections',bg:'#fef9c3',ic:'#ca8a04',svg:'<circle cx="8" cy="8" r="6"/><path d="M8 4v4M8 11v1"/>'},
-    {mod:'loans',label:'Loans',bg:'#d1fae5',ic:'#059669',svg:'<rect x="1" y="4" width="14" height="9" rx="1.5"/><path d="M5 7h6M5 10h4"/>'},
-    {mod:'expiry',label:'Expiry',bg:'#fee2e2',ic:'#dc2626',svg:'<circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 11v.5"/>'},
-    {mod:'rota',label:'Schedule',bg:'#ecfdf5',ic:'#059669',svg:'<rect x="1" y="3" width="14" height="11" rx="1.5"/><path d="M1 7h14M5 1v3M11 1v3"/>'},
-    {mod:'assets',label:'Assets',bg:'#fff7ed',ic:'#d97706',svg:'<rect x="2" y="6" width="12" height="8" rx="1.5"/><path d="M5 6V4a3 3 0 0 1 6 0v2"/>'},
-    {mod:'recruitment',label:'Jobs',bg:'#ede9fe',ic:'#7c3aed',svg:'<circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4"/><path d="M11 8l2 2-2 2M13 10H9"/>'},
-    {mod:'performance',label:'Performance',bg:'#fdf4ff',ic:'#a21caf',svg:'<path d="M2 12l3-4 3 2 3-5 3 3"/>'},
-    {mod:'documents',label:'Documents',bg:'#f3e8ff',ic:'#7c3aed',svg:'<path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/>'},
+  // quick tiles
+  const defs=[
+    {m:'attendance',l:'Attendance',bg:'#dcfce7',ic:'#16a34a',s:'<circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/>'},
+    {m:'leave',l:'Leave',bg:'#dbeafe',ic:'#2563eb',s:'<rect x="2" y="3" width="12" height="11" rx="1"/><path d="M2 7h12M5 1v3M11 1v3"/>'},
+    {m:'overtime',l:'Overtime',bg:'#e0e7ff',ic:'#4f46e5',s:'<circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/>'},
+    {m:'payslips',l:'Payslips',bg:'#ffedd5',ic:'#ea580c',s:'<rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6h12M5 10h3M10 10h1"/>'},
+    {m:'corrections',l:'Corrections',bg:'#fef9c3',ic:'#ca8a04',s:'<circle cx="8" cy="8" r="6"/><path d="M8 4v4M8 11v1"/>'},
+    {m:'loans',l:'Loans',bg:'#d1fae5',ic:'#059669',s:'<rect x="2" y="4" width="12" height="9" rx="1"/><path d="M2 7.5h12M5 11h6"/>'},
+    {m:'expiry',l:'Expiry',bg:'#fee2e2',ic:'#dc2626',s:'<path d="M8 1.5a5.5 5.5 0 100 11"/><path d="M8 4v4M8 11v.5"/>'},
+    {m:'rota',l:'Schedule',bg:'#ecfdf5',ic:'#059669',s:'<rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1.5v3M11 1.5v3M2 6h12"/>'},
+    {m:'assets',l:'Assets',bg:'#fff7ed',ic:'#d97706',s:'<rect x="1.5" y="8" width="4" height="5" rx="1"/><rect x="6" y="5.5" width="4" height="7.5" rx="1"/><rect x="10.5" y="3" width="4" height="10" rx="1"/>'},
+    {m:'recruitment',l:'Jobs',bg:'#ede9fe',ic:'#7c3aed',s:'<circle cx="7" cy="5" r="3"/><path d="M1 14c0-3 2.5-5 6-5"/>'},
+    {m:'performance',l:'Performance',bg:'#fdf4ff',ic:'#a21caf',s:'<path d="M2 12l3-4 3 2 3-5 3 3"/>'},
+    {m:'documents',l:'Documents',bg:'#f3e8ff',ic:'#7c3aed',s:'<path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/>'},
   ];
-  const tileEl=document.getElementById('emp-quick-tiles');
-  if(tileEl)tileEl.innerHTML=tiles.filter(t=>allowed.has(t.mod)||t.mod==='documents').map(t=>`
-    <button onclick="empTab('${t.mod}')" style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 4px 8px;background:var(--surface);border:1.5px solid var(--border);border-radius:12px;cursor:pointer;font-family:inherit;width:100%;transition:box-shadow .12s" onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow=''">
-      <div style="width:38px;height:38px;border-radius:10px;background:${t.bg};display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="${t.ic}" stroke-width="1.4">${t.svg}</svg></div>
-      <div style="font-size:10.5px;font-weight:600;color:#374151;text-align:center">${t.label}</div>
+  const te=document.getElementById('ep-tiles');
+  if(te)te.innerHTML=defs.filter(t=>allowed.has(t.m)||t.m==='documents').map(t=>`
+    <button onclick="empGo('${t.m}')" style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 4px 10px;background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;cursor:pointer;font-family:inherit;width:100%;transition:box-shadow .12s,border-color .12s" onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,.1)';this.style.borderColor='#d1d5db'" onmouseout="this.style.boxShadow='';this.style.borderColor='#e2e8f0'">
+      <div style="width:40px;height:40px;border-radius:10px;background:${t.bg};display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="${t.ic}" stroke-width="1.4">${t.s}</svg></div>
+      <div style="font-size:10.5px;font-weight:600;color:#374151;text-align:center">${t.l}</div>
     </button>`).join('');
   document.getElementById('emp-portal').classList.add('on');
-  empTab('profile');
+  empGo('dashboard');
 }
 
-function empTab(tab){
-  document.querySelectorAll('#emp-sidebar .nav').forEach(b=>b.classList.remove('on'));
+/* ── Navigation ───────────────────────────────────────────── */
+const _titles={dashboard:'Dashboard',profile:'My Profile',attendance:'Attendance',rota:'Rota & Shift',leave:'Leave',payslips:'Payslips',overtime:'Overtime',loans:'Loans & Advances',corrections:'Corrections',expiry:'Expiry Alerts',documents:'Documents',recruitment:'Recruitment',performance:'Performance',assets:'Assets'};
+
+function empGo(tab){
+  document.querySelectorAll('#emp-sb .nav').forEach(n=>n.classList.remove('on'));
   document.querySelectorAll('.emp-page').forEach(p=>p.classList.remove('on'));
-  const nav=document.getElementById('enav-'+tab);if(nav)nav.classList.add('on');
-  const page=document.getElementById('epp-'+tab);if(page)page.classList.add('on');
+  const n=document.getElementById('enav-'+tab);if(n)n.classList.add('on');
+  const p=document.getElementById('ep-'+tab);if(p)p.classList.add('on');
   const c=document.querySelector('#emp-portal .content');if(c)c.scrollTop=0;
-  if(tab==='profile')        {empLoadProfile();empLoadDashboard();}
-  else if(tab==='attendance') empLoadAttendance();
-  else if(tab==='leave')      empLoadLeave();
-  else if(tab==='overtime')   empLoadOT();
-  else if(tab==='payslips')   empLoadPayslips();
-  else if(tab==='corrections')empLoadCorrections();
-  else if(tab==='loans')      empLoadLoans();
-  else if(tab==='expiry')     empLoadExpiry();
-  else if(tab==='documents')  empLoadDocuments();
-  else if(tab==='rota')       empLoadRota();
-  else if(tab==='assets')     empLoadAssets();
-  else if(tab==='recruitment')empLoadRecruitment();
-  else if(tab==='performance')empLoadPerformance();
+  // update search placeholder
+  const si=document.getElementById('ep-search');if(si)si.placeholder='Search '+(_titles[tab]||tab).toLowerCase()+'...';
+  ({
+    dashboard:_loadDash,profile:_loadProfile,attendance:_loadAtt,rota:_loadRota,
+    leave:_loadLeave,payslips:_loadPay,overtime:_loadOT,loans:_loadLoans,
+    corrections:_loadCor,expiry:_loadExpiry,documents:_loadDocs,
+    recruitment:_loadRec,performance:_loadPerf,assets:_loadAssets,
+  }[tab]||function(){})();
 }
-window.empTab=empTab;
+window.empGo=empGo;
 
-async function empLoadDashboard(){
+function empSearch(q){/* client-side: future use */}
+window.empSearch=empSearch;
+
+/* ── Dashboard ────────────────────────────────────────────── */
+async function _loadDash(){
+  _loadProfile();
   try{
-    const [att,lv,ot,exp]=await Promise.allSettled([_empApi('/attendance'),_empApi('/leave'),_empApi('/overtime'),_empApi('/expiry')]);
-    if(att.status==='fulfilled'){const rows=att.value.records||[];const now=new Date();const m=now.getMonth(),y=now.getFullYear();const days=new Set(rows.filter(r=>{const d=new Date(r.date);return d.getMonth()===m&&d.getFullYear()===y;}).map(r=>r.date));document.getElementById('edash-present').textContent=days.size;}
-    if(lv.status==='fulfilled'){const rows=lv.value.records||[];const used=rows.filter(r=>r.type==='Annual Leave'&&(r.status||'').toLowerCase()==='approved').reduce((s,r)=>s+(parseFloat(r.days)||0),0);document.getElementById('edash-leave').textContent=Math.max(0,30-used);}
-    if(ot.status==='fulfilled')document.getElementById('edash-ot').textContent=(ot.value.records||[]).filter(r=>(r.status||'').toLowerCase()==='pending').length;
-    if(exp.status==='fulfilled')document.getElementById('edash-expiry').textContent=(exp.value.documents||[]).filter(d=>d.days_left!=null&&d.days_left<=90&&d.days_left>=0).length;
+    const [att,lv,ot,exp]=await Promise.allSettled([_api('/attendance'),_api('/leave'),_api('/overtime'),_api('/expiry')]);
+    if(att.status==='fulfilled'){const rows=att.value.records||[];const now=new Date();const m=now.getMonth(),y=now.getFullYear();const days=new Set(rows.filter(r=>{const d=new Date(r.date);return d.getMonth()===m&&d.getFullYear()===y;}).map(r=>r.date));_q('kpi-present',days.size);}
+    if(lv.status==='fulfilled'){const rows=lv.value.records||[];const used=rows.filter(r=>r.type==='Annual Leave'&&(r.status||'').toLowerCase()==='approved').reduce((s,r)=>s+(parseFloat(r.days)||0),0);_q('kpi-leave',Math.max(0,30-used));}
+    if(ot.status==='fulfilled')_q('kpi-ot',(ot.value.records||[]).filter(r=>(r.status||'').toLowerCase()==='pending').length);
+    if(exp.status==='fulfilled'){const cnt=(exp.value.documents||[]).filter(d=>d.days_left!=null&&d.days_left<=90&&d.days_left>=0).length;_q('kpi-expiry',cnt);const nb=document.getElementById('ep-notif-badge');if(nb){nb.textContent=cnt;nb.style.display=cnt>0?'flex':'none';}}
   }catch(e){}
 }
 
-async function empLoadProfile(){
+/* ── Profile ──────────────────────────────────────────────── */
+async function _loadProfile(){
   try{
-    const data=await _empApi('/profile');const emp=data.employee||{};
-    const fields=[['Full Name',emp.name],['Employee No.',emp.id||emp.employee_no],['Department',emp.department],['Designation',emp.designation],['Email',emp.email],['Mobile',emp.mobile],['Nationality',emp.nationality],['Date of Birth',emp.dob],['Join Date',emp.join_date],['Contract Type',emp.contract],['Branch',emp.branch||emp.location],['Emirates ID',emp.emirates_id]];
-    document.getElementById('eprofile-grid').innerHTML=fields.filter(([,v])=>v).map(([l,v])=>`<div style="display:flex;flex-direction:column;gap:3px"><div style="font-size:10.5px;color:#9ca3af;font-weight:700;text-transform:uppercase;letter-spacing:.5px">${l}</div><div style="font-size:13.5px;font-weight:500;color:#111827">${v}</div></div>`).join('')||'<div style="grid-column:1/-1;color:#9ca3af;font-size:13px">No profile data found.</div>';
-  }catch(e){}
+    const d=await _api('/profile');const e=d.employee||{};
+    _set('ep-profile-name',e.name||'—');_set('ep-sb-name',e.name||'—');_set('ep-top-name',e.name||'—');
+    const ini=_ini(e.name||'');
+    ['ep-sb-av','ep-top-av','ep-profile-av'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=ini;});
+    const des=[e.designation,e.department].filter(Boolean).join(' · ');
+    _set('ep-profile-desg',des||'Employee');_set('ep-top-role',e.designation||'Employee');_set('ep-sb-role',e.designation||'Employee');
+    const personal=[['Full Name',e.name],['Nick Name',e.nickname],['Gender',e.gender],['Date of Birth',e.dob],['Nationality',e.nationality],['Marital Status',e.marital_status],['Mobile',e.mobile],['Personal Email',e.email],['Emirates ID',e.emirates_id],['Address',e.address]];
+    const emp=[['Employee No.',e.id||e.employee_no],['Department',e.department],['Designation',e.designation],['Branch',e.branch||e.location],['Contract',e.contract],['Join Date',e.join_date],['Work Permit',e.work_permit_no],['Visa Expiry',e.visa_expiry],['Passport No.',e.passport_no],['Passport Expiry',e.passport_expiry]];
+    const bank=[['Bank',e.salary_bank],['IBAN',e.iban],['Personal Code',e.personal_code],['Routing Code',e.routing_code],['Insurance',e.insurance_type],['Policy No.',e.insurance_policy],['Insurance Expiry',e.insurance_expiry]];
+    const docs=[['Emirates ID',e.emirates_id],['Passport No.',e.passport_no],['Work Permit',e.work_permit_no],['Visa No.',e.visa_no],['Labour Card',e.labour_card_no]];
+    _grid('ep-info-personal',personal);_grid('ep-info-emp',emp);_grid('ep-info-bank',bank);_grid('ep-info-docs',docs);
+  }catch(ex){}
 }
+function _grid(id,fields){const el=document.getElementById(id);if(!el)return;const r=fields.filter(([,v])=>v).map(([l,v])=>_field(l,v)).join('');el.innerHTML=r||'<div style="color:#9ca3af;font-size:13px;grid-column:1/-1">No data on record.</div>';}
 
-async function empLoadAttendance(){
-  document.getElementById('eatt-content').innerHTML='<div class="emp-empty"><div class="emp-spinner"></div></div>';
+/* ── Attendance ───────────────────────────────────────────── */
+async function _loadAtt(){
+  document.getElementById('att-tbl').innerHTML='<div class="emp-empty"><div class="emp-spin"></div></div>';
   try{
-    const data=await _empApi('/attendance');const rows=data.records||[];
+    const d=await _api('/attendance');const rows=d.records||[];
     const now=new Date();const m=now.getMonth(),y=now.getFullYear();
-    const pDays=new Set(rows.filter(r=>{const d=new Date(r.date);return d.getMonth()===m&&d.getFullYear()===y;}).map(r=>r.date));
-    const inP=rows.filter(r=>r.direction==='in');
-    document.getElementById('eatt-present').textContent=pDays.size;
-    document.getElementById('eatt-total').textContent=rows.length;
-    document.getElementById('eatt-in').textContent=inP.length;
-    document.getElementById('eatt-last').textContent=rows[0]?rows[0].date:'—';
-    if(!rows.length){document.getElementById('eatt-content').innerHTML='<div class="emp-empty">No attendance records found.</div>';return;}
-    document.getElementById('eatt-content').innerHTML=`<div style="overflow-x:auto"><table class="emp-table"><thead><tr><th>Date</th><th>Time</th><th>Direction</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.date}</td><td style="font-weight:500">${r.time}</td><td>${_badge(r.direction==='in'?'Approved':'Paid')} <span style="font-size:12px;color:#6b7280">${r.direction}</span></td></tr>`).join('')}</tbody></table></div>`;
-  }catch(e){document.getElementById('eatt-content').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
+    const days=new Set(rows.filter(r=>{const x=new Date(r.date);return x.getMonth()===m&&x.getFullYear()===y;}).map(r=>r.date));
+    _q('att-present',days.size);_q('att-total',rows.length);_q('att-in',rows.filter(r=>r.direction==='in').length);_q('att-last',rows[0]?rows[0].date:'—');
+    document.getElementById('att-tbl').innerHTML=_tbl(['Date','Time','Direction'],rows.map(r=>`<tr><td style="font-weight:600">${r.date}</td><td style="font-family:monospace">${r.time}</td><td>${_badge(r.direction==='in'?'Active':'Paid')} <span style="font-size:11px;color:#6b7280">${r.direction}</span></td></tr>`),'No attendance records.');
+  }catch(e){document.getElementById('att-tbl').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
 }
 
-async function empLoadLeave(){
-  document.getElementById('eleave-balance').innerHTML='<div class="emp-empty"><div class="emp-spinner"></div></div>';
-  document.getElementById('eleave-history').innerHTML='<div class="emp-empty"><div class="emp-spinner"></div></div>';
+/* ── Rota ─────────────────────────────────────────────────── */
+async function _loadRota(){
+  document.getElementById('rota-tbl').innerHTML='<div class="emp-empty"><div class="emp-spin"></div></div>';
   try{
-    const data=await _empApi('/leave');const rows=data.records||[];
-    const types=[{label:'Annual Leave',days:30,color:'#3b82f6'},{label:'Sick Leave',days:90,color:'#eab308'},{label:'Emergency Leave',days:5,color:'#f43f5e'},{label:'Maternity Leave',days:60,color:'#a855f7'}];
-    const usedMap={};rows.filter(r=>(r.status||'').toLowerCase()==='approved').forEach(r=>{usedMap[r.type]=(usedMap[r.type]||0)+(parseFloat(r.days)||0);});
-    document.getElementById('eleave-balance').innerHTML=types.map(lt=>{const used=usedMap[lt.label]||0;const pct=Math.min(100,lt.days>0?(used/lt.days)*100:0);return `<div class="emp-prog-block"><div class="emp-prog-hd"><span style="font-size:12.5px;font-weight:600;color:#374151">${lt.label}</span><span style="color:#6b7280">${used} / ${lt.days} days</span></div><div class="emp-prog-bar"><div class="emp-prog-fill" style="width:${pct}%;background:${lt.color}"></div></div></div>`;}).join('');
-    if(!rows.length){document.getElementById('eleave-history').innerHTML='<div class="emp-empty">No leave requests yet.</div>';return;}
-    document.getElementById('eleave-history').innerHTML=`<div style="overflow-x:auto"><table class="emp-table"><thead><tr><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Status</th></tr></thead><tbody>${rows.map(r=>`<tr><td style="font-weight:500">${r.type||'—'}</td><td>${r.from||r.from_date||'—'}</td><td>${r.to||r.to_date||'—'}</td><td>${r.days||'—'}</td><td>${_badge(r.status||'Pending')}</td></tr>`).join('')}</tbody></table></div>`;
-  }catch(e){document.getElementById('eleave-history').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
+    const d=await _api('/rota');const recs=d.records||[];
+    const now=new Date();const ws=new Date(now);ws.setDate(now.getDate()-now.getDay());const we=new Date(ws);we.setDate(ws.getDate()+6);
+    const toD=s=>new Date((s||'')+'T00:00:00');
+    const week=recs.filter(r=>{const x=toD(r.date||r.startDate);return x>=ws&&x<=we;});
+    const hrs=week.reduce((s,r)=>{const[sh,sm]=(r.shiftStart||r.shift_start||'08:00').split(':').map(Number);const[eh,em]=(r.shiftEnd||r.shift_end||'17:00').split(':').map(Number);return s+Math.max(0,((eh*60+em)-(sh*60+sm)-(parseInt(r.breakMinutes||r.break_minutes||30)))/60);},0);
+    const up=recs.filter(r=>toD(r.date||r.startDate)>=now).sort((a,b)=>(a.date||a.startDate||'').localeCompare(b.date||b.startDate||''));
+    _q('rota-week',week.length);_q('rota-hrs',hrs.toFixed(1)+' h');_q('rota-next',up[0]?(up[0].date||up[0].startDate||'—'):'—');_q('rota-total',recs.length);
+    const sorted=[...recs].sort((a,b)=>(b.date||b.startDate||'').localeCompare(a.date||a.startDate||''));
+    document.getElementById('rota-tbl').innerHTML=_tbl(['Date','Shift Type','Start','End','Break','Status'],sorted.map(r=>`<tr><td style="font-weight:600">${r.date||r.startDate||'—'}</td><td>${_badge(r.shiftType||r.shift_type||'Scheduled')}</td><td style="font-family:monospace">${r.shiftStart||r.shift_start||'—'}</td><td style="font-family:monospace">${r.shiftEnd||r.shift_end||'—'}</td><td>${r.breakMinutes||r.break_minutes||'—'} min</td><td>${_badge(r.status||'Scheduled')}</td></tr>`),'No schedule records.');
+  }catch(e){document.getElementById('rota-tbl').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
+}
+
+/* ── Leave ────────────────────────────────────────────────── */
+async function _loadLeave(){
+  document.getElementById('leave-bal').innerHTML='<div class="emp-empty"><div class="emp-spin"></div></div>';
+  document.getElementById('leave-tbl').innerHTML='<div class="emp-empty"><div class="emp-spin"></div></div>';
+  try{
+    const d=await _api('/leave');const rows=d.records||[];
+    const types=[{l:'Annual Leave',days:30,c:'#2563eb'},{l:'Sick Leave',days:90,c:'#eab308'},{l:'Emergency Leave',days:5,c:'#f43f5e'},{l:'Maternity Leave',days:60,c:'#a855f7'},{l:'Casual Leave',days:7,c:'#14b8a6'}];
+    const used={};rows.filter(r=>(r.status||'').toLowerCase()==='approved').forEach(r=>{used[r.type]=(used[r.type]||0)+(parseFloat(r.days)||0);});
+    document.getElementById('leave-bal').innerHTML=types.map(lt=>{const u=used[lt.l]||0;const pct=Math.min(100,lt.days?(u/lt.days)*100:0);return `<div><div class="hc-progress-hd"><span class="hc-prog-lbl">${lt.l}</span><span class="hc-prog-val">${u} / ${lt.days} days used</span></div><div class="hc-prog-bar"><div class="hc-prog-fill" style="width:${pct}%;background:${lt.c}"></div></div></div>`;}).join('');
+    document.getElementById('leave-tbl').innerHTML=_tbl(['Type','From','To','Days','Status'],rows.map(r=>`<tr><td style="font-weight:500">${r.type||'—'}</td><td>${r.from||r.from_date||'—'}</td><td>${r.to||r.to_date||'—'}</td><td>${r.days||'—'}</td><td>${_badge(r.status||'Pending')}</td></tr>`),'No leave requests yet.');
+  }catch(e){document.getElementById('leave-tbl').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
 }
 async function empApplyLeave(){
-  const type=document.getElementById('el-type').value;const from_date=document.getElementById('el-from').value;const to_date=document.getElementById('el-to').value;const reason=document.getElementById('el-reason').value.trim();
-  if(!from_date||!to_date){_toast('Please select dates');return;}
-  try{await _empApi('/leave/apply',{method:'POST',body:{type,from_date,to_date,reason}});_toast('Leave request submitted');empLoadLeave();}catch(e){_toast(e.message||'Failed');}
+  const type=document.getElementById('lv-type').value;const from_date=document.getElementById('lv-from').value;const to_date=document.getElementById('lv-to').value;const reason=document.getElementById('lv-reason').value.trim();
+  if(!from_date||!to_date){_toast('Please select dates',true);return;}
+  try{await _api('/leave/apply',{method:'POST',body:{type,from_date,to_date,reason}});_toast('Leave request submitted');_loadLeave();}catch(e){_toast(e.message||'Failed',true);}
 }
 window.empApplyLeave=empApplyLeave;
 
-async function empLoadOT(){
-  document.getElementById('eot-history').innerHTML='<div class="emp-empty"><div class="emp-spinner"></div></div>';
+/* ── Payslips ─────────────────────────────────────────────── */
+async function _loadPay(){
+  document.getElementById('pay-tbl').innerHTML='<div class="emp-empty"><div class="emp-spin"></div></div>';
   try{
-    const data=await _empApi('/overtime');const rows=data.records||[];
-    const pending=rows.filter(r=>(r.status||'').toLowerCase()==='pending').length;
-    const approved=rows.filter(r=>(r.status||'').toLowerCase()==='approved');
-    const hrs=approved.reduce((s,r)=>s+(parseFloat(r.ot_hours)||0),0);
-    document.getElementById('eot-pending').textContent=pending;document.getElementById('eot-hours').textContent=hrs.toFixed(1);
-    document.getElementById('eot-value').textContent=hrs>0?'AED '+(hrs*45).toLocaleString('en-AE',{maximumFractionDigits:0}):'—';
-    document.getElementById('eot-rejected').textContent=rows.filter(r=>(r.status||'').toLowerCase()==='rejected').length;
-    if(!rows.length){document.getElementById('eot-history').innerHTML='<div class="emp-empty">No overtime records yet.</div>';return;}
-    document.getElementById('eot-history').innerHTML=`<div style="overflow-x:auto"><table class="emp-table"><thead><tr><th>Date</th><th>Hours</th><th>Reason</th><th>Status</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.date||'—'}</td><td style="font-weight:600">${r.ot_hours||'—'} hrs</td><td style="color:#6b7280">${r.reason||'—'}</td><td>${_badge(r.status||'Pending')}</td></tr>`).join('')}</tbody></table></div>`;
-  }catch(e){document.getElementById('eot-history').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
+    const d=await _api('/payslips');const slips=d.payslips||[];
+    document.getElementById('pay-tbl').innerHTML=_tbl(['Period','Basic','Allowances','OT','Deductions','Net Pay','Status'],slips.map(s=>`<tr><td style="font-weight:600">${s.period}</td><td>${_aed(s.basic)}</td><td>${_aed(s.allowances)}</td><td>${_aed(s.overtime)}</td><td style="color:#dc2626">${_aed(s.deductions)}</td><td style="font-weight:700;color:#16a34a">${_aed(s.net_pay)}</td><td>${_badge(s.status==='draft'?'Draft':'Paid')}</td></tr>`),'No payslips found.');
+  }catch(e){document.getElementById('pay-tbl').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
+}
+
+/* ── Overtime ─────────────────────────────────────────────── */
+async function _loadOT(){
+  document.getElementById('ot-tbl').innerHTML='<div class="emp-empty"><div class="emp-spin"></div></div>';
+  try{
+    const d=await _api('/overtime');const rows=d.records||[];
+    const appr=rows.filter(r=>(r.status||'').toLowerCase()==='approved');
+    const hrs=appr.reduce((s,r)=>s+(parseFloat(r.ot_hours)||0),0);
+    _q('ot-pending',rows.filter(r=>(r.status||'').toLowerCase()==='pending').length);
+    _q('ot-hrs',hrs.toFixed(1)+' h');
+    _q('ot-val',hrs>0?'AED '+(hrs*45).toLocaleString('en-AE',{maximumFractionDigits:0}):'—');
+    _q('ot-rej',rows.filter(r=>(r.status||'').toLowerCase()==='rejected').length);
+    document.getElementById('ot-tbl').innerHTML=_tbl(['Date','Hours','Reason','Status'],rows.map(r=>`<tr><td>${r.date||'—'}</td><td style="font-weight:600">${r.ot_hours||'—'} hrs</td><td style="color:#6b7280">${r.reason||'—'}</td><td>${_badge(r.status||'Pending')}</td></tr>`),'No overtime records.');
+  }catch(e){document.getElementById('ot-tbl').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
 }
 async function empApplyOT(){
-  const date=document.getElementById('eot-date').value;const ot_hours=document.getElementById('eot-hrs').value;const reason=document.getElementById('eot-reason').value.trim();
-  if(!date||!ot_hours){_toast('Date and hours required');return;}
-  try{await _empApi('/overtime/apply',{method:'POST',body:{date,ot_hours,reason}});_toast('OT report submitted');empLoadOT();}catch(e){_toast(e.message||'Failed');}
+  const date=document.getElementById('ot-date').value;const ot_hours=document.getElementById('ot-hours-in').value;const reason=document.getElementById('ot-reason').value.trim();
+  if(!date||!ot_hours){_toast('Date and hours required',true);return;}
+  try{await _api('/overtime/apply',{method:'POST',body:{date,ot_hours,reason}});_toast('OT report submitted');_loadOT();}catch(e){_toast(e.message||'Failed',true);}
 }
 window.empApplyOT=empApplyOT;
 
-async function empLoadPayslips(){
-  document.getElementById('epay-content').innerHTML='<div class="emp-empty"><div class="emp-spinner"></div></div>';
+/* ── Loans ────────────────────────────────────────────────── */
+async function _loadLoans(){
+  document.getElementById('loan-tbl').innerHTML='<div class="emp-empty"><div class="emp-spin"></div></div>';
   try{
-    const data=await _empApi('/payslips');const slips=data.payslips||[];
-    if(!slips.length){document.getElementById('epay-content').innerHTML='<div class="emp-empty">No payslips found yet.</div>';return;}
-    document.getElementById('epay-content').innerHTML=`<div style="overflow-x:auto"><table class="emp-table" style="min-width:580px"><thead><tr><th>Period</th><th>Basic</th><th>Allowances</th><th>OT</th><th>Deductions</th><th>Net Pay</th><th>Status</th></tr></thead><tbody>${slips.map(s=>`<tr><td style="font-weight:600">${s.period}</td><td>${_fmtAed(s.basic)}</td><td>${_fmtAed(s.allowances)}</td><td>${_fmtAed(s.overtime)}</td><td style="color:#dc2626">${_fmtAed(s.deductions)}</td><td style="font-weight:700;color:#16a34a">${_fmtAed(s.net_pay)}</td><td>${_badge(s.status==='draft'?'Draft':'Paid')}</td></tr>`).join('')}</tbody></table></div>`;
-  }catch(e){document.getElementById('epay-content').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
-}
-
-async function empLoadCorrections(){
-  document.getElementById('ecor-history').innerHTML='<div class="emp-empty"><div class="emp-spinner"></div></div>';
-  try{
-    const data=await _empApi('/corrections');const recs=data.records||[];
-    if(!recs.length){document.getElementById('ecor-history').innerHTML='<div class="emp-empty">No corrections submitted yet.</div>';return;}
-    document.getElementById('ecor-history').innerHTML=`<div style="overflow-x:auto"><table class="emp-table"><thead><tr><th>Date</th><th>In</th><th>Out</th><th>Reason</th><th>Status</th></tr></thead><tbody>${recs.map(r=>`<tr><td>${r.date||''}</td><td>${r.in_time||'—'}</td><td>${r.out_time||'—'}</td><td>${r.reason||'—'}</td><td>${_badge(r.status||'Pending')}</td></tr>`).join('')}</tbody></table></div>`;
-  }catch(e){document.getElementById('ecor-history').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
-}
-async function empApplyCorrection(){
-  const date=document.getElementById('ecor-date').value;const in_time=document.getElementById('ecor-in').value;const out_time=document.getElementById('ecor-out').value;const reason=document.getElementById('ecor-reason').value.trim();
-  if(!date){_toast('Please select a date');return;}
-  try{await _empApi('/corrections/apply',{method:'POST',body:{date,in_time,out_time,reason}});_toast('Correction submitted');empLoadCorrections();}catch(e){_toast(e.message||'Failed');}
-}
-window.empApplyCorrection=empApplyCorrection;
-
-async function empLoadLoans(){
-  document.getElementById('eloan-history').innerHTML='<div class="emp-empty"><div class="emp-spinner"></div></div>';
-  try{
-    const data=await _empApi('/loans');const recs=data.records||[];
-    if(!recs.length){document.getElementById('eloan-history').innerHTML='<div class="emp-empty">No requests yet.</div>';return;}
-    document.getElementById('eloan-history').innerHTML=`<div style="overflow-x:auto"><table class="emp-table"><thead><tr><th>Type</th><th>Amount</th><th>Period</th><th>Purpose</th><th>Status</th></tr></thead><tbody>${recs.map(r=>`<tr><td style="font-weight:600">${r.type||''}</td><td style="color:#16a34a;font-weight:700">${_fmtAed(r.amount)}</td><td>${r.period||'—'}</td><td>${r.purpose||'—'}</td><td>${_badge(r.status||'Pending')}</td></tr>`).join('')}</tbody></table></div>`;
-  }catch(e){document.getElementById('eloan-history').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
+    const d=await _api('/loans');const recs=d.records||[];
+    document.getElementById('loan-tbl').innerHTML=_tbl(['Type','Amount','Period','Purpose','Status'],recs.map(r=>`<tr><td style="font-weight:600">${r.type||''}</td><td style="color:#16a34a;font-weight:600">${_aed(r.amount)}</td><td>${r.period||'—'}</td><td>${r.purpose||'—'}</td><td>${_badge(r.status||'Pending')}</td></tr>`),'No requests yet.');
+  }catch(e){document.getElementById('loan-tbl').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
 }
 async function empApplyLoan(){
-  const type=document.getElementById('eloan-type').value;const amount=document.getElementById('eloan-amount').value;const purpose=document.getElementById('eloan-purpose').value.trim();const period=document.getElementById('eloan-period').value;
-  if(!amount||parseFloat(amount)<=0){_toast('Please enter a valid amount');return;}
-  try{await _empApi('/loans/apply',{method:'POST',body:{type,amount,purpose,period}});_toast('Loan request submitted');empLoadLoans();}catch(e){_toast(e.message||'Failed');}
+  const type=document.getElementById('loan-type').value;const amount=document.getElementById('loan-amt').value;const purpose=document.getElementById('loan-purpose').value.trim();const period=document.getElementById('loan-period').value;
+  if(!amount||parseFloat(amount)<=0){_toast('Please enter a valid amount',true);return;}
+  try{await _api('/loans/apply',{method:'POST',body:{type,amount,purpose,period}});_toast('Loan request submitted');_loadLoans();}catch(e){_toast(e.message||'Failed',true);}
 }
 window.empApplyLoan=empApplyLoan;
 
-async function empLoadExpiry(){
-  document.getElementById('eexp-content').innerHTML='<div class="emp-empty"><div class="emp-spinner"></div></div>';
+/* ── Corrections ──────────────────────────────────────────── */
+async function _loadCor(){
+  document.getElementById('cor-tbl').innerHTML='<div class="emp-empty"><div class="emp-spin"></div></div>';
   try{
-    const data=await _empApi('/expiry');const docs=data.documents||[];
-    document.getElementById('eexp-30').textContent=docs.filter(d=>d.days_left!=null&&d.days_left<=30).length;
-    document.getElementById('eexp-90').textContent=docs.filter(d=>d.days_left!=null&&d.days_left>30&&d.days_left<=90).length;
-    document.getElementById('eexp-valid').textContent=docs.filter(d=>d.status==='Valid').length;
-    document.getElementById('eexp-missing').textContent=docs.filter(d=>!d.expiry||d.status==='Unknown').length;
-    if(!docs.length){document.getElementById('eexp-content').innerHTML='<div class="emp-empty">No document expiry on record. Ask HR to update your profile.</div>';return;}
-    const sbg={'Expired':'#fee2e2','Expiring Soon':'#ffedd5','Due Soon':'#fef9c3','Valid':'#dcfce7','Unknown':'#f3f4f6'};
-    const sc={'Expired':'#dc2626','Expiring Soon':'#ea580c','Due Soon':'#ca8a04','Valid':'#15803d','Unknown':'#6b7280'};
-    document.getElementById('eexp-content').innerHTML=`<div style="overflow-x:auto"><table class="emp-table"><thead><tr><th>Document</th><th>Expiry Date</th><th>Days Left</th><th>Status</th></tr></thead><tbody>${docs.map(d=>`<tr><td style="font-weight:600">${d.label}</td><td>${d.expiry||'—'}</td><td>${d.days_left!=null?(d.days_left<0?`<span style="color:#dc2626;font-weight:700">${Math.abs(d.days_left)} days ago</span>`:`<span style="font-weight:600">${d.days_left} days</span>`):'—'}</td><td><span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:${sbg[d.status]||'#f3f4f6'};color:${sc[d.status]||'#6b7280'}">${d.status}</span></td></tr>`).join('')}</tbody></table></div>`;
-  }catch(e){document.getElementById('eexp-content').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
+    const d=await _api('/corrections');const recs=d.records||[];
+    document.getElementById('cor-tbl').innerHTML=_tbl(['Date','In','Out','Reason','Status'],recs.map(r=>`<tr><td>${r.date||''}</td><td style="font-family:monospace">${r.in_time||'—'}</td><td style="font-family:monospace">${r.out_time||'—'}</td><td>${r.reason||'—'}</td><td>${_badge(r.status||'Pending')}</td></tr>`),'No corrections yet.');
+  }catch(e){document.getElementById('cor-tbl').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
+}
+async function empApplyCorrection(){
+  const date=document.getElementById('cor-date').value;const in_time=document.getElementById('cor-in').value;const out_time=document.getElementById('cor-out').value;const reason=document.getElementById('cor-reason').value.trim();
+  if(!date){_toast('Please select a date',true);return;}
+  try{await _api('/corrections/apply',{method:'POST',body:{date,in_time,out_time,reason}});_toast('Correction submitted');_loadCor();}catch(e){_toast(e.message||'Failed',true);}
+}
+window.empApplyCorrection=empApplyCorrection;
+
+/* ── Expiry ───────────────────────────────────────────────── */
+async function _loadExpiry(){
+  document.getElementById('exp-tbl').innerHTML='<div class="emp-empty"><div class="emp-spin"></div></div>';
+  try{
+    const d=await _api('/expiry');const docs=d.documents||[];
+    _q('exp-30',docs.filter(x=>x.days_left!=null&&x.days_left<=30).length);
+    _q('exp-90',docs.filter(x=>x.days_left!=null&&x.days_left>30&&x.days_left<=90).length);
+    _q('exp-valid',docs.filter(x=>x.status==='Valid').length);
+    _q('exp-missing',docs.filter(x=>!x.expiry||x.status==='Unknown').length);
+    document.getElementById('exp-tbl').innerHTML=_tbl(['Document','Expiry Date','Days Left','Status'],docs.map(x=>`<tr><td style="font-weight:600">${x.label}</td><td>${x.expiry||'—'}</td><td>${x.days_left!=null?(x.days_left<0?`<span style="color:#dc2626;font-weight:700">${Math.abs(x.days_left)} days ago</span>`:`<span style="font-weight:600;color:${x.days_left<=30?'#dc2626':x.days_left<=90?'#ea580c':'#16a34a'}">${x.days_left} days</span>`):'—'}</td><td>${_badge(x.status||'Unknown')}</td></tr>`),'No document expiry on record.');
+  }catch(e){document.getElementById('exp-tbl').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
 }
 
-async function empLoadDocuments(){
-  document.getElementById('edoc-content').innerHTML='<div class="emp-empty"><div class="emp-spinner"></div></div>';
+/* ── Documents ────────────────────────────────────────────── */
+async function _loadDocs(){
+  document.getElementById('doc-tbl').innerHTML='<div class="emp-empty"><div class="emp-spin"></div></div>';
   try{
-    const data=await _empApi('/documents');const docs=data.documents||{};const entries=Object.entries(docs).filter(([,v])=>v);
-    if(!entries.length){document.getElementById('edoc-content').innerHTML='<div class="emp-empty">No documents on record.</div>';return;}
-    document.getElementById('edoc-content').innerHTML=entries.map(([k,v])=>`<div style="display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #f3f4f6"><div style="width:40px;height:40px;border-radius:10px;background:#f3e8ff;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="#7c3aed" stroke-width="1.3"><path d="M4 2h5l4 4v9H4V2z"/><path d="M9 2v4h4"/></svg></div><div><div style="font-weight:600;font-size:13px;text-transform:capitalize">${k.replace(/_/g,' ')}</div><div style="font-size:12px;color:#6b7280;margin-top:2px">${v}</div></div></div>`).join('');
-  }catch(e){document.getElementById('edoc-content').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
+    const d=await _api('/documents');const docs=d.documents||{};const entries=Object.entries(docs).filter(([,v])=>v);
+    if(!entries.length){document.getElementById('doc-tbl').innerHTML='<div class="emp-empty">No documents on record.</div>';return;}
+    document.getElementById('doc-tbl').innerHTML=`<div class="tbl-scroll"><table class="tbl"><thead><tr><th>Document</th><th>Reference / Value</th></tr></thead><tbody>${entries.map(([k,v])=>`<tr><td style="font-weight:500;text-transform:capitalize">${k.replace(/_/g,' ')}</td><td style="font-family:monospace">${v}</td></tr>`).join('')}</tbody></table></div>`;
+  }catch(e){document.getElementById('doc-tbl').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
 }
 
-async function empLoadRota(){
-  document.getElementById('erota-content').innerHTML='<div class="emp-empty"><div class="emp-spinner"></div></div>';
+/* ── Recruitment ──────────────────────────────────────────── */
+async function _loadRec(){
+  document.getElementById('rec-tbl').innerHTML='<div class="emp-empty"><div class="emp-spin"></div></div>';
   try{
-    const data=await _empApi('/rota');const recs=data.records||[];
-    const now=new Date();const ws=new Date(now);ws.setDate(now.getDate()-now.getDay());const we=new Date(ws);we.setDate(ws.getDate()+6);
-    const toD=d=>new Date(d+'T00:00:00');
-    const week=recs.filter(r=>{const d=toD(r.date||r.startDate||'');return d>=ws&&d<=we;});
-    const hrs=week.reduce((s,r)=>{const st=r.shiftStart||r.shift_start||'08:00';const en=r.shiftEnd||r.shift_end||'17:00';const brk=parseInt(r.breakMinutes||r.break_minutes||30);const[sh,sm]=st.split(':').map(Number);const[eh,em]=en.split(':').map(Number);return s+Math.max(0,((eh*60+em)-(sh*60+sm)-brk)/60);},0);
-    const up=recs.filter(r=>toD(r.date||r.startDate||'')>=now).sort((a,b)=>(a.date||a.startDate||'').localeCompare(b.date||b.startDate||''));
-    document.getElementById('erota-week').textContent=week.length;document.getElementById('erota-hours').textContent=hrs.toFixed(1)+' h';
-    document.getElementById('erota-next').textContent=up[0]?((up[0].date||up[0].startDate||'—')+' '+(up[0].shiftType||up[0].shift_type||'')):'—';
-    document.getElementById('erota-total').textContent=recs.length;
-    if(!recs.length){document.getElementById('erota-content').innerHTML='<div class="emp-empty">No schedule records. Contact HR to assign your rota.</div>';return;}
-    const sorted=[...recs].sort((a,b)=>(b.date||b.startDate||'').localeCompare(a.date||a.startDate||''));
-    const sBg={'Scheduled':'#dbeafe','Published':'#dcfce7','Draft':'#fef9c3','Off':'#f3f4f6'};const sCol={'Scheduled':'#1d4ed8','Published':'#15803d','Draft':'#ca8a04','Off':'#6b7280'};
-    document.getElementById('erota-content').innerHTML=`<div style="overflow-x:auto"><table class="emp-table"><thead><tr><th>Date</th><th>Shift</th><th>Start</th><th>End</th><th>Break</th><th>Dept</th><th>Status</th></tr></thead><tbody>${sorted.map(r=>`<tr><td style="font-weight:600">${r.date||r.startDate||'—'}</td><td><span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:${sBg[r.shiftType||r.shift_type]||'#eff6ff'};color:${sCol[r.shiftType||r.shift_type]||'#2563eb'}">${r.shiftType||r.shift_type||r.shiftCode||'—'}</span></td><td>${r.shiftStart||r.shift_start||'—'}</td><td>${r.shiftEnd||r.shift_end||'—'}</td><td>${r.breakMinutes||r.break_minutes||'—'} min</td><td>${r.department||'—'}</td><td><span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:${sBg[r.status]||'#f3f4f6'};color:${sCol[r.status]||'#6b7280'}">${r.status||'Scheduled'}</span></td></tr>`).join('')}</tbody></table></div>`;
-  }catch(e){document.getElementById('erota-content').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
+    const d=await _api('/recruitment');const jobs=d.jobs||[];
+    if(!jobs.length){document.getElementById('rec-tbl').innerHTML='<div class="emp-empty">No open positions at this time.</div>';return;}
+    document.getElementById('rec-tbl').innerHTML=jobs.map(j=>`<div style="padding:14px 0;border-bottom:1px solid #f3f4f6"><div style="font-weight:700;font-size:14px;color:#111827">${j.title||j.position||'Open Position'}</div><div style="font-size:12px;color:#6b7280;margin-top:5px;display:flex;gap:14px;flex-wrap:wrap">${j.department?`<span>Dept: ${j.department}</span>`:''} ${j.type?`<span>Type: ${j.type}</span>`:''} ${j.status?_badge(j.status):''}</div>${j.description?`<div style="font-size:12.5px;color:#374151;margin-top:7px">${j.description}</div>`:''}</div>`).join('');
+  }catch(e){document.getElementById('rec-tbl').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
 }
 
-async function empLoadAssets(){
-  document.getElementById('easset-content').innerHTML='<div class="emp-empty"><div class="emp-spinner"></div></div>';
+/* ── Performance ──────────────────────────────────────────── */
+async function _loadPerf(){
+  document.getElementById('perf-tbl').innerHTML='<div class="emp-empty"><div class="emp-spin"></div></div>';
+  document.getElementById('train-tbl').innerHTML='<div class="emp-empty"><div class="emp-spin"></div></div>';
   try{
-    const data=await _empApi('/assets');const items=data.assets||[];
-    document.getElementById('easset-total').textContent=items.length;document.getElementById('easset-active').textContent=items.filter(a=>(a.status||'Active').toLowerCase()==='active').length;
-    document.getElementById('easset-maint').textContent=items.filter(a=>(a.status||'').toLowerCase().includes('mainten')).length;document.getElementById('easset-returned').textContent=items.filter(a=>(a.status||'').toLowerCase()==='returned').length;
-    if(!items.length){document.getElementById('easset-content').innerHTML='<div class="emp-empty">No assets assigned. Contact HR if you need an asset record updated.</div>';return;}
-    const sb={'Active':'#dcfce7','Returned':'#f3f4f6','Maintenance':'#ffedd5','Lost':'#fee2e2'};const sc={'Active':'#15803d','Returned':'#6b7280','Maintenance':'#ea580c','Lost':'#dc2626'};
-    document.getElementById('easset-content').innerHTML=`<div style="overflow-x:auto"><table class="emp-table"><thead><tr><th>Asset</th><th>Type</th><th>Serial / Code</th><th>Assigned</th><th>Condition</th><th>Status</th></tr></thead><tbody>${items.map(a=>{const name=a.name||a.assetName||a.asset_name||'—';const type=a.type||a.category||a.assetType||'—';const serial=a.serial||a.serialNo||a.code||a.assetCode||'—';const dt=a.assignedDate||a.assigned_date||a.date||'—';const cond=a.condition||'—';const st=a.status||'Active';return `<tr><td style="font-weight:600">${name}</td><td>${type}</td><td>${serial}</td><td>${dt}</td><td>${cond}</td><td><span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:${sb[st]||'#f3f4f6'};color:${sc[st]||'#6b7280'}">${st}</span></td></tr>`;}).join('')}</tbody></table></div>`;
-  }catch(e){document.getElementById('easset-content').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
+    const d=await _api('/performance');const recs=d.records||[];
+    const rev=recs.filter(r=>r._type!=='trainingRecords');const trn=recs.filter(r=>r._type==='trainingRecords');
+    const card=r=>`<div style="padding:14px 0;border-bottom:1px solid #f3f4f6"><div style="display:flex;align-items:center;justify-content:space-between"><div style="font-weight:700;font-size:13.5px;color:#111827">${r.title||r.type||'Record'}</div>${r.rating?`<span class="badge b-b" style="font-size:12px">${r.rating}</span>`:''}</div><div style="font-size:12px;color:#6b7280;margin-top:4px;display:flex;gap:12px">${r.date||r.period?`<span>${r.date||r.period}</span>`:''} ${r.status?_badge(r.status):''}</div>${r.comments||r.notes?`<div style="font-size:12.5px;color:#374151;margin-top:5px">${r.comments||r.notes}</div>`:''}</div>`;
+    document.getElementById('perf-tbl').innerHTML=rev.length?rev.map(card).join(''):'<div class="emp-empty">No performance reviews found.</div>';
+    document.getElementById('train-tbl').innerHTML=trn.length?trn.map(card).join(''):'<div class="emp-empty">No training records found.</div>';
+  }catch(e){['perf-tbl','train-tbl'].forEach(id=>document.getElementById(id).innerHTML=`<div class="emp-empty">${e.message}</div>`);}
 }
 
-async function empLoadRecruitment(){
-  document.getElementById('erec-content').innerHTML='<div class="emp-empty"><div class="emp-spinner"></div></div>';
+/* ── Assets ───────────────────────────────────────────────── */
+async function _loadAssets(){
+  document.getElementById('asset-tbl').innerHTML='<div class="emp-empty"><div class="emp-spin"></div></div>';
   try{
-    const data=await _empApi('/recruitment');const jobs=data.jobs||[];
-    if(!jobs.length){document.getElementById('erec-content').innerHTML='<div class="emp-empty">No open positions at this time.</div>';return;}
-    document.getElementById('erec-content').innerHTML=jobs.map(j=>`<div style="padding:14px 0;border-bottom:1px solid #f3f4f6"><div style="font-weight:700;font-size:14px">${j.title||j.position||'Open Position'}</div><div style="font-size:12px;color:#6b7280;margin-top:4px;display:flex;gap:14px;flex-wrap:wrap">${j.department?`<span>Dept: ${j.department}</span>`:''} ${j.type?`<span>Type: ${j.type}</span>`:''} ${j.status?`${_badge(j.status)}`:''}</div>${j.description?`<div style="font-size:12.5px;color:#374151;margin-top:6px">${j.description}</div>`:''}</div>`).join('');
-  }catch(e){document.getElementById('erec-content').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
+    const d=await _api('/assets');const items=d.assets||[];
+    _q('asset-total',items.length);_q('asset-active',items.filter(a=>(a.status||'Active').toLowerCase()==='active').length);
+    _q('asset-maint',items.filter(a=>(a.status||'').toLowerCase().includes('mainten')).length);_q('asset-ret',items.filter(a=>(a.status||'').toLowerCase()==='returned').length);
+    document.getElementById('asset-tbl').innerHTML=_tbl(['Asset','Type','Serial','Assigned Date','Condition','Status'],items.map(a=>`<tr><td style="font-weight:600">${a.name||a.assetName||'—'}</td><td>${a.type||a.category||'—'}</td><td style="font-family:monospace">${a.serial||a.serialNo||a.code||'—'}</td><td>${a.assignedDate||a.assigned_date||'—'}</td><td>${a.condition||'—'}</td><td>${_badge(a.status||'Active')}</td></tr>`),'No assets assigned.');
+  }catch(e){document.getElementById('asset-tbl').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
 }
 
-async function empLoadPerformance(){
-  document.getElementById('eperf-content').innerHTML='<div class="emp-empty"><div class="emp-spinner"></div></div>';
-  document.getElementById('etrain-content').innerHTML='<div class="emp-empty"><div class="emp-spinner"></div></div>';
-  try{
-    const data=await _empApi('/performance');const recs=data.records||[];
-    const reviews=recs.filter(r=>r._type!=='trainingRecords');const training=recs.filter(r=>r._type==='trainingRecords');
-    const card=r=>`<div style="padding:14px 0;border-bottom:1px solid #f3f4f6"><div style="display:flex;align-items:center;justify-content:space-between"><div style="font-weight:700;font-size:13.5px">${r.title||r.type||'Record'}</div>${r.rating?`<span style="font-size:12px;font-weight:700;padding:3px 9px;border-radius:20px;background:#dbeafe;color:#1d4ed8">${r.rating}</span>`:''}</div><div style="font-size:12px;color:#6b7280;margin-top:4px;display:flex;gap:12px">${r.date||r.period?`<span>${r.date||r.period}</span>`:''} ${r.status?`${_badge(r.status)}`:''}</div>${r.comments||r.notes?`<div style="font-size:12.5px;color:#374151;margin-top:5px">${r.comments||r.notes}</div>`:''}</div>`;
-    document.getElementById('eperf-content').innerHTML=reviews.length?reviews.map(card).join(''):'<div class="emp-empty">No performance reviews found.</div>';
-    document.getElementById('etrain-content').innerHTML=training.length?training.map(card).join(''):'<div class="emp-empty">No training records found.</div>';
-  }catch(e){document.getElementById('eperf-content').innerHTML=`<div class="emp-empty">${e.message}</div>`;document.getElementById('etrain-content').innerHTML=`<div class="emp-empty">${e.message}</div>`;}
-}
+/* ── Tiny helpers ─────────────────────────────────────────── */
+function _q(id,v){const el=document.getElementById(id);if(el)el.textContent=v;}
+function _set(id,v){const el=document.getElementById(id);if(el)el.textContent=v;}
 
-// Auto-restore session
-if(_empTok){
-  _empApi('/profile').then(data=>{
-    _empEmp=data.employee||null;
-    if(data.allowed_modules&&data.allowed_modules.length){_empMods=data.allowed_modules;localStorage.setItem('emp_modules',JSON.stringify(_empMods));}
-    else{_empMods=JSON.parse(localStorage.getItem('emp_modules')||'[]');}
-    hideLogin();showEmpPortal();
-  }).catch(()=>{localStorage.removeItem('emp_token');localStorage.removeItem('emp_modules');_empTok='';});
+/* ── Auto-restore session ─────────────────────────────────── */
+if(_tok){
+  _api('/profile').then(d=>{
+    _emp=d.employee||null;
+    const saved=JSON.parse(localStorage.getItem('emp_mods')||'[]');
+    _mods=d.allowed_modules&&d.allowed_modules.length?d.allowed_modules:saved;
+    localStorage.setItem('emp_mods',JSON.stringify(_mods));
+    document.getElementById('emp-login').style.display='none';
+    _boot();
+  }).catch(()=>{localStorage.removeItem('emp_token');localStorage.removeItem('emp_mods');_tok='';});
 }
 })();
 </script>
