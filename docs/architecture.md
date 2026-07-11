@@ -17,11 +17,10 @@ frontend/public/taxflow/index.html       Single-page app HTML
 frontend/public/taxflow/src/app.js       All frontend logic (~16,000 lines)
 frontend/public/taxflow/src/styles.css   UI styles
 frontend/public/taxflow/hrms.html        Standalone HRMS portal — served at /hrms
-frontend/public/taxflow/emp.html         Employee Self-Service portal — served at /emp
 backend/                     FastAPI API, SQLAlchemy models, routers, storage
 backend/app/main.py          API app, router registration, startup migrations
 backend/app/models.py        SQLAlchemy ORM models
-backend/app/routers/         Auth, invoices, documents, reports, app data, modules, events, exceptions, emp
+backend/app/routers/         Auth, invoices, documents, reports, app data, modules, events, exceptions
 backend/app/cache.py         Redis report cache with company-scoped invalidation
 backend/scripts/             Local data reset and seed scripts
 backend/*.db                 Local SQLite databases for lightweight development
@@ -114,23 +113,14 @@ Frontend (frontend/public/taxflow/)
 |-- Exception Center screen
 |-- Dashboard: revenue, VAT, invoices, purchases, staff KPI cards
 |-- Sidebar module badges from live dashboard API counts
-|-- HRMS Portal (/hrms → hrms.html)
-|   |-- Standalone HR management portal with own sidebar and topbar
-|   |-- Employees, Attendance, Rota & Shift, Leave, Payroll, Overtime
-|   |-- Loans & Advances, Recruitment, Performance, Training, Assets
-|   |-- KPI cards, progress bars, tbl tables — design from styles.css
-|   `-- Role-based module access via HR Settings > Roles
-`-- Employee Self-Service Portal (/emp → emp.html)
-    |-- Dedicated employee login with JWT (sub: "emp:<company_id>:<emp_key>")
-    |-- Default password = Employee ID (fallback when no portal password set)
-    |-- Login by username, email, employee ID, or mobile number
-    |-- Same design as HRMS — identical CSS, sidebar, topbar, card layout
-    |-- Permission-filtered sidebar: only modules granted by employee's role
-    |-- Dashboard: Present Days, Leave Balance, OT Pending, Docs Expiring
-    |-- My Profile, Attendance, Rota & Shift, Leave (apply + history)
-    |-- Payslips, Overtime (report + history), Loans & Advances
-    |-- Corrections, Expiry Alerts, Documents, Recruitment, Performance, Assets
-    `-- Session auto-restore from localStorage emp_token
+`-- HRMS Portal (/hrms → hrms.html)
+    |-- Standalone HR management portal with own sidebar and topbar
+    |-- Employees, Attendance, Rota & Shift, Leave, Payroll, Overtime
+    |-- Loans & Advances, Recruitment, Performance, Training, Assets
+    |-- KPI cards, progress bars, tbl tables — design from styles.css
+    |-- Role-based module access via HR Settings > Roles
+    `-- Weekly Rota: Repeat Schedule option (1 Year / Indefinitely) auto-creates
+        Draft assignments for all future weeks from the current week's template
 
 Backend (backend/app/)
 |-- Auth and company context (JWT, token expiry 1440 min)
@@ -144,8 +134,6 @@ Backend (backend/app/)
 |-- Tax codes, tax lines, VAT returns, corporate tax returns
 |-- Inventory: warehouses, mappings, stock movements, valuation layers, adjustment approvals
 |-- Payroll: employees, payroll runs, WPS batches, SIF export
-|-- Employee Portal: emp.py router — login, profile, attendance, payslips, leave,
-|   overtime, corrections, loans, expiry, documents, rota, recruitment, performance, assets
 |-- Audit logs, domain events, event outbox, exception events
 |-- Reporting snapshot tables
 |-- Period locks (accounting, VAT, payroll, inventory)
@@ -191,7 +179,7 @@ Browser
 DigitalOcean App Platform (nyc3)
   2–6 × professional-s instances  (autoscale at 70% CPU)
   FastAPI served by uvicorn (4 workers per instance)
-  Named routes: / → index.html, /hrms → hrms.html, /emp → emp.html
+  Named routes: / → index.html, /hrms → hrms.html
   Static files: frontend/public/taxflow/ served at /taxflow/
   |
   v
@@ -1693,6 +1681,8 @@ Rota is a separate module.
 Rota Planning
 |-- Shift Setup
 |-- Weekly Rota
+|   `-- Repeat Schedule: 1 Year (52 weeks) or Indefinitely (~260 weeks)
+|       Copies current week's assignments forward as Draft records
 |-- Monthly Rota
 |-- Department Coverage
 |-- Shift Swap Requests
@@ -2218,24 +2208,6 @@ GET/POST /api/v1/inventory/adjustment-approvals
 GET      /api/v1/app-data
 POST     /api/v1/app-data
 GET      /api/v1/app-data/records/{collection}
-POST     /api/v1/emp/login
-GET      /api/v1/emp/profile
-GET      /api/v1/emp/attendance
-GET      /api/v1/emp/payslips
-GET      /api/v1/emp/leave
-POST     /api/v1/emp/leave/apply
-GET      /api/v1/emp/overtime
-POST     /api/v1/emp/overtime/apply
-GET      /api/v1/emp/documents
-GET      /api/v1/emp/corrections
-POST     /api/v1/emp/corrections/apply
-GET      /api/v1/emp/loans
-POST     /api/v1/emp/loans/apply
-GET      /api/v1/emp/expiry
-GET      /api/v1/emp/recruitment
-GET      /api/v1/emp/performance
-GET      /api/v1/emp/rota
-GET      /api/v1/emp/assets
 ```
 
 Target workflow endpoints not yet fully implemented:
