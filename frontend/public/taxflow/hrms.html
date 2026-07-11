@@ -157,6 +157,34 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 </head>
 <body class="theme-light">
 <noscript>This application requires JavaScript to run.</noscript>
+
+<!-- ═══ EMPLOYEE LOGIN OVERLAY ═══ -->
+<div id="hrms-emp-overlay" style="display:none;position:fixed;inset:0;background:rgba(10,15,28,.72);backdrop-filter:blur(6px);z-index:9990;align-items:center;justify-content:center">
+  <div style="background:var(--bg2);border-radius:18px;padding:36px 32px;width:380px;max-width:94vw;box-shadow:0 28px 70px rgba(0,0,0,.4)">
+    <div style="text-align:center;margin-bottom:26px">
+      <div style="width:52px;height:52px;background:#2563eb;border-radius:14px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px;box-shadow:0 8px 24px rgba(37,99,235,.35)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" width="26" height="26"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      </div>
+      <div style="font-weight:700;font-size:20px;letter-spacing:-.01em">Employee Login</div>
+      <div style="font-size:13px;color:var(--text3);margin-top:5px">Sign in to access your HRMS portal</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:13px">
+      <div>
+        <label class="fl">Username / Employee ID / Email</label>
+        <input class="fi" id="hrms-emp-user" type="text" placeholder="Enter your username or ID" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('hrms-emp-pass').focus()">
+      </div>
+      <div>
+        <label class="fl">Password</label>
+        <input class="fi" id="hrms-emp-pass" type="password" placeholder="Default: your employee ID" autocomplete="current-password" onkeydown="if(event.key==='Enter')hrmsEmpDoLogin()">
+      </div>
+      <div id="hrms-emp-err" style="display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.28);border-radius:8px;padding:9px 13px;font-size:12.5px;color:#ef4444"></div>
+      <button class="btn btn-p" id="hrms-emp-btn" onclick="hrmsEmpDoLogin()" style="width:100%;margin-top:2px;height:40px;font-size:14px">Sign In</button>
+      <div style="text-align:center;font-size:12px;color:var(--text3);padding-top:2px">
+        HR admin? <a href="/" style="color:var(--accent);text-decoration:none;font-weight:500">Sign in to main app →</a>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="scrim" id="nav-scrim" aria-hidden="true" onclick="closeSidebar()"></div>
 <nav class="sb" id="sidebar" aria-label="HRMS Navigation">
   <div class="sb-logo">
@@ -2618,7 +2646,10 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 </div>
 
 <script>
-(function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
+(function(){
+  var at=localStorage.getItem('taxflow_token'),et=localStorage.getItem('emp_token');
+  if(!at){var o=document.getElementById('hrms-emp-overlay');if(o)o.style.display='flex';}
+})();
 window.HRMS_STANDALONE=true;
 </script>
 <script src="src/app.js?v=20260704k" defer></script>
@@ -2644,7 +2675,10 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 </script>
 <script>
-(function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
+(function(){
+  var at=localStorage.getItem('taxflow_token'),et=localStorage.getItem('emp_token');
+  if(!at){var o=document.getElementById('hrms-emp-overlay');if(o)o.style.display='flex';}
+})();
 window.HRMS_STANDALONE=true;
 </script>
 <script src="src/app.js?v=20260704k" defer></script>
@@ -3133,5 +3167,33 @@ document.addEventListener('DOMContentLoaded',function(){
     </div>
   </div>
 </div>
+<script>
+async function hrmsEmpDoLogin(){
+  var user=(document.getElementById('hrms-emp-user')?.value||'').trim();
+  var pass=document.getElementById('hrms-emp-pass')?.value||'';
+  var errEl=document.getElementById('hrms-emp-err');
+  var btn=document.getElementById('hrms-emp-btn');
+  errEl.style.display='none';
+  if(!user){errEl.style.display='';errEl.textContent='Please enter your username or employee ID.';return;}
+  btn.disabled=true;btn.textContent='Signing in…';
+  try{
+    var base=(window.TAXFLOW_API_BASE_URL||(location.protocol+'//'+location.host))+'/api/v1/emp';
+    var resp=await fetch(base+'/login',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username:user,password:pass||user})
+    });
+    var data=await resp.json();
+    if(!resp.ok)throw new Error(data.detail||data.message||'Invalid credentials');
+    localStorage.setItem('emp_token',data.access_token);
+    localStorage.setItem('emp_mods',JSON.stringify(data.allowed_modules||[]));
+    window.location.href='/emp';
+  }catch(e){
+    errEl.style.display='';
+    errEl.textContent=e.message||'Login failed. Please try again.';
+    btn.disabled=false;btn.textContent='Sign In';
+  }
+}
+</script>
 </body>
 </html>
