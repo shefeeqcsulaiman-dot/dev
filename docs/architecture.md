@@ -123,7 +123,7 @@ Frontend (frontend/public/taxflow/)
         Draft assignments for all future weeks from the current week's template
 
 Backend (backend/app/)
-|-- Auth and company context (JWT, token expiry 1440 min)
+|-- Auth and company context (JWT, token expiry 60 min)
 |-- app_data_records: single table storing all module JSON as payload column
 |-- Reports: dashboard, purchase summary, P&L, trial balance, VAT, debug endpoints
 |-- Cache: Redis-backed report cache (app/cache.py)
