@@ -1903,7 +1903,7 @@ function showLoginOverlay(){
   try{toast('Session expired — please sign in again','warn');}catch{}
   setTimeout(()=>window.location.replace('/login'),1200);
 }
-function hideLoginOverlay(){}
+function hideLoginOverlay(){ /* overlay removed — login handled by /login page */ }
 async function submitLogin(){
   const email=(document.getElementById('login-email').value||'').trim();
   const password=(document.getElementById('login-password').value||'').trim();

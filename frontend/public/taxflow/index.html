@@ -5741,30 +5741,6 @@ period_locks ─&lt; audit_logs
 <!-- ═══ POS PAGE (redirect via dashboard banner / topbar button) ═══ -->
 <div class="page" id="page-pos"></div>
 
-<!-- Login overlay -->
-<div id="login-overlay">
-  <div class="login-card">
-    <div class="login-card-brand">
-      <div class="login-card-brand-name">ETaxFlow</div>
-      <div class="login-card-brand-sub">Sign in to your account</div>
-    </div>
-    <div id="login-error" class="login-card-error"></div>
-    <div class="login-card-field">
-      <label class="login-card-lbl">Email</label>
-      <input id="login-email" type="email" class="login-card-input" placeholder="admin@taxflowapp.com" autocomplete="username"
-        onkeydown="if(event.key==='Enter')document.getElementById('login-password').focus()">
-    </div>
-    <div class="login-card-field last">
-      <label class="login-card-lbl">Password</label>
-      <input id="login-password" type="password" class="login-card-input" placeholder="••••••••" autocomplete="current-password"
-        onkeydown="if(event.key==='Enter')submitLogin()">
-    </div>
-    <button onclick="submitLogin()" id="login-btn" class="login-card-btn">Sign In</button>
-    <div class="login-card-footer">
-      Don't have an account? <a href="/signup.html">Sign up</a>
-    </div>
-  </div>
-</div>
 
 <div id="fullpage-loader" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);align-items:center;justify-content:center;flex-direction:column;gap:20px">
   <div style="background:var(--surface,#1e2128);border:1px solid var(--border,#2e3340);border-radius:16px;padding:36px 48px;text-align:center;min-width:280px;box-shadow:0 24px 64px rgba(0,0,0,.5)">

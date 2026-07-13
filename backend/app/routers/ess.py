@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import get_db
 from app.models import Employee, PayrollItem, PayrollRun
-from app.security import hash_password, pwd_context
+from app.security import pwd_context
 
 router = APIRouter(prefix="/ess", tags=["ess"])
 settings = get_settings()
