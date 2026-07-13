@@ -17131,7 +17131,7 @@ function applyRotaRepeat(){
   const info=document.getElementById('rota-repeat-info');
   if(info)info.textContent=`✓ ${count} assignments created from ${start}`;
   toast(`Rota repeated ${label}: ${count} assignments saved as Draft`,'ok');
-  audit(`Rota repeat applied (${mode})','Rota Planning','Draft');
+  audit(`Rota repeat applied (${mode})`,'Rota Planning','Draft');
 }
 
 function copyPreviousRota(){
