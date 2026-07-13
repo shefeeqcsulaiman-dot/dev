@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Employee Self-Service — ETaxFlow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{--accent:#1d4ed8;--accent2:#3b82f6;--bg:#f1f5f9;--surface:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--text3:#94a3b8;--red:#ef4444;--green:#10b981;}
+    body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+    /* ── LOGIN ── */
+    #login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(145deg,#040d1e 0%,#0a1f4a 45%,#07163a 100%)}
+    .login-card{background:#fff;border-radius:20px;padding:44px 40px 36px;width:100%;max-width:420px;margin:20px;box-shadow:0 40px 120px rgba(0,0,0,.45)}
+    .brand{text-align:center;margin-bottom:32px}
+    .brand-logo{width:120px;height:auto;margin-bottom:10px}
+    .brand-title{font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:700;color:var(--accent);margin-bottom:4px}
+    .brand-sub{font-size:13px;color:var(--text3)}
+    .field{margin-bottom:16px}
+    .field label{display:block;font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:#374151;margin-bottom:7px}
+    .field input{width:100%;padding:11px 15px;border:1.5px solid #d1d5db;border-radius:9px;font-size:14px;font-family:inherit;color:#111827;background:#f9fafb;outline:none;transition:border-color .15s,box-shadow .15s}
+    .field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(29,78,216,.12);background:#fff}
+    .field.last{margin-bottom:24px}
+    .err-box{display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:9px;padding:11px 14px;font-size:13px;color:var(--red);margin-bottom:20px}
+    .btn-login{width:100%;padding:13px;background:linear-gradient(135deg,#073D7F,#4f8ef0);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;letter-spacing:.1px;transition:filter .2s,opacity .2s}
+    .btn-login:hover{filter:brightness(1.08)}
+    .btn-login:disabled{opacity:.6;cursor:not-allowed;filter:none}
+    .login-hint{text-align:center;margin-top:18px;font-size:12px;color:var(--text3)}
+
+    /* ── APP SHELL ── */
+    #app-screen{display:none;min-height:100vh;flex-direction:column}
+    .topbar{height:54px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;position:sticky;top:0;z-index:50}
+    .topbar-brand{font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;color:var(--accent);flex:1}
+    .topbar-name{font-size:13px;color:var(--text2);font-weight:500}
+    .btn-logout{padding:6px 14px;border:1px solid var(--border);border-radius:7px;background:#fff;font-size:12px;font-family:inherit;cursor:pointer;color:var(--text2);transition:background .15s}
+    .btn-logout:hover{background:var(--bg)}
+    .content{max-width:860px;margin:0 auto;padding:24px 16px;width:100%}
+
+    /* ── TABS ── */
+    .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:24px}
+    .tab{padding:10px 18px;font-size:13px;font-weight:500;color:var(--text3);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:inherit;transition:color .15s,border-color .15s}
+    .tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+    .tab-body{display:none}
+    .tab-body.on{display:block}
+
+    /* ── CARDS ── */
+    .card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px}
+    .card-title{font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px}
+    .profile-row{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+    @media(max-width:500px){.profile-row{grid-template-columns:1fr}}
+    .kv{display:flex;flex-direction:column;gap:3px}
+    .kv-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+    .kv-value{font-size:14px;color:var(--text)}
+    .badge{display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;background:#dcfce7;color:#166534}
+    .badge.inactive{background:#fee2e2;color:#991b1b}
+
+    /* ── TABLE ── */
+    .tbl-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th{background:#f8fafc;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 14px;text-align:left;border-bottom:1px solid var(--border)}
+    td{padding:11px 14px;border-bottom:1px solid var(--border);color:var(--text)}
+    tr:last-child td{border-bottom:none}
+    tr:hover td{background:#f8fafc}
+    .dir-in{color:var(--green);font-weight:600}
+    .dir-out{color:var(--red);font-weight:600}
+    .empty{text-align:center;padding:32px;color:var(--text3);font-size:13px}
+    .loading{text-align:center;padding:24px;color:var(--text3);font-size:13px}
+
+    /* ── PAYSLIP CARD ── */
+    .payslip-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+    .payslip-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px}
+    .payslip-period{font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px}
+    .payslip-row{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0}
+    .payslip-row.net{border-top:1px solid var(--border);margin-top:6px;padding-top:6px;font-weight:700;font-size:13px}
+    .payslip-status{font-size:10.5px;font-weight:600;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+  </style>
+</head>
+<body>
+
+<!-- ── LOGIN ── -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="brand">
+      <img src="/logo.png" alt="ETaxFlow" class="brand-logo" onerror="this.style.display='none'">
+      <div class="brand-title">Employee Self-Service</div>
+      <div class="brand-sub">Sign in with your Employee ID</div>
+    </div>
+    <div id="login-err" class="err-box"></div>
+    <div class="field">
+      <label for="ess-user">Employee ID / Number</label>
+      <input id="ess-user" type="text" placeholder="e.g. EMP001" autocomplete="username"
+        onkeydown="if(event.key==='Enter')document.getElementById('ess-pass').focus()">
+    </div>
+    <div class="field last">
+      <label for="ess-pass">Password <span style="font-weight:400;color:var(--text3)">(default: your Employee ID)</span></label>
+      <input id="ess-pass" type="password" placeholder="••••••••" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter')essLogin()">
+    </div>
+    <button id="ess-login-btn" class="btn-login" onclick="essLogin()">Sign In</button>
+    <div class="login-hint">Having trouble? Contact your HR administrator.</div>
+  </div>
+</div>
+
+<!-- ── APP ── -->
+<div id="app-screen">
+  <div class="topbar">
+    <div class="topbar-brand">Employee Portal</div>
+    <span class="topbar-name" id="ess-emp-name"></span>
+    <button class="btn-logout" onclick="essLogout()">Sign Out</button>
+  </div>
+  <div class="content">
+    <div class="tabs">
+      <button class="tab on" onclick="essTab(this,'profile')">Profile</button>
+      <button class="tab" onclick="essTab(this,'attendance')">Attendance</button>
+      <button class="tab" onclick="essTab(this,'payslips')">Payslips</button>
+    </div>
+
+    <!-- Profile -->
+    <div class="tab-body on" id="tb-profile">
+      <div class="card" id="profile-card">
+        <div class="card-title">My Information</div>
+        <div class="profile-row" id="profile-fields">
+          <div class="loading">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Attendance -->
+    <div class="tab-body" id="tb-attendance">
+      <div class="card">
+        <div class="card-title">Attendance Records (last 90)</div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Time</th><th>Direction</th><th>Source</th></tr></thead>
+            <tbody id="att-body"><tr><td colspan="4" class="loading">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Payslips -->
+    <div class="tab-body" id="tb-payslips">
+      <div class="card">
+        <div class="card-title">Payslips</div>
+        <div id="payslip-content" class="loading">Loading…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/config.js"></script>
+<script>
+  var ESS_TOKEN_KEY = 'ess_token';
+
+  function apiBase() {
+    if (window.TAXFLOW_API_BASE_URL) return window.TAXFLOW_API_BASE_URL;
+    var h = window.location.hostname;
+    if (['localhost','127.0.0.1','::1',''].includes(h))
+      return window.location.protocol + '//' + window.location.host + '/api/v1';
+    return window.location.protocol + '//' + h + '/api/v1';
+  }
+
+  function essHeaders() {
+    var t = localStorage.getItem(ESS_TOKEN_KEY);
+    return {'Content-Type':'application/json','Authorization': t ? 'Bearer '+t : ''};
+  }
+
+  async function essLogin() {
+    var btn = document.getElementById('ess-login-btn');
+    var err = document.getElementById('login-err');
+    var user = (document.getElementById('ess-user').value || '').trim();
+    var pass = document.getElementById('ess-pass').value;
+    err.style.display = 'none';
+    if (!user) { err.textContent = 'Please enter your Employee ID.'; err.style.display = 'block'; return; }
+    btn.disabled = true; btn.textContent = 'Signing in…';
+    try {
+      var r = await fetch(apiBase() + '/ess/login', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({username: user, password: pass || user})
+      });
+      var d = await r.json();
+      if (r.ok && d.access_token) {
+        localStorage.setItem(ESS_TOKEN_KEY, d.access_token);
+        showApp();
+      } else {
+        err.textContent = d.detail || 'Invalid credentials. Try your Employee ID as password.';
+        err.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Sign In';
+      }
+    } catch(e) {
+      err.textContent = 'Cannot reach server. Please try again.';
+      err.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Sign In';
+    }
+  }
+
+  function essLogout() {
+    localStorage.removeItem(ESS_TOKEN_KEY);
+    window.location.reload();
+  }
+
+  function essTab(el, id) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+    document.querySelectorAll('.tab-body').forEach(t => t.classList.remove('on'));
+    el.classList.add('on');
+    document.getElementById('tb-' + id).classList.add('on');
+  }
+
+  async function loadProfile() {
+    try {
+      var r = await fetch(apiBase() + '/ess/me', {headers: essHeaders()});
+      if (r.status === 401) { essLogout(); return; }
+      var emp = await r.json();
+      document.getElementById('ess-emp-name').textContent = emp.full_name;
+      document.getElementById('profile-fields').innerHTML =
+        kv('Employee ID', emp.employee_no) +
+        kv('Full Name', emp.full_name) +
+        kv('Department', emp.department) +
+        kv('Designation', emp.designation) +
+        kv('Status', '<span class="badge' + (emp.status !== 'active' ? ' inactive' : '') + '">' + emp.status + '</span>');
+    } catch(e) { console.error(e); }
+  }
+
+  function kv(label, value) {
+    return '<div class="kv"><div class="kv-label">' + label + '</div><div class="kv-value">' + value + '</div></div>';
+  }
+
+  async function loadAttendance() {
+    try {
+      var r = await fetch(apiBase() + '/ess/attendance', {headers: essHeaders()});
+      if (r.status === 401) { essLogout(); return; }
+      var rows = await r.json();
+      var body = document.getElementById('att-body');
+      if (!rows.length) { body.innerHTML = '<tr><td colspan="4" class="empty">No attendance records found.</td></tr>'; return; }
+      body.innerHTML = rows.map(function(p) {
+        var dir = p.direction === 'in'
+          ? '<span class="dir-in">↑ IN</span>'
+          : '<span class="dir-out">↓ OUT</span>';
+        var t = p.punch_time ? p.punch_time.substring(11,16) : '—';
+        return '<tr><td>' + p.punch_date + '</td><td>' + t + '</td><td>' + dir + '</td><td>' + p.source + '</td></tr>';
+      }).join('');
+    } catch(e) { document.getElementById('att-body').innerHTML = '<tr><td colspan="4" class="empty">Failed to load.</td></tr>'; }
+  }
+
+  async function loadPayslips() {
+    try {
+      var r = await fetch(apiBase() + '/ess/payslips', {headers: essHeaders()});
+      if (r.status === 401) { essLogout(); return; }
+      var items = await r.json();
+      var el = document.getElementById('payslip-content');
+      if (!items.length) { el.innerHTML = '<div class="empty">No payslips found.</div>'; return; }
+      el.innerHTML = '<div class="payslip-grid">' + items.map(function(p) {
+        return '<div class="payslip-card">' +
+          '<div class="payslip-status">' + p.run_status + '</div>' +
+          '<div class="payslip-period">' + p.period + '</div>' +
+          row('Basic', p.basic) + row('Allowances', p.allowances) +
+          row('Overtime', p.overtime) + row('Deductions', '- ' + p.deductions) +
+          '<div class="payslip-row net"><span>Net Pay</span><span>AED ' + fmt(p.net_pay) + '</span></div>' +
+          '</div>';
+      }).join('') + '</div>';
+    } catch(e) { document.getElementById('payslip-content').innerHTML = '<div class="empty">Failed to load.</div>'; }
+  }
+
+  function row(label, val) {
+    return '<div class="payslip-row"><span>' + label + '</span><span>AED ' + fmt(val) + '</span></div>';
+  }
+  function fmt(n) { return Number(n).toLocaleString('en-AE', {minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+  function showApp() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display = 'flex';
+    loadProfile();
+    loadAttendance();
+    loadPayslips();
+  }
+
+  // Auto-login if token exists
+  (function(){
+    if (localStorage.getItem(ESS_TOKEN_KEY)) showApp();
+  })();
+</script>
+</body>
+</html>
