@@ -14,7 +14,7 @@ ALGORITHM = "HS256"
 
 # Pre-computed dummy hash used when email not found — ensures constant-time
 # response regardless of whether the email exists (prevents timing enumeration)
-_DUMMY_HASH = "$2b$12$QmNqX3Yv8pK2LmRtW1uZe.dummyhashfortimingnormalization.X"
+_DUMMY_HASH = "$2b$12$Z2HUw9SswHis7rcngsd7iOdXn/b9HafcmcwJx9D39ozeKwrSy22r."
 
 
 def hash_password(password: str) -> str:
