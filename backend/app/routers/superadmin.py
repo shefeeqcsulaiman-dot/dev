@@ -10,7 +10,23 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.limiter import limiter
-from app.models import AppDataRecord, ClientError, Company, Employee, User
+from app.models import (
+    AccrualPrepaymentRecord, Account, AppDataRecord, ApprovalMatrixRecord,
+    AttendancePunch, AuditLog, AuditLogDetail, BankAccount,
+    BankReconciliationMatch, BankStatementLine, BiometricDevice, BudgetRecord,
+    CashFlowForecastRecord, ClientError, Company, ConsolidationRecord,
+    CorporateTaxRecord, CorporateTaxReturn, CostCenterRecord,
+    CreditControlRecord, CustomerAgingSnapshot, DailyGlBalance, Document,
+    DomainEvent, Employee, EventOutbox, EventProcessingLog, ExceptionEvent,
+    FixedAssetRecord, GeneralLedgerEntry, InventoryBalanceSnapshot,
+    InventoryValuationLayer, Invoice, InvoiceLine, ItemUnit, ItemUnitConversion,
+    Job, JournalEntry, JournalLine, MonthEndCloseRecord, Payment, PayrollItem,
+    PayrollRun, PeriodLock, PostingJob, Receipt, SourceTransaction,
+    SourceTransactionLine, StockAdjustmentApproval, StockMovement,
+    StockProductMapping, TaxCode, TaxLine, TaxPeriod, User, VatReturn,
+    VatReturnSnapshot, Voucher, VoucherLine, VoucherType, Warehouse,
+    WpsBatch,
+)
 from app.security import hash_password, user_id_from_token
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
@@ -331,7 +347,94 @@ def delete_company(
         raise HTTPException(status_code=404, detail="Company not found")
     if db.query(User).filter(User.company_id == company_id, User.role == "superadmin").count() > 0:
         raise HTTPException(status_code=400, detail="Cannot delete superadmin company")
-    db.query(User).filter(User.company_id == company_id).delete()
+
+    cid = company_id
+    s = dict(synchronize_session=False)
+
+    # Tier 1 — leaf rows that FK into data tables (no direct company_id)
+    inv_ids = db.query(Invoice.id).filter(Invoice.company_id == cid).subquery()
+    db.query(InvoiceLine).filter(InvoiceLine.invoice_id.in_(inv_ids)).delete(**s)
+
+    src_ids = db.query(SourceTransaction.id).filter(SourceTransaction.company_id == cid).subquery()
+    db.query(SourceTransactionLine).filter(SourceTransactionLine.source_id.in_(src_ids)).delete(**s)
+
+    run_ids = db.query(PayrollRun.id).filter(PayrollRun.company_id == cid).subquery()
+    db.query(PayrollItem).filter(PayrollItem.run_id.in_(run_ids)).delete(**s)
+
+    je_ids = db.query(JournalEntry.id).filter(JournalEntry.company_id == cid).subquery()
+    db.query(JournalLine).filter(JournalLine.journal_id.in_(je_ids)).delete(**s)
+
+    v_ids = db.query(Voucher.id).filter(Voucher.company_id == cid).subquery()
+    db.query(VoucherLine).filter(VoucherLine.voucher_id.in_(v_ids)).delete(**s)
+
+    # Tier 2 — tables that cross-reference other data tables
+    db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == cid).delete(**s)
+    db.query(BankReconciliationMatch).filter(BankReconciliationMatch.company_id == cid).delete(**s)
+    db.query(BankStatementLine).filter(BankStatementLine.company_id == cid).delete(**s)
+
+    al_ids = db.query(AuditLog.id).filter(AuditLog.company_id == cid).subquery()
+    db.query(AuditLogDetail).filter(AuditLogDetail.audit_log_id.in_(al_ids)).delete(**s)
+
+    db.query(EventOutbox).filter(EventOutbox.company_id == cid).delete(**s)
+    db.query(EventProcessingLog).filter(EventProcessingLog.company_id == cid).delete(**s)
+    db.query(PostingJob).filter(PostingJob.company_id == cid).delete(**s)
+    db.query(WpsBatch).filter(WpsBatch.company_id == cid).delete(**s)
+    db.query(StockMovement).filter(StockMovement.company_id == cid).delete(**s)
+    db.query(InventoryValuationLayer).filter(InventoryValuationLayer.company_id == cid).delete(**s)
+    db.query(StockAdjustmentApproval).filter(StockAdjustmentApproval.company_id == cid).delete(**s)
+    db.query(Payment).filter(Payment.company_id == cid).delete(**s)
+    db.query(Receipt).filter(Receipt.company_id == cid).delete(**s)
+
+    # Tier 3 — tables that reference accounts/voucher_types/users
+    db.query(Voucher).filter(Voucher.company_id == cid).delete(**s)
+    db.query(VoucherType).filter(VoucherType.company_id == cid).delete(**s)
+    db.query(AuditLog).filter(AuditLog.company_id == cid).delete(**s)
+    db.query(AuditLogDetail).filter(AuditLogDetail.company_id == cid).delete(**s)
+    db.query(ExceptionEvent).filter(ExceptionEvent.company_id == cid).delete(**s)
+    db.query(PeriodLock).filter(PeriodLock.company_id == cid).delete(**s)
+    db.query(DomainEvent).filter(DomainEvent.company_id == cid).delete(**s)
+
+    # Tier 4 — main data tables
+    db.query(Invoice).filter(Invoice.company_id == cid).delete(**s)
+    db.query(JournalEntry).filter(JournalEntry.company_id == cid).delete(**s)
+    db.query(SourceTransaction).filter(SourceTransaction.company_id == cid).delete(**s)
+    db.query(PayrollRun).filter(PayrollRun.company_id == cid).delete(**s)
+    db.query(TaxLine).filter(TaxLine.company_id == cid).delete(**s)
+    db.query(TaxPeriod).filter(TaxPeriod.company_id == cid).delete(**s)
+    db.query(TaxCode).filter(TaxCode.company_id == cid).delete(**s)
+    db.query(VatReturn).filter(VatReturn.company_id == cid).delete(**s)
+    db.query(CorporateTaxReturn).filter(CorporateTaxReturn.company_id == cid).delete(**s)
+    db.query(BankAccount).filter(BankAccount.company_id == cid).delete(**s)
+    db.query(Warehouse).filter(Warehouse.company_id == cid).delete(**s)
+    db.query(StockProductMapping).filter(StockProductMapping.company_id == cid).delete(**s)
+    db.query(ItemUnitConversion).filter(ItemUnitConversion.company_id == cid).delete(**s)
+    db.query(ItemUnit).filter(ItemUnit.company_id == cid).delete(**s)
+    db.query(AttendancePunch).filter(AttendancePunch.company_id == cid).delete(**s)
+    db.query(BiometricDevice).filter(BiometricDevice.company_id == cid).delete(**s)
+    db.query(ApprovalMatrixRecord).filter(ApprovalMatrixRecord.company_id == cid).delete(**s)
+    db.query(Employee).filter(Employee.company_id == cid).delete(**s)
+    db.query(Document).filter(Document.company_id == cid).delete(**s)
+    db.query(Job).filter(Job.company_id == cid).delete(**s)
+    db.query(AppDataRecord).filter(AppDataRecord.company_id == cid).delete(**s)
+
+    # Tier 5 — snapshot / reporting tables (company_id only)
+    for Model in (
+        DailyGlBalance, InventoryBalanceSnapshot, CustomerAgingSnapshot,
+        VatReturnSnapshot, CorporateTaxRecord, FixedAssetRecord,
+        AccrualPrepaymentRecord, CostCenterRecord, BudgetRecord,
+        CashFlowForecastRecord, CreditControlRecord, MonthEndCloseRecord,
+        ConsolidationRecord,
+    ):
+        db.query(Model).filter(Model.company_id == cid).delete(**s)
+
+    # Tier 6 — Account (self-referential FK: null parent first, then delete)
+    db.query(Account).filter(Account.company_id == cid).update(
+        {"parent_account_id": None}, synchronize_session=False
+    )
+    db.query(Account).filter(Account.company_id == cid).delete(**s)
+
+    # Tier 7 — Users, then Company
+    db.query(User).filter(User.company_id == cid).delete(**s)
     db.delete(company)
     db.commit()
     return {"ok": True}
