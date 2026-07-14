@@ -480,6 +480,7 @@
     ['c-name','c-trn','c-email','c-fullname','c-password'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
     const ex=document.getElementById('c-expiry'); if(ex) ex.value='';
     openModal('m-create');
+    buildModGrid('c-mod-grid', MODULE_DEFS.map(m=>m.key));
   }
 
   async function createCompany(){
@@ -492,10 +493,11 @@
     const fullName = document.getElementById('c-fullname').value.trim();
     const trn = document.getElementById('c-trn').value.trim()||null;
     const expiry = document.getElementById('c-expiry').value||null;
+    const modules = getCheckedModules('c-mod-grid');
     if(!name||!email||!password){ errEl.textContent='Company name, email and password are required.'; errEl.style.display='block'; return; }
     btn.disabled=true; btn.textContent='Creating…';
     try{
-      const res = await apiFetch('/superadmin/companies',{method:'POST',body:JSON.stringify({name,email,password,full_name:fullName,trn,expires_at:expiry})});
+      const res = await apiFetch('/superadmin/companies',{method:'POST',body:JSON.stringify({name,email,password,full_name:fullName,trn,expires_at:expiry,modules})});
       const data = await res.json();
       if(!res.ok){ errEl.textContent=data.detail||'Failed to create company.'; errEl.style.display='block'; return; }
       closeModal('m-create');
@@ -898,39 +900,6 @@
       if(cb){ cb.checked=checked; }
       if(item){ item.classList.toggle('active',checked); }
     });
-  }
-
-  // Patch openCreateCompany to also build the module grid
-  const _origOpenCreate = openCreateCompany;
-  function openCreateCompany(){
-    _origOpenCreate();
-    buildModGrid('c-mod-grid', MODULE_DEFS.map(m=>m.key)); // all on by default
-  }
-
-  // Override createCompany to include modules
-  const _origCreateCompany = createCompany;
-  async function createCompany(){
-    const btn = document.getElementById('create-btn');
-    const errEl = document.getElementById('create-err');
-    errEl.style.display='none';
-    const name = document.getElementById('c-name').value.trim();
-    const email = document.getElementById('c-email').value.trim();
-    const password = document.getElementById('c-password').value;
-    const fullName = document.getElementById('c-fullname').value.trim();
-    const trn = document.getElementById('c-trn').value.trim()||null;
-    const expiry = document.getElementById('c-expiry').value||null;
-    const modules = getCheckedModules('c-mod-grid');
-    if(!name||!email||!password){ errEl.textContent='Company name, email and password are required.'; errEl.style.display='block'; return; }
-    btn.disabled=true; btn.textContent='Creating…';
-    try{
-      const res = await apiFetch('/superadmin/companies',{method:'POST',body:JSON.stringify({name,email,password,full_name:fullName,trn,expires_at:expiry,modules})});
-      const data = await res.json();
-      if(!res.ok){ errEl.textContent=data.detail||'Failed to create company.'; errEl.style.display='block'; return; }
-      closeModal('m-create');
-      loadDashboard();
-    }catch(err){
-      errEl.textContent=err.message; errEl.style.display='block';
-    }finally{ btn.disabled=false; btn.textContent='Create Company'; }
   }
 
   function openModules(companyId, companyName, enabledModules){
