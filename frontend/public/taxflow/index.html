@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260714d" as="style">
-<link rel="preload" href="src/app.js?v=20260714d" as="script">
+<link rel="preload" href="src/styles.css?v=20260714e" as="style">
+<link rel="preload" href="src/app.js?v=20260714e" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260714d">
+<link rel="stylesheet" href="src/styles.css?v=20260714e">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
 </head>
 <body class="theme-light">
@@ -4845,7 +4845,7 @@ period_locks ─&lt; audit_logs
 
 <!-- ═══ MODALS ═══ -->
 <div class="overlay" id="m-product" onclick="closeOvBg(event,'m-product')">
-  <div class="modal modal-lg"><div class="modal-title">Add Product / Service</div><div class="modal-sub">Add item, stock settings, supplier, and invoice pricing</div>
+  <div class="modal modal-lg"><div class="modal-title">Add Product or Service</div><div class="modal-sub">Set item details, pricing, stock settings and preferred supplier</div>
     <div class="fr2"><div class="fg"><label class="fl">Item Code</label><input class="fi mono" id="prod-code" placeholder="ITM-005"></div><div class="fg"><label class="fl">Category</label><select class="fi" id="prod-category"><option>Materials</option><option>Services</option><option>Supplies</option></select></div></div>
     <div class="fg"><label class="fl">Item Name</label><input class="fi" id="prod-name" placeholder="Full item name"></div>
     <div class="fr2"><div class="fg"><label class="fl">Unit of Measure</label><select class="fi" id="prod-unit"><option>Each</option><option>Ton</option><option>Box</option><option>Hour</option><option>Trip</option><option>Sqm</option></select></div><div class="fg"><label class="fl">Cost Price</label><input class="fi mono" id="prod-cost" placeholder="0.00"></div></div>
@@ -5144,7 +5144,7 @@ period_locks ─&lt; audit_logs
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 20px 0;flex-shrink:0">
       <div>
         <div class="modal-title" id="sales-view-title" style="margin:0 0 3px">Invoice Preview</div>
-        <div class="modal-sub" id="sales-view-sub" style="margin:0">Sales invoice</div>
+        <div class="modal-sub" id="sales-view-sub" style="margin:0">View, share and download this invoice</div>
       </div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end">
         <button class="btn btn-g btn-sm" title="Print / Save as PDF" onclick="downloadCurrentInvoicePdf()">
@@ -5255,7 +5255,7 @@ period_locks ─&lt; audit_logs
 <div class="overlay" id="m-new-layout" onclick="closeOvBg(event,'m-new-layout')">
   <div class="modal" style="max-width:420px">
     <div class="modal-title">New Invoice Layout</div>
-    <div class="modal-sub">Give this layout a name — customise all design settings after creating it</div>
+    <div class="modal-sub">Create a named layout — customise fonts, colours and fields after saving</div>
     <div class="fg" style="margin-top:14px"><label class="fl">Layout Name</label><input class="fi" id="new-layout-name" placeholder="e.g. Export Invoice, Arabic Layout…" maxlength="60" onkeydown="if(event.key==='Enter')confirmAddInvoiceLayout()"></div>
     <div class="fg"><label class="fl">Start From</label>
       <select class="fi" id="new-layout-base">
@@ -5271,7 +5271,7 @@ period_locks ─&lt; audit_logs
 </div>
 
 <div class="overlay" id="m-emp" onclick="closeOvBg(event,'m-emp')">
-  <div class="modal modal-lg"><div class="modal-title">Add Employee</div><div class="modal-sub">Register new employee details</div>
+  <div class="modal modal-lg"><div class="modal-title">Add Employee</div><div class="modal-sub">Complete the employee profile, employment terms and document details</div>
     <div class="section-hd">Personal Information</div>
     <div style="display:flex;gap:16px;align-items:flex-start">
       <div style="flex:1">
@@ -5403,7 +5403,7 @@ period_locks ─&lt; audit_logs
 </div>
 
 <div class="overlay" id="m-edit-shift" onclick="closeOvBg(event,'m-edit-shift')">
-  <div class="modal"><div class="modal-title">Edit Shift</div><div class="modal-sub" id="rota-edit-sub">Select a rota cell</div>
+  <div class="modal"><div class="modal-title">Edit Shift</div><div class="modal-sub" id="rota-edit-sub">Update the shift type, times and notes for this rota entry</div>
     <div class="fg"><label class="fl">Shift Type</label><select class="fi" id="rota-edit-type" onchange="applyRotaEditTypeDefaults()"><option>Morning</option><option>Evening</option><option>Night</option><option>Off</option><option>Leave</option><option>Overtime</option></select></div>
     <div class="fr3"><div class="fg"><label class="fl">Start Time</label><input class="fi mono" id="rota-edit-start" type="time" value="09:00"></div><div class="fg"><label class="fl">End Time</label><input class="fi mono" id="rota-edit-end" type="time" value="18:00"></div><div class="fg"><label class="fl">Break Minutes</label><input class="fi mono" id="rota-edit-break" value="60"></div></div>
     <div class="fg"><label class="fl">Mark As</label><select class="fi" id="rota-edit-mark"><option>Shift</option><option>Off</option><option>Leave</option><option>OT</option><option>Holiday</option><option>Training</option></select></div>
@@ -5413,7 +5413,7 @@ period_locks ─&lt; audit_logs
 </div>
 
 <div class="overlay" id="m-edit-month-shift" onclick="closeOvBg(event,'m-edit-month-shift')">
-  <div class="modal"><div class="modal-title">Edit Monthly Rota Cell</div><div class="modal-sub" id="rota-edit-sub">Select a cell to edit</div>
+  <div class="modal"><div class="modal-title">Edit Monthly Rota Cell</div><div class="modal-sub" id="rota-month-edit-sub">Update the day type, shift hours and notes for this cell</div>
     <div class="fr2"><div class="fg"><label class="fl">Day Type</label><select class="fi"><option>Shift</option><option>Off</option><option>Leave</option><option>Holiday</option><option>Training</option></select></div><div class="fg"><label class="fl">Shift</label><select class="fi"><option>Morning</option><option>Evening</option><option>Night</option><option>Overtime</option></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Start Time</label><input class="fi mono" type="time" value="09:00"></div><div class="fg"><label class="fl">End Time</label><input class="fi mono" type="time" value="18:00"></div><div class="fg"><label class="fl">Break Minutes</label><input class="fi mono" value="60"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Overtime</label><select class="fi"><option>No</option><option>Yes</option></select></div><div class="fg"><label class="fl">OT Start Time</label><input class="fi mono" type="time" value="18:00"></div><div class="fg"><label class="fl">OT End Time</label><input class="fi mono" type="time" value="20:00"></div></div>
@@ -5484,7 +5484,7 @@ period_locks ─&lt; audit_logs
 <div class="overlay" id="m-acc" onclick="closeOvBg(event,'m-acc')">
   <div class="modal" style="max-width:540px">
     <div class="modal-title" id="acc-modal-title">New Account</div>
-    <div class="modal-sub" id="acc-modal-sub">Account — transactions post here</div>
+    <div class="modal-sub" id="acc-modal-sub">Add a new account to the chart of accounts</div>
     <div class="coa-modal-type-bar">
       <button class="coa-type-btn" id="acc-type-group-btn" onclick="setAccModalType('group')">Group</button>
       <button class="coa-type-btn on" id="acc-type-ledger-btn" onclick="setAccModalType('ledger')">Sub Ledger</button>
@@ -5690,8 +5690,8 @@ period_locks ─&lt; audit_logs
   <div class="modal" style="max-width:560px;width:100%">
     <div class="modal-head flx-b" style="padding:18px 20px 14px">
       <div>
-        <div class="modal-title">Old Uploads</div>
-        <div class="modal-sub" style="font-size:12px;color:var(--text3);margin-top:2px">Completed files are green, partial saves are yellow, and unsaved/failed files are red</div>
+        <div class="modal-title">Sales Upload History</div>
+        <div class="modal-sub" style="font-size:12px;color:var(--text3);margin-top:2px">Green — saved · Yellow — partial · Red — failed or unsaved</div>
       </div>
       <button class="icon-btn" type="button" onclick="closeM('m-sales-old-uploads')" aria-label="Close">&times;</button>
     </div>
@@ -5711,8 +5711,8 @@ period_locks ─&lt; audit_logs
   <div class="modal" style="max-width:560px;width:100%">
     <div class="modal-head flx-b" style="padding:18px 20px 14px">
       <div>
-        <div class="modal-title">Old Uploads</div>
-        <div class="modal-sub" style="font-size:12px;color:var(--text3);margin-top:2px">Completed files are green, partial saves are yellow, and unsaved/failed files are red</div>
+        <div class="modal-title">Purchase Upload History</div>
+        <div class="modal-sub" style="font-size:12px;color:var(--text3);margin-top:2px">Green — saved · Yellow — partial · Red — failed or unsaved</div>
       </div>
       <button class="icon-btn" type="button" onclick="closeM('m-old-uploads')" aria-label="Close">&times;</button>
     </div>
@@ -5771,7 +5771,7 @@ period_locks ─&lt; audit_logs
 <div class="overlay" id="m-branch" onclick="closeOvBg(event,'m-branch')">
   <div class="modal">
     <div class="modal-title" id="branch-modal-title">Add Branch</div>
-    <div class="modal-sub">Branch / office location details</div>
+    <div class="modal-sub">Register a branch or office location for your company</div>
     <input type="hidden" id="branch-edit-id">
     <div class="fr2">
       <div class="fg"><label class="fl">Branch Name <span style="color:var(--red)">*</span></label><input class="fi" id="branch-name" placeholder="e.g. Dubai HQ"></div>
@@ -5790,6 +5790,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260714d" defer></script>
+<script src="src/app.js?v=20260714e" defer></script>
 </body>
 </html>
