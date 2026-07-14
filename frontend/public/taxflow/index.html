@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260714c" as="style">
-<link rel="preload" href="src/app.js?v=20260714c" as="script">
+<link rel="preload" href="src/styles.css?v=20260714d" as="style">
+<link rel="preload" href="src/app.js?v=20260714d" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260714c">
+<link rel="stylesheet" href="src/styles.css?v=20260714d">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
 </head>
 <body class="theme-light">
@@ -107,10 +107,6 @@
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="7"/><path d="M8 4v5l3 2"/></svg>
       <span data-i18n="sb_expert">Expert Review</span>
     </div>
-    <div class="nav" onclick="go('exception')">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2l6 11H2L8 2z"/><path d="M8 6v3"/><path d="M8 12h.01"/></svg>
-      <span data-i18n="sb_exception">Exception Center</span>
-    </div>
   </div>
 
   <div class="sb-section">
@@ -137,7 +133,6 @@
     </div>
     <div class="tb-right">
       <button class="btn btn-g hidden" id="extract-top-badge" onclick="go('purchase')" title="AI extraction in progress" style="background:rgba(108,92,231,.12);border-color:rgba(108,92,231,.3);color:var(--primary)">⟳ Extracting <span id="extract-top-count">0</span></button>
-      <button class="btn btn-g" id="exception-top-badge" onclick="go('exception')" title="Open Exception Center">Exceptions <span class="b b-g" id="exception-top-count">0</span></button>
       <button onclick="window.open('/pos','_blank')" title="Open POS Terminal in new tab" style="display:flex;align-items:center;gap:6px;padding:6px 13px;border-radius:8px;border:none;background:linear-gradient(135deg,#3ecf8e,#2ab87a);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;transition:opacity .15s" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" width="13" height="13"><rect x="1" y="3" width="14" height="11" rx="1"/><path d="M1 7h14"/><path d="M5 11h2M10 11h1"/><path d="M8 1v2"/></svg>
         POS Terminal
@@ -804,7 +799,7 @@
           <button class="dv2-qa" onclick="go('reports')" style="--qa:#6366f1">
             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M4 17V8l4-5 4 5v9"/><path d="M8 17v-5h4v5"/></svg><span data-i18n="qa_reports">Reports</span>
           </button>
-          <button class="dv2-qa" onclick="go('exception')" style="--qa:#f472b6">
+          <button class="dv2-qa" onclick="go('settings');setTimeout(()=>{const t=document.querySelector('[onclick*=set-exception]');if(t)t.click();},50)" style="--qa:#f472b6">
             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><circle cx="10" cy="10" r="7"/><path d="M10 7v3M10 13v1"/></svg><span data-i18n="qa_alerts">Alerts</span>
           </button>
           <button class="dv2-qa" onclick="window.open('/pos','_blank')" style="--qa:#3ecf8e" title="Open POS terminal">
@@ -3415,26 +3410,7 @@
 </div>
 
 <!-- ═══════════════════ EXCEPTION CENTER ═══════════════════ -->
-<div class="page" id="page-exception">
-  <div class="g4 mb16">
-    <div class="stat"><div class="stat-lbl">Open Exceptions</div><div class="stat-val" id="exc-open" style="color:var(--red)">0</div><div class="stat-delta">system issues</div></div>
-    <div class="stat"><div class="stat-lbl">High Severity</div><div class="stat-val" id="exc-high" style="color:var(--amber)">0</div><div class="stat-delta">fix first</div></div>
-    <div class="stat"><div class="stat-lbl">Medium</div><div class="stat-val" id="exc-medium" style="color:var(--purple)">0</div><div class="stat-delta">needs review</div></div>
-    <div class="stat"><div class="stat-lbl">Low</div><div class="stat-val" id="exc-low" style="color:var(--green)">0</div><div class="stat-delta">monitor</div></div>
-  </div>
-  <div class="card">
-    <div class="card-hd">
-      <div><div class="card-title">System Problems</div><div class="card-sub">Failed postings, duplicates, stock gaps, VAT/OCR/payroll issues</div></div>
-      <button class="btn btn-g btn-sm" onclick="loadExceptionCenter()">Refresh</button>
-    </div>
-    <table class="tbl">
-      <thead><tr><th>Module</th><th>Issue</th><th>Source</th><th>Severity</th><th>Status</th><th>Action</th></tr></thead>
-      <tbody id="exception-tbody">
-        <tr><td colspan="6" style="color:var(--text3);text-align:center">Reading exception center...</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+<div class="page" id="page-exception"></div>
 
 <!-- ═══════════════════ SETTINGS MODULE ═══════════════════ -->
 <div class="page" id="page-settings">
@@ -3447,6 +3423,7 @@
     <div class="tab" onclick="stab(this,'set-docs')">Invoice Design</div>
     <div class="tab" onclick="stab(this,'set-quotation-docs')">Quotation Design</div>
     <div class="tab" onclick="stab(this,'set-backup')">Backup & Audit</div>
+    <div class="tab" onclick="stab(this,'set-exception');loadExceptionCenter()">Exception Center</div>
   </div>
 
   <div class="tab-body on" id="set-company">
@@ -3844,6 +3821,27 @@
         <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Record</th><th>Result</th></tr></thead>
         <tbody id="audit-tbody">
           <tr><td class="mono" colspan="5" style="color:var(--text3);text-align:center">Loading audit log…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-body" id="set-exception">
+    <div class="g4 mb16">
+      <div class="stat"><div class="stat-lbl">Open Exceptions</div><div class="stat-val" id="exc-open" style="color:var(--red)">0</div><div class="stat-delta">system issues</div></div>
+      <div class="stat"><div class="stat-lbl">High Severity</div><div class="stat-val" id="exc-high" style="color:var(--amber)">0</div><div class="stat-delta">fix first</div></div>
+      <div class="stat"><div class="stat-lbl">Medium</div><div class="stat-val" id="exc-medium" style="color:var(--purple)">0</div><div class="stat-delta">needs review</div></div>
+      <div class="stat"><div class="stat-lbl">Low</div><div class="stat-val" id="exc-low" style="color:var(--green)">0</div><div class="stat-delta">monitor</div></div>
+    </div>
+    <div class="card">
+      <div class="card-hd">
+        <div><div class="card-title">System Problems</div><div class="card-sub">Failed postings, duplicates, stock gaps, VAT/OCR/payroll issues</div></div>
+        <button class="btn btn-g btn-sm" onclick="loadExceptionCenter()">Refresh</button>
+      </div>
+      <table class="tbl">
+        <thead><tr><th>Module</th><th>Issue</th><th>Source</th><th>Severity</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody id="exception-tbody">
+          <tr><td colspan="6" style="color:var(--text3);text-align:center">Reading exception center...</td></tr>
         </tbody>
       </table>
     </div>
@@ -5792,6 +5790,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260714c" defer></script>
+<script src="src/app.js?v=20260714d" defer></script>
 </body>
 </html>
