@@ -37,7 +37,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
 def register(request: Request, payload: RegisterRequest, db: Session = Depends(get_db)) -> Token:
     if db.query(User).filter(User.email == payload.email.lower()).first():
         raise HTTPException(status_code=409, detail="Registration failed")
-    trial_expires = (datetime.now(timezone.utc) + timedelta(days=30)).strftime("%Y-%m-%d")
+    trial_expires = (datetime.now(timezone.utc) + timedelta(days=3)).strftime("%Y-%m-%d")
     company = Company(
         name=payload.company_name,
         trn=payload.trn or None,
