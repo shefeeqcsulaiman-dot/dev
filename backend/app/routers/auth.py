@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.limiter import limiter
-from app.models import Company, User
+from pydantic import BaseModel
+
+from app.models import Company, TrialRequest, User
 from app.schemas import LoginRequest, RegisterRequest, Token, UserOut
 from app.security import authenticate_user, create_access_token, hash_password
 
@@ -61,3 +63,29 @@ def register(request: Request, payload: RegisterRequest, db: Session = Depends(g
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)) -> User:
     return current_user
+
+
+class TrialRequestIn(BaseModel):
+    full_name: str
+    company_name: str
+    email: str
+    phone: str | None = None
+    interest: str | None = None
+    notes: str | None = None
+
+
+@router.post("/trial-request", status_code=201)
+@limiter.limit("5/hour")
+def trial_request(request: Request, payload: TrialRequestIn, db: Session = Depends(get_db)) -> dict:
+    record = TrialRequest(
+        full_name=payload.full_name.strip(),
+        company_name=payload.company_name.strip(),
+        email=payload.email.strip().lower(),
+        phone=payload.phone,
+        interest=payload.interest,
+        notes=payload.notes,
+        status="new",
+    )
+    db.add(record)
+    db.commit()
+    return {"ok": True}

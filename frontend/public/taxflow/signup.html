@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Create Account — ETaxFlow</title>
+  <title>Free Trial — ETaxFlow</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
@@ -16,76 +16,91 @@
       align-items:center;
       justify-content:center;
       background:linear-gradient(145deg,#040d1e 0%,#0a1f4a 45%,#07163a 100%);
-      padding:24px 0;
+      padding:28px 0;
     }
     .card{
       background:#fff;
       border-radius:20px;
-      padding:44px 40px 36px;
+      padding:44px 40px 38px;
       width:100%;
-      max-width:480px;
+      max-width:500px;
       margin:20px;
       box-shadow:0 40px 120px rgba(0,0,0,.45);
     }
-    .brand{text-align:center;margin-bottom:30px;}
-    .brand-img{width:140px;height:auto;margin-bottom:10px;}
-    .brand-sub{font-size:13.5px;color:#6b7a99;margin-top:2px;}
+    .brand{text-align:center;margin-bottom:28px;}
+    .brand-img{width:130px;height:auto;margin-bottom:12px;}
+    .card-title{
+      font-family:'Space Grotesk',sans-serif;
+      font-size:22px;font-weight:700;color:#0f172a;
+      text-align:center;margin-bottom:6px;
+    }
+    .card-sub{
+      font-size:13.5px;color:#6b7a99;text-align:center;
+      line-height:1.55;margin-bottom:28px;
+    }
     .error{
       display:none;
       background:#fef2f2;border:1px solid #fecaca;border-radius:9px;
-      padding:11px 14px;font-size:13px;color:#dc2626;margin-bottom:20px;
+      padding:11px 14px;font-size:13px;color:#dc2626;margin-bottom:18px;
     }
-    .success{
+    .success-box{
       display:none;
-      background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px;
-      padding:11px 14px;font-size:13px;color:#16a34a;margin-bottom:20px;
+      background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;
+      padding:24px 20px;text-align:center;
     }
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+    .success-box .tick{font-size:36px;margin-bottom:10px;}
+    .success-box h3{font-size:17px;font-weight:700;color:#15803d;margin-bottom:6px;}
+    .success-box p{font-size:13.5px;color:#166534;line-height:1.5;}
     .field{margin-bottom:16px;}
     .field label{
       display:block;font-size:11px;font-weight:600;letter-spacing:.6px;
       text-transform:uppercase;color:#374151;margin-bottom:7px;
     }
-    .field input,.field select{
+    .field label .req{color:#e05252;margin-left:2px;}
+    .field input,.field select,.field textarea{
       width:100%;padding:11px 15px;
       border:1.5px solid #d1d5db;border-radius:9px;
       font-size:14px;font-family:inherit;color:#111827;
       background:#f9fafb;outline:none;
       transition:border-color .15s,box-shadow .15s,background .15s;
-      appearance:none;
     }
-    .field input:focus,.field select:focus{
+    .field input:focus,.field select:focus,.field textarea:focus{
       border-color:#4f8ef0;
       box-shadow:0 0 0 3px rgba(79,142,240,.15);
       background:#fff;
     }
-    .field select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7a99' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;}
-    .hint{font-size:11px;color:#9ca3af;margin-top:5px;}
-    .section-label{
-      font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;
-      color:#9ca3af;margin:20px 0 14px;padding-bottom:8px;border-bottom:1px solid #f3f4f6;
+    .field textarea{resize:vertical;min-height:80px;}
+    .field select{
+      appearance:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7a99' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;
     }
+    .phone-wrap{display:flex;gap:10px;}
+    .phone-prefix{
+      display:flex;align-items:center;gap:7px;
+      border:1.5px solid #d1d5db;border-radius:9px;
+      background:#f9fafb;padding:0 13px;
+      font-size:14px;color:#374151;font-weight:500;
+      white-space:nowrap;min-width:90px;
+    }
+    .phone-prefix img{width:20px;height:14px;object-fit:cover;border-radius:2px;}
+    .phone-wrap input{flex:1;}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
     .btn{
-      width:100%;padding:13px;
+      width:100%;padding:14px;
       background:linear-gradient(135deg,#073D7F,#4f8ef0);
       color:#fff;border:none;border-radius:10px;
       font-size:15px;font-weight:700;font-family:inherit;
-      cursor:pointer;letter-spacing:.1px;margin-top:8px;
+      cursor:pointer;letter-spacing:.1px;margin-top:6px;
       transition:filter .2s,opacity .2s;
     }
     .btn:hover{filter:brightness(1.08);}
     .btn:disabled{opacity:.6;cursor:not-allowed;filter:none;}
-    .footer{text-align:center;margin-top:22px;font-size:13px;color:#6b7a99;}
-    .footer a{color:#4f8ef0;text-decoration:none;font-weight:500;}
-    .footer a:hover{text-decoration:underline;}
-    .trial-badge{
-      display:inline-block;background:#eff6ff;color:#2563eb;
-      border:1px solid #bfdbfe;border-radius:20px;
-      font-size:12px;font-weight:600;padding:4px 12px;
-      margin-bottom:18px;
-    }
+    .footer-note{text-align:center;margin-top:18px;font-size:13px;color:#6b7a99;}
+    .footer-note a{color:#4f8ef0;text-decoration:none;font-weight:500;}
+    .footer-note a:hover{text-decoration:underline;}
     @media(max-width:520px){
-      .card{padding:36px 24px 28px;}
+      .card{padding:36px 24px 30px;}
       .row{grid-template-columns:1fr;}
     }
   </style>
@@ -94,94 +109,78 @@
 <div class="card">
   <div class="brand">
     <img src="/logo.png" alt="ETaxFlow" class="brand-img">
-    <div class="brand-sub">Create your free account</div>
   </div>
-  <div style="text-align:center"><span class="trial-badge">30-day free trial · No credit card required</span></div>
+  <div class="card-title">Book Your Free 3-Day Trial</div>
+  <div class="card-sub">Fill in your details and we'll be in touch within 24 hours to get you started.</div>
+
   <div id="err" class="error"></div>
-  <div id="ok" class="success"></div>
 
-  <div class="section-label">Your Details</div>
-  <div class="row">
-    <div class="field">
-      <label for="full_name">Full Name</label>
-      <input id="full_name" type="text" placeholder="Ahmed Al Rashidi" autocomplete="name">
+  <div id="form-body">
+    <div class="row">
+      <div class="field">
+        <label>Full Name <span class="req">*</span></label>
+        <input id="full_name" type="text" placeholder="Your full name" autocomplete="name">
+      </div>
+      <div class="field">
+        <label>Company Name <span class="req">*</span></label>
+        <input id="company_name" type="text" placeholder="Your company name" autocomplete="organization">
+      </div>
     </div>
-    <div class="field">
-      <label for="phone">Phone (optional)</label>
-      <input id="phone" type="tel" placeholder="+971 50 000 0000" autocomplete="tel">
-    </div>
-  </div>
-  <div class="field">
-    <label for="email">Email Address</label>
-    <input id="email" type="email" placeholder="you@company.com" autocomplete="email">
-  </div>
-  <div class="field">
-    <label for="password">Password</label>
-    <input id="password" type="password" placeholder="Min. 6 characters" autocomplete="new-password">
-  </div>
 
-  <div class="section-label">Company Details</div>
-  <div class="field">
-    <label for="company_name">Company Name</label>
-    <input id="company_name" type="text" placeholder="Al Rashidi Trading LLC" autocomplete="organization">
-  </div>
-  <div class="row">
     <div class="field">
-      <label for="emirate">Emirate</label>
-      <select id="emirate">
-        <option value="">Select emirate</option>
-        <option>Abu Dhabi</option>
-        <option>Dubai</option>
-        <option>Sharjah</option>
-        <option>Ajman</option>
-        <option>Umm Al Quwain</option>
-        <option>Ras Al Khaimah</option>
-        <option>Fujairah</option>
+      <label>Email Address <span class="req">*</span></label>
+      <input id="email" type="email" placeholder="your@email.com" autocomplete="email">
+    </div>
+
+    <div class="field">
+      <label>Phone / WhatsApp</label>
+      <div class="phone-wrap">
+        <div class="phone-prefix">
+          <img src="https://flagcdn.com/w40/ae.png" alt="UAE">
+          +971
+        </div>
+        <input id="phone" type="tel" placeholder="50 000 0000" inputmode="numeric">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>I'm interested in</label>
+      <select id="interest">
+        <option value="">Select a module...</option>
+        <option value="Sales & Invoicing">Sales &amp; Invoicing</option>
+        <option value="HR & Payroll">HR &amp; Payroll</option>
+        <option value="Inventory Management">Inventory Management</option>
+        <option value="Accounting & VAT">Accounting &amp; VAT</option>
+        <option value="Purchasing">Purchasing</option>
+        <option value="Reports & Compliance">Reports &amp; Compliance</option>
+        <option value="Full Suite">Full Suite (All Modules)</option>
       </select>
     </div>
+
     <div class="field">
-      <label for="trn">TRN (optional)</label>
-      <input id="trn" type="text" placeholder="100123456700003" maxlength="15" inputmode="numeric">
-      <div class="hint" id="trn-hint"></div>
+      <label>Anything else you'd like us to know?</label>
+      <textarea id="notes" placeholder="e.g. number of employees, current software, go-live date..."></textarea>
     </div>
+
+    <button id="btn" class="btn" onclick="submitTrial()">Get My Free Trial</button>
   </div>
 
-  <button id="btn" class="btn" onclick="signUp()">Create Account</button>
+  <div id="success-box" class="success-box">
+    <div class="tick">✅</div>
+    <h3>Thank you! We'll be in touch soon.</h3>
+    <p>Your trial request has been received. Our team will contact you within 24 hours to set up your account.</p>
+  </div>
 
-  <div class="footer" style="margin-top:18px">
+  <div class="footer-note" style="margin-top:20px">
     Already have an account? <a href="/login">Sign in</a>
   </div>
-  <div class="footer" style="margin-top:10px;font-size:12px;color:#9ca3af;">
+  <div class="footer-note" style="margin-top:8px;font-size:12px;color:#9ca3af;">
     ETaxFlow &mdash; UAE Business Management Platform
   </div>
 </div>
 
 <script src="/config.js"></script>
 <script>
-  (async function(){
-    var t=localStorage.getItem('taxflow_token');
-    if(!t)return;
-    try{
-      var r=await fetch(apiBase()+'/auth/me',{headers:{'Authorization':'Bearer '+t}});
-      if(r.ok)window.location.replace('/');
-    }catch(e){}
-  })();
-
-  document.getElementById('trn').addEventListener('input',function(){
-    var v=this.value.replace(/\D/g,'');
-    this.value=v;
-    var hint=document.getElementById('trn-hint');
-    if(v.length===0){hint.textContent='';return;}
-    hint.textContent=v.length+'/15';
-    hint.style.color=v.length===15?'#16a34a':'#9ca3af';
-  });
-
-  ['full_name','email','password','company_name'].forEach(function(id){
-    document.getElementById(id).addEventListener('keydown',function(e){
-      if(e.key==='Enter')signUp();
-    });
-  });
-
   function apiBase(){
     if(window.TAXFLOW_API_BASE_URL)return window.TAXFLOW_API_BASE_URL;
     var h=window.location.hostname;
@@ -189,63 +188,48 @@
     return window.location.protocol+'//'+h+'/api/v1';
   }
 
-  async function signUp(){
+  async function submitTrial(){
     var btn=document.getElementById('btn');
     var err=document.getElementById('err');
-    var ok=document.getElementById('ok');
     err.style.display='none';
-    ok.style.display='none';
 
     var fullName=document.getElementById('full_name').value.trim();
-    var email=document.getElementById('email').value.trim();
-    var pwd=document.getElementById('password').value;
     var company=document.getElementById('company_name').value.trim();
+    var email=document.getElementById('email').value.trim();
     var phone=document.getElementById('phone').value.trim();
-    var emirate=document.getElementById('emirate').value;
-    var trn=document.getElementById('trn').value.trim();
+    var interest=document.getElementById('interest').value;
+    var notes=document.getElementById('notes').value.trim();
 
     if(!fullName){err.textContent='Please enter your full name.';err.style.display='block';return;}
-    if(!email){err.textContent='Please enter your email address.';err.style.display='block';return;}
-    if(!pwd||pwd.length<6){err.textContent='Password must be at least 6 characters.';err.style.display='block';return;}
     if(!company){err.textContent='Please enter your company name.';err.style.display='block';return;}
-    if(trn&&(trn.length!==15||!/^\d+$/.test(trn))){err.textContent='TRN must be exactly 15 numeric digits.';err.style.display='block';return;}
+    if(!email||!email.includes('@')){err.textContent='Please enter a valid email address.';err.style.display='block';return;}
 
-    btn.disabled=true;btn.textContent='Creating account…';
+    btn.disabled=true;btn.textContent='Submitting…';
+
+    var body={full_name:fullName,company_name:company,email:email};
+    if(phone)body.phone='+971 '+phone;
+    if(interest)body.interest=interest;
+    if(notes)body.notes=notes;
 
     try{
-      var body={
-        full_name:fullName,
-        email:email,
-        password:pwd,
-        company_name:company
-      };
-      if(phone)body.phone=phone;
-      if(emirate)body.emirate=emirate;
-      if(trn)body.trn=trn;
-
-      var resp=await fetch(apiBase()+'/auth/register',{
+      var resp=await fetch(apiBase()+'/auth/trial-request',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify(body)
       });
-      var data=await resp.json();
-
-      if(resp.ok&&data.access_token){
-        localStorage.setItem('taxflow_token',data.access_token);
-        ok.textContent='Account created! Redirecting…';
-        ok.style.display='block';
-        setTimeout(function(){window.location.replace('/');},800);
+      if(resp.ok){
+        document.getElementById('form-body').style.display='none';
+        document.getElementById('success-box').style.display='block';
       }else{
-        var msg=data.detail||'Registration failed. Please try again.';
-        if(resp.status===409)msg='An account with this email already exists. Please sign in.';
-        err.textContent=msg;
+        var data=await resp.json().catch(function(){return{};});
+        err.textContent=data.detail||'Something went wrong. Please try again.';
         err.style.display='block';
-        btn.disabled=false;btn.textContent='Create Account';
+        btn.disabled=false;btn.textContent='Get My Free Trial';
       }
     }catch(e){
       err.textContent='Cannot reach server. Please try again.';
       err.style.display='block';
-      btn.disabled=false;btn.textContent='Create Account';
+      btn.disabled=false;btn.textContent='Get My Free Trial';
     }
   }
 </script>

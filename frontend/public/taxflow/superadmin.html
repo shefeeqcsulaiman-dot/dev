@@ -160,6 +160,20 @@
     </div>
   </div>
 
+  <!-- Trial Requests -->
+  <div class="card" style="margin-top:24px">
+    <div class="card-hd">
+      <div>
+        <div class="card-title">Trial Requests <span id="sa-trial-badge" style="display:none;background:#4f8ef0;color:#fff;font-size:11px;font-weight:600;border-radius:20px;padding:2px 8px;margin-left:6px;vertical-align:middle"></span></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">Inbound free trial requests from the signup page</div>
+      </div>
+      <button class="btn btn-g btn-sm" onclick="loadTrialRequests()">Refresh</button>
+    </div>
+    <div id="sa-trials-wrap">
+      <div class="loading-state">Loading…</div>
+    </div>
+  </div>
+
   <!-- Audit Log Panel -->
   <div class="card" style="margin-top:24px">
     <div class="card-hd">
@@ -740,6 +754,55 @@
     finally{ btn.disabled=false; btn.textContent='Delete Company'; }
   }
 
+  // ── Trial requests ────────────────────────────────────────────
+  const TRIAL_STATUS_LABELS={new:'New',contacted:'Contacted',converted:'Converted',closed:'Closed'};
+  const TRIAL_STATUS_COLORS={new:'#2563eb',contacted:'#d97706',converted:'#16a34a',closed:'#6b7280'};
+
+  async function loadTrialRequests(){
+    const wrap=document.getElementById('sa-trials-wrap');
+    wrap.innerHTML='<div class="loading-state"><span class="spinner"></span> Loading…</div>';
+    try{
+      const res=await apiFetch('/superadmin/trial-requests');
+      const rows=await res.json();
+      const badge=document.getElementById('sa-trial-badge');
+      const newCount=rows.filter(r=>r.status==='new').length;
+      if(newCount){badge.textContent=newCount+' new';badge.style.display='inline';}
+      else badge.style.display='none';
+      if(!rows.length){wrap.innerHTML='<div class="loading-state" style="color:var(--muted)">No trial requests yet.</div>';return;}
+      let html=`<table class="sa-table"><thead><tr>
+        <th>Date</th><th>Name</th><th>Company</th><th>Email</th><th>Phone</th><th>Interest</th><th>Notes</th><th>Status</th>
+      </tr></thead><tbody>`;
+      rows.forEach(r=>{
+        const d=r.created_at?r.created_at.slice(0,10):'—';
+        const sc=TRIAL_STATUS_COLORS[r.status]||'#6b7280';
+        const sl=TRIAL_STATUS_LABELS[r.status]||r.status;
+        html+=`<tr>
+          <td style="font-size:11.5px;color:var(--muted)">${d}</td>
+          <td><strong>${r.full_name||'—'}</strong></td>
+          <td>${r.company_name||'—'}</td>
+          <td><a href="mailto:${r.email}" style="color:#4f8ef0">${r.email}</a></td>
+          <td>${r.phone||'—'}</td>
+          <td>${r.interest||'—'}</td>
+          <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.notes||'').replace(/"/g,'&quot;')}">${r.notes||'—'}</td>
+          <td>
+            <select onchange="updateTrialStatus('${r.id}',this.value)" style="padding:3px 6px;border:1.5px solid ${sc};border-radius:6px;font-size:11.5px;color:${sc};background:transparent;font-weight:600;cursor:pointer;outline:none">
+              ${Object.keys(TRIAL_STATUS_LABELS).map(k=>`<option value="${k}"${k===r.status?' selected':''}>${TRIAL_STATUS_LABELS[k]}</option>`).join('')}
+            </select>
+          </td>
+        </tr>`;
+      });
+      html+='</tbody></table>';
+      wrap.innerHTML=html;
+    }catch(e){wrap.innerHTML='<div class="loading-state" style="color:var(--red)">Failed to load trial requests.</div>';}
+  }
+
+  async function updateTrialStatus(id,status){
+    try{
+      await apiFetch('/superadmin/trial-requests/'+id,{method:'PATCH',body:JSON.stringify({status})});
+      loadTrialRequests();
+    }catch(e){alert('Failed to update status.');}
+  }
+
   // ── Client error report ───────────────────────────────────────
   async function loadClientErrors(){
     const wrap=document.getElementById('sa-errors-wrap');
@@ -884,6 +947,7 @@
 
   loadDashboard();
   loadClientErrors();
+  loadTrialRequests();
 
   // ── Module permissions ────────────────────────────────────────
   const MODULE_DEFS = [

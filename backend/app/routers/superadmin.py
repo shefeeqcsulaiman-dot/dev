@@ -23,7 +23,7 @@ from app.models import (
     Job, JournalEntry, JournalLine, MonthEndCloseRecord, Payment, PayrollItem,
     PayrollRun, PeriodLock, PostingJob, Receipt, SourceTransaction,
     SourceTransactionLine, StockAdjustmentApproval, StockMovement,
-    StockProductMapping, TaxCode, TaxLine, TaxPeriod, User, VatReturn,
+    StockProductMapping, TaxCode, TaxLine, TaxPeriod, TrialRequest, User, VatReturn,
     VatReturnSnapshot, Voucher, VoucherLine, VoucherType, Warehouse,
     WpsBatch,
 )
@@ -579,3 +579,37 @@ def list_audit_logs(
         })
 
     return {"total": len(entries), "entries": entries}
+
+
+@router.get("/trial-requests")
+def list_trial_requests(db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
+    rows = db.query(TrialRequest).order_by(TrialRequest.created_at.desc()).all()
+    return [
+        {
+            "id": r.id,
+            "full_name": r.full_name,
+            "company_name": r.company_name,
+            "email": r.email,
+            "phone": r.phone,
+            "interest": r.interest,
+            "notes": r.notes,
+            "status": r.status,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
+
+
+class TrialStatusIn(BaseModel):
+    status: str
+
+
+@router.patch("/trial-requests/{request_id}")
+def update_trial_status(request_id: str, body: TrialStatusIn, db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
+    row = db.query(TrialRequest).filter(TrialRequest.id == request_id).first()
+    if not row:
+        raise HTTPException(404, "Not found")
+    row.status = body.status
+    db.commit()
+    return {"ok": True}
+

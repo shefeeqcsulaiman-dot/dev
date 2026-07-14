@@ -971,3 +971,17 @@ class ApprovalMatrixRecord(Base, TimestampMixin):
     max_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     approver_role: Mapped[str] = mapped_column(String(80), nullable=False)
     department: Mapped[str | None] = mapped_column(String(80))
+
+
+class TrialRequest(Base, TimestampMixin):
+    __tablename__ = "trial_requests"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    company_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    phone: Mapped[str | None] = mapped_column(String(60))
+    interest: Mapped[str | None] = mapped_column(String(120))
+    notes: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="new")
+

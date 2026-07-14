@@ -376,6 +376,22 @@ def ensure_schema_updates() -> None:
             "CREATE INDEX IF NOT EXISTS ix_app_data_company_collection_created "
             "ON app_data_records (company_id, collection, created_at)"
         ))
+        if "trial_requests" not in table_names:
+            connection.execute(text("""
+                CREATE TABLE IF NOT EXISTS trial_requests (
+                    id VARCHAR(36) PRIMARY KEY,
+                    full_name VARCHAR(255) NOT NULL,
+                    company_name VARCHAR(255) NOT NULL,
+                    email VARCHAR(255) NOT NULL,
+                    phone VARCHAR(60),
+                    interest VARCHAR(120),
+                    notes TEXT,
+                    status VARCHAR(30) DEFAULT 'new',
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                )
+            """))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS idx_trial_requests_status ON trial_requests (status)"))
 
 
 def seed_initial_data() -> None:
