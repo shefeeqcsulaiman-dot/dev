@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class Token(BaseModel):
@@ -15,16 +15,23 @@ class LoginRequest(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    full_name: str
+    full_name: str = Field(min_length=1)
     email: EmailStr
-    password: str
+    password: str = Field(min_length=6)
     phone: str | None = None
-    company_name: str
+    company_name: str = Field(min_length=1)
     business_type: str | None = None
     emirate: str | None = None
     trn: str | None = None
-    employee_count: int | None = None
+    employee_count: int | None = Field(default=None, ge=0)
     plan: str = "starter"
+
+    @field_validator("trn")
+    @classmethod
+    def validate_trn(cls, v: str | None) -> str | None:
+        if v is not None and (not v.isdigit() or len(v) != 15):
+            raise ValueError("TRN must be exactly 15 numeric digits")
+        return v
 
 
 class CompanyOut(BaseModel):
@@ -57,6 +64,13 @@ class CompanyUpdate(BaseModel):
     name: str | None = None
     trade_name: str | None = None
     trn: str | None = None
+
+    @field_validator("trn")
+    @classmethod
+    def validate_trn(cls, v: str | None) -> str | None:
+        if v is not None and (not v.isdigit() or len(v) != 15):
+            raise ValueError("TRN must be exactly 15 numeric digits")
+        return v
     country: str | None = None
     emirate: str | None = None
     business_type: str | None = None
@@ -643,7 +657,14 @@ class StockAdjustmentApprovalIn(BaseModel):
     item_code: str
     warehouse_id: str | None = None
     quantity_delta: Decimal
-    reason: str
+    reason: str = Field(min_length=1)
+
+    @field_validator("quantity_delta")
+    @classmethod
+    def quantity_not_zero(cls, v: Decimal) -> Decimal:
+        if v == 0:
+            raise ValueError("quantity_delta must not be zero")
+        return v
 
 
 class StockAdjustmentApprovalOut(StockAdjustmentApprovalIn):
@@ -669,7 +690,7 @@ class EmployeeOut(BaseModel):
 
 
 class PayrollGenerate(BaseModel):
-    period: str = "2024-06"
+    period: str = Field(default="2024-06", pattern=r"^\d{4}-\d{2}$")
 
 
 class PayrollItemOut(BaseModel):

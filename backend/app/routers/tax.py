@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -25,6 +25,13 @@ def create_tax_code(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> TaxCode:
+    existing = db.query(TaxCode).filter(
+        TaxCode.company_id == current_user.company_id,
+        TaxCode.code == payload.code,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Tax code '{payload.code}' already exists")
+
     code = TaxCode(company_id=current_user.company_id, **payload.model_dump())
     db.add(code)
     db.commit()

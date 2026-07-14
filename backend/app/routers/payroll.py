@@ -34,6 +34,13 @@ def generate_payroll(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> PayrollRun:
+    existing = db.query(PayrollRun).filter(
+        PayrollRun.company_id == current_user.company_id,
+        PayrollRun.period == payload.period,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Payroll run for {payload.period} already exists")
+
     employees = db.query(Employee).filter(Employee.company_id == current_user.company_id, Employee.status == "active").all()
     if not employees:
         raise HTTPException(status_code=422, detail="No active employees found")

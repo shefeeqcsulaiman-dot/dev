@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260713a" as="style">
-<link rel="preload" href="src/app.js?v=20260713b" as="script">
+<link rel="preload" href="src/styles.css?v=20260714a" as="style">
+<link rel="preload" href="src/app.js?v=20260714a" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260713a">
+<link rel="stylesheet" href="src/styles.css?v=20260714a">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
 </head>
 <body class="theme-light">
@@ -19,6 +19,9 @@
 <!-- SIDEBAR -->
 <nav class="sb" id="sidebar" aria-label="Primary navigation">
   <div class="sb-logo">
+    <button class="sb-ham-btn" onclick="toggleSidebar()" aria-label="Toggle sidebar">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M3 5h14M3 10h14M3 15h14"/></svg>
+    </button>
     <img id="sb-logo-img" class="sb-logo-img" alt="Company Logo">
     <div class="sb-logo-text">
       <div class="sb-brand">Tax<span>Flow</span></div>
@@ -88,10 +91,9 @@
 
   <div class="sb-section">
     <div class="sb-lbl" data-i18n="sb_hr">People &amp; HR</div>
-    <div class="nav" id="nav-hrms" onclick="window.open('/hrms','_blank')" title="Opens HRMS Portal in a new tab">
+    <div class="nav" id="nav-hrms" onclick="location.href='/hrms'" title="HRMS Portal">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2a3 3 0 100 6 3 3 0 000-6z"/><path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/><path d="M12 7l1.5-1.5"/><circle cx="13.5" cy="4.5" r="1.5"/></svg>
       <span data-i18n="sb_hrms">HRMS</span>
-      <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-left:auto;opacity:.45"><path d="M2 2h8v8M10 2L2 10"/></svg>
     </div>
   </div>
 
@@ -168,10 +170,7 @@
       <div class="mb3-hdr-date" id="dash-today-date"></div>
     </div>
     <div class="mb3-hdr-right">
-      <div class="mb3-search-pill">
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><circle cx="9" cy="9" r="5.5"/><path d="M14.5 14.5l-3-3"/></svg>
-        <span>Search transactions…</span>
-      </div>
+
       <div class="dv2-live-badge"><span class="live-dot"></span><span id="dash-period-label">Live</span></div>
       <button class="mb3-hdr-btn" id="dash-btn-new-invoice" onclick="go('sales')">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13"><path d="M2 4h12l-1 8H3L2 4z"/></svg><span id="dash-btn-new-invoice-label">New Invoice</span>
@@ -1116,8 +1115,8 @@
         <div class="sinv-section mb10">
           <div class="sinv-section-title">Invoice Details</div>
           <div class="fr3 mb10">
-            <div class="fg" style="margin:0"><label class="fl" id="sales-no-label">Invoice No.</label><input class="fi mono" id="inv-no" dir="auto" oninput="updateSalesInvPreview()"></div>
-            <div class="fg" style="margin:0"><label class="fl" id="sales-date-label">Invoice Date</label><input class="fi" type="date" id="inv-date" oninput="updateSalesInvPreview()"></div>
+            <div class="fg" style="margin:0"><label class="fl" id="sales-no-label">Invoice No.</label><input class="fi mono" id="inv-no" dir="auto" required oninput="updateSalesInvPreview()"></div>
+            <div class="fg" style="margin:0"><label class="fl" id="sales-date-label">Invoice Date</label><input class="fi" type="date" id="inv-date" required oninput="updateSalesInvPreview()"></div>
             <div class="fg" style="margin:0"><label class="fl">Due Date</label><input class="fi" type="date" id="inv-due" oninput="updateSalesInvPreview()"></div>
           </div>
           <div class="fr3">
@@ -1134,7 +1133,7 @@
             <div class="fg" style="margin:0">
               <label class="fl">Customer Name</label>
               <div class="field-action-row">
-                <input class="fi" id="inv-cust" list="invoice-customer-options" placeholder="Select or type customer" dir="auto" onfocus="refreshInvoiceCustomerOptions()" oninput="applyInvoiceCustomerSelection();updateSalesInvPreview()" onchange="applyInvoiceCustomerSelection();updateSalesInvPreview()">
+                <input class="fi" id="inv-cust" list="invoice-customer-options" placeholder="Select or type customer" dir="auto" required onfocus="refreshInvoiceCustomerOptions()" oninput="applyInvoiceCustomerSelection();updateSalesInvPreview()" onchange="applyInvoiceCustomerSelection();updateSalesInvPreview()">
                 <button class="btn btn-g btn-sm" type="button" onclick="openAddCustomerFromInvoice()">+ Add</button>
               </div>
               <datalist id="invoice-customer-options"></datalist>
@@ -1163,7 +1162,7 @@
             <div></div>
           </div>
           <div id="inv-lines">
-            <div class="inv-item sales-inv-line"><input class="fi inv-product" list="invoice-product-options" placeholder="Description or product" dir="auto" style="font-size:12.5px" onfocus="refreshInvoiceProductSuggestions()" onchange="applyInvoiceProductSuggestion(this)"><input class="fi inv-unit" value="PCS" dir="auto" readonly style="font-size:12.5px;background:var(--bg)"><input class="fi inv-qty" value="1" style="font-size:12.5px" oninput="calcLine(this)"><input class="fi inv-price" value="0.00" style="font-size:12.5px" oninput="calcLine(this)"><input class="fi mono inv-amount" value="0.00" readonly style="background:var(--bg)"><button class="btn btn-g" style="padding:4px 8px" onclick="remLine(this)">&#x2715;</button></div>
+            <div class="inv-item sales-inv-line"><input class="fi inv-product" list="invoice-product-options" placeholder="Description or product" dir="auto" style="font-size:12.5px" onfocus="refreshInvoiceProductSuggestions()" onchange="applyInvoiceProductSuggestion(this)"><input class="fi inv-unit" value="PCS" dir="auto" readonly style="font-size:12.5px;background:var(--bg)"><input class="fi inv-qty" type="number" min="0.01" step="0.01" value="1" style="font-size:12.5px" oninput="calcLine(this)"><input class="fi inv-price" type="number" min="0" step="0.01" value="0.00" style="font-size:12.5px" oninput="calcLine(this)"><input class="fi mono inv-amount" value="0.00" readonly style="background:var(--bg)"><button class="btn btn-g" style="padding:4px 8px" onclick="remLine(this)">&#x2715;</button></div>
           </div>
           <div class="sinv-totals-wrap">
             <div class="sinv-totals-box">
@@ -1435,9 +1434,9 @@
     <div class="card mb16">
       <div class="card-hd"><div><div class="card-title" id="mp-form-title">Add Purchase</div><div class="card-sub" id="mp-form-sub">Manual supplier purchase entry with items, discounts, tax, shipping, and payment</div></div><button class="btn btn-g btn-sm" onclick="resetManualPurchase()">Clear</button></div>
       <div class="fr3">
-        <div class="fg"><label class="fl">Supplier *</label><div class="field-action-row"><select class="fi" id="mp-supplier" onchange="applySupplierAddress()"><option value="">Please Select</option><option>Al Hamad Steel</option><option>Gulf Freight</option><option>Office Depot UAE</option><option>UAE Paints Co.</option></select><button class="btn btn-g btn-sm" type="button" onclick="openSupplierPopup()">+ Add</button></div></div>
+        <div class="fg"><label class="fl">Supplier *</label><div class="field-action-row"><select class="fi" id="mp-supplier" required onchange="applySupplierAddress()"><option value="">Please Select</option><option>Al Hamad Steel</option><option>Gulf Freight</option><option>Office Depot UAE</option><option>UAE Paints Co.</option></select><button class="btn btn-g btn-sm" type="button" onclick="openSupplierPopup()">+ Add</button></div></div>
         <div class="fg"><label class="fl">Reference No.</label><input class="fi mono" id="mp-ref" placeholder="PUR-2026-0001"></div>
-        <div class="fg"><label class="fl">Purchase Date *</label><input class="fi" id="mp-date" type="datetime-local"></div>
+        <div class="fg"><label class="fl">Purchase Date *</label><input class="fi" id="mp-date" type="datetime-local" required></div>
       </div>
       <div class="fr3">
         <div class="fg"><label class="fl">Address</label><input class="fi" id="mp-address" placeholder="Supplier address"></div>
@@ -1977,7 +1976,7 @@
           <div class="fg"><label class="fl">Type</label><select class="fi" id="pay-adj-type"><option>Overtime</option><option>Deduction</option><option>Advance</option><option>Bonus</option></select></div>
         </div>
         <div class="fr2">
-          <div class="fg"><label class="fl">Amount</label><input class="fi mono" id="pay-adj-amount" placeholder="0.00"></div>
+          <div class="fg"><label class="fl">Amount</label><input class="fi mono" id="pay-adj-amount" type="number" min="0.01" step="0.01" placeholder="0.00" required></div>
           <div class="fg"><label class="fl">Reason</label><input class="fi" id="pay-adj-reason" placeholder="Reason"></div>
         </div>
         <button class="btn btn-p btn-sm" onclick="addPayrollAdjustment()">Add Adjustment</button>
@@ -3603,7 +3602,7 @@
       </div>
       <div class="fg"><label class="fl">VAT Registration Number (TRN)</label><input class="fi mono" id="tax-trn" placeholder="15-digit TRN"></div>
       <div class="fr2">
-        <div class="fg"><label class="fl">FTA Username</label><input class="fi" id="tax-fta-user" placeholder="username@eservices.tax.gov.ae"></div>
+        <div class="fg"><label class="fl">FTA Username</label><input class="fi" id="tax-fta-user" type="email" placeholder="username@eservices.tax.gov.ae"></div>
         <div class="fg"><label class="fl">Filing Frequency</label><select class="fi" id="tax-filing-freq"><option>Monthly</option><option>Quarterly</option></select></div>
       </div>
       <div style="margin-top:12px"><button class="btn btn-p btn-sm" onclick="saveTaxSettings()">Save Tax Settings</button></div>
@@ -5303,7 +5302,7 @@ period_locks ─&lt; audit_logs
     <div class="section-hd">Employment Details</div>
     <div class="fr3"><div class="fg"><label class="fl">Employee ID</label><input class="fi mono" id="emp-id" placeholder="EMP-005"></div><div class="fg"><label class="fl">Employment Type</label><select class="fi" id="emp-contract"><option>Full-Time</option><option>Part-Time</option><option>Contract</option><option>Probation</option><option>Intern / Trainee</option><option>Daily Wage</option><option>Hourly</option><option>Weekly</option><option>Short-Term</option><option>Freelance / Consultant</option><option>Seasonal</option><option>Project-Based</option></select></div><div class="fg"><label class="fl">Join Date</label><input class="fi" id="emp-join-date" type="date"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Department <span style="color:var(--red)">*</span></label><select class="fi" id="emp-department" required><option value="">— Select Department —</option><option>Management</option><option>Finance</option><option>Operations</option><option>Sales</option><option>HR</option><option>IT</option><option>Marketing</option><option>Procurement</option><option>Logistics</option></select></div><div class="fg"><label class="fl">Designation</label><input class="fi" id="emp-designation" placeholder="e.g. Sales Executive"></div><div class="fg"><label class="fl">Branch <span style="color:var(--red)">*</span></label><select class="fi" id="emp-branch" required><option value="">— Select Branch —</option><option>Dubai HQ</option><option>Abu Dhabi</option><option>Sharjah</option><option>Ajman</option><option>Ras Al Khaimah</option><option>Fujairah</option></select></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Total Salary (AED)</label><input class="fi mono" id="emp-salary"></div><div class="fg"><label class="fl">OT Policy</label><select class="fi" id="emp-ot-rate"><option value="system-default">— System Default (from HR Settings) —</option><option value="fixed">Fixed Rate</option><option value="monthly">Monthly-Based Rate</option><option value="other">Other / Custom</option></select></div><div class="fg"><label class="fl">Leave Policy</label><select class="fi" id="emp-leave-policy"><optgroup label="UAE Policy (Calendar Days)"><option value="UAE 30 Calendar">UAE Policy — 30 Calendar Days</option><option value="UAE Standard">UAE Standard — 21 Calendar Days</option></optgroup><optgroup label="Internal Policy (Working Days)"><option value="Internal 22 Working">Internal — 22 Working Days</option><option value="Internal 29 Working">Internal — 29 Working Days</option><option value="Executive 30 Working">Executive — 30 Working Days</option></optgroup><optgroup label="Other"><option value="Contractor">Contractor — 14 Calendar Days</option><option value="Part-Time">Part-Time Pro-Rata</option><option value="Custom">Custom (per contract)</option></optgroup></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Total Salary (AED)</label><input class="fi mono" id="emp-salary" type="number" min="0" step="0.01" required></div><div class="fg"><label class="fl">OT Policy</label><select class="fi" id="emp-ot-rate"><option value="system-default">— System Default (from HR Settings) —</option><option value="fixed">Fixed Rate</option><option value="monthly">Monthly-Based Rate</option><option value="other">Other / Custom</option></select></div><div class="fg"><label class="fl">Leave Policy</label><select class="fi" id="emp-leave-policy"><optgroup label="UAE Policy (Calendar Days)"><option value="UAE 30 Calendar">UAE Policy — 30 Calendar Days</option><option value="UAE Standard">UAE Standard — 21 Calendar Days</option></optgroup><optgroup label="Internal Policy (Working Days)"><option value="Internal 22 Working">Internal — 22 Working Days</option><option value="Internal 29 Working">Internal — 29 Working Days</option><option value="Executive 30 Working">Executive — 30 Working Days</option></optgroup><optgroup label="Other"><option value="Contractor">Contractor — 14 Calendar Days</option><option value="Part-Time">Part-Time Pro-Rata</option><option value="Custom">Custom (per contract)</option></optgroup></select></div></div>
     <div class="fr2"><div class="fg"><label class="fl">Default Shift</label><select class="fi" id="emp-shift"><option>09:00-18:00</option><option>08:00-17:00</option><option>10:00-19:00</option><option>Night 22:00-06:00</option><option>Split Shift</option></select></div><div class="fg"><label class="fl">Work Location</label><select class="fi" id="emp-location"><option>Dubai HQ</option><option>Abu Dhabi Warehouse</option><option>Sharjah Sales Office</option><option>Remote</option><option>Field / Site</option></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Work Permit No.</label><input class="fi mono" id="emp-work-permit"></div><div class="fg"><label class="fl">Visa Expiry</label><input class="fi" id="emp-visa-expiry" type="date"></div><div class="fg"><label class="fl">Cost Center</label><input class="fi" id="emp-cost-center" placeholder="e.g. CC-01-OPS"></div></div>
     <div class="fr2"><div class="fg"><label class="fl">Emergency Contact Name</label><input class="fi" id="emp-emergency" placeholder="Full name"></div><div class="fg"><label class="fl">Emergency Contact Mobile</label><input class="fi mono" id="emp-emergency-mobile" placeholder="+971..."></div></div>
@@ -5801,6 +5800,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260713b" defer></script>
+<script src="src/app.js?v=20260714a" defer></script>
 </body>
 </html>
