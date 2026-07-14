@@ -446,8 +446,7 @@
         <td>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <button class="btn btn-p btn-sm" onclick="openEditCompany('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.trn||'')}','${escHtml(c.country||'')}','${escHtml(c.subscription_expires_at||'')}')">Edit</button>
-            <button class="btn btn-g btn-sm" onclick="quickExtend('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}',30)">+30d</button>
-            <button class="btn btn-g btn-sm" onclick="quickExtend('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}',90)">+90d</button>
+            <button class="btn btn-g btn-sm" onclick="quickExtend('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}',7)">+7d</button>
             <button class="btn btn-g btn-sm" onclick="quickExtend('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}',365)">+1yr</button>
             <button class="btn btn-g btn-sm" onclick="toggleUsers('users-${escHtml(c.id)}')">Users</button>
             <button class="btn btn-g btn-sm" onclick="openAddUser('${escHtml(c.id)}','${escHtml(c.name)}')">+ User</button>
