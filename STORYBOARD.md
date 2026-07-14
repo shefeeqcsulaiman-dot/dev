@@ -49,14 +49,13 @@
 | Bank quick-link | One-click to open Bank & Payments |
 
 ### 2.4 Quick Actions (bottom row)
-Six shortcut buttons: New Invoice · Add Purchase · New Quotation · Journal Entry · Reports · Exception Center
+Six shortcut buttons: New Invoice · Add Purchase · New Quotation · Journal Entry · Reports · Alerts (→ Settings / Exception Center)
 
 ### 2.5 Topbar
 | Element | Function |
 |---------|----------|
 | ☰ Hamburger | Collapses/expands sidebar (also lives in sidebar logo area) |
 | ← Back | Go back to previous page |
-| Exception badge | Shows count of flagged items; opens Exception Center |
 | AI Extracting badge | Appears during background OCR extraction |
 | POS Terminal | Opens POS in a new tab |
 | EN / عربي toggle | Switch UI language |
@@ -350,7 +349,7 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 
 ### 11.7 Weekly Rota
 - Drag-and-drop shift planner grid (days × employees)
-- Repeat schedule: daily / weekly / custom
+- Repeat schedule: apply one shift pattern across daily / weekly / custom range in one click
 - Audit trail on rota changes
 
 ### 11.8 Expiry Alerts
@@ -397,12 +396,13 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 - Review status tracking
 
 ### 13.3 Exception Center
+- Moved to **Settings → Exception Center tab** (no longer a standalone sidebar page)
 - All flagged transactions appear here
 - Severity levels: High / Medium / Low
 - Status: Open / In Review / Resolved
 - Exception types: missing TRN, unmatched payment, VAT mismatch, duplicate invoice
 - Resolution workflow with notes
-- Count shown in topbar badge
+- Dashboard Alerts tile navigates directly to Settings → Exception Center tab
 
 ---
 
@@ -452,6 +452,12 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 - Timestamp, user, module, action description
 - Export for compliance evidence
 
+### 14.8 Exception Center
+- Embedded as a tab inside Settings (moved from sidebar)
+- Shows exception stats: Open · High · Medium · Low counts
+- Full exception table: type, description, severity, status, date, resolution notes
+- Same data as standalone Exception Center page (same element IDs — JS unchanged)
+
 ---
 
 ## 15. AI Features
@@ -476,6 +482,24 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 
 ---
 
+## 16. Super Admin Portal
+
+**Entry:** `/superadmin` — separate page, superadmin credentials only
+
+### 16.1 Company Management
+| Action | Detail |
+|--------|--------|
+| Create company | Name, TRN, email, admin full name, password, expiry date, module selection |
+| Module selection | Grid of toggles per company — only enabled modules appear in that company's sidebar |
+| Extend subscription | Quick buttons: +7d · +1yr |
+| Delete company | Two-password authorization required (both must match before delete fires); cascades all FK-linked data |
+
+### 16.2 Company List
+- Table: ID · Name · TRN · Admin email · Expiry · Modules · Actions
+- Live subscription status badge (Active / Expired)
+
+---
+
 ## Module Dependency Map
 
 ```
@@ -493,9 +517,9 @@ Login ──► Dashboard
            ├── HRMS Portal ──► Payroll ──► WPS Batch ──► Bank
            │              └── ESS Portal (employee login)
            ├── Notifications (from all modules)
-           ├── Exception Center (from AI Extraction + VAT checks)
            └── Settings ──► Tax Codes (used in invoices + reports)
-                        └── Company Profile (used in invoice PDF)
+                        ├── Company Profile (used in invoice PDF)
+                        └── Exception Center (from AI Extraction + VAT checks)
 ```
 
 ---

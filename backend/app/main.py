@@ -145,6 +145,10 @@ def create_app() -> FastAPI:
     def login_page() -> FileResponse:
         return FileResponse(str(static_dir / "taxflow" / "login.html"))
 
+    @app.get("/signup", include_in_schema=False)
+    def signup_page() -> FileResponse:
+        return FileResponse(str(static_dir / "taxflow" / "signup.html"))
+
     @app.get("/superadmin", include_in_schema=False)
     def superadmin_page() -> FileResponse:
         return FileResponse(str(static_dir / "taxflow" / "superadmin.html"))

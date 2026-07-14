@@ -1,3 +1,6 @@
+import json
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
@@ -7,6 +10,12 @@ from app.limiter import limiter
 from app.models import Company, User
 from app.schemas import LoginRequest, RegisterRequest, Token, UserOut
 from app.security import authenticate_user, create_access_token, hash_password
+
+_ALL_MODULES = [
+    "sales", "quotations", "pos", "purchase", "inventory", "expense",
+    "bank", "accounting", "corporate", "reports", "hrms", "ess",
+    "notifications", "expert", "exception", "ai",
+]
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -26,10 +35,13 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
 def register(request: Request, payload: RegisterRequest, db: Session = Depends(get_db)) -> Token:
     if db.query(User).filter(User.email == payload.email.lower()).first():
         raise HTTPException(status_code=409, detail="Registration failed")
+    trial_expires = (datetime.now(timezone.utc) + timedelta(days=30)).strftime("%Y-%m-%d")
     company = Company(
         name=payload.company_name,
         trn=payload.trn or None,
         country="United Arab Emirates",
+        subscription_expires_at=trial_expires,
+        modules_enabled=json.dumps(_ALL_MODULES),
     )
     db.add(company)
     db.flush()
