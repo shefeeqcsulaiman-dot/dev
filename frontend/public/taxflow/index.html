@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260714b" as="style">
-<link rel="preload" href="src/app.js?v=20260714b" as="script">
+<link rel="preload" href="src/styles.css?v=20260714c" as="style">
+<link rel="preload" href="src/app.js?v=20260714c" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260714b">
+<link rel="stylesheet" href="src/styles.css?v=20260714c">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
 </head>
 <body class="theme-light">
@@ -4936,9 +4936,6 @@ period_locks ─&lt; audit_logs
         </div>
         <span class="pmt-title" id="pmt-modal-title">New Payment</span>
       </div>
-      <button class="pmt-close" onclick="closeM('m-payment')" title="Close">
-        <svg viewBox="0 0 16 16" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2.2"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
-      </button>
     </div>
 
     <!-- BODY -->
@@ -5072,9 +5069,12 @@ period_locks ─&lt; audit_logs
 <!-- ═══ STOCK MOVEMENT MONTHLY HISTORY MODAL ═══ -->
 <div class="overlay" id="m-stock-history" onclick="closeOvBg(event,'m-stock-history')">
   <div class="modal" style="max-width:780px;width:95vw;max-height:90vh;display:flex;flex-direction:column">
-    <div style="padding:18px 20px 14px;flex-shrink:0;border-bottom:1px solid var(--border)">
-      <div class="modal-title" id="smh-title" style="margin:0 0 2px">Stock Movement Monthly History</div>
-      <div class="modal-sub" id="smh-sub" style="margin:0">Monthly inwards, outwards and closing balance</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 14px;flex-shrink:0;border-bottom:1px solid var(--border)">
+      <div>
+        <div class="modal-title" id="smh-title" style="margin:0 0 2px">Stock Movement Monthly History</div>
+        <div class="modal-sub" id="smh-sub" style="margin:0">Monthly inwards, outwards and closing balance</div>
+      </div>
+      <button class="btn btn-g btn-sm" onclick="closeM('m-stock-history')">Close</button>
     </div>
     <div style="overflow:auto;flex:1;padding:16px 20px 20px">
       <table class="tbl" id="smh-table" data-delete-actions-bound="skip" data-no-table-tools="1" style="border-collapse:collapse;width:100%;font-size:13px">
@@ -5185,6 +5185,7 @@ period_locks ─&lt; audit_logs
         </button>
         <button class="btn btn-p btn-sm" onclick="openInvoiceShareModal()">All Share Options</button>
       </div>
+      <button class="btn btn-g btn-sm" onclick="closeM('m-sales-view')">Close</button>
     </div>
     <!-- hidden anchor for edit-from-view -->
     <span data-sinv-edit-anchor style="display:none"></span>
@@ -5237,6 +5238,7 @@ period_locks ─&lt; audit_logs
     </div>
     <div class="fg mb10"><label class="fl">Message</label><textarea class="fi" id="share-message" rows="3" style="font-size:12.5px"></textarea></div>
     <div class="fg"><label class="fl">Online View Link</label><div class="field-action-row"><input class="fi mono" id="share-link" readonly style="font-size:12px"><button class="btn btn-g btn-sm" type="button" onclick="copyCurrentInvoiceLink()">Copy</button></div></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-invoice-share')">Close</button></div>
   </div>
 </div>
 
@@ -5418,7 +5420,7 @@ period_locks ─&lt; audit_logs
     <div class="fr3"><div class="fg"><label class="fl">Start Time</label><input class="fi mono" type="time" value="09:00"></div><div class="fg"><label class="fl">End Time</label><input class="fi mono" type="time" value="18:00"></div><div class="fg"><label class="fl">Break Minutes</label><input class="fi mono" value="60"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Overtime</label><select class="fi"><option>No</option><option>Yes</option></select></div><div class="fg"><label class="fl">OT Start Time</label><input class="fi mono" type="time" value="18:00"></div><div class="fg"><label class="fl">OT End Time</label><input class="fi mono" type="time" value="20:00"></div></div>
     <div class="fg"><label class="fl">Notes</label><textarea class="fi" rows="3" placeholder="Optional monthly rota note"></textarea></div>
-    <div class="modal-foot"><button class="btn btn-danger" onclick="closeM('m-edit-month-shift');toast('Monthly cell removed','warn')">Remove</button><button class="btn btn-g" onclick="toast('Copied to selected days','ok')">Copy to Other Days</button><button class="btn btn-p" onclick="saveM('m-edit-month-shift','Monthly rota cell updated ✓')">Save</button></div>
+    <div class="modal-foot"><button class="btn btn-danger" onclick="closeM('m-edit-month-shift');toast('Monthly cell removed','warn')">Remove</button><button class="btn btn-g" onclick="toast('Copied to selected days','ok')">Copy to Other Days</button><button class="btn btn-g" onclick="closeM('m-edit-month-shift')">Cancel</button><button class="btn btn-p" onclick="saveM('m-edit-month-shift','Monthly rota cell updated ✓')">Save</button></div>
   </div>
 </div>
 
@@ -5448,7 +5450,7 @@ period_locks ─&lt; audit_logs
       <div style="text-align:center;background:var(--bg3);border-radius:10px;padding:12px"><div class="mono" style="color:var(--amber);font-size:18px">48h</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Response time</div></div>
     </div>
     <div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:16px">Specializes in UAE VAT filings, FTA audit representation, and penalty disputes. Previously worked at Big 4 firm. Fluent in Arabic and English. Registered Tax Agent (TAAN 20009871).</div>
-    <div class="modal-foot"><button class="btn btn-p" onclick="closeM('m-expert1');showM('m-newreview');toast('Expert pre-selected','info')">Request Review →</button></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-expert1')">Close</button><button class="btn btn-p" onclick="closeM('m-expert1');showM('m-newreview');toast('Expert pre-selected','info')">Request Review →</button></div>
   </div>
 </div>
 
@@ -5790,6 +5792,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260714b" defer></script>
+<script src="src/app.js?v=20260714c" defer></script>
 </body>
 </html>
