@@ -187,8 +187,13 @@
 <!-- Create Company Modal -->
 <div class="overlay" id="m-create" onclick="if(event.target===this)closeModal('m-create')">
   <div class="modal">
-    <div class="modal-title">New Company</div>
-    <div class="modal-sub">Create a new tenant company with an admin user</div>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+      <div>
+        <div class="modal-title">New Company</div>
+        <div class="modal-sub">Create a new tenant company with an admin user</div>
+      </div>
+      <button onclick="closeModal('m-create')" style="background:none;border:none;cursor:pointer;color:#8896b3;font-size:20px;line-height:1;padding:0;flex-shrink:0" title="Close">&times;</button>
+    </div>
     <div id="create-err" class="err-msg"></div>
     <div class="fg"><label class="fl">Company Name</label><input class="fi" id="c-name" placeholder="Acme LLC"></div>
     <div class="fr2">
