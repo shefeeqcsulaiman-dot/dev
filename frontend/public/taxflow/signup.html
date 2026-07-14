@@ -252,13 +252,27 @@
         <input id="email" type="email" placeholder="you@company.com" autocomplete="email">
       </div>
 
-      <div class="field">
-        <label>Phone / WhatsApp</label>
-        <div class="phone-wrap">
-          <div class="phone-prefix">
-            <img src="https://flagcdn.com/w40/ae.png" alt="UAE"> +971
+      <div class="row2">
+        <div class="field">
+          <label>Phone / WhatsApp</label>
+          <div class="phone-wrap">
+            <div class="phone-prefix">
+              <img src="https://flagcdn.com/w40/ae.png" alt="UAE"> +971
+            </div>
+            <input id="phone" type="tel" placeholder="50 000 0000" inputmode="numeric">
           </div>
-          <input id="phone" type="tel" placeholder="50 000 0000" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label>Number of Employees</label>
+          <select id="employee_count">
+            <option value="">Select range...</option>
+            <option value="1–10">1 – 10</option>
+            <option value="11–50">11 – 50</option>
+            <option value="51–100">51 – 100</option>
+            <option value="101–250">101 – 250</option>
+            <option value="251–500">251 – 500</option>
+            <option value="500+">500+</option>
+          </select>
         </div>
       </div>
 
@@ -367,6 +381,7 @@
     var company=document.getElementById('company_name').value.trim();
     var email=document.getElementById('email').value.trim();
     var phone=document.getElementById('phone').value.trim();
+    var empCount=document.getElementById('employee_count').value;
     var pwd=document.getElementById('password').value;
     var cpwd=document.getElementById('confirm_password').value;
 
@@ -380,6 +395,7 @@
 
     var body={full_name:fullName,email:email,password:pwd,company_name:company};
     if(phone)body.phone='+971 '+phone;
+    if(empCount)body.employee_count=empCount;
 
     try{
       var resp=await fetch(apiBase()+'/auth/register',{
@@ -391,7 +407,7 @@
         // also log trial request with notes/interest
         fetch(apiBase()+'/auth/trial-request',{
           method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({full_name:fullName,company_name:company,email:email,phone:phone?'+971 '+phone:null})
+          body:JSON.stringify({full_name:fullName,company_name:company,email:email,phone:phone?'+971 '+phone:null,employee_count:empCount||null})
         }).catch(function(){});
         localStorage.setItem('taxflow_token',data.access_token);
         document.getElementById('form-body').style.display='none';

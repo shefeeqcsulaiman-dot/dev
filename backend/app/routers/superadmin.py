@@ -591,6 +591,7 @@ def list_trial_requests(db: Session = Depends(get_db), _: User = Depends(_requir
             "company_name": r.company_name,
             "email": r.email,
             "phone": r.phone,
+            "employee_count": r.employee_count,
             "interest": r.interest,
             "notes": r.notes,
             "status": r.status,

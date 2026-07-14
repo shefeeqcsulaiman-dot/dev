@@ -33,7 +33,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
 
 
 @router.post("/register", response_model=Token, status_code=201)
-@limiter.limit("5/hour")
+@limiter.limit("30/hour")
 def register(request: Request, payload: RegisterRequest, db: Session = Depends(get_db)) -> Token:
     if db.query(User).filter(User.email == payload.email.lower()).first():
         raise HTTPException(status_code=409, detail="Registration failed")
@@ -70,18 +70,20 @@ class TrialRequestIn(BaseModel):
     company_name: str
     email: str
     phone: str | None = None
+    employee_count: str | None = None
     interest: str | None = None
     notes: str | None = None
 
 
 @router.post("/trial-request", status_code=201)
-@limiter.limit("5/hour")
+@limiter.limit("30/hour")
 def trial_request(request: Request, payload: TrialRequestIn, db: Session = Depends(get_db)) -> dict:
     record = TrialRequest(
         full_name=payload.full_name.strip(),
         company_name=payload.company_name.strip(),
         email=payload.email.strip().lower(),
         phone=payload.phone,
+        employee_count=payload.employee_count,
         interest=payload.interest,
         notes=payload.notes,
         status="new",

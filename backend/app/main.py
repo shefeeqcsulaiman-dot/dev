@@ -376,6 +376,10 @@ def ensure_schema_updates() -> None:
             "CREATE INDEX IF NOT EXISTS ix_app_data_company_collection_created "
             "ON app_data_records (company_id, collection, created_at)"
         ))
+        if "trial_requests" in table_names:
+            existing_columns = {c["name"] for c in inspector.get_columns("trial_requests")}
+            if "employee_count" not in existing_columns:
+                connection.execute(text("ALTER TABLE trial_requests ADD COLUMN employee_count VARCHAR(40)"))
         if "trial_requests" not in table_names:
             connection.execute(text("""
                 CREATE TABLE IF NOT EXISTS trial_requests (
