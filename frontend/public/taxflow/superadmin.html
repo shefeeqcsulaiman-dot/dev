@@ -317,6 +317,22 @@
   </div>
 </div>
 
+<!-- Delete Company Confirmation Modal -->
+<div class="overlay" id="m-delete-co">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-title" style="color:#e05252">Delete Company</div>
+    <div class="modal-sub" id="delete-co-sub">This will permanently delete the company and ALL its data. This cannot be undone.</div>
+    <div id="delete-co-err" class="err-msg"></div>
+    <input type="hidden" id="delete-co-id">
+    <div class="fg" style="margin-top:16px"><label class="fl">Authorization Password 1</label><input class="fi mono" id="delete-co-pwd1" type="password" placeholder="Enter first authorization password" autocomplete="off"></div>
+    <div class="fg"><label class="fl">Authorization Password 2</label><input class="fi mono" id="delete-co-pwd2" type="password" placeholder="Enter second authorization password" autocomplete="off"></div>
+    <div class="modal-foot">
+      <button class="btn btn-g" onclick="closeModal('m-delete-co')">Cancel</button>
+      <button class="btn btn-r" id="delete-co-btn" onclick="confirmDeleteCompany()">Delete Company</button>
+    </div>
+  </div>
+</div>
+
 <!-- Module Permissions Modal -->
 <div class="overlay" id="m-modules" onclick="if(event.target===this)closeModal('m-modules')">
   <div class="modal" style="max-width:580px">
@@ -686,13 +702,37 @@
   }
 
   // ── Delete company ────────────────────────────────────────────
-  async function deleteCompany(companyId, name){
-    if(!confirm('Delete company "'+name+'" and ALL its data? This cannot be undone.')) return;
+  function deleteCompany(companyId, name){
+    document.getElementById('delete-co-err').style.display='none';
+    document.getElementById('delete-co-id').value=companyId;
+    document.getElementById('delete-co-sub').textContent='Permanently delete "'+name+'" and ALL its data. This cannot be undone.';
+    document.getElementById('delete-co-pwd1').value='';
+    document.getElementById('delete-co-pwd2').value='';
+    openModal('m-delete-co');
+  }
+
+  async function confirmDeleteCompany(){
+    const errEl=document.getElementById('delete-co-err');
+    errEl.style.display='none';
+    const companyId=document.getElementById('delete-co-id').value;
+    const p1=document.getElementById('delete-co-pwd1').value;
+    const p2=document.getElementById('delete-co-pwd2').value;
+    if(p1!=='9744636565'||p2!=='7898812372'){
+      errEl.textContent='Incorrect authorization passwords. Both passwords must be correct.';
+      errEl.style.display='block';
+      document.getElementById('delete-co-pwd1').value='';
+      document.getElementById('delete-co-pwd2').value='';
+      return;
+    }
+    const btn=document.getElementById('delete-co-btn');
+    btn.disabled=true; btn.textContent='Deleting…';
     try{
       const res=await apiFetch(`/superadmin/companies/${companyId}`,{method:'DELETE'});
-      if(!res.ok){ const d=await res.json(); alert(d.detail||'Delete failed.'); return; }
+      if(!res.ok){ const d=await res.json(); errEl.textContent=d.detail||'Delete failed.'; errEl.style.display='block'; return; }
+      closeModal('m-delete-co');
       loadDashboard();
-    }catch(err){ alert(err.message); }
+    }catch(err){ errEl.textContent=err.message; errEl.style.display='block'; }
+    finally{ btn.disabled=false; btn.textContent='Delete Company'; }
   }
 
   // ── Client error report ───────────────────────────────────────
