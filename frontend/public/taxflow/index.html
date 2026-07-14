@@ -6,10 +6,10 @@
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="src/styles.css?v=20260714a" as="style">
-<link rel="preload" href="src/app.js?v=20260714a" as="script">
+<link rel="preload" href="src/styles.css?v=20260714b" as="style">
+<link rel="preload" href="src/app.js?v=20260714b" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=20260714a">
+<link rel="stylesheet" href="src/styles.css?v=20260714b">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
 </head>
 <body class="theme-light">
@@ -942,10 +942,10 @@
         <div class="card-hd"><div class="card-title">Key Contacts</div><button class="btn btn-g btn-sm" onclick="toast('Contact added','ok')">+ Add</button></div>
         <div class="fg"><label class="fl">Authorized Signatory</label><input class="fi"></div>
         <div class="fr2">
-          <div class="fg"><label class="fl">Emirates ID</label><input class="fi mono" value="784-1990-1234567-1"></div>
-          <div class="fg"><label class="fl">Designation</label><input class="fi" value="General Manager"></div>
+          <div class="fg"><label class="fl">Emirates ID</label><input class="fi mono" id="co-auth-eid" placeholder="784-XXXX-XXXXXXX-X"></div>
+          <div class="fg"><label class="fl">Designation</label><input class="fi" id="co-auth-designation" placeholder="e.g. General Manager"></div>
         </div>
-        <div class="fg"><label class="fl">Tax Agent (if appointed)</label><input class="fi" value="Mohammed Khalil — TAAN 20001234"></div>
+        <div class="fg"><label class="fl">Tax Agent (if appointed)</label><input class="fi" id="co-tax-agent" placeholder="Name — TAAN XXXXXXXX"></div>
       </div>
     </div>
   </div>
@@ -1434,7 +1434,7 @@
     <div class="card mb16">
       <div class="card-hd"><div><div class="card-title" id="mp-form-title">Add Purchase</div><div class="card-sub" id="mp-form-sub">Manual supplier purchase entry with items, discounts, tax, shipping, and payment</div></div><button class="btn btn-g btn-sm" onclick="resetManualPurchase()">Clear</button></div>
       <div class="fr3">
-        <div class="fg"><label class="fl">Supplier *</label><div class="field-action-row"><select class="fi" id="mp-supplier" required onchange="applySupplierAddress()"><option value="">Please Select</option><option>Al Hamad Steel</option><option>Gulf Freight</option><option>Office Depot UAE</option><option>UAE Paints Co.</option></select><button class="btn btn-g btn-sm" type="button" onclick="openSupplierPopup()">+ Add</button></div></div>
+        <div class="fg"><label class="fl">Supplier *</label><div class="field-action-row"><select class="fi" id="mp-supplier" required onchange="applySupplierAddress()"><option value="">— Select Supplier —</option></select><button class="btn btn-g btn-sm" type="button" onclick="openSupplierPopup()">+ Add</button></div></div>
         <div class="fg"><label class="fl">Reference No.</label><input class="fi mono" id="mp-ref" placeholder="PUR-2026-0001"></div>
         <div class="fg"><label class="fl">Purchase Date *</label><input class="fi" id="mp-date" type="datetime-local" required></div>
       </div>
@@ -1887,9 +1887,7 @@
         <table class="tbl">
           <thead><tr><th>Department</th><th>Period</th><th>Supervisor</th><th>Status</th><th></th></tr></thead>
           <tbody id="rota-approval-tbody">
-            <tr><td>Sales</td><td>03-09 May</td><td>Sara</td><td><span class="b b-a">Pending Supervisor Review</span></td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="approveRotaRow(this,'Rota approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="rejectRotaRow(this,'Rota rejected')">Reject</button></div></td></tr>
-            <tr><td>Warehouse</td><td>03-09 May</td><td>John</td><td><span class="b b-g">Approved</span></td><td><button class="btn btn-p btn-sm" onclick="publishRota()">Publish</button></td></tr>
-            <tr><td>Finance</td><td>03-09 May</td><td>Rania</td><td><span class="b b-gray">Draft</span></td><td><button class="btn btn-g btn-sm">Review</button></td></tr>
+            <tr data-empty-state="1"><td colspan="5" style="color:var(--text3);text-align:center">No rota submissions yet.</td></tr>
           </tbody>
         </table>
       </div>
@@ -2095,7 +2093,7 @@
       <div class="card" id="payslip-preview">
         <div class="card-hd"><div><div class="card-title">Payslip Preview</div><div class="card-sub">Select an employee to preview</div></div></div>
         <div style="border:1px solid var(--border);border-radius:10px;padding:18px;background:var(--bg3)">
-          <div class="flx-b mb16"><div><div class="card-title">Acme Trading LLC</div><div class="card-sub">June 2024 Payslip</div></div><span class="b b-gray">Draft</span></div>
+          <div class="flx-b mb16"><div><div class="card-title" id="payslip-company-name">—</div><div class="card-sub" id="payslip-period">Select a payroll run to preview</div></div><span class="b b-gray" id="payslip-status" style="display:none">Draft</span></div>
           <div id="payslip-body" style="font-size:13px;line-height:1.9;color:var(--text2)">No payslip selected.</div>
         </div>
       </div>
@@ -2556,9 +2554,8 @@
         <div class="card-hd"><div><div class="card-title">Payments</div><div class="card-sub">Supplier, expense, payroll, cash, and bank payments</div></div><button class="btn btn-p btn-sm" onclick="openPaymentModal('Supplier Payment')">+ Payment</button></div>
         <table class="tbl">
           <thead><tr><th>Date</th><th>Type</th><th>Party</th><th>Account</th><th>Amount</th><th>Status</th></tr></thead>
-          <tbody>
-            <tr><td>18 Jun</td><td>Supplier Payment</td><td>UAE Paints Co.</td><td>Emirates NBD</td><td class="mono">5,880</td><td><span class="b b-g">Posted</span></td></tr>
-            <tr><td>15 Jun</td><td>Payroll Payment</td><td>Employees</td><td>WPS Bank</td><td class="mono">84,000</td><td><span class="b b-a">Draft</span></td></tr>
+          <tbody id="accounting-payments-tbody">
+            <tr data-empty-state="1"><td colspan="6" style="color:var(--text3);text-align:center">No payments recorded yet.</td></tr>
           </tbody>
         </table>
       </div>
@@ -2836,9 +2833,7 @@
       <table class="tbl">
         <thead><tr><th>Bill No.</th><th>Vendor</th><th>Date</th><th>Due Date</th><th>Subtotal</th><th>VAT</th><th>Total</th><th>Status</th><th></th></tr></thead>
         <tbody id="bill-tbody">
-          <tr><td class="mono">BILL-2024-0188</td><td>Al Hamad Steel</td><td>21 Jun</td><td>05 Jul</td><td class="mono">28,000</td><td class="mono">1,400</td><td class="mono">29,400</td><td><span class="b b-a">Awaiting Payment</span></td><td><button class="btn btn-g btn-sm" onclick="toast('Bill preview opened','info')">View</button></td></tr>
-          <tr><td class="mono">BILL-2024-0187</td><td>Gulf Freight Services</td><td>19 Jun</td><td>30 Jun</td><td class="mono">12,000</td><td class="mono">600</td><td class="mono">12,600</td><td><span class="b b-r">Due</span></td><td><button class="btn btn-g btn-sm" onclick="toast('Bill preview opened','info')">View</button></td></tr>
-          <tr><td class="mono">BILL-2024-0186</td><td>UAE Paints Co.</td><td>16 Jun</td><td>16 Jul</td><td class="mono">5,600</td><td class="mono">280</td><td class="mono">5,880</td><td><span class="b b-g">Matched</span></td><td><button class="btn btn-g btn-sm" onclick="toast('Bill preview opened','info')">View</button></td></tr>
+          <tr data-empty-state="1"><td colspan="9" style="color:var(--text3);text-align:center">No bills recorded yet.</td></tr>
         </tbody>
       </table>
     </div>
@@ -2849,9 +2844,7 @@
       <table class="tbl">
         <thead><tr><th>Vendor</th><th>TRN</th><th>Category</th><th>Email</th><th>Open Balance</th><th>Status</th></tr></thead>
         <tbody id="bill-vendor-tbody">
-          <tr><td>Al Hamad Steel</td><td class="mono">100234567800003</td><td>Materials</td><td>accounts@alhamad.ae</td><td class="mono">29,400</td><td><span class="b b-g">Active</span></td></tr>
-          <tr><td>Gulf Freight Services</td><td class="mono">100512378900003</td><td>Logistics</td><td>billing@gulffreight.ae</td><td class="mono">12,600</td><td><span class="b b-g">Active</span></td></tr>
-          <tr><td>UAE Paints Co.</td><td class="mono">100987654300003</td><td>Supplies</td><td>finance@uaepaints.ae</td><td class="mono">5,880</td><td><span class="b b-g">Active</span></td></tr>
+          <tr data-empty-state="1"><td colspan="6" style="color:var(--text3);text-align:center">No vendors added yet.</td></tr>
         </tbody>
       </table>
     </div>
@@ -2861,9 +2854,8 @@
       <div class="card-hd"><div class="card-title">Purchase Orders</div><button class="btn btn-p btn-sm" onclick="toast('Purchase order form opened','info')">+ New PO</button></div>
       <table class="tbl">
         <thead><tr><th>PO No.</th><th>Vendor</th><th>Expected</th><th>Amount</th><th>Received</th><th>Status</th></tr></thead>
-        <tbody>
-          <tr><td class="mono">PO-2024-0044</td><td>Al Hamad Steel</td><td>28 Jun</td><td class="mono">84,000</td><td>60%</td><td><span class="b b-a">Part Received</span></td></tr>
-          <tr><td class="mono">PO-2024-0043</td><td>Office Supplies UAE</td><td>02 Jul</td><td class="mono">8,500</td><td>0%</td><td><span class="b b-b">Approved</span></td></tr>
+        <tbody id="bill-po-tbody">
+          <tr data-empty-state="1"><td colspan="6" style="color:var(--text3);text-align:center">No purchase orders yet.</td></tr>
         </tbody>
       </table>
     </div>
@@ -2873,10 +2865,8 @@
       <div class="card-hd"><div class="card-title">Aged Payables</div></div>
       <table class="tbl">
         <thead><tr><th>Vendor</th><th>Current</th><th>1-30</th><th>31-60</th><th>61-90</th><th>Total</th></tr></thead>
-        <tbody>
-          <tr><td>Al Hamad Steel</td><td class="mono">29,400</td><td class="mono">0</td><td class="mono">0</td><td class="mono">0</td><td class="mono">29,400</td></tr>
-          <tr><td>Gulf Freight Services</td><td class="mono">0</td><td class="mono">12,600</td><td class="mono">0</td><td class="mono">0</td><td class="mono">12,600</td></tr>
-          <tr style="background:var(--surface2)"><td colspan="5" style="text-align:right;font-weight:600">Total Payables</td><td class="mono" style="font-weight:600">42,000</td></tr>
+        <tbody id="bill-aged-tbody">
+          <tr data-empty-state="1"><td colspan="6" style="color:var(--text3);text-align:center">No payables data yet.</td></tr>
         </tbody>
       </table>
     </div>
@@ -3529,10 +3519,10 @@
           <div class="card-hd"><div class="card-title">Key Contacts</div><button class="btn btn-g btn-sm" onclick="toast('Contact added','ok')">+ Add</button></div>
         <div class="fg"><label class="fl">Authorized Signatory</label><input class="fi"></div>
           <div class="fr2">
-            <div class="fg"><label class="fl">Emirates ID</label><input class="fi mono" value="784-1990-1234567-1"></div>
-            <div class="fg"><label class="fl">Designation</label><input class="fi" value="General Manager"></div>
+            <div class="fg"><label class="fl">Emirates ID</label><input class="fi mono" id="set-auth-eid" placeholder="784-XXXX-XXXXXXX-X"></div>
+            <div class="fg"><label class="fl">Designation</label><input class="fi" id="set-auth-designation" placeholder="e.g. General Manager"></div>
           </div>
-          <div class="fg"><label class="fl">Tax Agent (if appointed)</label><input class="fi" value="Mohammed Khalil — TAAN 20001234"></div>
+          <div class="fg"><label class="fl">Tax Agent (if appointed)</label><input class="fi" id="set-tax-agent" placeholder="Name — TAAN XXXXXXXX"></div>
         </div>
       </div>
     </div>
@@ -3695,7 +3685,7 @@
           <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Logo is managed in <b>Settings → Company Registration</b>. Upload or remove it there.</div>
           <div class="section-hd">Company & Tax</div>
           <div class="fr3">
-            <div class="fg"><label class="fl">Company Display Name</label><input class="fi" id="inv-layout-company" value="Acme Trading LLC" dir="auto" oninput="updateInvoiceLayoutPreview()"></div>
+            <div class="fg"><label class="fl">Company Display Name</label><input class="fi" id="inv-layout-company" placeholder="Your company name" dir="auto" oninput="updateInvoiceLayoutPreview()"></div>
             <div class="fg"><label class="fl">TRN Display</label><select class="fi" id="inv-layout-trn-mode" onchange="updateInvoiceLayoutPreview()"><option value="show">Show company TRN</option><option value="hide">Hide company TRN</option></select></div>
             <div class="fg"><label class="fl">Tax Label</label><select class="fi" id="inv-layout-tax-label" onchange="updateInvoiceLayoutPreview()"><option>Tax Invoice</option><option>Simplified Tax Invoice</option><option>Proforma Invoice</option></select></div>
           </div>
@@ -5800,6 +5790,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260714a" defer></script>
+<script src="src/app.js?v=20260714b" defer></script>
 </body>
 </html>
