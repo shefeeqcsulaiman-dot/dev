@@ -57,6 +57,7 @@ class Company(Base, TimestampMixin):
     fta_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     departments: Mapped[str | None] = mapped_column(Text, nullable=True)
     branches: Mapped[str | None] = mapped_column(Text, nullable=True)
+    modules_enabled: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     users: Mapped[list["User"]] = relationship(back_populates="company")
     invoices: Mapped[list["Invoice"]] = relationship(back_populates="company")

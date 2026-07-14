@@ -279,6 +279,7 @@ def ensure_schema_updates() -> None:
                 ("website", "VARCHAR(160)"),
                 ("departments", "TEXT"),
                 ("branches", "TEXT"),
+                ("modules_enabled", "TEXT"),
             ]:
                 if col not in existing_columns:
                     connection.execute(text(f"ALTER TABLE companies ADD COLUMN {col} {typedef}"))

@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -30,6 +31,17 @@ class ResetPasswordIn(BaseModel):
     password: str
 
 
+ALL_MODULES = [
+    "sales", "quotations", "pos", "purchase", "inventory", "expense",
+    "bank", "accounting", "corporate", "reports", "hrms", "ess",
+    "notifications", "expert", "exception", "ai",
+]
+
+
+class ModulesIn(BaseModel):
+    modules: list[str]
+
+
 class CreateCompanyIn(BaseModel):
     name: str
     email: str
@@ -37,6 +49,7 @@ class CreateCompanyIn(BaseModel):
     full_name: str = ""
     trn: str | None = None
     expires_at: str | None = None
+    modules: list[str] | None = None
 
 
 class UpdateCompanyIn(BaseModel):
@@ -76,6 +89,10 @@ def list_companies(db: Session = Depends(get_db), _: User = Depends(_require_sup
             or 0
         )
         sub_users = [u for u in users if u.role not in ("admin", "superadmin")]
+        try:
+            mods = json.loads(company.modules_enabled) if company.modules_enabled else ALL_MODULES
+        except Exception:
+            mods = ALL_MODULES
         result.append(
             {
                 "id": company.id,
@@ -86,6 +103,7 @@ def list_companies(db: Session = Depends(get_db), _: User = Depends(_require_sup
                 "subscription_expires_at": company.subscription_expires_at,
                 "employee_count": employee_count,
                 "sub_user_count": len(sub_users),
+                "modules_enabled": mods,
                 "users": [
                     {
                         "id": u.id,
@@ -142,11 +160,13 @@ def create_company(
     email = body.email.strip().lower()
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(status_code=409, detail="Email already registered")
+    mods = body.modules if body.modules is not None else ALL_MODULES
     company = Company(
         name=body.name.strip(),
         trn=body.trn or None,
         country="United Arab Emirates",
         subscription_expires_at=body.expires_at,
+        modules_enabled=json.dumps(mods),
     )
     db.add(company)
     db.flush()
@@ -266,6 +286,38 @@ def delete_user(
     db.delete(user)
     db.commit()
     return {"ok": True}
+
+
+@router.get("/companies/{company_id}/modules")
+def get_company_modules(
+    company_id: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    try:
+        mods = json.loads(company.modules_enabled) if company.modules_enabled else ALL_MODULES
+    except Exception:
+        mods = ALL_MODULES
+    return {"modules": mods, "all_modules": ALL_MODULES}
+
+
+@router.put("/companies/{company_id}/modules")
+def set_company_modules(
+    company_id: str,
+    body: ModulesIn,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    valid = [m for m in body.modules if m in ALL_MODULES]
+    company.modules_enabled = json.dumps(valid)
+    db.commit()
+    return {"ok": True, "modules": valid}
 
 
 @router.delete("/companies/{company_id}")

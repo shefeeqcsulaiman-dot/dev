@@ -77,6 +77,14 @@
     .fr2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
     .modal-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
     .err-msg{display:none;background:rgba(240,107,107,.1);border:1px solid rgba(240,107,107,.25);border-radius:8px;padding:10px 14px;font-size:13px;color:#f06b6b;margin-bottom:16px;}
+    .mod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:8px;margin-top:8px;}
+    .mod-item{display:flex;align-items:center;gap:8px;background:rgba(99,130,200,.06);border:1px solid rgba(99,130,200,.14);border-radius:8px;padding:8px 10px;cursor:pointer;transition:border-color .15s;}
+    .mod-item:hover{border-color:rgba(79,142,240,.4);}
+    .mod-item input[type=checkbox]{accent-color:#4f8ef0;width:15px;height:15px;flex-shrink:0;}
+    .mod-item.active{border-color:rgba(79,142,240,.5);background:rgba(79,142,240,.08);}
+    .mod-lbl{font-size:12.5px;font-weight:500;color:#dde4f0;line-height:1.2;}
+    .mod-sub{font-size:10.5px;color:#8896b3;margin-top:1px;}
+    .mod-section-hd{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#8896b3;margin:16px 0 6px;}
 
     /* loading */
     .spinner{display:inline-block;width:18px;height:18px;border:2.5px solid rgba(99,130,200,.2);border-top-color:#4f8ef0;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;}
@@ -190,6 +198,16 @@
     <div class="fg"><label class="fl">Admin Email</label><input class="fi" id="c-email" type="email" placeholder="admin@company.ae"></div>
     <div class="fg"><label class="fl">Admin Full Name</label><input class="fi" id="c-fullname" placeholder="Company Administrator"></div>
     <div class="fg"><label class="fl">Admin Password</label><input class="fi" id="c-password" type="password" placeholder="Set a strong password"></div>
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <label class="fl" style="margin:0">Module Permissions</label>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn btn-g btn-sm" onclick="setAllModules(true)">All On</button>
+          <button type="button" class="btn btn-g btn-sm" onclick="setAllModules(false)">All Off</button>
+        </div>
+      </div>
+      <div class="mod-grid" id="c-mod-grid"></div>
+    </div>
     <div class="modal-foot">
       <button class="btn btn-g" onclick="closeModal('m-create')">Cancel</button>
       <button class="btn btn-p" id="create-btn" onclick="createCompany()">Create Company</button>
@@ -295,6 +313,25 @@
     <div class="modal-foot">
       <button class="btn btn-g" onclick="closeModal('m-expiry')">Cancel</button>
       <button class="btn btn-p" id="expiry-btn" onclick="doSetExpiry()">Save Expiry</button>
+    </div>
+  </div>
+</div>
+
+<!-- Module Permissions Modal -->
+<div class="overlay" id="m-modules" onclick="if(event.target===this)closeModal('m-modules')">
+  <div class="modal" style="max-width:580px">
+    <div class="modal-title">Module Permissions</div>
+    <div class="modal-sub" id="modules-sub">Control which modules this company can access</div>
+    <div id="modules-err" class="err-msg"></div>
+    <input type="hidden" id="modules-co-id">
+    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:4px">
+      <button type="button" class="btn btn-g btn-sm" onclick="setEditModules(true)">All On</button>
+      <button type="button" class="btn btn-g btn-sm" onclick="setEditModules(false)">All Off</button>
+    </div>
+    <div class="mod-grid" id="edit-mod-grid"></div>
+    <div class="modal-foot">
+      <button class="btn btn-g" onclick="closeModal('m-modules')">Cancel</button>
+      <button class="btn btn-p" id="modules-btn" onclick="saveModules()">Save Permissions</button>
     </div>
   </div>
 </div>
@@ -414,6 +451,7 @@
             <button class="btn btn-g btn-sm" onclick="quickExtend('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}',365)">+1yr</button>
             <button class="btn btn-g btn-sm" onclick="toggleUsers('users-${escHtml(c.id)}')">Users</button>
             <button class="btn btn-g btn-sm" onclick="openAddUser('${escHtml(c.id)}','${escHtml(c.name)}')">+ User</button>
+            <button class="btn btn-g btn-sm" onclick="openModules('${escHtml(c.id)}','${escHtml(c.name)}',${JSON.stringify(c.modules_enabled||[])})">Modules</button>
             <button class="btn btn-r btn-sm" onclick="deleteCompany('${escHtml(c.id)}','${escHtml(c.name)}')">Delete</button>
           </div>
           <div id="users-${escHtml(c.id)}" style="display:none;margin-top:10px;padding:8px;background:rgba(99,130,200,.05);border-radius:8px">
@@ -800,6 +838,126 @@
 
   loadDashboard();
   loadClientErrors();
+
+  // ── Module permissions ────────────────────────────────────────
+  const MODULE_DEFS = [
+    {key:'sales',       label:'Sales & Invoices',     sub:'Tax invoices, customer management'},
+    {key:'quotations',  label:'Quotations',            sub:'Quote creation and conversion'},
+    {key:'pos',         label:'Point of Sale',         sub:'POS terminal and receipts'},
+    {key:'purchase',    label:'Purchases',             sub:'Supplier invoices and bills'},
+    {key:'inventory',   label:'Inventory',             sub:'Stock, warehouses, adjustments'},
+    {key:'expense',     label:'Expenses',              sub:'Expense entry with receipts'},
+    {key:'bank',        label:'Bank & Payments',       sub:'Statements, reconciliation, WPS'},
+    {key:'accounting',  label:'Accounting',            sub:'Chart of accounts, journals, GL'},
+    {key:'corporate',   label:'Corporate Accounting',  sub:'Corporate tax returns, CT 9%'},
+    {key:'reports',     label:'Reports',               sub:'P&L, balance sheet, VAT return'},
+    {key:'hrms',        label:'HRMS Portal',           sub:'Employee, payroll, leave, rota'},
+    {key:'ess',         label:'ESS Portal',            sub:'Employee self-service login'},
+    {key:'notifications',label:'Notifications',        sub:'Compliance alerts and reminders'},
+    {key:'expert',      label:'Expert Review',         sub:'Audit prep and document packs'},
+    {key:'exception',   label:'Exception Center',      sub:'Flagged transaction resolution'},
+    {key:'ai',          label:'AI Features',           sub:'AI assistant and OCR extraction'},
+  ];
+
+  function buildModGrid(containerId, enabledKeys){
+    const grid = document.getElementById(containerId);
+    grid.innerHTML = MODULE_DEFS.map(m=>{
+      const on = enabledKeys.includes(m.key);
+      return `<label class="mod-item${on?' active':''}" id="mod-item-${containerId}-${m.key}">
+        <input type="checkbox" id="mod-${containerId}-${m.key}" ${on?'checked':''} onchange="toggleModItem(this,'${containerId}','${m.key}')">
+        <div><div class="mod-lbl">${escHtml(m.label)}</div><div class="mod-sub">${escHtml(m.sub)}</div></div>
+      </label>`;
+    }).join('');
+  }
+
+  function toggleModItem(cb, containerId, key){
+    const item = document.getElementById('mod-item-'+containerId+'-'+key);
+    if(item) item.classList.toggle('active', cb.checked);
+  }
+
+  function getCheckedModules(containerId){
+    return MODULE_DEFS.map(m=>m.key).filter(k=>{
+      const el = document.getElementById('mod-'+containerId+'-'+k);
+      return el && el.checked;
+    });
+  }
+
+  function setAllModules(checked){
+    MODULE_DEFS.forEach(m=>{
+      const cb = document.getElementById('mod-c-mod-grid-'+m.key);
+      const item = document.getElementById('mod-item-c-mod-grid-'+m.key);
+      if(cb){ cb.checked=checked; }
+      if(item){ item.classList.toggle('active',checked); }
+    });
+  }
+
+  function setEditModules(checked){
+    MODULE_DEFS.forEach(m=>{
+      const cb = document.getElementById('mod-edit-mod-grid-'+m.key);
+      const item = document.getElementById('mod-item-edit-mod-grid-'+m.key);
+      if(cb){ cb.checked=checked; }
+      if(item){ item.classList.toggle('active',checked); }
+    });
+  }
+
+  // Patch openCreateCompany to also build the module grid
+  const _origOpenCreate = openCreateCompany;
+  function openCreateCompany(){
+    _origOpenCreate();
+    buildModGrid('c-mod-grid', MODULE_DEFS.map(m=>m.key)); // all on by default
+  }
+
+  // Override createCompany to include modules
+  const _origCreateCompany = createCompany;
+  async function createCompany(){
+    const btn = document.getElementById('create-btn');
+    const errEl = document.getElementById('create-err');
+    errEl.style.display='none';
+    const name = document.getElementById('c-name').value.trim();
+    const email = document.getElementById('c-email').value.trim();
+    const password = document.getElementById('c-password').value;
+    const fullName = document.getElementById('c-fullname').value.trim();
+    const trn = document.getElementById('c-trn').value.trim()||null;
+    const expiry = document.getElementById('c-expiry').value||null;
+    const modules = getCheckedModules('c-mod-grid');
+    if(!name||!email||!password){ errEl.textContent='Company name, email and password are required.'; errEl.style.display='block'; return; }
+    btn.disabled=true; btn.textContent='Creating…';
+    try{
+      const res = await apiFetch('/superadmin/companies',{method:'POST',body:JSON.stringify({name,email,password,full_name:fullName,trn,expires_at:expiry,modules})});
+      const data = await res.json();
+      if(!res.ok){ errEl.textContent=data.detail||'Failed to create company.'; errEl.style.display='block'; return; }
+      closeModal('m-create');
+      loadDashboard();
+    }catch(err){
+      errEl.textContent=err.message; errEl.style.display='block';
+    }finally{ btn.disabled=false; btn.textContent='Create Company'; }
+  }
+
+  function openModules(companyId, companyName, enabledModules){
+    document.getElementById('modules-err').style.display='none';
+    document.getElementById('modules-sub').textContent='Modules for: '+companyName;
+    document.getElementById('modules-co-id').value=companyId;
+    const mods = Array.isArray(enabledModules) && enabledModules.length ? enabledModules : MODULE_DEFS.map(m=>m.key);
+    buildModGrid('edit-mod-grid', mods);
+    openModal('m-modules');
+  }
+
+  async function saveModules(){
+    const btn = document.getElementById('modules-btn');
+    const errEl = document.getElementById('modules-err');
+    errEl.style.display='none';
+    const companyId = document.getElementById('modules-co-id').value;
+    const modules = getCheckedModules('edit-mod-grid');
+    btn.disabled=true; btn.textContent='Saving…';
+    try{
+      const res = await apiFetch(`/superadmin/companies/${companyId}/modules`,{method:'PUT',body:JSON.stringify({modules})});
+      const data = await res.json();
+      if(!res.ok){ errEl.textContent=data.detail||'Failed.'; errEl.style.display='block'; return; }
+      closeModal('m-modules');
+      loadDashboard();
+    }catch(err){ errEl.textContent=err.message; errEl.style.display='block'; }
+    finally{ btn.disabled=false; btn.textContent='Save Permissions'; }
+  }
 </script>
 </body>
 </html>
