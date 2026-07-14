@@ -288,42 +288,6 @@
         <div id="match-hint" class="match-hint"></div>
       </div>
 
-      <div class="divider"><span>Optional details</span></div>
-
-      <div class="row2">
-        <div class="field">
-          <label>I'm interested in</label>
-          <select id="interest">
-            <option value="">Select a module...</option>
-            <option>Sales &amp; Invoicing</option>
-            <option>HR &amp; Payroll</option>
-            <option>Inventory Management</option>
-            <option>Accounting &amp; VAT</option>
-            <option>Purchasing</option>
-            <option>Reports &amp; Compliance</option>
-            <option>Full Suite</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Emirate</label>
-          <select id="emirate">
-            <option value="">Select...</option>
-            <option>Abu Dhabi</option>
-            <option>Dubai</option>
-            <option>Sharjah</option>
-            <option>Ajman</option>
-            <option>Umm Al Quwain</option>
-            <option>Ras Al Khaimah</option>
-            <option>Fujairah</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="field">
-        <label>Anything else you'd like us to know?</label>
-        <textarea id="notes" placeholder="e.g. number of employees, current software, go-live date…"></textarea>
-      </div>
-
       <button id="btn" class="btn" onclick="signUp()">Get My Free Trial</button>
     </div>
 
@@ -406,9 +370,6 @@
     var phone=document.getElementById('phone').value.trim();
     var pwd=document.getElementById('password').value;
     var cpwd=document.getElementById('confirm_password').value;
-    var interest=document.getElementById('interest').value;
-    var emirate=document.getElementById('emirate').value;
-    var notes=document.getElementById('notes').value.trim();
 
     if(!fullName){show('Please enter your full name.');return;}
     if(!company){show('Please enter your company name.');return;}
@@ -420,8 +381,6 @@
 
     var body={full_name:fullName,email:email,password:pwd,company_name:company};
     if(phone)body.phone='+971 '+phone;
-    if(emirate)body.emirate=emirate;
-    if(interest)body.business_type=interest;
 
     try{
       var resp=await fetch(apiBase()+'/auth/register',{
@@ -433,7 +392,7 @@
         // also log trial request with notes/interest
         fetch(apiBase()+'/auth/trial-request',{
           method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({full_name:fullName,company_name:company,email:email,phone:phone?'+971 '+phone:null,interest:interest||null,notes:notes||null})
+          body:JSON.stringify({full_name:fullName,company_name:company,email:email,phone:phone?'+971 '+phone:null})
         }).catch(function(){});
         localStorage.setItem('taxflow_token',data.access_token);
         document.getElementById('form-body').style.display='none';
