@@ -116,10 +116,27 @@
   <div class="stats">
     <div class="stat-card"><div class="stat-label">Total Companies</div><div class="stat-val" id="sa-stat-companies">—</div></div>
     <div class="stat-card"><div class="stat-label">Total Users</div><div class="stat-val" id="sa-stat-users">—</div></div>
-    <div class="stat-card"><div class="stat-label">Active Subscriptions</div><div class="stat-val" id="sa-stat-active">—</div></div>
-    <div class="stat-card"><div class="stat-label">Expiring Soon</div><div class="stat-val" id="sa-stat-expiring">—</div></div>
+    <div class="stat-card" style="border-color:rgba(74,222,128,.3)"><div class="stat-label">Active Subscriptions</div><div class="stat-val" id="sa-stat-active" style="color:#16a34a">—</div></div>
+    <div class="stat-card" style="border-color:rgba(251,146,60,.3)"><div class="stat-label">Expiring in 7 Days</div><div class="stat-val" id="sa-stat-expiring" style="color:#d97706">—</div></div>
     <div class="stat-card" style="border-color:rgba(240,107,107,.35)"><div class="stat-label">Expired</div><div class="stat-val" id="sa-stat-expired" style="color:var(--red)">—</div></div>
+    <div class="stat-card" style="border-color:rgba(79,142,240,.3)"><div class="stat-label">New This Month</div><div class="stat-val" id="sa-stat-new-month" style="color:#4f8ef0">—</div></div>
+    <div class="stat-card" style="border-color:rgba(79,142,240,.3)"><div class="stat-label">Trial Requests</div><div class="stat-val" id="sa-stat-trials" style="color:#4f8ef0">—</div></div>
+    <div class="stat-card"><div class="stat-label">Total Employees</div><div class="stat-val" id="sa-stat-employees">—</div></div>
     <div class="stat-card" style="border-color:rgba(240,107,107,.35)"><div class="stat-label">JS Errors (7d)</div><div class="stat-val" id="sa-stat-errors" style="color:var(--red)">—</div></div>
+  </div>
+
+  <!-- Insights & Actions -->
+  <div class="card" style="margin-top:24px" id="sa-insights-card">
+    <div class="card-hd">
+      <div>
+        <div class="card-title">Insights &amp; Actions</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">Smart suggestions based on current platform data</div>
+      </div>
+      <button class="btn btn-g btn-sm" onclick="loadDashboard()">Refresh</button>
+    </div>
+    <div id="sa-insights-wrap" style="padding:4px 0">
+      <div class="loading-state">Loading…</div>
+    </div>
   </div>
 
   <!-- Companies -->
@@ -426,20 +443,132 @@
 
   function renderStats(data){
     const now = new Date();
-    const soon = new Date(); soon.setDate(soon.getDate()+30);
-    let active=0, expiring=0, expired=0, totalUsers=0;
+    const in7  = new Date(); in7.setDate(now.getDate()+7);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    let active=0, expiring=0, expired=0, totalUsers=0, newMonth=0, totalEmployees=0;
     data.forEach(c=>{
       totalUsers += (c.users||[]).length;
+      totalEmployees += (c.employee_count||0);
       const exp = c.subscription_expires_at ? new Date(c.subscription_expires_at) : null;
       if(!exp || exp > now) active++;
-      if(exp && exp > now && exp <= soon) expiring++;
+      if(exp && exp > now && exp <= in7) expiring++;
       if(exp && exp < now) expired++;
+      const created = c.created_at ? new Date(c.created_at) : null;
+      if(created && created >= monthStart) newMonth++;
     });
     document.getElementById('sa-stat-companies').textContent = data.length;
     document.getElementById('sa-stat-users').textContent = totalUsers;
     document.getElementById('sa-stat-active').textContent = active;
     document.getElementById('sa-stat-expiring').textContent = expiring;
     document.getElementById('sa-stat-expired').textContent = expired;
+    document.getElementById('sa-stat-new-month').textContent = newMonth;
+    document.getElementById('sa-stat-employees').textContent = totalEmployees || '—';
+    renderInsights(data, {active, expiring, expired, newMonth});
+  }
+
+  function renderInsights(data, stats){
+    const now = new Date();
+    const in7  = new Date(); in7.setDate(now.getDate()+7);
+    const in30 = new Date(); in30.setDate(now.getDate()+30);
+    const insights = [];
+
+    // Expired companies — reactivation opportunity
+    const expiredList = data.filter(c=>{
+      const exp = c.subscription_expires_at ? new Date(c.subscription_expires_at) : null;
+      return exp && exp < now;
+    });
+    if(expiredList.length){
+      insights.push({
+        type:'red',
+        icon:'⚠️',
+        title: expiredList.length+' '+(expiredList.length===1?'company has':'companies have')+' expired subscriptions',
+        body: expiredList.slice(0,3).map(c=>`<strong>${escHtml(c.name)}</strong>`).join(', ')+(expiredList.length>3?' and '+(expiredList.length-3)+' more':''),
+        action:'Scroll to Companies list and extend their subscriptions.',
+      });
+    }
+
+    // Expiring in 7 days
+    const expiringList = data.filter(c=>{
+      const exp = c.subscription_expires_at ? new Date(c.subscription_expires_at) : null;
+      return exp && exp > now && exp <= in7;
+    });
+    if(expiringList.length){
+      insights.push({
+        type:'amber',
+        icon:'⏰',
+        title: expiringList.length+' '+(expiringList.length===1?'company expires':'companies expire')+' within 7 days',
+        body: expiringList.map(c=>`<strong>${escHtml(c.name)}</strong> — ${c.subscription_expires_at}`).join('<br>'),
+        action:'Extend their subscriptions before they lose access.',
+      });
+    }
+
+    // Companies with no users
+    const noUsers = data.filter(c=>!(c.users||[]).filter(u=>u.role!=='superadmin').length);
+    if(noUsers.length){
+      insights.push({
+        type:'blue',
+        icon:'👤',
+        title: noUsers.length+' '+(noUsers.length===1?'company has':'companies have')+' no users',
+        body: noUsers.slice(0,3).map(c=>`<strong>${escHtml(c.name)}</strong>`).join(', ')+(noUsers.length>3?' and '+(noUsers.length-3)+' more':''),
+        action:'Add an admin user so the company can log in.',
+      });
+    }
+
+    // New companies this month
+    if(stats.newMonth){
+      insights.push({
+        type:'green',
+        icon:'🎉',
+        title: stats.newMonth+' new '+(stats.newMonth===1?'company':'companies')+' joined this month',
+        body:'Welcome them by checking their module setup and subscription expiry.',
+        action:null,
+      });
+    }
+
+    // No expiry set
+    const noExpiry = data.filter(c=>!c.subscription_expires_at);
+    if(noExpiry.length){
+      insights.push({
+        type:'blue',
+        icon:'📅',
+        title: noExpiry.length+' '+(noExpiry.length===1?'company has':'companies have')+' no expiry date set',
+        body: noExpiry.slice(0,3).map(c=>`<strong>${escHtml(c.name)}</strong>`).join(', ')+(noExpiry.length>3?' and '+(noExpiry.length-3)+' more':''),
+        action:'Set an expiry date so subscriptions can be tracked.',
+      });
+    }
+
+    // All good
+    if(!insights.length){
+      insights.push({
+        type:'green', icon:'✅',
+        title:'Everything looks good',
+        body:'All companies are active, no subscriptions expiring soon, and no configuration issues found.',
+        action:null,
+      });
+    }
+
+    const colors={red:'rgba(240,107,107,.12)',amber:'rgba(251,191,36,.12)',green:'rgba(74,222,128,.12)',blue:'rgba(79,142,240,.1)'};
+    const borders={red:'rgba(240,107,107,.3)',amber:'rgba(251,191,36,.3)',green:'rgba(74,222,128,.3)',blue:'rgba(79,142,240,.25)'};
+    const textc={red:'#dc2626',amber:'#92400e',green:'#14532d',blue:'#1d4ed8'};
+
+    const wrap=document.getElementById('sa-insights-wrap');
+    wrap.innerHTML=insights.map(ins=>`
+      <div style="display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--border)">
+        <div style="width:40px;height:40px;border-radius:10px;background:${colors[ins.type]};border:1px solid ${borders[ins.type]};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${ins.icon}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:3px">${ins.title}</div>
+          <div style="font-size:12.5px;color:var(--muted);line-height:1.5">${ins.body}</div>
+          ${ins.action?`<div style="font-size:11.5px;color:${textc[ins.type]};margin-top:5px;font-weight:500">→ ${ins.action}</div>`:''}
+        </div>
+      </div>
+    `).join('');
+    // remove last border
+    const last=wrap.querySelector('div:last-child');
+    if(last)last.style.borderBottom='none';
+
+    // update trial requests badge in stats once trials load
+    const trialBadgeEl=document.getElementById('sa-stat-trials');
+    if(trialBadgeEl&&trialBadgeEl.textContent==='—')trialBadgeEl.textContent='…';
   }
 
   function renderCompanies(data){
@@ -768,6 +897,8 @@
       const newCount=rows.filter(r=>r.status==='new').length;
       if(newCount){badge.textContent=newCount+' new';badge.style.display='inline';}
       else badge.style.display='none';
+      const trialStat=document.getElementById('sa-stat-trials');
+      if(trialStat)trialStat.textContent=rows.length+(newCount?' ('+newCount+' new)':'');
       if(!rows.length){wrap.innerHTML='<div class="loading-state" style="color:var(--muted)">No trial requests yet.</div>';return;}
       let html=`<table class="sa-table"><thead><tr>
         <th>Date</th><th>Name</th><th>Company</th><th>Email</th><th>Phone</th><th>Employees</th><th>Status</th>
