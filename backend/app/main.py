@@ -39,6 +39,30 @@ from app.security import hash_password
 settings = get_settings()
 
 
+async def _invalidate_cache_bg(auth_header: str) -> None:
+    import asyncio
+    try:
+        token = auth_header.removeprefix("Bearer ").strip()
+        if not token:
+            return
+        from app.security import user_id_from_token
+        user_id = await asyncio.get_event_loop().run_in_executor(None, user_id_from_token, token)
+        if not user_id:
+            return
+        def _sync():
+            db = SessionLocal()
+            try:
+                user = db.query(User).filter(User.id == user_id).first()
+                if user:
+                    import app.cache as _cache
+                    _cache.invalidate_company(user.company_id)
+            finally:
+                db.close()
+        await asyncio.get_event_loop().run_in_executor(None, _sync)
+    except Exception:
+        pass
+
+
 def create_app() -> FastAPI:
     from app.limiter import limiter
 
@@ -58,22 +82,9 @@ def create_app() -> FastAPI:
     async def cache_invalidation(request: Request, call_next):
         response = await call_next(request)
         if request.method in ("POST", "PUT", "PATCH", "DELETE") and "/api/v1/" in request.url.path:
-            try:
-                token = (request.headers.get("authorization", "")).removeprefix("Bearer ").strip()
-                if token:
-                    from app.security import user_id_from_token
-                    user_id = user_id_from_token(token)
-                    if user_id:
-                        db = SessionLocal()
-                        try:
-                            user = db.query(User).filter(User.id == user_id).first()
-                            if user:
-                                import app.cache as _cache
-                                _cache.invalidate_company(user.company_id)
-                        finally:
-                            db.close()
-            except Exception:
-                pass
+            import asyncio
+            auth_header = request.headers.get("authorization", "")
+            asyncio.create_task(_invalidate_cache_bg(auth_header))
         return response
 
     @app.exception_handler(Exception)
