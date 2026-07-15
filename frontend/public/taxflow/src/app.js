@@ -2535,7 +2535,6 @@ function renderDashboardHero(data,kpis={},counts={}){
   _purWithVat=formatAed(purchases);
   _purNet=formatAed(purchasesNet);
   set('dash-total-purchases',_purSlideIdx===1?_purNet:_purWithVat);
-  set('dash-pur-only',_purNet);
   set('dash-purchases-sub',`${purCount} bill${purCount===1?'':'s'}`);
   set('dash-vat',formatAed(vatPayable));
   set('dash-vat-sub',vatPayable>0?'Payable to FTA':'Credit position');
