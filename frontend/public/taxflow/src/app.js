@@ -2547,7 +2547,6 @@ function renderDashboardHero(data,kpis={},counts={}){
   const marginPct=revenueNet>0?Math.max(0,Math.round(grossProfit/revenueNet*100)):0;
   set('dash-margin-pct',`${marginPct}%`);
   set('dash-margin-pct-big',`${marginPct}%`);
-  set('dash-gross-profit-sub',formatAed(grossProfit));
   const marginBar=document.getElementById('dash-profit-margin-bar');
   if(marginBar)marginBar.style.width=Math.min(Math.max(marginPct,0),100)+'%';
 
