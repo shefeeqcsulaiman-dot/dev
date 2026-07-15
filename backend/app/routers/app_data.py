@@ -3527,7 +3527,6 @@ def upsert_purchase_master_data(
     cost: Decimal,
 ) -> None:
     save_app_record(db, current_user, "salesCategories", {"name": category, "type": "Purchase", "status": "Active"})
-    save_app_record(db, current_user, "salesUnits", {"code": unit, "name": unit, "status": "Active"})
     product_record = {
         "code": sku,
         "name": product,
