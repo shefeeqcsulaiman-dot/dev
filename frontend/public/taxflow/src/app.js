@@ -2572,9 +2572,6 @@ function renderDashboardHero(data,kpis={},counts={}){
   const revBar=document.getElementById('dash-rev-rate-bar');
   if(revBar)revBar.style.width=Math.min(colRate,100)+'%';
 
-  // Revenue slider slide-1 big number
-  const revOnly=document.getElementById('dash-rev-only');
-  if(revOnly)revOnly.textContent=formatAed(revenueNet||0);
 
   // Liquid Position card
   const purPaidAmt=parseAmount(purSum.paid||0);
