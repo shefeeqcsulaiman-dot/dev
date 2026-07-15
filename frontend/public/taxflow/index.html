@@ -194,8 +194,7 @@
             <!-- Label -->
             <div style="z-index:1;padding-bottom:14px">
               <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#065f46;opacity:.7" data-i18n="dash_total_revenue">Total Revenue</div>
-              <div id="rev-banner-vat" style="font-size:13px;font-weight:700;color:#065f46;opacity:.8;transition:opacity .25s" data-i18n="dash_plus_vat">+ VAT</div>
-              <div class="mono" style="font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.5px;margin-top:4px;text-shadow:0 1px 6px rgba(0,0,0,.18)" id="dash-revenue">AED 0.00</div>
+              <div id="rev-banner-vat" style="font-size:15px;font-weight:800;color:#065f46;transition:opacity .25s" data-i18n="dash_plus_vat">+ VAT</div>
             </div>
             <!-- SVG Illustration: money stack + arrow + VAT coin -->
             <svg viewBox="0 0 120 100" width="120" height="100" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
@@ -231,6 +230,8 @@
               <div id="dash-revenue-sub" style="font-size:11.5px;color:var(--text3)">0 Invoices</div>
               <span id="dash-rev-trend" class="dv2-kpi-badge up" style="font-size:10.5px">—</span>
             </div>
+            <!-- Main value -->
+            <div class="mono" style="font-size:22px;font-weight:700;color:#10b981;letter-spacing:-0.5px;margin-bottom:12px;text-align:center" id="dash-revenue">AED 0.00</div>
             <div style="border-top:1px solid var(--border);margin-bottom:10px"></div>
             <!-- Slide 0: Full stats -->
             <div id="rev-slide-0">
@@ -274,8 +275,7 @@
             <div style="position:absolute;top:-20px;right:-20px;width:100px;height:100px;border-radius:50%;background:rgba(99,102,241,.18);filter:blur(24px)"></div>
             <div style="z-index:1;padding-bottom:14px">
               <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#1e3a8a;opacity:.7" data-i18n="dash_total_purchases">Total Purchases</div>
-              <div id="pur-banner-vat" style="font-size:13px;font-weight:700;color:#1e3a8a;opacity:.8;transition:opacity .25s" data-i18n="dash_plus_vat">+ VAT</div>
-              <div class="mono" style="font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.5px;margin-top:4px;text-shadow:0 1px 6px rgba(0,0,0,.18)" id="dash-total-purchases">AED 0.00</div>
+              <div id="pur-banner-vat" style="font-size:15px;font-weight:800;color:#1e3a8a;transition:opacity .25s" data-i18n="dash_plus_vat">+ VAT</div>
             </div>
             <!-- SVG Illustration: shopping bag + receipt + VAT + coins -->
             <svg viewBox="0 0 120 100" width="120" height="100" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
@@ -319,6 +319,7 @@
               <div id="dash-purchases-sub" style="font-size:11.5px;color:var(--text3)">0 Bills</div>
               <span id="dash-pur-trend" class="dv2-kpi-badge up" style="font-size:10.5px">—</span>
             </div>
+            <div class="mono" style="font-size:22px;font-weight:700;color:#4f8ef0;letter-spacing:-0.5px;margin-bottom:12px;text-align:center" id="dash-total-purchases">AED 0.00</div>
             <div style="border-top:1px solid var(--border);margin-bottom:10px"></div>
             <!-- Slide 0: Full stats -->
             <div id="pur-slide-0">
@@ -362,8 +363,7 @@
             <div style="position:absolute;top:-20px;right:-20px;width:100px;height:100px;border-radius:50%;background:rgba(139,92,246,.18);filter:blur(24px)"></div>
             <div style="z-index:1;padding-bottom:14px">
               <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#4c1d95;opacity:.7" data-i18n="dash_net_profit">Net Profit</div>
-              <div id="prof-banner-label" style="font-size:13px;font-weight:700;color:#4c1d95;opacity:.8;transition:opacity .25s" data-i18n="dash_margin">Margin</div>
-              <div class="mono" style="font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.5px;margin-top:4px;text-shadow:0 1px 6px rgba(0,0,0,.18)" id="dash-gross-profit">AED 0</div>
+              <div id="prof-banner-label" style="font-size:15px;font-weight:800;color:#4c1d95;transition:opacity .25s" data-i18n="dash_margin">Margin</div>
             </div>
             <!-- SVG Illustration: bar chart + trend arrow + star + coins -->
             <svg viewBox="0 0 120 100" width="120" height="100" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
@@ -395,7 +395,8 @@
               <div id="dash-profit-sub" style="font-size:11px;color:var(--text3)">Revenue − Purchases</div>
               <span id="dash-profit-trend" class="dv2-kpi-badge up" style="font-size:10.5px">—</span>
             </div>
-            <div style="border-top:1px solid var(--border);margin-bottom:10px"></div>
+            <div class="mono" style="font-size:22px;font-weight:700;color:#8b5cf6;letter-spacing:-0.5px;margin-bottom:10px;text-align:center" id="dash-gross-profit">AED 0</div>
+<div style="border-top:1px solid var(--border);margin-bottom:10px"></div>
             <!-- Slide 0: Net Profit Margin bar -->
             <div id="prof-slide-0">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
