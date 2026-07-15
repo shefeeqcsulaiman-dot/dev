@@ -7167,7 +7167,8 @@ function cleanupDemoProductsFromServer(products=[]){
 }
 
 function hydrateFromServer(){
-  return apiRequest('bootstrap',{}, {method:'GET'}).then(({data})=>{
+  const _yield=()=>new Promise(r=>setTimeout(r,0));
+  return apiRequest('bootstrap',{}, {method:'GET'}).then(async ({data})=>{
     if(!data)return;
     isHydratingFromServer=true;
     const renderStats={};
@@ -7176,14 +7177,20 @@ function hydrateFromServer(){
       financePaymentsByRef.clear();
       financeBankAccountsByKey.clear();
       if(data.company)applyCompanyToUi(data.company);
-      // ── Phase 1: critical collections — render immediately ───────────────────
+      // ── Phase 1: critical collections — yield between each to avoid blocking ──
+      await _yield();
       renderStats.products=_renderProductsBatch(productRows);
+      await _yield();
       renderStats.salesCategories=renderRecordList(data.salesCategories,renderSalesCategoryRecord,'sales category');
       renderStats.salesUnits=renderRecordList(data.salesUnits,renderSalesUnitRecord,'sales unit');
+      await _yield();
       renderStats.customers=renderRecordList(data.customers,renderCustomerRecord,'customer');
       renderStats.users=renderRecordList(data.users,renderUserRecord,'user');
+      await _yield();
       renderStats.salesInvoices=renderRecordList(data.salesInvoices,inv=>addSalesInvoiceRow(inv,{persist:false}),'sales invoice');
+      await _yield();
       renderStats.quotations=renderRecordList(data.quotations,renderQuotationRecord,'quotation');
+      await _yield();
       renderStats.accounts=renderRecordList(data.accounts,renderAccountRecord,'account');
       renderStats.purchaseRecords={rendered:0,failed:0,total:0,lazy:true};
       loadPurchaseDocumentsFromServer(data.purchaseDocuments||[],[]);
@@ -7192,7 +7199,7 @@ function hydrateFromServer(){
     }
     // ── Phase 2: deferred collections — render during idle time ─────────────
     const _deferred2=data;
-    scheduleIdleTask(()=>{
+    scheduleIdleTask(async ()=>{
       isHydratingFromServer=true;
       try{
         renderStats.employees=renderRecordList(_deferred2.employees,record=>{
@@ -7200,36 +7207,39 @@ function hydrateFromServer(){
           renderPayrollEmployeeRecord(record);
         },'employee');
         renderStats.bankAccounts=renderRecordList(_deferred2.bankAccounts,renderBankAccountRecord,'bank account');
+        await _yield();
         renderStats.payments=renderRecordList(_deferred2.payments,renderPaymentRecord,'payment');
         renderStats.expenses=renderRecordList(_deferred2.expenses,renderExpenseRecord,'expense');
+        await _yield();
         if(Array.isArray(_deferred2.bills)){_hydratedBills.length=0;_hydratedBills.push(..._deferred2.bills);}
         renderStats.bills=renderRecordList(_deferred2.bills,renderBillRecord,'bill');
         renderStats.vendors=renderRecordList(_deferred2.vendors,renderVendorRecord,'vendor');
-        // Re-render purchase card now that bill data is loaded
         _refreshPurchaseDashboardCard();
       }finally{isHydratingFromServer=false;}
       updateFinanceFromDatabaseRecords();
       updateAccountSelectors();
     },600);
     // ── Phase 3: HR/rota — render after a longer idle window ────────────────
-    scheduleIdleTask(()=>{
+    scheduleIdleTask(async ()=>{
       isHydratingFromServer=true;
       try{
         renderStats.rotaShifts=renderRecordList(_deferred2.rotaShifts,renderRotaShiftRecord,'rota shift');
         renderStats.rotaSwaps=renderRecordList(_deferred2.rotaSwaps,renderRotaSwapRecord,'rota swap');
+        await _yield();
         renderStats.rotaApprovals=renderRecordList(_deferred2.rotaApprovals,renderRotaApprovalRecord,'rota approval');
         renderStats.rotaAssignments=renderRecordList(_deferred2.rotaAssignments,renderRotaAssignmentRecord,'rota assignment');
         renderRotaBoards();
+        await _yield();
         renderStats.overtimeRequests=renderRecordList(_deferred2.overtimeRequests,renderOTRecord,'overtime request');
         renderStats.leaveRequests=renderRecordList(_deferred2.leaveRequests,renderLeaveRecord,'leave request');
         renderStats.attendanceCorrections=renderRecordList(_deferred2.attendanceCorrections,renderCorrectionRecord,'correction');
+        await _yield();
         renderStats.ledger=renderRecordList(_deferred2.ledger,line=>postLedgerLine(line,{persist:false}),'ledger');
         if(Array.isArray(_deferred2.hrUsers)&&_deferred2.hrUsers.length){
           _hrUsers.length=0;
           _hrUsers.push(..._deferred2.hrUsers);
           _renderHrUsersTable();
         }
-        // Load dept/branch/role config saved via _saveDeptsBranchesToDb (hr_settings collection)
         const hrCfg=Array.isArray(_deferred2.hr_settings)
           ?_deferred2.hr_settings.find(x=>x.id==='dept-branch-role-config')
           :null;
