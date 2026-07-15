@@ -2539,8 +2539,6 @@ function renderDashboardHero(data,kpis={},counts={}){
   set('dash-vat',formatAed(vatPayable));
   set('dash-vat-sub',vatPayable>0?'Payable to FTA':'Credit position');
   set('dash-gross-profit',formatAed(grossProfit));
-  set('dash-total-income',formatAed(revenueNet));
-  set('dash-total-expenses',formatAed(purchasesNet));
   set('dash-profit-sub',closingStock>0?`Closing stock: ${formatAed(closingStock)}`:'');
   // Profit card: margin bar
   const marginPct=revenueNet>0?Math.max(0,Math.round(grossProfit/revenueNet*100)):0;
