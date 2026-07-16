@@ -159,6 +159,15 @@ def delete_device(
     db.commit()
 
 
+_TCP_TYPES = {
+    "ZKTeco F Series", "ZKTeco K Series", "ZKTeco iClock",
+    "ZKTeco X Face Pro", "ZKTeco SpeedFace", "ZKTeco ProFace",
+    "ZKTeco G Series", "ZKTeco UA Series", "ZKTeco IN Series",
+    "ZKTeco MB Series", "ZKTeco", "Anviz",
+}
+_PUSH_TYPES = {"Suprema", "Hikvision", "ZKTeco ADMS"}
+
+
 @router.post("/devices/{device_id}/test")
 def test_device(
     device_id: str,
@@ -171,19 +180,65 @@ def test_device(
     ).first()
     if not device:
         raise HTTPException(404, "Device not found")
+
+    now = datetime.now(UTC)
+
+    # ── HTTP Push / ADMS devices: they call us, we can't call them ────────────
+    if device.device_type in _PUSH_TYPES:
+        week_ago = now - timedelta(days=7)
+        recent = db.query(func.count(AttendancePunch.id)).filter(
+            AttendancePunch.device_id == device.id,
+            AttendancePunch.punch_time >= week_ago,
+        ).scalar() or 0
+
+        if device.last_sync:
+            delta = now - device.last_sync.replace(tzinfo=UTC) if device.last_sync.tzinfo is None else now - device.last_sync
+            secs = int(delta.total_seconds())
+            if secs < 120:
+                age = f"{secs}s ago"
+            elif secs < 3600:
+                age = f"{secs//60} min ago"
+            elif secs < 86400:
+                age = f"{secs//3600} hr ago"
+            else:
+                age = f"{secs//86400} day(s) ago"
+
+            if secs < 86400:
+                return {"ok": True, "message": f"Last punch received {age} · {recent} punches in last 7 days"}
+            else:
+                return {"ok": False, "message": f"No punch in {secs//86400} day(s) — check device push settings and API key"}
+        else:
+            return {"ok": False, "message": f"{device.device_type}: no punches received yet — open Setup Guide and configure the device to push to this server"}
+
+    # ── Manual / CSV: no connection to test ────────────────────────────────────
+    if device.device_type == "Manual":
+        total = db.query(func.count(AttendancePunch.id)).filter(
+            AttendancePunch.company_id == current_user.company_id,
+            AttendancePunch.source == "csv",
+        ).scalar() or 0
+        return {"ok": True, "message": f"CSV import device — {total} records imported total"}
+
+    # ── TCP/IP devices: socket reachability check ──────────────────────────────
     if not device.ip_address:
-        return {"ok": False, "message": "No IP address configured"}
+        return {"ok": False, "message": "No IP address configured — add the device IP to test connectivity"}
+
     import socket
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(3)
+        s.settimeout(4)
         s.connect((device.ip_address, device.port))
         s.close()
-        return {"ok": True, "message": f"TCP port {device.port} is open on {device.ip_address}"}
+        week_ago = now - timedelta(days=7)
+        recent = db.query(func.count(AttendancePunch.id)).filter(
+            AttendancePunch.device_id == device.id,
+            AttendancePunch.punch_time >= week_ago,
+        ).scalar() or 0
+        sync_note = f" · {recent} punches in last 7 days" if recent else " · no punches synced yet (is zk_bridge.py running?)"
+        return {"ok": True, "message": f"Reachable — {device.ip_address}:{device.port} is open{sync_note}"}
     except socket.timeout:
-        return {"ok": False, "message": f"Timeout connecting to {device.ip_address}:{device.port} — device may be offline"}
+        return {"ok": False, "message": f"Timeout — {device.ip_address}:{device.port} did not respond (device offline or wrong IP?)"}
     except ConnectionRefusedError:
-        return {"ok": False, "message": f"Connection refused on {device.ip_address}:{device.port} — check IP/port"}
+        return {"ok": False, "message": f"Connection refused on {device.ip_address}:{device.port} — verify IP and port"}
     except OSError as e:
         return {"ok": False, "message": f"Cannot reach {device.ip_address}:{device.port} — {e.strerror}"}
 

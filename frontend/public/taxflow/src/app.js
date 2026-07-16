@@ -17918,9 +17918,28 @@ async function saveBiometricDevice(){
 async function testBiometricDevice(id,btn){
   const orig=btn.textContent;
   btn.textContent='Testing…';btn.disabled=true;
+  const row=btn.closest('tr');
+  // Remove any previous result row
+  const prev=row?.nextElementSibling;
+  if(prev?.dataset?.testResult)prev.remove();
   try{
     const res=await moduleApi(`/attendance/devices/${encodeURIComponent(id)}/test`,{method:'POST',body:{}});
-    toast(res.message||'Done',res.ok?'ok':'warn');
+    const ok=res.ok;
+    const msg=res.message||'Done';
+    // Insert result row below the device row
+    if(row){
+      const td=document.createElement('tr');
+      td.dataset.testResult='1';
+      const cols=row.querySelectorAll('td').length||8;
+      td.innerHTML=`<td colspan="${cols}" style="padding:6px 14px 8px;background:${ok?'rgba(16,185,129,.06)':'rgba(239,68,68,.06)'};border-bottom:1px solid var(--border)">
+        <span style="font-size:12px;font-weight:600;color:${ok?'#065f46':'#991b1b'}">${ok?'✓':'✗'} ${escapeHtml(msg)}</span>
+        <button onclick="this.closest('tr').remove()" style="float:right;background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;line-height:1">×</button>
+      </td>`;
+      row.after(td);
+      setTimeout(()=>{if(td.isConnected)td.remove();},8000);
+    } else {
+      toast(msg, ok?'ok':'warn');
+    }
   }catch(e){toast('Test failed: '+e,'warn');}
   btn.textContent=orig;btn.disabled=false;
 }
