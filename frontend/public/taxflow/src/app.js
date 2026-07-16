@@ -17804,20 +17804,19 @@ function _bioDiagramCSV(){
 }
 
 function showBioGuide(apiKey, type, ip, port){
-  const TCP_TYPES=new Set(['ZKTeco F Series','ZKTeco K Series','ZKTeco iClock','ZKTeco X Face Pro','ZKTeco SpeedFace','ZKTeco ProFace','ZKTeco G Series','ZKTeco UA Series','ZKTeco IN Series','ZKTeco MB Series','ZKTeco','Anviz']);
-  const PUSH_TYPES=new Set(['Suprema','Hikvision']);
   const keyEl=document.getElementById('bio-key-val');
   const keyRow=document.getElementById('bio-guide-key-row');
   const subEl=document.getElementById('bio-guide-sub');
   const stepsEl=document.getElementById('bio-guide-steps');
-  if(keyEl)keyEl.value=apiKey||'';
+  const diagramEl=document.getElementById('bio-guide-diagram');
   const baseUrl=(window.TAXFLOW_API_BASE_URL||'https://app.etaxflow.com').replace(/\/$/,'');
   const punchUrl=`${baseUrl}/api/v1/attendance/punch`;
   const keyDisplay=apiKey||'YOUR_API_KEY';
-  const ipDisplay=ip||'192.168.1.x';
-  const portDisplay=port||4370;
 
-  // Update key row label depending on whether key is freshly generated or not
+  if(keyEl) keyEl.value=apiKey||'';
+  if(diagramEl) diagramEl.innerHTML='';
+  if(subEl) subEl.textContent='Works with ZKTeco · Suprema · Hikvision · Anviz · any HTTP Push device';
+
   const keyLabelEl=document.querySelector('#bio-guide-key-row .fl');
   if(keyLabelEl){
     if(apiKey){
@@ -17826,99 +17825,56 @@ function showBioGuide(apiKey, type, ip, port){
       keyLabelEl.innerHTML='API Key <span style="color:var(--text3);font-weight:400">— key was already shown when device was added. To get a new key, remove and re-add the device.</span>';
     }
   }
+  if(keyRow) keyRow.style.display='';
 
-  let sub='', steps=[], diagram='';
   const I=_BIO_ICONS;
-  const diagramEl=document.getElementById('bio-guide-diagram');
+  const steps=[
+    {icon:I.key, title:'Copy the API Key', color:'var(--accent)',
+     body:'The API key is shown above — copy it now. You will paste it into the device settings in step 4.'},
+    {icon:I.monitor, title:'Open the Device Web Admin Panel', color:'var(--accent)',
+     body:`On a PC on the <strong>same network</strong> as the device, open a browser and go to <code>http://&lt;device-ip&gt;</code>. Default admin credentials:<br><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+      <span style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px 10px;font-size:11px"><strong>Hikvision</strong> — admin / 12345</span>
+      <span style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px 10px;font-size:11px"><strong>Suprema</strong> — admin / admin</span>
+      <span style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px 10px;font-size:11px"><strong>ZKTeco</strong> — admin / 12345</span>
+      <span style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px 10px;font-size:11px"><strong>Anviz</strong> — admin / admin</span>
+     </div>`},
+    {icon:I.settings, title:'Navigate to the Push / Webhook Setting', color:'var(--accent)',
+     body:`Find the HTTP push or webhook menu — exact path by brand:<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Hikvision</strong> → Configuration → Network → Advanced → <em>HTTP Listening</em></div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Suprema</strong> → Settings → Server → <em>HTTP Push</em></div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>ZKTeco ADMS</strong> → Menu → Communication → <em>Cloud Server</em></div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Anviz</strong> → Network → <em>Web Server / HTTP Push</em></div>
+     </div>`},
+    {icon:I.form, title:'Enter TaxFlow Server Details', color:'var(--accent)',
+     body:`<table style="font-size:11px;border-collapse:collapse;width:100%;margin-top:4px">
+      <tr style="background:rgba(99,102,241,.07)"><td style="padding:5px 10px 5px 8px;color:var(--text3);white-space:nowrap;font-weight:600">Server URL</td><td style="padding:5px 8px"><code style="word-break:break-all">${punchUrl}</code></td></tr>
+      <tr><td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Method</td><td style="padding:5px 8px"><code>POST</code></td></tr>
+      <tr style="background:rgba(99,102,241,.07)"><td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Header name</td><td style="padding:5px 8px"><code>X-Device-Key</code></td></tr>
+      <tr><td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Header value</td><td style="padding:5px 8px"><code style="word-break:break-all;font-size:10px">${keyDisplay}</code></td></tr>
+      <tr style="background:rgba(99,102,241,.07)"><td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Data format</td><td style="padding:5px 8px"><code>JSON</code></td></tr>
+     </table>`},
+    {icon:I.toggle, title:'Enable and Save', color:'var(--accent)',
+     body:'Enable the HTTP push / webhook toggle and save the settings. The device will now push every punch record directly to TaxFlow within seconds of each scan.'},
+    {icon:I.check, title:'Test — Punch In &amp; Check Sync Log', color:'#10b981',
+     body:'Scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within a few seconds. If it doesn\'t, check the IP address and API key in your device settings.'},
+  ];
 
-  if(type==='Manual'){
-    if(keyRow)keyRow.style.display='none';
-    diagram=_bioDiagramCSV();
-    sub='CSV Import — no device connection needed';
-    steps=[
-      {icon:I.csv,  title:'Export from device software',body:'Export the attendance log from your device\'s PC software as a <strong>.csv</strong> file.'},
-      {icon:I.form, title:'Required columns',body:'<code>employee_id</code>, <code>punch_time</code> (format: <code>YYYY-MM-DD HH:MM:SS</code>)<br>Optional: <code>employee_name</code>, <code>direction</code> (in / out)'},
-      {icon:I.check,title:'Import in TaxFlow',body:'Go to <strong>HRMS → Attendance tab → ↑ Import CSV</strong> and select the file. Records appear instantly.'},
-    ];
-  } else if(type==='ZKTeco ADMS'){
-    if(keyRow)keyRow.style.display='';
-    diagram=_bioDiagramPush('ZKTeco ADMS');
-    sub='ZKTeco ADMS — device pushes punches automatically, no PC software needed';
-    steps=[
-      {icon:I.key,    title:'Copy the API key above',body:'You will paste it into the device settings in step 4.'},
-      {icon:I.monitor,title:'Open device keypad / screen',body:'On the device itself: <strong>Menu → Communication → ADMS</strong> (label may vary by model).'},
-      {icon:I.settings,title:'Enter server address',body:`Server Address: <code>${baseUrl}</code><br>Port: <code>443</code><br>Enable HTTPS: <strong>Yes</strong>`},
-      {icon:I.form,   title:'Paste the API key on device',body:`Find the field labelled <strong>Cloud Key</strong> or <strong>Server Key</strong> and paste:<br><code style="word-break:break-all;font-size:10px">${keyDisplay}</code>`},
-      {icon:I.toggle, title:'Enable push & save',body:'Save settings. The device will start pushing punches automatically.'},
-      {icon:I.check,  title:'Confirm in Sync Activity Log',body:'Go to <strong>HRMS → Biometric Integration → ⟳ Refresh</strong> — punch records appear within seconds.'},
-    ];
-  } else if(PUSH_TYPES.has(type)){
-    if(keyRow)keyRow.style.display='';
-    diagram=_bioDiagramPush(type);
-    const menuPath=type==='Hikvision'?'Configuration → Network → Advanced → HTTP Listening':type==='Suprema'?'Settings → Server → HTTP Push':'Network → Web Server / HTTP Push';
-    const defaultLogin=type==='Hikvision'?'admin / 12345':type==='Suprema'?'admin / admin':'admin / 12345';
-    sub=`${type} — device pushes punches directly, no local software needed`;
-    steps=[
-      {icon:I.key,     title:'Copy the API key above',body:'You will paste it into the device admin panel in step 4.'},
-      {icon:I.monitor, title:'Open the device web admin panel',body:`On a PC on the <strong>same network</strong> as the device, open a browser and go to:<br><code>http://${ipDisplay}</code><br>Default login: <code>${defaultLogin}</code>`},
-      {icon:I.settings,title:'Find the HTTP Push / Webhook setting',body:`Navigate to: <strong>${menuPath}</strong><br><em>The exact label may differ by firmware version.</em>`},
-      {icon:I.form,    title:'Enter TaxFlow server details',body:`
-        <table style="font-size:11px;border-collapse:collapse;width:100%;margin-top:4px">
-          <tr style="background:rgba(16,185,129,.06)"><td style="padding:4px 10px 4px 6px;color:var(--text3);white-space:nowrap;border-radius:4px 0 0 4px">Server URL</td><td style="padding:4px 6px"><code style="word-break:break-all">${punchUrl}</code></td></tr>
-          <tr><td style="padding:4px 10px 4px 6px;color:var(--text3)">Method</td><td style="padding:4px 6px"><code>POST</code></td></tr>
-          <tr style="background:rgba(16,185,129,.06)"><td style="padding:4px 10px 4px 6px;color:var(--text3)">Header name</td><td style="padding:4px 6px"><code>X-Device-Key</code></td></tr>
-          <tr><td style="padding:4px 10px 4px 6px;color:var(--text3)">Header value</td><td style="padding:4px 6px"><code style="word-break:break-all;font-size:10px">${keyDisplay}</code></td></tr>
-          <tr style="background:rgba(16,185,129,.06)"><td style="padding:4px 10px 4px 6px;color:var(--text3)">Data format</td><td style="padding:4px 6px"><code>JSON</code></td></tr>
-        </table>`},
-      {icon:I.toggle,  title:'Enable and save',body:'Enable the push setting and save. The device will push every punch within seconds.'},
-      {icon:I.check,   title:'Test it',body:'Punch in on the device → go to <strong>HRMS → Biometric Integration → ⟳ Refresh</strong> the Sync Activity Log. The record should appear within a few seconds.'},
-    ];
-  } else if(TCP_TYPES.has(type)){
-    if(keyRow)keyRow.style.display='';
-    diagram=_bioDiagramTCP(type.replace('ZKTeco ',''));
-    const isAnviz=type==='Anviz';
-    sub=`${type} — bridge script runs on the same network as the device`;
-    steps=[
-      {icon:I.key,      title:'Copy the API key above',body:'You will use it in the run command in step 4.'},
-      {icon:I.terminal, title:'Install Python + dependency',body:'On the office PC (Windows/Mac/Linux) on the same LAN as the device:<br><code style="display:block;margin-top:5px;padding:7px 10px;background:var(--surface2);border-radius:6px">pip install pyzk requests</code>'},
-      {icon:I.download, title:'Download zk_bridge.py',body:`Save the bridge script on the office PC:<br><button onclick="downloadBridgeScript()" style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:7px 16px;background:var(--accent);color:#fff;border-radius:8px;font-size:12px;font-weight:700;border:none;cursor:pointer">${I.download} Download zk_bridge.py</button>`},
-      {icon:I.terminal, title:'Run the bridge',body:`Open a terminal in the folder and run:<br><code style="word-break:break-all;display:block;margin-top:6px;padding:8px 10px;background:var(--surface2);border-radius:6px;font-size:10.5px">DEVICE_API_KEY=${keyDisplay} ZK_DEVICE_IP=${ipDisplay} ZK_DEVICE_PORT=${isAnviz?5010:portDisplay} python zk_bridge.py</code>`},
-      {icon:I.check,    title:'Confirm punches are syncing',body:'The script polls every 30 seconds. Watch the <strong>Sync Activity Log</strong> in TaxFlow — records appear after the first sync.'},
-      {icon:I.toggle,   title:'Keep it running (optional)',body:'Run permanently with PM2:<br><code style="display:block;margin-top:5px;padding:7px 10px;background:var(--surface2);border-radius:6px;font-size:10.5px">pm2 start zk_bridge.py --interpreter python3 --name zk-bridge</code><br>Or add it to Windows <strong>Task Scheduler</strong> to auto-start on boot.'},
-    ];
-  } else {
-    if(keyRow)keyRow.style.display='';
-    diagram=_bioDiagramPush('Your device');
-    sub='Configure HTTP push on your device';
-    steps=[
-      {icon:I.key,     title:'Copy the API key above',body:'You will paste it into your device admin panel.'},
-      {icon:I.monitor, title:'Open the device web admin panel',body:`Open a browser on the same network: <code>http://${ipDisplay}</code>. Login with admin credentials.`},
-      {icon:I.settings,title:'Find HTTP Push / Webhook / Cloud Server',body:'Check your device manual — common labels: <em>HTTP Push, Webhook, Cloud Server URL, Server Settings</em>.'},
-      {icon:I.form,    title:'Enter TaxFlow server details',body:`
-        <table style="font-size:11px;border-collapse:collapse;width:100%;margin-top:4px">
-          <tr style="background:rgba(16,185,129,.06)"><td style="padding:4px 10px 4px 6px;color:var(--text3);white-space:nowrap">Server URL</td><td style="padding:4px 6px"><code style="word-break:break-all">${punchUrl}</code></td></tr>
-          <tr><td style="padding:4px 10px 4px 6px;color:var(--text3)">Method</td><td style="padding:4px 6px"><code>POST</code></td></tr>
-          <tr style="background:rgba(16,185,129,.06)"><td style="padding:4px 10px 4px 6px;color:var(--text3)">Header name</td><td style="padding:4px 6px"><code>X-Device-Key</code></td></tr>
-          <tr><td style="padding:4px 10px 4px 6px;color:var(--text3)">Header value</td><td style="padding:4px 6px"><code style="word-break:break-all;font-size:10px">${keyDisplay}</code></td></tr>
-        </table>`},
-      {icon:I.check,   title:'Save and test',body:'Save settings → punch in on the device → check the <strong>Sync Activity Log</strong>. Records appear within seconds.'},
-    ];
-  }
-
-  if(subEl)subEl.textContent=sub;
-  if(diagramEl)diagramEl.innerHTML=diagram;
   if(stepsEl){
     stepsEl.innerHTML=steps.map((s,i)=>`
-      <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:var(--surface2);border-radius:10px;border-left:3px solid var(--accent)">
-        <div style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">${i+1}</div>
+      <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:${i===5?'rgba(16,185,129,.06)':'var(--surface2)'};border-radius:10px;border-left:3px solid ${s.color}">
+        <div style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:${s.color};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">${i+1}</div>
         <div style="flex:1">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
-            <span style="color:var(--accent)">${s.icon}</span>
-            <span style="font-size:12px;font-weight:700">${s.title}</span>
+            <span style="color:${s.color}">${s.icon}</span>
+            <span style="font-size:12px;font-weight:700${i===5?';color:#065f46':''}">${s.title}</span>
           </div>
           <div style="font-size:11.5px;color:var(--text2);line-height:1.7">${s.body}</div>
         </div>
-      </div>`).join('');
+      </div>`).join('')
+    +`<div style="background:var(--surface2);border-radius:10px;padding:10px 14px;font-size:11.5px;color:var(--text2);line-height:1.7">
+        <strong>ZKTeco TCP/IP devices</strong> (F/K/iClock/SpeedFace/ProFace) need the bridge script instead —
+        <button onclick="downloadBridgeScript()" style="background:none;border:none;color:var(--accent);font-weight:700;cursor:pointer;font-size:11.5px;padding:0;text-decoration:underline">Download zk_bridge.py</button>
+      </div>`;
   }
   showM('m-bio-key');
 }
