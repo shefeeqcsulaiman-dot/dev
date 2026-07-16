@@ -17764,13 +17764,23 @@ function showBioGuide(apiKey, type, ip, port){
     ];
   } else if(PUSH_TYPES.has(type)){
     if(keyRow)keyRow.style.display='';
-    sub=`${type} — configure HTTP push on the device`;
+    const menuPath=type==='Hikvision'?'Configuration → Network → Advanced → HTTP Listening':type==='Suprema'?'Settings → Server → HTTP Push':'Network → Web Server / HTTP Push';
+    const defaultLogin=type==='Hikvision'?'admin / 12345':type==='Suprema'?'admin / admin':'admin / 12345';
+    sub=`${type} — device pushes punches directly, no local software needed`;
     steps=[
-      {n:1,title:'Copy the API key above',body:'You will paste it into the device\'s webhook header in step 3.'},
-      {n:2,title:'Open device admin panel',body:`Open your <strong>${type}</strong> web interface (usually at <code>http://${ipDisplay}</code>) and find <strong>HTTP Push</strong> or <strong>Webhook</strong> settings.`},
-      {n:3,title:'Set the push URL',body:`URL: <code style="word-break:break-all">${punchUrl}</code><br>Method: <strong>POST</strong><br>Content-Type: <code>application/json</code>`},
-      {n:4,title:'Add the authentication header',body:`Header name: <code>X-Device-Key</code><br>Value: <code style="word-break:break-all">${keyDisplay}</code>`},
-      {n:5,title:'Enable and save',body:'Save the settings. The device will push every punch automatically. Confirm in the <strong>Sync Activity Log</strong>.'},
+      {n:1,title:'Copy the API key above',body:'You will paste it into the device admin panel in step 4.'},
+      {n:2,title:'Open the device web admin panel',body:`On a PC on the <strong>same network</strong> as the device, open a browser and go to:<br><code>http://${ipDisplay}</code><br>Login with admin credentials (default: <code>${defaultLogin}</code>)`},
+      {n:3,title:'Find the HTTP Push / Webhook setting',body:`Navigate to: <strong>${menuPath}</strong><br><em>The exact menu name may differ by firmware version.</em>`},
+      {n:4,title:'Enter TaxFlow server details',body:`
+        <table style="font-size:11px;border-collapse:collapse;width:100%;margin-top:4px">
+          <tr><td style="padding:3px 8px 3px 0;color:var(--text3);white-space:nowrap">Server URL</td><td><code style="word-break:break-all">${punchUrl}</code></td></tr>
+          <tr><td style="padding:3px 8px 3px 0;color:var(--text3)">Method</td><td><code>POST</code></td></tr>
+          <tr><td style="padding:3px 8px 3px 0;color:var(--text3)">Header name</td><td><code>X-Device-Key</code></td></tr>
+          <tr><td style="padding:3px 8px 3px 0;color:var(--text3)">Header value</td><td><code style="word-break:break-all">${keyDisplay}</code></td></tr>
+          <tr><td style="padding:3px 8px 3px 0;color:var(--text3)">Data format</td><td><code>JSON</code></td></tr>
+        </table>`},
+      {n:5,title:'Enable and save',body:'Enable the push setting and save. The device will push every punch within seconds.'},
+      {n:6,title:'Test it',body:'Punch in on the device → go to <strong>HRMS → Biometric Integration → ⟳ Refresh</strong> the Sync Activity Log. The record should appear within a few seconds.'},
     ];
   } else if(TCP_TYPES.has(type)){
     if(keyRow)keyRow.style.display='';
@@ -17786,8 +17796,20 @@ function showBioGuide(apiKey, type, ip, port){
     ];
   } else {
     if(keyRow)keyRow.style.display='';
-    sub='Follow the steps for your device';
-    steps=[{n:1,title:'Use the API key',body:`Set <code>X-Device-Key: ${keyDisplay}</code> header when POSTing punches to:<br><code>${punchUrl}</code>`}];
+    sub='Configure HTTP push on your device';
+    steps=[
+      {n:1,title:'Copy the API key above',body:'You will paste it into your device admin panel.'},
+      {n:2,title:'Open the device web admin panel',body:`Open a browser on the same network and go to <code>http://${ipDisplay}</code>. Login with admin credentials.`},
+      {n:3,title:'Find HTTP Push / Webhook / Cloud Server setting',body:'Check your device manual for the exact menu name — common labels: <em>HTTP Push, Webhook, Cloud Server URL, Server Settings</em>.'},
+      {n:4,title:'Enter TaxFlow server details',body:`
+        <table style="font-size:11px;border-collapse:collapse;width:100%;margin-top:4px">
+          <tr><td style="padding:3px 8px 3px 0;color:var(--text3);white-space:nowrap">Server URL</td><td><code style="word-break:break-all">${punchUrl}</code></td></tr>
+          <tr><td style="padding:3px 8px 3px 0;color:var(--text3)">Method</td><td><code>POST</code></td></tr>
+          <tr><td style="padding:3px 8px 3px 0;color:var(--text3)">Header name</td><td><code>X-Device-Key</code></td></tr>
+          <tr><td style="padding:3px 8px 3px 0;color:var(--text3)">Header value</td><td><code style="word-break:break-all">${keyDisplay}</code></td></tr>
+        </table>`},
+      {n:5,title:'Save and test',body:'Save settings → punch in on the device → check the <strong>Sync Activity Log</strong> in TaxFlow. Records appear within seconds.'},
+    ];
   }
 
   if(subEl)subEl.textContent=sub;
