@@ -394,7 +394,7 @@ def attendance_summary(
 @router.get("/bridge-script")
 def download_bridge_script(
     current_user: User = Depends(get_current_user),
-) -> PlainTextResponse:
+) -> PlainTextResponse:  # auth keeps it scoped to logged-in users
     """Serve zk_bridge.py as a downloadable file."""
     candidates = [
         pathlib.Path(__file__).parent.parent.parent / "zk_bridge.py",  # backend/zk_bridge.py

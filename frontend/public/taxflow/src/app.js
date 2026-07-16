@@ -17711,6 +17711,23 @@ function onBioDevTypeChange(val){
   }
 }
 
+async function downloadBridgeScript(){
+  try{
+    const token=localStorage.getItem('taxflow_token')||'';
+    const base=(window.TAXFLOW_API_BASE_URL||'').replace(/\/$/,'')||'http://localhost:8000';
+    const resp=await fetch(`${base}/api/v1/attendance/bridge-script`,{
+      headers:{Authorization:`Bearer ${token}`}
+    });
+    if(!resp.ok){toast('Download failed: '+resp.status,'warn');return;}
+    const text=await resp.text();
+    const blob=new Blob([text],{type:'text/plain'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download='zk_bridge.py';a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),2000);
+  }catch(e){toast('Download error: '+e,'warn');}
+}
+
 function showBioGuide(apiKey, type, ip, port){
   const TCP_TYPES=new Set(['ZKTeco F Series','ZKTeco K Series','ZKTeco iClock','ZKTeco X Face Pro','ZKTeco SpeedFace','ZKTeco ProFace','ZKTeco G Series','ZKTeco UA Series','ZKTeco IN Series','ZKTeco MB Series','ZKTeco','Anviz']);
   const PUSH_TYPES=new Set(['Suprema','Hikvision']);
@@ -17762,7 +17779,7 @@ function showBioGuide(apiKey, type, ip, port){
     steps=[
       {n:1,title:'Copy the API key above',body:'You will use it in the run command in step 4.'},
       {n:2,title:'Install Python + dependency',body:'On the office PC (Windows/Mac/Linux) on the same LAN as the device:<br><code>pip install pyzk requests</code>'},
-      {n:3,title:'Download zk_bridge.py',body:`Download the bridge script and place it on the office PC:<br><a href="${baseUrl}/api/v1/attendance/bridge-script" download="zk_bridge.py" style="display:inline-block;margin-top:6px;padding:6px 14px;background:var(--accent);color:#fff;border-radius:7px;font-size:12px;font-weight:700;text-decoration:none">↓ Download zk_bridge.py</a>`},
+      {n:3,title:'Download zk_bridge.py',body:`Download the bridge script and place it on the office PC:<br><button onclick="downloadBridgeScript()" style="display:inline-block;margin-top:6px;padding:6px 14px;background:var(--accent);color:#fff;border-radius:7px;font-size:12px;font-weight:700;border:none;cursor:pointer">↓ Download zk_bridge.py</button>`},
       {n:4,title:'Run the bridge',body:`Open a terminal and run:<br><code style="word-break:break-all;display:block;margin-top:6px;padding:8px;background:var(--surface2);border-radius:6px">DEVICE_API_KEY=${keyDisplay} ZK_DEVICE_IP=${ipDisplay} ZK_DEVICE_PORT=${isAnviz?5010:portDisplay} python zk_bridge.py</code>`},
       {n:5,title:'Confirm punches are syncing',body:'The script polls every 30 seconds. Watch the <strong>Sync Activity Log</strong> in TaxFlow — punch records appear shortly after the first sync.'},
       {n:6,title:'Keep it running (optional)',body:'To run permanently: <code>pm2 start zk_bridge.py --interpreter python3 --name zk-bridge</code><br>Or set it as a Windows Startup Task.'},
