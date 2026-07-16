@@ -17728,6 +17728,81 @@ async function downloadBridgeScript(){
   }catch(e){toast('Download error: '+e,'warn');}
 }
 
+// ── SVG step icons ────────────────────────────────────────────────────────────
+const _BIO_ICONS={
+  key:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="M21 2l-9.6 9.6"/><path d="M15.5 7.5l3 3L22 7l-3-3"/></svg>`,
+  monitor:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>`,
+  settings:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+  form:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`,
+  toggle:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="7" width="22" height="10" rx="5"/><circle cx="16" cy="12" r="3" fill="currentColor"/></svg>`,
+  check:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+  download:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+  terminal:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`,
+  csv:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>`,
+};
+
+// ── Flow diagrams ─────────────────────────────────────────────────────────────
+function _bioDiagramPush(label){
+  return `<div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border-radius:12px;padding:14px 16px 10px;margin-bottom:2px">
+    <svg viewBox="0 0 380 60" width="100%" style="display:block">
+      <rect x="4" y="10" width="88" height="40" rx="8" fill="#0ea5e9" fill-opacity=".12" stroke="#0ea5e9" stroke-width="1.5"/>
+      <text x="48" y="27" text-anchor="middle" font-size="9.5" font-weight="700" fill="#0369a1">BIOMETRIC</text>
+      <text x="48" y="41" text-anchor="middle" font-size="9.5" font-weight="700" fill="#0369a1">DEVICE</text>
+      <line x1="94" y1="30" x2="155" y2="30" stroke="#10b981" stroke-width="2" stroke-dasharray="5,3"/>
+      <polygon points="153,26 161,30 153,34" fill="#10b981"/>
+      <text x="126" y="22" text-anchor="middle" font-size="8.5" fill="#065f46" font-weight="600">HTTPS Push</text>
+      <rect x="163" y="10" width="210" height="40" rx="8" fill="#10b981" fill-opacity=".12" stroke="#10b981" stroke-width="1.5"/>
+      <text x="268" y="27" text-anchor="middle" font-size="9.5" font-weight="700" fill="#065f46">TaxFlow Server</text>
+      <text x="268" y="41" text-anchor="middle" font-size="9" fill="#065f46">app.etaxflow.com</text>
+    </svg>
+    <div style="text-align:center;font-size:11px;color:#166534;font-weight:600;margin-top:2px">✓ No local software needed — ${label} pushes punches directly to TaxFlow</div>
+  </div>`;
+}
+function _bioDiagramTCP(deviceLabel){
+  return `<div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border-radius:12px;padding:14px 16px 10px;margin-bottom:2px">
+    <svg viewBox="0 0 480 60" width="100%" style="display:block">
+      <rect x="4" y="10" width="88" height="40" rx="8" fill="#0ea5e9" fill-opacity=".12" stroke="#0ea5e9" stroke-width="1.5"/>
+      <text x="48" y="27" text-anchor="middle" font-size="9" font-weight="700" fill="#0369a1">${deviceLabel}</text>
+      <text x="48" y="41" text-anchor="middle" font-size="9" font-weight="700" fill="#0369a1">DEVICE</text>
+      <line x1="94" y1="30" x2="145" y2="30" stroke="#6366f1" stroke-width="2" stroke-dasharray="5,3"/>
+      <polygon points="143,26 151,30 143,34" fill="#6366f1"/>
+      <text x="119" y="22" text-anchor="middle" font-size="8" fill="#4338ca" font-weight="600">LAN</text>
+      <rect x="153" y="10" width="110" height="40" rx="8" fill="#6366f1" fill-opacity=".12" stroke="#6366f1" stroke-width="1.5"/>
+      <text x="208" y="27" text-anchor="middle" font-size="9" font-weight="700" fill="#3730a3">Office PC</text>
+      <text x="208" y="41" text-anchor="middle" font-size="8.5" fill="#3730a3">zk_bridge.py</text>
+      <line x1="265" y1="30" x2="315" y2="30" stroke="#10b981" stroke-width="2" stroke-dasharray="5,3"/>
+      <polygon points="313,26 321,30 313,34" fill="#10b981"/>
+      <text x="290" y="22" text-anchor="middle" font-size="8" fill="#065f46" font-weight="600">HTTPS</text>
+      <rect x="323" y="10" width="152" height="40" rx="8" fill="#10b981" fill-opacity=".12" stroke="#10b981" stroke-width="1.5"/>
+      <text x="399" y="27" text-anchor="middle" font-size="9.5" font-weight="700" fill="#065f46">TaxFlow Server</text>
+      <text x="399" y="41" text-anchor="middle" font-size="9" fill="#065f46">app.etaxflow.com</text>
+    </svg>
+    <div style="text-align:center;font-size:11px;color:#1e40af;font-weight:600;margin-top:2px">Bridge script runs on an office PC on the same network as the device</div>
+  </div>`;
+}
+function _bioDiagramCSV(){
+  return `<div style="background:linear-gradient(135deg,#faf5ff,#ede9fe);border-radius:12px;padding:14px 16px 10px;margin-bottom:2px">
+    <svg viewBox="0 0 380 60" width="100%" style="display:block">
+      <rect x="4" y="10" width="100" height="40" rx="8" fill="#8b5cf6" fill-opacity=".12" stroke="#8b5cf6" stroke-width="1.5"/>
+      <text x="54" y="27" text-anchor="middle" font-size="9" font-weight="700" fill="#5b21b6">Device</text>
+      <text x="54" y="41" text-anchor="middle" font-size="9" fill="#5b21b6">Software</text>
+      <line x1="106" y1="30" x2="155" y2="30" stroke="#8b5cf6" stroke-width="2" stroke-dasharray="5,3"/>
+      <polygon points="153,26 161,30 153,34" fill="#8b5cf6"/>
+      <text x="131" y="22" text-anchor="middle" font-size="8" fill="#5b21b6" font-weight="600">Export</text>
+      <rect x="163" y="10" width="70" height="40" rx="8" fill="#f59e0b" fill-opacity=".15" stroke="#f59e0b" stroke-width="1.5"/>
+      <text x="198" y="27" text-anchor="middle" font-size="9" font-weight="700" fill="#78350f">CSV</text>
+      <text x="198" y="41" text-anchor="middle" font-size="9" fill="#78350f">File</text>
+      <line x1="235" y1="30" x2="283" y2="30" stroke="#10b981" stroke-width="2" stroke-dasharray="5,3"/>
+      <polygon points="281,26 289,30 281,34" fill="#10b981"/>
+      <text x="259" y="22" text-anchor="middle" font-size="8" fill="#065f46" font-weight="600">Import</text>
+      <rect x="291" y="10" width="86" height="40" rx="8" fill="#10b981" fill-opacity=".12" stroke="#10b981" stroke-width="1.5"/>
+      <text x="334" y="27" text-anchor="middle" font-size="9.5" font-weight="700" fill="#065f46">TaxFlow</text>
+      <text x="334" y="41" text-anchor="middle" font-size="9" fill="#065f46">HRMS</text>
+    </svg>
+    <div style="text-align:center;font-size:11px;color:#5b21b6;font-weight:600;margin-top:2px">Export CSV from device software → import into TaxFlow manually</div>
+  </div>`;
+}
+
 function showBioGuide(apiKey, type, ip, port){
   const TCP_TYPES=new Set(['ZKTeco F Series','ZKTeco K Series','ZKTeco iClock','ZKTeco X Face Pro','ZKTeco SpeedFace','ZKTeco ProFace','ZKTeco G Series','ZKTeco UA Series','ZKTeco IN Series','ZKTeco MB Series','ZKTeco','Anviz']);
   const PUSH_TYPES=new Set(['Suprema','Hikvision']);
@@ -17742,82 +17817,97 @@ function showBioGuide(apiKey, type, ip, port){
   const ipDisplay=ip||'192.168.1.x';
   const portDisplay=port||4370;
 
-  let sub='', steps=[];
+  let sub='', steps=[], diagram='';
+  const I=_BIO_ICONS;
+  const diagramEl=document.getElementById('bio-guide-diagram');
 
   if(type==='Manual'){
     if(keyRow)keyRow.style.display='none';
+    diagram=_bioDiagramCSV();
     sub='CSV Import — no device connection needed';
     steps=[
-      {n:1,title:'Export from device software',body:'Export the attendance log from your device\'s PC software as a <strong>.csv</strong> file.'},
-      {n:2,title:'Required columns',body:'<code>employee_id</code>, <code>punch_time</code> (format: <code>YYYY-MM-DD HH:MM:SS</code>)<br>Optional: <code>employee_name</code>, <code>direction</code> (in / out)'},
-      {n:3,title:'Import in TaxFlow',body:'Go to <strong>HRMS → Attendance tab → ↑ Import CSV</strong> and select the file. Records appear instantly.'},
+      {icon:I.csv,  title:'Export from device software',body:'Export the attendance log from your device\'s PC software as a <strong>.csv</strong> file.'},
+      {icon:I.form, title:'Required columns',body:'<code>employee_id</code>, <code>punch_time</code> (format: <code>YYYY-MM-DD HH:MM:SS</code>)<br>Optional: <code>employee_name</code>, <code>direction</code> (in / out)'},
+      {icon:I.check,title:'Import in TaxFlow',body:'Go to <strong>HRMS → Attendance tab → ↑ Import CSV</strong> and select the file. Records appear instantly.'},
     ];
   } else if(type==='ZKTeco ADMS'){
     if(keyRow)keyRow.style.display='';
-    sub='ZKTeco ADMS — device pushes punches automatically';
+    diagram=_bioDiagramPush('ZKTeco ADMS');
+    sub='ZKTeco ADMS — device pushes punches automatically, no PC software needed';
     steps=[
-      {n:1,title:'Copy the API key above',body:'You will paste it into the device settings in step 3.'},
-      {n:2,title:'Open your device admin panel',body:'On the device screen: <strong>Menu → Communication → ADMS</strong> (may differ by model).'},
-      {n:3,title:'Enter server settings',body:`Server Address: <code>${baseUrl}</code><br>Port: <code>443</code><br>Enable HTTPS: <strong>Yes</strong>`},
-      {n:4,title:'Set the API key on device',body:`Look for <strong>Cloud Key</strong> or <strong>Server Key</strong> field and paste your API key:<br><code style="word-break:break-all">${keyDisplay}</code>`},
-      {n:5,title:'Enable push & save',body:'Save settings. The device will start pushing punches automatically. Check the <strong>Sync Activity Log</strong> below to confirm.'},
+      {icon:I.key,    title:'Copy the API key above',body:'You will paste it into the device settings in step 4.'},
+      {icon:I.monitor,title:'Open device keypad / screen',body:'On the device itself: <strong>Menu → Communication → ADMS</strong> (label may vary by model).'},
+      {icon:I.settings,title:'Enter server address',body:`Server Address: <code>${baseUrl}</code><br>Port: <code>443</code><br>Enable HTTPS: <strong>Yes</strong>`},
+      {icon:I.form,   title:'Paste the API key on device',body:`Find the field labelled <strong>Cloud Key</strong> or <strong>Server Key</strong> and paste:<br><code style="word-break:break-all;font-size:10px">${keyDisplay}</code>`},
+      {icon:I.toggle, title:'Enable push & save',body:'Save settings. The device will start pushing punches automatically.'},
+      {icon:I.check,  title:'Confirm in Sync Activity Log',body:'Go to <strong>HRMS → Biometric Integration → ⟳ Refresh</strong> — punch records appear within seconds.'},
     ];
   } else if(PUSH_TYPES.has(type)){
     if(keyRow)keyRow.style.display='';
+    diagram=_bioDiagramPush(type);
     const menuPath=type==='Hikvision'?'Configuration → Network → Advanced → HTTP Listening':type==='Suprema'?'Settings → Server → HTTP Push':'Network → Web Server / HTTP Push';
     const defaultLogin=type==='Hikvision'?'admin / 12345':type==='Suprema'?'admin / admin':'admin / 12345';
     sub=`${type} — device pushes punches directly, no local software needed`;
     steps=[
-      {n:1,title:'Copy the API key above',body:'You will paste it into the device admin panel in step 4.'},
-      {n:2,title:'Open the device web admin panel',body:`On a PC on the <strong>same network</strong> as the device, open a browser and go to:<br><code>http://${ipDisplay}</code><br>Login with admin credentials (default: <code>${defaultLogin}</code>)`},
-      {n:3,title:'Find the HTTP Push / Webhook setting',body:`Navigate to: <strong>${menuPath}</strong><br><em>The exact menu name may differ by firmware version.</em>`},
-      {n:4,title:'Enter TaxFlow server details',body:`
+      {icon:I.key,     title:'Copy the API key above',body:'You will paste it into the device admin panel in step 4.'},
+      {icon:I.monitor, title:'Open the device web admin panel',body:`On a PC on the <strong>same network</strong> as the device, open a browser and go to:<br><code>http://${ipDisplay}</code><br>Default login: <code>${defaultLogin}</code>`},
+      {icon:I.settings,title:'Find the HTTP Push / Webhook setting',body:`Navigate to: <strong>${menuPath}</strong><br><em>The exact label may differ by firmware version.</em>`},
+      {icon:I.form,    title:'Enter TaxFlow server details',body:`
         <table style="font-size:11px;border-collapse:collapse;width:100%;margin-top:4px">
-          <tr><td style="padding:3px 8px 3px 0;color:var(--text3);white-space:nowrap">Server URL</td><td><code style="word-break:break-all">${punchUrl}</code></td></tr>
-          <tr><td style="padding:3px 8px 3px 0;color:var(--text3)">Method</td><td><code>POST</code></td></tr>
-          <tr><td style="padding:3px 8px 3px 0;color:var(--text3)">Header name</td><td><code>X-Device-Key</code></td></tr>
-          <tr><td style="padding:3px 8px 3px 0;color:var(--text3)">Header value</td><td><code style="word-break:break-all">${keyDisplay}</code></td></tr>
-          <tr><td style="padding:3px 8px 3px 0;color:var(--text3)">Data format</td><td><code>JSON</code></td></tr>
+          <tr style="background:rgba(16,185,129,.06)"><td style="padding:4px 10px 4px 6px;color:var(--text3);white-space:nowrap;border-radius:4px 0 0 4px">Server URL</td><td style="padding:4px 6px"><code style="word-break:break-all">${punchUrl}</code></td></tr>
+          <tr><td style="padding:4px 10px 4px 6px;color:var(--text3)">Method</td><td style="padding:4px 6px"><code>POST</code></td></tr>
+          <tr style="background:rgba(16,185,129,.06)"><td style="padding:4px 10px 4px 6px;color:var(--text3)">Header name</td><td style="padding:4px 6px"><code>X-Device-Key</code></td></tr>
+          <tr><td style="padding:4px 10px 4px 6px;color:var(--text3)">Header value</td><td style="padding:4px 6px"><code style="word-break:break-all;font-size:10px">${keyDisplay}</code></td></tr>
+          <tr style="background:rgba(16,185,129,.06)"><td style="padding:4px 10px 4px 6px;color:var(--text3)">Data format</td><td style="padding:4px 6px"><code>JSON</code></td></tr>
         </table>`},
-      {n:5,title:'Enable and save',body:'Enable the push setting and save. The device will push every punch within seconds.'},
-      {n:6,title:'Test it',body:'Punch in on the device → go to <strong>HRMS → Biometric Integration → ⟳ Refresh</strong> the Sync Activity Log. The record should appear within a few seconds.'},
+      {icon:I.toggle,  title:'Enable and save',body:'Enable the push setting and save. The device will push every punch within seconds.'},
+      {icon:I.check,   title:'Test it',body:'Punch in on the device → go to <strong>HRMS → Biometric Integration → ⟳ Refresh</strong> the Sync Activity Log. The record should appear within a few seconds.'},
     ];
   } else if(TCP_TYPES.has(type)){
     if(keyRow)keyRow.style.display='';
+    diagram=_bioDiagramTCP(type.replace('ZKTeco ',''));
     const isAnviz=type==='Anviz';
-    sub=`${type} — run the bridge script on the same network as the device`;
+    sub=`${type} — bridge script runs on the same network as the device`;
     steps=[
-      {n:1,title:'Copy the API key above',body:'You will use it in the run command in step 4.'},
-      {n:2,title:'Install Python + dependency',body:'On the office PC (Windows/Mac/Linux) on the same LAN as the device:<br><code>pip install pyzk requests</code>'},
-      {n:3,title:'Download zk_bridge.py',body:`Download the bridge script and place it on the office PC:<br><button onclick="downloadBridgeScript()" style="display:inline-block;margin-top:6px;padding:6px 14px;background:var(--accent);color:#fff;border-radius:7px;font-size:12px;font-weight:700;border:none;cursor:pointer">↓ Download zk_bridge.py</button>`},
-      {n:4,title:'Run the bridge',body:`Open a terminal and run:<br><code style="word-break:break-all;display:block;margin-top:6px;padding:8px;background:var(--surface2);border-radius:6px">DEVICE_API_KEY=${keyDisplay} ZK_DEVICE_IP=${ipDisplay} ZK_DEVICE_PORT=${isAnviz?5010:portDisplay} python zk_bridge.py</code>`},
-      {n:5,title:'Confirm punches are syncing',body:'The script polls every 30 seconds. Watch the <strong>Sync Activity Log</strong> in TaxFlow — punch records appear shortly after the first sync.'},
-      {n:6,title:'Keep it running (optional)',body:'To run permanently: <code>pm2 start zk_bridge.py --interpreter python3 --name zk-bridge</code><br>Or set it as a Windows Startup Task.'},
+      {icon:I.key,      title:'Copy the API key above',body:'You will use it in the run command in step 4.'},
+      {icon:I.terminal, title:'Install Python + dependency',body:'On the office PC (Windows/Mac/Linux) on the same LAN as the device:<br><code style="display:block;margin-top:5px;padding:7px 10px;background:var(--surface2);border-radius:6px">pip install pyzk requests</code>'},
+      {icon:I.download, title:'Download zk_bridge.py',body:`Save the bridge script on the office PC:<br><button onclick="downloadBridgeScript()" style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:7px 16px;background:var(--accent);color:#fff;border-radius:8px;font-size:12px;font-weight:700;border:none;cursor:pointer">${I.download} Download zk_bridge.py</button>`},
+      {icon:I.terminal, title:'Run the bridge',body:`Open a terminal in the folder and run:<br><code style="word-break:break-all;display:block;margin-top:6px;padding:8px 10px;background:var(--surface2);border-radius:6px;font-size:10.5px">DEVICE_API_KEY=${keyDisplay} ZK_DEVICE_IP=${ipDisplay} ZK_DEVICE_PORT=${isAnviz?5010:portDisplay} python zk_bridge.py</code>`},
+      {icon:I.check,    title:'Confirm punches are syncing',body:'The script polls every 30 seconds. Watch the <strong>Sync Activity Log</strong> in TaxFlow — records appear after the first sync.'},
+      {icon:I.toggle,   title:'Keep it running (optional)',body:'Run permanently with PM2:<br><code style="display:block;margin-top:5px;padding:7px 10px;background:var(--surface2);border-radius:6px;font-size:10.5px">pm2 start zk_bridge.py --interpreter python3 --name zk-bridge</code><br>Or add it to Windows <strong>Task Scheduler</strong> to auto-start on boot.'},
     ];
   } else {
     if(keyRow)keyRow.style.display='';
+    diagram=_bioDiagramPush('Your device');
     sub='Configure HTTP push on your device';
     steps=[
-      {n:1,title:'Copy the API key above',body:'You will paste it into your device admin panel.'},
-      {n:2,title:'Open the device web admin panel',body:`Open a browser on the same network and go to <code>http://${ipDisplay}</code>. Login with admin credentials.`},
-      {n:3,title:'Find HTTP Push / Webhook / Cloud Server setting',body:'Check your device manual for the exact menu name — common labels: <em>HTTP Push, Webhook, Cloud Server URL, Server Settings</em>.'},
-      {n:4,title:'Enter TaxFlow server details',body:`
+      {icon:I.key,     title:'Copy the API key above',body:'You will paste it into your device admin panel.'},
+      {icon:I.monitor, title:'Open the device web admin panel',body:`Open a browser on the same network: <code>http://${ipDisplay}</code>. Login with admin credentials.`},
+      {icon:I.settings,title:'Find HTTP Push / Webhook / Cloud Server',body:'Check your device manual — common labels: <em>HTTP Push, Webhook, Cloud Server URL, Server Settings</em>.'},
+      {icon:I.form,    title:'Enter TaxFlow server details',body:`
         <table style="font-size:11px;border-collapse:collapse;width:100%;margin-top:4px">
-          <tr><td style="padding:3px 8px 3px 0;color:var(--text3);white-space:nowrap">Server URL</td><td><code style="word-break:break-all">${punchUrl}</code></td></tr>
-          <tr><td style="padding:3px 8px 3px 0;color:var(--text3)">Method</td><td><code>POST</code></td></tr>
-          <tr><td style="padding:3px 8px 3px 0;color:var(--text3)">Header name</td><td><code>X-Device-Key</code></td></tr>
-          <tr><td style="padding:3px 8px 3px 0;color:var(--text3)">Header value</td><td><code style="word-break:break-all">${keyDisplay}</code></td></tr>
+          <tr style="background:rgba(16,185,129,.06)"><td style="padding:4px 10px 4px 6px;color:var(--text3);white-space:nowrap">Server URL</td><td style="padding:4px 6px"><code style="word-break:break-all">${punchUrl}</code></td></tr>
+          <tr><td style="padding:4px 10px 4px 6px;color:var(--text3)">Method</td><td style="padding:4px 6px"><code>POST</code></td></tr>
+          <tr style="background:rgba(16,185,129,.06)"><td style="padding:4px 10px 4px 6px;color:var(--text3)">Header name</td><td style="padding:4px 6px"><code>X-Device-Key</code></td></tr>
+          <tr><td style="padding:4px 10px 4px 6px;color:var(--text3)">Header value</td><td style="padding:4px 6px"><code style="word-break:break-all;font-size:10px">${keyDisplay}</code></td></tr>
         </table>`},
-      {n:5,title:'Save and test',body:'Save settings → punch in on the device → check the <strong>Sync Activity Log</strong> in TaxFlow. Records appear within seconds.'},
+      {icon:I.check,   title:'Save and test',body:'Save settings → punch in on the device → check the <strong>Sync Activity Log</strong>. Records appear within seconds.'},
     ];
   }
 
   if(subEl)subEl.textContent=sub;
+  if(diagramEl)diagramEl.innerHTML=diagram;
   if(stepsEl){
-    stepsEl.innerHTML=steps.map(s=>`
-      <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:var(--surface2);border-radius:10px">
-        <div style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center">${s.n}</div>
-        <div><div style="font-size:12px;font-weight:700;margin-bottom:3px">${s.title}</div><div style="font-size:11.5px;color:var(--text2);line-height:1.6">${s.body}</div></div>
+    stepsEl.innerHTML=steps.map((s,i)=>`
+      <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:var(--surface2);border-radius:10px;border-left:3px solid var(--accent)">
+        <div style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">${i+1}</div>
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+            <span style="color:var(--accent)">${s.icon}</span>
+            <span style="font-size:12px;font-weight:700">${s.title}</span>
+          </div>
+          <div style="font-size:11.5px;color:var(--text2);line-height:1.7">${s.body}</div>
+        </div>
       </div>`).join('');
   }
   showM('m-bio-key');
