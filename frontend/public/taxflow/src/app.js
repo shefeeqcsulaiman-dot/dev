@@ -17947,6 +17947,13 @@ function _bioDiagramCSV(){
   </div>`;
 }
 
+function _bioCopy(text,btn){
+  const done=()=>{const orig=btn.textContent;btn.textContent='✓';btn.style.color='#10b981';setTimeout(()=>{btn.textContent=orig;btn.style.color='';},1500);};
+  if(navigator.clipboard&&window.isSecureContext){
+    navigator.clipboard.writeText(text).then(done).catch(()=>{_copyFallback(text);done();});
+  }else{_copyFallback(text);done();}
+}
+
 function copyBioKey(){
   const val=document.getElementById('bio-key-val')?.value||'';
   if(!val){toast('No key to copy','warn');return;}
@@ -18008,11 +18015,31 @@ function showBioGuide(apiKey, type, ip, port){
      </div>`},
     {icon:I.form, title:'Enter TaxFlow Server Details', color:'var(--accent)',
      body:`<table style="font-size:11px;border-collapse:collapse;width:100%;margin-top:4px">
-      <tr style="background:rgba(99,102,241,.07)"><td style="padding:5px 10px 5px 8px;color:var(--text3);white-space:nowrap;font-weight:600">Server URL</td><td style="padding:5px 8px"><code style="word-break:break-all">${punchUrl}</code></td></tr>
-      <tr><td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Method</td><td style="padding:5px 8px"><code>POST</code></td></tr>
-      <tr style="background:rgba(99,102,241,.07)"><td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Header name</td><td style="padding:5px 8px"><code>X-Device-Key</code></td></tr>
-      <tr><td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Header value</td><td style="padding:5px 8px"><code style="word-break:break-all;font-size:10px">${keyDisplay}</code></td></tr>
-      <tr style="background:rgba(99,102,241,.07)"><td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Data format</td><td style="padding:5px 8px"><code>JSON</code></td></tr>
+      <tr style="background:rgba(99,102,241,.07)">
+        <td style="padding:5px 10px 5px 8px;color:var(--text3);white-space:nowrap;font-weight:600;width:90px">Server URL</td>
+        <td style="padding:5px 8px"><code style="word-break:break-all">${punchUrl}</code></td>
+        <td style="padding:5px 8px 5px 0;width:52px"><button onclick="_bioCopy('${punchUrl.replace(/'/g,"\\'")}',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer;white-space:nowrap">Copy</button></td>
+      </tr>
+      <tr>
+        <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Method</td>
+        <td style="padding:5px 8px"><code>POST</code></td>
+        <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('POST',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
+      </tr>
+      <tr style="background:rgba(99,102,241,.07)">
+        <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Header name</td>
+        <td style="padding:5px 8px"><code>X-Device-Key</code></td>
+        <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('X-Device-Key',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
+      </tr>
+      <tr>
+        <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Header value</td>
+        <td style="padding:5px 8px"><code style="word-break:break-all;font-size:10px">${keyDisplay}</code></td>
+        <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy(${JSON.stringify(keyDisplay)},this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
+      </tr>
+      <tr style="background:rgba(99,102,241,.07)">
+        <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Data format</td>
+        <td style="padding:5px 8px"><code>JSON</code></td>
+        <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('JSON',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
+      </tr>
      </table>`},
     {icon:I.toggle, title:'Enable and Save', color:'var(--accent)',
      body:'Enable the HTTP push / webhook toggle and save the settings. The device will now push every punch record directly to TaxFlow within seconds of each scan.'},
