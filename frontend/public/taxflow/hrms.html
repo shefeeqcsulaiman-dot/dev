@@ -2460,12 +2460,25 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 </div>
 
 <div class="overlay" id="m-bio-key" onclick="closeOvBg(event,'m-bio-key')">
-  <div class="modal"><div class="modal-title">Device API Key</div><div class="modal-sub">Save this key — it is shown only once</div>
-    <div class="fg"><label class="fl">API Key</label><div style="display:flex;gap:6px"><input class="fi mono" id="bio-key-val" readonly style="flex:1"><button class="btn btn-g btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('bio-key-val').value);toast('Copied','ok')">Copy</button></div></div>
-    <div style="background:var(--amber-bg);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--amber);margin-top:8px">
-      Use this key in <code>zk_bridge.py</code> as the <code>DEVICE_API_KEY</code> environment variable.
+  <div class="modal" style="max-width:580px">
+    <div class="modal-title">Device Setup Guide</div>
+    <div class="modal-sub" id="bio-guide-sub">Follow the steps below to connect your device</div>
+
+    <!-- API Key row (shown for all types except Manual) -->
+    <div id="bio-guide-key-row" style="margin-bottom:14px">
+      <label class="fl">API Key <span style="color:var(--amber);font-weight:700">— copy now, shown only once</span></label>
+      <div style="display:flex;gap:6px;margin-top:4px">
+        <input class="fi mono" id="bio-key-val" readonly style="flex:1;font-size:12px">
+        <button class="btn btn-g btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('bio-key-val').value);toast('Copied!','ok')">Copy</button>
+      </div>
     </div>
-    <div class="modal-foot"><button class="btn btn-p" onclick="closeM('m-bio-key');loadBiometricDevices()">Done</button></div>
+
+    <!-- Step-by-step panel -->
+    <div id="bio-guide-steps" style="display:flex;flex-direction:column;gap:10px"></div>
+
+    <div class="modal-foot" style="margin-top:18px">
+      <button class="btn btn-p" onclick="closeM('m-bio-key');loadBiometricDevices()">Done</button>
+    </div>
   </div>
 </div>
 

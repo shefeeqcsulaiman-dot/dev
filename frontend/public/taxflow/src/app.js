@@ -17641,7 +17641,7 @@ async function loadBiometricDevices(){
       tr.dataset.deviceId=d.id;
       const statusCls=d.status==='active'?'b-g':'b-r';
       const lastSync=d.last_sync?new Date(d.last_sync).toLocaleString('en-AE'):'Never';
-      tr.innerHTML=`<td>${escapeHtml(d.name)}</td><td><span class="b b-b" style="font-size:10px">${escapeHtml(d.device_type)}</span></td><td class="mono">${escapeHtml(d.ip_address||'—')}</td><td class="mono">${d.port||'—'}</td><td>${escapeHtml(d.location||'—')}</td><td><span class="b ${statusCls}">${escapeHtml(d.status)}</span></td><td class="mono" style="font-size:11px">${lastSync}</td><td><div class="flx"><button class="btn btn-g btn-sm" onclick="testBiometricDevice('${escapeHtml(d.id)}',this)">Test</button><button class="btn btn-danger btn-sm" onclick="deleteBiometricDevice('${escapeHtml(d.id)}',this)">Remove</button></div></td>`;
+      tr.innerHTML=`<td>${escapeHtml(d.name)}</td><td><span class="b b-b" style="font-size:10px">${escapeHtml(d.device_type)}</span></td><td class="mono">${escapeHtml(d.ip_address||'—')}</td><td class="mono">${d.port||'—'}</td><td>${escapeHtml(d.location||'—')}</td><td><span class="b ${statusCls}">${escapeHtml(d.status)}</span></td><td class="mono" style="font-size:11px">${lastSync}</td><td><div class="flx"><button class="btn btn-p btn-sm" onclick="showBioGuide(null,'${escapeHtml(d.device_type)}','${escapeHtml(d.ip_address||'')}',${d.port||4370})">Guide</button><button class="btn btn-g btn-sm" onclick="testBiometricDevice('${escapeHtml(d.id)}',this)">Test</button><button class="btn btn-danger btn-sm" onclick="deleteBiometricDevice('${escapeHtml(d.id)}',this)">Remove</button></div></td>`;
       tbody.appendChild(tr);
     });
     if(latestSync)set('bio-kpi-last',new Date(latestSync).toLocaleTimeString('en-AE'));
@@ -17711,6 +17711,79 @@ function onBioDevTypeChange(val){
   }
 }
 
+function showBioGuide(apiKey, type, ip, port){
+  const TCP_TYPES=new Set(['ZKTeco F Series','ZKTeco K Series','ZKTeco iClock','ZKTeco X Face Pro','ZKTeco SpeedFace','ZKTeco ProFace','ZKTeco G Series','ZKTeco UA Series','ZKTeco IN Series','ZKTeco MB Series','ZKTeco','Anviz']);
+  const PUSH_TYPES=new Set(['Suprema','Hikvision']);
+  const keyEl=document.getElementById('bio-key-val');
+  const keyRow=document.getElementById('bio-guide-key-row');
+  const subEl=document.getElementById('bio-guide-sub');
+  const stepsEl=document.getElementById('bio-guide-steps');
+  if(keyEl)keyEl.value=apiKey||'';
+  const baseUrl=(window.TAXFLOW_API_BASE_URL||'https://app.etaxflow.com').replace(/\/$/,'');
+  const punchUrl=`${baseUrl}/api/v1/attendance/punch`;
+  const keyDisplay=apiKey||'<your-api-key>';
+  const ipDisplay=ip||'192.168.1.x';
+  const portDisplay=port||4370;
+
+  let sub='', steps=[];
+
+  if(type==='Manual'){
+    if(keyRow)keyRow.style.display='none';
+    sub='CSV Import — no device connection needed';
+    steps=[
+      {n:1,title:'Export from device software',body:'Export the attendance log from your device\'s PC software as a <strong>.csv</strong> file.'},
+      {n:2,title:'Required columns',body:'<code>employee_id</code>, <code>punch_time</code> (format: <code>YYYY-MM-DD HH:MM:SS</code>)<br>Optional: <code>employee_name</code>, <code>direction</code> (in / out)'},
+      {n:3,title:'Import in TaxFlow',body:'Go to <strong>HRMS → Attendance tab → ↑ Import CSV</strong> and select the file. Records appear instantly.'},
+    ];
+  } else if(type==='ZKTeco ADMS'){
+    if(keyRow)keyRow.style.display='';
+    sub='ZKTeco ADMS — device pushes punches automatically';
+    steps=[
+      {n:1,title:'Copy the API key above',body:'You will paste it into the device settings in step 3.'},
+      {n:2,title:'Open your device admin panel',body:'On the device screen: <strong>Menu → Communication → ADMS</strong> (may differ by model).'},
+      {n:3,title:'Enter server settings',body:`Server Address: <code>${baseUrl}</code><br>Port: <code>443</code><br>Enable HTTPS: <strong>Yes</strong>`},
+      {n:4,title:'Set the API key on device',body:`Look for <strong>Cloud Key</strong> or <strong>Server Key</strong> field and paste your API key:<br><code style="word-break:break-all">${keyDisplay}</code>`},
+      {n:5,title:'Enable push & save',body:'Save settings. The device will start pushing punches automatically. Check the <strong>Sync Activity Log</strong> below to confirm.'},
+    ];
+  } else if(PUSH_TYPES.has(type)){
+    if(keyRow)keyRow.style.display='';
+    sub=`${type} — configure HTTP push on the device`;
+    steps=[
+      {n:1,title:'Copy the API key above',body:'You will paste it into the device\'s webhook header in step 3.'},
+      {n:2,title:'Open device admin panel',body:`Open your <strong>${type}</strong> web interface (usually at <code>http://${ipDisplay}</code>) and find <strong>HTTP Push</strong> or <strong>Webhook</strong> settings.`},
+      {n:3,title:'Set the push URL',body:`URL: <code style="word-break:break-all">${punchUrl}</code><br>Method: <strong>POST</strong><br>Content-Type: <code>application/json</code>`},
+      {n:4,title:'Add the authentication header',body:`Header name: <code>X-Device-Key</code><br>Value: <code style="word-break:break-all">${keyDisplay}</code>`},
+      {n:5,title:'Enable and save',body:'Save the settings. The device will push every punch automatically. Confirm in the <strong>Sync Activity Log</strong>.'},
+    ];
+  } else if(TCP_TYPES.has(type)){
+    if(keyRow)keyRow.style.display='';
+    const isAnviz=type==='Anviz';
+    sub=`${type} — run the bridge script on the same network as the device`;
+    steps=[
+      {n:1,title:'Copy the API key above',body:'You will use it in the run command in step 4.'},
+      {n:2,title:'Install Python + dependency',body:'On the office PC (Windows/Mac/Linux) on the same LAN as the device:<br><code>pip install pyzk requests</code>'},
+      {n:3,title:'Download zk_bridge.py',body:`Download the bridge script from your TaxFlow server:<br><code>${baseUrl}/zk_bridge.py</code><br><em>Or copy it from the HRMS → Biometric Integration → Setup Guide section.</em>`},
+      {n:4,title:'Run the bridge',body:`Open a terminal and run:<br><code style="word-break:break-all;display:block;margin-top:6px;padding:8px;background:var(--surface2);border-radius:6px">DEVICE_API_KEY=${keyDisplay} ZK_DEVICE_IP=${ipDisplay} ZK_DEVICE_PORT=${isAnviz?5010:portDisplay} python zk_bridge.py</code>`},
+      {n:5,title:'Confirm punches are syncing',body:'The script polls every 30 seconds. Watch the <strong>Sync Activity Log</strong> in TaxFlow — punch records appear shortly after the first sync.'},
+      {n:6,title:'Keep it running (optional)',body:'To run permanently: <code>pm2 start zk_bridge.py --interpreter python3 --name zk-bridge</code><br>Or set it as a Windows Startup Task.'},
+    ];
+  } else {
+    if(keyRow)keyRow.style.display='';
+    sub='Follow the steps for your device';
+    steps=[{n:1,title:'Use the API key',body:`Set <code>X-Device-Key: ${keyDisplay}</code> header when POSTing punches to:<br><code>${punchUrl}</code>`}];
+  }
+
+  if(subEl)subEl.textContent=sub;
+  if(stepsEl){
+    stepsEl.innerHTML=steps.map(s=>`
+      <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:var(--surface2);border-radius:10px">
+        <div style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center">${s.n}</div>
+        <div><div style="font-size:12px;font-weight:700;margin-bottom:3px">${s.title}</div><div style="font-size:11.5px;color:var(--text2);line-height:1.6">${s.body}</div></div>
+      </div>`).join('');
+  }
+  showM('m-bio-key');
+}
+
 async function saveBiometricDevice(){
   const name=(document.getElementById('bio-dev-name')?.value||'').trim();
   const type=document.getElementById('bio-dev-type')?.value||'ZKTeco F Series';
@@ -17722,9 +17795,8 @@ async function saveBiometricDevice(){
     const res=await moduleApi('/attendance/devices',{method:'POST',body:{name,device_type:type,ip_address:ip||null,port,location:loc||null}});
     if(res.api_key){
       closeM('m-bio-device');
-      document.getElementById('bio-key-val').value=res.api_key;
-      showM('m-bio-key');
       ['bio-dev-name','bio-dev-ip','bio-dev-location'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+      showBioGuide(res.api_key,type,ip,port);
     } else {
       toast('Device added','ok');closeM('m-bio-device');loadBiometricDevices();
     }
