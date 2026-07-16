@@ -2045,10 +2045,13 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div class="flx" style="gap:8px;align-items:center;padding-top:8px;flex-wrap:wrap">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="15" height="15" style="opacity:.45;flex-shrink:0"><path d="M2 4h9a3 3 0 0 1 0 6H4"/><path d="M4 7l-2.5 3L4 13"/></svg>
         <span style="font-size:12px;color:var(--text3);white-space:nowrap">Repeat this rota:</span>
-        <select class="fi" id="rota-repeat-mode" style="width:180px;height:30px;padding:3px 8px;font-size:12px">
+        <select class="fi" id="rota-repeat-mode" style="width:160px;height:30px;padding:3px 8px;font-size:12px">
           <option value="none">— No Repeat —</option>
           <option value="1year">1 Year (52 weeks)</option>
           <option value="forever">Indefinitely (∞)</option>
+        </select>
+        <select class="fi" id="rota-repeat-employee" style="width:180px;height:30px;padding:3px 8px;font-size:12px">
+          <option value="all">All Employees</option>
         </select>
         <button class="btn btn-p btn-sm" onclick="applyRotaRepeat()">Apply Repeat</button>
         <span id="rota-repeat-info" style="font-size:11px;color:var(--text3)"></span>

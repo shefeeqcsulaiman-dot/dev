@@ -16930,6 +16930,7 @@ function renderRotaBoards(){
   renderRotaSummary();
   renderRotaCodes();
   updateRotaStats();
+  populateRotaRepeatEmployeeSelect();
 }
 
 const DEFAULT_ROTA_SHIFTS=[];
@@ -17106,16 +17107,35 @@ function publishRota(){
   audit('Rota published','Rota Planning','Published');
 }
 
+function populateRotaRepeatEmployeeSelect(){
+  const sel=document.getElementById('rota-repeat-employee');
+  if(!sel)return;
+  const current=sel.value;
+  sel.innerHTML='<option value="all">All Employees</option>';
+  currentRotaStaff().forEach(s=>{
+    const opt=document.createElement('option');
+    opt.value=s.id;
+    opt.textContent=s.name;
+    sel.appendChild(opt);
+  });
+  if(current&&[...sel.options].some(o=>o.value===current))sel.value=current;
+}
+
 function applyRotaRepeat(){
   const mode=document.getElementById('rota-repeat-mode')?.value||'none';
   if(mode==='none'){toast('Select a repeat duration first','warn');return;}
+  const empFilter=document.getElementById('rota-repeat-employee')?.value||'all';
   const start=weekStartValue();
   const weeks=mode==='1year'?52:260;
-  const sourceAssignments=[...rotaAssignmentsById.values()].filter(a=>{
+  let sourceAssignments=[...rotaAssignmentsById.values()].filter(a=>{
     const diff=Math.round((new Date(`${a.date}T00:00:00`)-new Date(`${start}T00:00:00`))/86400000);
     return diff>=0&&diff<7;
   });
-  if(!sourceAssignments.length){toast('No assignments in the current week to repeat','warn');return;}
+  if(empFilter!=='all') sourceAssignments=sourceAssignments.filter(a=>a.employee_id===empFilter);
+  if(!sourceAssignments.length){
+    toast(empFilter==='all'?'No assignments in the current week to repeat':'No assignments for this employee in the current week','warn');
+    return;
+  }
   let count=0;
   for(let w=1;w<=weeks;w++){
     sourceAssignments.forEach(src=>{
@@ -17134,11 +17154,12 @@ function applyRotaRepeat(){
       count++;
     });
   }
+  const empName=empFilter==='all'?'all employees':([...document.getElementById('rota-repeat-employee')?.options||[]].find(o=>o.value===empFilter)?.textContent||empFilter);
   const label=mode==='1year'?'1 year (52 weeks)':'indefinitely (~5 years / 260 weeks)';
   const info=document.getElementById('rota-repeat-info');
-  if(info)info.textContent=`✓ ${count} assignments created from ${start}`;
-  toast(`Rota repeated ${label}: ${count} assignments saved as Draft`,'ok');
-  audit(`Rota repeat applied (${mode})`,'Rota Planning','Draft');
+  if(info)info.textContent=`✓ ${count} assignments created for ${empName} from ${start}`;
+  toast(`Rota repeated ${label} for ${empName}: ${count} assignments saved`,'ok');
+  audit(`Rota repeat applied (${mode}) for ${empName}`,'Rota Planning','Draft');
 }
 
 function copyPreviousRota(){
