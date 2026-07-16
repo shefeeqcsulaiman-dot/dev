@@ -17803,9 +17803,32 @@ function _bioDiagramCSV(){
   </div>`;
 }
 
+function copyBioKey(){
+  const val=document.getElementById('bio-key-val')?.value||'';
+  if(!val){toast('No key to copy','warn');return;}
+  if(navigator.clipboard&&window.isSecureContext){
+    navigator.clipboard.writeText(val).then(()=>toast('API key copied!','ok')).catch(()=>{
+      _copyFallback(val);
+    });
+  } else {
+    _copyFallback(val);
+  }
+}
+function _copyFallback(text){
+  const ta=document.createElement('textarea');
+  ta.value=text;ta.style.position='fixed';ta.style.left='-9999px';
+  document.body.appendChild(ta);ta.focus();ta.select();
+  try{document.execCommand('copy');toast('API key copied!','ok');}
+  catch{toast('Copy failed — select and copy manually','warn');}
+  document.body.removeChild(ta);
+}
+
 function showBioGuide(apiKey, type, ip, port){
   const keyEl=document.getElementById('bio-key-val');
   const keyRow=document.getElementById('bio-guide-key-row');
+  const keyAvail=document.getElementById('bio-key-available');
+  const keyMissing=document.getElementById('bio-key-missing');
+  const keyDisplay_el=document.getElementById('bio-key-val-display');
   const subEl=document.getElementById('bio-guide-sub');
   const stepsEl=document.getElementById('bio-guide-steps');
   const diagramEl=document.getElementById('bio-guide-diagram');
@@ -17814,18 +17837,12 @@ function showBioGuide(apiKey, type, ip, port){
   const keyDisplay=apiKey||'YOUR_API_KEY';
 
   if(keyEl) keyEl.value=apiKey||'';
+  if(keyDisplay_el) keyDisplay_el.textContent=apiKey||'';
   if(diagramEl) diagramEl.innerHTML='';
   if(subEl) subEl.textContent='Works with ZKTeco · Suprema · Hikvision · Anviz · any HTTP Push device';
-
-  const keyLabelEl=document.querySelector('#bio-guide-key-row .fl');
-  if(keyLabelEl){
-    if(apiKey){
-      keyLabelEl.innerHTML='API Key <span style="color:var(--amber);font-weight:700">— copy now, shown only once</span>';
-    } else {
-      keyLabelEl.innerHTML='API Key <span style="color:var(--text3);font-weight:400">— key was already shown when device was added. To get a new key, remove and re-add the device.</span>';
-    }
-  }
   if(keyRow) keyRow.style.display='';
+  if(keyAvail) keyAvail.style.display=apiKey?'':'none';
+  if(keyMissing) keyMissing.style.display=apiKey?'none':'';
 
   const I=_BIO_ICONS;
   const steps=[

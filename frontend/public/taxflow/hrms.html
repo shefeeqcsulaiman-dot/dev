@@ -2549,12 +2549,18 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="modal-title">Device Setup Guide</div>
     <div class="modal-sub" id="bio-guide-sub">Follow the steps below to connect your device</div>
 
-    <!-- API Key row (shown for all types except Manual) -->
-    <div id="bio-guide-key-row" style="margin-bottom:14px">
-      <label class="fl">API Key <span style="color:var(--amber);font-weight:700">— copy now, shown only once</span></label>
-      <div style="display:flex;gap:6px;margin-top:4px">
-        <input class="fi mono" id="bio-key-val" readonly style="flex:1;font-size:12px">
-        <button class="btn btn-g btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('bio-key-val').value);toast('Copied!','ok')">Copy</button>
+    <!-- API Key row -->
+    <div id="bio-guide-key-row" style="margin-bottom:16px">
+      <div id="bio-key-available" style="background:rgba(245,158,11,.1);border:1.5px solid var(--amber);border-radius:10px;padding:12px 14px">
+        <div style="font-size:11px;font-weight:700;color:var(--amber);margin-bottom:6px;letter-spacing:.03em">⚠ API KEY — COPY NOW, SHOWN ONLY ONCE</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <code id="bio-key-val-display" style="flex:1;font-size:12px;word-break:break-all;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px;line-height:1.6;min-height:34px;display:block"></code>
+          <button class="btn btn-p btn-sm" onclick="copyBioKey()" style="white-space:nowrap;flex-shrink:0">Copy Key</button>
+        </div>
+        <input id="bio-key-val" readonly style="position:absolute;left:-9999px;opacity:0" tabindex="-1">
+      </div>
+      <div id="bio-key-missing" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--text3)">
+        API key was shown when the device was first added and cannot be retrieved again. To get a new key, <strong>remove and re-add this device</strong>.
       </div>
     </div>
 
