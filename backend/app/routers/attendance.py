@@ -204,7 +204,7 @@ def _optional_user(request: Request, db: Session = Depends(get_db)) -> User | No
 # ── Punch recording ───────────────────────────────────────────────────────────
 
 @router.post("/punch", status_code=201)
-@limiter.limit("600/minute")   # ZK bridge sends bursts during initial sync
+@limiter.limit("60/minute")
 def record_punch(
     request: Request,
     body: PunchIn,
@@ -226,6 +226,16 @@ def record_punch(
         raise HTTPException(status_code=401, detail="Authentication required")
 
     punch_time = _parse_time(body.punch_time)
+
+    # Reject punches more than 5 minutes in the future (prevents date manipulation)
+    now = datetime.now(UTC)
+    if punch_time > now + timedelta(minutes=5):
+        raise HTTPException(status_code=422, detail="Punch time is in the future")
+
+    # Reject punches older than 90 days (prevents replay / mass backdating attacks)
+    if x_device_key and punch_time < now - timedelta(days=90):
+        raise HTTPException(status_code=422, detail="Punch time is too old (>90 days)")
+
     punch_date = punch_time.strftime("%Y-%m-%d")
 
     punch = AttendancePunch(

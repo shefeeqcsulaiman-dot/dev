@@ -41,7 +41,7 @@ import os
 import sys
 import time
 import logging
-import json
+import pathlib
 from datetime import datetime, timezone
 from typing import Any
 
@@ -51,12 +51,38 @@ except ImportError:
     sys.exit("Missing dependency: pip install requests")
 
 # ── Configuration ─────────────────────────────────────────────────────────────
+# Values are read from zk_bridge.conf (same folder as this script) first,
+# then from environment variables, then fall back to the defaults below.
+# Using a config file keeps the API key out of shell history and process lists.
+#
+# zk_bridge.conf example:
+#   DEVICE_API_KEY=your_key_here
+#   ZK_DEVICE_IP=192.168.1.201
+#   ZK_DEVICE_PORT=4370
+#   API_BASE_URL=https://app.etaxflow.com
 
-ZK_DEVICE_IP     = os.environ.get("ZK_DEVICE_IP",     "192.168.1.201")
-ZK_DEVICE_PORT   = int(os.environ.get("ZK_DEVICE_PORT", "4370"))
-ZK_POLL_INTERVAL = int(os.environ.get("ZK_POLL_INTERVAL", "30"))
-API_BASE_URL     = os.environ.get("API_BASE_URL",     "https://app.etaxflow.com").rstrip("/")
-DEVICE_API_KEY   = os.environ.get("DEVICE_API_KEY",   "")
+def _load_conf() -> dict[str, str]:
+    conf: dict[str, str] = {}
+    conf_path = pathlib.Path(__file__).parent / "zk_bridge.conf"
+    if conf_path.exists():
+        for line in conf_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            conf[k.strip()] = v.strip()
+    return conf
+
+_conf = _load_conf()
+
+def _get(key: str, default: str = "") -> str:
+    return _conf.get(key) or os.environ.get(key) or default
+
+ZK_DEVICE_IP     = _get("ZK_DEVICE_IP",     "192.168.1.201")
+ZK_DEVICE_PORT   = int(_get("ZK_DEVICE_PORT", "4370"))
+ZK_POLL_INTERVAL = int(_get("ZK_POLL_INTERVAL", "30"))
+API_BASE_URL     = _get("API_BASE_URL",     "https://app.etaxflow.com").rstrip("/")
+DEVICE_API_KEY   = _get("DEVICE_API_KEY",   "")
 
 PUNCH_ENDPOINT = f"{API_BASE_URL}/api/v1/attendance/punch"
 
