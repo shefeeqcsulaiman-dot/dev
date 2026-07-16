@@ -20983,7 +20983,7 @@ function initApp(){
   enhancePageTables('page-dashboard');
   syncDashboardFromDatabase().catch(err=>console.warn('Dashboard sync failed during init:',err));
   hydrateFromServer().catch(err=>console.warn('Database hydrate failed during init:',err));
-  const _lastPage=localStorage.getItem('taxflow_current_page');
+  const _lastPage=window.HRMS_STANDALONE?'hrms':localStorage.getItem('taxflow_current_page');
   setTimeout(()=>go(_lastPage||'dashboard'),400);
   scheduleIdleTask(()=>{
     updateAccountSelectors();
