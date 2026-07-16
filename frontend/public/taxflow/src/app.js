@@ -17813,9 +17813,19 @@ function showBioGuide(apiKey, type, ip, port){
   if(keyEl)keyEl.value=apiKey||'';
   const baseUrl=(window.TAXFLOW_API_BASE_URL||'https://app.etaxflow.com').replace(/\/$/,'');
   const punchUrl=`${baseUrl}/api/v1/attendance/punch`;
-  const keyDisplay=apiKey||'<your-api-key>';
+  const keyDisplay=apiKey||'YOUR_API_KEY';
   const ipDisplay=ip||'192.168.1.x';
   const portDisplay=port||4370;
+
+  // Update key row label depending on whether key is freshly generated or not
+  const keyLabelEl=document.querySelector('#bio-guide-key-row .fl');
+  if(keyLabelEl){
+    if(apiKey){
+      keyLabelEl.innerHTML='API Key <span style="color:var(--amber);font-weight:700">— copy now, shown only once</span>';
+    } else {
+      keyLabelEl.innerHTML='API Key <span style="color:var(--text3);font-weight:400">— key was already shown when device was added. To get a new key, remove and re-add the device.</span>';
+    }
+  }
 
   let sub='', steps=[], diagram='';
   const I=_BIO_ICONS;
