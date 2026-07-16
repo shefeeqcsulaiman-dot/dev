@@ -17762,7 +17762,7 @@ function showBioGuide(apiKey, type, ip, port){
     steps=[
       {n:1,title:'Copy the API key above',body:'You will use it in the run command in step 4.'},
       {n:2,title:'Install Python + dependency',body:'On the office PC (Windows/Mac/Linux) on the same LAN as the device:<br><code>pip install pyzk requests</code>'},
-      {n:3,title:'Download zk_bridge.py',body:`Download the bridge script from your TaxFlow server:<br><code>${baseUrl}/zk_bridge.py</code><br><em>Or copy it from the HRMS → Biometric Integration → Setup Guide section.</em>`},
+      {n:3,title:'Download zk_bridge.py',body:`Download the bridge script and place it on the office PC:<br><a href="${baseUrl}/api/v1/attendance/bridge-script" download="zk_bridge.py" style="display:inline-block;margin-top:6px;padding:6px 14px;background:var(--accent);color:#fff;border-radius:7px;font-size:12px;font-weight:700;text-decoration:none">↓ Download zk_bridge.py</a>`},
       {n:4,title:'Run the bridge',body:`Open a terminal and run:<br><code style="word-break:break-all;display:block;margin-top:6px;padding:8px;background:var(--surface2);border-radius:6px">DEVICE_API_KEY=${keyDisplay} ZK_DEVICE_IP=${ipDisplay} ZK_DEVICE_PORT=${isAnviz?5010:portDisplay} python zk_bridge.py</code>`},
       {n:5,title:'Confirm punches are syncing',body:'The script polls every 30 seconds. Watch the <strong>Sync Activity Log</strong> in TaxFlow — punch records appear shortly after the first sync.'},
       {n:6,title:'Keep it running (optional)',body:'To run permanently: <code>pm2 start zk_bridge.py --interpreter python3 --name zk-bridge</code><br>Or set it as a Windows Startup Task.'},

@@ -9,11 +9,13 @@ Supported punch sources:
 
 import csv
 import io
+import pathlib
 import secrets
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, UploadFile, status
+from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -385,3 +387,24 @@ def attendance_summary(
         AttendancePunch.direction == "in",
     ).group_by(AttendancePunch.punch_date).all()
     return {"week": {r.punch_date: r.cnt for r in rows}}
+
+
+# ── Bridge script download ────────────────────────────────────────────────────
+
+@router.get("/bridge-script")
+def download_bridge_script(
+    current_user: User = Depends(get_current_user),
+) -> PlainTextResponse:
+    """Serve zk_bridge.py as a downloadable file."""
+    candidates = [
+        pathlib.Path(__file__).parent.parent.parent / "zk_bridge.py",  # backend/zk_bridge.py
+        pathlib.Path(__file__).parent.parent.parent.parent / "backend" / "zk_bridge.py",
+    ]
+    for path in candidates:
+        if path.exists():
+            content = path.read_text(encoding="utf-8")
+            return PlainTextResponse(
+                content=content,
+                headers={"Content-Disposition": "attachment; filename=zk_bridge.py"},
+            )
+    raise HTTPException(404, "Bridge script not found on server")
