@@ -17162,6 +17162,129 @@ function applyRotaRepeat(){
   audit(`Rota repeat applied (${mode}) for ${empName}`,'Rota Planning','Draft');
 }
 
+// ── Rota export helpers ───────────────────────────────────────────────────────
+
+function _rotaExportData(){
+  const start=weekStartValue();
+  const staff=filteredRotaStaff('week');
+  const dates=ROTA_WEEK_DAYS.map((_,i)=>weekDateFromStart(start,i));
+  const rows=staff.map(s=>{
+    const cells=dates.map((date,i)=>{
+      const a=rotaAssignmentsById.get(rotaAssignmentId(s.id,date));
+      if(!a||!a.code||a.code==='OFF')return{code:'OFF',time:'-',hours:0};
+      const time=(a.start&&a.end)?`${a.start}-${a.end}`:'-';
+      return{code:a.code||'—',time,hours:rotaHours(a)};
+    });
+    const total=cells.reduce((s,c)=>s+c.hours,0);
+    return{name:s.name,department:s.department,role:s.role,cells,total};
+  });
+  const weekEnd=weekDateFromStart(start,6);
+  return{start,weekEnd,dates,rows};
+}
+
+function _shiftColor(code){
+  const c=String(code||'').toUpperCase();
+  if(c==='OFF'||c==='-')return{bg:'#f3f4f6',fg:'#6b7280'};
+  if(c==='L')return{bg:'#fef3c7',fg:'#92400e'};
+  if(c==='M'||c==='AM')return{bg:'#dbeafe',fg:'#1e40af'};
+  if(c==='E'||c==='PM')return{bg:'#ede9fe',fg:'#5b21b6'};
+  if(c==='N'||c==='ND')return{bg:'#1e293b',fg:'#e2e8f0'};
+  if(c==='OT')return{bg:'#fef9c3',fg:'#854d0e'};
+  return{bg:'#dcfce7',fg:'#14532d'};
+}
+
+function downloadRotaPdf(){
+  const{start,weekEnd,dates,rows}=_rotaExportData();
+  const companyName=document.getElementById('sb-company-name')?.textContent||'TaxFlow HRMS';
+  const dayHeaders=ROTA_WEEK_DAYS.map((d,i)=>`<th style="padding:7px 5px;font-size:10px;font-weight:700;background:#1e293b;color:#fff;text-align:center;white-space:nowrap">${d}<br><span style="font-weight:400;opacity:.75">${dates[i].slice(5)}</span></th>`).join('');
+  const bodyRows=rows.map((r,ri)=>{
+    const bg=ri%2===0?'#ffffff':'#f8fafc';
+    const dayCells=r.cells.map(c=>{
+      const{bg:cbg,fg:cfg}=_shiftColor(c.code);
+      const isOff=c.code==='OFF'||c.code==='-';
+      return `<td style="padding:5px 3px;text-align:center;background:${bg}"><div style="background:${cbg};color:${cfg};border-radius:5px;padding:3px 4px;font-size:9.5px;font-weight:700;line-height:1.4">${isOff?'<span style="opacity:.4">—</span>':`${escapeHtml(c.code)}<br><span style="font-weight:400;font-size:8.5px">${escapeHtml(c.time)}</span>`}</div></td>`;
+    }).join('');
+    return `<tr>
+      <td style="padding:6px 8px;background:${bg};font-size:10px;font-weight:600;white-space:nowrap">${escapeHtml(r.name)}</td>
+      <td style="padding:6px 8px;background:${bg};font-size:9.5px;color:#64748b;white-space:nowrap">${escapeHtml(r.department)}</td>
+      <td style="padding:6px 8px;background:${bg};font-size:9.5px;color:#64748b;white-space:nowrap">${escapeHtml(r.role)}</td>
+      ${dayCells}
+      <td style="padding:6px 8px;background:${bg};font-size:10px;font-weight:700;text-align:center;color:#2563eb">${r.total>0?r.total.toFixed(1)+'h':'—'}</td>
+    </tr>`;
+  }).join('');
+
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Weekly Rota ${start}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff;padding:24px;color:#0f172a}
+    @media print{@page{size:A4 landscape;margin:12mm}body{padding:0}}
+  </style></head><body>
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:18px;padding-bottom:12px;border-bottom:2px solid #2563eb">
+    <div>
+      <div style="font-size:20px;font-weight:800;color:#1e293b">${escapeHtml(companyName)}</div>
+      <div style="font-size:13px;color:#2563eb;font-weight:600;margin-top:2px">Weekly Staff Rota</div>
+    </div>
+    <div style="text-align:right;font-size:11px;color:#64748b">
+      <div><strong>Week:</strong> ${start} – ${weekEnd}</div>
+      <div><strong>Staff:</strong> ${rows.length} employees</div>
+      <div><strong>Generated:</strong> ${new Date().toLocaleDateString('en-GB')}</div>
+    </div>
+  </div>
+  <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+    <colgroup>
+      <col style="width:16%"><col style="width:10%"><col style="width:10%">
+      ${ROTA_WEEK_DAYS.map(()=>'<col style="width:8%">').join('')}
+      <col style="width:6%">
+    </colgroup>
+    <thead>
+      <tr>
+        <th style="padding:7px 8px;font-size:10px;font-weight:700;background:#1e293b;color:#fff;text-align:left">Employee</th>
+        <th style="padding:7px 8px;font-size:10px;font-weight:700;background:#1e293b;color:#fff;text-align:left">Dept</th>
+        <th style="padding:7px 8px;font-size:10px;font-weight:700;background:#1e293b;color:#fff;text-align:left">Role</th>
+        ${dayHeaders}
+        <th style="padding:7px 5px;font-size:10px;font-weight:700;background:#1e293b;color:#fff;text-align:center">Hrs</th>
+      </tr>
+    </thead>
+    <tbody>${bodyRows}</tbody>
+  </table>
+  <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+    ${[['M/AM','#dbeafe','#1e40af','Morning'],['E/PM','#ede9fe','#5b21b6','Evening'],['N/ND','#1e293b','#e2e8f0','Night'],['OT','#fef9c3','#854d0e','Overtime'],['L','#fef3c7','#92400e','Leave'],['OFF','#f3f4f6','#6b7280','Day Off']].map(([code,bg,fg,label])=>`<div style="display:flex;align-items:center;gap:5px;font-size:9px"><span style="width:28px;height:16px;border-radius:3px;background:${bg};color:${fg};font-weight:700;display:inline-flex;align-items:center;justify-content:center;font-size:8.5px">${code}</span> ${label}</div>`).join('')}
+  </div>
+  <script>window.onload=function(){window.print();}<\/script>
+  </body></html>`;
+
+  const win=window.open('','_blank','width=1050,height=750');
+  if(win){win.document.write(html);win.document.close();}
+  else{toast('Allow pop-ups to download PDF','warn');}
+}
+
+function downloadRotaExcel(){
+  const{start,weekEnd,dates,rows}=_rotaExportData();
+  const companyName=document.getElementById('sb-company-name')?.textContent||'TaxFlow HRMS';
+  const BOM='﻿';
+  const headers=['Employee','Department','Role',...ROTA_WEEK_DAYS.map((d,i)=>`${d} ${dates[i]}`),'Total Hours'];
+  const dataRows=rows.map(r=>[
+    r.name, r.department, r.role,
+    ...r.cells.map(c=>c.code==='OFF'?'OFF':`${c.code} ${c.time}`),
+    r.total>0?r.total.toFixed(1):''
+  ]);
+  const escape=v=>{const s=String(v??'');return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s;};
+  const csv=[
+    `${escapeHtml(companyName)} — Weekly Rota`,
+    `Week: ${start} to ${weekEnd}`,
+    `Generated: ${new Date().toLocaleDateString('en-GB')}`,
+    '',
+    headers.map(escape).join(','),
+    ...dataRows.map(r=>r.map(escape).join(',')),
+  ].join('\r\n');
+  const blob=new Blob([BOM+csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`Rota_${start}.csv`;a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+  toast('Excel file downloaded','ok');
+}
+
 function copyPreviousRota(){
   const start=weekStartValue();
   const priorStart=weekDateFromStart(start,-7);

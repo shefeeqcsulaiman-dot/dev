@@ -1963,7 +1963,11 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div class="card">
         <div class="card-hd">
           <div><div class="card-title">Staff Schedule</div><div class="card-sub">Click a cell to edit. Saved cells update weekly, monthly, and department views.</div></div>
-          <button class="btn btn-g btn-sm" onclick="renderRotaBoards()">Refresh</button>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="btn btn-g btn-sm" onclick="downloadRotaExcel()">↓ Excel</button>
+            <button class="btn btn-g btn-sm" onclick="downloadRotaPdf()">↓ PDF</button>
+            <button class="btn btn-g btn-sm" onclick="renderRotaBoards()">Refresh</button>
+          </div>
         </div>
         <div class="rota-board" id="rota-weekly-board"></div>
         <div class="divider"></div>
