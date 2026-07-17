@@ -1175,6 +1175,7 @@ body:not(.theme-light) .mb3-vat-side{background:linear-gradient(180deg,rgba(139,
 .rota-cell.draft,.rota-cell.off{background:rgba(255,255,255,0.04);}
 .rota-cell.conflict{border-color:var(--red-border);background:var(--red-bg);}
 .rota-cell.overtime,.rota-cell.night{background:var(--purple-bg);border-color:rgba(155,114,240,0.25);}
+.rota-cell.holiday{border-color:var(--red-border);background:var(--red-bg);}
 .rota-board{display:grid;gap:10px;}
 .rota-staff-row{display:grid;grid-template-columns:190px minmax(0,1fr);gap:10px;align-items:stretch;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);}
 .rota-staff-meta{display:flex;flex-direction:column;gap:4px;justify-content:center;min-width:0;}

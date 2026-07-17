@@ -16746,8 +16746,8 @@ function saveActiveRotaAssignmentFromModal(forceOff=false){
   const mark=forceOff?'Off':document.getElementById('rota-edit-mark')?.value||defaults.mark;
   const start=forceOff?'':document.getElementById('rota-edit-start')?.value||defaults.start;
   const end=forceOff?'':document.getElementById('rota-edit-end')?.value||defaults.end;
-  const className=mark==='Off'?'off':mark==='Leave'?'draft':mark==='OT'?'overtime':defaults.className;
-  const code=mark==='Off'?'OFF':mark==='Leave'?'L':mark==='OT'?'OT':defaults.code;
+  const className=mark==='Off'?'off':mark==='Leave'?'draft':mark==='OT'?'overtime':mark==='Holiday'?'holiday':defaults.className;
+  const code=mark==='Off'?'OFF':mark==='Leave'?'L':mark==='OT'?'OT':mark==='Holiday'?'PH':defaults.code;
   const existing=activeRotaCell.dataset.assignment?normalizeRotaAssignment(JSON.parse(activeRotaCell.dataset.assignment)):{};
   const assignment=normalizeRotaAssignment({
     ...existing,
@@ -17164,45 +17164,69 @@ function applyRotaRepeat(){
 
 // ── Rota export helpers ───────────────────────────────────────────────────────
 
+function _companyHolidayMap(){
+  const map=new Map();
+  const months={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+  document.querySelectorAll('#holidays-tbody tr').forEach(row=>{
+    const cells=row.querySelectorAll('td');
+    if(cells.length<2)return;
+    const m=cells[0].textContent.trim().match(/(\d{1,2})\s+([A-Za-z]{3})/);
+    const name=cells[1].textContent.trim();
+    if(!m||!name)return;
+    const day=parseInt(m[1],10);
+    const monIdx=months[m[2]];
+    if(monIdx===undefined)return;
+    const thisYear=new Date().getFullYear();
+    [thisYear-1,thisYear,thisYear+1].forEach(y=>{
+      map.set(new Date(y,monIdx,day).toISOString().slice(0,10),name);
+    });
+  });
+  return map;
+}
+
 function _rotaExportData(){
   const start=weekStartValue();
   const staff=filteredRotaStaff('week');
   const dates=ROTA_WEEK_DAYS.map((_,i)=>weekDateFromStart(start,i));
+  const holidayMap=_companyHolidayMap();
+  const dayHolidays=dates.map(d=>holidayMap.get(d)||'');
   const rows=staff.map(s=>{
     const cells=dates.map((date,i)=>{
       const a=rotaAssignmentsById.get(rotaAssignmentId(s.id,date));
-      if(!a||!a.code||a.code==='OFF')return{code:'OFF',time:'-',hours:0};
+      const isHoliday=!!dayHolidays[i]||String(a?.code||'').toUpperCase()==='PH';
+      if(!a||!a.code||a.code==='OFF')return{code:isHoliday?'PH':'OFF',time:'-',hours:0,isHoliday};
       const time=(a.start&&a.end)?`${a.start}-${a.end}`:'-';
-      return{code:a.code||'—',time,hours:rotaHours(a)};
+      return{code:a.code||'—',time,hours:rotaHours(a),isHoliday};
     });
     const total=cells.reduce((s,c)=>s+c.hours,0);
     return{name:s.name,department:s.department,role:s.role,cells,total};
   });
   const weekEnd=weekDateFromStart(start,6);
-  return{start,weekEnd,dates,rows};
+  return{start,weekEnd,dates,dayHolidays,rows};
 }
 
-function _shiftColor(code){
+function _shiftColor(code,isHoliday){
   const c=String(code||'').toUpperCase();
+  if(isHoliday||c==='PH')return{bg:'#fee2e2',fg:'#b91c1c'};
   if(c==='OFF'||c==='-')return{bg:'#f3f4f6',fg:'#6b7280'};
   if(c==='L')return{bg:'#fef3c7',fg:'#92400e'};
-  if(c==='M'||c==='AM')return{bg:'#dbeafe',fg:'#1e40af'};
-  if(c==='E'||c==='PM')return{bg:'#ede9fe',fg:'#5b21b6'};
-  if(c==='N'||c==='ND')return{bg:'#1e293b',fg:'#e2e8f0'};
-  if(c==='OT')return{bg:'#fef9c3',fg:'#854d0e'};
   return{bg:'#dcfce7',fg:'#14532d'};
 }
 
 function downloadRotaPdf(){
-  const{start,weekEnd,dates,rows}=_rotaExportData();
+  const{start,weekEnd,dates,dayHolidays,rows}=_rotaExportData();
   const companyName=document.getElementById('sb-company-name')?.textContent||'TaxFlow HRMS';
-  const dayHeaders=ROTA_WEEK_DAYS.map((d,i)=>`<th style="padding:7px 5px;font-size:10px;font-weight:700;background:#1e293b;color:#fff;text-align:center;white-space:nowrap">${d}<br><span style="font-weight:400;opacity:.75">${dates[i].slice(5)}</span></th>`).join('');
+  const dayHeaders=ROTA_WEEK_DAYS.map((d,i)=>{
+    const holidayName=dayHolidays[i];
+    return `<th style="padding:7px 5px;font-size:10px;font-weight:700;background:${holidayName?'#7f1d1d':'#1e293b'};color:#fff;text-align:center;white-space:nowrap">${d}<br><span style="font-weight:400;opacity:.75">${dates[i].slice(5)}</span>${holidayName?`<br><span style="font-weight:700;font-size:8px;color:#fecaca">${escapeHtml(holidayName)}</span>`:''}</th>`;
+  }).join('');
   const bodyRows=rows.map((r,ri)=>{
     const bg=ri%2===0?'#ffffff':'#f8fafc';
     const dayCells=r.cells.map(c=>{
-      const{bg:cbg,fg:cfg}=_shiftColor(c.code);
-      const isOff=c.code==='OFF'||c.code==='-';
-      return `<td style="padding:5px 3px;text-align:center;background:${bg}"><div style="background:${cbg};color:${cfg};border-radius:5px;padding:3px 4px;font-size:9.5px;font-weight:700;line-height:1.4">${isOff?'<span style="opacity:.4">—</span>':`${escapeHtml(c.code)}<br><span style="font-weight:400;font-size:8.5px">${escapeHtml(c.time)}</span>`}</div></td>`;
+      const{bg:cbg,fg:cfg}=_shiftColor(c.code,c.isHoliday);
+      const isBlank=c.code==='OFF'&&!c.isHoliday;
+      const label=c.isHoliday&&c.code==='OFF'?'PH':c.code;
+      return `<td style="padding:5px 3px;text-align:center;background:${bg}"><div style="background:${cbg};color:${cfg};border-radius:5px;padding:3px 4px;font-size:9.5px;font-weight:700;line-height:1.4">${isBlank?'<span style="opacity:.4">—</span>':`${escapeHtml(label)}<br><span style="font-weight:400;font-size:8.5px">${escapeHtml(c.time)}</span>`}</div></td>`;
     }).join('');
     return `<tr>
       <td style="padding:6px 8px;background:${bg};font-size:10px;font-weight:600;white-space:nowrap">${escapeHtml(r.name)}</td>
@@ -17247,8 +17271,13 @@ function downloadRotaPdf(){
     </thead>
     <tbody>${bodyRows}</tbody>
   </table>
-  <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
-    ${[['M/AM','#dbeafe','#1e40af','Morning'],['E/PM','#ede9fe','#5b21b6','Evening'],['N/ND','#1e293b','#e2e8f0','Night'],['OT','#fef9c3','#854d0e','Overtime'],['L','#fef3c7','#92400e','Leave'],['OFF','#f3f4f6','#6b7280','Day Off']].map(([code,bg,fg,label])=>`<div style="display:flex;align-items:center;gap:5px;font-size:9px"><span style="width:28px;height:16px;border-radius:3px;background:${bg};color:${fg};font-weight:700;display:inline-flex;align-items:center;justify-content:center;font-size:8.5px">${code}</span> ${label}</div>`).join('')}
+  <div style="margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0">
+    <div style="font-size:10.5px;font-weight:700;color:#1e293b;margin-bottom:7px">Color Guide</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">
+      ${[['#dcfce7','#14532d','Working Day'],['#f3f4f6','#6b7280','Day Off'],['#fee2e2','#b91c1c','Public Holiday'],['#fef3c7','#92400e','Leave']].map(([bg,fg,label])=>`<div style="display:flex;align-items:center;gap:6px;font-size:9.5px;color:#1e293b"><span style="width:16px;height:16px;border-radius:3px;background:${bg};border:1px solid ${fg}"></span> ${label}</div>`).join('')}
+    </div>
+    <div style="font-size:8.5px;color:#64748b">Shift Codes — M: Morning &middot; E: Evening &middot; N: Night &middot; OT: Overtime &middot; L: Leave &middot; OFF: Day Off &middot; PH: Public Holiday</div>
+    ${dayHolidays.some(Boolean)?`<div style="font-size:8.5px;color:#b91c1c;margin-top:4px"><strong>Public Holidays this week:</strong> ${dates.map((d,i)=>dayHolidays[i]?`${d.slice(5)} – ${escapeHtml(dayHolidays[i])}`:null).filter(Boolean).join(', ')}</div>`:''}
   </div>
   <script>window.onload=function(){window.print();}<\/script>
   </body></html>`;
@@ -17259,13 +17288,17 @@ function downloadRotaPdf(){
 }
 
 function downloadRotaExcel(){
-  const{start,weekEnd,dates,rows}=_rotaExportData();
+  const{start,weekEnd,dates,dayHolidays,rows}=_rotaExportData();
   const companyName=document.getElementById('sb-company-name')?.textContent||'TaxFlow HRMS';
   const BOM='﻿';
-  const headers=['Employee','Department','Role',...ROTA_WEEK_DAYS.map((d,i)=>`${d} ${dates[i]}`),'Total Hours'];
+  const headers=['Employee','Department','Role',...ROTA_WEEK_DAYS.map((d,i)=>`${d} ${dates[i]}${dayHolidays[i]?` [Public Holiday: ${dayHolidays[i]}]`:''}`),'Total Hours'];
+  const cellText=c=>{
+    if(c.isHoliday)return c.code==='OFF'?'PUBLIC HOLIDAY':`${c.code} ${c.time} (Public Holiday)`;
+    return c.code==='OFF'?'OFF':`${c.code} ${c.time}`;
+  };
   const dataRows=rows.map(r=>[
     r.name, r.department, r.role,
-    ...r.cells.map(c=>c.code==='OFF'?'OFF':`${c.code} ${c.time}`),
+    ...r.cells.map(cellText),
     r.total>0?r.total.toFixed(1):''
   ]);
   const escape=v=>{const s=String(v??'');return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s;};
@@ -17276,6 +17309,12 @@ function downloadRotaExcel(){
     '',
     headers.map(escape).join(','),
     ...dataRows.map(r=>r.map(escape).join(',')),
+    '',
+    'Legend:',
+    'Working Day = staff on shift (M=Morning, E=Evening, N=Night, OT=Overtime)',
+    'OFF = Day Off',
+    'PUBLIC HOLIDAY = Company holiday (see Holiday Calendar)',
+    'L = Leave',
   ].join('\r\n');
   const blob=new Blob([BOM+csv],{type:'text/csv;charset=utf-8'});
   const url=URL.createObjectURL(blob);
