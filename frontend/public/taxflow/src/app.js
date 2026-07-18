@@ -18037,22 +18037,15 @@ function showBioGuide(apiKey, type, ip, port){
   const I=_BIO_ICONS;
   const steps=[
     {icon:I.key, title:'Copy the API Key', color:'var(--accent)',
-     body:'The API key is shown above — copy it now. You will paste it into the device settings in step 4.'},
-    {icon:I.monitor, title:'Open the Device Web Admin Panel', color:'var(--accent)',
-     body:`On a PC on the <strong>same network</strong> as the device, open a browser and go to <code>http://&lt;device-ip&gt;</code>. Default admin credentials:<br><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
-      <span style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px 10px;font-size:11px"><strong>Hikvision</strong> — admin / 12345</span>
-      <span style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px 10px;font-size:11px"><strong>Suprema</strong> — admin / admin</span>
-      <span style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px 10px;font-size:11px"><strong>ZKTeco</strong> — admin / 12345</span>
-      <span style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px 10px;font-size:11px"><strong>Anviz</strong> — admin / admin</span>
+     body:'The API key is shown above — copy it now. You will paste it into the device in step 3.'},
+    {icon:I.monitor, title:'Open the Device Push / Webhook Setting', color:'var(--accent)',
+     body:`On a PC on the <strong>same network</strong> as the device, go to <code>http://&lt;device-ip&gt;</code>, sign in, then open the HTTP push / webhook menu. Login and menu path by brand:<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Hikvision</strong> — admin / 12345 → Configuration → Network → Advanced → <em>HTTP Listening</em></div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Suprema</strong> — admin / admin → Settings → Server → <em>HTTP Push</em></div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>ZKTeco ADMS</strong> — admin / 12345 → Menu → Communication → <em>Cloud Server</em></div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Anviz</strong> — admin / admin → Network → <em>Web Server / HTTP Push</em></div>
      </div>`},
-    {icon:I.settings, title:'Navigate to the Push / Webhook Setting', color:'var(--accent)',
-     body:`Find the HTTP push or webhook menu — exact path by brand:<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Hikvision</strong> → Configuration → Network → Advanced → <em>HTTP Listening</em></div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Suprema</strong> → Settings → Server → <em>HTTP Push</em></div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>ZKTeco ADMS</strong> → Menu → Communication → <em>Cloud Server</em></div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Anviz</strong> → Network → <em>Web Server / HTTP Push</em></div>
-     </div>`},
-    {icon:I.form, title:'Enter TaxFlow Server Details', color:'var(--accent)',
+    {icon:I.form, title:'Enter These Details and Save', color:'var(--accent)',
      body:`<table style="font-size:11px;border-collapse:collapse;width:100%;margin-top:4px">
       <tr style="background:rgba(99,102,241,.07)">
         <td style="padding:5px 10px 5px 8px;color:var(--text3);white-space:nowrap;font-weight:600;width:90px">Server URL</td>
@@ -18079,21 +18072,21 @@ function showBioGuide(apiKey, type, ip, port){
         <td style="padding:5px 8px"><code>JSON</code></td>
         <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('JSON',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
       </tr>
-     </table>`},
-    {icon:I.toggle, title:'Enable and Save', color:'var(--accent)',
-     body:'Enable the HTTP push / webhook toggle and save the settings. The device will now push every punch record directly to TaxFlow within seconds of each scan.'},
+     </table>
+     <div style="margin-top:6px">Enable the push / webhook toggle and save. The device will now push every punch directly to TaxFlow within seconds of each scan.</div>`},
     {icon:I.check, title:'Test — Punch In &amp; Check Sync Log', color:'#10b981',
      body:'Scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within a few seconds. If it doesn\'t, check the IP address and API key in your device settings.'},
   ];
 
   if(stepsEl){
+    const lastIdx=steps.length-1;
     stepsEl.innerHTML=steps.map((s,i)=>`
-      <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:${i===5?'rgba(16,185,129,.06)':'var(--surface2)'};border-radius:10px;border-left:3px solid ${s.color}">
+      <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:${i===lastIdx?'rgba(16,185,129,.06)':'var(--surface2)'};border-radius:10px;border-left:3px solid ${s.color}">
         <div style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:${s.color};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">${i+1}</div>
         <div style="flex:1">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
             <span style="color:${s.color}">${s.icon}</span>
-            <span style="font-size:12px;font-weight:700${i===5?';color:#065f46':''}">${s.title}</span>
+            <span style="font-size:12px;font-weight:700${i===lastIdx?';color:#065f46':''}">${s.title}</span>
           </div>
           <div style="font-size:11.5px;color:var(--text2);line-height:1.7">${s.body}</div>
         </div>
