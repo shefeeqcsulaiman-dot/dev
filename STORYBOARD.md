@@ -339,8 +339,15 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 
 ### 11.5 Attendance
 - Punch In / Punch Out records
-- Source: manual / biometric device (ZKTeco MB series integration)
 - Daily attendance summary
+- **Biometric Integration** (HR Settings tab): connect physical devices, each handled per its actual connection type —
+  - **TCP/IP pull** (ZKTeco F/K/iClock/SpeedFace/ProFace/G/UA/IN/MB Series, Anviz): device syncs via `zk_bridge.py` running on an office PC on the same network, polling every 30s; the bridge persists its last-synced punch to disk so a restart doesn't resend the whole device log
+  - **HTTP push** (ZKTeco ADMS, Suprema, Hikvision): device posts directly to `POST /api/v1/punch` with an `X-Device-Key` header — no bridge script needed
+  - **Manual / CSV**: no live connection; export from the device's own software and use Import CSV
+  - **Device Setup Guide**: step-by-step modal that branches by device type — bridge-script download + a pre-filled `zk_bridge.conf` snippet for TCP/IP, a copyable server-details table for HTTP push, or a single CSV-import step for Manual — each with its own flow diagram
+  - Add Device / Test connectivity (socket reachability check for TCP/IP, last-punch-age check for push) / Remove, from a Biometric Devices table with live Total/Active KPI tiles
+  - API key shown once at creation, bcrypt-hashed server-side; device-sourced punches are deduplicated by (employee, timestamp, device) so a bridge restart can't create duplicate attendance rows
+  - Sync Activity Log: last 50 punch records from all sources (device / manual / CSV), with Import CSV and Refresh
 
 ### 11.6 Overtime
 - OT types: Normal · Ramadan · Weekend · Public Holiday
@@ -351,6 +358,7 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 - Drag-and-drop shift planner grid (days × employees)
 - Repeat schedule: apply one shift pattern across daily / weekly / custom range in one click
 - Audit trail on rota changes
+- Staff Schedule download (PDF and Excel/CSV): colour-coded by day type — Working Day (green), Day Off (grey), Public Holiday (red, auto-detected from the Holiday Calendar and labelled with the holiday's name), Leave (amber) — with a colour-guide legend and shift-code key (M/E/N/OT/L/OFF/PH) printed on the export
 
 ### 11.8 Expiry Alerts
 - Centralized tracker for: passport, Emirates ID, visa, insurance, work permit, driving license, labor card
@@ -362,6 +370,8 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 - Branches / Locations
 - OT rules configuration
 - Attendance rules (allow multiple breaks, shift tolerance)
+- Holiday Calendar: company public holidays (date, name, location, paid/status) — feeds the Weekly Rota's automatic Public Holiday detection
+- Biometric Integration: see §11.5
 
 ---
 
