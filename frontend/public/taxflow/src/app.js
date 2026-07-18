@@ -18025,58 +18025,87 @@ function showBioGuide(apiKey, type, ip, port){
   const baseUrl=(window.TAXFLOW_API_BASE_URL||'https://app.etaxflow.com').replace(/\/$/,'');
   const punchUrl=`${baseUrl}/api/v1/punch`;
   const keyDisplay=apiKey||'YOUR_API_KEY';
+  const isManual=type==='Manual';
+  const isTcp=BIO_TCP_TYPES.has(type);
 
   if(keyEl) keyEl.value=apiKey||'';
   if(keyDisplay_el) keyDisplay_el.textContent=apiKey||'';
-  if(diagramEl) diagramEl.innerHTML='';
-  if(subEl) subEl.textContent='Works with ZKTeco · Suprema · Hikvision · Anviz · any HTTP Push device';
   if(keyRow) keyRow.style.display='';
   if(keyAvail) keyAvail.style.display=apiKey?'':'none';
   if(keyMissing) keyMissing.style.display=apiKey?'none':'';
 
   const I=_BIO_ICONS;
-  const steps=[
-    {icon:I.key, title:'Copy the API Key', color:'var(--accent)',
-     body:'The API key is shown above — copy it now. You will paste it into the device in step 3.'},
-    {icon:I.monitor, title:'Open the Device Push / Webhook Setting', color:'var(--accent)',
-     body:`On a PC on the <strong>same network</strong> as the device, go to <code>http://&lt;device-ip&gt;</code>, sign in, then open the HTTP push / webhook menu. Login and menu path by brand:<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Hikvision</strong> — admin / 12345 → Configuration → Network → Advanced → <em>HTTP Listening</em></div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Suprema</strong> — admin / admin → Settings → Server → <em>HTTP Push</em></div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>ZKTeco ADMS</strong> — admin / 12345 → Menu → Communication → <em>Cloud Server</em></div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Anviz</strong> — admin / admin → Network → <em>Web Server / HTTP Push</em></div>
-     </div>`},
-    {icon:I.form, title:'Enter These Details and Save', color:'var(--accent)',
-     body:`<table style="font-size:11px;border-collapse:collapse;width:100%;margin-top:4px">
-      <tr style="background:rgba(99,102,241,.07)">
-        <td style="padding:5px 10px 5px 8px;color:var(--text3);white-space:nowrap;font-weight:600;width:90px">Server URL</td>
-        <td style="padding:5px 8px"><code style="word-break:break-all">${punchUrl}</code></td>
-        <td style="padding:5px 8px 5px 0;width:52px"><button onclick="_bioCopy('${punchUrl.replace(/'/g,"\\'")}',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer;white-space:nowrap">Copy</button></td>
-      </tr>
-      <tr>
-        <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Method</td>
-        <td style="padding:5px 8px"><code>POST</code></td>
-        <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('POST',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
-      </tr>
-      <tr style="background:rgba(99,102,241,.07)">
-        <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Header name</td>
-        <td style="padding:5px 8px"><code>X-Device-Key</code></td>
-        <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('X-Device-Key',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
-      </tr>
-      <tr>
-        <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Header value</td>
-        <td style="padding:5px 8px"><code style="word-break:break-all;font-size:10px">${keyDisplay}</code></td>
-        <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy(${JSON.stringify(keyDisplay)},this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
-      </tr>
-      <tr style="background:rgba(99,102,241,.07)">
-        <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Data format</td>
-        <td style="padding:5px 8px"><code>JSON</code></td>
-        <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('JSON',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
-      </tr>
-     </table>
-     <div style="margin-top:6px">Enable the push / webhook toggle and save. The device will now push every punch directly to TaxFlow within seconds of each scan.</div>`},
-    {icon:I.check, title:'Test — Punch In &amp; Check Sync Log', color:'#10b981',
-     body:'Scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within a few seconds. If it doesn\'t, check the IP address and API key in your device settings.'},
-  ];
+  let steps;
+
+  if(isManual){
+    if(subEl) subEl.textContent='CSV import only — no live device connection required';
+    if(diagramEl) diagramEl.innerHTML=_bioDiagramCSV();
+    steps=[
+      {icon:I.csv, title:'Export and Import a CSV', color:'var(--accent)',
+       body:'This device is set up for CSV import only — no live connection to configure. Export the attendance log from the device\'s own software, then click <strong>↑ Import CSV</strong> in the Sync Activity Log. Required columns: <code>employee_id, punch_time</code> (optional: <code>employee_name, direction</code>).'},
+    ];
+  } else if(isTcp){
+    const confSnippet=`DEVICE_API_KEY=${keyDisplay}\nZK_DEVICE_IP=${ip||'192.168.1.201'}\nZK_DEVICE_PORT=${port||4370}\nAPI_BASE_URL=${baseUrl}`;
+    if(subEl) subEl.textContent=`${type} — TCP/IP pull via zk_bridge.py (not a webhook)`;
+    if(diagramEl) diagramEl.innerHTML=_bioDiagramTCP(type.replace('ZKTeco ','').toUpperCase()||'ZK');
+    steps=[
+      {icon:I.download, title:'Download the Bridge Script', color:'var(--accent)',
+       body:`${escapeHtml(type)} is pulled over TCP/IP by a small script that runs on a PC on the <strong>same network</strong> as the device — it is not a webhook device.<br><button onclick="downloadBridgeScript()" style="margin-top:6px;padding:5px 12px;font-size:11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-weight:600">⬇ Download zk_bridge.py</button>`},
+      {icon:I.form, title:'Create zk_bridge.conf With These Values', color:'var(--accent)',
+       body:`Save this as <code>zk_bridge.conf</code> in the same folder as the script:<div style="display:flex;align-items:flex-start;gap:8px;margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px">
+        <pre style="flex:1;margin:0;font-size:10.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all">${escapeHtml(confSnippet)}</pre>
+        <button onclick="_bioCopy(${JSON.stringify(confSnippet)},this)" style="flex-shrink:0;padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;white-space:nowrap">Copy</button>
+       </div>`},
+      {icon:I.terminal, title:'Install pyzk and Run the Script', color:'var(--accent)',
+       body:`On that same PC: <code>pip install pyzk requests</code>, then <code>python zk_bridge.py</code>. It connects to the device, polls every 30 seconds, and forwards new punches automatically — leave it running (use <code>pm2</code> or a service for production).`},
+      {icon:I.check, title:'Test — Punch In &amp; Check Sync Log', color:'#10b981',
+       body:'With <code>zk_bridge.py</code> running, scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within about 30 seconds. If it doesn\'t, check the device IP/port and API key in <code>zk_bridge.conf</code>.'},
+    ];
+  } else {
+    if(subEl) subEl.textContent='Works with Suprema · Hikvision · ZKTeco ADMS · any HTTP Push device';
+    if(diagramEl) diagramEl.innerHTML=_bioDiagramPush(type||'Device');
+    steps=[
+      {icon:I.key, title:'Copy the API Key', color:'var(--accent)',
+       body:'The API key is shown above — copy it now. You will paste it into the device in step 3.'},
+      {icon:I.monitor, title:'Open the Device Push / Webhook Setting', color:'var(--accent)',
+       body:`On a PC on the <strong>same network</strong> as the device, go to <code>http://&lt;device-ip&gt;</code>, sign in, then open the HTTP push / webhook menu. Login and menu path by brand:<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Hikvision</strong> — admin / 12345 → Configuration → Network → Advanced → <em>HTTP Listening</em></div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Suprema</strong> — admin / admin → Settings → Server → <em>HTTP Push</em></div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>ZKTeco ADMS</strong> — admin / 12345 → Menu → Communication → <em>Cloud Server</em></div>
+       </div>`},
+      {icon:I.form, title:'Enter These Details and Save', color:'var(--accent)',
+       body:`<table style="font-size:11px;border-collapse:collapse;width:100%;margin-top:4px">
+        <tr style="background:rgba(99,102,241,.07)">
+          <td style="padding:5px 10px 5px 8px;color:var(--text3);white-space:nowrap;font-weight:600;width:90px">Server URL</td>
+          <td style="padding:5px 8px"><code style="word-break:break-all">${punchUrl}</code></td>
+          <td style="padding:5px 8px 5px 0;width:52px"><button onclick="_bioCopy('${punchUrl.replace(/'/g,"\\'")}',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer;white-space:nowrap">Copy</button></td>
+        </tr>
+        <tr>
+          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Method</td>
+          <td style="padding:5px 8px"><code>POST</code></td>
+          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('POST',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
+        </tr>
+        <tr style="background:rgba(99,102,241,.07)">
+          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Header name</td>
+          <td style="padding:5px 8px"><code>X-Device-Key</code></td>
+          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('X-Device-Key',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
+        </tr>
+        <tr>
+          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Header value</td>
+          <td style="padding:5px 8px"><code style="word-break:break-all;font-size:10px">${keyDisplay}</code></td>
+          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy(${JSON.stringify(keyDisplay)},this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
+        </tr>
+        <tr style="background:rgba(99,102,241,.07)">
+          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Data format</td>
+          <td style="padding:5px 8px"><code>JSON</code></td>
+          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('JSON',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
+        </tr>
+       </table>
+       <div style="margin-top:6px">Enable the push / webhook toggle and save. The device will now push every punch directly to TaxFlow within seconds of each scan.</div>`},
+      {icon:I.check, title:'Test — Punch In &amp; Check Sync Log', color:'#10b981',
+       body:'Scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within a few seconds. If it doesn\'t, check the IP address and API key in your device settings.'},
+    ];
+  }
 
   if(stepsEl){
     const lastIdx=steps.length-1;
@@ -18090,11 +18119,7 @@ function showBioGuide(apiKey, type, ip, port){
           </div>
           <div style="font-size:11.5px;color:var(--text2);line-height:1.7">${s.body}</div>
         </div>
-      </div>`).join('')
-    +`<div style="background:var(--surface2);border-radius:10px;padding:10px 14px;font-size:11.5px;color:var(--text2);line-height:1.7">
-        <strong>ZKTeco TCP/IP devices</strong> (F/K/iClock/SpeedFace/ProFace) need the bridge script instead —
-        <button onclick="downloadBridgeScript()" style="background:none;border:none;color:var(--accent);font-weight:700;cursor:pointer;font-size:11.5px;padding:0;text-decoration:underline">Download zk_bridge.py</button>
-      </div>`;
+      </div>`).join('');
   }
   showM('m-bio-key');
 }
