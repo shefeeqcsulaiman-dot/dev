@@ -229,6 +229,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(attendance.router, prefix="/api/v1")
+    app.include_router(attendance.short_router, prefix="/api/v1")
     app.include_router(ai.router, prefix="/api/v1")
     app.include_router(hr_ai.router, prefix="/api/v1")
     app.include_router(invoice_share.router, prefix="/api/v1")

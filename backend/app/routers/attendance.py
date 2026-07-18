@@ -28,6 +28,12 @@ from app.security import verify_password, hash_password
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
 
+# Prefix-less router for short, device-friendly URL aliases (e.g. /api/v1/punch
+# instead of /api/v1/attendance/punch). Physical devices/firmware admin panels
+# have this URL manually typed into a small on-device form, so shorter matters
+# here in a way it doesn't for the CRUD endpoints our own frontend calls.
+short_router = APIRouter(tags=["attendance"])
+
 CIRC = 238.76  # SVG donut circumference reference (unused here, kept for JS)
 
 
@@ -322,6 +328,15 @@ def record_punch(
     db.add(punch)
     db.commit()
     return {"ok": True, "id": punch.id}
+
+
+# Short alias: POST /api/v1/punch — same handler, same rate limit and auth,
+# just a shorter URL for device push-config screens. /attendance/punch above
+# keeps working for anything already configured with the long URL.
+short_router.add_api_route(
+    "/punch", record_punch, methods=["POST"], status_code=201,
+    summary="Short alias for /attendance/punch",
+)
 
 
 # ── CSV Import ────────────────────────────────────────────────────────────────

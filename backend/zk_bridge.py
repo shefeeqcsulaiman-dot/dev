@@ -86,7 +86,7 @@ ZK_POLL_INTERVAL = int(_get("ZK_POLL_INTERVAL", "30"))
 API_BASE_URL     = _get("API_BASE_URL",     "https://app.etaxflow.com").rstrip("/")
 DEVICE_API_KEY   = _get("DEVICE_API_KEY",   "")
 
-PUNCH_ENDPOINT = f"{API_BASE_URL}/api/v1/attendance/punch"
+PUNCH_ENDPOINT = f"{API_BASE_URL}/api/v1/punch"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -195,7 +195,7 @@ def _run_pyzk() -> None:
 #
 #  For Suprema, Hikvision, Anviz devices that support HTTP push:
 #  Configure the device to POST to:
-#    POST {API_BASE_URL}/api/v1/attendance/punch
+#    POST {API_BASE_URL}/api/v1/punch
 #  with the following JSON body:
 #    {"employee_id": "<badge_id>", "punch_time": "<ISO8601>", "direction": "in"}
 #  and header:

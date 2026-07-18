@@ -17882,7 +17882,7 @@ function onBioDevTypeChange(val){
     if(netRow)netRow.style.display='none';
   } else if(BIO_PUSH_TYPES.has(val)){
     hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--amber-bg);color:var(--amber)';
-    hint.innerHTML='<strong>Mode: HTTP Webhook Push</strong> — Configure the device to POST punches to <code>/api/v1/attendance/punch</code> with header <code>X-Device-Key: &lt;key&gt;</code>.';
+    hint.innerHTML='<strong>Mode: HTTP Webhook Push</strong> — Configure the device to POST punches to <code>/api/v1/punch</code> with header <code>X-Device-Key: &lt;key&gt;</code>.';
     if(netRow)netRow.style.display='none';
   } else {
     hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--blue-bg);color:var(--blue)';
@@ -18023,7 +18023,7 @@ function showBioGuide(apiKey, type, ip, port){
   const stepsEl=document.getElementById('bio-guide-steps');
   const diagramEl=document.getElementById('bio-guide-diagram');
   const baseUrl=(window.TAXFLOW_API_BASE_URL||'https://app.etaxflow.com').replace(/\/$/,'');
-  const punchUrl=`${baseUrl}/api/v1/attendance/punch`;
+  const punchUrl=`${baseUrl}/api/v1/punch`;
   const keyDisplay=apiKey||'YOUR_API_KEY';
 
   if(keyEl) keyEl.value=apiKey||'';
