@@ -7539,10 +7539,17 @@ async function requestSalesInvoiceExtraction(entry){
 
   try{
     const endpoint=APP_CONFIG.salesExtractionEndpoint||`${apiBaseUrl()}/app-data?action=invoices.import`;
-    const response=await authenticatedFetch(endpoint,{
-      method:'POST',
-      body:JSON.stringify(payload)
-    });
+    let response;
+    try{
+      response=await authenticatedFetch(endpoint,{
+        method:'POST',
+        body:JSON.stringify(payload),
+        signal:_extractionAbortSignal()
+      });
+    }catch(err){
+      if(err.name==='AbortError')throw new Error('Invoice import timed out after 2 minutes — please try again');
+      throw err;
+    }
     if(!response.ok)throw new Error('Invoice import service returned '+response.status);
     const data=await response.json();
     const invoices=Array.isArray(data)?data:data.invoices;
@@ -18065,7 +18072,10 @@ function showBioGuide(apiKey, type, ip, port){
     if(diagramEl) diagramEl.innerHTML=_bioDiagramTCP(type.replace('ZKTeco ','').toUpperCase()||'ZK');
     steps=[
       {icon:I.download, title:'Download the Bridge Script', color:'var(--accent)',
-       body:`${escapeHtml(type)} is pulled over TCP/IP by a small script that runs on a PC on the <strong>same network</strong> as the device — it is not a webhook device.<br><button onclick="downloadBridgeScript()" style="margin-top:6px;padding:5px 12px;font-size:11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-weight:600">⬇ Download zk_bridge.py</button>`},
+       body:`${escapeHtml(type)} is pulled over TCP/IP by a small script that runs on a PC on the <strong>same network</strong> as the device — it is not a webhook device.<br><button onclick="downloadBridgeScript()" style="margin-top:6px;padding:5px 12px;font-size:11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-weight:600">⬇ Download zk_bridge.py</button>
+       <div style="margin-top:8px;padding:7px 10px;background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)">
+        <strong>Tip:</strong> check the device's own menu first — <code>Menu → Comm → Cloud Server Setting</code> (wording varies). If it has that option, skip the script entirely: remove this device and re-add it as <strong>ZKTeco ADMS</strong> instead, which pushes punches directly with no bridge script needed. Older/basic terminals without this option still need the script below.
+       </div>`},
       {icon:I.form, title:'Create zk_bridge.conf With These Values', color:'var(--accent)',
        body:`Save this as <code>zk_bridge.conf</code> in the same folder as the script:<div style="display:flex;align-items:flex-start;gap:8px;margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px">
         <pre style="flex:1;margin:0;font-size:10.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all">${escapeHtml(confSnippet)}</pre>
