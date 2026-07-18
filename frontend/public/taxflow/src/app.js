@@ -7367,6 +7367,14 @@ function buildFallbackExtraction(entry){
   return [];
 }
 
+const EXTRACTION_TIMEOUT_MS=120000; // AI extraction can legitimately take a while, but must not hang forever
+
+function _extractionAbortSignal(ms=EXTRACTION_TIMEOUT_MS){
+  const controller=new AbortController();
+  setTimeout(()=>controller.abort(),ms);
+  return controller.signal;
+}
+
 async function requestInvoiceExtraction(entry){
   const payload={
     file:{name:entry.name,size:entry.size,type:entry.type,base64:entry.base64},
@@ -7374,10 +7382,17 @@ async function requestInvoiceExtraction(entry){
     period:entry.period
   };
   const endpoint=APP_CONFIG.extractionEndpoint||`${apiBaseUrl()}/app-data?action=documents.extract`;
-  const response=await authenticatedFetch(endpoint,{
-    method:'POST',
-    body:JSON.stringify(payload)
-  });
+  let response;
+  try{
+    response=await authenticatedFetch(endpoint,{
+      method:'POST',
+      body:JSON.stringify(payload),
+      signal:_extractionAbortSignal()
+    });
+  }catch(err){
+    if(err.name==='AbortError')throw new Error('Extraction timed out after 2 minutes — please try again');
+    throw err;
+  }
   if(!response.ok){
     let detail='';
     try{const d=await response.json();detail=d.detail||d.message||'';}catch{}

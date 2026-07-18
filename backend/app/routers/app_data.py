@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 import app.cache as cache
 from app.config import get_settings
@@ -802,7 +803,10 @@ async def app_data_action(
 
     if action == "documents.extract":
         file = payload.get("file", {})
-        invoices = ingest_purchase_document(db, current_user, file)
+        # Runs in a thread: it can make a blocking OpenAI/Anthropic call (and a
+        # blocking subprocess for PDF rendering) taking up to ~90s, which would
+        # otherwise freeze this whole async worker's event loop for every user.
+        invoices = await run_in_threadpool(ingest_purchase_document, db, current_user, file)
         # Flag any extracted invoice whose invoice_no already exists in purchaseRecords
         non_error_invoices = [inv for inv in invoices if not inv.get("extraction_error")]
         invoice_nos = [str(inv.get("invoice_no") or "").strip() for inv in non_error_invoices]
@@ -834,7 +838,8 @@ async def app_data_action(
 
     if action == "invoices.import":
         file = payload.get("file", {})
-        invoices = ingest_sales_invoice_document(db, current_user, file)
+        # See documents.extract above: same blocking-AI-call concern applies here.
+        invoices = await run_in_threadpool(ingest_sales_invoice_document, db, current_user, file)
         non_error = [inv for inv in invoices if not inv.get("extraction_error")]
         log_action(db, current_user, "salesInvoices", "invoice_import_requested", {"file": file.get("name"), "invoices": len(non_error)})
         db.commit()
