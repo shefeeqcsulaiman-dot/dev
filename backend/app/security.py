@@ -25,9 +25,12 @@ def verify_password(password: str, password_hash: str) -> bool:
     return pwd_context.verify(password, password_hash)
 
 
-def create_access_token(subject: str) -> str:
+def create_access_token(subject: str, impersonated_by: str | None = None) -> str:
     expires = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_minutes)
-    return jwt.encode({"sub": subject, "exp": expires}, settings.secret_key, algorithm=ALGORITHM)
+    payload: dict = {"sub": subject, "exp": expires}
+    if impersonated_by:
+        payload["imp"] = impersonated_by
+    return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
 
 
 def authenticate_user(db: Session, email: str, password: str) -> User | None:
@@ -47,5 +50,14 @@ def user_id_from_token(token: str) -> str | None:
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
         return payload.get("sub")
+    except JWTError:
+        return None
+
+
+def impersonator_id_from_token(token: str) -> str | None:
+    """Returns the superadmin user id if this token was issued as an impersonation session."""
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+        return payload.get("imp")
     except JWTError:
         return None

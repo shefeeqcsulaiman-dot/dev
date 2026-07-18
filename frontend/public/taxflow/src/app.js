@@ -1955,6 +1955,7 @@ async function applyRoleBasedNav(){
     const topAv=document.getElementById('hrms-top-av');
     if(topName)topName.textContent=user.name||user.email||'Admin';
     if(topAv)topAv.textContent=initialsFromName(user.name||user.email||'Admin');
+    renderImpersonationBanner(user.impersonated_by,user.company,user.full_name||user.email);
     if(role==='admin'||role==='superadmin')return; // full access
     const allowed=new Set(_NAV_ROLE_MAP[role]||[]);
     document.querySelectorAll('.nav[onclick]').forEach(nav=>{
@@ -1966,6 +1967,31 @@ async function applyRoleBasedNav(){
   }catch(e){
     console.warn('[RoleNav]',e);
   }
+}
+
+function renderImpersonationBanner(impersonatedBy,company,viewingAsName){
+  const existing=document.getElementById('impersonation-banner');
+  if(!impersonatedBy){existing?.remove();document.body?.style.removeProperty('padding-top');return;}
+  if(existing)return; // already shown
+  const bar=document.createElement('div');
+  bar.id='impersonation-banner';
+  bar.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#7c3aed;color:#fff;font-family:inherit;font-size:13px;padding:8px 16px;display:flex;align-items:center;justify-content:center;gap:14px;box-shadow:0 2px 8px rgba(0,0,0,.2)';
+  bar.innerHTML=`<span>⚠ Viewing as <strong>${escapeHtml(viewingAsName||'')}</strong> at <strong>${escapeHtml(company?.name||'')}</strong> as Super Admin</span><button id="impersonation-exit-btn" style="background:#fff;color:#7c3aed;border:none;border-radius:6px;padding:4px 12px;font-weight:700;cursor:pointer;font-size:12px">Exit Impersonation</button>`;
+  document.body.prepend(bar);
+  document.body.style.paddingTop=(bar.offsetHeight||36)+'px';
+  document.getElementById('impersonation-exit-btn').onclick=exitImpersonation;
+}
+
+async function exitImpersonation(){
+  try{
+    await authenticatedFetch(`${apiBaseUrl()}/superadmin/end-impersonation`,{method:'POST'});
+  }catch(e){console.warn('[Impersonation] end-session call failed:',e);}
+  const superadminToken=localStorage.getItem('taxflow_superadmin_token');
+  if(superadminToken){
+    localStorage.setItem('taxflow_token',superadminToken);
+    localStorage.removeItem('taxflow_superadmin_token');
+  }
+  window.location.replace('/superadmin');
 }
 
 async function ensureBackendSession(){

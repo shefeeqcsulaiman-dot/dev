@@ -90,6 +90,23 @@
     .spinner{display:inline-block;width:18px;height:18px;border:2.5px solid rgba(99,130,200,.2);border-top-color:#4f8ef0;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;}
     @keyframes spin{to{transform:rotate(360deg)}}
     .loading-state{text-align:center;padding:40px;color:#8896b3;}
+
+    /* shell + sidebar */
+    .shell{display:flex;align-items:stretch;min-height:calc(100vh - 56px);}
+    .sb{width:216px;flex-shrink:0;background:#0d1120;border-right:1px solid rgba(99,130,200,.14);padding:18px 12px;position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto;}
+    .sb-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;font-size:13px;font-weight:500;color:#8896b3;cursor:pointer;transition:background .15s,color .15s;margin-bottom:2px;}
+    .sb-item svg{flex-shrink:0;width:16px;height:16px;}
+    .sb-item:hover{background:rgba(99,130,200,.08);color:#dde4f0;}
+    .sb-item.on{background:rgba(79,142,240,.12);color:#4f8ef0;}
+    .sb-item .sb-badge{margin-left:auto;background:rgba(240,107,107,.15);color:#f06b6b;font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;}
+    .main-wrap{flex:1;min-width:0;}
+    .page-section{display:none;}
+    .page-section.on{display:block;}
+
+    /* mini charts */
+    .chart-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;}
+    .chart-title{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px;}
+    .health-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;}
   </style>
 </head>
 <body>
@@ -107,10 +124,47 @@
   </div>
 </div>
 
-<!-- Main -->
-<div class="main">
-  <div class="page-title">Company Management</div>
-  <div class="page-sub">Manage all tenant companies, users and subscriptions</div>
+<!-- Shell -->
+<div class="shell">
+  <nav class="sb" id="sa-sidebar">
+    <div class="sb-item on" data-page="overview" onclick="saGo('overview',this)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>
+      Overview
+    </div>
+    <div class="sb-item" data-page="companies" onclick="saGo('companies',this)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="8" height="12" rx="1"/><path d="M10 6h4v8h-4M4.5 5h1M4.5 8h1M4.5 11h1"/></svg>
+      Companies
+    </div>
+    <div class="sb-item" data-page="analytics" onclick="saGo('analytics',this)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14V2M2 14h12"/><rect x="4" y="8" width="2" height="4"/><rect x="7.5" y="5" width="2" height="7"/><rect x="11" y="9.5" width="2" height="2.5"/></svg>
+      Usage Analytics
+    </div>
+    <div class="sb-item" data-page="health" onclick="saGo('health',this)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8h3l1.5-4L8 12l1.5-6L11 8h4"/></svg>
+      System Health
+    </div>
+    <div class="sb-item" data-page="errors" onclick="saGo('errors',this)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5l7 12.5H1L8 1.5z"/><path d="M8 6.5v3M8 11.5v.1"/></svg>
+      Client Errors
+      <span class="sb-badge" id="sb-badge-errors" style="display:none"></span>
+    </div>
+    <div class="sb-item" data-page="trials" onclick="saGo('trials',this)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><path d="M12 4v4M10 6h4"/></svg>
+      Trial Requests
+      <span class="sb-badge" id="sb-badge-trials" style="display:none"></span>
+    </div>
+    <div class="sb-item" data-page="audit" onclick="saGo('audit',this)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2.5 1.5"/></svg>
+      Audit Log
+    </div>
+  </nav>
+
+  <div class="main-wrap">
+  <div class="main">
+
+  <div class="page-section on" id="page-overview">
+  <div class="page-title">Overview</div>
+  <div class="page-sub">Platform-wide snapshot across all tenant companies</div>
 
   <!-- Stats -->
   <div class="stats">
@@ -138,6 +192,11 @@
       <div class="loading-state">Loading…</div>
     </div>
   </div>
+  </div><!-- /page-overview -->
+
+  <div class="page-section" id="page-companies">
+  <div class="page-title">Companies</div>
+  <div class="page-sub">Manage all tenant companies, users and subscriptions</div>
 
   <!-- Companies -->
   <div class="card">
@@ -145,6 +204,12 @@
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <div class="card-title">All Companies</div>
         <input type="text" id="sa-co-search" placeholder="Search by name, TRN…" oninput="filterCompanies()" style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;background:var(--surface);color:var(--text);outline:none;width:200px">
+        <select id="sa-co-status-filter" onchange="filterCompanies()" style="padding:5px 8px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;background:var(--surface);color:var(--text)">
+          <option value="">All Statuses</option>
+          <option value="active">Active</option>
+          <option value="expiring">Expiring in 7 days</option>
+          <option value="expired">Expired</option>
+        </select>
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-g btn-sm" onclick="exportCompaniesCSV()">Export CSV</button>
@@ -155,9 +220,56 @@
       <div class="loading-state"><span class="spinner"></span> Loading companies…</div>
     </div>
   </div>
+  </div><!-- /page-companies -->
 
+  <div class="page-section" id="page-analytics">
+  <div class="page-title">Usage Analytics</div>
+  <div class="page-sub">Real platform activity — no billing data exists, so this tracks usage, not revenue</div>
+  <div class="card">
+    <div class="card-hd">
+      <div>
+        <div class="card-title">Activity Overview</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">Records created and new users, across all companies</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="sa-usage-days" onchange="loadUsageAnalytics()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text)">
+          <option value="14">Last 14 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+      </div>
+    </div>
+    <div id="sa-usage-wrap"><div class="loading-state"><span class="spinner"></span> Loading…</div></div>
+  </div>
+  <div class="card" style="margin-top:20px">
+    <div class="card-hd"><div class="card-title">Most Active Companies</div></div>
+    <div id="sa-usage-companies-wrap"><div class="loading-state">Loading…</div></div>
+  </div>
+  <div class="card" style="margin-top:20px">
+    <div class="card-hd"><div class="card-title">Module Usage Breakdown</div></div>
+    <div id="sa-usage-modules-wrap"><div class="loading-state">Loading…</div></div>
+  </div>
+  </div><!-- /page-analytics -->
+
+  <div class="page-section" id="page-health">
+  <div class="page-title">System Health</div>
+  <div class="page-sub">Database reachability and error-rate trend (no external APM is configured — this reports only what's actually checkable here)</div>
+  <div class="card">
+    <div class="card-hd">
+      <div class="card-title">Status</div>
+      <button class="btn btn-g btn-sm" onclick="loadSystemHealth()">Refresh</button>
+    </div>
+    <div id="sa-health-status-wrap"><div class="loading-state"><span class="spinner"></span> Loading…</div></div>
+  </div>
+  <div class="card" style="margin-top:20px">
+    <div class="card-hd"><div class="card-title">Error Rate Trend</div></div>
+    <div id="sa-health-chart-wrap"><div class="loading-state">Loading…</div></div>
+  </div>
+  </div><!-- /page-health -->
+
+  <div class="page-section" id="page-errors">
   <!-- Client Error Report -->
-  <div class="card" style="margin-top:24px">
+  <div class="card">
     <div class="card-hd">
       <div>
         <div class="card-title">Client Error Report</div>
@@ -176,9 +288,11 @@
       <div class="loading-state">Loading errors…</div>
     </div>
   </div>
+  </div><!-- /page-errors -->
 
+  <div class="page-section" id="page-trials">
   <!-- Trial Requests -->
-  <div class="card" style="margin-top:24px">
+  <div class="card">
     <div class="card-hd">
       <div>
         <div class="card-title">Trial Requests <span id="sa-trial-badge" style="display:none;background:#4f8ef0;color:#fff;font-size:11px;font-weight:600;border-radius:20px;padding:2px 8px;margin-left:6px;vertical-align:middle"></span></div>
@@ -190,9 +304,11 @@
       <div class="loading-state">Loading…</div>
     </div>
   </div>
+  </div><!-- /page-trials -->
 
+  <div class="page-section" id="page-audit">
   <!-- Audit Log Panel -->
-  <div class="card" style="margin-top:24px">
+  <div class="card">
     <div class="card-hd">
       <div>
         <div class="card-title">Activity Audit Log</div>
@@ -213,7 +329,11 @@
       <div class="loading-state">Loading audit log…</div>
     </div>
   </div>
-</div>
+  </div><!-- /page-audit -->
+
+  </div><!-- /main -->
+  </div><!-- /main-wrap -->
+</div><!-- /shell -->
 
 <!-- Create Company Modal -->
 <div class="overlay" id="m-create" onclick="if(event.target===this)closeModal('m-create')">
@@ -420,6 +540,19 @@
 
   function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+  // ── Sidebar page switcher ──────────────────────────────────────
+  const SA_PAGE_LOADERS={
+    analytics: ()=>loadUsageAnalytics(),
+    health: ()=>loadSystemHealth(),
+  };
+  function saGo(page, el){
+    document.querySelectorAll('.page-section').forEach(p=>p.classList.remove('on'));
+    document.getElementById('page-'+page)?.classList.add('on');
+    document.querySelectorAll('.sb-item').forEach(n=>n.classList.remove('on'));
+    (el||document.querySelector(`.sb-item[data-page="${page}"]`))?.classList.add('on');
+    if(SA_PAGE_LOADERS[page]) SA_PAGE_LOADERS[page]();
+  }
+
   // ── Load ──────────────────────────────────────────────────────
   let companies = [];
 
@@ -614,7 +747,8 @@
             <button class="btn btn-g btn-sm" onclick="quickExtend('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}',365)">+1yr</button>
             <button class="btn btn-g btn-sm" onclick="toggleUsers('users-${escHtml(c.id)}')">Users</button>
             <button class="btn btn-g btn-sm" onclick="openAddUser('${escHtml(c.id)}','${escHtml(c.name)}')">+ User</button>
-            <button class="btn btn-g btn-sm" onclick="openModules('${escHtml(c.id)}','${escHtml(c.name)}',${JSON.stringify(c.modules_enabled||[])})">Modules</button>
+            <button class="btn btn-g btn-sm" onclick="openModules('${escHtml(c.id)}','${escHtml(c.name)}',${escHtml(JSON.stringify(c.modules_enabled||[]))})">Modules</button>
+            <button class="btn btn-g btn-sm" style="color:#a78bfa" onclick="impersonateCompany('${escHtml(c.id)}','${escHtml(c.name)}')" title="Log in as this company's admin for support">Impersonate</button>
             <button class="btn btn-r btn-sm" onclick="deleteCompany('${escHtml(c.id)}','${escHtml(c.name)}')">Delete</button>
           </div>
           <div id="users-${escHtml(c.id)}" style="display:none;margin-top:10px;padding:8px;background:rgba(99,130,200,.05);border-radius:8px">
@@ -883,6 +1017,19 @@
     finally{ btn.disabled=false; btn.textContent='Delete Company'; }
   }
 
+  // ── Impersonate ───────────────────────────────────────────────
+  async function impersonateCompany(companyId, companyName){
+    if(!confirm(`Log in as ${companyName}'s admin? This is recorded in the Audit Log and visible via a banner while active.`)) return;
+    try{
+      const res=await apiFetch(`/superadmin/companies/${companyId}/impersonate`,{method:'POST'});
+      const data=await res.json();
+      if(!res.ok){ alert(data.detail||'Impersonation failed.'); return; }
+      localStorage.setItem('taxflow_superadmin_token', localStorage.getItem('taxflow_token'));
+      localStorage.setItem('taxflow_token', data.access_token);
+      window.location.replace('/');
+    }catch(err){ alert(err.message); }
+  }
+
   // ── Trial requests ────────────────────────────────────────────
   const TRIAL_STATUS_LABELS={new:'New',contacted:'Contacted',converted:'Converted',closed:'Closed'};
   const TRIAL_STATUS_COLORS={new:'#2563eb',contacted:'#d97706',converted:'#16a34a',closed:'#6b7280'};
@@ -897,6 +1044,8 @@
       const newCount=rows.filter(r=>r.status==='new').length;
       if(newCount){badge.textContent=newCount+' new';badge.style.display='inline';}
       else badge.style.display='none';
+      const sbBadgeTrials=document.getElementById('sb-badge-trials');
+      if(sbBadgeTrials){sbBadgeTrials.textContent=newCount;sbBadgeTrials.style.display=newCount?'inline':'none';}
       const trialStat=document.getElementById('sa-stat-trials');
       if(trialStat)trialStat.textContent=rows.length+(newCount?' ('+newCount+' new)':'');
       if(!rows.length){wrap.innerHTML='<div class="loading-state" style="color:var(--muted)">No trial requests yet.</div>';return;}
@@ -942,6 +1091,8 @@
       const res=await apiFetch(`/superadmin/client-errors?days=${days}&limit=200`);
       const data=await res.json();
       document.getElementById('sa-stat-errors').textContent=data.total||0;
+      const sbBadgeErrors=document.getElementById('sb-badge-errors');
+      if(sbBadgeErrors){sbBadgeErrors.textContent=data.total||0;sbBadgeErrors.style.display=data.total?'inline':'none';}
       if(!data.errors||!data.errors.length){
         wrap.innerHTML='<div class="loading-state" style="color:var(--green)">No errors in the selected period.</div>';
         return;
@@ -950,25 +1101,33 @@
       const grouped={};
       data.errors.forEach(e=>{
         const key=e.message.slice(0,120);
-        if(!grouped[key]) grouped[key]={count:0,first:e,last:e,companies:new Set()};
+        if(!grouped[key]) grouped[key]={count:0,first:e,last:e,companies:new Set(),users:new Map()};
         grouped[key].count++;
         grouped[key].last=e;
         if(e.company_id) grouped[key].companies.add(e.company_id);
+        if(e.user_id) grouped[key].users.set(e.user_id,e.user_name||e.user_email||e.user_id);
       });
       const rows=Object.values(grouped).sort((a,b)=>b.count-a.count);
-      let html='<table class="tbl" style="font-size:12px"><thead><tr><th>Count</th><th>Error Message</th><th>Context</th><th>URL</th><th>Last Seen</th><th></th></tr></thead><tbody>';
+      let html='<table class="tbl" style="font-size:12px"><thead><tr><th>Count</th><th>Error Message</th><th>User</th><th>Company</th><th>Context</th><th>URL</th><th>Last Seen</th><th></th></tr></thead><tbody>';
       rows.forEach(g=>{
         const e=g.last;
         const ts=e.occurred_at?new Date(e.occurred_at).toLocaleString():'';
         const ctx=escHtml(e.context||'');
         const url=e.url?'<a href="'+escHtml(e.url)+'" target="_blank" style="color:var(--primary);word-break:break-all">'+escHtml(e.url.slice(0,60))+'…</a>':'—';
         const stack=e.stack?`<div style="font-family:monospace;font-size:11px;white-space:pre-wrap;background:var(--hover);padding:8px;border-radius:4px;margin-top:6px;max-height:120px;overflow:auto">${escHtml(e.stack.slice(0,1500))}</div>`:'';
+        const userNames=[...g.users.values()];
+        const userCell=userNames.length
+          ?`<div style="font-weight:500">${escHtml(userNames[0])}</div>${e.user_email?`<div style="font-size:10.5px;color:var(--muted)">${escHtml(e.user_email)}</div>`:''}${userNames.length>1?`<div style="font-size:10.5px;color:var(--muted)">+${userNames.length-1} more user(s)</div>`:''}`
+          :'<span style="color:var(--muted)">—</span>';
+        const companyCell=e.company_name?escHtml(e.company_name):(e.company_id?'<span style="color:var(--muted)">Unknown</span>':'<span style="color:var(--muted)">—</span>');
         html+=`<tr>
           <td><span style="background:rgba(240,107,107,.15);color:var(--red);padding:2px 8px;border-radius:12px;font-weight:600">${g.count}</span></td>
           <td style="max-width:340px">
             <div style="font-weight:500;word-break:break-word">${escHtml(e.message.slice(0,200))}</div>
             ${stack}
           </td>
+          <td style="white-space:nowrap">${userCell}</td>
+          <td style="white-space:nowrap">${companyCell}</td>
           <td>${ctx||'—'}</td>
           <td style="max-width:180px">${url}</td>
           <td style="white-space:nowrap;color:var(--muted)">${ts}</td>
@@ -1038,11 +1197,114 @@
     });
   }
 
-  // ── Company search filter ─────────────────────────────────────
+  // ── Company search + status filter ─────────────────────────────
   function filterCompanies(){
     const q=(document.getElementById('sa-co-search').value||'').toLowerCase();
-    const filtered=q?companies.filter(c=>(c.name||'').toLowerCase().includes(q)||(c.trn||'').toLowerCase().includes(q)||(c.country||'').toLowerCase().includes(q)):companies;
+    const status=document.getElementById('sa-co-status-filter')?.value||'';
+    const now=new Date();
+    const in7=new Date(); in7.setDate(now.getDate()+7);
+    let filtered=q?companies.filter(c=>(c.name||'').toLowerCase().includes(q)||(c.trn||'').toLowerCase().includes(q)||(c.country||'').toLowerCase().includes(q)):companies;
+    if(status){
+      filtered=filtered.filter(c=>{
+        const exp=c.subscription_expires_at?new Date(c.subscription_expires_at):null;
+        if(status==='active')return !exp||exp>=now;
+        if(status==='expiring')return exp&&exp>now&&exp<=in7;
+        if(status==='expired')return exp&&exp<now;
+        return true;
+      });
+    }
     renderCompanies(filtered);
+  }
+
+  // ── Mini SVG bar chart (no charting library in this codebase — kept consistent) ──
+  function saBarChart(data, {color='#4f8ef0', height=90, showEvery=null}={}){
+    if(!data||!data.length) return '<div class="loading-state" style="padding:16px">No data.</div>';
+    const w=Math.max(320, data.length*22);
+    const maxVal=Math.max(1, ...data.map(d=>d.count));
+    const barW=Math.min(18, (w/data.length)-4);
+    const step=showEvery||Math.max(1,Math.ceil(data.length/8));
+    const bars=data.map((d,i)=>{
+      const x=i*(w/data.length)+2;
+      const h=Math.max(1,(d.count/maxVal)*(height-18));
+      const y=height-18-h;
+      const label=i%step===0?`<text x="${x+barW/2}" y="${height-4}" font-size="8.5" fill="var(--muted)" text-anchor="middle">${escHtml(d.date.slice(5))}</text>`:'';
+      return `<rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="2" fill="${color}" fill-opacity="${d.count?1:.15}"><title>${escHtml(d.date)}: ${d.count}</title></rect>${label}`;
+    }).join('');
+    return `<svg viewBox="0 0 ${w} ${height}" width="100%" height="${height}" style="display:block">${bars}</svg>`;
+  }
+
+  // ── Usage analytics ─────────────────────────────────────────────
+  async function loadUsageAnalytics(){
+    const days=parseInt(document.getElementById('sa-usage-days').value)||30;
+    const wrap=document.getElementById('sa-usage-wrap');
+    const coWrap=document.getElementById('sa-usage-companies-wrap');
+    const modWrap=document.getElementById('sa-usage-modules-wrap');
+    wrap.innerHTML='<div class="loading-state"><span class="spinner"></span> Loading…</div>';
+    try{
+      const res=await apiFetch(`/superadmin/usage-analytics?days=${days}`);
+      const data=await res.json();
+      wrap.innerHTML=`
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div class="chart-wrap">
+            <div class="chart-title">Records Created / Day (${data.total_records} total in period)</div>
+            ${saBarChart(data.daily_trend,{color:'#4f8ef0'})}
+          </div>
+          <div class="chart-wrap">
+            <div class="chart-title">New Users / Day</div>
+            ${saBarChart(data.new_users_trend,{color:'#3ecf8e'})}
+          </div>
+        </div>`;
+
+      if(!data.top_companies.length){
+        coWrap.innerHTML='<div class="loading-state" style="color:var(--muted)">No activity recorded in this period.</div>';
+      }else{
+        const maxCount=Math.max(...data.top_companies.map(c=>c.count));
+        coWrap.innerHTML='<table class="tbl" style="font-size:12.5px"><thead><tr><th>Company</th><th>Activity</th><th></th></tr></thead><tbody>'+
+          data.top_companies.map(c=>`<tr>
+            <td>${escHtml(c.company_name)}</td>
+            <td class="mono" style="width:60px">${c.count}</td>
+            <td><div style="background:rgba(79,142,240,.15);border-radius:4px;height:8px;width:${Math.max(4,(c.count/maxCount)*160)}px"></div></td>
+          </tr>`).join('')+'</tbody></table>';
+      }
+
+      if(!data.module_breakdown.length){
+        modWrap.innerHTML='<div class="loading-state" style="color:var(--muted)">No module activity recorded in this period.</div>';
+      }else{
+        const maxMod=Math.max(...data.module_breakdown.map(m=>m.count));
+        modWrap.innerHTML=data.module_breakdown.map(m=>`
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0">
+            <div style="width:110px;font-size:12.5px;text-transform:capitalize">${escHtml(m.module)}</div>
+            <div style="flex:1;background:rgba(99,130,200,.08);border-radius:4px;height:10px;overflow:hidden"><div style="background:#a78bfa;height:100%;width:${Math.max(2,(m.count/maxMod)*100)}%"></div></div>
+            <div class="mono" style="width:40px;text-align:right;font-size:12px;color:var(--muted)">${m.count}</div>
+          </div>`).join('');
+      }
+    }catch(err){
+      wrap.innerHTML='<div class="loading-state" style="color:var(--red)">Failed to load: '+escHtml(err.message)+'</div>';
+    }
+  }
+
+  // ── System health ───────────────────────────────────────────────
+  async function loadSystemHealth(){
+    const statusWrap=document.getElementById('sa-health-status-wrap');
+    const chartWrap=document.getElementById('sa-health-chart-wrap');
+    statusWrap.innerHTML='<div class="loading-state"><span class="spinner"></span> Loading…</div>';
+    try{
+      const res=await apiFetch('/superadmin/system-health?days=14');
+      const data=await res.json();
+      const dotColor=data.db_ok?'#3ecf8e':'#f06b6b';
+      statusWrap.innerHTML=`
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px">
+          <div class="stat-card"><div class="stat-label"><span class="health-dot" style="background:${dotColor}"></span>Database</div><div class="stat-val" style="font-size:18px;color:${dotColor}">${data.db_ok?'Reachable':'Down'}</div></div>
+          <div class="stat-card"><div class="stat-label">DB Latency</div><div class="stat-val" style="font-size:18px">${data.db_latency_ms!=null?data.db_latency_ms+' ms':'—'}</div></div>
+          <div class="stat-card"><div class="stat-label">Errors (period)</div><div class="stat-val" style="font-size:18px;color:${data.total_errors?'#f06b6b':'#3ecf8e'}">${data.total_errors}</div></div>
+          <div class="stat-card"><div class="stat-label">Companies</div><div class="stat-val" style="font-size:18px">${data.scale.companies}</div></div>
+          <div class="stat-card"><div class="stat-label">Users</div><div class="stat-val" style="font-size:18px">${data.scale.users}</div></div>
+          <div class="stat-card"><div class="stat-label">Total Records</div><div class="stat-val" style="font-size:18px">${data.scale.records.toLocaleString()}</div></div>
+        </div>`;
+      chartWrap.innerHTML=`<div class="chart-wrap">${saBarChart(data.error_trend,{color:'#f06b6b'})}</div>`;
+    }catch(err){
+      statusWrap.innerHTML='<div class="loading-state" style="color:var(--red)">Failed to load: '+escHtml(err.message)+'</div>';
+    }
   }
 
   // ── Quick-extend subscription ─────────────────────────────────
@@ -1099,13 +1361,15 @@
     {key:'ai',          label:'AI Features',           sub:'AI assistant and OCR extraction'},
   ];
 
-  function buildModGrid(containerId, enabledKeys){
+  function buildModGrid(containerId, enabledKeys, usageCounts=null){
     const grid = document.getElementById(containerId);
     grid.innerHTML = MODULE_DEFS.map(m=>{
       const on = enabledKeys.includes(m.key);
+      const count = usageCounts ? (usageCounts[m.key]||0) : null;
+      const usageBadge = usageCounts ? `<div class="mod-sub" style="margin-top:2px;color:${count?'#4f8ef0':'#8896b3'}">${count?count+' action'+(count===1?'':'s')+' (30d)':'No recent activity'}</div>` : '';
       return `<label class="mod-item${on?' active':''}" id="mod-item-${containerId}-${m.key}">
         <input type="checkbox" id="mod-${containerId}-${m.key}" ${on?'checked':''} onchange="toggleModItem(this,'${containerId}','${m.key}')">
-        <div><div class="mod-lbl">${escHtml(m.label)}</div><div class="mod-sub">${escHtml(m.sub)}</div></div>
+        <div><div class="mod-lbl">${escHtml(m.label)}</div><div class="mod-sub">${escHtml(m.sub)}</div>${usageBadge}</div>
       </label>`;
     }).join('');
   }
@@ -1140,12 +1404,19 @@
     });
   }
 
-  function openModules(companyId, companyName, enabledModules){
+  async function openModules(companyId, companyName, enabledModules){
     document.getElementById('modules-err').style.display='none';
     document.getElementById('modules-sub').textContent='Modules for: '+companyName;
     document.getElementById('modules-co-id').value=companyId;
     const mods = Array.isArray(enabledModules) && enabledModules.length ? enabledModules : MODULE_DEFS.map(m=>m.key);
-    buildModGrid('edit-mod-grid', mods);
+    let counts=null;
+    try{
+      const res=await apiFetch(`/superadmin/usage-analytics?days=30&company_id=${encodeURIComponent(companyId)}`);
+      const data=await res.json();
+      counts={};
+      (data.module_breakdown||[]).forEach(m=>{counts[m.module]=m.count;});
+    }catch(err){ /* usage badges are a nice-to-have; proceed without them */ }
+    buildModGrid('edit-mod-grid', mods, counts);
     openModal('m-modules');
   }
 

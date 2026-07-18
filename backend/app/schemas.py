@@ -90,12 +90,18 @@ class CompanyUpdate(BaseModel):
     branches: str | None = None
 
 
+class ImpersonatorOut(BaseModel):
+    id: str
+    email: EmailStr
+
+
 class UserOut(BaseModel):
     id: str
     email: EmailStr
     full_name: str
     role: str
     company: CompanyOut
+    impersonated_by: ImpersonatorOut | None = None
 
     model_config = {"from_attributes": True}
 

@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -27,7 +27,7 @@ from app.models import (
     VatReturnSnapshot, Voucher, VoucherLine, VoucherType, Warehouse,
     WpsBatch,
 )
-from app.security import hash_password, user_id_from_token
+from app.security import create_access_token, hash_password, impersonator_id_from_token, user_id_from_token
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
 
@@ -501,13 +501,26 @@ def list_client_errors(
         .all()
     )
     total = db.query(func.count(ClientError.id)).filter(ClientError.occurred_at >= since).scalar()
+
+    user_ids = {r.user_id for r in rows if r.user_id}
+    users_by_id = {
+        u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()
+    } if user_ids else {}
+    company_ids = {r.company_id for r in rows if r.company_id}
+    companies_by_id = {
+        c.id: c for c in db.query(Company).filter(Company.id.in_(company_ids)).all()
+    } if company_ids else {}
+
     return {
         "total": total,
         "errors": [
             {
                 "id": r.id,
                 "company_id": r.company_id,
+                "company_name": companies_by_id[r.company_id].name if r.company_id in companies_by_id else None,
                 "user_id": r.user_id,
+                "user_name": users_by_id[r.user_id].full_name if r.user_id in users_by_id else None,
+                "user_email": users_by_id[r.user_id].email if r.user_id in users_by_id else None,
                 "message": r.message,
                 "stack": r.stack,
                 "url": r.url,
@@ -564,7 +577,7 @@ def list_audit_logs(
     entries = []
     for row in rows:
         try:
-            payload = _json.loads(row.data) if isinstance(row.data, str) else (row.data or {})
+            payload = _json.loads(row.payload) if isinstance(row.payload, str) else (row.payload or {})
         except Exception:
             payload = {}
         entries.append({
@@ -572,13 +585,222 @@ def list_audit_logs(
             "company_id": row.company_id,
             "company_name": companies.get(row.company_id, row.company_id),
             "action": payload.get("action") or payload.get("event") or "—",
-            "detail": payload.get("detail") or payload.get("description") or "",
-            "status": payload.get("status") or "",
+            "detail": payload.get("detail") or payload.get("record") or payload.get("description") or "",
+            "status": payload.get("status") or payload.get("result") or "",
             "user": payload.get("user") or payload.get("email") or "",
             "created_at": row.created_at.isoformat() if row.created_at else None,
         })
 
     return {"total": len(entries), "entries": entries}
+
+
+# ── Usage analytics ───────────────────────────────────────────────────────────
+# There's no billing data anywhere in this schema (no plan/price on Company, no
+# payment gateway), so this tracks real usage activity instead of revenue. The
+# frontend's audit() calls always write user="System User" (no real per-user
+# identity), so "active users" here is intentionally not part of this — it
+# would just be a fake-looking flat number. Everything below is built only
+# from counts/timestamps that are genuinely real.
+
+_COLLECTION_MODULE_MAP: dict[str, str] = {
+    "salesInvoices": "sales", "salesCategories": "sales", "salesUnits": "sales", "customers": "sales",
+    "quotations": "quotations",
+    "purchaseDocuments": "purchase", "purchaseRecords": "purchase", "vendors": "purchase", "bills": "purchase",
+    "products": "inventory", "warehouses": "inventory", "stockMovements": "inventory", "itemUnits": "inventory",
+    "expenses": "expense",
+    "bankAccounts": "bank", "payments": "bank", "receipts": "bank",
+    "accounts": "accounting", "ledger": "accounting", "journalDrafts": "accounting",
+    "employees": "hrms", "rotaShifts": "hrms", "rotaAssignments": "hrms", "rotaSwaps": "hrms",
+    "rotaApprovals": "hrms", "leaveRequests": "hrms", "overtimeRequests": "hrms",
+    "attendanceCorrections": "hrms", "payrollRuns": "hrms", "payrollAdjustments": "hrms", "hrUsers": "hrms",
+}
+
+
+@router.get("/usage-analytics")
+def usage_analytics(
+    days: int = 30,
+    company_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    days = max(1, min(days, 90))
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    q = db.query(AppDataRecord.company_id, AppDataRecord.collection, AppDataRecord.created_at).filter(
+        AppDataRecord.created_at >= since
+    )
+    if company_id:
+        q = q.filter(AppDataRecord.company_id == company_id)
+    rows = q.all()
+
+    daily_counts: dict[str, int] = {}
+    company_counts: dict[str, int] = {}
+    module_counts: dict[str, int] = {}
+    for company_id, collection, created_at in rows:
+        day = created_at.date().isoformat() if created_at else "unknown"
+        daily_counts[day] = daily_counts.get(day, 0) + 1
+        company_counts[company_id] = company_counts.get(company_id, 0) + 1
+        module = _COLLECTION_MODULE_MAP.get(collection, "other")
+        module_counts[module] = module_counts.get(module, 0) + 1
+
+    dates = [(datetime.now(timezone.utc).date() - timedelta(days=i)).isoformat() for i in range(days - 1, -1, -1)]
+    daily_trend = [{"date": d, "count": daily_counts.get(d, 0)} for d in dates]
+
+    new_users_rows = (
+        db.query(func.date(User.created_at), func.count(User.id))
+        .filter(User.created_at >= since, User.role != "superadmin")
+        .group_by(func.date(User.created_at))
+        .all()
+    )
+    new_users_by_day = {str(d): c for d, c in new_users_rows}
+    new_users_trend = [{"date": d, "count": new_users_by_day.get(d, 0)} for d in dates]
+
+    company_ids = list(company_counts.keys())
+    companies_by_id = {c.id: c.name for c in db.query(Company).filter(Company.id.in_(company_ids)).all()} if company_ids else {}
+    top_companies = sorted(
+        ({"company_id": cid, "company_name": companies_by_id.get(cid, cid), "count": cnt} for cid, cnt in company_counts.items()),
+        key=lambda x: x["count"], reverse=True,
+    )[:10]
+
+    module_breakdown = sorted(
+        ({"module": m, "count": c} for m, c in module_counts.items()),
+        key=lambda x: x["count"], reverse=True,
+    )
+
+    return {
+        "days": days,
+        "total_records": len(rows),
+        "daily_trend": daily_trend,
+        "new_users_trend": new_users_trend,
+        "top_companies": top_companies,
+        "module_breakdown": module_breakdown,
+    }
+
+
+# ── System health ─────────────────────────────────────────────────────────────
+# No APM/monitoring tool exists in this stack, so this only reports what's
+# actually checkable here: DB reachability/latency, error rate, and rough scale.
+
+@router.get("/system-health")
+def system_health(
+    days: int = 7,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    days = max(1, min(days, 30))
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    db_ok = True
+    db_latency_ms = None
+    try:
+        start = datetime.now(timezone.utc)
+        db.execute(text("SELECT 1"))
+        db_latency_ms = round((datetime.now(timezone.utc) - start).total_seconds() * 1000, 1)
+    except Exception:
+        db_ok = False
+
+    error_rows = (
+        db.query(ClientError.occurred_at)
+        .filter(ClientError.occurred_at >= since)
+        .all()
+    )
+    error_daily: dict[str, int] = {}
+    for (occurred_at,) in error_rows:
+        day = occurred_at.date().isoformat() if occurred_at else "unknown"
+        error_daily[day] = error_daily.get(day, 0) + 1
+    dates = [(datetime.now(timezone.utc).date() - timedelta(days=i)).isoformat() for i in range(days - 1, -1, -1)]
+    error_trend = [{"date": d, "count": error_daily.get(d, 0)} for d in dates]
+
+    total_companies = db.query(func.count(Company.id)).scalar() or 0
+    total_users = db.query(func.count(User.id)).scalar() or 0
+    total_records = db.query(func.count(AppDataRecord.id)).scalar() or 0
+
+    return {
+        "db_ok": db_ok,
+        "db_latency_ms": db_latency_ms,
+        "error_trend": error_trend,
+        "total_errors": len(error_rows),
+        "scale": {
+            "companies": total_companies,
+            "users": total_users,
+            "records": total_records,
+        },
+    }
+
+
+# ── Impersonation ─────────────────────────────────────────────────────────────
+# Superadmin can act as a company's admin for support. Every session start/end
+# is written to the same AppDataRecord "audit" collection the Audit Log panel
+# already reads, so it shows up there automatically — no new table needed.
+
+def _write_audit_blob(db: Session, company_id: str, user_label: str, action: str, record: str, result: str) -> None:
+    from app.models import uuid as _uuid
+    entry = {
+        "time": datetime.now(timezone.utc).strftime("%d/%m/%Y, %H:%M"),
+        "user": user_label,
+        "action": action,
+        "record": record,
+        "result": result,
+    }
+    db.add(AppDataRecord(
+        id=_uuid(),
+        company_id=company_id,
+        collection="audit",
+        record_key=None,
+        payload=json.dumps(entry),
+    ))
+
+
+@router.post("/companies/{company_id}/impersonate")
+def impersonate_company(
+    company_id: str,
+    db: Session = Depends(get_db),
+    superadmin: User = Depends(_require_superadmin),
+):
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    target = (
+        db.query(User)
+        .filter(User.company_id == company_id, User.role == "admin", User.is_active == True)  # noqa: E712
+        .order_by(User.created_at.asc())
+        .first()
+    )
+    if not target:
+        raise HTTPException(status_code=400, detail="This company has no active admin user to impersonate")
+
+    _write_audit_blob(
+        db, company_id, f"Super Admin ({superadmin.email})",
+        "Impersonation started", f"as {target.full_name} ({target.email})", "Started",
+    )
+    db.commit()
+
+    token = create_access_token(target.id, impersonated_by=superadmin.id)
+    return {
+        "ok": True,
+        "access_token": token,
+        "user": {"id": target.id, "email": target.email, "full_name": target.full_name},
+        "company": {"id": company.id, "name": company.name},
+    }
+
+
+@router.post("/end-impersonation")
+def end_impersonation(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    auth = request.headers.get("authorization", "")
+    impersonator_id = impersonator_id_from_token(auth.removeprefix("Bearer ").strip()) if auth.startswith("Bearer ") else None
+    if not impersonator_id:
+        raise HTTPException(status_code=400, detail="Current session is not an impersonation session")
+    superadmin = db.query(User).filter(User.id == impersonator_id).first()
+    _write_audit_blob(
+        db, current_user.company_id, f"Super Admin ({superadmin.email if superadmin else impersonator_id})",
+        "Impersonation ended", f"was viewing as {current_user.full_name} ({current_user.email})", "Ended",
+    )
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/trial-requests")

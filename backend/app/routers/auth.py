@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from app.models import Company, TrialRequest, User
 from app.schemas import LoginRequest, RegisterRequest, Token, UserOut
-from app.security import authenticate_user, create_access_token, hash_password
+from app.security import authenticate_user, create_access_token, hash_password, impersonator_id_from_token
 
 _ALL_MODULES = [
     "sales", "quotations", "pos", "purchase", "inventory", "expense",
@@ -61,7 +61,18 @@ def register(request: Request, payload: RegisterRequest, db: Session = Depends(g
 
 
 @router.get("/me", response_model=UserOut)
-def me(current_user: User = Depends(get_current_user)) -> User:
+def me(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> User:
+    auth = request.headers.get("authorization", "")
+    if auth.startswith("Bearer "):
+        impersonator_id = impersonator_id_from_token(auth.removeprefix("Bearer ").strip())
+        if impersonator_id:
+            impersonator = db.query(User).filter(User.id == impersonator_id).first()
+            if impersonator:
+                current_user.impersonated_by = {"id": impersonator.id, "email": impersonator.email}
     return current_user
 
 
