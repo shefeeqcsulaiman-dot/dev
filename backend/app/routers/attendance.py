@@ -292,10 +292,25 @@ def record_punch(
         raise HTTPException(status_code=422, detail="Punch time is too old (>90 days)")
 
     punch_date = punch_time.strftime("%Y-%m-%d")
+    employee_id = body.employee_id.strip()
+
+    # Idempotency guard: a bridge restart replays its whole in-memory backlog
+    # (last-synced marker is best-effort), so the same device punch can arrive
+    # more than once. Treat an identical (device, employee, timestamp) as the
+    # same punch instead of inserting a duplicate row.
+    if device_id:
+        existing = db.query(AttendancePunch).filter(
+            AttendancePunch.company_id == company_id,
+            AttendancePunch.employee_id == employee_id,
+            AttendancePunch.punch_time == punch_time,
+            AttendancePunch.device_id == device_id,
+        ).first()
+        if existing:
+            return {"ok": True, "id": existing.id, "duplicate": True}
 
     punch = AttendancePunch(
         company_id=company_id,
-        employee_id=body.employee_id.strip(),
+        employee_id=employee_id,
         employee_name=body.employee_name,
         punch_time=punch_time,
         punch_date=punch_date,

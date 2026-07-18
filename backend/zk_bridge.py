@@ -7,7 +7,9 @@ forwards every punch record to the ETaxFlow attendance API.
 
 Supports:
   • ZKTeco (pyzk library) — most UAE devices (ZK4500, ZK9500, iClock series)
-  • Fallback: raw socket polling for brands with ZK-compatible protocol
+  • Suprema / Hikvision / Anviz — use their built-in HTTP push instead of this
+    script (see "Webhook receiver helper" below); pyzk is required to run this
+    script at all, there is no non-pyzk fallback
 
 Usage
 -----
@@ -37,13 +39,13 @@ Environment variables (override defaults)
   DEVICE_API_KEY      API key from HRMS → Biometric Devices
 """
 
+import json
 import os
 import sys
 import time
 import logging
 import pathlib
 from datetime import datetime, timezone
-from typing import Any
 
 try:
     import requests
@@ -93,8 +95,28 @@ logging.basicConfig(
 log = logging.getLogger("zk_bridge")
 
 # ── State ─────────────────────────────────────────────────────────────────────
+# Persisted to disk so a restart (crash, redeploy, pm2 restart) doesn't forget
+# the last synced punch and resend the device's entire attendance log.
 
-_last_punch_time: datetime | None = None   # track last sent punch to avoid duplicates
+_STATE_PATH = pathlib.Path(__file__).parent / "zk_bridge_state.json"
+
+
+def _load_last_punch_time() -> datetime | None:
+    try:
+        raw = json.loads(_STATE_PATH.read_text(encoding="utf-8"))
+        return datetime.fromisoformat(raw["last_punch_time"])
+    except (FileNotFoundError, KeyError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def _save_last_punch_time(value: datetime) -> None:
+    try:
+        _STATE_PATH.write_text(json.dumps({"last_punch_time": value.isoformat()}), encoding="utf-8")
+    except OSError as exc:
+        log.warning("Could not persist sync state to %s: %s", _STATE_PATH, exc)
+
+
+_last_punch_time: datetime | None = _load_last_punch_time()   # track last sent punch to avoid duplicates
 
 
 def _post_punch(employee_id: str, employee_name: str, punch_time: datetime, direction: str = "in") -> bool:
@@ -158,69 +180,13 @@ def _run_pyzk() -> None:
                         _last_punch_time = punch_time
 
             log.info("Synced %d new punches (total on device: %d)", new_punches, len(attendances))
+            if new_punches and _last_punch_time is not None:
+                _save_last_punch_time(_last_punch_time)
             conn.enable_device()
             conn.disconnect()
 
         except Exception as exc:
             log.error("ZK error: %s", exc)
-
-        time.sleep(ZK_POLL_INTERVAL)
-
-
-# ── Fallback: raw socket ZK protocol ─────────────────────────────────────────
-
-def _run_socket_fallback() -> None:
-    """
-    Minimal ZK UDP attendance pull for devices where pyzk is unavailable.
-    Sends the standard ZK 'get attendance log' command.
-    For devices that support HTTP push, configure the device's webhook URL
-    to point to:  POST {API_BASE_URL}/api/v1/attendance/punch
-    with header:  X-Device-Key: {DEVICE_API_KEY}
-    """
-    import socket
-    log.info("pyzk not available — running socket fallback (polling mode)")
-    log.info("Alternatively, configure your device's HTTP push URL to: %s", PUNCH_ENDPOINT)
-
-    CMD_CONNECT      = 1000
-    CMD_GET_ATT_LOG  = 1201
-    REPLY_OK         = 2000
-
-    session_id = 0
-    reply_id   = 0
-
-    def _build_packet(cmd: int, data: bytes = b"") -> bytes:
-        chksum = 0
-        for b in data:
-            chksum = (chksum + b) & 0xFFFF
-        import struct
-        hdr = struct.pack("<HHHH", cmd, chksum, session_id, reply_id)
-        return hdr + data
-
-    global _last_punch_time
-
-    while True:
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_UDP if True else socket.SOCK_STREAM)
-            sock.settimeout(5)
-            sock.connect((ZK_DEVICE_IP, ZK_DEVICE_PORT))
-
-            sock.send(_build_packet(CMD_CONNECT))
-            resp = sock.recv(1024)
-            log.debug("Connect response: %s", resp.hex())
-
-            sock.send(_build_packet(CMD_GET_ATT_LOG))
-            data = b""
-            while True:
-                chunk = sock.recv(4096)
-                if not chunk:
-                    break
-                data += chunk
-
-            log.info("Received %d bytes of attendance data", len(data))
-            sock.close()
-
-        except Exception as exc:
-            log.error("Socket error: %s", exc)
 
         time.sleep(ZK_POLL_INTERVAL)
 
@@ -251,11 +217,11 @@ def main() -> None:
 
     try:
         import zk as _  # type: ignore[import]
-        log.info("pyzk found — using ZK protocol driver")
-        _run_pyzk()
     except ImportError:
-        log.warning("pyzk not installed (pip install pyzk) — falling back to socket mode")
-        _run_socket_fallback()
+        sys.exit("Missing dependency: pip install pyzk (required — this script has no working fallback without it)")
+
+    log.info("pyzk found — using ZK protocol driver")
+    _run_pyzk()
 
 
 if __name__ == "__main__":
