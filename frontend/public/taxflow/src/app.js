@@ -7256,6 +7256,11 @@ function hydrateFromServer(){
         renderStats.overtimeRequests=renderRecordList(_deferred2.overtimeRequests,renderOTRecord,'overtime request');
         renderStats.leaveRequests=renderRecordList(_deferred2.leaveRequests,renderLeaveRecord,'leave request');
         renderStats.attendanceCorrections=renderRecordList(_deferred2.attendanceCorrections,renderCorrectionRecord,'correction');
+        renderStats.employeeLoans=renderRecordList(_deferred2.employeeLoans,renderLoanRecord,'loan');
+        renderStats.salaryAdvances=renderRecordList(_deferred2.salaryAdvances,renderLoanAdvanceRecord,'salary advance');
+        renderStats.jobRequisitions=renderRecordList(_deferred2.jobRequisitions,renderJobRequisitionRecord,'job requisition');
+        renderStats.candidates=renderRecordList(_deferred2.candidates,renderCandidateRecord,'candidate');
+        refreshRecruitmentStats();
         await _yield();
         renderStats.ledger=renderRecordList(_deferred2.ledger,line=>postLedgerLine(line,{persist:false}),'ledger');
         if(Array.isArray(_deferred2.hrUsers)&&_deferred2.hrUsers.length){
@@ -7281,6 +7286,12 @@ function hydrateFromServer(){
             _roleList=hrCfg.roles;
             renderRoleTable();
           }
+        }
+        const otCfg=Array.isArray(_deferred2.hr_settings)
+          ?_deferred2.hr_settings.find(x=>x.id==='ot-rules-config')
+          :null;
+        if(otCfg){
+          _applyOtRulesConfig(otCfg);
         }
       }finally{isHydratingFromServer=false;}
       updateLeaveBalance();
@@ -15588,11 +15599,28 @@ function selectOtHours(type){
 function saveOtRules(){
   const rateType=document.querySelector('input[name="ot-rate-type"]:checked')?.value||'fixed';
   const hoursType=document.querySelector('input[name="ot-hours-type"]:checked')?.value||'hours';
-  const rule={rateType,hoursType,fixedRate:document.getElementById('ot-fixed-rate')?.value,workDays:document.getElementById('ot-work-days')?.value,workHours:document.getElementById('ot-work-hours')?.value,multNormal:document.getElementById('ot-mult-normal')?.value,multWeekend:document.getElementById('ot-mult-weekend')?.value,multHoliday:document.getElementById('ot-mult-holiday')?.value,multRamadan:document.getElementById('ot-mult-ramadan')?.value};
-  localStorage.setItem('taxflow_ot_rules',JSON.stringify(rule));
+  const rule={id:'ot-rules-config',rateType,hoursType,fixedRate:document.getElementById('ot-fixed-rate')?.value,workDays:document.getElementById('ot-work-days')?.value,workHours:document.getElementById('ot-work-hours')?.value,multNormal:document.getElementById('ot-mult-normal')?.value,multWeekend:document.getElementById('ot-mult-weekend')?.value,multHoliday:document.getElementById('ot-mult-holiday')?.value,multRamadan:document.getElementById('ot-mult-ramadan')?.value};
+  saveServer('hr_settings',rule);
   // Refresh OT policy selects
   _syncOtPolicySelects(rateType);
   toast('OT Rules saved','ok');
+}
+
+function _applyOtRulesConfig(rule){
+  if(!rule)return;
+  const setVal=(id,v)=>{const el=document.getElementById(id);if(el&&v!==undefined&&v!==null)el.value=v;};
+  const radio=document.querySelector(`input[name="ot-rate-type"][value="${rule.rateType}"]`);
+  if(radio)radio.checked=true;
+  const hoursRadio=document.querySelector(`input[name="ot-hours-type"][value="${rule.hoursType}"]`);
+  if(hoursRadio)hoursRadio.checked=true;
+  setVal('ot-fixed-rate',rule.fixedRate);
+  setVal('ot-work-days',rule.workDays);
+  setVal('ot-work-hours',rule.workHours);
+  setVal('ot-mult-normal',rule.multNormal);
+  setVal('ot-mult-weekend',rule.multWeekend);
+  setVal('ot-mult-holiday',rule.multHoliday);
+  setVal('ot-mult-ramadan',rule.multRamadan);
+  _syncOtPolicySelects(rule.rateType);
 }
 function _syncOtPolicySelects(rateType){
   // Update emp-ot-rate select to reflect named rules from tbody
@@ -16375,18 +16403,53 @@ function saveLoan(){
   const reason=document.getElementById('loan-reason')?.value.trim()||'';
   const date=document.getElementById('loan-date')?.value||new Date().toISOString().slice(0,10);
   if(!emp||!amount){toast('Employee and amount are required','warn');return;}
-  const emi=(amount/months).toFixed(2);
-  const record={id:`LN-${Date.now()}`,employee:emp,type,amount,emi:parseFloat(emi),months,balance:amount,reason,date,status:'Pending'};
-  const tbody=document.getElementById('loans-tbody');
-  if(tbody){
-    removeEmptyState(tbody);
-    const tr=document.createElement('tr');
-    tr.dataset.recordId=record.id;
-    tr.innerHTML=`<td>${escapeHtml(emp)}</td><td>${escapeHtml(type)}</td><td class="mono">AED ${amount.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td class="mono">AED ${emi}</td><td class="mono">AED ${amount.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td><span class="b b-a">Pending</span></td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="this.closest('tr').querySelector('.b').className='b b-g';this.closest('tr').querySelector('.b').textContent='Approved';this.closest('td').innerHTML='<button class=\\'btn btn-g btn-sm\\' onclick=\\'toast(\\'Loan detail\\',\\'info\\')\\'>View</button>';toast('Loan approved ✓','ok')">Approve</button><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove();toast('Loan rejected','warn')">Reject</button></div></td>`;
-    tbody.prepend(tr);
-  }
+  const emi=parseFloat((amount/months).toFixed(2));
+  const record={id:`LN-${Date.now()}`,employee:emp,type,amount,emi,months,balance:amount,reason,date,status:'Pending'};
+  renderLoanRecord(record);
+  saveServer('employeeLoans',record);
   closeM('m-loan');
   toast(`Loan request for ${emp} submitted ✓`,'ok');
+  audit('Loan request submitted',emp,'Pending');
+}
+
+function renderLoanRecord(rec){
+  const tbody=document.getElementById('loans-tbody');
+  if(!tbody)return;
+  if(tbody.querySelector(`[data-record-id="${CSS.escape(rec.id)}"]`))return;
+  removeEmptyState(tbody);
+  const statusCls=rec.status==='Approved'?'b-g':rec.status==='Rejected'?'b-r':'b-a';
+  const isPending=rec.status==='Pending'||!rec.status;
+  const actions=isPending
+    ?`<div class="flx"><button class="btn btn-success btn-sm" onclick="approveLoan(this)">Approve</button><button class="btn btn-danger btn-sm" onclick="rejectLoan(this)">Reject</button></div>`
+    :`<button class="btn btn-g btn-sm" onclick="toast('Loan detail','info')">View</button>`;
+  const amount=Number(rec.amount)||0;
+  const balance=Number(rec.balance??rec.amount)||0;
+  const tr=document.createElement('tr');
+  tr.dataset.recordId=rec.id;
+  tr.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td>${escapeHtml(rec.type)}</td><td class="mono">AED ${amount.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td class="mono">AED ${Number(rec.emi||0).toFixed(2)}</td><td class="mono">AED ${balance.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td><span class="b ${statusCls}">${escapeHtml(rec.status||'Pending')}</span></td><td>${actions}</td>`;
+  tbody.prepend(tr);
+}
+
+function approveLoan(btn){
+  const row=btn.closest('tr');
+  const id=row.dataset.recordId;
+  row.querySelector('.b').className='b b-g';
+  row.querySelector('.b').textContent='Approved';
+  row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm" onclick="toast(\'Loan detail\',\'info\')">View</button>';
+  if(id)saveServer('employeeLoans',{id,status:'Approved'});
+  toast('Loan approved ✓','ok');
+  audit('Loan approved',row.children[0]?.textContent||'','Approved');
+}
+
+function rejectLoan(btn){
+  const row=btn.closest('tr');
+  const id=row.dataset.recordId;
+  row.querySelector('.b').className='b b-r';
+  row.querySelector('.b').textContent='Rejected';
+  row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm" onclick="toast(\'Loan detail\',\'info\')">View</button>';
+  if(id)saveServer('employeeLoans',{id,status:'Rejected'});
+  toast('Loan rejected','warn');
+  audit('Loan rejected',row.children[0]?.textContent||'','Rejected');
 }
 
 function saveLoanAdvance(){
@@ -16395,15 +16458,40 @@ function saveLoanAdvance(){
   const month=document.getElementById('advance-month')?.value||'';
   const reason=document.getElementById('advance-reason')?.value.trim()||'';
   if(!emp||!amount){toast('Employee and amount are required','warn');return;}
-  const tbody=document.getElementById('advances-tbody');
-  if(tbody){
-    removeEmptyState(tbody);
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${escapeHtml(emp)}</td><td class="mono">${escapeHtml(month)}</td><td class="mono">AED ${amount.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td>${new Date().toLocaleDateString('en-GB')}</td><td><span class="b b-a">Pending</span></td><td><button class="btn btn-success btn-sm" onclick="this.closest('tr').querySelector('.b').className='b b-g';this.closest('tr').querySelector('.b').textContent='Approved';toast('Advance approved ✓','ok')">Approve</button></td>`;
-    tbody.prepend(tr);
-  }
+  const record={id:`ADV-${Date.now()}`,employee:emp,amount,month,reason,requested:new Date().toISOString(),status:'Pending'};
+  renderLoanAdvanceRecord(record);
+  saveServer('salaryAdvances',record);
   closeM('m-loan-advance');
   toast(`Salary advance for ${emp} submitted ✓`,'ok');
+  audit('Salary advance submitted',emp,'Pending');
+}
+
+function renderLoanAdvanceRecord(rec){
+  const tbody=document.getElementById('advances-tbody');
+  if(!tbody)return;
+  if(tbody.querySelector(`[data-record-id="${CSS.escape(rec.id)}"]`))return;
+  removeEmptyState(tbody);
+  const statusCls=rec.status==='Approved'?'b-g':rec.status==='Rejected'?'b-r':'b-a';
+  const isPending=rec.status==='Pending'||!rec.status;
+  const actions=isPending
+    ?`<button class="btn btn-success btn-sm" onclick="approveLoanAdvance(this)">Approve</button>`
+    :`<button class="btn btn-g btn-sm" onclick="toast('Advance detail','info')">View</button>`;
+  const requestedStr=rec.requested?new Date(rec.requested).toLocaleDateString('en-GB'):new Date().toLocaleDateString('en-GB');
+  const tr=document.createElement('tr');
+  tr.dataset.recordId=rec.id;
+  tr.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td class="mono">${escapeHtml(rec.month)}</td><td class="mono">AED ${Number(rec.amount||0).toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td>${requestedStr}</td><td><span class="b ${statusCls}">${escapeHtml(rec.status||'Pending')}</span></td><td>${actions}</td>`;
+  tbody.prepend(tr);
+}
+
+function approveLoanAdvance(btn){
+  const row=btn.closest('tr');
+  const id=row.dataset.recordId;
+  row.querySelector('.b').className='b b-g';
+  row.querySelector('.b').textContent='Approved';
+  row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm" onclick="toast(\'Advance detail\',\'info\')">View</button>';
+  if(id)saveServer('salaryAdvances',{id,status:'Approved'});
+  toast('Advance approved ✓','ok');
+  audit('Salary advance approved',row.children[0]?.textContent||'','Approved');
 }
 
 function saveJobRequisition(){
@@ -16416,18 +16504,43 @@ function saveJobRequisition(){
   const salFrom=document.getElementById('req-sal-from')?.value||'';
   const salTo=document.getElementById('req-sal-to')?.value||'';
   if(!title){toast('Job title is required','warn');return;}
-  const tbody=document.getElementById('requisitions-tbody');
-  if(tbody){
-    removeEmptyState(tbody);
-    const tr=document.createElement('tr');
-    const salRange=salFrom&&salTo?`AED ${Number(salFrom).toLocaleString()}–${Number(salTo).toLocaleString()}`:(salFrom?`AED ${Number(salFrom).toLocaleString()}+`:'—');
-    tr.innerHTML=`<td>${escapeHtml(title)}</td><td>${escapeHtml(dept)}</td><td><span class="b b-b">${escapeHtml(empType)}</span></td><td>${escapeHtml(location)}</td><td class="mono">${escapeHtml(positions)}</td><td class="mono">${salRange}</td><td>${escapeHtml(date)||'—'}</td><td><span class="b b-a">Pending Approval</span></td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="this.closest('tr').querySelector('.b').className='b b-g';this.closest('tr').querySelector('.b').textContent='Open';toast('Requisition approved ✓','ok')">Approve</button><button class="btn btn-g btn-sm" onclick="toast('Posting to job boards','info')">Post</button></div></td>`;
-    tbody.prepend(tr);
-  }
+  const record={id:`REQ-${Date.now()}`,title,department:dept,positions,employmentType:empType,location,date,salaryFrom:salFrom,salaryTo:salTo,status:'Pending Approval'};
+  renderJobRequisitionRecord(record);
+  saveServer('jobRequisitions',record);
   const cnt=document.getElementById('rec-open');
   if(cnt)cnt.textContent=document.querySelectorAll('#requisitions-tbody tr:not([data-empty-state])').length;
   closeM('m-recruitment');
   toast(`Requisition "${title}" created ✓`,'ok');
+  audit('Job requisition created',title,'Pending Approval');
+}
+
+function renderJobRequisitionRecord(rec){
+  const tbody=document.getElementById('requisitions-tbody');
+  if(!tbody)return;
+  if(tbody.querySelector(`[data-record-id="${CSS.escape(rec.id)}"]`))return;
+  removeEmptyState(tbody);
+  const statusCls=rec.status==='Open'?'b-g':rec.status==='Closed'?'b-gray':'b-a';
+  const isPending=rec.status==='Pending Approval'||!rec.status;
+  const salFrom=rec.salaryFrom,salTo=rec.salaryTo;
+  const salRange=salFrom&&salTo?`AED ${Number(salFrom).toLocaleString()}–${Number(salTo).toLocaleString()}`:(salFrom?`AED ${Number(salFrom).toLocaleString()}+`:'—');
+  const actions=isPending
+    ?`<div class="flx"><button class="btn btn-success btn-sm" onclick="approveJobRequisition(this)">Approve</button><button class="btn btn-g btn-sm" onclick="toast('Posting to job boards','info')">Post</button></div>`
+    :`<button class="btn btn-g btn-sm" onclick="toast('Posting to job boards','info')">Post</button>`;
+  const tr=document.createElement('tr');
+  tr.dataset.recordId=rec.id;
+  tr.innerHTML=`<td>${escapeHtml(rec.title)}</td><td>${escapeHtml(rec.department||'')}</td><td><span class="b b-b">${escapeHtml(rec.employmentType||'Full-Time')}</span></td><td>${escapeHtml(rec.location||'')}</td><td class="mono">${escapeHtml(String(rec.positions||1))}</td><td class="mono">${salRange}</td><td>${escapeHtml(rec.date)||'—'}</td><td><span class="b ${statusCls}">${escapeHtml(rec.status||'Pending Approval')}</span></td><td>${actions}</td>`;
+  tbody.prepend(tr);
+}
+
+function approveJobRequisition(btn){
+  const row=btn.closest('tr');
+  const id=row.dataset.recordId;
+  const statusBadge=row.querySelector('td:nth-child(8) .b');
+  if(statusBadge){statusBadge.className='b b-g';statusBadge.textContent='Open';}
+  row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm" onclick="toast(\'Posting to job boards\',\'info\')">Post</button>';
+  if(id)saveServer('jobRequisitions',{id,status:'Open'});
+  toast('Requisition approved ✓','ok');
+  audit('Job requisition approved',row.children[0]?.textContent||'','Open');
 }
 
 function saveCandidate(){
@@ -16440,18 +16553,27 @@ function saveCandidate(){
   const source=document.getElementById('cand-source')?.value||'';
   const stage=document.getElementById('cand-stage')?.value||'Applied';
   if(!name){toast('Candidate name is required','warn');return;}
-  const tbody=document.getElementById('candidates-tbody');
-  if(tbody){
-    removeEmptyState(tbody);
-    const stageCls=stage==='Hired'?'b-g':stage==='Rejected'?'b-r':stage==='Offer Sent'?'b-p':stage==='Interview Scheduled'?'b-b':'b-a';
-    const tr=document.createElement('tr');
-    tr.dataset.stage=stage;
-    tr.innerHTML=`<td>${escapeHtml(name)}</td><td>${escapeHtml(position)}</td><td>${escapeHtml(nationality)}</td><td class="mono">${escapeHtml(exp)} yrs</td><td class="mono">AED ${Number(salary||0).toLocaleString()}</td><td>${escapeHtml(source)}</td><td><span class="b ${stageCls}">${escapeHtml(stage)}</span></td><td><div class="flx"><button class="btn btn-g btn-sm" onclick="toast('Scheduling interview for '+${JSON.stringify(name)},'info')">Interview</button><button class="btn btn-g btn-sm" onclick="toast('Sending offer letter','info')">Offer</button></div></td>`;
-    tbody.prepend(tr);
-  }
+  const record={id:`CAND-${Date.now()}`,name,position,mobile,nationality,experience:exp,salary,source,stage};
+  renderCandidateRecord(record);
+  saveServer('candidates',record);
   closeM('m-candidate');
   refreshRecruitmentStats();
   toast(`Candidate "${name}" added ✓`,'ok');
+  audit('Candidate added',name,stage);
+}
+
+function renderCandidateRecord(rec){
+  const tbody=document.getElementById('candidates-tbody');
+  if(!tbody)return;
+  if(tbody.querySelector(`[data-record-id="${CSS.escape(rec.id)}"]`))return;
+  removeEmptyState(tbody);
+  const stage=rec.stage||'Applied';
+  const stageCls=stage==='Hired'?'b-g':stage==='Rejected'?'b-r':stage==='Offer Sent'?'b-p':stage==='Interview Scheduled'?'b-b':'b-a';
+  const tr=document.createElement('tr');
+  tr.dataset.recordId=rec.id;
+  tr.dataset.stage=stage;
+  tr.innerHTML=`<td>${escapeHtml(rec.name)}</td><td>${escapeHtml(rec.position||'')}</td><td>${escapeHtml(rec.nationality||'')}</td><td class="mono">${escapeHtml(String(rec.experience||0))} yrs</td><td class="mono">AED ${Number(rec.salary||0).toLocaleString()}</td><td>${escapeHtml(rec.source||'')}</td><td><span class="b ${stageCls}">${escapeHtml(stage)}</span></td><td><div class="flx"><button class="btn btn-g btn-sm" onclick="toast('Scheduling interview for '+${JSON.stringify(String(rec.name||''))},'info')">Interview</button><button class="btn btn-g btn-sm" onclick="toast('Sending offer letter','info')">Offer</button></div></td>`;
+  tbody.prepend(tr);
 }
 
 function filterCandidates(stage,btn){
@@ -18061,46 +18183,26 @@ function _copyFallback(text){
   document.body.removeChild(ta);
 }
 
-function showBioGuide(apiKey, type, ip, port){
-  const keyEl=document.getElementById('bio-key-val');
-  const keyRow=document.getElementById('bio-guide-key-row');
-  const keyAvail=document.getElementById('bio-key-available');
-  const keyMissing=document.getElementById('bio-key-missing');
-  const keyDisplay_el=document.getElementById('bio-key-val-display');
-  const subEl=document.getElementById('bio-guide-sub');
-  const stepsEl=document.getElementById('bio-guide-steps');
-  const diagramEl=document.getElementById('bio-guide-diagram');
+let _bioGuideModes=null;
+
+function _buildBioGuideModes(apiKey, type, ip, port){
   const baseUrl=(window.TAXFLOW_API_BASE_URL||'https://app.etaxflow.com').replace(/\/$/,'');
   const punchUrl=`${baseUrl}/api/v1/punch`;
   const keyDisplay=apiKey||'YOUR_API_KEY';
-  const isManual=type==='Manual';
-  const isTcp=BIO_TCP_TYPES.has(type);
-
-  if(keyEl) keyEl.value=apiKey||'';
-  if(keyDisplay_el) keyDisplay_el.textContent=apiKey||'';
-  if(keyRow) keyRow.style.display='';
-  if(keyAvail) keyAvail.style.display=apiKey?'':'none';
-  if(keyMissing) keyMissing.style.display=apiKey?'none':'';
-
   const I=_BIO_ICONS;
-  let steps;
+  const tcpLabel=BIO_TCP_TYPES.has(type)?type.replace('ZKTeco ','').toUpperCase():'ZK';
+  const pushLabel=(type==='ZKTeco ADMS'||BIO_PUSH_TYPES.has(type))?type:'Device';
+  const confSnippet=`DEVICE_API_KEY=${keyDisplay}\nZK_DEVICE_IP=${ip||'192.168.1.201'}\nZK_DEVICE_PORT=${port||4370}\nAPI_BASE_URL=${baseUrl}`;
 
-  if(isManual){
-    if(subEl) subEl.textContent='CSV import only — no live device connection required';
-    if(diagramEl) diagramEl.innerHTML=_bioDiagramCSV();
-    steps=[
-      {icon:I.csv, title:'Export and Import a CSV', color:'var(--accent)',
-       body:'This device is set up for CSV import only — no live connection to configure. Export the attendance log from the device\'s own software, then click <strong>↑ Import CSV</strong> in the Sync Activity Log. Required columns: <code>employee_id, punch_time</code> (optional: <code>employee_name, direction</code>).'},
-    ];
-  } else if(isTcp){
-    const confSnippet=`DEVICE_API_KEY=${keyDisplay}\nZK_DEVICE_IP=${ip||'192.168.1.201'}\nZK_DEVICE_PORT=${port||4370}\nAPI_BASE_URL=${baseUrl}`;
-    if(subEl) subEl.textContent=`${type} — TCP/IP pull via zk_bridge.py (not a webhook)`;
-    if(diagramEl) diagramEl.innerHTML=_bioDiagramTCP(type.replace('ZKTeco ','').toUpperCase()||'ZK');
-    steps=[
+  const tcp={
+    label:'TCP/IP Pull',
+    tag:'Bridge script · ZKTeco F/K/iClock/X Face Pro/SpeedFace/ProFace/G/UA/IN/MB Series, Anviz',
+    diagram:_bioDiagramTCP(tcpLabel),
+    steps:[
       {icon:I.download, title:'Download the Bridge Script', color:'var(--accent)',
-       body:`${escapeHtml(type)} is pulled over TCP/IP by a small script that runs on a PC on the <strong>same network</strong> as the device — it is not a webhook device.<br><button onclick="downloadBridgeScript()" style="margin-top:6px;padding:5px 12px;font-size:11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-weight:600">⬇ Download zk_bridge.py</button>
+       body:`These devices are pulled over TCP/IP by a small script that runs on a PC on the <strong>same network</strong> as the device — they are not webhook devices.<br><button onclick="downloadBridgeScript()" style="margin-top:6px;padding:5px 12px;font-size:11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-weight:600">⬇ Download zk_bridge.py</button>
        <div style="margin-top:8px;padding:7px 10px;background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)">
-        <strong>Tip:</strong> check the device's own menu first — <code>Menu → Comm → Cloud Server Setting</code> (wording varies). If it has that option, skip the script entirely: remove this device and re-add it as <strong>ZKTeco ADMS</strong> instead, which pushes punches directly with no bridge script needed. Older/basic terminals without this option still need the script below.
+        <strong>Tip:</strong> check the device's own menu first — <code>Menu → Comm → Cloud Server Setting</code> (wording varies). If it has that option, skip the script entirely: add it instead as <strong>ZKTeco ADMS</strong> (see the <em>HTTP / ADMS Push</em> tab above), which pushes punches directly with no bridge script needed. Older/basic terminals without this option still need the script below.
        </div>`},
       {icon:I.form, title:'Create zk_bridge.conf With These Values', color:'var(--accent)',
        body:`Save this as <code>zk_bridge.conf</code> in the same folder as the script:<div style="display:flex;align-items:flex-start;gap:8px;margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px">
@@ -18111,11 +18213,14 @@ function showBioGuide(apiKey, type, ip, port){
        body:`On that same PC: <code>pip install pyzk requests</code>, then <code>python zk_bridge.py</code>. It connects to the device, polls every 30 seconds, and forwards new punches automatically — leave it running (use <code>pm2</code> or a service for production).`},
       {icon:I.check, title:'Test — Punch In &amp; Check Sync Log', color:'#10b981',
        body:'With <code>zk_bridge.py</code> running, scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within about 30 seconds. If it doesn\'t, check the device IP/port and API key in <code>zk_bridge.conf</code>.'},
-    ];
-  } else {
-    if(subEl) subEl.textContent='Works with Suprema · Hikvision · ZKTeco ADMS · any HTTP Push device';
-    if(diagramEl) diagramEl.innerHTML=_bioDiagramPush(type||'Device');
-    steps=[
+    ]
+  };
+
+  const push={
+    label:'HTTP / ADMS Push',
+    tag:'No bridge script needed · ZKTeco ADMS, Suprema, Hikvision',
+    diagram:_bioDiagramPush(pushLabel),
+    steps:[
       {icon:I.key, title:'Copy the API Key', color:'var(--accent)',
        body:'The API key is shown above — copy it now. You will paste it into the device in step 3.'},
       {icon:I.monitor, title:'Open the Device Push / Webhook Setting', color:'var(--accent)',
@@ -18155,23 +18260,82 @@ function showBioGuide(apiKey, type, ip, port){
        <div style="margin-top:6px">Enable the push / webhook toggle and save. The device will now push every punch directly to TaxFlow within seconds of each scan.</div>`},
       {icon:I.check, title:'Test — Punch In &amp; Check Sync Log', color:'#10b981',
        body:'Scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within a few seconds. If it doesn\'t, check the IP address and API key in your device settings.'},
-    ];
+    ]
+  };
+
+  const manual={
+    label:'Manual / CSV',
+    tag:'No live connection · any device with an export function',
+    diagram:_bioDiagramCSV(),
+    steps:[
+      {icon:I.csv, title:'Export and Import a CSV', color:'var(--accent)',
+       body:'No live connection to configure. Export the attendance log from the device\'s own software, then click <strong>↑ Import CSV</strong> in the Sync Activity Log. Required columns: <code>employee_id, punch_time</code> (optional: <code>employee_name, direction</code>).'},
+    ]
+  };
+
+  return {tcp,push,manual};
+}
+
+function _renderBioGuideSteps(steps){
+  const lastIdx=steps.length-1;
+  return steps.map((s,i)=>`
+    <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:${i===lastIdx?'rgba(16,185,129,.06)':'var(--surface2)'};border-radius:10px;border-left:3px solid ${s.color}">
+      <div style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:${s.color};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">${i+1}</div>
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+          <span style="color:${s.color}">${s.icon}</span>
+          <span style="font-size:12px;font-weight:700${i===lastIdx?';color:#065f46':''}">${s.title}</span>
+        </div>
+        <div style="font-size:11.5px;color:var(--text2);line-height:1.7">${s.body}</div>
+      </div>
+    </div>`).join('');
+}
+
+function switchBioGuideMode(mode){
+  if(!_bioGuideModes||!_bioGuideModes.modes[mode])return;
+  const m=_bioGuideModes.modes[mode];
+  const subEl=document.getElementById('bio-guide-sub');
+  const diagramEl=document.getElementById('bio-guide-diagram');
+  const stepsEl=document.getElementById('bio-guide-steps');
+  const recommended=mode===_bioGuideModes.recommended;
+  if(subEl) subEl.textContent=m.tag+(recommended?' — recommended for this device':'');
+  if(diagramEl) diagramEl.innerHTML=m.diagram;
+  if(stepsEl) stepsEl.innerHTML=_renderBioGuideSteps(m.steps);
+  document.querySelectorAll('#bio-guide-tabs [data-mode]').forEach(btn=>{
+    const active=btn.dataset.mode===mode;
+    btn.style.background=active?'var(--accent)':'var(--surface2)';
+    btn.style.color=active?'#fff':'var(--text2)';
+    btn.style.borderColor=active?'var(--accent)':'var(--border)';
+  });
+}
+
+function showBioGuide(apiKey, type, ip, port){
+  const keyEl=document.getElementById('bio-key-val');
+  const keyRow=document.getElementById('bio-guide-key-row');
+  const keyAvail=document.getElementById('bio-key-available');
+  const keyMissing=document.getElementById('bio-key-missing');
+  const keyDisplay_el=document.getElementById('bio-key-val-display');
+  const tabsEl=document.getElementById('bio-guide-tabs');
+
+  if(keyEl) keyEl.value=apiKey||'';
+  if(keyDisplay_el) keyDisplay_el.textContent=apiKey||'';
+  if(keyRow) keyRow.style.display='';
+  if(keyAvail) keyAvail.style.display=apiKey?'':'none';
+  if(keyMissing) keyMissing.style.display=apiKey?'none':'';
+
+  const modes=_buildBioGuideModes(apiKey,type,ip,port);
+  const recommended=type==='Manual'?'manual':(BIO_TCP_TYPES.has(type)?'tcp':'push');
+  _bioGuideModes={modes,recommended};
+
+  if(tabsEl){
+    tabsEl.innerHTML=Object.keys(modes).map(key=>{
+      const m=modes[key];
+      const badge=key===recommended?' <span style="opacity:.85">✓</span>':'';
+      return `<button data-mode="${key}" onclick="switchBioGuideMode('${key}')" style="padding:7px 13px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text2);font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">${m.label}${badge}</button>`;
+    }).join('');
   }
 
-  if(stepsEl){
-    const lastIdx=steps.length-1;
-    stepsEl.innerHTML=steps.map((s,i)=>`
-      <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:${i===lastIdx?'rgba(16,185,129,.06)':'var(--surface2)'};border-radius:10px;border-left:3px solid ${s.color}">
-        <div style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:${s.color};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">${i+1}</div>
-        <div style="flex:1">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
-            <span style="color:${s.color}">${s.icon}</span>
-            <span style="font-size:12px;font-weight:700${i===lastIdx?';color:#065f46':''}">${s.title}</span>
-          </div>
-          <div style="font-size:11.5px;color:var(--text2);line-height:1.7">${s.body}</div>
-        </div>
-      </div>`).join('');
-  }
+  switchBioGuideMode(recommended);
   showM('m-bio-key');
 }
 
