@@ -18273,7 +18273,7 @@ function _buildBioGuideModes(apiKey, type, ip, port){
     ]
   };
 
-  return {tcp,push,manual};
+  return {push,tcp,manual};
 }
 
 function _renderBioGuideSteps(steps){
@@ -18291,6 +18291,13 @@ function _renderBioGuideSteps(steps){
     </div>`).join('');
 }
 
+const BIO_MODE_ORDER=['push','tcp','manual'];
+const _BIO_MODE_HINT={
+  push:'Easiest — device sends punches to TaxFlow directly',
+  tcp:'Needs a script running on an office PC',
+  manual:'No live connection — export/import only',
+};
+
 function switchBioGuideMode(mode){
   if(!_bioGuideModes||!_bioGuideModes.modes[mode])return;
   const m=_bioGuideModes.modes[mode];
@@ -18301,11 +18308,13 @@ function switchBioGuideMode(mode){
   if(subEl) subEl.textContent=m.tag+(recommended?' — recommended for this device':'');
   if(diagramEl) diagramEl.innerHTML=m.diagram;
   if(stepsEl) stepsEl.innerHTML=_renderBioGuideSteps(m.steps);
-  document.querySelectorAll('#bio-guide-tabs [data-mode]').forEach(btn=>{
-    const active=btn.dataset.mode===mode;
-    btn.style.background=active?'var(--accent)':'var(--surface2)';
-    btn.style.color=active?'#fff':'var(--text2)';
-    btn.style.borderColor=active?'var(--accent)':'var(--border)';
+  document.querySelectorAll('#bio-guide-tabs [data-mode]').forEach(card=>{
+    const active=card.dataset.mode===mode;
+    card.style.borderColor=active?'var(--accent)':'var(--border)';
+    card.style.background=active?'rgba(99,102,241,.10)':'var(--surface2)';
+    card.style.boxShadow=active?'0 0 0 1px var(--accent)':'none';
+    const check=card.querySelector('.bio-tab-check');
+    if(check)check.style.visibility=active?'visible':'hidden';
   });
 }
 
@@ -18325,17 +18334,26 @@ function showBioGuide(apiKey, type, ip, port){
 
   const modes=_buildBioGuideModes(apiKey,type,ip,port);
   const recommended=type==='Manual'?'manual':(BIO_TCP_TYPES.has(type)?'tcp':'push');
+  const defaultTab=type==='Manual'?'manual':'push';
   _bioGuideModes={modes,recommended};
 
   if(tabsEl){
-    tabsEl.innerHTML=Object.keys(modes).map(key=>{
+    tabsEl.style.gap='10px';
+    tabsEl.innerHTML=BIO_MODE_ORDER.map(key=>{
       const m=modes[key];
-      const badge=key===recommended?' <span style="opacity:.85">✓</span>':'';
-      return `<button data-mode="${key}" onclick="switchBioGuideMode('${key}')" style="padding:7px 13px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text2);font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">${m.label}${badge}</button>`;
+      const isRecommended=key===recommended;
+      return `<button data-mode="${key}" onclick="switchBioGuideMode('${key}')" style="flex:1 1 170px;min-width:160px;text-align:left;cursor:pointer;padding:13px 14px;border-radius:12px;border:2px solid var(--border);background:var(--surface2);transition:border-color .15s,background .15s,box-shadow .15s">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+          <span style="font-size:13.5px;font-weight:800;color:var(--text1)">${m.label}</span>
+          <span class="bio-tab-check" style="visibility:hidden;color:var(--accent);font-weight:900;font-size:14px">✓</span>
+        </div>
+        <div style="font-size:11px;color:var(--text2);line-height:1.5;margin-top:4px">${_BIO_MODE_HINT[key]||''}</div>
+        ${isRecommended?`<div style="margin-top:8px;display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.02em;color:var(--accent);background:rgba(99,102,241,.12);padding:3px 8px;border-radius:6px">YOUR DEVICE</div>`:''}
+      </button>`;
     }).join('');
   }
 
-  switchBioGuideMode(recommended);
+  switchBioGuideMode(defaultTab);
   showM('m-bio-key');
 }
 
