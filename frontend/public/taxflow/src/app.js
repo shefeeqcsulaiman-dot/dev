@@ -18393,7 +18393,7 @@ async function testBiometricDevice(id,btn){
         <button onclick="this.closest('tr').remove()" style="float:right;background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;line-height:1">×</button>
       </td>`;
       row.after(tr);
-      setTimeout(()=>{if(tr.isConnected)tr.remove();},8000);
+      setTimeout(()=>{if(tr.isConnected)tr.remove();},ok?8000:12000);
     } else {
       toast(msg, ok?'ok':'warn');
     }
