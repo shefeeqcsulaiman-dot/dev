@@ -56,6 +56,7 @@ class CompanyOut(BaseModel):
     fta_username: str | None = None
     departments: str | None = None
     branches: str | None = None
+    subscription_expires_at: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -95,12 +96,24 @@ class ImpersonatorOut(BaseModel):
     email: EmailStr
 
 
+class CompanyBrief(BaseModel):
+    """Minimal company fields for embedding in /auth/me — deliberately excludes
+    logo/departments/branches, which can be a large base64 blob and aren't used
+    anywhere /auth/me's response is consumed (only .name is read, for the
+    impersonation banner). Full company data is fetched separately via
+    GET /companies/current when actually needed."""
+    id: str
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
 class UserOut(BaseModel):
     id: str
     email: EmailStr
     full_name: str
     role: str
-    company: CompanyOut
+    company: CompanyBrief
     impersonated_by: ImpersonatorOut | None = None
 
     model_config = {"from_attributes": True}

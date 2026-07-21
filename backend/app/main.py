@@ -21,7 +21,7 @@ static_dir: pathlib.Path = (
     else (_default_static if _default_static.exists() else _repo_static)
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
+from brotli_asgi import BrotliMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
@@ -69,7 +69,10 @@ def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name, version="0.1.0")
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-    app.add_middleware(GZipMiddleware, minimum_size=1000)
+    # Brotli compresses ~15-20% smaller than gzip for text/JS/CSS at the same
+    # quality; falls back to gzip automatically for clients that don't send
+    # "br" in Accept-Encoding, so this is a drop-in replacement for GZipMiddleware.
+    app.add_middleware(BrotliMiddleware, minimum_size=1000)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
