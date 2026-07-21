@@ -87,6 +87,23 @@ def create_app() -> FastAPI:
             asyncio.create_task(_invalidate_cache_bg(auth_header))
         return response
 
+    @app.middleware("http")
+    async def static_cache_headers(request: Request, call_next):
+        response = await call_next(request)
+        if request.method == "GET" and response.status_code == 200 and "cache-control" not in response.headers:
+            path = request.url.path
+            last_segment = path.rsplit("/", 1)[-1]
+            ext = last_segment.rsplit(".", 1)[-1].lower() if "." in last_segment else ""
+            if ext in ("js", "css") and "v=" in request.url.query:
+                # Cache-busted via ?v=... query string, so it's safe to cache "forever" —
+                # any future edit ships under a new query string and misses this cache entirely.
+                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            elif ext == "html" or path in ("", "/"):
+                # Never cache HTML itself — it's the only thing that references the current
+                # ?v=... asset URLs above, so it must always be revalidated on load.
+                response.headers["Cache-Control"] = "no-cache"
+        return response
+
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         from fastapi import HTTPException as _HTTPEx
