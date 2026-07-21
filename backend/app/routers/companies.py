@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
@@ -28,13 +28,28 @@ def _resolve_company(current_user: User, db: Session) -> "Company | None":
 
 @router.get("/current", response_model=CompanyOut)
 def current_company(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     company = _resolve_company(current_user, db)
     if not company:
         raise HTTPException(status_code=404, detail="No company found")
-    return company
+    # This response can carry a large base64 logo, and is fetched on every page
+    # load. ETag it on (id, updated_at) so a browser that already has the
+    # current copy gets a tiny 304 instead of re-downloading it — the JSON
+    # shape and data returned when it DOES change are completely unchanged.
+    etag = f'"{company.id}-{company.updated_at.isoformat()}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=304,
+            headers={"ETag": etag, "Cache-Control": "private, max-age=0, must-revalidate"},
+        )
+    return Response(
+        content=CompanyOut.model_validate(company).model_dump_json(),
+        media_type="application/json",
+        headers={"ETag": etag, "Cache-Control": "private, max-age=0, must-revalidate"},
+    )
 
 
 @router.put("/current", response_model=CompanyOut)
