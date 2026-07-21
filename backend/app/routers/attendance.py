@@ -2,21 +2,24 @@
 
 Supported punch sources:
   - ZKTeco TCP/IP (via zk_bridge.py running on-premises)
-  - HTTP webhook (Suprema, Hikvision, Anviz)
+  - ADMS / Cloud Server / HTTP Push / Web Service (ZKTeco ADMS, Suprema, Hikvision, Anviz —
+    exact menu name varies by manufacturer and firmware)
   - CSV import
   - Manual entry
 """
 
 import csv
 import io
+import json
 import pathlib
 import secrets
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import parse_qsl
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, PlainTextResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -263,28 +266,59 @@ def _optional_user(request: Request, db: Session = Depends(get_db)) -> User | No
 
 
 # ── Punch recording ───────────────────────────────────────────────────────────
+#
+# Device compatibility notes:
+#   - Not every ADMS/cloud-push device can send a custom HTTP header, so the
+#     device key is accepted three ways: header (X-Device-Key), query string
+#     (?device_key=... / ?deviceKey=...), or as a URL path segment
+#     (/adms/{device_key}) — whichever the device firmware supports.
+#   - Not every device sends JSON. The body is sniffed by Content-Type and
+#     falls back to form-urlencoded, then to raw "key=value&..." pairs, before
+#     giving up. This covers common webhook/ADMS-style integrations; it is
+#     NOT an implementation of ZKTeco's native /iclock/cdata SN+ATTLOG wire
+#     protocol, which is a materially different (non-HTTP-webhook) protocol.
 
-@router.post("/punch", status_code=201)
-@limiter.limit("60/minute")
-def record_punch(
-    request: Request,
-    body: PunchIn,
-    x_device_key: str | None = Header(default=None),
-    db: Session = Depends(get_db),
-    current_user: User | None = Depends(_optional_user),
-) -> dict[str, Any]:
-    """Accept a punch from the ZK bridge (X-Device-Key) or an authenticated user (manual entry)."""
+async def _parse_punch_body(request: Request) -> dict[str, Any]:
+    content_type = request.headers.get("content-type", "")
+    if "json" in content_type:
+        return await request.json()
+    if "form" in content_type:
+        form = await request.form()
+        return dict(form)
+    raw = (await request.body()).decode("utf-8", errors="ignore").strip()
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        pass
+    pairs = parse_qsl(raw)
+    if pairs:
+        return dict(pairs)
+    raise HTTPException(
+        status_code=422,
+        detail="Unsupported request body — send JSON, form-urlencoded, or key=value pairs",
+    )
+
+
+async def _record_punch(request: Request, db: Session, current_user: User | None, device_key: str | None) -> dict[str, Any]:
     if current_user:
         company_id = current_user.company_id
         device_name = "Manual"
         device_id = None
-    elif x_device_key:
-        company_id, device = _get_device_company(x_device_key, db)
+    elif device_key:
+        company_id, device = _get_device_company(device_key, db)
         device_name = device.name
         device_id = device.id
         device.last_sync = datetime.now(UTC)
     else:
         raise HTTPException(status_code=401, detail="Authentication required")
+
+    raw_data = await _parse_punch_body(request)
+    try:
+        body = PunchIn(**raw_data)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     punch_time = _parse_time(body.punch_time)
 
@@ -294,7 +328,7 @@ def record_punch(
         raise HTTPException(status_code=422, detail="Punch time is in the future")
 
     # Reject punches older than 90 days (prevents replay / mass backdating attacks)
-    if x_device_key and punch_time < now - timedelta(days=90):
+    if device_key and punch_time < now - timedelta(days=90):
         raise HTTPException(status_code=422, detail="Punch time is too old (>90 days)")
 
     punch_date = punch_time.strftime("%Y-%m-%d")
@@ -323,19 +357,68 @@ def record_punch(
         direction=body.direction,
         device_id=device_id,
         device_name=device_name,
-        source="device" if x_device_key else "manual",
+        source="device" if device_key else "manual",
     )
     db.add(punch)
     db.commit()
     return {"ok": True, "id": punch.id}
 
 
-# Short alias: POST /api/v1/punch — same handler, same rate limit and auth,
-# just a shorter URL for device push-config screens. /attendance/punch above
-# keeps working for anything already configured with the long URL.
+@router.post("/punch", status_code=201)
+@limiter.limit("60/minute")
+async def record_punch(
+    request: Request,
+    x_device_key: str | None = Header(default=None),
+    device_key: str | None = Query(default=None),
+    deviceKey: str | None = Query(default=None),  # noqa: N803 - matches device-side URL convention
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(_optional_user),
+) -> dict[str, Any]:
+    """Accept a punch via X-Device-Key header, ?device_key=/?deviceKey= query string,
+    or an authenticated user (manual entry)."""
+    return await _record_punch(request, db, current_user, x_device_key or device_key or deviceKey)
+
+
+@router.post("/punch/{path_device_key}", status_code=201)
+@limiter.limit("60/minute")
+async def record_punch_key_in_path(
+    request: Request,
+    path_device_key: str,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(_optional_user),
+) -> dict[str, Any]:
+    """Same as /punch, but the device key travels in the URL path — for firmware
+    that can't send a custom header or a query string reliably."""
+    return await _record_punch(request, db, current_user, path_device_key)
+
+
+# Short + descriptive aliases — same handlers, same rate limit and auth, just
+# friendlier/shorter URLs for device push-config screens (physical devices
+# often have these typed by hand into a small on-device form). The original
+# /attendance/punch keeps working for anything already configured with it.
 short_router.add_api_route(
     "/punch", record_punch, methods=["POST"], status_code=201,
     summary="Short alias for /attendance/punch",
+)
+short_router.add_api_route(
+    "/punch/{path_device_key}", record_punch_key_in_path, methods=["POST"], status_code=201,
+    summary="Short alias for /attendance/punch, device key in the URL path",
+)
+router.add_api_route(
+    "/adms", record_punch, methods=["POST"], status_code=201,
+    summary="Descriptive alias for /attendance/punch (ADMS/cloud-push devices)",
+)
+router.add_api_route(
+    "/adms/{path_device_key}", record_punch_key_in_path, methods=["POST"], status_code=201,
+    summary="Descriptive alias for /attendance/punch, device key in the URL path",
+)
+short_router.add_api_route(
+    "/adms", record_punch, methods=["POST"], status_code=201,
+    summary="Short descriptive alias for /attendance/punch (ADMS/cloud-push devices)",
+)
+short_router.add_api_route(
+    "/adms/{path_device_key}", record_punch_key_in_path, methods=["POST"], status_code=201,
+    summary="Short descriptive alias, device key in the URL path",
 )
 
 

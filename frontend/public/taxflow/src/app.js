@@ -18167,7 +18167,7 @@ function copyBioKey(){
   const val=document.getElementById('bio-key-val')?.value||'';
   if(!val){toast('No key to copy','warn');return;}
   if(navigator.clipboard&&window.isSecureContext){
-    navigator.clipboard.writeText(val).then(()=>toast('API key copied!','ok')).catch(()=>{
+    navigator.clipboard.writeText(val).then(()=>toast('Device Key copied!','ok')).catch(()=>{
       _copyFallback(val);
     });
   } else {
@@ -18178,7 +18178,7 @@ function _copyFallback(text){
   const ta=document.createElement('textarea');
   ta.value=text;ta.style.position='fixed';ta.style.left='-9999px';
   document.body.appendChild(ta);ta.focus();ta.select();
-  try{document.execCommand('copy');toast('API key copied!','ok');}
+  try{document.execCommand('copy');toast('Device Key copied!','ok');}
   catch{toast('Copy failed — select and copy manually','warn');}
   document.body.removeChild(ta);
 }
@@ -18187,8 +18187,10 @@ let _bioGuideModes=null;
 
 function _buildBioGuideModes(apiKey, type, ip, port){
   const baseUrl=(window.TAXFLOW_API_BASE_URL||'https://app.etaxflow.com').replace(/\/$/,'');
-  const punchUrl=`${baseUrl}/api/v1/punch`;
-  const keyDisplay=apiKey||'YOUR_API_KEY';
+  const admsEndpoint='/api/v1/adms';
+  const punchUrl=`${baseUrl}${admsEndpoint}`;
+  const punchUrlWithKeyInPath=`${punchUrl}/${apiKey||'YOUR_DEVICE_KEY'}`;
+  const keyDisplay=apiKey||'YOUR_DEVICE_KEY';
   const I=_BIO_ICONS;
   const tcpLabel=BIO_TCP_TYPES.has(type)?type.replace('ZKTeco ','').toUpperCase():'ZK';
   const pushLabel=(type==='ZKTeco ADMS'||BIO_PUSH_TYPES.has(type))?type:'Device';
@@ -18218,28 +18220,43 @@ function _buildBioGuideModes(apiKey, type, ip, port){
 
   const push={
     label:'HTTP / ADMS Push',
-    tag:'No bridge script needed · ZKTeco ADMS, Suprema, Hikvision',
+    tag:'No bridge script needed · works with ZKTeco ADMS, Suprema, Hikvision, Anviz and most cloud-push devices',
     diagram:_bioDiagramPush(pushLabel),
     steps:[
-      {icon:I.key, title:'Copy the API Key', color:'var(--accent)',
-       body:'The API key is shown above — copy it now. You will paste it into the device in step 3.'},
-      {icon:I.monitor, title:'Open the Device Push / Webhook Setting', color:'var(--accent)',
-       body:`On a PC on the <strong>same network</strong> as the device, go to <code>http://&lt;device-ip&gt;</code>, sign in, then open the HTTP push / webhook menu. Login and menu path by brand:<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Hikvision</strong> — admin / 12345 → Configuration → Network → Advanced → <em>HTTP Listening</em></div>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Suprema</strong> — admin / admin → Settings → Server → <em>HTTP Push</em></div>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>ZKTeco ADMS</strong> — admin / 12345 → Menu → Communication → <em>Cloud Server</em></div>
+      {icon:I.key, title:'Copy the Device Key', color:'var(--accent)',
+       body:'The Device Key is shown above — copy it now. You will enter it into the device in step 3 (either as a header value, or as part of the URL — see the note below).'},
+      {icon:I.monitor, title:'Open the Device Cloud / ADMS Settings', color:'var(--accent)',
+       body:`On a PC on the <strong>same network</strong> as the device, go to <code>http://&lt;device-ip&gt;</code> and sign in. Every manufacturer names this menu differently — look for a communication/network setting labeled one of:
+       <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">
+        ${['ADMS','Cloud Server','HTTP Push','Push Service','Web Service'].map(t=>`<span style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px 9px;font-size:10.5px;font-weight:600">${t}</span>`).join('')}
+       </div>
+       <div style="margin-top:9px;font-size:10.5px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.03em">Examples — exact path varies by model/firmware</div>
+       <div style="display:flex;flex-direction:column;gap:4px;margin-top:5px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>ZKTeco</strong> — admin / 12345 → Menu → Communication → <em>Cloud Server / ADMS</em></div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Hikvision</strong> — admin / 12345 → Configuration → Network → Advanced → <em>Platform Access / HTTP Listening</em></div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Suprema</strong> — admin / admin → Settings → Server → <em>BioStar / HTTP Push</em></div>
        </div>`},
       {icon:I.form, title:'Enter These Details and Save', color:'var(--accent)',
        body:`<table style="font-size:11px;border-collapse:collapse;width:100%;margin-top:4px">
         <tr style="background:rgba(99,102,241,.07)">
-          <td style="padding:5px 10px 5px 8px;color:var(--text3);white-space:nowrap;font-weight:600;width:90px">Server URL</td>
-          <td style="padding:5px 8px"><code style="word-break:break-all">${punchUrl}</code></td>
-          <td style="padding:5px 8px 5px 0;width:52px"><button onclick="_bioCopy('${punchUrl.replace(/'/g,"\\'")}',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer;white-space:nowrap">Copy</button></td>
+          <td style="padding:5px 10px 5px 8px;color:var(--text3);white-space:nowrap;font-weight:600;width:90px">Server Address</td>
+          <td style="padding:5px 8px"><code style="word-break:break-all">${baseUrl}</code></td>
+          <td style="padding:5px 8px 5px 0;width:52px"><button onclick="_bioCopy('${baseUrl.replace(/'/g,"\\'")}',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer;white-space:nowrap">Copy</button></td>
         </tr>
         <tr>
-          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Method</td>
-          <td style="padding:5px 8px"><code>POST</code></td>
-          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('POST',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
+          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Endpoint</td>
+          <td style="padding:5px 8px"><code>${admsEndpoint}</code></td>
+          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('${admsEndpoint}',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
+        </tr>
+        <tr style="background:rgba(99,102,241,.07)">
+          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Port</td>
+          <td style="padding:5px 8px"><code>443</code></td>
+          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('443',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
+        </tr>
+        <tr>
+          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Protocol / SSL</td>
+          <td style="padding:5px 8px"><code>HTTPS</code> — SSL enabled</td>
+          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('HTTPS',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
         </tr>
         <tr style="background:rgba(99,102,241,.07)">
           <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Header name</td>
@@ -18247,19 +18264,24 @@ function _buildBioGuideModes(apiKey, type, ip, port){
           <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('X-Device-Key',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
         </tr>
         <tr>
-          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Header value</td>
+          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Device Key</td>
           <td style="padding:5px 8px"><code style="word-break:break-all;font-size:10px">${keyDisplay}</code></td>
           <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy(${JSON.stringify(keyDisplay)},this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
         </tr>
         <tr style="background:rgba(99,102,241,.07)">
           <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Data format</td>
-          <td style="padding:5px 8px"><code>JSON</code></td>
-          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('JSON',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
+          <td colspan="2" style="padding:5px 8px;color:var(--text2)">TaxFlow accepts whatever the device sends — JSON, form-urlencoded, or plain key=value pairs. No specific format needs to be selected on the device.</td>
         </tr>
        </table>
-       <div style="margin-top:6px">Enable the push / webhook toggle and save. The device will now push every punch directly to TaxFlow within seconds of each scan.</div>`},
+       <div style="margin-top:8px;padding:7px 10px;background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)">
+        <strong>Can't send a custom header?</strong> Many ADMS devices can't set <code>X-Device-Key</code>. Use the Device Key in the URL instead — either as a query string:<br>
+        <code style="word-break:break-all;display:inline-block;margin-top:3px">${punchUrl}?device_key=${keyDisplay}</code><br>
+        or as part of the path:<br>
+        <code style="word-break:break-all;display:inline-block;margin-top:3px">${punchUrlWithKeyInPath}</code>
+       </div>
+       <div style="margin-top:6px">Save the configuration. The device will now push every punch directly to TaxFlow within seconds of each scan.</div>`},
       {icon:I.check, title:'Test — Punch In &amp; Check Sync Log', color:'#10b981',
-       body:'Scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within a few seconds. If it doesn\'t, check the IP address and API key in your device settings.'},
+       body:'Scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within a few seconds. If it doesn\'t, check the IP address and Device Key in your device settings.'},
     ]
   };
 
