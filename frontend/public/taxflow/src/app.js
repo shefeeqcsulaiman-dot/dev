@@ -2230,6 +2230,19 @@ function applyCompanyToUi(company){
   updateInvoiceLayoutPreview?.();
   renderBusinessLocationRows();
   applyDeptsBranchesFromCompany(company);
+  const essLinkEl=document.getElementById('ess-portal-link');
+  if(essLinkEl&&company.id)essLinkEl.textContent=`${window.location.origin}/ess?c=${company.id}`;
+}
+
+function copyEssPortalLink(){
+  const el=document.getElementById('ess-portal-link');
+  const link=el?.textContent||'';
+  if(!link){toast('Company not loaded yet — try again in a moment','warn');return;}
+  if(navigator.clipboard&&window.isSecureContext){
+    navigator.clipboard.writeText(link).then(()=>toast('ESS portal link copied!','ok')).catch(()=>_copyFallback(link,'ESS portal link'));
+  }else{
+    _copyFallback(link,'ESS portal link');
+  }
 }
 
 async function syncCompanyFromDatabase(){
@@ -18174,11 +18187,11 @@ function copyBioKey(){
     _copyFallback(val);
   }
 }
-function _copyFallback(text){
+function _copyFallback(text,label='Device Key'){
   const ta=document.createElement('textarea');
   ta.value=text;ta.style.position='fixed';ta.style.left='-9999px';
   document.body.appendChild(ta);ta.focus();ta.select();
-  try{document.execCommand('copy');toast('Device Key copied!','ok');}
+  try{document.execCommand('copy');toast(`${label} copied!`,'ok');}
   catch{toast('Copy failed — select and copy manually','warn');}
   document.body.removeChild(ta);
 }

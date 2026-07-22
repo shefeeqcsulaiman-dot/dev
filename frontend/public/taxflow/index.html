@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=20260721e" as="style">
-<link rel="preload" href="src/app.js?v=20260721e" as="script">
+<link rel="preload" href="src/app.js?v=20260722a" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=20260721e">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
@@ -92,7 +92,7 @@
 
   <div class="sb-section">
     <div class="sb-lbl" data-i18n="sb_hr">People &amp; HR</div>
-    <div class="nav" id="nav-hrms" onclick="location.href='/hrms'" title="HRMS Portal">
+    <div class="nav" id="nav-hrms" onclick="window.open('/hrms','_blank')" title="HRMS Portal">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2a3 3 0 100 6 3 3 0 000-6z"/><path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/><path d="M12 7l1.5-1.5"/><circle cx="13.5" cy="4.5" r="1.5"/></svg>
       <span data-i18n="sb_hrms">HRMS</span>
     </div>
@@ -5796,6 +5796,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260721e" defer></script>
+<script src="src/app.js?v=20260722a" defer></script>
 </body>
 </html>

@@ -19,6 +19,7 @@ _ESS_PREFIX = "emp:"
 class EssLoginRequest(BaseModel):
     username: str  # employee_no, or email stored in ext fields
     password: str
+    company_id: str  # required — see ess_login for why
 
 
 class EssToken(BaseModel):
@@ -33,6 +34,11 @@ class EssEmployeeOut(BaseModel):
     department: str
     designation: str
     status: str
+
+
+class EssChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -81,19 +87,32 @@ def ess_bearer(request: Request, db: Session = Depends(get_db)) -> Employee:
 def ess_login(payload: EssLoginRequest, db: Session = Depends(get_db)) -> EssToken:
     username = payload.username.strip()
     password = payload.password
+    company_id = payload.company_id.strip()
 
-    # Look up employee by employee_no (case-insensitive)
+    if not company_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing company reference — use the Employee Self-Service link provided by your employer.",
+        )
+
+    # Look up employee by employee_no, scoped to their own company.
+    # employee_no has no uniqueness guarantee across different tenant companies
+    # (e.g. two unrelated companies can each have an "Employee #1") — without
+    # this company_id filter, an employee at one company could log in as a
+    # same-numbered employee at a completely different company.
     emp = db.query(Employee).filter(
-        Employee.employee_no.ilike(username)
+        Employee.company_id == company_id,
+        Employee.employee_no.ilike(username),
     ).first()
 
-    # Verify password — default password is the employee_no itself
+    # Verify password — default password is the employee_no itself, until the
+    # employee sets a real one via POST /ess/change-password.
     if not emp:
         # constant-time dummy check
         pwd_context.verify(password, "$2b$12$Z2HUw9SswHis7rcngsd7iOdXn/b9HafcmcwJx9D39ozeKwrSy22r.")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    stored_hash = getattr(emp, "password_hash", None)
+    stored_hash = emp.password_hash
     if not stored_hash:
         # default password = employee_no
         if password != emp.employee_no:
@@ -118,13 +137,39 @@ def ess_me(request: Request, db: Session = Depends(get_db)) -> EssEmployeeOut:
     )
 
 
+@router.post("/change-password")
+def ess_change_password(
+    payload: EssChangePasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    emp = ess_bearer(request, db)
+    stored_hash = emp.password_hash
+    current_ok = (
+        pwd_context.verify(payload.current_password, stored_hash)
+        if stored_hash
+        else payload.current_password == emp.employee_no
+    )
+    if not current_ok:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Current password is incorrect")
+    if len(payload.new_password) < 6:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be at least 6 characters")
+    emp.password_hash = pwd_context.hash(payload.new_password)
+    db.add(emp)
+    db.commit()
+    return {"ok": True}
+
+
 @router.get("/attendance")
 def ess_attendance(request: Request, db: Session = Depends(get_db)) -> list:
     emp = ess_bearer(request, db)
     from app.models import AttendancePunch
     punches = (
         db.query(AttendancePunch)
-        .filter(AttendancePunch.employee_id == emp.employee_no)
+        .filter(
+            AttendancePunch.company_id == emp.company_id,
+            AttendancePunch.employee_id == emp.employee_no,
+        )
         .order_by(AttendancePunch.punch_time.desc())
         .limit(90)
         .all()

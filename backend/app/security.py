@@ -1,3 +1,4 @@
+import secrets
 from datetime import UTC, datetime, timedelta
 
 from jose import JWTError, jwt
@@ -30,6 +31,9 @@ def create_access_token(subject: str, impersonated_by: str | None = None) -> str
     payload: dict = {"sub": subject, "exp": expires}
     if impersonated_by:
         payload["imp"] = impersonated_by
+        # Only impersonation tokens carry a jti — it's what lets "End Impersonation"
+        # actually revoke this specific token instead of just logging that it happened.
+        payload["jti"] = secrets.token_urlsafe(16)
     return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
 
 
@@ -61,3 +65,33 @@ def impersonator_id_from_token(token: str) -> str | None:
         return payload.get("imp")
     except JWTError:
         return None
+
+
+def impersonation_revocation_info(token: str) -> tuple[str, int] | None:
+    """For an impersonation token, returns (jti, seconds_until_natural_expiry).
+
+    Returns None for non-impersonation tokens (no "imp"/"jti" claim) or invalid
+    tokens — callers should treat that as "nothing to revoke."
+    """
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+    except JWTError:
+        return None
+    jti = payload.get("jti")
+    exp = payload.get("exp")
+    if not payload.get("imp") or not jti or not exp:
+        return None
+    remaining = int(exp - datetime.now(UTC).timestamp())
+    return (jti, max(remaining, 1))
+
+
+def is_impersonation_token_revoked(token: str) -> bool:
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+    except JWTError:
+        return False
+    jti = payload.get("jti")
+    if not payload.get("imp") or not jti:
+        return False
+    import app.cache as cache
+    return bool(cache.get(f"revoked_imp:{jti}"))

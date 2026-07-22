@@ -125,6 +125,20 @@
           <div class="loading">Loading…</div>
         </div>
       </div>
+      <div class="card">
+        <div class="card-title">Change Password</div>
+        <div id="pw-err" class="err-box"></div>
+        <div id="pw-ok" style="display:none;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px;padding:11px 14px;font-size:13px;color:var(--green);margin-bottom:20px">Password updated.</div>
+        <div class="field">
+          <label for="pw-current">Current Password</label>
+          <input id="pw-current" type="password" placeholder="Current password" autocomplete="current-password">
+        </div>
+        <div class="field last">
+          <label for="pw-new">New Password</label>
+          <input id="pw-new" type="password" placeholder="At least 6 characters" autocomplete="new-password">
+        </div>
+        <button id="pw-btn" class="btn-login" style="width:auto;padding:10px 20px" onclick="essChangePassword()">Update Password</button>
+      </div>
     </div>
 
     <!-- Attendance -->
@@ -153,6 +167,7 @@
 <script src="/config.js"></script>
 <script>
   var ESS_TOKEN_KEY = 'ess_token';
+  var ESS_COMPANY_KEY = 'ess_company_id';
 
   function apiBase() {
     if (window.TAXFLOW_API_BASE_URL) return window.TAXFLOW_API_BASE_URL;
@@ -167,19 +182,34 @@
     return {'Content-Type':'application/json','Authorization': t ? 'Bearer '+t : ''};
   }
 
+  // The ESS company id comes from the link HR shares with employees
+  // (?c=<company_id>) and is remembered locally after the first visit, since
+  // employee_no alone isn't unique across different companies on this platform.
+  function essCompanyId() {
+    var fromUrl = new URLSearchParams(window.location.search).get('c');
+    if (fromUrl) { localStorage.setItem(ESS_COMPANY_KEY, fromUrl); return fromUrl; }
+    return localStorage.getItem(ESS_COMPANY_KEY) || '';
+  }
+
   async function essLogin() {
     var btn = document.getElementById('ess-login-btn');
     var err = document.getElementById('login-err');
     var user = (document.getElementById('ess-user').value || '').trim();
     var pass = document.getElementById('ess-pass').value;
+    var companyId = essCompanyId();
     err.style.display = 'none';
+    if (!companyId) {
+      err.textContent = 'This link is missing your company reference. Please use the Employee Self-Service link provided by your HR administrator.';
+      err.style.display = 'block';
+      return;
+    }
     if (!user) { err.textContent = 'Please enter your Employee ID.'; err.style.display = 'block'; return; }
     btn.disabled = true; btn.textContent = 'Signing in…';
     try {
       var r = await fetch(apiBase() + '/ess/login', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({username: user, password: pass || user})
+        body: JSON.stringify({username: user, password: pass || user, company_id: companyId})
       });
       var d = await r.json();
       if (r.ok && d.access_token) {
@@ -195,6 +225,37 @@
       err.style.display = 'block';
       btn.disabled = false; btn.textContent = 'Sign In';
     }
+  }
+
+  async function essChangePassword() {
+    var btn = document.getElementById('pw-btn');
+    var err = document.getElementById('pw-err');
+    var ok = document.getElementById('pw-ok');
+    var current = document.getElementById('pw-current').value;
+    var next = document.getElementById('pw-new').value;
+    err.style.display = 'none'; ok.style.display = 'none';
+    if (!current || !next) { err.textContent = 'Please fill in both fields.'; err.style.display = 'block'; return; }
+    if (next.length < 6) { err.textContent = 'New password must be at least 6 characters.'; err.style.display = 'block'; return; }
+    btn.disabled = true; btn.textContent = 'Updating…';
+    try {
+      var r = await fetch(apiBase() + '/ess/change-password', {
+        method: 'POST', headers: essHeaders(),
+        body: JSON.stringify({current_password: current, new_password: next})
+      });
+      var d = await r.json();
+      if (r.ok && d.ok) {
+        ok.style.display = 'block';
+        document.getElementById('pw-current').value = '';
+        document.getElementById('pw-new').value = '';
+      } else {
+        err.textContent = d.detail || 'Could not update password.';
+        err.style.display = 'block';
+      }
+    } catch(e) {
+      err.textContent = 'Cannot reach server. Please try again.';
+      err.style.display = 'block';
+    }
+    btn.disabled = false; btn.textContent = 'Update Password';
   }
 
   function essLogout() {
@@ -277,8 +338,10 @@
     loadPayslips();
   }
 
-  // Auto-login if token exists
+  // Capture ?c=<company_id> from the link on every load (even if already
+  // logged in), and auto-login if a token already exists.
   (function(){
+    essCompanyId();
     if (localStorage.getItem(ESS_TOKEN_KEY)) showApp();
   })();
 </script>

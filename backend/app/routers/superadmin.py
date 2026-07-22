@@ -27,7 +27,10 @@ from app.models import (
     VatReturnSnapshot, Voucher, VoucherLine, VoucherType, Warehouse,
     WpsBatch,
 )
-from app.security import create_access_token, hash_password, impersonator_id_from_token, user_id_from_token
+from app.security import (
+    create_access_token, hash_password, impersonation_revocation_info,
+    impersonator_id_from_token, user_id_from_token,
+)
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
 
@@ -791,9 +794,18 @@ def end_impersonation(
     current_user: User = Depends(get_current_user),
 ):
     auth = request.headers.get("authorization", "")
-    impersonator_id = impersonator_id_from_token(auth.removeprefix("Bearer ").strip()) if auth.startswith("Bearer ") else None
+    raw_token = auth.removeprefix("Bearer ").strip() if auth.startswith("Bearer ") else ""
+    impersonator_id = impersonator_id_from_token(raw_token) if raw_token else None
     if not impersonator_id:
         raise HTTPException(status_code=400, detail="Current session is not an impersonation session")
+    # Actually invalidate this token (not just log it as ended) — otherwise it
+    # keeps working as the impersonated company's admin until it naturally
+    # expires, up to access_token_expire_minutes later.
+    revocation = impersonation_revocation_info(raw_token)
+    if revocation:
+        import app.cache as cache
+        jti, ttl_seconds = revocation
+        cache.set(f"revoked_imp:{jti}", True, ttl=ttl_seconds)
     superadmin = db.query(User).filter(User.id == impersonator_id).first()
     _write_audit_blob(
         db, current_user.company_id, f"Super Admin ({superadmin.email if superadmin else impersonator_id})",

@@ -323,6 +323,10 @@ def ensure_schema_updates() -> None:
             existing_columns = {column["name"] for column in inspector.get_columns("users")}
             if "is_active" not in existing_columns:
                 connection.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT TRUE NOT NULL"))
+        if "employees" in table_names:
+            existing_columns = {column["name"] for column in inspector.get_columns("employees")}
+            if "password_hash" not in existing_columns:
+                connection.execute(text("ALTER TABLE employees ADD COLUMN password_hash VARCHAR(255)"))
         if "stock_product_mappings" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("stock_product_mappings")}
             required_columns = {

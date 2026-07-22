@@ -624,6 +624,7 @@ class Employee(Base, TimestampMixin):
     iban: Mapped[str | None] = mapped_column(String(40))
     wps_id: Mapped[str | None] = mapped_column(String(40))
     status: Mapped[str] = mapped_column(String(30), default="active")
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class PayrollRun(Base, TimestampMixin):
