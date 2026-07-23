@@ -43,16 +43,17 @@ test("dashboard shortcuts open purchase upload and reports before adding an invo
 
   await expect(page.getByText("TaxFlow app loaded")).toBeVisible({ timeout: 20_000 });
 
-  await page.getByRole("button", { name: "Upload Purchase" }).click();
+  await page.getByRole("button", { name: "Add Purchase" }).click();
   await expect(page.locator("#page-purchase")).toHaveClass(/on/);
   await expect(page.locator("#p-upload")).toHaveClass(/on/);
 
   await page.getByText("Dashboard").first().click();
-  await page.getByRole("button", { name: "Open Reports" }).click();
+  await page.getByRole("button", { name: "Reports" }).click();
   await expect(page.locator("#page-reports")).toHaveClass(/on/);
 
   await page.getByText("Sales & Invoices").first().click();
-  await page.getByText("Create Invoice").click();
+  await page.getByText("Add Sales").click();
+  await page.getByRole("button", { name: "Sales Invoice" }).click();
   const invoiceNo = `E2E-${Date.now()}`;
   await page.locator("#inv-no").fill(invoiceNo);
   await page.locator("#inv-cust").fill("E2E Customer LLC");

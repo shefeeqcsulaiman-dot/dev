@@ -658,7 +658,7 @@ function Login({ onLogin, error }) {
           <div className="brand">E<span>Tax</span>Flow</div>
           <p>Sign in to your ETaxFlow account.</p>
         </div>
-        <input name="email" type="email" placeholder="Email address" required />
+        <input name="email" type="email" placeholder="Email address" defaultValue="admin@taxflowapp.com" required />
         <input name="password" type="password" placeholder="Password" required />
         {error && <div className="alert">{error}</div>}
         <button className="primary" disabled={busy}>{busy ? "Signing in..." : "Sign in"}</button>
