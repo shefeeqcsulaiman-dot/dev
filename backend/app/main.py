@@ -1,6 +1,8 @@
+import hashlib
 import logging
 import os
 import pathlib
+from typing import Any
 
 # Load .env into os.environ so os.environ.get() works for AI keys
 try:
@@ -38,6 +40,45 @@ from app.security import hash_password
 
 settings = get_settings()
 
+# Cache for _resolve_app_js(), keyed by (app.js mtime, app.min.js mtime) so we
+# only re-read/re-hash these files when either one actually changes on disk.
+_app_js_cache: dict[str, Any] = {}
+
+
+def _resolve_app_js() -> tuple[bytes, bool]:
+    """Returns (content, is_minified). Serves app.min.js only when its embedded
+    //SOURCE_SHA256:<hash> header matches the current app.js — see
+    frontend/scripts/build-min.mjs for how that file is generated."""
+    src_path = static_dir / "taxflow" / "src" / "app.js"
+    min_path = static_dir / "taxflow" / "src" / "app.min.js"
+    try:
+        src_mtime = src_path.stat().st_mtime
+        min_mtime = min_path.stat().st_mtime if min_path.exists() else None
+    except OSError:
+        return b"", False
+
+    cache_key = (src_mtime, min_mtime)
+    if _app_js_cache.get("key") == cache_key:
+        return _app_js_cache["content"], _app_js_cache["is_min"]
+
+    src_bytes = src_path.read_bytes()
+    content, is_min = src_bytes, False
+    if min_mtime is not None:
+        try:
+            min_bytes = min_path.read_bytes()
+            first_line_end = min_bytes.index(b"\n")
+            header = min_bytes[:first_line_end].decode("ascii", errors="ignore")
+            if header.startswith("//SOURCE_SHA256:"):
+                expected_hash = header.split(":", 1)[1].strip()
+                actual_hash = hashlib.sha256(src_bytes).hexdigest()
+                if expected_hash == actual_hash:
+                    content, is_min = min_bytes, True
+        except (OSError, ValueError):
+            pass
+
+    _app_js_cache.update(key=cache_key, content=content, is_min=is_min)
+    return content, is_min
+
 
 async def _invalidate_cache_bg(auth_header: str) -> None:
     import asyncio
@@ -72,7 +113,12 @@ def create_app() -> FastAPI:
     # Brotli compresses ~15-20% smaller than gzip for text/JS/CSS at the same
     # quality; falls back to gzip automatically for clients that don't send
     # "br" in Accept-Encoding, so this is a drop-in replacement for GZipMiddleware.
-    app.add_middleware(BrotliMiddleware, minimum_size=1000)
+    # quality=6 (default is 4): ~10% smaller output for a few extra ms per
+    # request — measured against this app's actual app.js/hrms.html: quality 4
+    # -> 244KB/45KB in ~19/4ms, quality 6 -> 219KB/40KB in ~36/6ms. Worth it
+    # since app.js is now cached for a year (this cost is paid once per
+    # browser) and even HTML's few extra ms are imperceptible.
+    app.add_middleware(BrotliMiddleware, minimum_size=1000, quality=6)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
@@ -216,6 +262,21 @@ def create_app() -> FastAPI:
             else "// local dev — app.js falls back to localhost:8000\n"
         )
         return Response(content=content, media_type="application/javascript")
+
+    # Serve the minified app.js build (frontend/scripts/build-min.mjs) instead
+    # of the source file, but ONLY when its embedded source hash still matches
+    # the current app.js on disk. If someone edits app.js and forgets to
+    # regenerate the minified twin, this falls back to serving the original
+    # source — correctness always wins over the size/speed win, never the
+    # other way around.
+    @app.get("/src/app.js", include_in_schema=False)
+    @app.get("/taxflow/src/app.js", include_in_schema=False)
+    def app_js() -> Response:
+        content, is_min = _resolve_app_js()
+        response = Response(content=content, media_type="text/javascript")
+        if is_min:
+            response.headers["X-Served-Variant"] = "minified"
+        return response
 
     # Legacy /taxflow/* redirects for backward compatibility
     @app.get("/taxflow", include_in_schema=False)
