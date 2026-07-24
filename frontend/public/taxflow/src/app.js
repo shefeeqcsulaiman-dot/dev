@@ -279,6 +279,18 @@ function goHrmsTab(n,id){
   }
 }
 
+// Same as goHrmsTab, but for #page-hrms-ext (Performance/Training/Asset
+// Management/ESS Portal/Manager Portal) instead of #page-staff.
+function goHrmsExtTab(n,id){
+  if(window.HRMS_STANDALONE){
+    const tab=document.querySelector('#page-hrms-ext .tab:nth-child('+n+')');
+    if(tab)stab(tab,id);
+    go('hrms-ext');
+  }else{
+    window.open('/hrms','_blank');
+  }
+}
+
 function populateHrEmployeeSelect(id){
   const sel=document.getElementById(id);
   if(!sel)return;
@@ -588,6 +600,7 @@ function openEmpEdit(emp){
   setV('emp-mobile',emp.mobile);
   setSel('emp-department',emp.department);
   setV('emp-designation',emp.designation);
+  setV('emp-supervisor',emp.supervisor);
   setV('emp-salary',emp.salary);
   setSel('emp-contract',emp.contract);
   setSel('emp-branch',emp.branch||emp.location);
@@ -960,7 +973,7 @@ function renderPayrollRunRow(employee){
   row.dataset.wps=employee.iban?'ok':'missing';
   const fmt=n=>Number(n||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
   row.innerHTML=`
-    <td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px">${escapeHtml(initialsFromName(employee.name))}</div><div>${escapeHtml(employee.name)}<div class="card-sub">${escapeHtml(employee.department||'')}</div></div></div></td>
+    <td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px">${escapeHtml(initialsFromName(employee.name))}</div><div class="pay-emp-name">${escapeHtml(employee.name)}<div class="card-sub">${escapeHtml(employee.department||'')}</div></div></div></td>
     <td><input class="fi mono pay-basic" style="width:90px;padding:4px 6px;font-size:12px" value="${salary.toFixed(2)}" onchange="recalcPayroll()"></td>
     <td><input class="fi mono pay-allow" style="width:90px;padding:4px 6px;font-size:12px" value="0.00" onchange="recalcPayroll()"></td>
     <td><input class="fi mono pay-ot" style="width:70px;padding:4px 6px;font-size:12px" value="0.00" onchange="recalcPayroll()"></td>
@@ -3758,6 +3771,11 @@ function clearStaticDemoData(){
   document.querySelectorAll('.page table.tbl tbody').forEach(tbody=>{
     if(tbody.querySelector('[data-empty-state]'))return;
     if(tbody.closest('#page-dashboard'))return;
+    // data-keep-static: opt-out for tables that aren't a list of database
+    // records at all — e.g. the Payroll Approval Workflow tracker, whose
+    // rows are a fixed set of workflow steps that approvePayroll() mutates
+    // in place, not something to replace with a "no records yet" message.
+    if(tbody.closest('[data-keep-static]'))return;
     emptyTableMessage(tbody,'No database records yet.');
   });
   document.querySelectorAll('[data-demo-static="1"]').forEach(node=>node.remove());
@@ -7411,6 +7429,16 @@ window.forceDbRefresh=forceDbRefresh;
 
 function escapeHtml(value){
   return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+// JSON.stringify() always wraps its output in double quotes, which breaks a
+// double-quoted HTML attribute the moment it's interpolated in (the HTML
+// tokenizer ends the attribute at that first unescaped "). Use this instead
+// of a bare JSON.stringify() whenever building onclick="fn(${...})" — it
+// HTML-entity-encodes the surrounding quotes so the browser decodes them back
+// to real quotes before handing the attribute off to the JS parser.
+function jsonAttr(value){
+  return JSON.stringify(value).replace(/"/g,'&quot;');
 }
 
 function buildFallbackExtraction(entry){
@@ -14769,6 +14797,20 @@ function refreshHrmsKpis(){
   refreshManagerPortalCounts();
 }
 
+// Maps the real #emp-leave-policy <option value="..."> strings to annual
+// entitlement days. Values must match hrms.html's Leave Policy select exactly.
+const _LEAVE_POLICY_DAYS={
+  'UAE 30 Calendar':30,
+  'UAE Standard':21,
+  'Internal 22 Working':22,
+  'Internal 29 Working':29,
+  'Executive 30 Working':30,
+  'Contractor':14,
+};
+function leaveEntitlementDays(policy){
+  return _LEAVE_POLICY_DAYS[policy]??21; // Part-Time/Custom/unknown fall back to the UAE standard baseline
+}
+
 function refreshHrmsDashboard(){
   const CIRC=238.76; // 2π × r=38
   const DEPT_COLORS=['#3b82f6','#8b5cf6','#f59e0b','#10b981','#ef4444','#06b6d4','#e879f9','#f97316'];
@@ -14887,7 +14929,7 @@ function refreshHrmsDashboard(){
   let annualEnt=0,sickEnt=0;
   empRows.forEach(row=>{
     let emp={};try{emp=JSON.parse(row.dataset.employee||'{}');}catch{}
-    annualEnt+=emp.leave_policy==='Executive'?30:21;
+    annualEnt+=leaveEntitlementDays(emp.leave_policy);
     sickEnt+=90;
   });
   const casualEnt=empRows.length*6;   // 6 days per employee (UAE standard)
@@ -15133,7 +15175,7 @@ function updateLeaveBalance(){
     const emp=employeeFromDirectoryRow(row);
     if(!emp.name)return;
     const policy=emp.leave_policy||'UAE Standard';
-    const annualDays=policy==='Executive'?30:21;
+    const annualDays=leaveEntitlementDays(policy);
     const sickDays=90;
     const used=usedMap[emp.name]||0;
     const remaining=Math.max(0,annualDays-used);
@@ -15258,7 +15300,7 @@ async function hrmsAiCvParse(){
       ['Skills',(res.skills||[]).slice(0,5).join(', ')],
       ['Languages',(res.languages||[]).join(', ')],
     ].filter(([,v])=>v).map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text3)">${k}</span><strong style="color:var(--text);text-align:right;max-width:60%">${escapeHtml(String(v))}</strong></div>`).join('');
-    const useBtn=`<button class="btn btn-p btn-sm" style="width:100%;margin-top:8px" onclick="hrmsAiCvFillForm(${JSON.stringify(JSON.stringify(res))})">Use in Employee Form</button>`;
+    const useBtn=`<button class="btn btn-p btn-sm" style="width:100%;margin-top:8px" onclick="hrmsAiCvFillForm(${jsonAttr(JSON.stringify(res))})">Use in Employee Form</button>`;
     _hrmsAiResultHtml('hrms-ai-cv-result',`<div>${fields}</div>${useBtn}`);
   }catch(e){_hrmsAiErrorHtml('hrms-ai-cv-result','AI call failed: '+e.message);}
   finally{_hrmsAiBtn('hrms-ai-cv-btn','Parse CV',false);}
@@ -15461,8 +15503,8 @@ async function hrmsAiJdGenerate(){
       ${section('Benefits',res.benefits)}
       ${section('UAE Requirements',res.uae_requirements)}
       <div style="margin-top:10px">
-        <button class="btn btn-g btn-sm" onclick="hrmsAiJdCopy(${JSON.stringify(JSON.stringify(res))})">Copy Full JD</button>
-        <button class="btn btn-g btn-sm" onclick="hrmsAiJdToRecruitment(${JSON.stringify(JSON.stringify(res))})">Add to Recruitment</button>
+        <button class="btn btn-g btn-sm" onclick="hrmsAiJdCopy(${jsonAttr(JSON.stringify(res))})">Copy Full JD</button>
+        <button class="btn btn-g btn-sm" onclick="hrmsAiJdToRecruitment(${jsonAttr(JSON.stringify(res))})">Add to Recruitment</button>
       </div>
     </div>`;
     _hrmsAiResultHtml('hrms-ai-jd-result',html);
@@ -16585,7 +16627,7 @@ function renderCandidateRecord(rec){
   const tr=document.createElement('tr');
   tr.dataset.recordId=rec.id;
   tr.dataset.stage=stage;
-  tr.innerHTML=`<td>${escapeHtml(rec.name)}</td><td>${escapeHtml(rec.position||'')}</td><td>${escapeHtml(rec.nationality||'')}</td><td class="mono">${escapeHtml(String(rec.experience||0))} yrs</td><td class="mono">AED ${Number(rec.salary||0).toLocaleString()}</td><td>${escapeHtml(rec.source||'')}</td><td><span class="b ${stageCls}">${escapeHtml(stage)}</span></td><td><div class="flx"><button class="btn btn-g btn-sm" onclick="toast('Scheduling interview for '+${JSON.stringify(String(rec.name||''))},'info')">Interview</button><button class="btn btn-g btn-sm" onclick="toast('Sending offer letter','info')">Offer</button></div></td>`;
+  tr.innerHTML=`<td>${escapeHtml(rec.name)}</td><td>${escapeHtml(rec.position||'')}</td><td>${escapeHtml(rec.nationality||'')}</td><td class="mono">${escapeHtml(String(rec.experience||0))} yrs</td><td class="mono">AED ${Number(rec.salary||0).toLocaleString()}</td><td>${escapeHtml(rec.source||'')}</td><td><span class="b ${stageCls}">${escapeHtml(stage)}</span></td><td><div class="flx"><button class="btn btn-g btn-sm" onclick="toast('Scheduling interview for '+${jsonAttr(String(rec.name||''))},'info')">Interview</button><button class="btn btn-g btn-sm" onclick="toast('Sending offer letter','info')">Offer</button></div></td>`;
   tbody.prepend(tr);
 }
 
@@ -17894,7 +17936,7 @@ function approvePayroll(){
   });
   const fin=document.getElementById('pay-fin-status');
   const mgmt=document.getElementById('pay-mgmt-status');
-  if(fin){fin.className='b b-g';fin.textContent='Approved';}
+  if(fin){fin.className=blocked?'b b-a':'b b-g';fin.textContent=blocked?'Review':'Approved';}
   if(mgmt){mgmt.className=blocked?'b b-a':'b b-g';mgmt.textContent=blocked?'Conditional':'Approved';}
   const period=document.getElementById('pay-period')?.value||'';
   const preparedBy=document.getElementById('pay-prepared-by')?.value.trim()||'';
@@ -18222,7 +18264,7 @@ function _buildBioGuideModes(apiKey, type, ip, port){
       {icon:I.form, title:'Create zk_bridge.conf With These Values', color:'var(--accent)',
        body:`Save this as <code>zk_bridge.conf</code> in the same folder as the script:<div style="display:flex;align-items:flex-start;gap:8px;margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px">
         <pre style="flex:1;margin:0;font-size:10.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all">${escapeHtml(confSnippet)}</pre>
-        <button onclick="_bioCopy(${JSON.stringify(confSnippet)},this)" style="flex-shrink:0;padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;white-space:nowrap">Copy</button>
+        <button onclick="_bioCopy(${jsonAttr(confSnippet)},this)" style="flex-shrink:0;padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;white-space:nowrap">Copy</button>
        </div>`},
       {icon:I.terminal, title:'Install pyzk and Run the Script', color:'var(--accent)',
        body:`On that same PC: <code>pip install pyzk requests</code>, then <code>python zk_bridge.py</code>. It connects to the device, polls every 30 seconds, and forwards new punches automatically — leave it running (use <code>pm2</code> or a service for production).`},
@@ -18279,7 +18321,7 @@ function _buildBioGuideModes(apiKey, type, ip, port){
         <tr>
           <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Device Key</td>
           <td style="padding:5px 8px"><code style="word-break:break-all;font-size:10px">${keyDisplay}</code></td>
-          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy(${JSON.stringify(keyDisplay)},this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
+          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy(${jsonAttr(keyDisplay)},this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
         </tr>
         <tr style="background:rgba(99,102,241,.07)">
           <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Data format</td>
@@ -18705,9 +18747,9 @@ function validateWPS(){
 
 function generateSIF(){
   const valid=validateWPS();
-  const molId=(document.querySelector('#page-payroll input[placeholder="MOL-7845129"]')?.value||'MOL-0000000').trim();
-  const fileSeq=(document.querySelector('#page-payroll input[value*="SIF"]')?.value||'SIF-001').trim();
-  const salaryMonth=(document.querySelector('#page-payroll input[value*="2024"]')?.value||'').trim();
+  const molId=(document.getElementById('wps-mol-id')?.value||'MOL-0000000').trim();
+  const fileSeq=(document.getElementById('wps-file-seq')?.value||'SIF-001').trim();
+  const salaryMonth=(document.getElementById('wps-salary-month')?.value||'').trim();
   const payDate=document.getElementById('pay-date')?.value||new Date().toISOString().split('T')[0];
   const period=document.getElementById('pay-period')?.value||salaryMonth;
   const rows=getPayrollRows().filter(r=>r.dataset.wps==='ok');
@@ -18745,7 +18787,8 @@ function generateSIF(){
 }
 
 function getPayrollRowInfo(row){
-  const name=row.querySelector('td div div div')?.textContent||'Employee';
+  const nameEl=row.querySelector('.pay-emp-name');
+  const name=(nameEl?.childNodes[0]?.textContent?.trim())||nameEl?.textContent?.trim()||'Employee';
   const basic=parseMoneyInput(row.querySelector('.pay-basic'));
   const allow=parseMoneyInput(row.querySelector('.pay-allow'));
   const ot=parseMoneyInput(row.querySelector('.pay-ot'));
@@ -18782,8 +18825,10 @@ function previewStaticPayslip(name,net){
 }
 
 function publishPayslips(){
-  toast('Payslips published to employee email and mobile app ?','ok');
-  audit('Published payslips','June 2024','Published');
+  const period=document.getElementById('pay-period')?.value||'';
+  saveServer('payrollRuns',{id:`PUB-${Date.now()}`,period,status:'Published',published_at:new Date().toISOString()});
+  toast('Payslips published to employee email and mobile app ✓','ok');
+  audit('Published payslips',period,'Published');
 }
 
 function postPayrollJournal(){

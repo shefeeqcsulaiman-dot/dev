@@ -760,7 +760,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         </div>
       </div>
       <div class="hc-legend" id="hrms-assets-legend" style="font-size:11px">
-        <div style="font-size:11px;color:var(--text3)">No assets assigned yet.<br><a style="color:#3b82f6;cursor:pointer" onclick="goHrmsTab(8,'hrext-assets')">Go to Asset Management →</a></div>
+        <div style="font-size:11px;color:var(--text3)">No assets assigned yet.<br><a style="color:#3b82f6;cursor:pointer" onclick="goHrmsExtTab(3,'hrext-assets')">Go to Asset Management →</a></div>
       </div>
     </div>
   </div>
@@ -785,7 +785,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-train-certs-fill" style="width:0%;background:#f59e0b"></div></div>
       </div>
       <div style="margin-top:8px">
-        <div style="font-size:11px;color:var(--text3)"><a style="color:#3b82f6;cursor:pointer" onclick="goHrmsTab(8,'hrext-train')">Go to Training Management →</a></div>
+        <div style="font-size:11px;color:var(--text3)"><a style="color:#3b82f6;cursor:pointer" onclick="goHrmsExtTab(2,'hrext-train')">Go to Training Management →</a></div>
       </div>
     </div>
   </div>
@@ -2248,12 +2248,12 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div class="card">
         <div class="card-hd"><div><div class="card-title">WPS / SIF File</div><div class="card-sub">Salary Information File preparation</div></div><span class="b b-a" id="wps-status">Pending validation</span></div>
         <div class="fr2">
-          <div class="fg"><label class="fl">Employer MOL ID</label><input class="fi mono" value="MOL-7845129"></div>
+          <div class="fg"><label class="fl">Employer MOL ID</label><input class="fi mono" id="wps-mol-id" value="MOL-7845129"></div>
           <div class="fg"><label class="fl">Routing Bank</label><select class="fi"><option>ADCB</option><option>Emirates NBD</option><option>FAB</option></select></div>
         </div>
         <div class="fr2">
-          <div class="fg"><label class="fl">File Sequence</label><input class="fi mono" value="SIF-2024-06-001"></div>
-          <div class="fg"><label class="fl">Salary Month</label><input class="fi" value="June 2024"></div>
+          <div class="fg"><label class="fl">File Sequence</label><input class="fi mono" id="wps-file-seq" value="SIF-2024-06-001"></div>
+          <div class="fg"><label class="fl">Salary Month</label><input class="fi" id="wps-salary-month" value="June 2024"></div>
         </div>
         <div class="divider"></div>
         <div class="flx" style="flex-wrap:wrap"><button class="btn btn-g" onclick="validateWPS()">Validate WPS</button><button class="btn btn-p" onclick="generateSIF()">Generate SIF</button><button class="btn btn-g" onclick="toast('SIF download prepared','ok')">Download</button></div>
@@ -2306,7 +2306,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   <div class="tab-body" id="pay-approvals">
     <div class="card">
       <div class="card-hd"><div class="card-title">Payroll Approval Workflow</div><button class="btn btn-success btn-sm" onclick="approvePayroll()">Approve Payroll</button></div>
-      <table class="tbl" data-delete-actions-bound="skip">
+      <table class="tbl" data-delete-actions-bound="skip" data-keep-static="1">
         <thead><tr><th>Step</th><th>Owner</th><th>Status</th><th>Completed</th><th>Notes</th></tr></thead>
         <tbody>
           <tr><td>Prepared</td><td>Payroll Officer</td><td><span class="b b-g">Done</span></td><td>28 Jun 17:20</td><td>Attendance and adjustments imported</td></tr>
@@ -2365,7 +2365,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="section-hd">Employment Details</div>
     <div class="fr3"><div class="fg"><label class="fl">Employee ID</label><input class="fi mono" id="emp-id" placeholder="EMP-005"></div><div class="fg"><label class="fl">Employment Type</label><select class="fi" id="emp-contract"><option>Full-Time</option><option>Part-Time</option><option>Contract</option><option>Probation</option><option>Intern / Trainee</option><option>Daily Wage</option><option>Hourly</option><option>Weekly</option><option>Short-Term</option><option>Freelance / Consultant</option><option>Seasonal</option><option>Project-Based</option></select></div><div class="fg"><label class="fl">Join Date</label><input class="fi" id="emp-join-date" type="date"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Department <span style="color:var(--red)">*</span></label><select class="fi" id="emp-department" required onchange="filterEmpRoles()"><option value="">— Select Department —</option></select></div><div class="fg"><label class="fl">Designation</label><input class="fi" id="emp-designation" placeholder="e.g. Sales Executive"></div><div class="fg"><label class="fl">Branch <span style="color:var(--red)">*</span></label><select class="fi" id="emp-branch" required onchange="filterEmpRoles()"><option value="">— Select Branch —</option></select></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Role <span style="color:var(--red)">*</span></label><select class="fi" id="emp-role"><option value="">— Select Branch &amp; Department first —</option></select></div><div class="fg" style="align-self:flex-end"><div style="font-size:11px;color:var(--text3);padding-bottom:6px">Role options update automatically when Branch and Department are selected.</div></div><div class="fg"></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Role <span style="color:var(--red)">*</span></label><select class="fi" id="emp-role"><option value="">— Select Branch &amp; Department first —</option></select></div><div class="fg" style="align-self:flex-end"><div style="font-size:11px;color:var(--text3);padding-bottom:6px">Role options update automatically when Branch and Department are selected.</div></div><div class="fg"><label class="fl">Supervisor</label><input class="fi" id="emp-supervisor" placeholder="e.g. Ahmed Al Mansouri"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Total Salary (AED)</label><input class="fi mono" id="emp-salary"></div><div class="fg"><label class="fl">OT Policy</label><select class="fi" id="emp-ot-rate"><option value="system-default">— System Default (from HR Settings) —</option><option value="fixed">Fixed Rate</option><option value="monthly">Monthly-Based Rate</option><option value="other">Other / Custom</option></select></div><div class="fg"><label class="fl">Leave Policy</label><select class="fi" id="emp-leave-policy"><optgroup label="UAE Policy (Calendar Days)"><option value="UAE 30 Calendar">UAE Policy — 30 Calendar Days</option><option value="UAE Standard">UAE Standard — 21 Calendar Days</option></optgroup><optgroup label="Internal Policy (Working Days)"><option value="Internal 22 Working">Internal — 22 Working Days</option><option value="Internal 29 Working">Internal — 29 Working Days</option><option value="Executive 30 Working">Executive — 30 Working Days</option></optgroup><optgroup label="Other"><option value="Contractor">Contractor — 14 Calendar Days</option><option value="Part-Time">Part-Time Pro-Rata</option><option value="Custom">Custom (per contract)</option></optgroup></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Shift Hours</label><select class="fi" id="emp-shift-hours-type"><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div><div class="fg"><label class="fl">Hours</label><input class="fi mono" id="emp-shift-hours" type="number" min="0" placeholder="e.g. 40"></div><div class="fg"><label class="fl">Work Location</label><select class="fi" id="emp-location"><option value="">— Select Location —</option></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Work Permit No.</label><input class="fi mono" id="emp-work-permit"></div><div class="fg"><label class="fl">Visa Expiry</label><input class="fi" id="emp-visa-expiry" type="date"></div><div class="fg"><label class="fl">Cost Center</label><input class="fi" id="emp-cost-center" placeholder="e.g. CC-01-OPS"></div></div>
@@ -3155,5 +3155,7 @@ document.addEventListener('DOMContentLoaded',function(){
     </div>
   </div>
 </div>
+
+<div class="toasts" id="toasts"></div>
 </body>
 </html>
