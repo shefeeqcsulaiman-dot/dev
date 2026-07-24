@@ -18,7 +18,8 @@ from xml.etree import ElementTree
 
 import datetime as _dt
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -63,6 +64,43 @@ _REPORT_AFFECTING_COLLECTIONS = frozenset({
     "journalDrafts", "purchaseDocuments", "purchaseRecords",
     "bankAccounts", "employees", "payrollRuns",
 })
+
+# Collections representing real financial transactions — subject to the same
+# server-side period lock as manual journal vouchers (accounting.py). Without
+# this, a closed/filed period could still be edited via a direct /app-data
+# call even though the UI's period-lock toggle implies it can't be.
+_PERIOD_LOCKED_COLLECTIONS: dict[str, str] = {
+    "salesInvoices": "sales",
+    "purchaseRecords": "purchase",
+    "bills": "purchase",
+    "expenses": "expense",
+    "payrollRuns": "payroll",
+}
+
+
+def _record_period_date(record: dict[str, Any]) -> _dt.datetime | None:
+    period = record.get("period")
+    if period and re.match(r"^\d{4}-\d{2}", str(period)):
+        try:
+            return _dt.datetime.strptime(str(period)[:7], "%Y-%m").replace(tzinfo=_dt.timezone.utc)
+        except ValueError:
+            pass
+    for key in ("date", "invoice_date", "bill_date", "expense_date", "created_at"):
+        value = record.get(key)
+        if value:
+            try:
+                return _dt.datetime.fromisoformat(str(value)[:10]).replace(tzinfo=_dt.timezone.utc)
+            except ValueError:
+                continue
+    return None
+
+
+def assert_collection_period_open(db: Session, current_user: User, collection: str, record: dict[str, Any]) -> None:
+    module = _PERIOD_LOCKED_COLLECTIONS.get(collection)
+    if not module:
+        return
+    from app.routers.accounting import assert_period_open
+    assert_period_open(db, current_user.company_id, module, _record_period_date(record))
 
 # Per-collection caps for bootstrap to prevent memory spikes on large accounts.
 # Sized to cover ~1 year of data for a 50-employee UAE SME without truncation:
@@ -629,6 +667,7 @@ async def app_data_action(
         record = payload.get("record", {})
         if not isinstance(record, dict):
             record = {"value": record}
+        assert_collection_period_open(db, current_user, collection, record)
         saved = save_app_record(db, current_user, collection, record)
         sync_domain_model(db, current_user, collection, serialize(saved))
         db.commit()
@@ -657,6 +696,7 @@ async def app_data_action(
         updated_count = 0
         created_count = 0
         for record in normalized_records:
+            assert_collection_period_open(db, current_user, collection, record)
             key = record_key(collection, record)
             payload_json = json.dumps(record, ensure_ascii=False, default=str)
             existing = existing_by_key.get(key) if key else None
@@ -707,6 +747,14 @@ async def app_data_action(
                 .first()
             )
             if existing:
+                # Check the period lock against the STORED record's own date,
+                # not whatever the client's delete request happens to include
+                # — otherwise omitting the date field would bypass the lock.
+                try:
+                    stored_record = json.loads(existing.payload or "{}")
+                except (TypeError, json.JSONDecodeError):
+                    stored_record = record
+                assert_collection_period_open(db, current_user, collection, stored_record if isinstance(stored_record, dict) else record)
                 db.delete(existing)
                 deleted = True
             sync_domain_delete(db, current_user, collection, record)
@@ -725,6 +773,21 @@ async def app_data_action(
         keys = [k for k in (record_key(collection, r) for r in records) if k]
         deleted_count = 0
         if keys:
+            existing_rows = (
+                db.query(AppDataRecord)
+                .filter(
+                    AppDataRecord.company_id == current_user.company_id,
+                    AppDataRecord.collection == collection,
+                    AppDataRecord.record_key.in_(keys),
+                )
+                .all()
+            )
+            for row in existing_rows:
+                try:
+                    stored_record = json.loads(row.payload or "{}")
+                except (TypeError, json.JSONDecodeError):
+                    stored_record = {}
+                assert_collection_period_open(db, current_user, collection, stored_record if isinstance(stored_record, dict) else {})
             deleted_count = (
                 db.query(AppDataRecord)
                 .filter(
@@ -3588,15 +3651,24 @@ _WIPE_KEEP_COLLECTIONS = frozenset({
 })
 
 
+class WipeCompanyDataIn(BaseModel):
+    confirm: str = ""
+
+
 @router.post("/wipe")
 @limiter.limit("5/minute")
 def wipe_company_data(
     request: Request,
+    payload: WipeCompanyDataIn,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Delete all transactional data for the company. Keeps invoice layouts,
     sales categories and sales units. Irreversible — requires explicit call."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only an admin can wipe company data")
+    if payload.confirm.strip().upper() != "DELETE ALL":
+        raise HTTPException(status_code=422, detail='Confirmation phrase "DELETE ALL" is required')
     cid = current_user.company_id
 
     # Domain tables (order matters for FK constraints)
@@ -3643,6 +3715,11 @@ def wipe_company_data(
         .delete(synchronize_session=False)
     )
 
+    db.commit()
+
+    # Logged after the wipe (not before) so this record survives the
+    # AuditLog deletion above instead of being wiped along with everything else.
+    log_action(db, current_user, "settings", "company_data_wiped", {"app_records_deleted": app_deleted})
     db.commit()
 
     import app.cache as cache

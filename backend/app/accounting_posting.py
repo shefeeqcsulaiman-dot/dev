@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import func
@@ -146,6 +147,7 @@ def ensure_tax_line(db: Session, transaction: SourceTransaction) -> None:
     tax_code = db.query(TaxCode).filter(TaxCode.company_id == transaction.company_id, TaxCode.code == code_name).first()
     if not tax_code:
         tax_code = db.query(TaxCode).filter(TaxCode.company_id == transaction.company_id, TaxCode.code == "VAT5").first()
+    period = (transaction.created_at or datetime.now(timezone.utc)).strftime("%Y-%m")
     db.add(
         TaxLine(
             company_id=transaction.company_id,
@@ -154,6 +156,7 @@ def ensure_tax_line(db: Session, transaction: SourceTransaction) -> None:
             direction="output" if transaction.module in {"sales", "sales_invoice"} else "input",
             taxable_amount=money(transaction.subtotal),
             tax_amount=money(transaction.vat),
+            period=period,
         )
     )
 

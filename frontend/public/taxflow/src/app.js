@@ -6299,65 +6299,6 @@ function loadMorePurchaseRecords(){
   });
 }
 
-async function clearPurchaseRecords(){
-  if(purchaseRecordsLoading){
-    toast('Purchase records are still loading','warn');
-    return;
-  }
-  if(!purchaseRecordsLoaded&&purchaseRecordCache.size<purchaseRecordsTotal){
-    await fetchAllPurchaseRecordsForStock();
-  }
-  const records=[...purchaseRecordCache.values()];
-  if(!records.length){
-    toast('No purchase records to clear','warn');
-    return;
-  }
-  const confirmed=await appConfirm({
-    title:'Clear Purchase Records',
-    message:`Clear ${records.length.toLocaleString('en-AE')} purchase record(s)? This removes their source transactions and stock movements from the database.`,
-    okText:'Clear Records'
-  });
-  if(!confirmed)return;
-  // Show full-page loader
-  const fpl=document.getElementById('fullpage-loader');
-  const fplFill=document.getElementById('fullpage-loader-fill');
-  const fplPct=document.getElementById('fullpage-loader-pct');
-  const fplSub=document.getElementById('fullpage-loader-sub');
-  const fplTitle=document.getElementById('fullpage-loader-title');
-  if(fpl){
-    if(fplTitle)fplTitle.textContent='Deleting Purchase Records';
-    if(fplSub)fplSub.textContent=`Deleting ${records.length.toLocaleString('en-AE')} record(s)…`;
-    if(fplFill)fplFill.style.width='10%';
-    if(fplPct)fplPct.textContent='';
-    fpl.style.display='flex';
-  }
-  let failed=0;
-  try{
-    // Send all records in one bulk-delete request
-    const result=await apiRequest('bulk-delete',{collection:'purchaseRecords',records});
-    if(result===null)failed=records.length;
-    if(fplFill)fplFill.style.width='90%';
-  }catch(err){
-    failed=records.length;
-    console.warn('Bulk delete failed:',err);
-  }
-  if(fpl)fpl.style.display='none';
-  // Always clear UI
-  purchaseRecordCache.clear();
-  purchaseRecordsTotal=0;
-  purchaseRecordsOffset=0;
-  purchaseRecordsLoaded=true;
-  renderPurchaseRecordWindow();
-  syncStockLevelsFromProducts();
-  loadStockLevelsFromServer();
-  const cleared=records.length-failed;
-  audit('Cleared purchase records',`${cleared} record(s)`,'Deleted');
-  toast(
-    `${cleared.toLocaleString('en-AE')} purchase record(s) cleared${failed?`; ${failed.toLocaleString('en-AE')} failed`:''}`,
-    failed?'warn':'ok'
-  );
-}
-
 function showRecentPurchaseRecords(){
   fetchPurchaseRecordsPage({reset:true}).then(data=>{
     const count=Array.isArray(data.records)?data.records.length:purchaseRecordCache.size;
@@ -7184,13 +7125,19 @@ function removeDemoProductRows(){
 }
 
 function isDemoPurchaseRecord(record={}){
+  // Any single signal alone is common enough in real UAE business data to
+  // false-positive (e.g. a genuine 2024-dated PO, or a product literally
+  // named "Safety Gloves") — require at least 2 of 3 to agree, matching the
+  // actual seeded demo dataset (consistently demo across every field).
+  let signals=0;
   const ref=String(record.ref||record.invoice_no||record.reference||'').trim();
-  if(/^(INV|PUR|QTN|BILL|PO|RCT)-2024-/i.test(ref))return true;
+  if(/^(INV|PUR|QTN|BILL|PO|RCT)-2024-/i.test(ref))signals++;
   const supplier=String(record.supplier||'').toLowerCase();
   const demoSuppliers=['al hamad steel','gulf freight','office depot uae','uae paints co','uae paints co.','gulf logistics ltd','emirates supplies','al baraka trading'];
-  if(demoSuppliers.includes(supplier))return true;
+  if(demoSuppliers.includes(supplier))signals++;
   const lines=Array.isArray(record.lines)?record.lines:[];
-  return lines.length>0&&lines.every(line=>isDemoProductRecord({code:line.sku||line.code||'',name:line.product||line.name||line.description||''}));
+  if(lines.length>0&&lines.every(line=>isDemoProductRecord({code:line.sku||line.code||'',name:line.product||line.name||line.description||''})))signals++;
+  return signals>=2;
 }
 
 function cleanupDemoProductsFromServer(products=[]){
@@ -12382,7 +12329,7 @@ async function wipeAllCompanyData(){
   if(!confirmed2)return;
   try{
     toast('Clearing all data…','info');
-    const res=await authenticatedFetch(`${apiBaseUrl()}/app-data/wipe`,{method:'POST'});
+    const res=await authenticatedFetch(`${apiBaseUrl()}/app-data/wipe`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:'DELETE ALL'})});
     if(!res.ok)throw new Error('Wipe failed ('+res.status+')');
     const data=await res.json();
     // Clear all in-memory caches

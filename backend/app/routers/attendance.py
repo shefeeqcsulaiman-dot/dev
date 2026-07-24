@@ -71,18 +71,40 @@ class DeviceOut(BaseModel):
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
+# UAE Standard Time has no DST, so this fixed offset is safe for the whole
+# app's target market. Devices (ZKTeco/Suprema/Hikvision/Anviz) and CSV
+# imports report their own local wall-clock time with no timezone info —
+# treating that naive value as if it were already UTC (rather than converting
+# it) makes every punch appear ~4 hours in the future and get rejected.
+_DEVICE_UTC_OFFSET = timedelta(hours=4)
+
+
 def _parse_time(ts: str | None) -> datetime:
     if not ts:
         return datetime.now(UTC)
     for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%SZ", "%d/%m/%Y %H:%M:%S"):
         try:
-            return datetime.strptime(ts, fmt).replace(tzinfo=UTC)
+            naive = datetime.strptime(ts, fmt)
+            if fmt.endswith("Z"):
+                return naive.replace(tzinfo=UTC)
+            return (naive - _DEVICE_UTC_OFFSET).replace(tzinfo=UTC)
         except ValueError:
             continue
     try:
         return datetime.fromisoformat(ts.replace("Z", "+00:00"))
     except Exception:
         return datetime.now(UTC)
+
+
+def _local_date(punch_time_utc: datetime) -> str:
+    """Calendar date in UAE local time — punches near midnight UTC must not
+    bucket into the wrong business day."""
+    return (punch_time_utc + _DEVICE_UTC_OFFSET).strftime("%Y-%m-%d")
+
+
+def _local_today():
+    """Today's date in UAE local time, matching how punch_date is bucketed."""
+    return (datetime.now(UTC) + _DEVICE_UTC_OFFSET).date()
 
 
 def _get_device_company(x_device_key: str, db: Session) -> tuple[str, BiometricDevice]:
@@ -331,7 +353,7 @@ async def _record_punch(request: Request, db: Session, current_user: User | None
     if device_key and punch_time < now - timedelta(days=90):
         raise HTTPException(status_code=422, detail="Punch time is too old (>90 days)")
 
-    punch_date = punch_time.strftime("%Y-%m-%d")
+    punch_date = _local_date(punch_time)
     employee_id = body.employee_id.strip()
 
     # Idempotency guard: a bridge restart replays its whole in-memory backlog
@@ -463,7 +485,7 @@ async def import_csv(
             employee_id=emp_id,
             employee_name=norm.get("employee_name") or None,
             punch_time=punch_time,
-            punch_date=punch_time.strftime("%Y-%m-%d"),
+            punch_date=_local_date(punch_time),
             direction=norm.get("direction", "in"),
             source="csv",
         )
@@ -482,7 +504,7 @@ def attendance_today(
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Return today's punch-in count for the Present Today KPI."""
-    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    today = _local_today().isoformat()
     rows = db.query(AttendancePunch).filter(
         AttendancePunch.company_id == current_user.company_id,
         AttendancePunch.punch_date == today,
@@ -504,7 +526,7 @@ def attendance_trend(
 ) -> dict[str, Any]:
     """Return daily punch-in unique-employee counts for the last N days (for Attendance Trend chart)."""
     days = max(7, min(days, 90))
-    today = datetime.now(UTC).date()
+    today = _local_today()
     start = today - timedelta(days=days - 1)
 
     rows = db.query(
@@ -554,7 +576,7 @@ def attendance_summary(
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Recent 7-day attendance overview."""
-    today = datetime.now(UTC).date()
+    today = _local_today()
     week_start = (today - timedelta(days=6)).isoformat()
     rows = db.query(
         AttendancePunch.punch_date,

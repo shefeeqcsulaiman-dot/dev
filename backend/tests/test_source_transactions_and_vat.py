@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 
 
@@ -81,7 +82,11 @@ def test_vat_return_reads_tax_lines(client, auth_headers):
     ).json()
     client.post(f"/api/v1/source-transactions/{source['id']}/approve", headers=auth_headers)
 
-    vat_return = client.get("/api/v1/tax/vat-return?period=2024-06", headers=auth_headers)
+    # TaxLine.period is stamped from the transaction's actual creation date,
+    # not a hardcoded value, so the current real-world period must be used.
+    period = datetime.now(timezone.utc).strftime("%Y-%m")
+
+    vat_return = client.get(f"/api/v1/tax/vat-return?period={period}", headers=auth_headers)
     assert vat_return.status_code == 200
     payload = vat_return.json()
     assert Decimal(payload["input_vat"]) >= Decimal("10.00")
@@ -89,7 +94,7 @@ def test_vat_return_reads_tax_lines(client, auth_headers):
     saved_return = client.post(
         "/api/v1/tax/vat-returns",
         headers=auth_headers,
-        json={"period": "2024-06", "adjustments": "1.00", "filing_status": "approved", "fta_reference_no": "FTA-QA-001"},
+        json={"period": period, "adjustments": "1.00", "filing_status": "approved", "fta_reference_no": "FTA-QA-001"},
     )
     assert saved_return.status_code == 201
     assert Decimal(saved_return.json()["input_vat"]) >= Decimal("10.00")
@@ -113,4 +118,26 @@ def test_corporate_tax_return_calculates_taxable_income(client, auth_headers):
     assert response.status_code == 201
     payload = response.json()
     assert Decimal(payload["taxable_income"]) == Decimal("100400.00")
-    assert Decimal(payload["corporate_tax_payable"]) == Decimal("9036.00")
+    # Below the AED 375,000 Small Business Relief threshold — 0% applies.
+    assert Decimal(payload["corporate_tax_payable"]) == Decimal("0.00")
+
+
+def test_corporate_tax_return_applies_small_business_relief_threshold(client, auth_headers):
+    response = client.post(
+        "/api/v1/tax/corporate-tax-returns",
+        headers=auth_headers,
+        json={
+            "tax_period": "2025",
+            "accounting_profit": "500000.00",
+            "non_deductible_expenses": "1000.00",
+            "exempt_income": "500.00",
+            "tax_loss_adjustment": "100.00",
+            "tax_rate": "9.00",
+            "filing_status": "approved",
+        },
+    )
+    assert response.status_code == 201
+    payload = response.json()
+    assert Decimal(payload["taxable_income"]) == Decimal("500400.00")
+    # Only the amount above AED 375,000 is taxed: (500400 - 375000) * 9% = 11286.00
+    assert Decimal(payload["corporate_tax_payable"]) == Decimal("11286.00")

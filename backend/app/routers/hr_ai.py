@@ -13,12 +13,13 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.limiter import limiter
 from app.models import AppDataRecord, Employee, PayrollItem, PayrollRun, User
 
 router = APIRouter(prefix="/ai/hr", tags=["hr ai"])
@@ -56,8 +57,13 @@ def _call_ai(prompt: str, system: str = "You are an expert HR consultant for UAE
             headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=45) as resp:
-            result = json.loads(resp.read().decode())
+        try:
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                result = json.loads(resp.read().decode())
+        except urllib.error.HTTPError as exc:
+            return {"error": f"OpenAI request failed ({exc.code}): {exc.reason}"}
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            return {"error": f"OpenAI request failed: {exc}"}
         raw = result["choices"][0]["message"]["content"].strip()
     elif anthropic_key:
         payload = {
@@ -75,8 +81,13 @@ def _call_ai(prompt: str, system: str = "You are an expert HR consultant for UAE
             },
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=45) as resp:
-            result = json.loads(resp.read().decode())
+        try:
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                result = json.loads(resp.read().decode())
+        except urllib.error.HTTPError as exc:
+            return {"error": f"Anthropic request failed ({exc.code}): {exc.reason}"}
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            return {"error": f"Anthropic request failed: {exc}"}
         raw = result["content"][0]["text"].strip()
     else:
         return {"error": "No AI API key configured. Add OPENAI_API_KEY or ANTHROPIC_API_KEY to .env"}
@@ -180,7 +191,8 @@ class LeaveAnalysisRequest(BaseModel):
 # ── endpoints ────────────────────────────────────────────────────────────────
 
 @router.post("/cv-parse")
-def cv_parse(payload: CvParseRequest, current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+@limiter.limit("15/minute")
+def cv_parse(request: Request, payload: CvParseRequest, current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     """Extract structured employee fields from raw CV / resume text."""
     prompt = f"""Extract HR employee data from this CV/resume text and return JSON.
 
@@ -209,7 +221,8 @@ Return exactly this JSON structure:
 
 
 @router.post("/payroll-anomaly")
-def payroll_anomaly(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+@limiter.limit("15/minute")
+def payroll_anomaly(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     """Detect payroll anomalies using real payroll data from the database."""
     employees = _employee_rows(db, current_user.company_id)
     payroll = _payroll_history(db, current_user.company_id)
@@ -260,7 +273,8 @@ Return JSON:
 
 
 @router.post("/attrition-risk")
-def attrition_risk(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+@limiter.limit("15/minute")
+def attrition_risk(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     """Score each employee's attrition risk based on DB data."""
     employees = _employee_rows(db, current_user.company_id)
     payroll = _payroll_history(db, current_user.company_id)
@@ -316,7 +330,8 @@ Return JSON:
 
 
 @router.post("/compliance-check")
-def compliance_check(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+@limiter.limit("15/minute")
+def compliance_check(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     """Check UAE Labor Law compliance for all employees in the database."""
     employees = _employee_rows(db, current_user.company_id)
     payroll = _payroll_history(db, current_user.company_id)
@@ -366,7 +381,9 @@ Return JSON:
 
 
 @router.post("/leave-analysis")
+@limiter.limit("15/minute")
 def leave_analysis(
+    request: Request,
     payload: LeaveAnalysisRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -425,7 +442,8 @@ Return JSON:
 
 
 @router.post("/jd-generate")
-def jd_generate(payload: JdGenerateRequest, current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+@limiter.limit("15/minute")
+def jd_generate(request: Request, payload: JdGenerateRequest, current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     """Generate a UAE-compliant Job Description using AI."""
     salary_hint = f"Salary range: {payload.salary_range} AED/month" if payload.salary_range else ""
     exp_hint = f"Experience required: {payload.experience_years} years" if payload.experience_years else ""
@@ -463,7 +481,9 @@ Return JSON:
 
 
 @router.post("/chatbot")
+@limiter.limit("15/minute")
 def chatbot(
+    request: Request,
     payload: ChatbotRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

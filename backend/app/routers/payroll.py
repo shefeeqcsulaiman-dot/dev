@@ -50,9 +50,12 @@ def generate_payroll(
     deductions_total = Decimal("0.00")
     net_total = Decimal("0.00")
     for employee in employees:
-        allowances = employee.basic_salary * Decimal("0.15")
-        overtime = Decimal("350.00") if employee.department in {"Sales", "Operations"} else Decimal("0.00")
-        deductions = Decimal("300.00") if not employee.iban else Decimal("0.00")
+        # Use the employee's own stored allowances/overtime/deductions rather
+        # than a flat guess — these are real per-employee figures maintained
+        # via the HRMS employee record, not a one-size-fits-all formula.
+        allowances = employee.allowances or Decimal("0.00")
+        overtime = employee.overtime or Decimal("0.00")
+        deductions = employee.deductions or Decimal("0.00")
         net = employee.basic_salary + allowances + overtime - deductions
         gross_total += employee.basic_salary + allowances + overtime
         deductions_total += deductions

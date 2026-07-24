@@ -26,6 +26,7 @@ from app.models import (
     PostingJob,
     Receipt,
     SourceTransaction,
+    TaxLine,
     User,
     Voucher,
     VoucherLine,
@@ -490,10 +491,14 @@ def update_account(
     account = db.query(Account).filter(Account.company_id == current_user.company_id, Account.id == account_id).first()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
-    # Never overwrite structural/derived fields on edit
+    # Never overwrite structural/derived fields on edit. is_active is excluded
+    # too — it's set together with `status` via the dedicated
+    # /accounts/{id}/status endpoint, and the frontend's edit form always
+    # submits is_active=true regardless of the account's real state, which
+    # would otherwise silently reactivate a deactivated account on any edit.
     editable = payload.model_dump(exclude={
         "parent_account_id", "level", "is_group",
-        "node_type", "created_mode", "status", "ai_confidence",
+        "node_type", "created_mode", "status", "ai_confidence", "is_active",
     })
     # Re-derive normal_balance from updated type
     editable["normal_balance"] = _derive_normal_balance(payload.type)
@@ -509,7 +514,8 @@ def clear_all_accounts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    """Delete all accounts for the company that are not used in journal lines."""
+    """Delete all accounts for the company that are not used in journal lines
+    and have no child accounts (same rule as the single-account delete)."""
     used_ids = {
         row[0]
         for row in db.query(JournalLine.account_id)
@@ -519,9 +525,10 @@ def clear_all_accounts(
         .all()
     }
     accounts = db.query(Account).filter(Account.company_id == current_user.company_id).all()
+    parent_ids = {acc.parent_account_id for acc in accounts if acc.parent_account_id}
     deleted, skipped = 0, 0
     for acc in accounts:
-        if acc.id in used_ids:
+        if acc.id in used_ids or acc.id in parent_ids:
             skipped += 1
             continue
         db.delete(acc)
@@ -612,7 +619,17 @@ def delete_journal(
     if not journal:
         raise HTTPException(status_code=404, detail="Journal entry not found")
     db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.journal_entry_id == journal_id).delete()
-    db.query(Voucher).filter(Voucher.posted_journal_id == journal_id).update({"posted_journal_id": None})
+    # Reset status back to "approved" (not just clearing the FK) so the
+    # voucher can actually be re-posted — approve_voucher() and
+    # retry_posting_job() both no-op when status is already "posted", which
+    # would otherwise leave these permanently stuck with no journal at all.
+    db.query(Voucher).filter(Voucher.posted_journal_id == journal_id).update(
+        {"posted_journal_id": None, "status": "approved"}
+    )
+    if journal.source_id:
+        db.query(SourceTransaction).filter(SourceTransaction.id == journal.source_id).update({"status": "approved"})
+        db.query(PostingJob).filter(PostingJob.source_id == journal.source_id).update({"status": "approved"})
+        db.query(TaxLine).filter(TaxLine.source_id == journal.source_id).delete(synchronize_session=False)
     db.delete(journal)
     db.commit()
 

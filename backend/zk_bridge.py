@@ -45,7 +45,7 @@ import sys
 import time
 import logging
 import pathlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 try:
     import requests
@@ -85,6 +85,11 @@ ZK_DEVICE_PORT   = int(_get("ZK_DEVICE_PORT", "4370"))
 ZK_POLL_INTERVAL = int(_get("ZK_POLL_INTERVAL", "30"))
 API_BASE_URL     = _get("API_BASE_URL",     "https://app.etaxflow.com").rstrip("/")
 DEVICE_API_KEY   = _get("DEVICE_API_KEY",   "")
+# ZKTeco devices report attendance in the device's own local clock (naive
+# datetime, no tzinfo). UAE has no DST, so this is a fixed UTC+4 offset by
+# default — override via DEVICE_UTC_OFFSET_HOURS if the device clock is set
+# to a different timezone.
+DEVICE_UTC_OFFSET_HOURS = float(_get("DEVICE_UTC_OFFSET_HOURS", "4"))
 
 PUNCH_ENDPOINT = f"{API_BASE_URL}/api/v1/punch"
 
@@ -166,7 +171,10 @@ def _run_pyzk() -> None:
             for att in attendances:
                 punch_time = att.timestamp
                 if isinstance(punch_time, datetime) and punch_time.tzinfo is None:
-                    punch_time = punch_time.replace(tzinfo=timezone.utc)
+                    # Device clock is local time, not UTC — convert before mislabeling
+                    # it, otherwise every punch looks DEVICE_UTC_OFFSET_HOURS in the
+                    # future and the API rejects it as an invalid future timestamp.
+                    punch_time = (punch_time - timedelta(hours=DEVICE_UTC_OFFSET_HOURS)).replace(tzinfo=timezone.utc)
 
                 if _last_punch_time and punch_time <= _last_punch_time:
                     continue

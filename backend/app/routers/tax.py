@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -46,10 +47,11 @@ def list_tax_lines(db: Session = Depends(get_db), current_user: User = Depends(g
 
 @router.get("/vat-return")
 def vat_return(
-    period: str = "2024-06",
+    period: str | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
+    period = period or datetime.now(timezone.utc).strftime("%Y-%m")
     cache_key = f"vat_return:{current_user.company_id}:{period}"
     cached = cache.get(cache_key)
     if cached is not None:
@@ -149,7 +151,12 @@ def create_corporate_tax_return(
 ) -> CorporateTaxReturn:
     taxable_income = payload.accounting_profit + payload.non_deductible_expenses - payload.exempt_income - payload.tax_loss_adjustment
     taxable_income = max(Decimal("0.00"), taxable_income)
-    tax_payable = (taxable_income * (payload.tax_rate / Decimal("100"))).quantize(Decimal("0.01"))
+    # UAE Small Business Relief: the first AED 375,000 of taxable income is
+    # taxed at 0%, only the excess is taxed at the standard rate. Matches the
+    # frontend's own calcCorporateTax() worksheet.
+    SMALL_BUSINESS_RELIEF_THRESHOLD = Decimal("375000.00")
+    taxable_above_threshold = max(Decimal("0.00"), taxable_income - SMALL_BUSINESS_RELIEF_THRESHOLD)
+    tax_payable = (taxable_above_threshold * (payload.tax_rate / Decimal("100"))).quantize(Decimal("0.01"))
     row = (
         db.query(CorporateTaxReturn)
         .filter(CorporateTaxReturn.company_id == current_user.company_id, CorporateTaxReturn.tax_period == payload.tax_period)

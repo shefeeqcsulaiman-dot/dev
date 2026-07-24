@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
@@ -47,7 +47,7 @@ class SetExpiryIn(BaseModel):
 
 class ResetPasswordIn(BaseModel):
     user_id: str
-    password: str
+    password: str = Field(min_length=6)
 
 
 ALL_MODULES = [
@@ -160,12 +160,15 @@ def reset_password(
     company_id: str,
     body: ResetPasswordIn,
     db: Session = Depends(get_db),
-    _: User = Depends(_require_superadmin),
+    superadmin: User = Depends(_require_superadmin),
 ):
     user = db.query(User).filter(User.id == body.user_id, User.company_id == company_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if user.role == "superadmin":
+        raise HTTPException(status_code=400, detail="Cannot reset another superadmin's password")
     user.password_hash = hash_password(body.password)
+    _write_audit_blob(db, company_id, superadmin.email, "reset_password", user.email, "Done")
     db.commit()
     return {"ok": True}
 
@@ -174,7 +177,7 @@ def reset_password(
 def create_company(
     body: CreateCompanyIn,
     db: Session = Depends(get_db),
-    _: User = Depends(_require_superadmin),
+    superadmin: User = Depends(_require_superadmin),
 ):
     email = body.email.strip().lower()
     if db.query(User).filter(User.email == email).first():
@@ -198,6 +201,7 @@ def create_company(
         role="admin",
     )
     db.add(user)
+    _write_audit_blob(db, company.id, superadmin.email, "create_company", company.name, "Done")
     db.commit()
     return {"ok": True, "company_id": company.id}
 
@@ -207,17 +211,23 @@ def update_company(
     company_id: str,
     body: UpdateCompanyIn,
     db: Session = Depends(get_db),
-    _: User = Depends(_require_superadmin),
+    superadmin: User = Depends(_require_superadmin),
 ):
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
+    # SUPERADMIN-INTERNAL is a sentinel TRN list_companies() uses to hide the
+    # internal superadmin company from the tenant list — don't let a normal
+    # PATCH spoof a tenant into (or out of) that hidden state.
+    if body.trn is not None and body.trn.strip() == "SUPERADMIN-INTERNAL" and company.trn != "SUPERADMIN-INTERNAL":
+        raise HTTPException(status_code=400, detail="This TRN value is reserved")
     if body.name is not None:
         company.name = body.name.strip()
     if body.trn is not None:
         company.trn = body.trn.strip() or None
     if body.country is not None:
         company.country = body.country.strip()
+    _write_audit_blob(db, company_id, superadmin.email, "update_company", company.name, "Done")
     db.commit()
     return {"ok": True}
 
@@ -254,11 +264,13 @@ def update_user(
     user_id: str,
     body: UpdateUserIn,
     db: Session = Depends(get_db),
-    _: User = Depends(_require_superadmin),
+    superadmin: User = Depends(_require_superadmin),
 ):
     user = db.query(User).filter(User.id == user_id, User.company_id == company_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if user.role == "superadmin" and body.role is not None and body.role != "superadmin":
+        raise HTTPException(status_code=400, detail="Cannot change another superadmin's role")
     if body.email is not None:
         new_email = body.email.strip().lower()
         existing = db.query(User).filter(User.email == new_email, User.id != user_id).first()
@@ -269,6 +281,7 @@ def update_user(
         user.full_name = body.full_name.strip()
     if body.role is not None and body.role in ("admin", "user", "accountant", "viewer"):
         user.role = body.role
+    _write_audit_blob(db, company_id, superadmin.email, "update_user", user.email, "Done")
     db.commit()
     return {"ok": True}
 
@@ -278,7 +291,7 @@ def toggle_user_status(
     company_id: str,
     user_id: str,
     db: Session = Depends(get_db),
-    _: User = Depends(_require_superadmin),
+    superadmin: User = Depends(_require_superadmin),
 ):
     user = db.query(User).filter(User.id == user_id, User.company_id == company_id).first()
     if not user:
@@ -286,6 +299,7 @@ def toggle_user_status(
     if user.role == "superadmin":
         raise HTTPException(status_code=400, detail="Cannot disable superadmin")
     user.is_active = not getattr(user, "is_active", True)
+    _write_audit_blob(db, company_id, superadmin.email, "toggle_user_status", user.email, "Active" if user.is_active else "Disabled")
     db.commit()
     return {"ok": True, "is_active": user.is_active}
 
@@ -295,13 +309,14 @@ def delete_user(
     company_id: str,
     user_id: str,
     db: Session = Depends(get_db),
-    _: User = Depends(_require_superadmin),
+    superadmin: User = Depends(_require_superadmin),
 ):
     user = db.query(User).filter(User.id == user_id, User.company_id == company_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if user.role == "superadmin":
         raise HTTPException(status_code=400, detail="Cannot delete superadmin user")
+    _write_audit_blob(db, company_id, superadmin.email, "delete_user", user.email, "Deleted")
     db.delete(user)
     db.commit()
     return {"ok": True}
@@ -328,13 +343,14 @@ def set_company_modules(
     company_id: str,
     body: ModulesIn,
     db: Session = Depends(get_db),
-    _: User = Depends(_require_superadmin),
+    superadmin: User = Depends(_require_superadmin),
 ):
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     valid = [m for m in body.modules if m in ALL_MODULES]
     company.modules_enabled = json.dumps(valid)
+    _write_audit_blob(db, company_id, superadmin.email, "set_company_modules", ", ".join(valid), "Done")
     db.commit()
     return {"ok": True, "modules": valid}
 
@@ -343,7 +359,7 @@ def set_company_modules(
 def delete_company(
     company_id: str,
     db: Session = Depends(get_db),
-    _: User = Depends(_require_superadmin),
+    superadmin: User = Depends(_require_superadmin),
 ):
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
@@ -353,6 +369,10 @@ def delete_company(
 
     cid = company_id
     s = dict(synchronize_session=False)
+    # Logged against the superadmin's OWN company, not the one being deleted —
+    # this record would otherwise be wiped out along with the target company's
+    # AppDataRecord rows a few lines down, leaving no trace it ever happened.
+    _write_audit_blob(db, superadmin.company_id, superadmin.email, "delete_company", f"{company.name} ({cid})", "Deleted")
 
     # Tier 1 — leaf rows that FK into data tables (no direct company_id)
     inv_ids = db.query(Invoice.id).filter(Invoice.company_id == cid).subquery()

@@ -57,12 +57,19 @@ def _is_demo_sku_or_name(sku: str, name: str) -> bool:
 
 
 def _is_demo_purchase_record(record: dict) -> bool:
+    # Any single signal (ref pattern, supplier name, product names) is common
+    # enough in real UAE business data on its own to false-positive (e.g. a
+    # genuine 2024-dated PO, or a real product literally named "Safety
+    # Gloves"). Requiring at least 2 of 3 to agree matches how the actual
+    # seeded demo dataset looks (consistently demo across every field) while
+    # sparing real records that only coincidentally share one trait.
+    signals = 0
     ref = str(record.get("ref") or record.get("invoice_no") or record.get("reference") or "").strip()
     if _DEMO_REFERENCE_RE.match(ref):
-        return True
+        signals += 1
     supplier = str(record.get("supplier") or "").strip().lower()
     if supplier in _DEMO_SUPPLIERS:
-        return True
+        signals += 1
     lines = record.get("lines") or []
     if lines and all(
         _is_demo_sku_or_name(
@@ -72,34 +79,8 @@ def _is_demo_purchase_record(record: dict) -> bool:
         for ln in lines
         if isinstance(ln, dict)
     ):
-        return True
-    return False
-
-
-def _delete_demo_stock_mappings(db: Session, company_id: str) -> None:
-    """Remove any StockProductMapping rows whose SKU or name matches demo patterns."""
-    mappings = (
-        db.query(StockProductMapping)
-        .filter(StockProductMapping.company_id == company_id)
-        .all()
-    )
-    demo_ids = [
-        m.id
-        for m in mappings
-        if _is_demo_sku_or_name(m.sku or "", m.name or "")
-        or re.match(r"^(RT10-|REAL15|REAL50|BULK50)", (m.sku or "").upper())
-    ]
-    if not demo_ids:
-        return
-    db.query(StockMovement).filter(
-        StockMovement.mapping_id.in_(demo_ids),
-        StockMovement.company_id == company_id,
-    ).delete(synchronize_session=False)
-    db.query(StockProductMapping).filter(
-        StockProductMapping.id.in_(demo_ids),
-        StockProductMapping.company_id == company_id,
-    ).delete(synchronize_session=False)
-    db.commit()
+        signals += 1
+    return signals >= 2
 
 
 @router.get("/warehouses", response_model=list[WarehouseOut])
@@ -122,7 +103,6 @@ def create_warehouse(
 
 @router.get("/inventory/mappings", response_model=list[StockMappingOut])
 def list_mappings(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[StockProductMapping]:
-    _delete_demo_stock_mappings(db, current_user.company_id)
     if not inventory_backfill_disabled(db, current_user.company_id):
         backfill_purchase_stock_movements(db, current_user)
     mappings = (
@@ -137,7 +117,6 @@ def list_mappings(db: Session = Depends(get_db), current_user: User = Depends(ge
 
 @router.get("/inventory/stock-levels")
 def list_stock_levels(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[dict[str, object]]:
-    _delete_demo_stock_mappings(db, current_user.company_id)
     backfill_purchase_stock_movements(db, current_user)
     rows = (
         db.query(
