@@ -492,11 +492,22 @@ def report_summary(request: Request, db: Session = Depends(get_db), current_user
     return result
 
 
+def _is_recognized_revenue_status(status: object) -> bool:
+    """Only issued/paid invoices are recognized revenue — drafts aren't yet
+    committed sales, and cancelled/returned invoices were never fulfilled."""
+    return normalized_ref(status) in {"issued", "paid"}
+
+
 def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
     app_sales = app_sales_invoice_records(db, company_id)
     app_purchases = app_data_payloads(db, company_id, "purchaseRecords")
-    revenue = money(db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(Invoice.company_id == company_id).scalar())
-    revenue += sum((record_amount(row, "total", "amount", "net_amount") for row in app_sales), Decimal("0.00"))
+    recognized_app_sales = [row for row in app_sales if _is_recognized_revenue_status(row.get("status"))]
+    revenue = money(
+        db.query(func.coalesce(func.sum(Invoice.total), 0))
+        .filter(Invoice.company_id == company_id, Invoice.status.in_(["issued", "paid"]))
+        .scalar()
+    )
+    revenue += sum((record_amount(row, "total", "amount", "net_amount") for row in recognized_app_sales), Decimal("0.00"))
     # Use same SQL JSON extraction as _purchase_summary to cover all field variants
     purchases = money(_purchase_summary(db, company_id)["total"])
     payroll = money(db.query(func.coalesce(func.sum(PayrollRun.net_total), 0)).filter(PayrollRun.company_id == company_id).scalar())
@@ -511,29 +522,15 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
     gross_profit = revenue - purchases
     net_profit = gross_profit - operating_expenses
     gross_margin = (gross_profit / revenue * Decimal("100")).quantize(Decimal("0.01")) if revenue else Decimal("0.00")
-    output_taxable = money(
-        db.query(func.coalesce(func.sum(TaxLine.taxable_amount), 0))
-        .filter(TaxLine.company_id == company_id, TaxLine.direction == "output")
-        .scalar()
-    )
-    output_taxable += sum((record_amount(row, "subtotal", "net_amount", "taxable_amount") for row in app_sales), Decimal("0.00"))
-    output_vat = money(
-        db.query(func.coalesce(func.sum(TaxLine.tax_amount), 0))
-        .filter(TaxLine.company_id == company_id, TaxLine.direction == "output")
-        .scalar()
-    )
-    output_vat += sum((record_amount(row, "vat_amount", "vat", "tax_amount") for row in app_sales), Decimal("0.00"))
-    input_taxable = money(
-        db.query(func.coalesce(func.sum(TaxLine.taxable_amount), 0))
-        .filter(TaxLine.company_id == company_id, TaxLine.direction == "input")
-        .scalar()
-    )
+    output_breakdown = tax_line_breakdown(db, company_id, "output")
+    output_taxable = output_breakdown["standard"] + output_breakdown["zero"] + output_breakdown["exempt"]
+    output_taxable += sum((record_amount(row, "subtotal", "net_amount", "taxable_amount") for row in recognized_app_sales), Decimal("0.00"))
+    output_vat = output_breakdown["vat"]
+    output_vat += sum((record_amount(row, "vat_amount", "vat", "tax_amount") for row in recognized_app_sales), Decimal("0.00"))
+    input_breakdown = tax_line_breakdown(db, company_id, "input")
+    input_taxable = input_breakdown["standard"] + input_breakdown["zero"] + input_breakdown["exempt"]
     input_taxable += sum((record_amount(row, "net_amount", "subtotal", "taxable_amount") for row in app_purchases), Decimal("0.00"))
-    input_vat = money(
-        db.query(func.coalesce(func.sum(TaxLine.tax_amount), 0))
-        .filter(TaxLine.company_id == company_id, TaxLine.direction == "input")
-        .scalar()
-    )
+    input_vat = input_breakdown["vat"]
     input_vat += sum((record_amount(row, "tax_amount", "vat_amount", "vat") for row in app_purchases), Decimal("0.00"))
     aging_rows = receivables_aging(db, company_id)
     ar_total = sum(money(row["total"]) for row in aging_rows)
@@ -561,16 +558,18 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
         "vat": {
             "period": monthly[-1]["period"] if monthly else "Current",
             "output": {
-                "standard_rated": amount(output_taxable),
-                "zero_rated": "0.00",
-                "exempt": "0.00",
+                # App-data sales invoices carry no VAT-treatment tag, so their amount
+                # is folded into "standard" alongside standard-rated DB transactions.
+                "standard_rated": amount(output_breakdown["standard"] + sum((record_amount(row, "subtotal", "net_amount", "taxable_amount") for row in recognized_app_sales), Decimal("0.00"))),
+                "zero_rated": amount(output_breakdown["zero"]),
+                "exempt": amount(output_breakdown["exempt"]),
                 "total_supplies": amount(output_taxable),
                 "output_vat": amount(output_vat),
             },
             "input": {
-                "standard_rated": amount(input_taxable),
-                "zero_rated": "0.00",
-                "exempt": "0.00",
+                "standard_rated": amount(input_breakdown["standard"] + sum((record_amount(row, "net_amount", "subtotal", "taxable_amount") for row in app_purchases), Decimal("0.00"))),
+                "zero_rated": amount(input_breakdown["zero"]),
+                "exempt": amount(input_breakdown["exempt"]),
                 "total_purchases": amount(input_taxable),
                 "input_vat": amount(input_vat),
             },
@@ -652,35 +651,99 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
     return result
 
 
-def trial_balance_rows(db: Session, company_id: str) -> list[dict[str, str]]:
+def tax_line_breakdown(db: Session, company_id: str, direction: str) -> dict[str, Decimal]:
+    """Splits TaxLine taxable amounts into standard/zero-rated/exempt buckets
+    by joining to TaxCode, instead of assuming everything is standard-rated."""
     rows = (
-        db.query(Account.code, Account.name, func.coalesce(func.sum(JournalLine.debit), 0), func.coalesce(func.sum(JournalLine.credit), 0))
-        .join(JournalLine, JournalLine.account_id == Account.id)
+        db.query(TaxCode.code, func.coalesce(func.sum(TaxLine.taxable_amount), 0), func.coalesce(func.sum(TaxLine.tax_amount), 0))
+        .join(TaxLine, TaxLine.tax_code_id == TaxCode.id)
+        .filter(TaxLine.company_id == company_id, TaxLine.direction == direction)
+        .group_by(TaxCode.code)
+        .all()
+    )
+    # TaxLines without a resolved tax_code (tax_code_id is NULL) are still standard-rated by default.
+    untagged = (
+        db.query(func.coalesce(func.sum(TaxLine.taxable_amount), 0), func.coalesce(func.sum(TaxLine.tax_amount), 0))
+        .filter(TaxLine.company_id == company_id, TaxLine.direction == direction, TaxLine.tax_code_id.is_(None))
+        .first()
+    )
+    result = {"standard": Decimal("0.00"), "zero": Decimal("0.00"), "exempt": Decimal("0.00"), "vat": Decimal("0.00")}
+    for code, taxable, tax in rows:
+        taxable_d = money(taxable)
+        tax_d = money(tax)
+        code_upper = str(code or "").upper()
+        if "EXEMPT" in code_upper:
+            result["exempt"] += taxable_d
+        elif "ZERO" in code_upper:
+            result["zero"] += taxable_d
+        else:
+            result["standard"] += taxable_d
+        result["vat"] += tax_d
+    if untagged:
+        result["standard"] += money(untagged[0])
+        result["vat"] += money(untagged[1])
+    return result
+
+
+def _posted_journal_line_totals(db: Session, company_id: str):
+    return (
+        db.query(
+            JournalLine.account_id.label("account_id"),
+            func.coalesce(func.sum(JournalLine.debit), 0).label("debit"),
+            func.coalesce(func.sum(JournalLine.credit), 0).label("credit"),
+        )
         .join(JournalEntry, JournalEntry.id == JournalLine.journal_id)
-        .filter(Account.company_id == company_id, JournalEntry.company_id == company_id)
-        .group_by(Account.code, Account.name)
+        .filter(JournalEntry.company_id == company_id, JournalEntry.status == "posted")
+        .group_by(JournalLine.account_id)
+        .subquery()
+    )
+
+
+def _opening_balance_dr_cr(opening_balance: Any, opening_balance_type: Any) -> tuple[Decimal, Decimal]:
+    ob_value = money(opening_balance or 0)
+    if str(opening_balance_type or "DR").upper() == "CR":
+        return Decimal("0.00"), ob_value
+    return ob_value, Decimal("0.00")
+
+
+def trial_balance_rows(db: Session, company_id: str) -> list[dict[str, str]]:
+    jl_totals = _posted_journal_line_totals(db, company_id)
+    rows = (
+        db.query(Account.code, Account.name, Account.opening_balance, Account.opening_balance_type, jl_totals.c.debit, jl_totals.c.credit)
+        .outerjoin(jl_totals, jl_totals.c.account_id == Account.id)
+        .filter(Account.company_id == company_id)
         .order_by(Account.code)
         .all()
     )
-    return [{"code": code, "name": name, "debit": amount(money(debit)), "credit": amount(money(credit))} for code, name, debit, credit in rows]
+    result = []
+    for code, name, ob, ob_type, debit, credit in rows:
+        ob_dr, ob_cr = _opening_balance_dr_cr(ob, ob_type)
+        debit_total = money(debit or 0) + ob_dr
+        credit_total = money(credit or 0) + ob_cr
+        if not (debit_total or credit_total):
+            continue
+        result.append({"code": code, "name": name, "debit": amount(debit_total), "credit": amount(credit_total)})
+    return result
 
 
 def balance_sheet_rows(db: Session, company_id: str) -> dict[str, Any]:
+    jl_totals = _posted_journal_line_totals(db, company_id)
     rows = (
-        db.query(Account.code, Account.name, Account.type, func.coalesce(func.sum(JournalLine.debit), 0), func.coalesce(func.sum(JournalLine.credit), 0))
-        .join(JournalLine, JournalLine.account_id == Account.id)
-        .join(JournalEntry, JournalEntry.id == JournalLine.journal_id)
-        .filter(Account.company_id == company_id, JournalEntry.company_id == company_id)
-        .group_by(Account.code, Account.name, Account.type)
+        db.query(Account.code, Account.name, Account.type, Account.opening_balance, Account.opening_balance_type, jl_totals.c.debit, jl_totals.c.credit)
+        .outerjoin(jl_totals, jl_totals.c.account_id == Account.id)
+        .filter(Account.company_id == company_id)
         .order_by(Account.code)
         .all()
     )
     sections: dict[str, list[dict[str, str]]] = {"assets": [], "liabilities": [], "equity": []}
     totals = {"assets": Decimal("0.00"), "liabilities": Decimal("0.00"), "equity": Decimal("0.00")}
-    for code, name, account_type, debit, credit in rows:
+    for code, name, account_type, ob, ob_type, debit, credit in rows:
         normalized = str(account_type or "").strip().lower()
-        debit_value = money(debit)
-        credit_value = money(credit)
+        ob_dr, ob_cr = _opening_balance_dr_cr(ob, ob_type)
+        debit_value = money(debit or 0) + ob_dr
+        credit_value = money(credit or 0) + ob_cr
+        if not (debit_value or credit_value):
+            continue
         if normalized == "asset":
             balance = debit_value - credit_value
             section = "assets"

@@ -129,7 +129,9 @@ def build_journal(db: Session, transaction: SourceTransaction) -> JournalEntry:
 
 
 def ensure_tax_line(db: Session, transaction: SourceTransaction) -> None:
-    if not money(transaction.vat):
+    # Zero VAT can mean zero-rated (still a real taxable supply, must be
+    # reported) rather than "nothing to report" — only skip truly empty lines.
+    if not money(transaction.subtotal):
         return
     exists = (
         db.query(TaxLine)
@@ -138,7 +140,12 @@ def ensure_tax_line(db: Session, transaction: SourceTransaction) -> None:
     )
     if exists:
         return
-    tax_code = db.query(TaxCode).filter(TaxCode.company_id == transaction.company_id, TaxCode.code == "VAT5").first()
+    # No per-line VAT-treatment selector exists yet, so this is a best-effort
+    # inference: zero VAT on a non-zero supply is treated as zero-rated.
+    code_name = "ZERO" if not money(transaction.vat) else "VAT5"
+    tax_code = db.query(TaxCode).filter(TaxCode.company_id == transaction.company_id, TaxCode.code == code_name).first()
+    if not tax_code:
+        tax_code = db.query(TaxCode).filter(TaxCode.company_id == transaction.company_id, TaxCode.code == "VAT5").first()
     db.add(
         TaxLine(
             company_id=transaction.company_id,
