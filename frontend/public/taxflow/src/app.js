@@ -18742,7 +18742,26 @@ function validateWPS(){
     results.innerHTML=lines.join('');
   }
   toast(exceptions?'WPS validation: '+exceptions+' exception(s)':'WPS validation passed ✓',exceptions?'warn':'ok');
+  renderSifPreview(rows);
   return exceptions===0;
+}
+
+// Mirrors the SCR record fields generateSIF() actually writes to the file,
+// so what the user previews here matches what gets downloaded.
+function renderSifPreview(rows){
+  const tbody=document.getElementById('sif-preview-tbody');
+  if(!tbody)return;
+  if(!rows.length){emptyTableMessage(tbody,'No payroll rows — run payroll first.');return;}
+  tbody.innerHTML=rows.map((row,i)=>{
+    const info=getPayrollRowInfo(row);
+    const ok=row.dataset.wps==='ok';
+    const empRow=[...document.querySelectorAll('#payroll-employee-tbody tr')].find(r=>r.textContent.includes(info.name));
+    const iban=ok?(empRow?.querySelector('.mono')?.textContent?.trim()||''):'';
+    const bank=ok?(empRow?.cells?.[2]?.textContent?.trim()||''):'';
+    const empId='EMP-'+String(i+1).padStart(3,'0');
+    const missing=' style="color:var(--amber)"';
+    return `<tr><td>SCR</td><td class="mono">${escapeHtml(empId)}</td><td${ok?'':missing}>${ok?escapeHtml(bank):'Missing'}</td><td class="mono"${ok?'':missing}>${ok?escapeHtml(iban):'Missing'}</td><td class="mono">${info.basic.toFixed(2)}</td><td class="mono">${(info.allow+info.ot).toFixed(2)}</td><td class="mono">30</td><td class="mono">${info.net.toFixed(2)}</td></tr>`;
+  }).join('');
 }
 
 function generateSIF(){

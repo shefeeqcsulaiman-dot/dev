@@ -1905,7 +1905,7 @@
   <div class="tab-body" id="rota-reports">
     <div class="card mb16">
       <div class="card-hd"><div class="card-title">Rota Reports</div><button class="btn btn-g btn-sm" onclick="toast('Rota reports exported','ok')">Export</button></div>
-      <table class="tbl">
+      <table class="tbl" data-keep-static="1">
         <thead><tr><th>Report</th><th>Purpose</th><th>Status</th></tr></thead>
         <tbody>
           <tr><td>Weekly Rota Report</td><td>Staff schedule by week</td><td><span class="b b-g">Ready</span></td></tr>
@@ -2070,11 +2070,8 @@
       <div class="card-hd"><div class="card-title">SIF Preview</div></div>
       <table class="tbl">
         <thead><tr><th>Record</th><th>Employee ID</th><th>Bank</th><th>IBAN</th><th>Fixed Salary</th><th>Variable Pay</th><th>Days</th><th>Net</th></tr></thead>
-        <tbody>
-          <tr><td>SCR</td><td class="mono">EMP-001</td><td>ADCB</td><td class="mono">AE070...</td><td class="mono">28,500</td><td class="mono">0</td><td class="mono">30</td><td class="mono">28,500</td></tr>
-          <tr><td>SCR</td><td class="mono">EMP-002</td><td>ENBD</td><td class="mono">AE150...</td><td class="mono">10,300</td><td class="mono">-100</td><td class="mono">30</td><td class="mono">10,200</td></tr>
-          <tr><td>SCR</td><td class="mono">EMP-003</td><td style="color:var(--amber)">Missing</td><td style="color:var(--amber)">Missing</td><td class="mono">8,400</td><td class="mono">-300</td><td class="mono">30</td><td class="mono">8,100</td></tr>
-          <tr><td>SCR</td><td class="mono">EMP-004</td><td>FAB</td><td class="mono">AE460...</td><td class="mono">8,200</td><td class="mono">350</td><td class="mono">30</td><td class="mono">8,550</td></tr>
+        <tbody id="sif-preview-tbody">
+          <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">Click <strong>Validate WPS</strong> to preview the SIF records that will be generated.</td></tr>
         </tbody>
       </table>
     </div>
@@ -2120,7 +2117,7 @@
     <div class="g2">
       <div class="card">
         <div class="card-hd"><div class="card-title">Payroll Journal Preview</div><button class="btn btn-p btn-sm" onclick="postPayrollJournal()">Post Journal</button></div>
-        <table class="tbl">
+        <table class="tbl" data-keep-static="1">
           <thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead>
           <tbody>
             <tr><td>Salary Expense</td><td class="mono" id="pay-je-gross">AED 0.00</td><td></td></tr>
