@@ -1948,8 +1948,10 @@ function renderHrAccessPanel(){
   const connected=!!localStorage.getItem(HR_ACCESS_TOKEN_KEY);
   if(loginBox)loginBox.style.display=connected?'none':'block';
   if(panel)panel.style.display=connected?'block':'none';
-  if(connected){loadCompanyLocations();loadLiveLocations();}
+  if(connected){loadCompanyLocations();loadLiveLocations();populateAssignEmployeeSelect();loadEmployeeLocationAssignments();}
 }
+
+let HR_LOCATIONS_CACHE=[];
 
 async function loadCompanyLocations(){
   const tbody=document.getElementById('hr-loc-tbody');
@@ -1958,12 +1960,71 @@ async function loadCompanyLocations(){
     const r=await fetch(`${apiBaseUrl()}/hr/company-locations`,{headers:hrAccessHeaders()});
     if(r.status===401){hrAccessLogout();return;}
     const rows=await r.json();
+    HR_LOCATIONS_CACHE=rows;
     tbody.innerHTML=rows.length?rows.map(l=>`<tr>
       <td>${l.location_name}</td><td>${l.latitude.toFixed(6)}, ${l.longitude.toFixed(6)}</td>
       <td>${l.allowed_radius_meters}m</td><td>${l.status}</td>
       <td><button class="btn btn-g btn-sm" onclick="deleteCompanyLocation('${l.id}')">Delete</button></td>
     </tr>`).join(''):'<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">No locations yet.</td></tr>';
+    populateAssignLocationSelect();
   }catch(e){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--text3)">Failed to load.</td></tr>';}
+}
+
+function populateAssignLocationSelect(){
+  const sel=document.getElementById('hr-assign-location');
+  if(!sel)return;
+  const prev=sel.value;
+  sel.innerHTML='<option value="">Select location…</option>'+HR_LOCATIONS_CACHE.map(l=>`<option value="${l.id}">${l.location_name}</option>`).join('');
+  if(prev)sel.value=prev;
+}
+
+async function populateAssignEmployeeSelect(){
+  const sel=document.getElementById('hr-assign-employee');
+  if(!sel)return;
+  try{
+    const r=await fetch(`${apiBaseUrl()}/payroll/employees`,{headers:backendHeaders()});
+    if(!r.ok)return;
+    const employees=await r.json();
+    const prev=sel.value;
+    sel.innerHTML='<option value="">Select employee…</option>'+employees.map(e=>`<option value="${e.id}">${e.full_name} (${e.employee_no})</option>`).join('');
+    if(prev)sel.value=prev;
+  }catch(e){/* dropdown just stays empty on failure */}
+}
+
+async function loadEmployeeLocationAssignments(){
+  const tbody=document.getElementById('hr-assign-tbody');
+  if(!tbody)return;
+  try{
+    const r=await fetch(`${apiBaseUrl()}/hr/employee-locations`,{headers:hrAccessHeaders()});
+    if(r.status===401){hrAccessLogout();return;}
+    if(r.status===403){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:16px">Your role does not have access to manage assignments.</td></tr>';return;}
+    const rows=await r.json();
+    tbody.innerHTML=rows.length?rows.map(a=>`<tr>
+      <td>${a.employee_name}</td><td>${a.location_name}</td>
+      <td>${a.is_primary?'<span class="b b-g">Primary</span>':''}</td>
+      <td><button class="btn btn-g btn-sm" onclick="unassignEmployeeLocation('${a.id}')">Unassign</button></td>
+    </tr>`).join(''):'<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:16px">No employees assigned yet.</td></tr>';
+  }catch(e){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3)">Failed to load.</td></tr>';}
+}
+
+async function assignEmployeeToLocation(){
+  const employeeId=document.getElementById('hr-assign-employee')?.value;
+  const locationId=document.getElementById('hr-assign-location')?.value;
+  if(!employeeId||!locationId){toast('Select both an employee and a location','warn');return;}
+  try{
+    const r=await fetch(`${apiBaseUrl()}/hr/employee-locations`,{method:'POST',headers:hrAccessHeaders(),
+      body:JSON.stringify({employee_id:employeeId,location_id:locationId,is_primary:true})});
+    if(r.ok){toast('Employee assigned to location','ok');loadEmployeeLocationAssignments();}
+    else{const d=await r.json();toast(d.detail||'Failed to assign','err');}
+  }catch(e){toast('Cannot reach server','err');}
+}
+
+async function unassignEmployeeLocation(linkId){
+  if(!confirm('Remove this employee\'s location assignment?'))return;
+  try{
+    await fetch(`${apiBaseUrl()}/hr/employee-locations/${linkId}`,{method:'DELETE',headers:hrAccessHeaders()});
+    loadEmployeeLocationAssignments();
+  }catch(e){toast('Failed to unassign','err');}
 }
 
 async function addCompanyLocation(){

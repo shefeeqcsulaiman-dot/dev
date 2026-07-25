@@ -490,6 +490,67 @@ class EmployeeLocationAssignRequest(BaseModel):
     is_primary: bool = True
 
 
+class EmployeeLocationOut(BaseModel):
+    id: str
+    employee_id: str
+    employee_name: str
+    location_id: str
+    location_name: str
+    is_primary: bool
+
+
+@router.get("/employee-locations", response_model=list[EmployeeLocationOut])
+def list_employee_locations(
+    db: Session = Depends(get_db),
+    emp: Employee = Depends(require_permission("hr:manage_locations", "hr:manage_employees", "hr:view_all_attendance")),
+) -> list[EmployeeLocationOut]:
+    rows = (
+        db.query(EmployeeLocation, Employee, CompanyLocation)
+        .join(Employee, Employee.id == EmployeeLocation.employee_id)
+        .join(CompanyLocation, CompanyLocation.id == EmployeeLocation.location_id)
+        .filter(Employee.company_id == emp.company_id)
+        .order_by(EmployeeLocation.is_primary.desc())
+        .all()
+    )
+    return [
+        EmployeeLocationOut(
+            id=link.id, employee_id=e.id, employee_name=e.full_name, location_id=loc.id,
+            location_name=loc.location_name, is_primary=link.is_primary,
+        )
+        for link, e, loc in rows
+    ]
+
+
+@router.delete("/employee-locations/{link_id}", status_code=204, response_model=None)
+def unassign_employee_location(
+    link_id: str,
+    db: Session = Depends(get_db),
+    emp: Employee = Depends(require_permission("hr:manage_locations", "hr:manage_employees")),
+) -> None:
+    link = (
+        db.query(EmployeeLocation)
+        .join(Employee, Employee.id == EmployeeLocation.employee_id)
+        .filter(EmployeeLocation.id == link_id, Employee.company_id == emp.company_id)
+        .first()
+    )
+    if link:
+        target = db.get(Employee, link.employee_id)
+        db.delete(link)
+        db.flush()
+        # If the deleted link was the primary, and no other assignment remains
+        # primary, clear work_location_id so check-in correctly reports "no
+        # location assigned" instead of pointing at a stale/removed link.
+        if target and target.work_location_id == link.location_id:
+            remaining = (
+                db.query(EmployeeLocation)
+                .filter(EmployeeLocation.employee_id == target.id, EmployeeLocation.is_primary == True)  # noqa: E712
+                .first()
+            )
+            target.work_location_id = remaining.location_id if remaining else None
+            db.add(target)
+        db.commit()
+
+
 @router.post("/employee-locations", status_code=201)
 def assign_employee_location(
     payload: EmployeeLocationAssignRequest,

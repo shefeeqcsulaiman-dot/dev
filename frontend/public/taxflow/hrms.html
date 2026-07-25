@@ -958,6 +958,19 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
             </table>
           </div>
         </div>
+        <div>
+          <div class="card-title" style="margin-bottom:8px">Assign Employees to Locations</div>
+          <p style="font-size:12px;color:var(--text3);margin-bottom:8px">An employee must be assigned to a location before GPS check-in works for them.</p>
+          <div class="flx" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">
+            <select id="hr-assign-employee" style="max-width:220px"><option value="">Select employee…</option></select>
+            <select id="hr-assign-location" style="max-width:180px"><option value="">Select location…</option></select>
+            <button class="btn btn-g btn-sm" onclick="assignEmployeeToLocation()">Assign</button>
+          </div>
+          <table class="tbl">
+            <thead><tr><th>Employee</th><th>Location</th><th></th><th></th></tr></thead>
+            <tbody id="hr-assign-tbody"><tr><td colspan="4" style="text-align:center;color:var(--text3);padding:16px">Loading…</td></tr></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
