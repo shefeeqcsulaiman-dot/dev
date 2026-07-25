@@ -21415,21 +21415,24 @@ function mergeBankAndPaymentsModule(){
       const headers={'Content-Type':'application/json'};
       if(token)headers['Authorization']='Bearer '+token;
       const base=window.location.hostname==='localhost'?'http://localhost:8000':'';
+      const activePage=(document.querySelector('.page.on')?.id||'').replace(/^page-/,'')||null;
+      const body={
+        message:String(message).slice(0,2000),
+        stack:String(stack||'').slice(0,4000),
+        url:window.location.href.slice(0,500),
+        context:String(context||'').slice(0,120),
+        user_agent:navigator.userAgent.slice(0,500),
+        page:activePage,
+        viewport:window.innerWidth+'x'+window.innerHeight,
+        // sendBeacon cannot set custom headers, so the Authorization bearer
+        // token never reaches the server on that path — without this, the
+        // backend can never resolve which user hit the error and every row
+        // in the Client Error Report shows a blank User column.
+        token:token||null,
+      };
       navigator.sendBeacon
-        ?navigator.sendBeacon(base+'/api/v1/superadmin/client-errors',new Blob([JSON.stringify({
-            message:String(message).slice(0,2000),
-            stack:String(stack||'').slice(0,4000),
-            url:window.location.href.slice(0,500),
-            context:String(context||'').slice(0,120),
-            user_agent:navigator.userAgent.slice(0,500)
-          })],{type:'application/json'}))
-        :fetch(base+'/api/v1/superadmin/client-errors',{method:'POST',headers,body:JSON.stringify({
-            message:String(message).slice(0,2000),
-            stack:String(stack||'').slice(0,4000),
-            url:window.location.href.slice(0,500),
-            context:String(context||'').slice(0,120),
-            user_agent:navigator.userAgent.slice(0,500)
-          })}).catch(()=>{});
+        ?navigator.sendBeacon(base+'/api/v1/superadmin/client-errors',new Blob([JSON.stringify(body)],{type:'application/json'}))
+        :fetch(base+'/api/v1/superadmin/client-errors',{method:'POST',headers,body:JSON.stringify(body)}).catch(()=>{});
     }catch(e){/* never throw inside error handler */}
   }
   window.addEventListener('error',function(e){

@@ -27,6 +27,7 @@ from app.models import (
     VatReturnSnapshot, Voucher, VoucherLine, VoucherType, Warehouse,
     WpsBatch,
 )
+from app.schemas import CompanyUpdate
 from app.security import (
     create_access_token, hash_password, impersonation_revocation_info,
     impersonator_id_from_token, user_id_from_token,
@@ -71,10 +72,6 @@ class CreateCompanyIn(BaseModel):
     modules: list[str] | None = None
 
 
-class UpdateCompanyIn(BaseModel):
-    name: str | None = None
-    trn: str | None = None
-    country: str | None = None
 
 
 class AddUserIn(BaseModel):
@@ -116,8 +113,22 @@ def list_companies(db: Session = Depends(get_db), _: User = Depends(_require_sup
             {
                 "id": company.id,
                 "name": company.name,
+                "trade_name": company.trade_name,
                 "trn": company.trn,
                 "country": company.country,
+                "emirate": company.emirate,
+                "business_type": company.business_type,
+                "business_activity": company.business_activity,
+                "legal_structure": company.legal_structure,
+                "trade_license_no": company.trade_license_no,
+                "trade_license_issue_date": company.trade_license_issue_date,
+                "trade_license_expiry": company.trade_license_expiry,
+                "free_zone": company.free_zone,
+                "address": company.address,
+                "po_box": company.po_box,
+                "phone": company.phone,
+                "website": company.website,
+                "fta_username": company.fta_username,
                 "created_at": company.created_at.isoformat() if company.created_at else None,
                 "subscription_expires_at": company.subscription_expires_at,
                 "employee_count": employee_count,
@@ -209,7 +220,7 @@ def create_company(
 @router.patch("/companies/{company_id}")
 def update_company(
     company_id: str,
-    body: UpdateCompanyIn,
+    body: CompanyUpdate,
     db: Session = Depends(get_db),
     superadmin: User = Depends(_require_superadmin),
 ):
@@ -221,12 +232,27 @@ def update_company(
     # PATCH spoof a tenant into (or out of) that hidden state.
     if body.trn is not None and body.trn.strip() == "SUPERADMIN-INTERNAL" and company.trn != "SUPERADMIN-INTERNAL":
         raise HTTPException(status_code=400, detail="This TRN value is reserved")
-    if body.name is not None:
+
+    # Same field set as PUT /companies/current (companies.py) — superadmin
+    # edits the full tenant profile, not just name/trn/country.
+    nullable_fields = [
+        "trade_name", "emirate", "business_type", "business_activity",
+        "legal_structure", "trade_license_no", "trade_license_issue_date",
+        "trade_license_expiry", "free_zone", "address", "po_box",
+        "phone", "website", "fta_username",
+    ]
+    for field in nullable_fields:
+        val = getattr(body, field, None)
+        if val is not None:
+            setattr(company, field, val.strip() or None)
+
+    if body.name:
         company.name = body.name.strip()
-    if body.trn is not None:
-        company.trn = body.trn.strip() or None
-    if body.country is not None:
+    if body.country:
         company.country = body.country.strip()
+    if body.trn:
+        company.trn = body.trn.strip()
+
     _write_audit_blob(db, company_id, superadmin.email, "update_company", company.name, "Done")
     db.commit()
     return {"ok": True}
@@ -471,6 +497,15 @@ class ClientErrorIn(BaseModel):
     url: Optional[str] = None
     context: Optional[str] = None
     user_agent: Optional[str] = None
+    page: Optional[str] = None
+    viewport: Optional[str] = None
+    # navigator.sendBeacon (the primary transport in app.js — see
+    # setupGlobalErrorCapture) cannot set custom headers, so the bearer
+    # token can't travel as an Authorization header on that path. The
+    # frontend puts it here instead so the user/company can still be
+    # resolved; the Authorization header (used by the fetch() fallback)
+    # takes precedence when both are present.
+    token: Optional[str] = None
 
 
 @router.post("/client-errors", status_code=201)
@@ -485,9 +520,13 @@ def report_client_error(
     from app.models import uuid as _uuid
     company_id: Optional[str] = None
     user_id: Optional[str] = None
+    bearer_token: Optional[str] = None
     if authorization and authorization.startswith("Bearer "):
-        token = authorization.removeprefix("Bearer ").strip()
-        uid = user_id_from_token(token)
+        bearer_token = authorization.removeprefix("Bearer ").strip()
+    elif payload.token:
+        bearer_token = payload.token.strip()
+    if bearer_token:
+        uid = user_id_from_token(bearer_token)
         if uid:
             user = db.query(User).filter(User.id == uid).first()
             if user:
@@ -502,6 +541,8 @@ def report_client_error(
         url=(payload.url or "")[:500] or None,
         context=(payload.context or "")[:120] or None,
         user_agent=(payload.user_agent or "")[:500] or None,
+        page=(payload.page or "")[:80] or None,
+        viewport=(payload.viewport or "")[:20] or None,
     )
     db.add(err)
     db.commit()
@@ -549,6 +590,8 @@ def list_client_errors(
                 "url": r.url,
                 "context": r.context,
                 "user_agent": r.user_agent,
+                "page": r.page,
+                "viewport": r.viewport,
                 "occurred_at": r.occurred_at.isoformat() if r.occurred_at else None,
             }
             for r in rows

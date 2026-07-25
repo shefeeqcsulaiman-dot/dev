@@ -249,6 +249,19 @@
     <div class="card-hd"><div class="card-title">Module Usage Breakdown</div></div>
     <div id="sa-usage-modules-wrap"><div class="loading-state">Loading…</div></div>
   </div>
+  <div class="card" style="margin-top:20px">
+    <div class="card-hd">
+      <div>
+        <div class="card-title">Current Users</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px" id="sa-usage-users-sub">Every user across all tenant companies</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="sa-usage-users-search" placeholder="Search name, email, company…" oninput="renderUsageUsersList()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text);width:220px">
+        <button class="btn btn-g btn-sm" onclick="exportUsersCSV()">Export CSV</button>
+      </div>
+    </div>
+    <div id="sa-usage-users-wrap"><div class="loading-state">Loading…</div></div>
+  </div>
   </div><!-- /page-analytics -->
 
   <div class="page-section" id="page-health">
@@ -379,10 +392,34 @@
     <div id="edit-co-err" class="err-msg"></div>
     <input type="hidden" id="edit-co-id">
     <div class="fg"><label class="fl">Company Name</label><input class="fi" id="edit-co-name" placeholder="Acme LLC"></div>
+    <div class="fg"><label class="fl">Trade Name</label><input class="fi" id="edit-co-trade-name" placeholder="Trading as…"></div>
     <div class="fr2">
       <div class="fg"><label class="fl">TRN</label><input class="fi mono" id="edit-co-trn" placeholder="100000000000003"></div>
       <div class="fg"><label class="fl">Country</label><input class="fi" id="edit-co-country" placeholder="United Arab Emirates"></div>
     </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Emirate</label><input class="fi" id="edit-co-emirate" placeholder="Dubai"></div>
+      <div class="fg"><label class="fl">Business Type</label><input class="fi" id="edit-co-business-type" placeholder="LLC, Sole Establishment…"></div>
+    </div>
+    <div class="fg"><label class="fl">Business Activity</label><input class="fi" id="edit-co-business-activity" placeholder="Trading, consulting…"></div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Legal Structure</label><input class="fi" id="edit-co-legal-structure" placeholder="LLC, Free Zone, Sole Prop…"></div>
+      <div class="fg"><label class="fl">Free Zone</label><input class="fi" id="edit-co-free-zone" placeholder="If applicable"></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Trade License No.</label><input class="fi mono" id="edit-co-license-no"></div>
+      <div class="fg"><label class="fl">License Issue Date</label><input class="fi" id="edit-co-license-issue" type="date"></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">License Expiry</label><input class="fi" id="edit-co-license-expiry" type="date"></div>
+      <div class="fg"><label class="fl">PO Box</label><input class="fi" id="edit-co-pobox"></div>
+    </div>
+    <div class="fg"><label class="fl">Address</label><input class="fi" id="edit-co-address" placeholder="Street, building, city"></div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Phone</label><input class="fi" id="edit-co-phone" placeholder="+971 …"></div>
+      <div class="fg"><label class="fl">Website</label><input class="fi" id="edit-co-website" placeholder="https://…"></div>
+    </div>
+    <div class="fg"><label class="fl">FTA Username</label><input class="fi" id="edit-co-fta-user"></div>
     <div class="fg"><label class="fl">Subscription Expiry (leave blank to remove)</label><input class="fi" id="edit-co-expiry" type="date"></div>
     <div class="modal-foot">
       <button class="btn btn-g" onclick="closeModal('m-edit-co')">Cancel</button>
@@ -742,7 +779,7 @@
         <td style="font-size:11.5px;color:#8896b3">${c.created_at ? c.created_at.slice(0,10) : '—'}</td>
         <td>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn btn-p btn-sm" onclick="openEditCompany('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.trn||'')}','${escHtml(c.country||'')}','${escHtml(c.subscription_expires_at||'')}')">Edit</button>
+            <button class="btn btn-p btn-sm" onclick="openEditCompany('${escHtml(c.id)}')">Edit</button>
             <button class="btn btn-g btn-sm" onclick="quickExtend('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}',7)">+7d</button>
             <button class="btn btn-g btn-sm" onclick="quickExtend('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}',365)">+1yr</button>
             <button class="btn btn-g btn-sm" onclick="toggleUsers('users-${escHtml(c.id)}')">Users</button>
@@ -805,13 +842,29 @@
   }
 
   // ── Edit company ──────────────────────────────────────────────
-  function openEditCompany(id, name, trn, country, expiry){
+  function openEditCompany(id){
+    const c = companies.find(x=>x.id===id);
+    if(!c) return;
     document.getElementById('edit-co-err').style.display='none';
-    document.getElementById('edit-co-id').value=id;
-    document.getElementById('edit-co-name').value=name;
-    document.getElementById('edit-co-trn').value=trn;
-    document.getElementById('edit-co-country').value=country;
-    document.getElementById('edit-co-expiry').value=expiry?expiry.slice(0,10):'';
+    document.getElementById('edit-co-id').value=c.id;
+    document.getElementById('edit-co-name').value=c.name||'';
+    document.getElementById('edit-co-trade-name').value=c.trade_name||'';
+    document.getElementById('edit-co-trn').value=c.trn||'';
+    document.getElementById('edit-co-country').value=c.country||'';
+    document.getElementById('edit-co-emirate').value=c.emirate||'';
+    document.getElementById('edit-co-business-type').value=c.business_type||'';
+    document.getElementById('edit-co-business-activity').value=c.business_activity||'';
+    document.getElementById('edit-co-legal-structure').value=c.legal_structure||'';
+    document.getElementById('edit-co-free-zone').value=c.free_zone||'';
+    document.getElementById('edit-co-license-no').value=c.trade_license_no||'';
+    document.getElementById('edit-co-license-issue').value=(c.trade_license_issue_date||'').slice(0,10);
+    document.getElementById('edit-co-license-expiry').value=(c.trade_license_expiry||'').slice(0,10);
+    document.getElementById('edit-co-pobox').value=c.po_box||'';
+    document.getElementById('edit-co-address').value=c.address||'';
+    document.getElementById('edit-co-phone').value=c.phone||'';
+    document.getElementById('edit-co-website').value=c.website||'';
+    document.getElementById('edit-co-fta-user').value=c.fta_username||'';
+    document.getElementById('edit-co-expiry').value=c.subscription_expires_at?c.subscription_expires_at.slice(0,10):'';
     openModal('m-edit-co');
   }
 
@@ -820,15 +873,24 @@
     const errEl=document.getElementById('edit-co-err');
     errEl.style.display='none';
     const id=document.getElementById('edit-co-id').value;
-    const name=document.getElementById('edit-co-name').value.trim();
-    const trn=document.getElementById('edit-co-trn').value.trim()||'';
-    const country=document.getElementById('edit-co-country').value.trim();
+    const val=fid=>document.getElementById(fid).value.trim()||null;
+    const name=val('edit-co-name');
     const expiry=document.getElementById('edit-co-expiry').value||null;
     if(!name){ errEl.textContent='Company name is required.'; errEl.style.display='block'; return; }
+    const body={
+      name, trn:val('edit-co-trn'), country:val('edit-co-country'),
+      trade_name:val('edit-co-trade-name'), emirate:val('edit-co-emirate'),
+      business_type:val('edit-co-business-type'), business_activity:val('edit-co-business-activity'),
+      legal_structure:val('edit-co-legal-structure'), free_zone:val('edit-co-free-zone'),
+      trade_license_no:val('edit-co-license-no'), trade_license_issue_date:val('edit-co-license-issue'),
+      trade_license_expiry:val('edit-co-license-expiry'), po_box:val('edit-co-pobox'),
+      address:val('edit-co-address'), phone:val('edit-co-phone'), website:val('edit-co-website'),
+      fta_username:val('edit-co-fta-user'),
+    };
     btn.disabled=true; btn.textContent='Saving…';
     try{
-      const [r1,r2]=await Promise.all([
-        apiFetch(`/superadmin/companies/${id}`,{method:'PATCH',body:JSON.stringify({name,trn,country})}),
+      const [r1]=await Promise.all([
+        apiFetch(`/superadmin/companies/${id}`,{method:'PATCH',body:JSON.stringify(body)}),
         apiFetch(`/superadmin/companies/${id}/set-expiry`,{method:'POST',body:JSON.stringify({expires_at:expiry})})
       ]);
       const d1=await r1.json();
@@ -1108,7 +1170,7 @@
         if(e.user_id) grouped[key].users.set(e.user_id,e.user_name||e.user_email||e.user_id);
       });
       const rows=Object.values(grouped).sort((a,b)=>b.count-a.count);
-      let html='<table class="tbl" style="font-size:12px"><thead><tr><th>Count</th><th>Error Message</th><th>User</th><th>Company</th><th>Context</th><th>URL</th><th>Last Seen</th><th></th></tr></thead><tbody>';
+      let html='<table class="tbl" style="font-size:12px"><thead><tr><th>Count</th><th>Error Message</th><th>User</th><th>Company</th><th>Page</th><th>Context</th><th>Viewport</th><th>URL</th><th>Last Seen</th></tr></thead><tbody>';
       rows.forEach(g=>{
         const e=g.last;
         const ts=e.occurred_at?new Date(e.occurred_at).toLocaleString():'';
@@ -1116,10 +1178,16 @@
         const url=e.url?'<a href="'+escHtml(e.url)+'" target="_blank" style="color:var(--primary);word-break:break-all">'+escHtml(e.url.slice(0,60))+'…</a>':'—';
         const stack=e.stack?`<div style="font-family:monospace;font-size:11px;white-space:pre-wrap;background:var(--hover);padding:8px;border-radius:4px;margin-top:6px;max-height:120px;overflow:auto">${escHtml(e.stack.slice(0,1500))}</div>`:'';
         const userNames=[...g.users.values()];
+        // Empty user_id can mean two different things — the error handler
+        // itself never distinguishes them from the raw data, so make the
+        // more common/actionable case ("not logged in") the default label
+        // rather than a bare dash that reads as "unknown/broken".
         const userCell=userNames.length
           ?`<div style="font-weight:500">${escHtml(userNames[0])}</div>${e.user_email?`<div style="font-size:10.5px;color:var(--muted)">${escHtml(e.user_email)}</div>`:''}${userNames.length>1?`<div style="font-size:10.5px;color:var(--muted)">+${userNames.length-1} more user(s)</div>`:''}`
-          :'<span style="color:var(--muted)">—</span>';
+          :'<span style="color:var(--muted)">Not signed in</span>';
         const companyCell=e.company_name?escHtml(e.company_name):(e.company_id?'<span style="color:var(--muted)">Unknown</span>':'<span style="color:var(--muted)">—</span>');
+        const pageCell=e.page?`<span class="b b-p" style="font-size:10px">${escHtml(e.page)}</span>`:'<span style="color:var(--muted)">—</span>';
+        const viewportCell=e.viewport?escHtml(e.viewport):'—';
         html+=`<tr>
           <td><span style="background:rgba(240,107,107,.15);color:var(--red);padding:2px 8px;border-radius:12px;font-weight:600">${g.count}</span></td>
           <td style="max-width:340px">
@@ -1128,10 +1196,11 @@
           </td>
           <td style="white-space:nowrap">${userCell}</td>
           <td style="white-space:nowrap">${companyCell}</td>
+          <td style="white-space:nowrap">${pageCell}</td>
           <td>${ctx||'—'}</td>
+          <td class="mono" style="white-space:nowrap">${viewportCell}</td>
           <td style="max-width:180px">${url}</td>
           <td style="white-space:nowrap;color:var(--muted)">${ts}</td>
-          <td></td>
         </tr>`;
       });
       html+='</tbody></table>';
@@ -1278,9 +1347,65 @@
             <div class="mono" style="width:40px;text-align:right;font-size:12px;color:var(--muted)">${m.count}</div>
           </div>`).join('');
       }
+
+      renderUsageUsersList();
     }catch(err){
       wrap.innerHTML='<div class="loading-state" style="color:var(--red)">Failed to load: '+escHtml(err.message)+'</div>';
     }
+  }
+
+  // ── Current users list (flattened from the already-loaded companies,
+  // each of which carries its own nested `users` array — no extra
+  // round-trip needed) ────────────────────────────────────────────
+  function _allUsers(){
+    return companies.flatMap(c=>(c.users||[]).map(u=>({...u, company_name:c.name, company_id:c.id})));
+  }
+
+  function renderUsageUsersList(){
+    const wrap=document.getElementById('sa-usage-users-wrap');
+    const subEl=document.getElementById('sa-usage-users-sub');
+    if(!wrap) return;
+    const q=(document.getElementById('sa-usage-users-search')?.value||'').trim().toLowerCase();
+    let users=_allUsers();
+    if(q){
+      users=users.filter(u=>
+        (u.full_name||'').toLowerCase().includes(q) ||
+        (u.email||'').toLowerCase().includes(q) ||
+        (u.company_name||'').toLowerCase().includes(q) ||
+        (u.role||'').toLowerCase().includes(q));
+    }
+    users.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+    if(subEl) subEl.textContent=users.length+' user'+(users.length===1?'':'s')+' across '+companies.length+' compan'+(companies.length===1?'y':'ies');
+    if(!users.length){
+      wrap.innerHTML='<div class="loading-state" style="color:var(--muted)">No users match.</div>';
+      return;
+    }
+    wrap.innerHTML='<div style="overflow-x:auto"><table class="tbl" style="font-size:12.5px"><thead><tr><th>Name</th><th>Email</th><th>Company</th><th>Role</th><th>Status</th><th>Joined</th></tr></thead><tbody>'+
+      users.map(u=>{
+        const statusBadge=u.is_active!==false?'<span class="b b-g">Active</span>':'<span class="b b-r">Disabled</span>';
+        return `<tr>
+          <td style="font-weight:500">${escHtml(u.full_name||'—')}</td>
+          <td class="mono">${escHtml(u.email||'')}</td>
+          <td>${escHtml(u.company_name||'—')}</td>
+          <td><span class="b b-p" style="font-size:10px">${escHtml(u.role||'')}</span></td>
+          <td>${statusBadge}</td>
+          <td style="color:var(--muted)">${u.created_at?u.created_at.slice(0,10):'—'}</td>
+        </tr>`;
+      }).join('')+'</tbody></table></div>';
+  }
+
+  function exportUsersCSV(){
+    const header=['Name','Email','Company','Role','Status','Joined'];
+    const rows=_allUsers().map(u=>[
+      u.full_name||'', u.email||'', u.company_name||'', u.role||'',
+      u.is_active!==false?'Active':'Disabled', u.created_at?u.created_at.slice(0,10):'',
+    ].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(','));
+    const csv=[header.join(','),...rows].join('\n');
+    const blob=new Blob([csv],{type:'text/csv'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download='users-'+new Date().toISOString().slice(0,10)+'.csv';
+    a.click();URL.revokeObjectURL(url);
   }
 
   // ── System health ───────────────────────────────────────────────

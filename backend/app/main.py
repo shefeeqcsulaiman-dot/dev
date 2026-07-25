@@ -472,10 +472,18 @@ def ensure_schema_updates() -> None:
                     url VARCHAR(500),
                     context VARCHAR(120),
                     user_agent VARCHAR(500),
+                    page VARCHAR(80),
+                    viewport VARCHAR(20),
                     occurred_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
                 )
             """))
             connection.execute(text("CREATE INDEX IF NOT EXISTS idx_client_errors_company ON client_errors (company_id)"))
+        else:
+            existing_columns = {column["name"] for column in inspector.get_columns("client_errors")}
+            if "page" not in existing_columns:
+                connection.execute(text("ALTER TABLE client_errors ADD COLUMN page VARCHAR(80)"))
+            if "viewport" not in existing_columns:
+                connection.execute(text("ALTER TABLE client_errors ADD COLUMN viewport VARCHAR(20)"))
             connection.execute(text("CREATE INDEX IF NOT EXISTS idx_client_errors_occurred ON client_errors (occurred_at DESC)"))
         # Composite indexes on app_data_records for scale
         connection.execute(text(
