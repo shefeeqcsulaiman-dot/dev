@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
+from app.dependencies import get_current_user
 from app.models import (
     AttendanceSession,
     CompanyLocation,
@@ -26,6 +27,7 @@ from app.models import (
     Permission,
     Role,
     RolePermission,
+    User,
 )
 from app.security import pwd_context
 
@@ -398,6 +400,135 @@ def list_permissions(db: Session = Depends(get_db), emp: Employee = Depends(get_
     catalog = _ensure_permission_catalog(db)
     db.commit()
     return [{"key": key, "module": p.module, "permission_name": p.permission_name} for key, p in catalog.items()]
+
+
+# ── admin-managed portal access (HRMS "Users & Roles" screen) ──────────────
+# These routes authenticate as the company's own TaxFlow admin User (the same
+# login already used to reach hrms.html), not as an Employee. They exist so
+# an HR admin can grant an employee a username/password/role from inside
+# HRMS without first needing an employee-RBAC login of their own — that
+# employee-RBAC login (see /hr/login above) is still what the resulting
+# credentials are checked against everywhere else (ESS, GPS check-in, etc).
+
+class AdminEmployeePortalOut(BaseModel):
+    id: str
+    employee_no: str
+    full_name: str
+    department: str
+    username: str | None = None
+    role_id: str | None = None
+    role_name: str | None = None
+    is_active: bool
+    has_password: bool
+
+
+@router.get("/admin/roles", response_model=list[RoleOut])
+def admin_list_roles(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[RoleOut]:
+    _ensure_default_roles(db, current_user.company_id)
+    roles = db.query(Role).filter(Role.company_id == current_user.company_id).order_by(Role.role_name).all()
+    return [
+        RoleOut(
+            id=r.id, role_name=r.role_name, description=r.description, is_system_role=r.is_system_role,
+            permissions=sorted(_role_permission_keys(db, r)),
+        )
+        for r in roles
+    ]
+
+
+@router.get("/admin/employees", response_model=list[AdminEmployeePortalOut])
+def admin_list_employee_portal_access(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[AdminEmployeePortalOut]:
+    employees = (
+        db.query(Employee)
+        .filter(Employee.company_id == current_user.company_id)
+        .order_by(Employee.employee_no)
+        .all()
+    )
+    role_ids = {e.role_id for e in employees if e.role_id}
+    roles_by_id = {r.id: r for r in db.query(Role).filter(Role.id.in_(role_ids)).all()} if role_ids else {}
+    return [
+        AdminEmployeePortalOut(
+            id=e.id, employee_no=e.employee_no, full_name=e.full_name, department=e.department,
+            username=e.username, role_id=e.role_id,
+            role_name=roles_by_id[e.role_id].role_name if e.role_id in roles_by_id else None,
+            is_active=e.is_active, has_password=bool(e.password_hash),
+        )
+        for e in employees
+    ]
+
+
+class PortalAccessIn(BaseModel):
+    username: str | None = None
+    password: str | None = None
+    role_id: str | None = None
+    is_active: bool | None = None
+
+
+@router.put("/admin/employees/{employee_id}/portal-access")
+def set_employee_portal_access(
+    employee_id: str,
+    payload: PortalAccessIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    target = db.query(Employee).filter(Employee.id == employee_id, Employee.company_id == current_user.company_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    if payload.username is not None:
+        username = payload.username.strip()
+        if username:
+            dup = (
+                db.query(Employee)
+                .filter(Employee.company_id == current_user.company_id, Employee.username == username, Employee.id != target.id)
+                .first()
+            )
+            if dup:
+                raise HTTPException(status_code=409, detail="That username is already in use")
+        target.username = username or None
+
+    if payload.password:
+        if len(payload.password) < 6:
+            raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+        target.password_hash = pwd_context.hash(payload.password)
+        target.password_changed_at = datetime.now(UTC)
+
+    if payload.role_id is not None:
+        if payload.role_id:
+            role = db.query(Role).filter(Role.id == payload.role_id, Role.company_id == current_user.company_id).first()
+            if not role:
+                raise HTTPException(status_code=404, detail="Role not found")
+        target.role_id = payload.role_id or None
+
+    if payload.is_active is not None:
+        target.is_active = payload.is_active
+
+    db.add(target)
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/admin/employees/{employee_id}/portal-access")
+def revoke_employee_portal_access(
+    employee_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    target = db.query(Employee).filter(Employee.id == employee_id, Employee.company_id == current_user.company_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    # Clears login credentials rather than deleting the Employee record —
+    # this screen manages *portal access*, the HR employee record itself
+    # (attendance, payroll history, etc.) is untouched.
+    target.username = None
+    target.password_hash = None
+    target.role_id = None
+    target.is_active = False
+    db.add(target)
+    db.commit()
+    return {"ok": True}
 
 
 # ── company locations ───────────────────────────────────────────────────────

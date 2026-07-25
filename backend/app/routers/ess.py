@@ -70,6 +70,8 @@ def _get_employee_from_token(token: str, db: Session) -> Employee:
     emp = db.query(Employee).filter(Employee.id == emp_id).first()
     if not emp:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Employee not found")
+    if not emp.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal access has been disabled for this account")
     return emp
 
 
@@ -95,18 +97,20 @@ def ess_login(payload: EssLoginRequest, db: Session = Depends(get_db)) -> EssTok
             detail="Missing company reference — use the Employee Self-Service link provided by your employer.",
         )
 
-    # Look up employee by employee_no, scoped to their own company.
-    # employee_no has no uniqueness guarantee across different tenant companies
-    # (e.g. two unrelated companies can each have an "Employee #1") — without
-    # this company_id filter, an employee at one company could log in as a
-    # same-numbered employee at a completely different company.
+    # Look up employee by employee_no OR the HR-assigned portal username
+    # (set via HRMS > HR Settings > Users & Roles), scoped to their own
+    # company. employee_no has no uniqueness guarantee across different
+    # tenant companies (e.g. two unrelated companies can each have an
+    # "Employee #1") — without this company_id filter, an employee at one
+    # company could log in as a same-numbered employee at a different one.
     emp = db.query(Employee).filter(
         Employee.company_id == company_id,
-        Employee.employee_no.ilike(username),
+        (Employee.employee_no.ilike(username)) | (Employee.username.ilike(username)),
     ).first()
 
     # Verify password — default password is the employee_no itself, until the
-    # employee sets a real one via POST /ess/change-password.
+    # employee sets a real one via POST /ess/change-password, or HR sets one
+    # directly via HRMS > Users & Roles.
     if not emp:
         # constant-time dummy check
         pwd_context.verify(password, "$2b$12$Z2HUw9SswHis7rcngsd7iOdXn/b9HafcmcwJx9D39ozeKwrSy22r.")
@@ -120,6 +124,9 @@ def ess_login(payload: EssLoginRequest, db: Session = Depends(get_db)) -> EssTok
     else:
         if not pwd_context.verify(password, stored_hash):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    if not emp.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal access has been disabled for this account")
 
     return EssToken(access_token=_create_ess_token(emp.id))
 
