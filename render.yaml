@@ -42,7 +42,9 @@ services:
   - type: worker
     name: etaxflow-celery
     runtime: docker
-    startCommand: celery -A app.worker worker --loglevel=info --concurrency=2
+    # -B embeds the beat scheduler (drives periodic tasks like
+    # hr.auto_checkout_stale_sessions) — only safe on a single instance.
+    startCommand: celery -A app.worker worker -B --loglevel=info --concurrency=2
     plan: free
     envVars:
       - key: DATABASE_URL

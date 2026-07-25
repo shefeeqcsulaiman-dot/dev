@@ -802,7 +802,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 <div class="page" id="page-staff">
   <div class="tabs">
     <div class="tab on" onclick="stab(this,'hr-emp')">Employees</div>
-    <div class="tab" onclick="stab(this,'hr-att');openAttendanceCheck();refreshAttendanceToday();loadAttendanceTrend()">Attendance</div>
+    <div class="tab" onclick="stab(this,'hr-att');openAttendanceCheck();refreshAttendanceToday();loadAttendanceTrend();renderHrAccessPanel()">Attendance</div>
     <div class="tab" onclick="stab(this,'hr-ot')">Overtime</div>
     <div class="tab" onclick="stab(this,'hr-leave')">Leave Management</div>
     <div class="tab" onclick="stab(this,'hr-corrections')">Corrections</div>
@@ -912,6 +912,54 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     </div>
 
     <!-- Biometric devices managed in Biometric Integration tab -->
+
+    <!-- GPS Attendance: Company Locations + Live Tracking -->
+    <div class="card mb16">
+      <div class="card-hd">
+        <div><div class="card-title">GPS Attendance — Company Locations &amp; Live Tracking</div><div class="card-sub">Geofenced check-in and live employee locations</div></div>
+      </div>
+      <div id="hr-access-login">
+        <div id="hr-access-err" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:9px;padding:10px 14px;font-size:13px;color:var(--red);margin-bottom:12px"></div>
+        <p style="font-size:12.5px;color:var(--text3);margin-bottom:10px">Sign in with an HR/Administrator employee login to manage locations and view live attendance. This uses the employee RBAC login, separate from your TaxFlow admin account.</p>
+        <div class="flx" style="gap:8px;flex-wrap:wrap">
+          <input type="text" id="hr-access-user" placeholder="Employee ID" style="max-width:180px">
+          <input type="password" id="hr-access-pass" placeholder="Password (default = Employee ID)" style="max-width:220px">
+          <button class="btn btn-p" onclick="hrAccessLogin()">Connect HR Access</button>
+        </div>
+      </div>
+      <div id="hr-access-panel" style="display:none">
+        <div class="flx" style="justify-content:space-between;margin-bottom:10px">
+          <span class="b b-g" style="font-size:11px">HR Access Connected</span>
+          <button class="btn btn-g btn-sm" onclick="hrAccessLogout()">Disconnect</button>
+        </div>
+        <div class="g2 mb16">
+          <div>
+            <div class="card-title" style="margin-bottom:8px">Company Locations</div>
+            <div class="flx" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">
+              <input type="text" id="hr-loc-name" placeholder="Location name" style="max-width:140px">
+              <input type="text" id="hr-loc-lat" placeholder="Latitude" style="max-width:100px">
+              <input type="text" id="hr-loc-lng" placeholder="Longitude" style="max-width:100px">
+              <input type="number" id="hr-loc-radius" placeholder="Radius (m)" value="200" style="max-width:100px">
+              <button class="btn btn-g btn-sm" onclick="addCompanyLocation()">+ Add</button>
+            </div>
+            <table class="tbl">
+              <thead><tr><th>Name</th><th>Coordinates</th><th>Radius</th><th>Status</th><th></th></tr></thead>
+              <tbody id="hr-loc-tbody"><tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Loading…</td></tr></tbody>
+            </table>
+          </div>
+          <div>
+            <div class="flx" style="justify-content:space-between;margin-bottom:8px">
+              <div class="card-title">Live Employee Locations</div>
+              <button class="btn btn-g btn-sm" onclick="loadLiveLocations()">⟳ Refresh</button>
+            </div>
+            <table class="tbl">
+              <thead><tr><th>Employee</th><th>Checked In</th><th>Geofence</th><th>Last Ping</th></tr></thead>
+              <tbody id="hr-live-tbody"><tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Setup Guide -->
     <div class="card mb16">

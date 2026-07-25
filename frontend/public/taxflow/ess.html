@@ -114,6 +114,7 @@
     <div class="tabs">
       <button class="tab on" onclick="essTab(this,'profile')">Profile</button>
       <button class="tab" onclick="essTab(this,'attendance')">Attendance</button>
+      <button class="tab" onclick="essTab(this,'gps');refreshGpsStatus()">GPS Check-In</button>
       <button class="tab" onclick="essTab(this,'payslips')">Payslips</button>
     </div>
 
@@ -151,6 +152,17 @@
             <tbody id="att-body"><tr><td colspan="4" class="loading">Loading…</td></tr></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- GPS Check-In -->
+    <div class="tab-body" id="tb-gps">
+      <div class="card">
+        <div class="card-title">GPS Attendance</div>
+        <div id="gps-err" class="err-box"></div>
+        <div id="gps-status" style="font-size:14px;color:var(--text2);margin-bottom:16px">Checking status…</div>
+        <button id="gps-checkin-btn" class="btn-login" style="width:auto;padding:10px 20px;display:none" onclick="gpsCheckIn()">Check In</button>
+        <button id="gps-checkout-btn" class="btn-login" style="width:auto;padding:10px 20px;display:none;background:linear-gradient(135deg,#b91c1c,#ef4444)" onclick="gpsCheckOut()">Check Out</button>
       </div>
     </div>
 
@@ -259,8 +271,101 @@
   }
 
   function essLogout() {
+    stopGpsPingLoop();
     localStorage.removeItem(ESS_TOKEN_KEY);
     window.location.reload();
+  }
+
+  // ── GPS check-in/out — same "emp:" token as the rest of ESS, posted to
+  // the RBAC/geofencing endpoints in app/routers/hr_access.py. Pings every
+  // 2 minutes while checked in, matching the interval documented in
+  // docs/hrms-architecture.md §7 (Live Employee Tracking).
+  var gpsPingTimer = null;
+
+  function getPosition() {
+    return new Promise(function(resolve, reject) {
+      if (!navigator.geolocation) { reject(new Error('GPS is not available on this device/browser.')); return; }
+      navigator.geolocation.getCurrentPosition(resolve, function(e) {
+        reject(new Error(e.code === 1 ? 'Location permission denied. Enable location access to check in.' : 'Could not get your location. Try again.'));
+      }, {enableHighAccuracy:true, timeout:15000, maximumAge:0});
+    });
+  }
+
+  function gpsSetStatus(text, isErr) {
+    var s = document.getElementById('gps-status');
+    if (s) s.textContent = text;
+    var err = document.getElementById('gps-err');
+    if (err) { err.style.display = isErr ? 'block' : 'none'; if (isErr) err.textContent = text; }
+  }
+
+  async function refreshGpsStatus() {
+    try {
+      var r = await fetch(apiBase() + '/hr/dashboard', {headers: essHeaders()});
+      if (r.status === 401) { essLogout(); return; }
+      var d = await r.json();
+      if (d.checked_in) {
+        gpsSetStatus('Checked in since ' + (d.check_in_time ? d.check_in_time.substring(0,16).replace('T',' ') : '—') + '.');
+        document.getElementById('gps-checkin-btn').style.display = 'none';
+        document.getElementById('gps-checkout-btn').style.display = 'inline-block';
+        startGpsPingLoop();
+      } else {
+        gpsSetStatus('Not checked in.');
+        document.getElementById('gps-checkin-btn').style.display = 'inline-block';
+        document.getElementById('gps-checkout-btn').style.display = 'none';
+        stopGpsPingLoop();
+      }
+    } catch(e) { gpsSetStatus('Cannot reach server.', true); }
+  }
+
+  async function gpsCheckIn() {
+    var btn = document.getElementById('gps-checkin-btn');
+    btn.disabled = true;
+    try {
+      var pos = await getPosition();
+      var r = await fetch(apiBase() + '/hr/check-in', {
+        method: 'POST', headers: essHeaders(),
+        body: JSON.stringify({latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy, device: navigator.userAgent.substring(0,120)})
+      });
+      var d = await r.json();
+      if (r.ok) { await refreshGpsStatus(); }
+      else { gpsSetStatus(d.detail || 'Check-in failed.', true); }
+    } catch(e) { gpsSetStatus(e.message || 'Check-in failed.', true); }
+    btn.disabled = false;
+  }
+
+  async function gpsCheckOut() {
+    var btn = document.getElementById('gps-checkout-btn');
+    btn.disabled = true;
+    try {
+      var pos = await getPosition().catch(function(){ return null; });
+      var r = await fetch(apiBase() + '/hr/check-out', {
+        method: 'POST', headers: essHeaders(),
+        body: pos ? JSON.stringify({latitude: pos.coords.latitude, longitude: pos.coords.longitude}) : '{}'
+      });
+      var d = await r.json();
+      if (r.ok) { stopGpsPingLoop(); await refreshGpsStatus(); }
+      else { gpsSetStatus(d.detail || 'Check-out failed.', true); }
+    } catch(e) { gpsSetStatus(e.message || 'Check-out failed.', true); }
+    btn.disabled = false;
+  }
+
+  function startGpsPingLoop() {
+    if (gpsPingTimer) return;
+    gpsPingTimer = setInterval(async function() {
+      try {
+        var pos = await getPosition();
+        var r = await fetch(apiBase() + '/hr/location', {
+          method: 'POST', headers: essHeaders(),
+          body: JSON.stringify({latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy, device: navigator.userAgent.substring(0,120)})
+        });
+        var d = await r.json();
+        if (r.ok && d.auto_checked_out) { stopGpsPingLoop(); refreshGpsStatus(); }
+      } catch(e) { /* transient GPS/network errors are not surfaced on every ping */ }
+    }, 120000);
+  }
+
+  function stopGpsPingLoop() {
+    if (gpsPingTimer) { clearInterval(gpsPingTimer); gpsPingTimer = null; }
   }
 
   function essTab(el, id) {

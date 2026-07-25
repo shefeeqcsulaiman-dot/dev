@@ -34,7 +34,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.models import Account, Company, TaxCode, User, VoucherType
-from app.routers import accounting, ai, app_data, attendance, audit, auth, companies, corporate_accounting, documents, ess, events, exception_center, hr_ai, inventory, invoice_share, invoices, jobs, module_records, payroll, reports, source_transactions, superadmin, tax
+from app.routers import accounting, ai, app_data, attendance, audit, auth, companies, corporate_accounting, documents, ess, events, exception_center, hr_access, hr_ai, inventory, invoice_share, invoices, jobs, module_records, payroll, reports, source_transactions, superadmin, tax
 from app.security import hash_password
 
 
@@ -332,6 +332,7 @@ def create_app() -> FastAPI:
     app.include_router(app_data.router, prefix="/api/v1")
     app.include_router(superadmin.router, prefix="/api/v1")
     app.include_router(ess.router, prefix="/api/v1")
+    app.include_router(hr_access.router, prefix="/api/v1")
 
     # Serve frontend static files
     if static_dir.exists():
@@ -388,6 +389,18 @@ def ensure_schema_updates() -> None:
             existing_columns = {column["name"] for column in inspector.get_columns("employees")}
             if "password_hash" not in existing_columns:
                 connection.execute(text("ALTER TABLE employees ADD COLUMN password_hash VARCHAR(255)"))
+            required_columns = {
+                "username": "VARCHAR(80)",
+                "role_id": "VARCHAR(36)",
+                "work_location_id": "VARCHAR(36)",
+                "is_active": "BOOLEAN DEFAULT TRUE",
+                "last_login": "TIMESTAMP WITH TIME ZONE",
+                "last_activity": "TIMESTAMP WITH TIME ZONE",
+                "password_changed_at": "TIMESTAMP WITH TIME ZONE",
+            }
+            for column_name, column_type in required_columns.items():
+                if column_name not in existing_columns:
+                    connection.execute(text(f"ALTER TABLE employees ADD COLUMN {column_name} {column_type}"))
         if "stock_product_mappings" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("stock_product_mappings")}
             required_columns = {

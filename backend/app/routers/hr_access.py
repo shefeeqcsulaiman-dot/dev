@@ -1,0 +1,702 @@
+"""RBAC, company geofencing, and GPS attendance for HRMS.
+
+Extends the employee identity already used by app/routers/ess.py rather than
+building a second auth system: tokens issued here use the same "emp:" JWT
+subject prefix and secret key, so an /hr/login token also works against
+/ess/* routes and vice versa. See docs/hrms-architecture.md for the design.
+"""
+
+import math
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from jose import JWTError, jwt
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.config import get_settings
+from app.database import get_db
+from app.models import (
+    AttendanceSession,
+    CompanyLocation,
+    Employee,
+    EmployeeLocation,
+    EmployeeLocationLog,
+    Permission,
+    Role,
+    RolePermission,
+)
+from app.security import pwd_context
+
+router = APIRouter(prefix="/hr", tags=["hr-access"])
+settings = get_settings()
+
+_EMP_PREFIX = "emp:"
+_AUTO_CHECKOUT_GRACE_MINUTES = 5
+
+# ── default RBAC catalog ───────────────────────────────────────────────────
+
+_PERMISSION_CATALOG: dict[str, list[str]] = {
+    "hr": ["manage_roles", "manage_locations", "manage_employees", "view_all_attendance"],
+    "payroll": ["run_payroll", "view_payroll"],
+    "attendance": ["check_in_out", "view_own_attendance"],
+    "dashboard": ["admin", "hr", "payroll", "manager", "employee"],
+}
+
+_DEFAULT_ROLES: dict[str, list[str]] = {
+    "Administrator": ["*"],  # all permissions
+    "HR Manager": ["hr:manage_roles", "hr:manage_locations", "hr:manage_employees",
+                    "hr:view_all_attendance", "attendance:check_in_out", "attendance:view_own_attendance",
+                    "dashboard:hr"],
+    "Payroll Officer": ["payroll:run_payroll", "payroll:view_payroll", "attendance:check_in_out",
+                         "attendance:view_own_attendance", "dashboard:payroll"],
+    "Manager": ["hr:view_all_attendance", "attendance:check_in_out", "attendance:view_own_attendance",
+                "dashboard:manager"],
+    "Employee": ["attendance:check_in_out", "attendance:view_own_attendance", "dashboard:employee"],
+}
+
+
+def _ensure_permission_catalog(db: Session) -> dict[str, Permission]:
+    existing = {f"{p.module}:{p.permission_name}": p for p in db.query(Permission).all()}
+    for module, names in _PERMISSION_CATALOG.items():
+        for name in names:
+            key = f"{module}:{name}"
+            if key not in existing:
+                perm = Permission(module=module, permission_name=name)
+                db.add(perm)
+                db.flush()
+                existing[key] = perm
+    return existing
+
+
+def _ensure_default_roles(db: Session, company_id: str) -> dict[str, Role]:
+    """Idempotently seeds the default role set for a company on first use."""
+    catalog = _ensure_permission_catalog(db)
+    roles = {r.role_name: r for r in db.query(Role).filter(Role.company_id == company_id).all()}
+    changed = False
+    for role_name, perm_keys in _DEFAULT_ROLES.items():
+        role = roles.get(role_name)
+        if not role:
+            role = Role(company_id=company_id, role_name=role_name, is_system_role=True)
+            db.add(role)
+            db.flush()
+            roles[role_name] = role
+            changed = True
+        existing_links = {
+            rp.permission_id for rp in db.query(RolePermission).filter(RolePermission.role_id == role.id).all()
+        }
+        grant_keys = list(catalog.keys()) if perm_keys == ["*"] else perm_keys
+        for key in grant_keys:
+            perm = catalog.get(key)
+            if perm and perm.id not in existing_links:
+                db.add(RolePermission(role_id=role.id, permission_id=perm.id))
+                changed = True
+    if changed:
+        db.commit()
+    return roles
+
+
+def _role_permission_keys(db: Session, role: Role | None) -> set[str]:
+    if not role:
+        return set()
+    rows = (
+        db.query(Permission)
+        .join(RolePermission, RolePermission.permission_id == Permission.id)
+        .filter(RolePermission.role_id == role.id)
+        .all()
+    )
+    return {f"{p.module}:{p.permission_name}" for p in rows}
+
+
+# ── geofencing ──────────────────────────────────────────────────────────────
+
+def _distance_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Haversine distance between two lat/long points, in meters."""
+    r = 6371000.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lng2 - lng1)
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def _nearest_assigned_location(db: Session, employee_id: str) -> tuple[CompanyLocation, bool] | None:
+    """Returns (location, is_primary) for the employee's primary assigned location, or None."""
+    link = (
+        db.query(EmployeeLocation)
+        .filter(EmployeeLocation.employee_id == employee_id)
+        .order_by(EmployeeLocation.is_primary.desc())
+        .first()
+    )
+    if not link:
+        return None
+    loc = db.get(CompanyLocation, link.location_id)
+    if not loc:
+        return None
+    return loc, link.is_primary
+
+
+# ── auth ─────────────────────────────────────────────────────────────────────
+
+class HrLoginRequest(BaseModel):
+    username: str
+    password: str
+    company_id: str
+
+
+class HrToken(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    role_name: str | None = None
+
+
+class GeoPoint(BaseModel):
+    latitude: float
+    longitude: float
+    accuracy: float | None = None
+    device: str | None = None
+    battery: int | None = None
+
+
+def _create_employee_token(employee_id: str, role_id: str | None) -> str:
+    exp = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_minutes)
+    payload: dict = {"sub": _EMP_PREFIX + employee_id, "exp": exp}
+    if role_id:
+        payload["rid"] = role_id
+    return jwt.encode(payload, settings.secret_key, algorithm="HS256")
+
+
+def _employee_id_from_token(token: str) -> str | None:
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+        sub: str | None = payload.get("sub")
+        if sub and sub.startswith(_EMP_PREFIX):
+            return sub[len(_EMP_PREFIX):]
+    except JWTError:
+        pass
+    return None
+
+
+def get_current_employee(request: Request, db: Session = Depends(get_db)) -> Employee:
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
+    emp_id = _employee_id_from_token(auth[7:])
+    if not emp_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    emp = db.query(Employee).filter(Employee.id == emp_id).first()
+    if not emp:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Employee not found")
+    if not emp.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+    emp.last_activity = datetime.now(UTC)
+    db.add(emp)
+    db.commit()
+    return emp
+
+
+def require_permission(*keys: str):
+    """Dependency factory — caller's role must grant at least one of the given permission keys."""
+    def _check(
+        request: Request,
+        db: Session = Depends(get_db),
+        emp: Employee = Depends(get_current_employee),
+    ) -> Employee:
+        role = db.get(Role, emp.role_id) if emp.role_id else None
+        granted = _role_permission_keys(db, role)
+        if not granted.intersection(keys):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not permitted")
+        return emp
+    return _check
+
+
+@router.post("/login", response_model=HrToken)
+def hr_login(payload: HrLoginRequest, db: Session = Depends(get_db)) -> HrToken:
+    company_id = payload.company_id.strip()
+    username = payload.username.strip()
+    if not company_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing company reference")
+
+    emp = (
+        db.query(Employee)
+        .filter(
+            Employee.company_id == company_id,
+            (Employee.username.ilike(username)) | (Employee.employee_no.ilike(username)),
+        )
+        .first()
+    )
+    if not emp:
+        pwd_context.verify(payload.password, "$2b$12$Z2HUw9SswHis7rcngsd7iOdXn/b9HafcmcwJx9D39ozeKwrSy22r.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    stored_hash = emp.password_hash
+    if not stored_hash:
+        if payload.password != emp.employee_no:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    elif not pwd_context.verify(payload.password, stored_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    if not emp.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+
+    roles = _ensure_default_roles(db, company_id)
+    if not emp.role_id:
+        emp.role_id = roles["Employee"].id
+
+    now = datetime.now(UTC)
+    emp.last_login = now
+    emp.last_activity = now
+    db.add(emp)
+    db.commit()
+
+    role = db.get(Role, emp.role_id)
+    return HrToken(access_token=_create_employee_token(emp.id, emp.role_id), role_name=role.role_name if role else None)
+
+
+@router.post("/logout")
+def hr_logout(emp: Employee = Depends(get_current_employee)) -> dict:
+    # Tokens are stateless JWTs with no server-side revocation list (same as
+    # ess.py) — logout is a client-side action; this endpoint exists so
+    # clients have a symmetric call and so a future revocation list has a
+    # natural place to hook in.
+    return {"ok": True}
+
+
+class HrMeOut(BaseModel):
+    id: str
+    employee_no: str
+    full_name: str
+    department: str
+    designation: str
+    role_name: str | None = None
+    permissions: list[str] = []
+    work_location_id: str | None = None
+
+
+@router.get("/me", response_model=HrMeOut)
+def hr_me(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> HrMeOut:
+    role = db.get(Role, emp.role_id) if emp.role_id else None
+    perms = sorted(_role_permission_keys(db, role))
+    return HrMeOut(
+        id=emp.id,
+        employee_no=emp.employee_no,
+        full_name=emp.full_name,
+        department=emp.department,
+        designation=emp.designation,
+        role_name=role.role_name if role else None,
+        permissions=perms,
+        work_location_id=emp.work_location_id,
+    )
+
+
+# ── role-based dashboard ────────────────────────────────────────────────────
+
+@router.get("/dashboard")
+def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> dict:
+    role = db.get(Role, emp.role_id) if emp.role_id else None
+    role_name = role.role_name if role else "Employee"
+    company_id = emp.company_id
+
+    if role_name in ("Administrator", "HR Manager"):
+        return {
+            "role": role_name,
+            "total_employees": db.query(Employee).filter(Employee.company_id == company_id).count(),
+            "active_sessions_now": db.query(AttendanceSession).filter(
+                AttendanceSession.company_id == company_id, AttendanceSession.status == "open"
+            ).count(),
+            "company_locations": db.query(CompanyLocation).filter(CompanyLocation.company_id == company_id).count(),
+            "roles_configured": db.query(Role).filter(Role.company_id == company_id).count(),
+        }
+    if role_name == "Payroll Officer":
+        from app.models import PayrollRun
+        latest = (
+            db.query(PayrollRun)
+            .filter(PayrollRun.company_id == company_id)
+            .order_by(PayrollRun.period.desc())
+            .first()
+        )
+        return {
+            "role": role_name,
+            "latest_run_period": latest.period if latest else None,
+            "latest_run_status": latest.status if latest else None,
+            "latest_run_net_total": float(latest.net_total) if latest else 0,
+        }
+    if role_name == "Manager":
+        return {
+            "role": role_name,
+            "team_active_sessions": db.query(AttendanceSession).filter(
+                AttendanceSession.company_id == company_id, AttendanceSession.status == "open"
+            ).count(),
+        }
+
+    # Employee dashboard — own status only
+    open_session = (
+        db.query(AttendanceSession)
+        .filter(AttendanceSession.employee_id == emp.id, AttendanceSession.status == "open")
+        .first()
+    )
+    return {
+        "role": role_name,
+        "checked_in": bool(open_session),
+        "check_in_time": str(open_session.check_in) if open_session else None,
+    }
+
+
+# ── roles & permissions ─────────────────────────────────────────────────────
+
+class RoleOut(BaseModel):
+    id: str
+    role_name: str
+    description: str | None = None
+    is_system_role: bool
+    permissions: list[str] = []
+
+
+class RoleCreateRequest(BaseModel):
+    role_name: str
+    description: str | None = None
+    permission_keys: list[str] = []
+
+
+@router.get("/roles", response_model=list[RoleOut])
+def list_roles(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> list[RoleOut]:
+    _ensure_default_roles(db, emp.company_id)
+    roles = db.query(Role).filter(Role.company_id == emp.company_id).order_by(Role.role_name).all()
+    return [
+        RoleOut(
+            id=r.id, role_name=r.role_name, description=r.description, is_system_role=r.is_system_role,
+            permissions=sorted(_role_permission_keys(db, r)),
+        )
+        for r in roles
+    ]
+
+
+@router.post("/roles", response_model=RoleOut, status_code=201)
+def create_role(
+    payload: RoleCreateRequest,
+    db: Session = Depends(get_db),
+    emp: Employee = Depends(require_permission("hr:manage_roles")),
+) -> RoleOut:
+    catalog = _ensure_permission_catalog(db)
+    role = Role(company_id=emp.company_id, role_name=payload.role_name.strip(), description=payload.description)
+    db.add(role)
+    db.flush()
+    for key in payload.permission_keys:
+        perm = catalog.get(key)
+        if perm:
+            db.add(RolePermission(role_id=role.id, permission_id=perm.id))
+    db.commit()
+    return RoleOut(
+        id=role.id, role_name=role.role_name, description=role.description, is_system_role=False,
+        permissions=sorted(_role_permission_keys(db, role)),
+    )
+
+
+@router.get("/permissions")
+def list_permissions(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> list[dict]:
+    catalog = _ensure_permission_catalog(db)
+    db.commit()
+    return [{"key": key, "module": p.module, "permission_name": p.permission_name} for key, p in catalog.items()]
+
+
+# ── company locations ───────────────────────────────────────────────────────
+
+class CompanyLocationOut(BaseModel):
+    id: str
+    location_name: str
+    address: str | None = None
+    latitude: float
+    longitude: float
+    allowed_radius_meters: int
+    status: str
+
+
+class CompanyLocationRequest(BaseModel):
+    location_name: str
+    branch_id: str | None = None
+    address: str | None = None
+    latitude: float
+    longitude: float
+    allowed_radius_meters: int = 200
+
+
+def _location_out(loc: CompanyLocation) -> CompanyLocationOut:
+    return CompanyLocationOut(
+        id=loc.id, location_name=loc.location_name, address=loc.address,
+        latitude=float(loc.latitude), longitude=float(loc.longitude),
+        allowed_radius_meters=loc.allowed_radius_meters, status=loc.status,
+    )
+
+
+@router.get("/company-locations", response_model=list[CompanyLocationOut])
+def list_company_locations(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> list[CompanyLocationOut]:
+    rows = db.query(CompanyLocation).filter(CompanyLocation.company_id == emp.company_id).order_by(CompanyLocation.location_name).all()
+    return [_location_out(r) for r in rows]
+
+
+@router.post("/company-locations", response_model=CompanyLocationOut, status_code=201)
+def create_company_location(
+    payload: CompanyLocationRequest,
+    db: Session = Depends(get_db),
+    emp: Employee = Depends(require_permission("hr:manage_locations")),
+) -> CompanyLocationOut:
+    loc = CompanyLocation(
+        company_id=emp.company_id, location_name=payload.location_name.strip(), branch_id=payload.branch_id,
+        address=payload.address, latitude=Decimal(str(payload.latitude)), longitude=Decimal(str(payload.longitude)),
+        allowed_radius_meters=payload.allowed_radius_meters,
+    )
+    db.add(loc)
+    db.commit()
+    return _location_out(loc)
+
+
+@router.put("/company-locations/{location_id}", response_model=CompanyLocationOut)
+def update_company_location(
+    location_id: str,
+    payload: CompanyLocationRequest,
+    db: Session = Depends(get_db),
+    emp: Employee = Depends(require_permission("hr:manage_locations")),
+) -> CompanyLocationOut:
+    loc = db.query(CompanyLocation).filter(CompanyLocation.id == location_id, CompanyLocation.company_id == emp.company_id).first()
+    if not loc:
+        raise HTTPException(status_code=404, detail="Location not found")
+    loc.location_name = payload.location_name.strip()
+    loc.branch_id = payload.branch_id
+    loc.address = payload.address
+    loc.latitude = Decimal(str(payload.latitude))
+    loc.longitude = Decimal(str(payload.longitude))
+    loc.allowed_radius_meters = payload.allowed_radius_meters
+    db.add(loc)
+    db.commit()
+    return _location_out(loc)
+
+
+@router.delete("/company-locations/{location_id}", status_code=204, response_model=None)
+def delete_company_location(
+    location_id: str,
+    db: Session = Depends(get_db),
+    emp: Employee = Depends(require_permission("hr:manage_locations")),
+) -> None:
+    loc = db.query(CompanyLocation).filter(CompanyLocation.id == location_id, CompanyLocation.company_id == emp.company_id).first()
+    if loc:
+        db.delete(loc)
+        db.commit()
+
+
+class EmployeeLocationAssignRequest(BaseModel):
+    employee_id: str
+    location_id: str
+    is_primary: bool = True
+
+
+@router.post("/employee-locations", status_code=201)
+def assign_employee_location(
+    payload: EmployeeLocationAssignRequest,
+    db: Session = Depends(get_db),
+    emp: Employee = Depends(require_permission("hr:manage_locations", "hr:manage_employees")),
+) -> dict:
+    target = db.query(Employee).filter(Employee.id == payload.employee_id, Employee.company_id == emp.company_id).first()
+    loc = db.query(CompanyLocation).filter(CompanyLocation.id == payload.location_id, CompanyLocation.company_id == emp.company_id).first()
+    if not target or not loc:
+        raise HTTPException(status_code=404, detail="Employee or location not found")
+    if payload.is_primary:
+        db.query(EmployeeLocation).filter(EmployeeLocation.employee_id == target.id).update({"is_primary": False})
+    link = EmployeeLocation(employee_id=target.id, location_id=loc.id, is_primary=payload.is_primary)
+    db.add(link)
+    target.work_location_id = loc.id
+    db.add(target)
+    db.commit()
+    return {"ok": True}
+
+
+# ── GPS attendance ───────────────────────────────────────────────────────────
+
+class CheckInOut(BaseModel):
+    session_id: str
+    status: str
+    check_in: str
+    location_name: str | None = None
+    distance_meters: float
+
+
+@router.post("/check-in", response_model=CheckInOut)
+def check_in(
+    payload: GeoPoint,
+    db: Session = Depends(get_db),
+    emp: Employee = Depends(get_current_employee),
+) -> CheckInOut:
+    existing = (
+        db.query(AttendanceSession)
+        .filter(AttendanceSession.employee_id == emp.id, AttendanceSession.status == "open")
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already checked in")
+
+    nearest = _nearest_assigned_location(db, emp.id)
+    if not nearest:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No work location assigned")
+    loc, _ = nearest
+    distance = _distance_meters(payload.latitude, payload.longitude, float(loc.latitude), float(loc.longitude))
+    if distance > loc.allowed_radius_meters:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Outside company location — {int(distance)}m from {loc.location_name} (allowed {loc.allowed_radius_meters}m)",
+        )
+
+    now = datetime.now(UTC)
+    session = AttendanceSession(
+        company_id=emp.company_id, employee_id=emp.id, location_id=loc.id, check_in=now,
+        check_in_lat=Decimal(str(payload.latitude)), check_in_lng=Decimal(str(payload.longitude)),
+        status="open",
+    )
+    db.add(session)
+    db.flush()
+    db.add(EmployeeLocationLog(
+        company_id=emp.company_id, employee_id=emp.id, session_id=session.id,
+        latitude=Decimal(str(payload.latitude)), longitude=Decimal(str(payload.longitude)),
+        accuracy=Decimal(str(payload.accuracy)) if payload.accuracy is not None else None,
+        inside_geofence=True, device=payload.device, battery=payload.battery,
+    ))
+    db.commit()
+    return CheckInOut(session_id=session.id, status="open", check_in=str(session.check_in), location_name=loc.location_name, distance_meters=distance)
+
+
+@router.post("/check-out")
+def check_out(
+    payload: GeoPoint | None = None,
+    db: Session = Depends(get_db),
+    emp: Employee = Depends(get_current_employee),
+) -> dict:
+    session = (
+        db.query(AttendanceSession)
+        .filter(AttendanceSession.employee_id == emp.id, AttendanceSession.status == "open")
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not checked in")
+    now = datetime.now(UTC)
+    session.check_out = now
+    session.status = "closed"
+    if payload:
+        session.check_out_lat = Decimal(str(payload.latitude))
+        session.check_out_lng = Decimal(str(payload.longitude))
+    db.add(session)
+    db.commit()
+    return {"ok": True, "session_id": session.id, "check_out": str(now)}
+
+
+@router.post("/location")
+def ping_location(
+    payload: GeoPoint,
+    db: Session = Depends(get_db),
+    emp: Employee = Depends(get_current_employee),
+) -> dict:
+    session = (
+        db.query(AttendanceSession)
+        .filter(AttendanceSession.employee_id == emp.id, AttendanceSession.status == "open")
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not checked in")
+
+    loc = db.get(CompanyLocation, session.location_id) if session.location_id else None
+    inside = True
+    distance = 0.0
+    if loc:
+        distance = _distance_meters(payload.latitude, payload.longitude, float(loc.latitude), float(loc.longitude))
+        inside = distance <= loc.allowed_radius_meters
+
+    db.add(EmployeeLocationLog(
+        company_id=emp.company_id, employee_id=emp.id, session_id=session.id,
+        latitude=Decimal(str(payload.latitude)), longitude=Decimal(str(payload.longitude)),
+        accuracy=Decimal(str(payload.accuracy)) if payload.accuracy is not None else None,
+        inside_geofence=inside, device=payload.device, battery=payload.battery,
+    ))
+    db.commit()
+
+    auto_closed = False
+    if not inside:
+        auto_closed = _maybe_auto_checkout(db, session)
+
+    return {"inside_geofence": inside, "distance_meters": distance, "auto_checked_out": auto_closed}
+
+
+def _maybe_auto_checkout(db: Session, session: AttendanceSession) -> bool:
+    """Closes the session if it has been continuously outside the geofence
+    for at least _AUTO_CHECKOUT_GRACE_MINUTES. Called after each ping so
+    an employee walking away gets auto-checked-out without waiting for the
+    periodic sweep (see worker.py for the sweep covering dropped pings)."""
+    logs = (
+        db.query(EmployeeLocationLog)
+        .filter(EmployeeLocationLog.session_id == session.id)
+        .order_by(EmployeeLocationLog.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    if not logs:
+        return False
+    earliest_outside = None
+    for log in logs:
+        if not log.inside_geofence:
+            earliest_outside = log.created_at
+        else:
+            break
+    if earliest_outside is None:
+        return False
+    now = datetime.now(UTC)
+    ref = earliest_outside if earliest_outside.tzinfo else earliest_outside.replace(tzinfo=UTC)
+    if now - ref < timedelta(minutes=_AUTO_CHECKOUT_GRACE_MINUTES):
+        return False
+    session.check_out = now
+    session.status = "closed"
+    session.auto_checkout = True
+    db.add(session)
+    db.commit()
+    return True
+
+
+# ── live tracking ────────────────────────────────────────────────────────────
+
+class LiveLocationOut(BaseModel):
+    employee_id: str
+    employee_name: str
+    session_id: str
+    check_in: str
+    latitude: float
+    longitude: float
+    inside_geofence: bool
+    last_ping: str
+
+
+@router.get("/live-locations", response_model=list[LiveLocationOut])
+def live_locations(
+    db: Session = Depends(get_db),
+    emp: Employee = Depends(require_permission("hr:view_all_attendance")),
+) -> list[LiveLocationOut]:
+    sessions = (
+        db.query(AttendanceSession)
+        .filter(AttendanceSession.company_id == emp.company_id, AttendanceSession.status == "open")
+        .all()
+    )
+    out: list[LiveLocationOut] = []
+    for session in sessions:
+        latest = (
+            db.query(EmployeeLocationLog)
+            .filter(EmployeeLocationLog.session_id == session.id)
+            .order_by(EmployeeLocationLog.created_at.desc())
+            .first()
+        )
+        target = db.get(Employee, session.employee_id)
+        if not target:
+            continue
+        lat = float(latest.latitude) if latest else float(session.check_in_lat or 0)
+        lng = float(latest.longitude) if latest else float(session.check_in_lng or 0)
+        inside = latest.inside_geofence if latest else True
+        last_ping = str(latest.created_at) if latest else str(session.check_in)
+        out.append(LiveLocationOut(
+            employee_id=target.id, employee_name=target.full_name, session_id=session.id,
+            check_in=str(session.check_in), latitude=lat, longitude=lng, inside_geofence=inside, last_ping=last_ping,
+        ))
+    return out

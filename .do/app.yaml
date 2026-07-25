@@ -135,10 +135,15 @@ services:
         value: REPLACE_IN_DO_DASHBOARD
 
   # ── Celery background worker ──────────────────────────────────────────
+  # -B embeds the beat scheduler in this same process (drives periodic tasks
+  # like hr.auto_checkout_stale_sessions). Safe only because instance_count
+  # is 1 below — if this is ever scaled beyond 1 instance, beat must be
+  # split into its own single-instance service first, or every instance
+  # will fire the same periodic task duplicately.
   - name: worker
     source_dir: /
     dockerfile_path: backend/Dockerfile
-    run_command: celery -A app.worker worker --loglevel=info --concurrency=4
+    run_command: celery -A app.worker worker -B --loglevel=info --concurrency=4
     github:
       branch: main
       deploy_on_push: true

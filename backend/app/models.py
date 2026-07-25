@@ -626,6 +626,15 @@ class Employee(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(30), default="active")
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # Access control / GPS attendance — see docs/hrms-architecture.md §6
+    username: Mapped[str | None] = mapped_column(String(80))
+    role_id: Mapped[str | None] = mapped_column(ForeignKey("roles.id"))
+    work_location_id: Mapped[str | None] = mapped_column(ForeignKey("company_locations.id"))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_activity: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
 
 class PayrollRun(Base, TimestampMixin):
     __tablename__ = "payroll_runs"
@@ -960,6 +969,88 @@ class AttendancePunch(Base, TimestampMixin):
     device_id: Mapped[str | None] = mapped_column(String(36))
     device_name: Mapped[str | None] = mapped_column(String(120))
     source: Mapped[str] = mapped_column(String(32), default="manual")
+
+
+class Role(Base, TimestampMixin):
+    __tablename__ = "roles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    role_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(255))
+    is_system_role: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class Permission(Base):
+    __tablename__ = "permissions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
+    module: Mapped[str] = mapped_column(String(60), nullable=False)
+    permission_name: Mapped[str] = mapped_column(String(80), nullable=False)
+
+
+class RolePermission(Base):
+    __tablename__ = "role_permissions"
+
+    role_id: Mapped[str] = mapped_column(ForeignKey("roles.id"), primary_key=True)
+    permission_id: Mapped[str] = mapped_column(ForeignKey("permissions.id"), primary_key=True)
+
+
+class CompanyLocation(Base, TimestampMixin):
+    __tablename__ = "company_locations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    location_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(String(36))
+    address: Mapped[str | None] = mapped_column(String(400))
+    latitude: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
+    longitude: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
+    allowed_radius_meters: Mapped[int] = mapped_column(Integer, default=200)
+    status: Mapped[str] = mapped_column(String(30), default="active")
+
+
+class EmployeeLocation(Base, TimestampMixin):
+    __tablename__ = "employee_locations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
+    employee_id: Mapped[str] = mapped_column(ForeignKey("employees.id"), index=True, nullable=False)
+    location_id: Mapped[str] = mapped_column(ForeignKey("company_locations.id"), nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class AttendanceSession(Base, TimestampMixin):
+    __tablename__ = "attendance_sessions"
+    __table_args__ = (Index("ix_att_session_company_emp_status", "company_id", "employee_id", "status"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    employee_id: Mapped[str] = mapped_column(ForeignKey("employees.id"), index=True, nullable=False)
+    location_id: Mapped[str | None] = mapped_column(ForeignKey("company_locations.id"))
+    check_in: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    check_out: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    check_in_lat: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    check_in_lng: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    check_out_lat: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    check_out_lng: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    auto_checkout: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(20), default="open")
+
+
+class EmployeeLocationLog(Base, TimestampMixin):
+    __tablename__ = "employee_location_logs"
+    __table_args__ = (Index("ix_emp_loc_log_company_emp_created", "company_id", "employee_id", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    employee_id: Mapped[str] = mapped_column(ForeignKey("employees.id"), index=True, nullable=False)
+    session_id: Mapped[str | None] = mapped_column(ForeignKey("attendance_sessions.id"), index=True)
+    latitude: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
+    longitude: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
+    accuracy: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    inside_geofence: Mapped[bool] = mapped_column(Boolean, default=True)
+    device: Mapped[str | None] = mapped_column(String(120))
+    battery: Mapped[int | None] = mapped_column(Integer)
 
 
 class ApprovalMatrixRecord(Base, TimestampMixin):

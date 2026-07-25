@@ -1903,6 +1903,113 @@ function localApiBaseUrl(){
   return `${window.location.protocol}//${window.location.host}/api/v1`;
 }
 
+// ── HR RBAC / GPS attendance (Company Locations, Live Locations) ───────────
+// Uses a separate employee-scoped token (same "emp:" JWT format as
+// /ess/login) because the permission-gated /hr/* endpoints authenticate as
+// an Employee with an assigned role, not as the logged-in User account.
+// See docs/hrms-architecture.md §7 "Employee Login & RBAC".
+const HR_ACCESS_TOKEN_KEY='hr_access_token';
+
+function hrAccessHeaders(){
+  const headers={'Content-Type':'application/json'};
+  const token=localStorage.getItem(HR_ACCESS_TOKEN_KEY);
+  if(token)headers.Authorization='Bearer '+token;
+  return headers;
+}
+
+async function hrAccessLogin(){
+  const user=(document.getElementById('hr-access-user')?.value||'').trim();
+  const pass=document.getElementById('hr-access-pass')?.value||'';
+  const errEl=document.getElementById('hr-access-err');
+  if(errEl)errEl.style.display='none';
+  if(!user||!currentCompany?.id){toast('Enter your HR employee ID','warn');return;}
+  try{
+    const r=await fetch(`${apiBaseUrl()}/hr/login`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username:user,password:pass||user,company_id:currentCompany.id})});
+    const d=await r.json();
+    if(r.ok&&d.access_token){
+      localStorage.setItem(HR_ACCESS_TOKEN_KEY,d.access_token);
+      toast('HR Access connected ('+(d.role_name||'Employee')+')','ok');
+      renderHrAccessPanel();
+    }else{
+      if(errEl){errEl.textContent=d.detail||'Invalid credentials.';errEl.style.display='block';}
+    }
+  }catch(e){if(errEl){errEl.textContent='Cannot reach server.';errEl.style.display='block';}}
+}
+
+function hrAccessLogout(){
+  localStorage.removeItem(HR_ACCESS_TOKEN_KEY);
+  renderHrAccessPanel();
+}
+
+function renderHrAccessPanel(){
+  const loginBox=document.getElementById('hr-access-login');
+  const panel=document.getElementById('hr-access-panel');
+  const connected=!!localStorage.getItem(HR_ACCESS_TOKEN_KEY);
+  if(loginBox)loginBox.style.display=connected?'none':'block';
+  if(panel)panel.style.display=connected?'block':'none';
+  if(connected){loadCompanyLocations();loadLiveLocations();}
+}
+
+async function loadCompanyLocations(){
+  const tbody=document.getElementById('hr-loc-tbody');
+  if(!tbody)return;
+  try{
+    const r=await fetch(`${apiBaseUrl()}/hr/company-locations`,{headers:hrAccessHeaders()});
+    if(r.status===401){hrAccessLogout();return;}
+    const rows=await r.json();
+    tbody.innerHTML=rows.length?rows.map(l=>`<tr>
+      <td>${l.location_name}</td><td>${l.latitude.toFixed(6)}, ${l.longitude.toFixed(6)}</td>
+      <td>${l.allowed_radius_meters}m</td><td>${l.status}</td>
+      <td><button class="btn btn-g btn-sm" onclick="deleteCompanyLocation('${l.id}')">Delete</button></td>
+    </tr>`).join(''):'<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">No locations yet.</td></tr>';
+  }catch(e){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--text3)">Failed to load.</td></tr>';}
+}
+
+async function addCompanyLocation(){
+  const name=(document.getElementById('hr-loc-name')?.value||'').trim();
+  const lat=parseFloat(document.getElementById('hr-loc-lat')?.value);
+  const lng=parseFloat(document.getElementById('hr-loc-lng')?.value);
+  const radius=parseInt(document.getElementById('hr-loc-radius')?.value||'200',10);
+  if(!name||Number.isNaN(lat)||Number.isNaN(lng)){toast('Enter a name and valid coordinates','warn');return;}
+  try{
+    const r=await fetch(`${apiBaseUrl()}/hr/company-locations`,{method:'POST',headers:hrAccessHeaders(),
+      body:JSON.stringify({location_name:name,latitude:lat,longitude:lng,allowed_radius_meters:radius})});
+    if(r.ok){
+      toast('Location added','ok');
+      document.getElementById('hr-loc-name').value='';
+      document.getElementById('hr-loc-lat').value='';
+      document.getElementById('hr-loc-lng').value='';
+      loadCompanyLocations();
+    }else{const d=await r.json();toast(d.detail||'Failed to add location','err');}
+  }catch(e){toast('Cannot reach server','err');}
+}
+
+async function deleteCompanyLocation(id){
+  if(!confirm('Delete this company location?'))return;
+  try{
+    await fetch(`${apiBaseUrl()}/hr/company-locations/${id}`,{method:'DELETE',headers:hrAccessHeaders()});
+    loadCompanyLocations();
+  }catch(e){toast('Failed to delete','err');}
+}
+
+async function loadLiveLocations(){
+  const tbody=document.getElementById('hr-live-tbody');
+  if(!tbody)return;
+  try{
+    const r=await fetch(`${apiBaseUrl()}/hr/live-locations`,{headers:hrAccessHeaders()});
+    if(r.status===401){hrAccessLogout();return;}
+    if(r.status===403){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Your role does not have live-attendance access.</td></tr>';return;}
+    const rows=await r.json();
+    tbody.innerHTML=rows.length?rows.map(p=>`<tr>
+      <td>${p.employee_name}</td>
+      <td>${p.check_in.substring(0,16).replace('T',' ')}</td>
+      <td>${p.inside_geofence?'<span class="b b-g">Inside</span>':'<span class="b b-r">Outside</span>'}</td>
+      <td>${p.last_ping.substring(0,16).replace('T',' ')}</td>
+    </tr>`).join(''):'<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">No employees currently checked in.</td></tr>';
+  }catch(e){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3)">Failed to load.</td></tr>';}
+}
+
 function localApiUrlFor(url){
   try{
     const parsed=new URL(url,window.location.href);
