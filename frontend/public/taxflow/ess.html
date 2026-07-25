@@ -85,12 +85,12 @@
     <div class="brand">
       <img src="/logo.png" alt="ETaxFlow" class="brand-logo" onerror="this.style.display='none'">
       <div class="brand-title">Employee Self-Service</div>
-      <div class="brand-sub">Sign in with your Employee ID</div>
+      <div class="brand-sub">Sign in with your Employee ID or username</div>
     </div>
     <div id="login-err" class="err-box"></div>
     <div class="field">
-      <label for="ess-user">Employee ID / Number</label>
-      <input id="ess-user" type="text" placeholder="e.g. EMP001" autocomplete="username"
+      <label for="ess-user">Employee ID or Username</label>
+      <input id="ess-user" type="text" placeholder="e.g. EMP001 or john.smith" autocomplete="username"
         onkeydown="if(event.key==='Enter')document.getElementById('ess-pass').focus()">
     </div>
     <div class="field last">
@@ -108,6 +108,7 @@
   <div class="topbar">
     <div class="topbar-brand">Employee Portal</div>
     <span class="topbar-name" id="ess-emp-name"></span>
+    <span class="badge" id="ess-role-badge" style="display:none;margin-right:8px"></span>
     <button class="btn-logout" onclick="essLogout()">Sign Out</button>
   </div>
   <div class="content">
@@ -116,6 +117,7 @@
       <button class="tab" onclick="essTab(this,'attendance')">Attendance</button>
       <button class="tab" onclick="essTab(this,'gps');refreshGpsStatus()">GPS Check-In</button>
       <button class="tab" onclick="essTab(this,'payslips')">Payslips</button>
+      <button class="tab" id="ess-team-tab-btn" style="display:none" onclick="essTab(this,'team');loadTeamView()">Team</button>
     </div>
 
     <!-- Profile -->
@@ -173,6 +175,19 @@
         <div id="payslip-content" class="loading">Loading…</div>
       </div>
     </div>
+
+    <!-- Team (role-gated: only shown for roles with hr:view_all_attendance) -->
+    <div class="tab-body" id="tb-team">
+      <div class="card">
+        <div class="card-title">Team — Live Attendance</div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Employee</th><th>Checked In</th><th>Geofence</th><th>Last Ping</th></tr></thead>
+            <tbody id="team-body"><tr><td colspan="4" class="loading">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -195,12 +210,17 @@
   }
 
   // The ESS company id comes from the link HR shares with employees
-  // (?c=<company_id>) and is remembered locally after the first visit, since
-  // employee_no alone isn't unique across different companies on this platform.
+  // (?c=<company_id>) and is only used to disambiguate an Employee No.
+  // login (not unique across companies on this platform). It is deliberately
+  // NOT cached as a silent fallback for bare-URL visits — a stale cached
+  // company from a previous visit would make login check the wrong company
+  // and fail with a confusing "Invalid credentials", even with the right
+  // username/password. Portal usernames are unique platform-wide, so a
+  // username-based login works with no company reference at all.
   function essCompanyId() {
     var fromUrl = new URLSearchParams(window.location.search).get('c');
     if (fromUrl) { localStorage.setItem(ESS_COMPANY_KEY, fromUrl); return fromUrl; }
-    return localStorage.getItem(ESS_COMPANY_KEY) || '';
+    return '';
   }
 
   async function essLogin() {
@@ -210,25 +230,22 @@
     var pass = document.getElementById('ess-pass').value;
     var companyId = essCompanyId();
     err.style.display = 'none';
-    if (!companyId) {
-      err.textContent = 'This link is missing your company reference. Please use the Employee Self-Service link provided by your HR administrator.';
-      err.style.display = 'block';
-      return;
-    }
-    if (!user) { err.textContent = 'Please enter your Employee ID.'; err.style.display = 'block'; return; }
+    if (!user) { err.textContent = 'Please enter your Employee ID or username.'; err.style.display = 'block'; return; }
     btn.disabled = true; btn.textContent = 'Signing in…';
     try {
+      var body = {username: user, password: pass || user};
+      if (companyId) body.company_id = companyId;
       var r = await fetch(apiBase() + '/ess/login', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({username: user, password: pass || user, company_id: companyId})
+        body: JSON.stringify(body)
       });
       var d = await r.json();
       if (r.ok && d.access_token) {
         localStorage.setItem(ESS_TOKEN_KEY, d.access_token);
         showApp();
       } else {
-        err.textContent = d.detail || 'Invalid credentials. Try your Employee ID as password.';
+        err.textContent = d.detail || 'Invalid credentials.';
         err.style.display = 'block';
         btn.disabled = false; btn.textContent = 'Sign In';
       }
@@ -441,6 +458,40 @@
     loadProfile();
     loadAttendance();
     loadPayslips();
+    loadRoleAndPermissions();
+  }
+
+  // ── Role-based view — the same token also carries RBAC role/permission
+  // data (see app/routers/hr_access.py /hr/me), so an employee with an
+  // elevated role (HR Manager, Administrator, Manager) sees an extra
+  // "Team" tab here, without needing a separate HR-only login.
+  var ESS_PERMISSIONS = [];
+
+  async function loadRoleAndPermissions() {
+    try {
+      var r = await fetch(apiBase() + '/hr/me', {headers: essHeaders()});
+      if (!r.ok) return; // role/permissions are additive — a failure here shouldn't block the rest of ESS
+      var d = await r.json();
+      ESS_PERMISSIONS = d.permissions || [];
+      var badge = document.getElementById('ess-role-badge');
+      if (badge && d.role_name) { badge.textContent = d.role_name; badge.style.display = 'inline-block'; }
+      var teamTab = document.getElementById('ess-team-tab-btn');
+      if (teamTab && ESS_PERMISSIONS.includes('hr:view_all_attendance')) teamTab.style.display = '';
+    } catch(e) { /* role badge/Team tab just stay hidden on failure */ }
+  }
+
+  async function loadTeamView() {
+    var body = document.getElementById('team-body');
+    try {
+      var r = await fetch(apiBase() + '/hr/live-locations', {headers: essHeaders()});
+      if (r.status === 403) { body.innerHTML = '<tr><td colspan="4" class="empty">Your role does not have team visibility.</td></tr>'; return; }
+      var rows = await r.json();
+      if (!rows.length) { body.innerHTML = '<tr><td colspan="4" class="empty">No one is currently checked in.</td></tr>'; return; }
+      body.innerHTML = rows.map(function(p) {
+        var geo = p.inside_geofence ? '<span class="dir-in">Inside</span>' : '<span class="dir-out">Outside</span>';
+        return '<tr><td>' + p.employee_name + '</td><td>' + p.check_in.substring(0,16).replace('T',' ') + '</td><td>' + geo + '</td><td>' + p.last_ping.substring(0,16).replace('T',' ') + '</td></tr>';
+      }).join('');
+    } catch(e) { body.innerHTML = '<tr><td colspan="4" class="empty">Failed to load.</td></tr>'; }
   }
 
   // Capture ?c=<company_id> from the link on every load (even if already

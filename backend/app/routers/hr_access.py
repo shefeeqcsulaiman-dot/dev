@@ -144,7 +144,11 @@ def _nearest_assigned_location(db: Session, employee_id: str) -> tuple[CompanyLo
 class HrLoginRequest(BaseModel):
     username: str
     password: str
-    company_id: str
+    # Optional — see ess.py's EssLoginRequest.company_id for why: portal
+    # usernames are globally unique (uq_employees_username), so a
+    # username-based login can resolve the company without it. Only
+    # employee_no-based login (not unique platform-wide) requires it.
+    company_id: str | None = None
 
 
 class HrToken(BaseModel):
@@ -215,19 +219,23 @@ def require_permission(*keys: str):
 
 @router.post("/login", response_model=HrToken)
 def hr_login(payload: HrLoginRequest, db: Session = Depends(get_db)) -> HrToken:
-    company_id = payload.company_id.strip()
+    company_id = (payload.company_id or "").strip()
     username = payload.username.strip()
-    if not company_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing company reference")
 
-    emp = (
-        db.query(Employee)
-        .filter(
-            Employee.company_id == company_id,
-            (Employee.username.ilike(username)) | (Employee.employee_no.ilike(username)),
+    if company_id:
+        emp = (
+            db.query(Employee)
+            .filter(
+                Employee.company_id == company_id,
+                (Employee.username.ilike(username)) | (Employee.employee_no.ilike(username)),
+            )
+            .first()
         )
-        .first()
-    )
+    else:
+        # No company reference — resolve by the globally-unique portal
+        # username only (employee_no is not unique platform-wide).
+        emp = db.query(Employee).filter(Employee.username.ilike(username)).first()
+
     if not emp:
         pwd_context.verify(payload.password, "$2b$12$Z2HUw9SswHis7rcngsd7iOdXn/b9HafcmcwJx9D39ozeKwrSy22r.")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
@@ -242,7 +250,7 @@ def hr_login(payload: HrLoginRequest, db: Session = Depends(get_db)) -> HrToken:
     if not emp.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
 
-    roles = _ensure_default_roles(db, company_id)
+    roles = _ensure_default_roles(db, emp.company_id)
     if not emp.role_id:
         emp.role_id = roles["Employee"].id
 
@@ -480,13 +488,12 @@ def set_employee_portal_access(
     if payload.username is not None:
         username = payload.username.strip()
         if username:
-            dup = (
-                db.query(Employee)
-                .filter(Employee.company_id == current_user.company_id, Employee.username == username, Employee.id != target.id)
-                .first()
-            )
+            # Global check, not scoped to this company — uq_employees_username
+            # enforces uniqueness platform-wide so /ess and /hr/login can
+            # resolve an employee by username alone, with no company link.
+            dup = db.query(Employee).filter(Employee.username == username, Employee.id != target.id).first()
             if dup:
-                raise HTTPException(status_code=409, detail="That username is already in use")
+                raise HTTPException(status_code=409, detail="That username is already taken by another employee on this platform — choose a different one")
         target.username = username or None
 
     if payload.password:

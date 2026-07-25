@@ -17,9 +17,14 @@ _ESS_PREFIX = "emp:"
 
 
 class EssLoginRequest(BaseModel):
-    username: str  # employee_no, or email stored in ext fields
+    username: str  # employee_no (requires company_id) or a globally-unique portal username
     password: str
-    company_id: str  # required — see ess_login for why
+    # Optional: portal usernames are unique platform-wide (see
+    # uq_employees_username in main.py), so a username-based login can
+    # resolve the company on its own. company_id is still required when
+    # logging in with employee_no, which is only unique *within* a company —
+    # without it, "Employee #1" at two unrelated companies would collide.
+    company_id: str | None = None
 
 
 class EssToken(BaseModel):
@@ -89,24 +94,25 @@ def ess_bearer(request: Request, db: Session = Depends(get_db)) -> Employee:
 def ess_login(payload: EssLoginRequest, db: Session = Depends(get_db)) -> EssToken:
     username = payload.username.strip()
     password = payload.password
-    company_id = payload.company_id.strip()
+    company_id = (payload.company_id or "").strip()
 
-    if not company_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Missing company reference — use the Employee Self-Service link provided by your employer.",
-        )
-
-    # Look up employee by employee_no OR the HR-assigned portal username
-    # (set via HRMS > HR Settings > Users & Roles), scoped to their own
-    # company. employee_no has no uniqueness guarantee across different
-    # tenant companies (e.g. two unrelated companies can each have an
-    # "Employee #1") — without this company_id filter, an employee at one
-    # company could log in as a same-numbered employee at a different one.
-    emp = db.query(Employee).filter(
-        Employee.company_id == company_id,
-        (Employee.employee_no.ilike(username)) | (Employee.username.ilike(username)),
-    ).first()
+    if company_id:
+        # Company-scoped link (?c=<company_id>): match employee_no OR
+        # username within that company. employee_no has no uniqueness
+        # guarantee across different tenant companies (e.g. two unrelated
+        # companies can each have an "Employee #1") — without this filter,
+        # an employee at one company could log in as a same-numbered
+        # employee at a different one.
+        emp = db.query(Employee).filter(
+            Employee.company_id == company_id,
+            (Employee.employee_no.ilike(username)) | (Employee.username.ilike(username)),
+        ).first()
+    else:
+        # No company reference — only the portal username can resolve this
+        # safely, since uq_employees_username enforces it's unique across
+        # every company on the platform. employee_no is NOT unique
+        # platform-wide, so it cannot be used to log in without company_id.
+        emp = db.query(Employee).filter(Employee.username.ilike(username)).first()
 
     # Verify password — default password is the employee_no itself, until the
     # employee sets a real one via POST /ess/change-password, or HR sets one

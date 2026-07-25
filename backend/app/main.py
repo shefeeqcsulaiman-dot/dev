@@ -401,6 +401,22 @@ def ensure_schema_updates() -> None:
             for column_name, column_type in required_columns.items():
                 if column_name not in existing_columns:
                     connection.execute(text(f"ALTER TABLE employees ADD COLUMN {column_name} {column_type}"))
+            # Portal usernames are unique platform-wide (not just per-company) so
+            # /ess and /hr/login can look an employee up by username alone, with
+            # no ?c=<company_id> link required. Partial index (WHERE username IS
+            # NOT NULL) since most employees have no portal access at all.
+            try:
+                connection.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_employees_username "
+                    "ON employees (username) WHERE username IS NOT NULL"
+                ))
+            except Exception as idx_exc:
+                # Pre-existing duplicate usernames (extremely unlikely — this
+                # column is new) would block index creation; don't let that
+                # abort the rest of the schema migration on startup.
+                logging.getLogger("taxflow").error(
+                    "Could not create uq_employees_username (likely duplicate usernames already exist): %s", idx_exc
+                )
         if "stock_product_mappings" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("stock_product_mappings")}
             required_columns = {
