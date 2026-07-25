@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=20260721e" as="style">
-<link rel="preload" href="src/app.js?v=20260725a" as="script">
+<link rel="preload" href="src/app.js?v=20260725b" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=20260721e">
 <style>
@@ -1581,8 +1581,12 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="card mb16">
       <div class="card-hd">
         <div><div class="card-title">Users &amp; Roles</div><div class="card-sub">Assign system roles and Employee Self-Service portal access (username/password) to employees</div></div>
-        <button class="btn btn-g btn-sm" onclick="loadHrUsersAndRoles()">⟳ Refresh</button>
+        <div class="flx" style="gap:8px">
+          <button class="btn btn-g btn-sm" onclick="copyEssPortalLink()">📋 Copy ESS Portal Link</button>
+          <button class="btn btn-g btn-sm" onclick="loadHrUsersAndRoles()">⟳ Refresh</button>
+        </div>
       </div>
+      <p style="font-size:11.5px;color:var(--text3);margin:-6px 0 14px">Employees must sign in at the link above (it carries your company reference) — signing in at <code>/ess</code> with no link, or an old bookmarked one, can silently use the wrong company and show "Invalid credentials" even with correct username/password.</p>
       <table class="tbl" data-delete-actions-bound="skip" id="hr-users-tbl">
         <thead>
           <tr>
@@ -2693,7 +2697,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260725a" defer></script>
+<script src="src/app.js?v=20260725b" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
