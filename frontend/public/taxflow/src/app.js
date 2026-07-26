@@ -15833,8 +15833,10 @@ function _renderHrUsersTable(){
   }
   tbody.innerHTML=_hrEmployeesCache.map(e=>{
     const hasAccess=!!e.username;
-    const statusBadge=!hasAccess?'<span class="b" style="background:var(--bg3)">No Access</span>'
-      :e.is_active?'<span class="b b-g">Active</span>':'<span class="b b-r">Disabled</span>';
+    let statusBadge;
+    if(!hasAccess) statusBadge='<span class="b" style="background:var(--bg3)">No Access</span>';
+    else if(!e.has_password) statusBadge='<span class="b b-a" title="Username is set but no password was ever saved — login with the custom username will fail until a password is set">No Password Set</span>';
+    else statusBadge=e.is_active?'<span class="b b-g">Active</span>':'<span class="b b-r">Disabled</span>';
     return `<tr>
       <td style="font-size:12px">${escapeHtml(e.full_name)}</td>
       <td class="mono" style="font-size:12px">${escapeHtml(e.employee_no)}</td>
@@ -15870,7 +15872,7 @@ function openAddHrUserModal(employeeId){
   document.getElementById('hr-user-status').value=emp.is_active===false?'inactive':'active';
   document.getElementById('hr-user-password').value='';
   const pwHint=document.getElementById('hr-user-pw-hint');
-  if(pwHint)pwHint.textContent=hasAccess?'(leave blank to keep current password)':'(default = Employee No. if left blank)';
+  if(pwHint)pwHint.textContent=emp.has_password?'(leave blank to keep current password)':'(required — no password has ever been set for this employee; leaving this blank means their password stays their Employee No., not left as-is)';
 
   showM('m-hr-user');
 }
@@ -15879,12 +15881,14 @@ async function saveHrUser(){
   const modal=document.getElementById('m-hr-user');
   const employeeId=modal?.dataset.employeeId;
   if(!employeeId)return;
+  const emp=_hrEmployeesCache.find(e=>e.id===employeeId);
   const username=document.getElementById('hr-user-username')?.value.trim();
   const roleId=document.getElementById('hr-user-role')?.value||null;
   const status=document.getElementById('hr-user-status')?.value||'active';
   const password=document.getElementById('hr-user-password')?.value||'';
 
   if(!username){toast('Enter a portal username','warn');return;}
+  if(!emp?.has_password&&!password){toast('Set a password — this employee has never had one saved (their default is currently their Employee No.)','warn');return;}
   if(password&&password.length<6){toast('Password must be at least 6 characters','warn');return;}
 
   const body={username,role_id:roleId||null,is_active:status==='active'};
