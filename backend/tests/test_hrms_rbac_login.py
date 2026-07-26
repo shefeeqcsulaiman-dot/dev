@@ -157,6 +157,25 @@ def test_admin_bootstrap_unaffected(client, db, auth_headers):
     assert any(k in data for k in ("salesInvoices", "products", "bankAccounts", "customers"))
 
 
+def test_accounting_endpoints_401_for_employee_token(client, db, auth_headers):
+    """Documents why hydrateFromServer() must never call loadAccountingFromDb()
+    on hrms.html: /accounts and /journal are still User-only (get_current_user),
+    so an Employee token gets 401 (not 403) here, which authenticatedFetch()
+    correctly treats as an invalid session and force-logs the sub-user out.
+    This isn't a bug in these endpoints themselves — accounting isn't an HRMS
+    module — it's a bug in calling them unconditionally from a page that has
+    no accounting UI at all. See app.js hydrateFromServer()'s HRMS_STANDALONE
+    guard around loadAccountingFromDb()/loadCorporateAccountingFromDb()."""
+    employee_id = _seed_employee(client, auth_headers, db)
+    emp_headers, _role = _grant_role_and_login(
+        client, auth_headers, employee_id, "rbactest.user6", ["employees:view", "leave:view"]
+    )
+
+    assert client.get("/api/v1/accounts", headers=emp_headers).status_code == 401
+    assert client.get("/api/v1/journal", headers=emp_headers).status_code == 401
+    assert client.get("/api/v1/inventory/mappings", headers=emp_headers).status_code == 401
+
+
 def test_cross_tenant_employee_isolation(client, db, auth_headers, second_tenant_headers):
     """An Employee principal from company A must not be able to read
     company B's leave requests or bootstrap data, mirroring the existing

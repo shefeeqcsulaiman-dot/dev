@@ -7522,8 +7522,18 @@ function hydrateFromServer(){
     removeDemoProductRows();
     cleanupDemoProductsFromServer(data.products);
     loadStockMappingsFromServer();
-    loadAccountingFromDb();
-    loadCorporateAccountingFromDb(data);
+    // hrms.html has no accounting/ledger DOM at all, and loadAccountingFromDb()
+    // hits /accounts + /journal unconditionally (no DOM guard, unlike the
+    // stock-mapping loader above) — those are still User-only endpoints, so
+    // for an HRMS sub-user (Employee principal) they 401, which
+    // authenticatedFetch correctly treats as an invalid session and force-
+    // logs them out before the page even finishes rendering. Skip both on
+    // hrms.html for every principal kind — an admin visiting /hrms doesn't
+    // need this data either.
+    if(!window.HRMS_STANDALONE){
+      loadAccountingFromDb();
+      loadCorporateAccountingFromDb(data);
+    }
     // Load new feature collections
     if(Array.isArray(data.lockedPeriods))data.lockedPeriods.filter(r=>r.locked).forEach(r=>_lockedPeriods.add(r.id));
     if(Array.isArray(data.recurringJournals))loadRecurringJournals(data.recurringJournals);
