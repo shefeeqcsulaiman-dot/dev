@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=20260721e" as="style">
-<link rel="preload" href="src/app.js?v=20260726b" as="script">
+<link rel="preload" href="src/app.js?v=20260726c" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=20260721e">
 <style>
@@ -1223,16 +1223,13 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <!-- Roles & Permissions -->
     <div class="card mb16">
       <div class="card-hd">
-        <div><div class="card-title">Roles &amp; Permissions</div><div class="card-sub">Define roles per branch and department — employees are assigned roles during creation</div></div>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-g btn-sm" onclick="seedDefaultRoles()" title="Load 5 common starter roles">&#10010; Default Roles</button>
-          <button class="btn btn-p btn-sm" onclick="showRoleModal()">+ Add Role</button>
-        </div>
+        <div><div class="card-title">Roles &amp; Permissions</div><div class="card-sub">These are the exact roles assignable to employees in Users &amp; Roles, and what each one can access — same source of truth, not a separate list</div></div>
+        <button class="btn btn-p btn-sm" onclick="showRoleModal()">+ Add Custom Role</button>
       </div>
       <table class="tbl" data-delete-actions-bound="skip">
-        <thead><tr><th>Branch</th><th>Department</th><th>Role Name</th><th>Permissions</th><th>Modules</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Role Name</th><th>Description</th><th>Permissions</th><th>Type</th><th></th></tr></thead>
         <tbody id="role-tbody">
-          <tr><td colspan="6" style="color:var(--text3);text-align:center;padding:24px">Loading roles…</td></tr>
+          <tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px">Loading roles…</td></tr>
         </tbody>
       </table>
     </div>
@@ -2697,7 +2694,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260726b" defer></script>
+<script src="src/app.js?v=20260726c" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
@@ -2707,6 +2704,7 @@ function hrsTab(section){
   var nav=document.querySelector('.hrs-nav-item[data-hrs="'+section+'"]');
   if(nav)nav.classList.add('hrs-active');
   if(section==='users'&&typeof loadHrUsersAndRoles==='function')loadHrUsersAndRoles();
+  if(section==='roles'&&typeof loadRolesAndPermissionsTab==='function')loadRolesAndPermissionsTab();
 }
 document.addEventListener('DOMContentLoaded',function(){
   setTimeout(function(){
@@ -3143,60 +3141,20 @@ document.addEventListener('DOMContentLoaded',function(){
 <div class="overlay" id="m-role" onclick="closeOvBg(event,'m-role')">
   <div class="modal" style="max-width:560px;width:95%">
     <button class="modal-x" onclick="closeM('m-role')">×</button>
-    <div class="modal-title" id="role-modal-title">Add Role</div>
-    <div class="modal-sub" id="role-modal-sub">Define permissions for a new role</div>
-    <div class="fr3">
-      <div class="fg">
-        <label class="fl">Branch</label>
-        <select class="fi" id="role-branch"><option value="">All Branches</option></select>
-      </div>
-      <div class="fg">
-        <label class="fl">Department <span style="color:var(--red)">*</span></label>
-        <select class="fi" id="role-department"><option value="">— Select Department —</option></select>
-      </div>
-      <div class="fg">
-        <label class="fl">Status</label>
-        <select class="fi" id="role-status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select>
-      </div>
-    </div>
-    <div class="fg" style="margin-top:10px">
+    <div class="modal-title" id="role-modal-title">Add Custom Role</div>
+    <div class="modal-sub" id="role-modal-sub">Employees assigned this role will only see/do what's checked below — same permissions enforced everywhere (ESS portal, GPS attendance, dashboards)</div>
+    <input type="hidden" id="role-edit-id">
+    <div class="fg">
       <label class="fl">Role Name <span style="color:var(--red)">*</span></label>
       <input class="fi" id="role-name" placeholder="e.g. Finance Manager" style="width:100%">
     </div>
+    <div class="fg">
+      <label class="fl">Description</label>
+      <input class="fi" id="role-description" placeholder="What this role is for" style="width:100%">
+    </div>
     <div style="margin-top:14px">
       <label class="fl" style="margin-bottom:10px">Permissions</label>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:6px">
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="View"> View</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="Create"> Create</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="Edit"> Edit</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="Delete"> Delete</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="Approve"> Approve</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="Export"> Export</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="Import"> Import</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="Manage"> Manage</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm" value="Full Access"> Full Access</label>
-      </div>
-    </div>
-    <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <label class="fl" style="margin:0">Modules Access</label>
-        <button type="button" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;padding:0" onclick="document.querySelectorAll('#m-role .role-mod').forEach(c=>c.checked=true)">Select All</button>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Employees"> Employees</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Attendance"> Attendance</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Leave Management"> Leave</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Overtime"> Overtime</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Payroll"> Payroll</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Corrections"> Corrections</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Loans & Advances"> Loans</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Expiry Alerts"> Expiry Alerts</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Biometric"> Biometric</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Recruitment"> Recruitment</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="Performance"> Performance &amp; Training</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="HR Settings"> HR Settings</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-mod" value="ESS Portal"> ESS Portal</label>
-      </div>
+      <div id="role-perm-grid" style="display:flex;flex-direction:column;gap:10px;margin-top:6px">Loading permissions…</div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-r" id="role-delete-btn" style="display:none;margin-right:auto" onclick="deleteRoleFromModal()">Delete Role</button>

@@ -673,7 +673,7 @@ function saveEmployee(){
     location:employeeFormValue('emp-location','Dubai HQ'),
     branch:employeeFormValue('emp-branch','Dubai HQ'),
     role_id:employeeFormValue('emp-role'),
-    role_name:(()=>{const rid=employeeFormValue('emp-role');const r=_roleList.find(x=>x.id===rid);return r?r.roleName:'';})(),
+    role_name:(()=>{const rid=employeeFormValue('emp-role');const r=_hrRolesCache.find(x=>x.id===rid);return r?r.role_name:'';})(),
     cost_center:employeeFormValue('emp-cost-center'),
     status:'Active',
     created_at:new Date().toISOString(),
@@ -7403,10 +7403,8 @@ function hydrateFromServer(){
             renderBranchTable();
             _syncBranchSelects(_branchList.filter(b=>b.status!=='Inactive').map(b=>b.name));
           }
-          if(Array.isArray(hrCfg.roles)&&hrCfg.roles.length){
-            _roleList=hrCfg.roles;
-            renderRoleTable();
-          }
+          // Roles are real backend RBAC roles now (/hr/admin/roles), not
+          // part of this blob — loaded on demand by loadRolesAndPermissionsTab().
         }
         const otCfg=Array.isArray(_deferred2.hr_settings)
           ?_deferred2.hr_settings.find(x=>x.id==='ot-rules-config')
@@ -16020,6 +16018,7 @@ function _populateEmpSelects(){
         :'<option disabled>No branches — add in HR Settings</option>');
     if(cur)branchSel.value=cur;
   }
+  if(document.getElementById('emp-role'))filterEmpRoles();
 }
 
 function openEmpModal(){
@@ -16047,7 +16046,6 @@ async function _saveDeptsBranchesToDb(){
     id:'dept-branch-role-config',
     departments:_deptList,
     branches:_branchList,
-    roles:_roleList,
   });
   try{
     const response=await authenticatedFetch(`${apiBaseUrl()}/companies/current`,{
@@ -16186,15 +16184,11 @@ function applyDeptsBranchesFromCompany(company){
       }
     }
   }catch{}
-  try{
-    if(company.roles){
-      const p=JSON.parse(company.roles);
-      if(Array.isArray(p)&&p.length)_roleList=p;
-    }
-  }catch{}
+  // Note: roles are NOT part of the Company record — they're real backend
+  // RBAC roles (see /hr/admin/roles), loaded on demand by
+  // loadRolesAndPermissionsTab() when that HR Settings tab is opened.
   renderDeptTable();
   renderBranchTable();
-  renderRoleTable();
   _syncDeptBranchSelectsFromList();
   _syncBranchSelects(_branchList.filter(b=>b.status!=='Inactive').map(b=>b.name));
 }
@@ -16234,155 +16228,155 @@ function _syncDeptBranchSelects(depts,branches){
 // ── Branch data store ─────────────────────────────────────────────────
 let _branchList=[];
 
-// ── Roles & Permissions data store ───────────────────────────────────────────
-let _roleList=[];
+// ── Roles & Permissions ──────────────────────────────────────────────────
+// Backed by the real RBAC Role/Permission tables (backend/app/routers/
+// hr_access.py) via the admin-token endpoints — the exact same roles
+// assignable in Users & Roles, not a separate list. _hrRolesCache is
+// shared with that screen (declared earlier, in the HR USERS & ROLES
+// section) so both stay in sync from whichever loads last.
+let _hrPermissionsCatalogCache=[];
 
-const _PERM_COLORS={View:'b-b',Create:'b-g',Edit:'b-a',Delete:'b-r',Approve:'b-p',Export:'b-t',Import:'b-t',Manage:'b-b','Full Access':'b-p'};
+async function ensureHrRolesLoaded(){
+  if(_hrRolesCache.length)return _hrRolesCache;
+  try{
+    const r=await fetch(`${apiBaseUrl()}/hr/admin/roles`,{headers:backendHeaders()});
+    if(r.ok)_hrRolesCache=await r.json();
+  }catch(e){ /* dropdowns just stay empty on failure */ }
+  return _hrRolesCache;
+}
+
+async function loadRolesAndPermissionsTab(){
+  const tbody=document.getElementById('role-tbody');
+  if(tbody)tbody.innerHTML='<tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px">Loading…</td></tr>';
+  try{
+    const [roleRes,permRes]=await Promise.all([
+      fetch(`${apiBaseUrl()}/hr/admin/roles`,{headers:backendHeaders()}),
+      fetch(`${apiBaseUrl()}/hr/admin/permissions`,{headers:backendHeaders()}),
+    ]);
+    _hrRolesCache=roleRes.ok?await roleRes.json():[];
+    _hrPermissionsCatalogCache=permRes.ok?await permRes.json():[];
+    renderRoleTable();
+  }catch(e){
+    if(tbody)tbody.innerHTML='<tr><td colspan="5" style="color:var(--red);text-align:center;padding:24px">Failed to load roles.</td></tr>';
+  }
+}
 
 function renderRoleTable(){
-  const html=_roleList.length===0
-    ?'<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:20px">No roles defined. Click + Add Role to create one.</td></tr>'
-    :_roleList.map(r=>{
-      const permBadges=(r.permissions||[]).map(p=>`<span class="b ${_PERM_COLORS[p]||'b-b'}" style="margin:1px 2px;font-size:9px">${escapeHtml(p)}</span>`).join('');
-      const modBadges=(r.modules||[]).map(m=>`<span class="b b-gray" style="margin:1px 2px;font-size:9px">${escapeHtml(m)}</span>`).join('');
-      return `<tr>
-        <td style="font-size:12px;color:var(--text3)">${escapeHtml(r.branch||'All')}</td>
-        <td style="font-weight:600">${escapeHtml(r.department||'—')}</td>
-        <td>${escapeHtml(r.roleName)}</td>
-        <td style="max-width:200px;line-height:1.8">${permBadges||'<span style="color:var(--text3)">—</span>'}</td>
-        <td style="max-width:200px;line-height:1.8">${modBadges||'<span style="color:var(--text3)">—</span>'}</td>
-        <td><span class="b ${r.status==='Active'?'b-g':'b-gray'}">${escapeHtml(r.status)}</span></td>
-        <td style="white-space:nowrap"><button class="icon-btn edit" title="Edit role" onclick="showRoleModal('${r.id}')">${editIconSvg()}</button> <button class="icon-btn danger" title="Delete role" onclick="deleteRole('${r.id}')">${deleteIconSvg()}</button></td>
-      </tr>`;
-    }).join('');
-  document.querySelectorAll('#role-tbody').forEach(tb=>{tb.innerHTML=html;});
+  const tbody=document.getElementById('role-tbody');
+  if(!tbody)return;
+  if(!_hrRolesCache.length){
+    tbody.innerHTML='<tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px">No roles yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML=_hrRolesCache.map(r=>{
+    const perms=r.permissions||[];
+    const permBadges=perms.slice(0,6).map(p=>`<span class="b b-b" style="margin:1px 2px;font-size:9px">${escapeHtml(p)}</span>`).join('')
+      +(perms.length>6?`<span style="font-size:10px;color:var(--text3)"> +${perms.length-6} more</span>`:'');
+    const typeBadge=r.is_system_role?'<span class="b b-gray" title="Built-in default role">System</span>':'<span class="b b-b">Custom</span>';
+    const actions=r.is_system_role
+      ?'<span style="font-size:11px;color:var(--text3)">Default role</span>'
+      :`<button class="icon-btn edit" title="Edit role" onclick="showRoleModal('${escapeHtml(r.id)}')">${editIconSvg()}</button> <button class="icon-btn danger" title="Delete role" onclick="deleteRole('${escapeHtml(r.id)}')">${deleteIconSvg()}</button>`;
+    return `<tr>
+      <td style="font-weight:600">${escapeHtml(r.role_name)}</td>
+      <td style="color:var(--text3);font-size:12px">${escapeHtml(r.description||'—')}</td>
+      <td style="max-width:280px;line-height:1.8">${permBadges||'<span style="color:var(--text3)">—</span>'}</td>
+      <td>${typeBadge}</td>
+      <td style="white-space:nowrap">${actions}</td>
+    </tr>`;
+  }).join('');
 }
 
 function deleteRole(id){
-  const role=_roleList.find(r=>r.id===id);
+  const role=_hrRolesCache.find(r=>r.id===id);
   if(!role)return;
-  if(!confirm(`Delete role "${role.roleName}"?`))return;
-  _roleList=_roleList.filter(r=>r.id!==id);
-  renderRoleTable();
-  _saveDeptsBranchesToDb();
-  toast(`Role "${role.roleName}" deleted`,'ok');
+  if(!confirm(`Delete role "${role.role_name}"? Any employees still assigned this role must be reassigned first.`))return;
+  fetch(`${apiBaseUrl()}/hr/admin/roles/${id}`,{method:'DELETE',headers:backendHeaders()})
+    .then(async r=>{
+      if(r.ok){toast(`Role "${role.role_name}" deleted`,'ok');loadRolesAndPermissionsTab();}
+      else{const d=await r.json().catch(()=>({}));toast(d.detail||'Failed to delete role','err');}
+    })
+    .catch(()=>toast('Cannot reach server','err'));
 }
 
 function showRoleModal(id){
   const isEdit=!!id;
-  const role=id?_roleList.find(r=>r.id===id):null;
+  const role=id?_hrRolesCache.find(r=>r.id===id):null;
   const modal=document.getElementById('m-role');
   if(!modal)return;
   modal.dataset.editId=id||'';
-  const titleEl=modal.querySelector('.modal-title');
-  if(titleEl)titleEl.textContent=isEdit?'Edit Role':'Add Role';
-  const subEl=document.getElementById('role-modal-sub')||modal.querySelector('.modal-sub');
-  if(subEl)subEl.textContent=isEdit?`Editing role: ${role?.roleName||''}`:'Define permissions for a new role';
-  // Branch select
-  const branchSel=document.getElementById('role-branch');
-  if(branchSel){
-    branchSel.innerHTML='<option value="">All Branches</option>'+
-      _branchList.filter(b=>b.status!=='Inactive').map(b=>`<option value="${escapeHtml(b.name)}">${escapeHtml(b.name)}</option>`).join('');
-    branchSel.value=role?.branch||'';
+  document.getElementById('role-edit-id').value=id||'';
+  const titleEl=document.getElementById('role-modal-title');
+  if(titleEl)titleEl.textContent=isEdit?'Edit Role':'Add Custom Role';
+  const subEl=document.getElementById('role-modal-sub');
+  if(subEl)subEl.textContent=isEdit?`Editing role: ${role?.role_name||''}`:"Employees assigned this role will only see/do what's checked below — same permissions enforced everywhere (ESS portal, GPS attendance, dashboards)";
+  document.getElementById('role-name').value=role?.role_name||'';
+  document.getElementById('role-description').value=role?.description||'';
+
+  const grid=document.getElementById('role-perm-grid');
+  if(grid){
+    if(!_hrPermissionsCatalogCache.length){
+      grid.innerHTML='<div style="color:var(--text3);font-size:12px">No permissions available.</div>';
+    }else{
+      const byModule={};
+      _hrPermissionsCatalogCache.forEach(p=>{(byModule[p.module]=byModule[p.module]||[]).push(p);});
+      const checked=new Set(role?.permissions||[]);
+      grid.innerHTML=Object.keys(byModule).sort().map(mod=>`
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);margin-bottom:6px">${escapeHtml(mod)}</div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+            ${byModule[mod].map(p=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm-cb" value="${escapeHtml(p.key)}" ${checked.has(p.key)?'checked':''}> ${escapeHtml(p.permission_name.replace(/_/g,' '))}</label>`).join('')}
+          </div>
+        </div>`).join('');
+    }
   }
-  // Department select
-  const deptSel=document.getElementById('role-department');
-  if(deptSel){
-    deptSel.innerHTML='<option value="">— Select Department —</option>'+
-      _deptList.filter(d=>d.status!=='Inactive').map(d=>`<option value="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`).join('');
-    deptSel.value=role?.department||'';
-  }
-  const roleNameEl=document.getElementById('role-name');
-  if(roleNameEl)roleNameEl.value=role?.roleName||'';
-  const statusEl=document.getElementById('role-status');
-  if(statusEl)statusEl.value=role?.status||'Active';
-  const perms=role?.permissions||[];
-  modal.querySelectorAll('.role-perm').forEach(cb=>{cb.checked=perms.includes(cb.value);});
-  const mods=role?.modules||[];
-  modal.querySelectorAll('.role-mod').forEach(cb=>{cb.checked=mods.includes(cb.value);});
   const delBtn=document.getElementById('role-delete-btn');
-  if(delBtn)delBtn.style.display=isEdit?'':'none';
+  if(delBtn)delBtn.style.display=(isEdit&&!role?.is_system_role)?'':'none';
   showM('m-role');
 }
 
-function saveRoleModal(){
+async function saveRoleModal(){
   const modal=document.getElementById('m-role');
   const editId=modal?.dataset.editId||'';
-  const branch=document.getElementById('role-branch')?.value||'';
-  const department=document.getElementById('role-department')?.value||'';
   const roleName=(document.getElementById('role-name')?.value||'').trim();
-  const status=document.getElementById('role-status')?.value||'Active';
-  const permissions=[...document.querySelectorAll('#m-role .role-perm:checked')].map(cb=>cb.value);
-  const modules=[...document.querySelectorAll('#m-role .role-mod:checked')].map(cb=>cb.value);
-  if(!department){toast('Select a department','warn');return;}
+  const description=(document.getElementById('role-description')?.value||'').trim()||null;
+  const permissionKeys=[...document.querySelectorAll('#m-role .role-perm-cb:checked')].map(cb=>cb.value);
   if(!roleName){toast('Enter a role name','warn');return;}
-  if(_roleList.find(r=>r.roleName.toLowerCase()===roleName.toLowerCase()&&r.department.toLowerCase()===department.toLowerCase()&&r.id!==editId)){
-    toast('A role with this name already exists in the selected department','warn');return;
-  }
-  if(editId){
-    const idx=_roleList.findIndex(r=>r.id===editId);
-    if(idx>=0)_roleList[idx]={..._roleList[idx],branch,department,roleName,permissions,modules,status};
-  }else{
-    _roleList.push({id:'role-'+Date.now(),branch,department,roleName,permissions,modules,status});
-  }
-  renderRoleTable();
-  _saveDeptsBranchesToDb();
-  hideM('m-role');
-  toast(editId?'Role updated':'Role created','ok');
-}
-
-function seedDefaultRoles(){
-  const allPerms=['View','Create','Edit','Delete','Approve','Export','Import','Manage','Full Access'];
-  const allMods=['Employees','Attendance','Leave Management','Overtime','Payroll','Corrections','Loans & Advances','Expiry Alerts','Biometric','Recruitment','Performance','HR Settings','ESS Portal'];
-  const defaults=[
-    {roleName:'Employee',permissions:['View'],modules:['Attendance','Leave Management','Overtime','Corrections','Loans & Advances','Expiry Alerts','ESS Portal']},
-    {roleName:'Supervisor',permissions:['View','Create','Approve'],modules:['Employees','Attendance','Leave Management','Overtime','Corrections','Loans & Advances','Expiry Alerts','Performance','ESS Portal']},
-    {roleName:'HR Manager',permissions:allPerms,modules:allMods},
-    {roleName:'Finance Manager',permissions:['View','Create','Edit','Approve','Export','Manage'],modules:['Payroll','Loans & Advances','Expiry Alerts','ESS Portal']},
-    {roleName:'Admin',permissions:allPerms,modules:allMods},
-  ];
-  let added=0;
-  defaults.forEach(d=>{
-    const exists=_roleList.some(r=>r.roleName.toLowerCase()===d.roleName.toLowerCase());
-    if(!exists){
-      _roleList.push({id:'role-'+Date.now()+'-'+Math.random().toString(36).slice(2),branch:'',department:'',roleName:d.roleName,permissions:d.permissions,modules:d.modules,status:'Active'});
-      added++;
+  const body={role_name:roleName,description,permission_keys:permissionKeys};
+  try{
+    const url=editId?`${apiBaseUrl()}/hr/admin/roles/${editId}`:`${apiBaseUrl()}/hr/admin/roles`;
+    const r=await fetch(url,{method:editId?'PUT':'POST',headers:backendHeaders(),body:JSON.stringify(body)});
+    if(r.ok){
+      toast(editId?'Role updated':'Role created','ok');
+      hideM('m-role');
+      loadRolesAndPermissionsTab();
+    }else{
+      const d=await r.json().catch(()=>({}));
+      toast(d.detail||'Failed to save role','err');
     }
-  });
-  if(added===0){toast('All default roles already exist','info');return;}
-  renderRoleTable();
-  _saveDeptsBranchesToDb();
-  toast(`${added} default role${added>1?'s':''} added`,'ok');
+  }catch(e){toast('Cannot reach server','err');}
 }
 
 function deleteRoleFromModal(){
   const modal=document.getElementById('m-role');
   const id=modal?.dataset.editId;
   if(!id)return;
-  _roleList=_roleList.filter(r=>r.id!==id);
-  renderRoleTable();
-  _saveDeptsBranchesToDb();
   hideM('m-role');
-  toast('Role deleted','ok');
+  deleteRole(id);
 }
 
-function filterEmpRoles(){
-  const branch=document.getElementById('emp-branch')?.value||'';
-  const dept=document.getElementById('emp-department')?.value||'';
+async function filterEmpRoles(){
   const roleEl=document.getElementById('emp-role');
   if(!roleEl)return;
-  if(!branch&&!dept){
-    roleEl.innerHTML='<option value="">— Select Branch &amp; Department first —</option>';
+  const cur=roleEl.value;
+  roleEl.innerHTML='<option value="">Loading roles…</option>';
+  await ensureHrRolesLoaded();
+  if(!_hrRolesCache.length){
+    roleEl.innerHTML='<option value="">No roles yet — add one in HR Settings &gt; Roles &amp; Permissions</option>';
     return;
   }
-  const filtered=_roleList.filter(r=>{
-    if(r.status==='Inactive')return false;
-    const bMatch=!r.branch||r.branch===branch;
-    const dMatch=!r.department||r.department===dept;
-    return bMatch&&dMatch;
-  });
   roleEl.innerHTML='<option value="">— Select Role —</option>'+
-    filtered.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.roleName)}</option>`).join('');
+    _hrRolesCache.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.role_name)}</option>`).join('');
+  if(cur)roleEl.value=cur;
 }
 
 function renderBranchTable(){

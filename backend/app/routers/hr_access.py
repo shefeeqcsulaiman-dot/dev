@@ -430,6 +430,13 @@ class AdminEmployeePortalOut(BaseModel):
     has_password: bool
 
 
+@router.get("/admin/permissions")
+def admin_list_permissions(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[dict]:
+    catalog = _ensure_permission_catalog(db)
+    db.commit()
+    return [{"key": key, "module": p.module, "permission_name": p.permission_name} for key, p in catalog.items()]
+
+
 @router.get("/admin/roles", response_model=list[RoleOut])
 def admin_list_roles(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[RoleOut]:
     _ensure_default_roles(db, current_user.company_id)
@@ -441,6 +448,83 @@ def admin_list_roles(db: Session = Depends(get_db), current_user: User = Depends
         )
         for r in roles
     ]
+
+
+@router.post("/admin/roles", response_model=RoleOut, status_code=201)
+def admin_create_role(
+    payload: RoleCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RoleOut:
+    catalog = _ensure_permission_catalog(db)
+    role_name = payload.role_name.strip()
+    if not role_name:
+        raise HTTPException(status_code=400, detail="Role name is required")
+    if db.query(Role).filter(Role.company_id == current_user.company_id, Role.role_name.ilike(role_name)).first():
+        raise HTTPException(status_code=409, detail="A role with this name already exists")
+    role = Role(company_id=current_user.company_id, role_name=role_name, description=payload.description)
+    db.add(role)
+    db.flush()
+    for key in payload.permission_keys:
+        perm = catalog.get(key)
+        if perm:
+            db.add(RolePermission(role_id=role.id, permission_id=perm.id))
+    db.commit()
+    return RoleOut(
+        id=role.id, role_name=role.role_name, description=role.description, is_system_role=False,
+        permissions=sorted(_role_permission_keys(db, role)),
+    )
+
+
+@router.put("/admin/roles/{role_id}", response_model=RoleOut)
+def admin_update_role(
+    role_id: str,
+    payload: RoleCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RoleOut:
+    role = db.query(Role).filter(Role.id == role_id, Role.company_id == current_user.company_id).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+    if role.is_system_role:
+        raise HTTPException(status_code=400, detail="Default system roles cannot be edited — create a custom role instead")
+    catalog = _ensure_permission_catalog(db)
+    role_name = payload.role_name.strip()
+    if not role_name:
+        raise HTTPException(status_code=400, detail="Role name is required")
+    if db.query(Role).filter(Role.company_id == current_user.company_id, Role.role_name.ilike(role_name), Role.id != role.id).first():
+        raise HTTPException(status_code=409, detail="A role with this name already exists")
+    role.role_name = role_name
+    role.description = payload.description
+    db.add(role)
+    db.query(RolePermission).filter(RolePermission.role_id == role.id).delete()
+    for key in payload.permission_keys:
+        perm = catalog.get(key)
+        if perm:
+            db.add(RolePermission(role_id=role.id, permission_id=perm.id))
+    db.commit()
+    return RoleOut(
+        id=role.id, role_name=role.role_name, description=role.description, is_system_role=False,
+        permissions=sorted(_role_permission_keys(db, role)),
+    )
+
+
+@router.delete("/admin/roles/{role_id}", status_code=204, response_model=None)
+def admin_delete_role(
+    role_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    role = db.query(Role).filter(Role.id == role_id, Role.company_id == current_user.company_id).first()
+    if not role:
+        return
+    if role.is_system_role:
+        raise HTTPException(status_code=400, detail="Default system roles cannot be deleted")
+    if db.query(Employee).filter(Employee.role_id == role.id).first():
+        raise HTTPException(status_code=409, detail="This role is still assigned to one or more employees — reassign them first")
+    db.query(RolePermission).filter(RolePermission.role_id == role.id).delete()
+    db.delete(role)
+    db.commit()
 
 
 @router.get("/admin/employees", response_model=list[AdminEmployeePortalOut])
@@ -502,7 +586,11 @@ def set_employee_portal_access(
         target.password_hash = pwd_context.hash(payload.password)
         target.password_changed_at = datetime.now(UTC)
 
-    if payload.role_id is not None:
+    # role_id needs its own explicit-null-vs-omitted check ("is not None"
+    # can't tell them apart, since None is itself the meaningful "unassign
+    # the role" value) — model_fields_set tells us whether the client sent
+    # the key at all, regardless of what value it sent.
+    if "role_id" in payload.model_fields_set:
         if payload.role_id:
             role = db.query(Role).filter(Role.id == payload.role_id, Role.company_id == current_user.company_id).first()
             if not role:
