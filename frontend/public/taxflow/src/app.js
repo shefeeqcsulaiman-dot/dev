@@ -21742,11 +21742,23 @@ function initApp(){
   setManualPurchaseDefaults();
   configureSalesFormMode();
   configureManualPurchaseMode();
-  syncCompanyFromDatabase();
-  renderBusinessLocationRows();
-  loadUsersIntoTable();
-  enhancePageTables('page-dashboard');
-  syncDashboardFromDatabase().catch(err=>console.warn('Dashboard sync failed during init:',err));
+  // syncCompanyFromDatabase/loadUsersIntoTable/syncDashboardFromDatabase all
+  // call User-only endpoints (/companies/current, /app-data/users,
+  // /reports/dashboard) — for an HRMS sub-user (Employee principal) those
+  // 401 (no User row matches an "emp:" subject), which authenticatedFetch
+  // correctly treats as an invalid session and force-logs them out before
+  // the page even renders. None of the three are relevant to a sub-user
+  // session: company display comes from applyHrmsPermissionNav()
+  // (/auth/whoami), the dashboard here is the main-app one, and the users
+  // table doesn't apply to HRMS at all. hydrateFromServer() (bootstrap) is
+  // already principal-aware and runs for both session types.
+  if(localStorage.getItem('taxflow_principal_kind')!=='employee'){
+    syncCompanyFromDatabase();
+    renderBusinessLocationRows();
+    loadUsersIntoTable();
+    enhancePageTables('page-dashboard');
+    syncDashboardFromDatabase().catch(err=>console.warn('Dashboard sync failed during init:',err));
+  }
   hydrateFromServer().catch(err=>console.warn('Database hydrate failed during init:',err));
   const _lastPage=window.HRMS_STANDALONE?'hrms':localStorage.getItem('taxflow_current_page');
   setTimeout(()=>go(_lastPage||'dashboard'),400);
@@ -21765,6 +21777,14 @@ function initApp(){
 if(!localStorage.getItem('taxflow_token')){
   window.location.replace('/login');
 }else{
-  applyRoleBasedNav().catch(()=>{});
+  // applyRoleBasedNav() calls /auth/me, a User-only endpoint — for an HRMS
+  // sub-user (Employee principal) that 401s (no User row matches an "emp:"
+  // subject), which authenticatedFetch correctly treats as an invalid
+  // session and logs them straight back out. Skip it for employee sessions;
+  // applyHrmsPermissionNav() (hrms.html, via /auth/whoami) is the
+  // employee-aware equivalent.
+  if(localStorage.getItem('taxflow_principal_kind')!=='employee'){
+    applyRoleBasedNav().catch(()=>{});
+  }
   initApp();
 }
