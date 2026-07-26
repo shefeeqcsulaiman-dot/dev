@@ -7385,11 +7385,10 @@ function hydrateFromServer(){
         refreshRecruitmentStats();
         await _yield();
         renderStats.ledger=renderRecordList(_deferred2.ledger,line=>postLedgerLine(line,{persist:false}),'ledger');
-        if(Array.isArray(_deferred2.hrUsers)&&_deferred2.hrUsers.length){
-          _hrUsers.length=0;
-          _hrUsers.push(..._deferred2.hrUsers);
-          _renderHrUsersTable();
-        }
+        // Note: hrUsers (the old client-only mock "Users & Roles" store) is
+        // obsolete — that screen is now backed by the real Employee table via
+        // /hr/admin/employees, loaded on demand by loadHrUsersAndRoles()
+        // rather than from this bootstrap blob.
         const hrCfg=Array.isArray(_deferred2.hr_settings)
           ?_deferred2.hr_settings.find(x=>x.id==='dept-branch-role-config')
           :null;
@@ -16036,13 +16035,36 @@ function openEmpModal(){
 }
 
 // Persist dept/branch/role lists as one document in hr_settings collection
-function _saveDeptsBranchesToDb(){
+// (kept for the role list, and as a fallback), AND write departments/
+// branches through to the real Company record. The main dashboard and HRMS
+// both call applyDeptsBranchesFromCompany(company) from the *same* early
+// bootstrap step (Company.departments/branches), so writing there — rather
+// than relying solely on the idle-scheduled hr_settings blob hydration —
+// is what keeps both pages showing the same list immediately, not just
+// eventually once/if that later hydration step runs.
+async function _saveDeptsBranchesToDb(){
   saveServer('hr_settings',{
     id:'dept-branch-role-config',
     departments:_deptList,
     branches:_branchList,
     roles:_roleList,
   });
+  try{
+    const response=await authenticatedFetch(`${apiBaseUrl()}/companies/current`,{
+      method:'PUT',
+      body:JSON.stringify({
+        name:currentCompany?.name||'Company',
+        trn:currentCompany?.trn||null,
+        country:currentCompany?.country||'United Arab Emirates',
+        departments:JSON.stringify(_deptList),
+        branches:JSON.stringify(_branchList),
+      }),
+    });
+    if(response.ok){
+      const company=await response.json();
+      if(currentCompany){currentCompany.departments=company.departments;currentCompany.branches=company.branches;}
+    }
+  }catch(e){ /* hr_settings blob above still has the latest list even if this sync fails */ }
 }
 
 // ── Department data store ─────────────────────────────────────────────
