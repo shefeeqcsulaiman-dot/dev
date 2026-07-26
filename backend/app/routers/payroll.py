@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import Principal, get_current_user, require_principal_permission
 from app.models import Employee, PayrollItem, PayrollRun, User, WpsBatch
 from app.schemas import EmployeeOut, PayrollGenerate, PayrollRunOut, WpsBatchOut
 
@@ -13,16 +13,22 @@ router = APIRouter(prefix="/payroll", tags=["payroll"])
 
 
 @router.get("/employees", response_model=list[EmployeeOut])
-def list_employees(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[Employee]:
-    return db.query(Employee).filter(Employee.company_id == current_user.company_id).order_by(Employee.employee_no).all()
+def list_employees(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("employees:view")),
+) -> list[Employee]:
+    return db.query(Employee).filter(Employee.company_id == principal.company_id).order_by(Employee.employee_no).all()
 
 
 @router.get("/runs", response_model=list[PayrollRunOut])
-def list_runs(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[PayrollRun]:
+def list_runs(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("payroll:view")),
+) -> list[PayrollRun]:
     return (
         db.query(PayrollRun)
         .options(joinedload(PayrollRun.items))
-        .filter(PayrollRun.company_id == current_user.company_id)
+        .filter(PayrollRun.company_id == principal.company_id)
         .order_by(PayrollRun.created_at.desc())
         .all()
     )

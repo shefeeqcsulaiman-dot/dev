@@ -110,10 +110,16 @@
     var t=localStorage.getItem('taxflow_token');
     if(!t)return;
     try{
-      var r=await fetch(apiBase()+'/auth/me',{headers:{'Authorization':'Bearer '+t}});
-      var m=await r.json();
-      if(m&&m.role==='superadmin'){window.location.replace('/superadmin');return;}
-      if(r.ok)window.location.replace('/');
+      var r=await fetch(apiBase()+'/auth/whoami',{headers:{'Authorization':'Bearer '+t}});
+      if(!r.ok)return;
+      var who=await r.json();
+      if(who.kind==='employee'){window.location.replace('/hrms');return;}
+      // Admin: /auth/whoami doesn't carry the admin/superadmin distinction,
+      // /auth/me already does — check that only for the User path.
+      var meResp=await fetch(apiBase()+'/auth/me',{headers:{'Authorization':'Bearer '+t}});
+      var me=await meResp.json();
+      if(me&&me.role==='superadmin'){window.location.replace('/superadmin');return;}
+      window.location.replace('/');
     }catch(e){ window.location.replace('/'); }
   })();
 
@@ -148,17 +154,33 @@
       var data=await resp.json();
       if(resp.ok&&data.access_token){
         localStorage.setItem('taxflow_token',data.access_token);
+        localStorage.setItem('taxflow_principal_kind','user');
         try{
           var meResp=await fetch(apiBase()+'/auth/me',{headers:{'Authorization':'Bearer '+data.access_token}});
           var me=await meResp.json();
           if(me&&me.role==='superadmin'){window.location.replace('/superadmin');return;}
         }catch(e){}
         window.location.replace('/');
-      }else{
-        err.textContent=data.detail||'Incorrect email or password.';
-        err.style.display='block';
-        btn.disabled=false;btn.textContent='Sign In';
+        return;
       }
+      // Not a TaxFlow admin account — try as an HRMS sub-user (Employee RBAC
+      // login, same identity/login used by HRMS > Users & Roles and /ess).
+      // Username is unique platform-wide, so no company reference needed.
+      var hrResp=await fetch(apiBase()+'/hr/login',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({username:email,password:pwd})
+      });
+      var hrData=await hrResp.json();
+      if(hrResp.ok&&hrData.access_token){
+        localStorage.setItem('taxflow_token',hrData.access_token);
+        localStorage.setItem('taxflow_principal_kind','employee');
+        window.location.replace('/hrms');
+        return;
+      }
+      err.textContent=data.detail||'Incorrect email or password.';
+      err.style.display='block';
+      btn.disabled=false;btn.textContent='Sign In';
     }catch(e){
       err.textContent='Cannot reach server. Please try again.';
       err.style.display='block';

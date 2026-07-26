@@ -117,7 +117,30 @@ function goBack(){
   restoreNavState(previous);
 }
 
+// Direct-navigation guard for HRMS sub-users (Employee principals with a
+// restricted role) — blocks go()/goHrmsTab() calls reaching a module the
+// current role's permissions don't grant :view for (URL hash tampering,
+// back button, stale bookmarks). This is UI politeness only: the real
+// control is the backend 403 on every underlying API call — a user who
+// bypasses this via devtools still gets no data. window.HRMS_ALLOWED_MODULES
+// is populated by applyHrmsPermissionNav() (hrms.html); until it's set (or
+// for a User/admin principal), navigation is never blocked.
+function _hrmsNavAllowed(matchSubstr){
+  if(!window.HRMS_STANDALONE||window.HRMS_IS_ADMIN!==false||!window.HRMS_ALLOWED_MODULES)return true;
+  const navs=[...document.querySelectorAll('.sb .nav[data-module]')].filter(n=>(n.getAttribute('onclick')||'').includes(matchSubstr));
+  if(!navs.length)return true; // not a sidebar-gated destination — don't block
+  return navs.some(n=>window.HRMS_ALLOWED_MODULES.has(n.getAttribute('data-module')));
+}
+function _hrmsBlockNav(){
+  toast("You don't have access to this module — contact your administrator",'warn');
+}
+
 function go(page){
+  // 'staff' and 'hrms-ext' are shared containers for several differently-
+  // permissioned tabs (Employees vs HR Workflow; Performance/Training/
+  // Assets) — gating them here would block a legitimately-permitted tab's
+  // own goHrmsTab()/goHrmsExtTab() call, which already guards itself below.
+  if(page!=='staff'&&page!=='hrms-ext'&&!_hrmsNavAllowed(`go('${page}')`)){_hrmsBlockNav();return;}
   if(page==='payments'){
     go('bank');
     setTimeout(()=>{
@@ -271,6 +294,7 @@ function closeSidebar(){
 
 function goHrmsTab(n,id){
   if(window.HRMS_STANDALONE){
+    if(!_hrmsNavAllowed(`goHrmsTab(${n},'${id}')`)){_hrmsBlockNav();return;}
     const tab=document.querySelector('#page-staff .tab:nth-child('+n+')');
     if(tab)stab(tab,id);
     go('staff');
@@ -283,6 +307,7 @@ function goHrmsTab(n,id){
 // Management/ESS Portal/Manager Portal) instead of #page-staff.
 function goHrmsExtTab(n,id){
   if(window.HRMS_STANDALONE){
+    if(!_hrmsNavAllowed(`goHrmsExtTab(${n},'${id}')`)){_hrmsBlockNav();return;}
     const tab=document.querySelector('#page-hrms-ext .tab:nth-child('+n+')');
     if(tab)stab(tab,id);
     go('hrms-ext');
@@ -367,7 +392,7 @@ function showM(id){
   if(id==='m-emp'&&!document.getElementById('emp-id')?.value)setFieldValue(document.getElementById('emp-id'),nextEmployeeId());
   if(id==='m-edit-shift')populateRotaEditTypeSelect();
   if(id==='m-payment')setTimeout(()=>syncPaymentFormOptions(),0);
-  if(id==='m-leave')populateHrEmployeeSelect('leave-employee');
+  if(id==='m-leave')populateLeaveEmployeeSelect();
   if(id==='m-loan')populateHrEmployeeSelect('loan-employee');
   if(id==='m-loan-advance')populateHrEmployeeSelect('advance-employee');
   if(id==='m-ot')populateHrEmployeeSelect('ot-employee-sel');
@@ -2178,7 +2203,7 @@ async function exitImpersonation(){
 async function ensureBackendSession(){
   if(localStorage.getItem('taxflow_token'))return true;
   const host=window.location.hostname||'127.0.0.1';
-  if(['localhost','127.0.0.1','::1',''].includes(host)){
+  if(['localhost','127.0.0.1','::1',''].includes(host)&&localStorage.getItem('taxflow_principal_kind')!=='employee'){
     return loginLocalBackend();
   }
   showLoginOverlay();
@@ -2186,6 +2211,10 @@ async function ensureBackendSession(){
 }
 
 async function loginLocalBackend(){
+  // Never auto-relog as the seed admin for an employee/sub-user session — that
+  // would silently escalate a permission-limited sub-user to full admin on
+  // every dev-environment 401, masking real RBAC bugs during testing.
+  if(localStorage.getItem('taxflow_principal_kind')==='employee')return false;
   const host=window.location.hostname||'127.0.0.1';
   if(!['localhost','127.0.0.1','::1',''].includes(host))return false;
   const loginUrls=[`${apiBaseUrl()}/auth/login`,`${localApiBaseUrl()}/auth/login`].filter((url,index,self)=>self.indexOf(url)===index);
@@ -2225,7 +2254,12 @@ async function authenticatedFetch(url,options={}){
   await ensureBackendSession();
   const requestOptions={...options,headers:{...backendHeaders(),...(options.headers||{})}};
   let response=await fetchWithBackendFallback(url,requestOptions);
-  if(response.status===401||response.status===403){
+  // 401 = invalid/expired session -> re-authenticate. 403 = valid session,
+  // insufficient permission for THIS call -> must NOT clear the token or
+  // force a re-login; a permission-limited sub-user hitting one 403 would
+  // otherwise get logged out (or, in dev, silently re-escalated to the
+  // seed admin) the instant any permission check correctly denies them.
+  if(response.status===401){
     localStorage.removeItem('taxflow_token');
     const relogged=await loginLocalBackend();
     if(relogged){
@@ -7376,7 +7410,9 @@ function hydrateFromServer(){
         renderRotaBoards();
         await _yield();
         renderStats.overtimeRequests=renderRecordList(_deferred2.overtimeRequests,renderOTRecord,'overtime request');
-        renderStats.leaveRequests=renderRecordList(_deferred2.leaveRequests,renderLeaveRecord,'leave request');
+        // Leave requests are now backed by the real leave_requests table
+        // (see /api/v1/leave/*) — loaded on demand by loadLeaveRequests()
+        // when the Leave Management tab is opened, not from this bootstrap blob.
         renderStats.attendanceCorrections=renderRecordList(_deferred2.attendanceCorrections,renderCorrectionRecord,'correction');
         renderStats.employeeLoans=renderRecordList(_deferred2.employeeLoans,renderLoanRecord,'loan');
         renderStats.salaryAdvances=renderRecordList(_deferred2.salaryAdvances,renderLoanAdvanceRecord,'salary advance');
@@ -15103,59 +15139,107 @@ function refreshHrmsDashboard(){
   if(fill2)fill2.style.width=(certCount>0?Math.min(100,certCount*10):0)+'%';
 }
 
-function approveLeave(btn){
-  const row=btn.closest('tr');
-  row.querySelector('td:nth-child(6)').innerHTML='<span class="b b-g">Approved</span>';
-  row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm">View</button>';
-  toast('Leave approved ✓','ok');
-  const id=row.dataset.recordId;
-  if(id)saveServer('leaveRequests',{id,status:'Approved'});
-  audit('Leave approved',row.children[0]?.textContent||'','Approved');
-  scheduleIdleTask(updateLeaveBalance,100);
-}
-function rejectLeave(btn){
-  const row=btn.closest('tr');
-  row.querySelector('td:nth-child(6)').innerHTML='<span class="b b-r">Rejected</span>';
-  row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm">View</button>';
-  toast('Leave rejected','warn');
-  const id=row.dataset.recordId;
-  if(id)saveServer('leaveRequests',{id,status:'Rejected'});
-  audit('Leave rejected',row.children[0]?.textContent||'','Rejected');
-  scheduleIdleTask(updateLeaveBalance,100);
+// -- LEAVE MANAGEMENT ------------------------------------------------------
+// Backed by the real leave_requests table (backend/app/routers/leave.py),
+// not the generic app-data JSON bridge — approvals here actually persist
+// and feed the Leave Balance summary from real data, not scraped DOM rows.
+let _leaveRequestsCache=[];
+
+async function populateLeaveEmployeeSelect(){
+  const sel=document.getElementById('leave-employee');
+  if(!sel)return;
+  sel.innerHTML='<option value="">Loading employees…</option>';
+  try{
+    const r=await fetch(`${apiBaseUrl()}/payroll/employees`,{headers:backendHeaders()});
+    const employees=r.ok?await r.json():[];
+    sel.innerHTML='<option value="">— Select Employee —</option>'+
+      employees.map(e=>`<option value="${escapeHtml(e.id)}">${escapeHtml(e.full_name)}</option>`).join('');
+  }catch(e){sel.innerHTML='<option value="">Failed to load employees</option>';}
 }
 
-function saveLeaveRequest(){
-  const employee=document.getElementById('leave-employee')?.value.trim()||'';
-  const type=document.getElementById('leave-type')?.value.trim()||'';
+async function loadLeaveRequests(){
+  const tbody=document.getElementById('leave-tbody');
+  if(tbody)tbody.innerHTML='<tr><td colspan="7" class="loading" style="text-align:center;color:var(--text3);padding:20px">Loading…</td></tr>';
+  try{
+    const r=await fetch(`${apiBaseUrl()}/leave/requests`,{headers:backendHeaders()});
+    _leaveRequestsCache=r.ok?await r.json():[];
+    renderLeaveTable();
+    scheduleIdleTask(updateLeaveBalance,100);
+  }catch(e){
+    if(tbody)tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--red);padding:20px">Failed to load leave requests.</td></tr>';
+  }
+}
+
+function renderLeaveTable(){
+  const tbody=document.getElementById('leave-tbody');
+  if(!tbody)return;
+  if(!_leaveRequestsCache.length){
+    tbody.innerHTML='<tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">No leave requests yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML=_leaveRequestsCache.map(rec=>{
+    const statusCls=rec.status==='approved'?'b-g':rec.status==='rejected'?'b-r':'b-a';
+    const typeCls={Annual:'b-a',Sick:'b-t',Emergency:'b-p',Unpaid:'b-gray',Hajj:'b-b'}[rec.leave_type?.replace(' Leave','')]||'b-b';
+    const actions=rec.status==='pending'
+      ?`<div class="flx"><button class="btn btn-success btn-sm" onclick="approveLeave('${escapeHtml(rec.id)}')">✓</button><button class="btn btn-danger btn-sm" onclick="rejectLeave('${escapeHtml(rec.id)}')">✕</button></div>`
+      :`<span class="b ${statusCls}" style="text-transform:capitalize">${escapeHtml(rec.status)}</span>`;
+    return `<tr data-record-id="${escapeHtml(rec.id)}">
+      <td>${escapeHtml(rec.employee_name)}</td>
+      <td><span class="b ${typeCls}">${escapeHtml(rec.leave_type?.replace(' Leave','')||rec.leave_type)}</span></td>
+      <td>${escapeHtml(rec.start_date)}</td>
+      <td>${escapeHtml(rec.end_date)}</td>
+      <td>${rec.days||'—'}</td>
+      <td><span class="b ${statusCls}" style="text-transform:capitalize">${escapeHtml(rec.status)}</span></td>
+      <td>${actions}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function approveLeave(id){
+  try{
+    const r=await fetch(`${apiBaseUrl()}/leave/requests/${id}/approve`,{method:'POST',headers:backendHeaders()});
+    if(r.ok){
+      toast('Leave approved ✓','ok');
+      audit('Leave approved',id,'Approved');
+      loadLeaveRequests();
+    }else{const d=await r.json().catch(()=>({}));toast(d.detail||'Failed to approve','err');}
+  }catch(e){toast('Cannot reach server','err');}
+}
+
+async function rejectLeave(id){
+  try{
+    const r=await fetch(`${apiBaseUrl()}/leave/requests/${id}/reject`,{method:'POST',headers:backendHeaders()});
+    if(r.ok){
+      toast('Leave rejected','warn');
+      audit('Leave rejected',id,'Rejected');
+      loadLeaveRequests();
+    }else{const d=await r.json().catch(()=>({}));toast(d.detail||'Failed to reject','err');}
+  }catch(e){toast('Cannot reach server','err');}
+}
+
+async function saveLeaveRequest(){
+  const employeeId=document.getElementById('leave-employee')?.value||'';
+  const leaveType=document.getElementById('leave-type')?.value.trim()||'';
   const from=document.getElementById('leave-from')?.value||'';
   const to=document.getElementById('leave-to')?.value||'';
   const reason=document.getElementById('leave-reason')?.value.trim()||'';
-  if(!employee||!from||!to){toast('Employee, From and To dates are required','warn');return;}
-  const fromDate=new Date(from);const toDate=new Date(to);
-  const days=Math.max(1,Math.round((toDate-fromDate)/(1000*60*60*24))+1);
-  const record={id:`LVE-${Date.now()}`,employee,type,from,to,days,reason,status:'Pending',submitted:new Date().toISOString()};
-  renderLeaveRecord(record);
-  saveServer('leaveRequests',record);
-  closeM('m-leave');
-  document.getElementById('leave-reason').value='';
-  toast('Leave request submitted ✓','ok');
-  audit('Leave request submitted',employee,'Pending');
-  scheduleIdleTask(updateLeaveBalance,100);
-}
-
-function renderLeaveRecord(rec){
-  const tbody=document.getElementById('leave-tbody');
-  if(!tbody)return;
-  if(tbody.querySelector(`[data-record-id="${CSS.escape(rec.id)}"]`))return;
-  const statusCls=rec.status==='Approved'?'b-g':rec.status==='Rejected'?'b-r':'b-a';
-  const typeCls={Annual:'b-a',Sick:'b-t',Emergency:'b-p',Unpaid:'b-gray',Hajj:'b-b'}[rec.type?.replace(' Leave','')]||'b-b';
-  const actions=rec.status==='Pending'
-    ?`<div class="flx"><button class="btn btn-success btn-sm" onclick="approveLeave(this)">✓</button><button class="btn btn-danger btn-sm" onclick="rejectLeave(this)">✕</button></div>`
-    :`<button class="btn btn-g btn-sm">View</button>`;
-  const row=document.createElement('tr');
-  row.dataset.recordId=rec.id;
-  row.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td><span class="b ${typeCls}">${escapeHtml(rec.type?.replace(' Leave','')||rec.type)}</span></td><td>${escapeHtml(rec.from)}</td><td>${escapeHtml(rec.to)}</td><td>${rec.days||'—'}</td><td><span class="b ${statusCls}">${escapeHtml(rec.status)}</span></td><td>${actions}</td>`;
-  tbody.prepend(row);
+  if(!employeeId||!from||!to){toast('Employee, From and To dates are required','warn');return;}
+  if(to<from){toast('To date cannot be before From date','warn');return;}
+  try{
+    const r=await fetch(`${apiBaseUrl()}/leave/requests`,{method:'POST',headers:backendHeaders(),body:JSON.stringify({
+      employee_id:employeeId,leave_type:leaveType,start_date:from,end_date:to,reason:reason||null,
+    })});
+    if(r.ok){
+      closeM('m-leave');
+      document.getElementById('leave-reason').value='';
+      toast('Leave request submitted ✓','ok');
+      audit('Leave request submitted',employeeId,'Pending');
+      loadLeaveRequests();
+    }else{
+      const d=await r.json().catch(()=>({}));
+      toast(d.detail||'Failed to submit leave request','err');
+    }
+  }catch(e){toast('Cannot reach server','err');}
 }
 
 // ── Leave Calendar ────────────────────────────────────────────────────────────
@@ -15191,8 +15275,8 @@ function renderLeaveCalendar(){
     const type=cells[1]?.textContent.trim();
     const from=cells[2]?.textContent.trim();
     const to=cells[3]?.textContent.trim();
-    const status=cells[5]?.textContent.trim()||'';
-    if(status==='Rejected')return;
+    const status=(cells[5]?.textContent.trim()||'').toLowerCase();
+    if(status==='rejected')return;
     if(!emp||!from||!to)return;
     if(!empLeave[emp])empLeave[emp]={};
     const d=new Date(from);
@@ -15254,8 +15338,8 @@ function updateLeaveBalance(){
     if(cells.length<6)return;
     const emp=cells[0]?.textContent.trim();
     const days=parseInt(cells[4]?.textContent||'0')||0;
-    const status=cells[5]?.textContent.trim();
-    if(status==='Rejected'||!emp)return;
+    const status=(cells[5]?.textContent.trim()||'').toLowerCase();
+    if(status==='rejected'||!emp)return;
     usedMap[emp]=(usedMap[emp]||0)+days;
   });
   tbody.innerHTML='';

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import Principal, get_current_principal, get_current_user
 from app.limiter import limiter
 from pydantic import BaseModel
 
@@ -74,6 +74,34 @@ def me(
             if impersonator:
                 current_user.impersonated_by = {"id": impersonator.id, "email": impersonator.email}
     return current_user
+
+
+class WhoAmIOut(BaseModel):
+    kind: str  # "user" | "employee"
+    id: str
+    company_id: str
+    display_name: str
+    email: str | None = None
+    is_admin: bool
+    permissions: list[str] = []
+    role_name: str | None = None
+
+
+@router.get("/whoami", response_model=WhoAmIOut)
+def whoami(principal: Principal = Depends(get_current_principal)) -> WhoAmIOut:
+    """Identity check that works for either login path (admin User or HRMS
+    Employee sub-user) — the one call the frontend makes to decide what to
+    show, instead of guessing which of /auth/me or /hr/me applies."""
+    return WhoAmIOut(
+        kind=principal.kind,
+        id=principal.user.id if principal.user else principal.employee.id,
+        company_id=principal.company_id,
+        display_name=principal.display_name,
+        email=principal.user.email if principal.user else None,
+        is_admin=principal.is_admin,
+        permissions=sorted(principal.permissions),
+        role_name=principal.role_name,
+    )
 
 
 class TrialRequestIn(BaseModel):

@@ -28,7 +28,7 @@ from starlette.concurrency import run_in_threadpool
 import app.cache as cache
 from app.config import get_settings
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import Principal, get_current_principal, get_current_user
 from app.limiter import limiter
 from app.module_integration import sync_purchase_accounting, sync_sales_invoice_accounting
 from app.models import (
@@ -246,14 +246,46 @@ def list_collection_records(
     }
 
 
+# Maps each HRMS sidebar module to the app-data collection(s) it reads.
+# Used to scope the bootstrap blob for an Employee principal (HRMS sub-user)
+# to only what their role can view — everything else (sales, purchases,
+# banking, accounting, audit, ...) is never returned to an Employee
+# principal, full stop, since none of those map to any HRMS module.
+_HR_COLLECTIONS_BY_MODULE: dict[str, list[str]] = {
+    "employees": ["employees"],
+    "leave": ["leaveRequests"],
+    "attendance": ["attendanceCorrections"],
+    "rota": ["rotaShifts", "rotaSwaps", "rotaApprovals", "rotaDrafts", "rotaAssignments"],
+    "overtime": ["overtimeRequests"],
+    "loans": ["employeeLoans", "salaryAdvances"],
+    "recruitment": ["jobRequisitions", "candidates"],
+    "payroll": ["payrollRuns", "payrollAdjustments"],
+}
+
+
+def _allowed_bootstrap_collections(principal: Principal) -> set[str] | None:
+    """None means unrestricted (admin User). For an Employee principal,
+    returns exactly the collections their role's module `:view` permissions
+    unlock — never the full set, regardless of how many permissions they
+    have, since only HR modules are ever eligible."""
+    if principal.is_admin:
+        return None
+    allowed: set[str] = set()
+    for module, collections in _HR_COLLECTIONS_BY_MODULE.items():
+        if principal.has(f"{module}:view"):
+            allowed.update(collections)
+    return allowed
+
+
 @router.get("")
 @limiter.limit("60/minute")
 def bootstrap(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(get_current_principal),
 ) -> dict[str, object]:
     cap = get_settings().bootstrap_record_cap
+    allowed_collections = _allowed_bootstrap_collections(principal)
     # Collections with large record counts are fetched with DB-level LIMIT to avoid
     # loading and deserializing thousands of rows that will be discarded in Python.
     _HEAVY_COLLECTIONS = {c for c, n in _BOOTSTRAP_COLLECTION_CAPS.items() if n <= 500}
@@ -262,15 +294,17 @@ def bootstrap(
     for coll, coll_cap in _BOOTSTRAP_COLLECTION_CAPS.items():
         if coll_cap > 500:
             continue  # low-cap collections handled in the bulk query below
+        if allowed_collections is not None and coll not in allowed_collections:
+            continue
         total = (
             db.query(AppDataRecord)
-            .filter(AppDataRecord.company_id == current_user.company_id, AppDataRecord.collection == coll)
+            .filter(AppDataRecord.company_id == principal.company_id, AppDataRecord.collection == coll)
             .count()
         )
         heavy_totals[coll] = total
         rows = (
             db.query(AppDataRecord)
-            .filter(AppDataRecord.company_id == current_user.company_id, AppDataRecord.collection == coll)
+            .filter(AppDataRecord.company_id == principal.company_id, AppDataRecord.collection == coll)
             .order_by(AppDataRecord.created_at.desc())
             .limit(coll_cap)
             .all()
@@ -279,16 +313,13 @@ def bootstrap(
         heavy_results[coll] = [serialize(r) for r in rows]
 
     # Bulk query for all remaining (non-heavy) collections
-    records = (
-        db.query(AppDataRecord)
-        .filter(
-            AppDataRecord.company_id == current_user.company_id,
-            AppDataRecord.collection.notin_(_HEAVY_COLLECTIONS | {"purchaseRecords"}),
-        )
-        .order_by(AppDataRecord.created_at.desc())
-        .limit(cap)
-        .all()
+    bulk_query = db.query(AppDataRecord).filter(
+        AppDataRecord.company_id == principal.company_id,
+        AppDataRecord.collection.notin_(_HEAVY_COLLECTIONS | {"purchaseRecords"}),
     )
+    if allowed_collections is not None:
+        bulk_query = bulk_query.filter(AppDataRecord.collection.in_(allowed_collections))
+    records = bulk_query.order_by(AppDataRecord.created_at.desc()).limit(cap).all()
     records.reverse()
 
     grouped: dict[str, list[dict[str, Any]]] = {**heavy_results}
@@ -308,28 +339,37 @@ def bootstrap(
 
     truncated = [c for c, total in collection_totals.items() if _BOOTSTRAP_COLLECTION_CAPS.get(c) and total > _BOOTSTRAP_COLLECTION_CAPS[c]]
 
-    audit_rows = (
-        db.query(AuditLog)
-        .filter(AuditLog.company_id == current_user.company_id)
-        .order_by(AuditLog.created_at.desc())
-        .limit(50)
-        .all()
-    )
-    audit = [
-        {
-            "time": row.created_at.strftime("%d/%m/%Y, %H:%M") if row.created_at else "",
-            "user": current_user.full_name,
-            "action": row.action.replace("_", " ").title(),
-            "record": row.module,
-            "result": "Logged",
-        }
-        for row in audit_rows
-    ]
+    # Company-wide audit trail is never sent to an Employee principal —
+    # separate from the module allowlist above since it isn't collection-
+    # scoped in the same way (AuditLog is its own table, not AppDataRecord).
+    audit: list[dict[str, Any]] = []
+    if principal.is_admin:
+        audit_rows = (
+            db.query(AuditLog)
+            .filter(AuditLog.company_id == principal.company_id)
+            .order_by(AuditLog.created_at.desc())
+            .limit(50)
+            .all()
+        )
+        audit = [
+            {
+                "time": row.created_at.strftime("%d/%m/%Y, %H:%M") if row.created_at else "",
+                "user": principal.display_name,
+                "action": row.action.replace("_", " ").title(),
+                "record": row.module,
+                "result": "Logged",
+            }
+            for row in audit_rows
+        ]
 
     invoice_layout = grouped.get("invoiceLayout", [{}])[-1] if grouped.get("invoiceLayout") else None
 
-    from app.routers.companies import _resolve_company
-    company = _resolve_company(current_user, db)
+    if principal.is_admin:
+        from app.routers.companies import _resolve_company
+        company = _resolve_company(principal.user, db)
+    else:
+        from app.models import Company
+        company = db.query(Company).filter(Company.id == principal.company_id).first()
     company_data: dict[str, object] | None = None
     if company:
         company_data = {
@@ -357,7 +397,7 @@ def bootstrap(
         **grouped,
         "audit": audit,
         "invoiceLayout": invoice_layout,
-        "user": {"name": current_user.full_name, "role": current_user.role},
+        "user": {"name": principal.display_name, "role": principal.role_name if not principal.is_admin else (principal.user.role if principal.user else "admin")},
         "company": company_data,
     }
     return {"ok": True, "data": data, "truncated_collections": truncated}

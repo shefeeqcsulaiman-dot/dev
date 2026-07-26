@@ -24,7 +24,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import Principal, get_current_user, require_principal_permission
 from app.limiter import limiter
 from app.models import AttendancePunch, BiometricDevice, User
 from app.security import verify_password, hash_password
@@ -501,12 +501,12 @@ async def import_csv(
 @router.get("/today")
 def attendance_today(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(require_principal_permission("attendance:view")),
 ) -> dict[str, Any]:
     """Return today's punch-in count for the Present Today KPI."""
     today = _local_today().isoformat()
     rows = db.query(AttendancePunch).filter(
-        AttendancePunch.company_id == current_user.company_id,
+        AttendancePunch.company_id == principal.company_id,
         AttendancePunch.punch_date == today,
         AttendancePunch.direction == "in",
     ).all()
@@ -522,7 +522,7 @@ def attendance_today(
 def attendance_trend(
     days: int = 30,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(require_principal_permission("attendance:view")),
 ) -> dict[str, Any]:
     """Return daily punch-in unique-employee counts for the last N days (for Attendance Trend chart)."""
     days = max(7, min(days, 90))
@@ -533,7 +533,7 @@ def attendance_trend(
         AttendancePunch.punch_date,
         func.count(func.distinct(AttendancePunch.employee_id)).label("cnt"),
     ).filter(
-        AttendancePunch.company_id == current_user.company_id,
+        AttendancePunch.company_id == principal.company_id,
         AttendancePunch.punch_date >= start.isoformat(),
         AttendancePunch.direction == "in",
     ).group_by(AttendancePunch.punch_date).all()
@@ -548,12 +548,12 @@ def attendance_trend(
 def recent_punches(
     limit: int = 50,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(require_principal_permission("attendance:view")),
 ) -> dict[str, Any]:
     """Return the most recent punch records for the sync activity log."""
     limit = max(1, min(limit, 200))
     rows = db.query(AttendancePunch).filter(
-        AttendancePunch.company_id == current_user.company_id,
+        AttendancePunch.company_id == principal.company_id,
     ).order_by(AttendancePunch.punch_time.desc()).limit(limit).all()
     return {"punches": [
         {
@@ -573,7 +573,7 @@ def recent_punches(
 @router.get("/summary")
 def attendance_summary(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(require_principal_permission("attendance:view")),
 ) -> dict[str, Any]:
     """Recent 7-day attendance overview."""
     today = _local_today()
@@ -582,7 +582,7 @@ def attendance_summary(
         AttendancePunch.punch_date,
         func.count(func.distinct(AttendancePunch.employee_id)).label("cnt"),
     ).filter(
-        AttendancePunch.company_id == current_user.company_id,
+        AttendancePunch.company_id == principal.company_id,
         AttendancePunch.punch_date >= week_start,
         AttendancePunch.direction == "in",
     ).group_by(AttendancePunch.punch_date).all()

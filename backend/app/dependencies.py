@@ -6,6 +6,16 @@ from app.database import get_db
 from app.models import User
 from app.security import is_impersonation_token_revoked, user_id_from_token
 
+# Re-exported so routers keep importing all request-auth dependencies from
+# this one conventional module, whether the route needs admin-only,
+# employee-only, or either (Principal-based) auth.
+from app.auth_principal import (  # noqa: F401
+    Principal,
+    get_current_employee,
+    get_current_principal,
+    require_permission,
+    require_principal_permission,
+)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 

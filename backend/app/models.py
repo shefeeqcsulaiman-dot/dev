@@ -1055,6 +1055,27 @@ class EmployeeLocationLog(Base, TimestampMixin):
     battery: Mapped[int | None] = mapped_column(Integer)
 
 
+class LeaveRequest(Base, TimestampMixin):
+    __tablename__ = "leave_requests"
+    __table_args__ = (Index("ix_leave_requests_company_employee", "company_id", "employee_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    employee_id: Mapped[str] = mapped_column(ForeignKey("employees.id"), index=True, nullable=False)
+    leave_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    start_date: Mapped[str] = mapped_column(String(20), nullable=False)
+    end_date: Mapped[str] = mapped_column(String(20), nullable=False)
+    days: Mapped[int] = mapped_column(Integer, default=1)
+    reason: Mapped[str | None] = mapped_column(String(500))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    approved_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    # Separate FK for an Employee-principal approver (HRMS sub-user) — kept
+    # distinct from approved_by (-> users.id) rather than relaxing that FK,
+    # since exactly one of the two is ever set depending on who approved.
+    approved_by_employee_id: Mapped[str | None] = mapped_column(ForeignKey("employees.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ApprovalMatrixRecord(Base, TimestampMixin):
     __tablename__ = "approval_matrix_records"
 

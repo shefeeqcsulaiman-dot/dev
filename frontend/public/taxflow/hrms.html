@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=20260721e" as="style">
-<link rel="preload" href="src/app.js?v=20260726c" as="script">
+<link rel="preload" href="src/app.js?v=20260726d" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=20260721e">
 <style>
@@ -174,67 +174,67 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   </div>
 
   <div class="sb-section" style="padding-bottom:4px">
-    <div class="nav on" id="nav-hrms" onclick="go('hrms')">
+    <div class="nav on" id="nav-hrms" data-module="dashboard" onclick="go('hrms')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>
       Dashboard
     </div>
-    <div class="nav" data-module="Employees" onclick="go('staff')">
+    <div class="nav" data-module="employees" onclick="go('staff')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><circle cx="12.5" cy="5" r="1.8"/><path d="M14.5 13c0-2-1.3-3-2.5-3.5"/></svg>
       Employees
     </div>
-    <div class="nav" data-module="Attendance" onclick="goHrmsTab(2,'hr-att')">
+    <div class="nav" data-module="attendance" onclick="goHrmsTab(2,'hr-att')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2.5 1.5"/></svg>
       Attendance
     </div>
-    <div class="nav" data-module="Attendance" onclick="go('rota')">
+    <div class="nav" data-module="rota" onclick="go('rota')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1.5v3M11 1.5v3M2 6h12"/></svg>
       Rota &amp; Shift
     </div>
-    <div class="nav" data-module="Leave Management" onclick="goHrmsTab(4,'hr-leave')">
+    <div class="nav" data-module="leave" onclick="goHrmsTab(4,'hr-leave')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8c0-2.8 2.2-5 5-5s5 2.2 5 5v4H3V8z"/><path d="M1 12h14M6 3.5C6 2 7 1 8 1s2 1 2 2.5"/></svg>
       Leave
     </div>
-    <div class="nav" data-module="Payroll" onclick="go('payroll')">
+    <div class="nav" data-module="payroll" onclick="go('payroll')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6h12M5 10h3M10 10h1"/></svg>
       Payroll
     </div>
-    <div class="nav" data-module="Overtime" onclick="goHrmsTab(3,'hr-ot')">
+    <div class="nav" data-module="overtime" onclick="goHrmsTab(3,'hr-ot')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2.5 1.5"/><path d="M12 2l2-1.5"/></svg>
       Overtime
     </div>
-    <div class="nav" data-module="Loans & Advances" onclick="goHrmsTab(6,'hr-loans')">
+    <div class="nav" data-module="loans" onclick="goHrmsTab(6,'hr-loans')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="9" rx="1"/><path d="M2 7.5h12M8 7.5V4M6 11h4"/></svg>
       Loans &amp; Advances
     </div>
-    <div class="nav" data-module="Recruitment" onclick="go('recruitment')">
+    <div class="nav" data-module="recruitment" onclick="go('recruitment')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="5" r="3"/><path d="M1 14c0-3 2.5-5 6-5s6 2 6 5"/><path d="M13 2l1 1-2.5 2.5-1-1"/></svg>
       Recruitment (ATS)
     </div>
-    <div class="nav" data-module="Performance" onclick="go('hrms-ext')">
+    <div class="nav" data-module="performance" onclick="go('hrms-ext')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2l1.2 3.5H13l-2.9 2 1.1 3.5L8 9.2l-3.2 1.8 1.1-3.5L3 5.5h3.8z"/></svg>
       Performance
     </div>
-    <div class="nav" data-module="Performance" onclick="go('hrms-ext')">
+    <div class="nav" data-module="performance" onclick="go('hrms-ext')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 13V8a5 5 0 0110 0v5M1 13h14"/><circle cx="8" cy="7" r="2"/></svg>
       Training
     </div>
-    <div class="nav" data-module="Performance" onclick="go('hrms-ext')">
+    <div class="nav" data-module="performance" onclick="go('hrms-ext')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="8" width="4" height="5" rx="1"/><rect x="6" y="5.5" width="4" height="7.5" rx="1"/><rect x="10.5" y="3" width="4" height="10" rx="1"/></svg>
       Assets
     </div>
-    <div class="nav" data-module="Employees" onclick="go('staff')">
+    <div class="nav" data-module="hr_workflow" onclick="go('staff')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 4h14M1 8h9M1 12h6"/><circle cx="13" cy="11" r="2.5"/><path d="M13 9.5v1.5l1 1"/></svg>
       HR Workflow
     </div>
-    <div class="nav" data-module="Payroll" onclick="go('payroll')">
+    <div class="nav" data-module="reports" onclick="go('payroll')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12l4-4 3 3 5-6"/><path d="M10 6h4v4"/></svg>
       Reports &amp; Analytics
     </div>
-    <div class="nav" onclick="go('hrms-ai')">
+    <div class="nav" data-module="ai_insights" onclick="go('hrms-ai')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2c1.5 0 3 1 3.5 2.5S11 8 8 9c-3 1-3.5 2-3.5 3.5"/><circle cx="8" cy="13.5" r=".8" fill="currentColor" stroke="none"/></svg>
       AI Insights
     </div>
-    <div class="nav" data-module="HR Settings" id="nav-hr-settings" onclick="go('hr-settings')">
+    <div class="nav" data-module="hr_settings" id="nav-hr-settings" onclick="go('hr-settings')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.5 1.5M11.3 11.3l1.5 1.5M3.2 12.8l1.5-1.5M11.3 4.7l1.5-1.5"/></svg>
       HR Settings
     </div>
@@ -804,7 +804,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="tab on" onclick="stab(this,'hr-emp')">Employees</div>
     <div class="tab" onclick="stab(this,'hr-att');openAttendanceCheck();refreshAttendanceToday();loadAttendanceTrend();renderHrAccessPanel()">Attendance</div>
     <div class="tab" onclick="stab(this,'hr-ot')">Overtime</div>
-    <div class="tab" onclick="stab(this,'hr-leave')">Leave Management</div>
+    <div class="tab" onclick="stab(this,'hr-leave');loadLeaveRequests()">Leave Management</div>
     <div class="tab" onclick="stab(this,'hr-corrections')">Corrections</div>
     <div class="tab" onclick="stab(this,'hr-loans')">Loans &amp; Advances</div>
     <div class="tab" onclick="stab(this,'hr-expiry');scheduleIdleTask(refreshExpiryAlerts,100)">Expiry Alerts</div>
@@ -2694,7 +2694,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260726c" defer></script>
+<script src="src/app.js?v=20260726d" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
@@ -2964,98 +2964,48 @@ function hrmsSignOut(){
   if(confirm('Sign out of HRMS?'))logout();
 }
 
-// Apply role-based sidebar visibility for HRMS.
-// Reads current auth user → matches to employee record → reads their role → hides modules not in role.modules.
-// Admin / superadmin always get full access.
-async function applyHrmsModuleAccess(){
+// Apply role-based sidebar visibility for HRMS. Works for either login path
+// via GET /auth/whoami: a User principal (real TaxFlow admin) always gets
+// the full sidebar; an Employee principal (HRMS sub-user, e.g. "Junior HR
+// Manager") gets it filtered to exactly the modules their role's
+// permissions grant `:view` for. Replaces the old applyHrmsModuleAccess(),
+// which tried to match a User's email to an Employee table row and read a
+// client-only _roleList that no longer exists after this session's Roles &
+// Permissions rewrite (it never actually worked for a real employee login).
+//
+// Sets window.HRMS_PERMISSIONS/window.HRMS_IS_ADMIN so go()/goHrmsTab() can
+// block direct navigation to a hidden module without a second network call.
+async function applyHrmsPermissionNav(){
   try{
     const token=localStorage.getItem('taxflow_token');
     if(!token)return;
-    const resp=await fetch((typeof apiBaseUrl==='function'?apiBaseUrl():'/api/v1')+'/auth/me',{
-      headers:{Authorization:'Bearer '+token}
-    });
+    const base=(typeof apiBaseUrl==='function'?apiBaseUrl():'/api/v1');
+    const resp=await fetch(base+'/auth/whoami',{headers:{Authorization:'Bearer '+token}});
     if(!resp||!resp.ok)return;
-    const user=await resp.json();
-    const sysRole=(user.role||'admin').toLowerCase();
-    // Admins and superadmins get full sidebar
-    if(sysRole==='admin'||sysRole==='superadmin')return;
+    const who=await resp.json();
 
-    // Update sidebar name/avatar with real user info
-    const displayName=user.name||user.email||'User';
+    const displayName=who.display_name||who.email||'User';
     ['hrms-sb-name','hrms-top-name'].forEach(function(id){
       var el=document.getElementById(id);if(el)el.textContent=displayName;
     });
     ['hrms-sb-av','hrms-top-av'].forEach(function(id){
       var el=document.getElementById(id);if(el)el.textContent=(displayName[0]||'U').toUpperCase();
     });
-
-    // Find matching employee by email in the employee table
-    const email=(user.email||'').toLowerCase();
-    const empRows=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')];
-    let matchedRoleId=null;
-    let matchedRoleName=null;
-    for(var i=0;i<empRows.length;i++){
-      var row=empRows[i];
-      var empData=null;
-      try{empData=row.dataset.employee?JSON.parse(row.dataset.employee):null;}catch(e){}
-      if(!empData){
-        // fallback: read cells (less reliable for email)
-        empData={email:(row.children[1]?.querySelector('[data-email]')?.dataset?.email||'').toLowerCase()};
-      }
-      if(email&&empData.email&&empData.email.toLowerCase()===email){
-        matchedRoleId=empData.role_id||empData.role||'';
-        matchedRoleName=empData.role_name||'';
-        break;
-      }
-    }
-
-    // If no match by email, check HR Users table (_hrUsers) by username match
-    if(!matchedRoleId&&typeof _hrUsers!=='undefined'){
-      var hrUser=_hrUsers.find(function(u){
-        return (u.username||'').toLowerCase()===email||
-               (u.userId||'').toLowerCase()===email;
-      });
-      if(hrUser){
-        // find employee by ID in table
-        for(var j=0;j<empRows.length;j++){
-          var r=empRows[j];
-          var ed=null;
-          try{ed=r.dataset.employee?JSON.parse(r.dataset.employee):null;}catch(e){}
-          if(ed&&(ed.id===hrUser.employeeId||ed.name===hrUser.employeeName)){
-            matchedRoleId=ed.role_id||ed.role||'';
-            matchedRoleName=ed.role_name||'';
-            break;
-          }
-        }
-      }
-    }
-
-    if(!matchedRoleId&&!matchedRoleName)return; // no employee match — keep all visible
-
-    // Find role in _roleList
-    var roleObj=null;
-    if(typeof _roleList!=='undefined'&&_roleList.length){
-      roleObj=_roleList.find(function(r){
-        return r.id===matchedRoleId||r.roleName===matchedRoleName;
-      });
-    }
-    if(!roleObj)return; // role not found — keep all visible
-
-    var allowedMods=roleObj.modules||[];
-    if(allowedMods.indexOf('Full Access')>=0)return; // full access role
-
-    // Update the role chip in sidebar
     var roleChip=document.querySelector('.hm-user-role');
-    if(roleChip)roleChip.textContent=roleObj.roleName||'';
+    if(roleChip&&who.role_name)roleChip.textContent=who.role_name;
 
-    var allowed=new Set(allowedMods);
-    // Hide sidebar nav items whose data-module isn't in the allowed set
+    window.HRMS_IS_ADMIN=!!who.is_admin;
+    window.HRMS_PERMISSIONS=who.permissions||[];
+    if(who.is_admin)return; // real TaxFlow admins/superadmins get the full sidebar
+
+    var allowed=new Set(window.HRMS_PERMISSIONS.filter(function(p){return p.endsWith(':view');}).map(function(p){return p.split(':')[0];}));
+    window.HRMS_ALLOWED_MODULES=allowed;
     document.querySelectorAll('.sb .nav[data-module]').forEach(function(nav){
       var mod=nav.getAttribute('data-module');
       nav.style.display=allowed.has(mod)?'':'none';
     });
   }catch(e){
-    console.warn('[HrmsModuleAccess]',e);
+    console.warn('[HrmsPermissionNav]',e);
   }
 }
 
@@ -3132,8 +3082,10 @@ document.addEventListener('DOMContentLoaded',function(){
     if(typeof refreshHrmsKpis==='function')refreshHrmsKpis();
     if(typeof refreshHrmsDashboard==='function')refreshHrmsDashboard();
   },2500);
-  // Apply role-based module access after data is fully hydrated (~3s)
-  setTimeout(function(){applyHrmsModuleAccess();},3000);
+  // Apply role-based sidebar visibility as early as possible — it only
+  // needs /auth/whoami, not the hydrated employee table, so a restricted
+  // sub-user doesn't see a flash of the full sidebar before it's filtered.
+  applyHrmsPermissionNav();
 });
 </script>
 

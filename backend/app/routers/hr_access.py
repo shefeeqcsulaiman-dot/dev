@@ -10,14 +10,20 @@ import math
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from jose import JWTError, jwt
+from fastapi import APIRouter, Depends, HTTPException, status
+from jose import jwt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.auth_principal import (
+    Principal,
+    _role_permission_keys,
+    get_current_employee,
+    require_permission,
+    require_principal_permission,
+)
 from app.config import get_settings
 from app.database import get_db
-from app.dependencies import get_current_user
 from app.models import (
     AttendanceSession,
     CompanyLocation,
@@ -27,7 +33,6 @@ from app.models import (
     Permission,
     Role,
     RolePermission,
-    User,
 )
 from app.security import pwd_context
 
@@ -41,21 +46,56 @@ _AUTO_CHECKOUT_GRACE_MINUTES = 5
 
 _PERMISSION_CATALOG: dict[str, list[str]] = {
     "hr": ["manage_roles", "manage_locations", "manage_employees", "view_all_attendance"],
-    "payroll": ["run_payroll", "view_payroll"],
-    "attendance": ["check_in_out", "view_own_attendance"],
-    "dashboard": ["admin", "hr", "payroll", "manager", "employee"],
+    # "view"/"edit" merged into the pre-existing payroll/attendance/dashboard
+    # groups (rather than a separate "module_payroll" etc.) so the Add
+    # Custom Role modal shows one "Payroll" section, not two.
+    "payroll": ["run_payroll", "view_payroll", "view", "edit"],
+    "attendance": ["check_in_out", "view_own_attendance", "view", "edit"],
+    "dashboard": ["admin", "hr", "payroll", "manager", "employee", "view"],
+    # Module-level view/edit/delete matrix backing the full HRMS sidebar —
+    # see docs/hrms-architecture.md. "delete" is omitted for modules with no
+    # delete action today (attendance, payroll) rather than adding a
+    # misleading checkbox with nothing behind it. Performance/Training/Assets
+    # share one "performance" key since they're one destination page
+    # (go('hrms-ext')) in the sidebar today.
+    "employees": ["view", "edit", "delete"],
+    "rota": ["view", "edit", "delete"],
+    "leave": ["view", "edit", "delete"],
+    "overtime": ["view", "edit", "delete"],
+    "loans": ["view", "edit", "delete"],
+    "recruitment": ["view", "edit", "delete"],
+    "performance": ["view", "edit", "delete"],
+    "hr_workflow": ["view", "edit", "delete"],
+    "reports": ["view"],
+    "ai_insights": ["view"],
+    "hr_settings": ["view", "edit", "delete"],
 }
 
 _DEFAULT_ROLES: dict[str, list[str]] = {
     "Administrator": ["*"],  # all permissions
-    "HR Manager": ["hr:manage_roles", "hr:manage_locations", "hr:manage_employees",
-                    "hr:view_all_attendance", "attendance:check_in_out", "attendance:view_own_attendance",
-                    "dashboard:hr"],
-    "Payroll Officer": ["payroll:run_payroll", "payroll:view_payroll", "attendance:check_in_out",
-                         "attendance:view_own_attendance", "dashboard:payroll"],
-    "Manager": ["hr:view_all_attendance", "attendance:check_in_out", "attendance:view_own_attendance",
-                "dashboard:manager"],
-    "Employee": ["attendance:check_in_out", "attendance:view_own_attendance", "dashboard:employee"],
+    "HR Manager": [
+        "hr:manage_roles", "hr:manage_locations", "hr:manage_employees", "hr:view_all_attendance",
+        "attendance:check_in_out", "attendance:view_own_attendance", "attendance:view", "attendance:edit",
+        "dashboard:hr", "dashboard:view",
+        "employees:view", "employees:edit", "employees:delete",
+        "leave:view", "leave:edit", "leave:delete",
+        "rota:view", "rota:edit", "rota:delete",
+        "hr_settings:view", "hr_settings:edit",
+    ],
+    "Payroll Officer": [
+        "payroll:run_payroll", "payroll:view_payroll", "payroll:view", "payroll:edit",
+        "attendance:check_in_out", "attendance:view_own_attendance",
+        "dashboard:payroll", "dashboard:view",
+    ],
+    "Manager": [
+        "hr:view_all_attendance", "attendance:check_in_out", "attendance:view_own_attendance", "attendance:view",
+        "dashboard:manager", "dashboard:view",
+        "employees:view", "leave:view", "leave:edit", "rota:view",
+    ],
+    "Employee": [
+        "attendance:check_in_out", "attendance:view_own_attendance",
+        "dashboard:employee", "dashboard:view",
+    ],
 }
 
 
@@ -97,18 +137,6 @@ def _ensure_default_roles(db: Session, company_id: str) -> dict[str, Role]:
     if changed:
         db.commit()
     return roles
-
-
-def _role_permission_keys(db: Session, role: Role | None) -> set[str]:
-    if not role:
-        return set()
-    rows = (
-        db.query(Permission)
-        .join(RolePermission, RolePermission.permission_id == Permission.id)
-        .filter(RolePermission.role_id == role.id)
-        .all()
-    )
-    return {f"{p.module}:{p.permission_name}" for p in rows}
 
 
 # ── geofencing ──────────────────────────────────────────────────────────────
@@ -171,50 +199,6 @@ def _create_employee_token(employee_id: str, role_id: str | None) -> str:
     if role_id:
         payload["rid"] = role_id
     return jwt.encode(payload, settings.secret_key, algorithm="HS256")
-
-
-def _employee_id_from_token(token: str) -> str | None:
-    try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
-        sub: str | None = payload.get("sub")
-        if sub and sub.startswith(_EMP_PREFIX):
-            return sub[len(_EMP_PREFIX):]
-    except JWTError:
-        pass
-    return None
-
-
-def get_current_employee(request: Request, db: Session = Depends(get_db)) -> Employee:
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
-    emp_id = _employee_id_from_token(auth[7:])
-    if not emp_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    emp = db.query(Employee).filter(Employee.id == emp_id).first()
-    if not emp:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Employee not found")
-    if not emp.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
-    emp.last_activity = datetime.now(UTC)
-    db.add(emp)
-    db.commit()
-    return emp
-
-
-def require_permission(*keys: str):
-    """Dependency factory — caller's role must grant at least one of the given permission keys."""
-    def _check(
-        request: Request,
-        db: Session = Depends(get_db),
-        emp: Employee = Depends(get_current_employee),
-    ) -> Employee:
-        role = db.get(Role, emp.role_id) if emp.role_id else None
-        granted = _role_permission_keys(db, role)
-        if not granted.intersection(keys):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not permitted")
-        return emp
-    return _check
 
 
 @router.post("/login", response_model=HrToken)
@@ -431,16 +415,22 @@ class AdminEmployeePortalOut(BaseModel):
 
 
 @router.get("/admin/permissions")
-def admin_list_permissions(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[dict]:
+def admin_list_permissions(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("hr_settings:view")),
+) -> list[dict]:
     catalog = _ensure_permission_catalog(db)
     db.commit()
     return [{"key": key, "module": p.module, "permission_name": p.permission_name} for key, p in catalog.items()]
 
 
 @router.get("/admin/roles", response_model=list[RoleOut])
-def admin_list_roles(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[RoleOut]:
-    _ensure_default_roles(db, current_user.company_id)
-    roles = db.query(Role).filter(Role.company_id == current_user.company_id).order_by(Role.role_name).all()
+def admin_list_roles(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("hr_settings:view")),
+) -> list[RoleOut]:
+    _ensure_default_roles(db, principal.company_id)
+    roles = db.query(Role).filter(Role.company_id == principal.company_id).order_by(Role.role_name).all()
     return [
         RoleOut(
             id=r.id, role_name=r.role_name, description=r.description, is_system_role=r.is_system_role,
@@ -454,15 +444,15 @@ def admin_list_roles(db: Session = Depends(get_db), current_user: User = Depends
 def admin_create_role(
     payload: RoleCreateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(require_principal_permission("hr_settings:edit")),
 ) -> RoleOut:
     catalog = _ensure_permission_catalog(db)
     role_name = payload.role_name.strip()
     if not role_name:
         raise HTTPException(status_code=400, detail="Role name is required")
-    if db.query(Role).filter(Role.company_id == current_user.company_id, Role.role_name.ilike(role_name)).first():
+    if db.query(Role).filter(Role.company_id == principal.company_id, Role.role_name.ilike(role_name)).first():
         raise HTTPException(status_code=409, detail="A role with this name already exists")
-    role = Role(company_id=current_user.company_id, role_name=role_name, description=payload.description)
+    role = Role(company_id=principal.company_id, role_name=role_name, description=payload.description)
     db.add(role)
     db.flush()
     for key in payload.permission_keys:
@@ -481,9 +471,9 @@ def admin_update_role(
     role_id: str,
     payload: RoleCreateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(require_principal_permission("hr_settings:edit")),
 ) -> RoleOut:
-    role = db.query(Role).filter(Role.id == role_id, Role.company_id == current_user.company_id).first()
+    role = db.query(Role).filter(Role.id == role_id, Role.company_id == principal.company_id).first()
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
     if role.is_system_role:
@@ -492,7 +482,7 @@ def admin_update_role(
     role_name = payload.role_name.strip()
     if not role_name:
         raise HTTPException(status_code=400, detail="Role name is required")
-    if db.query(Role).filter(Role.company_id == current_user.company_id, Role.role_name.ilike(role_name), Role.id != role.id).first():
+    if db.query(Role).filter(Role.company_id == principal.company_id, Role.role_name.ilike(role_name), Role.id != role.id).first():
         raise HTTPException(status_code=409, detail="A role with this name already exists")
     role.role_name = role_name
     role.description = payload.description
@@ -513,9 +503,9 @@ def admin_update_role(
 def admin_delete_role(
     role_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(require_principal_permission("hr_settings:delete")),
 ) -> None:
-    role = db.query(Role).filter(Role.id == role_id, Role.company_id == current_user.company_id).first()
+    role = db.query(Role).filter(Role.id == role_id, Role.company_id == principal.company_id).first()
     if not role:
         return
     if role.is_system_role:
@@ -530,11 +520,11 @@ def admin_delete_role(
 @router.get("/admin/employees", response_model=list[AdminEmployeePortalOut])
 def admin_list_employee_portal_access(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(require_principal_permission("hr_settings:view", "employees:view")),
 ) -> list[AdminEmployeePortalOut]:
     employees = (
         db.query(Employee)
-        .filter(Employee.company_id == current_user.company_id)
+        .filter(Employee.company_id == principal.company_id)
         .order_by(Employee.employee_no)
         .all()
     )
@@ -563,9 +553,9 @@ def set_employee_portal_access(
     employee_id: str,
     payload: PortalAccessIn,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(require_principal_permission("hr_settings:edit")),
 ) -> dict:
-    target = db.query(Employee).filter(Employee.id == employee_id, Employee.company_id == current_user.company_id).first()
+    target = db.query(Employee).filter(Employee.id == employee_id, Employee.company_id == principal.company_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="Employee not found")
 
@@ -592,7 +582,7 @@ def set_employee_portal_access(
     # the key at all, regardless of what value it sent.
     if "role_id" in payload.model_fields_set:
         if payload.role_id:
-            role = db.query(Role).filter(Role.id == payload.role_id, Role.company_id == current_user.company_id).first()
+            role = db.query(Role).filter(Role.id == payload.role_id, Role.company_id == principal.company_id).first()
             if not role:
                 raise HTTPException(status_code=404, detail="Role not found")
         target.role_id = payload.role_id or None
@@ -609,9 +599,9 @@ def set_employee_portal_access(
 def revoke_employee_portal_access(
     employee_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(require_principal_permission("hr_settings:delete")),
 ) -> dict:
-    target = db.query(Employee).filter(Employee.id == employee_id, Employee.company_id == current_user.company_id).first()
+    target = db.query(Employee).filter(Employee.id == employee_id, Employee.company_id == principal.company_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="Employee not found")
     # Clears login credentials rather than deleting the Employee record —
