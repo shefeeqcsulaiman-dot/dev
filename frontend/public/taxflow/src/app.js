@@ -241,7 +241,7 @@ function stab(el,target){
   if(target==='inv-stock')ensurePurchaseRecordsLoadedForStock();
   if(target==='inv-movement')loadStockMovements();
   if(String(target||'').startsWith('inv-'))setTimeout(()=>ensureInventoryBulkSelection(),80);
-  if(target==='p-records')ensurePurchaseRecordsLoaded();
+  if(target==='p-records')goToPurchaseRecordsPage(1);
   if(target==='hr-leave')scheduleIdleTask(updateLeaveBalance,50);
   if(target==='acc-voucher')prepareJournalForm();
   if(target==='acc-ledger')loadAccountingFromDb();
@@ -6421,6 +6421,79 @@ function renderPurchaseRecordList(records=[]){
     if(ref)purchaseRecordCache.set(ref,{...purchase,ref});
   });
   return renderPurchaseRecordWindow();
+}
+
+// ── Purchase Records: page-by-page Next/Previous ─────────────────────────────
+// Deliberately independent of purchaseRecordCache/purchaseRecordsOffset above
+// (those accumulate every record ever fetched, used by
+// fetchAllPurchaseRecordsForStock() for stock-level math) — this state only
+// ever holds the one page currently on screen, so Next/Previous never grows
+// the DOM past PURCHASE_PAGE_SIZE rows regardless of how many pages a user
+// clicks through.
+const _prPage={page:1,total:0,loading:false};
+
+async function goToPurchaseRecordsPage(page){
+  if(_prPage.loading||page<1)return;
+  _prPage.loading=true;
+  updatePurchaseRecordPageControls();
+  try{
+    const offset=(page-1)*PURCHASE_PAGE_SIZE;
+    const response=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/purchaseRecords?limit=${PURCHASE_PAGE_SIZE}&offset=${offset}`);
+    if(!response.ok)throw new Error('Purchase records API returned '+response.status);
+    const data=await response.json();
+    const records=Array.isArray(data.records)?data.records:[];
+    _prPage.total=Number(data.total||0);
+    _prPage.page=page;
+    const tbody=document.getElementById('purchase-record-tbody');
+    if(tbody){
+      const fragment=document.createDocumentFragment();
+      let rendered=0;
+      records.forEach(purchase=>{
+        try{
+          const ref=String(purchase?.ref||purchase?.invoice_no||purchase?.reference||'').trim();
+          const row=buildPurchaseRecordRow({...purchase,ref});
+          if(row){fragment.appendChild(row);rendered++;}
+        }catch(err){console.warn('Could not render purchase record:',err,purchase);}
+      });
+      tbody.innerHTML='';
+      if(rendered)tbody.appendChild(fragment);
+      else emptyTableMessage(tbody,'No purchase records in database yet.');
+      refreshEnhancedTable(tbody.closest('table'));
+    }
+  }catch(err){
+    console.warn('Purchase records page load failed:',err);
+    toast('Purchase records could not load. Check backend connection.','warn');
+  }finally{
+    _prPage.loading=false;
+    updatePurchaseRecordPageControls();
+  }
+}
+
+function nextPurchaseRecordsPage(){
+  const totalPages=Math.max(1,Math.ceil(_prPage.total/PURCHASE_PAGE_SIZE));
+  if(_prPage.page>=totalPages)return;
+  goToPurchaseRecordsPage(_prPage.page+1);
+}
+
+function prevPurchaseRecordsPage(){
+  if(_prPage.page<=1)return;
+  goToPurchaseRecordsPage(_prPage.page-1);
+}
+
+function updatePurchaseRecordPageControls(){
+  const count=document.getElementById('purchase-record-count');
+  const prevBtn=document.getElementById('purchase-prev-btn');
+  const nextBtn=document.getElementById('purchase-next-btn');
+  const totalPages=Math.max(1,Math.ceil(_prPage.total/PURCHASE_PAGE_SIZE));
+  if(count){
+    count.textContent=_prPage.loading
+      ? 'Loading purchase records...'
+      : _prPage.total
+      ? `Page ${_prPage.page.toLocaleString('en-AE')} of ${totalPages.toLocaleString('en-AE')} — ${_prPage.total.toLocaleString('en-AE')} database records`
+      : 'No purchase records in database yet.';
+  }
+  if(prevBtn)prevBtn.disabled=_prPage.loading||_prPage.page<=1;
+  if(nextBtn)nextBtn.disabled=_prPage.loading||_prPage.page>=totalPages;
 }
 
 async function fetchPurchaseRecordsPage({reset=false}={}){
