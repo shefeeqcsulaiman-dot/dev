@@ -5,7 +5,7 @@ import urllib.request
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
@@ -594,15 +594,41 @@ def update_account_status(
     return {"id": account.id, "status": account.status}
 
 
-@router.get("/journal", response_model=list[JournalOut])
-def list_journals(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[JournalEntry]:
-    return (
+@router.get("/journal")
+def list_journals(
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, object]:
+    # Paginated the same way GET /app-data/records/{collection} already is —
+    # previously this returned every journal entry unconditionally, which
+    # measured at ~500ms server time alone with ~2000 entries and only gets
+    # worse as a company accumulates real transaction history. Callers that
+    # genuinely need everything (clearLedgerRecords()) page through with
+    # has_more instead of relying on one unbounded response.
+    total = (
+        db.query(func.count(JournalEntry.id))
+        .filter(JournalEntry.company_id == current_user.company_id)
+        .scalar()
+        or 0
+    )
+    rows = (
         db.query(JournalEntry)
         .options(joinedload(JournalEntry.lines))
         .filter(JournalEntry.company_id == current_user.company_id)
         .order_by(JournalEntry.created_at.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
+    return {
+        "records": [JournalOut.model_validate(row).model_dump(mode="json") for row in rows],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(rows) < total,
+    }
 
 
 @router.delete("/journal/{journal_id}", status_code=204)

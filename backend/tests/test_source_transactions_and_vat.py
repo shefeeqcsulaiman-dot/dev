@@ -37,7 +37,7 @@ def test_source_transaction_validation_approval_tax_and_audit(client, auth_heade
     assert any(row["record_id"] == source["id"] and row["action"] == "approved" for row in audit_rows)
     assert any(row["record_id"] == source["id"] and row["action"] == "posted_to_ledger" for row in audit_rows)
 
-    journals = client.get("/api/v1/journal", headers=auth_headers).json()
+    journals = client.get("/api/v1/journal", headers=auth_headers).json()["records"]
     matching_journals = [journal for journal in journals if journal["source_id"] == source["id"]]
     assert len(matching_journals) == 1
     journal = matching_journals[0]
@@ -47,7 +47,7 @@ def test_source_transaction_validation_approval_tax_and_audit(client, auth_heade
     approved_again = client.post(f"/api/v1/source-transactions/{source['id']}/approve", headers=auth_headers)
     assert approved_again.status_code == 202
     assert approved_again.json()["status"] == "posted"
-    journals_after_retry = client.get("/api/v1/journal", headers=auth_headers).json()
+    journals_after_retry = client.get("/api/v1/journal", headers=auth_headers).json()["records"]
     assert len([journal for journal in journals_after_retry if journal["source_id"] == source["id"]]) == 1
 
 

@@ -14363,24 +14363,71 @@ async function loadAccountingFromDb(){
     _coaFlatAccounts=accounts||[];
     renderAccountTree(_coaFlatAccounts);
     updateAccountSelectors();
-    const journals=await moduleApi('/journal');
-    clearTableBody('ledger-tbody','No journal entries in database yet.');
-    // Chunked/yielding for the same reason as renderRecordList (app.js) —
-    // GET /journal is unbounded, and a company with a real year of
-    // transaction volume can have thousands of entries; rendering them all
-    // in one synchronous loop is long enough to trip the browser's
-    // "Page Unresponsive" watchdog.
-    const journalRows=(journals||[]).slice().reverse();
-    for(let i=0;i<journalRows.length;i++){
-      renderJournalEntry(journalRows[i]);
-      if(i>0&&i%60===0)await new Promise(r=>setTimeout(r,0));
-    }
-    filterLedger();
-    refreshEnhancedTable(document.getElementById('ledger-tbody')?.closest('table'));
+    await goToJournalPage(1);
     prepareJournalForm();
   }catch(err){
     console.warn('Accounting database load failed:',err);
   }
+}
+
+// ── Ledger/Journal: page-by-page Next/Previous ───────────────────────────────
+// GET /journal used to return every entry unconditionally — measured at
+// ~500ms server time alone with ~2000 rows, growing without bound as a
+// company accumulates transaction history, and rendering that many rows in
+// one pass was long enough to trip the browser's "Page Unresponsive"
+// watchdog (same class of issue fixed for Purchase Records). Now paginated
+// server-side; this mirrors the independent-state pattern used there.
+const _ldgPage={page:1,total:0,loading:false};
+const _LEDGER_PAGE_SIZE=100;
+
+async function goToJournalPage(page){
+  if(_ldgPage.loading||page<1)return;
+  _ldgPage.loading=true;
+  updateJournalPageControls();
+  try{
+    const offset=(page-1)*_LEDGER_PAGE_SIZE;
+    const data=await moduleApi(`/journal?limit=${_LEDGER_PAGE_SIZE}&offset=${offset}`);
+    const rows=Array.isArray(data?.records)?data.records:[];
+    _ldgPage.total=Number(data?.total||0);
+    _ldgPage.page=page;
+    clearTableBody('ledger-tbody','No journal entries in database yet.');
+    rows.slice().reverse().forEach(renderJournalEntry);
+    filterLedger();
+    refreshEnhancedTable(document.getElementById('ledger-tbody')?.closest('table'));
+  }catch(err){
+    console.warn('Journal page load failed:',err);
+    toast('Journal entries could not load. Check backend connection.','warn');
+  }finally{
+    _ldgPage.loading=false;
+    updateJournalPageControls();
+  }
+}
+
+function nextJournalPage(){
+  const totalPages=Math.max(1,Math.ceil(_ldgPage.total/_LEDGER_PAGE_SIZE));
+  if(_ldgPage.page>=totalPages)return;
+  goToJournalPage(_ldgPage.page+1);
+}
+
+function prevJournalPage(){
+  if(_ldgPage.page<=1)return;
+  goToJournalPage(_ldgPage.page-1);
+}
+
+function updateJournalPageControls(){
+  const count=document.getElementById('journal-page-count');
+  const prevBtn=document.getElementById('journal-prev-btn');
+  const nextBtn=document.getElementById('journal-next-btn');
+  const totalPages=Math.max(1,Math.ceil(_ldgPage.total/_LEDGER_PAGE_SIZE));
+  if(count){
+    count.textContent=_ldgPage.loading
+      ? 'Loading journal entries...'
+      : _ldgPage.total
+      ? `Page ${_ldgPage.page.toLocaleString('en-AE')} of ${totalPages.toLocaleString('en-AE')} — ${_ldgPage.total.toLocaleString('en-AE')} journal entries`
+      : 'No journal entries in database yet.';
+  }
+  if(prevBtn)prevBtn.disabled=_ldgPage.loading||_ldgPage.page<=1;
+  if(nextBtn)nextBtn.disabled=_ldgPage.loading||_ldgPage.page>=totalPages;
 }
 
 async function postJournalEntry(){
@@ -14550,12 +14597,25 @@ async function clearLedgerRecords(){
   if(!ok)return;
   let failed=0;
   try{
-    const journals=await moduleApi('/journal');
-    for(const j of (journals||[])){
-      try{await moduleApi('/journal/'+j.id,{method:'DELETE'});}catch{failed++;}
+    // /journal is paginated now (see goToJournalPage) — page through with
+    // has_more rather than assuming one response has everything, deleting
+    // each page's worth before fetching the next (offset stays at 0 since
+    // deleting shrinks the remaining set under it).
+    let hasMore=true;
+    while(hasMore){
+      const data=await moduleApi('/journal?limit=100&offset=0');
+      const rows=Array.isArray(data?.records)?data.records:[];
+      if(!rows.length)break;
+      for(const j of rows){
+        try{await moduleApi('/journal/'+j.id,{method:'DELETE'});}catch{failed++;}
+      }
+      hasMore=!!data?.has_more;
     }
   }catch(e){console.warn('Clear ledger error:',e);failed++;}
+  _ldgPage.page=1;
+  _ldgPage.total=0;
   clearTableBody('ledger-tbody','No journal entries in database yet.');
+  updateJournalPageControls();
   toast(`Ledger cleared${failed?`; ${failed} failed`:''}`,failed?'warn':'ok');
   audit('Cleared ledger entries','All','Deleted');
 }

@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=20260721e" as="style">
-<link rel="preload" href="src/app.js?v=20260728b" as="script">
+<link rel="preload" href="src/app.js?v=20260728c" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=20260721e">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
@@ -2511,10 +2511,15 @@
 
   <div class="tab-body" id="acc-ledger">
     <div class="card">
-      <div class="card-hd"><div class="card-title">General Ledger</div>
+      <div class="card-hd"><div>
+          <div class="card-title">General Ledger</div>
+          <div class="card-sub" id="journal-page-count">Loading journal entries...</div>
+        </div>
         <div class="flx" style="gap:6px">
           <select class="fi" id="ledger-account-filter" style="width:200px" onchange="filterLedger()"><option>All Accounts</option><option>Cash & Cash Equivalents</option><option>Accounts Receivable</option><option>Sales Revenue</option></select>
           <select class="fi" style="width:130px"><option>June 2024</option></select>
+          <button class="btn btn-g btn-sm" id="journal-prev-btn" onclick="prevJournalPage()">&larr; Previous</button>
+          <button class="btn btn-g btn-sm" id="journal-next-btn" onclick="nextJournalPage()">Next &rarr;</button>
           <button class="btn btn-g btn-sm" onclick="exportNearestTable(this,'ledger.csv')">⬇ CSV</button>
           <button class="btn btn-r btn-sm" onclick="clearLedgerRecords()">Clear Records</button>
         </div>
@@ -5787,6 +5792,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260728b" defer></script>
+<script src="src/app.js?v=20260728c" defer></script>
 </body>
 </html>

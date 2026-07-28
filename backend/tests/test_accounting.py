@@ -101,7 +101,7 @@ def test_failed_posting_job_can_be_retried_after_mapping_fix(client, auth_header
     assert retried.status_code == 200
     assert retried.json()["status"] == "posted"
 
-    journals = client.get("/api/v1/journal", headers=auth_headers).json()
+    journals = client.get("/api/v1/journal", headers=auth_headers).json()["records"]
     matching = [journal for journal in journals if journal["source_id"] == created.json()["id"]]
     assert len(matching) == 1
 
