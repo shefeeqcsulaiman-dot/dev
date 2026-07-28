@@ -15,17 +15,20 @@ def _seed_active_employee(db, company_id, basic_salary=8000):
 
 
 def test_generate_payroll_succeeds_for_active_employees(client, db, auth_headers):
+    # auth_headers reuses the same tenant across the whole test session, so
+    # other tests' leftover employees may already be active in this company
+    # — assert on this test's own employee/item, not run-wide totals/counts.
     r = client.get("/api/v1/auth/me", headers=auth_headers)
     company_id = r.json()["company"]["id"]
-    _seed_active_employee(db, company_id, basic_salary=8000)
+    emp = _seed_active_employee(db, company_id, basic_salary=8000)
 
     r = client.post("/api/v1/payroll/generate", json={"period": "2025-07"}, headers=auth_headers)
     assert r.status_code == 201, r.text
     run = r.json()
-    assert run["gross_total"] == "8000.00"
-    assert run["net_total"] == "8000.00"
-    assert len(run["items"]) == 1
-    assert run["items"][0]["allowances"] == "0.00"
+    item = next(i for i in run["items"] if i["employee_id"] == emp.id)
+    assert item["basic"] == "8000.00"
+    assert item["net_pay"] == "8000.00"
+    assert item["allowances"] == "0.00"
 
 
 def test_generate_payroll_rejects_duplicate_period(client, db, auth_headers):

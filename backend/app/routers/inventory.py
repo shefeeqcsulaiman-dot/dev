@@ -117,7 +117,8 @@ def list_mappings(db: Session = Depends(get_db), current_user: User = Depends(ge
 
 @router.get("/inventory/stock-levels")
 def list_stock_levels(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[dict[str, object]]:
-    backfill_purchase_stock_movements(db, current_user)
+    if not inventory_backfill_disabled(db, current_user.company_id):
+        backfill_purchase_stock_movements(db, current_user)
     rows = (
         db.query(
             StockProductMapping,
@@ -169,7 +170,8 @@ def list_stock_levels(db: Session = Depends(get_db), current_user: User = Depend
 
 @router.get("/inventory/stock-movements")
 def list_stock_movements(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[dict[str, object]]:
-    backfill_purchase_stock_movements(db, current_user)
+    if not inventory_backfill_disabled(db, current_user.company_id):
+        backfill_purchase_stock_movements(db, current_user)
     rows = (
         db.query(StockMovement, StockProductMapping)
         .join(StockProductMapping, StockMovement.mapping_id == StockProductMapping.id)
@@ -231,12 +233,15 @@ def clear_stock_levels(db: Session = Depends(get_db), current_user: User = Depen
         .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == "products")
         .delete(synchronize_session=False)
     )
-    # Remove the backfill disabled marker so new purchase records generate movements again
-    db.query(AppDataRecord).filter(
-        AppDataRecord.company_id == company_id,
-        AppDataRecord.collection == "inventorySettings",
-        AppDataRecord.record_key == "stock_backfill_disabled",
-    ).delete(synchronize_session=False)
+    # Keep backfill disabled after a clear, don't re-enable it. New purchases
+    # don't need backfill at all — sync_purchase_stock() (app_data.py) creates
+    # their StockMovement/mapping directly at save time. Backfill only exists
+    # to catch up orphaned/legacy purchase records that predate that sync —
+    # exactly the records this wipe just deleted movements for. Previously
+    # this removed the marker instead, which re-enabled backfill and had it
+    # immediately resurrect every historical purchase's stock on the very
+    # next GET, undoing the wipe.
+    set_inventory_backfill_disabled(db, company_id)
     db.commit()
     return {
         "ok": True,
