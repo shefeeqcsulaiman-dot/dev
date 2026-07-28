@@ -56,12 +56,16 @@ def generate_payroll(
     deductions_total = Decimal("0.00")
     net_total = Decimal("0.00")
     for employee in employees:
-        # Use the employee's own stored allowances/overtime/deductions rather
-        # than a flat guess — these are real per-employee figures maintained
-        # via the HRMS employee record, not a one-size-fits-all formula.
-        allowances = employee.allowances or Decimal("0.00")
-        overtime = employee.overtime or Decimal("0.00")
-        deductions = employee.deductions or Decimal("0.00")
+        # Employee has no allowances/overtime/deductions columns — those only
+        # exist on PayrollItem (this run's own output). Previously this read
+        # employee.allowances/.overtime/.deductions, which don't exist on the
+        # model at all and made every single call to this endpoint raise an
+        # AttributeError 500, for every company, unconditionally. Default to
+        # 0 here; per-employee adjustments happen via PayrollAdjustment
+        # records applied on top of a run, not stored on Employee itself.
+        allowances = Decimal("0.00")
+        overtime = Decimal("0.00")
+        deductions = Decimal("0.00")
         net = employee.basic_salary + allowances + overtime - deductions
         gross_total += employee.basic_salary + allowances + overtime
         deductions_total += deductions
