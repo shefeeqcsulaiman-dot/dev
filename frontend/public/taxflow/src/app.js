@@ -7206,18 +7206,27 @@ async function deleteAccountRow(btn){
   toast('Account deleted','warn');
 }
 
-function renderRecordList(records,renderRecord,label){
+// Chunked/yielding: a plain synchronous forEach over a large collection
+// (1000+ sales invoices, journal entries, etc.) blocks the main thread for
+// long enough that Chrome shows its "Page Unresponsive" watchdog dialog —
+// the render work is correct, it's just uninterrupted for multiple seconds.
+// Yielding every _RENDER_CHUNK records lets the browser paint/handle input
+// between chunks without changing what gets rendered or in what order.
+const _RENDER_CHUNK=60;
+async function renderRecordList(records,renderRecord,label){
   let rendered=0;
   let failed=0;
-  (records||[]).slice().reverse().forEach(record=>{
+  const ordered=(records||[]).slice().reverse();
+  for(let i=0;i<ordered.length;i++){
     try{
-      renderRecord(record);
+      renderRecord(ordered[i]);
       rendered++;
     }catch(err){
       failed++;
-      console.warn(`Could not render ${label} record:`,err,record);
+      console.warn(`Could not render ${label} record:`,err,ordered[i]);
     }
-  });
+    if(i>0&&i%_RENDER_CHUNK===0)await new Promise(r=>setTimeout(r,0));
+  }
   return {rendered,failed};
 }
 
@@ -7360,17 +7369,17 @@ function hydrateFromServer(){
       await _yield();
       renderStats.products=_renderProductsBatch(productRows);
       await _yield();
-      renderStats.salesCategories=renderRecordList(data.salesCategories,renderSalesCategoryRecord,'sales category');
-      renderStats.salesUnits=renderRecordList(data.salesUnits,renderSalesUnitRecord,'sales unit');
+      renderStats.salesCategories=await renderRecordList(data.salesCategories,renderSalesCategoryRecord,'sales category');
+      renderStats.salesUnits=await renderRecordList(data.salesUnits,renderSalesUnitRecord,'sales unit');
       await _yield();
-      renderStats.customers=renderRecordList(data.customers,renderCustomerRecord,'customer');
-      renderStats.users=renderRecordList(data.users,renderUserRecord,'user');
+      renderStats.customers=await renderRecordList(data.customers,renderCustomerRecord,'customer');
+      renderStats.users=await renderRecordList(data.users,renderUserRecord,'user');
       await _yield();
-      renderStats.salesInvoices=renderRecordList(data.salesInvoices,inv=>addSalesInvoiceRow(inv,{persist:false}),'sales invoice');
+      renderStats.salesInvoices=await renderRecordList(data.salesInvoices,inv=>addSalesInvoiceRow(inv,{persist:false}),'sales invoice');
       await _yield();
-      renderStats.quotations=renderRecordList(data.quotations,renderQuotationRecord,'quotation');
+      renderStats.quotations=await renderRecordList(data.quotations,renderQuotationRecord,'quotation');
       await _yield();
-      renderStats.accounts=renderRecordList(data.accounts,renderAccountRecord,'account');
+      renderStats.accounts=await renderRecordList(data.accounts,renderAccountRecord,'account');
       renderStats.purchaseRecords={rendered:0,failed:0,total:0,lazy:true};
       loadPurchaseDocumentsFromServer(data.purchaseDocuments||[],[]);
     }finally{
@@ -7381,18 +7390,18 @@ function hydrateFromServer(){
     scheduleIdleTask(async ()=>{
       isHydratingFromServer=true;
       try{
-        renderStats.employees=renderRecordList(_deferred2.employees,record=>{
+        renderStats.employees=await renderRecordList(_deferred2.employees,record=>{
           renderEmployeeRecord(record);
           renderPayrollEmployeeRecord(record);
         },'employee');
-        renderStats.bankAccounts=renderRecordList(_deferred2.bankAccounts,renderBankAccountRecord,'bank account');
+        renderStats.bankAccounts=await renderRecordList(_deferred2.bankAccounts,renderBankAccountRecord,'bank account');
         await _yield();
-        renderStats.payments=renderRecordList(_deferred2.payments,renderPaymentRecord,'payment');
-        renderStats.expenses=renderRecordList(_deferred2.expenses,renderExpenseRecord,'expense');
+        renderStats.payments=await renderRecordList(_deferred2.payments,renderPaymentRecord,'payment');
+        renderStats.expenses=await renderRecordList(_deferred2.expenses,renderExpenseRecord,'expense');
         await _yield();
         if(Array.isArray(_deferred2.bills)){_hydratedBills.length=0;_hydratedBills.push(..._deferred2.bills);}
-        renderStats.bills=renderRecordList(_deferred2.bills,renderBillRecord,'bill');
-        renderStats.vendors=renderRecordList(_deferred2.vendors,renderVendorRecord,'vendor');
+        renderStats.bills=await renderRecordList(_deferred2.bills,renderBillRecord,'bill');
+        renderStats.vendors=await renderRecordList(_deferred2.vendors,renderVendorRecord,'vendor');
         _refreshPurchaseDashboardCard();
       }finally{isHydratingFromServer=false;}
       updateFinanceFromDatabaseRecords();
@@ -7402,25 +7411,25 @@ function hydrateFromServer(){
     scheduleIdleTask(async ()=>{
       isHydratingFromServer=true;
       try{
-        renderStats.rotaShifts=renderRecordList(_deferred2.rotaShifts,renderRotaShiftRecord,'rota shift');
-        renderStats.rotaSwaps=renderRecordList(_deferred2.rotaSwaps,renderRotaSwapRecord,'rota swap');
+        renderStats.rotaShifts=await renderRecordList(_deferred2.rotaShifts,renderRotaShiftRecord,'rota shift');
+        renderStats.rotaSwaps=await renderRecordList(_deferred2.rotaSwaps,renderRotaSwapRecord,'rota swap');
         await _yield();
-        renderStats.rotaApprovals=renderRecordList(_deferred2.rotaApprovals,renderRotaApprovalRecord,'rota approval');
-        renderStats.rotaAssignments=renderRecordList(_deferred2.rotaAssignments,renderRotaAssignmentRecord,'rota assignment');
+        renderStats.rotaApprovals=await renderRecordList(_deferred2.rotaApprovals,renderRotaApprovalRecord,'rota approval');
+        renderStats.rotaAssignments=await renderRecordList(_deferred2.rotaAssignments,renderRotaAssignmentRecord,'rota assignment');
         renderRotaBoards();
         await _yield();
-        renderStats.overtimeRequests=renderRecordList(_deferred2.overtimeRequests,renderOTRecord,'overtime request');
+        renderStats.overtimeRequests=await renderRecordList(_deferred2.overtimeRequests,renderOTRecord,'overtime request');
         // Leave requests are now backed by the real leave_requests table
         // (see /api/v1/leave/*) — loaded on demand by loadLeaveRequests()
         // when the Leave Management tab is opened, not from this bootstrap blob.
-        renderStats.attendanceCorrections=renderRecordList(_deferred2.attendanceCorrections,renderCorrectionRecord,'correction');
-        renderStats.employeeLoans=renderRecordList(_deferred2.employeeLoans,renderLoanRecord,'loan');
-        renderStats.salaryAdvances=renderRecordList(_deferred2.salaryAdvances,renderLoanAdvanceRecord,'salary advance');
-        renderStats.jobRequisitions=renderRecordList(_deferred2.jobRequisitions,renderJobRequisitionRecord,'job requisition');
-        renderStats.candidates=renderRecordList(_deferred2.candidates,renderCandidateRecord,'candidate');
+        renderStats.attendanceCorrections=await renderRecordList(_deferred2.attendanceCorrections,renderCorrectionRecord,'correction');
+        renderStats.employeeLoans=await renderRecordList(_deferred2.employeeLoans,renderLoanRecord,'loan');
+        renderStats.salaryAdvances=await renderRecordList(_deferred2.salaryAdvances,renderLoanAdvanceRecord,'salary advance');
+        renderStats.jobRequisitions=await renderRecordList(_deferred2.jobRequisitions,renderJobRequisitionRecord,'job requisition');
+        renderStats.candidates=await renderRecordList(_deferred2.candidates,renderCandidateRecord,'candidate');
         refreshRecruitmentStats();
         await _yield();
-        renderStats.ledger=renderRecordList(_deferred2.ledger,line=>postLedgerLine(line,{persist:false}),'ledger');
+        renderStats.ledger=await renderRecordList(_deferred2.ledger,line=>postLedgerLine(line,{persist:false}),'ledger');
         // Note: hrUsers (the old client-only mock "Users & Roles" store) is
         // obsolete — that screen is now backed by the real Employee table via
         // /hr/admin/employees, loaded on demand by loadHrUsersAndRoles()
@@ -14283,7 +14292,16 @@ async function loadAccountingFromDb(){
     updateAccountSelectors();
     const journals=await moduleApi('/journal');
     clearTableBody('ledger-tbody','No journal entries in database yet.');
-    (journals||[]).slice().reverse().forEach(renderJournalEntry);
+    // Chunked/yielding for the same reason as renderRecordList (app.js) —
+    // GET /journal is unbounded, and a company with a real year of
+    // transaction volume can have thousands of entries; rendering them all
+    // in one synchronous loop is long enough to trip the browser's
+    // "Page Unresponsive" watchdog.
+    const journalRows=(journals||[]).slice().reverse();
+    for(let i=0;i<journalRows.length;i++){
+      renderJournalEntry(journalRows[i]);
+      if(i>0&&i%60===0)await new Promise(r=>setTimeout(r,0));
+    }
     filterLedger();
     refreshEnhancedTable(document.getElementById('ledger-tbody')?.closest('table'));
     prepareJournalForm();

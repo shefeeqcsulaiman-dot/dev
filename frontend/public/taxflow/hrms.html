@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=20260721e" as="style">
-<link rel="preload" href="src/app.js?v=20260726f" as="script">
+<link rel="preload" href="src/app.js?v=20260728a" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=20260721e">
 <style>
@@ -242,7 +242,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 
   <div class="sb-foot">
     <div style="padding:0 12px 12px">
-      <button class="btn btn-g btn-block" onclick="window.location.href='/'">← Back to Main App</button>
+      <button class="btn btn-g btn-block" id="hrms-back-main-btn" onclick="window.location.href='/'">← Back to Main App</button>
     </div>
   </div>
 </nav>
@@ -2694,7 +2694,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260726f" defer></script>
+<script src="src/app.js?v=20260728a" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
@@ -2997,6 +2997,12 @@ async function applyHrmsPermissionNav(){
     window.HRMS_IS_ADMIN=!!who.is_admin;
     window.HRMS_PERMISSIONS=who.permissions||[];
     if(who.is_admin)return; // real TaxFlow admins/superadmins get the full sidebar
+
+    // Sub-users (Employee principals) have no User account and no access to
+    // '/', the main TaxFlow admin app — hide the link rather than let them
+    // hit it and bounce off a 401.
+    var backBtn=document.getElementById('hrms-back-main-btn');
+    if(backBtn)backBtn.style.display='none';
 
     var allowed=new Set(window.HRMS_PERMISSIONS.filter(function(p){return p.endsWith(':view');}).map(function(p){return p.split(':')[0];}));
     window.HRMS_ALLOWED_MODULES=allowed;
