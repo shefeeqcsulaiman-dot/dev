@@ -31,9 +31,10 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
+from app.company_defaults import seed_accounts, seed_tax_codes, seed_voucher_types
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
-from app.models import Account, Company, TaxCode, User, VoucherType
+from app.models import Company, User
 from app.routers import accounting, ai, app_data, attendance, audit, auth, companies, corporate_accounting, documents, ess, events, exception_center, hr_access, hr_ai, inventory, invoice_share, invoices, jobs, leave, module_records, payroll, reports, source_transactions, superadmin, tax
 from app.security import hash_password
 
@@ -567,6 +568,7 @@ def seed_initial_data() -> None:
         user.password_hash = hash_password(admin_pwd)
         user.company_id = company.id
 
+        seed_accounts(db, company.id)
         seed_voucher_types(db, company.id)
         seed_tax_codes(db, company.id)
 
@@ -594,69 +596,6 @@ def seed_initial_data() -> None:
         db.commit()
     finally:
         db.close()
-
-
-def seed_accounts(db: Session, company_id: str) -> None:
-    accounts = [
-        ("1000", "Cash and Bank", "asset", True, True),
-        ("1100", "Accounts Receivable", "asset", False, True),
-        ("1200", "Inventory", "asset", False, True),
-        ("2100", "Accounts Payable", "liability", False, True),
-        ("2200", "VAT Output Payable", "liability", False, True),
-        ("2210", "VAT Input Recoverable", "asset", False, True),
-        ("2300", "Corporate Tax Payable", "liability", False, True),
-        ("3000", "Sales Income", "sales", False, False),
-        ("4000", "Purchases", "purchase", False, False),
-        ("5000", "Cost of Goods Sold", "direct expense", False, False),
-        ("5100", "Corporate Tax Expense", "indirect expense", False, False),
-        ("6000", "Salary Expense", "indirect expense", False, False),
-    ]
-    for code, name, account_type, is_bank_cash, is_control in accounts:
-        account = db.query(Account).filter(Account.company_id == company_id, Account.code == code).first()
-        if not account:
-            db.add(Account(company_id=company_id, code=code, name=name, type=account_type, is_bank_cash=is_bank_cash, is_control_account=is_control))
-
-
-def seed_voucher_types(db: Session, company_id: str) -> None:
-    rows = [
-        ("Payment Voucher", "PAY", "PAY", True, True),
-        ("Receipt Voucher", "RCT", "RCT", True, True),
-        ("Journal Voucher", "JRN", "JRN", True, False),
-        ("Sales Voucher", "SAL", "SAL", True, True),
-        ("Purchase Voucher", "PUR", "PUR", True, True),
-        ("Contra Voucher", "CON", "CON", True, False),
-        ("Debit Note", "DN", "DN", True, True),
-        ("Credit Note", "CN", "CN", True, True),
-        ("Adjustment Voucher", "ADJ", "ADJ", True, True),
-        ("Opening Balance Voucher", "OB", "OB", True, False),
-    ]
-    for name, code, prefix, approval_required, affects_vat in rows:
-        voucher_type = db.query(VoucherType).filter(VoucherType.company_id == company_id, VoucherType.code == code).first()
-        if not voucher_type:
-            db.add(
-                VoucherType(
-                    company_id=company_id,
-                    name=name,
-                    code=code,
-                    prefix=prefix,
-                    approval_required=approval_required,
-                    affects_cash_bank=code in {"PAY", "RCT", "CON"},
-                    affects_vat=affects_vat,
-                )
-            )
-
-
-def seed_tax_codes(db: Session, company_id: str) -> None:
-    codes = [
-        ("VAT5", "Standard UAE VAT", "5.00", True, "Box 1"),
-        ("ZERO", "Zero-rated export", "0.00", False, "Box 4"),
-        ("EXEMPT", "Exempt supply", "0.00", False, "Box 6"),
-        ("RCM", "Reverse charge", "5.00", True, "Box 3"),
-    ]
-    for code, name, rate, recoverable, box in codes:
-        tax_code = db.query(TaxCode).filter(TaxCode.company_id == company_id, TaxCode.code == code).first()
-        if not tax_code:
-            db.add(TaxCode(company_id=company_id, code=code, name=name, rate=rate, recoverable=recoverable, reporting_box=box))
 
 
 app = create_app()

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from app.company_defaults import seed_company_defaults
 from app.database import get_db
 from app.dependencies import Principal, get_current_principal, get_current_user
 from app.limiter import limiter
@@ -47,6 +48,14 @@ def register(request: Request, payload: RegisterRequest, db: Session = Depends(g
     )
     db.add(company)
     db.flush()
+    # A company with no chart of accounts can never post a single
+    # transaction: post_source_transaction() requires control accounts
+    # 1100/2200 to exist, and fails the posting job silently otherwise —
+    # the invoice/purchase save still returns success, it just never
+    # reaches the ledger, VAT report, or any financial statement. This was
+    # previously dead code (seed_accounts had zero callers anywhere), so
+    # every company that ever registered started financially non-functional.
+    seed_company_defaults(db, company.id)
     user = User(
         company_id=company.id,
         email=payload.email.lower(),
