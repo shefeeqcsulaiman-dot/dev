@@ -336,6 +336,10 @@
         <select id="sa-audit-company" onchange="loadAuditLogs()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text)">
           <option value="">All Companies</option>
         </select>
+        <select id="sa-audit-sort" onchange="renderAuditLogRows()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text)">
+          <option value="time" selected>Sort: Newest first</option>
+          <option value="user">Sort: By user</option>
+        </select>
       </div>
     </div>
     <div id="sa-audit-wrap">
@@ -1220,6 +1224,8 @@
   }
 
   // ── Audit log ─────────────────────────────────────────────────
+  let _auditLogEntries=[];
+
   async function loadAuditLogs(){
     const wrap=document.getElementById('sa-audit-wrap');
     const days=parseInt(document.getElementById('sa-audit-days').value)||7;
@@ -1229,27 +1235,47 @@
       const qs=`?days=${days}&limit=300`+(companyId?`&company_id=${encodeURIComponent(companyId)}`:'');
       const res=await apiFetch('/superadmin/audit-logs'+qs);
       const data=await res.json();
-      if(!data.entries||!data.entries.length){
-        wrap.innerHTML='<div class="loading-state" style="color:var(--muted)">No activity in the selected period.</div>';
-        return;
-      }
-      let html='<table class="tbl" style="font-size:12px"><thead><tr><th>Time</th><th>Company</th><th>Action</th><th>Detail</th><th>Status</th></tr></thead><tbody>';
-      data.entries.forEach(e=>{
-        const ts=e.created_at?new Date(e.created_at).toLocaleString():'';
-        const statusCls=e.status==='Deleted'?'b-r':e.status==='Created'?'b-g':e.status==='Opened'?'b-a':'b-p';
-        html+=`<tr>
-          <td style="white-space:nowrap;color:var(--muted)">${escHtml(ts)}</td>
-          <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(e.company_name||e.company_id||'—')}</td>
-          <td style="font-weight:500">${escHtml(e.action)}</td>
-          <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;color:var(--muted)">${escHtml(e.detail||'')}</td>
-          <td>${e.status?`<span class="b ${escHtml(statusCls)}">${escHtml(e.status)}</span>`:'—'}</td>
-        </tr>`;
-      });
-      html+='</tbody></table>';
-      wrap.innerHTML=html;
+      _auditLogEntries=data.entries||[];
+      renderAuditLogRows();
     }catch(err){
       wrap.innerHTML='<div class="loading-state" style="color:var(--red)">Failed: '+escHtml(err.message)+'</div>';
     }
+  }
+
+  function renderAuditLogRows(){
+    const wrap=document.getElementById('sa-audit-wrap');
+    if(!_auditLogEntries.length){
+      wrap.innerHTML='<div class="loading-state" style="color:var(--muted)">No activity in the selected period.</div>';
+      return;
+    }
+    const sortBy=document.getElementById('sa-audit-sort')?.value||'time';
+    const rows=[..._auditLogEntries];
+    if(sortBy==='user'){
+      // Group same user's entries together, newest-first within each group —
+      // most audit entries were previously unattributable at all (every one
+      // said "System User"), so this only became meaningful once audit()
+      // (app.js) started recording the real logged-in user.
+      rows.sort((a,b)=>{
+        const ua=(a.user||'Unknown User').toLowerCase(), ub=(b.user||'Unknown User').toLowerCase();
+        if(ua!==ub)return ua<ub?-1:1;
+        return new Date(b.created_at||0)-new Date(a.created_at||0);
+      });
+    }
+    let html='<table class="tbl" style="font-size:12px"><thead><tr><th>Time</th><th>User</th><th>Company</th><th>Action</th><th>Detail</th><th>Status</th></tr></thead><tbody>';
+    rows.forEach(e=>{
+      const ts=e.created_at?new Date(e.created_at).toLocaleString():'';
+      const statusCls=e.status==='Deleted'?'b-r':e.status==='Created'?'b-g':e.status==='Opened'?'b-a':'b-p';
+      html+=`<tr>
+        <td style="white-space:nowrap;color:var(--muted)">${escHtml(ts)}</td>
+        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">${escHtml(e.user||'Unknown User')}</td>
+        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(e.company_name||e.company_id||'—')}</td>
+        <td style="font-weight:500">${escHtml(e.action)}</td>
+        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;color:var(--muted)">${escHtml(e.detail||'')}</td>
+        <td>${e.status?`<span class="b ${escHtml(statusCls)}">${escHtml(e.status)}</span>`:'—'}</td>
+      </tr>`;
+    });
+    html+='</tbody></table>';
+    wrap.innerHTML=html;
   }
 
   function populateAuditCompanyFilter(companiesData){

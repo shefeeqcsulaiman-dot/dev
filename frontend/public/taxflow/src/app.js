@@ -1876,6 +1876,7 @@ function logout(){
     'taxflow_inventory_table_cleared',
     'taxflow_biz_locations',
     'taxflow_user_role',
+    'taxflow_user_display_name',
   ];
   keysToRemove.forEach(k=>localStorage.removeItem(k));
   window.location.replace('/login');
@@ -2163,10 +2164,14 @@ async function applyRoleBasedNav(){
     const user=await resp.json();
     const role=(user.role||'admin').toLowerCase();
     localStorage.setItem('taxflow_user_role',role);
+    // Shared with hrms.html's applyHrmsPermissionNav() — audit() reads this
+    // key regardless of which page resolved it first, so every audit entry
+    // records who actually did it instead of a hardcoded "System User".
+    localStorage.setItem('taxflow_user_display_name',user.full_name||user.email||'Admin');
     const topName=document.getElementById('hrms-top-name');
     const topAv=document.getElementById('hrms-top-av');
-    if(topName)topName.textContent=user.name||user.email||'Admin';
-    if(topAv)topAv.textContent=initialsFromName(user.name||user.email||'Admin');
+    if(topName)topName.textContent=user.full_name||user.email||'Admin';
+    if(topAv)topAv.textContent=initialsFromName(user.full_name||user.email||'Admin');
     renderImpersonationBanner(user.impersonated_by,user.company,user.full_name||user.email);
     if(role==='admin'||role==='superadmin')return; // full access
     const allowed=new Set(_NAV_ROLE_MAP[role]||[]);
@@ -3914,7 +3919,13 @@ function saveInvoiceLayoutServer(layout){
 }
 
 function audit(action,record='System',result='Logged'){
-  const entry={time:new Date().toLocaleString('en-AE',{dateStyle:'short',timeStyle:'short'}),user:'System User',action,record,result};
+  // Previously hardcoded 'System User' for every single call, on every
+  // page, for every real user — no audit entry anywhere ever recorded who
+  // actually did it. taxflow_user_display_name is set by applyRoleBasedNav()
+  // (index.html/admin) or applyHrmsPermissionNav() (hrms.html/either
+  // principal kind), whichever loaded first on this page.
+  const displayUser=localStorage.getItem('taxflow_user_display_name')||'Unknown User';
+  const entry={time:new Date().toLocaleString('en-AE',{dateStyle:'short',timeStyle:'short'}),user:displayUser,action,record,result};
   debouncedSaveServer('audit',entry,300);
   renderAuditLog([entry]);
 }
