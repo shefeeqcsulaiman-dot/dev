@@ -10,8 +10,9 @@ via a live report of exactly that error when deleting a real company."""
 from datetime import UTC, datetime
 
 from app.models import (
-    AttendanceSession, Company, CompanyLocation, Employee, EmployeeLocation,
-    EmployeeLocationLog, LeaveRequest, Permission, Role, RolePermission, User,
+    Account, AttendanceSession, Company, CompanyLocation, Employee,
+    EmployeeLocation, EmployeeLocationLog, GeneralLedgerEntry, JournalEntry,
+    JournalLine, LeaveRequest, Permission, Role, RolePermission, User,
 )
 from app.security import hash_password
 
@@ -67,6 +68,22 @@ def test_delete_company_with_hrms_gps_and_rbac_data(client, db):
                                 latitude=25.2, longitude=55.3))
     db.add(LeaveRequest(company_id=target.id, employee_id=emp.id, leave_type="Annual Leave",
                          start_date="2026-08-01", end_date="2026-08-02", days=2, status="pending"))
+
+    # A company with real, posted transactions has GeneralLedgerEntry rows
+    # whose journal_line_id FKs into journal_lines — reproduces the ordering
+    # bug (GL entries were deleted after journal_lines, not before).
+    account = Account(company_id=target.id, code="1000", name="Cash", type="asset")
+    db.add(account)
+    db.flush()
+    journal = JournalEntry(company_id=target.id, entry_number="JE-DEL-TEST-001", description="Delete test entry")
+    db.add(journal)
+    db.flush()
+    line = JournalLine(journal_id=journal.id, account_id=account.id, debit=100, credit=0)
+    db.add(line)
+    db.flush()
+    db.add(GeneralLedgerEntry(company_id=target.id, voucher_no="JE-DEL-TEST-001", voucher_type="Journal",
+                               account_id=account.id, journal_entry_id=journal.id, journal_line_id=line.id,
+                               debit=100, credit=0))
     db.commit()
 
     headers = _make_superadmin(db)
@@ -77,3 +94,5 @@ def test_delete_company_with_hrms_gps_and_rbac_data(client, db):
     assert db.query(Employee).filter(Employee.company_id == target.id).count() == 0
     assert db.query(Role).filter(Role.company_id == target.id).count() == 0
     assert db.query(CompanyLocation).filter(CompanyLocation.company_id == target.id).count() == 0
+    assert db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == target.id).count() == 0
+    assert db.query(JournalEntry).filter(JournalEntry.company_id == target.id).count() == 0

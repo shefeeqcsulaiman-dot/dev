@@ -387,20 +387,6 @@ def delete_company(
     db: Session = Depends(get_db),
     superadmin: User = Depends(_require_superadmin),
 ):
-    # TEMPORARY diagnostic wrapper — surfaces the real exception instead of
-    # FastAPI's generic 500 handler swallowing it into "An internal error
-    # occurred", so a live production failure can actually be diagnosed.
-    # Remove once the real cause is found and fixed.
-    try:
-        return _delete_company_impl(company_id, db, superadmin)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}") from exc
-
-
-def _delete_company_impl(company_id: str, db: Session, superadmin: User):
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -424,6 +410,16 @@ def _delete_company_impl(company_id: str, db: Session, superadmin: User):
     run_ids = db.query(PayrollRun.id).filter(PayrollRun.company_id == cid).subquery()
     db.query(PayrollItem).filter(PayrollItem.run_id.in_(run_ids)).delete(**s)
 
+    # GeneralLedgerEntry.journal_line_id FKs into journal_lines, so it must
+    # be cleared before JournalLine below — this was reversed (GL entries
+    # were deleted in "Tier 2", journal_lines here in "Tier 1", i.e. after),
+    # which raised a ForeignKeyViolation for any company whose postings had
+    # actually produced GL entries (e.g. a company with real, posted
+    # transactions — reproduced live on a real customer's data, not caught
+    # by the earlier GPS/RBAC/Leave fix since this is a separate ordering
+    # bug in a section that predates all of that).
+    db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == cid).delete(**s)
+
     je_ids = db.query(JournalEntry.id).filter(JournalEntry.company_id == cid).subquery()
     db.query(JournalLine).filter(JournalLine.journal_id.in_(je_ids)).delete(**s)
 
@@ -443,7 +439,6 @@ def _delete_company_impl(company_id: str, db: Session, superadmin: User):
     db.query(EmployeeLocation).filter(EmployeeLocation.employee_id.in_(emp_ids)).delete(**s)
 
     # Tier 2 — tables that cross-reference other data tables
-    db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == cid).delete(**s)
     db.query(BankReconciliationMatch).filter(BankReconciliationMatch.company_id == cid).delete(**s)
     db.query(BankStatementLine).filter(BankStatementLine.company_id == cid).delete(**s)
 
