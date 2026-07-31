@@ -1590,7 +1590,13 @@ async function loadStockMappingsFromServer(){
     await ensureBackendSession();
     const mappings=await moduleApi('/inventory/mappings');
     tbody.innerHTML='';
-    (mappings||[]).forEach(renderStockMappingRecord);
+    // Chunked for the same reason as renderRecordList/journal (app.js) — a
+    // large product catalog would otherwise render in one uninterrupted pass.
+    const rows=mappings||[];
+    for(let i=0;i<rows.length;i++){
+      renderStockMappingRecord(rows[i]);
+      if(i>0&&i%60===0)await new Promise(r=>setTimeout(r,0));
+    }
     if(!isInventoryTableCleared())syncStockMappingFromItems();
     removeDemoProductRows();
     if(tbody.querySelectorAll('tr:not([data-empty-state])').length===0){
