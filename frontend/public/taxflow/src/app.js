@@ -10208,6 +10208,15 @@ async function deletePurchaseRecord(btn){
   row.remove();
   purchaseRecordCache.delete(String(ref));
   purchaseRecordsTotal=Math.max(0,purchaseRecordsTotal-1);
+  // Keep the visible Previous/Next pager (_prPage — see goToPurchaseRecordsPage)
+  // in sync too. It's deliberately separate state from purchaseRecordCache
+  // above (that one backs the stock-sync accumulator, not the table), so a
+  // delete has to update both or the "Page X of Y" count and Next/Prev
+  // button state go stale.
+  if(typeof _prPage!=='undefined'){
+    _prPage.total=Math.max(0,_prPage.total-1);
+    updatePurchaseRecordPageControls();
+  }
   const tbody=table.tBodies?.[0];
   if(tbody&&tbody.querySelectorAll('tr:not([data-empty-state])').length===0){
     emptyTableMessage(tbody,'No purchase records in database yet.');
@@ -10221,7 +10230,14 @@ async function deletePurchaseRecord(btn){
       toast(`Purchase ${ref} deleted`,'ok');
     })
     .catch(()=>{
-      toast(`Purchase ${ref} removed on screen, database delete failed`,'warn');
+      // The row was already removed from screen optimistically, but the
+      // database delete failed — the record still exists server-side.
+      // Reload the current page from the server instead of leaving the UI
+      // silently out of sync (previously: a warning toast, but the row
+      // stayed gone until an unrelated page refresh made it reappear with
+      // no explanation).
+      toast(`Delete failed for ${ref} — restoring from database`,'err');
+      if(typeof _prPage!=='undefined')goToPurchaseRecordsPage(_prPage.page);
     });
   audit('Deleted purchase record',ref,'Deleted');
 }
