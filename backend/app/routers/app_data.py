@@ -367,10 +367,20 @@ def bootstrap(
             .limit(50)
             .all()
         )
+        # Every row previously showed principal.display_name — whoever is
+        # CURRENTLY viewing the page, not who actually performed each
+        # historical action (export_all_data() below already does this
+        # correctly; bootstrap()'s copy never got the same fix). Look up
+        # each row's real user_id instead, same as the export endpoint.
+        audit_user_ids = {row.user_id for row in audit_rows if row.user_id}
+        audit_user_map = {
+            u.id: u.full_name
+            for u in db.query(User).filter(User.id.in_(audit_user_ids)).all()
+        } if audit_user_ids else {}
         audit = [
             {
                 "time": row.created_at.strftime("%d/%m/%Y, %H:%M") if row.created_at else "",
-                "user": principal.display_name,
+                "user": audit_user_map.get(row.user_id or "", "Unknown User"),
                 "action": row.action.replace("_", " ").title(),
                 "record": row.module,
                 "result": "Logged",
