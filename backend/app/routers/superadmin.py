@@ -12,20 +12,20 @@ from app.dependencies import get_current_user
 from app.limiter import limiter
 from app.models import (
     AccrualPrepaymentRecord, Account, AppDataRecord, ApprovalMatrixRecord,
-    AttendancePunch, AuditLog, AuditLogDetail, BankAccount,
+    AttendancePunch, AttendanceSession, AuditLog, AuditLogDetail, BankAccount,
     BankReconciliationMatch, BankStatementLine, BiometricDevice, BudgetRecord,
-    CashFlowForecastRecord, ClientError, Company, ConsolidationRecord,
-    CorporateTaxRecord, CorporateTaxReturn, CostCenterRecord,
+    CashFlowForecastRecord, ClientError, Company, CompanyLocation,
+    ConsolidationRecord, CorporateTaxRecord, CorporateTaxReturn, CostCenterRecord,
     CreditControlRecord, CustomerAgingSnapshot, DailyGlBalance, Document,
-    DomainEvent, Employee, EventOutbox, EventProcessingLog, ExceptionEvent,
-    FixedAssetRecord, GeneralLedgerEntry, InventoryBalanceSnapshot,
-    InventoryValuationLayer, Invoice, InvoiceLine, ItemUnit, ItemUnitConversion,
-    Job, JournalEntry, JournalLine, MonthEndCloseRecord, Payment, PayrollItem,
-    PayrollRun, PeriodLock, PostingJob, Receipt, SourceTransaction,
-    SourceTransactionLine, StockAdjustmentApproval, StockMovement,
-    StockProductMapping, TaxCode, TaxLine, TaxPeriod, TrialRequest, User, VatReturn,
-    VatReturnSnapshot, Voucher, VoucherLine, VoucherType, Warehouse,
-    WpsBatch,
+    DomainEvent, Employee, EmployeeLocation, EmployeeLocationLog, EventOutbox,
+    EventProcessingLog, ExceptionEvent, FixedAssetRecord, GeneralLedgerEntry,
+    InventoryBalanceSnapshot, InventoryValuationLayer, Invoice, InvoiceLine,
+    ItemUnit, ItemUnitConversion, Job, JournalEntry, JournalLine, LeaveRequest,
+    MonthEndCloseRecord, Payment, PayrollItem, PayrollRun, PeriodLock, PostingJob,
+    Receipt, Role, RolePermission, SourceTransaction, SourceTransactionLine,
+    StockAdjustmentApproval, StockMovement, StockProductMapping, TaxCode, TaxLine,
+    TaxPeriod, TrialRequest, User, VatReturn, VatReturnSnapshot, Voucher,
+    VoucherLine, VoucherType, Warehouse, WpsBatch,
 )
 from app.schemas import CompanyUpdate
 from app.security import (
@@ -416,6 +416,18 @@ def delete_company(
     v_ids = db.query(Voucher.id).filter(Voucher.company_id == cid).subquery()
     db.query(VoucherLine).filter(VoucherLine.voucher_id.in_(v_ids)).delete(**s)
 
+    # GPS/RBAC/Leave — leaf rows that FK into employees/attendance_sessions,
+    # must clear before Employee is deleted below (Tier 4). Previously
+    # missing entirely (added after this cascade was written), which raised
+    # a foreign-key IntegrityError on any company that had used HRMS GPS
+    # attendance, roles, or leave — surfaced as a generic "An internal
+    # error occurred" with no useful detail.
+    db.query(EmployeeLocationLog).filter(EmployeeLocationLog.company_id == cid).delete(**s)
+    db.query(LeaveRequest).filter(LeaveRequest.company_id == cid).delete(**s)
+    db.query(AttendanceSession).filter(AttendanceSession.company_id == cid).delete(**s)
+    emp_ids = db.query(Employee.id).filter(Employee.company_id == cid).subquery()
+    db.query(EmployeeLocation).filter(EmployeeLocation.employee_id.in_(emp_ids)).delete(**s)
+
     # Tier 2 — tables that cross-reference other data tables
     db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == cid).delete(**s)
     db.query(BankReconciliationMatch).filter(BankReconciliationMatch.company_id == cid).delete(**s)
@@ -465,6 +477,14 @@ def delete_company(
     db.query(Document).filter(Document.company_id == cid).delete(**s)
     db.query(Job).filter(Job.company_id == cid).delete(**s)
     db.query(AppDataRecord).filter(AppDataRecord.company_id == cid).delete(**s)
+    db.query(ClientError).filter(ClientError.company_id == cid).delete(**s)
+
+    # Role/CompanyLocation can only go now — Employee.role_id and
+    # Employee.work_location_id reference them, and Employee is deleted above.
+    role_ids = db.query(Role.id).filter(Role.company_id == cid).subquery()
+    db.query(RolePermission).filter(RolePermission.role_id.in_(role_ids)).delete(**s)
+    db.query(Role).filter(Role.company_id == cid).delete(**s)
+    db.query(CompanyLocation).filter(CompanyLocation.company_id == cid).delete(**s)
 
     # Tier 5 — snapshot / reporting tables (company_id only)
     for Model in (
