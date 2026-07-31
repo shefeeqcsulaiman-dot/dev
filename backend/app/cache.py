@@ -84,3 +84,4 @@ def invalidate_company(company_id: str) -> None:
     delete(f"summary:{company_id}")
     delete(f"trial_balance:{company_id}")
     delete_prefix(f"vat_return:{company_id}:")
+    delete(f"bootstrap:{company_id}")

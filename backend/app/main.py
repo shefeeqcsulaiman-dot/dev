@@ -204,7 +204,25 @@ def create_app() -> FastAPI:
             db_status = "ok"
         except Exception:
             db_status = "error"
-        return {"status": "ok" if db_status == "ok" else "degraded", "db": db_status, "service": settings.app_name}
+        # Diagnostic only — app.cache already degrades gracefully if Redis is
+        # unreachable (returns None / no-ops instead of raising), which means
+        # a broken connection is otherwise invisible: nothing errors, caching
+        # just silently never helps. Surfacing the real state here so that's
+        # checkable without DB/log access.
+        from app import cache as _cache
+        redis_client = _cache._redis()
+        redis_status = "disabled (no REDIS_URL)" if redis_client is None else "ok"
+        if redis_client is not None:
+            try:
+                redis_client.ping()
+            except Exception as exc:
+                redis_status = f"error: {exc}"
+        return {
+            "status": "ok" if db_status == "ok" else "degraded",
+            "db": db_status,
+            "redis": redis_status,
+            "service": settings.app_name,
+        }
 
     @app.get("/landing.html", include_in_schema=False)
     def landing() -> FileResponse:

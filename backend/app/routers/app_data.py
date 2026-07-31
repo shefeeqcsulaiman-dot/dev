@@ -284,6 +284,22 @@ def bootstrap(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
 ) -> dict[str, object]:
+    # Cache admin bootstrap responses briefly — this is the single most
+    # expensive, most frequently-called read in the app (every page
+    # navigation re-fetches it) and previously had no caching at all, unlike
+    # dashboard/summary/trial-balance. Deliberately admin-only and a short
+    # TTL: an Employee principal's response depends on their role's specific
+    # permissions (_allowed_bootstrap_collections), so caching it under a
+    # company-wide key could leak one role's filtered view to a different
+    # role, or serve a stale filtered view after a permission change — not
+    # worth the risk for a lower-traffic path. 8s is short enough that
+    # staleness is barely noticeable but still absorbs bursts of repeated
+    # calls (e.g. clicking through several pages in quick succession).
+    if principal.is_admin:
+        cached = cache.get(f"bootstrap:{principal.company_id}")
+        if cached is not None:
+            return cached
+
     cap = get_settings().bootstrap_record_cap
     allowed_collections = _allowed_bootstrap_collections(principal)
     # Collections with large record counts are fetched with DB-level LIMIT to avoid
@@ -400,7 +416,10 @@ def bootstrap(
         "user": {"name": principal.display_name, "role": principal.role_name if not principal.is_admin else (principal.user.role if principal.user else "admin")},
         "company": company_data,
     }
-    return {"ok": True, "data": data, "truncated_collections": truncated}
+    result = {"ok": True, "data": data, "truncated_collections": truncated}
+    if principal.is_admin:
+        cache.set(f"bootstrap:{principal.company_id}", result, ttl=8)
+    return result
 
 
 @router.get("/users")
