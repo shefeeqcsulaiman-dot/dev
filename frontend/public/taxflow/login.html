@@ -77,9 +77,25 @@
     @media(max-width:480px){
       .card{padding:36px 24px 28px;}
     }
+    #loader-overlay{
+      display:none;position:fixed;inset:0;z-index:9999;
+      align-items:center;justify-content:center;flex-direction:column;gap:18px;
+      background:linear-gradient(145deg,#040d1e 0%,#0a1f4a 45%,#07163a 100%);
+    }
+    #loader-overlay .spinner{
+      width:34px;height:34px;border:3px solid rgba(255,255,255,.25);
+      border-top-color:#4f8ef0;border-radius:50%;animation:loader-spin .8s linear infinite;
+    }
+    #loader-overlay .loader-text{color:#dbeafe;font-size:14px;font-weight:500;letter-spacing:.3px}
+    @keyframes loader-spin{to{transform:rotate(360deg)}}
   </style>
 </head>
 <body>
+<div id="loader-overlay">
+  <img src="/logo.png" alt="ETaxFlow" style="width:120px;height:auto;opacity:.95">
+  <div class="spinner"></div>
+  <div class="loader-text">Loading your dashboard…</div>
+</div>
 <div class="card">
   <div class="brand">
     <img src="/logo.png" alt="ETaxFlow" class="brand-img">
@@ -113,13 +129,13 @@
       var r=await fetch(apiBase()+'/auth/whoami',{headers:{'Authorization':'Bearer '+t}});
       if(!r.ok)return;
       var who=await r.json();
-      if(who.kind==='employee'){window.location.replace('/hrms');return;}
+      if(who.kind==='employee'){preloadAndRedirect('/hrms',t);return;}
       // Admin: /auth/whoami doesn't carry the admin/superadmin distinction,
       // /auth/me already does — check that only for the User path.
       var meResp=await fetch(apiBase()+'/auth/me',{headers:{'Authorization':'Bearer '+t}});
       var me=await meResp.json();
       if(me&&me.role==='superadmin'){window.location.replace('/superadmin');return;}
-      window.location.replace('/');
+      preloadAndRedirect('/',t);
     }catch(e){ window.location.replace('/'); }
   })();
 
@@ -135,6 +151,28 @@
     var h=window.location.hostname;
     if(['localhost','127.0.0.1','::1',''].includes(h))return window.location.protocol+'//'+window.location.host+'/api/v1';
     return window.location.protocol+'//'+h+'/api/v1';
+  }
+
+  // Shows the full-page loader for a minimum of 3s (so it never just flashes)
+  // while prefetching the dashboard bootstrap payload in the background and
+  // caching it in sessionStorage — app.js's hydrateFromServer() picks this
+  // cache up on the next page load instead of re-fetching, so the dashboard
+  // that appears right after the loader has its data ready immediately
+  // rather than showing its own separate loading state.
+  async function preloadAndRedirect(url,token){
+    document.getElementById('loader-overlay').style.display='flex';
+    var minWait=new Promise(function(r){setTimeout(r,3000);});
+    var prefetch=fetch(apiBase()+'/app-data?action=bootstrap',{headers:{'Authorization':'Bearer '+token}})
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(json){
+        if(json){
+          try{sessionStorage.setItem('taxflow_bootstrap_cache',JSON.stringify({data:json,ts:Date.now()}));}catch(e){}
+        }
+      })
+      .catch(function(){});
+    var maxWait=new Promise(function(r){setTimeout(r,8000);});
+    await Promise.all([minWait,Promise.race([prefetch,maxWait])]);
+    window.location.replace(url);
   }
 
   async function signIn(){
@@ -160,7 +198,7 @@
           var me=await meResp.json();
           if(me&&me.role==='superadmin'){window.location.replace('/superadmin');return;}
         }catch(e){}
-        window.location.replace('/');
+        preloadAndRedirect('/',data.access_token);
         return;
       }
       // Not a TaxFlow admin account — try as an HRMS sub-user (Employee RBAC
@@ -175,7 +213,7 @@
       if(hrResp.ok&&hrData.access_token){
         localStorage.setItem('taxflow_token',hrData.access_token);
         localStorage.setItem('taxflow_principal_kind','employee');
-        window.location.replace('/hrms');
+        preloadAndRedirect('/hrms',hrData.access_token);
         return;
       }
       err.textContent=data.detail||'Incorrect email or password.';

@@ -956,6 +956,15 @@ class BiometricDevice(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(30), default="active")
     last_sync: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # BioTime server connection (device_type == "ZKTeco BioTime Server") — a
+    # pull integration against the customer's own BioTime install, not a
+    # single physical terminal. Credentials are per-company, never shared.
+    biotime_base_url: Mapped[str | None] = mapped_column(String(255))
+    biotime_username: Mapped[str | None] = mapped_column(String(120))
+    biotime_password_enc: Mapped[str | None] = mapped_column(Text)
+    biotime_token: Mapped[str | None] = mapped_column(Text)
+    biotime_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
 
 class AttendancePunch(Base, TimestampMixin):
     __tablename__ = "attendance_punches"

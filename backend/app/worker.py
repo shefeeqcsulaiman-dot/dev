@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime, timedelta
 from time import sleep
 
@@ -5,7 +6,9 @@ from celery import Celery
 
 from app.config import get_settings
 from app.database import SessionLocal
-from app.models import AttendanceSession, EmployeeLocationLog, Job, JobStatus
+from app.models import AttendanceSession, BiometricDevice, EmployeeLocationLog, Job, JobStatus
+
+logger = logging.getLogger("taxflow.worker")
 
 
 settings = get_settings()
@@ -22,6 +25,10 @@ celery_app.conf.task_eager_propagates = True
 celery_app.conf.beat_schedule = {
     "hr-auto-checkout-stale-sessions": {
         "task": "hr.auto_checkout_stale_sessions",
+        "schedule": 300.0,
+    },
+    "hr-sync-biotime-devices": {
+        "task": "hr.sync_biotime_devices",
         "schedule": 300.0,
     },
 }
@@ -58,6 +65,34 @@ def auto_checkout_stale_sessions() -> int:
         if closed:
             db.commit()
         return closed
+    finally:
+        db.close()
+
+
+@celery_app.task(name="hr.sync_biotime_devices")
+def sync_biotime_devices() -> int:
+    """Pulls attendance from every company's own connected BioTime server —
+    one isolated sync per device (biotime_sync.sync_biotime_device), never a
+    pooled cross-company query. A failure on one company's server must not
+    block another's, so each device is wrapped in its own try/except."""
+    from app import biotime_sync  # local import: keeps worker.py's import
+    # graph light for tasks that don't need it, matching this module's
+    # existing pattern of not importing every router/service at top level.
+
+    db = SessionLocal()
+    total_synced = 0
+    try:
+        devices = db.query(BiometricDevice).filter(
+            BiometricDevice.device_type == "ZKTeco BioTime Server",
+            BiometricDevice.status == "active",
+        ).all()
+        for device in devices:
+            try:
+                total_synced += biotime_sync.sync_biotime_device(db, device)
+            except Exception as exc:
+                db.rollback()
+                logger.warning("BioTime sync failed for device %s (company %s): %s", device.id, device.company_id, exc)
+        return total_synced
     finally:
         db.close()
 

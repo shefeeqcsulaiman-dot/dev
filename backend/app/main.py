@@ -437,6 +437,18 @@ def ensure_schema_updates() -> None:
                 logging.getLogger("taxflow").error(
                     "Could not create uq_employees_username (likely duplicate usernames already exist): %s", idx_exc
                 )
+        if "biometric_devices" in table_names:
+            existing_columns = {column["name"] for column in inspector.get_columns("biometric_devices")}
+            required_columns = {
+                "biotime_base_url": "VARCHAR(255)",
+                "biotime_username": "VARCHAR(120)",
+                "biotime_password_enc": "TEXT",
+                "biotime_token": "TEXT",
+                "biotime_token_expires_at": "TIMESTAMP WITH TIME ZONE",
+            }
+            for column_name, column_type in required_columns.items():
+                if column_name not in existing_columns:
+                    connection.execute(text(f"ALTER TABLE biometric_devices ADD COLUMN {column_name} {column_type}"))
         if "stock_product_mappings" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("stock_product_mappings")}
             required_columns = {

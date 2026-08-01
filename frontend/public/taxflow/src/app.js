@@ -7444,9 +7444,27 @@ function cleanupDemoProductsFromServer(products=[]){
   }
 }
 
+// login.html shows a loader on sign-in and prefetches this same bootstrap
+// payload in the background during it, caching it here — pick that up
+// instead of re-fetching so the dashboard has data the instant it renders.
+// One-time use (removed on read) and time-boxed so a stale leftover from an
+// abandoned tab is never mistaken for fresh data.
+function _takeBootstrapPreloadCache(){
+  try{
+    const raw=sessionStorage.getItem('taxflow_bootstrap_cache');
+    if(!raw)return null;
+    sessionStorage.removeItem('taxflow_bootstrap_cache');
+    const cached=JSON.parse(raw);
+    if(cached&&cached.data&&(Date.now()-cached.ts)<60000)return cached.data;
+  }catch(e){}
+  return null;
+}
+
 function hydrateFromServer(){
   const _yield=()=>new Promise(r=>setTimeout(r,0));
-  return apiRequest('bootstrap',{}, {method:'GET'}).then(async ({data})=>{
+  const _bootstrapPromise=Promise.resolve(_takeBootstrapPreloadCache())
+    .then(cached=>cached||apiRequest('bootstrap',{}, {method:'GET'}));
+  return _bootstrapPromise.then(async ({data})=>{
     if(!data)return;
     isHydratingFromServer=true;
     const renderStats={};
@@ -18424,7 +18442,14 @@ async function loadBiometricDevices(){
       tr.dataset.deviceId=d.id;
       const statusCls=d.status==='active'?'b-g':'b-r';
       const lastSync=d.last_sync?new Date(d.last_sync).toLocaleString('en-AE'):'Never';
-      tr.innerHTML=`<td>${escapeHtml(d.name)}</td><td><span class="b b-b" style="font-size:10px">${escapeHtml(d.device_type)}</span></td><td class="mono">${escapeHtml(d.ip_address||'—')}</td><td class="mono">${d.port||'—'}</td><td>${escapeHtml(d.location||'—')}</td><td><span class="b ${statusCls}">${escapeHtml(d.status)}</span></td><td class="mono" style="font-size:11px">${lastSync}</td><td><div class="flx"><button class="btn btn-p btn-sm" onclick="showBioGuide(null,'${escapeHtml(d.device_type)}','${escapeHtml(d.ip_address||'')}',${d.port||4370})">Guide</button><button class="btn btn-g btn-sm" onclick="testBiometricDevice('${escapeHtml(d.id)}',this)">Test</button><button class="btn btn-danger btn-sm" onclick="deleteBiometricDevice('${escapeHtml(d.id)}',this)">Remove</button></div></td>`;
+      const isBioTime=BIO_BIOTIME_TYPES.has(d.device_type);
+      const addrCol=isBioTime
+        ?`<td class="mono" colspan="2" style="font-size:11px">${escapeHtml((d.biotime_base_url||'—').replace(/^https?:\/\//,''))}</td>`
+        :`<td class="mono">${escapeHtml(d.ip_address||'—')}</td><td class="mono">${d.port||'—'}</td>`;
+      const actionsCol=isBioTime
+        ?`<button class="btn btn-p btn-sm" onclick="syncBiometricDeviceNow('${escapeHtml(d.id)}',this)">Sync Now</button><button class="btn btn-g btn-sm" onclick="testBiometricDevice('${escapeHtml(d.id)}',this)">Test</button>`
+        :`<button class="btn btn-p btn-sm" onclick="showBioGuide(null,'${escapeHtml(d.device_type)}','${escapeHtml(d.ip_address||'')}',${d.port||4370})">Guide</button><button class="btn btn-g btn-sm" onclick="testBiometricDevice('${escapeHtml(d.id)}',this)">Test</button>`;
+      tr.innerHTML=`<td>${escapeHtml(d.name)}</td><td><span class="b b-b" style="font-size:10px">${escapeHtml(d.device_type)}</span></td>${addrCol}<td>${escapeHtml(d.location||'—')}</td><td><span class="b ${statusCls}">${escapeHtml(d.status)}</span></td><td class="mono" style="font-size:11px">${lastSync}</td><td><div class="flx">${actionsCol}<button class="btn btn-danger btn-sm" onclick="deleteBiometricDevice('${escapeHtml(d.id)}',this)">Remove</button></div></td>`;
       tbody.appendChild(tr);
     });
     if(latestSync)set('bio-kpi-last',new Date(latestSync).toLocaleTimeString('en-AE'));
@@ -18466,12 +18491,17 @@ async function loadBioSyncLog(){
 
 const BIO_TCP_TYPES=new Set(['ZKTeco F Series','ZKTeco K Series','ZKTeco iClock','ZKTeco X Face Pro','ZKTeco SpeedFace','ZKTeco ProFace','ZKTeco G Series','ZKTeco UA Series','ZKTeco IN Series','ZKTeco MB Series','ZKTeco','Anviz']);
 const BIO_PUSH_TYPES=new Set(['ZKTeco ADMS','Suprema','Hikvision']);
+const BIO_BIOTIME_TYPES=new Set(['ZKTeco BioTime Server']);
 
 function onBioDevTypeChange(val){
   const hint=document.getElementById('bio-dev-mode-hint');
   const netRow=document.getElementById('bio-dev-net-row');
+  const biotimeRow=document.getElementById('bio-dev-biotime-row');
   const portEl=document.getElementById('bio-dev-port');
+  const saveBtn=document.getElementById('bio-dev-save-btn');
   if(!hint)return;
+  if(biotimeRow)biotimeRow.style.display=BIO_BIOTIME_TYPES.has(val)?'':'none';
+  if(saveBtn)saveBtn.textContent=BIO_BIOTIME_TYPES.has(val)?'Connect BioTime Server':'Add Device & Get Device Key';
   if(val==='Manual'){
     hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--bg2);color:var(--text3)';
     hint.innerHTML='<strong>Mode: Manual / CSV</strong> — No device connection needed. Use the <em>Import CSV</em> button to upload attendance records.';
@@ -18479,6 +18509,10 @@ function onBioDevTypeChange(val){
   } else if(val==='ZKTeco ADMS'){
     hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--amber-bg);color:var(--amber)';
     hint.innerHTML='<strong>Mode: ADMS Cloud Push</strong> — On the device panel, set: <em>ADMS Server → this server\'s URL</em>. The device pushes punches automatically. No bridge script needed.';
+    if(netRow)netRow.style.display='none';
+  } else if(BIO_BIOTIME_TYPES.has(val)){
+    hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--blue-bg);color:var(--blue)';
+    hint.innerHTML='<strong>Mode: BioTime Pull</strong> — TaxFlow connects directly to your existing BioTime server every 5 minutes and pulls attendance for all its terminals. No bridge software needed. Requires each employee\'s <em>Employee No.</em> to match their BioTime personnel ID.';
     if(netRow)netRow.style.display='none';
   } else if(BIO_PUSH_TYPES.has(val)){
     hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--amber-bg);color:var(--amber)';
@@ -18812,10 +18846,29 @@ function showBioGuide(apiKey, type, ip, port){
 async function saveBiometricDevice(){
   const name=(document.getElementById('bio-dev-name')?.value||'').trim();
   const type=document.getElementById('bio-dev-type')?.value||'ZKTeco F Series';
-  const ip=(document.getElementById('bio-dev-ip')?.value||'').trim();
-  const port=parseInt(document.getElementById('bio-dev-port')?.value)||4370;
   const loc=(document.getElementById('bio-dev-location')?.value||'').trim();
   if(!name){toast('Device name is required','warn');return;}
+
+  if(BIO_BIOTIME_TYPES.has(type)){
+    const baseUrl=(document.getElementById('bio-dev-biotime-url')?.value||'').trim();
+    const username=(document.getElementById('bio-dev-biotime-user')?.value||'').trim();
+    const password=document.getElementById('bio-dev-biotime-pass')?.value||'';
+    if(!baseUrl||!username||!password){toast('Server URL, username and password are all required','warn');return;}
+    try{
+      await moduleApi('/attendance/devices',{method:'POST',body:{
+        name,device_type:type,location:loc||null,
+        biotime_base_url:baseUrl,biotime_username:username,biotime_password:password,
+      }});
+      toast('BioTime server connected — syncing now…','ok');
+      closeM('m-bio-device');
+      ['bio-dev-name','bio-dev-location','bio-dev-biotime-url','bio-dev-biotime-user','bio-dev-biotime-pass'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+      await loadBiometricDevices();
+    }catch(e){toast('Failed to connect BioTime server: '+e,'warn');}
+    return;
+  }
+
+  const ip=(document.getElementById('bio-dev-ip')?.value||'').trim();
+  const port=parseInt(document.getElementById('bio-dev-port')?.value)||4370;
   try{
     const res=await moduleApi('/attendance/devices',{method:'POST',body:{name,device_type:type,ip_address:ip||null,port,location:loc||null}});
     if(res.api_key){
@@ -18826,6 +18879,20 @@ async function saveBiometricDevice(){
       toast('Device added','ok');closeM('m-bio-device');loadBiometricDevices();
     }
   }catch(e){toast('Failed to add device: '+e,'warn');}
+}
+
+async function syncBiometricDeviceNow(id,btn){
+  const orig=btn.textContent;
+  btn.textContent='Syncing…';btn.disabled=true;
+  try{
+    const res=await moduleApi(`/attendance/devices/${encodeURIComponent(id)}/biotime/sync`,{method:'POST',body:{}});
+    toast(res.message||`Synced ${res.synced||0} record(s)`,'ok');
+    loadBiometricDevices();
+    loadBioSyncLog();
+  }catch(e){
+    toast('Sync failed: '+(e?.message||e),'warn');
+  }
+  btn.textContent=orig;btn.disabled=false;
 }
 
 async function testBiometricDevice(id,btn){

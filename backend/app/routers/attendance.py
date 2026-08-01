@@ -23,6 +23,7 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app import biotime_client, biotime_sync, crypto
 from app.database import get_db
 from app.dependencies import Principal, get_current_user, require_principal_permission
 from app.limiter import limiter
@@ -52,10 +53,14 @@ class PunchIn(BaseModel):
 
 class DeviceCreate(BaseModel):
     name: str
-    device_type: str = "ZKTeco F Series"  # ZKTeco F/K/iClock/SpeedFace/ProFace/G/UA/IN/MB Series | ZKTeco ADMS | Suprema | Hikvision | Anviz | Manual
+    device_type: str = "ZKTeco F Series"  # ZKTeco F/K/iClock/SpeedFace/ProFace/G/UA/IN/MB Series | ZKTeco ADMS | Suprema | Hikvision | Anviz | ZKTeco BioTime Server | Manual
     ip_address: str | None = None
     port: int = 4370
     location: str | None = None
+    # BioTime server connection only (device_type == "ZKTeco BioTime Server")
+    biotime_base_url: str | None = None
+    biotime_username: str | None = None
+    biotime_password: str | None = None
 
 
 class DeviceOut(BaseModel):
@@ -67,6 +72,8 @@ class DeviceOut(BaseModel):
     location: str | None
     status: str
     last_sync: str | None
+    biotime_base_url: str | None = None
+    biotime_username: str | None = None
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -142,6 +149,8 @@ def list_devices(
         location=d.location,
         status=d.status,
         last_sync=d.last_sync.isoformat() if d.last_sync else None,
+        biotime_base_url=d.biotime_base_url,
+        biotime_username=d.biotime_username,
     ) for d in devices]
 
 
@@ -151,6 +160,31 @@ def add_device(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
+    # BioTime Server: a pull connection to the customer's own BioTime
+    # install, not a device we issue a push key to — no api_key_hash.
+    if body.device_type in _BIOTIME_TYPES:
+        if not body.biotime_base_url or not body.biotime_username or not body.biotime_password:
+            raise HTTPException(400, "Base URL, username and password are required for a BioTime Server connection")
+        device = BiometricDevice(
+            company_id=current_user.company_id,
+            name=body.name,
+            device_type=body.device_type,
+            location=body.location,
+            biotime_base_url=body.biotime_base_url.strip(),
+            biotime_username=body.biotime_username.strip(),
+            biotime_password_enc=crypto.encrypt_secret(body.biotime_password),
+            status="active",
+        )
+        db.add(device)
+        db.commit()
+        db.refresh(device)
+        return {
+            "id": device.id,
+            "name": device.name,
+            "device_type": device.device_type,
+            "message": "BioTime connection saved. Click Sync Now to pull attendance, or wait for the next automatic sync (every 5 minutes).",
+        }
+
     raw_key = secrets.token_urlsafe(32)
     device = BiometricDevice(
         company_id=current_user.company_id,
@@ -197,6 +231,7 @@ _TCP_TYPES = {
     "ZKTeco MB Series", "ZKTeco", "Anviz",
 }
 _PUSH_TYPES = {"Suprema", "Hikvision", "ZKTeco ADMS"}
+_BIOTIME_TYPES = {"ZKTeco BioTime Server"}
 
 
 @router.post("/devices/{device_id}/test")
@@ -213,6 +248,23 @@ def test_device(
         raise HTTPException(404, "Device not found")
 
     now = datetime.now(UTC)
+
+    # ── BioTime Server: authenticate + list terminals as the connectivity check ──
+    if device.device_type in _BIOTIME_TYPES:
+        if not device.biotime_base_url or not device.biotime_username or not device.biotime_password_enc:
+            return {"ok": False, "message": "BioTime connection is not fully configured"}
+        try:
+            password = crypto.decrypt_secret(device.biotime_password_enc)
+            token = biotime_client.get_token(device.biotime_base_url, device.biotime_username, password)
+            terminals = biotime_client.list_terminals(device.biotime_base_url, token)
+        except (biotime_client.BioTimeError, ValueError) as exc:
+            return {"ok": False, "message": str(exc)}
+        device.biotime_token = token
+        device.biotime_token_expires_at = now + timedelta(hours=6)
+        db.commit()
+        names = ", ".join(t.get("alias") or t.get("sn") or "?" for t in terminals[:5])
+        more = f" (+{len(terminals) - 5} more)" if len(terminals) > 5 else ""
+        return {"ok": True, "message": f"Connected — {len(terminals)} terminal(s) on this BioTime server: {names}{more}"}
 
     # ── HTTP Push / ADMS devices: they call us, we can't call them ────────────
     if device.device_type in _PUSH_TYPES:
@@ -272,6 +324,30 @@ def test_device(
         return {"ok": False, "message": f"Connection refused on {device.ip_address}:{device.port} — verify IP and port"}
     except OSError as e:
         return {"ok": False, "message": f"Cannot reach {device.ip_address}:{device.port} — {e.strerror}"}
+
+
+@router.post("/devices/{device_id}/biotime/sync")
+def sync_biotime_device_now(
+    device_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Manual "Sync Now" — pulls attendance from the company's own BioTime
+    server. Same code path (biotime_sync.sync_biotime_device) the periodic
+    Celery beat task uses, so behavior is identical whether triggered here
+    or automatically."""
+    device = db.query(BiometricDevice).filter(
+        BiometricDevice.id == device_id,
+        BiometricDevice.company_id == current_user.company_id,
+        BiometricDevice.device_type.in_(_BIOTIME_TYPES),
+    ).first()
+    if not device:
+        raise HTTPException(404, "BioTime device not found")
+    try:
+        inserted = biotime_sync.sync_biotime_device(db, device)
+    except (biotime_client.BioTimeError, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"ok": True, "synced": inserted, "message": f"Synced {inserted} new punch record(s)."}
 
 
 def _optional_user(request: Request, db: Session = Depends(get_db)) -> User | None:

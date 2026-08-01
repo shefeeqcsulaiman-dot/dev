@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=20260721e" as="style">
-<link rel="preload" href="src/app.js?v=20260729c" as="script">
+<link rel="preload" href="src/app.js?v=20260801a" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=20260721e">
 <style>
@@ -2488,6 +2488,9 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
           <optgroup label="ZKTeco — ADMS Cloud Push">
             <option value="ZKTeco ADMS">ZKTeco ADMS (Push Mode — device calls server)</option>
           </optgroup>
+          <optgroup label="ZKTeco — BioTime Server (Pull via REST API)">
+            <option value="ZKTeco BioTime Server">BioTime 9.5 Server — connect to your existing BioTime install</option>
+          </optgroup>
           <optgroup label="Other Brands — HTTP Push">
             <option value="Suprema">Suprema — BioStation A2, CoreStation</option>
             <option value="Hikvision">Hikvision — DS-K1T Series, MinMoe</option>
@@ -2504,8 +2507,15 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div class="fg"><label class="fl">IP Address</label><input class="fi mono" id="bio-dev-ip" placeholder="192.168.1.201"></div>
       <div class="fg"><label class="fl">Port</label><input class="fi mono" id="bio-dev-port" value="4370" type="number"></div>
     </div>
+    <div id="bio-dev-biotime-row" style="display:none">
+      <div class="fg"><label class="fl">BioTime Server URL</label><input class="fi mono" id="bio-dev-biotime-url" placeholder="http://your-biotime-server:8098"></div>
+      <div class="fr2">
+        <div class="fg"><label class="fl">Username</label><input class="fi" id="bio-dev-biotime-user" autocomplete="off" placeholder="BioTime login username"></div>
+        <div class="fg"><label class="fl">Password</label><input class="fi" id="bio-dev-biotime-pass" type="password" autocomplete="new-password" placeholder="BioTime login password"></div>
+      </div>
+    </div>
     <div class="fg"><label class="fl">Location / Description</label><input class="fi" id="bio-dev-location" placeholder="Reception, Factory Gate, Office Door…"></div>
-    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-bio-device')">Cancel</button><button class="btn btn-p" onclick="saveBiometricDevice()">Add Device &amp; Get Device Key</button></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-bio-device')">Cancel</button><button class="btn btn-p" id="bio-dev-save-btn" onclick="saveBiometricDevice()">Add Device &amp; Get Device Key</button></div>
   </div>
 </div>
 
@@ -2694,7 +2704,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260729c" defer></script>
+<script src="src/app.js?v=20260801a" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
