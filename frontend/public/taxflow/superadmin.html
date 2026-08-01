@@ -395,12 +395,17 @@
     <div class="modal-sub" id="edit-co-sub">Update company details</div>
     <div id="edit-co-err" class="err-msg"></div>
     <input type="hidden" id="edit-co-id">
+    <input type="hidden" id="edit-co-admin-user-id">
+    <input type="hidden" id="edit-co-admin-role">
     <div class="fg"><label class="fl">Company Name</label><input class="fi" id="edit-co-name" placeholder="Acme LLC"></div>
     <div class="fr2">
       <div class="fg"><label class="fl">TRN (optional)</label><input class="fi mono" id="edit-co-trn" placeholder="100000000000003"></div>
       <div class="fg"><label class="fl">Subscription Expiry</label><input class="fi" id="edit-co-expiry" type="date"></div>
     </div>
-    <div style="font-size:11.5px;color:#8896b3;margin:-6px 0 10px">Full business profile (trade license, address, FTA login, etc.) is managed by the company itself under its own Settings — this only covers identity, subscription, and module access.</div>
+    <div class="fg"><label class="fl">Admin Email</label><input class="fi" id="edit-co-admin-email" type="email" placeholder="admin@company.ae"></div>
+    <div class="fg"><label class="fl">Admin Full Name</label><input class="fi" id="edit-co-admin-name" placeholder="Company Administrator"></div>
+    <div class="fg"><label class="fl">Admin Password <span style="color:#8896b3;font-weight:400">(leave blank to keep current)</span></label><input class="fi" id="edit-co-admin-pwd" type="password" placeholder="Set a new password" autocomplete="new-password"></div>
+    <div style="font-size:11.5px;color:#8896b3;margin:-6px 0 10px">Full business profile (trade license, address, FTA login, etc.) is managed by the company itself under its own Settings — this only covers identity, subscription, admin login, and module access.</div>
     <div>
       <div style="display:flex;align-items:center;justify-content:space-between">
         <label class="fl" style="margin:0">Module Permissions</label>
@@ -840,6 +845,12 @@
     document.getElementById('edit-co-name').value=c.name||'';
     document.getElementById('edit-co-trn').value=c.trn||'';
     document.getElementById('edit-co-expiry').value=c.subscription_expires_at?c.subscription_expires_at.slice(0,10):'';
+    const admin=(c.users||[]).find(u=>u.role==='admin')||(c.users||[])[0]||null;
+    document.getElementById('edit-co-admin-user-id').value=admin?admin.id:'';
+    document.getElementById('edit-co-admin-role').value=admin?admin.role:'admin';
+    document.getElementById('edit-co-admin-email').value=admin?admin.email||'':'';
+    document.getElementById('edit-co-admin-name').value=admin?admin.full_name||'':'';
+    document.getElementById('edit-co-admin-pwd').value='';
     const mods=Array.isArray(c.modules_enabled)&&c.modules_enabled.length?c.modules_enabled:MODULE_DEFS.map(m=>m.key);
     buildModGrid('edit-co-mod-grid', mods);
     openModal('m-edit-co');
@@ -861,16 +872,32 @@
     // never erases existing profile data.
     const body={ name, trn:val('edit-co-trn') };
     const modules=getCheckedModules('edit-co-mod-grid');
+    const adminUserId=document.getElementById('edit-co-admin-user-id').value;
+    const adminRole=document.getElementById('edit-co-admin-role').value||'admin';
+    const adminEmail=val('edit-co-admin-email');
+    const adminName=val('edit-co-admin-name');
+    const adminPwd=document.getElementById('edit-co-admin-pwd').value;
+    if(adminUserId&&!adminEmail){ errEl.textContent='Admin email is required.'; errEl.style.display='block'; return; }
     btn.disabled=true; btn.textContent='Saving…';
     try{
-      const [r1,,r3]=await Promise.all([
+      const calls=[
         apiFetch(`/superadmin/companies/${id}`,{method:'PATCH',body:JSON.stringify(body)}),
         apiFetch(`/superadmin/companies/${id}/set-expiry`,{method:'POST',body:JSON.stringify({expires_at:expiry})}),
-        apiFetch(`/superadmin/companies/${id}/modules`,{method:'PUT',body:JSON.stringify({modules})})
-      ]);
+        apiFetch(`/superadmin/companies/${id}/modules`,{method:'PUT',body:JSON.stringify({modules})}),
+      ];
+      // Admin Email/Full Name/Password reuse the exact same endpoints as the
+      // separate Edit User / Reset Password modals — this just saves them in
+      // the same click as the rest of the company edit.
+      if(adminUserId){
+        calls.push(apiFetch(`/superadmin/companies/${id}/users/${adminUserId}`,{method:'PATCH',body:JSON.stringify({full_name:adminName,email:adminEmail,role:adminRole})}));
+        if(adminPwd) calls.push(apiFetch(`/superadmin/companies/${id}/reset-password`,{method:'POST',body:JSON.stringify({user_id:adminUserId,password:adminPwd})}));
+      }
+      const [r1,,r3,r4,r5]=await Promise.all(calls);
       const d1=await r1.json();
       if(!r1.ok){ errEl.textContent=d1.detail||'Failed to update company.'; errEl.style.display='block'; return; }
       if(!r3.ok){ const d3=await r3.json().catch(()=>({})); errEl.textContent=d3.detail||'Company details saved, but module permissions failed to update.'; errEl.style.display='block'; return; }
+      if(r4&&!r4.ok){ const d4=await r4.json().catch(()=>({})); errEl.textContent=d4.detail||'Company details saved, but admin details failed to update.'; errEl.style.display='block'; return; }
+      if(r5&&!r5.ok){ const d5=await r5.json().catch(()=>({})); errEl.textContent=d5.detail||'Company/admin details saved, but password reset failed.'; errEl.style.display='block'; return; }
       closeModal('m-edit-co');
       loadDashboard();
     }catch(err){ errEl.textContent=err.message; errEl.style.display='block'; }
