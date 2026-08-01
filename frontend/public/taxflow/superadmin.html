@@ -396,35 +396,11 @@
     <div id="edit-co-err" class="err-msg"></div>
     <input type="hidden" id="edit-co-id">
     <div class="fg"><label class="fl">Company Name</label><input class="fi" id="edit-co-name" placeholder="Acme LLC"></div>
-    <div class="fg"><label class="fl">Trade Name</label><input class="fi" id="edit-co-trade-name" placeholder="Trading as…"></div>
     <div class="fr2">
-      <div class="fg"><label class="fl">TRN</label><input class="fi mono" id="edit-co-trn" placeholder="100000000000003"></div>
-      <div class="fg"><label class="fl">Country</label><input class="fi" id="edit-co-country" placeholder="United Arab Emirates"></div>
+      <div class="fg"><label class="fl">TRN (optional)</label><input class="fi mono" id="edit-co-trn" placeholder="100000000000003"></div>
+      <div class="fg"><label class="fl">Subscription Expiry</label><input class="fi" id="edit-co-expiry" type="date"></div>
     </div>
-    <div class="fr2">
-      <div class="fg"><label class="fl">Emirate</label><input class="fi" id="edit-co-emirate" placeholder="Dubai"></div>
-      <div class="fg"><label class="fl">Business Type</label><input class="fi" id="edit-co-business-type" placeholder="LLC, Sole Establishment…"></div>
-    </div>
-    <div class="fg"><label class="fl">Business Activity</label><input class="fi" id="edit-co-business-activity" placeholder="Trading, consulting…"></div>
-    <div class="fr2">
-      <div class="fg"><label class="fl">Legal Structure</label><input class="fi" id="edit-co-legal-structure" placeholder="LLC, Free Zone, Sole Prop…"></div>
-      <div class="fg"><label class="fl">Free Zone</label><input class="fi" id="edit-co-free-zone" placeholder="If applicable"></div>
-    </div>
-    <div class="fr2">
-      <div class="fg"><label class="fl">Trade License No.</label><input class="fi mono" id="edit-co-license-no"></div>
-      <div class="fg"><label class="fl">License Issue Date</label><input class="fi" id="edit-co-license-issue" type="date"></div>
-    </div>
-    <div class="fr2">
-      <div class="fg"><label class="fl">License Expiry</label><input class="fi" id="edit-co-license-expiry" type="date"></div>
-      <div class="fg"><label class="fl">PO Box</label><input class="fi" id="edit-co-pobox"></div>
-    </div>
-    <div class="fg"><label class="fl">Address</label><input class="fi" id="edit-co-address" placeholder="Street, building, city"></div>
-    <div class="fr2">
-      <div class="fg"><label class="fl">Phone</label><input class="fi" id="edit-co-phone" placeholder="+971 …"></div>
-      <div class="fg"><label class="fl">Website</label><input class="fi" id="edit-co-website" placeholder="https://…"></div>
-    </div>
-    <div class="fg"><label class="fl">FTA Username</label><input class="fi" id="edit-co-fta-user"></div>
-    <div class="fg"><label class="fl">Subscription Expiry (leave blank to remove)</label><input class="fi" id="edit-co-expiry" type="date"></div>
+    <div style="font-size:11.5px;color:#8896b3;margin:-6px 0 10px">Full business profile (trade license, address, FTA login, etc.) is managed by the company itself under its own Settings — this only covers identity, subscription, and module access.</div>
     <div>
       <div style="display:flex;align-items:center;justify-content:space-between">
         <label class="fl" style="margin:0">Module Permissions</label>
@@ -862,22 +838,7 @@
     document.getElementById('edit-co-err').style.display='none';
     document.getElementById('edit-co-id').value=c.id;
     document.getElementById('edit-co-name').value=c.name||'';
-    document.getElementById('edit-co-trade-name').value=c.trade_name||'';
     document.getElementById('edit-co-trn').value=c.trn||'';
-    document.getElementById('edit-co-country').value=c.country||'';
-    document.getElementById('edit-co-emirate').value=c.emirate||'';
-    document.getElementById('edit-co-business-type').value=c.business_type||'';
-    document.getElementById('edit-co-business-activity').value=c.business_activity||'';
-    document.getElementById('edit-co-legal-structure').value=c.legal_structure||'';
-    document.getElementById('edit-co-free-zone').value=c.free_zone||'';
-    document.getElementById('edit-co-license-no').value=c.trade_license_no||'';
-    document.getElementById('edit-co-license-issue').value=(c.trade_license_issue_date||'').slice(0,10);
-    document.getElementById('edit-co-license-expiry').value=(c.trade_license_expiry||'').slice(0,10);
-    document.getElementById('edit-co-pobox').value=c.po_box||'';
-    document.getElementById('edit-co-address').value=c.address||'';
-    document.getElementById('edit-co-phone').value=c.phone||'';
-    document.getElementById('edit-co-website').value=c.website||'';
-    document.getElementById('edit-co-fta-user').value=c.fta_username||'';
     document.getElementById('edit-co-expiry').value=c.subscription_expires_at?c.subscription_expires_at.slice(0,10):'';
     const mods=Array.isArray(c.modules_enabled)&&c.modules_enabled.length?c.modules_enabled:MODULE_DEFS.map(m=>m.key);
     buildModGrid('edit-co-mod-grid', mods);
@@ -893,16 +854,12 @@
     const name=val('edit-co-name');
     const expiry=document.getElementById('edit-co-expiry').value||null;
     if(!name){ errEl.textContent='Company name is required.'; errEl.style.display='block'; return; }
-    const body={
-      name, trn:val('edit-co-trn'), country:val('edit-co-country'),
-      trade_name:val('edit-co-trade-name'), emirate:val('edit-co-emirate'),
-      business_type:val('edit-co-business-type'), business_activity:val('edit-co-business-activity'),
-      legal_structure:val('edit-co-legal-structure'), free_zone:val('edit-co-free-zone'),
-      trade_license_no:val('edit-co-license-no'), trade_license_issue_date:val('edit-co-license-issue'),
-      trade_license_expiry:val('edit-co-license-expiry'), po_box:val('edit-co-pobox'),
-      address:val('edit-co-address'), phone:val('edit-co-phone'), website:val('edit-co-website'),
-      fta_username:val('edit-co-fta-user'),
-    };
+    // Only identity + TRN here — full business profile (trade name, address,
+    // license, FTA login, etc.) is the company's own responsibility via its
+    // Settings page; the backend PATCH only touches fields it's sent
+    // non-null (see update_company in superadmin.py), so omitting them here
+    // never erases existing profile data.
+    const body={ name, trn:val('edit-co-trn') };
     const modules=getCheckedModules('edit-co-mod-grid');
     btn.disabled=true; btn.textContent='Saving…';
     try{
