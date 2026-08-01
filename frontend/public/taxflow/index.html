@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=20260721e" as="style">
-<link rel="preload" href="src/app.js?v=20260801a" as="script">
+<link rel="preload" href="src/app.js?v=20260801c" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=20260721e">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
@@ -40,15 +40,15 @@
 
   <div class="sb-section">
     <div class="sb-lbl" data-i18n="sb_sales">Sales</div>
-    <div class="nav" onclick="go('sales')">
+    <div class="nav" data-module="sales" onclick="go('sales')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12l-1 8H3L2 4z"/><path d="M5 4V3a3 3 0 016 0v1"/></svg>
       <span data-i18n="sb_sales_invoices">Sales &amp; Invoices</span>
     </div>
-    <div class="nav" onclick="go('quotations')">
+    <div class="nav" data-module="quotations" onclick="go('quotations')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2h8l2 2v10H3z"/><path d="M10.5 2v3H13"/><path d="M5 7h6M5 10h5"/></svg>
       <span data-i18n="sb_quotations">Quotations</span>
     </div>
-    <div class="nav" onclick="window.open('/pos','_blank')" title="Opens POS terminal in a new tab">
+    <div class="nav" data-module="pos" onclick="window.open('/pos','_blank')" title="Opens POS terminal in a new tab">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="11" rx="1"/><path d="M1 7h14"/><path d="M5 11h2M10 11h1"/><path d="M8 1v2"/></svg>
       <span data-i18n="sb_pos">Point of Sale</span>
     </div>
@@ -56,15 +56,15 @@
 
   <div class="sb-section">
     <div class="sb-lbl" data-i18n="sb_purchasing">Purchasing</div>
-    <div class="nav" onclick="go('purchase')">
+    <div class="nav" data-module="purchase" onclick="go('purchase')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2h2l2 8h8"/><circle cx="7" cy="13" r="1"/><circle cx="13" cy="13" r="1"/></svg>
       <span data-i18n="sb_purchases">Purchases</span>
     </div>
-    <div class="nav" onclick="go('inventory')">
+    <div class="nav" data-module="inventory" onclick="go('inventory')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12"/><path d="M4 4v10"/><path d="M12 4v10"/><path d="M4 8h8"/></svg>
       <span data-i18n="sb_inventory">Inventory</span>
     </div>
-    <div class="nav" onclick="go('expense')">
+    <div class="nav" data-module="expense" onclick="go('expense')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
       <span data-i18n="sb_expenses">Expenses</span>
     </div>
@@ -72,19 +72,19 @@
 
   <div class="sb-section">
     <div class="sb-lbl" data-i18n="sb_finance">Finance</div>
-    <div class="nav" onclick="go('bank')">
+    <div class="nav" data-module="bank" onclick="go('bank')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="6" width="14" height="9" rx="1"/><path d="M1 9h14"/><path d="M8 2L1 6h14L8 2z"/></svg>
       <span data-i18n="sb_bank">Bank &amp; Payments</span>
     </div>
-    <div class="nav" onclick="go('accounting')">
+    <div class="nav" data-module="accounting" onclick="go('accounting')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M5 5h6M5 8h6M5 11h4"/></svg>
       <span data-i18n="sb_accounting">Accounting</span>
     </div>
-    <div class="nav" onclick="go('corporate')">
+    <div class="nav" data-module="corporate" onclick="go('corporate')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 14V3h10v11"/><path d="M5 5h2M9 5h2M5 8h2M9 8h2M5 11h2M9 11h2"/></svg>
       <span data-i18n="sb_corporate">Corporate Accounting</span>
     </div>
-    <div class="nav" onclick="go('reports')">
+    <div class="nav" data-module="reports" onclick="go('reports')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14V6l6-4 6 4v8"/><path d="M6 14v-4h4v4"/></svg>
       <span data-i18n="sb_reports">Reports</span>
     </div>
@@ -92,7 +92,7 @@
 
   <div class="sb-section">
     <div class="sb-lbl" data-i18n="sb_hr">People &amp; HR</div>
-    <div class="nav" id="nav-hrms" onclick="window.open('/hrms','_blank')" title="HRMS Portal">
+    <div class="nav" id="nav-hrms" data-module="hrms" onclick="window.open('/hrms','_blank')" title="HRMS Portal">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2a3 3 0 100 6 3 3 0 000-6z"/><path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/><path d="M12 7l1.5-1.5"/><circle cx="13.5" cy="4.5" r="1.5"/></svg>
       <span data-i18n="sb_hrms">HRMS</span>
     </div>
@@ -100,11 +100,11 @@
 
   <div class="sb-section">
     <div class="sb-lbl" data-i18n="sb_compliance">Compliance</div>
-    <div class="nav" onclick="go('notifications')">
+    <div class="nav" data-module="notifications" onclick="go('notifications')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 14a2 2 0 002-2H6a2 2 0 002 2z"/><path d="M3 11h10l-1-2V6a4 4 0 10-8 0v3z"/></svg>
       <span data-i18n="sb_notifications">Notifications</span>
     </div>
-    <div class="nav" onclick="go('expert')">
+    <div class="nav" data-module="expert" onclick="go('expert')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="7"/><path d="M8 4v5l3 2"/></svg>
       <span data-i18n="sb_expert">Expert Review</span>
     </div>
@@ -5792,6 +5792,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=20260801a" defer></script>
+<script src="src/app.js?v=20260801c" defer></script>
 </body>
 </html>

@@ -141,6 +141,12 @@ function go(page){
   // Assets) — gating them here would block a legitimately-permitted tab's
   // own goHrmsTab()/goHrmsExtTab() call, which already guards itself below.
   if(page!=='staff'&&page!=='hrms-ext'&&!_hrmsNavAllowed(`go('${page}')`)){_hrmsBlockNav();return;}
+  // Company-level Module Permissions (set by superadmin) — separate from the
+  // HRMS per-employee RBAC check above. Only meaningful in the main app.
+  if(!window.HRMS_STANDALONE&&!_moduleNavAllowed(page)){
+    toast("This module isn't enabled for your company — contact support to enable it",'warn');
+    return;
+  }
   if(page==='payments'){
     go('bank');
     setTimeout(()=>{
@@ -2458,6 +2464,39 @@ function applyCompanyToUi(company){
   applyDeptsBranchesFromCompany(company);
   const essLinkEl=document.getElementById('ess-portal-link');
   if(essLinkEl&&company.id)essLinkEl.textContent=`${window.location.origin}/ess?c=${company.id}`;
+  applyModulePermissionNav(company.modules_enabled);
+}
+
+// Superadmin's per-company "Module Permissions" (set at company creation or
+// via the Modules button on the superadmin company list) — hides sidebar
+// entries for modules this company hasn't been granted. `null`/undefined
+// means "not restricted" (matches the backend's own fallback for companies
+// that predate this column) so this never locks an existing company out.
+// Mirrors the same hide-by-data-module pattern already used for HRMS
+// per-employee RBAC nav (applyHrmsPermissionNav in hrms.html) — but that's
+// a DIFFERENT, non-overlapping data-module vocabulary on the SAME ".sb"
+// sidebar class in hrms.html, so this must never run there: it would find
+// zero matches for any HRMS module key and hide the entire HRMS sidebar.
+window.COMPANY_ALLOWED_MODULES=null;
+function applyModulePermissionNav(modulesEnabled){
+  if(window.HRMS_STANDALONE)return;
+  if(!Array.isArray(modulesEnabled)){
+    window.COMPANY_ALLOWED_MODULES=null;
+    document.querySelectorAll('.sb .nav[data-module]').forEach(n=>n.classList.remove('hidden'));
+    return;
+  }
+  const allowed=new Set(modulesEnabled);
+  window.COMPANY_ALLOWED_MODULES=allowed;
+  document.querySelectorAll('.sb .nav[data-module]').forEach(n=>{
+    n.classList.toggle('hidden',!allowed.has(n.dataset.module));
+  });
+}
+
+function _moduleNavAllowed(page){
+  if(!window.COMPANY_ALLOWED_MODULES)return true;
+  const nav=document.querySelector(`.sb .nav[data-module="${page}"]`);
+  if(!nav)return true; // not a module-gated destination (dashboard, settings, etc.)
+  return window.COMPANY_ALLOWED_MODULES.has(page);
 }
 
 function copyEssPortalLink(){
@@ -3421,11 +3460,31 @@ function renderApAging(rows){
   body.innerHTML=(rows.length?rows.map(r=>`<tr><td>${escapeHtml(r.supplier)}</td><td class="mono" style="text-align:right">${reportAmount(r.current)}</td><td class="mono" style="text-align:right">${reportAmount(r.d1_30)}</td><td class="mono" style="text-align:right">${reportAmount(r.d31_60)}</td><td class="mono" style="text-align:right">${reportAmount(r.d61_90)}</td><td class="mono" style="text-align:right">${reportAmount(r.over90)}</td><td class="mono" style="text-align:right;font-weight:600">${reportAmount(r.total)}</td></tr>`).join(''):`<tr><td colspan="7" style="color:var(--text3);text-align:center">No unpaid purchase invoices in database.</td></tr>`)+`<tr style="background:var(--surface2)"><td colspan="6" style="font-weight:600;text-align:right">Total</td><td class="mono" style="text-align:right;font-weight:600">${reportAmount(total)}</td></tr>`;
 }
 
-function renderInventoryReport(){
+async function renderInventoryReport(){
   const body=document.getElementById('rep-inv-body');
   if(!body)return;
-  const products=[...stockProductMappings.values()].slice(0,100);
-  body.innerHTML=products.length?products.map(p=>`<tr><td class="mono">${escapeHtml(p.sku||'—')}</td><td>${escapeHtml(p.name||p.taxflow_name||'—')}</td><td class="mono" style="text-align:right">${Number(p.qty||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono" style="text-align:right">${reportAmount(p.cost||0)}</td><td class="mono" style="text-align:right;font-weight:600">${reportAmount((Number(p.qty||0)*Number(p.cost||0)).toFixed(2))}</td></tr>`).join(''):`<tr><td colspan="5" style="color:var(--text3);text-align:center">No inventory items found.</td></tr>`;
+  try{
+    // Same endpoint + field-normalization as the working Inventory > Stock
+    // Levels tab (loadStockLevelsFromServer) — this report used to read a
+    // client-side "stockProductMappings" map that was never populated
+    // anywhere in the app, so it silently threw and stayed on "Loading…"
+    // forever. Pull from the real backend stock data instead.
+    const rows=await moduleApi('/inventory/stock-levels');
+    const products=(Array.isArray(rows)?rows:[])
+      .map(row=>({
+        sku:row.code||'',
+        name:row.name||row.code||'Stock item',
+        qty:parseAmount(row.current_stock??row.quantity??row.available),
+        cost:parseAmount(row.cost??row.purchase_rate??row.unit_cost??0),
+      }))
+      .filter(item=>!isDemoProductRecord(item))
+      .filter(item=>item.sku||item.name)
+      .slice(0,100);
+    body.innerHTML=products.length?products.map(p=>`<tr><td class="mono">${escapeHtml(p.sku||'—')}</td><td>${escapeHtml(p.name||'—')}</td><td class="mono" style="text-align:right">${Number(p.qty||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono" style="text-align:right">${reportAmount(p.cost||0)}</td><td class="mono" style="text-align:right;font-weight:600">${reportAmount((Number(p.qty||0)*Number(p.cost||0)).toFixed(2))}</td></tr>`).join(''):`<tr><td colspan="5" style="color:var(--text3);text-align:center">No inventory items found.</td></tr>`;
+  }catch(e){
+    console.warn('Inventory report failed:',e);
+    body.innerHTML='<tr><td colspan="5" style="color:var(--text3);text-align:center">Could not load inventory data.</td></tr>';
+  }
 }
 
 function renderRevenueIntelligence(rev,dashboard){

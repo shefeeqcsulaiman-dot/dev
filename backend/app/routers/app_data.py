@@ -277,6 +277,20 @@ def _allowed_bootstrap_collections(principal: Principal) -> set[str] | None:
     return allowed
 
 
+def _parse_modules_enabled(raw: str | None) -> list[str] | None:
+    """Superadmin's per-company Module Permissions (companies.modules_enabled,
+    a JSON array) — None means "not restricted, show everything" (matches
+    superadmin.py's own ALL_MODULES fallback for a null/blank column, so a
+    company created before this column existed isn't suddenly locked down)."""
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, list) else None
+    except (TypeError, ValueError):
+        return None
+
+
 @router.get("")
 @limiter.limit("60/minute")
 def bootstrap(
@@ -417,6 +431,7 @@ def bootstrap(
             "phone": company.phone,
             "website": company.website,
             "logo": company.logo,
+            "modules_enabled": _parse_modules_enabled(company.modules_enabled),
         }
 
     data: dict[str, object] = {
