@@ -2477,6 +2477,41 @@ function applyCompanyToUi(company){
 // a DIFFERENT, non-overlapping data-module vocabulary on the SAME ".sb"
 // sidebar class in hrms.html, so this must never run there: it would find
 // zero matches for any HRMS module key and hide the entire HRMS sidebar.
+// Keep in sync with ALL_MODULES in backend/app/routers/superadmin.py and
+// MODULE_DEFS in superadmin.html's Modules grid — same 16 keys, just the
+// friendly labels needed for the read-only summary on the company's own
+// Settings > Company Registration tab (renderModuleAccessCard below).
+const ALL_MODULE_DEFS=[
+  {key:'sales',label:'Sales & Invoices'},
+  {key:'quotations',label:'Quotations'},
+  {key:'pos',label:'Point of Sale'},
+  {key:'purchase',label:'Purchases'},
+  {key:'inventory',label:'Inventory'},
+  {key:'expense',label:'Expenses'},
+  {key:'bank',label:'Bank & Payments'},
+  {key:'accounting',label:'Accounting'},
+  {key:'corporate',label:'Corporate Accounting'},
+  {key:'reports',label:'Reports'},
+  {key:'hrms',label:'HRMS Portal'},
+  {key:'ess',label:'ESS Portal'},
+  {key:'notifications',label:'Notifications'},
+  {key:'expert',label:'Expert Review'},
+  {key:'exception',label:'Exception Center'},
+  {key:'ai',label:'AI Features'},
+];
+
+function renderModuleAccessCard(allowedOrNull){
+  const wrap=document.getElementById('module-access-grid');
+  if(!wrap)return;
+  wrap.innerHTML=ALL_MODULE_DEFS.map(m=>{
+    const on=!allowedOrNull||allowedOrNull.has(m.key);
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)">
+      <span style="font-size:12.5px">${escapeHtml(m.label)}</span>
+      <span class="b ${on?'b-g':'b-r'}" style="font-size:10.5px;flex-shrink:0">${on?'Enabled':'Disabled'}</span>
+    </div>`;
+  }).join('');
+}
+
 window.COMPANY_ALLOWED_MODULES=null;
 function applyModulePermissionNav(modulesEnabled){
   if(window.HRMS_STANDALONE)return;
@@ -2484,6 +2519,7 @@ function applyModulePermissionNav(modulesEnabled){
     window.COMPANY_ALLOWED_MODULES=null;
     document.querySelectorAll('.sb .nav[data-module]').forEach(n=>n.classList.remove('hidden'));
     document.querySelectorAll('[data-module-gate]').forEach(n=>n.classList.remove('hidden'));
+    renderModuleAccessCard(null);
     return;
   }
   const allowed=new Set(modulesEnabled);
@@ -2497,6 +2533,7 @@ function applyModulePermissionNav(modulesEnabled){
   document.querySelectorAll('[data-module-gate]').forEach(n=>{
     n.classList.toggle('hidden',!allowed.has(n.dataset.moduleGate));
   });
+  renderModuleAccessCard(allowed);
 }
 
 function _moduleNavAllowed(page){
