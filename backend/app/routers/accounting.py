@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.accounting_posting import create_gl_entries_from_journal, money, post_source_transaction
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_module
 from app.models import (
     Account,
     AuditLog,
@@ -59,7 +59,7 @@ from app.schemas import (
 )
 
 
-router = APIRouter(tags=["accounting"])
+router = APIRouter(tags=["accounting"], dependencies=[Depends(require_module("accounting"))])
 
 
 def next_number(db: Session, company_id: str, prefix: str, model: object, field: object) -> str:

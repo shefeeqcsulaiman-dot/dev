@@ -8,7 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_module
 from app.models import AppDataRecord, InventoryValuationLayer, ItemUnit, ItemUnitConversion, StockAdjustmentApproval, StockMovement, StockProductMapping, User, Warehouse
 from app.schemas import (
     InventoryValuationLayerOut,
@@ -25,7 +25,7 @@ from app.schemas import (
 )
 
 
-router = APIRouter(tags=["inventory"])
+router = APIRouter(tags=["inventory"], dependencies=[Depends(require_module("inventory"))])
 
 # ── Demo product detection ───────────────────────────────────────────────────
 _DEMO_REFERENCE_RE = re.compile(r"^(INV|PUR|QTN|BILL|PO|RCT)-2024-", re.IGNORECASE)

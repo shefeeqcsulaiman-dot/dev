@@ -2483,6 +2483,7 @@ function applyModulePermissionNav(modulesEnabled){
   if(!Array.isArray(modulesEnabled)){
     window.COMPANY_ALLOWED_MODULES=null;
     document.querySelectorAll('.sb .nav[data-module]').forEach(n=>n.classList.remove('hidden'));
+    document.querySelectorAll('[data-module-gate]').forEach(n=>n.classList.remove('hidden'));
     return;
   }
   const allowed=new Set(modulesEnabled);
@@ -2490,11 +2491,17 @@ function applyModulePermissionNav(modulesEnabled){
   document.querySelectorAll('.sb .nav[data-module]').forEach(n=>{
     n.classList.toggle('hidden',!allowed.has(n.dataset.module));
   });
+  // Module-gated entry points outside the sidebar (topbar buttons, quick
+  // actions, settings tabs) — e.g. AI Assistant, Exception Center — that
+  // don't fit the .sb .nav[data-module] pattern above.
+  document.querySelectorAll('[data-module-gate]').forEach(n=>{
+    n.classList.toggle('hidden',!allowed.has(n.dataset.moduleGate));
+  });
 }
 
 function _moduleNavAllowed(page){
   if(!window.COMPANY_ALLOWED_MODULES)return true;
-  const nav=document.querySelector(`.sb .nav[data-module="${page}"]`);
+  const nav=document.querySelector(`.sb .nav[data-module="${page}"]`)||document.querySelector(`[data-module-gate="${page}"]`);
   if(!nav)return true; // not a module-gated destination (dashboard, settings, etc.)
   return window.COMPANY_ALLOWED_MODULES.has(page);
 }

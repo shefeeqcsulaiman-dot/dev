@@ -329,6 +329,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(attendance.router, prefix="/api/v1")
+    app.include_router(attendance.gated_router, prefix="/api/v1")
     app.include_router(attendance.short_router, prefix="/api/v1")
     app.include_router(ai.router, prefix="/api/v1")
     app.include_router(hr_ai.router, prefix="/api/v1")
@@ -352,6 +353,7 @@ def create_app() -> FastAPI:
     app.include_router(superadmin.router, prefix="/api/v1")
     app.include_router(ess.router, prefix="/api/v1")
     app.include_router(hr_access.router, prefix="/api/v1")
+    app.include_router(hr_access.gated_router, prefix="/api/v1")
     app.include_router(leave.router, prefix="/api/v1")
 
     # Serve frontend static files

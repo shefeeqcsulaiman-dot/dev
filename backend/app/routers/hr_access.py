@@ -24,6 +24,7 @@ from app.auth_principal import (
 )
 from app.config import get_settings
 from app.database import get_db
+from app.dependencies import require_module
 from app.models import (
     AttendanceSession,
     CompanyLocation,
@@ -36,7 +37,12 @@ from app.models import (
 )
 from app.security import pwd_context
 
+# /login and /logout stay on the ungated `router` (issuing/discarding a token
+# can't itself require a module check — there's no principal yet); every
+# other HRMS-admin/employee endpoint here requires the "hrms" module,
+# checked server-side (not just hidden in the sidebar — see require_module).
 router = APIRouter(prefix="/hr", tags=["hr-access"])
+gated_router = APIRouter(prefix="/hr", tags=["hr-access"], dependencies=[Depends(require_module("hrms"))])
 settings = get_settings()
 
 _EMP_PREFIX = "emp:"
@@ -268,7 +274,7 @@ class HrMeOut(BaseModel):
     work_location_id: str | None = None
 
 
-@router.get("/me", response_model=HrMeOut)
+@gated_router.get("/me", response_model=HrMeOut)
 def hr_me(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> HrMeOut:
     role = db.get(Role, emp.role_id) if emp.role_id else None
     perms = sorted(_role_permission_keys(db, role))
@@ -286,7 +292,7 @@ def hr_me(db: Session = Depends(get_db), emp: Employee = Depends(get_current_emp
 
 # ── role-based dashboard ────────────────────────────────────────────────────
 
-@router.get("/dashboard")
+@gated_router.get("/dashboard")
 def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> dict:
     role = db.get(Role, emp.role_id) if emp.role_id else None
     role_name = role.role_name if role else "Employee"
@@ -353,7 +359,7 @@ class RoleCreateRequest(BaseModel):
     permission_keys: list[str] = []
 
 
-@router.get("/roles", response_model=list[RoleOut])
+@gated_router.get("/roles", response_model=list[RoleOut])
 def list_roles(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> list[RoleOut]:
     _ensure_default_roles(db, emp.company_id)
     roles = db.query(Role).filter(Role.company_id == emp.company_id).order_by(Role.role_name).all()
@@ -366,7 +372,7 @@ def list_roles(db: Session = Depends(get_db), emp: Employee = Depends(get_curren
     ]
 
 
-@router.post("/roles", response_model=RoleOut, status_code=201)
+@gated_router.post("/roles", response_model=RoleOut, status_code=201)
 def create_role(
     payload: RoleCreateRequest,
     db: Session = Depends(get_db),
@@ -387,7 +393,7 @@ def create_role(
     )
 
 
-@router.get("/permissions")
+@gated_router.get("/permissions")
 def list_permissions(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> list[dict]:
     catalog = _ensure_permission_catalog(db)
     db.commit()
@@ -414,7 +420,7 @@ class AdminEmployeePortalOut(BaseModel):
     has_password: bool
 
 
-@router.get("/admin/permissions")
+@gated_router.get("/admin/permissions")
 def admin_list_permissions(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("hr_settings:view")),
@@ -424,7 +430,7 @@ def admin_list_permissions(
     return [{"key": key, "module": p.module, "permission_name": p.permission_name} for key, p in catalog.items()]
 
 
-@router.get("/admin/roles", response_model=list[RoleOut])
+@gated_router.get("/admin/roles", response_model=list[RoleOut])
 def admin_list_roles(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("hr_settings:view")),
@@ -440,7 +446,7 @@ def admin_list_roles(
     ]
 
 
-@router.post("/admin/roles", response_model=RoleOut, status_code=201)
+@gated_router.post("/admin/roles", response_model=RoleOut, status_code=201)
 def admin_create_role(
     payload: RoleCreateRequest,
     db: Session = Depends(get_db),
@@ -466,7 +472,7 @@ def admin_create_role(
     )
 
 
-@router.put("/admin/roles/{role_id}", response_model=RoleOut)
+@gated_router.put("/admin/roles/{role_id}", response_model=RoleOut)
 def admin_update_role(
     role_id: str,
     payload: RoleCreateRequest,
@@ -499,7 +505,7 @@ def admin_update_role(
     )
 
 
-@router.delete("/admin/roles/{role_id}", status_code=204, response_model=None)
+@gated_router.delete("/admin/roles/{role_id}", status_code=204, response_model=None)
 def admin_delete_role(
     role_id: str,
     db: Session = Depends(get_db),
@@ -517,7 +523,7 @@ def admin_delete_role(
     db.commit()
 
 
-@router.get("/admin/employees", response_model=list[AdminEmployeePortalOut])
+@gated_router.get("/admin/employees", response_model=list[AdminEmployeePortalOut])
 def admin_list_employee_portal_access(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("hr_settings:view", "employees:view")),
@@ -548,7 +554,7 @@ class PortalAccessIn(BaseModel):
     is_active: bool | None = None
 
 
-@router.put("/admin/employees/{employee_id}/portal-access")
+@gated_router.put("/admin/employees/{employee_id}/portal-access")
 def set_employee_portal_access(
     employee_id: str,
     payload: PortalAccessIn,
@@ -595,7 +601,7 @@ def set_employee_portal_access(
     return {"ok": True}
 
 
-@router.delete("/admin/employees/{employee_id}/portal-access")
+@gated_router.delete("/admin/employees/{employee_id}/portal-access")
 def revoke_employee_portal_access(
     employee_id: str,
     db: Session = Depends(get_db),
@@ -645,13 +651,13 @@ def _location_out(loc: CompanyLocation) -> CompanyLocationOut:
     )
 
 
-@router.get("/company-locations", response_model=list[CompanyLocationOut])
+@gated_router.get("/company-locations", response_model=list[CompanyLocationOut])
 def list_company_locations(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> list[CompanyLocationOut]:
     rows = db.query(CompanyLocation).filter(CompanyLocation.company_id == emp.company_id).order_by(CompanyLocation.location_name).all()
     return [_location_out(r) for r in rows]
 
 
-@router.post("/company-locations", response_model=CompanyLocationOut, status_code=201)
+@gated_router.post("/company-locations", response_model=CompanyLocationOut, status_code=201)
 def create_company_location(
     payload: CompanyLocationRequest,
     db: Session = Depends(get_db),
@@ -667,7 +673,7 @@ def create_company_location(
     return _location_out(loc)
 
 
-@router.put("/company-locations/{location_id}", response_model=CompanyLocationOut)
+@gated_router.put("/company-locations/{location_id}", response_model=CompanyLocationOut)
 def update_company_location(
     location_id: str,
     payload: CompanyLocationRequest,
@@ -688,7 +694,7 @@ def update_company_location(
     return _location_out(loc)
 
 
-@router.delete("/company-locations/{location_id}", status_code=204, response_model=None)
+@gated_router.delete("/company-locations/{location_id}", status_code=204, response_model=None)
 def delete_company_location(
     location_id: str,
     db: Session = Depends(get_db),
@@ -715,7 +721,7 @@ class EmployeeLocationOut(BaseModel):
     is_primary: bool
 
 
-@router.get("/employee-locations", response_model=list[EmployeeLocationOut])
+@gated_router.get("/employee-locations", response_model=list[EmployeeLocationOut])
 def list_employee_locations(
     db: Session = Depends(get_db),
     emp: Employee = Depends(require_permission("hr:manage_locations", "hr:manage_employees", "hr:view_all_attendance")),
@@ -737,7 +743,7 @@ def list_employee_locations(
     ]
 
 
-@router.delete("/employee-locations/{link_id}", status_code=204, response_model=None)
+@gated_router.delete("/employee-locations/{link_id}", status_code=204, response_model=None)
 def unassign_employee_location(
     link_id: str,
     db: Session = Depends(get_db),
@@ -767,7 +773,7 @@ def unassign_employee_location(
         db.commit()
 
 
-@router.post("/employee-locations", status_code=201)
+@gated_router.post("/employee-locations", status_code=201)
 def assign_employee_location(
     payload: EmployeeLocationAssignRequest,
     db: Session = Depends(get_db),
@@ -797,7 +803,7 @@ class CheckInOut(BaseModel):
     distance_meters: float
 
 
-@router.post("/check-in", response_model=CheckInOut)
+@gated_router.post("/check-in", response_model=CheckInOut)
 def check_in(
     payload: GeoPoint,
     db: Session = Depends(get_db),
@@ -840,7 +846,7 @@ def check_in(
     return CheckInOut(session_id=session.id, status="open", check_in=str(session.check_in), location_name=loc.location_name, distance_meters=distance)
 
 
-@router.post("/check-out")
+@gated_router.post("/check-out")
 def check_out(
     payload: GeoPoint | None = None,
     db: Session = Depends(get_db),
@@ -864,7 +870,7 @@ def check_out(
     return {"ok": True, "session_id": session.id, "check_out": str(now)}
 
 
-@router.post("/location")
+@gated_router.post("/location")
 def ping_location(
     payload: GeoPoint,
     db: Session = Depends(get_db),
@@ -947,7 +953,7 @@ class LiveLocationOut(BaseModel):
     last_ping: str
 
 
-@router.get("/live-locations", response_model=list[LiveLocationOut])
+@gated_router.get("/live-locations", response_model=list[LiveLocationOut])
 def live_locations(
     db: Session = Depends(get_db),
     emp: Employee = Depends(require_permission("hr:view_all_attendance")),

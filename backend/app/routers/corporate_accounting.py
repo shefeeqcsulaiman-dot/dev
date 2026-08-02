@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_module
 from app.models import (
     AccrualPrepaymentRecord,
     ApprovalMatrixRecord,
@@ -18,7 +18,7 @@ from app.models import (
 )
 
 
-router = APIRouter(prefix="/corporate-accounting", tags=["corporate accounting"])
+router = APIRouter(prefix="/corporate-accounting", tags=["corporate accounting"], dependencies=[Depends(require_module("corporate"))])
 
 
 @router.get("/summary")

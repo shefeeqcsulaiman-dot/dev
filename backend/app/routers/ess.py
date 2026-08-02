@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
-from app.models import Employee, PayrollItem, PayrollRun
+from app.dependencies import company_allows_module
+from app.models import Company, Employee, PayrollItem, PayrollRun
 from app.security import pwd_context
 
 router = APIRouter(prefix="/ess", tags=["ess"])
@@ -133,6 +134,13 @@ def ess_login(payload: EssLoginRequest, db: Session = Depends(get_db)) -> EssTok
 
     if not emp.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal access has been disabled for this account")
+
+    # Superadmin's per-company Module Permissions — gated at login (there's no
+    # per-request principal to hang a require_module check off of here, same
+    # reasoning as hr_access.py's /login staying on the ungated router).
+    modules_enabled = db.query(Company.modules_enabled).filter(Company.id == emp.company_id).scalar()
+    if not company_allows_module(modules_enabled, "ess"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="The ESS portal is not enabled for your company")
 
     return EssToken(access_token=_create_ess_token(emp.id))
 

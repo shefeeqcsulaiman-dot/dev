@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.accounting_posting import post_source_transaction
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import company_allows_module, get_current_user
 from app.models import Account, AuditLog, PostingJob, SourceTransaction, SourceTransactionLine, User
 from app.schemas import PostingJobOut, SourceTransactionCreate, SourceTransactionOut
 
@@ -44,6 +44,12 @@ def create_source(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> SourceTransaction:
+    # payload.module is caller-supplied free text (sales/purchase/pos/expense/...)
+    # — the source-transactions router itself isn't module-specific, so the gate
+    # has to inspect each record rather than the whole router (see require_module
+    # in dependencies.py for the router-level version used elsewhere).
+    if not company_allows_module(current_user.company.modules_enabled, payload.module):
+        raise HTTPException(status_code=403, detail=f"The '{payload.module}' module is not enabled for your company")
     transaction = SourceTransaction(
         company_id=current_user.company_id,
         module=payload.module,

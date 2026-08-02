@@ -4,12 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.dependencies import Principal, get_current_user, require_principal_permission
+from app.dependencies import Principal, get_current_user, require_module, require_principal_permission
 from app.models import Employee, PayrollItem, PayrollRun, User, WpsBatch
 from app.schemas import EmployeeOut, PayrollGenerate, PayrollRunOut, WpsBatchOut
 
 
-router = APIRouter(prefix="/payroll", tags=["payroll"])
+router = APIRouter(prefix="/payroll", tags=["payroll"], dependencies=[Depends(require_module("hrms"))])
 
 
 @router.get("/employees", response_model=list[EmployeeOut])

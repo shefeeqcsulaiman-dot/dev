@@ -4,13 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_module
 from app.module_integration import sync_sales_invoice_accounting
 from app.models import Invoice, InvoiceLine, User
 from app.schemas import InvoiceCreate, InvoiceOut
 
 
-router = APIRouter(prefix="/invoices", tags=["invoices"])
+router = APIRouter(prefix="/invoices", tags=["invoices"], dependencies=[Depends(require_module("sales"))])
 
 
 def calculate_totals(invoice: Invoice) -> None:

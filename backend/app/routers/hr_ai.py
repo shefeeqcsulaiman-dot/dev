@@ -18,11 +18,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_module
 from app.limiter import limiter
 from app.models import AppDataRecord, Employee, PayrollItem, PayrollRun, User
 
-router = APIRouter(prefix="/ai/hr", tags=["hr ai"])
+router = APIRouter(prefix="/ai/hr", tags=["hr ai"], dependencies=[Depends(require_module("hrms"))])
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────

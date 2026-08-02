@@ -143,7 +143,7 @@
         <button class="dash-lang-btn" id="dash-lang-ar" onclick="setAppLang('ar')">عربي</button>
       </div>
       <button class="btn btn-g" id="theme-menu-toggle" onclick="toggleNightMode(document.body.classList.contains('theme-light'))">☾ Dark Mode</button>
-      <button class="btn btn-g" onclick="go('ai')">AI Assistant</button>
+      <button class="btn btn-g" data-module-gate="ai" onclick="go('ai')">AI Assistant</button>
       <button class="btn btn-g" onclick="logout()">Logout</button>
       <button class="btn btn-p hidden" id="topaction" onclick="go('sales')"></button>
     </div>
@@ -801,7 +801,7 @@
           <button class="dv2-qa" onclick="go('reports')" style="--qa:#6366f1">
             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M4 17V8l4-5 4 5v9"/><path d="M8 17v-5h4v5"/></svg><span data-i18n="qa_reports">Reports</span>
           </button>
-          <button class="dv2-qa" onclick="go('settings');setTimeout(()=>{const t=document.querySelector('[onclick*=set-exception]');if(t)t.click();},50)" style="--qa:#f472b6">
+          <button class="dv2-qa" data-module-gate="exception" onclick="go('settings');setTimeout(()=>{const t=document.querySelector('[onclick*=set-exception]');if(t)t.click();},50)" style="--qa:#f472b6">
             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><circle cx="10" cy="10" r="7"/><path d="M10 7v3M10 13v1"/></svg><span data-i18n="qa_alerts">Alerts</span>
           </button>
           <button class="dv2-qa" onclick="window.open('/pos','_blank')" style="--qa:#3ecf8e" title="Open POS terminal">
@@ -3425,7 +3425,7 @@
     <div class="tab" onclick="stab(this,'set-docs')">Invoice Design</div>
     <div class="tab" onclick="stab(this,'set-quotation-docs')">Quotation Design</div>
     <div class="tab" onclick="stab(this,'set-backup')">Backup & Audit</div>
-    <div class="tab" onclick="stab(this,'set-exception');loadExceptionCenter()">Exception Center</div>
+    <div class="tab" data-module-gate="exception" onclick="stab(this,'set-exception');loadExceptionCenter()">Exception Center</div>
   </div>
 
   <div class="tab-body on" id="set-company">

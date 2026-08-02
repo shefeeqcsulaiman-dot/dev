@@ -28,7 +28,7 @@ from starlette.concurrency import run_in_threadpool
 import app.cache as cache
 from app.config import get_settings
 from app.database import get_db
-from app.dependencies import Principal, get_current_principal, get_current_user
+from app.dependencies import Principal, company_allows_module, get_current_principal, get_current_user
 from app.limiter import limiter
 from app.module_integration import sync_purchase_accounting, sync_sales_invoice_accounting
 from app.models import (
@@ -76,6 +76,44 @@ _PERIOD_LOCKED_COLLECTIONS: dict[str, str] = {
     "expenses": "expense",
     "payrollRuns": "payroll",
 }
+
+# Superadmin's per-company Module Permissions, enforced against writes to the
+# generic AppDataRecord store (this router's /app-data POST save/bulk-save
+# actions are the single choke point almost every module's own data actually
+# flows through — /app-data/records/{collection} GET below is the read-side
+# counterpart). Built by tracing every literal collection name passed to
+# saveServer()/saveRec() across app.js and pos.html — NOT exhaustive: a
+# handful of collections (customers, vendors, payments, products, salesUnits,
+# users, app_actions) are deliberately left unmapped because they're shared
+# master/reference data read and written by more than one module (e.g.
+# "payments" covers both sales receipts and purchase payments — see
+# inferCollectionFromContext's payment-in/payment-out comment in app.js), so
+# there's no single correct module to gate them under.
+_COLLECTION_MODULE: dict[str, str] = {
+    "salesInvoices": "sales", "salesCategories": "sales",
+    "quotations": "quotations", "quotationLayout": "quotations",
+    "posSales": "pos",
+    "bills": "purchase", "purchaseRecords": "purchase", "purchaseDocuments": "purchase",
+    "stockMovements": "inventory",
+    "expenses": "expense",
+    "bankAccounts": "bank", "bankReconLines": "bank", "bankReconMatches": "bank", "bankReconSessions": "bank",
+    "ledger": "accounting", "journalDrafts": "accounting", "recurringJournals": "accounting",
+    "alertRules": "notifications",
+    "employees": "hrms", "employeeLoans": "hrms", "salaryAdvances": "hrms",
+    "leaveRequests": "hrms", "hrLeavePolicy": "hrms", "hr_settings": "hrms",
+    "attendanceCorrections": "hrms", "overtimeRequests": "hrms",
+    "rotaShifts": "hrms", "rotaSwaps": "hrms", "rotaApprovals": "hrms", "rotaDrafts": "hrms", "rotaAssignments": "hrms",
+    "jobRequisitions": "hrms", "candidates": "hrms",
+    "payrollRuns": "hrms", "payrollAdjustments": "hrms",
+}
+
+
+def assert_collection_module_enabled(current_user: User, collection: str) -> None:
+    module = _COLLECTION_MODULE.get(collection)
+    if not module:
+        return
+    if not company_allows_module(current_user.company.modules_enabled, module):
+        raise HTTPException(status_code=403, detail=f"The '{module}' module is not enabled for your company")
 
 
 def _record_period_date(record: dict[str, Any]) -> _dt.datetime | None:
@@ -215,6 +253,7 @@ def list_collection_records(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, object]:
+    assert_collection_module_enabled(current_user, collection)
     total = (
         db.query(func.count(AppDataRecord.id))
         .filter(
@@ -748,6 +787,7 @@ async def app_data_action(
     payload = await request.json()
     if action == "save":
         collection = str(payload.get("collection", "app_actions"))
+        assert_collection_module_enabled(current_user, collection)
         record = payload.get("record", {})
         if not isinstance(record, dict):
             record = {"value": record}
@@ -761,6 +801,7 @@ async def app_data_action(
 
     if action == "bulk-save":
         collection = str(payload.get("collection", "app_actions"))
+        assert_collection_module_enabled(current_user, collection)
         records = payload.get("records", [])
         if not isinstance(records, list):
             records = []

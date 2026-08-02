@@ -4,12 +4,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_module
 from app.models import AppDataRecord, Employee, ExceptionEvent, Job, PostingJob, StockProductMapping, User
 from app.schemas import ExceptionEventIn, ExceptionEventOut
 
 
-router = APIRouter(prefix="/exceptions", tags=["exception center"])
+router = APIRouter(prefix="/exceptions", tags=["exception center"], dependencies=[Depends(require_module("exception"))])
 
 
 def _event(module: str, category: str, severity: str, source_record: str | None, message: str, status: str = "open") -> dict[str, str | None]:

@@ -5,10 +5,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import Principal, require_principal_permission
+from app.dependencies import Principal, require_module, require_principal_permission
 from app.models import Employee, LeaveRequest
 
-router = APIRouter(prefix="/leave", tags=["leave"])
+router = APIRouter(prefix="/leave", tags=["leave"], dependencies=[Depends(require_module("hrms"))])
 
 _ALLOWED_TYPES = {
     "Annual Leave", "Sick Leave", "Casual Leave", "Emergency Leave", "Maternity Leave",

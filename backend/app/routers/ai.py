@@ -5,12 +5,12 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_module
 from app.models import Account, AppDataRecord, AuditLog, ExceptionEvent, Invoice, SourceTransaction, TaxLine, User
 from app.schemas import AIAssistRequest, AIExceptionExplainRequest, AIResponse, AITransactionValidationRequest
 
 
-router = APIRouter(prefix="/ai", tags=["ai assistant"])
+router = APIRouter(prefix="/ai", tags=["ai assistant"], dependencies=[Depends(require_module("ai"))])
 
 
 ACCOUNT_HINTS = (

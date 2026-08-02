@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_module
 from app.models import AppDataRecord, User
 from app.schemas import AppRecordIn, AppRecordOut
 
@@ -81,12 +81,12 @@ def create_record(name: str, payload: AppRecordIn, db: Session, current_user: Us
     return _out(row)
 
 
-@router.get("/purchases", response_model=list[AppRecordOut])
+@router.get("/purchases", response_model=list[AppRecordOut], dependencies=[Depends(require_module("purchase"))])
 def list_purchases(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[AppRecordOut]:
     return list_records("purchases", db, current_user)
 
 
-@router.post("/purchases", response_model=AppRecordOut, status_code=201)
+@router.post("/purchases", response_model=AppRecordOut, status_code=201, dependencies=[Depends(require_module("purchase"))])
 def create_purchase(payload: AppRecordIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> AppRecordOut:
     return create_record("purchases", payload, db, current_user)
 

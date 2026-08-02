@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_module
 from app.limiter import limiter
 from app.models import AppDataRecord
 
@@ -26,7 +26,7 @@ class SharePayload(BaseModel):
     payload: dict
 
 
-@router.post("/share/invoice")
+@router.post("/share/invoice", dependencies=[Depends(require_module("sales"))])
 def create_invoice_share(
     body: SharePayload,
     db: Session = Depends(get_db),

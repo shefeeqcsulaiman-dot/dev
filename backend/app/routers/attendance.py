@@ -25,12 +25,19 @@ from sqlalchemy.orm import Session
 
 from app import biotime_client, biotime_sync, crypto
 from app.database import get_db
-from app.dependencies import Principal, get_current_user, require_principal_permission
+from app.dependencies import Principal, get_current_user, require_module, require_principal_permission
 from app.limiter import limiter
 from app.models import AttendancePunch, BiometricDevice, User
 from app.security import verify_password, hash_password
 
+# router carries only the device-facing punch/adms endpoints (auth is via
+# _optional_user / device key, not a login — devices never have a company
+# session token, so they can't be gated the normal way). Every other
+# (logged-in-user) endpoint lives on gated_router, which requires the "hrms"
+# module server-side — same reasoning as the hr_access.py router/gated_router
+# split.
 router = APIRouter(prefix="/attendance", tags=["attendance"])
+gated_router = APIRouter(prefix="/attendance", tags=["attendance"], dependencies=[Depends(require_module("hrms"))])
 
 # Prefix-less router for short, device-friendly URL aliases (e.g. /api/v1/punch
 # instead of /api/v1/attendance/punch). Physical devices/firmware admin panels
@@ -131,7 +138,7 @@ def _get_device_company(x_device_key: str, db: Session) -> tuple[str, BiometricD
 
 # ── Device management ─────────────────────────────────────────────────────────
 
-@router.get("/devices")
+@gated_router.get("/devices")
 def list_devices(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -154,7 +161,7 @@ def list_devices(
     ) for d in devices]
 
 
-@router.post("/devices", status_code=201)
+@gated_router.post("/devices", status_code=201)
 def add_device(
     body: DeviceCreate,
     db: Session = Depends(get_db),
@@ -208,7 +215,7 @@ def add_device(
     }
 
 
-@router.delete("/devices/{device_id}", status_code=204, response_model=None)
+@gated_router.delete("/devices/{device_id}", status_code=204, response_model=None)
 def delete_device(
     device_id: str,
     db: Session = Depends(get_db),
@@ -234,7 +241,7 @@ _PUSH_TYPES = {"Suprema", "Hikvision", "ZKTeco ADMS"}
 _BIOTIME_TYPES = {"ZKTeco BioTime Server"}
 
 
-@router.post("/devices/{device_id}/test")
+@gated_router.post("/devices/{device_id}/test")
 def test_device(
     device_id: str,
     db: Session = Depends(get_db),
@@ -326,7 +333,7 @@ def test_device(
         return {"ok": False, "message": f"Cannot reach {device.ip_address}:{device.port} — {e.strerror}"}
 
 
-@router.post("/devices/{device_id}/biotime/sync")
+@gated_router.post("/devices/{device_id}/biotime/sync")
 def sync_biotime_device_now(
     device_id: str,
     db: Session = Depends(get_db),
@@ -522,7 +529,7 @@ short_router.add_api_route(
 
 # ── CSV Import ────────────────────────────────────────────────────────────────
 
-@router.post("/import-csv", status_code=201)
+@gated_router.post("/import-csv", status_code=201)
 async def import_csv(
     file: UploadFile,
     db: Session = Depends(get_db),
@@ -574,7 +581,7 @@ async def import_csv(
 
 # ── Dashboard data ────────────────────────────────────────────────────────────
 
-@router.get("/today")
+@gated_router.get("/today")
 def attendance_today(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("attendance:view")),
@@ -594,7 +601,7 @@ def attendance_today(
     }
 
 
-@router.get("/trend")
+@gated_router.get("/trend")
 def attendance_trend(
     days: int = 30,
     db: Session = Depends(get_db),
@@ -620,7 +627,7 @@ def attendance_trend(
     return {"dates": dates, "counts": counts}
 
 
-@router.get("/punches")
+@gated_router.get("/punches")
 def recent_punches(
     limit: int = 50,
     db: Session = Depends(get_db),
@@ -646,7 +653,7 @@ def recent_punches(
     ]}
 
 
-@router.get("/summary")
+@gated_router.get("/summary")
 def attendance_summary(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("attendance:view")),
@@ -667,7 +674,7 @@ def attendance_summary(
 
 # ── Bridge script download ────────────────────────────────────────────────────
 
-@router.get("/bridge-script")
+@gated_router.get("/bridge-script")
 def download_bridge_script(
     current_user: User = Depends(get_current_user),
 ) -> PlainTextResponse:  # auth keeps it scoped to logged-in users

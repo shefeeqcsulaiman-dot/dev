@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 import app.cache as cache
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_module
 from app.models import CorporateTaxReturn, TaxCode, TaxLine, User, VatReturn
 from app.schemas import CorporateTaxReturnCreate, CorporateTaxReturnOut, TaxCodeIn, TaxCodeOut, TaxLineOut, VatReturnCreate, VatReturnOut
 
@@ -15,12 +15,12 @@ from app.schemas import CorporateTaxReturnCreate, CorporateTaxReturnOut, TaxCode
 router = APIRouter(prefix="/tax", tags=["tax"])
 
 
-@router.get("/codes", response_model=list[TaxCodeOut])
+@router.get("/codes", response_model=list[TaxCodeOut], dependencies=[Depends(require_module("accounting"))])
 def list_tax_codes(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[TaxCode]:
     return db.query(TaxCode).filter(TaxCode.company_id == current_user.company_id).order_by(TaxCode.code).all()
 
 
-@router.post("/codes", response_model=TaxCodeOut, status_code=201)
+@router.post("/codes", response_model=TaxCodeOut, status_code=201, dependencies=[Depends(require_module("accounting"))])
 def create_tax_code(
     payload: TaxCodeIn,
     db: Session = Depends(get_db),
@@ -40,12 +40,12 @@ def create_tax_code(
     return code
 
 
-@router.get("/lines", response_model=list[TaxLineOut])
+@router.get("/lines", response_model=list[TaxLineOut], dependencies=[Depends(require_module("accounting"))])
 def list_tax_lines(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[TaxLine]:
     return db.query(TaxLine).filter(TaxLine.company_id == current_user.company_id).order_by(TaxLine.created_at.desc()).all()
 
 
-@router.get("/vat-return")
+@router.get("/vat-return", dependencies=[Depends(require_module("accounting"))])
 def vat_return(
     period: str | None = None,
     db: Session = Depends(get_db),
@@ -77,12 +77,12 @@ def vat_return(
     return result
 
 
-@router.get("/vat-returns", response_model=list[VatReturnOut])
+@router.get("/vat-returns", response_model=list[VatReturnOut], dependencies=[Depends(require_module("accounting"))])
 def list_vat_returns(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[VatReturn]:
     return db.query(VatReturn).filter(VatReturn.company_id == current_user.company_id).order_by(VatReturn.period.desc()).all()
 
 
-@router.post("/vat-returns", response_model=VatReturnOut, status_code=201)
+@router.post("/vat-returns", response_model=VatReturnOut, status_code=201, dependencies=[Depends(require_module("accounting"))])
 def create_vat_return(
     payload: VatReturnCreate,
     db: Session = Depends(get_db),
@@ -138,12 +138,12 @@ def create_vat_return(
     return row
 
 
-@router.get("/corporate-tax-returns", response_model=list[CorporateTaxReturnOut])
+@router.get("/corporate-tax-returns", response_model=list[CorporateTaxReturnOut], dependencies=[Depends(require_module("corporate"))])
 def list_corporate_tax_returns(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[CorporateTaxReturn]:
     return db.query(CorporateTaxReturn).filter(CorporateTaxReturn.company_id == current_user.company_id).order_by(CorporateTaxReturn.tax_period.desc()).all()
 
 
-@router.post("/corporate-tax-returns", response_model=CorporateTaxReturnOut, status_code=201)
+@router.post("/corporate-tax-returns", response_model=CorporateTaxReturnOut, status_code=201, dependencies=[Depends(require_module("corporate"))])
 def create_corporate_tax_return(
     payload: CorporateTaxReturnCreate,
     db: Session = Depends(get_db),
