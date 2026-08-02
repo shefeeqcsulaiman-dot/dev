@@ -113,13 +113,13 @@
       var r=await fetch(apiBase()+'/auth/whoami',{headers:{'Authorization':'Bearer '+t}});
       if(!r.ok)return;
       var who=await r.json();
-      if(who.kind==='employee'){preloadAndRedirect('/hrms');return;}
+      if(who.kind==='employee'){preloadAndRedirect('/hrms',t);return;}
       // Admin: /auth/whoami doesn't carry the admin/superadmin distinction,
       // /auth/me already does — check that only for the User path.
       var meResp=await fetch(apiBase()+'/auth/me',{headers:{'Authorization':'Bearer '+t}});
       var me=await meResp.json();
       if(me&&me.role==='superadmin'){window.location.replace('/superadmin');return;}
-      preloadAndRedirect('/');
+      preloadAndRedirect('/',t);
     }catch(e){ window.location.replace('/'); }
   })();
 
@@ -137,16 +137,28 @@
     return window.location.protocol+'//'+h+'/api/v1';
   }
 
-  // Redirect immediately — no artificial wait. (Previously this held a
-  // full-page loader for a forced 3-8s while prefetching the dashboard
-  // bootstrap payload into sessionStorage; that made every login feel
-  // slower than before for no visible benefit, so it's gone. The dashboard
-  // fetches its own bootstrap data on load and already shows its own
-  // "Loading dashboard from database" state — see hydrateFromServer() /
-  // _takeBootstrapPreloadCache() in app.js, which still falls back to a
-  // normal fetch when nothing's been prefetched, so this stays compatible.)
-  function preloadAndRedirect(url){
-    window.location.replace(url);
+  // Kick off the dashboard bootstrap fetch in the background and redirect
+  // as soon as it resolves OR after a short 1.2s cap, whichever comes
+  // first — never a forced minimum wait like the old 3-8s version, but
+  // still gives a normally-fast API call a real chance to land in
+  // sessionStorage before the dashboard needs it (a fetch started here has
+  // to be awaited at least a little, since navigating away cancels any
+  // request still in flight — there's no way to "fire and forget" one that
+  // finishes after the page unloads). If the cap is hit first, the fetch
+  // is simply abandoned and the dashboard falls back to fetching its own
+  // bootstrap data on load — see hydrateFromServer() /
+  // _takeBootstrapPreloadCache() in app.js.
+  function preloadAndRedirect(url,token){
+    var prefetch=fetch(apiBase()+'/app-data?action=bootstrap',{headers:{'Authorization':'Bearer '+token}})
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(json){
+        if(json){
+          try{sessionStorage.setItem('taxflow_bootstrap_cache',JSON.stringify({data:json,ts:Date.now()}));}catch(e){}
+        }
+      })
+      .catch(function(){});
+    var cap=new Promise(function(r){setTimeout(r,1200);});
+    Promise.race([prefetch,cap]).then(function(){window.location.replace(url);});
   }
 
   async function signIn(){
@@ -172,7 +184,7 @@
           var me=await meResp.json();
           if(me&&me.role==='superadmin'){window.location.replace('/superadmin');return;}
         }catch(e){}
-        preloadAndRedirect('/');
+        preloadAndRedirect('/',data.access_token);
         return;
       }
       // Not a TaxFlow admin account — try as an HRMS sub-user (Employee RBAC
@@ -187,7 +199,7 @@
       if(hrResp.ok&&hrData.access_token){
         localStorage.setItem('taxflow_token',hrData.access_token);
         localStorage.setItem('taxflow_principal_kind','employee');
-        preloadAndRedirect('/hrms');
+        preloadAndRedirect('/hrms',hrData.access_token);
         return;
       }
       err.textContent=data.detail||'Incorrect email or password.';
