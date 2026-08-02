@@ -2478,7 +2478,7 @@ function applyCompanyToUi(company){
 // sidebar class in hrms.html, so this must never run there: it would find
 // zero matches for any HRMS module key and hide the entire HRMS sidebar.
 // Keep in sync with ALL_MODULES in backend/app/routers/superadmin.py and
-// MODULE_DEFS in superadmin.html's Modules grid — same 16 keys, just the
+// MODULE_DEFS in superadmin.html's Modules grid — same 17 keys, just the
 // friendly labels needed for the read-only summary on the company's own
 // Settings > Company Registration tab (renderModuleAccessCard below).
 const ALL_MODULE_DEFS=[
@@ -2498,6 +2498,7 @@ const ALL_MODULE_DEFS=[
   {key:'expert',label:'Expert Review'},
   {key:'exception',label:'Exception Center'},
   {key:'ai',label:'AI Features'},
+  {key:'settings',label:'Company & Settings'},
 ];
 
 function renderModuleAccessCard(allowedOrNull){

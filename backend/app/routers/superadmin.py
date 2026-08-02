@@ -51,10 +51,16 @@ class ResetPasswordIn(BaseModel):
     password: str = Field(min_length=6)
 
 
+# "settings" is deliberately NOT wired into require_module() anywhere (see
+# app/dependencies.py) — it only hides the sidebar link. Settings covers
+# core account admin (Users & Roles, password/profile, backup); a hard
+# server-side block would risk locking a company out of its own account
+# management if something upstream went wrong. Every other key here has a
+# matching require_module("<key>") somewhere in the routers.
 ALL_MODULES = [
     "sales", "quotations", "pos", "purchase", "inventory", "expense",
     "bank", "accounting", "corporate", "reports", "hrms", "ess",
-    "notifications", "expert", "exception", "ai",
+    "notifications", "expert", "exception", "ai", "settings",
 ]
 
 
