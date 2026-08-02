@@ -2165,9 +2165,12 @@ async function applyRoleBasedNav(){
   try{
     const token=localStorage.getItem('taxflow_token');
     if(!token)return;
-    const resp=await authenticatedFetch(`${apiBaseUrl()}/auth/me`);
-    if(!resp.ok)return;
-    const user=await resp.json();
+    let user=_takeMePreloadCache();
+    if(!user){
+      const resp=await authenticatedFetch(`${apiBaseUrl()}/auth/me`);
+      if(!resp.ok)return;
+      user=await resp.json();
+    }
     const role=(user.role||'admin').toLowerCase();
     localStorage.setItem('taxflow_user_role',role);
     // Shared with hrms.html's applyHrmsPermissionNav() — audit() reads this
@@ -7558,6 +7561,20 @@ function _takeBootstrapPreloadCache(){
     const raw=sessionStorage.getItem('taxflow_bootstrap_cache');
     if(!raw)return null;
     sessionStorage.removeItem('taxflow_bootstrap_cache');
+    const cached=JSON.parse(raw);
+    if(cached&&cached.data&&(Date.now()-cached.ts)<60000)return cached.data;
+  }catch(e){}
+  return null;
+}
+
+// Same pattern as _takeBootstrapPreloadCache() above, but for /auth/me —
+// login.html already fetches it (to check for a superadmin redirect) before
+// landing here, so applyRoleBasedNav() doesn't need to fetch it again.
+function _takeMePreloadCache(){
+  try{
+    const raw=sessionStorage.getItem('taxflow_me_cache');
+    if(!raw)return null;
+    sessionStorage.removeItem('taxflow_me_cache');
     const cached=JSON.parse(raw);
     if(cached&&cached.data&&(Date.now()-cached.ts)<60000)return cached.data;
   }catch(e){}

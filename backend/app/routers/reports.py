@@ -111,7 +111,7 @@ def _build_dashboard(db: Session, company_id: str) -> dict[str, Any]:
         "payment_receipt_count": count(db, Payment, company_id) + count(db, Receipt, company_id),
         "purchase_invoice_count": app_counts.get("purchaseInvoices", 0) + app_counts.get("purchaseDocuments", 0),
     }
-    status = invoice_status(db, company_id)
+    status = invoice_status(db, company_id, app_sales)
     pur_summary = _purchase_summary(db, company_id)
     return {
         "kpis": {
@@ -126,9 +126,9 @@ def _build_dashboard(db: Session, company_id: str) -> dict[str, Any]:
             "staff_present": employee_count,
             "payroll_net": amount(payroll_net),
         },
-        "monthly_revenue_vat": monthly_revenue_vat(db, company_id),
+        "monthly_revenue_vat": monthly_revenue_vat(db, company_id, app_sales),
         "recent_activity": recent_activity(db, company_id),
-        "top_customers": top_customers(db, company_id),
+        "top_customers": top_customers(db, company_id, app_sales),
         "invoice_status": status,
         "purchase_summary": pur_summary,
         "staff_today": {
@@ -226,14 +226,14 @@ def period_label(value: object) -> str:
     return str(value)[:7]
 
 
-def monthly_revenue_vat(db: Session, company_id: str) -> list[dict[str, str]]:
+def monthly_revenue_vat(db: Session, company_id: str, app_sales: list[dict[str, Any]]) -> list[dict[str, str]]:
     periods: dict[str, dict[str, Decimal]] = {}
     invoices = db.query(Invoice).filter(Invoice.company_id == company_id).all()
     for invoice in invoices:
         item = periods.setdefault(period_label(invoice.created_at), {"sales": Decimal("0.00"), "purchases": Decimal("0.00"), "output_vat": Decimal("0.00"), "input_vat": Decimal("0.00")})
         item["sales"] += money(invoice.total)
         item["output_vat"] += money(invoice.vat)
-    for invoice in app_sales_invoice_records(db, company_id):
+    for invoice in app_sales:
         item = periods.setdefault(period_label(invoice.get("date") or invoice.get("created_at")), {"sales": Decimal("0.00"), "purchases": Decimal("0.00"), "output_vat": Decimal("0.00"), "input_vat": Decimal("0.00")})
         item["sales"] += record_amount(invoice, "total", "amount", "net_amount")
         item["output_vat"] += record_amount(invoice, "vat_amount", "vat", "tax_amount")
@@ -280,7 +280,7 @@ def recent_activity(db: Session, company_id: str) -> list[dict[str, str]]:
     ]
 
 
-def top_customers(db: Session, company_id: str) -> list[dict[str, str]]:
+def top_customers(db: Session, company_id: str, app_sales: list[dict[str, Any]]) -> list[dict[str, str]]:
     rows = (
         db.query(Invoice.customer_name, func.coalesce(func.sum(Invoice.total), 0).label("total"))
         .filter(Invoice.company_id == company_id)
@@ -292,7 +292,7 @@ def top_customers(db: Session, company_id: str) -> list[dict[str, str]]:
     totals: dict[str, Decimal] = {}
     for name, total in rows:
         totals[str(name or "Customer")] = money(total)
-    for invoice in app_sales_invoice_records(db, company_id):
+    for invoice in app_sales:
         name = str(invoice.get("customer") or invoice.get("customer_name") or "Customer")
         totals[name] = totals.get(name, Decimal("0.00")) + record_amount(invoice, "total", "amount", "net_amount")
     return [
@@ -404,8 +404,7 @@ def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
     }
 
 
-def invoice_status(db: Session, company_id: str) -> dict[str, dict[str, str | int]]:
-    app_sales = app_sales_invoice_records(db, company_id)
+def invoice_status(db: Session, company_id: str, app_sales: list[dict[str, Any]]) -> dict[str, dict[str, str | int]]:
     # Total excludes drafts — drafts are not yet revenue
     total_count = int(db.query(func.count(Invoice.id)).filter(Invoice.company_id == company_id, Invoice.status != "draft").scalar() or 0)
     total_count += sum(1 for r in app_sales if normalized_ref(r.get("status", "")) != "draft")
@@ -536,7 +535,7 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
     ar_total = sum(money(row["total"]) for row in aging_rows)
     overdue_total = sum(money(row["d31_60"]) + money(row["d61_90"]) + money(row["over90"]) for row in aging_rows)
     risk_score = "Low" if overdue_total == 0 else "Medium" if overdue_total < ar_total / Decimal("2") else "High"
-    monthly = monthly_revenue_vat(db, company_id)
+    monthly = monthly_revenue_vat(db, company_id, app_sales)
     result = {
         "dashboard": {
             "revenue": amount(revenue),

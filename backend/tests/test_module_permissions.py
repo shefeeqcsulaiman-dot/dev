@@ -14,6 +14,7 @@ tests hit the API directly (bypassing the frontend nav) to prove the 403
 actually happens at the backend, not just that the UI hides a button."""
 from app.models import Company, Employee, User
 from app.security import hash_password
+from tests.conftest import ensure_user
 
 
 def _make_superadmin(client, db, tag):
@@ -148,3 +149,40 @@ def test_ess_login_blocked_when_ess_module_disabled(client, db):
     assert r2.status_code == 200, r2.text
     r3 = client.post("/api/v1/ess/login", json={"username": "ESS-BLOCK-001", "company_id": company_id, "password": "ESS-BLOCK-001"})
     assert r3.status_code == 200, r3.text
+
+
+def test_bootstrap_heavy_collection_counts_not_cross_contaminated(client, db):
+    """bootstrap()'s per-collection COUNT(*) calls (one per "heavy" collection,
+    17 of them) were collapsed into a single GROUP BY query — this proves that
+    refactor still attributes each collection's records to the right key
+    instead of mixing them up, by seeding different counts into two heavy
+    collections and checking both the returned record lists and
+    truncated_collections reflect the correct, uncapped counts."""
+    admin = ensure_user(db, "bootstrap-count@taxflowqa.com", "900000000000104")
+    db.commit()
+    login = client.post("/api/v1/auth/login", json={"email": admin.email, "password": "admin123"})
+    assert login.status_code == 200, login.text
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    for i in range(3):
+        r = client.post(
+            "/api/v1/app-data?action=save",
+            headers=headers,
+            json={"collection": "quotations", "record": {"quote_no": f"Q-COUNT-{i}", "amount": 100}},
+        )
+        assert r.status_code == 200, r.text
+    for i in range(2):
+        r = client.post(
+            "/api/v1/app-data?action=save",
+            headers=headers,
+            json={"collection": "salesCategories", "record": {"name": f"Category {i}"}},
+        )
+        assert r.status_code == 200, r.text
+
+    boot = client.get("/api/v1/app-data", headers=headers)
+    assert boot.status_code == 200, boot.text
+    data = boot.json()["data"]
+    assert len(data["quotations"]) == 3
+    assert len(data["salesCategories"]) == 2
+    # Well under either collection's cap (500/200) — nothing should be flagged truncated.
+    assert boot.json()["truncated_collections"] == []

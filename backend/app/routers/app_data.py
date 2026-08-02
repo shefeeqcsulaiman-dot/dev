@@ -359,18 +359,27 @@ def bootstrap(
     # loading and deserializing thousands of rows that will be discarded in Python.
     _HEAVY_COLLECTIONS = {c for c, n in _BOOTSTRAP_COLLECTION_CAPS.items() if n <= 500}
     heavy_results: dict[str, list[dict[str, Any]]] = {}
-    heavy_totals: dict[str, int] = {}
+    # One GROUP BY instead of a separate COUNT(*) per heavy collection (was
+    # 17 round trips — costs more on production Postgres than locally on
+    # SQLite, where there's no real network latency per query).
+    _heavy_coll_names = [
+        c for c in _HEAVY_COLLECTIONS
+        if allowed_collections is None or c in allowed_collections
+    ]
+    heavy_totals: dict[str, int] = dict(
+        db.query(AppDataRecord.collection, func.count(AppDataRecord.id))
+        .filter(
+            AppDataRecord.company_id == principal.company_id,
+            AppDataRecord.collection.in_(_heavy_coll_names),
+        )
+        .group_by(AppDataRecord.collection)
+        .all()
+    )
     for coll, coll_cap in _BOOTSTRAP_COLLECTION_CAPS.items():
         if coll_cap > 500:
             continue  # low-cap collections handled in the bulk query below
         if allowed_collections is not None and coll not in allowed_collections:
             continue
-        total = (
-            db.query(AppDataRecord)
-            .filter(AppDataRecord.company_id == principal.company_id, AppDataRecord.collection == coll)
-            .count()
-        )
-        heavy_totals[coll] = total
         rows = (
             db.query(AppDataRecord)
             .filter(AppDataRecord.company_id == principal.company_id, AppDataRecord.collection == coll)

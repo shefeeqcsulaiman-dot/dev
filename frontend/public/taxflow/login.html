@@ -119,6 +119,7 @@
       var meResp=await fetch(apiBase()+'/auth/me',{headers:{'Authorization':'Bearer '+t}});
       var me=await meResp.json();
       if(me&&me.role==='superadmin'){window.location.replace('/superadmin');return;}
+      try{sessionStorage.setItem('taxflow_me_cache',JSON.stringify({data:me,ts:Date.now()}));}catch(e){}
       preloadAndRedirect('/',t);
     }catch(e){ window.location.replace('/'); }
   })();
@@ -183,6 +184,7 @@
           var meResp=await fetch(apiBase()+'/auth/me',{headers:{'Authorization':'Bearer '+data.access_token}});
           var me=await meResp.json();
           if(me&&me.role==='superadmin'){window.location.replace('/superadmin');return;}
+          try{sessionStorage.setItem('taxflow_me_cache',JSON.stringify({data:me,ts:Date.now()}));}catch(e){}
         }catch(e){}
         preloadAndRedirect('/',data.access_token);
         return;
