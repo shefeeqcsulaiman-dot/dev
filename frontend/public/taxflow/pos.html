@@ -387,22 +387,30 @@ button{cursor:pointer;border:none;background:none;}
 .ov-confirm:hover{background:var(--grn2);box-shadow:0 6px 20px rgba(34,197,94,.38);}
 .ov-confirm:disabled{opacity:.35;cursor:not-allowed;box-shadow:none;}
 
-/* Receipt modal */
+/* Receipt modal — bilingual (EN/AR) tax invoice */
 .ov-rcpt{width:440px;max-height:calc(100vh - 80px);overflow-y:auto;}
+.rcpt-ar{direction:rtl;unicode-bidi:isolate;font-family:'Segoe UI',Tahoma,Arial,sans-serif;}
 .rcpt{
-  font-family:'Courier New',monospace;font-size:12px;
-  border:1px dashed var(--bd2);border-radius:12px;padding:16px;
-  margin-bottom:16px;background:var(--sf2);line-height:1.75;
+  font-family:var(--fn);font-size:12px;
+  border:1px solid var(--bd);border-radius:14px;padding:20px;
+  margin-bottom:16px;background:#fff;line-height:1.6;box-shadow:var(--shadow-sm);
 }
-.rcpt-hd{text-align:center;margin-bottom:12px;}
-.rcpt-hd h2{font-size:14px;margin:0;font-weight:800;}
-.rcpt-hd p{font-size:11px;color:var(--t3);}
-.rcpt-hr{border:none;border-top:1px dashed var(--bd2);margin:8px 0;}
-.rcpt-row{display:flex;justify-content:space-between;font-size:11px;padding:1px 0;}
-.rcpt-tbl{width:100%;border-collapse:collapse;font-size:11px;}
-.rcpt-tbl td{padding:2px 0;}
-.rcpt-tbl td:last-child{text-align:right;}
-.rcpt-total{display:flex;justify-content:space-between;font-weight:700;font-size:13px;padding:5px 0 0;}
+.rcpt-hd{text-align:center;margin-bottom:12px;padding-bottom:12px;border-bottom:2px solid var(--t1);}
+.rcpt-hd h2{font-size:16px;margin:0 0 2px;font-weight:800;color:var(--t1);}
+.rcpt-hd .rcpt-heading{font-size:11px;font-weight:700;color:var(--acc);letter-spacing:.3px;margin-top:2px;}
+.rcpt-hd .rcpt-heading .rcpt-ar{margin-inline-start:6px;color:var(--acc2);}
+.rcpt-hd p{font-size:10.5px;color:var(--t3);margin-top:3px;}
+.rcpt-hr{border:none;border-top:1px dashed var(--bd2);margin:10px 0;}
+.rcpt-row{display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;padding:2px 0;gap:8px;}
+.rcpt-lbl{color:var(--t2);}
+.rcpt-lbl .rcpt-ar{font-size:10px;color:var(--t3);margin-inline-start:5px;}
+.rcpt-tbl{width:100%;border-collapse:collapse;font-size:11.5px;}
+.rcpt-tbl thead td{border-bottom:1.5px solid var(--bd2);padding-bottom:6px;color:var(--t2);}
+.rcpt-tbl td{padding:4px 0;vertical-align:top;}
+.rcpt-tbl td:last-child{text-align:right;font-variant-numeric:tabular-nums;}
+.rcpt-th-ar{display:block;font-size:9px;font-weight:500;color:var(--t3);}
+.rcpt-total{display:flex;justify-content:space-between;font-weight:800;font-size:15px;padding:8px 0 0;color:var(--t1);}
+.rcpt-total .rcpt-ar{font-size:11px;font-weight:700;color:var(--t3);margin-inline-start:6px;}
 .rcpt-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 .rcpt-btn{
   padding:11px;border-radius:11px;border:1.5px solid var(--bd);
@@ -1408,48 +1416,66 @@ async function genPosShortLink(sale){
   }catch{}
 }
 
-// ── Receipt ───────────────────────────────────────────────────────────
+// ── Receipt — bilingual English / Arabic tax invoice ───────────────────
+const RCPT_AR={
+  taxInvoice:'فاتورة ضريبية',customer:'العميل',service:'نوع الخدمة',table:'الطاولة',
+  item:'الصنف',qty:'الكمية',amount:'المبلغ',subtotal:'المجموع الفرعي',vat:'ضريبة القيمة المضافة',
+  discount:'خصم',orderTax:'ضريبة الطلب',shipping:'الشحن',packing:'التغليف',total:'الإجمالي',
+  payment:'طريقة الدفع',cash:'نقدي',card:'بطاقة',multi:'نقدي + بطاقة',credit:'آجل',
+  cashTendered:'المبلغ المستلم',change:'المتبقي',viewInvoice:'عرض الفاتورة',
+  thankYou:'شكراً لتعاملكم معنا',
+};
+function bl(en,arKey){ return `${esc(en)}<span class="rcpt-ar">${esc(RCPT_AR[arKey]||'')}</span>`; }
+
 function showReceipt(sale){
   _posShortUrl='';
   const rows=(sale.items||[]).map((i,n)=>
     `<tr><td>${n+1}. ${esc(i.name)}</td><td style="text-align:right">${i.qty}</td><td style="text-align:right">AED ${(Number(i.line_total)+Number(i.line_vat)).toFixed(2)}</td></tr>`
   ).join('');
   const adjRows=[
-    sale.discount>0?`<div class="rcpt-row"><span>Discount</span><span>-AED ${Number(sale.discount).toFixed(2)}</span></div>`:'',
-    sale.order_tax>0?`<div class="rcpt-row"><span>Order Tax</span><span>+AED ${Number(sale.order_tax).toFixed(2)}</span></div>`:'',
-    sale.shipping>0?`<div class="rcpt-row"><span>Shipping</span><span>+AED ${Number(sale.shipping).toFixed(2)}</span></div>`:'',
-    sale.packing>0?`<div class="rcpt-row"><span>Packing</span><span>+AED ${Number(sale.packing).toFixed(2)}</span></div>`:'',
+    sale.discount>0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Discount','discount')}</span><span>-AED ${Number(sale.discount).toFixed(2)}</span></div>`:'',
+    sale.order_tax>0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Order Tax','orderTax')}</span><span>+AED ${Number(sale.order_tax).toFixed(2)}</span></div>`:'',
+    sale.shipping>0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Shipping','shipping')}</span><span>+AED ${Number(sale.shipping).toFixed(2)}</span></div>`:'',
+    sale.packing>0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Packing','packing')}</span><span>+AED ${Number(sale.packing).toFixed(2)}</span></div>`:'',
   ].join('');
+  const payLabel={'cash':['Cash','cash'],'card':['Card','card'],'multi':['Cash + Card','multi'],'credit':['Credit','credit']}[sale.payment_method]||[sale.payment_method,''];
   const payInfo=sale.payment_method==='cash'
-    ?`<div class="rcpt-row"><span>Cash Tendered</span><span>AED ${Number(sale.cash_tendered||0).toFixed(2)}</span></div><div class="rcpt-row"><span>Change</span><span>AED ${Number(sale.change||0).toFixed(2)}</span></div>`
+    ?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Cash Tendered','cashTendered')}</span><span>AED ${Number(sale.cash_tendered||0).toFixed(2)}</span></div><div class="rcpt-row"><span class="rcpt-lbl">${bl('Change','change')}</span><span>AED ${Number(sale.change||0).toFixed(2)}</span></div>`
     :sale.payment_method==='multi'
-    ?`<div class="rcpt-row"><span>Cash</span><span>AED ${Number(sale.multi_cash||0).toFixed(2)}</span></div><div class="rcpt-row"><span>Card</span><span>AED ${Number(sale.multi_card||0).toFixed(2)}</span></div>`:'';
+    ?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Cash','cash')}</span><span>AED ${Number(sale.multi_cash||0).toFixed(2)}</span></div><div class="rcpt-row"><span class="rcpt-lbl">${bl('Card','card')}</span><span>AED ${Number(sale.multi_card||0).toFixed(2)}</span></div>`:'';
 
   document.getElementById('rcpt-body').innerHTML=`
-    <div class="rcpt-hd"><h2>${esc(CONAME())}</h2><p>Point of Sale Receipt</p></div>
-    <hr class="rcpt-hr">
-    <div class="rcpt-row"><span><b>${esc(sale.receipt_no)}</b></span><span>${esc(sale.date)}</span></div>
-    <div class="rcpt-row"><span>Customer</span><span>${esc(sale.customer)}</span></div>
-    ${sale.service_type?`<div class="rcpt-row"><span>Service</span><span>${esc(sale.service_type)}</span></div>`:''}
-    ${sale.table?`<div class="rcpt-row"><span>Table</span><span>${esc(sale.table)}</span></div>`:''}
+    <div class="rcpt-hd">
+      <h2>${esc(CONAME())}</h2>
+      <div class="rcpt-heading">TAX INVOICE<span class="rcpt-ar">${RCPT_AR.taxInvoice}</span></div>
+      <p>${esc(sale.date)}</p>
+    </div>
+    <div class="rcpt-row"><span class="rcpt-lbl"><b>${esc(sale.receipt_no)}</b></span></div>
+    <div class="rcpt-row"><span class="rcpt-lbl">${bl('Customer','customer')}</span><span>${esc(sale.customer)}</span></div>
+    ${sale.service_type?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Service','service')}</span><span>${esc(sale.service_type)}</span></div>`:''}
+    ${sale.table?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Table','table')}</span><span>${esc(sale.table)}</span></div>`:''}
     <hr class="rcpt-hr">
     <table class="rcpt-tbl">
-      <thead><tr><td><b>Item</b></td><td style="text-align:right"><b>Qty</b></td><td style="text-align:right"><b>Amt</b></td></tr></thead>
+      <thead><tr>
+        <td><b>Item</b><span class="rcpt-th-ar">${RCPT_AR.item}</span></td>
+        <td style="text-align:right"><b>Qty</b><span class="rcpt-th-ar">${RCPT_AR.qty}</span></td>
+        <td style="text-align:right"><b>Amount</b><span class="rcpt-th-ar">${RCPT_AR.amount}</span></td>
+      </tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <hr class="rcpt-hr">
-    <div class="rcpt-row"><span>Subtotal</span><span>AED ${Number(sale.subtotal).toFixed(2)}</span></div>
-    <div class="rcpt-row"><span>VAT</span><span>AED ${Number(sale.vat).toFixed(2)}</span></div>
+    <div class="rcpt-row"><span class="rcpt-lbl">${bl('Subtotal','subtotal')}</span><span>AED ${Number(sale.subtotal).toFixed(2)}</span></div>
+    <div class="rcpt-row"><span class="rcpt-lbl">${bl('VAT','vat')}</span><span>AED ${Number(sale.vat).toFixed(2)}</span></div>
     ${adjRows}
-    <div class="rcpt-total"><span>TOTAL</span><span>AED ${Number(sale.total).toFixed(2)}</span></div>
+    <div class="rcpt-total"><span>TOTAL<span class="rcpt-ar">${RCPT_AR.total}</span></span><span>AED ${Number(sale.total).toFixed(2)}</span></div>
     <hr class="rcpt-hr">
-    <div class="rcpt-row"><span>Payment</span><span>${{'cash':'Cash','card':'Card','multi':'Cash + Card','credit':'Credit'}[sale.payment_method]||sale.payment_method}</span></div>
+    <div class="rcpt-row"><span class="rcpt-lbl">${bl('Payment','payment')}</span><span>${esc(payLabel[0])}<span class="rcpt-ar">${RCPT_AR[payLabel[1]]||''}</span></span></div>
     ${payInfo}
     <hr class="rcpt-hr">
     <div style="text-align:center;font-size:10px;color:var(--t3);margin-top:4px">
-      <span>View invoice: </span><a id="rcpt-short-link" href="#" target="_blank" style="color:var(--acc);word-break:break-all">Generating link…</a>
+      <span>${bl('View invoice:','viewInvoice')} </span><a id="rcpt-short-link" href="#" target="_blank" style="color:var(--acc);word-break:break-all">Generating link…</a>
     </div>
-    <p style="text-align:center;font-size:10px;color:var(--t3);margin-top:6px">Thank you for your business!</p>`;
+    <p style="text-align:center;font-size:10px;color:var(--t3);margin-top:6px">Thank you for your business!<span class="rcpt-ar">${RCPT_AR.thankYou}</span></p>`;
   document.getElementById('ov-rcpt').style.display='flex';
   genPosShortLink(sale);
 }
@@ -1459,12 +1485,24 @@ function printRcpt(){
   const w=window.open('','_blank','width=380,height=620');
   if(!w){toast('Allow popups to print','warn');return;}
   w.document.write(`<!doctype html><html><head><title>Receipt</title><style>
-    *{box-sizing:border-box}body{font-family:monospace;font-size:12px;padding:16px;max-width:300px;margin:0 auto;color:#000;background:#fff}
-    .rcpt-hd{text-align:center;margin-bottom:10px}.rcpt-hd h2{font-size:14px;margin:0}.rcpt-hd p{font-size:11px}
+    *{box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:12px;padding:16px;max-width:320px;margin:0 auto;color:#000;background:#fff}
+    .rcpt-ar{direction:rtl;unicode-bidi:isolate;font-family:'Segoe UI',Tahoma,Arial,sans-serif;}
+    .rcpt-hd{text-align:center;margin-bottom:10px;padding-bottom:10px;border-bottom:2px solid #000}
+    .rcpt-hd h2{font-size:15px;margin:0 0 2px;font-weight:800}
+    .rcpt-hd .rcpt-heading{font-size:11px;font-weight:700}
+    .rcpt-hd .rcpt-heading .rcpt-ar{margin-inline-start:6px}
+    .rcpt-hd p{font-size:10.5px;color:#444;margin-top:3px}
     .rcpt-hr{border:none;border-top:1px dashed #000;margin:8px 0}
-    .rcpt-row{display:flex;justify-content:space-between;font-size:11px;padding:1px 0}
-    .rcpt-tbl{width:100%;border-collapse:collapse;font-size:11px}.rcpt-tbl td{padding:2px 0}
-    .rcpt-total{display:flex;justify-content:space-between;font-weight:700;font-size:13px;padding:5px 0 0}
+    .rcpt-row{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;padding:2px 0;gap:8px}
+    .rcpt-lbl .rcpt-ar{font-size:9.5px;color:#555;margin-inline-start:5px}
+    .rcpt-tbl{width:100%;border-collapse:collapse;font-size:11px}
+    .rcpt-tbl thead td{border-bottom:1.5px solid #000;padding-bottom:5px}
+    .rcpt-tbl td{padding:3px 0}
+    .rcpt-tbl td:last-child{text-align:right}
+    .rcpt-th-ar{display:block;font-size:9px;font-weight:400;color:#555}
+    .rcpt-total{display:flex;justify-content:space-between;font-weight:800;font-size:14px;padding:6px 0 0}
+    .rcpt-total .rcpt-ar{font-size:10.5px;font-weight:700;margin-inline-start:6px}
     @media print{body{padding:0}}
   </style></head><body>${html}</body></html>`);
   w.document.close();w.focus();setTimeout(()=>{w.print();w.close();},300);

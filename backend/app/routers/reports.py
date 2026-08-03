@@ -531,7 +531,7 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
     input_taxable += sum((record_amount(row, "net_amount", "subtotal", "taxable_amount") for row in app_purchases), Decimal("0.00"))
     input_vat = input_breakdown["vat"]
     input_vat += sum((record_amount(row, "tax_amount", "vat_amount", "vat") for row in app_purchases), Decimal("0.00"))
-    aging_rows = receivables_aging(db, company_id)
+    aging_rows = receivables_aging(db, company_id, app_sales)
     ar_total = sum(money(row["total"]) for row in aging_rows)
     overdue_total = sum(money(row["d31_60"]) + money(row["d61_90"]) + money(row["over90"]) for row in aging_rows)
     risk_score = "Low" if overdue_total == 0 else "Medium" if overdue_total < ar_total / Decimal("2") else "High"
@@ -793,7 +793,7 @@ def _add_to_aging_bucket(buckets: dict[str, Decimal], value: Decimal, days_overd
         buckets["over90"] += value
 
 
-def receivables_aging(db: Session, company_id: str) -> list[dict[str, str]]:
+def receivables_aging(db: Session, company_id: str, app_sales: list[dict[str, Any]]) -> list[dict[str, str]]:
     result: dict[str, dict[str, Decimal]] = {}
 
     # DB invoices — no due_date field; use created_at + 30 days as proxy
@@ -809,7 +809,7 @@ def receivables_aging(db: Session, company_id: str) -> list[dict[str, str]]:
         _add_to_aging_bucket(e, money(total), _days_overdue(proxy_due))
 
     # App sales invoices — have real due_date
-    for invoice in app_sales_invoice_records(db, company_id):
+    for invoice in app_sales:
         if is_paid_status(invoice.get("status")):
             continue
         key = str(invoice.get("customer") or invoice.get("customer_name") or "Unknown").strip() or "Unknown"
