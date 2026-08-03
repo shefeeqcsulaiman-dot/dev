@@ -544,6 +544,19 @@ def ensure_schema_updates() -> None:
             "CREATE INDEX IF NOT EXISTS ix_app_data_company_collection_created "
             "ON app_data_records (company_id, collection, created_at)"
         ))
+        # Join columns behind trial balance / balance sheet / ledger drill-down /
+        # payroll queries — these tables predate their FK columns having an
+        # index, so every one of those reports did a full scan on them. The
+        # model-level index=True only takes effect for a brand-new table;
+        # these CREATE INDEX IF NOT EXISTS calls are what actually backfills
+        # it onto the already-running production database.
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_journal_lines_journal_id ON journal_lines (journal_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_journal_lines_account_id ON journal_lines (account_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_general_ledger_entries_account_id ON general_ledger_entries (account_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_payroll_items_run_id ON payroll_items (run_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_payroll_items_employee_id ON payroll_items (employee_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_voucher_lines_voucher_id ON voucher_lines (voucher_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_voucher_lines_account_id ON voucher_lines (account_id)"))
         if "trial_requests" in table_names:
             existing_columns = {c["name"] for c in inspector.get_columns("trial_requests")}
             if "employee_count" not in existing_columns:

@@ -290,6 +290,22 @@ def backfill_purchase_stock_movements(db: Session, current_user: User) -> None:
         .filter(AppDataRecord.company_id == current_user.company_id, AppDataRecord.collection == "purchaseRecords")
         .all()
     )
+    if not records:
+        return
+    # This runs on every GET /inventory/stock-levels and /stock-movements
+    # call (unless disabled) — was one existence-check query PER purchase
+    # record, every single time, even when nothing had changed since the
+    # last call. Fetch every reference that already has a movement once,
+    # up front, instead.
+    existing_refs = {
+        row[0]
+        for row in db.query(StockMovement.reference)
+        .filter(
+            StockMovement.company_id == current_user.company_id,
+            StockMovement.movement_type == "purchase",
+        )
+        .all()
+    }
     changed = False
     updated_mapping_ids: set[int] = set()
     for item in records:
@@ -304,17 +320,12 @@ def backfill_purchase_stock_movements(db: Session, current_user: User) -> None:
         reference = str(record.get("ref") or record.get("invoice_no") or record.get("reference") or item.record_key or "").strip()
         if not reference:
             continue
-        existing = (
-            db.query(StockMovement.id)
-            .filter(
-                StockMovement.company_id == current_user.company_id,
-                StockMovement.movement_type == "purchase",
-                StockMovement.reference == reference,
-            )
-            .first()
-        )
-        if existing:
+        if reference in existing_refs:
             continue
+        # Guard against two purchaseRecords sharing the same reference
+        # within this same run — the old per-record query would've seen an
+        # earlier iteration's not-yet-committed movement via autoflush.
+        existing_refs.add(reference)
         lines = record.get("lines")
         if not isinstance(lines, list):
             continue

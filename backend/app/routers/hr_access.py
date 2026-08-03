@@ -10,7 +10,7 @@ import math
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from jose import jwt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -25,6 +25,7 @@ from app.auth_principal import (
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import require_module
+from app.limiter import limiter
 from app.models import (
     AttendanceSession,
     CompanyLocation,
@@ -208,7 +209,8 @@ def _create_employee_token(employee_id: str, role_id: str | None) -> str:
 
 
 @router.post("/login", response_model=HrToken)
-def hr_login(payload: HrLoginRequest, db: Session = Depends(get_db)) -> HrToken:
+@limiter.limit("10/minute")
+def hr_login(request: Request, payload: HrLoginRequest, db: Session = Depends(get_db)) -> HrToken:
     company_id = (payload.company_id or "").strip()
     username = payload.username.strip()
 

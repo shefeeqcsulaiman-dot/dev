@@ -1,3 +1,4 @@
+import os
 from uuid import uuid4
 
 import boto3
@@ -38,7 +39,12 @@ def ensure_bucket() -> None:
 
 def upload_fileobj(company_id: str, filename: str, content_type: str, fileobj) -> str:
     ensure_bucket()
-    key = f"companies/{company_id}/{uuid4()}-{filename}"
+    # filename is client-supplied (UploadFile.filename) — strip any directory
+    # components before it touches a path, or "../../../etc/x" would let an
+    # uploader write files outside LOCAL_STORAGE_ROOT. Handle both slash
+    # styles since a client can send either regardless of the server's OS.
+    safe_filename = os.path.basename(filename.replace("\\", "/")) or "file"
+    key = f"companies/{company_id}/{uuid4()}-{safe_filename}"
     if use_local_storage():
         path = LOCAL_STORAGE_ROOT / key
         path.parent.mkdir(parents=True, exist_ok=True)

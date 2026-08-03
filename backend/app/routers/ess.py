@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import company_allows_module
+from app.limiter import limiter
 from app.models import Company, Employee, PayrollItem, PayrollRun
 from app.security import pwd_context
 
@@ -92,7 +93,8 @@ def ess_bearer(request: Request, db: Session = Depends(get_db)) -> Employee:
 # ── routes ───────────────────────────────────────────────────────────────────
 
 @router.post("/login", response_model=EssToken)
-def ess_login(payload: EssLoginRequest, db: Session = Depends(get_db)) -> EssToken:
+@limiter.limit("10/minute")
+def ess_login(request: Request, payload: EssLoginRequest, db: Session = Depends(get_db)) -> EssToken:
     username = payload.username.strip()
     password = payload.password
     company_id = (payload.company_id or "").strip()
@@ -159,9 +161,10 @@ def ess_me(request: Request, db: Session = Depends(get_db)) -> EssEmployeeOut:
 
 
 @router.post("/change-password")
+@limiter.limit("10/minute")
 def ess_change_password(
-    payload: EssChangePasswordRequest,
     request: Request,
+    payload: EssChangePasswordRequest,
     db: Session = Depends(get_db),
 ) -> dict:
     emp = ess_bearer(request, db)

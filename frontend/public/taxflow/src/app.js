@@ -19382,7 +19382,7 @@ function renderPayslipPreview(info){
   const body=document.getElementById('payslip-body');
   if(!body)return;
   body.innerHTML=`
-    <div class="flx-b"><span>Employee</span><strong style="color:var(--text)">${info.name}</strong></div>
+    <div class="flx-b"><span>Employee</span><strong style="color:var(--text)">${escapeHtml(info.name)}</strong></div>
     <div class="flx-b"><span>Total Salary</span><span class="mono">${money(info.basic)}</span></div>
     <div class="flx-b"><span>Allowances</span><span class="mono">${money(info.allow)}</span></div>
     <div class="flx-b"><span>Overtime / Variable Pay</span><span class="mono">${money(info.ot)}</span></div>
