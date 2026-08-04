@@ -446,6 +446,11 @@ def ensure_schema_updates() -> None:
                 )
         if "company_locations" in table_names:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_company_locations_branch_id ON company_locations (branch_id)"))
+        if "attendance_sessions" in table_names:
+            existing_columns = {column["name"] for column in inspector.get_columns("attendance_sessions")}
+            if "branch_id" not in existing_columns:
+                connection.execute(text("ALTER TABLE attendance_sessions ADD COLUMN branch_id VARCHAR(36)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_attendance_sessions_branch_id ON attendance_sessions (branch_id)"))
         if "biometric_devices" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("biometric_devices")}
             required_columns = {

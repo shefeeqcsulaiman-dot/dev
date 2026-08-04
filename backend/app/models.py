@@ -1064,6 +1064,7 @@ class AttendanceSession(Base, TimestampMixin):
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
     employee_id: Mapped[str] = mapped_column(ForeignKey("employees.id"), index=True, nullable=False)
     location_id: Mapped[str | None] = mapped_column(ForeignKey("company_locations.id"))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     check_in: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     check_out: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     check_in_lat: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))

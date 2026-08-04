@@ -158,6 +158,21 @@ def _distance_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> floa
     return 2 * r * math.asin(math.sqrt(a))
 
 
+def _scope_attendance_to_branch(query, emp: Employee):
+    """Branch Management, Phase 2: a branch-assigned employee viewing
+    team/company-wide attendance (dashboard counts, live locations) only
+    sees sessions belonging to their own branch — plus branch-less legacy
+    sessions, so pre-existing data stays visible rather than vanishing.
+    An employee with no branch_id (the common case pre-feature, and for
+    companies that never set up branches) sees everything, unchanged from
+    today's behavior."""
+    if not emp.branch_id:
+        return query
+    return query.filter(
+        (AttendanceSession.branch_id == emp.branch_id) | (AttendanceSession.branch_id.is_(None))
+    )
+
+
 def _nearest_assigned_location(db: Session, employee_id: str) -> tuple[CompanyLocation, bool] | None:
     """Returns (location, is_primary) for the employee's primary assigned location, or None."""
     link = (
@@ -304,8 +319,11 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
         return {
             "role": role_name,
             "total_employees": db.query(Employee).filter(Employee.company_id == company_id).count(),
-            "active_sessions_now": db.query(AttendanceSession).filter(
-                AttendanceSession.company_id == company_id, AttendanceSession.status == "open"
+            "active_sessions_now": _scope_attendance_to_branch(
+                db.query(AttendanceSession).filter(
+                    AttendanceSession.company_id == company_id, AttendanceSession.status == "open"
+                ),
+                emp,
             ).count(),
             "company_locations": db.query(CompanyLocation).filter(CompanyLocation.company_id == company_id).count(),
             "roles_configured": db.query(Role).filter(Role.company_id == company_id).count(),
@@ -327,8 +345,11 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
     if role_name == "Manager":
         return {
             "role": role_name,
-            "team_active_sessions": db.query(AttendanceSession).filter(
-                AttendanceSession.company_id == company_id, AttendanceSession.status == "open"
+            "team_active_sessions": _scope_attendance_to_branch(
+                db.query(AttendanceSession).filter(
+                    AttendanceSession.company_id == company_id, AttendanceSession.status == "open"
+                ),
+                emp,
             ).count(),
         }
 
@@ -832,7 +853,7 @@ def check_in(
 
     now = datetime.now(UTC)
     session = AttendanceSession(
-        company_id=emp.company_id, employee_id=emp.id, location_id=loc.id, check_in=now,
+        company_id=emp.company_id, employee_id=emp.id, location_id=loc.id, branch_id=emp.branch_id, check_in=now,
         check_in_lat=Decimal(str(payload.latitude)), check_in_lng=Decimal(str(payload.longitude)),
         status="open",
     )
@@ -960,11 +981,11 @@ def live_locations(
     db: Session = Depends(get_db),
     emp: Employee = Depends(require_permission("hr:view_all_attendance")),
 ) -> list[LiveLocationOut]:
-    sessions = (
+    sessions = _scope_attendance_to_branch(
         db.query(AttendanceSession)
-        .filter(AttendanceSession.company_id == emp.company_id, AttendanceSession.status == "open")
-        .all()
-    )
+        .filter(AttendanceSession.company_id == emp.company_id, AttendanceSession.status == "open"),
+        emp,
+    ).all()
     out: list[LiveLocationOut] = []
     for session in sessions:
         latest = (
