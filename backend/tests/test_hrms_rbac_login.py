@@ -165,7 +165,14 @@ def test_accounting_endpoints_401_for_employee_token(client, db, auth_headers):
     This isn't a bug in these endpoints themselves — accounting isn't an HRMS
     module — it's a bug in calling them unconditionally from a page that has
     no accounting UI at all. See app.js hydrateFromServer()'s HRMS_STANDALONE
-    guard around loadAccountingFromDb()/loadCorporateAccountingFromDb()."""
+    guard around loadAccountingFromDb()/loadCorporateAccountingFromDb().
+
+    /inventory/mappings used to be in this same "still User-only" bucket, but
+    Branch Management Phase 5 deliberately widened it (and stock-levels/
+    stock-movements) to Employee/branch principals — see
+    test_branch_isolation.py for that behavior's own coverage. hrms.html
+    never called it (confirmed before this widening), so this was never a
+    force-logout risk for that page."""
     employee_id = _seed_employee(client, auth_headers, db)
     emp_headers, _role = _grant_role_and_login(
         client, auth_headers, employee_id, "rbactest.user6", ["employees:view", "leave:view"]
@@ -173,7 +180,6 @@ def test_accounting_endpoints_401_for_employee_token(client, db, auth_headers):
 
     assert client.get("/api/v1/accounts", headers=emp_headers).status_code == 401
     assert client.get("/api/v1/journal", headers=emp_headers).status_code == 401
-    assert client.get("/api/v1/inventory/mappings", headers=emp_headers).status_code == 401
 
 
 def test_cross_tenant_employee_isolation(client, db, auth_headers, second_tenant_headers):

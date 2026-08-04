@@ -10,6 +10,11 @@ branch_id yet (that lands in a later phase alongside POS/Sales) — widening
 those to accept branch-scoped principals now would silently under-filter
 and leak company-wide data, so they're deliberately left User-only until
 AppDataRecord itself is branch-aware.
+Phase 5: Inventory/Purchases — /inventory/stock-levels and /inventory/
+stock-movements (StockMovement.branch_id, stamped by Phase 4's write-path
+widening) plus the purchaseRecords AppDataRecord collection specifically
+(_BRANCH_FILTERED_COLLECTIONS in app_data.py — an explicit allowlist, not
+every collection, since POS/Sales collections are still Phase 6's job).
 """
 
 from datetime import UTC, datetime
@@ -254,3 +259,101 @@ def test_trial_balance_requires_reports_view_permission(client, db, auth_headers
     )
     resp = client.get("/api/v1/reports/trial-balance", headers=headers_no_perm)
     assert resp.status_code == 403
+
+
+def _save_purchase_record(client, headers, ref, branch_id, sku, quantity):
+    saved = client.post(
+        "/api/v1/app-data?action=save",
+        headers=headers,
+        json={
+            "collection": "purchaseRecords",
+            "record": {
+                "ref": ref,
+                "supplier": "Inventory Test Supplier",
+                "branch_id": branch_id,
+                "net_amount": 100,
+                "tax_amount": 5,
+                "total": 105,
+                "lines": [{"sku": sku, "product": sku, "quantity": quantity, "unit_cost": 10}],
+            },
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    return saved.json()
+
+
+def test_stock_levels_and_movements_scoped_by_branch(client, db, auth_headers):
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Inv Branch A"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Inv Branch B"}).json()
+
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_a = Employee(company_id=company_id, employee_no="BR-INV-A", full_name="Inv Branch A Admin", branch_id=branch_a["id"])
+    db.add(emp_a)
+    db.commit()
+    headers_a = _grant_role_and_login(client, auth_headers, emp_a.id, "branchtest.inva", ["employees:view"], "Administrator")
+
+    sku = "INV-ISO-SKU-1"
+    _save_purchase_record(client, auth_headers, "PUR-INV-A-001", branch_a["id"], sku, 10)
+    _save_purchase_record(client, auth_headers, "PUR-INV-B-001", branch_b["id"], sku, 7)
+
+    levels = client.get("/api/v1/inventory/stock-levels", headers=headers_a)
+    assert levels.status_code == 200, levels.text
+    row = next((r for r in levels.json() if r["code"] == sku), None)
+    assert row is not None
+    # Branch A's viewer sees only Branch A's 10 units, not Branch B's 7.
+    assert row["current_stock"] == 10
+
+    movements = client.get("/api/v1/inventory/stock-movements", headers=headers_a)
+    assert movements.status_code == 200, movements.text
+    refs = {m["reference"] for m in movements.json()}
+    assert "PUR-INV-A-001" in refs
+    assert "PUR-INV-B-001" not in refs
+
+
+def test_stock_levels_unassigned_employee_sees_all_branches(client, db, auth_headers):
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Inv Branch C"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Inv Branch D"}).json()
+
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_u = Employee(company_id=company_id, employee_no="BR-INV-U", full_name="Inv HQ Admin")
+    db.add(emp_u)
+    db.commit()
+    headers_u = _grant_role_and_login(client, auth_headers, emp_u.id, "branchtest.invu", ["employees:view"], "Administrator")
+
+    sku = "INV-ISO-SKU-2"
+    _save_purchase_record(client, auth_headers, "PUR-INV-C-001", branch_a["id"], sku, 4)
+    _save_purchase_record(client, auth_headers, "PUR-INV-D-001", branch_b["id"], sku, 6)
+
+    levels = client.get("/api/v1/inventory/stock-levels", headers=headers_u)
+    assert levels.status_code == 200
+    row = next((r for r in levels.json() if r["code"] == sku), None)
+    assert row is not None
+    assert row["current_stock"] == 10
+
+
+def test_purchase_records_collection_filtered_by_branch(client, db, auth_headers):
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Inv Branch E"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Inv Branch F"}).json()
+
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_a = Employee(company_id=company_id, employee_no="BR-INV-E", full_name="Inv Branch E Staff", branch_id=branch_a["id"])
+    db.add(emp_a)
+    db.commit()
+    headers_a = _grant_role_and_login(client, auth_headers, emp_a.id, "branchtest.inve", ["employees:view"], "Purchases Only Role")
+
+    _save_purchase_record(client, auth_headers, "PUR-INV-E-001", branch_a["id"], "INV-ISO-SKU-3", 1)
+    _save_purchase_record(client, auth_headers, "PUR-INV-F-001", branch_b["id"], "INV-ISO-SKU-4", 1)
+
+    listed = client.get("/api/v1/app-data/records/purchaseRecords", headers=headers_a)
+    assert listed.status_code == 200, listed.text
+    refs = {rec["ref"] for rec in listed.json()["records"]}
+    assert "PUR-INV-E-001" in refs
+    assert "PUR-INV-F-001" not in refs
+
+    # Admin (User token) is never branch-scoped — sees both.
+    listed_admin = client.get("/api/v1/app-data/records/purchaseRecords", headers=auth_headers)
+    admin_refs = {rec["ref"] for rec in listed_admin.json()["records"]}
+    assert {"PUR-INV-E-001", "PUR-INV-F-001"}.issubset(admin_refs)

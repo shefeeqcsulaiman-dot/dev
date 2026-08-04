@@ -8,7 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_module
+from app.dependencies import Principal, get_current_principal, get_current_user, require_module
 from app.models import AppDataRecord, InventoryValuationLayer, ItemUnit, ItemUnitConversion, StockAdjustmentApproval, StockMovement, StockProductMapping, User, Warehouse
 from app.schemas import (
     InventoryValuationLayerOut,
@@ -102,34 +102,45 @@ def create_warehouse(
 
 
 @router.get("/inventory/mappings", response_model=list[StockMappingOut])
-def list_mappings(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[StockProductMapping]:
-    if not inventory_backfill_disabled(db, current_user.company_id):
-        backfill_purchase_stock_movements(db, current_user)
+def list_mappings(db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> list[StockProductMapping]:
+    # Widened to Employee/branch principals in Branch Management Phase 5 —
+    # StockProductMapping itself is shared company-wide master data (the
+    # product catalog), so unlike stock-levels/stock-movements below, no
+    # branch filter is applied here; every principal in the company sees
+    # the same mapping list.
+    if not inventory_backfill_disabled(db, principal.company_id):
+        backfill_purchase_stock_movements(db, principal)
     mappings = (
         db.query(StockProductMapping)
-        .filter(StockProductMapping.company_id == current_user.company_id)
+        .filter(StockProductMapping.company_id == principal.company_id)
         .order_by(StockProductMapping.created_at.desc(), StockProductMapping.id.desc())
         .all()
     )
-    hydrate_mapping_costs_from_purchase_data(db, current_user.company_id, mappings)
+    hydrate_mapping_costs_from_purchase_data(db, principal.company_id, mappings)
     return mappings
 
 
 @router.get("/inventory/stock-levels")
-def list_stock_levels(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[dict[str, object]]:
-    if not inventory_backfill_disabled(db, current_user.company_id):
-        backfill_purchase_stock_movements(db, current_user)
+def list_stock_levels(db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> list[dict[str, object]]:
+    if not inventory_backfill_disabled(db, principal.company_id):
+        backfill_purchase_stock_movements(db, principal)
+    movement_join_condition = (StockMovement.mapping_id == StockProductMapping.id) & (StockMovement.company_id == principal.company_id)
+    if principal.branch_id:
+        # A branch-scoped viewer sees stock quantities from their own
+        # branch's movements only (plus branch-less legacy movements) —
+        # each branch's physical stock is a separate count, not a shared
+        # pool. Unassigned employees/the company admin still see the
+        # full company-wide total, unchanged from before this phase.
+        movement_join_condition = movement_join_condition & (
+            (StockMovement.branch_id == principal.branch_id) | (StockMovement.branch_id.is_(None))
+        )
     rows = (
         db.query(
             StockProductMapping,
             func.coalesce(func.sum(StockMovement.quantity), 0).label("current_stock"),
         )
-        .outerjoin(
-            StockMovement,
-            (StockMovement.mapping_id == StockProductMapping.id)
-            & (StockMovement.company_id == current_user.company_id),
-        )
-        .filter(StockProductMapping.company_id == current_user.company_id)
+        .outerjoin(StockMovement, movement_join_condition)
+        .filter(StockProductMapping.company_id == principal.company_id)
         .group_by(StockProductMapping.id)
         .order_by(StockProductMapping.sku)
         .all()
@@ -169,17 +180,17 @@ def list_stock_levels(db: Session = Depends(get_db), current_user: User = Depend
 
 
 @router.get("/inventory/stock-movements")
-def list_stock_movements(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[dict[str, object]]:
-    if not inventory_backfill_disabled(db, current_user.company_id):
-        backfill_purchase_stock_movements(db, current_user)
-    rows = (
+def list_stock_movements(db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> list[dict[str, object]]:
+    if not inventory_backfill_disabled(db, principal.company_id):
+        backfill_purchase_stock_movements(db, principal)
+    query = (
         db.query(StockMovement, StockProductMapping)
         .join(StockProductMapping, StockMovement.mapping_id == StockProductMapping.id)
-        .filter(StockMovement.company_id == current_user.company_id)
-        .order_by(StockMovement.created_at.desc())
-        .limit(500)
-        .all()
+        .filter(StockMovement.company_id == principal.company_id)
     )
+    if principal.branch_id:
+        query = query.filter((StockMovement.branch_id == principal.branch_id) | (StockMovement.branch_id.is_(None)))
+    rows = query.order_by(StockMovement.created_at.desc()).limit(500).all()
     # Build a lookup: reference → purchase record payload (for vendor/date)
     references = list({m.reference for m, _ in rows if m.reference})
     purchase_meta: dict[str, dict] = {}
@@ -187,7 +198,7 @@ def list_stock_movements(db: Session = Depends(get_db), current_user: User = Dep
         pr_records = (
             db.query(AppDataRecord)
             .filter(
-                AppDataRecord.company_id == current_user.company_id,
+                AppDataRecord.company_id == principal.company_id,
                 AppDataRecord.collection == "purchaseRecords",
                 AppDataRecord.record_key.in_(references),
             )
@@ -284,10 +295,10 @@ def set_inventory_backfill_disabled(db: Session, company_id: str) -> None:
         db.add(AppDataRecord(company_id=company_id, collection="inventorySettings", record_key="stock_backfill_disabled", payload=payload))
 
 
-def backfill_purchase_stock_movements(db: Session, current_user: User) -> None:
+def backfill_purchase_stock_movements(db: Session, principal: Principal) -> None:
     records = (
         db.query(AppDataRecord)
-        .filter(AppDataRecord.company_id == current_user.company_id, AppDataRecord.collection == "purchaseRecords")
+        .filter(AppDataRecord.company_id == principal.company_id, AppDataRecord.collection == "purchaseRecords")
         .all()
     )
     if not records:
@@ -301,7 +312,7 @@ def backfill_purchase_stock_movements(db: Session, current_user: User) -> None:
         row[0]
         for row in db.query(StockMovement.reference)
         .filter(
-            StockMovement.company_id == current_user.company_id,
+            StockMovement.company_id == principal.company_id,
             StockMovement.movement_type == "purchase",
         )
         .all()
@@ -329,19 +340,25 @@ def backfill_purchase_stock_movements(db: Session, current_user: User) -> None:
         lines = record.get("lines")
         if not isinstance(lines, list):
             continue
+        # Prefer the purchase record's own stamped branch_id (Branch
+        # Management Phase 4) over the current viewer's — a backfill run
+        # triggered by one branch's GET shouldn't attribute EVERY orphaned
+        # legacy purchase to that viewer's branch.
+        branch_id = item.branch_id or principal.branch_id
         for line in lines:
             if not isinstance(line, dict):
                 continue
             quantity = decimal_value(line.get("quantity") or line.get("qty") or line.get("purchase_qty") or line.get("qty_invoiced"))
             if quantity <= 0:
                 continue
-            mapping = stock_mapping_for_purchase_line(db, current_user, record, line)
+            mapping = stock_mapping_for_purchase_line(db, principal, record, line)
             if not mapping:
                 continue
             unit_cost = decimal_value(line.get("unit_cost_before_tax") or line.get("unit_cost") or line.get("purchase_unit_cost") or line.get("cost"))
             db.add(
                 StockMovement(
-                    company_id=current_user.company_id,
+                    company_id=principal.company_id,
+                    branch_id=branch_id,
                     mapping_id=mapping.id,
                     movement_type="purchase",
                     quantity=quantity,
@@ -351,7 +368,7 @@ def backfill_purchase_stock_movements(db: Session, current_user: User) -> None:
             )
             db.add(
                 InventoryValuationLayer(
-                    company_id=current_user.company_id,
+                    company_id=principal.company_id,
                     item_code=mapping.sku,
                     source_module="purchase",
                     source_id=reference,
@@ -365,7 +382,7 @@ def backfill_purchase_stock_movements(db: Session, current_user: User) -> None:
     if changed:
         db.commit()
         # Recompute weighted average cost for each affected mapping
-        _update_mapping_weighted_avg_cost(db, current_user.company_id, updated_mapping_ids)
+        _update_mapping_weighted_avg_cost(db, principal.company_id, updated_mapping_ids)
         db.commit()
 
 
@@ -398,7 +415,7 @@ def _update_mapping_weighted_avg_cost(db: Session, company_id: str, mapping_ids:
 
 def stock_mapping_for_purchase_line(
     db: Session,
-    current_user: User,
+    principal: Principal,
     record: dict[str, Any],
     line: dict[str, Any],
 ) -> StockProductMapping | None:
@@ -412,7 +429,7 @@ def stock_mapping_for_purchase_line(
         mapping = (
             db.query(StockProductMapping)
             .filter(
-                StockProductMapping.company_id == current_user.company_id,
+                StockProductMapping.company_id == principal.company_id,
                 func.lower(StockProductMapping.sku) == sku.lower(),
             )
             .first()
@@ -421,7 +438,7 @@ def stock_mapping_for_purchase_line(
         mapping = (
             db.query(StockProductMapping)
             .filter(
-                StockProductMapping.company_id == current_user.company_id,
+                StockProductMapping.company_id == principal.company_id,
                 func.lower(StockProductMapping.name) == product.lower(),
             )
             .first()
@@ -431,7 +448,7 @@ def stock_mapping_for_purchase_line(
         mapping = (
             db.query(StockProductMapping)
             .filter(
-                StockProductMapping.company_id == current_user.company_id,
+                StockProductMapping.company_id == principal.company_id,
                 func.lower(StockProductMapping.sku) == product.lower(),
             )
             .first()
@@ -440,14 +457,14 @@ def stock_mapping_for_purchase_line(
         mapping = (
             db.query(StockProductMapping)
             .filter(
-                StockProductMapping.company_id == current_user.company_id,
+                StockProductMapping.company_id == principal.company_id,
                 func.lower(StockProductMapping.name) == sku.lower(),
             )
             .first()
         )
     if not mapping:
         mapping = StockProductMapping(
-            company_id=current_user.company_id,
+            company_id=principal.company_id,
             sku=sku or product[:60],
             name=product or sku,
             supplier_name=str(record.get("supplier") or "").strip() or None,

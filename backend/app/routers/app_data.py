@@ -78,6 +78,15 @@ _PERIOD_LOCKED_COLLECTIONS: dict[str, str] = {
     "payrollRuns": "payroll",
 }
 
+# Collections branch-filtered for a branch-scoped Employee principal (Branch
+# Management Phase 5 — Inventory/Purchases). Deliberately an explicit
+# allowlist, not "every collection": AppDataRecord.branch_id has been
+# stamped on every write since Phase 4, so filtering it is technically safe
+# for any collection, but POS/Sales collections (posSales, salesInvoices)
+# are being held back for their own phase (6) on purpose — each phase gets
+# its own dedicated test pass before more of the app starts depending on it.
+_BRANCH_FILTERED_COLLECTIONS = frozenset({"purchaseRecords"})
+
 # Superadmin's per-company Module Permissions, enforced against writes to the
 # generic AppDataRecord store (this router's /app-data POST save/bulk-save
 # actions are the single choke point almost every module's own data actually
@@ -287,28 +296,26 @@ def list_collection_records(
 ) -> dict[str, object]:
     # Widened from admin-only in Branch Management Phase 4 — an Employee/
     # branch login needs to read reference data (products, customers, etc.)
-    # to write POS sales/purchases at all. No branch-filtering of results
-    # here yet (deferred to Phases 5-6, alongside AppDataRecord.branch_id
-    # actually being populated) — every principal in a company still sees
-    # every record in a collection, same as before this endpoint existed
-    # for Employees at all.
+    # to write POS sales/purchases at all. Branch-filtering of results is
+    # now applied for collections in _BRANCH_FILTERED_COLLECTIONS (Phase 5:
+    # purchaseRecords) — other collections still show every record in the
+    # company to every principal, same as before this endpoint existed for
+    # Employees at all (see _BRANCH_FILTERED_COLLECTIONS's own comment for
+    # why this is an explicit allowlist, not blanket filtering).
     company = resolve_principal_company(principal, db)
     assert_collection_module_enabled(company, collection)
-    total = (
-        db.query(func.count(AppDataRecord.id))
-        .filter(
-            AppDataRecord.company_id == principal.company_id,
-            AppDataRecord.collection == collection,
+    base_filters = [
+        AppDataRecord.company_id == principal.company_id,
+        AppDataRecord.collection == collection,
+    ]
+    if principal.branch_id and collection in _BRANCH_FILTERED_COLLECTIONS:
+        base_filters.append(
+            (AppDataRecord.branch_id == principal.branch_id) | (AppDataRecord.branch_id.is_(None))
         )
-        .scalar()
-        or 0
-    )
+    total = db.query(func.count(AppDataRecord.id)).filter(*base_filters).scalar() or 0
     rows = (
         db.query(AppDataRecord)
-        .filter(
-            AppDataRecord.company_id == principal.company_id,
-            AppDataRecord.collection == collection,
-        )
+        .filter(*base_filters)
         .order_by(AppDataRecord.created_at.desc(), AppDataRecord.id.desc())
         .offset(offset)
         .limit(limit)
@@ -1263,6 +1270,7 @@ def sync_purchase_stock(db: Session, principal: Principal, record: dict[str, Any
     lines = record.get("lines")
     if not isinstance(lines, list):
         lines = []
+    branch_id = str(record.get("branch_id") or "").strip() or principal.branch_id
     db.query(StockMovement).filter(
         StockMovement.company_id == principal.company_id,
         StockMovement.movement_type == "purchase",
@@ -1293,6 +1301,7 @@ def sync_purchase_stock(db: Session, principal: Principal, record: dict[str, Any
         db.add(
             StockMovement(
                 company_id=principal.company_id,
+                branch_id=branch_id,
                 mapping_id=mapping.id,
                 movement_type="purchase",
                 quantity=quantity,

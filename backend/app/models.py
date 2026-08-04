@@ -557,6 +557,7 @@ class StockMovement(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     mapping_id: Mapped[str] = mapped_column(ForeignKey("stock_product_mappings.id"), nullable=False)
     warehouse_id: Mapped[str | None] = mapped_column(ForeignKey("warehouses.id"))
     movement_type: Mapped[str] = mapped_column(String(40), nullable=False)
