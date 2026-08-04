@@ -1198,6 +1198,9 @@ def sync_domain_model(db: Session, current_user: User, collection: str, record: 
             iban = str(record.get("iban") or "").strip()
             if iban:
                 emp.iban = iban
+            branch_id = str(record.get("branch_id") or "").strip()
+            if branch_id:
+                emp.branch_id = branch_id
             status_raw = str(record.get("status") or "Active").lower()
             emp.status = "active" if status_raw in ("active", "1", "true") else "inactive"
 

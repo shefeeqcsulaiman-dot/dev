@@ -703,6 +703,12 @@ function saveEmployee(){
     contract:employeeFormValue('emp-contract','Full-Time'),
     location:employeeFormValue('emp-location','Dubai HQ'),
     branch:employeeFormValue('emp-branch','Dubai HQ'),
+    // Real Branch row id, looked up by name from the live _branchList (not
+    // stored as the <select>'s value — that select is shared with the
+    // free-text #emp-location/#req-location fields via _syncBranchSelects,
+    // so its value is the branch NAME, not an id). Empty when the selected
+    // name doesn't match any real Branch (e.g. no branches created yet).
+    branch_id:(typeof _branchList!=='undefined'?_branchList.find(b=>b.name===employeeFormValue('emp-branch','')):null)?.id||'',
     role_id:employeeFormValue('emp-role'),
     role_name:(()=>{const rid=employeeFormValue('emp-role');const r=_hrRolesCache.find(x=>x.id===rid);return r?r.role_name:'';})(),
     cost_center:employeeFormValue('emp-cost-center'),
@@ -7741,11 +7747,9 @@ function hydrateFromServer(){
             renderDeptTable();
             _syncDeptBranchSelectsFromList();
           }
-          if(Array.isArray(hrCfg.branches)&&hrCfg.branches.length){
-            _branchList=hrCfg.branches;
-            renderBranchTable();
-            _syncBranchSelects(_branchList.filter(b=>b.status!=='Inactive').map(b=>b.name));
-          }
+          // Branches are real Branch rows now (backend/app/routers/branches.py),
+          // loaded via loadBranchesFromDb() — NOT from this legacy blob, which
+          // may still hold stale pre-migration branch data on older records.
           // Roles are real backend RBAC roles now (/hr/admin/roles), not
           // part of this blob — loaded on demand by loadRolesAndPermissionsTab().
         }
@@ -16575,19 +16579,22 @@ function openEmpModal(){
   showM('m-emp');
 }
 
-// Persist dept/branch/role lists as one document in hr_settings collection
-// (kept for the role list, and as a fallback), AND write departments/
-// branches through to the real Company record. The main dashboard and HRMS
-// both call applyDeptsBranchesFromCompany(company) from the *same* early
-// bootstrap step (Company.departments/branches), so writing there — rather
-// than relying solely on the idle-scheduled hr_settings blob hydration —
-// is what keeps both pages showing the same list immediately, not just
+// Persist the department list as one document in hr_settings collection
+// (kept for the role list, and as a fallback), AND write departments
+// through to the real Company record. The main dashboard and HRMS both
+// call applyDeptsBranchesFromCompany(company) from the *same* early
+// bootstrap step (Company.departments), so writing there — rather than
+// relying solely on the idle-scheduled hr_settings blob hydration — is
+// what keeps both pages showing the same list immediately, not just
 // eventually once/if that later hydration step runs.
+// NOTE: branches are NOT saved here — they're real Branch rows now
+// (see saveBranchModal()/deleteBranch(), backend/app/routers/branches.py),
+// not a JSON blob on Company. Kept the name to avoid touching every
+// saveDeptModal()/deleteDept() call site for a departments-only rename.
 async function _saveDeptsBranchesToDb(){
   saveServer('hr_settings',{
     id:'dept-branch-role-config',
     departments:_deptList,
-    branches:_branchList,
   });
   try{
     const response=await authenticatedFetch(`${apiBaseUrl()}/companies/current`,{
@@ -16597,12 +16604,11 @@ async function _saveDeptsBranchesToDb(){
         trn:currentCompany?.trn||null,
         country:currentCompany?.country||'United Arab Emirates',
         departments:JSON.stringify(_deptList),
-        branches:JSON.stringify(_branchList),
       }),
     });
     if(response.ok){
       const company=await response.json();
-      if(currentCompany){currentCompany.departments=company.departments;currentCompany.branches=company.branches;}
+      if(currentCompany){currentCompany.departments=company.departments;}
     }
   }catch(e){ /* hr_settings blob above still has the latest list even if this sync fails */ }
 }
@@ -16714,24 +16720,23 @@ function applyDeptsBranchesFromCompany(company){
       }
     }
   }catch{}
-  try{
-    if(company.branches){
-      const p=JSON.parse(company.branches);
-      if(Array.isArray(p)&&p.length){
-        if(typeof p[0]==='string'){
-          _branchList=p.map((n,i)=>({id:'br-'+(i+1),name:n,code:n.slice(0,3).toUpperCase(),city:n,status:'Active'}));
-        } else {
-          _branchList=p;
-        }
-      }
-    }
-  }catch{}
   // Note: roles are NOT part of the Company record — they're real backend
   // RBAC roles (see /hr/admin/roles), loaded on demand by
   // loadRolesAndPermissionsTab() when that HR Settings tab is opened.
+  // Branches likewise aren't part of the Company record anymore — they're
+  // real Branch rows (backend/app/routers/branches.py), loaded separately.
   renderDeptTable();
-  renderBranchTable();
   _syncDeptBranchSelectsFromList();
+  loadBranchesFromDb();
+}
+
+async function loadBranchesFromDb(){
+  try{
+    const response=await authenticatedFetch(`${apiBaseUrl()}/branches`);
+    if(!response.ok)throw new Error('Branches API returned '+response.status);
+    _branchList=await response.json();
+  }catch(e){ console.warn('[loadBranchesFromDb]',e); }
+  renderBranchTable();
   _syncBranchSelects(_branchList.filter(b=>b.status!=='Inactive').map(b=>b.name));
 }
 
@@ -16952,40 +16957,49 @@ function showBranchModal(id){
   setTimeout(()=>document.getElementById('branch-name').focus(),120);
 }
 
-function saveBranchModal(){
+async function saveBranchModal(){
   const name=(document.getElementById('branch-name')?.value||'').trim();
   if(!name){toast('Branch name is required','err');return;}
   const id=document.getElementById('branch-edit-id')?.value;
-  const obj={
-    id:id||('br-'+Date.now()),
+  const payload={
     name,
     code:(document.getElementById('branch-code')?.value||'').trim().toUpperCase().slice(0,6)||name.slice(0,3).toUpperCase(),
     city:(document.getElementById('branch-city')?.value||'').trim(),
     status:document.getElementById('branch-status')?.value||'Active',
   };
   if(_branchList.find(x=>x.name.toLowerCase()===name.toLowerCase()&&x.id!==id)){toast('Branch name already exists','warn');return;}
-  if(id){
-    const idx=_branchList.findIndex(x=>x.id===id);
-    if(idx>=0)_branchList[idx]=obj;
-  } else {
-    _branchList.push(obj);
-  }
-  hideM('m-branch');
-  renderBranchTable();
-  _syncBranchSelects(_branchList.filter(b=>b.status!=='Inactive').map(b=>b.name));
-  _saveDeptsBranchesToDb();
-  toast(`Branch "${name}" ${id?'updated':'added'}`,'ok');
+  try{
+    const response=await authenticatedFetch(`${apiBaseUrl()}/branches${id?'/'+id:''}`,{
+      method:id?'PUT':'POST',
+      body:JSON.stringify(payload),
+    });
+    if(!response.ok)throw new Error('Save failed ('+response.status+')');
+    const saved=await response.json();
+    if(id){
+      const idx=_branchList.findIndex(x=>x.id===id);
+      if(idx>=0)_branchList[idx]=saved;
+    } else {
+      _branchList.push(saved);
+    }
+    hideM('m-branch');
+    renderBranchTable();
+    _syncBranchSelects(_branchList.filter(b=>b.status!=='Inactive').map(b=>b.name));
+    toast(`Branch "${name}" ${id?'updated':'added'}`,'ok');
+  }catch(err){toast('Save failed: '+err.message,'err');}
 }
 
-function deleteBranch(id){
+async function deleteBranch(id){
   const b=_branchList.find(x=>x.id===id);
   if(!b)return;
   if(!confirm(`Remove branch "${b.name}"?`))return;
-  _branchList=_branchList.filter(x=>x.id!==id);
-  renderBranchTable();
-  _syncBranchSelects(_branchList.filter(x=>x.status!=='Inactive').map(x=>x.name));
-  _saveDeptsBranchesToDb();
-  toast(`Branch "${b.name}" removed`,'ok');
+  try{
+    const response=await authenticatedFetch(`${apiBaseUrl()}/branches/${id}`,{method:'DELETE'});
+    if(!response.ok)throw new Error('Delete failed ('+response.status+')');
+    _branchList=_branchList.filter(x=>x.id!==id);
+    renderBranchTable();
+    _syncBranchSelects(_branchList.filter(x=>x.status!=='Inactive').map(x=>x.name));
+    toast(`Branch "${b.name}" removed`,'ok');
+  }catch(err){toast('Delete failed: '+err.message,'err');}
 }
 
 function deleteBranchFromModal(){

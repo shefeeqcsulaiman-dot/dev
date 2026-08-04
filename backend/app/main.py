@@ -35,7 +35,7 @@ from app.company_defaults import seed_accounts, seed_tax_codes, seed_voucher_typ
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.models import Company, User
-from app.routers import accounting, ai, app_data, attendance, audit, auth, companies, corporate_accounting, documents, ess, events, exception_center, hr_access, hr_ai, inventory, invoice_share, invoices, jobs, leave, module_records, payroll, reports, source_transactions, superadmin, tax
+from app.routers import accounting, ai, app_data, attendance, audit, auth, branches, companies, corporate_accounting, documents, ess, events, exception_center, hr_access, hr_ai, inventory, invoice_share, invoices, jobs, leave, module_records, payroll, reports, source_transactions, superadmin, tax
 from app.security import hash_password
 
 
@@ -335,6 +335,7 @@ def create_app() -> FastAPI:
     app.include_router(hr_ai.router, prefix="/api/v1")
     app.include_router(invoice_share.router, prefix="/api/v1")
     app.include_router(companies.router, prefix="/api/v1")
+    app.include_router(branches.router, prefix="/api/v1")
     app.include_router(invoices.router, prefix="/api/v1")
     app.include_router(documents.router, prefix="/api/v1")
     app.include_router(jobs.router, prefix="/api/v1")
@@ -417,6 +418,7 @@ def ensure_schema_updates() -> None:
                 "username": "VARCHAR(80)",
                 "role_id": "VARCHAR(36)",
                 "work_location_id": "VARCHAR(36)",
+                "branch_id": "VARCHAR(36)",
                 "is_active": "BOOLEAN DEFAULT TRUE",
                 "last_login": "TIMESTAMP WITH TIME ZONE",
                 "last_activity": "TIMESTAMP WITH TIME ZONE",
@@ -425,6 +427,7 @@ def ensure_schema_updates() -> None:
             for column_name, column_type in required_columns.items():
                 if column_name not in existing_columns:
                     connection.execute(text(f"ALTER TABLE employees ADD COLUMN {column_name} {column_type}"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_employees_branch_id ON employees (branch_id)"))
             # Portal usernames are unique platform-wide (not just per-company) so
             # /ess and /hr/login can look an employee up by username alone, with
             # no ?c=<company_id> link required. Partial index (WHERE username IS
@@ -441,6 +444,8 @@ def ensure_schema_updates() -> None:
                 logging.getLogger("taxflow").error(
                     "Could not create uq_employees_username (likely duplicate usernames already exist): %s", idx_exc
                 )
+        if "company_locations" in table_names:
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_company_locations_branch_id ON company_locations (branch_id)"))
         if "biometric_devices" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("biometric_devices")}
             required_columns = {

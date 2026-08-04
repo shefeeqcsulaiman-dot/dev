@@ -95,6 +95,33 @@ class CompanyUpdate(BaseModel):
     branches: str | None = None
 
 
+class BranchOut(BaseModel):
+    id: str
+    name: str
+    code: str | None = None
+    city: str | None = None
+    address: str | None = None
+    status: str = "Active"
+
+    model_config = {"from_attributes": True}
+
+
+class BranchCreate(BaseModel):
+    name: str = Field(min_length=1)
+    code: str | None = None
+    city: str | None = None
+    address: str | None = None
+    status: str = "Active"
+
+
+class BranchUpdate(BaseModel):
+    name: str | None = None
+    code: str | None = None
+    city: str | None = None
+    address: str | None = None
+    status: str | None = None
+
+
 class ImpersonatorOut(BaseModel):
     id: str
     email: EmailStr

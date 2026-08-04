@@ -94,6 +94,7 @@ class WhoAmIOut(BaseModel):
     is_admin: bool
     permissions: list[str] = []
     role_name: str | None = None
+    branch_id: str | None = None
 
 
 @router.get("/whoami", response_model=WhoAmIOut)
@@ -110,6 +111,7 @@ def whoami(principal: Principal = Depends(get_current_principal)) -> WhoAmIOut:
         is_admin=principal.is_admin,
         permissions=sorted(principal.permissions),
         role_name=principal.role_name,
+        branch_id=principal.branch_id,
     )
 
 

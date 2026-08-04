@@ -101,6 +101,10 @@ class Principal:
     user: User | None = None
     employee: Employee | None = None
     role_name: str | None = None
+    # None for a User (admin) principal, or an Employee not assigned to a
+    # branch — both mean "company-wide", matching pre-Branch-Management
+    # behavior. Set only for an Employee principal assigned to a Branch.
+    branch_id: str | None = None
 
     def has(self, *keys: str) -> bool:
         return self.is_admin or bool(self.permissions.intersection(keys))
@@ -126,6 +130,7 @@ def _principal_from_employee_token(token: str, db: Session) -> Principal | None:
         kind="employee", company_id=emp.company_id, display_name=emp.full_name,
         is_admin=False, permissions=frozenset(_role_permission_keys(db, role)),
         employee=emp, role_name=role.role_name if role else None,
+        branch_id=emp.branch_id,
     )
 
 

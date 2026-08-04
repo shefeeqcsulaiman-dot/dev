@@ -14,7 +14,7 @@ from app.models import (
     AccrualPrepaymentRecord, Account, AppDataRecord, ApprovalMatrixRecord,
     AttendancePunch, AttendanceSession, AuditLog, AuditLogDetail, BankAccount,
     BankReconciliationMatch, BankStatementLine, BiometricDevice, BudgetRecord,
-    CashFlowForecastRecord, ClientError, Company, CompanyLocation,
+    Branch, CashFlowForecastRecord, ClientError, Company, CompanyLocation,
     ConsolidationRecord, CorporateTaxRecord, CorporateTaxReturn, CostCenterRecord,
     CreditControlRecord, CustomerAgingSnapshot, DailyGlBalance, Document,
     DomainEvent, Employee, EmployeeLocation, EmployeeLocationLog, EventOutbox,
@@ -506,6 +506,7 @@ def delete_company(
     db.query(RolePermission).filter(RolePermission.role_id.in_(role_ids)).delete(**s)
     db.query(Role).filter(Role.company_id == cid).delete(**s)
     db.query(CompanyLocation).filter(CompanyLocation.company_id == cid).delete(**s)
+    db.query(Branch).filter(Branch.company_id == cid).delete(**s)
 
     # Tier 5 — snapshot / reporting tables (company_id only)
     for Model in (

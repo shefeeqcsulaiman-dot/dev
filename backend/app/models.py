@@ -640,6 +640,7 @@ class Employee(Base, TimestampMixin):
     username: Mapped[str | None] = mapped_column(String(80))
     role_id: Mapped[str | None] = mapped_column(ForeignKey("roles.id"))
     work_location_id: Mapped[str | None] = mapped_column(ForeignKey("company_locations.id"))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_activity: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -1015,13 +1016,30 @@ class RolePermission(Base):
     permission_id: Mapped[str] = mapped_column(ForeignKey("permissions.id"), primary_key=True)
 
 
+class Branch(Base, TimestampMixin):
+    __tablename__ = "branches"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    code: Mapped[str | None] = mapped_column(String(20))
+    city: Mapped[str | None] = mapped_column(String(80))
+    address: Mapped[str | None] = mapped_column(String(400))
+    # "Active"/"Inactive" (capitalized) — matches the pre-existing Settings >
+    # Departments & Branches UI convention this replaces the backing store
+    # for; keep in sync with frontend/public/taxflow/src/app.js's branch
+    # modal rather than the lowercase convention used elsewhere (e.g.
+    # CompanyLocation.status) to avoid a cosmetic mismatch after migration.
+    status: Mapped[str] = mapped_column(String(30), default="Active")
+
+
 class CompanyLocation(Base, TimestampMixin):
     __tablename__ = "company_locations"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
     location_name: Mapped[str] = mapped_column(String(120), nullable=False)
-    branch_id: Mapped[str | None] = mapped_column(String(36))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     address: Mapped[str | None] = mapped_column(String(400))
     latitude: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
     longitude: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
