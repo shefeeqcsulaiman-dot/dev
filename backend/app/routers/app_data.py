@@ -78,14 +78,15 @@ _PERIOD_LOCKED_COLLECTIONS: dict[str, str] = {
     "payrollRuns": "payroll",
 }
 
-# Collections branch-filtered for a branch-scoped Employee principal (Branch
-# Management Phase 5 — Inventory/Purchases). Deliberately an explicit
-# allowlist, not "every collection": AppDataRecord.branch_id has been
-# stamped on every write since Phase 4, so filtering it is technically safe
-# for any collection, but POS/Sales collections (posSales, salesInvoices)
-# are being held back for their own phase (6) on purpose — each phase gets
-# its own dedicated test pass before more of the app starts depending on it.
-_BRANCH_FILTERED_COLLECTIONS = frozenset({"purchaseRecords"})
+# Collections branch-filtered for a branch-scoped Employee principal.
+# Deliberately an explicit allowlist, not "every collection": each entry
+# was added in its own phase, with its own dedicated test pass, even though
+# AppDataRecord.branch_id has been stamped on every write since Phase 4 and
+# filtering would be technically safe for any collection immediately.
+_BRANCH_FILTERED_COLLECTIONS = frozenset({
+    "purchaseRecords",  # Phase 5 — Inventory/Purchases
+    "posSales", "salesInvoices",  # Phase 6 — POS/Sales
+})
 
 # Superadmin's per-company Module Permissions, enforced against writes to the
 # generic AppDataRecord store (this router's /app-data POST save/bulk-save

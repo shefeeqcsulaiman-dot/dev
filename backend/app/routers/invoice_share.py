@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_module
+from app.dependencies import Principal, get_current_principal, get_current_user, require_module
 from app.limiter import limiter
 from app.models import AppDataRecord
 
@@ -30,7 +30,9 @@ class SharePayload(BaseModel):
 def create_invoice_share(
     body: SharePayload,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    # Widened to Employee/branch principals in Branch Management Phase 6 —
+    # pos.html's receipt QR-code sharing (genPosShortLink()) calls this.
+    principal: Principal = Depends(get_current_principal),
 ):
     code = ""
     for _ in range(10):
@@ -46,7 +48,7 @@ def create_invoice_share(
         if not exists:
             break
     record = AppDataRecord(
-        company_id=current_user.company_id,
+        company_id=principal.company_id,
         collection="invoice_share",
         record_key=code,
         payload=json.dumps(body.payload),

@@ -15,12 +15,16 @@ stock-movements (StockMovement.branch_id, stamped by Phase 4's write-path
 widening) plus the purchaseRecords AppDataRecord collection specifically
 (_BRANCH_FILTERED_COLLECTIONS in app_data.py — an explicit allowlist, not
 every collection, since POS/Sales collections are still Phase 6's job).
+Phase 6: POS/Sales, the last data-scoping phase — posSales and
+salesInvoices added to _BRANCH_FILTERED_COLLECTIONS, plus GET/POST
+/invoices (the real ORM Invoice table, branch_id since Phase 3) widened
+and filtered the same way trial-balance was in Phase 3.
 """
 
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from app.models import AttendanceSession, Employee
+from app.models import AppDataRecord, AttendanceSession, Employee
 
 
 def _grant_role_and_login(client, admin_headers, employee_id, username, permission_keys, role_name):
@@ -357,3 +361,144 @@ def test_purchase_records_collection_filtered_by_branch(client, db, auth_headers
     listed_admin = client.get("/api/v1/app-data/records/purchaseRecords", headers=auth_headers)
     admin_refs = {rec["ref"] for rec in listed_admin.json()["records"]}
     assert {"PUR-INV-E-001", "PUR-INV-F-001"}.issubset(admin_refs)
+
+
+def _save_pos_sale(client, headers, ref, branch_id, total):
+    saved = client.post(
+        "/api/v1/app-data?action=save",
+        headers=headers,
+        json={
+            "collection": "posSales",
+            "record": {
+                "receipt_no": ref,
+                "id": ref,
+                "branch_id": branch_id,
+                "customer": "Walk-in",
+                "subtotal": total,
+                "vat": 0,
+                "total": total,
+                "payment_method": "cash",
+                "status": "completed",
+            },
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    return saved.json()
+
+
+def test_pos_sales_collection_scoped_by_branch(client, db, auth_headers):
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "POS Branch A"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "POS Branch B"}).json()
+
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_a = Employee(company_id=company_id, employee_no="BR-POS-A", full_name="POS Branch A Cashier", branch_id=branch_a["id"])
+    db.add(emp_a)
+    db.commit()
+    headers_a = _grant_role_and_login(client, auth_headers, emp_a.id, "branchtest.posa", ["employees:view"], "Administrator")
+
+    # Employee A creates their own sale directly (proves Phase 4's write
+    # widening + auto branch-stamping from principal.branch_id together).
+    saved = client.post(
+        "/api/v1/app-data?action=save",
+        headers=headers_a,
+        json={"collection": "posSales", "record": {"receipt_no": "POS-A-001", "id": "POS-A-001", "customer": "Walk-in", "subtotal": 100, "vat": 5, "total": 105, "payment_method": "cash", "status": "completed"}},
+    )
+    assert saved.status_code == 200, saved.text
+    _save_pos_sale(client, auth_headers, "POS-B-001", branch_b["id"], 200)
+
+    listed = client.get("/api/v1/app-data/records/posSales", headers=headers_a)
+    assert listed.status_code == 200, listed.text
+    refs = {rec.get("receipt_no") for rec in listed.json()["records"]}
+    assert "POS-A-001" in refs
+    assert "POS-B-001" not in refs
+
+    listed_admin = client.get("/api/v1/app-data/records/posSales", headers=auth_headers)
+    admin_refs = {rec.get("receipt_no") for rec in listed_admin.json()["records"]}
+    assert {"POS-A-001", "POS-B-001"}.issubset(admin_refs)
+
+
+def test_pos_sale_auto_stamped_from_employee_branch(client, db, auth_headers):
+    """The employee's own branch assignment stamps the sale automatically —
+    a cashier never has to manually tag which branch they're selling for."""
+    branch = client.post("/api/v1/branches", headers=auth_headers, json={"name": "POS Auto-Stamp Branch"}).json()
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp = Employee(company_id=company_id, employee_no="BR-POS-STAMP", full_name="Auto Stamp Cashier", branch_id=branch["id"])
+    db.add(emp)
+    db.commit()
+    headers = _grant_role_and_login(client, auth_headers, emp.id, "branchtest.posstamp", ["employees:view"], "Administrator")
+
+    saved = client.post(
+        "/api/v1/app-data?action=save",
+        headers=headers,
+        json={"collection": "posSales", "record": {"receipt_no": "POS-STAMP-001", "id": "POS-STAMP-001", "customer": "Walk-in", "subtotal": 50, "vat": 0, "total": 50, "payment_method": "cash", "status": "completed"}},
+    )
+    assert saved.status_code == 200, saved.text
+
+    row = db.query(AppDataRecord).filter(AppDataRecord.company_id == company_id, AppDataRecord.record_key == "POS-STAMP-001").first()
+    assert row is not None
+    assert row.branch_id == branch["id"]
+
+
+def test_sales_invoices_collection_scoped_by_branch(client, db, auth_headers):
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Sales Branch A"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Sales Branch B"}).json()
+
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_a = Employee(company_id=company_id, employee_no="BR-SI-A", full_name="Sales Branch A Staff", branch_id=branch_a["id"])
+    db.add(emp_a)
+    db.commit()
+    headers_a = _grant_role_and_login(client, auth_headers, emp_a.id, "branchtest.sia", ["employees:view"], "Administrator")
+
+    for ref, branch_id in (("SI-A-001", branch_a["id"]), ("SI-B-001", branch_b["id"])):
+        saved = client.post(
+            "/api/v1/app-data?action=save",
+            headers=auth_headers,
+            json={"collection": "salesInvoices", "record": {"invoice_no": ref, "customer": "Test Customer", "branch_id": branch_id, "status": "issued", "subtotal": "100.00", "total": "105.00", "vat_amount": "5.00"}},
+        )
+        assert saved.status_code == 200, saved.text
+
+    listed = client.get("/api/v1/app-data/records/salesInvoices", headers=headers_a)
+    assert listed.status_code == 200, listed.text
+    refs = {rec.get("invoice_no") for rec in listed.json()["records"]}
+    assert "SI-A-001" in refs
+    assert "SI-B-001" not in refs
+
+
+def test_invoices_endpoint_scoped_by_branch(client, db, auth_headers):
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Invoices Branch A"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Invoices Branch B"}).json()
+
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_a = Employee(company_id=company_id, employee_no="BR-INVOICE-A", full_name="Invoices Branch A Staff", branch_id=branch_a["id"])
+    db.add(emp_a)
+    db.commit()
+    headers_a = _grant_role_and_login(client, auth_headers, emp_a.id, "branchtest.invoicea", ["employees:view"], "Administrator")
+
+    created_a = client.post(
+        "/api/v1/invoices",
+        headers=headers_a,
+        json={"customer_name": "Branch A Customer", "invoice_number": "INV-BR-A-001", "lines": [{"description": "Item", "quantity": "1", "unit_price": "100.00", "vat_rate": "5"}]},
+    )
+    assert created_a.status_code == 201, created_a.text
+    assert created_a.json()["branch_id"] == branch_a["id"]
+
+    created_b = client.post(
+        "/api/v1/invoices",
+        headers=auth_headers,
+        json={"customer_name": "Branch B Customer", "invoice_number": "INV-BR-B-001", "branch_id": branch_b["id"], "lines": [{"description": "Item", "quantity": "1", "unit_price": "100.00", "vat_rate": "5"}]},
+    )
+    assert created_b.status_code == 201, created_b.text
+
+    listed_a = client.get("/api/v1/invoices", headers=headers_a)
+    assert listed_a.status_code == 200, listed_a.text
+    numbers_a = {inv["invoice_number"] for inv in listed_a.json()}
+    assert "INV-BR-A-001" in numbers_a
+    assert "INV-BR-B-001" not in numbers_a
+
+    listed_admin = client.get("/api/v1/invoices", headers=auth_headers)
+    numbers_admin = {inv["invoice_number"] for inv in listed_admin.json()}
+    assert {"INV-BR-A-001", "INV-BR-B-001"}.issubset(numbers_admin)

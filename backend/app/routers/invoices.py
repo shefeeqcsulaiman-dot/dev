@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_module
+from app.dependencies import Principal, get_current_principal, require_module
 from app.module_integration import sync_sales_invoice_accounting
-from app.models import Invoice, InvoiceLine, User
+from app.models import Invoice, InvoiceLine
 from app.schemas import InvoiceCreate, InvoiceOut
 
 
@@ -28,34 +28,35 @@ def calculate_totals(invoice: Invoice) -> None:
 @router.get("", response_model=list[InvoiceOut])
 def list_invoices(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(get_current_principal),
 ) -> list[Invoice]:
-    return (
-        db.query(Invoice)
-        .options(joinedload(Invoice.lines))
-        .filter(Invoice.company_id == current_user.company_id)
-        .order_by(Invoice.created_at.desc())
-        .all()
-    )
+    # Widened to Employee/branch principals + branch-filtered in Branch
+    # Management Phase 6 — mirrors trial-balance's Phase 3 treatment
+    # (Invoice.branch_id already existed since Phase 3; this endpoint just
+    # hadn't been opened up to Employee tokens yet).
+    query = db.query(Invoice).options(joinedload(Invoice.lines)).filter(Invoice.company_id == principal.company_id)
+    if principal.branch_id:
+        query = query.filter((Invoice.branch_id == principal.branch_id) | (Invoice.branch_id.is_(None)))
+    return query.order_by(Invoice.created_at.desc()).all()
 
 
 @router.post("", response_model=InvoiceOut, status_code=201)
 def create_invoice(
     payload: InvoiceCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(get_current_principal),
 ) -> Invoice:
     existing = (
         db.query(Invoice.id)
-        .filter(Invoice.company_id == current_user.company_id, Invoice.invoice_number == payload.invoice_number)
+        .filter(Invoice.company_id == principal.company_id, Invoice.invoice_number == payload.invoice_number)
         .first()
     )
     if existing:
         raise HTTPException(status_code=409, detail="Invoice number already exists for this company")
 
     invoice = Invoice(
-        company_id=current_user.company_id,
-        branch_id=payload.branch_id,
+        company_id=principal.company_id,
+        branch_id=payload.branch_id or principal.branch_id,
         customer_name=payload.customer_name,
         invoice_number=payload.invoice_number,
     )
@@ -63,7 +64,7 @@ def create_invoice(
     calculate_totals(invoice)
     db.add(invoice)
     db.flush()
-    sync_sales_invoice_accounting(db, invoice, current_user.id)
+    sync_sales_invoice_accounting(db, invoice, principal.user.id if principal.user else None)
     db.commit()
     db.refresh(invoice)
     return invoice
