@@ -85,6 +85,7 @@ class Invoice(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     customer_name: Mapped[str] = mapped_column(String(160), nullable=False)
     invoice_number: Mapped[str] = mapped_column(String(40), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default=InvoiceStatus.draft.value)
@@ -177,6 +178,7 @@ class JournalEntry(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     entry_number: Mapped[str] = mapped_column(String(40), nullable=False)
     source_module: Mapped[str] = mapped_column(String(60), default="manual")
     source_id: Mapped[str | None] = mapped_column(String(36), index=True)
@@ -262,6 +264,7 @@ class GeneralLedgerEntry(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     entry_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     voucher_no: Mapped[str] = mapped_column(String(60), nullable=False)
     voucher_type: Mapped[str] = mapped_column(String(80), nullable=False)
@@ -324,6 +327,7 @@ class SourceTransaction(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     module: Mapped[str] = mapped_column(String(60), nullable=False)
     reference: Mapped[str] = mapped_column(String(80), nullable=False)
     party_name: Mapped[str | None] = mapped_column(String(160))

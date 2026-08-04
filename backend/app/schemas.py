@@ -160,6 +160,7 @@ class InvoiceLineIn(BaseModel):
 class InvoiceCreate(BaseModel):
     customer_name: str
     invoice_number: str
+    branch_id: str | None = None
     lines: list[InvoiceLineIn]
 
 
@@ -173,6 +174,7 @@ class InvoiceOut(BaseModel):
     id: str
     customer_name: str
     invoice_number: str
+    branch_id: str | None = None
     status: str
     subtotal: Decimal
     vat: Decimal
@@ -288,6 +290,7 @@ class SourceTransactionCreate(BaseModel):
     module: str
     reference: str
     party_name: str | None = None
+    branch_id: str | None = None
     lines: list[SourceLineIn]
 
 
@@ -314,6 +317,7 @@ class SourceTransactionOut(BaseModel):
     module: str
     reference: str
     party_name: str | None
+    branch_id: str | None = None
     status: str
     subtotal: Decimal
     vat: Decimal

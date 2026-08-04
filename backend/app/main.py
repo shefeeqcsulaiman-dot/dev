@@ -502,6 +502,18 @@ def ensure_schema_updates() -> None:
                 connection.execute(
                     text("CREATE UNIQUE INDEX IF NOT EXISTS uq_invoice_company_number ON invoices (company_id, invoice_number)")
                 )
+            existing_columns = {column["name"] for column in inspector.get_columns("invoices")}
+            if "branch_id" not in existing_columns:
+                connection.execute(text("ALTER TABLE invoices ADD COLUMN branch_id VARCHAR(36)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_invoices_branch_id ON invoices (branch_id)"))
+        for branch_scoped_table in ("journal_entries", "general_ledger_entries", "source_transactions"):
+            if branch_scoped_table in table_names:
+                existing_columns = {column["name"] for column in inspector.get_columns(branch_scoped_table)}
+                if "branch_id" not in existing_columns:
+                    connection.execute(text(f"ALTER TABLE {branch_scoped_table} ADD COLUMN branch_id VARCHAR(36)"))
+                connection.execute(text(
+                    f"CREATE INDEX IF NOT EXISTS ix_{branch_scoped_table}_branch_id ON {branch_scoped_table} (branch_id)"
+                ))
         if "accounts" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("accounts")}
             required_columns = {

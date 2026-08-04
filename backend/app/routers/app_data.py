@@ -1160,6 +1160,7 @@ def sync_domain_model(db: Session, current_user: User, collection: str, record: 
             total=decimal_value(record.get("total")),
             lines=record.get("lines") if isinstance(record.get("lines"), list) else None,
             user_id=current_user.id,
+            branch_id=str(record.get("branch_id") or "").strip() or None,
         )
         sync_purchase_stock(db, current_user, record, reference)
 
@@ -1418,6 +1419,9 @@ def sync_sales_invoice(db: Session, current_user: User, record: dict[str, Any]) 
         invoice = Invoice(company_id=current_user.company_id, invoice_number=number, customer_name=customer)
         db.add(invoice)
     invoice.customer_name = customer
+    branch_id = str(record.get("branch_id") or "").strip()
+    if branch_id:
+        invoice.branch_id = branch_id
     invoice.subtotal = decimal_value(record.get("subtotal"))
     invoice.vat = decimal_value(record.get("vat_amount") or record.get("vat"))
     invoice.total = decimal_value(record.get("total"))

@@ -55,6 +55,7 @@ def create_invoice(
 
     invoice = Invoice(
         company_id=current_user.company_id,
+        branch_id=payload.branch_id,
         customer_name=payload.customer_name,
         invoice_number=payload.invoice_number,
     )
