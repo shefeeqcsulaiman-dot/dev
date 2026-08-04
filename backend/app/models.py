@@ -40,6 +40,8 @@ class Company(Base, TimestampMixin):
     trade_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     trn: Mapped[str | None] = mapped_column(String(32), unique=True)
     country: Mapped[str] = mapped_column(String(80), default="United Arab Emirates")
+    currency: Mapped[str] = mapped_column(String(3), default="AED")
+    vat_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("5.00"))
     emirate: Mapped[str | None] = mapped_column(String(80), nullable=True)
     business_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
     business_activity: Mapped[str | None] = mapped_column(String(160), nullable=True)

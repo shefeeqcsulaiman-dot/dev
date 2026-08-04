@@ -40,6 +40,8 @@ class CompanyOut(BaseModel):
     trade_name: str | None = None
     trn: str | None = None
     country: str
+    currency: str = "AED"
+    vat_rate: Decimal = Decimal("5.00")
     emirate: str | None = None
     business_type: str | None = None
     business_activity: str | None = None
@@ -73,6 +75,8 @@ class CompanyUpdate(BaseModel):
             raise ValueError("TRN must be exactly 15 numeric digits")
         return v
     country: str | None = None
+    currency: str | None = None
+    vat_rate: Decimal | None = None
     emirate: str | None = None
     business_type: str | None = None
     business_activity: str | None = None

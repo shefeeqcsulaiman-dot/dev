@@ -400,6 +400,8 @@ def ensure_schema_updates() -> None:
                 ("departments", "TEXT"),
                 ("branches", "TEXT"),
                 ("modules_enabled", "TEXT"),
+                ("currency", "VARCHAR(3) DEFAULT 'AED'"),
+                ("vat_rate", "NUMERIC(5,2) DEFAULT 5.00"),
             ]:
                 if col not in existing_columns:
                     connection.execute(text(f"ALTER TABLE companies ADD COLUMN {col} {typedef}"))

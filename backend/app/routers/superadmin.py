@@ -122,6 +122,8 @@ def list_companies(db: Session = Depends(get_db), _: User = Depends(_require_sup
                 "trade_name": company.trade_name,
                 "trn": company.trn,
                 "country": company.country,
+                "currency": company.currency,
+                "vat_rate": str(company.vat_rate),
                 "emirate": company.emirate,
                 "business_type": company.business_type,
                 "business_activity": company.business_activity,
@@ -256,6 +258,10 @@ def update_company(
         company.name = body.name.strip()
     if body.country:
         company.country = body.country.strip()
+    if body.currency:
+        company.currency = body.currency.strip()
+    if body.vat_rate is not None:
+        company.vat_rate = body.vat_rate
     if body.trn:
         company.trn = body.trn.strip()
 

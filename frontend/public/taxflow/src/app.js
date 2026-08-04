@@ -2491,6 +2491,13 @@ function applyCompanyToUi(company){
   set('set-company-pobox',company.po_box);
   set('set-company-phone',company.phone);
   set('set-company-website',company.website);
+  set('set-company-currency',company.currency||'AED');
+  const vatRateNum=company.vat_rate!=null?Number(company.vat_rate):5;
+  const vatRateEl=document.getElementById('set-company-vat-rate');
+  if(vatRateEl)vatRateEl.value=vatRateNum;
+  const taxVatDisplay=document.getElementById('tax-vat-rate-display');
+  if(taxVatDisplay)taxVatDisplay.value=vatRateNum+'%';
+  window.COMPANY_CURRENCY=company.currency||'AED';
   // Company registration page fields
   set('co-name',company.name);
   set('co-trade-name',company.trade_name);
@@ -2636,11 +2643,15 @@ async function saveCompanySettingsToDatabase(){
   if(!name){toast('Company name is required','warn');return;}
   const rawTrn=(v('set-company-trn')||'').replace(/\D/g,'');
   const trn=rawTrn.length===15?rawTrn:(currentCompany?.trn||null);
+  const vatRateRaw=document.getElementById('set-company-vat-rate')?.value;
+  const vatRate=(vatRateRaw!==''&&vatRateRaw!=null)?Number(vatRateRaw):(currentCompany?.vat_rate??5);
   const payload={
     name,
     trn,
     trade_name:v('set-company-trade-name'),
     country:currentCompany?.country||'United Arab Emirates',
+    currency:v('set-company-currency')||currentCompany?.currency||'AED',
+    vat_rate:vatRate,
     emirate:v('set-company-emirate'),
     business_type:v('set-company-biz-type'),
     business_activity:v('set-company-activity'),

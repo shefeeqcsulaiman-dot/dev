@@ -3496,9 +3496,19 @@
             <div class="fg"><label class="fl">Filing Frequency</label><select class="fi"><option selected>Monthly</option><option>Quarterly</option></select></div>
           </div>
           <div class="fr2">
-            <div class="fg"><label class="fl">Standard VAT Rate</label><input class="fi" value="5%" readonly style="color:var(--accent);font-weight:600"></div>
-            <div class="fg"><label class="fl">Annual Taxable Turnover (AED)</label><input class="fi mono" value="2,400,000"></div>
+            <div class="fg"><label class="fl">Currency</label><select class="fi" id="set-company-currency">
+              <option value="AED">AED — UAE Dirham</option>
+              <option value="SAR">SAR — Saudi Riyal</option>
+              <option value="USD">USD — US Dollar</option>
+              <option value="GBP">GBP — British Pound</option>
+              <option value="QAR">QAR — Qatari Riyal</option>
+              <option value="BHD">BHD — Bahraini Dinar</option>
+              <option value="OMR">OMR — Omani Rial</option>
+              <option value="KWD">KWD — Kuwaiti Dinar</option>
+            </select></div>
+            <div class="fg"><label class="fl">Standard VAT Rate (%)</label><input class="fi" type="number" step="0.01" min="0" max="100" id="set-company-vat-rate" placeholder="5.00" style="color:var(--accent);font-weight:600"></div>
           </div>
+          <div class="fg"><label class="fl">Annual Taxable Turnover (AED)</label><input class="fi mono" value="2,400,000"></div>
           <div class="fg"><label class="fl">FTA Account Username</label><input class="fi" id="co-fta-user-reg" placeholder="username@eservices.tax.gov.ae"></div>
         </div>
         <div class="card">
@@ -3579,7 +3589,7 @@
     <div class="card">
       <div class="card-hd"><div class="card-title">Tax Configuration</div></div>
       <div class="fr3">
-        <div class="fg"><label class="fl">Standard VAT Rate</label><input class="fi" value="5%" readonly></div>
+        <div class="fg"><label class="fl">Standard VAT Rate</label><input class="fi" id="tax-vat-rate-display" value="5%" readonly></div>
         <div class="fg"><label class="fl">Zero Rate</label><input class="fi" value="0%"></div>
         <div class="fg"><label class="fl">Excise Rate</label><input class="fi" value="100%"></div>
       </div>

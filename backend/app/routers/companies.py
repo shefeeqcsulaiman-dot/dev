@@ -84,6 +84,10 @@ def update_company(
         company.name = payload.name
     if payload.country:
         company.country = payload.country
+    if payload.currency:
+        company.currency = payload.currency
+    if payload.vat_rate is not None:
+        company.vat_rate = payload.vat_rate
 
     # TRN: unique nullable — only update when provided and non-empty
     if payload.trn:
