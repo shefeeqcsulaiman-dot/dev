@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.accounting_posting import post_source_transaction
 from app.models import (
+    Company,
     CorporateTaxRecord,
     Invoice,
     PostingJob,
@@ -20,6 +21,12 @@ def money(value: object) -> Decimal:
         return Decimal(str(value or 0)).quantize(Decimal("0.01"))
     except (InvalidOperation, ValueError):
         return Decimal("0.00")
+
+
+def _company_vat_rate(db: Session, company_id: str) -> Decimal:
+    """Company-configured VAT rate, defaulting to 5% (UAE) when unset."""
+    rate = db.query(Company.vat_rate).filter(Company.id == company_id).scalar()
+    return rate if rate is not None else Decimal("5")
 
 
 def sync_sales_invoice_accounting(db: Session, invoice: Invoice, user_id: str | None = None) -> SourceTransaction:
@@ -111,13 +118,14 @@ def upsert_source_transaction(
 
     db.query(SourceTransactionLine).filter(SourceTransactionLine.source_id == tx.id).delete(synchronize_session=False)
     db.flush()
+    company_vat_rate = _company_vat_rate(db, company_id)
     normalized_lines = lines if isinstance(lines, list) and lines else [
         {
             "description": reference,
             "account_code": default_account_code,
             "quantity": Decimal("1"),
             "unit_price": subtotal,
-            "vat_rate": Decimal("5") if money(vat) else Decimal("0"),
+            "vat_rate": company_vat_rate if money(vat) else Decimal("0"),
         }
     ]
     for raw_line in normalized_lines:
@@ -130,7 +138,7 @@ def upsert_source_transaction(
             or raw_line.get("cost")
         )
         amount = money(raw_line.get("amount") or raw_line.get("line_total") or (quantity * unit_price))
-        vat_rate = money(raw_line.get("vat_rate") or raw_line.get("tax_rate") or (Decimal("5") if money(vat) else Decimal("0")))
+        vat_rate = money(raw_line.get("vat_rate") or raw_line.get("tax_rate") or (company_vat_rate if money(vat) else Decimal("0")))
         db.add(
             SourceTransactionLine(
                 source_id=tx.id,

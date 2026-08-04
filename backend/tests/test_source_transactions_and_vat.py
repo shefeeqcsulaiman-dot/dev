@@ -207,6 +207,75 @@ def test_vat_return_reads_tax_lines(client, auth_headers):
     assert saved_return.json()["filing_status"] == "approved"
 
 
+def test_purchase_fallback_vat_rate_uses_company_setting(client, auth_headers):
+    """A purchase record saved with a tax_amount but no explicit line-level
+    vat_rate used to always fall back to a hardcoded 5% (UAE) — it should
+    instead fall back to the company's own configured VAT rate, so non-UAE
+    tenants (e.g. Saudi Arabia at 15%) get correct VAT lines without having
+    to specify the rate on every purchase."""
+    updated = client.put(
+        "/api/v1/companies/current",
+        headers=auth_headers,
+        json={"vat_rate": "15.00"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["vat_rate"] == "15.00"
+
+    saved = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={
+            "collection": "purchaseRecords",
+            "record": {
+                "ref": "PUR-VATRATE-001",
+                "supplier": "VAT Rate Test Supplier",
+                "net_amount": 100,
+                "tax_amount": 15,
+                "total": 115,
+            },
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    tax_lines = client.get("/api/v1/tax/lines", headers=auth_headers).json()
+    matching = [t for t in tax_lines if Decimal(t["tax_amount"]) == Decimal("15.00")]
+    assert matching, f"expected a 15% VAT tax line, got: {tax_lines}"
+
+
+def test_sales_invoice_fallback_vat_rate_uses_company_setting(client, auth_headers):
+    """A salesInvoices app-data record saved with no explicit "lines" used to
+    always get a single fallback InvoiceLine hardcoded at 5% VAT — it should
+    use the company's configured VAT rate instead."""
+    updated = client.put(
+        "/api/v1/companies/current",
+        headers=auth_headers,
+        json={"vat_rate": "15.00"},
+    )
+    assert updated.status_code == 200
+
+    saved = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={
+            "collection": "salesInvoices",
+            "record": {
+                "invoice_no": "INV-VATRATE-001",
+                "customer": "VAT Rate Test Customer",
+                "status": "issued",
+                "subtotal": "100.00",
+                "total": "115.00",
+                "vat_amount": "15.00",
+            },
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    invoices = client.get("/api/v1/invoices", headers=auth_headers).json()
+    invoice = next(i for i in invoices if i["invoice_number"] == "INV-VATRATE-001")
+    assert invoice["lines"], "expected a fallback line to be created"
+    assert Decimal(invoice["lines"][0]["vat_rate"]) == Decimal("15.00")
+
+
 def test_corporate_tax_return_calculates_taxable_income(client, auth_headers):
     response = client.post(
         "/api/v1/tax/corporate-tax-returns",

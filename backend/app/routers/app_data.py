@@ -191,6 +191,12 @@ def decimal_value(value: Any) -> Decimal:
         return Decimal("0")
 
 
+def get_company_vat_rate(company: Any) -> Decimal:
+    """Company-configured VAT rate, defaulting to 5% (UAE) when unset."""
+    rate = getattr(company, "vat_rate", None) if company else None
+    return rate if rate is not None else Decimal("5")
+
+
 def record_key(collection: str, record: dict[str, Any]) -> str | None:
     keys = {
         "products": "code",
@@ -1411,6 +1417,7 @@ def sync_sales_invoice(db: Session, current_user: User, record: dict[str, Any]) 
     invoice.vat = decimal_value(record.get("vat_amount") or record.get("vat"))
     invoice.total = decimal_value(record.get("total"))
     invoice.status = "issued" if str(record.get("status", "")).lower() in {"ready", "pending"} else str(record.get("status") or "draft").lower()
+    company_vat_rate = get_company_vat_rate(current_user.company)
     lines = record.get("lines") if isinstance(record.get("lines"), list) else []
     if lines:
         invoice.lines = []
@@ -1422,7 +1429,7 @@ def sync_sales_invoice(db: Session, current_user: User, record: dict[str, Any]) 
                     description=str(line.get("description") or line.get("product_name") or "Invoice item"),
                     quantity=quantity if quantity > 0 else Decimal("1"),
                     unit_price=unit_price,
-                    vat_rate=decimal_value(line.get("tax_rate") or line.get("vat_rate") or 5),
+                    vat_rate=decimal_value(line.get("tax_rate") or line.get("vat_rate") or company_vat_rate),
                 )
             )
     elif not invoice.lines:
@@ -1431,7 +1438,7 @@ def sync_sales_invoice(db: Session, current_user: User, record: dict[str, Any]) 
                 description=f"Imported invoice {number}",
                 quantity=Decimal("1"),
                 unit_price=invoice.subtotal,
-                vat_rate=Decimal("5"),
+                vat_rate=company_vat_rate,
             )
         ]
     db.flush()
@@ -1471,7 +1478,8 @@ def sync_source_transaction(
     tx.status = status.lower().replace(" ", "_")
     lines = lines if isinstance(lines, list) else None
     if lines is not None:
-        vat_rate = Decimal("5") if "5%" in tax_type and "exempt" not in tax_type.lower() else Decimal("0")
+        company_vat_rate = get_company_vat_rate(current_user.company)
+        vat_rate = company_vat_rate if "5%" in tax_type and "exempt" not in tax_type.lower() else Decimal("0")
         db.query(SourceTransactionLine).filter(SourceTransactionLine.source_id == tx.id).delete(synchronize_session=False)
         db.flush()
         for line in lines:
@@ -3607,7 +3615,7 @@ def build_purchase_invoices_from_rows(
                 "date": excel_date_value(row.get("date")),
                 "supplier": supplier,
                 "bill_to": str(row.get("bill_to") or ""),
-                "currency": str(row.get("currency") or "AED"),
+                "currency": str(row.get("currency") or current_user.company.currency or "AED"),
                 "address": str(row.get("address") or ""),
                 "pay_term": str(row.get("pay_term") or ""),
                 "supplier_trn": str(row.get("supplier_trn") or ""),
@@ -3651,6 +3659,7 @@ def build_purchase_invoices_from_rows(
                 "raw": row.get("raw") or {},
             }
         )
+    company_vat_rate = get_company_vat_rate(current_user.company)
     invoices = []
     for invoice in grouped.values():
         discount_type = str(invoice.get("discount_type") or "None")
@@ -3658,7 +3667,7 @@ def build_purchase_invoices_from_rows(
         discount = invoice["subtotal"] * (discount_value / Decimal("100")) if discount_type == "Percentage" else discount_value if discount_type == "Fixed" else Decimal("0")
         taxable = max(Decimal("0"), invoice["subtotal"] - discount)
         if not invoice["vat_amount"] and "5%" in str(invoice.get("tax_type") or "") and "exempt" not in str(invoice.get("tax_type") or "").lower():
-            invoice["vat_amount"] = taxable * Decimal("0.05")
+            invoice["vat_amount"] = taxable * (company_vat_rate / Decimal("100"))
         invoice["total"] = taxable + invoice["vat_amount"] + decimal_value(invoice.get("shipping"))
         invoice["due"] = max(Decimal("0"), invoice["total"] - decimal_value(invoice.get("paid")))
         invoices.append(json.loads(json.dumps(invoice, default=float)))
