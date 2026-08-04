@@ -704,6 +704,7 @@ class AppDataRecord(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     collection: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
     record_key: Mapped[str | None] = mapped_column(String(160), index=True)
     payload: Mapped[str] = mapped_column(Text, nullable=False)
@@ -715,6 +716,12 @@ class AuditLog(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
     user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    # Separate FK for an Employee-principal actor (HRMS sub-user, e.g. a
+    # branch login writing POS/purchase data — Branch Management Phase 4) —
+    # kept distinct from user_id (-> users.id) rather than relaxing that FK,
+    # since exactly one of the two is ever set depending on who acted.
+    # Mirrors LeaveRequest.approved_by/approved_by_employee_id.
+    employee_id: Mapped[str | None] = mapped_column(ForeignKey("employees.id"))
     module: Mapped[str] = mapped_column(String(60), nullable=False)
     action: Mapped[str] = mapped_column(String(80), nullable=False)
     record_id: Mapped[str | None] = mapped_column(String(36))

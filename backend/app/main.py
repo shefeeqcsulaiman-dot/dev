@@ -514,6 +514,15 @@ def ensure_schema_updates() -> None:
                 connection.execute(text(
                     f"CREATE INDEX IF NOT EXISTS ix_{branch_scoped_table}_branch_id ON {branch_scoped_table} (branch_id)"
                 ))
+        if "audit_logs" in table_names:
+            existing_columns = {column["name"] for column in inspector.get_columns("audit_logs")}
+            if "employee_id" not in existing_columns:
+                connection.execute(text("ALTER TABLE audit_logs ADD COLUMN employee_id VARCHAR(36)"))
+        if "app_data_records" in table_names:
+            existing_columns = {column["name"] for column in inspector.get_columns("app_data_records")}
+            if "branch_id" not in existing_columns:
+                connection.execute(text("ALTER TABLE app_data_records ADD COLUMN branch_id VARCHAR(36)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_app_data_records_branch_id ON app_data_records (branch_id)"))
         if "accounts" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("accounts")}
             required_columns = {

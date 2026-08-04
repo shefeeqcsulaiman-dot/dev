@@ -36,6 +36,7 @@ from app.models import (
     AppDataRecord,
     AuditLog,
     AuditLogDetail,
+    Company,
     Employee,
     GeneralLedgerEntry,
     InventoryValuationLayer,
@@ -108,11 +109,11 @@ _COLLECTION_MODULE: dict[str, str] = {
 }
 
 
-def assert_collection_module_enabled(current_user: User, collection: str) -> None:
+def assert_collection_module_enabled(company: Company | None, collection: str) -> None:
     module = _COLLECTION_MODULE.get(collection)
     if not module:
         return
-    if not company_allows_module(current_user.company.modules_enabled, module):
+    if not company_allows_module(company.modules_enabled if company else None, module):
         raise HTTPException(status_code=403, detail=f"The '{module}' module is not enabled for your company")
 
 
@@ -133,12 +134,12 @@ def _record_period_date(record: dict[str, Any]) -> _dt.datetime | None:
     return None
 
 
-def assert_collection_period_open(db: Session, current_user: User, collection: str, record: dict[str, Any]) -> None:
+def assert_collection_period_open(db: Session, principal: Principal, collection: str, record: dict[str, Any]) -> None:
     module = _PERIOD_LOCKED_COLLECTIONS.get(collection)
     if not module:
         return
     from app.routers.accounting import assert_period_open
-    assert_period_open(db, current_user.company_id, module, _record_period_date(record))
+    assert_period_open(db, principal.company_id, module, _record_period_date(record))
 
 # Per-collection caps for bootstrap to prevent memory spikes on large accounts.
 # Sized to cover ~1 year of data for a 50-employee UAE SME without truncation:
@@ -195,6 +196,31 @@ def get_company_vat_rate(company: Any) -> Decimal:
     """Company-configured VAT rate, defaulting to 5% (UAE) when unset."""
     rate = getattr(company, "vat_rate", None) if company else None
     return rate if rate is not None else Decimal("5")
+
+
+def principal_user_id(principal: Principal) -> str | None:
+    """The acting User's id, for columns that are a strict ForeignKey to
+    users.id (SourceTransaction.approved_by, PostingJob-related audit
+    entries in accounting_posting.py) and would violate that constraint in
+    production Postgres if fed an Employee's id instead. Deliberately
+    returns None (a valid value for these nullable FKs) for an Employee
+    principal rather than its id — those columns predate Employee logins
+    ever reaching this write path (Branch Management Phase 4) and widening
+    every one of them to accept either id is a separate, later change.
+    AuditLog itself is the one exception: it got its own employee_id column
+    (see log_action below) precisely so branch-login actions ARE attributed
+    correctly in the one place that matters most for this phase."""
+    return principal.user.id if principal.user else None
+
+
+def resolve_principal_company(principal: Principal, db: Session) -> Company | None:
+    """Same resolution bootstrap() already uses (see its is_admin branch) —
+    the canonical way to get a full Company row for either principal kind,
+    since only a User carries a `.company` relationship."""
+    if principal.is_admin:
+        from app.routers.companies import _resolve_company
+        return _resolve_company(principal.user, db)
+    return db.query(Company).filter(Company.id == principal.company_id).first()
 
 
 def record_key(collection: str, record: dict[str, Any]) -> str | None:
@@ -257,13 +283,21 @@ def list_collection_records(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(get_current_principal),
 ) -> dict[str, object]:
-    assert_collection_module_enabled(current_user, collection)
+    # Widened from admin-only in Branch Management Phase 4 — an Employee/
+    # branch login needs to read reference data (products, customers, etc.)
+    # to write POS sales/purchases at all. No branch-filtering of results
+    # here yet (deferred to Phases 5-6, alongside AppDataRecord.branch_id
+    # actually being populated) — every principal in a company still sees
+    # every record in a collection, same as before this endpoint existed
+    # for Employees at all.
+    company = resolve_principal_company(principal, db)
+    assert_collection_module_enabled(company, collection)
     total = (
         db.query(func.count(AppDataRecord.id))
         .filter(
-            AppDataRecord.company_id == current_user.company_id,
+            AppDataRecord.company_id == principal.company_id,
             AppDataRecord.collection == collection,
         )
         .scalar()
@@ -272,7 +306,7 @@ def list_collection_records(
     rows = (
         db.query(AppDataRecord)
         .filter(
-            AppDataRecord.company_id == current_user.company_id,
+            AppDataRecord.company_id == principal.company_id,
             AppDataRecord.collection == collection,
         )
         .order_by(AppDataRecord.created_at.desc(), AppDataRecord.id.desc())
@@ -806,26 +840,34 @@ async def app_data_action(
     request: Request,
     action: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(get_current_principal),
 ) -> dict[str, object]:
+    # Widened from admin-only in Branch Management Phase 4 — an Employee/
+    # branch login can now save/delete records here too, same as the read
+    # side (list_collection_records) already was widened to. No branch
+    # scoping is enforced yet: every write still lands company-wide
+    # (AppDataRecord.branch_id exists as of this phase but is never read or
+    # filtered on here) — that's Phases 5-6's job, once POS/Sales and
+    # Inventory/Purchases are ready to consume it.
+    company = resolve_principal_company(principal, db)
     payload = await request.json()
     if action == "save":
         collection = str(payload.get("collection", "app_actions"))
-        assert_collection_module_enabled(current_user, collection)
+        assert_collection_module_enabled(company, collection)
         record = payload.get("record", {})
         if not isinstance(record, dict):
             record = {"value": record}
-        assert_collection_period_open(db, current_user, collection, record)
-        saved = save_app_record(db, current_user, collection, record)
-        sync_domain_model(db, current_user, collection, serialize(saved))
+        assert_collection_period_open(db, principal, collection, record)
+        saved = save_app_record(db, principal, collection, record)
+        sync_domain_model(db, principal, collection, serialize(saved))
         db.commit()
         if collection in _REPORT_AFFECTING_COLLECTIONS:
-            cache.invalidate_company(current_user.company_id)
+            cache.invalidate_company(principal.company_id)
         return {"ok": True, "saved": True, "id": saved.id}
 
     if action == "bulk-save":
         collection = str(payload.get("collection", "app_actions"))
-        assert_collection_module_enabled(current_user, collection)
+        assert_collection_module_enabled(company, collection)
         records = payload.get("records", [])
         if not isinstance(records, list):
             records = []
@@ -835,7 +877,7 @@ async def app_data_action(
             item.record_key: item
             for item in db.query(AppDataRecord)
             .filter(
-                AppDataRecord.company_id == current_user.company_id,
+                AppDataRecord.company_id == principal.company_id,
                 AppDataRecord.collection == collection,
                 AppDataRecord.record_key.in_(keys),
             )
@@ -845,7 +887,7 @@ async def app_data_action(
         updated_count = 0
         created_count = 0
         for record in normalized_records:
-            assert_collection_period_open(db, current_user, collection, record)
+            assert_collection_period_open(db, principal, collection, record)
             key = record_key(collection, record)
             payload_json = json.dumps(record, ensure_ascii=False, default=str)
             existing = existing_by_key.get(key) if key else None
@@ -855,7 +897,8 @@ async def app_data_action(
                 updated_count += 1
             else:
                 saved = AppDataRecord(
-                    company_id=current_user.company_id,
+                    company_id=principal.company_id,
+                    branch_id=str(record.get("branch_id") or "").strip() or principal.branch_id,
                     collection=collection,
                     record_key=key,
                     payload=payload_json,
@@ -864,18 +907,18 @@ async def app_data_action(
                 if key:
                     existing_by_key[key] = saved
                 created_count += 1
-            sync_domain_model(db, current_user, collection, record)
+            sync_domain_model(db, principal, collection, record)
             saved_count += 1
         log_action(
             db,
-            current_user,
+            principal,
             collection,
             "records_bulk_saved",
             {"count": saved_count, "created": created_count, "updated": updated_count},
         )
         db.commit()
         if collection in _REPORT_AFFECTING_COLLECTIONS:
-            cache.invalidate_company(current_user.company_id)
+            cache.invalidate_company(principal.company_id)
         return {"ok": True, "saved": saved_count, "created": created_count, "updated": updated_count}
 
     if action == "delete":
@@ -889,7 +932,7 @@ async def app_data_action(
             existing = (
                 db.query(AppDataRecord)
                 .filter(
-                    AppDataRecord.company_id == current_user.company_id,
+                    AppDataRecord.company_id == principal.company_id,
                     AppDataRecord.collection == collection,
                     AppDataRecord.record_key == key,
                 )
@@ -903,14 +946,14 @@ async def app_data_action(
                     stored_record = json.loads(existing.payload or "{}")
                 except (TypeError, json.JSONDecodeError):
                     stored_record = record
-                assert_collection_period_open(db, current_user, collection, stored_record if isinstance(stored_record, dict) else record)
+                assert_collection_period_open(db, principal, collection, stored_record if isinstance(stored_record, dict) else record)
                 db.delete(existing)
                 deleted = True
-            sync_domain_delete(db, current_user, collection, record)
-        log_action(db, current_user, collection, "record_deleted" if deleted else "delete_not_found", record)
+            sync_domain_delete(db, principal, collection, record)
+        log_action(db, principal, collection, "record_deleted" if deleted else "delete_not_found", record)
         db.commit()
         if collection in _REPORT_AFFECTING_COLLECTIONS:
-            cache.invalidate_company(current_user.company_id)
+            cache.invalidate_company(principal.company_id)
         return {"ok": True, "deleted": deleted, "key": key}
 
     if action == "bulk-delete":
@@ -925,7 +968,7 @@ async def app_data_action(
             existing_rows = (
                 db.query(AppDataRecord)
                 .filter(
-                    AppDataRecord.company_id == current_user.company_id,
+                    AppDataRecord.company_id == principal.company_id,
                     AppDataRecord.collection == collection,
                     AppDataRecord.record_key.in_(keys),
                 )
@@ -936,11 +979,11 @@ async def app_data_action(
                     stored_record = json.loads(row.payload or "{}")
                 except (TypeError, json.JSONDecodeError):
                     stored_record = {}
-                assert_collection_period_open(db, current_user, collection, stored_record if isinstance(stored_record, dict) else {})
+                assert_collection_period_open(db, principal, collection, stored_record if isinstance(stored_record, dict) else {})
             deleted_count = (
                 db.query(AppDataRecord)
                 .filter(
-                    AppDataRecord.company_id == current_user.company_id,
+                    AppDataRecord.company_id == principal.company_id,
                     AppDataRecord.collection == collection,
                     AppDataRecord.record_key.in_(keys),
                 )
@@ -956,7 +999,7 @@ async def app_data_action(
             if refs:
                 tx_ids = [
                     row[0] for row in db.query(SourceTransaction.id).filter(
-                        SourceTransaction.company_id == current_user.company_id,
+                        SourceTransaction.company_id == principal.company_id,
                         SourceTransaction.module == "purchase",
                         SourceTransaction.reference.in_(refs),
                     ).all()
@@ -964,7 +1007,7 @@ async def app_data_action(
                 if tx_ids:
                     journal_ids = [
                         row[0] for row in db.query(JournalEntry.id).filter(
-                            JournalEntry.company_id == current_user.company_id,
+                            JournalEntry.company_id == principal.company_id,
                             JournalEntry.source_id.in_(tx_ids),
                         ).all()
                     ]
@@ -979,7 +1022,7 @@ async def app_data_action(
                             JournalEntry.id.in_(journal_ids)
                         ).delete(synchronize_session=False)
                     db.query(TaxLine).filter(
-                        TaxLine.company_id == current_user.company_id,
+                        TaxLine.company_id == principal.company_id,
                         TaxLine.source_id.in_(tx_ids),
                     ).delete(synchronize_session=False)
                     db.query(PostingJob).filter(
@@ -992,28 +1035,28 @@ async def app_data_action(
                         SourceTransaction.id.in_(tx_ids)
                     ).delete(synchronize_session=False)
                 db.query(StockMovement).filter(
-                    StockMovement.company_id == current_user.company_id,
+                    StockMovement.company_id == principal.company_id,
                     StockMovement.movement_type == "purchase",
                     StockMovement.reference.in_(refs),
                 ).delete(synchronize_session=False)
                 db.query(InventoryValuationLayer).filter(
-                    InventoryValuationLayer.company_id == current_user.company_id,
+                    InventoryValuationLayer.company_id == principal.company_id,
                     InventoryValuationLayer.source_module == "purchase",
                     InventoryValuationLayer.source_id.in_(refs),
                 ).delete(synchronize_session=False)
         else:
             for r in records:
-                sync_domain_delete(db, current_user, collection, r)
-        log_action(db, current_user, collection, "records_bulk_deleted", {"count": deleted_count})
+                sync_domain_delete(db, principal, collection, r)
+        log_action(db, principal, collection, "records_bulk_deleted", {"count": deleted_count})
         db.commit()
         if collection in _REPORT_AFFECTING_COLLECTIONS:
-            cache.invalidate_company(current_user.company_id)
+            cache.invalidate_company(principal.company_id)
         return {"ok": True, "deleted": deleted_count}
 
     if action == "invoice-layout":
         record = dict(payload)
-        saved = save_app_record(db, current_user, "invoiceLayout", record)
-        log_action(db, current_user, "settings", "invoice_layout_saved", record)
+        saved = save_app_record(db, principal, "invoiceLayout", record)
+        log_action(db, principal, "settings", "invoice_layout_saved", record)
         db.commit()
         return {"ok": True, "layout": record, "id": saved.id}
 
@@ -1022,7 +1065,7 @@ async def app_data_action(
         # Runs in a thread: it can make a blocking OpenAI/Anthropic call (and a
         # blocking subprocess for PDF rendering) taking up to ~90s, which would
         # otherwise freeze this whole async worker's event loop for every user.
-        invoices = await run_in_threadpool(ingest_purchase_document, db, current_user, file)
+        invoices = await run_in_threadpool(ingest_purchase_document, db, principal, file)
         # Flag any extracted invoice whose invoice_no already exists in purchaseRecords
         non_error_invoices = [inv for inv in invoices if not inv.get("extraction_error")]
         invoice_nos = [str(inv.get("invoice_no") or "").strip() for inv in non_error_invoices]
@@ -1032,7 +1075,7 @@ async def app_data_action(
                 row[0]
                 for row in db.query(AppDataRecord.record_key)
                 .filter(
-                    AppDataRecord.company_id == current_user.company_id,
+                    AppDataRecord.company_id == principal.company_id,
                     AppDataRecord.collection == "purchaseRecords",
                     AppDataRecord.record_key.in_(invoice_nos),
                 )
@@ -1044,7 +1087,7 @@ async def app_data_action(
                     inv["already_in_db"] = True
         log_action(
             db,
-            current_user,
+            principal,
             "documents",
             "document_extraction_requested",
             {"file": file.get("name"), "invoices": len(invoices)},
@@ -1055,23 +1098,23 @@ async def app_data_action(
     if action == "invoices.import":
         file = payload.get("file", {})
         # See documents.extract above: same blocking-AI-call concern applies here.
-        invoices = await run_in_threadpool(ingest_sales_invoice_document, db, current_user, file)
+        invoices = await run_in_threadpool(ingest_sales_invoice_document, db, principal, file)
         non_error = [inv for inv in invoices if not inv.get("extraction_error")]
-        log_action(db, current_user, "salesInvoices", "invoice_import_requested", {"file": file.get("name"), "invoices": len(non_error)})
+        log_action(db, principal, "salesInvoices", "invoice_import_requested", {"file": file.get("name"), "invoices": len(non_error)})
         db.commit()
         return {"ok": True, "invoices": invoices}
 
     return {"ok": True, "action": action}
 
 
-def save_app_record(db: Session, current_user: User, collection: str, record: dict[str, Any]) -> AppDataRecord:
+def save_app_record(db: Session, principal: Principal, collection: str, record: dict[str, Any]) -> AppDataRecord:
     key = record_key(collection, record)
     existing = None
     if key:
         existing = (
             db.query(AppDataRecord)
             .filter(
-                AppDataRecord.company_id == current_user.company_id,
+                AppDataRecord.company_id == principal.company_id,
                 AppDataRecord.collection == collection,
                 AppDataRecord.record_key == key,
             )
@@ -1082,29 +1125,36 @@ def save_app_record(db: Session, current_user: User, collection: str, record: di
         existing.payload = payload
         saved = existing
     else:
+        # branch_id is stamped now (Branch Management Phase 4) even though
+        # nothing filters on it yet — so records created from this point on
+        # don't need a backfill once Phase 5/6 actually starts reading it.
+        # An explicit branch_id in the record payload (e.g. an admin tagging
+        # which branch a manually-entered sale belongs to) wins; otherwise
+        # an Employee principal's own branch assignment is used.
         saved = AppDataRecord(
-            company_id=current_user.company_id,
+            company_id=principal.company_id,
+            branch_id=str(record.get("branch_id") or "").strip() or principal.branch_id,
             collection=collection,
             record_key=key,
             payload=payload,
         )
         db.add(saved)
-    log_action(db, current_user, collection, "record_saved", record)
+    log_action(db, principal, collection, "record_saved", record)
     return saved
 
 
-def sync_domain_model(db: Session, current_user: User, collection: str, record: dict[str, Any]) -> None:
+def sync_domain_model(db: Session, principal: Principal, collection: str, record: dict[str, Any]) -> None:
     if collection == "products":
         code = str(record.get("code") or record.get("sku") or "").strip()
         name = str(record.get("name") or "").strip()
         if code and name:
             mapping = (
                 db.query(StockProductMapping)
-                .filter(StockProductMapping.company_id == current_user.company_id, StockProductMapping.sku == code)
+                .filter(StockProductMapping.company_id == principal.company_id, StockProductMapping.sku == code)
                 .first()
             )
             if not mapping:
-                mapping = StockProductMapping(company_id=current_user.company_id, sku=code, name=name)
+                mapping = StockProductMapping(company_id=principal.company_id, sku=code, name=name)
                 db.add(mapping)
             mapping.name = name
             if not mapping.taxflow_name:
@@ -1123,22 +1173,22 @@ def sync_domain_model(db: Session, current_user: User, collection: str, record: 
         if code and name:
             account = (
                 db.query(Account)
-                .filter(Account.company_id == current_user.company_id, Account.code == code)
+                .filter(Account.company_id == principal.company_id, Account.code == code)
                 .first()
             )
             if not account:
-                account = Account(company_id=current_user.company_id, code=code, name=name, type=str(record.get("type") or "asset").lower())
+                account = Account(company_id=principal.company_id, code=code, name=name, type=str(record.get("type") or "asset").lower())
                 db.add(account)
             account.name = name
             account.type = str(record.get("type") or account.type).lower()
 
     elif collection == "salesInvoices":
-        sync_sales_invoice(db, current_user, record)
+        sync_sales_invoice(db, principal, record)
 
     elif collection == "bills":
         sync_source_transaction(
             db,
-            current_user,
+            principal,
             module="purchase_bill",
             reference=str(record.get("bill_no") or "BILL"),
             party_name=str(record.get("vendor") or ""),
@@ -1152,23 +1202,23 @@ def sync_domain_model(db: Session, current_user: User, collection: str, record: 
         reference = str(record.get("ref") or record.get("invoice_no") or "PURCHASE")
         sync_purchase_accounting(
             db,
-            company_id=current_user.company_id,
+            company_id=principal.company_id,
             reference=reference,
             party_name=str(record.get("supplier") or ""),
             subtotal=decimal_value(record.get("net_amount") or record.get("subtotal")),
             vat=decimal_value(record.get("tax_amount") or record.get("vat_amount")),
             total=decimal_value(record.get("total")),
             lines=record.get("lines") if isinstance(record.get("lines"), list) else None,
-            user_id=current_user.id,
-            branch_id=str(record.get("branch_id") or "").strip() or None,
+            user_id=principal_user_id(principal),
+            branch_id=str(record.get("branch_id") or "").strip() or principal.branch_id,
         )
-        sync_purchase_stock(db, current_user, record, reference)
+        sync_purchase_stock(db, principal, record, reference)
 
     elif collection == "payments":
         amount = decimal_value(record.get("amount"))
         sync_source_transaction(
             db,
-            current_user,
+            principal,
             module="payment",
             reference=str(record.get("ref") or "PAYMENT"),
             party_name=str(record.get("contact") or ""),
@@ -1184,11 +1234,11 @@ def sync_domain_model(db: Session, current_user: User, collection: str, record: 
         if emp_no and full_name:
             emp = (
                 db.query(Employee)
-                .filter(Employee.company_id == current_user.company_id, Employee.employee_no == emp_no)
+                .filter(Employee.company_id == principal.company_id, Employee.employee_no == emp_no)
                 .first()
             )
             if not emp:
-                emp = Employee(company_id=current_user.company_id, employee_no=emp_no, full_name=full_name)
+                emp = Employee(company_id=principal.company_id, employee_no=emp_no, full_name=full_name)
                 db.add(emp)
             emp.full_name = full_name
             emp.department = str(record.get("department") or emp.department or "Operations").strip()
@@ -1206,20 +1256,20 @@ def sync_domain_model(db: Session, current_user: User, collection: str, record: 
             emp.status = "active" if status_raw in ("active", "1", "true") else "inactive"
 
     elif collection == "audit":
-        log_action(db, current_user, str(record.get("record") or "audit"), str(record.get("action") or "ui_action"), record)
+        log_action(db, principal, str(record.get("record") or "audit"), str(record.get("action") or "ui_action"), record)
 
 
-def sync_purchase_stock(db: Session, current_user: User, record: dict[str, Any], reference: str) -> None:
+def sync_purchase_stock(db: Session, principal: Principal, record: dict[str, Any], reference: str) -> None:
     lines = record.get("lines")
     if not isinstance(lines, list):
         lines = []
     db.query(StockMovement).filter(
-        StockMovement.company_id == current_user.company_id,
+        StockMovement.company_id == principal.company_id,
         StockMovement.movement_type == "purchase",
         StockMovement.reference == reference,
     ).delete(synchronize_session=False)
     db.query(InventoryValuationLayer).filter(
-        InventoryValuationLayer.company_id == current_user.company_id,
+        InventoryValuationLayer.company_id == principal.company_id,
         InventoryValuationLayer.source_module == "purchase",
         InventoryValuationLayer.source_id == reference,
     ).delete(synchronize_session=False)
@@ -1231,7 +1281,7 @@ def sync_purchase_stock(db: Session, current_user: User, record: dict[str, Any],
         quantity = decimal_value(line.get("quantity") or line.get("qty") or line.get("purchase_qty") or line.get("qty_invoiced"))
         if quantity <= 0:
             continue
-        mapping = purchase_line_stock_mapping(db, current_user, line, record)
+        mapping = purchase_line_stock_mapping(db, principal, line, record)
         if not mapping:
             continue
         unit_cost = decimal_value(
@@ -1242,7 +1292,7 @@ def sync_purchase_stock(db: Session, current_user: User, record: dict[str, Any],
         )
         db.add(
             StockMovement(
-                company_id=current_user.company_id,
+                company_id=principal.company_id,
                 mapping_id=mapping.id,
                 movement_type="purchase",
                 quantity=quantity,
@@ -1252,7 +1302,7 @@ def sync_purchase_stock(db: Session, current_user: User, record: dict[str, Any],
         )
         db.add(
             InventoryValuationLayer(
-                company_id=current_user.company_id,
+                company_id=principal.company_id,
                 item_code=mapping.sku,
                 source_module="purchase",
                 source_id=reference,
@@ -1265,7 +1315,7 @@ def sync_purchase_stock(db: Session, current_user: User, record: dict[str, Any],
 
 def purchase_line_stock_mapping(
     db: Session,
-    current_user: User,
+    principal: Principal,
     line: dict[str, Any],
     record: dict[str, Any],
 ) -> StockProductMapping | None:
@@ -1277,18 +1327,18 @@ def purchase_line_stock_mapping(
     if sku:
         mapping = (
             db.query(StockProductMapping)
-            .filter(StockProductMapping.company_id == current_user.company_id, StockProductMapping.sku == sku)
+            .filter(StockProductMapping.company_id == principal.company_id, StockProductMapping.sku == sku)
             .first()
         )
     if not mapping and product:
         mapping = (
             db.query(StockProductMapping)
-            .filter(StockProductMapping.company_id == current_user.company_id, StockProductMapping.name == product)
+            .filter(StockProductMapping.company_id == principal.company_id, StockProductMapping.name == product)
             .first()
         )
     if not mapping:
         mapping = StockProductMapping(
-            company_id=current_user.company_id,
+            company_id=principal.company_id,
             sku=sku or product[:60],
             name=product or sku,
             supplier_name=str(record.get("supplier") or "").strip() or None,
@@ -1348,13 +1398,13 @@ def _delete_source_transaction_cascade(db: Session, company_id: str, tx_id: str)
     ).delete(synchronize_session=False)
 
 
-def sync_domain_delete(db: Session, current_user: User, collection: str, record: dict[str, Any]) -> None:
+def sync_domain_delete(db: Session, principal: Principal, collection: str, record: dict[str, Any]) -> None:
     if collection == "products":
         code = str(record.get("code") or record.get("sku") or record.get("id") or "").strip()
         if code:
             mapping = (
                 db.query(StockProductMapping)
-                .filter(StockProductMapping.company_id == current_user.company_id, StockProductMapping.sku == code)
+                .filter(StockProductMapping.company_id == principal.company_id, StockProductMapping.sku == code)
                 .first()
             )
             if mapping:
@@ -1365,7 +1415,7 @@ def sync_domain_delete(db: Session, current_user: User, collection: str, record:
         if number:
             invoice = (
                 db.query(Invoice)
-                .filter(Invoice.company_id == current_user.company_id, Invoice.invoice_number == number)
+                .filter(Invoice.company_id == principal.company_id, Invoice.invoice_number == number)
                 .first()
             )
             if invoice:
@@ -1385,48 +1435,48 @@ def sync_domain_delete(db: Session, current_user: User, collection: str, record:
             tx = (
                 db.query(SourceTransaction)
                 .filter(
-                    SourceTransaction.company_id == current_user.company_id,
+                    SourceTransaction.company_id == principal.company_id,
                     SourceTransaction.module == module,
                     SourceTransaction.reference == reference,
                 )
                 .first()
             )
             if tx:
-                _delete_source_transaction_cascade(db, current_user.company_id, tx.id)
+                _delete_source_transaction_cascade(db, principal.company_id, tx.id)
             db.query(StockMovement).filter(
-                StockMovement.company_id == current_user.company_id,
+                StockMovement.company_id == principal.company_id,
                 StockMovement.movement_type == module,
                 StockMovement.reference == reference,
             ).delete(synchronize_session=False)
             db.query(InventoryValuationLayer).filter(
-                InventoryValuationLayer.company_id == current_user.company_id,
+                InventoryValuationLayer.company_id == principal.company_id,
                 InventoryValuationLayer.source_module == module,
                 InventoryValuationLayer.source_id == reference,
             ).delete(synchronize_session=False)
 
 
-def sync_sales_invoice(db: Session, current_user: User, record: dict[str, Any]) -> None:
+def sync_sales_invoice(db: Session, principal: Principal, record: dict[str, Any]) -> None:
     number = str(record.get("invoice_no") or record.get("invoice_number") or "").strip()
     customer = str(record.get("customer") or record.get("customer_name") or "Customer").strip()
     if not number:
         return
     invoice = (
         db.query(Invoice)
-        .filter(Invoice.company_id == current_user.company_id, Invoice.invoice_number == number)
+        .filter(Invoice.company_id == principal.company_id, Invoice.invoice_number == number)
         .first()
     )
     if not invoice:
-        invoice = Invoice(company_id=current_user.company_id, invoice_number=number, customer_name=customer)
+        invoice = Invoice(company_id=principal.company_id, invoice_number=number, customer_name=customer)
         db.add(invoice)
     invoice.customer_name = customer
-    branch_id = str(record.get("branch_id") or "").strip()
+    branch_id = str(record.get("branch_id") or "").strip() or principal.branch_id
     if branch_id:
         invoice.branch_id = branch_id
     invoice.subtotal = decimal_value(record.get("subtotal"))
     invoice.vat = decimal_value(record.get("vat_amount") or record.get("vat"))
     invoice.total = decimal_value(record.get("total"))
     invoice.status = "issued" if str(record.get("status", "")).lower() in {"ready", "pending"} else str(record.get("status") or "draft").lower()
-    company_vat_rate = get_company_vat_rate(current_user.company)
+    company_vat_rate = get_company_vat_rate(resolve_principal_company(principal, db))
     lines = record.get("lines") if isinstance(record.get("lines"), list) else []
     if lines:
         invoice.lines = []
@@ -1451,12 +1501,12 @@ def sync_sales_invoice(db: Session, current_user: User, record: dict[str, Any]) 
             )
         ]
     db.flush()
-    sync_sales_invoice_accounting(db, invoice, current_user.id)
+    sync_sales_invoice_accounting(db, invoice, principal_user_id(principal))
 
 
 def sync_source_transaction(
     db: Session,
-    current_user: User,
+    principal: Principal,
     module: str,
     reference: str,
     party_name: str,
@@ -1470,13 +1520,13 @@ def sync_source_transaction(
     existing = (
         db.query(SourceTransaction)
         .filter(
-            SourceTransaction.company_id == current_user.company_id,
+            SourceTransaction.company_id == principal.company_id,
             SourceTransaction.module == module,
             SourceTransaction.reference == reference,
         )
         .first()
     )
-    tx = existing or SourceTransaction(company_id=current_user.company_id, module=module, reference=reference)
+    tx = existing or SourceTransaction(company_id=principal.company_id, branch_id=principal.branch_id, module=module, reference=reference)
     if not existing:
         db.add(tx)
         db.flush()
@@ -1487,7 +1537,7 @@ def sync_source_transaction(
     tx.status = status.lower().replace(" ", "_")
     lines = lines if isinstance(lines, list) else None
     if lines is not None:
-        company_vat_rate = get_company_vat_rate(current_user.company)
+        company_vat_rate = get_company_vat_rate(resolve_principal_company(principal, db))
         vat_rate = company_vat_rate if "5%" in tax_type and "exempt" not in tax_type.lower() else Decimal("0")
         db.query(SourceTransactionLine).filter(SourceTransactionLine.source_id == tx.id).delete(synchronize_session=False)
         db.flush()
@@ -1509,11 +1559,12 @@ def sync_source_transaction(
     return tx
 
 
-def log_action(db: Session, current_user: User, module: str, action: str, detail: Any) -> None:
+def log_action(db: Session, principal: Principal, module: str, action: str, detail: Any) -> None:
     db.add(
         AuditLog(
-            company_id=current_user.company_id,
-            user_id=current_user.id,
+            company_id=principal.company_id,
+            user_id=principal.user.id if principal.user else None,
+            employee_id=principal.employee.id if principal.employee else None,
             module=str(module)[:60],
             action=str(action)[:80],
             detail=json.dumps(detail, ensure_ascii=False, default=str)[:1000],
@@ -1521,7 +1572,7 @@ def log_action(db: Session, current_user: User, module: str, action: str, detail
     )
 
 
-def ingest_purchase_document(db: Session, current_user: User, file: dict[str, Any]) -> list[dict[str, Any]]:
+def ingest_purchase_document(db: Session, principal: Principal, file: dict[str, Any]) -> list[dict[str, Any]]:
     name = str(file.get("name") or "purchase-upload").strip()
     ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
     content = decode_uploaded_file(file)
@@ -1548,7 +1599,7 @@ def ingest_purchase_document(db: Session, current_user: User, file: dict[str, An
     except Exception as exc:
         return [purchase_extraction_error(name, f"Could not parse file: {exc}")]
 
-    invoices = merge_purchase_invoices(build_purchase_invoices_from_rows(db, current_user, rows, name), name)
+    invoices = merge_purchase_invoices(build_purchase_invoices_from_rows(db, principal, rows, name), name)
     if not invoices:
         hints = purchase_excel_debug_hint(content, ext)
         return [purchase_extraction_error(name, "No purchase invoice rows were found in the uploaded file" + hints)]
@@ -2311,7 +2362,7 @@ def _sfloat(val: Any) -> float:
         return 0.0
 
 
-def ingest_sales_invoice_document(db: Session, current_user: User, file: dict[str, Any]) -> list[dict[str, Any]]:
+def ingest_sales_invoice_document(db: Session, principal: Principal, file: dict[str, Any]) -> list[dict[str, Any]]:
     name = str(file.get("name") or "sales-upload").strip()
     ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
     content = decode_uploaded_file(file)
@@ -3595,10 +3646,13 @@ def first_present(row: dict[str, Any], names: tuple[str, ...]) -> Any:
 
 def build_purchase_invoices_from_rows(
     db: Session,
-    current_user: User,
+    principal: Principal,
     rows: list[dict[str, Any]],
     filename: str,
 ) -> list[dict[str, Any]]:
+    # Resolved once, not per-row/per-call, to avoid an N+1 query on large
+    # bulk-purchase-upload files (this function can process hundreds of rows).
+    company = resolve_principal_company(principal, db)
     grouped: dict[str, dict[str, Any]] = {}
     for index, row in enumerate(rows, start=1):
         product = str(row.get("product") or row.get("sku") or row.get("category") or "").strip()
@@ -3615,7 +3669,7 @@ def build_purchase_invoices_from_rows(
         unit_cost_before_tax = unit_cost * (Decimal("1") - (discount_percent / Decimal("100")))
         line_total = decimal_value(row.get("line_total")) or (quantity * unit_cost_before_tax)
         vat = decimal_value(row.get("vat_amount"))
-        upsert_purchase_master_data(db, current_user, category, unit, sku, product, supplier, unit_cost)
+        upsert_purchase_master_data(db, principal, category, unit, sku, product, supplier, unit_cost)
 
         invoice = grouped.setdefault(
             invoice_no,
@@ -3624,7 +3678,7 @@ def build_purchase_invoices_from_rows(
                 "date": excel_date_value(row.get("date")),
                 "supplier": supplier,
                 "bill_to": str(row.get("bill_to") or ""),
-                "currency": str(row.get("currency") or current_user.company.currency or "AED"),
+                "currency": str(row.get("currency") or (company.currency if company else None) or "AED"),
                 "address": str(row.get("address") or ""),
                 "pay_term": str(row.get("pay_term") or ""),
                 "supplier_trn": str(row.get("supplier_trn") or ""),
@@ -3668,7 +3722,7 @@ def build_purchase_invoices_from_rows(
                 "raw": row.get("raw") or {},
             }
         )
-    company_vat_rate = get_company_vat_rate(current_user.company)
+    company_vat_rate = get_company_vat_rate(company)
     invoices = []
     for invoice in grouped.values():
         discount_type = str(invoice.get("discount_type") or "None")
@@ -3759,7 +3813,7 @@ def excel_date_value(value: Any) -> str:
 
 def upsert_purchase_master_data(
     db: Session,
-    current_user: User,
+    principal: Principal,
     category: str,
     unit: str,
     sku: str,
@@ -3767,7 +3821,7 @@ def upsert_purchase_master_data(
     supplier: str,
     cost: Decimal,
 ) -> None:
-    save_app_record(db, current_user, "salesCategories", {"name": category, "type": "Purchase", "status": "Active"})
+    save_app_record(db, principal, "salesCategories", {"name": category, "type": "Purchase", "status": "Active"})
     product_record = {
         "code": sku,
         "name": product,
@@ -3778,8 +3832,8 @@ def upsert_purchase_master_data(
         "supplier_name": supplier,
         "status": "Active",
     }
-    saved = save_app_record(db, current_user, "products", product_record)
-    sync_domain_model(db, current_user, "products", serialize(saved))
+    saved = save_app_record(db, principal, "products", product_record)
+    sync_domain_model(db, principal, "products", serialize(saved))
 
 
 def product_code(product: str, index: int) -> str:
@@ -3888,7 +3942,15 @@ def wipe_company_data(
 
     # Logged after the wipe (not before) so this record survives the
     # AuditLog deletion above instead of being wiped along with everything else.
-    log_action(db, current_user, "settings", "company_data_wiped", {"app_records_deleted": app_deleted})
+    # log_action() takes a Principal now (Branch Management Phase 4) — this
+    # endpoint stays strictly admin-only (see the role check above), so
+    # wrap current_user in an admin-shaped Principal just for this one call
+    # rather than widening this destructive endpoint's own auth.
+    log_action(
+        db,
+        Principal(kind="user", company_id=current_user.company_id, display_name=current_user.full_name, is_admin=True, user=current_user),
+        "settings", "company_data_wiped", {"app_records_deleted": app_deleted},
+    )
     db.commit()
 
     import app.cache as cache
