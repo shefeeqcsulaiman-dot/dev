@@ -14,15 +14,27 @@
   --teal:#14b8a6;--teal2:#0d9488;
   --red:#ef4444;--red2:#dc2626;
   --amb:#f59e0b;--pur:#8b5cf6;
-  --cart:#0f172a;--cart2:#1e293b;--cart3:#334155;
-  --cart-bd:#334155;--cart-t1:#f8fafc;--cart-t2:#94a3b8;--cart-t3:#64748b;
+  /* Cart/top-bar panel — light theme (was a dark navy panel; kept the same
+     --cart-* token names so every rule below still works unchanged, just
+     repointed to light values). */
+  --cart:#ffffff;--cart2:#f8fafc;--cart3:#e2e8f0;
+  --cart-bd:#e2e8f0;--cart-t1:#0f172a;--cart-t2:#64748b;--cart-t3:#94a3b8;
   --fn:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
   --shadow-sm:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.05);
   --shadow:0 4px 16px rgba(0,0,0,.10);
   --shadow-lg:0 20px 50px rgba(0,0,0,.18);
 }
+/* Dark mode — overrides the same custom properties every component below
+   already reads, so nothing else needs a dark-specific rule. */
+body.pos-dark{
+  --bg:#0b1120;--sf:#1e293b;--sf2:#334155;--sf3:#1e293b;
+  --bd:#334155;--bd2:#475569;--t1:#f8fafc;--t2:#cbd5e1;--t3:#94a3b8;
+  --acc-bg:#312e81;
+  --cart:#1e293b;--cart2:#334155;--cart3:#475569;
+  --cart-bd:#475569;--cart-t1:#f8fafc;--cart-t2:#cbd5e1;--cart-t3:#94a3b8;
+}
 *{box-sizing:border-box;margin:0;padding:0;}
-html,body{height:100%;overflow:hidden;font-family:var(--fn);background:var(--bg);color:var(--t1);font-size:13px;}
+html,body{height:100%;overflow:hidden;font-family:var(--fn);background:var(--bg);color:var(--t1);font-size:13px;transition:background .2s;}
 input,select,button,textarea{font-family:var(--fn);}
 button{cursor:pointer;border:none;background:none;}
 ::-webkit-scrollbar{width:4px;height:4px;}
@@ -33,9 +45,9 @@ button{cursor:pointer;border:none;background:none;}
 
 /* ══ Top bar ════════════════════════════════════════════════ */
 .ptop{
-  display:flex;align-items:center;gap:10px;height:52px;padding:0 16px;
+  display:flex;align-items:center;gap:10px;height:56px;padding:0 16px;
   background:var(--cart);border-bottom:1px solid var(--cart-bd);
-  flex-shrink:0;
+  flex-shrink:0;box-shadow:var(--shadow-sm);
 }
 .ptop-brand{display:flex;align-items:center;gap:10px;flex-shrink:0;}
 .ptop-brand-ico{
@@ -43,16 +55,16 @@ button{cursor:pointer;border:none;background:none;}
   background:var(--acc);display:flex;align-items:center;justify-content:center;
 }
 .ptop-brand-ico svg{width:17px;height:17px;color:#fff;}
-.ptop-brand-name{font-size:15px;font-weight:800;color:#fff;letter-spacing:-.3px;}
+.ptop-brand-name{font-size:16px;font-weight:800;color:var(--cart-t1);letter-spacing:-.3px;}
 .ptop-brand-tag{
   font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;
-  background:rgba(99,102,241,.25);color:#a5b4fc;border:1px solid rgba(99,102,241,.4);
+  background:var(--acc-bg);color:var(--acc2);border:1px solid #c7d2fe;
   border-radius:5px;padding:2px 7px;flex-shrink:0;
 }
-.ptop-div{width:1px;height:24px;background:var(--cart3);flex-shrink:0;margin:0 2px;}
+.ptop-div{width:1px;height:24px;background:var(--cart-bd);flex-shrink:0;margin:0 2px;}
 .ptop-pill{
   display:flex;align-items:center;gap:6px;flex-shrink:0;
-  padding:5px 11px;border-radius:8px;background:rgba(255,255,255,.07);
+  padding:5px 11px;border-radius:8px;background:var(--cart2);
   border:1px solid var(--cart-bd);
 }
 .ptop-pill svg{width:12px;height:12px;color:var(--cart-t2);flex-shrink:0;}
@@ -60,29 +72,48 @@ button{cursor:pointer;border:none;background:none;}
 .ptop-clock{
   font-size:12px;font-weight:700;color:var(--cart-t1);font-variant-numeric:tabular-nums;
   flex-shrink:0;padding:5px 11px;border-radius:8px;
-  background:rgba(255,255,255,.07);border:1px solid var(--cart-bd);
+  background:var(--cart2);border:1px solid var(--cart-bd);
+}
+.ptop-search{
+  display:flex;align-items:center;gap:8px;flex:1;max-width:420px;
+  background:var(--cart2);border:1.5px solid var(--cart-bd);border-radius:10px;
+  padding:0 12px;height:36px;transition:all .14s;margin:0 4px;
+}
+.ptop-search:focus-within{border-color:var(--acc);background:#fff;box-shadow:0 0 0 3px rgba(99,102,241,.12);}
+.ptop-search svg{color:var(--cart-t3);flex-shrink:0;}
+.ptop-search input{flex:1;background:transparent;border:none;font-size:13px;color:var(--cart-t1);}
+.ptop-search input::placeholder{color:var(--cart-t3);}
+.ptop-search input:focus{outline:none;}
+.ptop-search kbd{
+  font-size:10px;font-weight:700;color:var(--cart-t3);background:var(--cart3);
+  border-radius:4px;padding:2px 6px;flex-shrink:0;font-family:var(--fn);
 }
 .ptop-spacer{flex:1;}
 .ptop-actions{display:flex;align-items:center;gap:6px;}
 .ptop-icon{
   width:34px;height:34px;border-radius:9px;border:1px solid var(--cart-bd);
-  background:rgba(255,255,255,.07);display:flex;align-items:center;justify-content:center;
-  transition:all .15s;flex-shrink:0;color:var(--cart-t2);
+  background:var(--cart2);display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0;color:var(--cart-t2);position:relative;
 }
-.ptop-icon:hover{border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.14);color:#fff;}
-.ptop-icon.clr:hover{border-color:var(--red);background:rgba(239,68,68,.15);color:var(--red);}
-.ptop-icon.sav:hover{border-color:var(--grn);background:rgba(34,197,94,.12);color:var(--grn);}
-.ptop-icon.ref:hover{border-color:var(--amb);background:rgba(245,158,11,.12);color:var(--amb);}
-.ptop-icon.calc-on{background:rgba(99,102,241,.25);border-color:rgba(99,102,241,.5);color:#a5b4fc;}
+.ptop-icon:hover{border-color:var(--acc);background:var(--acc-bg);color:var(--acc2);}
+.ptop-icon.clr:hover{border-color:var(--red);background:rgba(239,68,68,.08);color:var(--red);}
+.ptop-icon.sav:hover{border-color:var(--grn);background:rgba(34,197,94,.08);color:var(--grn2);}
+.ptop-icon.ref:hover{border-color:var(--amb);background:rgba(245,158,11,.08);color:var(--amb);}
+.ptop-icon.calc-on{background:var(--acc-bg);border-color:var(--acc);color:var(--acc2);}
 .ptop-icon svg{width:15px;height:15px;}
+.ptop-icon-badge{
+  position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 3px;
+  border-radius:8px;background:var(--red);color:#fff;font-size:9px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;border:2px solid var(--cart);
+}
 .ptop-btn{
   display:flex;align-items:center;gap:6px;
   padding:7px 14px;border-radius:9px;
-  background:rgba(255,255,255,.1);border:1px solid var(--cart-bd);
+  background:var(--cart2);border:1px solid var(--cart-bd);
   color:var(--cart-t1);font-size:12px;font-weight:700;
   transition:all .15s;flex-shrink:0;
 }
-.ptop-btn:hover{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.25);}
+.ptop-btn:hover{background:var(--acc-bg);border-color:var(--acc);color:var(--acc2);}
 .ptop-btn svg{width:13px;height:13px;}
 .ptop-btn.accent{background:var(--acc);border-color:var(--acc2);color:#fff;}
 .ptop-btn.accent:hover{background:var(--acc2);}
@@ -90,31 +121,32 @@ button{cursor:pointer;border:none;background:none;}
 /* ══ Main split ═════════════════════════════════════════════ */
 .pmain{display:flex;flex:1;min-height:0;overflow:hidden;}
 
-/* ══ LEFT — Cart panel (dark) ═══════════════════════════════ */
+/* ══ LEFT — Cart panel ══════════════════════════════════════ */
 .pleft{
   display:flex;flex-direction:column;
   flex:1;
-  background:var(--cart);overflow:hidden;
+  background:var(--cart);overflow:hidden;border-right:1px solid var(--cart-bd);
 }
 
 /* Customer / Controls */
 .pctrl{border-bottom:1px solid var(--cart-bd);flex-shrink:0;}
 .pctrl-row{
-  display:flex;align-items:center;gap:8px;
-  padding:8px 14px;border-bottom:1px solid var(--cart-bd);
+  display:flex;align-items:center;gap:10px;
+  padding:12px 14px;border-bottom:1px solid var(--cart-bd);
 }
 .pctrl-row:last-child{border-bottom:none;}
 .pctrl-ico{
-  width:28px;height:28px;border-radius:7px;background:rgba(255,255,255,.08);
+  width:36px;height:36px;border-radius:50%;background:var(--acc-bg);color:var(--acc2);
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
 }
-.pctrl-ico svg{width:13px;height:13px;color:var(--cart-t2);}
+.pctrl-ico svg{width:15px;height:15px;color:var(--acc2);}
 .pctrl-inp{
   flex:1;background:transparent;border:none;
-  color:var(--cart-t1);font-size:13px;font-weight:500;height:28px;
+  color:var(--cart-t1);font-size:13.5px;font-weight:700;height:28px;
 }
 .pctrl-inp:focus{outline:none;}
 .pctrl-inp::placeholder{color:var(--cart-t3);}
+.pctrl-sub{font-size:11px;color:var(--cart-t3);margin-top:1px;}
 .pctrl-sel{
   flex:1;height:28px;background:transparent;border:none;
   color:var(--cart-t1);font-size:12px;appearance:none;
@@ -122,14 +154,14 @@ button{cursor:pointer;border:none;background:none;}
   background-repeat:no-repeat;background-position:right 2px center;padding-right:16px;cursor:pointer;
 }
 .pctrl-sel:focus{outline:none;}
-.pctrl-sel option{background:#1e293b;color:#f8fafc;}
+.pctrl-sel option{background:#fff;color:#0f172a;}
 .pctrl-add{
-  width:26px;height:26px;border-radius:50%;
-  background:var(--acc);color:#fff;font-size:17px;font-weight:700;
+  width:30px;height:30px;border-radius:9px;border:1.5px solid var(--cart-bd);
+  background:var(--cart2);color:var(--cart-t2);font-size:17px;font-weight:700;
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  transition:background .12s;line-height:1;
+  transition:all .12s;line-height:1;
 }
-.pctrl-add:hover{background:var(--acc2);}
+.pctrl-add:hover{background:var(--acc);border-color:var(--acc);color:#fff;}
 
 /* Cart list */
 .pcart{flex:1;display:flex;flex-direction:column;overflow:hidden;}
@@ -149,27 +181,32 @@ button{cursor:pointer;border:none;background:none;}
 .pcart-body{flex:1;overflow-y:auto;}
 .pcart-empty{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  height:100%;color:var(--cart-t3);font-size:12.5px;gap:12px;
+  height:100%;color:var(--cart-t3);font-size:12.5px;gap:14px;
 }
-.pcart-empty svg{opacity:.3;}
+.pcart-empty-ico{
+  width:88px;height:88px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#ede9fe,var(--acc-bg));
+  display:flex;align-items:center;justify-content:center;color:var(--acc);
+}
+.pcart-empty b{color:var(--acc2);font-size:14px;font-weight:800;}
 .pcart-row{
   display:grid;grid-template-columns:1fr 100px 88px 30px;
-  padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.05);
+  padding:12px 14px;border-bottom:1px solid var(--cart-bd);
   align-items:center;transition:background .1s;
 }
-.pcart-row:hover{background:rgba(255,255,255,.04);}
+.pcart-row:hover{background:var(--cart2);}
 .pcart-name{font-size:13px;font-weight:600;color:var(--cart-t1);line-height:1.3;}
 .pcart-sub{font-size:10.5px;color:var(--cart-t3);margin-top:3px;}
 .pcart-qty{display:flex;align-items:center;gap:4px;justify-content:center;}
 .pcart-qty button{
-  width:26px;height:26px;border-radius:50%;border:1px solid var(--cart3);
+  width:26px;height:26px;border-radius:50%;border:1px solid var(--cart-bd);
   background:var(--cart2);color:var(--cart-t1);font-size:15px;font-weight:700;
   display:flex;align-items:center;justify-content:center;padding:0;
   transition:all .12s;line-height:1;
 }
 .pcart-qty button:hover{background:var(--acc);border-color:var(--acc);color:#fff;}
 .pcart-qty input{
-  width:34px;text-align:center;background:var(--cart2);border:1px solid var(--cart3);
+  width:34px;text-align:center;background:var(--cart2);border:1px solid var(--cart-bd);
   border-radius:6px;padding:2px 0;font-size:12px;color:var(--cart-t1);height:26px;
 }
 .pcart-qty input:focus{outline:none;border-color:var(--acc);}
@@ -179,20 +216,16 @@ button{cursor:pointer;border:none;background:none;}
   padding:4px;border-radius:5px;transition:all .12s;
   display:flex;align-items:center;justify-content:center;
 }
-.pcart-del:hover{background:rgba(239,68,68,.15);color:var(--red);}
+.pcart-del:hover{background:rgba(239,68,68,.1);color:var(--red);}
 
 /* Summary & Totals */
 .psum{padding:12px 14px;border-top:1px solid var(--cart-bd);background:var(--cart);flex-shrink:0;}
 
-.psum-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;}
-.psum-stat{
-  background:rgba(255,255,255,.06);border:1px solid var(--cart-bd);border-radius:10px;
-  padding:8px 10px;display:flex;flex-direction:column;gap:2px;
-}
+.psum-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;}
+.psum-stat{display:flex;flex-direction:column;gap:2px;}
 .psum-stat label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--cart-t3);}
-.psum-stat b{font-size:15px;font-weight:800;color:var(--cart-t1);font-variant-numeric:tabular-nums;}
-.psum-stat.hi{background:rgba(99,102,241,.18);border-color:rgba(99,102,241,.3);}
-.psum-stat.hi b{color:#a5b4fc;}
+.psum-stat b{font-size:14px;font-weight:800;color:var(--cart-t1);font-variant-numeric:tabular-nums;}
+.psum-stat.hi b{color:var(--acc2);}
 
 .psum-adjs{
   display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;
@@ -210,41 +243,44 @@ button{cursor:pointer;border:none;background:none;}
 }
 .psum-adj input:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px rgba(99,102,241,.2);}
 
-/* Payment bar */
+/* Payment bar — 2 rows: Pay/Cancel/Credit, then Card/Cash/Split */
 .pbot{
-  display:flex;align-items:center;gap:8px;
-  padding:10px 14px;background:var(--cart);
+  display:flex;flex-direction:column;gap:8px;
+  padding:12px 14px;background:var(--cart);
   border-top:1px solid var(--cart-bd);flex-shrink:0;
 }
-.pbot-total{
-  display:flex;flex-direction:column;justify-content:center;flex-shrink:0;
-  background:var(--acc);border-radius:12px;padding:10px 14px;
+.pbot-row1{display:flex;align-items:stretch;gap:8px;}
+.pbot-pay{
+  flex:2;display:flex;flex-direction:column;justify-content:center;gap:1px;
+  background:linear-gradient(135deg,var(--acc),var(--acc2));border-radius:12px;padding:10px 16px;
+  border:none;transition:all .15s;box-shadow:0 4px 14px rgba(99,102,241,.3);
 }
-.pbot-total-lbl{font-size:10px;font-weight:700;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px;}
-.pbot-total-val{font-size:22px;font-weight:900;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:-.5px;white-space:nowrap;}
+.pbot-pay:hover{box-shadow:0 6px 20px rgba(99,102,241,.4);transform:translateY(-1px);}
+.pbot-pay:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;transform:none;}
+.pbot-pay-lbl{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.5px;}
+.pbot-pay-lbl svg{width:12px;height:12px;}
+.pbot-pay-val{display:flex;align-items:center;justify-content:space-between;font-size:19px;font-weight:900;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:-.5px;white-space:nowrap;}
+.pbot-pay-val svg{width:16px;height:16px;flex-shrink:0;}
 .pbot-methods{display:flex;gap:6px;flex:1;}
 .pbtn{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:3px;padding:8px 6px;border-radius:11px;border:1px solid transparent;
+  gap:3px;padding:8px 6px;border-radius:11px;border:1.5px solid transparent;
   font-size:11px;font-weight:700;flex:1;height:52px;
   transition:all .15s;
 }
 .pbtn svg{width:18px;height:18px;flex-shrink:0;}
-.pbtn:disabled{opacity:.28;cursor:not-allowed;}
+.pbtn:disabled{opacity:.35;cursor:not-allowed;}
 .pbtn:not(:disabled):active{transform:scale(.96);}
-.pbtn.cancel{background:rgba(239,68,68,.12);color:#f87171;border-color:rgba(239,68,68,.2);}
+.pbtn.cancel{background:#fef2f2;color:var(--red);border-color:#fecaca;}
 .pbtn.cancel:not(:disabled):hover{background:var(--red);color:#fff;border-color:var(--red);}
-.pbtn.credit{background:rgba(139,92,246,.12);color:#a78bfa;border-color:rgba(139,92,246,.22);}
+.pbtn.credit{background:#f5f3ff;color:var(--pur);border-color:#ddd6fe;}
 .pbtn.credit:not(:disabled):hover{background:var(--pur);color:#fff;border-color:var(--pur);}
-.pbtn.card{background:rgba(99,102,241,.12);color:#818cf8;border-color:rgba(99,102,241,.22);}
+.pbtn.card{background:var(--acc-bg);color:var(--acc2);border-color:#c7d2fe;}
 .pbtn.card:not(:disabled):hover{background:var(--acc);color:#fff;border-color:var(--acc);}
-.pbtn.multi{background:rgba(20,184,166,.1);color:#5eead4;border-color:rgba(20,184,166,.22);}
+.pbtn.multi{background:#f0fdfa;color:var(--teal2);border-color:#99f6e4;}
 .pbtn.multi:not(:disabled):hover{background:var(--teal);color:#fff;border-color:var(--teal);}
-.pbtn.cash{
-  background:var(--grn);color:#fff;border-color:var(--grn2);
-  box-shadow:0 4px 18px rgba(34,197,94,.3);
-}
-.pbtn.cash:not(:disabled):hover{background:var(--grn2);box-shadow:0 6px 24px rgba(34,197,94,.4);}
+.pbtn.cash{background:#f0fdf4;color:var(--grn2);border-color:#bbf7d0;}
+.pbtn.cash:not(:disabled):hover{background:var(--grn);color:#fff;border-color:var(--grn);}
 
 /* ══ RIGHT — Products panel ═════════════════════════════════ */
 .pright{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);}
@@ -304,31 +340,57 @@ button{cursor:pointer;border:none;background:none;}
 }
 .ptile{
   background:var(--sf);border:1.5px solid var(--bd);border-radius:14px;
-  padding:14px 10px 12px;cursor:pointer;text-align:center;
+  padding:14px;cursor:pointer;text-align:left;position:relative;
   transition:all .18s;
-  display:flex;flex-direction:column;align-items:center;gap:7px;
+  display:flex;flex-direction:column;gap:8px;
   height:auto;
 }
-.ptile:hover{border-color:var(--acc);transform:translateY(-2px);box-shadow:0 8px 24px rgba(99,102,241,.18);}
+.ptile:hover{border-color:var(--acc);transform:translateY(-2px);box-shadow:0 8px 24px rgba(99,102,241,.14);}
 .ptile:active{transform:none;box-shadow:none;}
+.ptile-top{display:flex;align-items:flex-start;justify-content:space-between;}
 .ptile-img{
-  width:56px;height:56px;border-radius:14px;
+  width:42px;height:42px;border-radius:11px;
   display:flex;align-items:center;justify-content:center;
-  font-size:18px;font-weight:900;color:#fff;flex-shrink:0;
-  box-shadow:0 4px 12px rgba(0,0,0,.2);
+  font-size:14px;font-weight:900;color:#fff;flex-shrink:0;
+  box-shadow:0 3px 10px rgba(0,0,0,.15);
 }
-.ptile-name{font-size:11.5px;font-weight:700;color:var(--t1);line-height:1.35;word-break:break-word;}
-.ptile-price{
-  font-size:14px;font-weight:900;color:#fff;
-  background:var(--acc);border-radius:7px;padding:3px 10px;
-  letter-spacing:-.2px;
-}
+.ptile-fav{color:var(--amb);flex-shrink:0;}
+.ptile-fav svg{width:15px;height:15px;}
+.ptile-name{font-size:12px;font-weight:700;color:var(--t1);line-height:1.35;word-break:break-word;min-height:2.6em;}
+.ptile-bottom{display:flex;align-items:flex-end;justify-content:space-between;gap:6px;}
+.ptile-price{font-size:14.5px;font-weight:900;color:var(--acc2);letter-spacing:-.2px;}
 .ptile-vat{
+  display:inline-block;margin-top:3px;
   font-size:9px;color:var(--t3);background:var(--sf3);
   border-radius:4px;padding:1px 6px;border:1px solid var(--bd);
 }
+.ptile-add{
+  width:28px;height:28px;border-radius:50%;background:var(--acc);color:#fff;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  font-size:16px;font-weight:700;line-height:1;box-shadow:0 2px 8px rgba(99,102,241,.35);
+  transition:all .14s;
+}
+.ptile:hover .ptile-add{background:var(--acc2);transform:scale(1.08);}
 .pgrid-empty{grid-column:1/-1;text-align:center;padding:60px 16px;color:var(--t3);line-height:2.2;}
 .pgrid-empty svg{opacity:.25;margin-bottom:6px;}
+
+/* Quick actions strip */
+.pquick{
+  display:grid;grid-template-columns:repeat(6,1fr);gap:8px;
+  padding:10px 12px;background:var(--sf);border-top:1px solid var(--bd);flex-shrink:0;
+}
+.pquick-btn{
+  display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;
+  border:1.5px solid var(--bd);background:var(--sf2);text-align:left;transition:all .14s;
+}
+.pquick-btn:hover{border-color:var(--acc);background:var(--acc-bg);transform:translateY(-1px);}
+.pquick-ico{
+  width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;color:#fff;
+}
+.pquick-btn .pquick-ico svg{width:14px;height:14px;}
+.pquick-label{font-size:11.5px;font-weight:700;color:var(--t1);line-height:1.3;}
+.pquick-sub{font-size:9.5px;color:var(--t3);margin-top:1px;}
 
 /* ══ Overlays ═══════════════════════════════════════════════ */
 .ov{
@@ -411,6 +473,16 @@ button{cursor:pointer;border:none;background:none;}
 .rcpt-th-ar{display:block;font-size:9px;font-weight:500;color:var(--t3);}
 .rcpt-total{display:flex;justify-content:space-between;font-weight:800;font-size:15px;padding:8px 0 0;color:var(--t1);}
 .rcpt-total .rcpt-ar{font-size:11px;font-weight:700;color:var(--t3);margin-inline-start:6px;}
+.rcpt-orderno{
+  text-align:center;font-size:17px;font-weight:900;color:var(--acc2);
+  letter-spacing:.3px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed var(--bd2);
+}
+.rcpt-qr-wrap{text-align:center;padding:6px 0 2px;}
+.rcpt-qr-loading{
+  width:120px;height:120px;margin:0 auto;border-radius:8px;border:1px dashed var(--bd2);
+  display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--t3);text-align:center;padding:8px;
+}
+.rcpt-qr-hint{font-size:9.5px;color:var(--t3);margin-top:6px;}
 .rcpt-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 .rcpt-btn{
   padding:11px;border-radius:11px;border:1.5px solid var(--bd);
@@ -526,6 +598,11 @@ button{cursor:pointer;border:none;background:none;}
       <span id="pos-loc">Main Store</span>
     </div>
     <span class="ptop-clock" id="pos-clock">--/--/---- --:--</span>
+    <div class="ptop-search">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5l3 3"/></svg>
+      <input id="pos-topbar-search" placeholder="Search by name, code or barcode…" oninput="syncSearch(this.value)">
+      <kbd>Ctrl+K</kbd>
+    </div>
     <div class="ptop-spacer"></div>
     <div class="ptop-actions">
       <button class="ptop-icon" title="Calculator" onclick="toggleCalc()" id="calc-btn">
@@ -539,6 +616,14 @@ button{cursor:pointer;border:none;background:none;}
       </button>
       <button class="ptop-icon clr" title="Clear order" onclick="clearCart()">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 3l10 10M13 3L3 13"/></svg>
+      </button>
+      <div class="ptop-div"></div>
+      <button class="ptop-icon" title="Toggle dark mode" onclick="togglePosDarkMode()" id="pos-dark-toggle">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13.5 9.5A6 6 0 016.5 2.5a6 6 0 106.9 7z"/></svg>
+      </button>
+      <button class="ptop-icon" title="Notifications" onclick="toast('No new notifications','info')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6a4 4 0 018 0c0 3 1.2 4 1.2 4H2.8S4 9 4 6z"/><path d="M6.5 12.5a1.5 1.5 0 003 0"/></svg>
+        <span class="ptop-icon-badge" id="pos-notif-badge" style="display:none">0</span>
       </button>
       <div class="ptop-div"></div>
       <button class="ptop-btn" onclick="openRecent()">
@@ -564,7 +649,10 @@ button{cursor:pointer;border:none;background:none;}
           <div class="pctrl-ico">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 13c0-3 2-5 6-5s6 2 6 5"/></svg>
           </div>
-          <input class="pctrl-inp" id="pos-cust" value="Walk-In Customer" placeholder="Customer name">
+          <div style="flex:1;min-width:0">
+            <input class="pctrl-inp" id="pos-cust" value="Walk-In Customer" placeholder="Customer name">
+            <div class="pctrl-sub">Add customer details</div>
+          </div>
           <button class="pctrl-add" title="New customer" onclick="openAddCustomer()">+</button>
         </div>
         <div class="pctrl-row" style="gap:6px">
@@ -605,9 +693,11 @@ button{cursor:pointer;border:none;background:none;}
         </div>
         <div class="pcart-body" id="pcart-body">
           <div class="pcart-empty">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="52" height="52" style="color:#475569"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a4 4 0 00-8 0v2"/></svg>
-            <span>Cart is empty</span>
-            <span style="font-size:11px;color:var(--cart-t3)">Tap a product on the right to add</span>
+            <div class="pcart-empty-ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" width="34" height="34"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a4 4 0 00-8 0v2"/></svg>
+            </div>
+            <b>Your cart is empty</b>
+            <span style="font-size:11px;color:var(--cart-t3)">Tap a product from the right to add it to the cart</span>
           </div>
         </div>
       </div>
@@ -648,13 +738,13 @@ button{cursor:pointer;border:none;background:none;}
         </div>
       </div>
 
-      <!-- Payment bar -->
+      <!-- Payment bar — row 1: Pay / Cancel / Credit, row 2: Card / Cash / Split -->
       <div class="pbot">
-        <div class="pbot-total">
-          <div class="pbot-total-lbl">Total Payable</div>
-          <div class="pbot-total-val" id="bot-total">AED 0.00</div>
-        </div>
-        <div class="pbot-methods">
+        <div class="pbot-row1">
+          <button class="pbot-pay" id="btn-pay" disabled title="Pay (opens Cash payment)" onclick="openPay('cash')">
+            <span class="pbot-pay-lbl"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1" y="3" width="14" height="10" rx="1"/><circle cx="8" cy="8" r="2.5"/></svg>Total Payable</span>
+            <span class="pbot-pay-val">AED <span id="bot-total">0.00</span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg></span>
+          </button>
           <button class="pbtn cancel" onclick="clearCart()">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3l10 10M13 3L3 13"/></svg>
             Cancel
@@ -663,17 +753,19 @@ button{cursor:pointer;border:none;background:none;}
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="4" width="14" height="9" rx="1"/><path d="M1 7h14M4 11h3"/></svg>
             Credit
           </button>
+        </div>
+        <div class="pbot-methods">
           <button class="pbtn card" id="btn-card" disabled onclick="openPay('card')">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="4" width="14" height="9" rx="1"/><path d="M1 7h14M10 11h2"/></svg>
             Card
           </button>
-          <button class="pbtn multi" id="btn-multi" disabled onclick="openPay('multi')">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 5h10M1 8h7M1 11h4"/><rect x="9" y="6" width="6" height="8" rx="1"/></svg>
-            Split
-          </button>
           <button class="pbtn cash" id="btn-cash" disabled onclick="openPay('cash')">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="3" width="14" height="10" rx="1"/><circle cx="8" cy="8" r="2.5"/></svg>
             Cash
+          </button>
+          <button class="pbtn multi" id="btn-multi" disabled onclick="openPay('multi')">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 5h10M1 8h7M1 11h4"/><rect x="9" y="6" width="6" height="8" rx="1"/></svg>
+            Split
           </button>
         </div>
       </div>
@@ -705,6 +797,33 @@ button{cursor:pointer;border:none;background:none;}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="48" height="48"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
           <div>Loading products…</div>
         </div>
+      </div>
+
+      <div class="pquick">
+        <button class="pquick-btn" onclick="openAddProduct()">
+          <span class="pquick-ico" style="background:var(--grn)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 2v12M2 8h12"/></svg></span>
+          <span><span class="pquick-label">Quick Add</span><span class="pquick-sub" style="display:block">Add custom product</span></span>
+        </button>
+        <button class="pquick-btn" onclick="openRecentItems()">
+          <span class="pquick-ico" style="background:#3b82f6"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg></span>
+          <span><span class="pquick-label">Recent Items</span><span class="pquick-sub" style="display:block">View recently added items</span></span>
+        </button>
+        <button class="pquick-btn" onclick="saveAs('draft')">
+          <span class="pquick-ico" style="background:var(--amb)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="2" width="10" height="12" rx="1"/><path d="M6 6h4M6 9h4"/></svg></span>
+          <span><span class="pquick-label">Hold Order</span><span class="pquick-sub" style="display:block">Save order for later</span></span>
+        </button>
+        <button class="pquick-btn" onclick="priceCheck()">
+          <span class="pquick-ico" style="background:var(--pur)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5l3 3"/></svg></span>
+          <span><span class="pquick-label">Price Check</span><span class="pquick-sub" style="display:block">Check product price</span></span>
+        </button>
+        <button class="pquick-btn" onclick="stockLookup()">
+          <span class="pquick-ico" style="background:var(--teal)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="7" width="14" height="2"/><path d="M3 9v4M13 9v4M2 7V4a1 1 0 011-1h10a1 1 0 011 1v3"/></svg></span>
+          <span><span class="pquick-label">Stock Lookup</span><span class="pquick-sub" style="display:block">Check stock availability</span></span>
+        </button>
+        <button class="pquick-btn" onclick="focusOrderDiscount()">
+          <span class="pquick-ico" style="background:#ec4899"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 8.5L8.5 2H13a1 1 0 011 1v4.5L7.5 14 2 8.5z"/><circle cx="9.5" cy="5.5" r="1"/></svg></span>
+          <span><span class="pquick-label">Discount</span><span class="pquick-sub" style="display:block">Apply discount to order</span></span>
+        </button>
       </div>
 
     </div>
@@ -777,6 +896,21 @@ button{cursor:pointer;border:none;background:none;}
     </div>
     <div style="margin-top:14px">
       <button class="rcpt-btn" style="width:100%" onclick="closeRecent()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Recent Items (quick re-add) ── -->
+<div class="ov" id="ov-recent-items" style="display:none">
+  <div class="ov-box" style="width:380px;max-height:calc(100vh - 80px);overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="ov-title">Recent Items</div>
+      <button onclick="closeRecentItems()" style="background:none;border:none;font-size:18px;color:var(--t3);line-height:1;cursor:pointer;padding:4px;border-radius:6px;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--t3)'">✕</button>
+    </div>
+    <div class="ov-sub" style="margin-bottom:10px">Items added to the cart this session — tap Add to add another</div>
+    <div id="ov-recent-items-body"></div>
+    <div style="margin-top:14px">
+      <button class="rcpt-btn" style="width:100%" onclick="closeRecentItems()">Close</button>
     </div>
   </div>
 </div>
@@ -921,6 +1055,7 @@ let _filterMode = 'cat';
 let _activeChip = '';
 let _payMethod  = 'cash';
 let _lastSale   = null;
+let _recentItems = []; // most-recent-first, session-only, for the Recent Items quick action
 
 // ── Auth ─────────────────────────────────────────────────────────────
 async function checkAuth(){
@@ -1035,8 +1170,24 @@ function filterChip(val, btn){
 }
 
 function syncSearch(val){
+  // renderGrid() reads #pos-search2 directly — mirror whichever of the two
+  // search boxes (top bar or product panel) the user actually typed into so
+  // it keeps working regardless of which one fired this.
+  ['pos-search2','pos-topbar-search'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el&&el.value!==val)el.value=val;
+  });
   renderGrid();
 }
+
+// ── Dark mode ─────────────────────────────────────────────────────────
+function togglePosDarkMode(){
+  const on=document.body.classList.toggle('pos-dark');
+  localStorage.setItem('pos_dark_mode',on?'1':'0');
+}
+(function initPosDarkMode(){
+  if(localStorage.getItem('pos_dark_mode')==='1')document.body.classList.add('pos-dark');
+})();
 
 // ── Calculator ────────────────────────────────────────────────────────
 let _calcExpr = '', _calcVal = '0', _calcJustEvaled = false;
@@ -1107,10 +1258,15 @@ function renderGrid(){
     const color = tileColor(p.name||'');
     const init  = tileInit(p.name||'');
     return `<div class="ptile" onclick="addToCart(${idx})">
-      <div class="ptile-img" style="background:${color}">${esc(init)}</div>
+      <div class="ptile-top">
+        <div class="ptile-img" style="background:${color}">${esc(init)}</div>
+        ${idx===0?'<span class="ptile-fav" title="Favorite"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2.09 4.26 4.7.68-3.4 3.31.8 4.68L8 11.77l-4.2 2.21.8-4.68-3.4-3.31 4.7-.68z"/></svg></span>':''}
+      </div>
       <div class="ptile-name">${esc(p.name||'')}</div>
-      <div class="ptile-price">AED ${price.toFixed(2)}</div>
-      ${vatRate?`<div class="ptile-vat">+${vatRate}% VAT</div>`:''}
+      <div class="ptile-bottom">
+        <div><div class="ptile-price">AED ${price.toFixed(2)}</div>${vatRate?`<div class="ptile-vat">+${vatRate}% VAT</div>`:''}</div>
+        <span class="ptile-add" title="Add to cart">+</span>
+      </div>
     </div>`;
   }).join('');
 }
@@ -1125,6 +1281,13 @@ function addToCart(idx){
   const ex = _cart.find(i=>i.id===id);
   if(ex){ ex.qty++; }
   else { _cart.push({id, code:p.code||'', name:p.name||'', price, vatRate, qty:1, unit:p.unit||'PCS'}); }
+  // Self-contained snapshot, not an index into the currently-rendered/
+  // filtered grid — that array reshuffles on every search/chip change, so
+  // storing an index here would silently point at the wrong product (or
+  // nothing) by the time Recent Items is opened later.
+  _recentItems=_recentItems.filter(r=>r.id!==id);
+  _recentItems.unshift({id, code:p.code||'', name:p.name||'', price, vatRate, unit:p.unit||'PCS'});
+  _recentItems=_recentItems.slice(0,8);
   renderCart();
 }
 function changeQty(id,delta){
@@ -1170,7 +1333,7 @@ function recalc(){ renderSummary(); }
 function renderCart(){
   const body = document.getElementById('pcart-body');
   if(!_cart.length){
-    body.innerHTML = '<div class="pcart-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="52" height="52" style="color:#475569"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a4 4 0 00-8 0v2"/></svg><span>Cart is empty</span><span style="font-size:11px;color:var(--cart-t3)">Tap a product on the right to add</span></div>';
+    body.innerHTML = '<div class="pcart-empty"><div class="pcart-empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" width="34" height="34"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a4 4 0 00-8 0v2"/></svg></div><b>Your cart is empty</b><span style="font-size:11px;color:var(--cart-t3)">Tap a product from the right to add it to the cart</span></div>';
   }else{
     body.innerHTML = _cart.map((item)=>{
       const lineEx  = item.price * item.qty;
@@ -1200,11 +1363,11 @@ function renderSummary(){
   setText('s-items', items);
   setText('s-sub',   sub.toFixed(2));
   setText('s-vat',   vat.toFixed(2));
-  setText('bot-total', 'AED '+total.toFixed(2));
+  setText('bot-total', total.toFixed(2));
   const lbl = document.getElementById('s-vat-lbl');
   if(lbl) lbl.textContent = vatLabel + ':';
   const has = _cart.length>0;
-  ['btn-cash','btn-card','btn-multi'].forEach(id=>{ const el=document.getElementById(id); if(el) el.disabled=!has; });
+  ['btn-cash','btn-card','btn-multi','btn-pay'].forEach(id=>{ const el=document.getElementById(id); if(el) el.disabled=!has; });
 }
 
 // ── Payment ──────────────────────────────────────────────────────────
@@ -1409,11 +1572,19 @@ async function genPosShortLink(sale){
     const r=await api('/share/invoice',{method:'POST',body:{payload}});
     if(r?.code){
       _posShortUrl=window.location.origin+'/i/'+r.code;
-      // Update link shown in receipt
-      const el=document.getElementById('rcpt-short-link');
-      if(el){el.textContent=_posShortUrl;el.href=_posShortUrl;}
+      const qrEl=document.getElementById('rcpt-qr');
+      if(qrEl){
+        const qrSrc='https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data='+encodeURIComponent(_posShortUrl);
+        qrEl.outerHTML=`<img id="rcpt-qr" src="${qrSrc}" alt="Invoice QR code" width="120" height="120" style="display:block;margin:0 auto;border-radius:8px;border:1px solid var(--bd)">`;
+      }
+    }else{
+      const qrEl=document.getElementById('rcpt-qr');
+      if(qrEl){qrEl.textContent='Online link unavailable';}
     }
-  }catch{}
+  }catch{
+    const qrEl=document.getElementById('rcpt-qr');
+    if(qrEl){qrEl.textContent='Online link unavailable';}
+  }
 }
 
 // ── Receipt — bilingual English / Arabic tax invoice ───────────────────
@@ -1450,8 +1621,8 @@ function showReceipt(sale){
       <div class="rcpt-heading">TAX INVOICE<span class="rcpt-ar">${RCPT_AR.taxInvoice}</span></div>
       <p>${esc(sale.date)}</p>
     </div>
-    <div class="rcpt-row"><span class="rcpt-lbl"><b>${esc(sale.receipt_no)}</b></span></div>
-    <div class="rcpt-row"><span class="rcpt-lbl">${bl('Customer','customer')}</span><span>${esc(sale.customer)}</span></div>
+    <div class="rcpt-orderno">${esc(sale.receipt_no)}</div>
+    <div class="rcpt-row"><span class="rcpt-lbl">${bl('Customer','customer')}</span><span><b>${esc(sale.customer)}</b></span></div>
     ${sale.service_type?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Service','service')}</span><span>${esc(sale.service_type)}</span></div>`:''}
     ${sale.table?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Table','table')}</span><span>${esc(sale.table)}</span></div>`:''}
     <hr class="rcpt-hr">
@@ -1472,8 +1643,9 @@ function showReceipt(sale){
     <div class="rcpt-row"><span class="rcpt-lbl">${bl('Payment','payment')}</span><span>${esc(payLabel[0])}<span class="rcpt-ar">${RCPT_AR[payLabel[1]]||''}</span></span></div>
     ${payInfo}
     <hr class="rcpt-hr">
-    <div style="text-align:center;font-size:10px;color:var(--t3);margin-top:4px">
-      <span>${bl('View invoice:','viewInvoice')} </span><a id="rcpt-short-link" href="#" target="_blank" style="color:var(--acc);word-break:break-all">Generating link…</a>
+    <div class="rcpt-qr-wrap" id="rcpt-qr-wrap">
+      <div class="rcpt-qr-loading" id="rcpt-qr">Generating QR code…</div>
+      <div class="rcpt-qr-hint">${bl('Scan to view invoice online','viewInvoice')}</div>
     </div>
     <p style="text-align:center;font-size:10px;color:var(--t3);margin-top:6px">Thank you for your business!<span class="rcpt-ar">${RCPT_AR.thankYou}</span></p>`;
   document.getElementById('ov-rcpt').style.display='flex';
@@ -1503,6 +1675,9 @@ function printRcpt(){
     .rcpt-th-ar{display:block;font-size:9px;font-weight:400;color:#555}
     .rcpt-total{display:flex;justify-content:space-between;font-weight:800;font-size:14px;padding:6px 0 0}
     .rcpt-total .rcpt-ar{font-size:10.5px;font-weight:700;margin-inline-start:6px}
+    .rcpt-orderno{text-align:center;font-size:16px;font-weight:900;margin-bottom:8px;padding-bottom:8px;border-bottom:1px dashed #000}
+    .rcpt-qr-wrap{text-align:center;padding:4px 0}
+    .rcpt-qr-hint{font-size:9px;color:#555;margin-top:5px}
     @media print{body{padding:0}}
   </style></head><body>${html}</body></html>`);
   w.document.close();w.focus();setTimeout(()=>{w.print();w.close();},300);
@@ -1553,6 +1728,64 @@ async function openRecent(){
   }catch{body.innerHTML='<div style="padding:40px;text-align:center;color:var(--t3)">Failed to load.</div>';}
 }
 function closeRecent(){ document.getElementById('ov-recent').style.display='none'; }
+
+// ── Quick actions strip ─────────────────────────────────────────────────
+function openRecentItems(){
+  const modal=document.getElementById('ov-recent-items');
+  const body=document.getElementById('ov-recent-items-body');
+  if(!modal||!body)return;
+  if(!_recentItems.length){
+    body.innerHTML='<div style="padding:32px;text-align:center;color:var(--t3)">No items added yet this session.</div>';
+  }else{
+    body.innerHTML=_recentItems.map(r=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 4px;border-bottom:1px solid var(--bd)">
+        <div><div style="font-weight:700;font-size:12.5px">${esc(r.name)}</div><div style="font-size:11px;color:var(--t3)">AED ${r.price.toFixed(2)}</div></div>
+        <button class="rcpt-btn" style="padding:6px 14px" onclick="addRecentItemToCart('${esc(r.id)}')">+ Add</button>
+      </div>`).join('');
+  }
+  modal.style.display='flex';
+}
+function closeRecentItems(){ document.getElementById('ov-recent-items').style.display='none'; }
+function addRecentItemToCart(id){
+  const r=_recentItems.find(i=>i.id===id);
+  if(!r)return;
+  const ex=_cart.find(i=>i.id===id);
+  if(ex){ex.qty++;}
+  else{_cart.push({id:r.id, code:r.code, name:r.name, price:r.price, vatRate:r.vatRate, qty:1, unit:r.unit});}
+  renderCart();
+  toast(`${r.name} added`,'ok');
+}
+
+function priceCheck(){
+  const query=(prompt('Enter product name or code to check its price:')||'').trim().toLowerCase();
+  if(!query)return;
+  const match=_products.find(p=>String(p.name||'').toLowerCase().includes(query)||String(p.code||'').toLowerCase()===query);
+  if(!match){toast(`No product matching "${query}"`,'warn');return;}
+  const price=Number(match.selling_price||match.price||match.unit_price||match.sales_price||match.cost||0);
+  const vatRate=parseVat(match.vat);
+  toast(`${match.name}: AED ${price.toFixed(2)}${vatRate?` +${vatRate}% VAT`:''}`,'info');
+}
+
+async function stockLookup(){
+  const query=(prompt('Enter product name or code to check stock:')||'').trim().toLowerCase();
+  if(!query)return;
+  try{
+    const rows=await api('/inventory/stock-levels');
+    const match=(Array.isArray(rows)?rows:[]).find(r=>String(r.name||'').toLowerCase().includes(query)||String(r.code||'').toLowerCase()===query);
+    if(!match){toast(`No stock record matching "${query}"`,'warn');return;}
+    toast(`${match.name}: ${Number(match.current_stock||0)} in stock`,'info');
+  }catch{
+    toast('Stock lookup failed — try again','err');
+  }
+}
+
+function focusOrderDiscount(){
+  const el=document.getElementById('s-disc');
+  if(!el)return;
+  el.scrollIntoView({block:'center',behavior:'smooth'});
+  el.focus();
+  el.select();
+}
 
 // ── Utils ─────────────────────────────────────────────────────────────
 function esc(v){ return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
