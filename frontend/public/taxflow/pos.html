@@ -743,7 +743,7 @@ button{cursor:pointer;border:none;background:none;}
         <div class="pbot-row1">
           <button class="pbot-pay" id="btn-pay" disabled title="Pay (opens Cash payment)" onclick="openPay('cash')">
             <span class="pbot-pay-lbl"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1" y="3" width="14" height="10" rx="1"/><circle cx="8" cy="8" r="2.5"/></svg>Total Payable</span>
-            <span class="pbot-pay-val">AED <span id="bot-total">0.00</span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg></span>
+            <span class="pbot-pay-val"><span id="bot-total-cur">AED</span> <span id="bot-total">0.00</span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg></span>
           </button>
           <button class="pbtn cancel" onclick="clearCart()">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3l10 10M13 3L3 13"/></svg>
@@ -1056,6 +1056,7 @@ let _activeChip = '';
 let _payMethod  = 'cash';
 let _lastSale   = null;
 let _recentItems = []; // most-recent-first, session-only, for the Recent Items quick action
+let POS_CURRENCY = 'AED';
 
 // ── Auth ─────────────────────────────────────────────────────────────
 async function checkAuth(){
@@ -1063,6 +1064,12 @@ async function checkAuth(){
   try{
     const me = await api('/auth/me');
     if(me.company?.name) localStorage.setItem('taxflow_company_name', me.company.name);
+    try{
+      const company = await api('/companies/current');
+      POS_CURRENCY = company.currency || 'AED';
+      const curEl=document.getElementById('bot-total-cur');
+      if(curEl)curEl.textContent=POS_CURRENCY;
+    }catch{}
     return true;
   }catch{ document.getElementById('pos-auth').style.display='flex'; return false; }
 }
@@ -1264,7 +1271,7 @@ function renderGrid(){
       </div>
       <div class="ptile-name">${esc(p.name||'')}</div>
       <div class="ptile-bottom">
-        <div><div class="ptile-price">AED ${price.toFixed(2)}</div>${vatRate?`<div class="ptile-vat">+${vatRate}% VAT</div>`:''}</div>
+        <div><div class="ptile-price">${POS_CURRENCY} ${price.toFixed(2)}</div>${vatRate?`<div class="ptile-vat">+${vatRate}% VAT</div>`:''}</div>
         <span class="ptile-add" title="Add to cart">+</span>
       </div>
     </div>`;
@@ -1343,14 +1350,14 @@ function renderCart(){
       return `<div class="pcart-row">
         <div>
           <div class="pcart-name">${esc(item.name)}</div>
-          <div class="pcart-sub">AED ${item.price.toFixed(2)} / ${esc(item.unit)}${item.vatRate?' · VAT '+lineVat.toFixed(2):' · No VAT'}</div>
+          <div class="pcart-sub">${POS_CURRENCY} ${item.price.toFixed(2)} / ${esc(item.unit)}${item.vatRate?' · VAT '+lineVat.toFixed(2):' · No VAT'}</div>
         </div>
         <div class="pcart-qty">
           <button onclick="changeQty('${sid}',-1)">−</button>
           <input type="number" value="${item.qty}" min="1" onchange="setQty('${sid}',this.value)">
           <button onclick="changeQty('${sid}',1)">+</button>
         </div>
-        <div class="pcart-amt" title="Ex-VAT: AED ${lineEx.toFixed(2)} + VAT: AED ${lineVat.toFixed(2)}">AED ${lineInc.toFixed(2)}</div>
+        <div class="pcart-amt" title="Ex-VAT: ${POS_CURRENCY} ${lineEx.toFixed(2)} + VAT: ${POS_CURRENCY} ${lineVat.toFixed(2)}">${POS_CURRENCY} ${lineInc.toFixed(2)}</div>
         <button class="pcart-del" onclick="removeFromCart('${sid}')">✕</button>
       </div>`;
     }).join('');
@@ -1375,7 +1382,7 @@ function openPay(method){
   if(!_cart.length){toast('Add items to cart first','warn');return;}
   _payMethod = method;
   const {total} = cartTotals();
-  const totalStr = 'AED '+total.toFixed(2);
+  const totalStr = POS_CURRENCY+' '+total.toFixed(2);
   setText('pay-title', method==='cash'?'Cash Payment':method==='card'?'Card Payment':'Split Payment');
   setText('pay-total', totalStr);
   document.getElementById('pay-cash-panel').style.display = method==='cash'?'':'none';
@@ -1389,7 +1396,7 @@ function openPay(method){
     const amounts = [...new Set([roundUp,50,100,200,500].filter(a=>a>=total))].slice(0,4);
     document.getElementById('pay-quick').innerHTML =
       `<button class="ov-qbtn" onclick="setTender(${total.toFixed(2)})">Exact</button>`+
-      amounts.map(a=>`<button class="ov-qbtn" onclick="setTender(${a})">AED ${a}</button>`).join('');
+      amounts.map(a=>`<button class="ov-qbtn" onclick="setTender(${a})">${POS_CURRENCY} ${a}</button>`).join('');
     setTimeout(()=>tender?.focus(),80);
   }
   if(method==='multi'){
@@ -1406,7 +1413,7 @@ function calcChange(){
   const tendered=parseFloat(document.getElementById('pay-tender')?.value)||0;
   const change=Math.max(0,tendered-total);
   const el=document.getElementById('pay-change');
-  if(el){el.textContent='AED '+change.toFixed(2);el.style.color=tendered>=total?'var(--teal)':'var(--red)';}
+  if(el){el.textContent=POS_CURRENCY+' '+change.toFixed(2);el.style.color=tendered>=total?'var(--teal)':'var(--red)';}
   const ok=document.getElementById('pay-ok');
   if(ok) ok.disabled=tendered<total-0.001;
 }
@@ -1416,7 +1423,7 @@ function calcMultiBalance(){
   const mk=parseFloat(document.getElementById('pay-multi-card')?.value)||0;
   const rem=total-mc-mk;
   const el=document.getElementById('pay-multi-rem');
-  if(el){el.textContent='AED '+(Math.max(0,rem)).toFixed(2);el.style.color=rem<=0?'var(--teal)':'var(--red)';}
+  if(el){el.textContent=POS_CURRENCY+' '+(Math.max(0,rem)).toFixed(2);el.style.color=rem<=0?'var(--teal)':'var(--red)';}
   const ok=document.getElementById('pay-ok');
   if(ok) ok.disabled=rem>0.001;
 }
@@ -1601,19 +1608,19 @@ function bl(en,arKey){ return `${esc(en)}<span class="rcpt-ar">${esc(RCPT_AR[arK
 function showReceipt(sale){
   _posShortUrl='';
   const rows=(sale.items||[]).map((i,n)=>
-    `<tr><td>${n+1}. ${esc(i.name)}</td><td style="text-align:right">${i.qty}</td><td style="text-align:right">AED ${(Number(i.line_total)+Number(i.line_vat)).toFixed(2)}</td></tr>`
+    `<tr><td>${n+1}. ${esc(i.name)}</td><td style="text-align:right">${i.qty}</td><td style="text-align:right">${POS_CURRENCY} ${(Number(i.line_total)+Number(i.line_vat)).toFixed(2)}</td></tr>`
   ).join('');
   const adjRows=[
-    sale.discount>0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Discount','discount')}</span><span>-AED ${Number(sale.discount).toFixed(2)}</span></div>`:'',
-    sale.order_tax>0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Order Tax','orderTax')}</span><span>+AED ${Number(sale.order_tax).toFixed(2)}</span></div>`:'',
-    sale.shipping>0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Shipping','shipping')}</span><span>+AED ${Number(sale.shipping).toFixed(2)}</span></div>`:'',
-    sale.packing>0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Packing','packing')}</span><span>+AED ${Number(sale.packing).toFixed(2)}</span></div>`:'',
+    sale.discount>0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Discount','discount')}</span><span>-${POS_CURRENCY} ${Number(sale.discount).toFixed(2)}</span></div>`:'',
+    sale.order_tax>0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Order Tax','orderTax')}</span><span>+${POS_CURRENCY} ${Number(sale.order_tax).toFixed(2)}</span></div>`:'',
+    sale.shipping>0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Shipping','shipping')}</span><span>+${POS_CURRENCY} ${Number(sale.shipping).toFixed(2)}</span></div>`:'',
+    sale.packing>0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Packing','packing')}</span><span>+${POS_CURRENCY} ${Number(sale.packing).toFixed(2)}</span></div>`:'',
   ].join('');
   const payLabel={'cash':['Cash','cash'],'card':['Card','card'],'multi':['Cash + Card','multi'],'credit':['Credit','credit']}[sale.payment_method]||[sale.payment_method,''];
   const payInfo=sale.payment_method==='cash'
-    ?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Cash Tendered','cashTendered')}</span><span>AED ${Number(sale.cash_tendered||0).toFixed(2)}</span></div><div class="rcpt-row"><span class="rcpt-lbl">${bl('Change','change')}</span><span>AED ${Number(sale.change||0).toFixed(2)}</span></div>`
+    ?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Cash Tendered','cashTendered')}</span><span>${POS_CURRENCY} ${Number(sale.cash_tendered||0).toFixed(2)}</span></div><div class="rcpt-row"><span class="rcpt-lbl">${bl('Change','change')}</span><span>${POS_CURRENCY} ${Number(sale.change||0).toFixed(2)}</span></div>`
     :sale.payment_method==='multi'
-    ?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Cash','cash')}</span><span>AED ${Number(sale.multi_cash||0).toFixed(2)}</span></div><div class="rcpt-row"><span class="rcpt-lbl">${bl('Card','card')}</span><span>AED ${Number(sale.multi_card||0).toFixed(2)}</span></div>`:'';
+    ?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Cash','cash')}</span><span>${POS_CURRENCY} ${Number(sale.multi_cash||0).toFixed(2)}</span></div><div class="rcpt-row"><span class="rcpt-lbl">${bl('Card','card')}</span><span>${POS_CURRENCY} ${Number(sale.multi_card||0).toFixed(2)}</span></div>`:'';
 
   document.getElementById('rcpt-body').innerHTML=`
     <div class="rcpt-hd">
@@ -1635,10 +1642,10 @@ function showReceipt(sale){
       <tbody>${rows}</tbody>
     </table>
     <hr class="rcpt-hr">
-    <div class="rcpt-row"><span class="rcpt-lbl">${bl('Subtotal','subtotal')}</span><span>AED ${Number(sale.subtotal).toFixed(2)}</span></div>
-    <div class="rcpt-row"><span class="rcpt-lbl">${bl('VAT','vat')}</span><span>AED ${Number(sale.vat).toFixed(2)}</span></div>
+    <div class="rcpt-row"><span class="rcpt-lbl">${bl('Subtotal','subtotal')}</span><span>${POS_CURRENCY} ${Number(sale.subtotal).toFixed(2)}</span></div>
+    <div class="rcpt-row"><span class="rcpt-lbl">${bl('VAT','vat')}</span><span>${POS_CURRENCY} ${Number(sale.vat).toFixed(2)}</span></div>
     ${adjRows}
-    <div class="rcpt-total"><span>TOTAL<span class="rcpt-ar">${RCPT_AR.total}</span></span><span>AED ${Number(sale.total).toFixed(2)}</span></div>
+    <div class="rcpt-total"><span>TOTAL<span class="rcpt-ar">${RCPT_AR.total}</span></span><span>${POS_CURRENCY} ${Number(sale.total).toFixed(2)}</span></div>
     <hr class="rcpt-hr">
     <div class="rcpt-row"><span class="rcpt-lbl">${bl('Payment','payment')}</span><span>${esc(payLabel[0])}<span class="rcpt-ar">${RCPT_AR[payLabel[1]]||''}</span></span></div>
     ${payInfo}
@@ -1686,11 +1693,11 @@ function printRcpt(){
 function shareRcpt(channel){
   const sale=_lastSale;if(!sale)return;
   const fmt=n=>Number(n||0).toFixed(2);
-  const lines=(sale.items||[]).map(i=>`${i.name} ×${i.qty} = AED ${fmt(Number(i.line_total)+Number(i.line_vat))}`).join('\n');
+  const lines=(sale.items||[]).map(i=>`${i.name} ×${i.qty} = ${POS_CURRENCY} ${fmt(Number(i.line_total)+Number(i.line_vat))}`).join('\n');
   const linkLine=_posShortUrl?`\nView invoice: ${_posShortUrl}`:'';
-  const msg=[`Dear ${sale.customer||'Customer'}, please find your invoice ${sale.receipt_no} for AED ${fmt(sale.total)}. Due date: ${sale.date}.`,
+  const msg=[`Dear ${sale.customer||'Customer'}, please find your invoice ${sale.receipt_no} for ${POS_CURRENCY} ${fmt(sale.total)}. Due date: ${sale.date}.`,
     '',lines,'',
-    `Subtotal: AED ${fmt(sale.subtotal)}`,`VAT: AED ${fmt(sale.vat)}`,`Total: AED ${fmt(sale.total)}`,
+    `Subtotal: ${POS_CURRENCY} ${fmt(sale.subtotal)}`,`VAT: ${POS_CURRENCY} ${fmt(sale.vat)}`,`Total: ${POS_CURRENCY} ${fmt(sale.total)}`,
     `PDF: please attach the PDF printed from TaxFlow.`+linkLine].join('\n');
   if(channel==='whatsapp')window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');
   else window.open('mailto:?subject='+encodeURIComponent('Invoice '+sale.receipt_no)+'&body='+encodeURIComponent(msg),'_blank');
@@ -1722,7 +1729,7 @@ async function openRecent(){
         <td style="color:var(--acc);font-weight:700">${esc(s.receipt_no||'')}</td>
         <td style="color:var(--t2)">${esc(s.date||'')}</td>
         <td>${esc(s.customer||'Walk-in')}</td>
-        <td style="font-weight:700;font-variant-numeric:tabular-nums">AED ${Number(s.total||0).toFixed(2)}</td>
+        <td style="font-weight:700;font-variant-numeric:tabular-nums">${POS_CURRENCY} ${Number(s.total||0).toFixed(2)}</td>
         <td style="text-transform:capitalize">${esc(s.payment_method||'—')}</td>
       </tr>`).join('')}</tbody></table>`;
   }catch{body.innerHTML='<div style="padding:40px;text-align:center;color:var(--t3)">Failed to load.</div>';}
@@ -1739,7 +1746,7 @@ function openRecentItems(){
   }else{
     body.innerHTML=_recentItems.map(r=>`
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 4px;border-bottom:1px solid var(--bd)">
-        <div><div style="font-weight:700;font-size:12.5px">${esc(r.name)}</div><div style="font-size:11px;color:var(--t3)">AED ${r.price.toFixed(2)}</div></div>
+        <div><div style="font-weight:700;font-size:12.5px">${esc(r.name)}</div><div style="font-size:11px;color:var(--t3)">${POS_CURRENCY} ${r.price.toFixed(2)}</div></div>
         <button class="rcpt-btn" style="padding:6px 14px" onclick="addRecentItemToCart('${esc(r.id)}')">+ Add</button>
       </div>`).join('');
   }
@@ -1763,7 +1770,7 @@ function priceCheck(){
   if(!match){toast(`No product matching "${query}"`,'warn');return;}
   const price=Number(match.selling_price||match.price||match.unit_price||match.sales_price||match.cost||0);
   const vatRate=parseVat(match.vat);
-  toast(`${match.name}: AED ${price.toFixed(2)}${vatRate?` +${vatRate}% VAT`:''}`,'info');
+  toast(`${match.name}: ${POS_CURRENCY} ${price.toFixed(2)}${vatRate?` +${vatRate}% VAT`:''}`,'info');
 }
 
 async function stockLookup(){

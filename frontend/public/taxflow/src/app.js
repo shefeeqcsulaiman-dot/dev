@@ -2348,17 +2348,18 @@ async function authenticatedFetch(url,options={}){
   return response;
 }
 
-const AED_SYMBOL='AED';
-const AED_CHAR='AED ';
-const AED_HTML='AED ';
-function AED_SYMBOL_SVG(){return 'AED ';}
+window.COMPANY_CURRENCY=window.COMPANY_CURRENCY||'AED';
+function currentCurrency(){return window.COMPANY_CURRENCY||'AED';}
+Object.defineProperty(window,'AED_SYMBOL',{get:currentCurrency,configurable:true});
+Object.defineProperty(window,'AED_CHAR',{get:()=>currentCurrency()+' ',configurable:true});
+Object.defineProperty(window,'AED_HTML',{get:()=>currentCurrency()+' ',configurable:true});
+function AED_SYMBOL_SVG(){return currentCurrency()+' ';}
 function formatAed(value){
   const num=Number(value||0);
-  return 'AED '+num.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return currentCurrency()+' '+num.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 function formatAedHtml(value){
-  const num=Number(value||0);
-  return 'AED '+num.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return formatAed(value);
 }
 
 function findSettingsInput(labelText,scopeId='set-company'){
