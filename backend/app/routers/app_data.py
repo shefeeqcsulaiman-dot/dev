@@ -472,6 +472,8 @@ def bootstrap(
             "trade_name": company.trade_name,
             "trn": company.trn,
             "country": company.country,
+            "currency": company.currency,
+            "vat_rate": str(company.vat_rate) if company.vat_rate is not None else "5.00",
             "emirate": company.emirate,
             "business_type": company.business_type,
             "business_activity": company.business_activity,

@@ -276,6 +276,27 @@ def test_sales_invoice_fallback_vat_rate_uses_company_setting(client, auth_heade
     assert Decimal(invoice["lines"][0]["vat_rate"]) == Decimal("15.00")
 
 
+def test_bootstrap_company_payload_includes_currency_and_vat_rate(client, auth_headers):
+    """GET /app-data (bootstrap)'s hand-built "company" dict is a separate
+    code path from GET /companies/current — it used to omit currency/vat_rate
+    entirely, which silently reset the Settings page's currency/VAT fields
+    back to the AED/5% defaults on every fresh app load (bootstrap fires
+    after the correct /companies/current fetch and applyCompanyToUi()
+    overwrites the form fields with whatever ran last)."""
+    updated = client.put(
+        "/api/v1/companies/current",
+        headers=auth_headers,
+        json={"currency": "SAR", "vat_rate": "15.00"},
+    )
+    assert updated.status_code == 200
+
+    boot = client.get("/api/v1/app-data", headers=auth_headers)
+    assert boot.status_code == 200, boot.text
+    company = boot.json()["data"]["company"]
+    assert company["currency"] == "SAR"
+    assert company["vat_rate"] == "15.00"
+
+
 def test_corporate_tax_return_calculates_taxable_income(client, auth_headers):
     response = client.post(
         "/api/v1/tax/corporate-tax-returns",
