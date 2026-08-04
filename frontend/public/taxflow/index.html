@@ -1437,7 +1437,10 @@
       </div>
       <div class="fr3">
         <div class="fg"><label class="fl">Address</label><input class="fi" id="mp-address" placeholder="Supplier address"></div>
-        <div class="fg"><label class="fl">Pay Term</label><select class="fi" id="mp-term"><option value="">Please Select</option><option>Due on receipt</option><option>Net 15</option><option>Net 30</option><option>Net 45</option></select></div>
+        <div class="fg"><label class="fl">Pay Term</label><select class="fi" id="mp-term" onchange="applyPurchaseDueDateFromTerm('mp')"><option value="">Please Select</option><option>Due on receipt</option><option>Net 15</option><option>Net 30</option><option>Net 45</option></select></div>
+        <div class="fg"><label class="fl">Due Date</label><input class="fi" type="date" id="mp-due-date"></div>
+      </div>
+      <div class="fr3">
         <div class="fg"><label class="fl">Attach Document</label><input class="fi" id="mp-file" type="file" accept=".pdf,.csv,.zip,.doc,.docx,.jpeg,.jpg,.png"></div>
       </div>
     </div>
@@ -1496,7 +1499,11 @@
       <div class="fg"><label class="fl">Payment Account</label><select class="fi" id="mp-pay-account"><option>None</option><option>Cash on Hand</option><option>Emirates NBD</option><option>FAB</option></select></div>
       <div class="fg"><label class="fl">Payment Note</label><textarea class="fi" id="mp-pay-note" rows="3"></textarea></div>
       <div class="tot-row"><span>Payment due</span><span class="mono" id="mp-payment-due">0.00</span></div>
-      <div style="text-align:center;margin-top:16px"><button class="btn btn-p" id="mp-save-btn" onclick="saveManualPurchase()">Save</button></div>
+      <div style="text-align:center;margin-top:16px;display:flex;gap:8px;justify-content:center">
+        <button class="btn btn-g" type="button" title="Map this purchase's first item to a stock item" onclick="mapLineToStock(document.querySelector('#mp-lines .mp-product')?.value,'')">Map to Stock</button>
+        <button class="btn btn-g" type="button" title="Reverse and repost the ledger entry with this purchase's current amounts (only works after it's been saved)" onclick="updateLedgerForPurchase(document.getElementById('mp-ref')?.value?.trim())">Update Ledger</button>
+        <button class="btn btn-p" id="mp-save-btn" onclick="saveManualPurchase()">Save</button>
+      </div>
     </div>
   </div>
 

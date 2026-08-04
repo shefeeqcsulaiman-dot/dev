@@ -77,6 +77,115 @@ def post_source_transaction(db: Session, job: PostingJob, user_id: str | None = 
     return job
 
 
+def reverse_journal_entry(db: Session, original: JournalEntry, user_id: str | None = None) -> JournalEntry:
+    """Same logic as accounting.py's POST /journal/{id}/reverse endpoint,
+    factored out so repost_source_transaction() below can reuse it without
+    duplicating the reversal mechanics. Posted journals are never mutated or
+    deleted (docs/architecture.md's "corrections use reversal journals"
+    rule) — this posts an equal-and-opposite entry instead."""
+    reversal = JournalEntry(
+        company_id=original.company_id,
+        entry_number=f"REV-{original.entry_number}",
+        source_module="reversal",
+        source_id=original.id,
+        entry_date=datetime.now(timezone.utc),
+        description=f"Reversal of {original.entry_number}: {original.description}",
+        status="posted",
+    )
+    reversal.lines = [
+        JournalLine(
+            account_id=journal_line.account_id,
+            description=f"Reversal: {journal_line.description or ''}",
+            debit=money(journal_line.credit),
+            credit=money(journal_line.debit),
+        )
+        for journal_line in original.lines
+    ]
+    db.add(reversal)
+    db.flush()
+    create_gl_entries_from_journal(db, reversal, voucher_no=f"REV-{original.entry_number}", voucher_type="reversal")
+    db.add(AuditLog(
+        company_id=original.company_id,
+        user_id=user_id,
+        module="accounting",
+        action="journal_reversed",
+        record_id=original.id,
+        detail=reversal.entry_number,
+    ))
+    return reversal
+
+
+def repost_source_transaction(db: Session, transaction: SourceTransaction, user_id: str | None = None) -> JournalEntry:
+    """Manual re-sync for a source transaction that was edited AFTER it had
+    already posted to the ledger (e.g. correcting a purchase's amounts).
+    post_source_transaction() above is a no-op once ANY journal exists for a
+    source — by design, so a normal re-save never double-posts — but that
+    means an edit's new amounts never reach the GL/VAT on their own. This is
+    the explicit, user-triggered counterpart: reverses the still-active
+    journal for this source (if one exists and isn't already reversed) and
+    posts a fresh one from the transaction's current amounts. Also updates
+    the transaction's TaxLine in place, since ensure_tax_line() only ever
+    creates one and would otherwise leave VAT reporting stale too."""
+    # NOT .first() — every repost's fresh journal keeps the SAME
+    # (source_module, source_id) as the original (build_journal always
+    # stamps it from the transaction, which never changes id), so after one
+    # repost there are already two rows matching this filter. Must find
+    # every one of them and reverse whichever aren't already reversed,
+    # or a second repost could pick the wrong (already-reversed) row via
+    # arbitrary row order and silently skip reversing the real active one.
+    existing_journals = (
+        db.query(JournalEntry)
+        .options(joinedload(JournalEntry.lines))
+        .filter(
+            JournalEntry.company_id == transaction.company_id,
+            JournalEntry.source_module == transaction.module,
+            JournalEntry.source_id == transaction.id,
+        )
+        .all()
+    )
+    if existing_journals:
+        reversed_journal_ids = {
+            row[0]
+            for row in db.query(JournalEntry.source_id)
+            .filter(
+                JournalEntry.company_id == transaction.company_id,
+                JournalEntry.source_module == "reversal",
+                JournalEntry.source_id.in_([j.id for j in existing_journals]),
+            )
+            .all()
+        }
+        for stale_journal in existing_journals:
+            if stale_journal.id not in reversed_journal_ids:
+                reverse_journal_entry(db, stale_journal, user_id)
+
+    journal = build_journal(db, transaction)
+    db.add(journal)
+    db.flush()
+    create_gl_entries_from_journal(db, journal, transaction.reference, transaction.module, transaction.party_name)
+
+    tax_line = (
+        db.query(TaxLine)
+        .filter(TaxLine.company_id == transaction.company_id, TaxLine.source_id == transaction.id)
+        .first()
+    )
+    if tax_line:
+        tax_line.taxable_amount = money(transaction.subtotal)
+        tax_line.tax_amount = money(transaction.vat)
+    else:
+        ensure_tax_line(db, transaction)
+
+    transaction.status = "posted"
+    db.add(AuditLog(
+        company_id=transaction.company_id,
+        user_id=user_id,
+        module=transaction.module,
+        action="reposted_to_ledger",
+        record_id=transaction.id,
+        detail=journal.entry_number,
+    ))
+    return journal
+
+
 def build_journal(db: Session, transaction: SourceTransaction) -> JournalEntry:
     accounts = accounts_by_code(db, transaction.company_id)
     lines: list[JournalLine] = []

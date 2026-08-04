@@ -538,6 +538,12 @@ class StockProductMapping(Base, TimestampMixin):
     vat_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     inc_vat: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     price_outer: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    # False for a row silently auto-created from purchase-line OCR text
+    # (stock_mapping_for_purchase_line / purchase_line_stock_mapping) — the
+    # frontend must show these as "Needs Review", never "Mapped", until a
+    # user actually opens and saves the mapping. Only the explicit save path
+    # (PUT /inventory/mappings/{id} / POST /inventory/mappings) sets this True.
+    mapping_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class StockMovement(Base, TimestampMixin):

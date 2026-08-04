@@ -463,6 +463,13 @@ def ensure_schema_updates() -> None:
                 "vat_amount": "NUMERIC(12, 2) DEFAULT 0",
                 "inc_vat": "NUMERIC(12, 2) DEFAULT 0",
                 "price_outer": "NUMERIC(12, 2) DEFAULT 0",
+                # Existing rows predate this column and were created under
+                # the old all-implicit system — default them to TRUE so
+                # this migration doesn't retroactively relabel already-
+                # curated mappings as "Needs Review". Going forward, the
+                # application code explicitly sets this False on auto-create
+                # and True only on an explicit user save (see models.py).
+                "mapping_confirmed": "BOOLEAN DEFAULT TRUE",
             }
             for column_name, column_type in required_columns.items():
                 if column_name not in existing_columns:

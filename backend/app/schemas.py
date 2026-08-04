@@ -260,6 +260,11 @@ class SourceTransactionCreate(BaseModel):
     lines: list[SourceLineIn]
 
 
+class RepostByReferenceIn(BaseModel):
+    module: str
+    reference: str
+
+
 class SourceLineOut(BaseModel):
     id: str
     description: str
@@ -622,6 +627,11 @@ class StockMappingIn(BaseModel):
 
 class StockMappingOut(StockMappingIn):
     id: str
+    # Output-only — set server-side only when a user explicitly saves via
+    # POST/PUT /inventory/mappings, never from client input. False means
+    # this row was auto-created from purchase-line OCR text and nobody has
+    # actually reviewed it yet.
+    mapping_confirmed: bool = False
 
     model_config = {"from_attributes": True}
 

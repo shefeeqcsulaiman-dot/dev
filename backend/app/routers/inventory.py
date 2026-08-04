@@ -451,6 +451,7 @@ def stock_mapping_for_purchase_line(
             sku=sku or product[:60],
             name=product or sku,
             supplier_name=str(record.get("supplier") or "").strip() or None,
+            mapping_confirmed=False,
         )
         db.add(mapping)
         db.flush()
@@ -534,6 +535,10 @@ def create_mapping(
     else:
         mapping = StockProductMapping(company_id=current_user.company_id, **payload.model_dump())
         db.add(mapping)
+    # Reaching this endpoint at all means a user explicitly saved it — not
+    # client-controlled (not part of StockMappingIn), so it can't be spoofed
+    # by payload content.
+    mapping.mapping_confirmed = True
     db.commit()
     db.refresh(mapping)
     return mapping
@@ -555,6 +560,7 @@ def update_mapping(
         raise HTTPException(status_code=404, detail="Stock mapping not found")
     for field, value in payload.model_dump().items():
         setattr(mapping, field, value)
+    mapping.mapping_confirmed = True
     db.commit()
     db.refresh(mapping)
     return mapping

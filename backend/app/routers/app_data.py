@@ -786,7 +786,14 @@ def export_db_dump(
 
 
 @router.post("")
-@limiter.limit("180/minute")
+# This is the single busiest write endpoint in the app — every module's save
+# goes through it (the "compatibility bridge" architecture). Was 180/minute,
+# which a bulk purchase upload could exceed on its own: each uploaded file
+# fires 3 calls here (save the raw document, extract, re-save after
+# extraction) — a batch of ~60 files tripped 429s that read to users as
+# bulk upload being "restricted". This endpoint isn't a credential-guessing
+# surface like /auth/login, so a much higher ceiling is appropriate.
+@limiter.limit("600/minute")
 async def app_data_action(
     request: Request,
     action: str,
@@ -1273,14 +1280,24 @@ def purchase_line_stock_mapping(
             sku=sku or product[:60],
             name=product or sku,
             supplier_name=str(record.get("supplier") or "").strip() or None,
+            mapping_confirmed=False,
         )
         db.add(mapping)
         db.flush()
-    if product:
-        mapping.name = product
-    supplier = str(record.get("supplier") or "").strip()
-    if supplier:
-        mapping.supplier_name = supplier
+    # Once a user has explicitly confirmed a mapping (saved it from the
+    # Stock Mapping screen), later purchases referencing the same SKU/name
+    # must not silently overwrite the name/supplier they curated — this was
+    # the cause of mappings drifting out of sync with taxflow_name and
+    # showing a false "Mapped" badge from the resulting text mismatch, and
+    # of a user's chosen display name randomly changing on a later upload.
+    # Still-unconfirmed (auto-created) rows keep refreshing from the latest
+    # purchase text, same as before, until someone actually reviews them.
+    if not mapping.mapping_confirmed:
+        if product:
+            mapping.name = product
+        supplier = str(record.get("supplier") or "").strip()
+        if supplier:
+            mapping.supplier_name = supplier
     unit_cost = decimal_value(line.get("unit_cost_before_tax") or line.get("unit_cost") or line.get("cost"))
     if unit_cost > 0:
         mapping.cost = unit_cost

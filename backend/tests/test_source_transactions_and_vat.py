@@ -51,6 +51,112 @@ def test_source_transaction_validation_approval_tax_and_audit(client, auth_heade
     assert len([journal for journal in journals_after_retry if journal["source_id"] == source["id"]]) == 1
 
 
+def test_repost_by_reference_syncs_stale_ledger_after_purchase_edit(client, auth_headers):
+    """Editing a purchase after it's already posted used to leave the
+    original journal/GL permanently stale — post_source_transaction() is a
+    deliberate no-op once ANY journal exists for a source, so a re-save's
+    new amounts never reached the ledger on their own. The manual
+    "Update Ledger" action (POST /source-transactions/repost-by-reference)
+    reverses the stale journal and posts a fresh one matching current
+    amounts, without ever mutating or deleting the original posted entry."""
+    ref = "PUR-REPOST-001"
+    first_save = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={
+            "collection": "purchaseRecords",
+            "record": {
+                "ref": ref,
+                "supplier": "Repost Test Supplier",
+                "net_amount": 100,
+                "tax_amount": 5,
+                "total": 105,
+                "lines": [{"sku": "REPOST-SKU", "product": "Repost Item", "quantity": 1, "unit_cost": 100, "line_total": 100}],
+            },
+        },
+    )
+    assert first_save.status_code == 200, first_save.text
+
+    journals_before = client.get("/api/v1/journal", headers=auth_headers).json()["records"]
+    purchase_journals_before = [j for j in journals_before if j["source_module"] == "purchase"]
+    original = next(j for j in purchase_journals_before if any(Decimal(l["debit"]) == Decimal("100.00") or Decimal(l["credit"]) == Decimal("100.00") for l in j["lines"]))
+    original_count = len(purchase_journals_before)
+
+    # Edit the same purchase — amounts change, but the existing post_source_
+    # transaction() short-circuit means the journal doesn't follow along.
+    second_save = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={
+            "collection": "purchaseRecords",
+            "record": {
+                "ref": ref,
+                "supplier": "Repost Test Supplier",
+                "net_amount": 200,
+                "tax_amount": 10,
+                "total": 210,
+                "lines": [{"sku": "REPOST-SKU", "product": "Repost Item", "quantity": 2, "unit_cost": 100, "line_total": 200}],
+            },
+        },
+    )
+    assert second_save.status_code == 200, second_save.text
+
+    journals_after_edit = client.get("/api/v1/journal", headers=auth_headers).json()["records"]
+    purchase_journals_after_edit = [j for j in journals_after_edit if j["source_module"] == "purchase"]
+    assert len(purchase_journals_after_edit) == original_count  # confirms the bug: no new journal from the edit alone
+    assert purchase_journals_after_edit[0]["id"] == original["id"]
+
+    # Now trigger the manual repost.
+    reposted = client.post(
+        "/api/v1/source-transactions/repost-by-reference",
+        headers=auth_headers,
+        json={"module": "purchase", "reference": ref},
+    )
+    assert reposted.status_code == 200, reposted.text
+    assert reposted.json()["subtotal"] == "200.00"
+
+    all_journals_after = client.get("/api/v1/journal", headers=auth_headers).json()["records"]
+    reversal_journals = [j for j in all_journals_after if j["source_module"] == "reversal" and j["source_id"] == original["id"]]
+    assert len(reversal_journals) == 1, "exactly one reversal must be created, matching the original's lines inverted"
+    reversal = reversal_journals[0]
+    assert sorted((Decimal(l["debit"]), Decimal(l["credit"])) for l in reversal["lines"]) == sorted((Decimal(l["credit"]), Decimal(l["debit"])) for l in original["lines"])
+
+    new_purchase_journals = [j for j in all_journals_after if j["source_module"] == "purchase"]
+    assert len(new_purchase_journals) == original_count + 1, "original stays untouched, a fresh corrected journal is added"
+    fresh = next(j for j in new_purchase_journals if j["id"] != original["id"])
+    assert any(Decimal(l["debit"]) == Decimal("200.00") or Decimal(l["credit"]) == Decimal("200.00") for l in fresh["lines"])
+
+    # The original posted journal itself must be byte-for-byte untouched.
+    original_after = next(j for j in all_journals_after if j["id"] == original["id"])
+    assert original_after["lines"] == original["lines"]
+
+    # VAT reporting must reflect the corrected amount, not the stale original.
+    tax_lines = client.get("/api/v1/tax/lines", headers=auth_headers).json()
+    matching_tax = [t for t in tax_lines if t["source_id"] == reposted.json()["id"]]
+    assert len(matching_tax) == 1
+    assert Decimal(matching_tax[0]["tax_amount"]) == Decimal("10.00")
+
+    # Calling it again with nothing changed must not create yet another reversal.
+    idempotent = client.post(
+        "/api/v1/source-transactions/repost-by-reference",
+        headers=auth_headers,
+        json={"module": "purchase", "reference": ref},
+    )
+    assert idempotent.status_code == 200, idempotent.text
+    journals_final = client.get("/api/v1/journal", headers=auth_headers).json()["records"]
+    reversals_final = [j for j in journals_final if j["source_module"] == "reversal"]
+    assert len(reversals_final) == 2  # one more reversal for the just-posted fresh journal — still exactly one per repost call
+
+
+def test_repost_by_reference_requires_existing_posted_record(client, auth_headers):
+    missing = client.post(
+        "/api/v1/source-transactions/repost-by-reference",
+        headers=auth_headers,
+        json={"module": "purchase", "reference": "PUR-NEVER-EXISTED"},
+    )
+    assert missing.status_code == 404
+
+
 def test_source_transaction_missing_account_rejected(client, auth_headers):
     created = client.post(
         "/api/v1/source-transactions",

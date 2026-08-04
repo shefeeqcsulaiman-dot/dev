@@ -1019,6 +1019,58 @@ function renderPayrollRunRow(employee){
 
 let currentStockMapRow=null;
 
+// Shortcut from Purchase edit / Add Purchase / AI Extraction — jumps to
+// Inventory > Stock Mapping and opens the mapping for this line's product
+// (editing it if one already exists, e.g. auto-created by the purchase's
+// own OCR sync — see backend's stock_mapping_for_purchase_line/
+// purchase_line_stock_mapping — rather than creating a duplicate).
+function mapLineToStock(productName,sku){
+  const name=(productName||'').trim();
+  const code=(sku||'').trim();
+  if(!name&&!code){toast('Enter an item description first','warn');return;}
+  go('inventory');
+  setTimeout(()=>{
+    const mapTab=document.querySelector('#page-inventory .tabs .tab[onclick*="inv-mapping"]');
+    if(mapTab)stab(mapTab,'inv-mapping');
+    setTimeout(()=>{
+      const tbody=document.getElementById('stock-map-tbody');
+      const rows=[...(tbody?.querySelectorAll('tr:not([data-empty-state])')||[])];
+      const match=rows.find(row=>{
+        const rowSku=(row.dataset.stockSku||row.dataset.itemCode||'').toLowerCase();
+        const rowName=(row.children[0]?.textContent||'').trim().toLowerCase();
+        return (code&&rowSku===code.toLowerCase())||(name&&rowName===name.toLowerCase());
+      });
+      if(match){
+        openStockMap(match);
+        toast('Opened existing mapping for review','info');
+      }else{
+        openNewStockMap();
+        const productField=document.getElementById('stock-map-product');
+        if(productField)productField.value=name;
+        const generatedField=document.getElementById('stock-map-generated');
+        if(generatedField)generatedField.value=generateStockMapName(name);
+      }
+    },250);
+  },50);
+}
+
+// Shortcut from the same 3 screens — for a purchase that's already posted
+// to the ledger but was edited afterward (amounts no longer match the
+// posted journal — post_source_transaction() is a deliberate no-op once a
+// journal exists for a source, so a plain re-save never re-syncs it on its
+// own). Reverses the stale journal and posts a fresh one from the current
+// amounts; never touches the original posted entry in place.
+async function updateLedgerForPurchase(reference){
+  const ref=(reference||'').trim();
+  if(!ref){toast('Save this purchase first, then update the ledger','warn');return;}
+  try{
+    await moduleApi('/source-transactions/repost-by-reference',{method:'POST',body:{module:'purchase',reference:ref}});
+    toast('Ledger updated with the current amounts','ok');
+  }catch(err){
+    toast(err.message||'Failed to update ledger','err');
+  }
+}
+
 function openStockMap(btn){
   currentStockMapRow=btn.closest('tr');
   const cells=currentStockMapRow?.querySelectorAll('td')||[];
@@ -1547,8 +1599,13 @@ function renderStockMappingRecord(mapping){
   const name=mapping.name||mapping.taxflow_name||mapping.sku;
   const supplier=mapping.supplier_name||'Not assigned';
   const taxflowName=mapping.taxflow_name||mapping.name||mapping.sku;
-  const tfn=(mapping.taxflow_name||'').trim();
-  const isMapped=Boolean(tfn&&tfn!==mapping.name&&tfn!==mapping.sku);
+  // mapping_confirmed comes from the server (true only once a user has
+  // actually opened and saved this mapping via Save/+ Add Mapping) — do NOT
+  // derive this from a name/taxflow_name text comparison. Rows silently
+  // auto-created from purchase-line OCR text (see backfill_purchase_stock_
+  // movements) start unconfirmed and must read as "Review", never "Mapped",
+  // until someone deliberately reviews and saves them.
+  const isMapped=Boolean(mapping.mapping_confirmed);
   tr.dataset.mappingId=mapping.id||'';
   tr.dataset.stockSku=mapping.sku;
   tr.dataset.salesAccountCode=mapping.sales_account_code||'3000';
@@ -1563,7 +1620,7 @@ function renderStockMappingRecord(mapping){
   tr.dataset.vatAmount=mapping.vat_amount??0;
   tr.dataset.incVat=mapping.inc_vat??0;
   tr.dataset.priceOuter=mapping.price_outer??0;
-  tr.innerHTML=`<td>${escapeHtml(name)}</td><td>${escapeHtml(supplier)}</td><td>${escapeHtml(taxflowName)}</td><td class="mono">${Number(mapping.units_per_outer||1).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td><span class="b ${isMapped?'b-g':'b-a'}">${isMapped?'Mapped':'Not mapped'}</span></td><td data-action-col="1">${stockMapActionsHtml()}</td>`;
+  tr.innerHTML=`<td>${escapeHtml(name)}</td><td>${escapeHtml(supplier)}</td><td>${escapeHtml(taxflowName)}</td><td class="mono">${Number(mapping.units_per_outer||1).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td><span class="b ${isMapped?'b-g':'b-a'}">${isMapped?'Mapped':'Review'}</span></td><td data-action-col="1">${stockMapActionsHtml()}</td>`;
 }
 
 function stockMappingPayloadFromRow(row){
@@ -12041,12 +12098,16 @@ function ensurePurchaseAiEditModal(){
           <div class="purchase-party-box">
             <div class="section-hd">Payment</div>
             <div class="fr2 mb8">
-              <input class="fi" id="pai-term" placeholder="Pay term">
+              <input class="fi" id="pai-term" placeholder="Pay term" onblur="applyPurchaseDueDateFromTerm('pai')">
               <select class="fi" id="pai-pay-method"><option>Cash</option><option>Bank Transfer</option><option>Card</option><option>Cheque</option><option>Online</option></select>
             </div>
             <div class="fr2 mb8">
               <input class="fi" id="pai-pay-account" placeholder="Payment account">
               <input class="fi" id="pai-paid-on" placeholder="Paid on date">
+            </div>
+            <div class="fr2 mb8">
+              <label style="font-size:11px;color:var(--text3);font-weight:600;display:flex;align-items:center">Due Date</label>
+              <input class="fi" type="date" id="pai-due-date">
             </div>
             <input class="fi" id="pai-pay-note" placeholder="Payment reference / note">
           </div>
@@ -12057,7 +12118,7 @@ function ensurePurchaseAiEditModal(){
         </div>
         <div class="purchase-edit-table-wrap">
           <table class="tbl purchase-edit-lines">
-            <thead><tr><th>#</th><th>Item Description</th><th>SKU</th><th>Ledger / Category</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th style="display:none">Disc %</th><th>Disc Amt</th><th>VAT</th><th>Line Total</th><th></th></tr></thead>
+            <thead><tr><th>#</th><th>Item Description</th><th>SKU</th><th>Ledger / Category</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th>Disc %</th><th>Disc Amt</th><th>VAT</th><th>Line Total</th><th></th></tr></thead>
             <tbody id="pai-lines"></tbody>
           </table>
         </div>
@@ -12092,7 +12153,7 @@ function ensurePurchaseAiEditModal(){
           <div class="purchase-summary-box">
             <div class="tot-row"><span>Net Amount</span><input class="fi mono" id="pai-net" readonly></div>
             <div class="tot-row"><span>Discount (-)</span><input class="fi mono" id="pai-discount-label" readonly></div>
-            <div class="tot-row"><span>VAT (+)</span><input class="fi mono" id="pai-vat" placeholder="Tax amount" oninput="calcPurchaseAiEditInvoice()"></div>
+            <div class="tot-row"><span>VAT (+)</span><input class="fi mono" id="pai-vat" placeholder="Tax amount" oninput="_paiVatManuallyEdited=true;calcPurchaseAiEditInvoice()"></div>
             <div class="tot-row"><span>Shipping (+)</span><input class="fi mono" id="pai-shipping" placeholder="Shipping charges" oninput="calcPurchaseAiEditInvoice()"></div>
             <div class="tot-final"><span>Purchase Total</span><input class="fi mono" id="pai-total" readonly></div>
             <div class="tot-row"><span>Paid</span><input class="fi mono" id="pai-paid" placeholder="0.00" oninput="calcPurchaseAiEditInvoice()"></div>
@@ -12102,6 +12163,8 @@ function ensurePurchaseAiEditModal(){
       </div>
       <div class="modal-foot">
         <button class="btn btn-g" onclick="closeM('m-purchase-ai-edit')">Cancel</button>
+        <button class="btn btn-g" title="Map this purchase's first item to a stock item" onclick="mapLineToStock(document.querySelector('#pai-lines .pai-product')?.value,document.querySelector('#pai-lines .pai-sku')?.value)">Map to Stock</button>
+        <button class="btn btn-g" title="Reverse and repost the ledger entry with this purchase's current amounts (only works after it's been saved)" onclick="updateLedgerForPurchase(document.getElementById('pai-invoice')?.value.trim())">Update Ledger</button>
         <button class="btn btn-g" onclick="savePurchaseAiEdit(true)">Save & Next</button>
         <button class="btn btn-p" onclick="savePurchaseAiEdit(false)">Save</button>
       </div>
@@ -12134,6 +12197,7 @@ async function openPurchaseAiEdit(btn){
   document.getElementById('pai-bill-to').value=inv.bill_to||'';
   document.getElementById('pai-location').value=inv.location||'Dubai HQ';
   document.getElementById('pai-term').value=inv.pay_term||'';
+  document.getElementById('pai-due-date').value=inv.due_date||'';
   const body=document.getElementById('pai-lines');
   if(body)body.innerHTML='';
   const lines=Array.isArray(inv.lines)&&inv.lines.length?inv.lines:[{}];
@@ -12141,6 +12205,7 @@ async function openPurchaseAiEdit(btn){
   document.getElementById('pai-discount-type').value=inv.discount_type||'None';
   document.getElementById('pai-discount-value').value=inv.discount_value||inv.discount||0;
   document.getElementById('pai-tax-type').value=inv.tax_type||((purchaseAiNumber(inv.vat_amount)>0)?'VAT 5%':'None');
+  _paiVatManuallyEdited=false;
   document.getElementById('pai-vat').value=inv.vat_amount||0;
   document.getElementById('pai-shipping-details').value=inv.shipping_details||'';
   document.getElementById('pai-shipping').value=inv.shipping||0;
@@ -12236,7 +12301,7 @@ function addPurchaseAiEditLine(line={}){
     <td><input class="fi mono pai-qty" value="${qty||''}" oninput="calcPurchaseAiEditLine(this)" style="min-width:55px"></td>
     <td><select class="fi pai-unit">${unitOptionsHtml(line.unit||line.unit_of_measure||line.uom||'PCS')}</select></td>
     <td><input class="fi mono pai-cost" value="${cost||''}" oninput="calcPurchaseAiEditLine(this)"></td>
-    <td style="display:none"><input class="fi mono pai-line-discount" value="${discPct||''}" oninput="calcPurchaseAiEditLine(this)"></td>
+    <td><input class="fi mono pai-line-discount" value="${discPct||''}" oninput="calcPurchaseAiEditLine(this)" style="min-width:55px"></td>
     <td><input class="fi mono pai-disc-amt" value="${discAmt>0?discAmt.toFixed(2):''}" readonly style="min-width:70px"></td>
     <td><input class="fi mono pai-line-vat" value="${lineVat>0?lineVat.toFixed(2):''}" readonly style="min-width:60px"></td>
     <td><input class="fi mono pai-line-total" value="${lineTotal>0?lineTotal.toFixed(2):''}" oninput="calcPurchaseAiEditInvoice()" style="font-weight:700;color:var(--accent)"></td>
@@ -12251,6 +12316,13 @@ function removePurchaseAiEditLine(btn){
   if(!document.querySelector('#pai-lines tr'))addPurchaseAiEditLine();
   calcPurchaseAiEditInvoice();
 }
+
+// Tracks whether the user has directly typed into the invoice-level VAT
+// field since the last load/tax-type change — once set, recalculation from
+// other field edits (qty/cost/discount/shipping) must not clobber it. Reset
+// on tax-type change (explicit signal the user wants the auto value back)
+// and on loading a different record.
+let _paiVatManuallyEdited=false;
 
 function calcPurchaseAiEditLine(source){
   const row=source?.closest?.('tr')||source;
@@ -12268,6 +12340,7 @@ function calcPurchaseAiEditLine(source){
 }
 
 function calcPurchaseAiEditInvoice(forceTaxRecalc=false){
+  if(forceTaxRecalc)_paiVatManuallyEdited=false;
   document.querySelectorAll('#pai-lines tr').forEach((row,index)=>{
     const lineNo=row.querySelector('.pai-line-no');
     if(lineNo)lineNo.textContent=String(index+1);
@@ -12281,7 +12354,7 @@ function calcPurchaseAiEditInvoice(forceTaxRecalc=false){
   const taxType=document.getElementById('pai-tax-type')?.value||'None';
   const calculatedVat=taxType.includes('5%')&&!taxType.toLowerCase().includes('exempt')?taxable*.05:0;
   const vatField=document.getElementById('pai-vat');
-  if(vatField&&(forceTaxRecalc||document.activeElement!==vatField))vatField.value=calculatedVat.toFixed(2);
+  if(vatField&&(forceTaxRecalc||(!_paiVatManuallyEdited&&document.activeElement!==vatField)))vatField.value=calculatedVat.toFixed(2);
   const vat=parseAmount(vatField?.value);
   const shipping=parseAmount(document.getElementById('pai-shipping')?.value);
   const paid=parseAmount(document.getElementById('pai-paid')?.value);
@@ -12336,6 +12409,7 @@ function savePurchaseAiEdit(next=false){
     bill_to:(document.getElementById('pai-bill-to')?.value||'').trim(),
     location:(document.getElementById('pai-location')?.value||'').trim()||'Dubai HQ',
     pay_term:document.getElementById('pai-term').value,
+    due_date:document.getElementById('pai-due-date')?.value||'',
     subtotal,
     net_amount:subtotal,
     discount_type:document.getElementById('pai-discount-type').value,
@@ -13172,6 +13246,39 @@ function setSelectValue(select,value){
 
 let manualPurchaseEditingRef='';
 
+// Purchase never had a Due Date — only a free-text Pay Term ("Net 30" etc.)
+// that was never converted into an actual date anywhere. Parses the days
+// count out of the term text (handles the fixed mp-term dropdown options
+// and free-typed equivalents in pai-term/pv-pay-term alike) and returns an
+// ISO date string, or '' if the term can't be parsed (never guess a date).
+function calcDueDateFromTerm(termText,baseDateStr){
+  const term=String(termText||'').trim().toLowerCase();
+  if(!term)return '';
+  let days=null;
+  if(/due on receipt|on receipt/.test(term))days=0;
+  else{
+    const m=term.match(/(\d+)/);
+    if(m)days=Number(m[1]);
+  }
+  if(days===null||Number.isNaN(days))return '';
+  const base=baseDateStr?new Date(baseDateStr):new Date();
+  if(Number.isNaN(base.getTime()))return '';
+  base.setDate(base.getDate()+days);
+  return base.toISOString().slice(0,10);
+}
+
+// Wired to each screen's Pay Term field (mp-term/pai-term/pv-pay-term) —
+// only fires when the term is actually changed/left, so it never clobbers
+// a due date the user set manually afterward without touching Pay Term again.
+function applyPurchaseDueDateFromTerm(prefix){
+  const termEl=document.getElementById(prefix==='pv'?'pv-pay-term':`${prefix}-term`);
+  const dateEl=document.getElementById(prefix==='pv'?'pv-date':`${prefix}-date`);
+  const dueEl=document.getElementById(`${prefix}-due-date`);
+  if(!termEl||!dueEl)return;
+  const computed=calcDueDateFromTerm(termEl.value,dateEl?.value);
+  if(computed)dueEl.value=computed;
+}
+
 function calcManualPurchase(){
   const rows=[...document.querySelectorAll('#mp-lines tr')];
   let net=0;
@@ -13299,6 +13406,7 @@ async function saveManualPurchase(){
     status:isReturn?'Return':status,
     location:'Main Store',
     pay_term:document.getElementById('mp-term')?.value||'',
+    due_date:document.getElementById('mp-due-date')?.value||'',
     items:totals.items,
     net_amount:totals.net,
     discount:totals.discount,
@@ -13404,6 +13512,8 @@ function ensurePurchasePreviewModal(){
       <div id="purchase-view-body"></div>
       <div class="modal-foot">
         <button class="btn btn-g" onclick="toast('Preparing purchase PDF...','info')">Export PDF</button>
+        <button class="btn btn-g" title="Map this purchase's first item to a stock item" onclick="mapLineToStock(document.querySelector('#purchase-view-body .pv-product')?.value,document.querySelector('#purchase-view-body .pv-sku')?.value)">Map to Stock</button>
+        <button class="btn btn-g" title="Reverse and repost the ledger entry with this purchase's current amounts (only works after it's been saved)" onclick="updateLedgerForPurchase(document.getElementById('pv-ref')?.value?.trim()||currentPurchaseViewRef)">Update Ledger</button>
         <button class="btn btn-s hidden" id="purchase-view-add-line" onclick="addPurchasePreviewLine()">+ Add Line</button>
         <button class="btn btn-p hidden" id="purchase-view-save" onclick="savePurchasePreviewEdit()">Save Changes</button>
       </div>
@@ -13495,14 +13605,15 @@ function renderPurchaseRecordPreview(purchase,options={}){
         </div>
         <div class="purchase-party-box">
           <div class="section-hd">Payment</div>
-          <div class="fr2 mb8"><input class="fi" id="pv-pay-term" value="${escapeHtml(purchase.pay_term||'')}" placeholder="Pay term" ${editable?'':'readonly'}><input class="fi" id="pv-pay-method" value="${escapeHtml(purchase.payment_method||'')}" placeholder="Payment method" ${editable?'':'readonly'}></div>
+          <div class="fr2 mb8"><input class="fi" id="pv-pay-term" value="${escapeHtml(purchase.pay_term||'')}" placeholder="Pay term" onblur="applyPurchaseDueDateFromTerm('pv')" ${editable?'':'readonly'}><input class="fi" id="pv-pay-method" value="${escapeHtml(purchase.payment_method||'')}" placeholder="Payment method" ${editable?'':'readonly'}></div>
           <div class="fr2 mb8"><input class="fi" id="pv-pay-account" value="${escapeHtml(purchase.payment_account||'')}" placeholder="Payment account" ${editable?'':'readonly'}><input class="fi" id="pv-paid-on" value="${escapeHtml(paidOn)}" placeholder="Paid on date" ${editable?'':'readonly'}></div>
+          <div class="fr2 mb8"><label style="font-size:11px;color:var(--text3);font-weight:600;display:flex;align-items:center">Due Date</label><input class="fi" type="date" id="pv-due-date" value="${escapeHtml(purchase.due_date||'')}" ${editable?'':'readonly'}></div>
           <input class="fi" id="pv-pay-note" value="${escapeHtml(payNote)}" placeholder="Payment reference / note" ${editable?'':'readonly'}>
         </div>
       </div>
       <div class="purchase-edit-table-wrap">
         <table class="tbl purchase-edit-lines">
-          <thead><tr><th>#</th><th>Item Description</th><th>SKU</th><th>Ledger / Category</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th style="display:none">Disc %</th><th>Disc Amt</th><th>VAT</th><th>Line Total</th><th></th></tr></thead>
+          <thead><tr><th>#</th><th>Item Description</th><th>SKU</th><th>Ledger / Category</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th>Disc %</th><th>Disc Amt</th><th>VAT</th><th>Line Total</th><th></th></tr></thead>
           <tbody>
             ${lines.map((line,index)=>{
               const lQty=parseAmount(line.qty||line.quantity||1);
@@ -13518,7 +13629,7 @@ function renderPurchaseRecordPreview(purchase,options={}){
                 <td><input class="fi mono pv-qty" value="${fmt(lQty)}" oninput="calcPurchasePreviewEdit()" ${editable?'':'readonly'}></td>
                 <td><input class="fi pv-unit" value="${escapeHtml(line.unit||'PCS')}" ${editable?'':'readonly'}></td>
                 <td><input class="fi mono pv-cost" value="${fmt(lCost)}" oninput="calcPurchasePreviewEdit()" ${editable?'':'readonly'}></td>
-                <td style="display:none"><input class="fi mono pv-disc-pct" value="${lDiscPct>0?fmt(lDiscPct):''}" placeholder="0" oninput="calcPurchasePreviewEdit()" ${editable?'':'readonly'} style="width:60px"></td>
+                <td><input class="fi mono pv-disc-pct" value="${lDiscPct>0?fmt(lDiscPct):''}" placeholder="0" oninput="calcPurchasePreviewEdit()" ${editable?'':'readonly'} style="width:60px"></td>
                 <td><input class="fi mono pv-disc-amt" value="${lDiscAmt>0?fmt(lDiscAmt):''}" placeholder="0" readonly style="width:80px"></td>
                 <td><input class="fi mono pv-line-vat" value="${lVat>0?fmt(lVat):''}" placeholder="0" readonly style="width:70px"></td>
                 <td><input class="fi mono pv-line-total" value="${fmt(line.total)}" readonly style="font-weight:700;color:var(--accent)"></td>
@@ -13652,6 +13763,7 @@ function savePurchasePreviewEdit(){
     bill_to:document.getElementById('pv-bill-to')?.value||'',
     status:document.getElementById('pv-status')?.value||'Draft',
     pay_term:document.getElementById('pv-pay-term')?.value||'',
+    due_date:document.getElementById('pv-due-date')?.value||'',
     payment_method:document.getElementById('pv-pay-method')?.value||'',
     payment_account:document.getElementById('pv-pay-account')?.value||'',
     paid_on:document.getElementById('pv-paid-on')?.value||'',
@@ -13721,6 +13833,7 @@ function copyPurchaseRecord(btn){
     setFieldValue(document.getElementById('mp-date'),purchase.date||'');
     setFieldValue(document.getElementById('mp-address'),purchase.address||'');
     setSelectValue(document.getElementById('mp-term'),purchase.pay_term||'');
+    setFieldValue(document.getElementById('mp-due-date'),purchase.due_date||'');
     setSelectValue(document.getElementById('mp-discount-type'),purchase.discount_type||'None');
     setFieldValue(document.getElementById('mp-discount'),purchase.discount_value||purchase.discount||0);
     setSelectValue(document.getElementById('mp-tax'),purchase.tax_type||'None');

@@ -146,3 +146,88 @@ def test_exception_center_accepts_manual_exception(client, auth_headers):
     payload = listed.json()
     assert payload["summary"]["high"] >= 1
     assert any(row["source_record"] == "QA-JOB-001" for row in payload["exceptions"])
+
+
+def test_stock_mapping_auto_created_from_purchase_is_unconfirmed(client, auth_headers, db):
+    """A mapping silently auto-created as a side effect of saving a purchase
+    record (no user ever visited Stock Mapping) must read as unconfirmed —
+    the frontend shows this as "Review", never "Mapped" — until a user
+    explicitly saves it via POST/PUT /inventory/mappings."""
+    payload = {
+        "collection": "purchaseRecords",
+        "record": {
+            "ref": "PUR-MAP-CONFIRM-001",
+            "supplier": "Nova Pharma Trading",
+            "net_amount": 100,
+            "tax_amount": 5,
+            "total": 105,
+            "lines": [
+                {
+                    "sku": "MAP-CONFIRM-SKU",
+                    "product": "Auto Mapped Item",
+                    "quantity": 2,
+                    "unit_cost": 50,
+                    "unit_cost_before_tax": 50,
+                    "line_total": 100,
+                }
+            ],
+        },
+    }
+    r = client.post("/api/v1/app-data?action=save", headers=auth_headers, json=payload)
+    assert r.status_code == 200, r.text
+
+    mapping = db.query(StockProductMapping).filter(StockProductMapping.sku == "MAP-CONFIRM-SKU").one()
+    assert mapping.mapping_confirmed is False
+
+    mappings = client.get("/api/v1/inventory/mappings", headers=auth_headers)
+    assert mappings.status_code == 200
+    row = next(m for m in mappings.json() if m["sku"] == "MAP-CONFIRM-SKU")
+    assert row["mapping_confirmed"] is False
+
+    # A second purchase referencing the same SKU with different product text
+    # must still refresh the name (still unconfirmed) — auto-refresh only
+    # stops once a user has explicitly confirmed it.
+    payload2 = {
+        "collection": "purchaseRecords",
+        "record": {
+            "ref": "PUR-MAP-CONFIRM-002",
+            "supplier": "Nova Pharma Trading",
+            "net_amount": 50,
+            "tax_amount": 2.5,
+            "total": 52.5,
+            "lines": [{"sku": "MAP-CONFIRM-SKU", "product": "Renamed Before Confirmation", "quantity": 1, "unit_cost": 50, "line_total": 50}],
+        },
+    }
+    r2 = client.post("/api/v1/app-data?action=save", headers=auth_headers, json=payload2)
+    assert r2.status_code == 200, r2.text
+    db.refresh(mapping)
+    assert mapping.name == "Renamed Before Confirmation"
+    assert mapping.mapping_confirmed is False
+
+    # Explicit user save via PUT /inventory/mappings/{id} confirms it.
+    confirm = client.put(
+        f"/api/v1/inventory/mappings/{mapping.id}",
+        headers=auth_headers,
+        json={"sku": "MAP-CONFIRM-SKU", "name": "User Confirmed Name", "taxflow_name": "User Confirmed Name"},
+    )
+    assert confirm.status_code == 200, confirm.text
+    assert confirm.json()["mapping_confirmed"] is True
+
+    # A third purchase referencing the same SKU must NOT overwrite the name
+    # a user just confirmed.
+    payload3 = {
+        "collection": "purchaseRecords",
+        "record": {
+            "ref": "PUR-MAP-CONFIRM-003",
+            "supplier": "Nova Pharma Trading",
+            "net_amount": 20,
+            "tax_amount": 1,
+            "total": 21,
+            "lines": [{"sku": "MAP-CONFIRM-SKU", "product": "Should Not Overwrite", "quantity": 1, "unit_cost": 20, "line_total": 20}],
+        },
+    }
+    r3 = client.post("/api/v1/app-data?action=save", headers=auth_headers, json=payload3)
+    assert r3.status_code == 200, r3.text
+    db.refresh(mapping)
+    assert mapping.name == "User Confirmed Name"
+    assert mapping.mapping_confirmed is True

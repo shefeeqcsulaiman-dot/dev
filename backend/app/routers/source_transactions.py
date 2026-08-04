@@ -4,11 +4,11 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
-from app.accounting_posting import post_source_transaction
+from app.accounting_posting import PostingError, post_source_transaction, repost_source_transaction
 from app.database import get_db
 from app.dependencies import company_allows_module, get_current_user
 from app.models import Account, AuditLog, PostingJob, SourceTransaction, SourceTransactionLine, User
-from app.schemas import PostingJobOut, SourceTransactionCreate, SourceTransactionOut
+from app.schemas import PostingJobOut, RepostByReferenceIn, SourceTransactionCreate, SourceTransactionOut
 
 
 router = APIRouter(prefix="/source-transactions", tags=["source transactions"])
@@ -141,3 +141,39 @@ def approve_source(
     db.commit()
     db.refresh(job)
     return job
+
+
+@router.post("/repost-by-reference", response_model=SourceTransactionOut)
+def repost_by_reference(
+    payload: RepostByReferenceIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SourceTransaction:
+    """Manual "Update Ledger" action — for a purchase/sale/expense that's
+    already posted, but was edited afterward so the journal/GL no longer
+    matches its current amounts. Looked up by (module, reference) rather
+    than source_id since that's what the calling screens (Purchase edit,
+    AI Extraction) already have on hand."""
+    if not company_allows_module(current_user.company.modules_enabled, payload.module):
+        raise HTTPException(status_code=403, detail=f"The '{payload.module}' module is not enabled for your company")
+    transaction = (
+        db.query(SourceTransaction)
+        .options(joinedload(SourceTransaction.lines))
+        .filter(
+            SourceTransaction.company_id == current_user.company_id,
+            SourceTransaction.module == payload.module,
+            SourceTransaction.reference == payload.reference,
+        )
+        .first()
+    )
+    if not transaction:
+        raise HTTPException(status_code=404, detail="No ledger-linked record found for this reference yet — save it first so it posts automatically.")
+    if transaction.status != "posted":
+        raise HTTPException(status_code=422, detail="This record hasn't posted to the ledger yet — save it first.")
+    try:
+        repost_source_transaction(db, transaction, current_user.id)
+    except PostingError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    db.commit()
+    db.refresh(transaction)
+    return transaction
