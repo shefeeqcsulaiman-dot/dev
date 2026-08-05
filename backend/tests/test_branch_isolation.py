@@ -502,3 +502,110 @@ def test_invoices_endpoint_scoped_by_branch(client, db, auth_headers):
     listed_admin = client.get("/api/v1/invoices", headers=auth_headers)
     numbers_admin = {inv["invoice_number"] for inv in listed_admin.json()}
     assert {"INV-BR-A-001", "INV-BR-B-001"}.issubset(numbers_admin)
+
+
+# ── Phase 7: polish — admin branch filter, serialize() fallback, backfill ──
+
+
+def test_admin_branch_id_filter_scopes_collection(client, db, auth_headers):
+    """The company-wide admin's opt-in ?branch_id= param (the backend half of
+    the branch switcher) narrows any collection down to one branch, without
+    needing that collection in _BRANCH_FILTERED_COLLECTIONS."""
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Filter Branch A"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Filter Branch B"}).json()
+
+    _save_purchase_record(client, auth_headers, "PUR-FILT-A-001", branch_a["id"], "FILT-SKU-A", 1)
+    _save_purchase_record(client, auth_headers, "PUR-FILT-B-001", branch_b["id"], "FILT-SKU-B", 1)
+
+    listed_a = client.get(f"/api/v1/app-data/records/purchaseRecords?branch_id={branch_a['id']}", headers=auth_headers)
+    assert listed_a.status_code == 200, listed_a.text
+    refs_a = {rec["ref"] for rec in listed_a.json()["records"]}
+    assert refs_a == {"PUR-FILT-A-001"}
+
+    listed_unfiltered = client.get("/api/v1/app-data/records/purchaseRecords", headers=auth_headers)
+    refs_unfiltered = {rec["ref"] for rec in listed_unfiltered.json()["records"]}
+    assert {"PUR-FILT-A-001", "PUR-FILT-B-001"}.issubset(refs_unfiltered)
+
+
+def test_branch_employee_cannot_escalate_via_branch_id_query_param(client, db, auth_headers):
+    """A branch-scoped Employee always stays locked to their own branch, even
+    if they pass ?branch_id= pointing at a different branch."""
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Escalate Branch A"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Escalate Branch B"}).json()
+
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_a = Employee(company_id=company_id, employee_no="BR-ESC-A", full_name="Escalate Branch A Staff", branch_id=branch_a["id"])
+    db.add(emp_a)
+    db.commit()
+    headers_a = _grant_role_and_login(client, auth_headers, emp_a.id, "branchtest.esca", ["employees:view"], "Administrator")
+
+    _save_purchase_record(client, auth_headers, "PUR-ESC-A-001", branch_a["id"], "ESC-SKU-A", 1)
+    _save_purchase_record(client, auth_headers, "PUR-ESC-B-001", branch_b["id"], "ESC-SKU-B", 1)
+
+    listed = client.get(f"/api/v1/app-data/records/purchaseRecords?branch_id={branch_b['id']}", headers=headers_a)
+    assert listed.status_code == 200, listed.text
+    refs = {rec["ref"] for rec in listed.json()["records"]}
+    assert refs == {"PUR-ESC-A-001"}
+    assert "PUR-ESC-B-001" not in refs
+
+
+def test_serialize_falls_back_to_row_branch_id(client, db, auth_headers):
+    """A record saved without an explicit branch_id in its JSON body still
+    gets branch_id stamped onto the AppDataRecord row from the writer's own
+    principal.branch_id (existing behavior) — Phase 7 makes that row-level
+    value show up in the API response too, so list-view branch badges have
+    something to read even when the payload itself never carried it."""
+    branch = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Fallback Branch"}).json()
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp = Employee(company_id=company_id, employee_no="BR-FALLBACK", full_name="Fallback Branch Cashier", branch_id=branch["id"])
+    db.add(emp)
+    db.commit()
+    headers = _grant_role_and_login(client, auth_headers, emp.id, "branchtest.fallback", ["employees:view"], "Administrator")
+
+    saved = client.post(
+        "/api/v1/app-data?action=save",
+        headers=headers,
+        json={"collection": "posSales", "record": {"receipt_no": "POS-FALLBACK-001", "id": "POS-FALLBACK-001", "customer": "Walk-in", "subtotal": 10, "vat": 0, "total": 10, "payment_method": "cash", "status": "completed"}},
+    )
+    assert saved.status_code == 200, saved.text
+
+    listed_admin = client.get("/api/v1/app-data/records/posSales", headers=auth_headers)
+    record = next(rec for rec in listed_admin.json()["records"] if rec.get("receipt_no") == "POS-FALLBACK-001")
+    assert record.get("branch_id") == branch["id"]
+
+
+def test_employees_collection_backfills_branch_id_from_legacy_name(client, db, auth_headers):
+    """Legacy "employees" records created before app.js's employee form
+    started resolving branch_id by name (Phase 1) only ever got the
+    free-text branch name saved. Listing the collection should lazily and
+    idempotently backfill branch_id by matching that name against a real
+    Branch row."""
+    branch = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Backfill Branch"}).json()
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+
+    # Simulate a legacy record: JSON payload has the branch NAME but no
+    # branch_id, same shape app.js wrote before Phase 1.
+    saved = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={
+            "collection": "employees",
+            "record": {"id": "EMP-BACKFILL-001", "name": "Legacy Employee", "branch": "Backfill Branch", "department": "Operations"},
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    row = db.query(AppDataRecord).filter(AppDataRecord.company_id == company_id, AppDataRecord.record_key == "EMP-BACKFILL-001", AppDataRecord.collection == "employees").first()
+    assert row is not None
+    assert row.branch_id is None
+
+    listed = client.get("/api/v1/app-data/records/employees", headers=auth_headers)
+    assert listed.status_code == 200, listed.text
+    record = next(rec for rec in listed.json()["records"] if rec.get("id") == "EMP-BACKFILL-001")
+    assert record.get("branch_id") == branch["id"]
+
+    db.refresh(row)
+    assert row.branch_id == branch["id"]

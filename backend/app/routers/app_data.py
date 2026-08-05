@@ -36,6 +36,7 @@ from app.models import (
     AppDataRecord,
     AuditLog,
     AuditLogDetail,
+    Branch,
     Company,
     Employee,
     GeneralLedgerEntry,
@@ -280,11 +281,60 @@ def record_key(collection: str, record: dict[str, Any]) -> str | None:
     return None
 
 
+def _backfill_employee_branch_ids(db: Session, company_id: str) -> None:
+    """One-time, idempotent: attach a real branch_id to "employees" rows
+    that predate the branch-name lookup app.js's employee form has done at
+    save time since Branch Management Phase 1 (frontend/public/taxflow/
+    src/app.js ~line 711) — those legacy rows only ever got the free-text
+    branch/location name. Runs lazily on list; rows that already have a
+    branch_id are skipped, so repeat calls are cheap no-ops."""
+    branches = db.query(Branch.id, Branch.name).filter(Branch.company_id == company_id).all()
+    if not branches:
+        return
+    by_name = {name.strip().lower(): bid for bid, name in branches if name}
+    rows = (
+        db.query(AppDataRecord)
+        .filter(
+            AppDataRecord.company_id == company_id,
+            AppDataRecord.collection == "employees",
+            AppDataRecord.branch_id.is_(None),
+        )
+        .all()
+    )
+    if not rows:
+        return
+    changed = False
+    for row in rows:
+        try:
+            payload = json.loads(row.payload or "{}")
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        name = str(payload.get("branch") or payload.get("location") or "").strip().lower()
+        matched = by_name.get(name)
+        if matched:
+            row.branch_id = matched
+            changed = True
+    if changed:
+        db.commit()
+
+
 def serialize(record: AppDataRecord) -> dict[str, Any]:
     try:
-        return json.loads(record.payload)
+        data = json.loads(record.payload)
     except json.JSONDecodeError:
         return {}
+    # AppDataRecord.branch_id (the authoritative attribution, stamped at
+    # write time from the payload or the writer's principal — see
+    # app_data_action()) isn't always mirrored into the JSON payload itself,
+    # so callers reading the payload alone (branch badges in list views,
+    # Phase 7) would see nothing for records created without an explicit
+    # branch_id in the body. Surface the row's value as a fallback, without
+    # clobbering an explicit payload value.
+    if isinstance(data, dict) and record.branch_id and not data.get("branch_id"):
+        data["branch_id"] = record.branch_id
+    return data
 
 
 @router.get("/records/{collection}")
@@ -292,6 +342,7 @@ def list_collection_records(
     collection: str,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    branch_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
 ) -> dict[str, object]:
@@ -305,14 +356,24 @@ def list_collection_records(
     # why this is an explicit allowlist, not blanket filtering).
     company = resolve_principal_company(principal, db)
     assert_collection_module_enabled(company, collection)
+    if collection == "employees":
+        _backfill_employee_branch_ids(db, principal.company_id)
     base_filters = [
         AppDataRecord.company_id == principal.company_id,
         AppDataRecord.collection == collection,
     ]
     if principal.branch_id and collection in _BRANCH_FILTERED_COLLECTIONS:
+        # Branch-scoped Employee — always locked to their own branch,
+        # regardless of any ?branch_id= passed in (an explicit param here
+        # could otherwise be used to peek at another branch's records).
         base_filters.append(
             (AppDataRecord.branch_id == principal.branch_id) | (AppDataRecord.branch_id.is_(None))
         )
+    elif branch_id:
+        # Company-wide viewer (admin) explicitly asking to see one branch —
+        # Phase 7 branch switcher. Opt-in, so it applies to any collection,
+        # not just the _BRANCH_FILTERED_COLLECTIONS allowlist above.
+        base_filters.append(AppDataRecord.branch_id == branch_id)
     total = db.query(func.count(AppDataRecord.id)).filter(*base_filters).scalar() or 0
     rows = (
         db.query(AppDataRecord)
@@ -401,6 +462,7 @@ def bootstrap(
         if cached is not None:
             return cached
 
+    _backfill_employee_branch_ids(db, principal.company_id)
     cap = get_settings().bootstrap_record_cap
     allowed_collections = _allowed_bootstrap_collections(principal)
     # Collections with large record counts are fetched with DB-level LIMIT to avoid
