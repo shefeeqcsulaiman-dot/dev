@@ -12101,7 +12101,7 @@ function ensurePurchaseAiEditModal(){
             <label>Supplier TRN<input class="fi mono" id="pai-supplier-trn" placeholder="15-digit TRN"></label>
             <label>Status<select class="fi" id="pai-status"><option>Valid</option><option>Review</option><option>Error</option></select></label>
             <label>Date<input class="fi" id="pai-date" placeholder="YYYY-MM-DD"></label>
-            <label>Location<input class="fi" id="pai-location" placeholder="e.g. Dubai HQ" list="pai-location-list"><datalist id="pai-location-list"></datalist></label>
+            <label>Location<input class="fi" id="pai-location" placeholder="Branch or store name" list="pai-location-list"><datalist id="pai-location-list"></datalist></label>
           </div>
         </div>
         <div class="purchase-party-grid">
@@ -12211,7 +12211,7 @@ async function openPurchaseAiEdit(btn){
   document.getElementById('pai-supplier-trn').value=inv.supplier_trn||'';
   document.getElementById('pai-address').value=inv.address||'';
   document.getElementById('pai-bill-to').value=inv.bill_to||'';
-  document.getElementById('pai-location').value=inv.location||'Dubai HQ';
+  document.getElementById('pai-location').value=inv.location||'';
   document.getElementById('pai-term').value=inv.pay_term||'';
   document.getElementById('pai-due-date').value=inv.due_date||'';
   const body=document.getElementById('pai-lines');
@@ -12423,7 +12423,7 @@ function savePurchaseAiEdit(next=false){
     supplier_trn:(document.getElementById('pai-supplier-trn')?.value||'').trim(),
     address:document.getElementById('pai-address').value.trim(),
     bill_to:(document.getElementById('pai-bill-to')?.value||'').trim(),
-    location:(document.getElementById('pai-location')?.value||'').trim()||'Dubai HQ',
+    location:(document.getElementById('pai-location')?.value||'').trim(),
     pay_term:document.getElementById('pai-term').value,
     due_date:document.getElementById('pai-due-date')?.value||'',
     subtotal,
@@ -13141,7 +13141,7 @@ function mergePurchaseRecords(existing={},incoming={}){
     supplier:incoming.supplier||existing.supplier,
     address:incoming.address||existing.address||'',
     date:incoming.date||existing.date||'',
-    location:incoming.location||existing.location||'Main Store',
+    location:incoming.location||existing.location||'',
     lines:mergedLines
   };
   const existingOnlyTax=Math.max(0,parseAmount(existing.tax_amount||existing.vat_amount));
@@ -13420,7 +13420,7 @@ async function saveManualPurchase(){
     address:document.getElementById('mp-address')?.value||'',
     date:document.getElementById('mp-date')?.value||'',
     status:isReturn?'Return':status,
-    location:'Main Store',
+    location:'',
     pay_term:document.getElementById('mp-term')?.value||'',
     due_date:document.getElementById('mp-due-date')?.value||'',
     items:totals.items,
@@ -13610,7 +13610,7 @@ function renderPurchaseRecordPreview(purchase,options={}){
           <label>Supplier TRN<input class="fi mono" id="pv-supplier-trn" value="${escapeHtml(supplierTrn)}" placeholder="15-digit TRN" ${editable?'':'readonly'} style="${supplierTrn&&supplierTrn.length!==15?'border-color:var(--red)':''}"></label>
           <label>Status<select class="fi" id="pv-status" ${editable?'':'disabled'}><option${(purchase.status||'Draft')==='Draft'?' selected':''}>Draft</option><option${(purchase.status||'')==='Pending Payment'?' selected':''}>Pending Payment</option><option${(purchase.status||'')==='Paid'?' selected':''}>Paid</option><option${(purchase.status||'')==='Valid'?' selected':''}>Valid</option><option${(purchase.status||'')==='Received'?' selected':''}>Received</option></select></label>
           <label>Date<input class="fi" id="pv-date" value="${escapeHtml(purchase.date||'')}" ${editable?'':'readonly'}></label>
-          <label>Location<input class="fi" id="pv-location" value="${escapeHtml(purchase.location||'Main Store')}" ${editable?'':'readonly'}></label>
+          <label>Location<input class="fi" id="pv-location" value="${escapeHtml(purchase.location||'')}" ${editable?'':'readonly'}></label>
         </div>
       </div>
       <div class="purchase-party-grid">
@@ -13774,7 +13774,7 @@ function savePurchasePreviewEdit(){
     supplier:document.getElementById('pv-supplier')?.value?.trim()||'Supplier',
     supplier_trn:document.getElementById('pv-supplier-trn')?.value?.trim()||'',
     date:document.getElementById('pv-date')?.value||'',
-    location:document.getElementById('pv-location')?.value||'Main Store',
+    location:document.getElementById('pv-location')?.value||'',
     address:document.getElementById('pv-address')?.value||'',
     bill_to:document.getElementById('pv-bill-to')?.value||'',
     status:document.getElementById('pv-status')?.value||'Draft',
@@ -21382,6 +21382,14 @@ function saveBusinessLocations(){
 }
 
 function getBusinessLocationNames(){
+  // Prefer the company's real Branch rows (Settings > Departments & Branches,
+  // backend/app/routers/branches.py) over the legacy taxflow_biz_locations
+  // localStorage list — that older store has no management UI wired up
+  // anywhere in index.html, so it can never reflect a real company's actual
+  // locations, only whatever demo/placeholder names happened to end up in it.
+  if(typeof _branchList!=='undefined'&&_branchList.length){
+    return _branchList.filter(b=>b.status!=='Inactive').map(b=>b.name);
+  }
   return getBusinessLocations().map(l=>l.name);
 }
 

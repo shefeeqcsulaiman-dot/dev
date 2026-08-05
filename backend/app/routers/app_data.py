@@ -2302,7 +2302,7 @@ def openai_purchase_pdf_max_pages() -> int:
 
 
 def call_claude_invoice_extractor(api_key: str, parts: list[dict[str, Any]]) -> dict[str, Any]:
-    model = os.environ.get("ANTHROPIC_PURCHASE_MODEL", "claude-sonnet-4-6").strip() or "claude-sonnet-4-6"
+    model = os.environ.get("ANTHROPIC_PURCHASE_MODEL", "claude-sonnet-5").strip() or "claude-sonnet-5"
     # Convert OpenAI-style content parts to Anthropic format
     anthropic_content: list[dict[str, Any]] = []
     for part in parts:
@@ -2476,7 +2476,7 @@ def _extract_sales_with_ai(content: bytes, ext: str, name: str) -> list[dict[str
                 elif part.get("type") == "text":
                     anthropic_content.append({"type": "text", "text": part["text"]})
             anthropic_content.append({"type": "text", "text": SALES_INVOICE_EXTRACTION_PROMPT})
-            model = os.environ.get("ANTHROPIC_PURCHASE_MODEL", "claude-sonnet-4-6").strip() or "claude-sonnet-4-6"
+            model = os.environ.get("ANTHROPIC_PURCHASE_MODEL", "claude-sonnet-5").strip() or "claude-sonnet-5"
             payload = {"model": model, "max_tokens": 4096, "temperature": 0, "messages": [{"role": "user", "content": anthropic_content}]}
             import time as _time
             for attempt in range(3):
