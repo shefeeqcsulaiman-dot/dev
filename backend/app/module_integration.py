@@ -51,6 +51,7 @@ def sync_sales_invoice_accounting(db: Session, invoice: Invoice, user_id: str | 
         total=invoice.total,
         lines=lines,
         default_account_code="3000",
+        branch_id=invoice.branch_id,
     )
     approve_and_post_source(db, tx, user_id)
     refresh_corporate_tax_from_posted_sources(db, invoice.company_id)
@@ -67,6 +68,7 @@ def sync_purchase_accounting(
     total: Decimal,
     lines: list[dict[str, Any]] | None = None,
     user_id: str | None = None,
+    branch_id: str | None = None,
 ) -> SourceTransaction:
     tx = upsert_source_transaction(
         db,
@@ -79,6 +81,7 @@ def sync_purchase_accounting(
         total=total,
         lines=lines,
         default_account_code="4000",
+        branch_id=branch_id,
     )
     approve_and_post_source(db, tx, user_id)
     refresh_corporate_tax_from_posted_sources(db, company_id)
@@ -96,6 +99,7 @@ def upsert_source_transaction(
     total: Decimal,
     lines: list[dict[str, Any]] | None,
     default_account_code: str,
+    branch_id: str | None = None,
 ) -> SourceTransaction:
     tx = (
         db.query(SourceTransaction)
@@ -111,6 +115,8 @@ def upsert_source_transaction(
         db.add(tx)
         db.flush()
     tx.party_name = party_name
+    if branch_id is not None:
+        tx.branch_id = branch_id
     tx.subtotal = money(subtotal)
     tx.vat = money(vat)
     tx.total = money(total)

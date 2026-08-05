@@ -88,7 +88,12 @@
   <div id="err" class="error"></div>
   <div class="field">
     <label for="email">Your email id</label>
-    <input id="email" type="email" placeholder="admin@taxflowapp.com" autocomplete="username">
+    <!-- type="text", not "email" — signIn() falls back to /hr/login for a
+         branch/HRMS sub-user, whose username isn't necessarily email-shaped.
+         type="email"'s native browser validation blocked the form from ever
+         submitting for those users, so the JS fallback never even ran
+         (Branch Management Phase 6). -->
+    <input id="email" type="text" placeholder="admin@taxflowapp.com or username" autocomplete="username">
   </div>
   <div class="field last">
     <label for="password">Password</label>

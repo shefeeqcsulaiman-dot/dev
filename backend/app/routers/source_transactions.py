@@ -52,6 +52,7 @@ def create_source(
         raise HTTPException(status_code=403, detail=f"The '{payload.module}' module is not enabled for your company")
     transaction = SourceTransaction(
         company_id=current_user.company_id,
+        branch_id=payload.branch_id,
         module=payload.module,
         reference=payload.reference,
         party_name=payload.party_name,

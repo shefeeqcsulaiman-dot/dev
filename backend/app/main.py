@@ -446,6 +446,11 @@ def ensure_schema_updates() -> None:
                 )
         if "company_locations" in table_names:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_company_locations_branch_id ON company_locations (branch_id)"))
+        if "attendance_sessions" in table_names:
+            existing_columns = {column["name"] for column in inspector.get_columns("attendance_sessions")}
+            if "branch_id" not in existing_columns:
+                connection.execute(text("ALTER TABLE attendance_sessions ADD COLUMN branch_id VARCHAR(36)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_attendance_sessions_branch_id ON attendance_sessions (branch_id)"))
         if "biometric_devices" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("biometric_devices")}
             required_columns = {
@@ -497,6 +502,32 @@ def ensure_schema_updates() -> None:
                 connection.execute(
                     text("CREATE UNIQUE INDEX IF NOT EXISTS uq_invoice_company_number ON invoices (company_id, invoice_number)")
                 )
+            existing_columns = {column["name"] for column in inspector.get_columns("invoices")}
+            if "branch_id" not in existing_columns:
+                connection.execute(text("ALTER TABLE invoices ADD COLUMN branch_id VARCHAR(36)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_invoices_branch_id ON invoices (branch_id)"))
+        for branch_scoped_table in ("journal_entries", "general_ledger_entries", "source_transactions"):
+            if branch_scoped_table in table_names:
+                existing_columns = {column["name"] for column in inspector.get_columns(branch_scoped_table)}
+                if "branch_id" not in existing_columns:
+                    connection.execute(text(f"ALTER TABLE {branch_scoped_table} ADD COLUMN branch_id VARCHAR(36)"))
+                connection.execute(text(
+                    f"CREATE INDEX IF NOT EXISTS ix_{branch_scoped_table}_branch_id ON {branch_scoped_table} (branch_id)"
+                ))
+        if "audit_logs" in table_names:
+            existing_columns = {column["name"] for column in inspector.get_columns("audit_logs")}
+            if "employee_id" not in existing_columns:
+                connection.execute(text("ALTER TABLE audit_logs ADD COLUMN employee_id VARCHAR(36)"))
+        if "app_data_records" in table_names:
+            existing_columns = {column["name"] for column in inspector.get_columns("app_data_records")}
+            if "branch_id" not in existing_columns:
+                connection.execute(text("ALTER TABLE app_data_records ADD COLUMN branch_id VARCHAR(36)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_app_data_records_branch_id ON app_data_records (branch_id)"))
+        if "stock_movements" in table_names:
+            existing_columns = {column["name"] for column in inspector.get_columns("stock_movements")}
+            if "branch_id" not in existing_columns:
+                connection.execute(text("ALTER TABLE stock_movements ADD COLUMN branch_id VARCHAR(36)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_stock_movements_branch_id ON stock_movements (branch_id)"))
         if "accounts" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("accounts")}
             required_columns = {

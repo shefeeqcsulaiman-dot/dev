@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_current_user, get_db
+from app.dependencies import Principal, get_current_principal, get_current_user, get_db
 from app.models import Company, User, uuid as _new_uuid
 from app.schemas import CompanyOut, CompanyUpdate
 
@@ -30,9 +30,15 @@ def _resolve_company(current_user: User, db: Session) -> "Company | None":
 def current_company(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(get_current_principal),
 ):
-    company = _resolve_company(current_user, db)
+    # Widened to Employee/branch principals in Branch Management Phase 6 —
+    # pos.html's checkAuth() needs this for currency/company-name display,
+    # and read-only company info isn't sensitive enough to keep admin-only.
+    if principal.is_admin:
+        company = _resolve_company(principal.user, db)
+    else:
+        company = db.query(Company).filter(Company.id == principal.company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="No company found")
     # This response can carry a large base64 logo, and is fetched on every page

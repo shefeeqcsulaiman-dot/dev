@@ -572,7 +572,7 @@ button{cursor:pointer;border:none;background:none;}
     <p>Enter your credentials to open the POS terminal.</p>
     <form onsubmit="posLogin(event)">
       <label>Email</label>
-      <input type="email" id="pos-login-email" placeholder="you@company.com" required autocomplete="email">
+      <input type="text" id="pos-login-email" placeholder="you@company.com or username" required autocomplete="username">
       <label>Password</label>
       <input type="password" id="pos-login-pass" placeholder="••••••••" required autocomplete="current-password">
       <div class="pos-auth-err" id="pos-login-err"></div>
@@ -1062,10 +1062,13 @@ let POS_CURRENCY = 'AED';
 async function checkAuth(){
   if(!TOKEN()){ document.getElementById('pos-auth').style.display='flex'; return false; }
   try{
-    const me = await api('/auth/me');
-    if(me.company?.name) localStorage.setItem('taxflow_company_name', me.company.name);
+    // /auth/whoami (not /auth/me) works for both an admin User token and an
+    // Employee/branch-login token — /auth/me is User-only and would 401 an
+    // Employee out of POS entirely. See Branch Management Phase 6.
+    await api('/auth/whoami');
     try{
       const company = await api('/companies/current');
+      if(company.name) localStorage.setItem('taxflow_company_name', company.name);
       POS_CURRENCY = company.currency || 'AED';
       const curEl=document.getElementById('bot-total-cur');
       if(curEl)curEl.textContent=POS_CURRENCY;
@@ -1081,15 +1084,29 @@ async function posLogin(e){
   const pass=document.getElementById('pos-login-pass')?.value||'';
   btn.disabled=true; btn.textContent='Signing in…'; err.style.display='none';
   try{
+    let token=null;
     const res=await fetch(APIBASE+'/auth/login',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({email,password:pass}),
     });
     const data=await res.json();
-    if(!res.ok) throw new Error(data.detail||'Login failed');
-    localStorage.setItem('taxflow_token', data.access_token);
-    if(data.company_name) localStorage.setItem('taxflow_company_name', data.company_name);
+    if(res.ok&&data.access_token){
+      token=data.access_token;
+    }else{
+      // Not a TaxFlow admin account — try as a branch/HRMS sub-user
+      // (Employee RBAC login, same identity used by login.html's own
+      // fallback and /ess). Username is unique platform-wide.
+      const hrRes=await fetch(APIBASE+'/hr/login',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({username:email,password:pass}),
+      });
+      const hrData=await hrRes.json();
+      if(!hrRes.ok||!hrData.access_token) throw new Error(data.detail||hrData.detail||'Login failed');
+      token=hrData.access_token;
+    }
+    localStorage.setItem('taxflow_token', token);
     document.getElementById('pos-auth').style.display='none';
     btn.textContent='Sign In'; btn.disabled=false;
     const ok=await checkAuth();

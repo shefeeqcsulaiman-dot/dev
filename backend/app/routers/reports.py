@@ -9,6 +9,7 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 import app.cache as cache
+from app.auth_principal import Principal, require_principal_permission
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.limiter import limiter
@@ -466,13 +467,24 @@ def debug_purchase(db: Session = Depends(get_db), current_user: User = Depends(g
 
 @router.get("/trial-balance")
 @limiter.limit("30/minute")
-def trial_balance(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
-    company_id = current_user.company_id
-    cached = cache.get(f"trial_balance:{company_id}")
+def trial_balance(
+    request: Request,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("reports:view")),
+) -> dict[str, Any]:
+    company_id = principal.company_id
+    branch_id = principal.branch_id
+    # Branch Management, Phase 3: a branch-assigned employee sees only their
+    # branch's posted journal entries (plus branch-less legacy data); the
+    # company admin (branch_id always None) sees everything, as before.
+    # Cache key includes branch_id so one branch's result is never served
+    # to another branch or to the unscoped company-wide view.
+    cache_key = f"trial_balance:{company_id}:{branch_id or 'all'}"
+    cached = cache.get(cache_key)
     if cached is not None:
         return cached
-    result = {"status": "ready", "source": "posted journal entries", "rows": trial_balance_rows(db, company_id)}
-    cache.set(f"trial_balance:{company_id}", result, ttl=120)
+    result = {"status": "ready", "source": "posted journal entries", "rows": trial_balance_rows(db, company_id, branch_id)}
+    cache.set(cache_key, result, ttl=120)
     return result
 
 
@@ -684,8 +696,8 @@ def tax_line_breakdown(db: Session, company_id: str, direction: str) -> dict[str
     return result
 
 
-def _posted_journal_line_totals(db: Session, company_id: str):
-    return (
+def _posted_journal_line_totals(db: Session, company_id: str, branch_id: str | None = None):
+    query = (
         db.query(
             JournalLine.account_id.label("account_id"),
             func.coalesce(func.sum(JournalLine.debit), 0).label("debit"),
@@ -693,9 +705,13 @@ def _posted_journal_line_totals(db: Session, company_id: str):
         )
         .join(JournalEntry, JournalEntry.id == JournalLine.journal_id)
         .filter(JournalEntry.company_id == company_id, JournalEntry.status == "posted")
-        .group_by(JournalLine.account_id)
-        .subquery()
     )
+    if branch_id:
+        # NULL branch_id = predates Branch Management / no branch tagged —
+        # stays visible to a branch-scoped viewer rather than vanishing,
+        # same rule as attendance filtering (Phase 2).
+        query = query.filter((JournalEntry.branch_id == branch_id) | (JournalEntry.branch_id.is_(None)))
+    return query.group_by(JournalLine.account_id).subquery()
 
 
 def _opening_balance_dr_cr(opening_balance: Any, opening_balance_type: Any) -> tuple[Decimal, Decimal]:
@@ -705,8 +721,8 @@ def _opening_balance_dr_cr(opening_balance: Any, opening_balance_type: Any) -> t
     return ob_value, Decimal("0.00")
 
 
-def trial_balance_rows(db: Session, company_id: str) -> list[dict[str, str]]:
-    jl_totals = _posted_journal_line_totals(db, company_id)
+def trial_balance_rows(db: Session, company_id: str, branch_id: str | None = None) -> list[dict[str, str]]:
+    jl_totals = _posted_journal_line_totals(db, company_id, branch_id)
     rows = (
         db.query(Account.code, Account.name, Account.opening_balance, Account.opening_balance_type, jl_totals.c.debit, jl_totals.c.credit)
         .outerjoin(jl_totals, jl_totals.c.account_id == Account.id)

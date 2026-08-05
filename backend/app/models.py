@@ -85,6 +85,7 @@ class Invoice(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     customer_name: Mapped[str] = mapped_column(String(160), nullable=False)
     invoice_number: Mapped[str] = mapped_column(String(40), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default=InvoiceStatus.draft.value)
@@ -177,6 +178,7 @@ class JournalEntry(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     entry_number: Mapped[str] = mapped_column(String(40), nullable=False)
     source_module: Mapped[str] = mapped_column(String(60), default="manual")
     source_id: Mapped[str | None] = mapped_column(String(36), index=True)
@@ -262,6 +264,7 @@ class GeneralLedgerEntry(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     entry_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     voucher_no: Mapped[str] = mapped_column(String(60), nullable=False)
     voucher_type: Mapped[str] = mapped_column(String(80), nullable=False)
@@ -324,6 +327,7 @@ class SourceTransaction(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     module: Mapped[str] = mapped_column(String(60), nullable=False)
     reference: Mapped[str] = mapped_column(String(80), nullable=False)
     party_name: Mapped[str | None] = mapped_column(String(160))
@@ -553,6 +557,7 @@ class StockMovement(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     mapping_id: Mapped[str] = mapped_column(ForeignKey("stock_product_mappings.id"), nullable=False)
     warehouse_id: Mapped[str | None] = mapped_column(ForeignKey("warehouses.id"))
     movement_type: Mapped[str] = mapped_column(String(40), nullable=False)
@@ -700,6 +705,7 @@ class AppDataRecord(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     collection: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
     record_key: Mapped[str | None] = mapped_column(String(160), index=True)
     payload: Mapped[str] = mapped_column(Text, nullable=False)
@@ -711,6 +717,12 @@ class AuditLog(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
     user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    # Separate FK for an Employee-principal actor (HRMS sub-user, e.g. a
+    # branch login writing POS/purchase data — Branch Management Phase 4) —
+    # kept distinct from user_id (-> users.id) rather than relaxing that FK,
+    # since exactly one of the two is ever set depending on who acted.
+    # Mirrors LeaveRequest.approved_by/approved_by_employee_id.
+    employee_id: Mapped[str | None] = mapped_column(ForeignKey("employees.id"))
     module: Mapped[str] = mapped_column(String(60), nullable=False)
     action: Mapped[str] = mapped_column(String(80), nullable=False)
     record_id: Mapped[str | None] = mapped_column(String(36))
@@ -1064,6 +1076,7 @@ class AttendanceSession(Base, TimestampMixin):
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
     employee_id: Mapped[str] = mapped_column(ForeignKey("employees.id"), index=True, nullable=False)
     location_id: Mapped[str | None] = mapped_column(ForeignKey("company_locations.id"))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     check_in: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     check_out: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     check_in_lat: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))

@@ -85,6 +85,7 @@ def reverse_journal_entry(db: Session, original: JournalEntry, user_id: str | No
     rule) — this posts an equal-and-opposite entry instead."""
     reversal = JournalEntry(
         company_id=original.company_id,
+        branch_id=original.branch_id,
         entry_number=f"REV-{original.entry_number}",
         source_module="reversal",
         source_id=original.id,
@@ -229,6 +230,7 @@ def build_journal(db: Session, transaction: SourceTransaction) -> JournalEntry:
 
     journal = JournalEntry(
         company_id=transaction.company_id,
+        branch_id=transaction.branch_id,
         entry_number=f"AUTO-{transaction.reference}",
         source_module=transaction.module,
         source_id=transaction.id,
@@ -306,6 +308,7 @@ def create_gl_entries_from_journal(
         db.add(
             GeneralLedgerEntry(
                 company_id=journal.company_id,
+                branch_id=journal.branch_id,
                 entry_date=journal.entry_date,
                 voucher_no=voucher_no or journal.entry_number,
                 voucher_type=voucher_type or journal.source_module,

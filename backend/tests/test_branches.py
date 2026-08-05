@@ -7,6 +7,22 @@ filtering is added in this phase — see the plan file for later phases.
 import json
 
 from app.models import Employee
+from tests.conftest import ensure_user
+
+
+def _fresh_tenant_headers(client, db, trn_suffix):
+    # This test's migration assertion requires a company that has never had
+    # any Branch rows created — auth_headers's tenant is shared across the
+    # whole test session (other test files/tests create branches on it too),
+    # so a dedicated fresh tenant is needed here rather than reusing it.
+    ensure_user(db, f"branch-migrate-{trn_suffix}@taxflowqa.com", f"90000000009{trn_suffix}", role="admin")
+    db.commit()
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": f"branch-migrate-{trn_suffix}@taxflowqa.com", "password": "admin123"},
+    )
+    assert login.status_code == 200, login.text
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
 def test_branch_crud(client, auth_headers):
@@ -57,10 +73,15 @@ def test_branch_delete_unassigns_rather_than_orphans_employee(client, db, auth_h
     assert emp.branch_id is None
 
 
-def test_legacy_company_branches_json_migrates_on_first_list(client, auth_headers):
+def test_legacy_company_branches_json_migrates_on_first_list(client, db):
+    # Needs a tenant that has never had a Branch row created on it (the
+    # migration is a permanent no-op once any Branch exists for the
+    # company) — auth_headers's tenant is shared across the whole test
+    # session and other tests do create branches on it, so use a fresh one.
+    headers = _fresh_tenant_headers(client, db, "migrate01")
     updated = client.put(
         "/api/v1/companies/current",
-        headers=auth_headers,
+        headers=headers,
         json={"branches": json.dumps([
             {"id": "br-1", "name": "Business Bay", "code": "BB", "city": "Dubai", "status": "Active"},
             {"id": "br-2", "name": "Sharjah", "code": "SHJ", "city": "Sharjah", "status": "Inactive"},
@@ -68,7 +89,7 @@ def test_legacy_company_branches_json_migrates_on_first_list(client, auth_header
     )
     assert updated.status_code == 200
 
-    listed = client.get("/api/v1/branches", headers=auth_headers)
+    listed = client.get("/api/v1/branches", headers=headers)
     assert listed.status_code == 200
     names = {b["name"] for b in listed.json()}
     assert {"Business Bay", "Sharjah"}.issubset(names)
@@ -76,7 +97,7 @@ def test_legacy_company_branches_json_migrates_on_first_list(client, auth_header
     assert sharjah["status"] == "Inactive"
 
     # Idempotent: calling again must not duplicate the migrated rows.
-    listed_again = client.get("/api/v1/branches", headers=auth_headers)
+    listed_again = client.get("/api/v1/branches", headers=headers)
     assert len([b for b in listed_again.json() if b["name"] == "Business Bay"]) == 1
 
 
@@ -106,19 +127,19 @@ def test_employee_app_data_sync_sets_branch_id(client, db, auth_headers):
 
 
 def test_employee_principal_carries_branch_id(client, db, auth_headers):
-    created = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Al Ain"})
+    created = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Fujairah HQ"})
     branch_id = created.json()["id"]
 
     r = client.get("/api/v1/auth/me", headers=auth_headers)
     company_id = r.json()["company"]["id"]
-    emp = Employee(company_id=company_id, employee_no="BR-PRINCIPAL-001", full_name="Al Ain Staff", branch_id=branch_id)
+    emp = Employee(company_id=company_id, employee_no="BR-PRINCIPAL-001", full_name="Fujairah Staff", branch_id=branch_id)
     db.add(emp)
     db.commit()
 
     role_resp = client.post(
         "/api/v1/hr/admin/roles",
         headers=auth_headers,
-        json={"role_name": "Al Ain Branch Staff", "description": "test role", "permission_keys": ["employees:view"]},
+        json={"role_name": "Fujairah Branch Staff", "description": "test role", "permission_keys": ["employees:view"]},
     )
     assert role_resp.status_code == 201, role_resp.text
     role = role_resp.json()
@@ -126,11 +147,11 @@ def test_employee_principal_carries_branch_id(client, db, auth_headers):
     portal_resp = client.put(
         f"/api/v1/hr/admin/employees/{emp.id}/portal-access",
         headers=auth_headers,
-        json={"username": "branchtest.alain", "password": "branch123", "role_id": role["id"], "is_active": True},
+        json={"username": "branchtest.fujairah", "password": "branch123", "role_id": role["id"], "is_active": True},
     )
     assert portal_resp.status_code == 200, portal_resp.text
 
-    login_resp = client.post("/api/v1/ess/login", json={"username": "branchtest.alain", "password": "branch123"})
+    login_resp = client.post("/api/v1/ess/login", json={"username": "branchtest.fujairah", "password": "branch123"})
     assert login_resp.status_code == 200, login_resp.text
     emp_headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
 
