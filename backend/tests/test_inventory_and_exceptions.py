@@ -127,6 +127,90 @@ def test_purchase_record_syncs_line_quantity_to_stock_tables(client, auth_header
     assert db.query(AppDataRecord).filter(AppDataRecord.collection == "products").count() == 0
 
 
+def test_pos_sale_syncs_negative_stock_movement(client, auth_headers, db):
+    """Regression test: pos.html's completeSale() previously wrote its stock
+    deduction to a generic 'stockMovements' AppDataRecord collection with no
+    sync_domain_model branch behind it — the real StockMovement table (what
+    GET /inventory/stock-levels actually sums) never reflected a single POS
+    sale, so reported stock only ever went up (via purchases), never down."""
+    purchase = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={
+            "collection": "purchaseRecords",
+            "record": {
+                "ref": "PUR-POS-STOCK-001",
+                "supplier": "QA Supplier",
+                "status": "Paid",
+                "net_amount": 500,
+                "tax_amount": 25,
+                "total": 525,
+                "lines": [
+                    {"sku": "POS-STOCK-SKU", "product": "POS Stock Test Item", "quantity": 10, "unit_cost": 50, "unit_cost_before_tax": 50, "line_total": 500}
+                ],
+            },
+        },
+    )
+    assert purchase.status_code == 200, purchase.text
+
+    stock_after_purchase = client.get("/api/v1/inventory/stock-levels", headers=auth_headers)
+    row = next(r for r in stock_after_purchase.json() if r["code"] == "POS-STOCK-SKU")
+    assert Decimal(str(row["current_stock"])) == Decimal("10.00")
+
+    sale = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={
+            "collection": "posSales",
+            "record": {
+                "id": "POS-STOCK-RCPT-001",
+                "receipt_no": "POS-STOCK-RCPT-001",
+                "customer": "Walk-In Customer",
+                "items": [{"code": "POS-STOCK-SKU", "name": "POS Stock Test Item", "qty": 3, "price": 80, "unit": "PCS"}],
+                "subtotal": 240, "vat": 12, "total": 252,
+                "payment_method": "cash", "status": "completed",
+            },
+        },
+    )
+    assert sale.status_code == 200, sale.text
+
+    mapping = db.query(StockProductMapping).filter(StockProductMapping.sku == "POS-STOCK-SKU").one()
+    pos_movement = (
+        db.query(StockMovement)
+        .filter(StockMovement.mapping_id == mapping.id, StockMovement.movement_type == "pos_sale")
+        .one()
+    )
+    assert pos_movement.reference == "POS-STOCK-RCPT-001"
+    assert pos_movement.quantity == Decimal("-3.00")
+
+    stock_after_sale = client.get("/api/v1/inventory/stock-levels", headers=auth_headers)
+    row_after = next(r for r in stock_after_sale.json() if r["code"] == "POS-STOCK-SKU")
+    assert Decimal(str(row_after["current_stock"])) == Decimal("7.00")
+
+    # Re-saving the same sale (idempotent re-sync, e.g. an edit/retry) must
+    # not double-deduct — delete-then-recreate-by-reference, same as
+    # sync_purchase_stock()'s existing pattern.
+    resave = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={
+            "collection": "posSales",
+            "record": {
+                "id": "POS-STOCK-RCPT-001",
+                "receipt_no": "POS-STOCK-RCPT-001",
+                "customer": "Walk-In Customer",
+                "items": [{"code": "POS-STOCK-SKU", "name": "POS Stock Test Item", "qty": 3, "price": 80, "unit": "PCS"}],
+                "subtotal": 240, "vat": 12, "total": 252,
+                "payment_method": "cash", "status": "completed",
+            },
+        },
+    )
+    assert resave.status_code == 200, resave.text
+    stock_after_resave = client.get("/api/v1/inventory/stock-levels", headers=auth_headers)
+    row_after_resave = next(r for r in stock_after_resave.json() if r["code"] == "POS-STOCK-SKU")
+    assert Decimal(str(row_after_resave["current_stock"])) == Decimal("7.00")
+
+
 def test_exception_center_accepts_manual_exception(client, auth_headers):
     created = client.post(
         "/api/v1/exceptions",

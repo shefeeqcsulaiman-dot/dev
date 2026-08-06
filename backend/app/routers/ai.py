@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_module
+from app.routers.app_data import get_company_vat_rate
 from app.models import Account, AppDataRecord, AuditLog, ExceptionEvent, Invoice, SourceTransaction, TaxLine, User
 from app.schemas import AIAssistRequest, AIExceptionExplainRequest, AIResponse, AITransactionValidationRequest
 
@@ -48,12 +49,12 @@ def suggest_account(description: str, module: str) -> str:
     return "4000" if module.lower() in {"purchase", "purchase_bill", "expense"} else "3000"
 
 
-def vat_issues(subtotal: Decimal, vat: Decimal, treatment: str, supplier_trn: str | None, evidence_present: bool) -> list[str]:
+def vat_issues(subtotal: Decimal, vat: Decimal, treatment: str, supplier_trn: str | None, evidence_present: bool, vat_rate: Decimal = Decimal("5")) -> list[str]:
     issues: list[str] = []
-    expected_vat = subtotal * Decimal("0.05")
+    expected_vat = subtotal * (vat_rate / Decimal("100"))
     taxable = treatment.lower() in {"standard", "vat5", "5", "5%"}
     if taxable and subtotal > 0 and abs(vat - expected_vat) > Decimal("1.00"):
-        issues.append(f"VAT differs from 5% by more than AED 1.00; expected about AED {expected_vat:.2f}.")
+        issues.append(f"VAT differs from {vat_rate}% by more than AED 1.00; expected about AED {expected_vat:.2f}.")
     if vat > 0 and not evidence_present:
         issues.append("Taxable VAT is present but supporting tax evidence is not marked as available.")
     if vat > 0 and (not supplier_trn or len("".join(ch for ch in supplier_trn if ch.isdigit())) != 15):
@@ -132,7 +133,8 @@ def validate_transaction(payload: AITransactionValidationRequest, db: Session = 
             suggestions.append(f"{line.description}: account {line.account_code} is missing; consider {suggested} - {account_label}.")
         elif line.account_code != suggested:
             suggestions.append(f"{line.description}: review account {line.account_code}; AI suggestion is {suggested} - {account_label}.")
-    issues = vat_issues(subtotal, vat, payload.tax_treatment, payload.supplier_trn, payload.evidence_present)
+    vat_rate = get_company_vat_rate(current_user.company)
+    issues = vat_issues(subtotal, vat, payload.tax_treatment, payload.supplier_trn, payload.evidence_present, vat_rate)
     confidence = 92 if not issues and not suggestions else 72 if len(issues) + len(suggestions) <= 2 else 55
     return AIResponse(
         answer="AI transaction review completed. This is a draft review only; approval and posting must use the existing source transaction flow.",

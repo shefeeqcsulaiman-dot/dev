@@ -1300,6 +1300,10 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
         )
         sync_purchase_stock(db, principal, record, reference)
 
+    elif collection == "posSales":
+        reference = str(record.get("receipt_no") or record.get("id") or "POS")
+        sync_pos_stock(db, principal, record, reference)
+
     elif collection == "payments":
         amount = decimal_value(record.get("amount"))
         sync_source_transaction(
@@ -1397,6 +1401,56 @@ def sync_purchase_stock(db: Session, principal: Principal, record: dict[str, Any
                 quantity_in=quantity,
                 quantity_remaining=quantity,
                 unit_cost=unit_cost,
+            )
+        )
+
+
+def sync_pos_stock(db: Session, principal: Principal, record: dict[str, Any], reference: str) -> None:
+    """POS sales previously never reached the real StockMovement table at
+    all — pos.html wrote its per-line stock deduction to a generic
+    'stockMovements' AppDataRecord collection with no sync_domain_model
+    branch behind it, so Inventory > Stock Levels (SUM(StockMovement.
+    quantity), see list_stock_levels() in inventory.py) never reflected a
+    single POS sale. Mirrors sync_purchase_stock()'s delete-then-recreate-
+    by-reference pattern, but with negative quantities (a sale consumes
+    stock, a purchase adds it) and no InventoryValuationLayer — nothing in
+    this codebase currently consumes purchase valuation layers for COGS
+    reporting either, so adding sale-side layers here would be a new,
+    separate feature, not a fix for the reported "stock never decrements"
+    symptom."""
+    items = record.get("items")
+    if not isinstance(items, list):
+        items = []
+    branch_id = str(record.get("branch_id") or "").strip() or principal.branch_id
+    db.query(StockMovement).filter(
+        StockMovement.company_id == principal.company_id,
+        StockMovement.movement_type == "pos_sale",
+        StockMovement.reference == reference,
+    ).delete(synchronize_session=False)
+    db.flush()
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        quantity = decimal_value(item.get("qty") or item.get("quantity"))
+        if quantity <= 0:
+            continue
+        # purchase_line_stock_mapping() already falls back to "code"/"name"
+        # (POS cart items' field names) when "sku"/"product" aren't present,
+        # so it's directly reusable here without a POS-specific variant.
+        mapping = purchase_line_stock_mapping(db, principal, item, record)
+        if not mapping:
+            continue
+        unit_cost = decimal_value(item.get("price") or item.get("unit_cost"))
+        db.add(
+            StockMovement(
+                company_id=principal.company_id,
+                branch_id=branch_id,
+                mapping_id=mapping.id,
+                movement_type="pos_sale",
+                quantity=-quantity,
+                unit_cost=unit_cost,
+                reference=reference,
             )
         )
 
@@ -1560,9 +1614,6 @@ def sync_sales_invoice(db: Session, principal: Principal, record: dict[str, Any]
     branch_id = str(record.get("branch_id") or "").strip() or principal.branch_id
     if branch_id:
         invoice.branch_id = branch_id
-    invoice.subtotal = decimal_value(record.get("subtotal"))
-    invoice.vat = decimal_value(record.get("vat_amount") or record.get("vat"))
-    invoice.total = decimal_value(record.get("total"))
     invoice.status = "issued" if str(record.get("status", "")).lower() in {"ready", "pending"} else str(record.get("status") or "draft").lower()
     company_vat_rate = get_company_vat_rate(resolve_principal_company(principal, db))
     lines = record.get("lines") if isinstance(record.get("lines"), list) else []
@@ -1580,14 +1631,27 @@ def sync_sales_invoice(db: Session, principal: Principal, record: dict[str, Any]
                 )
             )
     elif not invoice.lines:
+        # No line items at all (minimal/legacy record) — nothing to
+        # recompute from, fall back to the client-supplied subtotal as a
+        # single line so calculate_totals() below still has something to sum.
         invoice.lines = [
             InvoiceLine(
                 description=f"Imported invoice {number}",
                 quantity=Decimal("1"),
-                unit_price=invoice.subtotal,
+                unit_price=decimal_value(record.get("subtotal")),
                 vat_rate=company_vat_rate,
             )
         ]
+    # Recompute subtotal/vat/total from the actual InvoiceLines server-side —
+    # previously these were trusted verbatim from the client
+    # (record.get("subtotal"/"vat_amount"/"total")), so a client-side bug or
+    # a hardcoded-5% VAT calculation (calcLine() etc. in app.js, which
+    # ignores a company's configured non-default vat_rate) would silently
+    # persist a wrong total that later drives VAT return figures — even
+    # though the lines built above already correctly use company_vat_rate.
+    # Mirrors invoices.py's calculate_totals() for the typed REST API.
+    from app.routers.invoices import calculate_totals
+    calculate_totals(invoice)
     db.flush()
     sync_sales_invoice_accounting(db, invoice, principal_user_id(principal))
 
