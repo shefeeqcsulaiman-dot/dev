@@ -3,8 +3,8 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_current_user, get_db
-from app.models import Branch, CompanyLocation, Employee, User
+from app.dependencies import Principal, get_current_principal, get_current_user, get_db
+from app.models import Branch, Company, CompanyLocation, Employee, User
 from app.schemas import BranchCreate, BranchOut, BranchUpdate
 
 router = APIRouter(prefix="/branches", tags=["branches"])
@@ -48,9 +48,24 @@ def _migrate_legacy_branches_json(db: Session, company_id: str, raw: str | None)
 @router.get("", response_model=list[BranchOut])
 def list_branches(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(get_current_principal),
 ):
-    company = current_user.company
+    # Widened from admin-only in Branch Management Phase 7 — the shared
+    # bootstrap/company-info hydration path (applyCompanyToUi() -> ...
+    # -> loadBranchesFromDb() in app.js) calls this unconditionally for
+    # every session, including an Employee/branch login landing on
+    # hrms.html. Left admin-only, this 401s for an Employee token, and the
+    # app's own global 401 handler (correctly, by design — see
+    # authenticatedFetch()'s comment) refuses to auto-relogin an Employee
+    # session, bouncing them straight back to the login page moments after
+    # a successful login. Read-only branch names aren't sensitive, so
+    # widening the endpoint (not gating the frontend call) matches the fix
+    # pattern used throughout this feature. Branch CRUD (create/update/
+    # delete below) stays admin-only.
+    company = (
+        principal.user.company if principal.is_admin and principal.user
+        else db.query(Company).filter(Company.id == principal.company_id).first()
+    )
     if not company:
         return []
     _migrate_legacy_branches_json(db, company.id, company.branches)

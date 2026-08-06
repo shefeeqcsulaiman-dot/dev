@@ -609,3 +609,31 @@ def test_employees_collection_backfills_branch_id_from_legacy_name(client, db, a
 
     db.refresh(row)
     assert row.branch_id == branch["id"]
+
+
+def test_branch_employee_can_list_branches_without_being_logged_out(client, db, auth_headers):
+    """Regression test for a real bug found via a full browser walkthrough
+    (not caught by any earlier phase's tests, since none of them simulate
+    the actual hrms.html page-load sequence): GET /branches was left
+    admin-only when built in Phase 1, but app.js's shared bootstrap/company-
+    info hydration path (applyCompanyToUi -> applyDeptsBranchesFromCompany
+    -> loadBranchesFromDb) calls it unconditionally for EVERY session,
+    including an Employee/branch login landing on hrms.html. A 401 here
+    trips authenticatedFetch()'s global handler, which deliberately refuses
+    to auto-relogin an Employee session (to avoid masking real RBAC bugs) —
+    so the employee got silently logged back out to /login moments after a
+    successful login, with no error shown anywhere. Same lesson as Phase 6's
+    pos.html finding: a passing backend test suite is not proof a login/auth
+    UI flow actually works end-to-end."""
+    branch = client.post("/api/v1/branches", headers=auth_headers, json={"name": "List Access Branch"}).json()
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp = Employee(company_id=company_id, employee_no="BR-LIST-ACCESS", full_name="List Access Branch Staff", branch_id=branch["id"])
+    db.add(emp)
+    db.commit()
+    headers = _grant_role_and_login(client, auth_headers, emp.id, "branchtest.listaccess", ["employees:view"], "Administrator")
+
+    listed = client.get("/api/v1/branches", headers=headers)
+    assert listed.status_code == 200, listed.text
+    names = {b["name"] for b in listed.json()}
+    assert "List Access Branch" in names
