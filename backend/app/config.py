@@ -51,6 +51,15 @@ class Settings(BaseSettings):
                 f"PRODUCTION STARTUP BLOCKED — insecure default values detected for: "
                 f"{', '.join(insecure)}. Set them via environment variables."
             )
+        # allow_credentials=True + a literal "*" origin makes Starlette's
+        # CORSMiddleware reflect whatever Origin header the request sent —
+        # effectively any site can make credentialed cross-origin requests.
+        if "*" in self.cors_origin_list:
+            raise RuntimeError(
+                "PRODUCTION STARTUP BLOCKED — CORS_ORIGINS is set to \"*\", which combined "
+                "with credentialed requests allows any site to call this API as a logged-in "
+                "user. Set CORS_ORIGINS to your real frontend domain(s)."
+            )
 
     @property
     def cors_origin_list(self) -> list[str]:

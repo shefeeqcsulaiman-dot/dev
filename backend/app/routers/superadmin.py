@@ -185,7 +185,9 @@ def set_expiry(
 
 
 @router.post("/companies/{company_id}/reset-password")
+@limiter.limit("20/minute")
 def reset_password(
+    request: Request,
     company_id: str,
     body: ResetPasswordIn,
     db: Session = Depends(get_db),
@@ -404,7 +406,9 @@ def set_company_modules(
 
 
 @router.delete("/companies/{company_id}")
+@limiter.limit("20/minute")
 def delete_company(
+    request: Request,
     company_id: str,
     payload: DeleteCompanyIn,
     db: Session = Depends(get_db),
@@ -873,7 +877,9 @@ def _write_audit_blob(db: Session, company_id: str, user_label: str, action: str
 
 
 @router.post("/companies/{company_id}/impersonate")
+@limiter.limit("20/minute")
 def impersonate_company(
+    request: Request,
     company_id: str,
     db: Session = Depends(get_db),
     superadmin: User = Depends(_require_superadmin),

@@ -12,18 +12,18 @@ router = APIRouter(prefix="/companies", tags=["companies"])
 _REQUIRED_FIELDS = {"name", "country"}
 
 
-def _resolve_company(current_user: User, db: Session) -> "Company | None":
-    """Return the user's company, auto-linking to an existing one if needed."""
-    company = current_user.company
-    if not company:
-        # company_id mismatch — find the first available company and re-link
-        company = db.query(Company).first()
-        if company:
-            current_user.company_id = company.id
-            db.add(current_user)
-            db.commit()
-            db.refresh(current_user)
-    return company
+def _resolve_company(current_user: User) -> "Company | None":
+    """Return the user's own company, or None if their company_id is orphaned.
+
+    Previously fell back to `db.query(Company).first()` and silently re-linked
+    the user to whichever company happened to sort first in the table — an
+    arbitrary, unrelated tenant. That auto-grants an is_admin user full
+    read/write access to a stranger's company data the moment any bug (or
+    future migration) ever nulls/breaks a company_id. Fail closed instead:
+    callers already handle a None company (404 on GET, create-a-new-company
+    on PUT) rather than needing a guessed substitute.
+    """
+    return current_user.company
 
 
 @router.get("/current", response_model=CompanyOut)
@@ -36,7 +36,7 @@ def current_company(
     # pos.html's checkAuth() needs this for currency/company-name display,
     # and read-only company info isn't sensitive enough to keep admin-only.
     if principal.is_admin:
-        company = _resolve_company(principal.user, db)
+        company = _resolve_company(principal.user)
     else:
         company = db.query(Company).filter(Company.id == principal.company_id).first()
     if not company:
@@ -64,7 +64,7 @@ def update_company(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    company = _resolve_company(current_user, db)
+    company = _resolve_company(current_user)
     if not company:
         # No existing company at all — create one
         company = Company(id=_new_uuid(), name=payload.name or "My Company")

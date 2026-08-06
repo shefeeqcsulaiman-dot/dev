@@ -230,7 +230,7 @@ def resolve_principal_company(principal: Principal, db: Session) -> Company | No
     since only a User carries a `.company` relationship."""
     if principal.is_admin:
         from app.routers.companies import _resolve_company
-        return _resolve_company(principal.user, db)
+        return _resolve_company(principal.user)
     return db.query(Company).filter(Company.id == principal.company_id).first()
 
 
@@ -580,7 +580,7 @@ def bootstrap(
 
     if principal.is_admin:
         from app.routers.companies import _resolve_company
-        company = _resolve_company(principal.user, db)
+        company = _resolve_company(principal.user)
     else:
         from app.models import Company
         company = db.query(Company).filter(Company.id == principal.company_id).first()

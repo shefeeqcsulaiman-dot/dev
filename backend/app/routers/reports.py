@@ -50,7 +50,7 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 
 
 @router.get("/dashboard")
-@limiter.limit("30/minute")
+@limiter.limit("120/minute")
 def dashboard(request: Request, db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("reports:view"))) -> dict[str, Any]:
     # Widened from admin-only in the "Main Dashboard Access" phase — still
     # company-wide/unfiltered (no branch_id anywhere in this function's data
@@ -471,7 +471,7 @@ def debug_purchase(db: Session = Depends(get_db), current_user: User = Depends(g
 
 
 @router.get("/trial-balance")
-@limiter.limit("30/minute")
+@limiter.limit("120/minute")
 def trial_balance(
     request: Request,
     db: Session = Depends(get_db),
@@ -494,7 +494,7 @@ def trial_balance(
 
 
 @router.get("/summary")
-@limiter.limit("30/minute")
+@limiter.limit("120/minute")
 def report_summary(request: Request, db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("reports:view"))) -> dict[str, Any]:
     # See dashboard()'s comment above — same widening, same reasoning.
     company_id = principal.company_id
