@@ -6528,18 +6528,28 @@ function openPurchaseInvoiceImage(btn){
   dlLink.download=filename;
   const body=document.getElementById('inv-img-body');
   body.innerHTML='';
+  const isPreviewableImage=/^data:image\//.test(src);
   if(isPdf){
     const frame=document.createElement('iframe');
     frame.src=src;
     frame.style.cssText='width:100%;min-height:70vh;border:none;border-radius:8px';
     frame.title='Invoice PDF';
     body.appendChild(frame);
-  }else{
+  }else if(isPreviewableImage){
     const img=document.createElement('img');
     img.src=src;
     img.alt='Invoice';
     img.style.cssText='max-width:100%;border-radius:8px;box-shadow:0 2px 16px rgba(0,0,0,.12)';
     body.appendChild(img);
+  }else{
+    // Excel/CSV source files (and anything else that isn't an image or PDF)
+    // have no inline preview — the file is still saved and downloadable via
+    // the Download button above, just don't try to render it as an <img>
+    // and show a broken-image icon.
+    const note=document.createElement('div');
+    note.style.cssText='padding:40px 20px;text-align:center;color:var(--text3)';
+    note.textContent=`No inline preview available for ${filename||'this file type'} — use Download above to open the original file.`;
+    body.appendChild(note);
   }
   overlay.style.display='flex';
 }
@@ -11347,7 +11357,7 @@ function purchaseRecordFromExtractedInvoice(inv){
     supplier:inv.supplier||'Supplier',
     address:inv.address||'',
     date:inv.date||'',
-    location:'Dubai HQ',
+    location:inv.location||'',
     pay_term:inv.pay_term||'',
     items:itemQuantity,
     net_amount:purchaseAiNumber(inv.net_amount||inv.subtotal),
@@ -13142,7 +13152,13 @@ function mergePurchaseRecords(existing={},incoming={}){
     address:incoming.address||existing.address||'',
     date:incoming.date||existing.date||'',
     location:incoming.location||existing.location||'',
-    lines:mergedLines
+    lines:mergedLines,
+    // The bookkeeping source document — object spread above would otherwise
+    // let an empty incoming value silently wipe an already-saved file (e.g.
+    // re-processing the same invoice number in a later browser session,
+    // once uploadedFiles has reset and there's no source file to re-attach).
+    source_image:incoming.source_image||existing.source_image||'',
+    source_filename:incoming.source_filename||existing.source_filename||''
   };
   const existingOnlyTax=Math.max(0,parseAmount(existing.tax_amount||existing.vat_amount));
   const incomingTax=Math.max(0,parseAmount(incoming.tax_amount||incoming.vat_amount));
