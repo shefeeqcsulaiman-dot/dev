@@ -147,6 +147,7 @@ function go(page){
     toast("This module isn't enabled for your company — contact support to enable it",'warn');
     return;
   }
+  if(!_mainDashboardNavAllowed(page)){_mainDashboardBlockNav();return;}
   if(page==='payments'){
     go('bank');
     setTimeout(()=>{
@@ -2616,6 +2617,67 @@ function _moduleNavAllowed(page){
   const nav=document.querySelector(`.sb .nav[data-module="${page}"]`)||document.querySelector(`[data-module-gate="${page}"]`);
   if(!nav)return true; // not a module-gated destination (dashboard, settings, etc.)
   return window.COMPANY_ALLOWED_MODULES.has(page);
+}
+
+// Sidebar module gating for an Employee/branch-login session on index.html
+// (Main Dashboard Access phase) — mirrors applyHrmsPermissionNav()'s exact
+// mechanism in hrms.html (whoami -> filter permissions ending ":view" ->
+// module set -> hide non-allowed .sb .nav[data-module] entries) but writes
+// to its OWN distinct global, window.MAIN_ALLOWED_MODULES, rather than
+// reusing window.HRMS_ALLOWED_MODULES: that one is documented as
+// hrms.html-specific and consumed by _hrmsNavAllowed(), which is already
+// hard-wired off on index.html (`if(!window.HRMS_STANDALONE...)return
+// true`) — sharing one mutable global across two pages that load this same
+// bundle risks stale-value bugs for no benefit. Composes safely with
+// applyModulePermissionNav()'s classList('hidden') company-level gate on
+// the exact same elements: independent CSS-hiding mechanisms (style.display
+// here, classList there), so a nav item is visible only when NEITHER has
+// hidden it — the desired "company module enabled AND role permits"
+// semantics, with zero coordination code.
+async function applyMainDashboardPermissionNav(){
+  try{
+    const token=localStorage.getItem('taxflow_token');
+    if(!token)return;
+    const resp=await fetch(apiBaseUrl()+'/auth/whoami',{headers:{Authorization:'Bearer '+token}});
+    if(!resp||!resp.ok)return;
+    const who=await resp.json();
+    if(who.is_admin){window.MAIN_ALLOWED_MODULES=null;return;}
+    const allowed=new Set((who.permissions||[]).filter(p=>p.endsWith(':view')).map(p=>p.split(':')[0]));
+    window.MAIN_ALLOWED_MODULES=allowed;
+    document.querySelectorAll('.sb .nav[data-module]').forEach(nav=>{
+      const mod=nav.getAttribute('data-module');
+      nav.style.display=allowed.has(mod)?'':'none';
+    });
+    // The sidebar's "HRMS" link (data-module="hrms") has no catalog entry —
+    // there is no blanket "hrms:view" permission key, HR access is granted
+    // per-module (employees:view, leave:view, etc.) same as it always has
+    // been. Show it if the employee's role grants ANY HR module :view
+    // permission, rather than leaving it permanently hidden the way it
+    // effectively was before this phase (a hidden nav item the generic loop
+    // above would never unhide, since "hrms" never appears in `allowed`).
+    const hrmsNav=document.querySelector('.sb .nav[data-module="hrms"]');
+    if(hrmsNav){
+      const hasAnyHrAccess=[...allowed].some(m=>['employees','leave','attendance','rota','overtime','loans','recruitment','payroll','hr','hr_settings','hr_workflow','performance'].includes(m));
+      hrmsNav.style.display=hasAnyHrAccess?'':'none';
+    }
+  }catch(e){
+    console.warn('[MainDashboardPermissionNav]',e);
+  }
+}
+
+// Direct-navigation guard, sibling of _hrmsNavAllowed()/_moduleNavAllowed()
+// above but for the new per-role main-dashboard gate — UI politeness only,
+// the real boundary is the backend 403 on every underlying API call (see
+// require_principal_permission() usage across accounting.py/
+// corporate_accounting.py/tax.py/reports.py).
+function _mainDashboardNavAllowed(page){
+  if(window.HRMS_STANDALONE||!window.MAIN_ALLOWED_MODULES)return true;
+  const nav=document.querySelector(`.sb .nav[data-module="${page}"]`);
+  if(!nav)return true; // not a role-gated destination (dashboard, settings, etc.)
+  return window.MAIN_ALLOWED_MODULES.has(page);
+}
+function _mainDashboardBlockNav(){
+  toast("You don't have access to this module — contact your administrator",'warn');
 }
 
 function copyEssPortalLink(){
@@ -7843,17 +7905,21 @@ function hydrateFromServer(){
     removeDemoProductRows();
     cleanupDemoProductsFromServer(data.products);
     loadStockMappingsFromServer();
-    // hrms.html has no accounting/ledger DOM at all, and loadAccountingFromDb()
-    // hits /accounts + /journal unconditionally (no DOM guard, unlike the
-    // stock-mapping loader above) — those are still User-only endpoints, so
-    // for an HRMS sub-user (Employee principal) they 401, which
-    // authenticatedFetch correctly treats as an invalid session and force-
-    // logs them out before the page even finishes rendering. Skip both on
-    // hrms.html for every principal kind — an admin visiting /hrms doesn't
-    // need this data either.
+    // hrms.html has no accounting/ledger DOM at all — skip both there for
+    // every principal kind regardless of permission, an admin visiting
+    // /hrms doesn't need this data either. On index.html, /accounts +
+    // /journal + corporate-accounting's own endpoints are now
+    // require_principal_permission-gated (Main Dashboard Access phase) —
+    // a 403 for an unpermitted Employee no longer force-logs them out the
+    // way the old admin-only 401 did (see authenticatedFetch()'s 401-vs-403
+    // handling), so this guard is now just avoiding a pointless round trip,
+    // not a safety requirement. window.MAIN_ALLOWED_MODULES is unset (falls
+    // through to "allow") for an admin or before applyMainDashboardPermission
+    // Nav()'s /auth/whoami call has resolved yet — same "not yet known,
+    // don't block" convention as _moduleNavAllowed()/_mainDashboardNavAllowed().
     if(!window.HRMS_STANDALONE){
-      loadAccountingFromDb();
-      loadCorporateAccountingFromDb(data);
+      if(!window.MAIN_ALLOWED_MODULES||window.MAIN_ALLOWED_MODULES.has('accounting'))loadAccountingFromDb();
+      if(!window.MAIN_ALLOWED_MODULES||window.MAIN_ALLOWED_MODULES.has('corporate'))loadCorporateAccountingFromDb(data);
     }
     // Load new feature collections
     if(Array.isArray(data.lockedPeriods))data.lockedPeriods.filter(r=>r.locked).forEach(r=>_lockedPeriods.add(r.id));
@@ -22330,6 +22396,11 @@ if(!localStorage.getItem('taxflow_token')){
   // employee-aware equivalent.
   if(localStorage.getItem('taxflow_principal_kind')!=='employee'){
     applyRoleBasedNav().catch(()=>{});
+  }else if(!window.HRMS_STANDALONE){
+    // Employee session on index.html (Main Dashboard Access phase) —
+    // hrms.html has its own separate call to applyHrmsPermissionNav() in
+    // its own DOMContentLoaded handler, this is index.html's equivalent.
+    applyMainDashboardPermissionNav().catch(()=>{});
   }
   initApp();
 }

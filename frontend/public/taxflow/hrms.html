@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=20260721e" as="style">
-<link rel="preload" href="src/app.js?v=20260806a" as="script">
+<link rel="preload" href="src/app.js?v=20260806b" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=20260721e">
 <style>
@@ -2704,7 +2704,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=20260806a" defer></script>
+<script src="src/app.js?v=20260806b" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
@@ -3012,14 +3012,28 @@ async function applyHrmsPermissionNav(){
     window.HRMS_PERMISSIONS=who.permissions||[];
     if(who.is_admin)return; // real TaxFlow admins/superadmins get the full sidebar
 
-    // Sub-users (Employee principals) have no User account and no access to
-    // '/', the main TaxFlow admin app — hide the link rather than let them
-    // hit it and bounce off a 401.
-    var backBtn=document.getElementById('hrms-back-main-btn');
-    if(backBtn)backBtn.style.display='none';
-
     var allowed=new Set(window.HRMS_PERMISSIONS.filter(function(p){return p.endsWith(':view');}).map(function(p){return p.split(':')[0];}));
     window.HRMS_ALLOWED_MODULES=allowed;
+
+    // Sub-users (Employee principals) get the "Main Dashboard" link only if
+    // their role grants at least one main-dashboard module permission
+    // (Main Dashboard Access phase) — previously this button was hidden for
+    // every Employee unconditionally, since index.html 401'd (and force-
+    // logged them out) the moment it loaded. Reciprocal to index.html's own
+    // "HRMS" sidebar link, which is gated the same way in the other
+    // direction (see the "hrmsNav" block inside applyMainDashboardPermissionNav()
+    // in app.js).
+    var MAIN_DASHBOARD_MODULES=['sales','quotations','pos','purchase','inventory','expense','bank','accounting','corporate','reports','notifications','expert'];
+    var backBtn=document.getElementById('hrms-back-main-btn');
+    if(backBtn){
+      var hasMainDashboardAccess=MAIN_DASHBOARD_MODULES.some(function(m){return allowed.has(m);});
+      if(hasMainDashboardAccess){
+        backBtn.textContent='Main Dashboard';
+        backBtn.style.display='';
+      }else{
+        backBtn.style.display='none';
+      }
+    }
     document.querySelectorAll('.sb .nav[data-module]').forEach(function(nav){
       var mod=nav.getAttribute('data-module');
       nav.style.display=allowed.has(mod)?'':'none';

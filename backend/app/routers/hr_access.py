@@ -76,6 +76,28 @@ _PERMISSION_CATALOG: dict[str, list[str]] = {
     "reports": ["view"],
     "ai_insights": ["view"],
     "hr_settings": ["view", "edit", "delete"],
+    # Main-dashboard (index.html) modules — Branch Management "Main Dashboard
+    # Access" phase. "view" only: nothing in this phase backs an edit/delete
+    # action for these modules yet (the corresponding accounting.py/etc.
+    # write endpoints are still admin-only, a deliberately separate later
+    # phase), so no edit/delete checkbox is added here, matching this
+    # catalog's own convention of not offering a checkbox with nothing
+    # behind it. Names reused verbatim from _COLLECTION_MODULE (app_data.py)
+    # and the index.html sidebar's own data-module attribute values, so one
+    # "module" vocabulary threads through the company-level Module
+    # Permissions gate, the bootstrap collection allowlist, and this
+    # per-role permission gate instead of three parallel naming schemes.
+    "sales": ["view"],
+    "quotations": ["view"],
+    "pos": ["view"],
+    "purchase": ["view"],
+    "inventory": ["view"],
+    "expense": ["view"],
+    "bank": ["view"],
+    "accounting": ["view"],
+    "corporate": ["view"],
+    "notifications": ["view"],
+    "expert": ["view"],
 }
 
 _DEFAULT_ROLES: dict[str, list[str]] = {
