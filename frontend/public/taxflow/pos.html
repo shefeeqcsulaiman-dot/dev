@@ -1478,11 +1478,15 @@ async function completeSale(){
   const okBtn=document.getElementById('pay-ok');
   if(okBtn)okBtn.disabled=true;
   try{
+    // Saving posSales now automatically creates the real StockMovement rows
+    // server-side (sync_pos_stock() in app_data.py, from sale.items) — this
+    // used to also write per-line deductions to a generic 'stockMovements'
+    // AppDataRecord collection here, but that collection was never synced
+    // into the real StockMovement table Inventory > Stock Levels actually
+    // reads, so POS sales silently never reduced reported stock. Removed
+    // rather than left alongside the real fix — it did nothing useful.
     await saveRec('posSales',sale);
     await saveRec('salesInvoices', posToInvoice(sale,'Paid')).catch(()=>{});
-    for(const item of _cart){
-      await saveRec('stockMovements',{id:`${rcptNo}-${item.code||item.id}`,item_name:item.name,item_code:item.code||item.id,movement_type:'pos_sale',quantity:-item.qty,date,reference:rcptNo,unit:item.unit}).catch(()=>{});
-    }
     _lastSale=sale;
     closePay();
     showReceipt(sale);

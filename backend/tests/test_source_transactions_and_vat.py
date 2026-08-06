@@ -276,6 +276,49 @@ def test_sales_invoice_fallback_vat_rate_uses_company_setting(client, auth_heade
     assert Decimal(invoice["lines"][0]["vat_rate"]) == Decimal("15.00")
 
 
+def test_sales_invoice_header_totals_recomputed_server_side_not_trusted_from_client(client, auth_headers):
+    """sync_sales_invoice() used to persist invoice.subtotal/vat/total
+    verbatim from whatever the client sent (record.get("subtotal"/
+    "vat_amount"/"total")) — a client-side bug, or the several places in
+    app.js that used to hardcode 5% VAT regardless of the company's
+    configured rate, would silently persist a wrong total that then drives
+    VAT return figures. Deliberately send a header computed at the WRONG
+    (5%) rate for a company configured at 15%, with real lines — the
+    persisted invoice must reflect the correct 15% total computed from the
+    lines, not the wrong client-sent header."""
+    updated = client.put("/api/v1/companies/current", headers=auth_headers, json={"vat_rate": "15.00"})
+    assert updated.status_code == 200
+
+    saved = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={
+            "collection": "salesInvoices",
+            "record": {
+                "invoice_no": "INV-VATRATE-TRUST-001",
+                "customer": "VAT Trust Test Customer",
+                "status": "issued",
+                # Deliberately wrong client-computed header — 5% of 200 is
+                # 10.00/210.00, not the company's real 15% rate.
+                "subtotal": "200.00",
+                "vat_amount": "10.00",
+                "total": "210.00",
+                "lines": [
+                    {"description": "Consulting", "qty": 1, "unit_price": "200.00"},
+                ],
+            },
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    invoices = client.get("/api/v1/invoices", headers=auth_headers).json()
+    invoice = next(i for i in invoices if i["invoice_number"] == "INV-VATRATE-TRUST-001")
+    assert Decimal(invoice["lines"][0]["vat_rate"]) == Decimal("15.00")
+    assert Decimal(invoice["subtotal"]) == Decimal("200.00")
+    assert Decimal(invoice["vat"]) == Decimal("30.00")
+    assert Decimal(invoice["total"]) == Decimal("230.00")
+
+
 def test_bootstrap_company_payload_includes_currency_and_vat_rate(client, auth_headers):
     """GET /app-data (bootstrap)'s hand-built "company" dict is a separate
     code path from GET /companies/current — it used to omit currency/vat_rate

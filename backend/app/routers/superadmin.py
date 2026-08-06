@@ -30,7 +30,7 @@ from app.models import (
 from app.schemas import CompanyUpdate
 from app.security import (
     create_access_token, hash_password, impersonation_revocation_info,
-    impersonator_id_from_token, user_id_from_token,
+    impersonator_id_from_token, user_id_from_token, verify_password,
 )
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
@@ -49,6 +49,16 @@ class SetExpiryIn(BaseModel):
 class ResetPasswordIn(BaseModel):
     user_id: str
     password: str = Field(min_length=6)
+
+
+class DeleteCompanyIn(BaseModel):
+    # The acting superadmin's OWN account password — verified server-side
+    # against their real password_hash below. Previously this destructive
+    # endpoint had no confirmation of any kind server-side; the two
+    # "authorization passwords" the frontend modal checked were hardcoded
+    # literal strings baked into the shipped JS (view-source readable,
+    # identical forever), never sent to or verified by the backend at all.
+    password: str
 
 
 # "settings" is deliberately NOT wired into require_module() anywhere (see
@@ -396,9 +406,12 @@ def set_company_modules(
 @router.delete("/companies/{company_id}")
 def delete_company(
     company_id: str,
+    payload: DeleteCompanyIn,
     db: Session = Depends(get_db),
     superadmin: User = Depends(_require_superadmin),
 ):
+    if not superadmin.password_hash or not verify_password(payload.password, superadmin.password_hash):
+        raise HTTPException(status_code=403, detail="Incorrect password")
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")

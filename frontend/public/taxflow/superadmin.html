@@ -512,8 +512,7 @@
     <div class="modal-sub" id="delete-co-sub">This will permanently delete the company and ALL its data. This cannot be undone.</div>
     <div id="delete-co-err" class="err-msg"></div>
     <input type="hidden" id="delete-co-id">
-    <div class="fg" style="margin-top:16px"><label class="fl">Authorization Password 1</label><input class="fi mono" id="delete-co-pwd1" type="password" placeholder="Enter first authorization password" autocomplete="off"></div>
-    <div class="fg"><label class="fl">Authorization Password 2</label><input class="fi mono" id="delete-co-pwd2" type="password" placeholder="Enter second authorization password" autocomplete="off"></div>
+    <div class="fg" style="margin-top:16px"><label class="fl">Your Account Password</label><input class="fi mono" id="delete-co-pwd1" type="password" placeholder="Confirm your superadmin password" autocomplete="off"></div>
     <div class="modal-foot">
       <button class="btn btn-g" onclick="closeModal('m-delete-co')">Cancel</button>
       <button class="btn btn-r" id="delete-co-btn" onclick="confirmDeleteCompany()">Delete Company</button>
@@ -1054,7 +1053,6 @@
     document.getElementById('delete-co-id').value=companyId;
     document.getElementById('delete-co-sub').textContent='Permanently delete "'+name+'" and ALL its data. This cannot be undone.';
     document.getElementById('delete-co-pwd1').value='';
-    document.getElementById('delete-co-pwd2').value='';
     openModal('m-delete-co');
   }
 
@@ -1062,20 +1060,26 @@
     const errEl=document.getElementById('delete-co-err');
     errEl.style.display='none';
     const companyId=document.getElementById('delete-co-id').value;
-    const p1=document.getElementById('delete-co-pwd1').value;
-    const p2=document.getElementById('delete-co-pwd2').value;
-    if(p1!=='9744636565'||p2!=='7898812372'){
-      errEl.textContent='Incorrect authorization passwords. Both passwords must be correct.';
+    const password=document.getElementById('delete-co-pwd1').value;
+    if(!password){
+      errEl.textContent='Enter your password to confirm.';
       errEl.style.display='block';
-      document.getElementById('delete-co-pwd1').value='';
-      document.getElementById('delete-co-pwd2').value='';
       return;
     }
     const btn=document.getElementById('delete-co-btn');
     btn.disabled=true; btn.textContent='Deleting…';
     try{
-      const res=await apiFetch(`/superadmin/companies/${companyId}`,{method:'DELETE'});
-      if(!res.ok){ const d=await res.json(); errEl.textContent=d.detail||'Delete failed.'; errEl.style.display='block'; return; }
+      // Server verifies this against the superadmin's real account
+      // password_hash — the actual authorization check now lives in
+      // backend/app/routers/superadmin.py's delete_company(), not here.
+      const res=await apiFetch(`/superadmin/companies/${companyId}`,{method:'DELETE',body:JSON.stringify({password})});
+      if(!res.ok){
+        const d=await res.json();
+        errEl.textContent=d.detail||'Delete failed.';
+        errEl.style.display='block';
+        document.getElementById('delete-co-pwd1').value='';
+        return;
+      }
       closeModal('m-delete-co');
       loadDashboard();
     }catch(err){ errEl.textContent=err.message; errEl.style.display='block'; }

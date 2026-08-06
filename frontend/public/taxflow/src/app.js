@@ -14,7 +14,7 @@ META.hrms={t:'HRMS Dashboard',s:'Employees · Attendance · Leave · OT · Payro
 META.recruitment={t:'Recruitment ATS',s:'Job Requisitions - Candidates - Interviews - Offer Letters - Onboarding',a:'+ New Requisition',ao:()=>showM('m-recruitment')};
 META['hrms-ext']={t:'HR Modules',s:'Performance - Training - Asset Management - ESS - Manager Portal',a:'',ao:null};
 META.accounting={t:'Accounting',s:'Chart - Vouchers - Ledger - Filing - Bank Recon',a:'+ Voucher',ao:()=>{go('accounting');setTimeout(()=>stab(document.querySelectorAll('#page-accounting .tab')[1],'acc-voucher'),50)}};
-META.corporate={t:'Corporate Accounting',s:'Corporate tax - Assets - Accruals - Cost centers - Budgets',a:'Tax Report',ao:()=>{go('corporate');setTimeout(()=>stab(document.querySelectorAll('#page-corporate .tab')[0],'corp-tax'),50)}};
+META.corporate={t:'Corporate Accounting',s:'Corporate tax - Assets - Accruals - Cost centers - Budgets',a:'Tax Report',ao:()=>{go('corporate');setTimeout(()=>stab(document.querySelectorAll('#page-corporate .tab')[0],'corp-tax-tab'),50)}};
 META.reports={t:'Reports',s:'VAT - P&L - Balance Sheet - Trial Balance',a:'Export PDF',ao:()=>exportActiveReportPdf()};
 META.exception={t:'Exception Center',s:'Failed postings - duplicates - VAT/OCR - stock and payroll issues',a:'Refresh',ao:()=>loadExceptionCenter()};
 META.pos={t:'Point of Sale',s:'Quick sale - Products - Receipt - Cash & Card',a:'Launch Terminal',ao:()=>window.open('/pos','_blank')};
@@ -199,7 +199,7 @@ function go(page){
     corpPage?.querySelectorAll('.tab').forEach(tab=>tab.classList.remove('on'));
     corpPage?.querySelectorAll('.tab-body').forEach(body=>body.classList.remove('on'));
     corpPage?.querySelector('.tab')?.classList.add('on');
-    document.getElementById('corp-tax')?.classList.add('on');
+    document.getElementById('corp-tax-tab')?.classList.add('on');
   }
   const m=META[page];
   const mAr=_appLang==='ar'?(_META_AR[page]||{}):null;
@@ -2358,6 +2358,15 @@ async function authenticatedFetch(url,options={}){
 window.COMPANY_CURRENCY=window.COMPANY_CURRENCY||'AED';
 function currentCurrency(){return window.COMPANY_CURRENCY||'AED';}
 Object.defineProperty(window,'AED_SYMBOL',{get:currentCurrency,configurable:true});
+
+// The company's configured VAT rate (Settings > Tax Settings) — set from
+// applyCompanyToUi() same as COMPANY_CURRENCY above. Several VAT
+// calculations across Sales/Quotations/Purchase-AI validation used to
+// hardcode 0.05/5% directly, silently ignoring this for any company on a
+// non-default rate; currentVatRate() is the one place all of them should
+// read from.
+window.COMPANY_VAT_RATE=window.COMPANY_VAT_RATE||5;
+function currentVatRate(){return Number(window.COMPANY_VAT_RATE)||5;}
 Object.defineProperty(window,'AED_CHAR',{get:()=>currentCurrency()+' ',configurable:true});
 Object.defineProperty(window,'AED_HTML',{get:()=>currentCurrency()+' ',configurable:true});
 function AED_SYMBOL_SVG(){return currentCurrency()+' ';}
@@ -2506,6 +2515,7 @@ function applyCompanyToUi(company){
   const taxVatDisplay=document.getElementById('tax-vat-rate-display');
   if(taxVatDisplay)taxVatDisplay.value=vatRateNum+'%';
   window.COMPANY_CURRENCY=company.currency||'AED';
+  window.COMPANY_VAT_RATE=vatRateNum;
   // Company registration page fields
   set('co-name',company.name);
   set('co-trade-name',company.trade_name);
@@ -8546,6 +8556,7 @@ function editSalesInvoiceFromRow(btn){
   const row=btn.closest('tr');
   const inv=invoiceFromSalesRow(row);
   if(!inv){toast('Invoice data not found','warn');return;}
+  _editingSalesInvoiceNo=inv.invoice_no;
   closeM('m-sales-view');
   currentSalesTransactionType=isSalesReturn(inv)?'return':'sale';
   go('sales');
@@ -8655,8 +8666,16 @@ function salesRegisterRows(){
 function addSalesInvoiceRow(inv,options={persist:true}){
   const tbody=salesRegisterTbody(inv);
   if(!tbody||!inv.invoice_no)return false;
+  // editingInvoiceNo (set by saveDraftInvoice() from _editingSalesInvoiceNo)
+  // identifies this as an update to an invoice already in the register, not
+  // a brand-new one — the exists-check below must not block that case, and
+  // if the number itself changed while editing, the old record needs to be
+  // removed rather than left behind as an orphaned duplicate.
+  const editingRef=options.editingInvoiceNo||null;
+  const isEditingSameNumber=editingRef&&invoiceKey(editingRef)===invoiceKey(inv.invoice_no);
+  const isRenaming=editingRef&&invoiceKey(editingRef)!==invoiceKey(inv.invoice_no);
   const exists=salesInvoiceDbKeys.has(invoiceKey(inv.invoice_no))||salesRegisterRows().some(row=>row.children[0]?.textContent===inv.invoice_no);
-  if(exists)return false;
+  if(exists&&!isEditingSameNumber)return false;
   // normalise vat/vat_amount across different save formats
   if(inv.vat_amount==null&&inv.vat!=null)inv={...inv,vat_amount:inv.vat};
   if(inv.vat==null&&inv.vat_amount!=null)inv={...inv,vat:inv.vat_amount};
@@ -8678,8 +8697,24 @@ function addSalesInvoiceRow(inv,options={persist:true}){
   row.dataset.rowActionsAdded='1';
   row.innerHTML=`<td class="mono">${escapeHtml(inv.invoice_no)}</td><td>${escapeHtml(inv.customer)}</td><td>${escapeHtml(inv.date)}</td><td>${escapeHtml(inv.due_date||'30 days')}</td><td class="mono">${fmt(inv.subtotal)}</td><td class="mono">${fmt(inv.vat_amount)}</td><td class="mono">${fmt(inv.total)}</td><td><span class="b ${sourceClass}">${escapeHtml(source)}</span></td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td data-action-col="1">${salesInvoiceActionsHtml()}</td>`;
   removeEmptyState(tbody);
-  tbody.prepend(row);
+  if(isEditingSameNumber){
+    // Replace the existing row in place rather than prepending a second one.
+    const existingRow=salesRegisterRows().find(r=>r.children[0]?.textContent===inv.invoice_no);
+    if(existingRow)existingRow.replaceWith(row);
+    else tbody.prepend(row);
+  }else{
+    tbody.prepend(row);
+  }
   registerSalesInvoiceKey(inv.invoice_no);
+  if(isRenaming){
+    // The invoice number changed while editing — remove the old row/key and
+    // delete the old backend record so it doesn't linger as an orphaned
+    // duplicate inflating sales totals/KPIs/VAT figures.
+    salesInvoiceDbKeys.delete(invoiceKey(editingRef));
+    const oldRow=salesRegisterRows().find(r=>r.children[0]?.textContent===editingRef);
+    if(oldRow)oldRow.remove();
+    deleteServer('salesInvoices',{invoice_no:editingRef}).catch(()=>{});
+  }
   if(options.persist)persistSalesInvoice({...inv,source,status});
   if(!isHydratingFromServer)refreshSalesInvoiceKpis();
   return true;
@@ -10121,6 +10156,16 @@ function renderSalesInvoicePreview(inv){
 }
 
 let currentSalesInvoice=null;
+// The invoice number the Create/Edit Sales Invoice form was loaded with,
+// set by editSalesInvoiceFromRow() and cleared by clearDraftInvoiceForm().
+// Distinct from #inv-no's live value, which the user may go on to change —
+// this is what lets saveDraftInvoice()/addSalesInvoiceRow() tell "editing
+// this exact invoice" apart from "creating a new one that happens to reuse
+// a number", the two cases that used to be silently conflated (an edit
+// with the number unchanged was blocked as a duplicate and discarded; an
+// edit with the number changed created a new record and orphaned the old
+// one in the register).
+let _editingSalesInvoiceNo=null;
 
 function openSalesInvoiceRow(btn){
   const row=btn.closest('tr');
@@ -10192,11 +10237,11 @@ function buildDraftInvoice(){
       mapping_price:parseAmount(row.dataset.sourcePrice||price),
       mapping_cost:parseAmount(row.dataset.mappingCost||0),
       markup_percent:parseAmount(row.dataset.markupPercent||0),
-      tax_rate:parseAmount(row.dataset.taxRate||5)
+      tax_rate:parseAmount(row.dataset.taxRate||currentVatRate())
     };
   }).filter(line=>line.description||line.qty||line.price);
   const subtotal=lines.reduce((sum,line)=>sum+line.amount,0);
-  const vat=subtotal*.05;
+  const vat=subtotal*(currentVatRate()/100);
   return {
     invoice_no:invoiceNo,
     document_type:currentSalesTransactionType==='return'?'Sales Return':'Sales Invoice',
@@ -10306,7 +10351,7 @@ function saveDraftInvoice(options={}){
     return null;
   }
   currentSalesInvoice=inv;
-  const saved=addSalesInvoiceRow(inv);
+  const saved=addSalesInvoiceRow(inv,{editingInvoiceNo:_editingSalesInvoiceNo});
   if(saved){
     audit(options.auditAction||'Saved draft sales invoice',inv.invoice_no,'Saved');
     toast(options.toast||'Invoice saved to register','ok');
@@ -10344,6 +10389,7 @@ function clearDraftInvoiceForm(){
     if(amount)amount.value='0.00';
   }
   currentSalesInvoice=null;
+  _editingSalesInvoiceNo=null;
   calcLine(null);
   configureSalesFormMode();
 }
@@ -12444,7 +12490,7 @@ function calcPurchaseAiEditInvoice(forceTaxRecalc=false){
   const discount=discountType==='Percentage'?lineTotal*(discountValue/100):discountType==='Fixed'?discountValue:0;
   const taxable=Math.max(0,lineTotal-discount);
   const taxType=document.getElementById('pai-tax-type')?.value||'None';
-  const calculatedVat=taxType.includes('5%')&&!taxType.toLowerCase().includes('exempt')?taxable*.05:0;
+  const calculatedVat=taxType.includes('5%')&&!taxType.toLowerCase().includes('exempt')?taxable*(currentVatRate()/100):0;
   const vatField=document.getElementById('pai-vat');
   if(vatField&&(forceTaxRecalc||(!_paiVatManuallyEdited&&document.activeElement!==vatField)))vatField.value=calculatedVat.toFixed(2);
   const vat=parseAmount(vatField?.value);
@@ -13401,7 +13447,7 @@ function calcManualPurchase(){
   const discount=discountType==='Percentage'?net*(discountValue/100):discountType==='Fixed'?discountValue:0;
   const taxable=Math.max(0,net-discount);
   const taxType=document.getElementById('mp-tax')?.value||'None';
-  const tax=taxType.includes('5%')&&!taxType.toLowerCase().includes('exempt')?taxable*.05:0;
+  const tax=taxType.includes('5%')&&!taxType.toLowerCase().includes('exempt')?taxable*(currentVatRate()/100):0;
   const shipping=parseAmount(document.getElementById('mp-shipping')?.value);
   const extraExpenses=collectManualPurchaseExpenses().reduce((sum,expense)=>sum+Number(expense.amount||0),0);
   const total=taxable+tax+shipping+extraExpenses;
@@ -14093,7 +14139,7 @@ function calcLine(inp){
   document.querySelectorAll('#inv-lines .inv-item').forEach(r=>{
     sub+=parseAmount(r.querySelector('.inv-qty')?.value)*parseAmount(r.querySelector('.inv-price')?.value);
   });
-  const vat=sub*0.05,tot=sub+vat;
+  const vat=sub*(currentVatRate()/100),tot=sub+vat;
   document.getElementById('subtotal').textContent='AED '+sub.toLocaleString('en-AE',{minimumFractionDigits:2});
   document.getElementById('vat-amt').textContent='AED '+vat.toLocaleString('en-AE',{minimumFractionDigits:2});
   document.getElementById('inv-total').textContent='AED '+tot.toLocaleString('en-AE',{minimumFractionDigits:2});
@@ -18508,11 +18554,11 @@ function editCalc(){
 
 function autoRecalcVAT(){
   const sub = parseFloat(document.getElementById('ei-subtotal').value)||0;
-  const calculated = parseFloat((sub*0.05).toFixed(2));
+  const calculated = parseFloat((sub*(currentVatRate()/100)).toFixed(2));
   document.getElementById('ei-vat').value = calculated;
   document.getElementById('ei-total').value = (sub+calculated).toFixed(2);
   runEditValidation();
-  toast('VAT recalculated at 5% ?','ok');
+  toast(`VAT recalculated at ${currentVatRate()}% ?`,'ok');
 }
 
 function runEditValidation(){
@@ -18520,11 +18566,11 @@ function runEditValidation(){
   const trn   = document.getElementById('ei-trn').value;
   const sub   = parseFloat(document.getElementById('ei-subtotal').value)||0;
   const vat   = parseFloat(document.getElementById('ei-vat').value)||0;
-  const expected = parseFloat((sub*0.05).toFixed(2));
+  const expected = parseFloat((sub*(currentVatRate()/100)).toFixed(2));
   const issues = [];
 
   if(trn.length!==15) issues.push('? TRN must be exactly 15 digits (currently '+trn.length+')');
-  if(sub>0 && Math.abs(vat-expected)>1) issues.push('? VAT AED '+vat.toFixed(2)+' ? 5% of AED '+sub.toFixed(2)+' = AED '+expected.toFixed(2));
+  if(sub>0 && Math.abs(vat-expected)>1) issues.push('? VAT AED '+vat.toFixed(2)+' ? '+currentVatRate()+'% of AED '+sub.toFixed(2)+' = AED '+expected.toFixed(2));
 
   panel.style.display='block';
   if(issues.length===0){
@@ -18658,7 +18704,19 @@ function runPayroll(){
   toast('Payroll calculated. Review WPS exceptions before approval.','ok');
 }
 
-function approvePayroll(){
+// "June 2024" (the #pay-period <select>'s option label) -> "2024-06", the
+// YYYY-MM format POST /payroll/generate requires. Returns null if the
+// label isn't parseable as a "Month YYYY" string.
+const _PAYROLL_PERIOD_MONTHS=['january','february','march','april','may','june','july','august','september','october','november','december'];
+function payrollPeriodToYearMonth(label){
+  const match=String(label||'').trim().match(/^([A-Za-z]+)\s+(\d{4})$/);
+  if(!match)return null;
+  const monthIndex=_PAYROLL_PERIOD_MONTHS.indexOf(match[1].toLowerCase());
+  if(monthIndex<0)return null;
+  return `${match[2]}-${String(monthIndex+1).padStart(2,'0')}`;
+}
+
+async function approvePayroll(){
   const blocked=getPayrollRows().some(row=>row.dataset.wps!=='ok');
   if(blocked){
     toast('Resolve WPS exceptions before final approval','warn');
@@ -18677,6 +18735,28 @@ function approvePayroll(){
   const preparedBy=document.getElementById('pay-prepared-by')?.value.trim()||'';
   const payDate=document.getElementById('pay-date')?.value||'';
   saveServer('payrollRuns',{id:`PAY-${Date.now()}`,period,prepared_by:preparedBy,payment_date:payDate,status:blocked?'Conditional':'Approved',approved_at:new Date().toISOString()});
+  // This UI's own gross/net/deductions numbers (basic + this screen's
+  // Quick Adjustments) previously never reached the real PayrollRun/
+  // PayrollItem tables at all — only this generic payrollRuns JSON blob,
+  // which nothing else reads. ESS's Payslips tab and the P&L's payroll
+  // expense line both query only the real tables, so approving payroll
+  // here produced no payslips and didn't reduce reported net profit.
+  // POST /payroll/generate uses its own, simpler calculation (basic
+  // salary only, no allowances/OT/deductions yet — see its own comment) —
+  // deliberately not attempting to reconcile the two calculations here,
+  // just making sure the real tables get populated so ESS/P&L have
+  // something. A 409 means a run already exists for this period, which is
+  // fine (idempotent from this button's perspective, not an error).
+  const yearMonth=payrollPeriodToYearMonth(period);
+  if(yearMonth){
+    try{
+      await moduleApi('/payroll/generate',{method:'POST',body:{period:yearMonth}});
+    }catch(err){
+      if(!/already exists/i.test(err.message||'')){
+        toast(`Payroll approved on screen, but syncing to payslips/reports failed: ${err.message}`,'warn');
+      }
+    }
+  }
   toast(blocked?'Payroll conditionally approved with WPS hold':'Payroll approved ✓',blocked?'warn':'ok');
   audit('Approved payroll',period,blocked?'Conditional':'Approved');
 }
@@ -19895,10 +19975,44 @@ function calcCorporateTax(){
   set('ct-taxable-income',formatAed(taxableIncome));
   set('ct-liability',formatAed(taxLiability));
   set('ct-sbr-note',note);
-  set('corp-tax',formatAed(taxLiability));
-  set('corp-income',formatAed(taxableIncome));
+  // Deliberately NOT updating 'corp-tax'/'corp-income' here anymore — those
+  // are the Reports page's own auto-derived-from-posted-transactions stat
+  // tiles (a different, independent number computed from a different
+  // profit base — see corporate_report_rows() in reports.py), previously
+  // silently clobbered by this worksheet's manual entry (or vice versa,
+  // depending on which ran last) since both used to target the same
+  // duplicate-id DOM element. This worksheet's own result now only ever
+  // writes to its own ct-* elements; use "Save Return for this Period"
+  // below to actually persist a filing record via the typed
+  // /tax/corporate-tax-returns API.
   const row=document.getElementById('ct-result-row');
   if(row)row.style.display='';
+  const saveRow=document.getElementById('ct-save-row');
+  if(saveRow)saveRow.style.display='';
+  const periodInput=document.getElementById('ct-period');
+  if(periodInput&&!periodInput.value)periodInput.value=String(new Date().getFullYear());
+}
+
+async function saveCorporateTaxReturn(){
+  const period=(document.getElementById('ct-period')?.value||'').trim();
+  if(!period){toast('Enter a tax period first','warn');return;}
+  const netProfit=parseAmount(document.getElementById('ct-net-profit')?.value)||0;
+  const nonDed=parseAmount(document.getElementById('ct-non-ded')?.value)||0;
+  const exempt=parseAmount(document.getElementById('ct-exempt')?.value)||0;
+  const statusEl=document.getElementById('ct-save-status');
+  try{
+    const saved=await moduleApi('/tax/corporate-tax-returns',{method:'POST',body:{
+      tax_period:period,
+      accounting_profit:netProfit,
+      non_deductible_expenses:nonDed,
+      exempt_income:exempt,
+    }});
+    if(statusEl)statusEl.textContent=`Saved — CT payable AED ${Number(saved.corporate_tax_payable||0).toLocaleString('en-AE',{minimumFractionDigits:2})} for ${period}`;
+    toast('Corporate tax return saved ✓','ok');
+  }catch(err){
+    if(statusEl)statusEl.textContent='';
+    toast(`Could not save return: ${err.message}`,'err');
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -20055,7 +20169,7 @@ function simulateReportScenario(type){
   }else if(type==='growth'){
     const revenueLift=revenue*0.10;
     const profitLift=revenueLift*(currentMargin/100);
-    const vatLift=revenueLift*0.05;
+    const vatLift=revenueLift*(currentVatRate()/100);
     msg=`Growth scenario: 10% revenue uplift adds about ${formatAed(revenueLift)} revenue, ${formatAed(profitLift)} gross profit, and approximately ${formatAed(vatLift)} output VAT before input offsets.`;
   }
   if(output)output.innerHTML='<strong style="color:var(--text)">Scenario Result</strong><br>'+msg;
@@ -21770,7 +21884,7 @@ function calcQuotationTotals(){
     const target=line.querySelector('.quote-amount');
     if(target)target.value=amount.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
   });
-  const vat=subtotal*0.05;
+  const vat=subtotal*(currentVatRate()/100);
   const total=subtotal+vat;
   const sub=document.getElementById('quote-subtotal');
   const vatEl=document.getElementById('quote-vat');

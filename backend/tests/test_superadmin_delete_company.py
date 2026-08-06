@@ -18,13 +18,20 @@ from app.security import hash_password
 
 
 def _make_superadmin(db):
-    company = Company(name="ETaxFlow Admin Test", trn="SUPERADMIN-TEST")
-    db.add(company)
-    db.flush()
-    admin = User(company_id=company.id, email="superadmin-test@etaxflow.com",
-                 full_name="Super Admin", role="superadmin", password_hash=hash_password("test12345"))
-    db.add(admin)
-    db.commit()
+    # Idempotent — Company.trn is unique, and this test module's DB persists
+    # across every test function in the session (same shared-tenant gotcha
+    # documented for auth_headers elsewhere in this suite), so a second call
+    # from a different test function must reuse the existing row rather than
+    # colliding on a fresh insert of the same literal TRN/email.
+    admin = db.query(User).filter(User.email == "superadmin-test@etaxflow.com").first()
+    if not admin:
+        company = Company(name="ETaxFlow Admin Test", trn="SUPERADMIN-TEST")
+        db.add(company)
+        db.flush()
+        admin = User(company_id=company.id, email="superadmin-test@etaxflow.com",
+                     full_name="Super Admin", role="superadmin", password_hash=hash_password("test12345"))
+        db.add(admin)
+        db.commit()
     r = _login_client_ref["client"].post("/api/v1/auth/login", json={"email": admin.email, "password": "test12345"})
     assert r.status_code == 200, r.text
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
@@ -87,7 +94,7 @@ def test_delete_company_with_hrms_gps_and_rbac_data(client, db):
     db.commit()
 
     headers = _make_superadmin(db)
-    r = client.delete(f"/api/v1/superadmin/companies/{target.id}", headers=headers)
+    r = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={"password": "test12345"})
     assert r.status_code == 200, r.text
 
     assert db.query(Company).filter(Company.id == target.id).first() is None
@@ -96,3 +103,26 @@ def test_delete_company_with_hrms_gps_and_rbac_data(client, db):
     assert db.query(CompanyLocation).filter(CompanyLocation.company_id == target.id).count() == 0
     assert db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == target.id).count() == 0
     assert db.query(JournalEntry).filter(JournalEntry.company_id == target.id).count() == 0
+
+
+def test_delete_company_rejects_wrong_password(client, db):
+    """Regression test for a real security gap: the endpoint used to accept
+    DELETE with no body/secret at all — the only "authorization" was two
+    hardcoded string literals checked entirely client-side in
+    superadmin.html, never sent to or verified by the backend. Confirms the
+    server now independently verifies the acting superadmin's own account
+    password and rejects the company survives a wrong or missing one."""
+    _login_client_ref["client"] = client
+    target = Company(name="Wrong Password Target Co", trn="TARGET-DELETE-WRONGPWD")
+    db.add(target)
+    db.commit()
+
+    headers = _make_superadmin(db)
+
+    wrong = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={"password": "not-the-real-password"})
+    assert wrong.status_code == 403, wrong.text
+
+    missing = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={})
+    assert missing.status_code == 422, missing.text
+
+    assert db.query(Company).filter(Company.id == target.id).first() is not None
