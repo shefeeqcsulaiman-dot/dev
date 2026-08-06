@@ -394,12 +394,12 @@ def list_collection_records(
     }
 
 
-# Maps each HRMS sidebar module to the app-data collection(s) it reads.
-# Used to scope the bootstrap blob for an Employee principal (HRMS sub-user)
-# to only what their role can view — everything else (sales, purchases,
-# banking, accounting, audit, ...) is never returned to an Employee
-# principal, full stop, since none of those map to any HRMS module.
-_HR_COLLECTIONS_BY_MODULE: dict[str, list[str]] = {
+# Maps each sidebar module (HR and, since the "Main Dashboard Access" phase,
+# main-app modules too) to the app-data collection(s) it reads. Used to scope
+# the bootstrap blob for an Employee principal to only what their role can
+# view — a collection not listed under any module the Employee's role grants
+# `:view` on is never returned, full stop.
+_COLLECTIONS_BY_MODULE: dict[str, list[str]] = {
     "employees": ["employees"],
     "leave": ["leaveRequests"],
     "attendance": ["attendanceCorrections"],
@@ -408,6 +408,22 @@ _HR_COLLECTIONS_BY_MODULE: dict[str, list[str]] = {
     "loans": ["employeeLoans", "salaryAdvances"],
     "recruitment": ["jobRequisitions", "candidates"],
     "payroll": ["payrollRuns", "payrollAdjustments"],
+    # Main-dashboard modules — products/customers/vendors are shared
+    # reference data needed by more than one module, so they're duplicated
+    # across every module list that plausibly needs them; the union below
+    # dedupes naturally.
+    "sales": ["salesInvoices", "salesCategories", "salesUnits", "customers", "products"],
+    "quotations": ["quotations", "quotationLayout"],
+    "purchase": ["bills", "purchaseDocuments", "vendors", "products"],
+    "inventory": ["products"],
+    "expense": ["expenses"],
+    "bank": ["bankAccounts", "payments"],
+    "accounting": ["ledger", "journalDrafts", "accounts", "recurringJournals", "lockedPeriods"],
+    "corporate": [
+        "corporateTax", "fixedAssets", "accrualsPrepayments", "costCenters",
+        "budgets", "cashFlowForecasts", "creditControl", "consolidation", "approvalMatrix",
+    ],
+    "notifications": ["alertRules"],
 }
 
 
@@ -415,11 +431,11 @@ def _allowed_bootstrap_collections(principal: Principal) -> set[str] | None:
     """None means unrestricted (admin User). For an Employee principal,
     returns exactly the collections their role's module `:view` permissions
     unlock — never the full set, regardless of how many permissions they
-    have, since only HR modules are ever eligible."""
+    have."""
     if principal.is_admin:
         return None
     allowed: set[str] = set()
-    for module, collections in _HR_COLLECTIONS_BY_MODULE.items():
+    for module, collections in _COLLECTIONS_BY_MODULE.items():
         if principal.has(f"{module}:view"):
             allowed.update(collections)
     return allowed

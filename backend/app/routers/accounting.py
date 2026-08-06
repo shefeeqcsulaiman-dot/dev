@@ -10,6 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.accounting_posting import create_gl_entries_from_journal, money, post_source_transaction
+from app.auth_principal import Principal, require_principal_permission
 from app.database import get_db
 from app.dependencies import get_current_user, require_module
 from app.models import (
@@ -100,13 +101,13 @@ def validate_lines(db: Session, company_id: str, lines: list) -> None:
 
 
 @router.get("/accounts", response_model=list[AccountOut])
-def list_accounts(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[Account]:
-    return db.query(Account).filter(Account.company_id == current_user.company_id).order_by(Account.code).all()
+def list_accounts(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("accounting:view"))) -> list[Account]:
+    return db.query(Account).filter(Account.company_id == principal.company_id).order_by(Account.code).all()
 
 
 @router.get("/accounts/tree", response_model=list[AccountTreeNode])
-def list_accounts_tree(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[AccountTreeNode]:
-    accounts = db.query(Account).filter(Account.company_id == current_user.company_id).order_by(Account.code).all()
+def list_accounts_tree(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("accounting:view"))) -> list[AccountTreeNode]:
+    accounts = db.query(Account).filter(Account.company_id == principal.company_id).order_by(Account.code).all()
     by_id: dict[str, AccountTreeNode] = {}
     roots: list[AccountTreeNode] = []
     for acc in accounts:
@@ -599,7 +600,7 @@ def list_journals(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(require_principal_permission("accounting:view")),
 ) -> dict[str, object]:
     # Paginated the same way GET /app-data/records/{collection} already is —
     # previously this returned every journal entry unconditionally, which
@@ -609,14 +610,14 @@ def list_journals(
     # has_more instead of relying on one unbounded response.
     total = (
         db.query(func.count(JournalEntry.id))
-        .filter(JournalEntry.company_id == current_user.company_id)
+        .filter(JournalEntry.company_id == principal.company_id)
         .scalar()
         or 0
     )
     rows = (
         db.query(JournalEntry)
         .options(joinedload(JournalEntry.lines))
-        .filter(JournalEntry.company_id == current_user.company_id)
+        .filter(JournalEntry.company_id == principal.company_id)
         .order_by(JournalEntry.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -661,8 +662,8 @@ def delete_journal(
 
 
 @router.get("/voucher-types", response_model=list[VoucherTypeOut])
-def list_voucher_types(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[VoucherType]:
-    return db.query(VoucherType).filter(VoucherType.company_id == current_user.company_id).order_by(VoucherType.code).all()
+def list_voucher_types(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("accounting:view"))) -> list[VoucherType]:
+    return db.query(VoucherType).filter(VoucherType.company_id == principal.company_id).order_by(VoucherType.code).all()
 
 
 @router.post("/voucher-types", response_model=VoucherTypeOut, status_code=201)
@@ -679,11 +680,11 @@ def create_voucher_type(
 
 
 @router.get("/vouchers", response_model=list[VoucherOut])
-def list_vouchers(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[Voucher]:
+def list_vouchers(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("accounting:view"))) -> list[Voucher]:
     return (
         db.query(Voucher)
         .options(joinedload(Voucher.lines))
-        .filter(Voucher.company_id == current_user.company_id)
+        .filter(Voucher.company_id == principal.company_id)
         .order_by(Voucher.created_at.desc())
         .all()
     )
@@ -771,11 +772,11 @@ def list_general_ledger(
     skip: int = 0,
     limit: int = 500,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(require_principal_permission("accounting:view")),
 ) -> list[GeneralLedgerEntry]:
     query = (
         db.query(GeneralLedgerEntry)
-        .filter(GeneralLedgerEntry.company_id == current_user.company_id)
+        .filter(GeneralLedgerEntry.company_id == principal.company_id)
     )
     if account_id:
         query = query.filter(GeneralLedgerEntry.account_id == account_id)
@@ -791,12 +792,12 @@ def list_general_ledger(
 @router.get("/vendors", response_model=list[str])
 def list_vendors(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(require_principal_permission("accounting:view")),
 ) -> list[str]:
     rows = (
         db.query(SourceTransaction.party_name)
         .filter(
-            SourceTransaction.company_id == current_user.company_id,
+            SourceTransaction.company_id == principal.company_id,
             SourceTransaction.party_name.isnot(None),
             SourceTransaction.party_name != "",
             SourceTransaction.module.in_(["purchase", "purchase_bill", "expense", "expenses"]),
@@ -809,7 +810,7 @@ def list_vendors(
     pay_rows = (
         db.query(Payment.payee_name)
         .filter(
-            Payment.company_id == current_user.company_id,
+            Payment.company_id == principal.company_id,
             Payment.payee_name.isnot(None),
             Payment.payee_name != "",
         )
@@ -884,11 +885,11 @@ def reverse_journal(
 @router.get("/posting-jobs", response_model=list[PostingJobOut])
 def list_posting_jobs(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(require_principal_permission("accounting:view")),
 ) -> list[PostingJob]:
     return (
         db.query(PostingJob)
-        .filter(PostingJob.company_id == current_user.company_id)
+        .filter(PostingJob.company_id == principal.company_id)
         .order_by(PostingJob.created_at.desc())
         .all()
     )
@@ -912,8 +913,8 @@ def retry_posting_job(
 
 
 @router.get("/payments", response_model=list[PaymentOut])
-def list_payments(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[Payment]:
-    return db.query(Payment).filter(Payment.company_id == current_user.company_id).order_by(Payment.created_at.desc()).all()
+def list_payments(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("accounting:view"))) -> list[Payment]:
+    return db.query(Payment).filter(Payment.company_id == principal.company_id).order_by(Payment.created_at.desc()).all()
 
 
 @router.post("/payments", response_model=PaymentOut, status_code=201)
@@ -967,8 +968,8 @@ def create_payment(
 
 
 @router.get("/receipts", response_model=list[ReceiptOut])
-def list_receipts(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[Receipt]:
-    return db.query(Receipt).filter(Receipt.company_id == current_user.company_id).order_by(Receipt.created_at.desc()).all()
+def list_receipts(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("accounting:view"))) -> list[Receipt]:
+    return db.query(Receipt).filter(Receipt.company_id == principal.company_id).order_by(Receipt.created_at.desc()).all()
 
 
 @router.post("/receipts", response_model=ReceiptOut, status_code=201)
@@ -1021,8 +1022,8 @@ def create_receipt(
 
 
 @router.get("/bank-accounts", response_model=list[BankAccountOut])
-def list_bank_accounts(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[BankAccount]:
-    return db.query(BankAccount).filter(BankAccount.company_id == current_user.company_id).order_by(BankAccount.bank_name).all()
+def list_bank_accounts(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("accounting:view"))) -> list[BankAccount]:
+    return db.query(BankAccount).filter(BankAccount.company_id == principal.company_id).order_by(BankAccount.bank_name).all()
 
 
 @router.post("/bank-accounts", response_model=BankAccountOut, status_code=201)

@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.auth_principal import Principal, require_principal_permission
 from app.database import get_db
-from app.dependencies import get_current_user, require_module
+from app.dependencies import require_module
 from app.models import (
     AccrualPrepaymentRecord,
     ApprovalMatrixRecord,
@@ -14,7 +15,6 @@ from app.models import (
     CreditControlRecord,
     FixedAssetRecord,
     MonthEndCloseRecord,
-    User,
 )
 
 
@@ -22,8 +22,8 @@ router = APIRouter(prefix="/corporate-accounting", tags=["corporate accounting"]
 
 
 @router.get("/summary")
-def summary(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, int]:
-    company_id = current_user.company_id
+def summary(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("corporate:view"))) -> dict[str, int]:
+    company_id = principal.company_id
     return {
         "corporate_tax": db.query(CorporateTaxRecord).filter(CorporateTaxRecord.company_id == company_id).count(),
         "fixed_assets": db.query(FixedAssetRecord).filter(FixedAssetRecord.company_id == company_id).count(),
@@ -39,50 +39,50 @@ def summary(db: Session = Depends(get_db), current_user: User = Depends(get_curr
 
 
 @router.get("/corporate-tax", response_model=None)
-def corporate_tax(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(CorporateTaxRecord).filter(CorporateTaxRecord.company_id == current_user.company_id).order_by(CorporateTaxRecord.created_at.desc()).all()
+def corporate_tax(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("corporate:view"))):
+    return db.query(CorporateTaxRecord).filter(CorporateTaxRecord.company_id == principal.company_id).order_by(CorporateTaxRecord.created_at.desc()).all()
 
 
 @router.get("/fixed-assets", response_model=None)
-def fixed_assets(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(FixedAssetRecord).filter(FixedAssetRecord.company_id == current_user.company_id).order_by(FixedAssetRecord.asset_code).all()
+def fixed_assets(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("corporate:view"))):
+    return db.query(FixedAssetRecord).filter(FixedAssetRecord.company_id == principal.company_id).order_by(FixedAssetRecord.asset_code).all()
 
 
 @router.get("/accruals-prepayments", response_model=None)
-def accruals_prepayments(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(AccrualPrepaymentRecord).filter(AccrualPrepaymentRecord.company_id == current_user.company_id).order_by(AccrualPrepaymentRecord.created_at.desc()).all()
+def accruals_prepayments(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("corporate:view"))):
+    return db.query(AccrualPrepaymentRecord).filter(AccrualPrepaymentRecord.company_id == principal.company_id).order_by(AccrualPrepaymentRecord.created_at.desc()).all()
 
 
 @router.get("/cost-centers", response_model=None)
-def cost_centers(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(CostCenterRecord).filter(CostCenterRecord.company_id == current_user.company_id).order_by(CostCenterRecord.code).all()
+def cost_centers(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("corporate:view"))):
+    return db.query(CostCenterRecord).filter(CostCenterRecord.company_id == principal.company_id).order_by(CostCenterRecord.code).all()
 
 
 @router.get("/budgets", response_model=None)
-def budgets(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(BudgetRecord).filter(BudgetRecord.company_id == current_user.company_id).order_by(BudgetRecord.fiscal_year.desc()).all()
+def budgets(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("corporate:view"))):
+    return db.query(BudgetRecord).filter(BudgetRecord.company_id == principal.company_id).order_by(BudgetRecord.fiscal_year.desc()).all()
 
 
 @router.get("/cash-flow", response_model=None)
-def cash_flow(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(CashFlowForecastRecord).filter(CashFlowForecastRecord.company_id == current_user.company_id).order_by(CashFlowForecastRecord.forecast_date).all()
+def cash_flow(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("corporate:view"))):
+    return db.query(CashFlowForecastRecord).filter(CashFlowForecastRecord.company_id == principal.company_id).order_by(CashFlowForecastRecord.forecast_date).all()
 
 
 @router.get("/credit-control", response_model=None)
-def credit_control(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(CreditControlRecord).filter(CreditControlRecord.company_id == current_user.company_id).order_by(CreditControlRecord.customer_name).all()
+def credit_control(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("corporate:view"))):
+    return db.query(CreditControlRecord).filter(CreditControlRecord.company_id == principal.company_id).order_by(CreditControlRecord.customer_name).all()
 
 
 @router.get("/month-end", response_model=None)
-def month_end(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(MonthEndCloseRecord).filter(MonthEndCloseRecord.company_id == current_user.company_id).order_by(MonthEndCloseRecord.period.desc()).all()
+def month_end(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("corporate:view"))):
+    return db.query(MonthEndCloseRecord).filter(MonthEndCloseRecord.company_id == principal.company_id).order_by(MonthEndCloseRecord.period.desc()).all()
 
 
 @router.get("/consolidation", response_model=None)
-def consolidation(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(ConsolidationRecord).filter(ConsolidationRecord.company_id == current_user.company_id).order_by(ConsolidationRecord.group_name).all()
+def consolidation(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("corporate:view"))):
+    return db.query(ConsolidationRecord).filter(ConsolidationRecord.company_id == principal.company_id).order_by(ConsolidationRecord.group_name).all()
 
 
 @router.get("/approval-matrix", response_model=None)
-def approval_matrix(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(ApprovalMatrixRecord).filter(ApprovalMatrixRecord.company_id == current_user.company_id).order_by(ApprovalMatrixRecord.module, ApprovalMatrixRecord.min_amount).all()
+def approval_matrix(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("corporate:view"))):
+    return db.query(ApprovalMatrixRecord).filter(ApprovalMatrixRecord.company_id == principal.company_id).order_by(ApprovalMatrixRecord.module, ApprovalMatrixRecord.min_amount).all()

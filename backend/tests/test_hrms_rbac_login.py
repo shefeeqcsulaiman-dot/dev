@@ -157,29 +157,28 @@ def test_admin_bootstrap_unaffected(client, db, auth_headers):
     assert any(k in data for k in ("salesInvoices", "products", "bankAccounts", "customers"))
 
 
-def test_accounting_endpoints_401_for_employee_token(client, db, auth_headers):
-    """Documents why hydrateFromServer() must never call loadAccountingFromDb()
-    on hrms.html: /accounts and /journal are still User-only (get_current_user),
-    so an Employee token gets 401 (not 403) here, which authenticatedFetch()
-    correctly treats as an invalid session and force-logs the sub-user out.
-    This isn't a bug in these endpoints themselves — accounting isn't an HRMS
-    module — it's a bug in calling them unconditionally from a page that has
-    no accounting UI at all. See app.js hydrateFromServer()'s HRMS_STANDALONE
-    guard around loadAccountingFromDb()/loadCorporateAccountingFromDb().
+def test_accounting_endpoints_403_for_employee_without_permission(client, db, auth_headers):
+    """Was test_accounting_endpoints_401_for_employee_token — /accounts and
+    /journal were User-only (get_current_user) until the "Main Dashboard
+    Access" phase widened them to require_principal_permission("accounting:
+    view"). An Employee token without that permission now gets 403 (not the
+    401 that used to force-log the sub-user out via authenticatedFetch()'s
+    session-invalid handling) — a permission problem, not a session problem.
+    See test_main_dashboard_access.py for full coverage of the widened
+    endpoints (granted-permission 200, admin unaffected, bootstrap
+    scoping, and the company-module-gate/role-permission-gate composition).
 
     /inventory/mappings used to be in this same "still User-only" bucket, but
     Branch Management Phase 5 deliberately widened it (and stock-levels/
     stock-movements) to Employee/branch principals — see
-    test_branch_isolation.py for that behavior's own coverage. hrms.html
-    never called it (confirmed before this widening), so this was never a
-    force-logout risk for that page."""
+    test_branch_isolation.py for that behavior's own coverage."""
     employee_id = _seed_employee(client, auth_headers, db)
     emp_headers, _role = _grant_role_and_login(
         client, auth_headers, employee_id, "rbactest.user6", ["employees:view", "leave:view"]
     )
 
-    assert client.get("/api/v1/accounts", headers=emp_headers).status_code == 401
-    assert client.get("/api/v1/journal", headers=emp_headers).status_code == 401
+    assert client.get("/api/v1/accounts", headers=emp_headers).status_code == 403
+    assert client.get("/api/v1/journal", headers=emp_headers).status_code == 403
 
 
 def test_cross_tenant_employee_isolation(client, db, auth_headers, second_tenant_headers):

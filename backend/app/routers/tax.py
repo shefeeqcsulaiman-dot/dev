@@ -6,6 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import app.cache as cache
+from app.auth_principal import Principal, require_principal_permission
 from app.database import get_db
 from app.dependencies import get_current_user, require_module
 from app.models import CorporateTaxReturn, TaxCode, TaxLine, User, VatReturn
@@ -16,8 +17,8 @@ router = APIRouter(prefix="/tax", tags=["tax"])
 
 
 @router.get("/codes", response_model=list[TaxCodeOut], dependencies=[Depends(require_module("accounting"))])
-def list_tax_codes(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[TaxCode]:
-    return db.query(TaxCode).filter(TaxCode.company_id == current_user.company_id).order_by(TaxCode.code).all()
+def list_tax_codes(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("accounting:view"))) -> list[TaxCode]:
+    return db.query(TaxCode).filter(TaxCode.company_id == principal.company_id).order_by(TaxCode.code).all()
 
 
 @router.post("/codes", response_model=TaxCodeOut, status_code=201, dependencies=[Depends(require_module("accounting"))])
@@ -41,29 +42,29 @@ def create_tax_code(
 
 
 @router.get("/lines", response_model=list[TaxLineOut], dependencies=[Depends(require_module("accounting"))])
-def list_tax_lines(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[TaxLine]:
-    return db.query(TaxLine).filter(TaxLine.company_id == current_user.company_id).order_by(TaxLine.created_at.desc()).all()
+def list_tax_lines(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("accounting:view"))) -> list[TaxLine]:
+    return db.query(TaxLine).filter(TaxLine.company_id == principal.company_id).order_by(TaxLine.created_at.desc()).all()
 
 
 @router.get("/vat-return", dependencies=[Depends(require_module("accounting"))])
 def vat_return(
     period: str | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(require_principal_permission("accounting:view")),
 ) -> dict[str, str]:
     period = period or datetime.now(timezone.utc).strftime("%Y-%m")
-    cache_key = f"vat_return:{current_user.company_id}:{period}"
+    cache_key = f"vat_return:{principal.company_id}:{period}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
     output_vat = (
         db.query(func.coalesce(func.sum(TaxLine.tax_amount), 0))
-        .filter(TaxLine.company_id == current_user.company_id, TaxLine.period == period, TaxLine.direction == "output")
+        .filter(TaxLine.company_id == principal.company_id, TaxLine.period == period, TaxLine.direction == "output")
         .scalar()
     )
     input_vat = (
         db.query(func.coalesce(func.sum(TaxLine.tax_amount), 0))
-        .filter(TaxLine.company_id == current_user.company_id, TaxLine.period == period, TaxLine.direction == "input")
+        .filter(TaxLine.company_id == principal.company_id, TaxLine.period == period, TaxLine.direction == "input")
         .scalar()
     )
     net = Decimal(str(output_vat)) - Decimal(str(input_vat))
@@ -78,8 +79,8 @@ def vat_return(
 
 
 @router.get("/vat-returns", response_model=list[VatReturnOut], dependencies=[Depends(require_module("accounting"))])
-def list_vat_returns(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[VatReturn]:
-    return db.query(VatReturn).filter(VatReturn.company_id == current_user.company_id).order_by(VatReturn.period.desc()).all()
+def list_vat_returns(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("accounting:view"))) -> list[VatReturn]:
+    return db.query(VatReturn).filter(VatReturn.company_id == principal.company_id).order_by(VatReturn.period.desc()).all()
 
 
 @router.post("/vat-returns", response_model=VatReturnOut, status_code=201, dependencies=[Depends(require_module("accounting"))])
@@ -139,8 +140,8 @@ def create_vat_return(
 
 
 @router.get("/corporate-tax-returns", response_model=list[CorporateTaxReturnOut], dependencies=[Depends(require_module("corporate"))])
-def list_corporate_tax_returns(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[CorporateTaxReturn]:
-    return db.query(CorporateTaxReturn).filter(CorporateTaxReturn.company_id == current_user.company_id).order_by(CorporateTaxReturn.tax_period.desc()).all()
+def list_corporate_tax_returns(db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("corporate:view"))) -> list[CorporateTaxReturn]:
+    return db.query(CorporateTaxReturn).filter(CorporateTaxReturn.company_id == principal.company_id).order_by(CorporateTaxReturn.tax_period.desc()).all()
 
 
 @router.post("/corporate-tax-returns", response_model=CorporateTaxReturnOut, status_code=201, dependencies=[Depends(require_module("corporate"))])

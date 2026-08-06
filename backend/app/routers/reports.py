@@ -51,8 +51,13 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 
 @router.get("/dashboard")
 @limiter.limit("30/minute")
-def dashboard(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
-    company_id = current_user.company_id
+def dashboard(request: Request, db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("reports:view"))) -> dict[str, Any]:
+    # Widened from admin-only in the "Main Dashboard Access" phase — still
+    # company-wide/unfiltered (no branch_id anywhere in this function's data
+    # sources), a deliberate, previously-reaffirmed decision that stands;
+    # this only changes WHO can view the same company-wide numbers, gated
+    # behind reports:view same as trial_balance() already is.
+    company_id = principal.company_id
     cached = cache.get(f"dashboard:{company_id}")
     if cached is not None:
         return cached
@@ -490,8 +495,9 @@ def trial_balance(
 
 @router.get("/summary")
 @limiter.limit("30/minute")
-def report_summary(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
-    company_id = current_user.company_id
+def report_summary(request: Request, db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("reports:view"))) -> dict[str, Any]:
+    # See dashboard()'s comment above — same widening, same reasoning.
+    company_id = principal.company_id
     cached = cache.get(f"summary:{company_id}")
     if cached is not None:
         return cached
