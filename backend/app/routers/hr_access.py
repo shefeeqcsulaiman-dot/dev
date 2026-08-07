@@ -97,11 +97,7 @@ _PERMISSION_CATALOG: dict[str, list[str]] = {
     "inventory": ["view", "view_all_branches"],
     "expense": ["view"],
     "bank": ["view"],
-    # "accounting:view_all_branches" deliberately not added yet — accounting.py's
-    # own /journal and /general-ledger have no branch filtering at all on
-    # main today (that lives on a separate, unmerged branch); a checkbox
-    # here would be a confusing no-op until that ships. Add it then.
-    "accounting": ["view"],
+    "accounting": ["view", "view_all_branches"],
     "corporate": ["view"],
     "notifications": ["view"],
     "expert": ["view"],

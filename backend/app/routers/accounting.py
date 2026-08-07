@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.accounting_posting import create_gl_entries_from_journal, money, post_source_transaction
-from app.auth_principal import Principal, require_principal_permission
+from app.auth_principal import Principal, require_principal_permission, resolve_active_branch
 from app.database import get_db
 from app.dependencies import get_current_user, require_module
 from app.models import (
@@ -599,6 +599,7 @@ def update_account_status(
 def list_journals(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    branch_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("accounting:view")),
 ) -> dict[str, object]:
@@ -608,16 +609,27 @@ def list_journals(
     # worse as a company accumulates real transaction history. Callers that
     # genuinely need everything (clearLedgerRecords()) page through with
     # has_more instead of relying on one unbounded response.
-    total = (
-        db.query(func.count(JournalEntry.id))
-        .filter(JournalEntry.company_id == principal.company_id)
-        .scalar()
-        or 0
-    )
-    rows = (
+    total_query = db.query(func.count(JournalEntry.id)).filter(JournalEntry.company_id == principal.company_id)
+    rows_query = (
         db.query(JournalEntry)
         .options(joinedload(JournalEntry.lines))
         .filter(JournalEntry.company_id == principal.company_id)
+    )
+    # Branch Security Layer: "accounting:view_all_branches" lets a specific
+    # branch employee see company-wide entries without being a full admin;
+    # otherwise resolve_active_branch() scopes to the caller's own branch
+    # (or, for a genuinely multi-branch employee, whichever of their
+    # assigned branches they've switched to) — same two-tier composition
+    # as trial_balance_rows() (reports.py) and every other branch-aware
+    # endpoint. NULL branch_id (legacy/manual entries) stays visible.
+    resolved_branch_id = branch_id if principal.can_cross_branch("accounting") else resolve_active_branch(principal, branch_id)
+    if resolved_branch_id:
+        branch_filter = (JournalEntry.branch_id == resolved_branch_id) | (JournalEntry.branch_id.is_(None))
+        total_query = total_query.filter(branch_filter)
+        rows_query = rows_query.filter(branch_filter)
+    total = total_query.scalar() or 0
+    rows = (
+        rows_query
         .order_by(JournalEntry.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -769,6 +781,7 @@ def approve_voucher(
 @router.get("/general-ledger", response_model=list[GeneralLedgerEntryOut])
 def list_general_ledger(
     account_id: str | None = None,
+    branch_id: str | None = None,
     skip: int = 0,
     limit: int = 500,
     db: Session = Depends(get_db),
@@ -778,6 +791,12 @@ def list_general_ledger(
         db.query(GeneralLedgerEntry)
         .filter(GeneralLedgerEntry.company_id == principal.company_id)
     )
+    # Same two-tier branch scoping as list_journals() above.
+    resolved_branch_id = branch_id if principal.can_cross_branch("accounting") else resolve_active_branch(principal, branch_id)
+    if resolved_branch_id:
+        query = query.filter(
+            (GeneralLedgerEntry.branch_id == resolved_branch_id) | (GeneralLedgerEntry.branch_id.is_(None))
+        )
     if account_id:
         query = query.filter(GeneralLedgerEntry.account_id == account_id)
     return (

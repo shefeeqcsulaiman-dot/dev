@@ -2322,7 +2322,7 @@ async function fetchWithBackendFallback(url,options={}){
 // a new endpoint server-side means adding its path here too.
 window.ACTIVE_BRANCH_ID=window.ACTIVE_BRANCH_ID||(()=>{try{return localStorage.getItem('taxflow_active_branch_id')||null;}catch{return null;}})();
 window.ACCESSIBLE_BRANCHES=window.ACCESSIBLE_BRANCHES||[];
-const _BRANCH_AWARE_PATH_RE=/\/(invoices|inventory\/stock-levels|inventory\/stock-movements|reports\/trial-balance|hr\/live-locations|app-data\/records\/(purchaseRecords|posSales|salesInvoices))(\?|$)/;
+const _BRANCH_AWARE_PATH_RE=/\/(invoices|inventory\/stock-levels|inventory\/stock-movements|reports\/trial-balance|hr\/live-locations|journal|general-ledger|app-data\/records\/(purchaseRecords|posSales|salesInvoices))(\?|$)/;
 function _withActiveBranchParam(url){
   if(!window.ACTIVE_BRANCH_ID)return url;
   if(typeof url!=='string'||!_BRANCH_AWARE_PATH_RE.test(url))return url;

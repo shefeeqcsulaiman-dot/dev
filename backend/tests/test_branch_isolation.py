@@ -820,3 +820,134 @@ def test_cross_branch_permission_is_scoped_per_module_not_global(client, db, aut
     # Still branch-locked for purchase — the sales flag doesn't leak here.
     assert refs == {"PUR-XB-SCOPE-A-001"}
     assert "PUR-XB-SCOPE-B-001" not in refs
+
+
+# ── Journal & General Ledger — Accounting main-dashboard scoping ──
+
+
+def test_journal_scoped_by_branch(client, db, auth_headers):
+    """GET /journal (accounting.py) previously never filtered by branch even
+    though JournalEntry.branch_id is already stamped by the posting pipeline
+    (proven correct by trial_balance_rows() above) — a branch employee with
+    accounting:view saw every journal entry in the company, not just theirs."""
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Journal Branch A"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Journal Branch B"}).json()
+
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_a = Employee(company_id=company_id, employee_no="BR-JNL-A", full_name="Journal Branch A Staff", branch_id=branch_a["id"])
+    db.add(emp_a)
+    db.commit()
+    headers_a = _grant_role_and_login(client, auth_headers, emp_a.id, "branchtest.jnla", ["accounting:view"], "Journal Branch Role")
+
+    source_a = _post_and_approve_source(client, auth_headers, "SRC-JNL-A-001", branch_a["id"])
+    source_b = _post_and_approve_source(client, auth_headers, "SRC-JNL-B-001", branch_b["id"])
+
+    listed = client.get("/api/v1/journal?limit=500", headers=headers_a)
+    assert listed.status_code == 200, listed.text
+    source_ids = {row["source_id"] for row in listed.json()["records"]}
+    assert source_a["id"] in source_ids
+    assert source_b["id"] not in source_ids
+
+
+def test_journal_unassigned_employee_sees_all_branches(client, db, auth_headers):
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Journal Branch C"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "Journal Branch D"}).json()
+
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_u = Employee(company_id=company_id, employee_no="BR-JNL-U", full_name="Journal HQ Staff")
+    db.add(emp_u)
+    db.commit()
+    headers_u = _grant_role_and_login(client, auth_headers, emp_u.id, "branchtest.jnlu", ["accounting:view"], "Journal HQ Role")
+
+    source_a = _post_and_approve_source(client, auth_headers, "SRC-JNL-C-001", branch_a["id"])
+    source_b = _post_and_approve_source(client, auth_headers, "SRC-JNL-D-001", branch_b["id"])
+
+    listed = client.get("/api/v1/journal?limit=500", headers=headers_u)
+    assert listed.status_code == 200, listed.text
+    source_ids = {row["source_id"] for row in listed.json()["records"]}
+    assert source_a["id"] in source_ids
+    assert source_b["id"] in source_ids
+
+
+def test_general_ledger_scoped_by_branch(client, db, auth_headers):
+    """Same gap, GET /general-ledger — GeneralLedgerEntry.branch_id is
+    already stamped (accounting_posting.py's create_gl_entries_from_journal,
+    copied from journal.branch_id) but was never read on this endpoint."""
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "GL Branch A"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "GL Branch B"}).json()
+
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_a = Employee(company_id=company_id, employee_no="BR-GL-A", full_name="GL Branch A Staff", branch_id=branch_a["id"])
+    db.add(emp_a)
+    db.commit()
+    headers_a = _grant_role_and_login(client, auth_headers, emp_a.id, "branchtest.gla", ["accounting:view"], "GL Branch Role")
+
+    _post_and_approve_source(client, auth_headers, "SRC-GL-A-001", branch_a["id"])
+    _post_and_approve_source(client, auth_headers, "SRC-GL-B-001", branch_b["id"])
+
+    # post_source_transaction() passes the SourceTransaction's own reference
+    # straight through as voucher_no (accounting_posting.py:62), not the
+    # journal's entry_number — so the reference strings above are what
+    # actually show up on the GL rows.
+    listed = client.get("/api/v1/general-ledger?limit=2000", headers=headers_a)
+    assert listed.status_code == 200, listed.text
+    vouchers = {row["voucher_no"] for row in listed.json()}
+    assert "SRC-GL-A-001" in vouchers
+    assert "SRC-GL-B-001" not in vouchers
+
+
+def test_general_ledger_unassigned_employee_sees_all_branches(client, db, auth_headers):
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "GL Branch C"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "GL Branch D"}).json()
+
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_u = Employee(company_id=company_id, employee_no="BR-GL-U", full_name="GL HQ Staff")
+    db.add(emp_u)
+    db.commit()
+    headers_u = _grant_role_and_login(client, auth_headers, emp_u.id, "branchtest.glu", ["accounting:view"], "GL HQ Role")
+
+    _post_and_approve_source(client, auth_headers, "SRC-GL-C-001", branch_a["id"])
+    _post_and_approve_source(client, auth_headers, "SRC-GL-D-001", branch_b["id"])
+
+    listed = client.get("/api/v1/general-ledger?limit=2000", headers=headers_u)
+    assert listed.status_code == 200, listed.text
+    vouchers = {row["voucher_no"] for row in listed.json()}
+    assert "SRC-GL-C-001" in vouchers
+    assert "SRC-GL-D-001" in vouchers
+
+
+def test_accounting_cross_branch_permission(client, db, auth_headers):
+    """"accounting:view_all_branches" — added alongside the branch-scoping
+    above (the permission catalog previously omitted this key on purpose,
+    since it would have been a no-op checkbox until /journal and
+    /general-ledger actually filtered by branch). Same opt-in pattern as
+    every other module in this file."""
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "XB Acct A"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "XB Acct B"}).json()
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_a = Employee(company_id=company_id, employee_no="XB-ACCT-A", full_name="XB Acct Staff", branch_id=branch_a["id"])
+    db.add(emp_a)
+    db.commit()
+    headers_a = _grant_role_and_login(
+        client, auth_headers, emp_a.id, "xbtest.accta",
+        ["accounting:view", "accounting:view_all_branches"], "XB Accounting Role",
+    )
+
+    source_a = _post_and_approve_source(client, auth_headers, "SRC-XB-ACCT-A-001", branch_a["id"])
+    source_b = _post_and_approve_source(client, auth_headers, "SRC-XB-ACCT-B-001", branch_b["id"])
+
+    listed = client.get("/api/v1/journal?limit=500", headers=headers_a)
+    assert listed.status_code == 200, listed.text
+    source_ids = {row["source_id"] for row in listed.json()["records"]}
+    assert source_a["id"] in source_ids
+    assert source_b["id"] in source_ids
+
+    gl = client.get("/api/v1/general-ledger?limit=2000", headers=headers_a)
+    assert gl.status_code == 200, gl.text
+    vouchers = {row["voucher_no"] for row in gl.json()}
+    assert {"SRC-XB-ACCT-A-001", "SRC-XB-ACCT-B-001"}.issubset(vouchers)
