@@ -140,6 +140,16 @@ class Principal:
     def has(self, *keys: str) -> bool:
         return self.is_admin or bool(self.permissions.intersection(keys))
 
+    def can_cross_branch(self, module: str) -> bool:
+        """Opt-in cross-branch visibility (Branch Security Layer Phase 2) —
+        separate from `branch_id` (which branch this identity is tied to)
+        and from ordinary permissions (whether it can see the module at
+        all). A branch-locked Employee normally only sees their own
+        branch's data on every branch-aware endpoint; granting
+        "<module>:view_all_branches" lets a specific employee see every
+        branch's data for that one module without becoming a full admin."""
+        return self.is_admin or self.has(f"{module}:view_all_branches")
+
 
 def _principal_from_employee_token(token: str, db: Session) -> Principal | None:
     # Employee tokens are self-describing (subject prefixed "emp:") — if the

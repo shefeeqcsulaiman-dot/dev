@@ -35,7 +35,7 @@ def list_invoices(
     # (Invoice.branch_id already existed since Phase 3; this endpoint just
     # hadn't been opened up to Employee tokens yet).
     query = db.query(Invoice).options(joinedload(Invoice.lines)).filter(Invoice.company_id == principal.company_id)
-    if principal.branch_id:
+    if principal.branch_id and not principal.can_cross_branch("sales"):
         query = query.filter((Invoice.branch_id == principal.branch_id) | (Invoice.branch_id.is_(None)))
     return query.order_by(Invoice.created_at.desc()).all()
 

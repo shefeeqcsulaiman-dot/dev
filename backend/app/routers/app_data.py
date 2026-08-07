@@ -362,10 +362,17 @@ def list_collection_records(
         AppDataRecord.company_id == principal.company_id,
         AppDataRecord.collection == collection,
     ]
-    if principal.branch_id and collection in _BRANCH_FILTERED_COLLECTIONS:
+    collection_module = _COLLECTION_MODULE.get(collection)
+    if (
+        principal.branch_id
+        and collection in _BRANCH_FILTERED_COLLECTIONS
+        and not (collection_module and principal.can_cross_branch(collection_module))
+    ):
         # Branch-scoped Employee — always locked to their own branch,
         # regardless of any ?branch_id= passed in (an explicit param here
-        # could otherwise be used to peek at another branch's records).
+        # could otherwise be used to peek at another branch's records) —
+        # unless their role grants "<module>:view_all_branches" (Branch
+        # Security Layer Phase 2), same opt-in used everywhere else.
         base_filters.append(
             (AppDataRecord.branch_id == principal.branch_id) | (AppDataRecord.branch_id.is_(None))
         )

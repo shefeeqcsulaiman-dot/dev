@@ -58,7 +58,7 @@ _PERMISSION_CATALOG: dict[str, list[str]] = {
     # groups (rather than a separate "module_payroll" etc.) so the Add
     # Custom Role modal shows one "Payroll" section, not two.
     "payroll": ["run_payroll", "view_payroll", "view", "edit"],
-    "attendance": ["check_in_out", "view_own_attendance", "view", "edit"],
+    "attendance": ["check_in_out", "view_own_attendance", "view", "edit", "view_all_branches"],
     "dashboard": ["admin", "hr", "payroll", "manager", "employee", "view"],
     # Module-level view/edit/delete matrix backing the full HRMS sidebar —
     # see docs/hrms-architecture.md. "delete" is omitted for modules with no
@@ -74,7 +74,7 @@ _PERMISSION_CATALOG: dict[str, list[str]] = {
     "recruitment": ["view", "edit", "delete"],
     "performance": ["view", "edit", "delete"],
     "hr_workflow": ["view", "edit", "delete"],
-    "reports": ["view"],
+    "reports": ["view", "view_all_branches"],
     "ai_insights": ["view"],
     "hr_settings": ["view", "edit", "delete"],
     # Main-dashboard (index.html) modules — Branch Management "Main Dashboard
@@ -88,13 +88,17 @@ _PERMISSION_CATALOG: dict[str, list[str]] = {
     # "module" vocabulary threads through the company-level Module
     # Permissions gate, the bootstrap collection allowlist, and this
     # per-role permission gate instead of three parallel naming schemes.
-    "sales": ["view"],
+    "sales": ["view", "view_all_branches"],
     "quotations": ["view"],
-    "pos": ["view"],
-    "purchase": ["view"],
-    "inventory": ["view"],
+    "pos": ["view", "view_all_branches"],
+    "purchase": ["view", "view_all_branches"],
+    "inventory": ["view", "view_all_branches"],
     "expense": ["view"],
     "bank": ["view"],
+    # "accounting:view_all_branches" deliberately not added yet — accounting.py's
+    # own /journal and /general-ledger have no branch filtering at all on
+    # main today (that lives on a separate, unmerged branch); a checkbox
+    # here would be a confusing no-op until that ships. Add it then.
     "accounting": ["view"],
     "corporate": ["view"],
     "notifications": ["view"],
@@ -158,7 +162,18 @@ def _ensure_default_roles(db: Session, company_id: str) -> dict[str, Role]:
         existing_links = {
             rp.permission_id for rp in db.query(RolePermission).filter(RolePermission.role_id == role.id).all()
         }
-        grant_keys = list(catalog.keys()) if perm_keys == ["*"] else perm_keys
+        # "*" (Administrator) picks up every ordinary permission key, but
+        # NEVER the cross-branch opt-ins (Branch Security Layer Phase 2) —
+        # those are a privilege escalation (company-wide visibility for a
+        # branch-assigned identity), not an ordinary view/edit permission,
+        # and must be granted explicitly per role, never implied by a
+        # wildcard. Without this, every branch's "Administrator" role
+        # (branch-manager-equivalent, not the same as a full company admin)
+        # would silently see every OTHER branch's data too.
+        if perm_keys == ["*"]:
+            grant_keys = [k for k in catalog.keys() if not k.endswith(":view_all_branches")]
+        else:
+            grant_keys = perm_keys
         for key in grant_keys:
             perm = catalog.get(key)
             if perm and perm.id not in existing_links:
@@ -181,15 +196,22 @@ def _distance_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> floa
     return 2 * r * math.asin(math.sqrt(a))
 
 
-def _scope_attendance_to_branch(query, emp: Employee):
+def _scope_attendance_to_branch(query, emp: Employee, db: Session):
     """Branch Management, Phase 2: a branch-assigned employee viewing
     team/company-wide attendance (dashboard counts, live locations) only
     sees sessions belonging to their own branch — plus branch-less legacy
     sessions, so pre-existing data stays visible rather than vanishing.
     An employee with no branch_id (the common case pre-feature, and for
     companies that never set up branches) sees everything, unchanged from
-    today's behavior."""
+    today's behavior. Branch Security Layer Phase 2: "attendance:view_all_
+    branches" opts a specific branch employee out of this filter, same as
+    every other cross-branch flag — checked here (not via a Principal,
+    since this file works directly with Employee rows) by resolving the
+    role's permission keys the same way require_permission() does."""
     if not emp.branch_id:
+        return query
+    role = db.get(Role, emp.role_id) if emp.role_id else None
+    if "attendance:view_all_branches" in _role_permission_keys(db, role):
         return query
     return query.filter(
         (AttendanceSession.branch_id == emp.branch_id) | (AttendanceSession.branch_id.is_(None))
@@ -349,7 +371,7 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
                 db.query(AttendanceSession).filter(
                     AttendanceSession.company_id == company_id, AttendanceSession.status == "open"
                 ),
-                emp,
+                emp, db,
             ).count(),
             "company_locations": db.query(CompanyLocation).filter(CompanyLocation.company_id == company_id).count(),
             "roles_configured": db.query(Role).filter(Role.company_id == company_id).count(),
@@ -375,7 +397,7 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
                 db.query(AttendanceSession).filter(
                     AttendanceSession.company_id == company_id, AttendanceSession.status == "open"
                 ),
-                emp,
+                emp, db,
             ).count(),
         }
 
@@ -1010,7 +1032,7 @@ def live_locations(
     sessions = _scope_attendance_to_branch(
         db.query(AttendanceSession)
         .filter(AttendanceSession.company_id == emp.company_id, AttendanceSession.status == "open"),
-        emp,
+        emp, db,
     ).all()
     out: list[LiveLocationOut] = []
     for session in sessions:

@@ -125,7 +125,7 @@ def list_stock_levels(db: Session = Depends(get_db), principal: Principal = Depe
     if not inventory_backfill_disabled(db, principal.company_id):
         backfill_purchase_stock_movements(db, principal)
     movement_join_condition = (StockMovement.mapping_id == StockProductMapping.id) & (StockMovement.company_id == principal.company_id)
-    if principal.branch_id:
+    if principal.branch_id and not principal.can_cross_branch("inventory"):
         # A branch-scoped viewer sees stock quantities from their own
         # branch's movements only (plus branch-less legacy movements) —
         # each branch's physical stock is a separate count, not a shared
@@ -188,7 +188,7 @@ def list_stock_movements(db: Session = Depends(get_db), principal: Principal = D
         .join(StockProductMapping, StockMovement.mapping_id == StockProductMapping.id)
         .filter(StockMovement.company_id == principal.company_id)
     )
-    if principal.branch_id:
+    if principal.branch_id and not principal.can_cross_branch("inventory"):
         query = query.filter((StockMovement.branch_id == principal.branch_id) | (StockMovement.branch_id.is_(None)))
     rows = query.order_by(StockMovement.created_at.desc()).limit(500).all()
     # Build a lookup: reference → purchase record payload (for vendor/date)

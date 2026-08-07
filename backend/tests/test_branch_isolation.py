@@ -196,7 +196,9 @@ def _post_and_approve_source(client, headers, reference, branch_id, account_code
 
 
 def _trial_balance_account_row(client, headers, code):
-    rows = client.get("/api/v1/reports/trial-balance", headers=headers).json()["rows"]
+    resp = client.get("/api/v1/reports/trial-balance", headers=headers)
+    assert resp.status_code == 200, resp.text
+    rows = resp.json()["rows"]
     return next((r for r in rows if r["code"] == code), None)
 
 
@@ -637,3 +639,184 @@ def test_branch_employee_can_list_branches_without_being_logged_out(client, db, 
     assert listed.status_code == 200, listed.text
     names = {b["name"] for b in listed.json()}
     assert "List Access Branch" in names
+
+
+# ── Branch Security Layer Phase 2: opt-in cross-branch permission flags ──
+# Previously binary: a branch-scoped Employee was ALWAYS locked to their own
+# branch on every branch-aware endpoint, with no middle tier between "one
+# branch" and "full admin". "<module>:view_all_branches" grants a specific
+# employee company-wide visibility for one module without making them an
+# admin — verified per-module below, plus that it's scoped (a flag for one
+# module doesn't leak into another).
+
+
+def test_invoices_cross_branch_permission(client, db, auth_headers):
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "XB Invoices A"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "XB Invoices B"}).json()
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_a = Employee(company_id=company_id, employee_no="XB-INV-A", full_name="XB Invoices Staff", branch_id=branch_a["id"])
+    db.add(emp_a)
+    db.commit()
+    headers_a = _grant_role_and_login(client, auth_headers, emp_a.id, "xbtest.inva", ["sales:view", "sales:view_all_branches"], "XB Sales Role")
+
+    created_a = client.post(
+        "/api/v1/invoices", headers=auth_headers,
+        json={"customer_name": "XB A Customer", "invoice_number": "INV-XB-A-001", "branch_id": branch_a["id"], "lines": [{"description": "Item", "quantity": "1", "unit_price": "100.00", "vat_rate": "5"}]},
+    )
+    assert created_a.status_code == 201, created_a.text
+    created_b = client.post(
+        "/api/v1/invoices", headers=auth_headers,
+        json={"customer_name": "XB B Customer", "invoice_number": "INV-XB-B-001", "branch_id": branch_b["id"], "lines": [{"description": "Item", "quantity": "1", "unit_price": "100.00", "vat_rate": "5"}]},
+    )
+    assert created_b.status_code == 201, created_b.text
+
+    listed = client.get("/api/v1/invoices", headers=headers_a)
+    assert listed.status_code == 200, listed.text
+    numbers = {inv["invoice_number"] for inv in listed.json()}
+    assert {"INV-XB-A-001", "INV-XB-B-001"}.issubset(numbers)
+
+
+def test_inventory_cross_branch_permission(client, db, auth_headers):
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "XB Inv A"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "XB Inv B"}).json()
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_a = Employee(company_id=company_id, employee_no="XB-STK-A", full_name="XB Inventory Staff", branch_id=branch_a["id"])
+    db.add(emp_a)
+    db.commit()
+    headers_a = _grant_role_and_login(client, auth_headers, emp_a.id, "xbtest.stka", ["employees:view", "inventory:view_all_branches"], "XB Inventory Role")
+
+    sku = "XB-INV-SKU-1"
+    _save_purchase_record(client, auth_headers, "PUR-XB-INV-A-001", branch_a["id"], sku, 5)
+    _save_purchase_record(client, auth_headers, "PUR-XB-INV-B-001", branch_b["id"], sku, 9)
+
+    levels = client.get("/api/v1/inventory/stock-levels", headers=headers_a)
+    assert levels.status_code == 200, levels.text
+    row = next((r for r in levels.json() if r["code"] == sku), None)
+    assert row is not None
+    assert row["current_stock"] == 14  # both branches' stock combined, not just branch A's 5
+
+    movements = client.get("/api/v1/inventory/stock-movements", headers=headers_a)
+    refs = {m["reference"] for m in movements.json()}
+    assert {"PUR-XB-INV-A-001", "PUR-XB-INV-B-001"}.issubset(refs)
+
+
+def test_purchase_records_cross_branch_permission(client, db, auth_headers):
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "XB Pur A"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "XB Pur B"}).json()
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_a = Employee(company_id=company_id, employee_no="XB-PUR-A", full_name="XB Purchase Staff", branch_id=branch_a["id"])
+    db.add(emp_a)
+    db.commit()
+    headers_a = _grant_role_and_login(client, auth_headers, emp_a.id, "xbtest.pura", ["employees:view", "purchase:view_all_branches"], "XB Purchase Role")
+
+    _save_purchase_record(client, auth_headers, "PUR-XB-A-001", branch_a["id"], "XB-PUR-SKU-1", 1)
+    _save_purchase_record(client, auth_headers, "PUR-XB-B-001", branch_b["id"], "XB-PUR-SKU-2", 1)
+
+    listed = client.get("/api/v1/app-data/records/purchaseRecords", headers=headers_a)
+    assert listed.status_code == 200, listed.text
+    refs = {rec["ref"] for rec in listed.json()["records"]}
+    assert {"PUR-XB-A-001", "PUR-XB-B-001"}.issubset(refs)
+
+
+def test_pos_sales_cross_branch_permission(client, db, auth_headers):
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "XB POS A"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "XB POS B"}).json()
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_a = Employee(company_id=company_id, employee_no="XB-POS-A", full_name="XB POS Staff", branch_id=branch_a["id"])
+    db.add(emp_a)
+    db.commit()
+    headers_a = _grant_role_and_login(client, auth_headers, emp_a.id, "xbtest.posa", ["employees:view", "pos:view_all_branches"], "XB POS Role")
+
+    _save_pos_sale(client, auth_headers, "POS-XB-A-001", branch_a["id"], 100)
+    _save_pos_sale(client, auth_headers, "POS-XB-B-001", branch_b["id"], 200)
+
+    listed = client.get("/api/v1/app-data/records/posSales", headers=headers_a)
+    assert listed.status_code == 200, listed.text
+    refs = {rec.get("receipt_no") for rec in listed.json()["records"]}
+    assert {"POS-XB-A-001", "POS-XB-B-001"}.issubset(refs)
+
+
+def test_trial_balance_cross_branch_permission(client, db, auth_headers):
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "XB TB A"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "XB TB B"}).json()
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_a = Employee(company_id=company_id, employee_no="XB-TB-A", full_name="XB TB Staff", branch_id=branch_a["id"])
+    db.add(emp_a)
+    db.commit()
+    headers_a = _grant_role_and_login(client, auth_headers, emp_a.id, "xbtest.tba", ["employees:view", "reports:view", "reports:view_all_branches"], "XB Reports Role")
+
+    before_a = _trial_balance_account_row(client, headers_a, "3000")
+    before_credit_a = Decimal(before_a["credit"]) if before_a else Decimal("0")
+
+    _post_and_approve_source(client, auth_headers, "SRC-XB-TB-A-001", branch_a["id"])
+    _post_and_approve_source(client, auth_headers, "SRC-XB-TB-B-001", branch_b["id"])
+
+    # With the cross-branch flag, Branch A's viewer sees BOTH branches'
+    # 1000.00 sales on account 3000 — 2000 total, not just their own 1000.
+    row_a = _trial_balance_account_row(client, headers_a, "3000")
+    assert row_a is not None
+    assert Decimal(row_a["credit"]) - before_credit_a == Decimal("2000.00")
+
+
+def test_live_locations_cross_branch_permission(client, db, auth_headers):
+    """hr_dashboard()'s role-based response shape is keyed off a hardcoded
+    role NAME match ("Administrator"/"HR Manager"/...), not permissions, so
+    it can't be exercised with a custom test role — use live_locations
+    instead (permission-gated via require_permission, same underlying
+    _scope_attendance_to_branch mechanism), mirroring the existing
+    test_live_locations_scoped_by_branch precedent above."""
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "XB Live A"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "XB Live B"}).json()
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_a = Employee(company_id=company_id, employee_no="XB-LIVE-A", full_name="XB Live Staff", branch_id=branch_a["id"])
+    emp_b = Employee(company_id=company_id, employee_no="XB-LIVE-B", full_name="XB Live Staff B", branch_id=branch_b["id"])
+    db.add_all([emp_a, emp_b])
+    db.commit()
+    headers_a = _grant_role_and_login(
+        client, auth_headers, emp_a.id, "xbtest.livea",
+        ["hr:view_all_attendance", "attendance:view_all_branches"], "XB Live Role",
+    )
+
+    _open_session(db, company_id, emp_a.id, branch_a["id"])
+    _open_session(db, company_id, emp_b.id, branch_b["id"])
+
+    live = client.get("/api/v1/hr/live-locations", headers=headers_a)
+    assert live.status_code == 200, live.text
+    employee_ids = {row["employee_id"] for row in live.json()}
+    # Cross-branch flag: sees both branches' sessions, not just their own.
+    assert emp_a.id in employee_ids
+    assert emp_b.id in employee_ids
+
+
+def test_cross_branch_permission_is_scoped_per_module_not_global(client, db, auth_headers):
+    """A cross-branch flag granted for ONE module must not leak into
+    another — this is the difference between an opt-in per-module flag
+    and accidentally re-implementing full admin access."""
+    branch_a = client.post("/api/v1/branches", headers=auth_headers, json={"name": "XB Scope A"}).json()
+    branch_b = client.post("/api/v1/branches", headers=auth_headers, json={"name": "XB Scope B"}).json()
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_a = Employee(company_id=company_id, employee_no="XB-SCOPE-A", full_name="XB Scope Staff", branch_id=branch_a["id"])
+    db.add(emp_a)
+    db.commit()
+    # Only sales:view_all_branches granted — NOT purchase.
+    headers_a = _grant_role_and_login(
+        client, auth_headers, emp_a.id, "xbtest.scopea",
+        ["employees:view", "sales:view_all_branches"], "XB Scope Role",
+    )
+
+    _save_purchase_record(client, auth_headers, "PUR-XB-SCOPE-A-001", branch_a["id"], "XB-SCOPE-SKU-A", 1)
+    _save_purchase_record(client, auth_headers, "PUR-XB-SCOPE-B-001", branch_b["id"], "XB-SCOPE-SKU-B", 1)
+
+    listed = client.get("/api/v1/app-data/records/purchaseRecords", headers=headers_a)
+    assert listed.status_code == 200, listed.text
+    refs = {rec["ref"] for rec in listed.json()["records"]}
+    # Still branch-locked for purchase — the sales flag doesn't leak here.
+    assert refs == {"PUR-XB-SCOPE-A-001"}
+    assert "PUR-XB-SCOPE-B-001" not in refs

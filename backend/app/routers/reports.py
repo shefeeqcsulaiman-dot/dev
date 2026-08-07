@@ -478,10 +478,13 @@ def trial_balance(
     principal: Principal = Depends(require_principal_permission("reports:view")),
 ) -> dict[str, Any]:
     company_id = principal.company_id
-    branch_id = principal.branch_id
     # Branch Management, Phase 3: a branch-assigned employee sees only their
     # branch's posted journal entries (plus branch-less legacy data); the
     # company admin (branch_id always None) sees everything, as before.
+    # Branch Security Layer Phase 2: "reports:view_all_branches" lets a
+    # specific branch employee see company-wide totals too, without being
+    # a full admin — same as every other cross-branch opt-in.
+    branch_id = None if principal.can_cross_branch("reports") else principal.branch_id
     # Cache key includes branch_id so one branch's result is never served
     # to another branch or to the unscoped company-wide view.
     cache_key = f"trial_balance:{company_id}:{branch_id or 'all'}"
