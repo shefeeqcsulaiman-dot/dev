@@ -1620,6 +1620,8 @@ Inventory -> Stock Dashboard -> Current Stock
 
 The frontend may temporarily calculate stock from the local purchase cache for immediate feedback after saving a purchase, but the authoritative stock table is the database total returned by `/api/v1/inventory/stock-levels`.
 
+**Backfill-disabled marker:** the backfill step above is skipped whenever an `inventorySettings` / `stock_backfill_disabled` `AppDataRecord` marker is set for the company (checked via `inventory_backfill_disabled()`). A new purchase's stock movement is created directly at save time by `sync_purchase_stock()`, independent of backfill — backfill exists only to catch up legacy/orphaned purchase records that predate that sync. `DELETE /api/v1/inventory/stock-levels` ("Clear Stock Data") sets this marker rather than clearing it, precisely so the wipe stays cleared: previously it removed the marker instead, which re-enabled backfill and had it immediately resurrect every historical purchase's stock on the very next `GET /inventory/stock-levels` or `/inventory/stock-movements` call, undoing the wipe. All three read endpoints must check the marker before backfilling — `list_mappings()` always did; `list_stock_levels()`/`list_stock_movements()` were missing the check and have since been fixed.
+
 Reorder alert:
 
 ```text
@@ -1641,6 +1643,8 @@ Critical validation rules:
 Reports must use stock movement, valuation, item, warehouse, reservation, and journal tables, not dashboard summaries.
 
 ## 15. HR and Attendance
+
+**See `docs/hrms-architecture.md` for the authoritative, current-state HR/HRMS reference** — module-by-module Tier 1 (real table) vs Tier 2 (JSON bridge) status, the full RBAC/GPS-attendance data model and API surface (both now built, not just planned), and HRMS-specific security findings. This section stays as a high-level summary only.
 
 Responsibilities:
 
@@ -1768,6 +1772,8 @@ wps_upload_logs
 wps_rejection_logs
 ```
 
+**Current real schema and known-fixed bug:** `PayrollItem.allowances/.overtime/.deductions` exist only on the payroll item (this run's own output) — `Employee` itself has no such columns. Payroll generation previously read `employee.allowances`/`.overtime`/`.deductions` directly, which raised an uncaught `AttributeError` and 500'd on every single call, for every company, unconditionally (found by generating a full year of payroll against a production account with 100 real employees). Fixed: these now default to `0` per employee at generation time. See `docs/hrms-architecture.md` §5 for the full current `Employee`/`PayrollRun`/`PayrollItem` schema and §9 for the incident writeup.
+
 ## 18. Reporting Architecture
 
 Reports must use authoritative sources:
@@ -1783,6 +1789,8 @@ Document Reports   -> Documents + Evidence Links
 ```
 
 Do not generate production reports from dashboard totals.
+
+**Client-side rendering must be chunked for real data volumes.** `hydrateFromServer()`'s per-collection render loop (`renderRecordList()` in `app.js`) and the Ledger's journal-entry render loop both used to run as one uninterrupted synchronous pass over the full collection. Invisible at demo scale (dozens–hundreds of rows), but with genuinely large data (1000+ sales invoices, 2000+ journal entries — reproduced by seeding a production account to that volume) this blocked the browser's main thread long enough to trip Chrome's "Page Unresponsive" watchdog, even though the server had already answered and the data was correct. Both loops now yield every ~60 records via a microtask break (`await new Promise(r=>setTimeout(r,0))`) instead of running straight through. Any new render loop over a server-fetched collection should do the same once the collection can plausibly exceed a few hundred rows for a real company — the "instant" fix is pagination (previous section); the "even if paginated, rendering one page must not freeze the tab" fix is chunked yielding, and both are needed for a genuinely large dataset.
 
 Core reports:
 
@@ -1996,6 +2004,61 @@ Tenant isolation must be enforced on the backend:
 - Queue workers validate tenant context before processing.
 - Reports and exports are tenant-filtered.
 
+## 21.1 Branch Management (shipped)
+
+Multi-branch support is built and live — not the aspirational `branches` table implied elsewhere in this doc, but a real, tested feature. A company can register multiple branches, each staffed by employees who log in with their own credentials and see only their own branch's data, while the company admin always sees everything consolidated.
+
+```text
+Branch (models.py)
+id, company_id, name, code, city, address, status
+```
+
+A `Branch` has no login of its own — it is purely an administrative entity (name/code/city/address/status), managed via Settings > Departments & Branches (`POST/GET/PUT/DELETE /api/v1/branches`).
+
+Login and identity:
+
+```text
+Employee.branch_id (nullable FK to Branch)
+        |
+        v
+Employee gets Portal Access (HR Settings > Users & Roles > Grant Portal Access)
+  -> username + bcrypt password_hash + role_id, PUT /hr/admin/employees/{id}/portal-access
+        |
+        v
+POST /hr/login -> "emp:"-prefixed JWT
+        |
+        v
+Principal.branch_id set from Employee.branch_id (auth_principal.py)
+```
+
+No new auth surface was added — a branch employee is just an `Employee` (the existing HR RBAC identity, see `docs/hrms-architecture.md`) assigned to a `Branch` and granted the existing Portal Access flow. `Principal.is_admin` is always `True` for a `User` (admin) token and `False` for an `Employee` token; `Principal.branch_id` is `None` for admins and for any employee without a branch assignment, which is the backward-compatibility mechanism — every branch filter below is a no-op unless a real `branch_id` is set.
+
+Data isolation, two mechanisms:
+
+```text
+AppDataRecord (JSON-blob collections: POS, Purchases, Sales invoices)
+  branch_id column + _BRANCH_FILTERED_COLLECTIONS allowlist (app_data.py)
+  = purchaseRecords, posSales, salesInvoices
+  Admin can opt in to view one branch's data via ?branch_id= on
+  GET /app-data/records/{collection} (any collection, not just the allowlist).
+
+ORM tables (real ledger/relational tables), branch_id column stamped by the
+posting pipeline all the way down:
+  Invoice, JournalEntry, GeneralLedgerEntry, SourceTransaction, StockMovement,
+  AttendanceSession, CompanyLocation, Employee, AppDataRecord
+  A branch-scoped principal's queries add:
+    (X.branch_id == principal.branch_id) | (X.branch_id.is_(None))
+  NULL branch_id (legacy data, or entries a module never stamped) stays
+  visible to a branch-scoped viewer rather than vanishing — same rule
+  applied consistently everywhere this filter is used.
+```
+
+Endpoints currently branch-scoped this way: `/hr/dashboard` and `/hr/live-locations` (attendance), `/reports/trial-balance`, `/inventory/stock-levels` and `/inventory/stock-movements`, `/journal` and `/general-ledger` (accounting.py), `/invoices`, and the three `_BRANCH_FILTERED_COLLECTIONS` above. **Deliberately NOT branch-scoped** (company-wide by design, not a gap): `/reports/dashboard` and `/reports/summary` (several data sources — `PayrollRun`, `TaxLine`, `AuditLog`, `CorporateTaxRecord`, `BudgetRecord` — have no `branch_id` and may never need one); VAT/Corporate Tax returns (filed once per company per period under UAE law, not per branch); `/inventory/mappings` and the chart of accounts (shared master data). Vouchers, Payments, Receipts, BankAccounts, and every Corporate Accounting `*Record` model have no `branch_id` column at all yet — extending scoping there needs a schema migration, not just a query change.
+
+**Main Dashboard Access for branch employees**: a branch employee's HRMS login (`/hrms`) can also reach the main business dashboard (`/`, same app as the admin uses) if their assigned Role grants at least one `<module>:view` permission (`sales:view`, `pos:view`, `purchase:view`, `inventory:view`, `accounting:view`, `corporate:view`, `reports:view`, etc. — `_PERMISSION_CATALOG` in `hr_access.py`). A reciprocal "Main Dashboard" link appears on `hrms.html` when applicable; the sidebar on `index.html` shows only the modules the Role permits (`applyMainDashboardPermissionNav()` in `app.js`), and every widened endpoint enforces the same permission server-side via `require_principal_permission("module:view")` — a permission-less employee gets a session-preserving 403, never a forced logout (this was the actual bug being fixed: `authenticatedFetch()` treats 401 as "force logout," 403 as "valid session, no access to this call"). This module-visibility gate is independent of the branch data-scoping above: a branch employee with `accounting:view` sees the Accounting module, and within it, only their own branch's data.
+
+Testing: `backend/tests/test_branch_isolation.py` and `backend/tests/test_main_dashboard_access.py` — the reference pattern for any new branch-scoped or permission-gated endpoint (grant a role/permission, log in as an Employee, assert branch/permission isolation, assert an admin token and a branch-less employee both see everything unchanged).
+
 ## 22. Data Architecture
 
 Recommended database groups:
@@ -2007,10 +2070,17 @@ Identity
 |-- permissions
 |-- role_permissions
 `-- user_sessions
+    (still not built for TaxFlow Users/admins — a separate, already-built
+    RBAC system exists today, but scoped to HR sub-users only: Role,
+    Permission, RolePermission in models.py, module:action keyed
+    permissions like "leave:edit", managed via /api/v1/hr/admin/*. See
+    docs/hrms-architecture.md §5/§7. It does not cover User/admin
+    permissions at all — a User is always full-access by construction
+    (Principal.is_admin=True bypasses every permission check).)
 
 Tenant
 |-- companies
-|-- branches
+|-- branches      (real, shipped — see §21.1 Branch Management)
 |-- departments
 |-- designations
 `-- tenant_settings
@@ -2148,7 +2218,9 @@ POST     /api/v1/source-transactions/{source_id}/validate
 POST     /api/v1/source-transactions/{source_id}/approve
 GET/POST /api/v1/accounts
 DELETE   /api/v1/accounts/{account_id}
-GET/POST /api/v1/journal
+GET/POST /api/v1/journal   (GET is paginated: ?limit&offset, returns
+                            {records, total, limit, offset, has_more} —
+                            see pagination pattern note below)
 GET/POST /api/v1/voucher-types
 GET/POST /api/v1/vouchers
 POST     /api/v1/vouchers/{voucher_id}/approve
@@ -2207,8 +2279,16 @@ GET      /api/v1/inventory/valuation-layers
 GET/POST /api/v1/inventory/adjustment-approvals
 GET      /api/v1/app-data
 POST     /api/v1/app-data
-GET      /api/v1/app-data/records/{collection}
+GET      /api/v1/app-data/records/{collection}   (paginated: ?limit&offset)
+GET      /api/v1/auth/whoami   (resolves either a User or an Employee/HR
+                                 sub-user bearer token into one shape —
+                                 {kind, id, company_id, display_name,
+                                 is_admin, permissions, role_name})
+GET/POST /api/v1/branches      (also PUT/DELETE by id — see §21.1 Branch
+                                 Management for the full feature)
 ```
+
+**List-endpoint pagination pattern:** any endpoint returning a collection that can grow past a few hundred rows for a real company (journal entries, purchase records, sales invoices, etc.) should paginate: `limit`/`offset` query params (bounded, e.g. `Query(default=100, ge=1, le=500)`), response envelope `{records, total, limit, offset, has_more}`. This was retrofitted onto `/journal` after it was measured at ~500ms server time alone with ~2000 rows and no cap at all (growing unbounded as a company accumulates transaction history) — `/app-data/records/{collection}` already had this pattern from the start and should be the template for any new list endpoint, not the unbounded style `/journal` used to have. The frontend pairs this with page-by-page Previous/Next navigation (not an accumulating "Load More") so the DOM never holds more than one page's worth of rows regardless of how many pages a user clicks through — see `goToJournalPage()`/`goToPurchaseRecordsPage()` in `app.js` for the reference implementation, and the "Page Unresponsive" note under §18 for why unbounded client-side rendering is the other half of this problem.
 
 Target workflow endpoints not yet fully implemented:
 
@@ -2228,6 +2308,10 @@ POST /api/v1/documents/{id}/link
 ```
 
 ## 24. Security Architecture
+
+**See `docs/hrms-architecture.md` §9 for current, concrete HRMS/RBAC security findings** (a Tier 2 write-path RBAC gap, a privilege-escalation path via `hr_settings:edit`, a weak default-credential fallback, and others) — these are specific, reproduced issues in the code as it stands today, not the general aspirational controls below.
+
+**Recent app-wide security fixes (2026-08-07)**: a superadmin-only `DELETE /superadmin/companies/{id}` now requires the acting superadmin's own account password, verified server-side (previously gated only by two hardcoded strings checked client-side in JS); `companies.py`'s `_resolve_company()` used to silently re-link a user with an orphaned `company_id` to whichever company sorted first in the table — an arbitrary unrelated tenant — now fails closed (404) instead; superadmin's `reset-password`/`delete-company`/`impersonate` endpoints gained rate limits (20/minute, defense-in-depth against a leaked token); production startup now also rejects `CORS_ORIGINS="*"` (combined with `allow_credentials=True`, a wildcard origin lets any site make credentialed cross-origin requests). See `backend/tests/test_security_hardening.py` and `backend/tests/test_companies_isolation.py`.
 
 Required controls:
 
