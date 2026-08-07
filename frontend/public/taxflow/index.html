@@ -142,6 +142,13 @@
         <button class="dash-lang-btn active" id="dash-lang-en" onclick="setAppLang('en')">EN</button>
         <button class="dash-lang-btn" id="dash-lang-ar" onclick="setAppLang('ar')">عربي</button>
       </div>
+      <!-- Branch Security Layer Phase 3 — only shown for a login with more
+           than one accessible branch (applyBranchSwitcherFromWhoami, app.js);
+           hidden by default so a normal single-branch session never sees it. -->
+      <div data-branch-switcher style="display:none;align-items:center;gap:6px" title="Switch branch">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="flex-shrink:0;opacity:.6"><path d="M4 2v12M12 2v12M4 5h8M4 11h8"/></svg>
+        <select class="fi" style="padding:5px 8px;font-size:12px;width:auto" onchange="switchActiveBranch(this.value)"></select>
+      </div>
       <button class="btn btn-g" id="theme-menu-toggle" onclick="toggleNightMode(document.body.classList.contains('theme-light'))">☾ Dark Mode</button>
       <button class="btn btn-g" data-module-gate="ai" onclick="go('ai')">AI Assistant</button>
       <button class="btn btn-g" onclick="logout()">Logout</button>

@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.config import get_settings
 from app.database import get_db
-from app.models import Company, Employee, Permission, Role, RolePermission, User
+from app.models import Company, Employee, EmployeeBranchAccess, Permission, Role, RolePermission, User
 from app.security import is_impersonation_token_revoked, user_id_from_token
 
 settings = get_settings()
@@ -136,6 +136,11 @@ class Principal:
     # branch — both mean "company-wide", matching pre-Branch-Management
     # behavior. Set only for an Employee principal assigned to a Branch.
     branch_id: str | None = None
+    # Branch Security Layer Phase 3: every branch this identity may switch
+    # into — the primary branch_id above plus any EmployeeBranchAccess
+    # rows. Empty for a User (admin, unrestricted by construction) and for
+    # an Employee with no branch_id and no extra grants.
+    accessible_branch_ids: frozenset[str] = field(default_factory=frozenset)
 
     def has(self, *keys: str) -> bool:
         return self.is_admin or bool(self.permissions.intersection(keys))
@@ -149,6 +154,35 @@ class Principal:
         "<module>:view_all_branches" lets a specific employee see every
         branch's data for that one module without becoming a full admin."""
         return self.is_admin or self.has(f"{module}:view_all_branches")
+
+
+def resolve_active_branch(principal: Principal, requested: str | None) -> str | None:
+    """Branch Security Layer Phase 3 — the single resolver every branch-
+    filtered endpoint calls instead of reading `principal.branch_id`
+    directly, so a multi-branch employee's `?branch_id=` switcher works
+    consistently everywhere (previously only app_data.py's generic
+    collection endpoint had this opt-in, with no membership check).
+
+    - Admin (unrestricted): `requested` passes straight through, same as
+      today's admin branch-switcher opt-in.
+    - An Employee with 0 or 1 accessible branches: `requested` is always
+      ignored, returns `principal.branch_id` unchanged — this is the
+      overwhelmingly common case (every employee before this phase) and
+      preserves the already-tested "cannot escalate via the query param"
+      guarantee exactly as before Phase 3 existed.
+    - A genuinely multi-branch Employee: `requested` is honored only if
+      it's one of their actually-assigned branches (never lets them peek
+      at an unassigned branch); otherwise falls back to their primary
+      branch, or an arbitrary accessible one if they have no primary.
+    """
+    if principal.is_admin:
+        return requested
+    accessible = principal.accessible_branch_ids
+    if len(accessible) <= 1:
+        return principal.branch_id
+    if requested and requested in accessible:
+        return requested
+    return principal.branch_id or next(iter(accessible))
 
 
 def _principal_from_employee_token(token: str, db: Session) -> Principal | None:
@@ -172,11 +206,14 @@ def _principal_from_employee_token(token: str, db: Session) -> Principal | None:
     db.add(emp)
     db.commit()
     role = db.get(Role, emp.role_id) if emp.role_id else None
+    accessible_branch_ids = {row[0] for row in db.query(EmployeeBranchAccess.branch_id).filter(EmployeeBranchAccess.employee_id == emp.id).all()}
+    if emp.branch_id:
+        accessible_branch_ids.add(emp.branch_id)
     return Principal(
         kind="employee", company_id=emp.company_id, display_name=emp.full_name,
         is_admin=False, permissions=frozenset(_role_permission_keys(db, role)),
         employee=emp, role_name=role.role_name if role else None,
-        branch_id=emp.branch_id,
+        branch_id=emp.branch_id, accessible_branch_ids=frozenset(accessible_branch_ids),
     )
 
 

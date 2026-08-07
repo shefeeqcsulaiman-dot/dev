@@ -28,6 +28,7 @@ from starlette.concurrency import run_in_threadpool
 import app.cache as cache
 from app.config import get_settings
 from app.database import get_db
+from app.auth_principal import resolve_active_branch
 from app.dependencies import Principal, company_allows_module, get_current_principal, get_current_user
 from app.limiter import limiter
 from app.module_integration import sync_purchase_accounting, sync_sales_invoice_accounting
@@ -363,18 +364,17 @@ def list_collection_records(
         AppDataRecord.collection == collection,
     ]
     collection_module = _COLLECTION_MODULE.get(collection)
-    if (
-        principal.branch_id
-        and collection in _BRANCH_FILTERED_COLLECTIONS
-        and not (collection_module and principal.can_cross_branch(collection_module))
-    ):
-        # Branch-scoped Employee — always locked to their own branch,
-        # regardless of any ?branch_id= passed in (an explicit param here
-        # could otherwise be used to peek at another branch's records) —
-        # unless their role grants "<module>:view_all_branches" (Branch
-        # Security Layer Phase 2), same opt-in used everywhere else.
+    cross_branch = bool(collection_module and principal.can_cross_branch(collection_module))
+    if principal.branch_id and collection in _BRANCH_FILTERED_COLLECTIONS and not cross_branch:
+        # Branch-scoped Employee — locked to their own accessible branch(es)
+        # (Phase 3: possibly more than one, via EmployeeBranchAccess),
+        # regardless of any ?branch_id= passed in beyond that set (an
+        # explicit param here could otherwise be used to peek at another
+        # branch's records) — unless their role grants
+        # "<module>:view_all_branches" (Branch Security Layer Phase 2).
+        active_branch = resolve_active_branch(principal, branch_id)
         base_filters.append(
-            (AppDataRecord.branch_id == principal.branch_id) | (AppDataRecord.branch_id.is_(None))
+            (AppDataRecord.branch_id == active_branch) | (AppDataRecord.branch_id.is_(None))
         )
     elif branch_id:
         # Company-wide viewer (admin) explicitly asking to see one branch —

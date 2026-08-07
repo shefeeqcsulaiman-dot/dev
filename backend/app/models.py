@@ -1045,6 +1045,23 @@ class Branch(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(30), default="Active")
 
 
+class EmployeeBranchAccess(Base, TimestampMixin):
+    """Branch Security Layer Phase 3: additional branches an employee may
+    switch into, on top of their primary Employee.branch_id (unchanged,
+    still their default/home branch — used for POS receipts, HR reports,
+    etc.). An employee with zero rows here behaves exactly as before this
+    table existed (locked to Employee.branch_id, or unrestricted if NULL) —
+    this table is purely additive. Same shape as the existing
+    EmployeeLocation (Employee<->CompanyLocation), the one other "one
+    identity, many X" precedent in this schema."""
+    __tablename__ = "employee_branch_access"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
+    employee_id: Mapped[str] = mapped_column(ForeignKey("employees.id"), index=True, nullable=False)
+    branch_id: Mapped[str] = mapped_column(ForeignKey("branches.id"), index=True, nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class CompanyLocation(Base, TimestampMixin):
     __tablename__ = "company_locations"
 

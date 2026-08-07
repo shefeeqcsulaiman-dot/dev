@@ -2314,8 +2314,65 @@ async function fetchWithBackendFallback(url,options={}){
   }
 }
 
+// Branch Security Layer Phase 3 — multi-branch employee's active branch
+// selection, threaded automatically into branch-aware requests so callers
+// don't need to know/care whether the current session is multi-branch.
+// Mirrors the exact list of endpoints the backend actually branch-filters
+// (resolve_active_branch(), auth_principal.py) — adding a branch filter to
+// a new endpoint server-side means adding its path here too.
+window.ACTIVE_BRANCH_ID=window.ACTIVE_BRANCH_ID||(()=>{try{return localStorage.getItem('taxflow_active_branch_id')||null;}catch{return null;}})();
+window.ACCESSIBLE_BRANCHES=window.ACCESSIBLE_BRANCHES||[];
+const _BRANCH_AWARE_PATH_RE=/\/(invoices|inventory\/stock-levels|inventory\/stock-movements|reports\/trial-balance|hr\/live-locations|app-data\/records\/(purchaseRecords|posSales|salesInvoices))(\?|$)/;
+function _withActiveBranchParam(url){
+  if(!window.ACTIVE_BRANCH_ID)return url;
+  if(typeof url!=='string'||!_BRANCH_AWARE_PATH_RE.test(url))return url;
+  if(/[?&]branch_id=/.test(url))return url; // caller already specified one explicitly — don't override
+  return url+(url.includes('?')?'&':'?')+'branch_id='+encodeURIComponent(window.ACTIVE_BRANCH_ID);
+}
+
+// Renders the branch switcher (any element marked data-branch-switcher) from
+// a whoami() response — called from both applyHrmsPermissionNav() (hrms.html)
+// and applyMainDashboardPermissionNav() (below), which already fetch whoami
+// for permission-nav purposes, so this adds no extra round trip. Hidden
+// entirely unless there's an actual choice to make (>1 accessible branch),
+// matching the backend's own "empty list unless genuinely multi-branch"
+// convention for who.accessible_branches.
+function applyBranchSwitcherFromWhoami(who){
+  window.ACCESSIBLE_BRANCHES=Array.isArray(who?.accessible_branches)?who.accessible_branches:[];
+  const containers=document.querySelectorAll('[data-branch-switcher]');
+  if(window.ACCESSIBLE_BRANCHES.length>1){
+    if(!window.ACTIVE_BRANCH_ID||!window.ACCESSIBLE_BRANCHES.some(b=>b.id===window.ACTIVE_BRANCH_ID)){
+      window.ACTIVE_BRANCH_ID=who.branch_id||window.ACCESSIBLE_BRANCHES[0].id;
+    }
+    containers.forEach(el=>{
+      el.style.display='';
+      const sel=el.querySelector('select');
+      if(sel){
+        sel.innerHTML=window.ACCESSIBLE_BRANCHES.map(b=>`<option value="${escapeHtml(b.id)}" ${b.id===window.ACTIVE_BRANCH_ID?'selected':''}>${escapeHtml(b.name)}</option>`).join('');
+      }
+    });
+  }else{
+    containers.forEach(el=>{el.style.display='none';});
+  }
+}
+
+// Switching branch never reloads the page — just updates the stored
+// selection and re-runs the same server hydration every page already does
+// on load, so every visible list/report re-fetches under the new branch.
+async function switchActiveBranch(branchId){
+  if(!branchId||branchId===window.ACTIVE_BRANCH_ID)return;
+  window.ACTIVE_BRANCH_ID=branchId;
+  try{localStorage.setItem('taxflow_active_branch_id',branchId);}catch{}
+  document.querySelectorAll('[data-branch-switcher] select').forEach(sel=>{sel.value=branchId;});
+  toast('Switched branch — refreshing…','ok');
+  if(typeof hydrateFromServer==='function'){
+    try{await hydrateFromServer();}catch(e){console.warn('[switchActiveBranch] refresh failed',e);}
+  }
+}
+
 async function authenticatedFetch(url,options={}){
   await ensureBackendSession();
+  url=_withActiveBranchParam(url);
   const requestOptions={...options,headers:{...backendHeaders(),...(options.headers||{})}};
   let response=await fetchWithBackendFallback(url,requestOptions);
   // 401 = invalid/expired session -> re-authenticate. 403 = valid session,
@@ -2631,6 +2688,7 @@ async function applyMainDashboardPermissionNav(){
     const resp=await fetch(apiBaseUrl()+'/auth/whoami',{headers:{Authorization:'Bearer '+token}});
     if(!resp||!resp.ok)return;
     const who=await resp.json();
+    applyBranchSwitcherFromWhoami(who);
     if(who.is_admin){window.MAIN_ALLOWED_MODULES=null;return;}
     const allowed=new Set((who.permissions||[]).filter(p=>p.endsWith(':view')).map(p=>p.split(':')[0]));
     window.MAIN_ALLOWED_MODULES=allowed;

@@ -4,12 +4,12 @@ from datetime import date as _date, timedelta
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 import app.cache as cache
-from app.auth_principal import Principal, require_principal_permission
+from app.auth_principal import Principal, require_principal_permission, resolve_active_branch
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.limiter import limiter
@@ -474,6 +474,7 @@ def debug_purchase(db: Session = Depends(get_db), current_user: User = Depends(g
 @limiter.limit("120/minute")
 def trial_balance(
     request: Request,
+    branch_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("reports:view")),
 ) -> dict[str, Any]:
@@ -483,15 +484,17 @@ def trial_balance(
     # company admin (branch_id always None) sees everything, as before.
     # Branch Security Layer Phase 2: "reports:view_all_branches" lets a
     # specific branch employee see company-wide totals too, without being
-    # a full admin — same as every other cross-branch opt-in.
-    branch_id = None if principal.can_cross_branch("reports") else principal.branch_id
+    # a full admin. Phase 3: ?branch_id= lets an unrestricted viewer (admin
+    # or cross-branch employee) opt into ONE branch's figures, and a
+    # genuinely multi-branch employee pick among their own assigned set.
+    resolved_branch_id = branch_id if principal.can_cross_branch("reports") else resolve_active_branch(principal, branch_id)
     # Cache key includes branch_id so one branch's result is never served
     # to another branch or to the unscoped company-wide view.
-    cache_key = f"trial_balance:{company_id}:{branch_id or 'all'}"
+    cache_key = f"trial_balance:{company_id}:{resolved_branch_id or 'all'}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
-    result = {"status": "ready", "source": "posted journal entries", "rows": trial_balance_rows(db, company_id, branch_id)}
+    result = {"status": "ready", "source": "posted journal entries", "rows": trial_balance_rows(db, company_id, resolved_branch_id)}
     cache.set(cache_key, result, ttl=120)
     return result
 
