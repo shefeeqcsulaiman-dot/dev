@@ -608,16 +608,24 @@ def list_journals(
     # worse as a company accumulates real transaction history. Callers that
     # genuinely need everything (clearLedgerRecords()) page through with
     # has_more instead of relying on one unbounded response.
-    total = (
-        db.query(func.count(JournalEntry.id))
-        .filter(JournalEntry.company_id == principal.company_id)
-        .scalar()
-        or 0
-    )
-    rows = (
+    total_query = db.query(func.count(JournalEntry.id)).filter(JournalEntry.company_id == principal.company_id)
+    rows_query = (
         db.query(JournalEntry)
         .options(joinedload(JournalEntry.lines))
         .filter(JournalEntry.company_id == principal.company_id)
+    )
+    if principal.branch_id:
+        # Branch-scoped viewer sees only their branch's entries (plus
+        # NULL-branch legacy/manual entries) — same rule as
+        # trial_balance_rows() (reports.py:715-719). Admins have
+        # branch_id == None, so this block never runs for them, matching
+        # every other branch filter in the app.
+        branch_filter = (JournalEntry.branch_id == principal.branch_id) | (JournalEntry.branch_id.is_(None))
+        total_query = total_query.filter(branch_filter)
+        rows_query = rows_query.filter(branch_filter)
+    total = total_query.scalar() or 0
+    rows = (
+        rows_query
         .order_by(JournalEntry.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -778,6 +786,12 @@ def list_general_ledger(
         db.query(GeneralLedgerEntry)
         .filter(GeneralLedgerEntry.company_id == principal.company_id)
     )
+    if principal.branch_id:
+        # Same branch-scoping rule as list_journals()/trial_balance_rows() —
+        # NULL branch_id (legacy/manual entries) stays visible.
+        query = query.filter(
+            (GeneralLedgerEntry.branch_id == principal.branch_id) | (GeneralLedgerEntry.branch_id.is_(None))
+        )
     if account_id:
         query = query.filter(GeneralLedgerEntry.account_id == account_id)
     return (
