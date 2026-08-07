@@ -10,7 +10,7 @@ from app.dependencies import Principal, assert_company_active, get_current_princ
 from app.limiter import limiter
 from pydantic import BaseModel
 
-from app.models import Company, TrialRequest, User
+from app.models import Branch, Company, TrialRequest, User
 from app.schemas import LoginRequest, RegisterRequest, Token, UserOut
 from app.security import authenticate_user, create_access_token, hash_password, impersonator_id_from_token
 
@@ -92,6 +92,11 @@ def me(
     return current_user
 
 
+class AccessibleBranchOut(BaseModel):
+    id: str
+    name: str
+
+
 class WhoAmIOut(BaseModel):
     kind: str  # "user" | "employee"
     id: str
@@ -102,13 +107,22 @@ class WhoAmIOut(BaseModel):
     permissions: list[str] = []
     role_name: str | None = None
     branch_id: str | None = None
+    # Branch Security Layer Phase 3 — populated only when this identity has
+    # MORE than one accessible branch (the common single-branch/no-branch
+    # case sends an empty list, so the frontend switcher only ever renders
+    # when there's an actual choice to make).
+    accessible_branches: list[AccessibleBranchOut] = []
 
 
 @router.get("/whoami", response_model=WhoAmIOut)
-def whoami(principal: Principal = Depends(get_current_principal)) -> WhoAmIOut:
+def whoami(db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> WhoAmIOut:
     """Identity check that works for either login path (admin User or HRMS
     Employee sub-user) — the one call the frontend makes to decide what to
     show, instead of guessing which of /auth/me or /hr/me applies."""
+    accessible_branches: list[AccessibleBranchOut] = []
+    if len(principal.accessible_branch_ids) > 1:
+        rows = db.query(Branch.id, Branch.name).filter(Branch.id.in_(principal.accessible_branch_ids)).all()
+        accessible_branches = [AccessibleBranchOut(id=bid, name=name) for bid, name in rows]
     return WhoAmIOut(
         kind=principal.kind,
         id=principal.user.id if principal.user else principal.employee.id,
@@ -119,6 +133,7 @@ def whoami(principal: Principal = Depends(get_current_principal)) -> WhoAmIOut:
         permissions=sorted(principal.permissions),
         role_name=principal.role_name,
         branch_id=principal.branch_id,
+        accessible_branches=accessible_branches,
     )
 
 

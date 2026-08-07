@@ -10,7 +10,7 @@ import math
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from jose import jwt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -28,9 +28,11 @@ from app.dependencies import assert_company_active, require_module
 from app.limiter import limiter
 from app.models import (
     AttendanceSession,
+    Branch,
     Company,
     CompanyLocation,
     Employee,
+    EmployeeBranchAccess,
     EmployeeLocation,
     EmployeeLocationLog,
     Permission,
@@ -196,7 +198,7 @@ def _distance_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> floa
     return 2 * r * math.asin(math.sqrt(a))
 
 
-def _scope_attendance_to_branch(query, emp: Employee, db: Session):
+def _scope_attendance_to_branch(query, emp: Employee, db: Session, requested_branch_id: str | None = None):
     """Branch Management, Phase 2: a branch-assigned employee viewing
     team/company-wide attendance (dashboard counts, live locations) only
     sees sessions belonging to their own branch — plus branch-less legacy
@@ -207,14 +209,23 @@ def _scope_attendance_to_branch(query, emp: Employee, db: Session):
     branches" opts a specific branch employee out of this filter, same as
     every other cross-branch flag — checked here (not via a Principal,
     since this file works directly with Employee rows) by resolving the
-    role's permission keys the same way require_permission() does."""
+    role's permission keys the same way require_permission() does. Phase 3:
+    `requested_branch_id` (an explicit ?branch_id= choice) is honored only
+    if it's one of this employee's own accessible branches (primary +
+    EmployeeBranchAccess rows) — same "cannot escalate" guarantee as every
+    other branch-filtered endpoint."""
     if not emp.branch_id:
         return query
     role = db.get(Role, emp.role_id) if emp.role_id else None
     if "attendance:view_all_branches" in _role_permission_keys(db, role):
+        if requested_branch_id:
+            return query.filter(AttendanceSession.branch_id == requested_branch_id)
         return query
+    accessible = {row[0] for row in db.query(EmployeeBranchAccess.branch_id).filter(EmployeeBranchAccess.employee_id == emp.id).all()}
+    accessible.add(emp.branch_id)
+    active_branch = requested_branch_id if (requested_branch_id and requested_branch_id in accessible) else emp.branch_id
     return query.filter(
-        (AttendanceSession.branch_id == emp.branch_id) | (AttendanceSession.branch_id.is_(None))
+        (AttendanceSession.branch_id == active_branch) | (AttendanceSession.branch_id.is_(None))
     )
 
 
@@ -693,6 +704,75 @@ def revoke_employee_portal_access(
     return {"ok": True}
 
 
+class BranchAccessIn(BaseModel):
+    branch_ids: list[str] = []
+
+
+class BranchAccessOut(BaseModel):
+    id: str
+    name: str
+    is_primary: bool
+
+
+@gated_router.get("/admin/employees/{employee_id}/branch-access", response_model=list[BranchAccessOut])
+def get_employee_branch_access(
+    employee_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("hr_settings:view")),
+) -> list[dict]:
+    target = db.query(Employee).filter(Employee.id == employee_id, Employee.company_id == principal.company_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    out = []
+    if target.branch_id:
+        branch = db.query(Branch).filter(Branch.id == target.branch_id).first()
+        if branch:
+            out.append({"id": branch.id, "name": branch.name, "is_primary": True})
+    extra = (
+        db.query(EmployeeBranchAccess, Branch)
+        .join(Branch, Branch.id == EmployeeBranchAccess.branch_id)
+        .filter(EmployeeBranchAccess.employee_id == employee_id)
+        .all()
+    )
+    out.extend({"id": b.id, "name": b.name, "is_primary": False} for _, b in extra)
+    return out
+
+
+@gated_router.put("/admin/employees/{employee_id}/branch-access")
+def set_employee_branch_access(
+    employee_id: str,
+    payload: BranchAccessIn,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("hr_settings:edit")),
+) -> dict:
+    """Branch Security Layer Phase 3 — grants an employee ADDITIONAL
+    branches beyond their primary Employee.branch_id (unchanged, still set
+    separately via the employee form). Replace-all semantics, mirroring how
+    portal-access sets role_id: the given branch_ids become the complete
+    extra set, not an incremental add. Their primary branch is excluded
+    automatically if included in the list (it's already implicitly
+    accessible — no need for a redundant row)."""
+    target = db.query(Employee).filter(Employee.id == employee_id, Employee.company_id == principal.company_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    requested_ids = {b.strip() for b in payload.branch_ids if b and b.strip()}
+    requested_ids.discard(target.branch_id or "")
+    if requested_ids:
+        valid = {
+            row[0] for row in db.query(Branch.id).filter(Branch.id.in_(requested_ids), Branch.company_id == principal.company_id).all()
+        }
+        invalid = requested_ids - valid
+        if invalid:
+            raise HTTPException(status_code=404, detail="One or more branches were not found")
+
+    db.query(EmployeeBranchAccess).filter(EmployeeBranchAccess.employee_id == employee_id).delete(synchronize_session=False)
+    for branch_id in requested_ids:
+        db.add(EmployeeBranchAccess(employee_id=employee_id, branch_id=branch_id))
+    db.commit()
+    return {"ok": True, "branch_ids": sorted(requested_ids)}
+
+
 # ── company locations ───────────────────────────────────────────────────────
 
 class CompanyLocationOut(BaseModel):
@@ -1026,13 +1106,14 @@ class LiveLocationOut(BaseModel):
 
 @gated_router.get("/live-locations", response_model=list[LiveLocationOut])
 def live_locations(
+    branch_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     emp: Employee = Depends(require_permission("hr:view_all_attendance")),
 ) -> list[LiveLocationOut]:
     sessions = _scope_attendance_to_branch(
         db.query(AttendanceSession)
         .filter(AttendanceSession.company_id == emp.company_id, AttendanceSession.status == "open"),
-        emp, db,
+        emp, db, branch_id,
     ).all()
     out: list[LiveLocationOut] = []
     for session in sessions:

@@ -3,10 +3,11 @@ import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.auth_principal import resolve_active_branch
 from app.database import get_db
 from app.dependencies import Principal, get_current_principal, get_current_user, require_module
 from app.models import AppDataRecord, InventoryValuationLayer, ItemUnit, ItemUnitConversion, StockAdjustmentApproval, StockMovement, StockProductMapping, User, Warehouse
@@ -121,19 +122,28 @@ def list_mappings(db: Session = Depends(get_db), principal: Principal = Depends(
 
 
 @router.get("/inventory/stock-levels")
-def list_stock_levels(db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> list[dict[str, object]]:
+def list_stock_levels(
+    branch_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> list[dict[str, object]]:
     if not inventory_backfill_disabled(db, principal.company_id):
         backfill_purchase_stock_movements(db, principal)
     movement_join_condition = (StockMovement.mapping_id == StockProductMapping.id) & (StockMovement.company_id == principal.company_id)
-    if principal.branch_id and not principal.can_cross_branch("inventory"):
+    if principal.can_cross_branch("inventory"):
+        if branch_id:
+            movement_join_condition = movement_join_condition & (StockMovement.branch_id == branch_id)
+    else:
         # A branch-scoped viewer sees stock quantities from their own
         # branch's movements only (plus branch-less legacy movements) —
         # each branch's physical stock is a separate count, not a shared
         # pool. Unassigned employees/the company admin still see the
         # full company-wide total, unchanged from before this phase.
-        movement_join_condition = movement_join_condition & (
-            (StockMovement.branch_id == principal.branch_id) | (StockMovement.branch_id.is_(None))
-        )
+        active_branch = resolve_active_branch(principal, branch_id)
+        if active_branch:
+            movement_join_condition = movement_join_condition & (
+                (StockMovement.branch_id == active_branch) | (StockMovement.branch_id.is_(None))
+            )
     rows = (
         db.query(
             StockProductMapping,
@@ -180,7 +190,11 @@ def list_stock_levels(db: Session = Depends(get_db), principal: Principal = Depe
 
 
 @router.get("/inventory/stock-movements")
-def list_stock_movements(db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> list[dict[str, object]]:
+def list_stock_movements(
+    branch_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> list[dict[str, object]]:
     if not inventory_backfill_disabled(db, principal.company_id):
         backfill_purchase_stock_movements(db, principal)
     query = (
@@ -188,8 +202,13 @@ def list_stock_movements(db: Session = Depends(get_db), principal: Principal = D
         .join(StockProductMapping, StockMovement.mapping_id == StockProductMapping.id)
         .filter(StockMovement.company_id == principal.company_id)
     )
-    if principal.branch_id and not principal.can_cross_branch("inventory"):
-        query = query.filter((StockMovement.branch_id == principal.branch_id) | (StockMovement.branch_id.is_(None)))
+    if principal.can_cross_branch("inventory"):
+        if branch_id:
+            query = query.filter(StockMovement.branch_id == branch_id)
+    else:
+        active_branch = resolve_active_branch(principal, branch_id)
+        if active_branch:
+            query = query.filter((StockMovement.branch_id == active_branch) | (StockMovement.branch_id.is_(None)))
     rows = query.order_by(StockMovement.created_at.desc()).limit(500).all()
     # Build a lookup: reference → purchase record payload (for vendor/date)
     references = list({m.reference for m, _ in rows if m.reference})

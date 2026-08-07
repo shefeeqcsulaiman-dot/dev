@@ -1,8 +1,9 @@
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
+from app.auth_principal import resolve_active_branch
 from app.database import get_db
 from app.dependencies import Principal, get_current_principal, require_module
 from app.module_integration import sync_sales_invoice_accounting
@@ -27,6 +28,7 @@ def calculate_totals(invoice: Invoice) -> None:
 
 @router.get("", response_model=list[InvoiceOut])
 def list_invoices(
+    branch_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
 ) -> list[Invoice]:
@@ -35,8 +37,20 @@ def list_invoices(
     # (Invoice.branch_id already existed since Phase 3; this endpoint just
     # hadn't been opened up to Employee tokens yet).
     query = db.query(Invoice).options(joinedload(Invoice.lines)).filter(Invoice.company_id == principal.company_id)
-    if principal.branch_id and not principal.can_cross_branch("sales"):
-        query = query.filter((Invoice.branch_id == principal.branch_id) | (Invoice.branch_id.is_(None)))
+    if principal.can_cross_branch("sales"):
+        # Admin, or an employee explicitly granted sales:view_all_branches —
+        # not constrained to any particular branch; ?branch_id= here is an
+        # explicit opt-in "show me just this one" choice, not a restriction.
+        if branch_id:
+            query = query.filter(Invoice.branch_id == branch_id)
+    else:
+        # Branch-locked employee (Phase 3: possibly one of SEVERAL branches
+        # they're assigned to) — resolve_active_branch keeps them confined
+        # to their own accessible set even if they pass an arbitrary
+        # ?branch_id=, same "cannot escalate" guarantee as before Phase 3.
+        active_branch = resolve_active_branch(principal, branch_id)
+        if active_branch:
+            query = query.filter((Invoice.branch_id == active_branch) | (Invoice.branch_id.is_(None)))
     return query.order_by(Invoice.created_at.desc()).all()
 
 
