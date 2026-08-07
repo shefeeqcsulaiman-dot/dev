@@ -668,7 +668,6 @@ function openEmpEdit(emp){
   setV('emp-iban',emp.iban);
   setV('emp-personal-code',emp.personal_code);
   setV('emp-routing-code',emp.routing_code);
-  setV('emp-username',emp.username);
   // Update modal title and button for edit mode
   const titleEl=document.querySelector('#m-emp .modal-title');
   const subEl=document.querySelector('#m-emp .modal-sub');
@@ -741,8 +740,6 @@ function saveEmployee(){
     iban:employeeFormValue('emp-iban'),
     personal_code:employeeFormValue('emp-personal-code'),
     routing_code:employeeFormValue('emp-routing-code'),
-    username:employeeFormValue('emp-username'),
-    password:employeeFormValue('emp-password'),
     photo:photoPreview,
     documents:{
       passport:passportFile?.name||'',
@@ -753,23 +750,6 @@ function saveEmployee(){
   if(!employee.name){
     toast('Enter employee name','warn');
     return;
-  }
-  const pwd=employeeFormValue('emp-password');
-  const pwdConfirm=employeeFormValue('emp-password-confirm');
-  if(pwd&&pwd!==pwdConfirm){
-    toast('Passwords do not match','warn');
-    document.getElementById('emp-password-confirm')?.focus();
-    return;
-  }
-  const isEdit=document.querySelector('#m-emp .modal-title')?.textContent==='Edit Employee';
-  // On edit, keep existing password if field left blank
-  if(isEdit&&!pwd){
-    const existingRow=[...document.querySelectorAll('#employee-tbody tr')].find(r=>{
-      try{return JSON.parse(r.dataset.employee||'{}').id===employee.id;}catch{return false;}
-    });
-    if(existingRow){
-      try{const ex=JSON.parse(existingRow.dataset.employee);employee.password=ex.password||'';}catch{}
-    }
   }
   renderEmployeeRecord(employee);
   renderPayrollEmployeeRecord(employee);
@@ -7841,6 +7821,8 @@ function hydrateFromServer(){
         if(otCfg){
           _applyOtRulesConfig(otCfg);
         }
+        await loadLeavePoliciesFromServer();
+        await loadHolidaysFromServer();
       }finally{isHydratingFromServer=false;}
       updateLeaveBalance();
       filterLedger();
@@ -15458,10 +15440,15 @@ function refreshHrmsKpis(){
     const cells=[...r.cells];
     const from=cells[2]?.textContent.trim();
     const to=cells[3]?.textContent.trim();
-    const status=cells[5]?.textContent.trim();
-    return status==='Approved'&&from&&to&&from<=today&&today<=to;
+    // renderLeaveTable() writes the real backend's lowercase status strings
+    // ('approved'/'pending') into textContent — only the CSS capitalizes
+    // them for display. Comparing against Title Case here always failed,
+    // pinning onLeaveToday/pendingLeave (and everything derived from them:
+    // present/absent counts, the pending-approvals badge) at 0.
+    const status=(cells[5]?.textContent.trim()||'').toLowerCase();
+    return status==='approved'&&from&&to&&from<=today&&today<=to;
   }).length;
-  const pendingLeave=leaveRows.filter(r=>r.cells[5]?.textContent.trim()==='Pending').length;
+  const pendingLeave=leaveRows.filter(r=>(r.cells[5]?.textContent.trim()||'').toLowerCase()==='pending').length;
   const pendingOT=otRows.filter(r=>r.cells[5]?.textContent.trim()==='Pending').length;
   const pendingCorr=corrRows.filter(r=>r.cells[5]?.textContent.trim()==='Pending').length;
   const payrollRuns=document.querySelectorAll('#payroll-tbody tr:not([data-empty-state])').length;
@@ -15922,15 +15909,22 @@ function updateLeaveBalance(){
   const empRows=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')];
   if(!empRows.length){emptyTableMessage(tbody,'No employees in database yet.');return;}
   const leaveRows=[...document.querySelectorAll('#leave-tbody tr:not([data-empty-state])')];
-  const usedMap={};
+  // Bucketed by (employee, leave type) — previously every non-rejected leave
+  // row, regardless of type, was summed into one number and subtracted from
+  // Annual Leave's remaining balance, so taking Sick/Emergency/Unpaid leave
+  // silently drained the Annual figure while the separate "Sick Days" column
+  // stayed hardcoded at 90 forever.
+  const usedByType={};
   leaveRows.forEach(row=>{
     const cells=[...row.cells];
     if(cells.length<6)return;
     const emp=cells[0]?.textContent.trim();
+    const type=cells[1]?.textContent.trim()||'Annual';
     const days=parseInt(cells[4]?.textContent||'0')||0;
     const status=(cells[5]?.textContent.trim()||'').toLowerCase();
     if(status==='rejected'||!emp)return;
-    usedMap[emp]=(usedMap[emp]||0)+days;
+    usedByType[emp]=usedByType[emp]||{};
+    usedByType[emp][type]=(usedByType[emp][type]||0)+days;
   });
   tbody.innerHTML='';
   empRows.forEach(row=>{
@@ -15939,10 +15933,13 @@ function updateLeaveBalance(){
     const policy=emp.leave_policy||'UAE Standard';
     const annualDays=leaveEntitlementDays(policy);
     const sickDays=90;
-    const used=usedMap[emp.name]||0;
+    const empUsed=usedByType[emp.name]||{};
+    const used=empUsed['Annual']||0;
+    const sickUsed=empUsed['Sick']||0;
     const remaining=Math.max(0,annualDays-used);
+    const sickRemaining=Math.max(0,sickDays-sickUsed);
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${escapeHtml(emp.name)}</td><td class="mono">${annualDays}</td><td class="mono">${sickDays}</td><td class="mono">${used}</td><td class="mono" ${remaining<5?'style="color:var(--red)"':''}>${remaining}</td>`;
+    tr.innerHTML=`<td>${escapeHtml(emp.name)}</td><td class="mono">${annualDays}</td><td class="mono">${sickRemaining}</td><td class="mono">${used}</td><td class="mono" ${remaining<5?'style="color:var(--red)"':''}>${remaining}</td>`;
     tbody.appendChild(tr);
   });
   if(!tbody.children.length)emptyTableMessage(tbody,'No employees in database yet.');
@@ -15953,9 +15950,17 @@ function updateOtMultiplier(){
   const multEl=document.getElementById('ot-multiplier');
   const noteEl=document.getElementById('ot-mult-note');
   if(!multEl)return;
-  let mult='1.25×',note='UAE Labour Law';
-  if(type==='weekend'||type==='holiday'){mult='1.5×';note='Weekend / Holiday rate';}
-  else if(type==='ramadan'){mult='1.25×';note='Ramadan OT rate';}
+  // Read the actual configured rates from HR Settings > OT Rules (saved via
+  // saveOtRules(), reloaded into these fields by _applyOtRulesConfig()) —
+  // previously hardcoded 1.25/1.5 regardless of what an admin had configured.
+  const normalRate=parseFloat(document.getElementById('ot-mult-normal')?.value)||1.25;
+  const weekendRate=parseFloat(document.getElementById('ot-mult-weekend')?.value)||1.5;
+  const holidayRate=parseFloat(document.getElementById('ot-mult-holiday')?.value)||weekendRate;
+  const ramadanRate=parseFloat(document.getElementById('ot-mult-ramadan')?.value)||normalRate;
+  let mult=`${normalRate}×`,note='UAE Labour Law';
+  if(type==='weekend'){mult=`${weekendRate}×`;note='Weekend rate';}
+  else if(type==='holiday'){mult=`${holidayRate}×`;note='Holiday rate';}
+  else if(type==='ramadan'){mult=`${ramadanRate}×`;note='Ramadan OT rate';}
   multEl.value=mult;
   if(noteEl)noteEl.textContent=note;
   const start=document.getElementById('ot-login')?.value||'';
@@ -16609,6 +16614,10 @@ function saveLeavePolicies(){
     const name=tr.querySelector('strong')?.textContent?.trim()||'';
     return{
       name,
+      // Matches the #emp-leave-policy <option value>, when this row is one
+      // of the built-in policies — lets leaveEntitlementDays() apply an
+      // admin's edited day-count instead of staying hardcoded forever.
+      value:tr.dataset.policyValue||null,
       days:cells[0]?.value||'',
       basis:cells[1]?.value||'Calendar',
       encash:cells[2]?.value||'No',
@@ -16621,7 +16630,45 @@ function saveLeavePolicies(){
   const encashTiming=document.getElementById('leave-encash-timing')?.value||'On resignation / gratuity';
   const data={leave_types:types,leave_policies:policies,year_start:yearStart,accrual,carry_deadline:carryDeadline,encash_timing:encashTiming};
   saveServer('hrLeavePolicy',{id:'leave-policy',...data});
+  _applyLeavePolicyDaysToMap(policies);
   toast('Leave policy saved','ok');
+}
+
+// Previously leaveEntitlementDays() only ever read the hardcoded
+// _LEAVE_POLICY_DAYS map — an admin editing a policy's day-count in HR
+// Settings > Leave Policy had zero effect on real entitlement/balance
+// calculations. This keeps the map in sync with whatever was last saved.
+function _applyLeavePolicyDaysToMap(policies){
+  (policies||[]).forEach(p=>{
+    if(p.value&&p.days!==''&&p.days!=null&&!isNaN(Number(p.days))){
+      _LEAVE_POLICY_DAYS[p.value]=Number(p.days);
+    }
+  });
+}
+
+async function loadLeavePoliciesFromServer(){
+  try{
+    const response=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/hrLeavePolicy?limit=10`);
+    if(!response.ok)return;
+    const data=await response.json();
+    const rec=(Array.isArray(data.records)?data.records:[]).find(r=>r.id==='leave-policy');
+    if(!rec)return;
+    _applyLeavePolicyDaysToMap(rec.leave_policies);
+    // Reflect the saved day-counts back into the settings table itself —
+    // previously this table always showed its 5 hardcoded defaults on every
+    // page load, even after an admin had edited and saved different values.
+    (rec.leave_policies||[]).forEach(p=>{
+      if(!p.value)return;
+      const row=document.querySelector(`#leave-policies-tbody tr[data-policy-value="${CSS.escape(p.value)}"]`);
+      const daysInput=row?.querySelector('input');
+      if(daysInput&&p.days!=null&&p.days!=='')daysInput.value=p.days;
+    });
+    const setSelVal=(id,v)=>{const el=document.getElementById(id);if(el&&v)el.value=v;};
+    setSelVal('leave-year-start',rec.year_start);
+    setSelVal('leave-accrual',rec.accrual);
+    setSelVal('leave-carry-deadline',rec.carry_deadline);
+    setSelVal('leave-encash-timing',rec.encash_timing);
+  }catch(e){console.warn('Failed to load leave policy settings:',e);}
 }
 
 function addLeavePolicy(){
@@ -18169,6 +18216,63 @@ function applyRotaRepeat(){
 }
 
 // ── Rota export helpers ───────────────────────────────────────────────────────
+
+function _renderHolidayRow(rec){
+  const tbody=document.getElementById('holidays-tbody');
+  if(!tbody)return;
+  // First real saved holiday clears the two hardcoded demo rows (Eid Al
+  // Adha / Islamic New Year) — those were never real company data, just
+  // placeholders standing in for an empty table.
+  tbody.querySelectorAll('tr[data-demo-row]').forEach(tr=>tr.remove());
+  const existing=tbody.querySelector(`tr[data-holiday-id="${CSS.escape(rec.id)}"]`);
+  const statusBadge=rec.status==='Planned'?'<span class="b b-a">Planned</span>':'<span class="b b-g">Active</span>';
+  const paidBadge=rec.paid===false||rec.paid==='No'?'<span class="b" style="background:var(--bg3)">No</span>':'<span class="b b-g">Yes</span>';
+  const html=`<td>${escapeHtml(rec.display_date||rec.date||'')}</td><td>${escapeHtml(rec.name||'')}</td><td>${escapeHtml(rec.location||'All branches')}</td><td>${paidBadge}</td><td>${statusBadge}</td><td><button class="btn btn-g btn-xs" onclick="deleteHoliday('${escapeHtml(rec.id)}')">×</button></td>`;
+  if(existing){existing.innerHTML=html;}
+  else{
+    const tr=document.createElement('tr');
+    tr.dataset.holidayId=rec.id;
+    tr.innerHTML=html;
+    tbody.appendChild(tr);
+  }
+  if(!tbody.children.length)emptyTableMessage(tbody,'No holidays added yet.');
+}
+
+function addHoliday(){
+  const isoDate=prompt('Holiday date (YYYY-MM-DD):',new Date().toISOString().slice(0,10));
+  if(!isoDate)return;
+  const parsed=new Date(isoDate+'T00:00:00');
+  if(isNaN(parsed.getTime())){toast('Enter a valid date (YYYY-MM-DD)','warn');return;}
+  const name=prompt('Holiday name (e.g. "Eid Al Fitr"):');
+  if(!name?.trim())return;
+  const location=prompt('Applies to (default: All branches):','All branches')||'All branches';
+  const paid=confirm('Is this a paid holiday? OK = Yes, Cancel = No');
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const display=`${String(parsed.getDate()).padStart(2,'0')} ${months[parsed.getMonth()]}`;
+  const rec={id:'holiday-'+Date.now(),date:isoDate,display_date:display,name:name.trim(),location:location.trim(),paid,status:'Active'};
+  _renderHolidayRow(rec);
+  saveServer('hrHolidays',rec);
+  toast('Holiday added','ok');
+}
+
+function deleteHoliday(id){
+  const tbody=document.getElementById('holidays-tbody');
+  const row=tbody?.querySelector(`tr[data-holiday-id="${CSS.escape(id)}"]`);
+  if(row)row.remove();
+  if(tbody&&!tbody.children.length)emptyTableMessage(tbody,'No holidays added yet.');
+  deleteServer('hrHolidays',{id});
+}
+
+async function loadHolidaysFromServer(){
+  try{
+    const response=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/hrHolidays?limit=200`);
+    if(!response.ok)return;
+    const data=await response.json();
+    const records=Array.isArray(data.records)?data.records:[];
+    if(!records.length)return; // keep the two demo rows when no company data exists yet
+    records.forEach(_renderHolidayRow);
+  }catch(e){console.warn('Failed to load holidays:',e);}
+}
 
 function _companyHolidayMap(){
   const map=new Map();

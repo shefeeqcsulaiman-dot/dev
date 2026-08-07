@@ -46,9 +46,15 @@ def list_exceptions(db: Session = Depends(get_db), current_user: User = Depends(
             if count > 1:
                 rows.append(_event(module, "Duplicate invoice", "high", key, f"Invoice/reference {key} appears {count} times"))
 
+    # sales_account_code/purchase_account_code/inventory_account_code all have
+    # non-empty SQLAlchemy defaults ("3000"/"4000"/"1200") applied at insert
+    # time for every mapping, including auto-created/unreviewed ones — so
+    # this "is it empty" check could effectively never fire. The real
+    # needs-review signal (already used by the Stock Mapping UI itself) is
+    # mapping_confirmed.
     mappings = db.query(StockProductMapping).filter(StockProductMapping.company_id == current_user.company_id).all()
     for mapping in mappings:
-        if not mapping.sales_account_code or not mapping.purchase_account_code or not mapping.inventory_account_code:
+        if not mapping.mapping_confirmed:
             rows.append(_event("Inventory", "Unmapped stock item", "medium", mapping.sku, f"{mapping.name} is missing stock/account mapping"))
 
     for employee in db.query(Employee).filter(Employee.company_id == current_user.company_id, Employee.status == "active", Employee.iban.is_(None)).all():

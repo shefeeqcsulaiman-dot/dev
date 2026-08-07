@@ -232,6 +232,35 @@ def test_exception_center_accepts_manual_exception(client, auth_headers):
     assert any(row["source_record"] == "QA-JOB-001" for row in payload["exceptions"])
 
 
+def test_exception_center_flags_unconfirmed_mapping_not_empty_account_codes(client, auth_headers, db):
+    """exception_center.py used to flag a stock mapping only when its
+    sales/purchase/inventory account codes were empty — but those columns
+    all have non-empty SQLAlchemy defaults ("3000"/"4000"/"1200") applied at
+    insert time for every mapping, including auto-created/unreviewed ones,
+    so that check could effectively never fire. The real "needs review"
+    signal is mapping_confirmed, already used by the Stock Mapping UI."""
+    from app.models import User
+
+    company_id = db.query(User).filter(User.email == "qa-admin@taxflowqa.com").first().company_id
+
+    unconfirmed = StockProductMapping(
+        company_id=company_id, sku="EXC-UNMAPPED-SKU", name="Exception QA Unmapped Item", mapping_confirmed=False,
+    )
+    confirmed = StockProductMapping(
+        company_id=company_id, sku="EXC-MAPPED-SKU", name="Exception QA Mapped Item", mapping_confirmed=True,
+    )
+    db.add_all([unconfirmed, confirmed])
+    db.commit()
+
+    listed = client.get("/api/v1/exceptions", headers=auth_headers)
+    assert listed.status_code == 200
+    rows = listed.json()["exceptions"]
+    unmapped_rows = [r for r in rows if r["category"] == "Unmapped stock item"]
+    flagged_skus = {r["source_record"] for r in unmapped_rows}
+    assert "EXC-UNMAPPED-SKU" in flagged_skus
+    assert "EXC-MAPPED-SKU" not in flagged_skus
+
+
 def test_stock_mapping_auto_created_from_purchase_is_unconfirmed(client, auth_headers, db):
     """A mapping silently auto-created as a side effect of saving a purchase
     record (no user ever visited Stock Mapping) must read as unconfirmed —

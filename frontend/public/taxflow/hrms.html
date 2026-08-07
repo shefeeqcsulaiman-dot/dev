@@ -1343,7 +1343,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
               <th style="width:40px"></th>
             </tr>
           </thead>
-          <tbody id="leave-types-tbody">
+          <tbody id="leave-types-tbody" data-keep-static="1">
             <tr data-leave-type="Annual Leave">
               <td><strong>Annual Leave</strong></td>
               <td><input class="fi mono" style="width:70px;padding:3px 6px" value="30"></td>
@@ -1474,8 +1474,8 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
               <th style="width:40px"></th>
             </tr>
           </thead>
-          <tbody id="leave-policies-tbody">
-            <tr>
+          <tbody id="leave-policies-tbody" data-keep-static="1">
+            <tr data-policy-value="UAE 30 Calendar">
               <td><strong>UAE Policy — 30 Calendar Days</strong><div class="card-sub" style="font-size:10px">UAE Labour Law Article 29 — standard entitlement</div></td>
               <td><input class="fi mono" style="width:80px;padding:3px 6px" value="30"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
@@ -1484,7 +1484,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
               <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
             </tr>
-            <tr>
+            <tr data-policy-value="UAE Standard">
               <td><strong>UAE Standard — 21 Calendar Days</strong><div class="card-sub" style="font-size:10px">After 6 months and before 1 year of service</div></td>
               <td><input class="fi mono" style="width:80px;padding:3px 6px" value="21"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
@@ -1493,7 +1493,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
             </tr>
-            <tr>
+            <tr data-policy-value="Internal 22 Working">
               <td><strong>Internal — 22 Working Days</strong><div class="card-sub" style="font-size:10px">Internal company policy, working days only</div></td>
               <td><input class="fi mono" style="width:80px;padding:3px 6px" value="22"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Calendar</option><option selected>Working</option></select></td>
@@ -1502,7 +1502,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
               <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
             </tr>
-            <tr>
+            <tr data-policy-value="Executive 30 Working">
               <td><strong>Executive — 30 Working Days</strong><div class="card-sub" style="font-size:10px">Senior management and executive tier</div></td>
               <td><input class="fi mono" style="width:80px;padding:3px 6px" value="30"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Calendar</option><option selected>Working</option></select></td>
@@ -1511,7 +1511,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
               <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
             </tr>
-            <tr>
+            <tr data-policy-value="Contractor">
               <td><strong>Contractor — 14 Calendar Days</strong><div class="card-sub" style="font-size:10px">Short-term and contract employees</div></td>
               <td><input class="fi mono" style="width:80px;padding:3px 6px" value="14"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
@@ -1562,12 +1562,12 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         <div id="hrs-holidays" class="hrs-section">
     <!-- Holiday Calendar -->
     <div class="card mb16">
-      <div class="card-hd"><div class="card-title">Holiday Calendar</div><button class="btn btn-g btn-sm" onclick="toast('Holiday added','ok')">+ Add Holiday</button></div>
+      <div class="card-hd"><div class="card-title">Holiday Calendar</div><button class="btn btn-g btn-sm" onclick="addHoliday()">+ Add Holiday</button></div>
       <table class="tbl" data-delete-actions-bound="skip">
-        <thead><tr><th>Date</th><th>Holiday</th><th>Location</th><th>Paid</th><th>Status</th></tr></thead>
-        <tbody id="holidays-tbody">
-          <tr><td>16 Jun</td><td>Eid Al Adha</td><td>All branches</td><td><span class="b b-g">Yes</span></td><td><span class="b b-g">Active</span></td></tr>
-          <tr><td>07 Jul</td><td>Islamic New Year</td><td>All branches</td><td><span class="b b-g">Yes</span></td><td><span class="b b-a">Planned</span></td></tr>
+        <thead><tr><th>Date</th><th>Holiday</th><th>Location</th><th>Paid</th><th>Status</th><th></th></tr></thead>
+        <tbody id="holidays-tbody" data-keep-static="1">
+          <tr data-demo-row><td>16 Jun</td><td>Eid Al Adha</td><td>All branches</td><td><span class="b b-g">Yes</span></td><td><span class="b b-g">Active</span></td><td></td></tr>
+          <tr data-demo-row><td>07 Jul</td><td>Islamic New Year</td><td>All branches</td><td><span class="b b-g">Yes</span></td><td><span class="b b-a">Planned</span></td><td></td></tr>
         </tbody>
       </table>
     </div>
@@ -2428,12 +2428,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div class="fg"><label class="fl">Visa / Work Permit</label><input class="fi" id="emp-work-permit-file" type="file" accept=".pdf,.jpg,.jpeg,.png"></div>
       <div class="fg"><label class="fl">Other Documents</label><input class="fi" id="emp-medical-file" type="file" accept=".pdf,.jpg,.jpeg,.png" multiple></div>
     </div>
-    <div class="section-hd">Portal Access (Employee Self-Service)</div>
-    <div class="fr3">
-      <div class="fg"><label class="fl">Username</label><input class="fi mono" id="emp-username" placeholder="e.g. john.smith or emp005" autocomplete="off"></div>
-      <div class="fg"><label class="fl">Password</label><input class="fi mono" id="emp-password" type="password" placeholder="Set login password" autocomplete="new-password"></div>
-      <div class="fg"><label class="fl">Confirm Password</label><input class="fi mono" id="emp-password-confirm" type="password" placeholder="Re-enter password" autocomplete="new-password"></div>
-    </div>
+    <p style="font-size:11.5px;color:var(--text3);margin:4px 0 0">Employee Self-Service portal access (username &amp; password) is granted separately in <strong>HR Settings &gt; Users &amp; Roles</strong>, after this employee is saved.</p>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-emp')">Cancel</button><button class="btn btn-p" onclick="saveEmployee()">Add Employee</button></div>
   </div>
 </div>
@@ -2715,6 +2710,8 @@ function hrsTab(section){
   if(nav)nav.classList.add('hrs-active');
   if(section==='users'&&typeof loadHrUsersAndRoles==='function')loadHrUsersAndRoles();
   if(section==='roles'&&typeof loadRolesAndPermissionsTab==='function')loadRolesAndPermissionsTab();
+  if(section==='leave'&&typeof loadLeavePoliciesFromServer==='function')loadLeavePoliciesFromServer();
+  if(section==='holidays'&&typeof loadHolidaysFromServer==='function')loadHolidaysFromServer();
 }
 document.addEventListener('DOMContentLoaded',function(){
   setTimeout(function(){
