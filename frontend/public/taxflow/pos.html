@@ -1035,8 +1035,11 @@ button{cursor:pointer;border:none;background:none;}
 // ── Config ──────────────────────────────────────────────────────────
 const APIBASE = (()=>{
   const h = location.hostname;
-  if(h==='localhost'||h==='127.0.0.1'||h==='::1'){
-    return `http://${h==='::1'?'127.0.0.1':h}:8000/api/v1`;
+  if(h==='localhost'||h==='127.0.0.1'||h==='::1'||h===''){
+    // Same-origin as the page (not a hardcoded port) — matches app.js's
+    // apiBaseUrl(), which avoids CORS issues in local dev where the backend
+    // may not be running on port 8000 specifically.
+    return `${location.protocol}//${location.host}/api/v1`;
   }
   return location.origin + '/api/v1';
 })();
