@@ -24,10 +24,11 @@ from app.auth_principal import (
 )
 from app.config import get_settings
 from app.database import get_db
-from app.dependencies import require_module
+from app.dependencies import assert_company_active, require_module
 from app.limiter import limiter
 from app.models import (
     AttendanceSession,
+    Company,
     CompanyLocation,
     Employee,
     EmployeeLocation,
@@ -278,6 +279,9 @@ def hr_login(request: Request, payload: HrLoginRequest, db: Session = Depends(ge
 
     if not emp.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+
+    expires_at = db.query(Company.subscription_expires_at).filter(Company.id == emp.company_id).scalar()
+    assert_company_active(expires_at)
 
     roles = _ensure_default_roles(db, emp.company_id)
     if not emp.role_id:

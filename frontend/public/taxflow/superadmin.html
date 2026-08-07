@@ -498,7 +498,9 @@
     <div id="expiry-err" class="err-msg"></div>
     <input type="hidden" id="expiry-company-id">
     <div class="fg"><label class="fl">Expiry Date (leave blank to remove)</label><input class="fi" id="expiry-date" type="date"></div>
+    <p style="font-size:11.5px;color:var(--text3);margin:2px 0 14px">A past or today's date blocks every login and API call for this company immediately — the same field doubles as Suspend. Clear the date or set a future one to restore access.</p>
     <div class="modal-foot">
+      <button class="btn btn-r" id="expiry-suspend-btn" onclick="suspendNow()">Suspend Now</button>
       <button class="btn btn-g" onclick="closeModal('m-expiry')">Cancel</button>
       <button class="btn btn-p" id="expiry-btn" onclick="doSetExpiry()">Save Expiry</button>
     </div>
@@ -1045,6 +1047,23 @@
       loadDashboard();
     }catch(err){ errEl.textContent=err.message; errEl.style.display='block'; }
     finally{ btn.disabled=false; btn.textContent='Save Expiry'; }
+  }
+
+  async function suspendNow(){
+    const btn=document.getElementById('expiry-suspend-btn');
+    const errEl=document.getElementById('expiry-err');
+    errEl.style.display='none';
+    const companyId=document.getElementById('expiry-company-id').value;
+    btn.disabled=true; btn.textContent='Suspending…';
+    try{
+      const today=new Date().toISOString().slice(0,10);
+      const res=await apiFetch(`/superadmin/companies/${companyId}/set-expiry`,{method:'POST',body:JSON.stringify({expires_at:today})});
+      const data=await res.json();
+      if(!res.ok){ errEl.textContent=data.detail||'Failed.'; errEl.style.display='block'; return; }
+      closeModal('m-expiry');
+      loadDashboard();
+    }catch(err){ errEl.textContent=err.message; errEl.style.display='block'; }
+    finally{ btn.disabled=false; btn.textContent='Suspend Now'; }
   }
 
   // ── Delete company ────────────────────────────────────────────

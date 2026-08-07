@@ -13,6 +13,7 @@ from app.security import is_impersonation_token_revoked, user_id_from_token
 # employee-only, or either (Principal-based) auth.
 from app.auth_principal import (  # noqa: F401
     Principal,
+    assert_company_active,
     get_current_employee,
     get_current_principal,
     require_permission,
@@ -36,6 +37,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User no longer exists")
     if not getattr(user, "is_active", True):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+    assert_company_active(user.company.subscription_expires_at if user.company else None)
     return user
 
 

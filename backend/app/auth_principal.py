@@ -19,11 +19,40 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.config import get_settings
 from app.database import get_db
-from app.models import Employee, Permission, Role, RolePermission, User
+from app.models import Company, Employee, Permission, Role, RolePermission, User
 from app.security import is_impersonation_token_revoked, user_id_from_token
 
 settings = get_settings()
 _EMP_PREFIX = "emp:"
+
+
+def assert_company_active(subscription_expires_at: str | None) -> None:
+    """Enforce superadmin's per-company subscription expiry — reuses the
+    existing Set Expiry field as the suspend control (a past/today date =
+    suspended, blank/future = active) rather than adding a separate flag.
+    NULL subscription_expires_at = unrestricted, matching the same
+    NULL-means-unrestricted convention already used by company_allows_module()
+    (dependencies.py) — this is also what protects superadmin's own sentinel
+    company (SUPERADMIN-INTERNAL, never given an expiry) with no special-case
+    code. 403, not 401: matches the existing is_active/require_module()
+    precedent (account-disabled and module-not-enabled are both 403 today)
+    and avoids authenticatedFetch()'s 401 handling (app.js), which clears the
+    token and attempts a silent re-login — a 403 leaves the session intact so
+    the frontend can show a specific "subscription expired" message instead.
+    Takes the raw date string (not a Company object) so both the User path
+    (already has it via a joinedload) and the Employee path (needs a fresh,
+    minimal scalar query — Employee has no `company` relationship) can call
+    this the same way without either constructing a fake Company object."""
+    if not subscription_expires_at:
+        return
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    # <=, not <: a same-day expiry (e.g. superadmin's "Suspend Now", which
+    # sets today's date) must block immediately, not tomorrow.
+    if subscription_expires_at <= today:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your company's subscription has expired. Contact support to renew.",
+        )
 
 
 # ── employee-token auth (moved from hr_access.py) ───────────────────────────
@@ -51,6 +80,8 @@ def get_current_employee(request: Request, db: Session = Depends(get_db)) -> Emp
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Employee not found")
     if not emp.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+    expires_at = db.query(Company.subscription_expires_at).filter(Company.id == emp.company_id).scalar()
+    assert_company_active(expires_at)
     emp.last_activity = datetime.now(UTC)
     db.add(emp)
     db.commit()
@@ -122,6 +153,11 @@ def _principal_from_employee_token(token: str, db: Session) -> Principal | None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Employee not found")
     if not emp.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+    # Employee has no `company` relationship (just company_id) — a minimal
+    # scalar query, same pattern require_module() already uses for its
+    # employee-path fallback.
+    expires_at = db.query(Company.subscription_expires_at).filter(Company.id == emp.company_id).scalar()
+    assert_company_active(expires_at)
     emp.last_activity = datetime.now(UTC)
     db.add(emp)
     db.commit()
@@ -145,6 +181,7 @@ def _principal_from_user_token(token: str, db: Session) -> Principal | None:
         return None
     if not getattr(user, "is_active", True):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+    assert_company_active(user.company.subscription_expires_at if user.company else None)
     return Principal(
         kind="user", company_id=user.company_id, display_name=user.full_name,
         is_admin=True, permissions=frozenset(), user=user,

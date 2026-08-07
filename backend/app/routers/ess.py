@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
-from app.dependencies import company_allows_module
+from app.dependencies import assert_company_active, company_allows_module
 from app.limiter import limiter
 from app.models import Company, Employee, PayrollItem, PayrollRun
 from app.security import pwd_context
@@ -79,6 +79,8 @@ def _get_employee_from_token(token: str, db: Session) -> Employee:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Employee not found")
     if not emp.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal access has been disabled for this account")
+    expires_at = db.query(Company.subscription_expires_at).filter(Company.id == emp.company_id).scalar()
+    assert_company_active(expires_at)
     return emp
 
 
@@ -143,6 +145,8 @@ def ess_login(request: Request, payload: EssLoginRequest, db: Session = Depends(
     modules_enabled = db.query(Company.modules_enabled).filter(Company.id == emp.company_id).scalar()
     if not company_allows_module(modules_enabled, "ess"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="The ESS portal is not enabled for your company")
+    expires_at = db.query(Company.subscription_expires_at).filter(Company.id == emp.company_id).scalar()
+    assert_company_active(expires_at)
 
     return EssToken(access_token=_create_ess_token(emp.id))
 

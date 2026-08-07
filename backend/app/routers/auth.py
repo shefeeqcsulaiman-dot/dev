@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.company_defaults import seed_company_defaults
 from app.database import get_db
-from app.dependencies import Principal, get_current_principal, get_current_user
+from app.dependencies import Principal, assert_company_active, get_current_principal, get_current_user
 from app.limiter import limiter
 from pydantic import BaseModel
 
@@ -30,6 +30,13 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     user = authenticate_user(db, payload.email, payload.password)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
+    # Unlike the vague "incorrect email or password" above (deliberate,
+    # avoids leaking account existence), a suspended company gets its own
+    # clear message here — this is about company standing, not credentials,
+    # and the whole point of Suspend is that affected staff should know why
+    # they're blocked rather than assume they mistyped their password.
+    expires_at = db.query(Company.subscription_expires_at).filter(Company.id == user.company_id).scalar()
+    assert_company_active(expires_at)
     return Token(access_token=create_access_token(user.id))
 
 

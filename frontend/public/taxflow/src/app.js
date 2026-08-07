@@ -2686,6 +2686,23 @@ async function syncCompanyFromDatabase(){
   if(!ready)return null;
   try{
     const response=await authenticatedFetch(`${apiBaseUrl()}/companies/current`);
+    if(response.status===403){
+      // A 403 here (session otherwise valid — authenticatedFetch only force-
+      // logs-out on 401) covering the one case that isn't "insufficient
+      // permission for this call": the company's subscription expired mid-
+      // session (assert_company_active, backend/app/auth_principal.py).
+      // New logins already show this clearly via login.html's existing
+      // error display; this covers a tab that was already open when
+      // superadmin suspended the company.
+      let detail='';
+      try{detail=(await response.clone().json())?.detail||'';}catch{}
+      if(/subscription has expired/i.test(detail)){
+        try{toast(detail,'err');}catch{}
+        localStorage.removeItem('taxflow_token');
+        setTimeout(()=>window.location.replace('/login'),1500);
+        return null;
+      }
+    }
     if(!response.ok)throw new Error('Company API returned '+response.status);
     const company=await response.json();
     applyCompanyToUi(company);

@@ -209,7 +209,12 @@
         preloadAndRedirect('/hrms',hrData.access_token);
         return;
       }
-      err.textContent=data.detail||'Incorrect email or password.';
+      // A 403 from /hr/login (vs 401) means a real employee account was
+      // found but something specific blocks it (disabled account, suspended
+      // company) — that message is more useful than /auth/login's generic
+      // "incorrect email or password" from moments earlier, which would
+      // otherwise always win and hide the real reason.
+      err.textContent=(hrResp.status===403?hrData.detail:null)||data.detail||'Incorrect email or password.';
       err.style.display='block';
       btn.disabled=false;btn.textContent='Sign In';
     }catch(e){
