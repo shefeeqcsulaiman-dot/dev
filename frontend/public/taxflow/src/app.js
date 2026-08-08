@@ -2637,16 +2637,22 @@ function renderModuleAccessCard(allowedOrNull){
 
 window.COMPANY_ALLOWED_MODULES=null;
 function applyModulePermissionNav(modulesEnabled){
+  // Branch Login Phase 1: window.COMPANY_ALLOWED_MODULES must be set even
+  // on hrms.html (HRMS_STANDALONE) — the Branch modal's module grid
+  // (buildBranchModGrid) and the Role modal's company-inheritance filter
+  // both read it there. The early return below still skips the
+  // index.html-only sidebar DOM manipulation, which doesn't apply on this
+  // page and would no-op harmlessly anyway (no .sb/[data-module] elements
+  // exist in hrms.html's DOM).
+  window.COMPANY_ALLOWED_MODULES=Array.isArray(modulesEnabled)?new Set(modulesEnabled):null;
   if(window.HRMS_STANDALONE)return;
   if(!Array.isArray(modulesEnabled)){
-    window.COMPANY_ALLOWED_MODULES=null;
     document.querySelectorAll('.sb .nav[data-module]').forEach(n=>n.classList.remove('hidden'));
     document.querySelectorAll('[data-module-gate]').forEach(n=>n.classList.remove('hidden'));
     renderModuleAccessCard(null);
     return;
   }
-  const allowed=new Set(modulesEnabled);
-  window.COMPANY_ALLOWED_MODULES=allowed;
+  const allowed=window.COMPANY_ALLOWED_MODULES;
   document.querySelectorAll('.sb .nav[data-module]').forEach(n=>{
     n.classList.toggle('hidden',!allowed.has(n.dataset.module));
   });
@@ -17192,6 +17198,59 @@ function renderBranchTable(){
   document.querySelectorAll('#branch-tbody').forEach(tb=>{tb.innerHTML=html;});
 }
 
+// Branch Login Phase 1 — the Main-Dashboard-business subset of company
+// modules a Branch entity's own module toggle can restrict (kept in sync
+// with backend/app/module_catalog.py::BRANCH_ELIGIBLE_MODULES by comment
+// reference — deliberately excludes hrms/ess/settings, see that file's
+// docstring for why).
+const BRANCH_MODULE_DEFS=[
+  {key:'sales',        label:'Sales & Invoices'},
+  {key:'quotations',   label:'Quotations'},
+  {key:'pos',          label:'Point of Sale'},
+  {key:'purchase',     label:'Purchases'},
+  {key:'inventory',    label:'Inventory'},
+  {key:'expense',      label:'Expenses'},
+  {key:'bank',         label:'Bank & Payments'},
+  {key:'accounting',   label:'Accounting'},
+  {key:'corporate',    label:'Corporate Accounting'},
+  {key:'reports',      label:'Reports'},
+  {key:'notifications',label:'Notifications'},
+  {key:'expert',       label:'Expert Review'},
+  {key:'exception',    label:'Exception Center'},
+  {key:'ai',           label:'AI Features'},
+];
+
+function buildBranchModGrid(enabledKeysOrNull){
+  const grid=document.getElementById('branch-mod-grid');
+  if(!grid)return;
+  // Company-disabled modules simply don't render as options at all here —
+  // the backend still re-validates (branches.py::_validate_branch_modules),
+  // this is UI convenience, not the enforcement boundary. window.
+  // COMPANY_ALLOWED_MODULES is a Set when the company is restricted, or
+  // null when unrestricted (see applyModulePermissionNav()).
+  const companyAllowed=window.COMPANY_ALLOWED_MODULES;
+  const offerable=BRANCH_MODULE_DEFS.filter(m=>!companyAllowed||companyAllowed.has(m.key));
+  if(!offerable.length){
+    grid.innerHTML='<div style="color:var(--text3);font-size:12px">No modules enabled for this company yet — enable modules in Settings first.</div>';
+    return;
+  }
+  // NULL (new branch, or an existing branch never explicitly restricted)
+  // pre-checks every offerable module, visually matching the NULL=
+  // unrestricted convention. Saving from here always writes an explicit
+  // array from then on (even if it equals the full offerable set) — same
+  // trade-off already accepted for Company.modules_enabled's own admin UI.
+  const checkedSet=new Set(enabledKeysOrNull===null?offerable.map(m=>m.key):enabledKeysOrNull);
+  grid.innerHTML=offerable.map(m=>`
+    <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer">
+      <input type="checkbox" class="branch-mod-cb" value="${escapeHtml(m.key)}" ${checkedSet.has(m.key)?'checked':''}>
+      ${escapeHtml(m.label)}
+    </label>`).join('');
+}
+
+function getCheckedBranchModules(){
+  return [...document.querySelectorAll('#branch-mod-grid .branch-mod-cb:checked')].map(cb=>cb.value);
+}
+
 function showBranchModal(id){
   const titleEl=document.getElementById('branch-modal-title');
   const b=id?_branchList.find(x=>x.id===id):null;
@@ -17201,6 +17260,7 @@ function showBranchModal(id){
   document.getElementById('branch-code').value=b?.code||'';
   document.getElementById('branch-city').value=b?.city||'';
   document.getElementById('branch-status').value=b?.status||'Active';
+  buildBranchModGrid(b?(b.modules_enabled??null):null);
   const delBtn=document.getElementById('branch-delete-btn');
   if(delBtn)delBtn.style.display=id?'':'none';
   showM('m-branch');
@@ -17216,6 +17276,7 @@ async function saveBranchModal(){
     code:(document.getElementById('branch-code')?.value||'').trim().toUpperCase().slice(0,6)||name.slice(0,3).toUpperCase(),
     city:(document.getElementById('branch-city')?.value||'').trim(),
     status:document.getElementById('branch-status')?.value||'Active',
+    modules_enabled:getCheckedBranchModules(),
   };
   if(_branchList.find(x=>x.name.toLowerCase()===name.toLowerCase()&&x.id!==id)){toast('Branch name already exists','warn');return;}
   try{

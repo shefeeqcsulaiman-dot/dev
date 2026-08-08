@@ -2670,6 +2670,11 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div class="fg"><label class="fl">City / Emirate</label><input class="fi" id="branch-city" placeholder="e.g. Dubai"></div>
       <div class="fg"><label class="fl">Status</label><select class="fi" id="branch-status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
     </div>
+    <div class="fg" style="margin-top:4px">
+      <label class="fl">Module Access</label>
+      <div class="card-sub" style="margin:-2px 0 8px">This branch can only use the modules checked below (never more than what's enabled for the company).</div>
+      <div id="branch-mod-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px"></div>
+    </div>
     <div class="modal-foot">
       <button id="branch-delete-btn" class="btn btn-r" style="display:none;margin-right:auto" onclick="deleteBranchFromModal()">Delete</button>
       <button class="btn btn-g" onclick="hideM('m-branch')">Cancel</button>

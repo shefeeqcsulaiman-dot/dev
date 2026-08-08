@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.models import Company, User
+from app.models import Branch, Company, User
 from app.security import is_impersonation_token_revoked, user_id_from_token
 
 # Re-exported so routers keep importing all request-auth dependencies from
@@ -56,6 +56,15 @@ def company_allows_module(modules_enabled_json: str | None, module_key: str) -> 
     return module_key in allowed
 
 
+def branch_allows_module(modules_enabled_json: str | None, module_key: str) -> bool:
+    """`branches.modules_enabled` semantics (Branch Login Phase 1): identical
+    NULL/empty=unrestricted rule as company_allows_module() above — see that
+    function's docstring. Kept as a distinct, separately-named function (not
+    a bare alias) purely for call-site clarity — this one always means "does
+    THIS branch allow it", the other "does the COMPANY"."""
+    return company_allows_module(modules_enabled_json, module_key)
+
+
 def require_module(module_key: str):
     """Dependency factory enforcing superadmin's per-company Module
     Permissions server-side. The frontend sidebar hide (applyModulePermissionNav
@@ -78,5 +87,18 @@ def require_module(module_key: str):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"The '{module_key}' module is not enabled for your company",
             )
+        # Branch Login Phase 1: a branch's own module toggle is an
+        # additional restriction layer on top of the company-level check
+        # above — applies uniformly to an Employee assigned to a branch
+        # (today's identity) and the Branch identity itself (Phase 2),
+        # since both carry principal.branch_id. No branch_id (admin, or an
+        # unassigned employee) means this block never runs, unchanged.
+        if principal.branch_id:
+            branch_modules = db.query(Branch.modules_enabled).filter(Branch.id == principal.branch_id).scalar()
+            if not branch_allows_module(branch_modules, module_key):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"The '{module_key}' module is not enabled for your branch",
+                )
         return principal
     return _check

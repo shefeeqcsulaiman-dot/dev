@@ -1043,6 +1043,13 @@ class Branch(Base, TimestampMixin):
     # modal rather than the lowercase convention used elsewhere (e.g.
     # CompanyLocation.status) to avoid a cosmetic mismatch after migration.
     status: Mapped[str] = mapped_column(String(30), default="Active")
+    # Branch Login Phase 1: JSON array of module keys, same NULL/empty=
+    # unrestricted convention as Company.modules_enabled (see
+    # dependencies.py::company_allows_module) — every pre-existing branch
+    # keeps today's unrestricted behavior on deploy day; only becomes an
+    # explicit (possibly restrictive) array once a company admin saves the
+    # branch modal's module grid.
+    modules_enabled: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class EmployeeBranchAccess(Base, TimestampMixin):
