@@ -3,11 +3,27 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.dependencies import Principal, get_current_principal, get_current_user, get_db
+from app.dependencies import Principal, company_allows_module, get_current_principal, get_current_user, get_db
 from app.models import Branch, Company, CompanyLocation, Employee, User
+from app.module_catalog import BRANCH_ELIGIBLE_MODULES
 from app.schemas import BranchCreate, BranchOut, BranchUpdate
 
 router = APIRouter(prefix="/branches", tags=["branches"])
+
+
+def _validate_branch_modules(modules: list[str] | None, company_modules_json: str | None) -> str | None:
+    """Branch Login Phase 1: a company can only enable, for a branch, a
+    module that's also enabled for the company itself (and only a module
+    that's actually branch-eligible at all — see BRANCH_ELIGIBLE_MODULES).
+    Returns the value to persist (json.dumps'd, or None for unrestricted)."""
+    if modules is None:
+        return None
+    for module in modules:
+        if module not in BRANCH_ELIGIBLE_MODULES:
+            raise HTTPException(status_code=400, detail=f"'{module}' cannot be assigned to a branch")
+        if not company_allows_module(company_modules_json, module):
+            raise HTTPException(status_code=400, detail=f"'{module}' is not enabled for your company — cannot enable it for a branch")
+    return json.dumps(modules)
 
 
 def _migrate_legacy_branches_json(db: Session, company_id: str, raw: str | None) -> None:
@@ -85,6 +101,8 @@ def create_branch(
 ):
     if not current_user.company_id:
         raise HTTPException(status_code=404, detail="No company found")
+    company_modules = current_user.company.modules_enabled if current_user.company else None
+    modules_enabled = _validate_branch_modules(payload.modules_enabled, company_modules)
     branch = Branch(
         company_id=current_user.company_id,
         name=payload.name.strip(),
@@ -92,6 +110,7 @@ def create_branch(
         city=(payload.city or "").strip() or None,
         address=(payload.address or "").strip() or None,
         status=payload.status or "active",
+        modules_enabled=modules_enabled,
     )
     db.add(branch)
     db.commit()
@@ -121,6 +140,13 @@ def update_branch(
             setattr(branch, field, val.strip() or None)
     if payload.status:
         branch.status = payload.status
+    # modules_enabled needs its own explicit-null-vs-omitted check ("is not
+    # None" can't tell them apart, since sending null is itself the
+    # meaningful "make this branch unrestricted again" value) —
+    # model_fields_set tells us whether the client sent the key at all.
+    if "modules_enabled" in payload.model_fields_set:
+        company_modules = db.query(Company.modules_enabled).filter(Company.id == current_user.company_id).scalar()
+        branch.modules_enabled = _validate_branch_modules(payload.modules_enabled, company_modules)
     db.add(branch)
     db.commit()
     db.refresh(branch)

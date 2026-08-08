@@ -29,7 +29,7 @@ import app.cache as cache
 from app.config import get_settings
 from app.database import get_db
 from app.auth_principal import resolve_active_branch
-from app.dependencies import Principal, company_allows_module, get_current_principal, get_current_user
+from app.dependencies import Principal, branch_allows_module, company_allows_module, get_current_principal, get_current_user
 from app.limiter import limiter
 from app.module_integration import sync_purchase_accounting, sync_sales_invoice_accounting
 from app.models import (
@@ -121,12 +121,21 @@ _COLLECTION_MODULE: dict[str, str] = {
 }
 
 
-def assert_collection_module_enabled(company: Company | None, collection: str) -> None:
+def assert_collection_module_enabled(db: Session, principal: Principal, company: Company | None, collection: str) -> None:
     module = _COLLECTION_MODULE.get(collection)
     if not module:
         return
     if not company_allows_module(company.modules_enabled if company else None, module):
         raise HTTPException(status_code=403, detail=f"The '{module}' module is not enabled for your company")
+    # Branch Login Phase 1: additional branch-level restriction, same
+    # rationale as the require_module() composition in dependencies.py —
+    # /app-data is the real write choke point for POS/Sales/Purchase/
+    # Inventory (not the require_module-decorated routers), so it needs the
+    # identical branch check to actually enforce the toggle on writes.
+    if principal.branch_id:
+        branch_modules = db.query(Branch.modules_enabled).filter(Branch.id == principal.branch_id).scalar()
+        if not branch_allows_module(branch_modules, module):
+            raise HTTPException(status_code=403, detail=f"The '{module}' module is not enabled for your branch")
 
 
 def _record_period_date(record: dict[str, Any]) -> _dt.datetime | None:
@@ -356,7 +365,7 @@ def list_collection_records(
     # Employees at all (see _BRANCH_FILTERED_COLLECTIONS's own comment for
     # why this is an explicit allowlist, not blanket filtering).
     company = resolve_principal_company(principal, db)
-    assert_collection_module_enabled(company, collection)
+    assert_collection_module_enabled(db, principal, company, collection)
     if collection == "employees":
         _backfill_employee_branch_ids(db, principal.company_id)
     base_filters = [
@@ -946,7 +955,7 @@ async def app_data_action(
     payload = await request.json()
     if action == "save":
         collection = str(payload.get("collection", "app_actions"))
-        assert_collection_module_enabled(company, collection)
+        assert_collection_module_enabled(db, principal, company, collection)
         record = payload.get("record", {})
         if not isinstance(record, dict):
             record = {"value": record}
@@ -960,7 +969,7 @@ async def app_data_action(
 
     if action == "bulk-save":
         collection = str(payload.get("collection", "app_actions"))
-        assert_collection_module_enabled(company, collection)
+        assert_collection_module_enabled(db, principal, company, collection)
         records = payload.get("records", [])
         if not isinstance(records, list):
             records = []

@@ -518,6 +518,10 @@ def ensure_schema_updates() -> None:
             existing_columns = {column["name"] for column in inspector.get_columns("audit_logs")}
             if "employee_id" not in existing_columns:
                 connection.execute(text("ALTER TABLE audit_logs ADD COLUMN employee_id VARCHAR(36)"))
+        if "branches" in table_names:
+            existing_columns = {column["name"] for column in inspector.get_columns("branches")}
+            if "modules_enabled" not in existing_columns:
+                connection.execute(text("ALTER TABLE branches ADD COLUMN modules_enabled TEXT"))
         if "app_data_records" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("app_data_records")}
             if "branch_id" not in existing_columns:

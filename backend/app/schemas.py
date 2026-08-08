@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from decimal import Decimal
 
@@ -102,6 +103,20 @@ class BranchOut(BaseModel):
     city: str | None = None
     address: str | None = None
     status: str = "Active"
+    # Branch Login Phase 1: JSON-text column on the ORM side (same storage
+    # convention as Company.modules_enabled), list on the wire. NULL/None =
+    # unrestricted, same semantics as company_allows_module().
+    modules_enabled: list[str] | None = None
+
+    @field_validator("modules_enabled", mode="before")
+    @classmethod
+    def _parse_modules_enabled(cls, value):
+        if isinstance(value, str):
+            try:
+                return json.loads(value) if value else None
+            except (TypeError, ValueError):
+                return None
+        return value
 
     model_config = {"from_attributes": True}
 
@@ -112,6 +127,7 @@ class BranchCreate(BaseModel):
     city: str | None = None
     address: str | None = None
     status: str = "Active"
+    modules_enabled: list[str] | None = None
 
 
 class BranchUpdate(BaseModel):
@@ -120,6 +136,7 @@ class BranchUpdate(BaseModel):
     city: str | None = None
     address: str | None = None
     status: str | None = None
+    modules_enabled: list[str] | None = None
 
 
 class ImpersonatorOut(BaseModel):

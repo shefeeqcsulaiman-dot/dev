@@ -10,6 +10,11 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.limiter import limiter
+# Re-exported here under the same name for every pre-existing call site in
+# this file — moved to app/module_catalog.py (Branch Login Phase 1) so core
+# auth code (auth_principal.py, dependencies.py) and branches.py can import
+# it without a reverse dependency on this router module.
+from app.module_catalog import ALL_MODULES
 from app.models import (
     AccrualPrepaymentRecord, Account, AppDataRecord, ApprovalMatrixRecord,
     AttendancePunch, AttendanceSession, AuditLog, AuditLogDetail, BankAccount,
@@ -59,19 +64,6 @@ class DeleteCompanyIn(BaseModel):
     # literal strings baked into the shipped JS (view-source readable,
     # identical forever), never sent to or verified by the backend at all.
     password: str
-
-
-# "settings" is deliberately NOT wired into require_module() anywhere (see
-# app/dependencies.py) — it only hides the sidebar link. Settings covers
-# core account admin (Users & Roles, password/profile, backup); a hard
-# server-side block would risk locking a company out of its own account
-# management if something upstream went wrong. Every other key here has a
-# matching require_module("<key>") somewhere in the routers.
-ALL_MODULES = [
-    "sales", "quotations", "pos", "purchase", "inventory", "expense",
-    "bank", "accounting", "corporate", "reports", "hrms", "ess",
-    "notifications", "expert", "exception", "ai", "settings",
-]
 
 
 class ModulesIn(BaseModel):

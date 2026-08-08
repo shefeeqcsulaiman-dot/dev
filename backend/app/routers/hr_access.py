@@ -24,7 +24,8 @@ from app.auth_principal import (
 )
 from app.config import get_settings
 from app.database import get_db
-from app.dependencies import assert_company_active, require_module
+from app.dependencies import assert_company_active, company_allows_module, require_module
+from app.module_catalog import ALL_MODULES
 from app.limiter import limiter
 from app.models import (
     AttendanceSession,
@@ -142,6 +143,22 @@ def _ensure_permission_catalog(db: Session) -> dict[str, Permission]:
                 db.flush()
                 existing[key] = perm
     return existing
+
+
+def _company_allowed_catalog_keys(catalog: dict[str, Permission], company_modules_json: str | None) -> set[str]:
+    """Branch Login Phase 1: a permission key is offerable/grantable only if
+    its module has no company-level module-enablement concept at all (the
+    HR-suite keys — hr, payroll, attendance, dashboard, employees, rota,
+    leave, overtime, loans, recruitment, performance, hr_workflow,
+    hr_settings, ai_insights — none of these appear in ALL_MODULES; they're
+    all covered collectively by the single "hrms" company module via
+    gated_router's own require_module("hrms")) or the company has that
+    module enabled. Shared by admin_list_permissions (what's offered) and
+    admin_create_role/admin_update_role (what's accepted)."""
+    return {
+        key for key, perm in catalog.items()
+        if perm.module not in ALL_MODULES or company_allows_module(company_modules_json, perm.module)
+    }
 
 
 def _ensure_default_roles(db: Session, company_id: str) -> dict[str, Role]:
@@ -505,7 +522,12 @@ def admin_list_permissions(
 ) -> list[dict]:
     catalog = _ensure_permission_catalog(db)
     db.commit()
-    return [{"key": key, "module": p.module, "permission_name": p.permission_name} for key, p in catalog.items()]
+    company_modules = db.query(Company.modules_enabled).filter(Company.id == principal.company_id).scalar()
+    allowed_keys = _company_allowed_catalog_keys(catalog, company_modules)
+    return [
+        {"key": key, "module": p.module, "permission_name": p.permission_name}
+        for key, p in catalog.items() if key in allowed_keys
+    ]
 
 
 @gated_router.get("/admin/roles", response_model=list[RoleOut])
@@ -531,6 +553,15 @@ def admin_create_role(
     principal: Principal = Depends(require_principal_permission("hr_settings:edit")),
 ) -> RoleOut:
     catalog = _ensure_permission_catalog(db)
+    # Branch Login Phase 1: reject a permission key for a module the
+    # company hasn't enabled, before any Role row is created — atomic, no
+    # partial role left behind on failure.
+    company_modules = db.query(Company.modules_enabled).filter(Company.id == principal.company_id).scalar()
+    allowed_keys = _company_allowed_catalog_keys(catalog, company_modules)
+    for key in payload.permission_keys:
+        perm = catalog.get(key)
+        if perm and key not in allowed_keys:
+            raise HTTPException(status_code=400, detail=f"'{perm.module}' is not enabled for your company — cannot grant this permission")
     role_name = payload.role_name.strip()
     if not role_name:
         raise HTTPException(status_code=400, detail="Role name is required")
@@ -563,6 +594,12 @@ def admin_update_role(
     if role.is_system_role:
         raise HTTPException(status_code=400, detail="Default system roles cannot be edited — create a custom role instead")
     catalog = _ensure_permission_catalog(db)
+    company_modules = db.query(Company.modules_enabled).filter(Company.id == principal.company_id).scalar()
+    allowed_keys = _company_allowed_catalog_keys(catalog, company_modules)
+    for key in payload.permission_keys:
+        perm = catalog.get(key)
+        if perm and key not in allowed_keys:
+            raise HTTPException(status_code=400, detail=f"'{perm.module}' is not enabled for your company — cannot grant this permission")
     role_name = payload.role_name.strip()
     if not role_name:
         raise HTTPException(status_code=400, detail="Role name is required")

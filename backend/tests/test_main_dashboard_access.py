@@ -228,7 +228,16 @@ def test_company_module_gate_and_role_permission_gate_both_enforce(client, db):
     # sufficient, matching require_module's existing documented behavior
     # (it already ran for admins too; this just confirms it keeps working
     # once the per-endpoint auth is widened to accept an Employee token).
-    company = Company(name="Gate Test Co", trn="MODPERM-GATE-001", modules_enabled='["reports", "hrms", "ess"]')
+    #
+    # Company starts WITH accounting enabled — Branch Login Phase 1 added a
+    # company->role inheritance check (POST/PUT /hr/admin/roles reject a
+    # permission key for a module the company hasn't enabled), so the role
+    # below can only be created while accounting is still on. The company
+    # is then restricted to simulate superadmin disabling accounting
+    # *after* the role already has accounting:view granted — a still-valid,
+    # still-important scenario the inheritance check doesn't (and shouldn't)
+    # retroactively touch existing roles for.
+    company = Company(name="Gate Test Co", trn="MODPERM-GATE-001", modules_enabled='["reports", "hrms", "ess", "accounting"]')
     db.add(company)
     db.flush()
     admin = User(company_id=company.id, email="gate-admin@example.com", full_name="Gate Admin",
@@ -241,6 +250,9 @@ def test_company_module_gate_and_role_permission_gate_both_enforce(client, db):
 
     emp = _new_employee(db, company.id, "MD-GATE-001")
     headers = _grant_role_and_login(client, admin_headers, emp.id, "md.gate", ["accounting:view"], "Accounting Only Gate Test")
+
+    company.modules_enabled = '["reports", "hrms", "ess"]'
+    db.commit()
 
     r = client.get("/api/v1/accounts", headers=headers)
     assert r.status_code == 403, f"expected 403 (company module disabled) even with accounting:view granted, got {r.status_code}: {r.text}"
