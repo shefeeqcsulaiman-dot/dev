@@ -1,14 +1,57 @@
 import json
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from jose import jwt
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.auth_principal import assert_company_active
+from app.config import get_settings
 from app.dependencies import Principal, company_allows_module, get_current_principal, get_current_user, get_db
+from app.limiter import limiter
 from app.models import Branch, Company, CompanyLocation, Employee, User
 from app.module_catalog import BRANCH_ELIGIBLE_MODULES
 from app.schemas import BranchCreate, BranchOut, BranchUpdate
+from app.security import pwd_context
 
 router = APIRouter(prefix="/branches", tags=["branches"])
+settings = get_settings()
+_BRANCH_PREFIX = "branch:"
+# Same constant-time-verify-on-not-found pattern as authenticate_user()
+# (security.py) and hr_login() (hr_access.py) — always runs a bcrypt
+# verify even when the username doesn't match, so response timing can't
+# be used to enumerate valid usernames.
+_DUMMY_HASH = "$2b$12$Z2HUw9SswHis7rcngsd7iOdXn/b9HafcmcwJx9D39ozeKwrSy22r."
+
+
+def _branch_out(branch: Branch) -> BranchOut:
+    out = BranchOut.model_validate(branch)
+    out.has_password = bool(branch.password_hash)
+    return out
+
+
+def _apply_branch_credentials(db: Session, branch: Branch, username: str | None, password: str | None) -> None:
+    """Branch Login Phase 2. Mirrors set_employee_portal_access()'s exact
+    "None = don't touch, empty string = clear" convention (hr_access.py) —
+    the frontend's saveBranchModal() omits these keys entirely when left
+    blank on an edit, which Pydantic defaults to None here, so an edit save
+    never accidentally nulls out an existing credential."""
+    if username is not None:
+        username = username.strip()
+        if username:
+            # Global check, not scoped to this company — uq_branches_username
+            # enforces uniqueness platform-wide so the shared /login page can
+            # resolve a branch by username alone, with no company link.
+            dup = db.query(Branch).filter(Branch.username == username, Branch.id != branch.id).first()
+            if dup:
+                raise HTTPException(status_code=409, detail="That username is already taken by another branch on this platform — choose a different one")
+        branch.username = username or None
+    if password:
+        if len(password) < 6:
+            raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+        branch.password_hash = pwd_context.hash(password)
+        branch.password_changed_at = datetime.now(UTC)
 
 
 def _validate_branch_modules(modules: list[str] | None, company_modules_json: str | None) -> str | None:
@@ -85,12 +128,13 @@ def list_branches(
     if not company:
         return []
     _migrate_legacy_branches_json(db, company.id, company.branches)
-    return (
+    branches = (
         db.query(Branch)
         .filter(Branch.company_id == company.id)
         .order_by(Branch.name)
         .all()
     )
+    return [_branch_out(b) for b in branches]
 
 
 @router.post("", response_model=BranchOut, status_code=201)
@@ -113,9 +157,11 @@ def create_branch(
         modules_enabled=modules_enabled,
     )
     db.add(branch)
+    db.flush()  # assigns branch.id, needed for the duplicate-username self-exclusion check below
+    _apply_branch_credentials(db, branch, payload.username, payload.password)
     db.commit()
     db.refresh(branch)
-    return branch
+    return _branch_out(branch)
 
 
 @router.put("/{branch_id}", response_model=BranchOut)
@@ -147,10 +193,11 @@ def update_branch(
     if "modules_enabled" in payload.model_fields_set:
         company_modules = db.query(Company.modules_enabled).filter(Company.id == current_user.company_id).scalar()
         branch.modules_enabled = _validate_branch_modules(payload.modules_enabled, company_modules)
+    _apply_branch_credentials(db, branch, payload.username, payload.password)
     db.add(branch)
     db.commit()
     db.refresh(branch)
-    return branch
+    return _branch_out(branch)
 
 
 @router.delete("/{branch_id}")
@@ -174,3 +221,51 @@ def delete_branch(
     db.delete(branch)
     db.commit()
     return {"ok": True}
+
+
+class BranchLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class BranchToken(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+def _create_branch_token(branch_id: str) -> str:
+    exp = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_minutes)
+    return jwt.encode({"sub": _BRANCH_PREFIX + branch_id, "exp": exp}, settings.secret_key, algorithm="HS256")
+
+
+@router.post("/login", response_model=BranchToken)
+@limiter.limit("10/minute")
+def branch_login(request: Request, payload: BranchLoginRequest, db: Session = Depends(get_db)) -> BranchToken:
+    """Branch Login Phase 2 — the Branch entity's own shared login, a third
+    identity alongside /auth/login (User admin) and /hr/login (Employee
+    sub-user). Structurally mirrors hr_login() (hr_access.py) closely:
+    case-insensitive global username lookup (no company selector needed,
+    same as Employee.username's platform-wide-unique convention), constant-
+    time dummy-hash verify on not-found, disabled-branch and suspended-
+    company checks."""
+    username = payload.username.strip()
+    branch = db.query(Branch).filter(Branch.username.ilike(username)).first()
+    if not branch:
+        pwd_context.verify(payload.password, _DUMMY_HASH)
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if not branch.password_hash or not pwd_context.verify(payload.password, branch.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if branch.status != "Active":
+        raise HTTPException(status_code=403, detail="This branch is disabled")
+
+    expires_at = db.query(Company.subscription_expires_at).filter(Company.id == branch.company_id).scalar()
+    assert_company_active(expires_at)
+
+    now = datetime.now(UTC)
+    branch.last_login = now
+    branch.last_activity = now
+    db.add(branch)
+    db.commit()
+
+    return BranchToken(access_token=_create_branch_token(branch.id))

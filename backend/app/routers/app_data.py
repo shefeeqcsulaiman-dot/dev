@@ -1733,6 +1733,10 @@ def log_action(db: Session, principal: Principal, module: str, action: str, deta
             company_id=principal.company_id,
             user_id=principal.user.id if principal.user else None,
             employee_id=principal.employee.id if principal.employee else None,
+            # Branch Login Phase 2 — a Branch principal has neither .user nor
+            # .employee, so without this its actions would silently lose
+            # their actor identity in the audit trail.
+            branch_actor_id=principal.branch.id if principal.branch else None,
             module=str(module)[:60],
             action=str(action)[:80],
             detail=json.dumps(detail, ensure_ascii=False, default=str)[:1000],

@@ -723,6 +723,10 @@ class AuditLog(Base, TimestampMixin):
     # since exactly one of the two is ever set depending on who acted.
     # Mirrors LeaveRequest.approved_by/approved_by_employee_id.
     employee_id: Mapped[str | None] = mapped_column(ForeignKey("employees.id"))
+    # Branch Login Phase 2 — same reasoning as employee_id above, for a
+    # Branch-identity actor (neither a User nor an Employee). Exactly one of
+    # user_id/employee_id/branch_actor_id is ever set per row.
+    branch_actor_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"))
     module: Mapped[str] = mapped_column(String(60), nullable=False)
     action: Mapped[str] = mapped_column(String(80), nullable=False)
     record_id: Mapped[str | None] = mapped_column(String(36))
@@ -1050,6 +1054,22 @@ class Branch(Base, TimestampMixin):
     # explicit (possibly restrictive) array once a company admin saves the
     # branch modal's module grid.
     modules_enabled: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Branch Login Phase 2 — the branch entity's own shared login, separate
+    # from any Employee account. Mirrors Employee's portal-access columns
+    # exactly, except password_hash has NO "unset means password=employee_no"
+    # fallback (Employee.password_hash's own convention) — there's no
+    # equivalent obvious default for a Branch, so a real password must
+    # always be set explicitly before this login works at all. username is
+    # globally unique (enforced by a partial unique index in main.py's
+    # migration block, mirroring uq_employees_username) so the shared
+    # /login page can resolve it without a company selector, same as
+    # Employee.username already does for /hr/login.
+    username: Mapped[str | None] = mapped_column(String(80))
+    password_hash: Mapped[str | None] = mapped_column(String(255))
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_activity: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class EmployeeBranchAccess(Base, TimestampMixin):
