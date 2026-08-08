@@ -15089,28 +15089,20 @@ function filterLedger(){
 async function clearLedgerRecords(){
   const ok=await appConfirm({title:'Clear Ledger Records',message:'Remove all journal entries from the General Ledger? This cannot be undone.',okText:'Clear Records'});
   if(!ok)return;
-  let failed=0;
+  let failed=false;
   try{
-    // /journal is paginated now (see goToJournalPage) — page through with
-    // has_more rather than assuming one response has everything, deleting
-    // each page's worth before fetching the next (offset stays at 0 since
-    // deleting shrinks the remaining set under it).
-    let hasMore=true;
-    while(hasMore){
-      const data=await moduleApi('/journal?limit=100&offset=0');
-      const rows=Array.isArray(data?.records)?data.records:[];
-      if(!rows.length)break;
-      for(const j of rows){
-        try{await moduleApi('/journal/'+j.id,{method:'DELETE'});}catch{failed++;}
-      }
-      hasMore=!!data?.has_more;
-    }
-  }catch(e){console.warn('Clear ledger error:',e);failed++;}
+    // Single server-side bulk action (POST /journal/clear-all) — previously
+    // paged through /journal deleting one entry at a time via DELETE
+    // /journal/{id}, which now correctly rejects posted journals (see
+    // accounting.py's delete_journal() guard); this dedicated endpoint is
+    // the deliberate, explicit bypass for a full reset, not a workaround.
+    await moduleApi('/journal/clear-all',{method:'POST'});
+  }catch(e){console.warn('Clear ledger error:',e);failed=true;}
   _ldgPage.page=1;
   _ldgPage.total=0;
   clearTableBody('ledger-tbody','No journal entries in database yet.');
   updateJournalPageControls();
-  toast(`Ledger cleared${failed?`; ${failed} failed`:''}`,failed?'warn':'ok');
+  toast(failed?'Clear ledger failed':'Ledger cleared',failed?'err':'ok');
   audit('Cleared ledger entries','All','Deleted');
 }
 

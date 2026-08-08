@@ -281,6 +281,7 @@ class JournalCreate(BaseModel):
     description: str
     source_module: str = "manual"
     source_id: str | None = None
+    branch_id: str | None = None
     lines: list[JournalLineIn]
 
 

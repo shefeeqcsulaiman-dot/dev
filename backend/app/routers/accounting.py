@@ -19,6 +19,7 @@ from app.models import (
     BankAccount,
     BankReconciliationMatch,
     BankStatementLine,
+    Branch,
     GeneralLedgerEntry,
     JournalEntry,
     JournalLine,
@@ -644,6 +645,27 @@ def list_journals(
     }
 
 
+def _delete_journal_cascade(db: Session, journal: JournalEntry) -> None:
+    """Shared cascade for removing a journal entry: its GL rows, unlinking/
+    resetting any Voucher back to re-postable, and resetting the originating
+    SourceTransaction + PostingJob (plus dropping the TaxLine) so it can be
+    re-approved and re-posted rather than left permanently stuck with no
+    journal at all — approve_voucher()/retry_posting_job() both no-op once
+    status is already "posted". Does not commit — caller's responsibility,
+    so a bulk caller (clear_all_journals) can batch many of these into one
+    transaction."""
+    journal_id = journal.id
+    db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.journal_entry_id == journal_id).delete()
+    db.query(Voucher).filter(Voucher.posted_journal_id == journal_id).update(
+        {"posted_journal_id": None, "status": "approved"}
+    )
+    if journal.source_id:
+        db.query(SourceTransaction).filter(SourceTransaction.id == journal.source_id).update({"status": "approved"})
+        db.query(PostingJob).filter(PostingJob.source_id == journal.source_id).update({"status": "approved"})
+        db.query(TaxLine).filter(TaxLine.source_id == journal.source_id).delete(synchronize_session=False)
+    db.delete(journal)
+
+
 @router.delete("/journal/{journal_id}", status_code=204)
 def delete_journal(
     journal_id: str,
@@ -657,20 +679,32 @@ def delete_journal(
     )
     if not journal:
         raise HTTPException(status_code=404, detail="Journal entry not found")
-    db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.journal_entry_id == journal_id).delete()
-    # Reset status back to "approved" (not just clearing the FK) so the
-    # voucher can actually be re-posted — approve_voucher() and
-    # retry_posting_job() both no-op when status is already "posted", which
-    # would otherwise leave these permanently stuck with no journal at all.
-    db.query(Voucher).filter(Voucher.posted_journal_id == journal_id).update(
-        {"posted_journal_id": None, "status": "approved"}
-    )
-    if journal.source_id:
-        db.query(SourceTransaction).filter(SourceTransaction.id == journal.source_id).update({"status": "approved"})
-        db.query(PostingJob).filter(PostingJob.source_id == journal.source_id).update({"status": "approved"})
-        db.query(TaxLine).filter(TaxLine.source_id == journal.source_id).delete(synchronize_session=False)
-    db.delete(journal)
+    # Posted journals are never deleted (see accounting_posting.py's
+    # documented invariant — post an equal-and-opposite entry via Reverse
+    # Journal instead). "Clear Ledger Records" (POST /journal/clear-all) is
+    # a deliberate, separate, explicit bulk-reset action that intentionally
+    # bypasses this guard — it is not a loophole in this one.
+    if journal.status == "posted":
+        raise HTTPException(status_code=400, detail="Posted journal entries cannot be deleted — use Reverse Journal instead")
+    _delete_journal_cascade(db, journal)
     db.commit()
+
+
+@router.post("/journal/clear-all")
+def clear_all_journals(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Deliberate bulk-reset action backing the "Clear Ledger Records" UI
+    button — deletes every journal entry for the company regardless of
+    status, in one server-side operation. Replaces the frontend's previous
+    approach of paging through /journal and calling DELETE /journal/{id}
+    once per entry, which the posted-status guard above would now block."""
+    journals = db.query(JournalEntry).filter(JournalEntry.company_id == current_user.company_id).all()
+    for journal in journals:
+        _delete_journal_cascade(db, journal)
+    db.commit()
+    return {"ok": True, "deleted": len(journals)}
 
 
 @router.get("/voucher-types", response_model=list[VoucherTypeOut])
@@ -865,6 +899,7 @@ def reverse_journal(
         raise HTTPException(status_code=400, detail="This journal entry has already been reversed")
     reversal = JournalEntry(
         company_id=current_user.company_id,
+        branch_id=original.branch_id,
         entry_number=f"REV-{original.entry_number}",
         source_module="reversal",
         source_id=original.id,
@@ -1150,11 +1185,17 @@ def create_journal(
     if len(found) != len(account_ids):
         raise HTTPException(status_code=422, detail="One or more accounts do not belong to this company")
 
+    if payload.branch_id is not None:
+        branch = db.query(Branch.id).filter(Branch.id == payload.branch_id, Branch.company_id == current_user.company_id).first()
+        if not branch:
+            raise HTTPException(status_code=422, detail="Branch does not belong to this company")
+
     journal_data = {
         "company_id": current_user.company_id,
         "entry_number": payload.entry_number,
         "source_module": payload.source_module,
         "source_id": payload.source_id,
+        "branch_id": payload.branch_id,
         "description": payload.description,
     }
     if payload.entry_date is not None:
