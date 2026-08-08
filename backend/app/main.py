@@ -518,10 +518,35 @@ def ensure_schema_updates() -> None:
             existing_columns = {column["name"] for column in inspector.get_columns("audit_logs")}
             if "employee_id" not in existing_columns:
                 connection.execute(text("ALTER TABLE audit_logs ADD COLUMN employee_id VARCHAR(36)"))
+            if "branch_actor_id" not in existing_columns:
+                connection.execute(text("ALTER TABLE audit_logs ADD COLUMN branch_actor_id VARCHAR(36)"))
         if "branches" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("branches")}
             if "modules_enabled" not in existing_columns:
                 connection.execute(text("ALTER TABLE branches ADD COLUMN modules_enabled TEXT"))
+            # Branch Login Phase 2 — the branch entity's own shared login.
+            required_columns = {
+                "username": "VARCHAR(80)",
+                "password_hash": "VARCHAR(255)",
+                "password_changed_at": "TIMESTAMP WITH TIME ZONE",
+                "last_login": "TIMESTAMP WITH TIME ZONE",
+                "last_activity": "TIMESTAMP WITH TIME ZONE",
+            }
+            for column_name, column_type in required_columns.items():
+                if column_name not in existing_columns:
+                    connection.execute(text(f"ALTER TABLE branches ADD COLUMN {column_name} {column_type}"))
+            # Global uniqueness (not per-company), mirroring uq_employees_username
+            # — the shared /login page resolves a branch by username alone, no
+            # company selector required.
+            try:
+                connection.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_branches_username "
+                    "ON branches (username) WHERE username IS NOT NULL"
+                ))
+            except Exception as idx_exc:
+                logging.getLogger("taxflow").error(
+                    "Could not create uq_branches_username (likely duplicate usernames already exist): %s", idx_exc
+                )
         if "app_data_records" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("app_data_records")}
             if "branch_id" not in existing_columns:

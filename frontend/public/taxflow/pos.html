@@ -1106,8 +1106,21 @@ async function posLogin(e){
         body:JSON.stringify({username:email,password:pass}),
       });
       const hrData=await hrRes.json();
-      if(!hrRes.ok||!hrData.access_token) throw new Error(data.detail||hrData.detail||'Login failed');
-      token=hrData.access_token;
+      if(hrRes.ok&&hrData.access_token){
+        token=hrData.access_token;
+      }else{
+        // Not an admin, not an employee — try as a Branch Login (Phase 2):
+        // the branch entity's own shared login, same username/password
+        // shape, no company reference needed (globally unique username).
+        const brRes=await fetch(APIBASE+'/branches/login',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({username:email,password:pass}),
+        });
+        const brData=await brRes.json();
+        if(!brRes.ok||!brData.access_token) throw new Error(data.detail||hrData.detail||brData.detail||'Login failed');
+        token=brData.access_token;
+      }
     }
     localStorage.setItem('taxflow_token', token);
     document.getElementById('pos-auth').style.display='none';

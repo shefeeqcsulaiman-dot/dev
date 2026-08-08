@@ -107,6 +107,11 @@ class BranchOut(BaseModel):
     # convention as Company.modules_enabled), list on the wire. NULL/None =
     # unrestricted, same semantics as company_allows_module().
     modules_enabled: list[str] | None = None
+    # Branch Login Phase 2 — the branch's own shared login. has_password is
+    # computed server-side (routers/branches.py::_branch_out) from
+    # password_hash, never the hash itself.
+    username: str | None = None
+    has_password: bool = False
 
     @field_validator("modules_enabled", mode="before")
     @classmethod
@@ -128,6 +133,8 @@ class BranchCreate(BaseModel):
     address: str | None = None
     status: str = "Active"
     modules_enabled: list[str] | None = None
+    username: str | None = None
+    password: str | None = None
 
 
 class BranchUpdate(BaseModel):
@@ -137,6 +144,8 @@ class BranchUpdate(BaseModel):
     address: str | None = None
     status: str | None = None
     modules_enabled: list[str] | None = None
+    username: str | None = None
+    password: str | None = None
 
 
 class ImpersonatorOut(BaseModel):

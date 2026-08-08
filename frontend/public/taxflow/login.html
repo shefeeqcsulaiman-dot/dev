@@ -119,6 +119,7 @@
       if(!r.ok)return;
       var who=await r.json();
       if(who.kind==='employee'){preloadAndRedirect('/hrms',t);return;}
+      if(who.kind==='branch'){preloadAndRedirect('/',t);return;}
       // Admin: /auth/whoami doesn't carry the admin/superadmin distinction,
       // /auth/me already does — check that only for the User path.
       var meResp=await fetch(apiBase()+'/auth/me',{headers:{'Authorization':'Bearer '+t}});
@@ -211,10 +212,30 @@
       }
       // A 403 from /hr/login (vs 401) means a real employee account was
       // found but something specific blocks it (disabled account, suspended
-      // company) — that message is more useful than /auth/login's generic
-      // "incorrect email or password" from moments earlier, which would
-      // otherwise always win and hide the real reason.
-      err.textContent=(hrResp.status===403?hrData.detail:null)||data.detail||'Incorrect email or password.';
+      // company) — stop here rather than also trying branch-login, same
+      // reasoning /auth/login's own 403 already skips the /hr/login attempt.
+      if(hrResp.status===401){
+        // Not an admin, not an employee — try as a Branch Login (Phase 2):
+        // the branch entity's own shared login, same username/password
+        // shape, no company reference needed (globally unique username).
+        var brResp=await fetch(apiBase()+'/branches/login',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({username:email,password:pwd})
+        });
+        var brData=await brResp.json();
+        if(brResp.ok&&brData.access_token){
+          localStorage.setItem('taxflow_token',brData.access_token);
+          localStorage.setItem('taxflow_principal_kind','branch');
+          preloadAndRedirect('/',brData.access_token);
+          return;
+        }
+        err.textContent=(brResp.status===403?brData.detail:null)||data.detail||'Incorrect email or password.';
+        err.style.display='block';
+        btn.disabled=false;btn.textContent='Sign In';
+        return;
+      }
+      err.textContent=hrData.detail||data.detail||'Incorrect email or password.';
       err.style.display='block';
       btn.disabled=false;btn.textContent='Sign In';
     }catch(e){

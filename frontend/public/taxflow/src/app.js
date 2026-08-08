@@ -2267,7 +2267,7 @@ async function exitImpersonation(){
 async function ensureBackendSession(){
   if(localStorage.getItem('taxflow_token'))return true;
   const host=window.location.hostname||'127.0.0.1';
-  if(['localhost','127.0.0.1','::1',''].includes(host)&&localStorage.getItem('taxflow_principal_kind')!=='employee'){
+  if(['localhost','127.0.0.1','::1',''].includes(host)&&!['employee','branch'].includes(localStorage.getItem('taxflow_principal_kind'))){
     return loginLocalBackend();
   }
   showLoginOverlay();
@@ -2275,10 +2275,12 @@ async function ensureBackendSession(){
 }
 
 async function loginLocalBackend(){
-  // Never auto-relog as the seed admin for an employee/sub-user session — that
-  // would silently escalate a permission-limited sub-user to full admin on
-  // every dev-environment 401, masking real RBAC bugs during testing.
-  if(localStorage.getItem('taxflow_principal_kind')==='employee')return false;
+  // Never auto-relog as the seed admin for an employee/branch sub-user
+  // session — that would silently escalate a permission-limited session to
+  // full admin on every dev-environment 401, masking real RBAC bugs during
+  // testing (Branch Login Phase 2: same reasoning applies to a Branch
+  // identity as it already did to an Employee).
+  if(['employee','branch'].includes(localStorage.getItem('taxflow_principal_kind')))return false;
   const host=window.location.hostname||'127.0.0.1';
   if(!['localhost','127.0.0.1','::1',''].includes(host))return false;
   const loginUrls=[`${apiBaseUrl()}/auth/login`,`${localApiBaseUrl()}/auth/login`].filter((url,index,self)=>self.indexOf(url)===index);
@@ -17261,6 +17263,10 @@ function showBranchModal(id){
   document.getElementById('branch-city').value=b?.city||'';
   document.getElementById('branch-status').value=b?.status||'Active';
   buildBranchModGrid(b?(b.modules_enabled??null):null);
+  document.getElementById('branch-username').value=b?.username||'';
+  document.getElementById('branch-password').value='';
+  const pwHint=document.getElementById('branch-pw-hint');
+  if(pwHint)pwHint.textContent=b?.has_password?'(leave blank to keep current password)':'(required to enable branch login)';
   const delBtn=document.getElementById('branch-delete-btn');
   if(delBtn)delBtn.style.display=id?'':'none';
   showM('m-branch');
@@ -17278,6 +17284,17 @@ async function saveBranchModal(){
     status:document.getElementById('branch-status')?.value||'Active',
     modules_enabled:getCheckedBranchModules(),
   };
+  // Branch Login Phase 2: username/password are optional and omitted
+  // entirely when left blank — never sent as an empty string, which would
+  // null out an existing credential on an edit save (same "None = don't
+  // touch" convention as set_employee_portal_access's own PUT endpoint).
+  const branchUsername=(document.getElementById('branch-username')?.value||'').trim();
+  if(branchUsername)payload.username=branchUsername;
+  const branchPassword=document.getElementById('branch-password')?.value||'';
+  if(branchPassword){
+    if(branchPassword.length<6){toast('Branch password must be at least 6 characters','warn');return;}
+    payload.password=branchPassword;
+  }
   if(_branchList.find(x=>x.name.toLowerCase()===name.toLowerCase()&&x.id!==id)){toast('Branch name already exists','warn');return;}
   try{
     const response=await authenticatedFetch(`${apiBaseUrl()}/branches${id?'/'+id:''}`,{
@@ -22709,15 +22726,16 @@ function initApp(){
   configureManualPurchaseMode();
   // syncCompanyFromDatabase/loadUsersIntoTable/syncDashboardFromDatabase all
   // call User-only endpoints (/companies/current, /app-data/users,
-  // /reports/dashboard) — for an HRMS sub-user (Employee principal) those
-  // 401 (no User row matches an "emp:" subject), which authenticatedFetch
+  // /reports/dashboard) — for an HRMS sub-user (Employee principal) or a
+  // Branch Login Phase 2 session (Branch principal) those 401 (no User row
+  // matches an "emp:"/"branch:" subject), which authenticatedFetch
   // correctly treats as an invalid session and force-logs them out before
-  // the page even renders. None of the three are relevant to a sub-user
-  // session: company display comes from applyHrmsPermissionNav()
-  // (/auth/whoami), the dashboard here is the main-app one, and the users
-  // table doesn't apply to HRMS at all. hydrateFromServer() (bootstrap) is
-  // already principal-aware and runs for both session types.
-  if(localStorage.getItem('taxflow_principal_kind')!=='employee'){
+  // the page even renders. None of the three are relevant to either
+  // non-admin session: company display comes from applyHrmsPermissionNav()/
+  // applyMainDashboardPermissionNav() (/auth/whoami), the dashboard here is
+  // the main-app one, and the users table doesn't apply. hydrateFromServer()
+  // (bootstrap) is already principal-aware and runs for every session kind.
+  if(!['employee','branch'].includes(localStorage.getItem('taxflow_principal_kind'))){
     syncCompanyFromDatabase();
     renderBusinessLocationRows();
     loadUsersIntoTable();
@@ -22743,17 +22761,24 @@ if(!localStorage.getItem('taxflow_token')){
   window.location.replace('/login');
 }else{
   // applyRoleBasedNav() calls /auth/me, a User-only endpoint — for an HRMS
-  // sub-user (Employee principal) that 401s (no User row matches an "emp:"
-  // subject), which authenticatedFetch correctly treats as an invalid
-  // session and logs them straight back out. Skip it for employee sessions;
+  // sub-user (Employee principal) or a Branch Login Phase 2 session (Branch
+  // principal) that 401s (no User row matches an "emp:"/"branch:" subject),
+  // which authenticatedFetch correctly treats as an invalid session and
+  // logs them straight back out. Skip it for both non-admin kinds;
   // applyHrmsPermissionNav() (hrms.html, via /auth/whoami) is the
   // employee-aware equivalent.
-  if(localStorage.getItem('taxflow_principal_kind')!=='employee'){
+  var _principalKind=localStorage.getItem('taxflow_principal_kind');
+  if(!['employee','branch'].includes(_principalKind)){
     applyRoleBasedNav().catch(()=>{});
-  }else if(!window.HRMS_STANDALONE){
-    // Employee session on index.html (Main Dashboard Access phase) —
-    // hrms.html has its own separate call to applyHrmsPermissionNav() in
-    // its own DOMContentLoaded handler, this is index.html's equivalent.
+  }else if(_principalKind==='branch'||!window.HRMS_STANDALONE){
+    // Employee session on index.html (Main Dashboard Access phase), or any
+    // Branch Login Phase 2 session (a Branch identity always lands on '/',
+    // never '/hrms', and has zero HRMS access — applyMainDashboardPermissionNav()
+    // is kind-agnostic and already handles this correctly with no changes
+    // of its own, since a Branch principal's permissions never contain an
+    // HR-suite key). hrms.html has its own separate call to
+    // applyHrmsPermissionNav() in its own DOMContentLoaded handler for the
+    // Employee-on-hrms.html case, this is index.html's equivalent.
     applyMainDashboardPermissionNav().catch(()=>{});
   }
   initApp();

@@ -2675,6 +2675,14 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div class="card-sub" style="margin:-2px 0 8px">This branch can only use the modules checked below (never more than what's enabled for the company).</div>
       <div id="branch-mod-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px"></div>
     </div>
+    <div class="fg" style="margin-top:4px">
+      <label class="fl">Branch Login</label>
+      <div class="card-sub" style="margin:-2px 0 8px">Optional — lets this branch sign in directly (at the same login page as company users) with its own shared username/password, separate from any employee account. Access is limited to the modules checked above.</div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Username</label><input class="fi mono" id="branch-username" placeholder="e.g. dubai-hq" autocomplete="off"></div>
+      <div class="fg"><label class="fl">Password <span id="branch-pw-hint" style="font-weight:400;color:var(--text3)"></span></label><input class="fi mono" id="branch-password" type="password" placeholder="Set password" autocomplete="new-password"></div>
+    </div>
     <div class="modal-foot">
       <button id="branch-delete-btn" class="btn btn-r" style="display:none;margin-right:auto" onclick="deleteBranchFromModal()">Delete</button>
       <button class="btn btn-g" onclick="hideM('m-branch')">Cancel</button>

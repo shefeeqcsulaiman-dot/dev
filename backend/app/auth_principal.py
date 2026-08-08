@@ -19,11 +19,13 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.config import get_settings
 from app.database import get_db
-from app.models import Company, Employee, EmployeeBranchAccess, Permission, Role, RolePermission, User
+from app.models import Branch, Company, Employee, EmployeeBranchAccess, Permission, Role, RolePermission, User
+from app.module_catalog import BRANCH_ELIGIBLE_MODULES
 from app.security import is_impersonation_token_revoked, user_id_from_token
 
 settings = get_settings()
 _EMP_PREFIX = "emp:"
+_BRANCH_PREFIX = "branch:"
 
 
 def assert_company_active(subscription_expires_at: str | None) -> None:
@@ -124,13 +126,16 @@ class Principal:
     so shared endpoints don't need two separate code paths. Admins implicitly
     pass every permission check (`is_admin=True`); an Employee's `permissions`
     set is exactly what their assigned Role grants."""
-    kind: str  # "user" | "employee"
+    kind: str  # "user" | "employee" | "branch"
     company_id: str
     display_name: str
     is_admin: bool
     permissions: frozenset[str] = field(default_factory=frozenset)
     user: User | None = None
     employee: Employee | None = None
+    # Branch Login Phase 2 — set only for kind="branch" (the Branch entity's
+    # own shared login), mirroring user/employee above.
+    branch: Branch | None = None
     role_name: str | None = None
     # None for a User (admin) principal, or an Employee not assigned to a
     # branch — both mean "company-wide", matching pre-Branch-Management
@@ -217,6 +222,60 @@ def _principal_from_employee_token(token: str, db: Session) -> Principal | None:
     )
 
 
+def _branch_id_from_token(token: str) -> str | None:
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+        sub: str | None = payload.get("sub")
+        if sub and sub.startswith(_BRANCH_PREFIX):
+            return sub[len(_BRANCH_PREFIX):]
+    except JWTError:
+        pass
+    return None
+
+
+def _principal_from_branch_token(token: str, db: Session) -> Principal | None:
+    """Branch Login Phase 2 — a Branch entity's own shared login, a third
+    identity kind alongside User (admin) and Employee (RBAC sub-user).
+    Branch tokens are self-describing (subject prefixed "branch:"), same
+    mutual-exclusivity trick as Employee tokens' "emp:" prefix.
+
+    Per the "module toggle alone = full access" design decision: a Branch
+    principal has no Role of its own — its `permissions` are synthesized
+    directly from the intersection of company-enabled and branch-enabled
+    modules (BRANCH_ELIGIBLE_MODULES), granting "<module>:view" for each.
+    This is enough to satisfy every existing require_principal_permission
+    ("<module>:view") check without inventing a parallel permission model.
+    `accessible_branch_ids` is exactly {branch.id} — no switching, matching
+    "branches must be completely isolated" (no multi-branch concept for a
+    Branch identity, unlike a multi-branch Employee)."""
+    branch_id = _branch_id_from_token(token)
+    if not branch_id:
+        return None
+    branch = db.query(Branch).filter(Branch.id == branch_id).first()
+    if not branch:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Branch not found")
+    if branch.status != "Active":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This branch is disabled")
+    company = db.query(Company).filter(Company.id == branch.company_id).first()
+    assert_company_active(company.subscription_expires_at if company else None)
+    # Deferred import — dependencies.py imports Principal/get_current_principal
+    # etc. FROM this module, so a module-level import here would be circular.
+    from app.dependencies import branch_allows_module, company_allows_module
+    company_modules = company.modules_enabled if company else None
+    enabled = [
+        m for m in BRANCH_ELIGIBLE_MODULES
+        if company_allows_module(company_modules, m) and branch_allows_module(branch.modules_enabled, m)
+    ]
+    branch.last_activity = datetime.now(UTC)
+    db.add(branch)
+    db.commit()
+    return Principal(
+        kind="branch", company_id=branch.company_id, display_name=branch.name,
+        is_admin=False, permissions=frozenset(f"{m}:view" for m in enabled),
+        branch=branch, branch_id=branch.id, accessible_branch_ids=frozenset({branch.id}),
+    )
+
+
 def _principal_from_user_token(token: str, db: Session) -> Principal | None:
     user_id = user_id_from_token(token)
     if not user_id:
@@ -236,16 +295,19 @@ def _principal_from_user_token(token: str, db: Session) -> Principal | None:
 
 
 def get_current_principal(request: Request, db: Session = Depends(get_db)) -> Principal:
-    """Resolves either a User bearer token or an Employee bearer token into
-    one Principal. The two token shapes are mutually exclusive by
-    construction (only Employee tokens carry the "emp:" subject prefix), so
-    there's no ambiguity in trying one then the other."""
+    """Resolves a User, Employee, or Branch bearer token into one Principal.
+    The three token shapes are mutually exclusive by construction (only
+    Employee tokens carry the "emp:" prefix, only Branch tokens "branch:"),
+    so there's no ambiguity in trying one then the other."""
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
     token = auth[7:]
 
     principal = _principal_from_employee_token(token, db)
+    if principal:
+        return principal
+    principal = _principal_from_branch_token(token, db)
     if principal:
         return principal
     principal = _principal_from_user_token(token, db)

@@ -98,7 +98,7 @@ class AccessibleBranchOut(BaseModel):
 
 
 class WhoAmIOut(BaseModel):
-    kind: str  # "user" | "employee"
+    kind: str  # "user" | "employee" | "branch"
     id: str
     company_id: str
     display_name: str
@@ -116,16 +116,23 @@ class WhoAmIOut(BaseModel):
 
 @router.get("/whoami", response_model=WhoAmIOut)
 def whoami(db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> WhoAmIOut:
-    """Identity check that works for either login path (admin User or HRMS
-    Employee sub-user) — the one call the frontend makes to decide what to
-    show, instead of guessing which of /auth/me or /hr/me applies."""
+    """Identity check that works for any of the three login paths (admin
+    User, HRMS Employee sub-user, or Branch Login Phase 2's Branch entity) —
+    the one call the frontend makes to decide what to show, instead of
+    guessing which of /auth/me or /hr/me applies."""
     accessible_branches: list[AccessibleBranchOut] = []
     if len(principal.accessible_branch_ids) > 1:
         rows = db.query(Branch.id, Branch.name).filter(Branch.id.in_(principal.accessible_branch_ids)).all()
         accessible_branches = [AccessibleBranchOut(id=bid, name=name) for bid, name in rows]
+    if principal.user:
+        principal_id = principal.user.id
+    elif principal.employee:
+        principal_id = principal.employee.id
+    else:
+        principal_id = principal.branch.id
     return WhoAmIOut(
         kind=principal.kind,
-        id=principal.user.id if principal.user else principal.employee.id,
+        id=principal_id,
         company_id=principal.company_id,
         display_name=principal.display_name,
         email=principal.user.email if principal.user else None,
