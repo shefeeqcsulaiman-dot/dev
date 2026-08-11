@@ -234,7 +234,14 @@ def period_label(value: object) -> str:
 
 def monthly_revenue_vat(db: Session, company_id: str, app_sales: list[dict[str, Any]]) -> list[dict[str, str]]:
     periods: dict[str, dict[str, Decimal]] = {}
-    invoices = db.query(Invoice).filter(Invoice.company_id == company_id).all()
+    # This function only ever returns the most recent 6 periods (see the
+    # [-6:] below), but previously queried a company's ENTIRE invoice/
+    # transaction history to compute them — cost that grows forever as a
+    # tenant accumulates data. Bounding to ~7 months (6 target + 1 buffer
+    # for edge-of-month safety) keeps the query cost roughly constant
+    # regardless of company age, with no behavior change to the output.
+    cutoff = (_date.today().replace(day=1) - timedelta(days=210)).replace(day=1)
+    invoices = db.query(Invoice).filter(Invoice.company_id == company_id, Invoice.created_at >= cutoff).all()
     for invoice in invoices:
         item = periods.setdefault(period_label(invoice.created_at), {"sales": Decimal("0.00"), "purchases": Decimal("0.00"), "output_vat": Decimal("0.00"), "input_vat": Decimal("0.00")})
         item["sales"] += money(invoice.total)
@@ -245,7 +252,11 @@ def monthly_revenue_vat(db: Session, company_id: str, app_sales: list[dict[str, 
         item["output_vat"] += record_amount(invoice, "vat_amount", "vat", "tax_amount")
     purchases = (
         db.query(SourceTransaction)
-        .filter(SourceTransaction.company_id == company_id, SourceTransaction.module.in_(["purchase", "purchase_bill"]))
+        .filter(
+            SourceTransaction.company_id == company_id,
+            SourceTransaction.module.in_(["purchase", "purchase_bill"]),
+            SourceTransaction.created_at >= cutoff,
+        )
         .all()
     )
     for purchase in purchases:

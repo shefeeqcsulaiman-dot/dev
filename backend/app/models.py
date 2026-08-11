@@ -81,7 +81,12 @@ class User(Base, TimestampMixin):
 
 class Invoice(Base, TimestampMixin):
     __tablename__ = "invoices"
-    __table_args__ = (UniqueConstraint("company_id", "invoice_number", name="uq_invoice_company_number"),)
+    __table_args__ = (
+        UniqueConstraint("company_id", "invoice_number", name="uq_invoice_company_number"),
+        # Backs the repeated status filters/GROUP BYs in reports.py's
+        # dashboard/summary/invoice_status queries.
+        Index("ix_invoices_company_status", "company_id", "status"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
@@ -175,6 +180,13 @@ class ClientError(Base):
 
 class JournalEntry(Base, TimestampMixin):
     __tablename__ = "journal_entries"
+    __table_args__ = (
+        # Backs _posted_journal_line_totals()'s status == "posted" filter
+        # (trial balance / balance sheet, run on nearly every report call)
+        # and date-range queries against entry_date.
+        Index("ix_journal_entries_company_status", "company_id", "status"),
+        Index("ix_journal_entries_company_date", "company_id", "entry_date"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
@@ -324,6 +336,13 @@ class Receipt(Base, TimestampMixin):
 
 class SourceTransaction(Base, TimestampMixin):
     __tablename__ = "source_transactions"
+    __table_args__ = (
+        # Backs the module.in_([...]) filters (_purchase_summary,
+        # monthly_revenue_vat, reports.py's expense query) and status
+        # filters used throughout the reports/posting flow.
+        Index("ix_source_tx_company_module", "company_id", "module"),
+        Index("ix_source_tx_company_status", "company_id", "status"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
@@ -713,6 +732,12 @@ class AppDataRecord(Base, TimestampMixin):
 
 class AuditLog(Base, TimestampMixin):
     __tablename__ = "audit_logs"
+    __table_args__ = (
+        # Backs recent_activity()'s ORDER BY created_at DESC LIMIT, filtered
+        # by company_id — audit_logs only ever grows, so this keeps that
+        # query cheap as it does.
+        Index("ix_audit_logs_company_created", "company_id", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)

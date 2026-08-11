@@ -19,6 +19,7 @@
     "vite": "^6.0.7"
   },
   "devDependencies": {
-    "@playwright/test": "^1.52.0"
+    "@playwright/test": "^1.52.0",
+    "esbuild": "^0.25.12"
   }
 }
