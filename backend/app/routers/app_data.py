@@ -125,7 +125,20 @@ def assert_collection_module_enabled(db: Session, principal: Principal, company:
     module = _COLLECTION_MODULE.get(collection)
     if not module:
         return
-    if not company_allows_module(company.modules_enabled if company else None, module):
+    company_modules = company.modules_enabled if company else None
+    allowed = company_allows_module(company_modules, module)
+    # completeSale() in pos.html writes posSales then mirrors it into
+    # salesInvoices as an inherent part of completing a sale — that's core
+    # POS behavior, not an optional cross-module feature, so a company/
+    # branch with "pos" enabled but not "sales" separately toggled should
+    # still be able to write this specific collection. Previously that
+    # combination 403'd here, silently (pos.html swallows the error since
+    # the sale itself already succeeded), so the sale would complete but
+    # never appear in Sales & Invoices — see the "sale from pos not
+    # showing" investigation.
+    if not allowed and collection == "salesInvoices":
+        allowed = company_allows_module(company_modules, "pos")
+    if not allowed:
         raise HTTPException(status_code=403, detail=f"The '{module}' module is not enabled for your company")
     # Branch Login Phase 1: additional branch-level restriction, same
     # rationale as the require_module() composition in dependencies.py —
@@ -134,7 +147,10 @@ def assert_collection_module_enabled(db: Session, principal: Principal, company:
     # identical branch check to actually enforce the toggle on writes.
     if principal.branch_id:
         branch_modules = db.query(Branch.modules_enabled).filter(Branch.id == principal.branch_id).scalar()
-        if not branch_allows_module(branch_modules, module):
+        branch_ok = branch_allows_module(branch_modules, module)
+        if not branch_ok and collection == "salesInvoices":
+            branch_ok = branch_allows_module(branch_modules, "pos")
+        if not branch_ok:
             raise HTTPException(status_code=403, detail=f"The '{module}' module is not enabled for your branch")
 
 
