@@ -7345,7 +7345,17 @@ function openCreateAccount(type){
   if(groupBtn)groupBtn.textContent='Group';
   if(ledgerBtn)ledgerBtn.textContent='Sub Ledger';
   _lockGroupToggle(false);
-  populateParentSelector(null);
+  // A posting ledger/sub-ledger must have a parent group (enforced in
+  // saveAccount(), and by updateAccLevelInfo()'s own auto-switch-to-Group
+  // fallback when the parent is blank). Pre-select the first available
+  // group here so opening in "ledger" mode doesn't immediately trip that
+  // fallback and silently flip the type back to Group before the user's
+  // even seen the modal — previously the default always opened as Group
+  // regardless of the requested type, whenever one wasn't pre-selected.
+  const defaultParentId=type!=='group'
+    ?_coaFlatAccounts.filter(a=>a.is_group&&(a.level||1)<=3).sort((a,b)=>String(a.code).localeCompare(String(b.code)))[0]?.id||null
+    :null;
+  populateParentSelector(defaultParentId);
   setAccModalType(type||'ledger');
   showM('m-acc');
 }
@@ -12318,6 +12328,7 @@ function ensurePurchaseAiEditModal(){
         <div class="purchase-lines-head">
           <div class="section-hd">Items</div>
           <button class="btn btn-g btn-sm" type="button" onclick="addPurchaseAiEditLine()">+ Add line</button>
+          <button class="btn btn-g btn-sm" type="button" title="Create a new ledger account, available immediately in every line's Ledger/Category dropdown below" onclick="openCreateAccount('ledger')">+ New Ledger</button>
         </div>
         <div class="purchase-edit-table-wrap">
           <table class="tbl purchase-edit-lines">
@@ -15053,6 +15064,14 @@ function updateAccountSelectors(){
     const value=select.value;
     select.innerHTML=options;
     if([...select.options].some(option=>option.value===value))select.value=value;
+  });
+  // Keeps the Extracted Purchase edit modal's per-line Ledger/Category
+  // dropdowns in sync with a ledger just created via its "+ New Ledger"
+  // button, without closing/reopening that modal — options are keyed by
+  // account name (see purchaseLedgerCategoryOptions), so re-passing the
+  // select's current value re-selects it if it still exists.
+  document.querySelectorAll('#pai-lines .pai-category').forEach(select=>{
+    select.innerHTML=purchaseLedgerCategoryOptions(select.value);
   });
   const filter=document.getElementById('ledger-account-filter');
   if(filter){

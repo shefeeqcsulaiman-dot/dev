@@ -502,6 +502,11 @@ textarea.fi{resize:vertical;min-height:80px;}
 
 /* ── MODAL ── */
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.65);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s;padding:16px;}
+/* #m-acc can be opened as a nested popup from within #m-purchase-ai-edit
+   (its "+ New Ledger" button) — #m-purchase-ai-edit is appended to <body>
+   at runtime, later in DOM order, so same z-index would render it on top
+   of #m-acc and make the ledger popup invisible/unreachable. */
+#m-acc{z-index:200;}
 .overlay.on{opacity:1;pointer-events:all;}
 .modal{
   position:relative;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r-xl);
