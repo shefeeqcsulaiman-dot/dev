@@ -1502,7 +1502,13 @@ async function completeSale(){
     // reads, so POS sales silently never reduced reported stock. Removed
     // rather than left alongside the real fix — it did nothing useful.
     await saveRec('posSales',sale);
-    await saveRec('salesInvoices', posToInvoice(sale,'Paid')).catch(()=>{});
+    // The sale itself is already saved at this point — don't fail/block the
+    // whole checkout over this mirror write, but DO surface it (previously
+    // silently swallowed) since a failure here means the sale won't show up
+    // anywhere in Sales & Invoices, which a cashier has no other way to notice.
+    await saveRec('salesInvoices', posToInvoice(sale,'Paid')).catch(e=>{
+      toast('Sale saved, but it may not appear in Sales & Invoices: '+e.message,'warn');
+    });
     _lastSale=sale;
     closePay();
     showReceipt(sale);
@@ -1592,7 +1598,9 @@ async function creditSale(){
   };
   try{
     await saveRec('posSales',sale);
-    await saveRec('salesInvoices', posToInvoice(sale,'Pending')).catch(()=>{});
+    await saveRec('salesInvoices', posToInvoice(sale,'Pending')).catch(e=>{
+      toast('Credit sale saved, but it may not appear in Sales & Invoices: '+e.message,'warn');
+    });
     _lastSale=sale;
     showReceipt(sale);
     toast('Credit sale saved — '+rcptNo,'ok');
