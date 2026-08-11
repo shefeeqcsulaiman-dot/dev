@@ -440,7 +440,7 @@
           '<div class="payslip-status">' + p.run_status + '</div>' +
           '<div class="payslip-period">' + p.period + '</div>' +
           row('Basic', p.basic) + row('Allowances', p.allowances) +
-          row('Overtime', p.overtime) + row('Deductions', '- ' + p.deductions) +
+          row('Overtime', p.overtime) + row('Deductions', -Math.abs(Number(p.deductions) || 0)) +
           '<div class="payslip-row net"><span>Net Pay</span><span>AED ' + fmt(p.net_pay) + '</span></div>' +
           '</div>';
       }).join('') + '</div>';

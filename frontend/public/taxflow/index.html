@@ -1119,8 +1119,8 @@
         <div class="sinv-section mb10">
           <div class="sinv-section-title">Invoice Details</div>
           <div class="fr3 mb10">
-            <div class="fg" style="margin:0"><label class="fl" id="sales-no-label">Invoice No.</label><input class="fi mono" id="inv-no" dir="auto" required oninput="updateSalesInvPreview()"></div>
-            <div class="fg" style="margin:0"><label class="fl" id="sales-date-label">Invoice Date</label><input class="fi" type="date" id="inv-date" required oninput="updateSalesInvPreview()"></div>
+            <div class="fg" style="margin:0"><label class="fl" id="sales-no-label">Invoice No. <span style="color:var(--red)">*</span></label><input class="fi mono" id="inv-no" dir="auto" required oninput="updateSalesInvPreview()"></div>
+            <div class="fg" style="margin:0"><label class="fl" id="sales-date-label">Invoice Date <span style="color:var(--red)">*</span></label><input class="fi" type="date" id="inv-date" required oninput="updateSalesInvPreview()"></div>
             <div class="fg" style="margin:0"><label class="fl">Due Date</label><input class="fi" type="date" id="inv-due" oninput="updateSalesInvPreview()"></div>
           </div>
           <div class="fr3">
@@ -1135,7 +1135,7 @@
           <div class="sinv-section-title">Bill To</div>
           <div class="fr2 mb8">
             <div class="fg" style="margin:0">
-              <label class="fl">Customer Name</label>
+              <label class="fl">Customer Name <span style="color:var(--red)">*</span></label>
               <div class="field-action-row">
                 <input class="fi" id="inv-cust" list="invoice-customer-options" placeholder="Select or type customer" dir="auto" required onfocus="refreshInvoiceCustomerOptions()" oninput="applyInvoiceCustomerSelection();updateSalesInvPreview()" onchange="applyInvoiceCustomerSelection();updateSalesInvPreview()">
                 <button class="btn btn-g btn-sm" type="button" onclick="openAddCustomerFromInvoice()">+ Add</button>
@@ -2933,9 +2933,9 @@
       <div class="drop-zone" onclick="toast('Document upload picker opened','info')"><div style="font-size:32px;margin-bottom:8px">📎</div><div class="drop-title">Upload Documents</div><div class="drop-sub">Invoices, bills, receipts, contracts, audit files, trade licenses</div></div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Storage Summary</div><span class="b b-g">Encrypted</span></div>
-        <div class="risk-row"><span>Invoices</span><div class="risk-track"><div class="risk-fill" style="width:76%"></div></div><span class="mono">184</span></div>
-        <div class="risk-row"><span>Receipts</span><div class="risk-track"><div class="risk-fill warn" style="width:42%"></div></div><span class="mono">92</span></div>
-        <div class="risk-row"><span>Audit docs</span><div class="risk-track"><div class="risk-fill" style="width:61%"></div></div><span class="mono">38</span></div>
+        <div class="risk-row"><span>Invoices</span><div class="risk-track"><div class="risk-fill" style="width:0%"></div></div><span class="mono">0</span></div>
+        <div class="risk-row"><span>Receipts</span><div class="risk-track"><div class="risk-fill warn" style="width:0%"></div></div><span class="mono">0</span></div>
+        <div class="risk-row"><span>Audit docs</span><div class="risk-track"><div class="risk-fill" style="width:0%"></div></div><span class="mono">0</span></div>
       </div>
     </div>
     <div class="card">
@@ -5504,14 +5504,14 @@ period_locks ─&lt; audit_logs
     <div class="fg"><label class="fl">Description</label><input class="fi" id="inv-item-description" placeholder="Short description (optional)"></div>
     <div class="fr2">
       <div class="fg">
-        <div class="flx-b"><label class="fl">Category</label><button type="button" class="btn-link" onclick="toggleInvCategoryAdd()" id="inv-cat-add-btn">+ New</button></div>
+        <div class="flx-b"><label class="fl">Category <span style="color:var(--red)">*</span></label><button type="button" class="btn-link" onclick="toggleInvCategoryAdd()" id="inv-cat-add-btn">+ New</button></div>
         <select class="fi" id="inv-item-category"><option value="">Select Category</option></select>
         <div id="inv-cat-quick-add" style="display:none;margin-top:6px;display:none">
           <div class="flx" style="gap:6px"><input class="fi" id="inv-cat-new-name" placeholder="Category name" style="flex:1"><button class="btn btn-p btn-sm" onclick="quickAddInventoryCategory()">Add</button><button class="btn btn-g btn-sm" onclick="toggleInvCategoryAdd()">✕</button></div>
         </div>
       </div>
       <div class="fg">
-        <div class="flx-b"><label class="fl">Unit of Measure</label><button type="button" class="btn-link" onclick="toggleInvUnitAdd()">+ New</button></div>
+        <div class="flx-b"><label class="fl">Unit of Measure <span style="color:var(--red)">*</span></label><button type="button" class="btn-link" onclick="toggleInvUnitAdd()">+ New</button></div>
         <select class="fi" id="inv-item-unit"><option value="">Select Unit</option></select>
         <div id="inv-unit-quick-add" style="display:none;margin-top:6px">
           <div class="flx" style="gap:6px"><input class="fi" id="inv-unit-new-name" placeholder="Unit name e.g. KG" style="flex:1"><button class="btn btn-p btn-sm" onclick="quickAddInventoryUnit()">Add</button><button class="btn btn-g btn-sm" onclick="toggleInvUnitAdd()">✕</button></div>
@@ -5816,7 +5816,7 @@ period_locks ─&lt; audit_logs
 <div class="overlay" id="m-branch" onclick="closeOvBg(event,'m-branch')">
   <div class="modal">
     <div class="modal-title" id="branch-modal-title">Add Branch</div>
-    <div class="modal-sub">Register a branch or office location for your company</div>
+    <div class="modal-sub">Branch / office location details</div>
     <input type="hidden" id="branch-edit-id">
     <div class="fr2">
       <div class="fg"><label class="fl">Branch Name <span style="color:var(--red)">*</span></label><input class="fi" id="branch-name" placeholder="e.g. Dubai HQ"></div>
@@ -5826,9 +5826,22 @@ period_locks ─&lt; audit_logs
       <div class="fg"><label class="fl">City / Emirate</label><input class="fi" id="branch-city" placeholder="e.g. Dubai"></div>
       <div class="fg"><label class="fl">Status</label><select class="fi" id="branch-status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
     </div>
-    <div class="modal-actions">
-      <button id="branch-delete-btn" class="btn btn-sm" style="display:none;background:var(--red-bg);color:var(--red);border-color:var(--red);margin-right:auto" onclick="deleteBranchFromModal()">Delete</button>
-      <button class="btn btn-ghost" onclick="hideM('m-branch')">Cancel</button>
+    <div class="fg" style="margin-top:4px">
+      <label class="fl">Module Access</label>
+      <div class="card-sub" style="margin:-2px 0 8px">This branch can only use the modules checked below (never more than what's enabled for the company).</div>
+      <div id="branch-mod-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px"></div>
+    </div>
+    <div class="fg" style="margin-top:4px">
+      <label class="fl">Branch Login</label>
+      <div class="card-sub" style="margin:-2px 0 8px">Optional — lets this branch sign in directly (at the same login page as company users) with its own shared username/password, separate from any employee account. Access is limited to the modules checked above.</div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Username</label><input class="fi mono" id="branch-username" placeholder="e.g. dubai-hq" autocomplete="off"></div>
+      <div class="fg"><label class="fl">Password <span id="branch-pw-hint" style="font-weight:400;color:var(--text3)"></span></label><input class="fi mono" id="branch-password" type="password" placeholder="Set password" autocomplete="new-password"></div>
+    </div>
+    <div class="modal-foot">
+      <button id="branch-delete-btn" class="btn btn-r" style="display:none;margin-right:auto" onclick="deleteBranchFromModal()">Delete</button>
+      <button class="btn btn-g" onclick="hideM('m-branch')">Cancel</button>
       <button class="btn btn-p" onclick="saveBranchModal()">Save Branch</button>
     </div>
   </div>

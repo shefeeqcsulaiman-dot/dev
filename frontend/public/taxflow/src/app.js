@@ -18,6 +18,9 @@ META.corporate={t:'Corporate Accounting',s:'Corporate tax - Assets - Accruals - 
 META.reports={t:'Reports',s:'VAT - P&L - Balance Sheet - Trial Balance',a:'Export PDF',ao:()=>exportActiveReportPdf()};
 META.exception={t:'Exception Center',s:'Failed postings - duplicates - VAT/OCR - stock and payroll issues',a:'Refresh',ao:()=>loadExceptionCenter()};
 META.pos={t:'Point of Sale',s:'Quick sale - Products - Receipt - Cash & Card',a:'Launch Terminal',ao:()=>window.open('/pos','_blank')};
+META.mobile={t:'Mobile App',s:'Companion app preview - Invoicing on the go',a:'',ao:null};
+META['hrms-ai']={t:'AI Insights',s:'Workforce analytics - Predictive HR recommendations',a:'',ao:null};
+META['hrms-org']={t:'Organization Overview',s:'Departments - Branches - Headcount reporting',a:'',ao:null};
 
 let isHydratingFromServer=false;
 const tableRefreshTimers=new WeakMap();
@@ -201,7 +204,7 @@ function go(page){
     corpPage?.querySelector('.tab')?.classList.add('on');
     document.getElementById('corp-tax-tab')?.classList.add('on');
   }
-  const m=META[page];
+  const m=META[page]||{t:page,s:'',a:'',ao:null};
   const mAr=_appLang==='ar'?(_META_AR[page]||{}):null;
   document.getElementById('ptitle').textContent=mAr?.t||m.t;
   document.getElementById('psub').textContent=mAr?.s||m.s;
@@ -684,6 +687,7 @@ function openEmpEdit(emp){
 }
 
 function saveEmployee(){
+  const isEdit=document.querySelector('#m-emp .modal-title')?.textContent==='Edit Employee';
   const passportFile=document.getElementById('emp-passport-file')?.files?.[0];
   const workPermitFile=document.getElementById('emp-work-permit-file')?.files?.[0];
   const medicalFile=document.getElementById('emp-medical-file')?.files?.[0];
@@ -2959,8 +2963,17 @@ function renderDashboardMeta(data){
   }
 }
 
+// syncDashboardFromDatabase() is called from several independent places
+// (init, forceDbRefresh, post-save refreshes) that can overlap in flight —
+// _dashboardSyncSeq lets a call detect it's been superseded by a newer one,
+// so a slow/failed older request can't clobber a faster/successful one that
+// started after it (previously caused the Total Revenue card to show a
+// stale "Check backend connection" error even after a later sync succeeded).
+let _dashboardSyncSeq=0;
 async function syncDashboardFromDatabase(){
+  const seq=++_dashboardSyncSeq;
   const ready=await ensureBackendSession();
+  if(seq!==_dashboardSyncSeq)return;
   if(!ready){
     setDashboardStat('Total Revenue + VAT','Login needed','Open the root app and sign in');
     setDashboardStat('VAT Payable','Login needed','No backend token found');
@@ -2973,6 +2986,7 @@ async function syncDashboardFromDatabase(){
     const response=await authenticatedFetch(`${apiBaseUrl()}/reports/dashboard`);
     if(!response.ok)throw new Error('Dashboard API returned '+response.status);
     const data=await response.json();
+    if(seq!==_dashboardSyncSeq)return;
     window.__taxflowFreshDashboardLoaded=true;
     try{localStorage.setItem('taxflow_dashboard_snapshot',JSON.stringify(data));}catch{}
     if(data.company)applyCompanyToUi(data.company);
@@ -2980,6 +2994,7 @@ async function syncDashboardFromDatabase(){
     syncSidebarCounts(data);
     renderFullDashboardFromDatabase(data);
   }catch(err){
+    if(seq!==_dashboardSyncSeq)return;
     console.warn('Dashboard database sync failed:',err);
     setDashboardStat('Total Revenue + VAT','—','Check backend connection');
     setDashboardStat('VAT Payable','—','Dashboard sync failed');
@@ -18163,6 +18178,18 @@ function renderRotaShiftRecord(shift){
   updateRotaStats();
 }
 
+// Optimistic shift rows render as if saved before the server confirms — if
+// the save actually failed, swap the status badge so the row doesn't look
+// indistinguishable from a real saved shift (it will vanish on refresh).
+function markRotaShiftRowUnsaved(code){
+  const tbody=document.getElementById('rota-shift-tbody');
+  const target=String(code||'').trim().toLowerCase();
+  const row=[...(tbody?.querySelectorAll('tr:not([data-empty-state])')||[])]
+    .find(r=>(r.children[1]?.textContent||'').trim().toLowerCase()===target);
+  const statusCell=row?.children[8];
+  if(statusCell)statusCell.innerHTML=rotaBadge('Pending Save')+`<div class="card-sub" style="margin-top:2px">Not saved to database</div>`;
+}
+
 function buildShiftRecordFromForm(){
   const name=(document.getElementById('shift-name')?.value||'').trim();
   const code=(document.getElementById('shift-code')?.value||'').trim().toUpperCase();
@@ -18195,6 +18222,7 @@ async function saveShift(){
     toast('Shift added on screen, but database save failed','warn');
     return null;
   });
+  if(!saved)markRotaShiftRowUnsaved(record.code);
   closeM('m-shift');
   ['shift-name','shift-code','shift-break','shift-grace','shift-ot-after'].forEach(id=>setFieldValue(document.getElementById(id),''));
   setFieldValue(document.getElementById('shift-start'),'09:00');
@@ -22402,7 +22430,9 @@ function convertQuotation(btn){
 
 function saveQuotationDraft(){
   calcQuotationTotals();
-  saveServer('quotations',buildDraftQuotationRecord('Draft'));
+  const record=buildDraftQuotationRecord('Draft');
+  renderQuotationRecord(record);
+  saveServer('quotations',record);
   toast(`${quotationNumber()} saved as draft`,'ok');
 }
 
@@ -22414,7 +22444,9 @@ function previewDraftQuotation(){
 
 function shareDraftQuotation(){
   calcQuotationTotals();
-  saveServer('quotations',{...buildDraftQuotationRecord('Draft'),last_shared_at:new Date().toISOString()});
+  const record={...buildDraftQuotationRecord('Draft'),last_shared_at:new Date().toISOString()};
+  renderQuotationRecord(record);
+  saveServer('quotations',record);
   toast(`Share link prepared for ${quotationNumber()}`,'ok');
 }
 
