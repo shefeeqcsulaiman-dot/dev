@@ -631,6 +631,16 @@ def ensure_schema_updates() -> None:
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_payroll_items_employee_id ON payroll_items (employee_id)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_voucher_lines_voucher_id ON voucher_lines (voucher_id)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_voucher_lines_account_id ON voucher_lines (account_id)"))
+        # Composite indexes backing reports.py's repeated status/module/date
+        # filters (dashboard ~30 queries, summary ~40-50 queries per call) —
+        # same backfill reasoning as the block above: the model-level
+        # Index()s in models.py only take effect for a brand-new table.
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_invoices_company_status ON invoices (company_id, status)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_source_tx_company_module ON source_transactions (company_id, module)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_source_tx_company_status ON source_transactions (company_id, status)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_journal_entries_company_status ON journal_entries (company_id, status)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_journal_entries_company_date ON journal_entries (company_id, entry_date)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_company_created ON audit_logs (company_id, created_at)"))
         if "trial_requests" in table_names:
             existing_columns = {c["name"] for c in inspector.get_columns("trial_requests")}
             if "employee_count" not in existing_columns:
