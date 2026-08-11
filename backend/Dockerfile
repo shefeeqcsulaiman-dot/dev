@@ -1,3 +1,26 @@
+# Regenerates app.min.js from the current app.js on every build, so
+# production always ships up-to-date minified JS. Previously this was a
+# manual `npm run build:min` step nobody reliably re-ran after editing
+# app.js, so the SHA-256 freshness check in app/main.py's _resolve_app_js()
+# would silently fall back to serving the full unminified file — see that
+# function and frontend/scripts/build-min.mjs for how the check works. That
+# fallback now only matters as defense-in-depth, not the normal path.
+#
+# Also rewrites the ?v=... cache-busting query strings on app.js/styles.css
+# in index.html/hrms.html (frontend/scripts/inject-asset-versions.mjs) from
+# each asset's own content hash. Previously that version string was a
+# hand-maintained date-ish string kept in sync across two files by hand —
+# forgetting to bump it meant browsers that had already fetched the old
+# ?v=... URL kept serving it forever (it's cached as immutable), even after
+# the server had a newer file.
+FROM node:20-slim AS frontend-build
+WORKDIR /build
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/scripts ./scripts
+COPY frontend/public/taxflow ./public/taxflow
+RUN npm run build:min && npm run inject-versions
+
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -10,6 +33,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/app ./app
 COPY frontend/public ./frontend/public
+COPY --from=frontend-build /build/public/taxflow/src/app.min.js ./frontend/public/taxflow/src/app.min.js
+COPY --from=frontend-build /build/public/taxflow/index.html ./frontend/public/taxflow/index.html
+COPY --from=frontend-build /build/public/taxflow/hrms.html ./frontend/public/taxflow/hrms.html
 
 EXPOSE 8000
 # WORKERS defaults to 4; override with -e WORKERS=8 for higher-traffic deployments

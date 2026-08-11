@@ -135,6 +135,18 @@ function _hrmsBlockNav(){
   toast("You don't have access to this module — contact your administrator",'warn');
 }
 
+// go() re-queries these on every single navigation click otherwise — cheap
+// per DOM size today but scales linearly with every page/nav item added.
+// Safe to cache once: all .page/.nav/.nav-sub elements are static markup
+// baked into the HTML at load, never added/removed dynamically afterward.
+let _navPageEls=null,_navItemEls=null,_navSubEls=null;
+function _cachedNavEls(){
+  if(!_navPageEls)_navPageEls=[...document.querySelectorAll('.page')];
+  if(!_navItemEls)_navItemEls=[...document.querySelectorAll('.nav')];
+  if(!_navSubEls)_navSubEls=[...document.querySelectorAll('.nav-sub')];
+  return {pages:_navPageEls,navs:_navItemEls,navSubs:_navSubEls};
+}
+
 function go(page){
   // 'staff' and 'hrms-ext' are shared containers for several differently-
   // permissioned tabs (Employees vs HR Workflow; Performance/Training/
@@ -169,8 +181,9 @@ function go(page){
     if(window.HRMS_STANDALONE){
       const fromState=getCurrentNavState();
       if(!restoringNavigation&&fromState.page!=='hr-settings')rememberNavState(fromState);
-      document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
-      document.querySelectorAll('.nav').forEach(n=>n.classList.remove('on'));
+      const {pages:_hrPages,navs:_hrNavs}=_cachedNavEls();
+      _hrPages.forEach(p=>p.classList.remove('on'));
+      _hrNavs.forEach(n=>n.classList.remove('on'));
       const staffPage=document.getElementById('page-staff');
       if(staffPage){
         staffPage.classList.add('on');
@@ -190,10 +203,11 @@ function go(page){
   if(!target)return;
   const fromState=getCurrentNavState();
   if(!restoringNavigation&&fromState.page!==page)rememberNavState(fromState);
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
-  document.querySelectorAll('.nav').forEach(n=>n.classList.remove('on'));
+  const {pages:_pages,navs:_navs,navSubs:_navSubs}=_cachedNavEls();
+  _pages.forEach(p=>p.classList.remove('on'));
+  _navs.forEach(n=>n.classList.remove('on'));
   target.classList.add('on');
-  document.querySelectorAll('.nav').forEach(n=>{if((n.getAttribute('onclick')||'').includes("'"+page+"'"))n.classList.add('on');});
+  _navs.forEach(n=>{if((n.getAttribute('onclick')||'').includes("'"+page+"'"))n.classList.add('on');});
   if(page==='corporate'){
     const corpPage=document.getElementById('page-corporate');
     corpPage?.querySelectorAll('.tab').forEach(tab=>tab.classList.remove('on'));
@@ -215,7 +229,7 @@ function go(page){
   if(['staff'].includes(page)){
     document.getElementById('nav-hrms')?.classList.add('on');
   }
-  document.querySelectorAll('.nav-sub').forEach(s=>s.classList.remove('on'));
+  _navSubs.forEach(s=>s.classList.remove('on'));
   localStorage.setItem('taxflow_current_page',page);
   closeSidebar();
   if(page==='reports')syncReportsFromDatabase();

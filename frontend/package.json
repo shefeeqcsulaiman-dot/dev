@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:e2e": "playwright test",
-    "build:min": "node scripts/build-min.mjs"
+    "build:min": "node scripts/build-min.mjs",
+    "inject-versions": "node scripts/inject-asset-versions.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",
@@ -19,6 +20,7 @@
     "vite": "^6.0.7"
   },
   "devDependencies": {
-    "@playwright/test": "^1.52.0"
+    "@playwright/test": "^1.52.0",
+    "esbuild": "^0.25.12"
   }
 }
