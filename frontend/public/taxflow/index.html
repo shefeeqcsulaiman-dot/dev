@@ -3008,6 +3008,7 @@
           </div>
         </div>
       </div>
+      <div class="ai-suggestions-label">Try asking</div>
       <div class="ai-suggestions" id="ai-suggestion-chips">
         <button class="btn btn-g btn-sm" onclick="askSystemAI('What should I check before VAT filing?')">VAT readiness</button>
         <button class="btn btn-g btn-sm" onclick="askSystemAI('Review purchase document extraction controls')">Purchase extraction</button>
@@ -3022,6 +3023,22 @@
       <div class="ai-compose-foot">
         <span id="system-ai-answer">Backend-aware. Existing validation, approval, posting, VAT, and audit controls stay in charge.</span>
         <button class="btn btn-g btn-sm" onclick="clearSystemAI()">Clear chat</button>
+      </div>
+    </div>
+    <div class="card ai-workbench-card">
+      <div class="card-hd">
+        <div>
+          <div class="card-title">AI Workbench</div>
+          <div class="card-sub">What the assistant can see right now</div>
+        </div>
+        <button class="btn btn-g btn-sm" onclick="loadAIWorkbench()" title="Refresh snapshot">Refresh</button>
+      </div>
+      <div id="ai-workbench-snapshot">
+        <div class="empty-card">Loading company snapshot…</div>
+      </div>
+      <div class="ai-msg-actions" id="ai-workbench-actions"></div>
+      <div class="ai-compose-foot" style="margin-top:10px;">
+        <span id="ai-workbench-status">Connecting to AI workbench…</span>
       </div>
     </div>
   </div>
