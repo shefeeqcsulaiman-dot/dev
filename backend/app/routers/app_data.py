@@ -1267,6 +1267,17 @@ def save_app_record(db: Session, principal: Principal, collection: str, record: 
     return saved
 
 
+def _is_credit_note_record(record: dict[str, Any]) -> bool:
+    """A negative-signed return/credit-note document (POS Sales Return v1).
+    Gated on sign, not just status/document_type text, so the main Sales
+    module's existing hand-keyed "Sales Return" documents — which are
+    stored with POSITIVE amounts today — keep their exact current behavior
+    (a real Invoice row, normal posting) untouched. Widening this to match
+    on status/text alone would silently change that pre-existing feature."""
+    text = f"{record.get('document_type','')} {record.get('source','')} {record.get('status','')}".lower()
+    return "return" in text and decimal_value(record.get("total")) < 0
+
+
 def sync_domain_model(db: Session, principal: Principal, collection: str, record: dict[str, Any]) -> None:
     if collection == "products":
         code = str(record.get("code") or record.get("sku") or "").strip()
@@ -1307,7 +1318,19 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
             account.type = str(record.get("type") or account.type).lower()
 
     elif collection == "salesInvoices":
-        sync_sales_invoice(db, principal, record)
+        if not _is_credit_note_record(record):
+            sync_sales_invoice(db, principal, record)
+        # A negative-signed credit note (POS Sales Return v1) deliberately
+        # skips sync_sales_invoice(): build_journal() rejects negative
+        # subtotal/vat/total (raises PostingError), and creating a real
+        # Invoice row here would make app_sales_invoice_records() (reports.py)
+        # dedupe this app-data record out of every report in favor of that
+        # Invoice row — whose own status filtering excludes "return" anyway.
+        # Reports read the credit note straight from app-data instead (see
+        # _is_credit_note() in reports.py). Legacy hand-keyed Sales Returns
+        # in the main Sales module are stored with POSITIVE amounts and are
+        # deliberately unaffected by this — see _is_credit_note_record()'s
+        # own docstring.
 
     elif collection == "bills":
         sync_source_transaction(
@@ -1455,14 +1478,27 @@ def sync_pos_stock(db: Session, principal: Principal, record: dict[str, Any], re
     this codebase currently consumes purchase valuation layers for COGS
     reporting either, so adding sale-side layers here would be a new,
     separate feature, not a fix for the reported "stock never decrements"
-    symptom."""
+    symptom.
+
+    Held orders (saveAs('draft'/'suspended')) write to this same collection
+    but haven't actually sold anything yet — skip them entirely so stock
+    isn't decremented until a sale genuinely completes. A POS refund
+    (Sales Return v1) reuses this same function with quantity sign flipped
+    instead of a near-duplicate sibling: its reference is namespaced
+    ('RET-'+original receipt), so the delete-by-reference cleanup below
+    can't touch the original sale's own movements."""
+    if str(record.get("status") or "").lower() in ("draft", "suspended"):
+        return
     items = record.get("items")
     if not isinstance(items, list):
         items = []
     branch_id = str(record.get("branch_id") or "").strip() or principal.branch_id
+    is_return = str(record.get("type") or "").lower() == "refund" or decimal_value(record.get("total")) < 0
+    movement_type = "pos_return" if is_return else "pos_sale"
+    sign = Decimal("1") if is_return else Decimal("-1")
     db.query(StockMovement).filter(
         StockMovement.company_id == principal.company_id,
-        StockMovement.movement_type == "pos_sale",
+        StockMovement.movement_type == movement_type,
         StockMovement.reference == reference,
     ).delete(synchronize_session=False)
     db.flush()
@@ -1485,8 +1521,8 @@ def sync_pos_stock(db: Session, principal: Principal, record: dict[str, Any], re
                 company_id=principal.company_id,
                 branch_id=branch_id,
                 mapping_id=mapping.id,
-                movement_type="pos_sale",
-                quantity=-quantity,
+                movement_type=movement_type,
+                quantity=sign * quantity,
                 unit_cost=unit_cost,
                 reference=reference,
             )
@@ -1632,6 +1668,22 @@ def sync_domain_delete(db: Session, principal: Principal, collection: str, recor
                 InventoryValuationLayer.company_id == principal.company_id,
                 InventoryValuationLayer.source_module == module,
                 InventoryValuationLayer.source_id == reference,
+            ).delete(synchronize_session=False)
+
+    elif collection == "posSales":
+        # resumeSale() (pos.html) deletes a held order's draft record after
+        # loading it into the cart — sync_pos_stock() now skips drafts
+        # entirely going forward, but this also cleans up any stock
+        # movements a held order already accumulated before that fix, and
+        # covers deleting a completed sale or refund record generally
+        # (either movement_type; a given reference is only ever one or the
+        # other, so filtering both by reference in one query is safe).
+        reference = str(record.get("receipt_no") or record.get("id") or "").strip()
+        if reference:
+            db.query(StockMovement).filter(
+                StockMovement.company_id == principal.company_id,
+                StockMovement.movement_type.in_(("pos_sale", "pos_return")),
+                StockMovement.reference == reference,
             ).delete(synchronize_session=False)
 
 

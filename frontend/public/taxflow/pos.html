@@ -874,7 +874,7 @@ button{cursor:pointer;border:none;background:none;}
 <div class="ov" id="ov-rcpt" style="display:none">
   <div class="ov-box ov-rcpt">
     <button class="ov-close" onclick="closeRcpt()" title="Close">✕</button>
-    <div class="ov-title" style="margin-bottom:12px">Sale Complete ✓</div>
+    <div class="ov-title" style="margin-bottom:12px" id="rcpt-modal-title">Sale Complete ✓</div>
     <div class="rcpt" id="rcpt-body"></div>
     <div class="rcpt-actions">
       <button class="rcpt-btn" onclick="printRcpt()">🖨 Print</button>
@@ -912,6 +912,31 @@ button{cursor:pointer;border:none;background:none;}
     <div id="ov-recent-items-body"></div>
     <div style="margin-top:14px">
       <button class="rcpt-btn" style="width:100%" onclick="closeRecentItems()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Refund (Sales Return) ── -->
+<div class="ov" id="ov-refund" style="display:none">
+  <div class="ov-box" style="width:400px;max-height:calc(100vh - 80px);overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="ov-title">Refund Sale</div>
+      <button onclick="closeRefund()" style="background:none;border:none;font-size:18px;color:var(--t3);line-height:1;cursor:pointer;padding:4px;border-radius:6px;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--t3)'">✕</button>
+    </div>
+    <div class="ov-sub" style="margin-bottom:10px">This will reverse the sale's stock and reduce reported revenue/VAT — it cannot be undone</div>
+    <div style="background:var(--sf3, #f5f5f7);border-radius:10px;padding:12px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--t3);margin-bottom:4px"><span id="refund-receipt"></span><span id="refund-date"></span></div>
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px" id="refund-customer"></div>
+      <div id="refund-items" style="border-top:1px solid var(--bd);padding-top:8px;margin-bottom:8px"></div>
+      <div style="display:flex;justify-content:space-between;font-weight:800;font-size:14px;border-top:1px solid var(--bd);padding-top:8px">
+        <span>Refund total</span><span id="refund-total" style="color:var(--red)"></span>
+      </div>
+    </div>
+    <label>Reason *</label>
+    <input type="text" id="refund-reason" maxlength="120" placeholder="e.g. Customer changed mind, wrong item, damaged">
+    <div class="ov-btns" style="margin-top:10px">
+      <button class="ov-cancel" onclick="closeRefund()">Cancel</button>
+      <button class="ov-confirm" id="refund-confirm-btn" onclick="confirmRefund()">Confirm Refund</button>
     </div>
   </div>
 </div>
@@ -1568,17 +1593,27 @@ function genRcptNo(){
 }
 
 function posToInvoice(sale, status){
+  // A refund's document_type/source ('Sales Return'/'POS Return') matches
+  // the main Sales module's own hand-keyed Sales Return convention exactly
+  // (isSalesReturn() in app.js sniffs document_type/source/status for
+  // "return"), so a POS refund lands in that module's Sales Returns
+  // register with zero changes there. Its negative total/qty is what keeps
+  // it out of the ledger/Invoice pipeline server-side — see
+  // _is_credit_note_record() in app_data.py.
+  const isRefund = sale.type==='refund';
   return {
     invoice_no:    sale.receipt_no,
-    document_type: 'Tax Invoice',
-    source:        'POS',
+    document_type: isRefund ? 'Sales Return' : 'Tax Invoice',
+    source:        isRefund ? 'POS Return' : 'POS',
     status,
     date:          sale.date,
     due_date:      sale.date,
     customer:      sale.customer,
     customer_trn:  '',
     customer_address: '',
-    reference_no:  sale.receipt_no,
+    reference_no:  isRefund ? sale.original_receipt_no : sale.receipt_no,
+    original_invoice_no: isRefund ? sale.original_receipt_no : undefined,
+    refund_reason: isRefund ? sale.refund_reason : undefined,
     payment_method:sale.payment_method||'cash',
     subtotal:      sale.subtotal,
     vat_amount:    sale.vat,
@@ -1590,7 +1625,7 @@ function posToInvoice(sale, status){
       product_name: i.name,
       product_code: i.code||'',
       unit:         i.unit||'PCS',
-      qty:          i.qty,
+      qty:          isRefund ? -Math.abs(i.qty) : i.qty,
       unit_price:   i.price,
       price:        i.price,
       amount:       +((i.line_total||0)+(i.line_vat||0)).toFixed(4),
@@ -1695,20 +1730,25 @@ const RCPT_AR={
   payment:'طريقة الدفع',cash:'نقدي',card:'بطاقة',multi:'نقدي + بطاقة',credit:'آجل',
   cashTendered:'المبلغ المستلم',change:'المتبقي',viewInvoice:'عرض الفاتورة',
   thankYou:'شكراً لتعاملكم معنا',
+  refund:'إشعار دائن',originalReceipt:'الإيصال الأصلي',reason:'السبب',
 };
 function bl(en,arKey){ return `${esc(en)}<span class="rcpt-ar">${esc(RCPT_AR[arKey]||'')}</span>`; }
 
 function showReceipt(sale){
   _posShortUrl='';
+  const isRefund=sale.type==='refund'||Number(sale.total)<0;
   const rows=(sale.items||[]).map((i,n)=>
     `<tr><td>${n+1}. ${esc(i.name)}</td><td style="text-align:right">${i.qty}</td><td style="text-align:right">${POS_CURRENCY} ${(Number(i.line_total)+Number(i.line_vat)).toFixed(2)}</td></tr>`
   ).join('');
   const adjRows=[
-    sale.discount>0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Discount','discount')}</span><span>-${POS_CURRENCY} ${Number(sale.discount).toFixed(2)}</span></div>`:'',
-    sale.order_tax>0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Order Tax','orderTax')}</span><span>+${POS_CURRENCY} ${Number(sale.order_tax).toFixed(2)}</span></div>`:'',
-    sale.shipping>0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Shipping','shipping')}</span><span>+${POS_CURRENCY} ${Number(sale.shipping).toFixed(2)}</span></div>`:'',
-    sale.packing>0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Packing','packing')}</span><span>+${POS_CURRENCY} ${Number(sale.packing).toFixed(2)}</span></div>`:'',
+    sale.discount!=0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Discount','discount')}</span><span>-${POS_CURRENCY} ${Number(sale.discount).toFixed(2)}</span></div>`:'',
+    sale.order_tax!=0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Order Tax','orderTax')}</span><span>+${POS_CURRENCY} ${Number(sale.order_tax).toFixed(2)}</span></div>`:'',
+    sale.shipping!=0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Shipping','shipping')}</span><span>+${POS_CURRENCY} ${Number(sale.shipping).toFixed(2)}</span></div>`:'',
+    sale.packing!=0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Packing','packing')}</span><span>+${POS_CURRENCY} ${Number(sale.packing).toFixed(2)}</span></div>`:'',
   ].join('');
+  const refundRows=isRefund?`
+    <div class="rcpt-row"><span class="rcpt-lbl">${bl('Original Receipt','originalReceipt')}</span><span>${esc(sale.original_receipt_no||'')}</span></div>
+    <div class="rcpt-row"><span class="rcpt-lbl">${bl('Reason','reason')}</span><span>${esc(sale.refund_reason||'')}</span></div>`:'';
   const payLabel={'cash':['Cash','cash'],'card':['Card','card'],'multi':['Cash + Card','multi'],'credit':['Credit','credit']}[sale.payment_method]||[sale.payment_method,''];
   const payInfo=sale.payment_method==='cash'
     ?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Cash Tendered','cashTendered')}</span><span>${POS_CURRENCY} ${Number(sale.cash_tendered||0).toFixed(2)}</span></div><div class="rcpt-row"><span class="rcpt-lbl">${bl('Change','change')}</span><span>${POS_CURRENCY} ${Number(sale.change||0).toFixed(2)}</span></div>`
@@ -1718,13 +1758,14 @@ function showReceipt(sale){
   document.getElementById('rcpt-body').innerHTML=`
     <div class="rcpt-hd">
       <h2>${esc(CONAME())}</h2>
-      <div class="rcpt-heading">TAX INVOICE<span class="rcpt-ar">${RCPT_AR.taxInvoice}</span></div>
+      <div class="rcpt-heading">${isRefund?'REFUND / CREDIT NOTE':'TAX INVOICE'}<span class="rcpt-ar">${isRefund?RCPT_AR.refund:RCPT_AR.taxInvoice}</span></div>
       <p>${esc(sale.date)}</p>
     </div>
     <div class="rcpt-orderno">${esc(sale.receipt_no)}</div>
     <div class="rcpt-row"><span class="rcpt-lbl">${bl('Customer','customer')}</span><span><b>${esc(sale.customer)}</b></span></div>
     ${sale.service_type?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Service','service')}</span><span>${esc(sale.service_type)}</span></div>`:''}
     ${sale.table?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Table','table')}</span><span>${esc(sale.table)}</span></div>`:''}
+    ${refundRows}
     <hr class="rcpt-hr">
     <table class="rcpt-tbl">
       <thead><tr>
@@ -1743,13 +1784,17 @@ function showReceipt(sale){
     <div class="rcpt-row"><span class="rcpt-lbl">${bl('Payment','payment')}</span><span>${esc(payLabel[0])}<span class="rcpt-ar">${RCPT_AR[payLabel[1]]||''}</span></span></div>
     ${payInfo}
     <hr class="rcpt-hr">
-    <div class="rcpt-qr-wrap" id="rcpt-qr-wrap">
+    ${isRefund?'':`<div class="rcpt-qr-wrap" id="rcpt-qr-wrap">
       <div class="rcpt-qr-loading" id="rcpt-qr">Generating QR code…</div>
       <div class="rcpt-qr-hint">${bl('Scan to view invoice online','viewInvoice')}</div>
-    </div>
+    </div>`}
     <p style="text-align:center;font-size:10px;color:var(--t3);margin-top:6px">Thank you for your business!<span class="rcpt-ar">${RCPT_AR.thankYou}</span></p>`;
+  const titleEl=document.getElementById('rcpt-modal-title');
+  if(titleEl)titleEl.textContent=isRefund?'Refund Complete ✓':'Sale Complete ✓';
   document.getElementById('ov-rcpt').style.display='flex';
-  genPosShortLink(sale);
+  // genPosShortLink() POSTs a hardcoded status:'Paid' payload and publishes
+  // a public share link — wrong for a negative-amount refund document.
+  if(!isRefund)genPosShortLink(sale);
 }
 
 function printRcpt(){
@@ -1818,6 +1863,7 @@ async function openRecent(){
     const all=(data.records||[]).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
     const held=all.filter(s=>s.status==='draft'||s.status==='suspended');
     const sales=all.filter(s=>s.status!=='draft'&&s.status!=='suspended');
+    const refundedSet=new Set(all.filter(s=>s.type==='refund').map(s=>s.original_receipt_no).filter(Boolean));
     if(!all.length){body.innerHTML='<div style="padding:40px;text-align:center;color:var(--t3)">No transactions yet.</div>';return;}
     const heldBlock = held.length ? `
       <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#b45309;margin-bottom:6px">Held Orders</div>
@@ -1828,14 +1874,24 @@ async function openRecent(){
         <td style="font-weight:700;font-variant-numeric:tabular-nums">${POS_CURRENCY} ${Number(s.total||0).toFixed(2)}</td>
         <td><button class="rcpt-btn" style="padding:5px 12px" onclick="resumeSale('${esc(s.id||'')}')">Resume</button></td>
       </tr>`).join('')}</tbody></table>` : '';
-    const salesBlock = sales.length ? `<table><thead><tr><th>Receipt</th><th>Date</th><th>Customer</th><th>Total</th><th>Payment</th></tr></thead>
-      <tbody>${sales.map(s=>`<tr>
+    const salesBlock = sales.length ? `<table><thead><tr><th>Receipt</th><th>Date</th><th>Customer</th><th>Total</th><th>Payment</th><th></th></tr></thead>
+      <tbody>${sales.map(s=>{
+        const isRefundRow=s.type==='refund';
+        const total=Number(s.total||0);
+        let action='—';
+        if(!isRefundRow){
+          action=refundedSet.has(s.receipt_no)
+            ? '<span style="color:var(--red);font-weight:700;font-size:11px">Refunded</span>'
+            : `<button class="rcpt-btn" style="padding:5px 12px" onclick="openRefund('${esc(s.id||'')}')">Refund</button>`;
+        }
+        return `<tr>
         <td style="color:var(--acc);font-weight:700">${esc(s.receipt_no||'')}</td>
         <td style="color:var(--t2)">${esc(s.date||'')}</td>
         <td>${esc(s.customer||'Walk-in')}</td>
-        <td style="font-weight:700;font-variant-numeric:tabular-nums">${POS_CURRENCY} ${Number(s.total||0).toFixed(2)}</td>
+        <td style="font-weight:700;font-variant-numeric:tabular-nums;${total<0?'color:var(--red)':''}">${POS_CURRENCY} ${total.toFixed(2)}</td>
         <td style="text-transform:capitalize">${esc(s.payment_method||'—')}</td>
-      </tr>`).join('')}</tbody></table>` : (held.length ? '' : '<div style="padding:20px;text-align:center;color:var(--t3)">No transactions yet.</div>');
+        <td>${action}</td>
+      </tr>`;}).join('')}</tbody></table>` : (held.length ? '' : '<div style="padding:20px;text-align:center;color:var(--t3)">No transactions yet.</div>');
     body.innerHTML = heldBlock + salesBlock;
   }catch{body.innerHTML='<div style="padding:40px;text-align:center;color:var(--t3)">Failed to load.</div>';}
 }
@@ -1865,6 +1921,84 @@ async function resumeSale(id){
     toast('Held order resumed — '+(draft.receipt_no||''),'ok');
   }catch(e){
     toast('Failed to resume held order: '+(e.message||e),'err');
+  }
+}
+
+// ── Sales Return / Refund (v1: full-sale only) ──────────────────────────
+// A refund is its own posSales record (type:'refund', negative amounts)
+// mirrored into salesInvoices as a Sales Return — same convention the main
+// Sales module already uses for its own hand-keyed returns, so this shows
+// up in that register automatically. Stock reversal and staying out of the
+// ledger/posting pipeline are handled server-side (app_data.py) purely by
+// this record's shape (type/status/sign), not by anything POS calls
+// differently — see backend/app/routers/app_data.py's sync_pos_stock()
+// and sync_domain_model()'s salesInvoices branch.
+let _refundSale=null;
+async function openRefund(id){
+  if(!id)return;
+  try{
+    const data=await api('/app-data/records/posSales?limit=50');
+    const sale=(data.records||[]).find(s=>s.id===id);
+    if(!sale){toast('Sale not found — refresh and try again','warn');return;}
+    const alreadyRefunded=(data.records||[]).some(s=>s.type==='refund'&&s.original_receipt_no===sale.receipt_no);
+    if(alreadyRefunded){toast('This sale has already been refunded','warn');return;}
+    _refundSale=sale;
+    document.getElementById('refund-receipt').textContent=sale.receipt_no||'';
+    document.getElementById('refund-date').textContent=sale.date||'';
+    document.getElementById('refund-customer').textContent=sale.customer||'Walk-in';
+    document.getElementById('refund-items').innerHTML=(sale.items||[]).map(i=>
+      `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0"><span>${esc(i.qty)} × ${esc(i.name)}</span><span>${POS_CURRENCY} ${(Number(i.line_total||0)+Number(i.line_vat||0)).toFixed(2)}</span></div>`
+    ).join('');
+    document.getElementById('refund-total').textContent=POS_CURRENCY+' '+Number(sale.total||0).toFixed(2);
+    document.getElementById('refund-reason').value='';
+    document.getElementById('ov-refund').style.display='flex';
+    setTimeout(()=>document.getElementById('refund-reason')?.focus(),80);
+  }catch(e){
+    toast('Failed to load sale: '+(e.message||e),'err');
+  }
+}
+function closeRefund(){ document.getElementById('ov-refund').style.display='none'; _refundSale=null; }
+
+async function confirmRefund(){
+  const orig=_refundSale;
+  if(!orig)return;
+  const reason=(document.getElementById('refund-reason')?.value||'').trim();
+  if(!reason){toast('Enter a reason for the refund','warn');return;}
+  const btn=document.getElementById('refund-confirm-btn');
+  if(btn)btn.disabled=true;
+  try{
+    // Re-check right before writing — closes the race where two tills (or
+    // two clicks) have this same sale's refund modal open at once.
+    const data=await api('/app-data/records/posSales?limit=50');
+    if((data.records||[]).some(s=>s.type==='refund'&&s.original_receipt_no===orig.receipt_no)){
+      toast('This sale has already been refunded','warn');
+      closeRefund();
+      return;
+    }
+    const today=new Date().toISOString().slice(0,10);
+    const refund={
+      id:'RET-'+orig.receipt_no, receipt_no:'RET-'+orig.receipt_no,
+      type:'refund', status:'refunded',
+      original_receipt_no:orig.receipt_no, refund_reason:reason,
+      date:today, customer:orig.customer, service_type:orig.service_type||'', table:orig.table||'',
+      items:(orig.items||[]).map(i=>({...i, line_total:-Math.abs(i.line_total||0), line_vat:-Math.abs(i.line_vat||0)})),
+      subtotal:-Number(orig.subtotal||0), vat:-Number(orig.vat||0), discount:-Number(orig.discount||0),
+      order_tax:-Number(orig.order_tax||0), shipping:-Number(orig.shipping||0), packing:-Number(orig.packing||0),
+      total:-Number(orig.total||0), payment_method:orig.payment_method||'cash', company_name:CONAME(),
+    };
+    await saveRec('posSales',refund);
+    await saveRec('salesInvoices', posToInvoice(refund,'Return')).catch(e=>{
+      toast('Refund saved, but it may not appear in Sales Returns: '+e.message,'warn');
+    });
+    _lastSale=refund;
+    closeRefund();
+    closeRecent();
+    showReceipt(refund);
+    toast('Refund completed — '+refund.receipt_no,'ok');
+  }catch(e){
+    toast('Failed to save refund: '+(e.message||e),'err');
+  }finally{
+    if(btn)btn.disabled=false;
   }
 }
 

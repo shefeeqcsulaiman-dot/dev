@@ -73,7 +73,7 @@ def _build_dashboard(db: Session, company_id: str) -> dict[str, Any]:
     revenue = money(db.query(func.coalesce(func.sum(Invoice.subtotal), 0)).filter(Invoice.company_id == company_id, Invoice.status != "draft").scalar())
     revenue += sum((record_amount(row, "subtotal", "net_amount", "amount") for row in app_sales if normalized_ref(row.get("status", "")) != "draft"), Decimal("0.00"))
     open_invoice_count = int(db.query(func.count(Invoice.id)).filter(Invoice.company_id == company_id, Invoice.status != "paid").scalar() or 0)
-    app_open_sales = [row for row in app_sales if not is_paid_status(row.get("status"))]
+    app_open_sales = [row for row in app_sales if not is_paid_status(row.get("status")) and not _is_credit_note(row)]
     open_invoice_count += len(app_open_sales)
     open_invoice_amount = money(db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(Invoice.company_id == company_id, Invoice.status != "paid").scalar())
     open_invoice_amount += sum((record_amount(row, "total", "amount", "net_amount") for row in app_open_sales), Decimal("0.00"))
@@ -532,10 +532,27 @@ def _is_recognized_revenue_status(status: object) -> bool:
     return normalized_ref(status) in {"issued", "paid"}
 
 
+def _is_credit_note(row: dict[str, Any]) -> bool:
+    """A negative-signed return/credit-note document (POS Sales Return v1 —
+    see _is_credit_note_record() in app_data.py, the write-side twin of
+    this check). These never get a real Invoice row (app_data.py skips
+    sync_sales_invoice() for them), so they're never deduped out of
+    app_sales_invoice_records() and must be recognized here instead of via
+    _is_recognized_revenue_status(), whose issued/paid check would
+    otherwise exclude them. Gated on sign, not just status/text, so
+    legacy hand-keyed Sales Returns — stored POSITIVE, excluded from this
+    summary today — keep behaving exactly as they do today; only widening
+    the status list would have retroactively inflated revenue from them."""
+    text = f"{row.get('document_type','')} {row.get('source','')} {row.get('status','')}".lower()
+    return "return" in text and record_amount(row, "total", "amount", "net_amount") < 0
+
+
 def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
     app_sales = app_sales_invoice_records(db, company_id)
     app_purchases = app_data_payloads(db, company_id, "purchaseRecords")
-    recognized_app_sales = [row for row in app_sales if _is_recognized_revenue_status(row.get("status"))]
+    recognized_app_sales = [
+        row for row in app_sales if _is_recognized_revenue_status(row.get("status")) or _is_credit_note(row)
+    ]
     revenue = money(
         db.query(func.coalesce(func.sum(Invoice.total), 0))
         .filter(Invoice.company_id == company_id, Invoice.status.in_(["issued", "paid"]))
@@ -849,7 +866,7 @@ def receivables_aging(db: Session, company_id: str, app_sales: list[dict[str, An
 
     # App sales invoices — have real due_date
     for invoice in app_sales:
-        if is_paid_status(invoice.get("status")):
+        if is_paid_status(invoice.get("status")) or _is_credit_note(invoice):
             continue
         key = str(invoice.get("customer") or invoice.get("customer_name") or "Unknown").strip() or "Unknown"
         e = result.setdefault(key, {k: Decimal("0") for k in ("current", "d1_30", "d31_60", "d61_90", "over90")})
