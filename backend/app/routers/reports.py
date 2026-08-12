@@ -69,7 +69,7 @@ def dashboard(request: Request, db: Session = Depends(get_db), principal: Princi
 def _build_dashboard(db: Session, company_id: str) -> dict[str, Any]:
     app_sales = app_sales_invoice_records(db, company_id)
     app_employees = app_data_payloads(db, company_id, "employees")
-    app_purchases = app_data_payloads(db, company_id, "purchaseRecords")
+    app_purchases = app_purchase_records(db, company_id)
     revenue = money(db.query(func.coalesce(func.sum(Invoice.subtotal), 0)).filter(Invoice.company_id == company_id, Invoice.status != "draft").scalar())
     revenue += sum((record_amount(row, "subtotal", "net_amount", "amount") for row in app_sales if normalized_ref(row.get("status", "")) != "draft"), Decimal("0.00"))
     open_invoice_count = int(db.query(func.count(Invoice.id)).filter(Invoice.company_id == company_id, Invoice.status != "paid").scalar() or 0)
@@ -207,6 +207,37 @@ def app_sales_invoice_records(db: Session, company_id: str) -> list[dict[str, An
     for row in app_data_payloads(db, company_id, "salesInvoices"):
         invoice_ref = normalized_ref(row.get("invoice_no") or row.get("invoice_number") or row.get("ref"))
         if invoice_ref and invoice_ref in existing_refs:
+            continue
+        records.append(row)
+    return records
+
+
+def app_purchase_records(db: Session, company_id: str) -> list[dict[str, Any]]:
+    """purchaseRecords app-data rows, deduped against purchases that already
+    posted a real input TaxLine (saving a purchaseRecords row triggers
+    sync_purchase_accounting() -> approve_and_post_source(), app_data.py's
+    purchaseRecords branch) — the same dedup app_sales_invoice_records()
+    already does against Invoice, applied to the purchase side. Without
+    this, _build_summary()'s input_vat double-counted: once from the real
+    TaxLine, once from the raw app-data row's own tax_amount, for every
+    normally-posted purchase — understating net_vat_payable."""
+    existing_refs = {
+        normalized_ref(reference)
+        for (reference,) in db.query(SourceTransaction.reference)
+        .join(TaxLine, TaxLine.source_id == SourceTransaction.id)
+        .filter(
+            SourceTransaction.company_id == company_id,
+            SourceTransaction.module == "purchase",
+            TaxLine.direction == "input",
+        )
+        .distinct()
+        .all()
+        if normalized_ref(reference)
+    }
+    records = []
+    for row in app_data_payloads(db, company_id, "purchaseRecords"):
+        purchase_ref = normalized_ref(row.get("ref") or row.get("invoice_no") or row.get("id"))
+        if purchase_ref and purchase_ref in existing_refs:
             continue
         records.append(row)
     return records
@@ -444,10 +475,18 @@ def invoice_status(db: Session, company_id: str, app_sales: list[dict[str, Any]]
 
 
 @router.get("/debug/purchase")
-def debug_purchase(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict[str, Any]:
-    """Diagnostic: shows exactly what is stored in DB for bills/purchaseRecords."""
+@limiter.limit("120/minute")
+def debug_purchase(
+    request: Request,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("reports:view")),
+) -> dict[str, Any]:
+    """Diagnostic: shows exactly what is stored in DB for bills/purchaseRecords.
+    Was bare get_current_user (any authenticated session, no rate limit) —
+    a branch-assigned employee with no reports access could read company-wide
+    purchase data through it; now gated the same as every other report."""
     import json as _json
-    company_id = current_user.company_id
+    company_id = principal.company_id
     rows = (
         db.query(AppDataRecord)
         .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection.in_(["bills", "purchaseRecords"]))
@@ -549,7 +588,7 @@ def _is_credit_note(row: dict[str, Any]) -> bool:
 
 def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
     app_sales = app_sales_invoice_records(db, company_id)
-    app_purchases = app_data_payloads(db, company_id, "purchaseRecords")
+    app_purchases = app_purchase_records(db, company_id)
     recognized_app_sales = [
         row for row in app_sales if _is_recognized_revenue_status(row.get("status")) or _is_credit_note(row)
     ]
