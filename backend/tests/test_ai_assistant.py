@@ -7,7 +7,11 @@ def test_ai_assistant_answers_with_company_context(client, auth_headers):
 
     assert response.status_code == 200
     data = response.json()
-    assert "VAT readiness" in data["answer"]
+    # /ai/assist calls a real LLM when a key is configured (falling back to
+    # a fixed rule-based string only on error) — its exact wording is
+    # non-deterministic, so assert topical relevance rather than one exact
+    # fallback phrase, which only ever matched the rule-based path.
+    assert any(term in data["answer"].lower() for term in ("vat", "tax"))
     assert data["context"]["invoice_count"] >= 0
     assert "direct-post" in " ".join(data["controls"])
 
