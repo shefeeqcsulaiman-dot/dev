@@ -112,10 +112,6 @@
 
   <div class="sb-section">
     <div class="sb-lbl" data-i18n="sb_company">Company</div>
-    <div class="nav" data-module="branches" onclick="go('branches')">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 14s5-4.5 5-8a5 5 0 10-10 0c0 3.5 5 8 5 8z"/><circle cx="8" cy="6" r="1.8"/></svg>
-      <span data-i18n="sb_branches">Branches</span>
-    </div>
     <div class="nav" data-module="settings" onclick="go('settings')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14V6l6-4 6 4v8"/><path d="M6 14v-4h4v4"/></svg>
       <span data-i18n="sb_settings">Company &amp; Settings</span>
@@ -3461,25 +3457,11 @@
 <!-- ═══════════════════ EXCEPTION CENTER ═══════════════════ -->
 <div class="page" id="page-exception"></div>
 
-<!-- ═══════════════════ BRANCHES MODULE ═══════════════════ -->
-<div class="page" id="page-branches">
-  <div class="card">
-    <div class="card-hd">
-      <div><div class="card-title">Branches / Locations</div><div class="card-sub">Manage company branches and office locations, and branch login access</div></div>
-      <button class="btn btn-p btn-sm" onclick="showBranchModal()">+ Add Branch</button>
-    </div>
-    <table class="tbl">
-      <thead><tr><th>Code</th><th>Branch Name</th><th>City / Emirate</th><th>Status</th><th></th></tr></thead>
-      <tbody id="branch-tbody"><tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px">Loading branches…</td></tr></tbody>
-    </table>
-  </div>
-</div>
-
 <!-- ═══════════════════ SETTINGS MODULE ═══════════════════ -->
 <div class="page" id="page-settings">
   <div class="tabs">
     <div class="tab on" onclick="stab(this,'set-company')">Company Registration</div>
-    <div class="tab" onclick="stab(this,'set-depts');renderDeptTable()">Departments</div>
+    <div class="tab" onclick="stab(this,'set-depts');renderDeptTable();renderBranchTable()">Departments &amp; Branches</div>
     <div class="tab" onclick="stab(this,'set-users')">Users & Roles</div>
     <div class="tab" onclick="stab(this,'set-tax')">Tax Settings</div>
     <div class="tab" onclick="stab(this,'set-notif')">Notifications</div>
@@ -3586,9 +3568,9 @@
 
   </div>
 
-  <!-- Departments tab -->
+  <!-- Departments & Branches tab -->
   <div class="tab-body" id="set-depts">
-    <div class="card">
+    <div class="card mb16">
       <div class="card-hd">
         <div><div class="card-title">Departments</div><div class="card-sub">Manage company departments used in employee profiles, payroll, and reporting</div></div>
         <button class="btn btn-p btn-sm" onclick="showDeptModal()">+ Add Department</button>
@@ -3598,6 +3580,16 @@
         <tbody id="dept-tbody">
           <tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">Loading departments…</td></tr>
         </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-hd">
+        <div><div class="card-title">Branches / Locations</div><div class="card-sub">Manage company branches and office locations, and branch login access</div></div>
+        <button class="btn btn-p btn-sm" onclick="showBranchModal()">+ Add Branch</button>
+      </div>
+      <table class="tbl">
+        <thead><tr><th>Code</th><th>Branch Name</th><th>City / Emirate</th><th>Status</th><th></th></tr></thead>
+        <tbody id="branch-tbody"><tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px">Loading branches…</td></tr></tbody>
       </table>
     </div>
   </div>
