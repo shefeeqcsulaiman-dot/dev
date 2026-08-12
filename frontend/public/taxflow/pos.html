@@ -1144,6 +1144,7 @@ async function posLogin(e){
   btn.disabled=true; btn.textContent='Signing in…'; err.style.display='none';
   try{
     let token=null;
+    let principalKind=null;
     const res=await fetch(APIBASE+'/auth/login',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -1152,6 +1153,7 @@ async function posLogin(e){
     const data=await res.json();
     if(res.ok&&data.access_token){
       token=data.access_token;
+      principalKind='user';
     }else{
       // Not a TaxFlow admin account — try as a branch/HRMS sub-user
       // (Employee RBAC login, same identity used by login.html's own
@@ -1164,6 +1166,14 @@ async function posLogin(e){
       const hrData=await hrRes.json();
       if(hrRes.ok&&hrData.access_token){
         token=hrData.access_token;
+        principalKind='employee';
+      }else if(hrRes.status===403){
+        // A 403 (vs 401) means a real employee account was found but
+        // something specific blocks it (disabled account, suspended
+        // company) — stop here with that reason instead of falling through
+        // to branch-login and reporting a generic "invalid credentials",
+        // same as login.html's own fallback chain.
+        throw new Error(hrData.detail||'This account is blocked');
       }else{
         // Not an admin, not an employee — try as a Branch Login (Phase 2):
         // the branch entity's own shared login, same username/password
@@ -1176,9 +1186,16 @@ async function posLogin(e){
         const brData=await brRes.json();
         if(!brRes.ok||!brData.access_token) throw new Error(data.detail||hrData.detail||brData.detail||'Login failed');
         token=brData.access_token;
+        principalKind='branch';
       }
     }
     localStorage.setItem('taxflow_token', token);
+    // Every other page (index.html/app.js) reads this to know which
+    // identity is active — without it, exiting POS to '/' was silently
+    // treated as an admin session and re-triggered the same admin-only
+    // bootstrap cascade that force-logged-out real Branch/Employee
+    // sessions elsewhere in the app.
+    localStorage.setItem('taxflow_principal_kind', principalKind);
     document.getElementById('pos-auth').style.display='none';
     btn.textContent='Sign In'; btn.disabled=false;
     const ok=await checkAuth();
