@@ -813,11 +813,11 @@ button{cursor:pointer;border:none;background:none;}
           <span class="pquick-ico" style="background:var(--amb)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="2" width="10" height="12" rx="1"/><path d="M6 6h4M6 9h4"/></svg></span>
           <span><span class="pquick-label">Hold Order</span><span class="pquick-sub" style="display:block">Save order for later</span></span>
         </button>
-        <button class="pquick-btn" onclick="priceCheck()">
+        <button class="pquick-btn" onclick="openPriceCheck()">
           <span class="pquick-ico" style="background:var(--pur)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5l3 3"/></svg></span>
           <span><span class="pquick-label">Price Check</span><span class="pquick-sub" style="display:block">Check product price</span></span>
         </button>
-        <button class="pquick-btn" onclick="stockLookup()">
+        <button class="pquick-btn" onclick="openStockLookup()">
           <span class="pquick-ico" style="background:var(--teal)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="7" width="14" height="2"/><path d="M3 9v4M13 9v4M2 7V4a1 1 0 011-1h10a1 1 0 011 1v3"/></svg></span>
           <span><span class="pquick-label">Stock Lookup</span><span class="pquick-sub" style="display:block">Check stock availability</span></span>
         </button>
@@ -912,6 +912,36 @@ button{cursor:pointer;border:none;background:none;}
     <div id="ov-recent-items-body"></div>
     <div style="margin-top:14px">
       <button class="rcpt-btn" style="width:100%" onclick="closeRecentItems()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Price Check ── -->
+<div class="ov" id="ov-price-check" style="display:none">
+  <div class="ov-box" style="width:380px;max-height:calc(100vh - 80px);overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="ov-title">Price Check</div>
+      <button onclick="closePriceCheck()" style="background:none;border:none;font-size:18px;color:var(--t3);line-height:1;cursor:pointer;padding:4px;border-radius:6px;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--t3)'">✕</button>
+    </div>
+    <input type="text" id="pc-query" placeholder="Search by name or code…" oninput="renderPriceCheckResults(this.value)" style="margin-bottom:10px">
+    <div id="pc-results"></div>
+    <div style="margin-top:14px">
+      <button class="rcpt-btn" style="width:100%" onclick="closePriceCheck()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Stock Lookup ── -->
+<div class="ov" id="ov-stock-lookup" style="display:none">
+  <div class="ov-box" style="width:380px;max-height:calc(100vh - 80px);overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="ov-title">Stock Lookup</div>
+      <button onclick="closeStockLookup()" style="background:none;border:none;font-size:18px;color:var(--t3);line-height:1;cursor:pointer;padding:4px;border-radius:6px;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--t3)'">✕</button>
+    </div>
+    <input type="text" id="sl-query" placeholder="Search by name or code…" oninput="renderStockLookupResults(this.value)" style="margin-bottom:10px">
+    <div id="sl-results"></div>
+    <div style="margin-top:14px">
+      <button class="rcpt-btn" style="width:100%" onclick="closeStockLookup()">Close</button>
     </div>
   </div>
 </div>
@@ -1785,19 +1815,58 @@ async function openRecent(){
   body.innerHTML='<div style="padding:40px;text-align:center;color:var(--t3)">Loading…</div>';
   try{
     const data=await api('/app-data/records/posSales?limit=50');
-    const sales=(data.records||[]).filter(s=>s.status!=='draft'&&s.status!=='suspended').sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
-    if(!sales.length){body.innerHTML='<div style="padding:40px;text-align:center;color:var(--t3)">No transactions yet.</div>';return;}
-    body.innerHTML=`<table><thead><tr><th>Receipt</th><th>Date</th><th>Customer</th><th>Total</th><th>Payment</th></tr></thead>
+    const all=(data.records||[]).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+    const held=all.filter(s=>s.status==='draft'||s.status==='suspended');
+    const sales=all.filter(s=>s.status!=='draft'&&s.status!=='suspended');
+    if(!all.length){body.innerHTML='<div style="padding:40px;text-align:center;color:var(--t3)">No transactions yet.</div>';return;}
+    const heldBlock = held.length ? `
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#b45309;margin-bottom:6px">Held Orders</div>
+      <table style="margin-bottom:16px"><tbody>${held.map(s=>`<tr>
+        <td style="color:var(--acc);font-weight:700">${esc(s.receipt_no||'')}</td>
+        <td style="color:var(--t2)">${esc(s.date||'')}</td>
+        <td>${esc(s.customer||'Walk-in')}</td>
+        <td style="font-weight:700;font-variant-numeric:tabular-nums">${POS_CURRENCY} ${Number(s.total||0).toFixed(2)}</td>
+        <td><button class="rcpt-btn" style="padding:5px 12px" onclick="resumeSale('${esc(s.id||'')}')">Resume</button></td>
+      </tr>`).join('')}</tbody></table>` : '';
+    const salesBlock = sales.length ? `<table><thead><tr><th>Receipt</th><th>Date</th><th>Customer</th><th>Total</th><th>Payment</th></tr></thead>
       <tbody>${sales.map(s=>`<tr>
         <td style="color:var(--acc);font-weight:700">${esc(s.receipt_no||'')}</td>
         <td style="color:var(--t2)">${esc(s.date||'')}</td>
         <td>${esc(s.customer||'Walk-in')}</td>
         <td style="font-weight:700;font-variant-numeric:tabular-nums">${POS_CURRENCY} ${Number(s.total||0).toFixed(2)}</td>
         <td style="text-transform:capitalize">${esc(s.payment_method||'—')}</td>
-      </tr>`).join('')}</tbody></table>`;
+      </tr>`).join('')}</tbody></table>` : (held.length ? '' : '<div style="padding:20px;text-align:center;color:var(--t3)">No transactions yet.</div>');
+    body.innerHTML = heldBlock + salesBlock;
   }catch{body.innerHTML='<div style="padding:40px;text-align:center;color:var(--t3)">Failed to load.</div>';}
 }
 function closeRecent(){ document.getElementById('ov-recent').style.display='none'; }
+
+// Resume a held order (Hold Order quick action) back into the live cart.
+// Held orders are saveAs('draft') records — previously these could be
+// created but never reopened anywhere in the UI, so "Hold Order" quietly
+// went nowhere. Deletes the draft after loading it so it can't be resumed
+// twice into two different carts.
+async function resumeSale(id){
+  if(!id)return;
+  if(_cart.length && !confirm('Resume this held order? Your current cart will be replaced.'))return;
+  try{
+    const data=await api('/app-data/records/posSales?limit=50');
+    const draft=(data.records||[]).find(s=>s.id===id);
+    if(!draft){toast('Held order not found — it may have already been resumed','warn');return;}
+    _cart=(draft.items||[]).map(i=>({id:i.id,code:i.code||'',name:i.name,price:i.price,vatRate:i.vatRate,qty:i.qty,unit:i.unit||'PCS'}));
+    const custEl=document.getElementById('pos-cust');
+    if(custEl)custEl.value=draft.customer||'Walk-In Customer';
+    if(draft.discount)document.getElementById('s-disc').value=draft.discount;
+    await api('/app-data?action=delete',{method:'POST',body:{collection:'posSales',record:{id:draft.id}}}).catch(e=>{
+      console.warn('Failed to clear held order after resume:',e);
+    });
+    renderCart();
+    closeRecent();
+    toast('Held order resumed — '+(draft.receipt_no||''),'ok');
+  }catch(e){
+    toast('Failed to resume held order: '+(e.message||e),'err');
+  }
+}
 
 // ── Quick actions strip ─────────────────────────────────────────────────
 function openRecentItems(){
@@ -1826,27 +1895,75 @@ function addRecentItemToCart(id){
   toast(`${r.name} added`,'ok');
 }
 
-function priceCheck(){
-  const query=(prompt('Enter product name or code to check its price:')||'').trim().toLowerCase();
-  if(!query)return;
-  const match=_products.find(p=>String(p.name||'').toLowerCase().includes(query)||String(p.code||'').toLowerCase()===query);
-  if(!match){toast(`No product matching "${query}"`,'warn');return;}
-  const price=Number(match.selling_price||match.price||match.unit_price||match.sales_price||match.cost||0);
-  const vatRate=parseVat(match.vat);
-  toast(`${match.name}: ${POS_CURRENCY} ${price.toFixed(2)}${vatRate?` +${vatRate}% VAT`:''}`,'info');
+// Price Check / Stock Lookup used to be blocking prompt() dialogs (one
+// shot, no results list, freezes the tab while open) — now a live-search
+// modal each, matching the rest of POS's UI.
+function openPriceCheck(){
+  const q=document.getElementById('pc-query');
+  if(q)q.value='';
+  renderPriceCheckResults('');
+  document.getElementById('ov-price-check').style.display='flex';
+  setTimeout(()=>document.getElementById('pc-query')?.focus(),80);
+}
+function closePriceCheck(){ document.getElementById('ov-price-check').style.display='none'; }
+function renderPriceCheckResults(q){
+  const query=(q||'').trim().toLowerCase();
+  const body=document.getElementById('pc-results');
+  if(!body)return;
+  const matches=(query
+    ? _products.filter(p=>String(p.name||'').toLowerCase().includes(query)||String(p.code||'').toLowerCase().includes(query))
+    : _products
+  ).slice(0,20);
+  if(!matches.length){
+    body.innerHTML='<div style="padding:24px;text-align:center;color:var(--t3)">No matching products.</div>';
+    return;
+  }
+  body.innerHTML=matches.map(p=>{
+    const price=Number(p.selling_price||p.price||p.unit_price||p.sales_price||p.cost||0);
+    const vatRate=parseVat(p.vat);
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 4px;border-bottom:1px solid var(--bd)">
+      <div><div style="font-weight:700;font-size:12.5px">${esc(p.name)}</div><div style="font-size:11px;color:var(--t3)">${esc(p.code||'')}</div></div>
+      <div style="text-align:right"><div style="font-weight:700;font-size:13px">${POS_CURRENCY} ${price.toFixed(2)}</div>${vatRate?`<div style="font-size:10.5px;color:var(--t3)">+${vatRate}% VAT</div>`:''}</div>
+    </div>`;
+  }).join('');
 }
 
-async function stockLookup(){
-  const query=(prompt('Enter product name or code to check stock:')||'').trim().toLowerCase();
-  if(!query)return;
+let _stockLevelsCache=null;
+async function openStockLookup(){
+  const q=document.getElementById('sl-query');
+  if(q)q.value='';
+  const body=document.getElementById('sl-results');
+  if(body)body.innerHTML='<div style="padding:24px;text-align:center;color:var(--t3)">Loading stock levels…</div>';
+  document.getElementById('ov-stock-lookup').style.display='flex';
+  setTimeout(()=>document.getElementById('sl-query')?.focus(),80);
   try{
-    const rows=await api('/inventory/stock-levels');
-    const match=(Array.isArray(rows)?rows:[]).find(r=>String(r.name||'').toLowerCase().includes(query)||String(r.code||'').toLowerCase()===query);
-    if(!match){toast(`No stock record matching "${query}"`,'warn');return;}
-    toast(`${match.name}: ${Number(match.current_stock||0)} in stock`,'info');
+    if(!_stockLevelsCache){
+      const rows=await api('/inventory/stock-levels');
+      _stockLevelsCache=Array.isArray(rows)?rows:[];
+    }
+    renderStockLookupResults('');
   }catch{
-    toast('Stock lookup failed — try again','err');
+    if(body)body.innerHTML='<div style="padding:24px;text-align:center;color:var(--t3)">Failed to load stock levels.</div>';
   }
+}
+function closeStockLookup(){ document.getElementById('ov-stock-lookup').style.display='none'; }
+function renderStockLookupResults(q){
+  const query=(q||'').trim().toLowerCase();
+  const body=document.getElementById('sl-results');
+  if(!body)return;
+  const rows=_stockLevelsCache||[];
+  const matches=(query
+    ? rows.filter(r=>String(r.name||'').toLowerCase().includes(query)||String(r.code||'').toLowerCase().includes(query))
+    : rows
+  ).slice(0,20);
+  if(!matches.length){
+    body.innerHTML='<div style="padding:24px;text-align:center;color:var(--t3)">No matching stock records.</div>';
+    return;
+  }
+  body.innerHTML=matches.map(r=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 4px;border-bottom:1px solid var(--bd)">
+      <div><div style="font-weight:700;font-size:12.5px">${esc(r.name)}</div><div style="font-size:11px;color:var(--t3)">${esc(r.code||'')}</div></div>
+      <div style="font-weight:700;font-size:13px">${Number(r.current_stock||0)} in stock</div>
+    </div>`).join('');
 }
 
 function focusOrderDiscount(){
