@@ -335,6 +335,10 @@ body:not(.theme-light) .nbadge.red{background:var(--red);}
 .row-actions{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:opacity .15s;}
 .tbl tbody tr .row-actions{opacity:.45;}
 .tbl tbody tr:hover .row-actions,.tbl tbody tr:focus-within .row-actions{opacity:1;}
+/* Fade-until-hover is a nice progressive-disclosure touch for a mouse, but
+   devices that report no hover capability at all (phones/tablets) would
+   otherwise never see these actions become discoverable. */
+@media (hover:none){.tbl tbody tr .row-actions{opacity:1;}}
 .ai-card-toolbar{gap:12px;flex-wrap:wrap;}
 .ai-card-controls{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
 .ai-view-toggle{display:inline-flex;align-items:center;border:1px solid var(--border2);border-radius:8px;background:var(--bg3);padding:3px;gap:3px;}

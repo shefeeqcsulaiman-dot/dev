@@ -17678,9 +17678,13 @@ function renderCandidateRecord(rec){
 function filterCandidates(stage,btn){
   document.querySelectorAll('.cand-filter-btn').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
-  document.querySelectorAll('#candidates-tbody tr:not([data-empty-state])').forEach(tr=>{
-    tr.style.display=(stage==='all'||tr.dataset.stage===stage)?'':'none';
-  });
+  // Previously toggled row.style.display directly, which the shared table
+  // system's search/pagination silently undid on the next keystroke or
+  // Prev/Next click (they recompute every row's visibility from scratch
+  // with no awareness of this filter) — routed through
+  // setTableExternalFilter() instead so it stays in effect.
+  const table=document.getElementById('candidates-tbody')?.closest('table');
+  setTableExternalFilter(table,stage==='all'?null:(tr=>tr.dataset.stage===stage));
 }
 
 function refreshRecruitmentStats(){
@@ -20859,9 +20863,16 @@ function enhanceTable(table){
   shell.appendChild(scroll);
   scroll.appendChild(table);
 
+  // Opt-in for tables that already have their own outer pagination (e.g.
+  // Purchase Records / Ledger fetch server-side pages of 100 via their own
+  // Previous/Next buttons) — defaulting the inner client-side pager to "all"
+  // avoids two independent Prev/Next controls fighting over the same rows.
+  // Search, CSV export, and the ability to manually pick a smaller page
+  // size are unaffected.
+  const defaultPageSize=table.dataset.defaultPageSize==='all'?'all':10;
   const state={
     page:1,
-    pageSize:10,
+    pageSize:defaultPageSize,
     query:'',
     input:controls.querySelector('.tbl-search'),
     size:controls.querySelector('.tbl-size'),
@@ -20870,6 +20881,7 @@ function enhanceTable(table){
     exportBtn:controls.querySelector('.tbl-export'),
     info:controls.querySelector('.tbl-info')
   };
+  if(defaultPageSize==='all'&&state.size)state.size.value='all';
   tableEnhanceState.set(table,state);
 
   state.input.addEventListener('input',()=>{
@@ -20892,7 +20904,8 @@ function enhanceTable(table){
     refreshEnhancedTable(table);
   });
   state.next.addEventListener('click',()=>{
-    const matched=getTableRows(table).filter(row=>!state.query||row.textContent.toLowerCase().includes(state.query));
+    const nextScopedRows=state.externalFilter?getTableRows(table).filter(state.externalFilter):getTableRows(table);
+    const matched=nextScopedRows.filter(row=>!state.query||row.textContent.toLowerCase().includes(state.query));
     const pageSize=state.pageSize==='all'?matched.length||1:state.pageSize;
     const totalPages=Math.max(1,Math.ceil(matched.length/pageSize));
     if(state.page>=totalPages){
@@ -21254,6 +21267,18 @@ function getTableDataRows(table){
   );
 }
 
+// Scopes an enhanced table to a subset of rows (e.g. a status/stage filter
+// chip) so search and pagination operate within that subset instead of
+// ignoring it — see the comment in refreshEnhancedTable(). Pass null to
+// clear the filter. No-op if the table hasn't been enhanced yet.
+function setTableExternalFilter(table,predicateOrNull){
+  const state=table&&tableEnhanceState.get(table);
+  if(!state)return;
+  state.externalFilter=predicateOrNull||null;
+  state.page=1;
+  refreshEnhancedTable(table);
+}
+
 function refreshEnhancedTable(table){
   if(!table)return;
   if(skipTableTools(table)){
@@ -21270,8 +21295,15 @@ function refreshEnhancedTable(table){
   }
   const rows=getTableRows(table);
   const dataRows=getTableDataRows(table);
+  // Lets a feature (e.g. HRMS Candidates' stage-filter chips) scope which
+  // rows are eligible at all, before search/pagination narrow that further
+  // — see setTableExternalFilter(). Without this, any table-level filter
+  // built by directly toggling row.style.display gets silently undone the
+  // next time the user searches, changes rows-per-page, or clicks Prev/Next,
+  // since those all recompute visibility for every row from scratch.
+  const scopedRows=state.externalFilter?dataRows.filter(state.externalFilter):dataRows;
   const query=state.query;
-  const matched=dataRows.filter(row=>!query||row.textContent.toLowerCase().includes(query));
+  const matched=scopedRows.filter(row=>!query||row.textContent.toLowerCase().includes(query));
   const pageSize=state.pageSize==='all'?matched.length||1:state.pageSize;
   const totalPages=Math.max(1,Math.ceil(matched.length/pageSize));
   state.page=Math.min(Math.max(1,state.page),totalPages);
