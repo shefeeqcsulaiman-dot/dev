@@ -1527,7 +1527,7 @@
           <button class="btn btn-p btn-sm" type="button" onclick="openPurchaseAddChoice()">+ Manual Entry</button>
         </div>
       </div>
-      <table class="tbl" data-delete-actions-bound="skip">
+      <table class="tbl" data-delete-actions-bound="skip" data-default-page-size="all">
         <thead><tr><th>Ref No.</th><th>Product Name</th><th>Supplier</th><th>Date</th><th>Location</th><th>Items</th><th>Net Amount</th><th>Tax</th><th>Shipping</th><th>Total</th><th>Paid</th><th>Due</th><th>Source</th><th>Status</th><th data-action-col="1">Actions</th></tr></thead>
         <tbody id="purchase-record-tbody">
           <tr data-empty-state="1"><td colspan="15" style="color:var(--text3);text-align:center">No purchase records in database yet.</td></tr>
@@ -2538,7 +2538,7 @@
           <button class="btn btn-r btn-sm" onclick="clearLedgerRecords()">Clear Records</button>
         </div>
       </div>
-      <table class="tbl">
+      <table class="tbl" data-default-page-size="all">
         <thead><tr><th>Date</th><th>Ref No.</th><th>Description</th><th>Debit (AED)</th><th>Credit (AED)</th><th>Balance (AED)</th></tr></thead>
         <tbody id="ledger-tbody">
           <tr data-account="Accounts Receivable"><td>20 Jun</td><td class="mono">INV-0848</td><td>Dubai Steel Co. — Invoice</td><td class="mono">44,100</td><td>—</td><td class="mono">44,100</td></tr>
