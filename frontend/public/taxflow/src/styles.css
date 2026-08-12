@@ -1139,8 +1139,20 @@ body:not(.theme-light) .mb3-vat-side{background:linear-gradient(180deg,rgba(139,
 .spark span{flex:1;border-radius:3px 3px 0 0;background:var(--accent-glow);min-height:6px;}
 .ai-card{background:linear-gradient(135deg,rgba(79,142,240,.14),rgba(62,207,142,.08));border:1px solid var(--border2);border-radius:var(--r-lg);padding:14px 16px;}
 .ai-score{font-family:'DM Mono',monospace;font-size:28px;color:var(--green);letter-spacing:-1px;}
-.ai-agent-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:stretch;}
+.ai-agent-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,320px);gap:14px;align-items:start;}
 .ai-chat-card{display:flex;flex-direction:column;min-height:620px;padding-bottom:14px;}
+.ai-workbench-card{display:flex;flex-direction:column;gap:2px;}
+.ai-workbench-stat{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);}
+.ai-workbench-stat:last-child{border-bottom:none;}
+.ai-workbench-stat span{font-size:11.5px;color:var(--text3);}
+.ai-workbench-stat b{font-family:'DM Mono',monospace;font-size:14.5px;color:var(--text);font-weight:600;}
+.ai-suggestions-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);font-weight:700;margin:12px 0 6px;}
+.ai-typing{display:inline-flex;gap:4px;align-items:center;padding:3px 0;}
+.ai-typing i{width:6px;height:6px;border-radius:50%;background:var(--text3);display:inline-block;animation:ai-typing-bounce 1.1s infinite ease-in-out;font-style:normal;}
+.ai-typing i:nth-child(2){animation-delay:.15s;}
+.ai-typing i:nth-child(3){animation-delay:.3s;}
+@keyframes ai-typing-bounce{0%,60%,100%{transform:translateY(0);opacity:.4;}30%{transform:translateY(-4px);opacity:1;}}
+@media (prefers-reduced-motion:reduce){.ai-typing i{animation:none;opacity:.7;}}
 .ai-thread{flex:1;min-height:360px;max-height:560px;overflow-y:auto;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px;}
 .ai-msg{display:flex;gap:10px;align-items:flex-start;}
 .ai-msg-user{justify-content:flex-end;}

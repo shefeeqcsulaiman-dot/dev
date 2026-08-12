@@ -20582,26 +20582,51 @@ function renderAIWorkbench(data){
   const snapshot=data?.context||{};
   const target=document.getElementById('ai-workbench-snapshot');
   if(target){
+    const openExceptions=Number(snapshot.open_exception_count)||0;
     target.innerHTML=`
-      <div class="toggle-row"><div><div>Document intake</div><div class="toggle-copy">Extracts fields into drafts only; no direct posting.</div></div><span class="b b-g">Ready</span></div>
-      <div class="toggle-row"><div><div>VAT validation</div><div class="toggle-copy">Net VAT from posted tax lines: AED ${escapeHtml(snapshot.net_vat??'0.00')}</div></div><span class="b b-a">Review</span></div>
-      <div class="toggle-row"><div><div>Accounting coding</div><div class="toggle-copy">${escapeHtml(snapshot.source_transaction_count??0)} source transactions available for mapping review.</div></div><span class="b b-g">Assistive</span></div>
-      <div class="toggle-row"><div><div>Exception explanations</div><div class="toggle-copy">${escapeHtml(snapshot.open_exception_count??0)} open saved exceptions can be explained from Exception Center.</div></div><span class="b ${(Number(snapshot.open_exception_count)||0)>0?'b-a':'b-g'}">Live</span></div>
-      <div class="toggle-row"><div><div>Audit-aware answers</div><div class="toggle-copy">${escapeHtml(snapshot.audit_log_count??0)} audit records available for context.</div></div><span class="b b-b">Scoped</span></div>
+      <div class="ai-workbench-stat"><span>Source transactions</span><b>${escapeHtml(snapshot.source_transaction_count??0)}</b></div>
+      <div class="ai-workbench-stat"><span>Invoices tracked</span><b>${escapeHtml(snapshot.invoice_count??0)}</b></div>
+      <div class="ai-workbench-stat"><span>Open exceptions</span><b style="color:${openExceptions>0?'var(--amber)':'var(--text)'}">${escapeHtml(snapshot.open_exception_count??0)}</b></div>
+      <div class="ai-workbench-stat"><span>Net VAT (posted)</span><b>AED ${escapeHtml(snapshot.net_vat??'0.00')}</b></div>
+      <div class="ai-workbench-stat"><span>Audit records</span><b>${escapeHtml(snapshot.audit_log_count??0)}</b></div>
     `;
+  }
+  const actionsBox=document.getElementById('ai-workbench-actions');
+  if(actionsBox){
+    const items=(data?.suggested_actions||[]).slice(0,3).map(item=>`<div>- ${escapeHtml(item)}</div>`).join('');
+    actionsBox.innerHTML=items?`<strong>Recommended next</strong>${items}`:'';
   }
   const status=document.getElementById('ai-workbench-status');
   if(status)status.textContent=data?.answer||'AI workbench is ready.';
 }
 
 function loadAIWorkbench(){
+  const status=document.getElementById('ai-workbench-status');
+  if(status)status.textContent='Refreshing snapshot…';
   moduleApi('/ai/workbench')
     .then(renderAIWorkbench)
     .catch(err=>{
       console.warn('AI workbench unavailable:',err);
-      const status=document.getElementById('ai-workbench-status');
+      const target=document.getElementById('ai-workbench-snapshot');
+      if(target)target.innerHTML='<div class="empty-card">Snapshot unavailable right now.</div>';
       if(status)status.textContent='AI backend unavailable. Local guide answers still work.';
     });
+}
+
+function aiThreadStorageKey(){return 'taxflow_ai_thread_v1';}
+
+function persistAIThread(){
+  const thread=document.getElementById('system-ai-thread');
+  if(!thread)return;
+  try{localStorage.setItem(aiThreadStorageKey(),thread.innerHTML);}catch(err){/* storage unavailable */}
+}
+
+function restoreAIThread(){
+  const thread=document.getElementById('system-ai-thread');
+  if(!thread)return;
+  let saved=null;
+  try{saved=localStorage.getItem(aiThreadStorageKey());}catch(err){/* storage unavailable */}
+  if(saved)thread.innerHTML=saved;
 }
 
 function buildSystemAIResponse(question){
@@ -20679,7 +20704,7 @@ async function askSystemAI(prompt){
   }
   if(input)input.value=prompt?'':input.value;
   appendAIMessage('user',escapeHtml(question),'You');
-  const pending=appendAIMessage('agent','<span style="color:var(--text3)">Thinking through the TaxFlow controls...</span>','TaxFlow AI');
+  const pending=appendAIMessage('agent','<span class="ai-typing"><i></i><i></i><i></i></span>','TaxFlow AI');
   if(input&&!prompt)input.value='';
   if(send)send.disabled=true;
   setAIStatus('TaxFlow AI is answering...');
@@ -20700,6 +20725,7 @@ async function askSystemAI(prompt){
   }finally{
     if(send)send.disabled=false;
     document.getElementById('system-ai-thread')?.scrollTo({top:document.getElementById('system-ai-thread').scrollHeight,behavior:'smooth'});
+    persistAIThread();
   }
   toast('AI assistant answered','ok');
   audit('Asked AI assistant',question.slice(0,60),'Answered');
@@ -20720,6 +20746,7 @@ function clearSystemAI(){
       </div>
     `;
   }
+  try{localStorage.removeItem(aiThreadStorageKey());}catch(err){/* storage unavailable */}
   setAIStatus('Chat cleared. Ask a new TaxFlow question.');
 }
 
@@ -22810,6 +22837,8 @@ function initApp(){
   updateBackButton();
 
   restoreSalesInvoices();
+  restoreAIThread();
+  if(document.getElementById('page-ai'))scheduleIdleTask(loadAIWorkbench,600);
   renderAuditLog();
   initInvoiceLayouts();
   updateInvoiceLayoutPreview();
