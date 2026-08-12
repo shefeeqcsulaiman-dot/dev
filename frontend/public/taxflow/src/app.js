@@ -1941,6 +1941,18 @@ function logout(){
     'taxflow_biz_locations',
     'taxflow_user_role',
     'taxflow_user_display_name',
+    // Previously left behind, causing real cross-session leakage: a stale
+    // taxflow_active_branch_id survives logout and gets appended to every
+    // branch-aware API call (_withActiveBranchParam) for the NEXT person
+    // who logs in on the same browser, silently filtering their data to
+    // the previous session's branch. taxflow_superadmin_token surviving
+    // logout leaves a privileged JWT usable for up to its full hour of
+    // validity after the user believes they've logged out.
+    'taxflow_principal_kind',
+    'taxflow_active_branch_id',
+    'taxflow_superadmin_token',
+    'ess_token',
+    'hr_access_token',
   ];
   keysToRemove.forEach(k=>localStorage.removeItem(k));
   window.location.replace('/login');
@@ -2396,7 +2408,24 @@ async function authenticatedFetch(url,options={}){
   // force a re-login; a permission-limited sub-user hitting one 403 would
   // otherwise get logged out (or, in dev, silently re-escalated to the
   // seed admin) the instant any permission check correctly denies them.
+  //
+  // A 401 with detail "User no longer exists" (get_current_user(),
+  // dependencies.py) is the SAME kind of scoped rejection, not an invalid
+  // session: it fires whenever a Branch/Employee token — whose JWT subject
+  // is never a real User.id by design — hits a User-only endpoint. Treating
+  // that identically to a genuinely expired/invalid token (detail "Invalid
+  // access token", from any JWTError including real expiry) used to
+  // force-log-out a perfectly valid Branch/Employee session the instant ANY
+  // call site forgot to guard against it (e.g. the loadAIWorkbench() bug,
+  // and loadExceptionCenter() reachable the same way) — a bug CLASS, since
+  // 93 backend endpoints are User-only vs 12 that accept any principal.
   if(response.status===401){
+    const principalKind=localStorage.getItem('taxflow_principal_kind');
+    if(principalKind==='employee'||principalKind==='branch'){
+      let detail='';
+      try{detail=(await response.clone().json())?.detail||'';}catch{}
+      if(detail==='User no longer exists')return response;
+    }
     localStorage.removeItem('taxflow_token');
     const relogged=await loginLocalBackend();
     if(relogged){
