@@ -750,7 +750,7 @@ button{cursor:pointer;border:none;background:none;}
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3l10 10M13 3L3 13"/></svg>
             Cancel
           </button>
-          <button class="pbtn credit" onclick="creditSale()">
+          <button class="pbtn credit" id="btn-credit-sale" onclick="creditSale()">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="4" width="14" height="9" rx="1"/><path d="M1 7h14M4 11h3"/></svg>
             Credit
           </button>
@@ -1358,11 +1358,17 @@ function clearCart(){
 function getAdj(){ return { disc:parseFloat(document.getElementById('s-disc')?.value)||0, tax:parseFloat(document.getElementById('s-tax')?.value)||0, ship:parseFloat(document.getElementById('s-ship')?.value)||0, pack:parseFloat(document.getElementById('s-pack')?.value)||0 }; }
 
 function cartTotals(){
-  const sub   = _cart.reduce((s,i)=>s + i.price*i.qty, 0);
-  const vat   = _cart.reduce((s,i)=>s + i.price*i.qty*i.vatRate/100, 0);
-  const inc   = sub + vat;
   const {disc,tax,ship,pack} = getAdj();
-  const total = inc - disc + tax + ship + pack;
+  const sub = _cart.reduce((s,i)=>s + i.price*i.qty, 0);
+  // Discount reduces the taxable base before VAT is computed (FTA: VAT is
+  // charged on the discounted consideration, not the pre-discount price),
+  // allocated proportionally per line so multi-VAT-rate carts still tax
+  // correctly. Previously the discount was subtracted from the already
+  // tax-inclusive total, overcharging VAT on every discounted sale.
+  const discRatio = sub>0 ? Math.min(1, disc/sub) : 0;
+  const vat = _cart.reduce((s,i)=>s + i.price*i.qty*(1-discRatio)*i.vatRate/100, 0);
+  const inc = (sub-disc) + vat;
+  const total = inc + tax + ship + pack;
   const items = _cart.reduce((s,i)=>s+i.qty, 0);
   const rates = [...new Set(_cart.map(i=>i.vatRate).filter(r=>r>0))].sort((a,b)=>a-b);
   const vatLabel = rates.length ? rates.map(r=>r+'%').join('/') + ' VAT' : 'VAT';
@@ -1522,7 +1528,13 @@ async function completeSale(){
 
 function genRcptNo(){
   const n=new Date();
-  return 'POS-'+n.getFullYear()+String(n.getMonth()+1).padStart(2,'0')+String(n.getDate()).padStart(2,'0')+'-'+String(n.getTime()).slice(-5);
+  // Full millisecond timestamp (not just the last 5 digits, which recurred
+  // every ~100 seconds) plus a random suffix — posSales isn't in
+  // record_key()'s explicit map (app_data.py), so it falls back to this id;
+  // a same-day collision used to silently overwrite the earlier sale's row
+  // and its stock movements instead of just duplicating a receipt number.
+  const rand=Math.random().toString(36).slice(2,5).toUpperCase();
+  return 'POS-'+n.getFullYear()+String(n.getMonth()+1).padStart(2,'0')+String(n.getDate()).padStart(2,'0')+'-'+n.getTime()+'-'+rand;
 }
 
 function posToInvoice(sale, status){
@@ -1597,6 +1609,8 @@ async function creditSale(){
     order_tax:+tax.toFixed(4),shipping:+ship.toFixed(4),packing:+pack.toFixed(4),
     total:+total.toFixed(4),payment_method:'credit',company_name:CONAME(),
   };
+  const creditBtn=document.getElementById('btn-credit-sale');
+  if(creditBtn)creditBtn.disabled=true;
   try{
     await saveRec('posSales',sale);
     await saveRec('salesInvoices', posToInvoice(sale,'Pending')).catch(e=>{
@@ -1606,6 +1620,9 @@ async function creditSale(){
     showReceipt(sale);
     toast('Credit sale saved — '+rcptNo,'ok');
   }catch(e){ toast('Failed: '+e.message,'err'); }
+  finally{
+    if(creditBtn)creditBtn.disabled=false;
+  }
 }
 
 // ── Short invoice link for POS ────────────────────────────────────────
