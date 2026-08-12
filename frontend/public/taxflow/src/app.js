@@ -1,6 +1,5 @@
 const META={dashboard:{t:'Dashboard',s:'Loading dashboard from database',a:'',ao:null},company:{t:'Company Registration',s:'UAE Trade License & FTA Details',a:'Save All',ao:()=>toast('All changes saved','ok')},sales:{t:'Sales & Invoices',s:'Upload - AI Extraction - Validation - Invoices',a:'+ New Invoice',ao:()=>{go('sales');setTimeout(()=>stab(document.querySelectorAll('#page-sales .tab')[4],'s-create'),50)}},purchase:{t:'Purchases',s:'Upload - AI Extraction - Validation',a:'Upload Files',ao:()=>document.getElementById('pur-file').click()},bank:{t:'Bank & Payments',s:'Accounts - transactions - receipts - payments - reconciliation',a:'+ Record Payment',ao:()=>openPaymentModal('Customer Receipt')},inventory:{t:'Inventory',s:'Stock - Items - Movements',a:'+ Add Item',ao:()=>openInventoryItemModal()},expense:{t:'Expenses',s:'AI Upload - Create - Approvals - List',a:'+ New Expense',ao:()=>{go('expense');setTimeout(()=>stab(document.querySelectorAll('#page-expense .tab')[1],'exp-create'),50)}},accounting:{t:'Accounting',s:'Chart - Journal - Ledger',a:'+ New Entry',ao:()=>showM('m-acc')},reports:{t:'Reports',s:'VAT - P&L - Trial Balance',a:'Export PDF',ao:()=>toast('Exporting report...','info')},settings:{t:'Settings',s:'General - Users - Tax',a:'Save All',ao:()=>toast('Settings saved','ok')},staff:{t:'Staff Management',s:'Attendance - Leave - Corrections - Biometric',a:'+ Add Employee',ao:()=>showM('m-emp')},expert:{t:'Expert Review',s:'Find CA experts - Submit for review',a:'+ New Request',ao:()=>showM('m-newreview')},design:{t:'System Design',s:'Functional Spec - Fields - Validations - API',a:'Export Spec',ao:()=>toast('Exporting FRD to PDF...','info')}};
 META.settings={t:'Settings',s:'Company - Users - Tax - Security - Integrations - Invoice Design',a:'Save All',ao:()=>toast('Settings saved','ok')};
-META.branches={t:'Branches',s:'Manage company branches, office locations, and branch login access',a:'+ Add Branch',ao:()=>showBranchModal()};
 META.payroll={t:'Payroll',s:'Salary run - WPS/SIF - Payslips - Posting',a:'Run Payroll',ao:()=>{go('payroll');setTimeout(()=>runPayroll(),50)}};
 META.sales={t:'Sales & Invoices',s:'Upload - AI Extraction - Validation - Invoices',a:'+ New',ao:()=>openSalesAddChoice()};
 META.quotations={t:'Quotations',s:'Create - share - convert to invoice',a:'+ New Quotation',ao:()=>{go('quotations');setTimeout(()=>stab(document.querySelectorAll('#page-quotations .tab')[1],'q-create'),50)}};
@@ -243,7 +242,6 @@ function go(page){
     setTimeout(()=>ensureInventoryBulkSelection(),80);
   }
   if(page==='pos')loadPosPage();
-  if(page==='branches')renderBranchTable();
   if(page==='accounting'){loadAccountingFromDb();renderPeriodLockPanel();}
   runPageWarmup(page);
   updateBackButton();
@@ -2639,7 +2637,6 @@ const ALL_MODULE_DEFS=[
   {key:'exception',label:'Exception Center'},
   {key:'ai',label:'AI Features'},
   {key:'settings',label:'Company & Settings'},
-  {key:'branches',label:'Branches'},
 ];
 
 function renderModuleAccessCard(allowedOrNull){
@@ -22725,7 +22722,7 @@ const _LANG={
     sb_finance:'Finance',sb_bank:'Bank & Payments',sb_accounting:'Accounting',sb_corporate:'Corporate Accounting',sb_reports:'Reports',
     sb_hr:'People & HR',sb_hrms:'HRMS',
     sb_compliance:'Compliance',sb_notifications:'Notifications',sb_expert:'Expert Review',sb_exception:'Exception Center',
-    sb_company:'Company',sb_branches:'Branches',sb_settings:'Company & Settings',sb_logout:'Logout',
+    sb_company:'Company',sb_settings:'Company & Settings',sb_logout:'Logout',
     dash_total_revenue:'Total Revenue',dash_plus_vat:'+ VAT',
     dash_collected:'Collected',dash_paid_invoices:'Paid Invoices',dash_collection_rate:'Collection Rate',
     dash_total_purchases:'Total Purchases',dash_payment_rate:'Payment Rate',
@@ -22747,7 +22744,7 @@ const _LANG={
     sb_finance:'المالية',sb_bank:'البنك والمدفوعات',sb_accounting:'المحاسبة',sb_corporate:'محاسبة الشركات',sb_reports:'التقارير',
     sb_hr:'الموارد البشرية',sb_hrms:'نظام الموارد البشرية',
     sb_compliance:'الامتثال',sb_notifications:'الإشعارات',sb_expert:'المراجعة المتخصصة',sb_exception:'مركز الاستثناءات',
-    sb_company:'الشركة',sb_branches:'الفروع',sb_settings:'الشركة والإعدادات',sb_logout:'تسجيل الخروج',
+    sb_company:'الشركة',sb_settings:'الشركة والإعدادات',sb_logout:'تسجيل الخروج',
     dash_total_revenue:'إجمالي الإيرادات',dash_plus_vat:'+ ضريبة',
     dash_collected:'المحصّل',dash_paid_invoices:'الفواتير المدفوعة',dash_collection_rate:'معدل التحصيل',
     dash_total_purchases:'إجمالي المشتريات',dash_payment_rate:'معدل الدفع',

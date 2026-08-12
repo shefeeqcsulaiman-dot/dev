@@ -7,18 +7,16 @@ module — routers/superadmin.py re-exports ALL_MODULES from here for every
 existing call site that imports it from there.
 """
 
-# "settings" and "branches" are deliberately NOT wired into require_module()
-# anywhere (see dependencies.py) — they only hide their sidebar link.
-# Settings covers core account admin (Users & Roles, password/profile,
-# backup) and Branches covers core company structure (locations, branch
-# login); a hard server-side block on either would risk locking a company
-# out of its own account/branch management if something upstream went
-# wrong. Every other key here has a matching require_module("<key>")
-# somewhere in the routers.
+# "settings" is deliberately NOT wired into require_module() anywhere (see
+# dependencies.py) — it only hides the sidebar link. Settings covers core
+# account admin (Users & Roles, password/profile, backup); a hard
+# server-side block would risk locking a company out of its own account
+# management if something upstream went wrong. Every other key here has a
+# matching require_module("<key>") somewhere in the routers.
 ALL_MODULES = [
     "sales", "quotations", "pos", "purchase", "inventory", "expense",
     "bank", "accounting", "corporate", "reports", "hrms", "ess",
-    "notifications", "expert", "exception", "ai", "settings", "branches",
+    "notifications", "expert", "exception", "ai", "settings",
 ]
 
 # Branch Login Phase 1: the subset of ALL_MODULES a Branch entity's own
