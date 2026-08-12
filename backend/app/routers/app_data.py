@@ -1767,6 +1767,55 @@ def ingest_purchase_document(db: Session, principal: Principal, file: dict[str, 
     if not content:
         return [purchase_extraction_error(name, "Uploaded file content was empty")]
 
+    # The Upload Documents UI advertises ".zip (batch)" as a supported
+    # format, but this endpoint previously had no handling for it at all —
+    # any .zip fell straight into the "Unsupported purchase upload format"
+    # branch below, which read to users as bulk upload being blocked/
+    # restricted. Unpack it here and run every contained file through the
+    # exact same per-file parsing this function already does.
+    if ext == "zip":
+        return _ingest_purchase_zip(db, principal, name, content)
+    return _ingest_purchase_file(db, principal, name, ext, content)
+
+
+# Nested zips aren't unpacked recursively — deliberately, to avoid zip-bomb-
+# style surprises from an archive containing archives.
+_PURCHASE_ZIP_SKIP_EXTENSIONS = {"zip"}
+
+
+def _ingest_purchase_zip(db: Session, principal: Principal, zip_name: str, content: bytes) -> list[dict[str, Any]]:
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(content))
+    except zipfile.BadZipFile:
+        return [purchase_extraction_error(zip_name, "Could not open .zip file — it may be corrupted")]
+
+    entries = [
+        info for info in archive.infolist()
+        if not info.is_dir()
+        and not info.filename.startswith("__MACOSX/")
+        and not info.filename.rsplit("/", 1)[-1].startswith(".")
+    ]
+    if not entries:
+        return [purchase_extraction_error(zip_name, "The .zip file contained no readable files")]
+
+    all_results: list[dict[str, Any]] = []
+    for info in entries:
+        entry_name = info.filename.rsplit("/", 1)[-1]
+        entry_ext = entry_name.rsplit(".", 1)[-1].lower() if "." in entry_name else ""
+        display_name = f"{zip_name}/{entry_name}"
+        if entry_ext in _PURCHASE_ZIP_SKIP_EXTENSIONS:
+            all_results.append(purchase_extraction_error(display_name, "Nested .zip files inside a batch upload aren't supported"))
+            continue
+        try:
+            entry_content = archive.read(info)
+        except Exception as exc:
+            all_results.append(purchase_extraction_error(display_name, f"Could not read file from archive: {exc}"))
+            continue
+        all_results.extend(_ingest_purchase_file(db, principal, display_name, entry_ext, entry_content))
+    return all_results
+
+
+def _ingest_purchase_file(db: Session, principal: Principal, name: str, ext: str, content: bytes) -> list[dict[str, Any]]:
     try:
         if ext == "csv":
             rows = parse_csv_rows(content)

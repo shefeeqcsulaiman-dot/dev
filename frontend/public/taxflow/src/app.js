@@ -12325,7 +12325,7 @@ function ensurePurchaseAiEditModal(){
           <div class="purchase-party-box">
             <div class="section-hd">Payment</div>
             <div class="fr2 mb8">
-              <input class="fi" id="pai-term" placeholder="Pay term" onblur="applyPurchaseDueDateFromTerm('pai')">
+              <input class="fi" id="pai-term" placeholder="Pay term" onfocus="this.dataset.prevValue=this.value" onblur="applyPurchaseDueDateFromTerm('pai')">
               <select class="fi" id="pai-pay-method"><option>Cash</option><option>Bank Transfer</option><option>Card</option><option>Cheque</option><option>Online</option></select>
             </div>
             <div class="fr2 mb8">
@@ -12530,7 +12530,7 @@ function addPurchaseAiEditLine(line={}){
     <td><select class="fi pai-unit">${unitOptionsHtml(line.unit||line.unit_of_measure||line.uom||'PCS')}</select></td>
     <td><input class="fi mono pai-cost" value="${cost||''}" oninput="calcPurchaseAiEditLine(this)"></td>
     <td><input class="fi mono pai-line-discount" value="${discPct||''}" oninput="calcPurchaseAiEditLine(this)" style="min-width:55px"></td>
-    <td><input class="fi mono pai-disc-amt" value="${discAmt>0?discAmt.toFixed(2):''}" readonly style="min-width:70px"></td>
+    <td><input class="fi mono pai-disc-amt" value="${discAmt>0?discAmt.toFixed(2):''}" oninput="calcPurchaseAiEditLine(this)" style="min-width:70px"></td>
     <td><input class="fi mono pai-line-vat" value="${lineVat>0?lineVat.toFixed(2):''}" readonly style="min-width:60px"></td>
     <td><input class="fi mono pai-line-total" value="${lineTotal>0?lineTotal.toFixed(2):''}" oninput="calcPurchaseAiEditInvoice()" style="font-weight:700;color:var(--accent)"></td>
     <td><button class="icon-btn danger" type="button" title="Remove line" onclick="removePurchaseAiEditLine(this)">${deleteIconSvg()}</button></td>`;
@@ -12558,11 +12558,19 @@ function calcPurchaseAiEditLine(source){
   const qty=parseAmount(row.querySelector('.pai-qty')?.value);
   const cost=parseAmount(row.querySelector('.pai-cost')?.value);
   const discountPct=parseAmount(row.querySelector('.pai-line-discount')?.value);
-  const discAmt=qty*cost*(discountPct/100);
-  const lineTotal=qty*cost-discAmt;
   const discAmtField=row.querySelector('.pai-disc-amt');
+  // A direct edit to Disc Amt itself (previously a read-only, derived-only
+  // field) takes precedence over the qty*cost*discount% auto-calc — mark it
+  // "manual" so a later qty/cost/discount% edit in this row doesn't silently
+  // overwrite what the user just typed. Resets when the row is rebuilt
+  // (new line / reopening the modal), matching how VAT's manual-edit flag
+  // resets per load rather than persisting forever.
+  if(source===discAmtField)discAmtField.dataset.manual='1';
+  const autoDiscAmt=qty*cost*(discountPct/100);
+  const discAmt=discAmtField?.dataset.manual==='1'?parseAmount(discAmtField.value):autoDiscAmt;
+  const lineTotal=qty*cost-discAmt;
   const totalField=row.querySelector('.pai-line-total');
-  if(discAmtField)discAmtField.value=discAmt>0?discAmt.toFixed(2):'';
+  if(discAmtField&&discAmtField.dataset.manual!=='1')discAmtField.value=discAmt>0?discAmt.toFixed(2):'';
   if(totalField)totalField.value=lineTotal.toFixed(2);
   calcPurchaseAiEditInvoice();
 }
@@ -13370,16 +13378,25 @@ function mergePurchaseRecords(existing={},incoming={}){
     source_image:incoming.source_image||existing.source_image||'',
     source_filename:incoming.source_filename||existing.source_filename||''
   };
-  const existingOnlyTax=Math.max(0,parseAmount(existing.tax_amount||existing.vat_amount));
-  const incomingTax=Math.max(0,parseAmount(incoming.tax_amount||incoming.vat_amount));
-  const existingShipping=Math.max(0,parseAmount(existing.shipping));
-  const incomingShipping=Math.max(0,parseAmount(incoming.shipping));
   const existingPaid=Math.max(0,parseAmount(existing.paid));
   const incomingPaid=Math.max(0,parseAmount(incoming.paid));
   merged.items=purchaseLinesTotalQuantity(mergedLines)||mergedLines.length;
   merged.net_amount=mergedLines.reduce((sum,line)=>sum+parseAmount(line.line_total||line.amount),0);
-  merged.tax_amount=existingOnlyTax+incomingTax;
-  merged.shipping=existingShipping+incomingShipping;
+  // tax_amount/shipping are single corrected values, same as every other
+  // invoice-level field above (supplier, address, date...) — incoming wins.
+  // Previously these two specifically added existing+incoming instead, which
+  // was right for "re-uploading the same invoice with genuinely additional
+  // charges" but wrong for "editing/correcting VAT or shipping via the Edit
+  // Extracted Purchase modal" (the far more common case) — an edit would
+  // silently inflate the saved total instead of replacing it. paid is left
+  // additive since it can legitimately represent a second, later payment
+  // against the same invoice, and wasn't reported broken.
+  // Nullish-coalesce, not ||, so an explicit edit down to exactly 0 (e.g.
+  // VAT-exempt) isn't mistaken for "not provided" and doesn't fall through
+  // to a stale existing value.
+  const incomingTaxRaw=incoming.tax_amount??incoming.vat_amount;
+  merged.tax_amount=Math.max(0,parseAmount(incomingTaxRaw??(existing.tax_amount??existing.vat_amount)));
+  merged.shipping=Math.max(0,parseAmount(incoming.shipping??existing.shipping));
   merged.paid=existingPaid+incomingPaid;
   merged.total=merged.net_amount+merged.tax_amount+merged.shipping+parseAmount(existing.additional_expense_amount)+parseAmount(incoming.additional_expense_amount);
   merged.due=Math.max(0,merged.total-merged.paid);
@@ -13509,14 +13526,21 @@ function calcDueDateFromTerm(termText,baseDateStr){
   return base.toISOString().slice(0,10);
 }
 
-// Wired to each screen's Pay Term field (mp-term/pai-term/pv-pay-term) —
-// only fires when the term is actually changed/left, so it never clobbers
-// a due date the user set manually afterward without touching Pay Term again.
+// Wired to each screen's Pay Term field (mp-term/pai-term/pv-pay-term).
+// mp-term is a <select> using onchange, which only ever fires on a real
+// change. pai-term/pv-pay-term are free-text inputs using onblur — which
+// fires on every blur regardless of whether the text changed, so without
+// the dataset.prevValue check below it would silently overwrite a due date
+// the user had just manually typed into the field next to it, merely by
+// tabbing back through an unchanged Pay Term field (see the paired
+// onfocus="this.dataset.prevValue=this.value" on those two inputs).
 function applyPurchaseDueDateFromTerm(prefix){
   const termEl=document.getElementById(prefix==='pv'?'pv-pay-term':`${prefix}-term`);
   const dateEl=document.getElementById(prefix==='pv'?'pv-date':`${prefix}-date`);
   const dueEl=document.getElementById(`${prefix}-due-date`);
   if(!termEl||!dueEl)return;
+  const termChanged=termEl.dataset.prevValue!==termEl.value;
+  if(!termChanged&&dueEl.value)return;
   const computed=calcDueDateFromTerm(termEl.value,dateEl?.value);
   if(computed)dueEl.value=computed;
 }
@@ -13775,6 +13799,7 @@ function purchasePreviewLines(purchase){
     return {
       product:purchaseAiProductName(line)||line.name||'Purchase item',
       sku:line.sku||line.code||'',
+      category:line.category||'',
       unit:line.unit||line.unit_of_measure||line.uom||'PCS',
       qty,
       cost,
@@ -13847,7 +13872,7 @@ function renderPurchaseRecordPreview(purchase,options={}){
         </div>
         <div class="purchase-party-box">
           <div class="section-hd">Payment</div>
-          <div class="fr2 mb8"><input class="fi" id="pv-pay-term" value="${escapeHtml(purchase.pay_term||'')}" placeholder="Pay term" onblur="applyPurchaseDueDateFromTerm('pv')" ${editable?'':'readonly'}><input class="fi" id="pv-pay-method" value="${escapeHtml(purchase.payment_method||'')}" placeholder="Payment method" ${editable?'':'readonly'}></div>
+          <div class="fr2 mb8"><input class="fi" id="pv-pay-term" value="${escapeHtml(purchase.pay_term||'')}" placeholder="Pay term" onfocus="this.dataset.prevValue=this.value" onblur="applyPurchaseDueDateFromTerm('pv')" ${editable?'':'readonly'}><input class="fi" id="pv-pay-method" value="${escapeHtml(purchase.payment_method||'')}" placeholder="Payment method" ${editable?'':'readonly'}></div>
           <div class="fr2 mb8"><input class="fi" id="pv-pay-account" value="${escapeHtml(purchase.payment_account||'')}" placeholder="Payment account" ${editable?'':'readonly'}><input class="fi" id="pv-paid-on" value="${escapeHtml(paidOn)}" placeholder="Paid on date" ${editable?'':'readonly'}></div>
           <div class="fr2 mb8"><label style="font-size:11px;color:var(--text3);font-weight:600;display:flex;align-items:center">Due Date</label><input class="fi" type="date" id="pv-due-date" value="${escapeHtml(purchase.due_date||'')}" ${editable?'':'readonly'}></div>
           <input class="fi" id="pv-pay-note" value="${escapeHtml(payNote)}" placeholder="Payment reference / note" ${editable?'':'readonly'}>
@@ -15093,6 +15118,11 @@ function updateAccountSelectors(){
   // account name (see purchaseLedgerCategoryOptions), so re-passing the
   // select's current value re-selects it if it still exists.
   document.querySelectorAll('#pai-lines .pai-category').forEach(select=>{
+    select.innerHTML=purchaseLedgerCategoryOptions(select.value);
+  });
+  // Same reasoning, for the separate Purchase Records preview/edit modal's
+  // per-line Ledger/Category dropdowns.
+  document.querySelectorAll('#purchase-view-body .pv-category').forEach(select=>{
     select.innerHTML=purchaseLedgerCategoryOptions(select.value);
   });
   const filter=document.getElementById('ledger-account-filter');
