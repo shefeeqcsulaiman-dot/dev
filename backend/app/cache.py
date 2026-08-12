@@ -82,6 +82,9 @@ def invalidate_company(company_id: str) -> None:
     """Bust all report caches for a company after a write operation."""
     delete(f"dashboard:{company_id}")
     delete(f"summary:{company_id}")
-    delete(f"trial_balance:{company_id}")
+    # trial_balance is written per-branch (reports.py: f"trial_balance:{company_id}:{branch_id or 'all'}"),
+    # so a plain delete() here never matched any actual key — the cache only
+    # ever cleared itself via its own TTL, not on writes.
+    delete_prefix(f"trial_balance:{company_id}:")
     delete_prefix(f"vat_return:{company_id}:")
     delete(f"bootstrap:{company_id}")
