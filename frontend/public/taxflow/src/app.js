@@ -13322,26 +13322,34 @@ function mergePurchaseRecords(existing={},incoming={}){
   const baseLines=(Array.isArray(existing.lines)?existing.lines:[]).map(normalizePurchaseLineForMerge);
   const incomingLines=(Array.isArray(incoming.lines)?incoming.lines:[]).map(normalizePurchaseLineForMerge);
   const mergedLines=[...baseLines.map(line=>({...line}))];
-  // Count occurrences of each key in the existing record.
-  // When the same product appears twice (e.g. rows 5 and 8 on a Eurovets invoice),
-  // each occurrence consumes one slot — so N existing copies allow N incoming copies
-  // to be skipped; any additional copies are treated as new and added.
-  const keyCounts=new Map();
-  baseLines.forEach(line=>{
+  // Index each key's available existing-line slots (a queue, so repeated
+  // products pair up in upload order — e.g. rows 5 and 8 on a Eurovets
+  // invoice each consume one slot, so N existing copies absorb N incoming
+  // copies; any additional copies are treated as new and added).
+  const keyIndices=new Map();
+  mergedLines.forEach((line,idx)=>{
     const key=purchaseLineMergeKey(line,date);
-    if(key)keyCounts.set(key,(keyCounts.get(key)||0)+1);
+    if(key){
+      if(!keyIndices.has(key))keyIndices.set(key,[]);
+      keyIndices.get(key).push(idx);
+    }
   });
   let mergedSameProduct=0;
   let addedProducts=0;
   incomingLines.forEach(line=>{
     const key=purchaseLineMergeKey(line,date);
-    const remaining=key?(keyCounts.get(key)||0):0;
-    if(remaining>0){
-      // One existing copy absorbs this incoming line — decrement and skip
-      keyCounts.set(key,remaining-1);
+    const queue=key?keyIndices.get(key):null;
+    if(queue&&queue.length){
+      // An existing slot absorbs this incoming line — update it with the
+      // incoming values (not just skip/discard them) so an edit made via
+      // the Edit Extracted Purchase modal (e.g. changing a line's Ledger/
+      // Category) actually sticks, instead of the old line silently
+      // surviving untouched just because it matched on sku/name/date.
+      const idx=queue.shift();
+      mergedLines[idx]={...mergedLines[idx],...line};
       mergedSameProduct++;
     }else{
-      // No existing copy left to absorb — this is a new line
+      // No existing slot left to absorb — this is a new line
       mergedLines.push({...line});
       addedProducts++;
     }
