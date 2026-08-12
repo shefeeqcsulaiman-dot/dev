@@ -2,13 +2,7 @@
 UAE compliance checks, leave pattern analysis, JD generation, HR chatbot.
 All endpoints pull real data from the database before calling OpenAI."""
 
-from __future__ import annotations
-
 import json
-import os
-import re
-import urllib.request
-import urllib.error
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -17,6 +11,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.ai_client import call_llm
 from app.database import get_db
 from app.dependencies import get_current_user, require_module
 from app.limiter import limiter
@@ -27,78 +22,16 @@ router = APIRouter(prefix="/ai/hr", tags=["hr ai"], dependencies=[Depends(requir
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
-def _openai_key() -> str:
-    return os.environ.get("OPENAI_API_KEY", "").strip()
-
-
-def _anthropic_key() -> str:
-    return os.environ.get("ANTHROPIC_API_KEY", "").strip()
-
-
 def _call_ai(prompt: str, system: str = "You are an expert HR consultant for UAE companies. Always respond with valid JSON only — no markdown, no explanation outside the JSON.") -> dict[str, Any]:
     """Call OpenAI (preferred) or Anthropic. Returns parsed dict."""
-    openai_key = _openai_key()
-    anthropic_key = _anthropic_key()
-
-    if openai_key:
-        payload = {
-            "model": os.environ.get("OPENAI_HR_MODEL", "gpt-4o-mini"),
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ],
-            "max_tokens": 2500,
-            "temperature": 0.2,
-            "response_format": {"type": "json_object"},
-        }
-        req = urllib.request.Request(
-            "https://api.openai.com/v1/chat/completions",
-            data=json.dumps(payload).encode(),
-            headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=45) as resp:
-                result = json.loads(resp.read().decode())
-        except urllib.error.HTTPError as exc:
-            return {"error": f"OpenAI request failed ({exc.code}): {exc.reason}"}
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-            return {"error": f"OpenAI request failed: {exc}"}
-        raw = result["choices"][0]["message"]["content"].strip()
-    elif anthropic_key:
-        payload = {
-            "model": os.environ.get("ANTHROPIC_HR_MODEL", "claude-haiku-4-5-20251001"),
-            "max_tokens": 2500,
-            "messages": [{"role": "user", "content": f"{system}\n\n{prompt}"}],
-        }
-        req = urllib.request.Request(
-            "https://api.anthropic.com/v1/messages",
-            data=json.dumps(payload).encode(),
-            headers={
-                "x-api-key": anthropic_key,
-                "anthropic-version": "2023-06-01",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=45) as resp:
-                result = json.loads(resp.read().decode())
-        except urllib.error.HTTPError as exc:
-            return {"error": f"Anthropic request failed ({exc.code}): {exc.reason}"}
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-            return {"error": f"Anthropic request failed: {exc}"}
-        raw = result["content"][0]["text"].strip()
-    else:
-        return {"error": "No AI API key configured. Add OPENAI_API_KEY or ANTHROPIC_API_KEY to .env"}
-
-    # strip markdown fences if present
-    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
-    raw = re.sub(r"\s*```$", "", raw)
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        return {"raw": raw}
+    return call_llm(
+        prompt,
+        system,
+        openai_model_env="OPENAI_HR_MODEL",
+        openai_default="gpt-4o-mini",
+        anthropic_model_env="ANTHROPIC_HR_MODEL",
+        anthropic_default="claude-haiku-4-5-20251001",
+    )
 
 
 def _employee_rows(db: Session, company_id: str) -> list[dict[str, Any]]:

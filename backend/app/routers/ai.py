@@ -1,14 +1,28 @@
+import json
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.ai_client import call_llm
 from app.database import get_db
 from app.dependencies import get_current_user, require_module
+from app.limiter import limiter
 from app.routers.app_data import get_company_vat_rate
 from app.models import Account, AppDataRecord, AuditLog, ExceptionEvent, Invoice, SourceTransaction, TaxLine, User
 from app.schemas import AIAssistRequest, AIExceptionExplainRequest, AIResponse, AITransactionValidationRequest
+
+ASSISTANT_SYSTEM_PROMPT = (
+    "You are TaxFlow AI, a safe review-layer assistant embedded in a UAE tax and accounting SaaS app. "
+    "You explain workflows, review data, and suggest next actions — you never post transactions, approve "
+    "anything, or claim an action was taken. Ground your answer in the company snapshot and open exceptions "
+    "given to you; cite real numbers from them when relevant. Keep the answer to 2-4 sentences. "
+    "Respond with valid JSON only — no markdown, no explanation outside the JSON — matching exactly this shape: "
+    '{"answer": "", "confidence": 0, "suggested_actions": ["...", "...", "..."]}. '
+    "\"confidence\" is 0-100, how confident you are that this answer is accurate and complete given the data "
+    "provided. \"suggested_actions\" is 2-4 concrete, specific next steps the user can take right now."
+)
 
 
 router = APIRouter(prefix="/ai", tags=["ai assistant"], dependencies=[Depends(require_module("ai"))])
@@ -89,10 +103,7 @@ def workbench(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     )
 
 
-@router.post("/assist", response_model=AIResponse)
-def assist(payload: AIAssistRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> AIResponse:
-    q = payload.question.lower()
-    snapshot = company_snapshot(db, current_user.company_id)
+def _rule_based_assist(q: str, snapshot: dict[str, int | str]) -> AIResponse:
     controls = [
         "Create drafts first; never direct-post from AI.",
         "Validate account mappings, VAT math, TRN, and evidence before approval.",
@@ -114,6 +125,63 @@ def assist(payload: AIAssistRequest, db: Session = Depends(get_db), current_user
         answer = "TaxFlow AI is configured as a safe assistant for document intake, VAT checks, account suggestions, exception explanations, reconciliation hints, and report narratives."
         actions = ["Ask about VAT, exceptions, document intake, account mapping, or reports.", "Use the recommended actions as review prompts, not automatic posting."]
     return AIResponse(answer=answer, confidence=86, controls=controls, suggested_actions=actions, context=snapshot)
+
+
+def _recent_open_exceptions(db: Session, company_id: str, limit: int = 5) -> list[dict[str, str]]:
+    rows = (
+        db.query(ExceptionEvent)
+        .filter(ExceptionEvent.company_id == company_id, ExceptionEvent.status != "closed")
+        .order_by(ExceptionEvent.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [{"category": r.category, "severity": r.severity, "message": r.message} for r in rows]
+
+
+@router.post("/assist", response_model=AIResponse)
+@limiter.limit("15/minute")
+def assist(request: Request, payload: AIAssistRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> AIResponse:
+    q = payload.question.lower()
+    snapshot = company_snapshot(db, current_user.company_id)
+    fallback = _rule_based_assist(q, snapshot)
+
+    prompt = f"""COMPANY SNAPSHOT:
+{json.dumps(snapshot, indent=2)}
+
+RECENT OPEN EXCEPTIONS (most recent first):
+{json.dumps(_recent_open_exceptions(db, current_user.company_id), indent=2)}
+
+USER QUESTION: {payload.question}"""
+
+    result = call_llm(
+        prompt,
+        ASSISTANT_SYSTEM_PROMPT,
+        openai_model_env="OPENAI_ASSIST_MODEL",
+        openai_default="gpt-4o-mini",
+        anthropic_model_env="ANTHROPIC_ASSIST_MODEL",
+        anthropic_default="claude-haiku-4-5-20251001",
+    )
+
+    answer = result.get("answer") if isinstance(result, dict) else None
+    if not answer or "error" in result:
+        return fallback
+
+    try:
+        confidence = max(0, min(100, int(result.get("confidence", 80))))
+    except (TypeError, ValueError):
+        confidence = 80
+
+    actions = result.get("suggested_actions")
+    if not isinstance(actions, list) or not actions:
+        actions = fallback.suggested_actions
+
+    return AIResponse(
+        answer=answer,
+        confidence=confidence,
+        controls=fallback.controls,
+        suggested_actions=actions,
+        context=snapshot,
+    )
 
 
 @router.post("/validate-transaction", response_model=AIResponse)
