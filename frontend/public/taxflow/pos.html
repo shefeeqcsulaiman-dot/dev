@@ -650,7 +650,8 @@ button{cursor:pointer;border:none;background:none;}
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 13c0-3 2-5 6-5s6 2 6 5"/></svg>
           </div>
           <div style="flex:1;min-width:0">
-            <input class="pctrl-inp" id="pos-cust" value="Walk-In Customer" placeholder="Customer name">
+            <input class="pctrl-inp" id="pos-cust" value="Walk-In Customer" placeholder="Customer name" list="pos-customer-list">
+            <datalist id="pos-customer-list"></datalist>
             <div class="pctrl-sub">Add customer details</div>
           </div>
           <button class="pctrl-add" title="New customer" onclick="openAddCustomer()">+</button>
@@ -1126,7 +1127,7 @@ async function posLogin(e){
     document.getElementById('pos-auth').style.display='none';
     btn.textContent='Sign In'; btn.disabled=false;
     const ok=await checkAuth();
-    if(ok){ renderCart(); await loadProducts(); }
+    if(ok){ renderCart(); await loadProducts(); loadPosCustomers(); }
   }catch(ex){
     err.textContent=ex.message||'Invalid email or password';
     err.style.display='block';
@@ -1852,6 +1853,24 @@ function toast(msg,type='ok'){
   _toastTimer=setTimeout(()=>el.style.display='none',3200);
 }
 
+// ── Customers ─────────────────────────────────────────────────────────
+// Branch-scoped server-side (a Branch Login only sees its own customers;
+// an admin/User login sees all, via _BRANCH_FILTERED_COLLECTIONS in
+// app_data.py) — this just renders whatever the backend already filtered.
+async function loadPosCustomers(){
+  try{
+    const data = await api('/app-data/records/customers?limit=500');
+    const list = document.getElementById('pos-customer-list');
+    if(list){
+      list.innerHTML = (data.records||[])
+        .map(c=>c.name).filter(Boolean)
+        .map(name=>`<option value="${esc(name)}">`).join('');
+    }
+  }catch(e){
+    console.warn('Customer list failed to load:', e);
+  }
+}
+
 // ── Add Customer ─────────────────────────────────────────────────────
 function openAddCustomer(){
   ['ac-name','ac-phone','ac-email','ac-trn','ac-address'].forEach(id=>{
@@ -1880,6 +1899,7 @@ async function saveNewCustomer(){
     document.getElementById('pos-cust').value=name;
     toast('Customer added: '+name,'ok');
     btn.disabled=false; btn.textContent='Save Customer';
+    loadPosCustomers();
   }catch(e){
     toast('Failed to save customer: '+(e.message||e),'err');
     const btn=document.querySelector('#ov-add-cust .ov-confirm');
@@ -1941,6 +1961,7 @@ async function saveNewProduct(){
   setInterval(tickClock,15000);
   renderCart();
   await loadProducts();
+  loadPosCustomers();
 })();
 
 document.addEventListener('click', e => {

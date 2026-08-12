@@ -88,6 +88,12 @@ _PERIOD_LOCKED_COLLECTIONS: dict[str, str] = {
 _BRANCH_FILTERED_COLLECTIONS = frozenset({
     "purchaseRecords",  # Phase 5 — Inventory/Purchases
     "posSales", "salesInvoices",  # Phase 6 — POS/Sales
+    "customers",  # POS customer picker — a branch only sees customers it
+    # created (branch_id stamped on write); customers with no branch_id
+    # (created by admin, or predating Branch Management) stay visible to
+    # everyone via the branch_id IS NULL fallback below. Admin/User
+    # principals have no branch_id at all, so this filter never applies to
+    # them — they always see every customer, company-wide.
 })
 
 # Superadmin's per-company Module Permissions, enforced against writes to the
