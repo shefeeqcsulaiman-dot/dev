@@ -825,6 +825,94 @@ Edit
 Delete with dependency checks
 ```
 
+## 9.1 Point of Sale (POS) (shipped)
+
+POS (`frontend/public/taxflow/pos.html`) is a standalone terminal page, not part of the main `index.html` SPA — its own login form (`posLogin()`, same admin/employee/branch fallback chain as `login.html`), its own `api()` wrapper, and its own copies of shared concepts like the receipt/print flow. It writes into the same `AppDataRecord` collections everything else uses (`products`, `customers`, `posSales`), so a POS sale is a normal citizen of the reporting/branch-isolation system described elsewhere in this doc, not a parallel one.
+
+```text
+Add items to cart (cartTotals() computes VAT on the DISCOUNTED subtotal —
+discount is allocated proportionally across cart lines before VAT, matching
+FTA guidance that a discount reduces the taxable value before tax)
+        |
+        v
+Complete Sale (cash/card/split/credit)
+        |
+        v
+saveRec('posSales', sale)              -- id/receipt_no = genRcptNo():
+                                           full millisecond timestamp + a
+                                           random suffix, not just the last
+                                           5 digits of the timestamp (the
+                                           old scheme recurred every ~100s
+                                           and, since posSales isn't in
+                                           record_key()'s explicit map, a
+                                           collision silently overwrote an
+                                           earlier sale's row AND its stock
+                                           movements)
+        |
+        v
+saveRec('salesInvoices', posToInvoice(sale,'Paid'))   -- mirror, non-blocking
+        |                                                 but surfaced on
+        v                                                 failure (toast)
+sync_pos_stock()  -- writes negative StockMovement rows (movement_type
+                     'pos_sale'), keyed by reference=receipt_no
+```
+
+**Customer picker** — a `<datalist>`-backed autocomplete on the customer-name field (`loadPosCustomers()`), reading `GET /app-data/records/customers`. `"customers"` is in `_BRANCH_FILTERED_COLLECTIONS` (`app_data.py`), so a Branch/Employee POS session only sees customers it created (plus any with no `branch_id` — admin-created or pre-dating Branch Management); an admin session has no `branch_id` and always sees every customer, unfiltered. Still name-only — `customer_id` is not yet captured on a sale (`posToInvoice()` hardcodes empty `customer_trn`/`customer_address` even when the matched customer record has them — a known gap, not yet closed).
+
+**Held orders** ("Hold Order" quick action, `saveAs('draft')`) can be resumed: `openRecent()`'s completed-transactions view now has a "Held Orders" section with a **Resume** action (`resumeSale()`) that loads the draft's items back into the live cart and deletes the draft record so it can't be resumed twice. Held/suspended records are explicitly skipped by `sync_pos_stock()` — they used to decrement real stock the moment an order was held (before it had actually sold anything), with nothing ever reversing it if the hold was abandoned or resumed; `sync_domain_delete()` also gained a `posSales` branch so deleting a held order cleans up any stock movements it had already accumulated before that fix.
+
+### Sales Return / Refund (v1: full-sale only, shipped)
+
+A refund is triggered per past sale from `openRecent()`'s completed-sales table (`openRefund()` → a confirm modal requiring a reason → `confirmRefund()`). It writes a **second, independent, negative-amount `posSales` record** rather than mutating the original sale:
+
+```text
+{
+  id: 'RET-'+original.receipt_no,   -- deterministic: a duplicate refund
+                                        attempt upserts instead of creating
+                                        a second row (record_key() falls
+                                        back to id for posSales)
+  type: 'refund', status: 'refunded',
+  original_receipt_no: original.receipt_no,   -- the link back
+  refund_reason, items (qty stays POSITIVE — "2 units returned"),
+  subtotal/vat/discount/total: all NEGATED
+}
+```
+
+Before writing, `confirmRefund()` re-checks for an existing refund against the same `original_receipt_no` (closes the two-tills-at-once race); `openRecent()` also hides the Refund button and shows a "Refunded" label once one exists, computed client-side from the same `posSales` fetch (no server-side "refunded" flag on the original record).
+
+**Why the refund bypasses the normal ledger/Invoice pipeline — the key architectural decision.** Two backend facts, not a preference: `build_journal()` (`accounting_posting.py`) rejects any negative `subtotal`/`vat`/`total` (`PostingError("Source transaction has invalid posting amounts")`); and creating a real `Invoice` row for the refund's `salesInvoices` mirror would make `app_sales_invoice_records()` (`reports.py`) dedupe the app-data record out of every report in favor of that `Invoice` row, whose own status filtering excludes `"return"` anyway. So `sync_domain_model()`'s `salesInvoices` branch now gates `sync_sales_invoice()` behind a sign-aware check:
+
+```text
+_is_credit_note_record(record):
+  "return" in (document_type + source + status).lower()  AND  total < 0
+        |
+        v
+  True  -> skip sync_sales_invoice() entirely. No Invoice row, no
+           SourceTransaction, no PostingJob, no TaxLine. Reports read the
+           refund straight from the app-data payload instead.
+  False -> normal path, unchanged — this is exactly how the MAIN Sales
+           module's own pre-existing hand-keyed "Sales Return" feature
+           (document_type:'Sales Return', but stored POSITIVE) already
+           behaved before this change, and continues to behave identically
+           after it, because it never satisfies "total < 0".
+```
+
+`posToInvoice()`'s mirror sets `document_type:'Sales Return'`, `source:'POS Return'` for a refund — matching the main Sales module's own existing convention (`isSalesReturn()` string-sniff in `app.js`) exactly, so a POS refund lands in that module's Sales Returns register with no changes there.
+
+**Reports correctness** — `reports.py` gained `_is_credit_note(row)`, the same sign-aware check, and `_build_summary()`'s revenue/VAT calculation now recognizes a row via `_is_recognized_revenue_status(status) OR _is_credit_note(row)` — one list feeds revenue, output-taxable, output-VAT, and net-VAT-payable simultaneously, so a refund correctly reduces all four. `receivables_aging` also excludes credit notes from the open-receivable count. Gating on **sign**, not status/text alone, is deliberate: it means the pre-existing positive-amount hand-keyed Sales Returns in the main module are completely unaffected by this change — still excluded from `_build_summary`, still (pre-existing, separately-flagged) counted as positive revenue in `_build_dashboard`. Fixing that historical inconsistency would mean rewriting historical data, a distinct decision not made as part of this change.
+
+**Stock reversal** reuses `sync_pos_stock()` with a sign-aware branch rather than a near-duplicate sibling function — a refund's `reference` (`'RET-'+original`) is its own namespace, so the existing delete-by-reference cleanup can't touch the original sale's movements:
+
+```text
+is_return = record.type == 'refund'  OR  record.total < 0
+movement_type = 'pos_return' if is_return else 'pos_sale'
+quantity = (+1 if is_return else -1) * quantity
+```
+
+`list_stock_levels()` sums all movement types unfiltered, so no downstream inventory code needed to change.
+
+**Out of scope for v1**: partial/line-item refunds, manager PIN/approval gating on refunds, refund-method choice (mirrors the original sale's payment method), a real FTA-numbered credit-note document/PDF (v1 relabels the existing thermal receipt), and any GL/journal posting for the refund (deliberately bypassed, per above — a proper reversing credit-note journal would mean relaxing `build_journal()`'s negative-amount guard, a separate accounting change).
+
 ## 10. Purchases, Bills, and Vendors
 
 Responsibilities:
@@ -2069,7 +2157,7 @@ Two independently shippable phases on top of §21.1, both live: a module-level r
 
 Critically, a Branch principal has **no Role of its own** — per the "module toggle alone = full access" design decision, its `permissions` frozenset is synthesized directly at login/request time as `"<module>:view"` for every module in the intersection of company-enabled and branch-enabled modules, which is sufficient to satisfy every existing `require_principal_permission()` check with no new permission model. `accessible_branch_ids` is always exactly `{self.id}` — a Branch identity never switches branches, unlike a multi-branch `Employee` (§21 Tenant Isolation's branch-switcher mechanism doesn't apply here); it lands on `/` (never `/hrms` — zero HRMS access, since its permissions never contain an HR-suite key) and is otherwise subject to the exact same branch data-isolation and module-visibility mechanisms described in §21.1/above, just as a non-Employee principal kind (`Principal.kind == "branch"`, `Principal.branch` holds the `Branch` row instead of `.user`/`.employee`). `AuditLog.branch_actor_id` records a Branch principal's actions (a fourth, mutually-exclusive-with-`user_id`/`employee_id` actor column).
 
-Frontend: `hrms.html`'s Branch modal gained a Module Access grid (`buildBranchModGrid()` in `app.js`, filtered to `BRANCH_ELIGIBLE_MODULES ∩ window.COMPANY_ALLOWED_MODULES`) and an inline "Branch Login" username/password section with the same omit-if-blank-on-edit semantics as the Employee Portal Access modal. `login.html`/`pos.html` each carry their own independent copy of the three-way login fallback chain (not shared code). The four `taxflow_principal_kind` guards in `app.js` (`ensureBackendSession`, `loginLocalBackend`, two init-block checks) that already excluded `'employee'` now also exclude `'branch'`, for the identical reason — a non-admin session must never silently auto-relog as the dev seed admin on a 401.
+Frontend: `hrms.html`'s Branch modal gained a Module Access grid (`buildBranchModGrid()` in `app.js`, filtered to `BRANCH_ELIGIBLE_MODULES ∩ window.COMPANY_ALLOWED_MODULES`) and an inline "Branch Login" username/password section with the same omit-if-blank-on-edit semantics as the Employee Portal Access modal. `login.html`/`pos.html` each carry their own independent copy of the three-way login fallback chain (not shared code) — this drifted for a while: `posLogin()` set `taxflow_token` but never `taxflow_principal_kind`, so a Branch/Employee session that logged in through POS was silently treated as an unset/admin session everywhere else (see §24's 2026-08-12 entry for the consequence and fix). The four `taxflow_principal_kind` guards in `app.js` (`ensureBackendSession`, `loginLocalBackend`, two init-block checks) that already excluded `'employee'` now also exclude `'branch'`, for the identical reason — a non-admin session must never silently auto-relog as the dev seed admin on a 401.
 
 Testing: `backend/tests/test_branch_role_module_inheritance.py` (Phase 1) and `backend/tests/test_branch_login.py` (Phase 2).
 
@@ -2272,7 +2360,16 @@ GET      /api/v1/reports/trial-balance
 GET      /api/v1/reports/summary
 GET      /api/v1/audit/trail
 GET      /api/v1/ai/workbench
-POST     /api/v1/ai/assist
+POST     /api/v1/ai/assist                -- real LLM call (OpenAI preferred,
+                                              Anthropic fallback; app/ai_client.py,
+                                              shared with the HR AI features),
+                                              grounded in the company's live
+                                              VAT/invoice/exception snapshot plus
+                                              recent open exceptions. Falls back
+                                              to the original rule-based
+                                              keyword-matched answers if no key
+                                              is configured or the call errors —
+                                              never a 500 or a blank reply.
 POST     /api/v1/ai/validate-transaction
 POST     /api/v1/ai/explain-exception
 GET      /api/v1/corporate-accounting/summary
@@ -2331,6 +2428,8 @@ POST /api/v1/documents/{id}/link
 **Recent app-wide security fixes (2026-08-07)**: a superadmin-only `DELETE /superadmin/companies/{id}` now requires the acting superadmin's own account password, verified server-side (previously gated only by two hardcoded strings checked client-side in JS); `companies.py`'s `_resolve_company()` used to silently re-link a user with an orphaned `company_id` to whichever company sorted first in the table — an arbitrary unrelated tenant — now fails closed (404) instead; superadmin's `reset-password`/`delete-company`/`impersonate` endpoints gained rate limits (20/minute, defense-in-depth against a leaked token); production startup now also rejects `CORS_ORIGINS="*"` (combined with `allow_credentials=True`, a wildcard origin lets any site make credentialed cross-origin requests). See `backend/tests/test_security_hardening.py` and `backend/tests/test_companies_isolation.py`.
 
 **Branch Login (2026-08-08/09, §21.2)**: a new, genuinely separate auth surface — `POST /api/v1/branches/login` authenticates a `Branch` entity directly (no `Employee` in the loop). Follows the same timing-safe pattern as every other login endpoint (`hr_login`, `authenticate_user`): a constant-time dummy-hash `bcrypt` verify runs even when the username doesn't match, so response timing can't be used to enumerate valid branch usernames. `Branch.username` is globally unique (partial unique index, `WHERE username IS NOT NULL`) and case-insensitively matched, same convention as `Employee.username`. A Branch principal has no Role and no password-reset/employee_no fallback — a real password must be set explicitly by a company admin before the login works at all. Deploy note: this and the preceding module-toggle phase both changed `app.js` substantially; the cache-busting `?v=` query string on `<script src="src/app.js?v=...">` (`hrms.html`, `index.html`) must be bumped on any app.js-touching deploy, or browsers that visited before the deploy keep serving stale JS indefinitely — missed once for this exact feature (fixed same day) and confirmed as the root cause of an early "branch login doesn't work" report even though the backend was already correct end-to-end.
+
+**Force-logout bug class + session key leakage (2026-08-12)**: `authenticatedFetch()` (`app.js`) treated *every* 401 as "invalid session — wipe the token and force re-login," which is only correct for a genuinely expired/invalid token. `get_current_user()` (`dependencies.py`, the User-only backend dependency) already returns a distinguishable `detail` for the other case — `"User no longer exists"` — whenever a Branch/Employee token's JWT subject (never a real `User.id`, by design) hits a User-only endpoint; a real expired/malformed token instead produces `"Invalid access token"` (any `JWTError`, including expiry). The frontend never looked at that distinction, so any unguarded call site touching one of the **93** `get_current_user`-only endpoints (vs. 12 accepting any `Principal`) force-logged-out an otherwise-perfectly-valid Branch/Employee session — reproduced twice: once via an AI Workbench bootstrap call (fixed same day with a call-site guard), once via `loadExceptionCenter()` (`"exception"` has no `data-module` nav gate, and the async permission-nav check fails open before it resolves). `authenticatedFetch()` now only force-logs-out when the 401 *isn't* the "User no longer exists" detail for a `taxflow_principal_kind` of `'employee'`/`'branch'` — the same principle already applied to 403 two lines above (a scoped rejection must not nuke the whole session) — fixing the bug class at its root instead of requiring a guard at every call site, present and future. Two adjacent, independently-real issues found in the same pass: `posLogin()` (`pos.html`) never set `taxflow_principal_kind` at all (see §21.2's note); and `logout()` didn't clear `taxflow_principal_kind`, `taxflow_active_branch_id`, `taxflow_superadmin_token`, `ess_token`, or `hr_access_token` — the `taxflow_active_branch_id` gap in particular meant a branch-scoped session logging out on a shared browser left the *next* login on that browser silently filtered to the previous session's branch (`_withActiveBranchParam()` appends it to every branch-aware call), a real cross-session data-scoping leak, not cosmetic staleness. All three fixed together; no backend change needed — `get_current_user()`'s existing error shape already carried the signal.
 
 Required controls:
 
