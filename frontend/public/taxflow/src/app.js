@@ -22838,7 +22838,14 @@ function initApp(){
 
   restoreSalesInvoices();
   restoreAIThread();
-  if(document.getElementById('page-ai'))scheduleIdleTask(loadAIWorkbench,600);
+  // /ai/workbench is a User-only endpoint (get_current_user) — for an HRMS
+  // sub-user (Employee principal) or a Branch Login Phase 2 session (Branch
+  // principal) it 401s, which authenticatedFetch treats as an invalid
+  // session and force-logs them out. Same guard as syncCompanyFromDatabase()
+  // etc. below.
+  if(document.getElementById('page-ai')&&!['employee','branch'].includes(localStorage.getItem('taxflow_principal_kind'))){
+    scheduleIdleTask(loadAIWorkbench,600);
+  }
   renderAuditLog();
   initInvoiceLayouts();
   updateInvoiceLayoutPreview();
