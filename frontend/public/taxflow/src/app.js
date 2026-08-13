@@ -265,6 +265,7 @@ function stab(el,target){
   if(target==='p-records')goToPurchaseRecordsPage(1);
   if(target==='hr-leave')scheduleIdleTask(updateLeaveBalance,50);
   if(target==='acc-voucher')prepareJournalForm();
+  if(target==='bk-reconcile')loadBankReconItems();
   if(target==='acc-ledger')loadAccountingFromDb();
   if(target==='set-backup')loadBackupTab();
   if(target==='set-users')loadUsersIntoTable();
@@ -6200,38 +6201,89 @@ function formatFinanceAmount(value){
 }
 
 // ── Bank Reconciliation ───────────────────────────────────────────────────────
-const _reconMatches=new Map(); // bookId -> stmtId
-const _stmtLines=[]; // {id, date, desc, amount, matched}
+// Backed by the real BankAccount/BankStatementLine/BankReconciliationMatch
+// tables (accounting.py) — previously this whole tab only ever wrote to a
+// generic app-data blob (saveServer('bankReconLines'/'bankReconMatches',...))
+// that was never read back, so matches vanished on refresh and nothing
+// stopped the same statement line or ledger entry being matched twice.
+// bookId/stmtId below are the real GeneralLedgerEntry.id / BankStatementLine.id.
+const _reconMatches=new Map(); // bookId -> {matchId, stmtId}
+const _stmtLines=[]; // {id, date, desc, amount}
+let _reconBankAccountId=null;
 
-function loadBankReconItems(){
+async function _ensureReconciliationBankAccount(){
+  if(_reconBankAccountId)return _reconBankAccountId;
+  try{
+    const existing=await moduleApi('/bank-accounts');
+    if(Array.isArray(existing)&&existing.length){_reconBankAccountId=existing[0].id;return _reconBankAccountId;}
+  }catch{/* fall through to auto-provision */}
+  if(!_coaFlatAccounts.length){
+    try{const accs=await moduleApi('/accounts');if(Array.isArray(accs))_coaFlatAccounts=accs;}catch{return null;}
+  }
+  const bankLedger=_coaFlatAccounts.find(a=>!a.is_group&&(a.is_bank_cash||/bank|cash/i.test(a.name||'')||/bank|cash/i.test(a.type||'')));
+  if(!bankLedger)return null;
+  const appBank=financeBankAccountsByKey.size?[...financeBankAccountsByKey.values()][0]:null;
+  try{
+    const created=await moduleApi('/bank-accounts',{method:'POST',body:{
+      account_id:bankLedger.id,
+      bank_name:appBank?.bank||appBank?.bank_name||'Primary Operating Account',
+      iban:appBank?.iban||null,
+      currency:appBank?.currency||'AED',
+      status:'active',
+    }});
+    _reconBankAccountId=created.id;
+    return _reconBankAccountId;
+  }catch{return null;}
+}
+
+async function loadBankReconItems(){
   const bookTbody=document.getElementById('recon-book-tbody');
   const stmtTbody=document.getElementById('recon-stmt-tbody');
   if(!bookTbody||!stmtTbody)return;
 
-  // Collect ledger entries that look like bank movements
-  const ledgerRows=[...document.querySelectorAll('#ledger-tbody tr')].filter(r=>r.cells.length>=5);
+  const bankAccountId=await _ensureReconciliationBankAccount();
+  if(!bankAccountId){
+    bookTbody.innerHTML=`<tr><td colspan="6" style="color:var(--text3);text-align:center">Set up a Bank/Cash ledger account in Chart of Accounts to enable reconciliation.</td></tr>`;
+    stmtTbody.innerHTML='';
+    return;
+  }
+  const bankLedgerAccountId=(await moduleApi('/bank-accounts').catch(()=>[])).find(b=>b.id===bankAccountId)?.account_id;
+
+  let glRows=[],stmtRows=[],matchRows=[];
+  try{
+    [glRows,stmtRows,matchRows]=await Promise.all([
+      bankLedgerAccountId?moduleApi(`/general-ledger?account_id=${encodeURIComponent(bankLedgerAccountId)}`):Promise.resolve([]),
+      moduleApi(`/bank-statement-lines?bank_account_id=${encodeURIComponent(bankAccountId)}`),
+      moduleApi(`/bank-reconciliation/matches?bank_account_id=${encodeURIComponent(bankAccountId)}`),
+    ]);
+  }catch(err){
+    console.warn('Bank reconciliation load failed:',err);
+    toast('Bank reconciliation data could not load','warn');
+    return;
+  }
+
+  _stmtLines.length=0;
+  (Array.isArray(stmtRows)?stmtRows:[]).forEach(line=>_stmtLines.push({id:line.id,date:line.transaction_date,desc:line.narration||line.party_name||'Statement line',amount:Number(line.debit||0)||Number(line.credit||0)}));
+  _reconMatches.clear();
+  (Array.isArray(matchRows)?matchRows:[]).forEach(m=>{if(m.ledger_entry_id&&m.statement_line_id)_reconMatches.set(m.ledger_entry_id,{matchId:m.id,stmtId:m.statement_line_id});});
+
   bookTbody.innerHTML='';
-  ledgerRows.slice(0,50).forEach(row=>{
-    const date=row.cells[0]?.textContent.trim();
-    const ref=row.cells[1]?.textContent.trim();
-    const desc=row.cells[2]?.textContent.trim();
-    const dr=parseAmount(row.cells[3]?.textContent)||0;
-    const cr=parseAmount(row.cells[4]?.textContent)||0;
-    const amount=dr||cr;
+  (Array.isArray(glRows)?glRows:[]).slice(0,100).forEach(row=>{
+    const amount=Number(row.debit||0)||Number(row.credit||0);
     if(!amount)return;
-    const id='BOOK-'+ref+'-'+date;
-    const matched=_reconMatches.has(id);
+    const matched=_reconMatches.has(row.id);
     const tr=document.createElement('tr');
-    tr.dataset.id=id;
+    tr.dataset.id=row.id;
     tr.dataset.amount=String(amount);
-    tr.style.cursor='pointer';
-    tr.innerHTML=`<td><input type="checkbox" data-recon-book="${escapeHtml(id)}"></td><td>${escapeHtml(date)}</td><td class="mono" style="font-size:11px">${escapeHtml(ref)}</td><td>${escapeHtml(desc.slice(0,40))}</td><td class="mono text-right">${formatAed(amount)}</td><td><span class="b ${matched?'b-g':'b-a'}">${matched?'Matched':'Unmatched'}</span></td>`;
+    tr.innerHTML=`<td><input type="checkbox" data-recon-book="${escapeHtml(row.id)}"></td><td>${escapeHtml((row.entry_date||'').slice(0,10))}</td><td class="mono" style="font-size:11px">${escapeHtml(row.voucher_no||'')}</td><td>${escapeHtml((row.narration||'').slice(0,40))}</td><td class="mono text-right">${formatAed(amount)}</td><td><span class="b ${matched?'b-g':'b-a'}">${matched?'Matched':'Unmatched'}</span></td>`;
     bookTbody.appendChild(tr);
   });
+  if(!bookTbody.children.length)bookTbody.innerHTML=`<tr><td colspan="6" style="color:var(--text3);text-align:center">No bank ledger entries yet.</td></tr>`;
 
+  const matchedStmtIds=new Set([..._reconMatches.values()].map(v=>v.stmtId));
   stmtTbody.innerHTML='';
   _stmtLines.forEach(line=>{
-    const matched=[..._reconMatches.values()].includes(line.id);
+    const matched=matchedStmtIds.has(line.id);
     const tr=document.createElement('tr');
     tr.dataset.id=line.id;
     tr.dataset.amount=String(line.amount);
@@ -6245,32 +6297,47 @@ function loadBankReconItems(){
 function _updateReconStats(){
   const stmtTotal=_stmtLines.reduce((s,l)=>s+l.amount,0);
   const bookTotal=[...document.querySelectorAll('#recon-book-tbody tr')].reduce((s,r)=>s+parseFloat(r.dataset.amount||0),0);
-  updateBankReconciliation(stmtTotal,bookTotal,[..._reconMatches.keys()].length);
-  const unmatchedBook=[...document.querySelectorAll('#recon-book-tbody tr')].filter(r=>!_reconMatches.has(r.dataset.id)).length;
+  updateBankReconciliation(stmtTotal,bookTotal,_reconMatches.size);
+  const unmatchedBook=[...document.querySelectorAll('#recon-book-tbody tr[data-id]')].filter(r=>!_reconMatches.has(r.dataset.id)).length;
   const el=document.getElementById('recon-unmatched-book');
   if(el)el.textContent=unmatchedBook+' unmatched';
 }
 
-function addStatementLine(){
+async function addStatementLine(){
+  const bankAccountId=await _ensureReconciliationBankAccount();
+  if(!bankAccountId){toast('Set up a Bank/Cash ledger account first','warn');return;}
   const date=prompt('Statement line date (YYYY-MM-DD):',new Date().toISOString().split('T')[0]);
   if(!date)return;
   const desc=prompt('Description:','');
   if(!desc)return;
-  const amtStr=prompt('Amount (AED):','');
+  const amtStr=prompt('Amount (AED) — negative for a debit/outflow:','');
   const amount=parseFloat(amtStr)||0;
   if(!amount)return;
-  _stmtLines.push({id:'STMT-'+Date.now(),date,desc,amount});
-  saveServer('bankReconLines',{id:'STMT-'+Date.now(),date,desc,amount,created:new Date().toISOString()});
-  loadBankReconItems();
+  try{
+    await moduleApi('/bank-statement-lines',{method:'POST',body:{
+      bank_account_id:bankAccountId,
+      statement_date:date,
+      transaction_date:date,
+      narration:desc,
+      debit:amount>0?amount:0,
+      credit:amount<0?-amount:0,
+    }});
+    await loadBankReconItems();
+    toast('Statement line added ✓','ok');
+  }catch(err){
+    console.warn('Add statement line failed:',err);
+    toast('Statement line could not be saved','err');
+  }
 }
 
 function removeStmtLine(id){
-  const idx=_stmtLines.findIndex(l=>l.id===id);
-  if(idx>=0)_stmtLines.splice(idx,1);
-  loadBankReconItems();
+  // Deleting a raw statement line (vs. unmatching one) isn't exposed by the
+  // backend — matches what's actually reconcilable: a line that's already
+  // matched must be unmatched via the book-side checkbox + Unmatch button.
+  toast('Select the matched book entry and use "Unmatch" instead','info');
 }
 
-function matchSelected(){
+async function matchSelected(){
   const bookChecked=[...document.querySelectorAll('[data-recon-book]:checked')];
   const stmtChecked=[...document.querySelectorAll('[data-recon-stmt]:checked')];
   if(!bookChecked.length||!stmtChecked.length){toast('Select one book entry and one statement line','warn');return;}
@@ -6278,32 +6345,53 @@ function matchSelected(){
   const stmtId=stmtChecked[0].dataset.reconStmt;
   const bookAmt=parseFloat(document.querySelector(`[data-id="${bookId}"]`)?.dataset.amount||0);
   const stmtAmt=parseFloat(document.querySelector(`[data-id="${stmtId}"]`)?.dataset.amount||0);
-  if(Math.abs(bookAmt-stmtAmt)>0.01){
-    toast(`Amount mismatch: book ${formatAed(bookAmt)} vs statement ${formatAed(stmtAmt)}. Match anyway?`,'warn');
+  const difference=Math.abs(bookAmt-stmtAmt);
+  if(difference>0.01){
+    toast(`Amount mismatch: book ${formatAed(bookAmt)} vs statement ${formatAed(stmtAmt)} — matching anyway`,'warn');
   }
-  _reconMatches.set(bookId,stmtId);
-  saveServer('bankReconMatches',{book_id:bookId,stmt_id:stmtId,matched_at:new Date().toISOString()});
-  loadBankReconItems();
-  audit('Matched bank reconciliation item',bookId,'Matched');
-  toast('Matched ✓','ok');
+  try{
+    await moduleApi('/bank-reconciliation/matches',{method:'POST',body:{
+      statement_line_id:stmtId,ledger_entry_id:bookId,match_method:'manual',difference,
+    }});
+    await loadBankReconItems();
+    audit('Matched bank reconciliation item',bookId,'Matched');
+    toast('Matched ✓','ok');
+  }catch(err){
+    toast(err?.detail||'That line or entry is already matched to something else','warn');
+  }
 }
 
-function unmatchSelected(){
+async function unmatchSelected(){
   const bookChecked=[...document.querySelectorAll('[data-recon-book]:checked')];
-  bookChecked.forEach(cb=>_reconMatches.delete(cb.dataset.reconBook));
-  loadBankReconItems();
+  if(!bookChecked.length){toast('Select a matched book entry to unmatch','warn');return;}
+  for(const cb of bookChecked){
+    const match=_reconMatches.get(cb.dataset.reconBook);
+    if(!match)continue;
+    try{await moduleApi(`/bank-reconciliation/matches/${match.matchId}`,{method:'DELETE'});}
+    catch(err){console.warn('Unmatch failed:',err);}
+  }
+  await loadBankReconItems();
+  toast('Unmatched ✓','ok');
 }
 
-function autoReconcile(){
-  const bookRows=[...document.querySelectorAll('#recon-book-tbody tr')];
+async function autoReconcile(){
+  const bookRows=[...document.querySelectorAll('#recon-book-tbody tr[data-id]')];
+  const matchedStmtIds=new Set([..._reconMatches.values()].map(v=>v.stmtId));
   let matched=0;
-  bookRows.forEach(bRow=>{
-    if(_reconMatches.has(bRow.dataset.id))return;
+  for(const bRow of bookRows){
+    if(_reconMatches.has(bRow.dataset.id))continue;
     const bAmt=parseFloat(bRow.dataset.amount||0);
-    const stmtMatch=_stmtLines.find(l=>Math.abs(l.amount-bAmt)<=0.01&&![..._reconMatches.values()].includes(l.id));
-    if(stmtMatch){_reconMatches.set(bRow.dataset.id,stmtMatch.id);matched++;}
-  });
-  loadBankReconItems();
+    const stmtMatch=_stmtLines.find(l=>Math.abs(l.amount-bAmt)<=0.01&&!matchedStmtIds.has(l.id));
+    if(!stmtMatch)continue;
+    try{
+      await moduleApi('/bank-reconciliation/matches',{method:'POST',body:{
+        statement_line_id:stmtMatch.id,ledger_entry_id:bRow.dataset.id,match_method:'auto',difference:0,
+      }});
+      matchedStmtIds.add(stmtMatch.id);
+      matched++;
+    }catch{/* already matched elsewhere — skip */}
+  }
+  await loadBankReconItems();
   toast(matched?`Auto-matched ${matched} item(s) ✓`:'No automatic matches found',matched?'ok':'info');
 }
 
@@ -15047,11 +15135,36 @@ function updateJournalPageControls(){
   if(nextBtn)nextBtn.disabled=_ldgPage.loading||_ldgPage.page>=totalPages;
 }
 
+// The 5 voucher types this form's "Voucher Type" select offers — created
+// on-demand (idempotent upsert-by-code server side) so every entry actually
+// flows through the real Voucher/VoucherLine tables and the real approval
+// pipeline (POST /vouchers -> POST /vouchers/{id}/approve) instead of
+// bypassing straight to POST /journal, which left the entire Voucher
+// approval system dead code no matter what a company configured.
+const _VOUCHER_TYPE_DEFS={
+  'Journal Voucher':{code:'JV',prefix:'JV'},
+  'Sales Voucher':{code:'SV',prefix:'SV'},
+  'Purchase Voucher':{code:'PV',prefix:'PV'},
+  'Receipt Voucher':{code:'RV',prefix:'RV'},
+  'Payment Voucher':{code:'PMV',prefix:'PMV'},
+};
+const _voucherTypeIdCache={};
+
+async function _ensureVoucherTypeId(label){
+  const def=_VOUCHER_TYPE_DEFS[label]||_VOUCHER_TYPE_DEFS['Journal Voucher'];
+  if(_voucherTypeIdCache[def.code])return _voucherTypeIdCache[def.code];
+  const row=await moduleApi('/voucher-types',{method:'POST',body:{
+    name:label,code:def.code,prefix:def.prefix,approval_required:false,
+  }});
+  _voucherTypeIdCache[def.code]=row.id;
+  return row.id;
+}
+
 async function postJournalEntry(){
   const date=document.getElementById('journal-date')?.value||'';
   const ref=(document.getElementById('journal-ref')?.value||'').trim();
   const desc=(document.getElementById('journal-desc')?.value||'').trim();
-  const source=(document.getElementById('journal-source')?.value||'Manual').toLowerCase();
+  const voucherTypeLabel=document.getElementById('journal-source')?.value||'Journal Voucher';
   const rawLines=getJournalLines();
   const lines=getJournalLines().filter(line=>line.account_id&&line.account!=='Select Account...'&&(line.debit||line.credit));
   const totals=recalcJournal();
@@ -15065,21 +15178,30 @@ async function postJournalEntry(){
   if(Math.abs(totals.diff)>.01){toast('Journal must balance before posting','err');return;}
 
   try{
-    const saved=await moduleApi('/journal',{method:'POST',body:{
+    const voucherTypeId=await _ensureVoucherTypeId(voucherTypeLabel);
+    const voucher=await moduleApi('/vouchers',{method:'POST',body:{
+      voucher_type_id:voucherTypeId,
+      voucher_no:ref,
+      voucher_date:new Date(date).toISOString(),
+      narration:desc,
+      lines:lines.map(line=>({account_id:line.account_id,debit:line.debit,credit:line.credit,narration:desc})),
+    }});
+    const posted=voucher.status==='posted'?voucher:await moduleApi(`/vouchers/${voucher.id}/approve`,{method:'POST'});
+    renderJournalEntry({
+      id:posted.posted_journal_id||posted.id,
       entry_number:ref,
       entry_date:new Date(date).toISOString(),
       description:desc,
-      source_module:source,
-      lines:lines.map(line=>({account_id:line.account_id,description:desc,debit:line.debit,credit:line.credit}))
-    }});
-    renderJournalEntry(saved);
-    toast('Journal entry posted to database','ok');
-    audit('Posted journal entry',ref,'Posted');
+      source_module:voucherTypeLabel.toLowerCase(),
+      lines:posted.lines?.map(line=>({account_id:line.account_id,description:line.narration||desc,debit:line.debit,credit:line.credit}))||[],
+    });
+    toast('Voucher posted to database','ok');
+    audit('Posted voucher entry',ref,'Posted');
     prepareJournalForm(true);
     filterLedger();
   }catch(err){
-    console.warn('Journal post failed:',err);
-    toast('Journal could not be posted to database','err');
+    console.warn('Voucher post failed:',err);
+    toast('Voucher could not be posted to database','err');
   }
 }
 

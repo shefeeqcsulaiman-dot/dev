@@ -718,6 +718,17 @@ def create_voucher_type(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> VoucherType:
+    # Upsert by code — the voucher-entry form calls this to ensure its 5
+    # built-in types exist before every post, so a plain insert-only
+    # endpoint would accumulate a duplicate VoucherType row on every single
+    # journal entry ever posted through it.
+    existing = (
+        db.query(VoucherType)
+        .filter(VoucherType.company_id == current_user.company_id, VoucherType.code == payload.code)
+        .first()
+    )
+    if existing:
+        return existing
     row = VoucherType(company_id=current_user.company_id, **payload.model_dump())
     db.add(row)
     db.commit()
@@ -1097,6 +1108,18 @@ def create_bank_account(
     return row
 
 
+@router.get("/bank-statement-lines", response_model=list[BankStatementLineOut])
+def list_bank_statement_lines(
+    bank_account_id: str | None = None,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("accounting:view")),
+) -> list[BankStatementLine]:
+    query = db.query(BankStatementLine).filter(BankStatementLine.company_id == principal.company_id)
+    if bank_account_id:
+        query = query.filter(BankStatementLine.bank_account_id == bank_account_id)
+    return query.order_by(BankStatementLine.transaction_date.desc()).all()
+
+
 @router.post("/bank-statement-lines", response_model=BankStatementLineOut, status_code=201)
 def create_bank_statement_line(
     payload: BankStatementLineCreate,
@@ -1113,6 +1136,18 @@ def create_bank_statement_line(
     return row
 
 
+@router.get("/bank-reconciliation/matches", response_model=list[BankMatchOut])
+def list_bank_matches(
+    bank_account_id: str | None = None,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("accounting:view")),
+) -> list[BankReconciliationMatch]:
+    query = db.query(BankReconciliationMatch).filter(BankReconciliationMatch.company_id == principal.company_id)
+    if bank_account_id:
+        query = query.filter(BankReconciliationMatch.bank_account_id == bank_account_id)
+    return query.order_by(BankReconciliationMatch.confirmed_at.desc()).all()
+
+
 @router.post("/bank-reconciliation/matches", response_model=BankMatchOut, status_code=201)
 def match_bank_line(
     payload: BankMatchCreate,
@@ -1123,6 +1158,17 @@ def match_bank_line(
     ledger = db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == current_user.company_id, GeneralLedgerEntry.id == payload.ledger_entry_id).first()
     if not statement or not ledger:
         raise HTTPException(status_code=404, detail="Statement line or ledger entry not found")
+    existing = (
+        db.query(BankReconciliationMatch)
+        .filter(
+            BankReconciliationMatch.company_id == current_user.company_id,
+            BankReconciliationMatch.match_status == "matched",
+            (BankReconciliationMatch.statement_line_id == statement.id) | (BankReconciliationMatch.ledger_entry_id == ledger.id),
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="Statement line or ledger entry is already matched to something else — unmatch it first")
     match = BankReconciliationMatch(
         company_id=current_user.company_id,
         bank_account_id=statement.bank_account_id,
@@ -1139,6 +1185,22 @@ def match_bank_line(
     db.commit()
     db.refresh(match)
     return match
+
+
+@router.delete("/bank-reconciliation/matches/{match_id}", status_code=204)
+def unmatch_bank_line(
+    match_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    match = db.query(BankReconciliationMatch).filter(BankReconciliationMatch.company_id == current_user.company_id, BankReconciliationMatch.id == match_id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    statement = db.query(BankStatementLine).filter(BankStatementLine.id == match.statement_line_id).first()
+    if statement:
+        statement.status = "unmatched"
+    db.delete(match)
+    db.commit()
 
 
 @router.post("/period-locks", response_model=PeriodLockOut, status_code=201)
@@ -1172,7 +1234,7 @@ def create_journal(
 ) -> JournalEntry:
     debit = sum((line.debit for line in payload.lines), Decimal("0.00"))
     credit = sum((line.credit for line in payload.lines), Decimal("0.00"))
-    if debit != credit:
+    if money(debit) != money(credit):
         raise HTTPException(status_code=422, detail="Journal must balance: total debit must equal total credit")
     assert_period_open(db, current_user.company_id, "accounting", payload.entry_date)
 

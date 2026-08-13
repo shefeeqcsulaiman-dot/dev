@@ -293,16 +293,27 @@ def create_gl_entries_from_journal(
         ob = money(account.opening_balance if account else 0)
         ob_type = (account.opening_balance_type or "DR") if account else "DR"
         running = ob if ob_type == "DR" else -ob
-        prior = (
-            db.query(
-                func.coalesce(func.sum(GeneralLedgerEntry.debit - GeneralLedgerEntry.credit), Decimal("0.00"))
-            )
-            .filter(
-                GeneralLedgerEntry.account_id == journal_line.account_id,
-                GeneralLedgerEntry.company_id == journal.company_id,
-            )
-            .scalar()
+        # Scoped to entries dated on or before this journal's own entry_date
+        # (not raw insertion order) and to the same branch — otherwise a
+        # backdated journal's stored "balance" snapshot would include
+        # chronologically-later entries, and two branches sharing an
+        # account would have their running balances mixed together. This
+        # is still only a point-in-time snapshot: entries already posted
+        # after this one's date are not retroactively recalculated when a
+        # backdated entry lands between them (documented limitation, not
+        # fixed here — would require rewriting every later entry's balance).
+        prior_query = db.query(
+            func.coalesce(func.sum(GeneralLedgerEntry.debit - GeneralLedgerEntry.credit), Decimal("0.00"))
+        ).filter(
+            GeneralLedgerEntry.account_id == journal_line.account_id,
+            GeneralLedgerEntry.company_id == journal.company_id,
+            GeneralLedgerEntry.entry_date <= journal.entry_date,
         )
+        if journal.branch_id:
+            prior_query = prior_query.filter(
+                (GeneralLedgerEntry.branch_id == journal.branch_id) | (GeneralLedgerEntry.branch_id.is_(None))
+            )
+        prior = prior_query.scalar()
         running += money(prior or 0)
         line_net = money(journal_line.debit) - money(journal_line.credit)
         db.add(
