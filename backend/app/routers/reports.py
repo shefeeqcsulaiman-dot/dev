@@ -213,21 +213,24 @@ def app_sales_invoice_records(db: Session, company_id: str) -> list[dict[str, An
 
 
 def app_purchase_records(db: Session, company_id: str) -> list[dict[str, Any]]:
-    """purchaseRecords app-data rows, deduped against purchases that already
-    posted a real input TaxLine (saving a purchaseRecords row triggers
-    sync_purchase_accounting() -> approve_and_post_source(), app_data.py's
-    purchaseRecords branch) — the same dedup app_sales_invoice_records()
-    already does against Invoice, applied to the purchase side. Without
-    this, _build_summary()'s input_vat double-counted: once from the real
-    TaxLine, once from the raw app-data row's own tax_amount, for every
-    normally-posted purchase — understating net_vat_payable."""
+    """purchaseRecords + bills app-data rows, deduped against purchases that
+    already posted a real input TaxLine (saving a purchaseRecords or bills
+    row triggers sync_purchase_accounting()/sync_bill_accounting() ->
+    approve_and_post_source(), app_data.py's purchaseRecords/bills branches)
+    — the same dedup app_sales_invoice_records() already does against
+    Invoice, applied to the purchase side. Without this, _build_summary()'s
+    input_vat double-counted: once from the real TaxLine, once from the raw
+    app-data row's own tax_amount, for every normally-posted purchase —
+    understating net_vat_payable. Bills were excluded here entirely until
+    they started posting real TaxLines (see sync_bill_accounting()), which
+    itself understated net_vat_payable by 100% of every bill's input VAT."""
     existing_refs = {
         normalized_ref(reference)
         for (reference,) in db.query(SourceTransaction.reference)
         .join(TaxLine, TaxLine.source_id == SourceTransaction.id)
         .filter(
             SourceTransaction.company_id == company_id,
-            SourceTransaction.module == "purchase",
+            SourceTransaction.module.in_(["purchase", "purchase_bill"]),
             TaxLine.direction == "input",
         )
         .distinct()
@@ -236,8 +239,24 @@ def app_purchase_records(db: Session, company_id: str) -> list[dict[str, Any]]:
     }
     records = []
     for row in app_data_payloads(db, company_id, "purchaseRecords"):
-        purchase_ref = normalized_ref(row.get("ref") or row.get("invoice_no") or row.get("id"))
+        # Mirrors app_data.py's sync_domain_model() reference formula for
+        # purchaseRecords, so a row with no ref/invoice_no still dedupes
+        # correctly against the "PURCHASE-{id}" fallback reference its own
+        # posted TaxLine was created under.
+        purchase_ref = normalized_ref(
+            row.get("ref") or row.get("invoice_no")
+            or (f"PURCHASE-{row['id']}" if row.get("id") else None)
+        )
         if purchase_ref and purchase_ref in existing_refs:
+            continue
+        records.append(row)
+    for row in app_data_payloads(db, company_id, "bills"):
+        # Mirrors app_data.py's sync_domain_model() reference formula for bills.
+        bill_ref = normalized_ref(
+            row.get("bill_no")
+            or (f"BILL-{row['id']}" if row.get("id") else None)
+        )
+        if bill_ref and bill_ref in existing_refs:
             continue
         records.append(row)
     return records

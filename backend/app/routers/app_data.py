@@ -14,6 +14,7 @@ import zipfile
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 from xml.etree import ElementTree
 
 import datetime as _dt
@@ -31,7 +32,7 @@ from app.database import get_db
 from app.auth_principal import resolve_active_branch
 from app.dependencies import Principal, branch_allows_module, company_allows_module, get_current_principal, get_current_user
 from app.limiter import limiter
-from app.module_integration import sync_purchase_accounting, sync_sales_invoice_accounting
+from app.module_integration import sync_bill_accounting, sync_purchase_accounting, sync_sales_invoice_accounting
 from app.models import (
     Account,
     AppDataRecord,
@@ -86,7 +87,7 @@ _PERIOD_LOCKED_COLLECTIONS: dict[str, str] = {
 # AppDataRecord.branch_id has been stamped on every write since Phase 4 and
 # filtering would be technically safe for any collection immediately.
 _BRANCH_FILTERED_COLLECTIONS = frozenset({
-    "purchaseRecords",  # Phase 5 — Inventory/Purchases
+    "purchaseRecords", "bills",  # Phase 5 — Inventory/Purchases
     "posSales", "salesInvoices",  # Phase 6 — POS/Sales
     "customers",  # POS customer picker — a branch only sees customers it
     # created (branch_id stamped on write); customers with no branch_id
@@ -1333,20 +1334,22 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
         # own docstring.
 
     elif collection == "bills":
-        sync_source_transaction(
+        reference = str(record.get("bill_no") or f"BILL-{record.get('id') or record.get('_id') or uuid4().hex[:8]}")
+        sync_bill_accounting(
             db,
-            principal,
-            module="purchase_bill",
-            reference=str(record.get("bill_no") or "BILL"),
+            company_id=principal.company_id,
+            reference=reference,
             party_name=str(record.get("vendor") or ""),
             subtotal=decimal_value(record.get("subtotal")),
             vat=decimal_value(record.get("vat")),
             total=decimal_value(record.get("total")),
-            status=str(record.get("status") or "draft"),
+            lines=record.get("lines") if isinstance(record.get("lines"), list) else None,
+            user_id=principal_user_id(principal),
+            branch_id=str(record.get("branch_id") or "").strip() or principal.branch_id,
         )
 
     elif collection == "purchaseRecords":
-        reference = str(record.get("ref") or record.get("invoice_no") or "PURCHASE")
+        reference = str(record.get("ref") or record.get("invoice_no") or f"PURCHASE-{record.get('id') or record.get('_id') or uuid4().hex[:8]}")
         sync_purchase_accounting(
             db,
             company_id=principal.company_id,

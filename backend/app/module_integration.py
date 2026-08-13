@@ -88,6 +88,36 @@ def sync_purchase_accounting(
     return tx
 
 
+def sync_bill_accounting(
+    db: Session,
+    company_id: str,
+    reference: str,
+    party_name: str,
+    subtotal: Decimal,
+    vat: Decimal,
+    total: Decimal,
+    lines: list[dict[str, Any]] | None = None,
+    user_id: str | None = None,
+    branch_id: str | None = None,
+) -> SourceTransaction:
+    tx = upsert_source_transaction(
+        db,
+        company_id=company_id,
+        module="purchase_bill",
+        reference=reference,
+        party_name=party_name,
+        subtotal=subtotal,
+        vat=vat,
+        total=total,
+        lines=lines,
+        default_account_code="4000",
+        branch_id=branch_id,
+    )
+    approve_and_post_source(db, tx, user_id)
+    refresh_corporate_tax_from_posted_sources(db, company_id)
+    return tx
+
+
 def upsert_source_transaction(
     db: Session,
     company_id: str,
