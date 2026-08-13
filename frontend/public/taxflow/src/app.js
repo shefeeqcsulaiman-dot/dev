@@ -4788,7 +4788,8 @@ async function loadStockLevelsFromServer(){
         unit:row.unit||'PCS',
         reorderLevel:parseAmount(row.reorder_level??row.reorderLevel),
         purchase_rate:parseAmount(row.cost??row.purchase_rate??row.unit_cost??0),
-        selling_price:parseAmount(row.selling_price??row.price??row.unit_price??0)
+        selling_price:parseAmount(row.selling_price??row.price??row.unit_price??0),
+        negativeStock:!!row.negative_stock
       }))
       .filter(item=>!isDemoProductRecord(item))
       .filter(item=>item.code||item.name);
@@ -4818,6 +4819,11 @@ function _collectSalesMovements(){
     let inv={};
     try{inv=JSON.parse(row.dataset.salesInvoice||'{}');}catch{}
     if(!inv.date||isSalesReturn(inv))return;
+    // POS-sourced sales invoices already have a real pos_sale StockMovement
+    // row from the backend (sync_pos_stock(), app_data.py) — synthesizing
+    // another movement from the invoice line here double-counted every POS
+    // sale in the Stock Movements table and its Monthly History dialog.
+    if(String(inv.source||'').toLowerCase().startsWith('pos'))return;
     const lines=Array.isArray(inv.lines)?inv.lines:[];
     lines.forEach(line=>{
       const name=(line.description||line.product||'').trim();
@@ -5210,8 +5216,9 @@ function stockItemKey(value){
 
 function renderStockLevelRow(item){
   const row=document.createElement('tr');
-  const status=item.available<=0?'Out':item.reorderLevel&&item.available<=item.reorderLevel?'Low':'OK';
-  const cls=status==='Out'?'b-r':status==='Low'?'b-a':'b-g';
+  const negative=item.negativeStock||item.available<0;
+  const status=negative?'Negative':item.available<=0?'Out':item.reorderLevel&&item.available<=item.reorderLevel?'Low':'OK';
+  const cls=negative?'b-r':status==='Out'?'b-r':status==='Low'?'b-a':'b-g';
   row.dataset.itemCode=item.code;
   row.dataset.stockSource=item.source||'product';
   const qty=Number(item.available||0);
@@ -5222,9 +5229,9 @@ function renderStockLevelRow(item){
   row.dataset.itemUnit=item.unit||'';
   row.dataset.sellingRate=String(rate);
   row.style.cursor='pointer';
-  row.title='Click to view stock movement history';
+  row.title=negative?'Stock has gone negative — sales/adjustments exceed recorded purchases. Click to view stock movement history.':'Click to view stock movement history';
   row.onclick=e=>{if(!e.target.closest('button'))openStockMovementHistory(row);};
-  row.innerHTML=`<td class="mono">${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td class="mono" style="text-align:center">${fmt(qty,2)}</td><td>${escapeHtml(item.unit)}</td><td class="mono" style="text-align:right">${value>0?fmt(value,2):'-'}</td><td><span class="b ${cls}">${status}</span></td>`;
+  row.innerHTML=`<td class="mono">${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td class="mono" style="text-align:center${negative?';color:var(--red);font-weight:600':''}">${fmt(qty,2)}</td><td>${escapeHtml(item.unit)}</td><td class="mono" style="text-align:right">${value>0?fmt(value,2):'-'}</td><td><span class="b ${cls}">${status}</span></td>`;
   return row;
 }
 

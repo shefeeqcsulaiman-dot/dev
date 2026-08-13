@@ -84,6 +84,42 @@ def _is_demo_purchase_record(record: dict) -> bool:
     return signals >= 2
 
 
+def consume_valuation_layers(db: Session, company_id: str, item_code: str, quantity: Decimal) -> None:
+    """FIFO-consume `quantity` units from this item's valuation layers,
+    oldest layer first, decrementing quantity_remaining. Layers were
+    previously written once at purchase time (sync_purchase_stock(),
+    backfill_purchase_stock_movements()) and never touched again — the
+    ledger only ever grew, permanently mislabeled "FIFO" since nothing
+    ever consumed it. Currently called for POS sales and negative stock
+    adjustments; a returned sale is not yet re-added as a new layer (which
+    lot it returns to is genuinely ambiguous without deeper cost tracking)
+    — same deliberate scope line sync_pos_stock() already draws around
+    valuation layers, just moved one step forward. Insufficient layers
+    (selling more than any purchase ever added) isn't an error: this only
+    keeps the FIFO costing ledger consistent with what stock existed to
+    consume — SUM(StockMovement.quantity) remains the authoritative total
+    regardless of what these layers show."""
+    remaining = quantity
+    if remaining <= 0:
+        return
+    layers = (
+        db.query(InventoryValuationLayer)
+        .filter(
+            InventoryValuationLayer.company_id == company_id,
+            InventoryValuationLayer.item_code == item_code,
+            InventoryValuationLayer.quantity_remaining > 0,
+        )
+        .order_by(InventoryValuationLayer.created_at.asc())
+        .all()
+    )
+    for layer in layers:
+        if remaining <= 0:
+            break
+        take = min(layer.quantity_remaining, remaining)
+        layer.quantity_remaining -= take
+        remaining -= take
+
+
 @router.get("/warehouses", response_model=list[WarehouseOut])
 def list_warehouses(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[Warehouse]:
     return db.query(Warehouse).filter(Warehouse.company_id == current_user.company_id).order_by(Warehouse.name).all()
@@ -185,6 +221,11 @@ def list_stock_levels(
     result = []
     for entry in consolidated.values():
         entry.pop("_qty_for_avg", None)
+        # Non-blocking signal only — stock is allowed to go negative (a sale
+        # can still complete when the recorded purchase history undercounts
+        # what's physically on the shelf), but nothing anywhere previously
+        # surfaced that it had happened, so it stayed invisible.
+        entry["negative_stock"] = entry["current_stock"] < 0
         result.append(entry)
     return result
 
@@ -724,4 +765,85 @@ def create_adjustment_approval(
     db.add(approval)
     db.commit()
     db.refresh(approval)
+    return approval
+
+
+@router.post("/inventory/adjustment-approvals/{approval_id}/approve", response_model=StockAdjustmentApprovalOut)
+def approve_adjustment(
+    approval_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StockAdjustmentApproval:
+    # Previously there was no approve/reject endpoint at all — creating an
+    # approval request had zero effect on stock no matter what happened to
+    # it afterward, since nothing ever read status=="approved" and applied
+    # quantity_delta to real stock.
+    approval = (
+        db.query(StockAdjustmentApproval)
+        .filter(StockAdjustmentApproval.company_id == current_user.company_id, StockAdjustmentApproval.id == approval_id)
+        .first()
+    )
+    if not approval:
+        raise HTTPException(status_code=404, detail="Adjustment approval not found")
+    if approval.status == "approved":
+        return approval
+    mapping = (
+        db.query(StockProductMapping)
+        .filter(StockProductMapping.company_id == current_user.company_id, StockProductMapping.sku == approval.item_code)
+        .first()
+    )
+    if not mapping:
+        raise HTTPException(status_code=422, detail=f"No stock item found for code '{approval.item_code}'")
+    unit_cost = mapping.cost or Decimal("0.00")
+    db.add(
+        StockMovement(
+            company_id=current_user.company_id,
+            mapping_id=mapping.id,
+            warehouse_id=approval.warehouse_id,
+            movement_type="adjustment",
+            quantity=approval.quantity_delta,
+            unit_cost=unit_cost,
+            reference=f"ADJ-{approval.id[:8]}",
+        )
+    )
+    if approval.quantity_delta < 0:
+        consume_valuation_layers(db, current_user.company_id, approval.item_code, -approval.quantity_delta)
+    else:
+        db.add(
+            InventoryValuationLayer(
+                company_id=current_user.company_id,
+                item_code=approval.item_code,
+                warehouse_id=approval.warehouse_id,
+                source_module="adjustment",
+                source_id=approval.id,
+                quantity_in=approval.quantity_delta,
+                quantity_remaining=approval.quantity_delta,
+                unit_cost=unit_cost,
+            )
+        )
+    approval.status = "approved"
+    approval.approved_by = current_user.id
+    db.commit()
+    db.refresh(approval)
+    return approval
+
+
+@router.post("/inventory/adjustment-approvals/{approval_id}/reject", response_model=StockAdjustmentApprovalOut)
+def reject_adjustment(
+    approval_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StockAdjustmentApproval:
+    approval = (
+        db.query(StockAdjustmentApproval)
+        .filter(StockAdjustmentApproval.company_id == current_user.company_id, StockAdjustmentApproval.id == approval_id)
+        .first()
+    )
+    if not approval:
+        raise HTTPException(status_code=404, detail="Adjustment approval not found")
+    if approval.status == "pending":
+        approval.status = "rejected"
+        approval.approved_by = current_user.id
+        db.commit()
+        db.refresh(approval)
     return approval

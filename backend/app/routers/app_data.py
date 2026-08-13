@@ -33,6 +33,7 @@ from app.auth_principal import resolve_active_branch
 from app.dependencies import Principal, branch_allows_module, company_allows_module, get_current_principal, get_current_user
 from app.limiter import limiter
 from app.module_integration import sync_bill_accounting, sync_purchase_accounting, sync_sales_invoice_accounting
+from app.routers.inventory import consume_valuation_layers
 from app.models import (
     Account,
     AppDataRecord,
@@ -1530,6 +1531,8 @@ def sync_pos_stock(db: Session, principal: Principal, record: dict[str, Any], re
                 reference=reference,
             )
         )
+        if not is_return:
+            consume_valuation_layers(db, principal.company_id, mapping.sku, quantity)
 
 
 def purchase_line_stock_mapping(
