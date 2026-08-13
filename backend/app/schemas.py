@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -537,7 +538,7 @@ class TaxLineOut(BaseModel):
 class VatReturnCreate(BaseModel):
     period: str
     adjustments: Decimal = Decimal("0.00")
-    filing_status: str = "draft"
+    filing_status: Literal["draft", "submitted", "approved", "filed"] = "draft"
     fta_reference_no: str | None = None
     attachment: str | None = None
 
@@ -566,7 +567,7 @@ class CorporateTaxReturnCreate(BaseModel):
     exempt_income: Decimal = Decimal("0.00")
     tax_loss_adjustment: Decimal = Decimal("0.00")
     tax_rate: Decimal = Decimal("9.00")
-    filing_status: str = "draft"
+    filing_status: Literal["draft", "submitted", "approved", "filed"] = "draft"
     reference_no: str | None = None
     attachment: str | None = None
 
