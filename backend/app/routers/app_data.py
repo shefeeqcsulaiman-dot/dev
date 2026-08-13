@@ -103,6 +103,17 @@ _BRANCH_FILTERED_COLLECTIONS = frozenset({
     # everyone via the branch_id IS NULL fallback below. Admin/User
     # principals have no branch_id at all, so this filter never applies to
     # them — they always see every customer, company-wide.
+
+    # HR deep-audit — verified live (a second branch could read, overwrite,
+    # and delete a first branch's loan/rota records) that none of these were
+    # ever added despite the payroll deduction engine already being
+    # branch-scoped at the calculation level. jobRequisitions/candidates are
+    # deliberately NOT included here — recruiting data being company-wide
+    # may be intentional, same precedent as the shared vendors/payments
+    # collections, and wasn't verified either way.
+    "employeeLoans", "salaryAdvances", "leaveRequests",
+    "rotaShifts", "rotaSwaps", "rotaApprovals", "rotaDrafts", "rotaAssignments",
+    "attendanceCorrections", "overtimeRequests",
 })
 
 # Superadmin's per-company Module Permissions, enforced against writes to the
@@ -1024,6 +1035,7 @@ async def app_data_action(
             key = record_key(collection, record)
             payload_json = json.dumps(record, ensure_ascii=False, default=str)
             existing = existing_by_key.get(key) if key else None
+            _assert_branch_writable(principal, collection, existing)
             if existing:
                 existing.payload = payload_json
                 saved = existing
@@ -1072,6 +1084,7 @@ async def app_data_action(
                 .first()
             )
             if existing:
+                _assert_branch_writable(principal, collection, existing)
                 # Check the period lock against the STORED record's own date,
                 # not whatever the client's delete request happens to include
                 # — otherwise omitting the date field would bypass the lock.
@@ -1108,6 +1121,7 @@ async def app_data_action(
                 .all()
             )
             for row in existing_rows:
+                _assert_branch_writable(principal, collection, row)
                 try:
                     stored_record = json.loads(row.payload or "{}")
                 except (TypeError, json.JSONDecodeError):
@@ -1240,6 +1254,30 @@ async def app_data_action(
     return {"ok": True, "action": action}
 
 
+def _assert_branch_writable(principal: Principal, collection: str, existing: AppDataRecord | None) -> None:
+    """Write-side counterpart to list_collection_records()'s read-side branch
+    filter — previously save/delete had NO branch-ownership check at all,
+    for any collection, so a branch-scoped principal could edit or delete
+    another branch's record by knowing/guessing its key, even for
+    collections already "branch-scoped" for reads (verified live: a second
+    branch could overwrite and then delete a first branch's employeeLoans
+    record, tampering with the financial figures the first branch would see
+    on its own reports). Mirrors the exact resolution logic
+    list_collection_records() already uses, just applied before a mutation
+    instead of a filter."""
+    if not existing or not existing.branch_id or not principal.branch_id:
+        return
+    if collection not in _BRANCH_FILTERED_COLLECTIONS:
+        return
+    collection_module = _COLLECTION_MODULE.get(collection)
+    if collection_module and principal.can_cross_branch(collection_module):
+        return
+    active_branch = resolve_active_branch(principal, None)
+    if active_branch and existing.branch_id == active_branch:
+        return
+    raise HTTPException(status_code=403, detail="This record belongs to a different branch")
+
+
 def save_app_record(db: Session, principal: Principal, collection: str, record: dict[str, Any]) -> AppDataRecord:
     key = record_key(collection, record)
     existing = None
@@ -1253,6 +1291,7 @@ def save_app_record(db: Session, principal: Principal, collection: str, record: 
             )
             .first()
         )
+    _assert_branch_writable(principal, collection, existing)
     payload = json.dumps(record, ensure_ascii=False, default=str)
     if existing:
         existing.payload = payload
