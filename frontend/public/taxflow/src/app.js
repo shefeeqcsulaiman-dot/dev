@@ -8800,7 +8800,7 @@ function addSalesInvoiceRow(inv,options={persist:true}){
   const fmt=n=>Number(n||0).toLocaleString('en-AE',{maximumFractionDigits:2});
   const source=inv.source||((inv.sourceFile||inv.confidence)?'AI Upload':'Manual');
   const returnDoc=isSalesReturn(inv);
-  const sourceClass=returnDoc?'b-r':String(source).toLowerCase().includes('ai')?'b-p':'b-gray';
+  const sourceClass=returnDoc?'b-r':String(source).toLowerCase().includes('ai')?'b-p':String(source).toLowerCase().startsWith('pos')?'b-t':'b-gray';
   const status=inv.status||'Draft';
   const sl=String(status).toLowerCase();
   const statusClass=returnDoc?'b-r':
