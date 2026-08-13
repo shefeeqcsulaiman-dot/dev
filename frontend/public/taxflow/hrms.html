@@ -2121,7 +2121,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Shift Swap Requests</div><div class="card-sub">Employee request, peer acceptance, supervisor approval</div></div><button class="btn btn-p btn-sm" onclick="showM('m-shift-swap')">+ Swap Request</button></div>
         <table class="tbl" data-delete-actions-bound="skip">
-          <thead><tr><th>Requester</th><th>My Shift</th><th>Swap With</th><th>Target Shift</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Employee A</th><th>A's Shift</th><th>Employee B</th><th>B's Shift</th><th>Status</th><th></th></tr></thead>
           <tbody id="rota-swap-tbody">
             <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No records yet.</td></tr>
           </tbody>
@@ -2617,9 +2617,15 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 </div>
 
 <div class="overlay" id="m-shift-swap" onclick="closeOvBg(event,'m-shift-swap')">
-  <div class="modal"><div class="modal-title">Shift Swap Request</div><div class="modal-sub">Request swap with another employee</div>
-    <div class="fg"><label class="fl">My Shift</label><input class="fi" id="swap-my-shift" placeholder="Mon Morning"></div>
-    <div class="fr2"><div class="fg"><label class="fl">Swap With</label><input class="fi" id="swap-with" placeholder="Employee name"></div><div class="fg"><label class="fl">Target Shift</label><input class="fi" id="swap-target-shift" placeholder="Tue Evening"></div></div>
+  <div class="modal"><div class="modal-title">Shift Swap Request</div><div class="modal-sub">Swap an assigned shift between two employees — approving this will actually reassign both shifts</div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Employee A</label><select class="fi" id="swap-employee-a" onchange="_populateSwapAssignmentSelect('swap-employee-a','swap-assignment-a')"><option value="">— Select Employee —</option></select></div>
+      <div class="fg"><label class="fl">Employee A's Shift</label><select class="fi" id="swap-assignment-a"><option value="">— Select employee first —</option></select></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Employee B</label><select class="fi" id="swap-employee-b" onchange="_populateSwapAssignmentSelect('swap-employee-b','swap-assignment-b')"><option value="">— Select Employee —</option></select></div>
+      <div class="fg"><label class="fl">Employee B's Shift</label><select class="fi" id="swap-assignment-b"><option value="">— Select employee first —</option></select></div>
+    </div>
     <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="swap-reason" rows="3" placeholder="Explain why this swap is needed"></textarea></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-shift-swap')">Cancel</button><button class="btn btn-p" onclick="saveRotaSwap()">Submit Request</button></div>
   </div>

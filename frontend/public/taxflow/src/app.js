@@ -419,6 +419,8 @@ function showM(id){
   if(id==='m-loan')populateHrEmployeeSelect('loan-employee');
   if(id==='m-loan-advance')populateHrEmployeeSelect('advance-employee');
   if(id==='m-ot')populateHrEmployeeSelect('ot-employee-sel');
+  if(id==='m-att-correction')populateHrEmployeeSelect('corr-employee');
+  if(id==='m-shift-swap'){populateHrEmployeeSelect('swap-employee-a');populateHrEmployeeSelect('swap-employee-b');}
   setTimeout(()=>modal.querySelector('input,select,textarea,button:not(.modal-x)')?.focus(),30);
 }
 
@@ -17955,6 +17957,7 @@ function renderOTRecord(rec){
   const worked=rec.login&&rec.logout?`${rec.login}–${rec.logout}`:(rec.shift||'—');
   const row=document.createElement('tr');
   row.dataset.recordId=rec.id;
+  row.dataset.record=JSON.stringify(rec);
   row.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td>${escapeHtml(rec.date)}</td><td class="mono">${escapeHtml(rec.shift||'—')}</td><td class="mono">${escapeHtml(rec.login||'—')}–${escapeHtml(rec.logout||'—')}</td><td class="mono">${escapeHtml(rec.ot_hours||rec.otHours||'0')}h</td><td><span class="b ${statusCls}">${escapeHtml(rec.status||'Pending')}</span></td><td>${actions}</td>`;
   tbody.prepend(row);
 }
@@ -17964,8 +17967,15 @@ function approveOT(btn,msg='Overtime approved'){
   row.querySelector('td:nth-child(6)').innerHTML='<span class="b b-g">Approved</span>';
   row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm" onclick="toast(\'OT detail opened\',\'info\')">View</button>';
   toast(msg+' ✓','ok');
+  // Previously saved only {id,status} — save_app_record() does a full
+  // payload overwrite, not a merge, so that silently destroyed every other
+  // field (employee/date/ot_hours/multiplier) on approval. Spreading the
+  // full stored record first (same pattern approveRotaRow() already uses)
+  // keeps them intact — the payroll deduction engine reads those same
+  // fields back out of this record for approved overtime pay.
+  let payload={};try{payload=JSON.parse(row.dataset.record||'{}');}catch{}
   const id=row.dataset.recordId;
-  if(id)saveServer('overtimeRequests',{id,status:'Approved'});
+  if(id)saveServer('overtimeRequests',{...payload,id,status:'Approved'});
   audit(msg,'HR Overtime','Approved');
 }
 
@@ -17975,8 +17985,9 @@ function rejectOT(btn){
   row.querySelector('td:nth-child(6)').innerHTML='<span class="b b-r">Rejected</span>';
   row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm" onclick="toast(\'Rejection reason: '+escapeHtml(reason).replace(/'/g,'&#39;')+'\',\'warn\')">Reason</button>';
   toast('Overtime rejected','warn');
+  let payload={};try{payload=JSON.parse(row.dataset.record||'{}');}catch{}
   const id=row.dataset.recordId;
-  if(id)saveServer('overtimeRequests',{id,status:'Rejected',rejection_reason:reason});
+  if(id)saveServer('overtimeRequests',{...payload,id,status:'Rejected',rejection_reason:reason});
   audit('Overtime rejected','HR Overtime','Rejected');
 }
 
@@ -17991,34 +18002,48 @@ function adjustOT(btn){
   audit('Overtime adjusted','HR Overtime','Adjusted');
 }
 
-function approveCorrection(btn){
+async function approveCorrection(btn){
   const row=btn.closest('tr');
-  row.querySelector('td:nth-child(6)').innerHTML='<span class="b b-g">Approved</span>';
-  row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm">View</button>';
-  toast('Attendance correction approved ✓','ok');
+  let payload={};try{payload=JSON.parse(row.dataset.record||'{}');}catch{}
   const id=row.dataset.recordId;
-  if(id)saveServer('attendanceCorrections',{id,status:'Approved'});
-  audit('Attendance correction approved','HR Attendance','Approved');
+  if(!id)return;
+  try{
+    // sync_domain_model()'s attendanceCorrections branch (app_data.py)
+    // applies the requested check-in/check-out as real AttendancePunch rows
+    // when status transitions to Approved — previously this only flipped
+    // the badge with no effect on attendance at all, despite the UI's own
+    // copy claiming "Approved corrections update attendance."
+    await saveServer('attendanceCorrections',{...payload,id,status:'Approved'},{throwOnError:true});
+    row.querySelector('td:nth-child(6)').innerHTML='<span class="b b-g">Approved</span>';
+    row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm">View</button>';
+    toast('Attendance correction approved — attendance updated ✓','ok');
+    audit('Attendance correction approved','HR Attendance','Approved');
+  }catch(e){
+    toast('Could not approve correction: '+(e.message||e),'err');
+  }
 }
 
 function rejectCorrection(btn){
   const row=btn.closest('tr');
+  let payload={};try{payload=JSON.parse(row.dataset.record||'{}');}catch{}
   row.querySelector('td:nth-child(6)').innerHTML='<span class="b b-r">Rejected</span>';
   row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm">View</button>';
   toast('Attendance correction rejected','warn');
   const id=row.dataset.recordId;
-  if(id)saveServer('attendanceCorrections',{id,status:'Rejected'});
+  if(id)saveServer('attendanceCorrections',{...payload,id,status:'Rejected'});
   audit('Attendance correction rejected','HR Attendance','Rejected');
 }
 
 function saveCorrectionRequest(){
-  const employee=document.getElementById('corr-employee')?.value.trim()||'';
+  const empSel=document.getElementById('corr-employee');
+  const employee=(empSel?.value||'').trim();
+  const employeeId=empSel?.selectedOptions?.[0]?.dataset.empId||'';
   const date=document.getElementById('corr-date')?.value||'';
   const checkin=document.getElementById('corr-checkin')?.value||'';
   const checkout=document.getElementById('corr-checkout')?.value||'';
   const reason=document.getElementById('corr-reason')?.value.trim()||'';
   if(!employee||!date){toast('Employee and date are required','warn');return;}
-  const record={id:`CORR-${Date.now()}`,employee,date,checkin,checkout,reason,status:'Pending',submitted:new Date().toISOString()};
+  const record={id:`CORR-${Date.now()}`,employee,employee_id:employeeId,date,checkin,checkout,reason,status:'Pending',submitted:new Date().toISOString()};
   renderCorrectionRecord(record);
   saveServer('attendanceCorrections',record);
   closeM('m-att-correction');
@@ -18038,6 +18063,7 @@ function renderCorrectionRecord(rec){
     :`<button class="btn btn-g btn-sm">View</button>`;
   const row=document.createElement('tr');
   row.dataset.recordId=rec.id;
+  row.dataset.record=JSON.stringify(rec);
   row.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td>${escapeHtml(rec.date)}</td><td class="mono">${escapeHtml(rec.checkin||'—')}</td><td class="mono">${escapeHtml(rec.checkout||'—')}</td><td>${escapeHtml(rec.reason||'—')}</td><td><span class="b ${statusCls}">${escapeHtml(rec.status||'Pending')}</span></td><td>${actions}</td>`;
   tbody.prepend(row);
 }
@@ -18506,30 +18532,72 @@ function renderRotaSwapRecord(swap){
   const row=document.createElement('tr');
   row.dataset.serverRecord='rotaSwaps';
   row.dataset.swap=JSON.stringify(swap);
-  row.innerHTML=`<td>${escapeHtml(swap.requester||'Current user')}</td><td>${escapeHtml(swap.my_shift||'-')}</td><td>${escapeHtml(swap.swap_with||'-')}</td><td>${escapeHtml(swap.target_shift||'-')}</td><td>${rotaBadge(swap.status||'Peer Pending')}</td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="approveRotaRow(this,'Swap approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="rejectRotaRow(this,'Swap rejected')">Reject</button></div></td>`;
+  const shiftLabel=assignmentId=>{
+    const a=assignmentId?rotaAssignmentsById.get(assignmentId):null;
+    return a?`${a.date} — ${a.type||a.code||'Shift'}`:(assignmentId?'(shift not found)':'-');
+  };
+  const aLabel=swap.assignment_a_id?shiftLabel(swap.assignment_a_id):(swap.my_shift||'-');
+  const bLabel=swap.assignment_b_id?shiftLabel(swap.assignment_b_id):(swap.swap_with||'-');
+  row.innerHTML=`<td>${escapeHtml(swap.employee_a||swap.requester||'-')}</td><td>${escapeHtml(aLabel)}</td><td>${escapeHtml(swap.employee_b||'-')}</td><td>${escapeHtml(bLabel)}</td><td>${rotaBadge(swap.status||'Peer Pending')}</td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="approveRotaRow(this,'Swap approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="rejectRotaRow(this,'Swap rejected')">Reject</button></div></td>`;
   removeEmptyState(tbody);
   tbody.prepend(row);
   updateRotaStats();
 }
 
+// Populates a swap request's per-employee assignment select with that
+// employee's upcoming (today or later) rotaAssignments entries, once an
+// employee has been chosen — the swap can only ever reference real,
+// existing assignments now (previously "My Shift"/"Swap With"/"Target
+// Shift" were three free-text inputs with no employee_id/date/shift
+// reference a backend could act on at all).
+function _populateSwapAssignmentSelect(employeeSelectId,assignmentSelectId){
+  const empSel=document.getElementById(employeeSelectId);
+  const assignSel=document.getElementById(assignmentSelectId);
+  if(!empSel||!assignSel)return;
+  const empId=empSel.selectedOptions?.[0]?.dataset.empId||'';
+  assignSel.innerHTML='<option value="">— Select Shift —</option>';
+  if(!empId)return;
+  const today=new Date().toISOString().slice(0,10);
+  const upcoming=[...rotaAssignmentsById.values()]
+    .filter(a=>a.employee_id===empId&&a.date>=today)
+    .sort((a,b)=>a.date.localeCompare(b.date));
+  upcoming.forEach(a=>{
+    const opt=document.createElement('option');
+    opt.value=a.id;
+    opt.textContent=`${a.date} — ${a.type||a.code||'Shift'}`;
+    assignSel.appendChild(opt);
+  });
+  if(!upcoming.length)assignSel.innerHTML='<option value="">No upcoming shifts for this employee</option>';
+}
+
 function saveRotaSwap(){
+  const empASel=document.getElementById('swap-employee-a');
+  const empBSel=document.getElementById('swap-employee-b');
   const record={
     id:'SWAP-'+Date.now(),
-    requester:'Current user',
-    my_shift:(document.getElementById('swap-my-shift')?.value||'').trim(),
-    swap_with:(document.getElementById('swap-with')?.value||'').trim(),
-    target_shift:(document.getElementById('swap-target-shift')?.value||'').trim(),
+    employee_a:empASel?.value||'',
+    employee_a_id:empASel?.selectedOptions?.[0]?.dataset.empId||'',
+    assignment_a_id:document.getElementById('swap-assignment-a')?.value||'',
+    employee_b:empBSel?.value||'',
+    employee_b_id:empBSel?.selectedOptions?.[0]?.dataset.empId||'',
+    assignment_b_id:document.getElementById('swap-assignment-b')?.value||'',
     reason:(document.getElementById('swap-reason')?.value||'').trim(),
     status:'Peer Pending'
   };
-  if(!record.my_shift||!record.swap_with||!record.target_shift){
-    toast('Enter my shift, swap with, and target shift','warn');
+  if(!record.assignment_a_id||!record.assignment_b_id){
+    toast('Select both employees and their shifts to swap','warn');
+    return;
+  }
+  if(record.employee_a_id&&record.employee_a_id===record.employee_b_id){
+    toast('Choose two different employees','warn');
     return;
   }
   renderRotaSwapRecord(record);
   saveServer('rotaSwaps',record);
   closeM('m-shift-swap');
-  ['swap-my-shift','swap-with','swap-target-shift','swap-reason'].forEach(id=>setFieldValue(document.getElementById(id),''));
+  ['swap-employee-a','swap-employee-b'].forEach(id=>setFieldValue(document.getElementById(id),''));
+  ['swap-assignment-a','swap-assignment-b'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='<option value="">— Select employee first —</option>';});
+  setFieldValue(document.getElementById('swap-reason'),'');
   toast('Shift swap request saved to database','ok');
   audit('Submitted shift swap',record.id,'Pending');
 }

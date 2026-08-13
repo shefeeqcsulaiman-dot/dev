@@ -37,6 +37,7 @@ from app.routers.inventory import consume_valuation_layers
 from app.models import (
     Account,
     AppDataRecord,
+    AttendancePunch,
     AuditLog,
     AuditLogDetail,
     Branch,
@@ -59,6 +60,12 @@ from app.models import (
     TaxLine,
     User,
 )
+
+# Local time offset punches are recorded in — mirrors attendance.py's own
+# _DEVICE_UTC_OFFSET (not imported directly to avoid a cross-router
+# dependency for one constant; both must be changed together if the
+# company's timezone ever becomes configurable instead of UAE-fixed).
+_ATTENDANCE_UTC_OFFSET = _dt.timedelta(hours=4)
 
 
 router = APIRouter(prefix="/app-data", tags=["app data"])
@@ -1409,6 +1416,116 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
                 emp.branch_id = branch_id
             status_raw = str(record.get("status") or "Active").lower()
             emp.status = "active" if status_raw in ("active", "1", "true") else "inactive"
+
+    elif collection == "attendanceCorrections":
+        # Previously a pure status-flip: approveCorrection() (app.js) saved
+        # {id,status:'Approved'} and nothing else ever happened, despite the
+        # UI's own copy claiming "Approved corrections update attendance."
+        # Applying it for real means inserting the requested check-in/
+        # check-out as real AttendancePunch rows once the request reaches
+        # "Approved" - the same table biometric/manual punches already
+        # write to, so it shows up in real attendance aggregation.
+        if str(record.get("status") or "").strip().lower() == "approved":
+            correction_id = str(record.get("id") or "").strip()
+            emp_no = str(record.get("employee_id") or "").strip()
+            emp_name = str(record.get("employee") or "").strip()
+            if not emp_no and emp_name:
+                emp = (
+                    db.query(Employee)
+                    .filter(Employee.company_id == principal.company_id, Employee.full_name == emp_name)
+                    .first()
+                )
+                if emp:
+                    emp_no = emp.employee_no
+            punch_date = str(record.get("date") or "").strip()
+            if correction_id and emp_no and punch_date:
+                # Delete-then-recreate by (employee, date, source) so
+                # re-approving after an edit, or approving twice, always
+                # converges to the request's current values instead of
+                # accumulating duplicate punches.
+                db.query(AttendancePunch).filter(
+                    AttendancePunch.company_id == principal.company_id,
+                    AttendancePunch.employee_id == emp_no,
+                    AttendancePunch.punch_date == punch_date,
+                    AttendancePunch.source == "correction",
+                ).delete(synchronize_session=False)
+                for time_field, direction in (("checkin", "in"), ("checkout", "out")):
+                    time_str = str(record.get(time_field) or "").strip()
+                    if not time_str:
+                        continue
+                    try:
+                        local_dt = _dt.datetime.strptime(f"{punch_date} {time_str}", "%Y-%m-%d %H:%M")
+                    except ValueError:
+                        continue
+                    punch_time = (local_dt - _ATTENDANCE_UTC_OFFSET).replace(tzinfo=_dt.timezone.utc)
+                    db.add(
+                        AttendancePunch(
+                            company_id=principal.company_id,
+                            employee_id=emp_no,
+                            employee_name=emp_name or None,
+                            punch_time=punch_time,
+                            punch_date=punch_date,
+                            direction=direction,
+                            source="correction",
+                        )
+                    )
+
+    elif collection == "rotaSwaps":
+        # Previously a pure status-flip: approveRotaRow() saved the swap
+        # record with a new status and nothing else - the rota board itself
+        # never changed. Applying it for real means swapping the two
+        # referenced rotaAssignments records' employee between each other.
+        if str(record.get("status") or "").strip().lower() == "approved":
+            assignment_a_id = str(record.get("assignment_a_id") or "").strip()
+            assignment_b_id = str(record.get("assignment_b_id") or "").strip()
+            if assignment_a_id and assignment_b_id and assignment_a_id != assignment_b_id:
+                row_a = (
+                    db.query(AppDataRecord)
+                    .filter(
+                        AppDataRecord.company_id == principal.company_id,
+                        AppDataRecord.collection == "rotaAssignments",
+                        AppDataRecord.record_key == assignment_a_id,
+                    )
+                    .first()
+                )
+                row_b = (
+                    db.query(AppDataRecord)
+                    .filter(
+                        AppDataRecord.company_id == principal.company_id,
+                        AppDataRecord.collection == "rotaAssignments",
+                        AppDataRecord.record_key == assignment_b_id,
+                    )
+                    .first()
+                )
+                if row_a and row_b:
+                    try:
+                        data_a = json.loads(row_a.payload or "{}")
+                        data_b = json.loads(row_b.payload or "{}")
+                    except (TypeError, json.JSONDecodeError):
+                        data_a = data_b = None
+                    # Idempotency: by the time sync_domain_model() runs, this
+                    # swap request's own row already has the new "Approved"
+                    # status saved — there's no separate "was it already
+                    # approved before this call" signal available. Detect an
+                    # already-applied swap by checking whether A's
+                    # assignment already holds B's original employee (and
+                    # vice versa) — a second approve click (or a re-save of
+                    # an already-approved record) would otherwise swap the
+                    # two right back.
+                    already_applied = (
+                        isinstance(data_a, dict) and isinstance(data_b, dict)
+                        and record.get("employee_b_id") and data_a.get("employee_id") == record.get("employee_b_id")
+                        and record.get("employee_a_id") and data_b.get("employee_id") == record.get("employee_a_id")
+                    )
+                    if isinstance(data_a, dict) and isinstance(data_b, dict) and not already_applied:
+                        # Only the employee-identity fields swap — the shift
+                        # itself (date/type/times) stays put on each
+                        # assignment row, so what actually moves is who is
+                        # working it, exactly what a shift swap means.
+                        for field in ("employee_id", "employee_name", "role", "department", "location"):
+                            data_a[field], data_b[field] = data_b.get(field), data_a.get(field)
+                        row_a.payload = json.dumps(data_a, ensure_ascii=False, default=str)
+                        row_b.payload = json.dumps(data_b, ensure_ascii=False, default=str)
 
     elif collection == "audit":
         log_action(db, principal, str(record.get("record") or "audit"), str(record.get("action") or "ui_action"), record)
