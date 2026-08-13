@@ -16537,7 +16537,8 @@ async function hrmsAiComplianceCheck(){
       </div>
       <div style="font-size:12px;color:var(--text2)">${escapeHtml(res.summary||'')}</div>
     </div>`;
-    _hrmsAiResultHtml('hrms-ai-comp-result',summary+(issues.length?rows:'<div style="color:var(--green);font-size:12px;text-align:center;padding:8px">✓ All employees fully compliant</div>'));
+    const disclaimer=`<div style="font-size:10px;color:var(--text3);margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">AI-generated law references and severities are a starting point, not legal advice — verify against UAE Federal Decree-Law No. 33 of 2021 (or current counsel) before acting.</div>`;
+    _hrmsAiResultHtml('hrms-ai-comp-result',summary+(issues.length?rows:'<div style="color:var(--green);font-size:12px;text-align:center;padding:8px">✓ All employees fully compliant</div>')+disclaimer);
   }catch(e){_hrmsAiErrorHtml('hrms-ai-comp-result','Audit failed: '+e.message);}
   finally{_hrmsAiBtn('hrms-ai-comp-btn','Run Compliance Audit',false);}
 }

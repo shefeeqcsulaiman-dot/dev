@@ -96,4 +96,12 @@ def call_llm(
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
-        return {"raw": raw}
+        # Previously returned {"raw": raw} with no "error" key — every caller
+        # that checks `if result.get("error")` (both ai.py's assist() and
+        # every hr_ai.py endpoint that forwards this dict straight to the
+        # frontend) would treat a truncated/malformed response as a normal,
+        # successful, empty-shaped result. For hr_ai.py's compliance_check in
+        # particular, that meant a truncated response silently rendered as
+        # "0 compliance issues found" — false negative on a real check. The
+        # most common cause is max_tokens cutting the JSON off mid-object.
+        return {"error": "AI response was not valid JSON (it may have been truncated) — try again or reduce the amount of data being analyzed.", "raw": raw}
