@@ -17945,6 +17945,22 @@ function submitOTRequest(){
   audit('Overtime submitted','HR Overtime','Pending');
 }
 
+function _refreshOtPageStats(){
+  const rows=[...document.querySelectorAll('#ot-tbody tr[data-record-id]')];
+  let pending=0,approvedHours=0,rejected=0;
+  rows.forEach(row=>{
+    let rec={};try{rec=JSON.parse(row.dataset.record||'{}');}catch{}
+    const status=String(rec.status||'').trim();
+    if(status==='Approved'||status==='HR Approved')approvedHours+=parseAmount(rec.ot_hours||rec.otHours||0);
+    else if(status==='Rejected')rejected++;
+    else pending++;
+  });
+  const setStat=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
+  setStat('ot-stat-pending',pending);
+  setStat('ot-stat-approved-hours',approvedHours.toLocaleString('en-AE',{maximumFractionDigits:1}));
+  setStat('ot-stat-rejected',rejected);
+}
+
 function renderOTRecord(rec){
   const tbody=document.getElementById('ot-tbody');
   if(!tbody)return;
@@ -17960,6 +17976,7 @@ function renderOTRecord(rec){
   row.dataset.record=JSON.stringify(rec);
   row.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td>${escapeHtml(rec.date)}</td><td class="mono">${escapeHtml(rec.shift||'—')}</td><td class="mono">${escapeHtml(rec.login||'—')}–${escapeHtml(rec.logout||'—')}</td><td class="mono">${escapeHtml(rec.ot_hours||rec.otHours||'0')}h</td><td><span class="b ${statusCls}">${escapeHtml(rec.status||'Pending')}</span></td><td>${actions}</td>`;
   tbody.prepend(row);
+  _refreshOtPageStats();
 }
 
 function approveOT(btn,msg='Overtime approved'){
@@ -17974,9 +17991,12 @@ function approveOT(btn,msg='Overtime approved'){
   // keeps them intact — the payroll deduction engine reads those same
   // fields back out of this record for approved overtime pay.
   let payload={};try{payload=JSON.parse(row.dataset.record||'{}');}catch{}
+  payload={...payload,status:'Approved'};
+  row.dataset.record=JSON.stringify(payload);
   const id=row.dataset.recordId;
-  if(id)saveServer('overtimeRequests',{...payload,id,status:'Approved'});
+  if(id)saveServer('overtimeRequests',{...payload,id});
   audit(msg,'HR Overtime','Approved');
+  _refreshOtPageStats();
 }
 
 function rejectOT(btn){
@@ -17986,9 +18006,12 @@ function rejectOT(btn){
   row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm" onclick="toast(\'Rejection reason: '+escapeHtml(reason).replace(/'/g,'&#39;')+'\',\'warn\')">Reason</button>';
   toast('Overtime rejected','warn');
   let payload={};try{payload=JSON.parse(row.dataset.record||'{}');}catch{}
+  payload={...payload,status:'Rejected',rejection_reason:reason};
+  row.dataset.record=JSON.stringify(payload);
   const id=row.dataset.recordId;
-  if(id)saveServer('overtimeRequests',{...payload,id,status:'Rejected',rejection_reason:reason});
+  if(id)saveServer('overtimeRequests',{...payload,id});
   audit('Overtime rejected','HR Overtime','Rejected');
+  _refreshOtPageStats();
 }
 
 function adjustOT(btn){
