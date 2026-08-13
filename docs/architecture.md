@@ -1765,9 +1765,9 @@ Approval
 Payroll
 ```
 
-## 15.1 Biometric Attendance — BioTime Server Connection (shipped)
+## 15.1 Biometric Attendance Connections
 
-**See `docs/biotime-architecture.md` for the authoritative reference** — connection setup, the shared manual/scheduled sync code path, token caching, the dedupe key shape, timezone handling, and known risks for the ZKTeco BioTime 9.5 pull integration (`BiometricDevice.device_type == "ZKTeco BioTime Server"`). One of several punch sources `BiometricDevice` supports (TCP/IP terminals, ADMS/HTTP-Push devices, CSV import, manual entry all share the same `attendance_punches` table) — this is the only one that's a real server-to-server connection rather than a device pushing to us or a file upload.
+**See `docs/biometric-architecture.md` for the authoritative reference.** Four connection methods are shipped — `zk_bridge.py` (on-prem script → TaxFlow, for direct ZKTeco/Anviz TCP/IP devices), ZKTeco ADMS/HTTP Push, a BioTime 9.5 pull connection (`BiometricDevice.device_type == "ZKTeco BioTime Server"`), and Manual/CSV — all converging on the same `attendance_punches` table. A fifth, a **TaxFlow Biometric Agent** (Windows-based, auto-updating, LAN device discovery, and able to reach a customer's BioTime server that isn't internet-reachable), is proposed and documented there but not yet built — additive to the four shipped methods, not a replacement for any of them.
 
 ## 16. Rota Planning
 
