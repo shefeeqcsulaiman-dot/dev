@@ -676,6 +676,7 @@ class PayrollRun(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     period: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(30), default="draft")
     gross_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
