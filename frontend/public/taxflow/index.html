@@ -2614,23 +2614,12 @@
   </div>
 
   <div class="tab-body" id="acc-bankrec">
-    <div class="g4 mb16">
-      <div class="stat"><div class="stat-lbl">Book Balance</div><div class="stat-val" style="color:var(--accent)">50K</div></div>
-      <div class="stat"><div class="stat-lbl">Statement Balance</div><div class="stat-val" style="color:var(--green)">49.5K</div></div>
-      <div class="stat"><div class="stat-lbl">Difference</div><div class="stat-val" style="color:var(--amber)">500</div></div>
-      <div class="stat"><div class="stat-lbl">Unmatched</div><div class="stat-val" style="color:var(--red)">3</div></div>
-    </div>
     <div class="card">
-      <div class="card-hd"><div><div class="card-title">Bank Reconciliation</div><div class="card-sub">Upload statement, match with book transactions, confirm, and generate reconciliation report</div></div><button class="btn btn-p btn-sm" onclick="toast('Bank statement upload opened','info')">Upload Statement</button></div>
-      <div class="fr2"><div class="fg"><label class="fl">Bank Account</label><select class="fi"><option>Emirates NBD Operating</option><option>ADCB Payroll</option></select></div><div class="fg"><label class="fl">Statement Date</label><input class="fi" type="date"></div></div>
-      <table class="tbl">
-        <thead><tr><th>Bank Transaction</th><th>Book Transaction</th><th>Confidence</th><th>Match</th><th></th></tr></thead>
-        <tbody>
-          <tr><td>AED 1,000 Receipt</td><td>INV-001 Receipt</td><td><span class="b b-g">100%</span></td><td><span class="b b-g">Matched</span></td><td><button class="btn btn-g btn-sm">Confirm</button></td></tr>
-          <tr><td>AED 2,200 Card Settlement</td><td>PAYTABS batch</td><td><span class="b b-a">80%</span></td><td><span class="b b-a">Suggested</span></td><td><button class="btn btn-g btn-sm">Review</button></td></tr>
-          <tr><td>AED 500 Bank Charge</td><td>—</td><td><span class="b b-r">0%</span></td><td><span class="b b-r">Unmatched</span></td><td><button class="btn btn-p btn-sm">Create Journal</button></td></tr>
-        </tbody>
-      </table>
+      <div class="card-hd"><div class="card-title">Bank Reconciliation</div></div>
+      <div style="padding:24px;text-align:center;color:var(--text3)">
+        Bank Reconciliation lives on the Bank page, matched directly against real ledger entries and statement lines.
+        <div style="margin-top:12px"><button class="btn btn-p btn-sm" onclick="go('bank');setTimeout(()=>{const t=[...document.querySelectorAll('#page-bank .tab')].find(el=>(el.getAttribute('onclick')||'').includes(&quot;'bk-reconcile'&quot;));if(t)stab(t,'bk-reconcile');},50)">Open Bank Reconciliation</button></div>
+      </div>
     </div>
   </div>
 
