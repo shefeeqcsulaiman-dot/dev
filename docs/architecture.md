@@ -1767,77 +1767,7 @@ Payroll
 
 ## 15.1 Biometric Attendance — BioTime Server Connection (shipped)
 
-`BiometricDevice` (`models.py:995-1016`) supports several punch sources — ZKTeco TCP/IP terminals via an on-premises bridge, ADMS/HTTP-Push devices (ZKTeco ADMS, Suprema, Hikvision, Anviz), CSV import, and manual entry — all sharing one `attendance_punches` table. This section covers **only** the one that's a real server-to-server integration rather than a device pushing to us or a file upload: `device_type == "ZKTeco BioTime Server"`, a **pull** connection against the customer's own self-hosted ZKTeco BioTime 9.5 install.
-
-```text
-Company admin (HRMS > Attendance > Devices)
-        |
-        v
-Add Device: name, "ZKTeco BioTime Server", base URL, username, password
-        |
-        v
-POST /api/v1/attendance/devices  (gated_router, require_module("hrms") + get_current_user)
-        |
-        v
-BiometricDevice row created — password Fernet-encrypted at rest
-  (crypto.encrypt_secret(), keyed off the app's own SECRET_KEY — no
-  separate secret to provision/rotate; biotime_base_url/username stored
-  plain, password only ever decrypted server-side when a sync/test runs)
-        |
-        v
-"Test Connection"  ->  POST /devices/{id}/test
-        |
-        v
-biotime_client.get_token()  ->  POST {base_url}/jwt-api-token-auth/
-        |
-        v
-biotime_client.list_terminals()  ->  GET {base_url}/iclock/api/terminals/
-  (paginated via the response's own "next" link; used purely as the
-  connectivity check — "Connected — N terminal(s): <names>")
-        |
-        v
-Fresh JWT cached on the device row (biotime_token / biotime_token_expires_at)
-```
-
-**Attendance pull — manual or scheduled, one shared code path:**
-
-```text
-"Sync Now" (POST /devices/{id}/biotime/sync)         Celery beat, every 300s
-  gated_router, get_current_user                        (worker.py: "hr-sync-biotime-devices")
-        |                                                       |
-        `------------------------  both call  -------------------'
-                                    |
-                                    v
-                    biotime_sync.sync_biotime_device(db, device)
-                                    |
-                                    v
-        biotime_client.get_valid_token() — reuses the cached token unless
-        within 5 minutes of its assumed expiry (BioTime's auth response
-        doesn't advertise a real TTL, so a conservative fixed 6h lifetime
-        is assumed and refreshed proactively, not reactively retried on 401)
-                                    |
-                                    v
-        biotime_client.list_transactions(start, end) — GET .../iclock/api/
-        transactions/, paginated, start = device.last_sync or now-24h on
-        first run
-                                    |
-                                    v
-        De-dupe against every existing AttendancePunch for this device,
-        keyed on (employee_id, punch_time.isoformat()) — isoformat
-        strings, not raw datetimes, because SQLite round-trips
-        DateTime(timezone=True) columns as naive and a tz-aware/naive
-        comparison would silently never match and defeat the dedupe
-                                    |
-                                    v
-        New AttendancePunch rows inserted (source="biotime"), device.last_sync
-        advances to now
-```
-
-The scheduled path iterates every active BioTime-type device across every company in one Celery task, but wraps each device's sync in its own `try/except` — one company's server being unreachable or misconfigured never blocks another company's sync (`worker.py:89-94`). The manual and scheduled paths are the exact same function call, not two implementations, so behavior never diverges based on trigger.
-
-**Timezone handling**: BioTime (like every other device source this app supports) reports local wall-clock time with no timezone info attached. A fixed `+4h` UAE offset (`biotime_sync.py:16`, matching `_DEVICE_UTC_OFFSET` already used elsewhere in `attendance.py`) converts device-local time to UTC for storage and back for the punch's local date — safe specifically because the UAE has no DST; this fixed-offset approach would need to become a real timezone conversion before this integration could serve a company outside the UAE.
-
-**Known, honestly-flagged risk** (already called out in the code, not discovered after the fact): `biotime_client.list_transactions()`'s field names (`emp_code`, `punch_time`, `terminal_sn`/`terminal_alias`, `punch_state`) follow the convention documented for BioTime's sibling Terminal/Personnel endpoints — the Transaction API's own doc page wasn't available when this was written, so those exact field names should be reconciled against a real server's actual response the first time this runs against genuine production data, not assumed correct from adjacent-endpoint conventions. `biotime_sync._map_direction()` already defends against one likely mismatch — an unrecognized `punch_state` value maps to `"unknown"` rather than silently guessing in/out wrong.
+**See `docs/biotime-architecture.md` for the authoritative reference** — connection setup, the shared manual/scheduled sync code path, token caching, the dedupe key shape, timezone handling, and known risks for the ZKTeco BioTime 9.5 pull integration (`BiometricDevice.device_type == "ZKTeco BioTime Server"`). One of several punch sources `BiometricDevice` supports (TCP/IP terminals, ADMS/HTTP-Push devices, CSV import, manual entry all share the same `attendance_punches` table) — this is the only one that's a real server-to-server connection rather than a device pushing to us or a file upload.
 
 ## 16. Rota Planning
 
