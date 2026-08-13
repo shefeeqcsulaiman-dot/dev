@@ -1767,7 +1767,7 @@ Payroll
 
 ## 15.1 Biometric Attendance Connections
 
-**See `docs/biometric-architecture.md` for the authoritative reference.** Four connection methods are shipped — `zk_bridge.py` (on-prem script → TaxFlow, for direct ZKTeco/Anviz TCP/IP devices), ZKTeco ADMS/HTTP Push, a BioTime 9.5 pull connection (`BiometricDevice.device_type == "ZKTeco BioTime Server"`), and Manual/CSV — all converging on the same `attendance_punches` table. A fifth, a **TaxFlow Biometric Agent** (Windows-based, auto-updating, LAN device discovery, and able to reach a customer's BioTime server that isn't internet-reachable), is proposed and documented there but not yet built — additive to the four shipped methods, not a replacement for any of them.
+**See `docs/biometric-architecture.md` for the authoritative reference.** Four connection methods are shipped — `zk_bridge.py` (on-prem script → TaxFlow, for direct ZKTeco/Anviz TCP/IP devices), ZKTeco ADMS/HTTP Push, a BioTime 9.5 pull connection (`BiometricDevice.device_type == "ZKTeco BioTime Server"`), and Manual/CSV — all converging on the same `attendance_punches` table. A fifth, the **TaxFlow Biometric Agent**, is additive (nothing shipped is replaced): its Agent-to-local-BioTime mode shipped as a v1 script (`backend/biotime_agent.py`, for customers whose BioTime server isn't internet-reachable); Agent-to-device mode and the operational polish (Windows service packaging, auto-update, remote diagnostics, LAN discovery) are still proposed.
 
 ## 16. Rota Planning
 
