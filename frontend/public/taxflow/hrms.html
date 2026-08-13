@@ -1002,10 +1002,10 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 
   <div class="tab-body" id="hr-ot">
     <div class="g4 mb16">
-      <div class="stat"><div class="stat-lbl">Pending OT</div><div class="stat-val" style="color:var(--amber)">4</div><div class="stat-delta">supervisor review</div></div>
-      <div class="stat"><div class="stat-lbl">Approved Hours</div><div class="stat-val" style="color:var(--green)">18.5</div><div class="stat-delta">June 2024</div></div>
-      <div class="stat"><div class="stat-lbl">Payroll Value</div><div class="stat-val" style="color:var(--accent)">AED 1.2k</div><div class="stat-delta">approved OT only</div></div>
-      <div class="stat"><div class="stat-lbl">Rejected</div><div class="stat-val" style="color:var(--red)">1</div><div class="stat-delta">needs reason</div></div>
+      <div class="stat"><div class="stat-lbl">Pending OT</div><div class="stat-val" id="ot-stat-pending" style="color:var(--amber)">0</div><div class="stat-delta">supervisor review</div></div>
+      <div class="stat"><div class="stat-lbl">Approved Hours</div><div class="stat-val" id="ot-stat-approved-hours" style="color:var(--green)">0</div><div class="stat-delta">all approved requests</div></div>
+      <div class="stat"><div class="stat-lbl">Payroll Value</div><div class="stat-val" style="color:var(--accent)">—</div><div class="stat-delta">calculated at payroll run</div></div>
+      <div class="stat"><div class="stat-lbl">Rejected</div><div class="stat-val" id="ot-stat-rejected" style="color:var(--red)">0</div><div class="stat-delta">needs reason</div></div>
     </div>
     <div class="g2 mb16">
       <div class="card">
@@ -1667,8 +1667,8 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div class="card-hd">
         <div><div class="card-title">Sync Activity Log</div><div class="card-sub">Last 50 punch records from all sources</div></div>
         <div style="display:flex;gap:6px;align-items:center">
-          <input type="file" id="att-csv-input" accept=".csv" style="display:none" onchange="importAttendanceCsv(this).then(()=>setTimeout(loadBioSyncLog,800))">
-          <button class="btn btn-g btn-sm" onclick="document.getElementById('att-csv-input').click()">↑ Import CSV</button>
+          <input type="file" id="bio-csv-input" accept=".csv" style="display:none" onchange="importAttendanceCsv(this).then(()=>setTimeout(loadBioSyncLog,800))">
+          <button class="btn btn-g btn-sm" onclick="document.getElementById('bio-csv-input').click()">↑ Import CSV</button>
           <button class="btn btn-g btn-sm" onclick="loadBioSyncLog()">⟳ Refresh</button>
         </div>
       </div>
@@ -1930,19 +1930,19 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div class="card">
         <div class="card-hd"><div class="card-title">Team Reports</div></div>
         <div style="display:flex;flex-direction:column;gap:8px;padding-top:4px">
-          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" onclick="toast('Generating team attendance report...','info')">
+          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" disabled title="Not available yet">
             <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M2 6h12M5 9h2M9 9h2M5 12h2"/></svg>
             Team Attendance Report
           </button>
-          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" onclick="toast('Loading team leave utilization...','info')">
+          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" disabled title="Not available yet">
             <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v4l2.5 1.5"/></svg>
             Leave Utilization by Employee
           </button>
-          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" onclick="toast('Fetching OT summary...','info')">
+          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" disabled title="Not available yet">
             <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 4v4.5l3 1.5M4 2l-1.5-1.5M12 2l1.5-1.5"/></svg>
             Overtime Summary
           </button>
-          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" onclick="toast('Opening headcount report...','info')">
+          <button class="btn btn-g" style="justify-content:flex-start;gap:10px" disabled title="Not available yet">
             <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="5" r="3"/><path d="M1 14c0-3 2-5 4-5s4 2 4 5"/><circle cx="12" cy="6" r="2"/><path d="M14 14c0-2.5-1.5-4-2-4.5"/></svg>
             Headcount Report
           </button>
@@ -2642,7 +2642,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 </div>
 
 <div class="overlay" id="m-edit-month-shift" onclick="closeOvBg(event,'m-edit-month-shift')">
-  <div class="modal"><div class="modal-title">Edit Monthly Rota Cell</div><div class="modal-sub" id="rota-edit-sub">Select a cell to edit</div>
+  <div class="modal"><div class="modal-title">Edit Monthly Rota Cell</div><div class="modal-sub" id="rota-edit-month-sub">Select a cell to edit</div>
     <div class="fr2"><div class="fg"><label class="fl">Day Type</label><select class="fi"><option>Shift</option><option>Off</option><option>Leave</option><option>Holiday</option><option>Training</option></select></div><div class="fg"><label class="fl">Shift</label><select class="fi"><option>Morning</option><option>Evening</option><option>Night</option><option>Overtime</option></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Start Time</label><input class="fi mono" type="time" value="09:00"></div><div class="fg"><label class="fl">End Time</label><input class="fi mono" type="time" value="18:00"></div><div class="fg"><label class="fl">Break Minutes</label><input class="fi mono" value="60"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Overtime</label><select class="fi"><option>No</option><option>Yes</option></select></div><div class="fg"><label class="fl">OT Start Time</label><input class="fi mono" type="time" value="18:00"></div><div class="fg"><label class="fl">OT End Time</label><input class="fi mono" type="time" value="20:00"></div></div>
