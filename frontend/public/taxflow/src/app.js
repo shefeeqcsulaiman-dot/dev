@@ -346,6 +346,7 @@ function populateHrEmployeeSelect(id){
     if(!emp||!emp.name||emp.name==='Employee')return;
     const opt=document.createElement('option');
     opt.value=emp.name;
+    opt.dataset.empId=emp.id||'';
     opt.textContent=emp.name+(emp.id?' ('+emp.id+')':'');
     sel.appendChild(opt);
   });
@@ -17559,15 +17560,18 @@ function calcLoanEmi(){
 }
 
 function saveLoan(){
-  const emp=document.getElementById('loan-employee')?.value||'';
+  const empSel=document.getElementById('loan-employee');
+  const emp=empSel?.value||'';
+  const empId=empSel?.selectedOptions?.[0]?.dataset.empId||'';
   const type=document.getElementById('loan-type')?.value||'Personal Loan';
   const amount=parseFloat(document.getElementById('loan-amount')?.value)||0;
   const months=parseInt(document.getElementById('loan-months')?.value)||1;
   const reason=document.getElementById('loan-reason')?.value.trim()||'';
   const date=document.getElementById('loan-date')?.value||new Date().toISOString().slice(0,10);
+  const deductFrom=document.getElementById('loan-deduct-from')?.value||'';
   if(!emp||!amount){toast('Employee and amount are required','warn');return;}
   const emi=parseFloat((amount/months).toFixed(2));
-  const record={id:`LN-${Date.now()}`,employee:emp,type,amount,emi,months,balance:amount,reason,date,status:'Pending'};
+  const record={id:`LN-${Date.now()}`,employee:emp,employee_id:empId,type,amount,emi,months,balance:amount,deduct_from:deductFrom,reason,date,status:'Pending'};
   renderLoanRecord(record);
   saveServer('employeeLoans',record);
   closeM('m-loan');
@@ -17616,12 +17620,14 @@ function rejectLoan(btn){
 }
 
 function saveLoanAdvance(){
-  const emp=document.getElementById('advance-employee')?.value||'';
+  const empSel=document.getElementById('advance-employee');
+  const emp=empSel?.value||'';
+  const empId=empSel?.selectedOptions?.[0]?.dataset.empId||'';
   const amount=parseFloat(document.getElementById('advance-amount')?.value)||0;
   const month=document.getElementById('advance-month')?.value||'';
   const reason=document.getElementById('advance-reason')?.value.trim()||'';
   if(!emp||!amount){toast('Employee and amount are required','warn');return;}
-  const record={id:`ADV-${Date.now()}`,employee:emp,amount,month,reason,requested:new Date().toISOString(),status:'Pending'};
+  const record={id:`ADV-${Date.now()}`,employee:emp,employee_id:empId,amount,month,reason,requested:new Date().toISOString(),status:'Pending'};
   renderLoanAdvanceRecord(record);
   saveServer('salaryAdvances',record);
   closeM('m-loan-advance');
@@ -17771,7 +17777,9 @@ function refreshManagerPortalCounts(){
 }
 
 function submitOTRequest(){
-  const employee=(document.getElementById('ot-employee-sel')?.value||document.getElementById('ot-employee')?.value||'').trim();
+  const empSel=document.getElementById('ot-employee-sel');
+  const employee=(empSel?.value||document.getElementById('ot-employee')?.value||'').trim();
+  const employeeId=empSel?.selectedOptions?.[0]?.dataset.empId||'';
   const dept=document.getElementById('ot-dept')?.value.trim()||'';
   const date=document.getElementById('ot-date')?.value.trim()||'';
   const shift=document.getElementById('ot-shift')?.value.trim()||'';
@@ -17782,7 +17790,7 @@ function submitOTRequest(){
   const otType=document.getElementById('ot-type')?.value||'normal';
   const multiplier=document.getElementById('ot-multiplier')?.value||'1.25×';
   if(!employee){toast('Employee name is required','warn');return;}
-  const record={id:`OT-${Date.now()}`,employee,department:dept,date,shift,login,logout,ot_hours:hours,ot_type:otType,multiplier,reason,status:'Pending',submitted:new Date().toISOString()};
+  const record={id:`OT-${Date.now()}`,employee,employee_id:employeeId,department:dept,date,shift,login,logout,ot_hours:hours,ot_type:otType,multiplier,reason,status:'Pending',submitted:new Date().toISOString()};
   renderOTRecord(record);
   saveServer('overtimeRequests',record);
   closeM('m-ot');

@@ -783,6 +783,7 @@ class EmployeeOut(BaseModel):
 
 class PayrollGenerate(BaseModel):
     period: str = Field(default="2024-06", pattern=r"^\d{4}-\d{2}$")
+    branch_id: str | None = None
 
 
 class PayrollItemOut(BaseModel):
@@ -801,6 +802,7 @@ class PayrollItemOut(BaseModel):
 class PayrollRunOut(BaseModel):
     id: str
     period: str
+    branch_id: str | None = None
     status: str
     gross_total: Decimal
     deductions_total: Decimal
