@@ -2841,10 +2841,10 @@
   </div>
   <div class="tab-body on" id="bill-list">
     <div class="g4 mb16">
-      <div class="stat"><div class="stat-lbl">Open Bills</div><div class="stat-val" style="color:var(--amber)">AED 62.4K</div><div class="stat-delta">6 unpaid bills</div></div>
-      <div class="stat"><div class="stat-lbl">Due This Week</div><div class="stat-val" style="color:var(--red)">AED 18.2K</div><div class="stat-delta">2 vendor payments</div></div>
-      <div class="stat"><div class="stat-lbl">PO Commitments</div><div class="stat-val" style="color:var(--purple)">AED 145K</div><div class="stat-delta">4 approved POs</div></div>
-      <div class="stat"><div class="stat-lbl">Missing Docs</div><div class="stat-val" style="color:var(--red)">3</div><div class="stat-delta">receipt / tax invoice</div></div>
+      <div class="stat"><div class="stat-lbl">Open Bills</div><div class="stat-val" id="bill-stat-open" style="color:var(--amber)">AED 0.00</div><div class="stat-delta" id="bill-stat-open-sub">0 unpaid bills</div></div>
+      <div class="stat"><div class="stat-lbl">Due This Week</div><div class="stat-val" id="bill-stat-due" style="color:var(--red)">AED 0.00</div><div class="stat-delta" id="bill-stat-due-sub">0 vendor payments</div></div>
+      <div class="stat"><div class="stat-lbl">PO Commitments</div><div class="stat-val" style="color:var(--purple)">—</div><div class="stat-delta">Purchase Orders not tracked yet</div></div>
+      <div class="stat"><div class="stat-lbl">Missing Docs</div><div class="stat-val" style="color:var(--text3)">—</div><div class="stat-delta">Not tracked yet</div></div>
     </div>
     <div class="card">
       <div class="card-hd"><div class="card-title">Vendor Bills</div><button class="btn btn-p btn-sm" onclick="showM('m-bill')">+ New Bill</button></div>
@@ -2858,13 +2858,11 @@
   </div>
   <div class="tab-body" id="bill-vendors">
     <div class="card">
-      <div class="card-hd"><div class="card-title">Vendor Directory</div><button class="btn btn-p btn-sm" onclick="showM('m-vendor')">+ Add Vendor</button></div>
-      <table class="tbl">
-        <thead><tr><th>Vendor</th><th>TRN</th><th>Category</th><th>Email</th><th>Open Balance</th><th>Status</th></tr></thead>
-        <tbody id="bill-vendor-tbody">
-          <tr data-empty-state="1"><td colspan="6" style="color:var(--text3);text-align:center">No vendors added yet.</td></tr>
-        </tbody>
-      </table>
+      <div class="card-hd"><div class="card-title">Vendor Directory</div></div>
+      <div style="padding:24px;text-align:center;color:var(--text3)">
+        The Vendor Directory lives on the Purchases page so there's one source of truth for vendor balances.
+        <div style="margin-top:12px"><button class="btn btn-p btn-sm" onclick="go('purchase');setTimeout(()=>{const t=[...document.querySelectorAll('#page-purchase .tab')].find(el=>(el.getAttribute('onclick')||'').includes(&quot;'p-vendors'&quot;));if(t)stab(t,'p-vendors');},50)">Open Vendor Directory</button></div>
+      </div>
     </div>
   </div>
   <div class="tab-body" id="bill-po">
@@ -2881,12 +2879,10 @@
   <div class="tab-body" id="bill-payables">
     <div class="card">
       <div class="card-hd"><div class="card-title">Aged Payables</div></div>
-      <table class="tbl">
-        <thead><tr><th>Vendor</th><th>Current</th><th>1-30</th><th>31-60</th><th>61-90</th><th>Total</th></tr></thead>
-        <tbody id="bill-aged-tbody">
-          <tr data-empty-state="1"><td colspan="6" style="color:var(--text3);text-align:center">No payables data yet.</td></tr>
-        </tbody>
-      </table>
+      <div style="padding:24px;text-align:center;color:var(--text3)">
+        Aged Payables is calculated on the Reports page alongside the rest of your financial reports.
+        <div style="margin-top:12px"><button class="btn btn-p btn-sm" onclick="go('reports');setTimeout(()=>showReport('rep-ap'),50)">Open AP Aging Report</button></div>
+      </div>
     </div>
   </div>
 </div>

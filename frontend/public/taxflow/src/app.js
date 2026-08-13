@@ -5354,6 +5354,28 @@ function _sumLines(lines){
   return lines.reduce((s,l)=>s+parseAmount(l.line_total||l.total||l.net||l.amount||((Number(l.qty||l.quantity||1))*(Number(l.unit_price||l.price||0)))),0);
 }
 
+function _refreshBillPageStats(){
+  const bills=_hydratedBills.length?_hydratedBills:[...document.querySelectorAll('#bill-tbody tr[data-server-record]')].map(row=>{
+    const c=row.querySelectorAll('td');
+    return {total:parseAmount(c[6]?.textContent||0),due:'',status:c[7]?.querySelector('.b')?.textContent||''};
+  });
+  const paidStatuses=['paid','complete','completed','posted','settled','received'];
+  const now=new Date();now.setHours(0,0,0,0);
+  const weekOut=new Date(now.getTime()+7*24*60*60*1000);
+  let openTotal=0,openCount=0,dueTotal=0,dueCount=0;
+  bills.forEach(bill=>{
+    const status=String(bill.status||'').trim().toLowerCase();
+    if(paidStatuses.includes(status))return;
+    const total=parseAmount(bill.total||0);
+    openTotal+=total;openCount++;
+    const dueDate=bill.due?new Date(bill.due):null;
+    if(dueDate&&!isNaN(dueDate)&&dueDate>=now&&dueDate<=weekOut){dueTotal+=total;dueCount++;}
+  });
+  const setStat=(id,val,sub)=>{const el=document.getElementById(id);if(el)el.textContent=val;const subEl=document.getElementById(id+'-sub');if(subEl&&sub)subEl.textContent=sub;};
+  setStat('bill-stat-open',formatAed(openTotal),`${openCount} unpaid bill${openCount===1?'':'s'}`);
+  setStat('bill-stat-due',formatAed(dueTotal),`${dueCount} vendor payment${dueCount===1?'':'s'}`);
+}
+
 function renderBillRecord(bill){
   const tbody=document.getElementById('bill-tbody');
   if(!tbody||!bill?.bill_no||hasFirstCellValue(tbody,bill.bill_no))return;
@@ -5362,6 +5384,18 @@ function renderBillRecord(bill){
   row.innerHTML=`<td class="mono">${escapeHtml(bill.bill_no)}</td><td>${escapeHtml(bill.vendor)}</td><td>${escapeHtml(bill.date)}</td><td>${escapeHtml(bill.due)}</td><td class="mono">${Number(bill.subtotal||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(bill.vat||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(bill.total||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b b-a">${escapeHtml(bill.status||'Awaiting Payment')}</span></td><td><button class="btn btn-g btn-sm" onclick="openRowDetail(this,'Bill / Vendor Detail','Bill detail')">View</button></td>`;
   removeEmptyState(tbody);
   tbody.prepend(row);
+  _refreshBillPageStats();
+}
+
+function _vendorOpenBalance(vendorName){
+  const name=String(vendorName||'').trim().toLowerCase();
+  if(!name)return 0;
+  const paidStatuses=['paid','complete','completed','posted','settled','received'];
+  return _hydratedBills.reduce((sum,bill)=>{
+    if(String(bill.vendor||'').trim().toLowerCase()!==name)return sum;
+    if(paidStatuses.includes(String(bill.status||'').trim().toLowerCase()))return sum;
+    return sum+parseAmount(bill.total||0);
+  },0);
 }
 
 function renderVendorRecord(vendor){
@@ -5374,7 +5408,8 @@ function renderVendorRecord(vendor){
   row.dataset.serverRecord='vendors';
   row.dataset.address=vendor.address||'';
   row.dataset.vendorTrn=trn;
-  row.innerHTML=`<td>${escapeHtml(vendor.name)}</td><td class="mono">${escapeHtml(trn||'Not registered')}</td><td>${escapeHtml(vendor.category||'Services')}</td><td>${escapeHtml(vendor.email||'-')}</td><td>${escapeHtml(vendor.address||'-')}</td><td class="mono">0.00</td><td><span class="b b-g">Active</span></td>`;
+  const openBalance=_vendorOpenBalance(vendor.name);
+  row.innerHTML=`<td>${escapeHtml(vendor.name)}</td><td class="mono">${escapeHtml(trn||'Not registered')}</td><td>${escapeHtml(vendor.category||'Services')}</td><td>${escapeHtml(vendor.email||'-')}</td><td>${escapeHtml(vendor.address||'-')}</td><td class="mono">${openBalance.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td><span class="b b-g">Active</span></td>`;
   removeEmptyState(tbody);
   tbody.prepend(row);
   syncSupplierOptions(vendor.name);
