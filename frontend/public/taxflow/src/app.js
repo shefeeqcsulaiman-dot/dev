@@ -17871,7 +17871,7 @@ function renderCandidateRecord(rec){
   const tr=document.createElement('tr');
   tr.dataset.recordId=rec.id;
   tr.dataset.stage=stage;
-  tr.innerHTML=`<td>${escapeHtml(rec.name)}</td><td>${escapeHtml(rec.position||'')}</td><td>${escapeHtml(rec.nationality||'')}</td><td class="mono">${escapeHtml(String(rec.experience||0))} yrs</td><td class="mono">AED ${Number(rec.salary||0).toLocaleString()}</td><td>${escapeHtml(rec.source||'')}</td><td><span class="b ${stageCls}">${escapeHtml(stage)}</span></td><td><div class="flx"><button class="btn btn-g btn-sm" onclick="toast('Scheduling interview for '+${jsonAttr(String(rec.name||''))},'info')">Interview</button><button class="btn btn-g btn-sm" onclick="toast('Sending offer letter','info')">Offer</button></div></td>`;
+  tr.innerHTML=`<td>${escapeHtml(rec.name)}</td><td>${escapeHtml(rec.position||'')}</td><td>${escapeHtml(rec.nationality||'')}</td><td class="mono">${escapeHtml(String(rec.experience||0))} yrs</td><td class="mono">AED ${Number(rec.salary||0).toLocaleString()}</td><td>${escapeHtml(rec.source||'')}</td><td><span class="b ${stageCls}">${escapeHtml(stage)}</span></td><td><div class="flx"><button class="btn btn-g btn-sm" disabled title="Not available yet">Interview</button><button class="btn btn-g btn-sm" disabled title="Not available yet">Offer</button></div></td>`;
   tbody.prepend(tr);
 }
 

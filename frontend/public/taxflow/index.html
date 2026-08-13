@@ -1728,212 +1728,6 @@
   </div>
 </div>
 
-<!-- ═══════════════════ ROTA PLANNING MODULE ═══════════════════ -->
-<div class="page" id="page-rota">
-  <div class="tabs">
-    <div class="tab on" onclick="stab(this,'rota-shifts')">Shift Setup</div>
-    <div class="tab" onclick="stab(this,'rota-weekly')">Weekly Rota</div>
-    <div class="tab" onclick="stab(this,'rota-monthly')">Monthly Rota</div>
-    <div class="tab" onclick="stab(this,'rota-dept')">Department Rota</div>
-    <div class="tab" onclick="stab(this,'rota-swap')">Swap Requests</div>
-    <div class="tab" onclick="stab(this,'rota-approval')">Rota Approval</div>
-  </div>
-
-  <div class="tab-body on" id="rota-shifts">
-    <div class="g4 mb16">
-      <div class="stat"><div class="stat-lbl">Active Shifts</div><div class="stat-val" style="color:var(--accent)">4</div><div class="stat-delta">morning · evening · night</div></div>
-      <div class="stat"><div class="stat-lbl">Departments</div><div class="stat-val" style="color:var(--green)">5</div><div class="stat-delta">shift rules assigned</div></div>
-      <div class="stat"><div class="stat-lbl">Open Conflicts</div><div class="stat-val" style="color:var(--red)">3</div><div class="stat-delta">before publish</div></div>
-      <div class="stat"><div class="stat-lbl">Pending Swaps</div><div class="stat-val" style="color:var(--amber)">2</div><div class="stat-delta">need approval</div></div>
-    </div>
-    <div class="card mb16">
-      <div class="card-hd"><div><div class="card-title">Shift Setup</div><div class="card-sub">Define shift timing, break, grace period, and overtime threshold</div></div><button class="btn btn-p btn-sm" onclick="showM('m-shift')">+ Add Shift</button></div>
-      <table class="tbl">
-        <thead><tr><th>Shift Name</th><th>Code</th><th>Start</th><th>End</th><th>Break</th><th>Hours</th><th>Grace</th><th>OT After</th><th>Status</th><th></th></tr></thead>
-        <tbody id="rota-shift-tbody">
-          <tr data-empty-state="1"><td colspan="10" style="color:var(--text3);text-align:center">No shifts in database yet.</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="g3">
-      <div class="setting-tile"><strong>Shift Assignment</strong><p>Shifts can be assigned to departments, locations, employee groups, or individual staff.</p></div>
-      <div class="setting-tile"><strong>Night Shift</strong><p>Checkout after midnight is supported and linked to the original rota work date.</p></div>
-      <div class="setting-tile"><strong>Overtime Rule</strong><p>Overtime starts after the configured standard hours or pre-approved rota OT block.</p></div>
-    </div>
-  </div>
-
-  <div class="tab-body" id="rota-weekly">
-    <div class="card mb16">
-      <div class="card-hd">
-        <div><div class="card-title">Weekly Rota</div><div class="card-sub">Assign staff shifts and save the schedule to database</div></div>
-        <span class="b b-gray" id="rota-weekly-status">Draft</span>
-      </div>
-      <div class="fr4">
-        <div class="fg"><label class="fl">Department</label><select class="fi" id="rota-week-department" onchange="renderRotaBoards()"><option>All Departments</option><option>Sales</option><option>Warehouse</option><option>Finance</option><option>Management</option></select></div>
-        <div class="fg"><label class="fl">Week Start</label><input class="fi mono" id="rota-week-start" type="date" value="2026-05-04" onchange="renderRotaBoards()"></div>
-        <div class="fg"><label class="fl">Location</label><select class="fi" id="rota-week-location" onchange="renderRotaBoards()"><option>All Locations</option><option>Branch</option><option>Dubai HQ</option><option>Warehouse</option></select></div>
-        <div class="fg"><label class="fl">Search</label><input class="fi" id="rota-staff-search" placeholder="Employee name" oninput="renderRotaBoards()"></div>
-      </div>
-      <div class="flx" style="gap:8px;flex-wrap:wrap">
-        <button class="btn btn-g btn-sm" onclick="copyPreviousRota()">Copy Previous</button>
-        <button class="btn btn-g btn-sm" onclick="autoGenerateRota()">Auto Fill 4 Staff</button>
-        <button class="btn btn-g btn-sm" onclick="saveRotaDraft()">Save Draft</button>
-        <button class="btn btn-warn btn-sm" onclick="submitRotaApproval()">Submit Approval</button>
-        <button class="btn btn-p btn-sm" onclick="publishRota()">Publish Rota</button>
-      </div>
-    </div>
-
-    <div class="g2 mb16" style="grid-template-columns:2fr 1fr">
-      <div class="card">
-        <div class="card-hd">
-          <div><div class="card-title">Staff Schedule</div><div class="card-sub">Click a cell to edit. Saved cells update weekly, monthly, and department views.</div></div>
-          <button class="btn btn-g btn-sm" onclick="renderRotaBoards()">Refresh</button>
-        </div>
-        <div class="rota-board" id="rota-weekly-board"></div>
-        <div class="divider"></div>
-        <div class="flx" style="gap:8px;flex-wrap:wrap"><button class="btn btn-g btn-sm" onclick="autoGenerateRota()">Bulk Assign</button><button class="btn btn-g btn-sm" onclick="toast('Employee notifications queued','ok')">Notify Employees</button></div>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Weekly Summary</div></div>
-        <table class="tbl">
-          <tbody id="rota-weekly-summary-tbody"></tbody>
-        </table>
-        <div class="divider"></div>
-        <div class="rota-code-row" id="rota-code-row"></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="tab-body" id="rota-monthly">
-    <div class="card mb16">
-      <div class="card-hd"><div><div class="card-title">Monthly Rota</div><div class="card-sub">Monthly overview built from saved weekly rota records</div></div><span class="b b-gray" id="rota-monthly-status">Draft</span></div>
-      <div class="fr3">
-        <div class="fg"><label class="fl">Month</label><input class="fi mono" id="rota-month-value" type="month" value="2026-05" onchange="renderRotaBoards()"></div>
-        <div class="fg"><label class="fl">Department</label><select class="fi" id="rota-month-department" onchange="renderRotaBoards()"><option>All Departments</option><option>Sales</option><option>Warehouse</option><option>Finance</option><option>Management</option></select></div>
-        <div class="fg"><label class="fl">Employee</label><input class="fi" id="rota-month-search" placeholder="Search employee" oninput="renderRotaBoards()"></div>
-      </div>
-      <div class="flx" style="gap:8px;flex-wrap:wrap">
-        <button class="btn btn-g btn-sm" onclick="copyPreviousMonthRota()">Copy Previous Month</button>
-        <button class="btn btn-g btn-sm" onclick="autoGenerateMonthlyRota()">Auto Fill Month</button>
-        <button class="btn btn-g btn-sm" onclick="saveRotaDraft()">Save Status</button>
-        <button class="btn btn-warn btn-sm" onclick="submitRotaApproval()">Submit Approval</button>
-        <button class="btn btn-p btn-sm" onclick="publishRota()">Publish</button>
-      </div>
-    </div>
-
-    <div class="g2 mb16" style="grid-template-columns:2fr 1fr">
-      <div class="card">
-        <div class="card-hd"><div><div class="card-title">Monthly Staff Overview</div><div class="card-sub">Shows saved assignments for the selected month</div></div></div>
-        <div class="rota-month-grid" id="rota-monthly-board"></div>
-        <div class="divider"></div>
-        <div class="flx" style="gap:8px;flex-wrap:wrap"><button class="btn btn-g btn-sm" onclick="autoGenerateMonthlyRota()">Bulk Assign</button><button class="btn btn-g btn-sm" onclick="toast('Employees notified','ok')">Notify Employees</button></div>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Monthly Summary</div></div>
-        <table class="tbl">
-          <tbody id="rota-monthly-summary-tbody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <div class="tab-body" id="rota-dept">
-    <div class="card mb16">
-      <div class="card-hd">
-        <div><div class="card-title">Department Rota</div><div class="card-sub">Simple department coverage from saved weekly rota records</div></div>
-        <span class="b b-a" id="rota-dept-status">Needs Coverage Review</span>
-      </div>
-      <div class="fr3">
-        <div class="fg"><label class="fl">Department</label><select class="fi" id="rota-dept-department" onchange="renderRotaBoards()"><option>All Departments</option><option>Sales</option><option>Warehouse</option><option>Finance</option><option>Management</option></select></div>
-        <div class="fg"><label class="fl">Week Start</label><input class="fi mono" id="rota-dept-week-start" type="date" value="2026-05-04" onchange="syncRotaWeekFromDept()"></div>
-        <div class="fg"><label class="fl">Supervisor</label><input class="fi" id="rota-dept-supervisor" value="HR Manager"></div>
-      </div>
-      <div class="flx" style="gap:8px;flex-wrap:wrap">
-        <button class="btn btn-g btn-sm" onclick="autoGenerateRota()">Auto Fill Gaps</button>
-        <button class="btn btn-g btn-sm" onclick="saveRotaDraft()">Save Draft</button>
-        <button class="btn btn-warn btn-sm" onclick="submitRotaApproval()">Submit Approval</button>
-        <button class="btn btn-p btn-sm" onclick="publishRota()">Publish</button>
-      </div>
-    </div>
-    <div class="g2 mb16">
-      <div class="card">
-        <div class="card-hd"><div><div class="card-title">Coverage By Shift</div><div class="card-sub" id="rota-dept-sub">Selected department</div></div><button class="btn btn-g btn-sm" onclick="toast('Extra staff requested','warn')">Request Staff</button></div>
-        <div class="rota-coverage-grid" id="rota-dept-coverage"></div>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Department Staff</div></div>
-        <table class="tbl">
-          <thead><tr><th>Employee</th><th>Department</th><th>Hours</th><th>Status</th></tr></thead>
-          <tbody id="rota-dept-staff-tbody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <div class="tab-body" id="rota-swap">
-    <div class="g2 mb16">
-      <div class="card">
-        <div class="card-hd"><div><div class="card-title">Shift Swap Requests</div><div class="card-sub">Employee request, peer acceptance, supervisor approval</div></div><button class="btn btn-p btn-sm" onclick="showM('m-shift-swap')">+ Swap Request</button></div>
-        <table class="tbl">
-          <thead><tr><th>Requester</th><th>My Shift</th><th>Swap With</th><th>Target Shift</th><th>Status</th><th></th></tr></thead>
-          <tbody id="rota-swap-tbody">
-            <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No records yet.</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Swap Flow</div></div>
-        <div class="tline-item"><div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)">1</div><div><div>Employee requests swap</div><div class="card-sub">Reason is required</div></div></div>
-        <div class="tline-item"><div class="tline-dot" style="background:var(--amber-bg);color:var(--amber)">2</div><div><div>Other employee accepts</div><div class="card-sub">Target employee must confirm</div></div></div>
-        <div class="tline-item"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">3</div><div><div>Supervisor approves</div><div class="card-sub">Rota updates and audit log is created</div></div></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="tab-body" id="rota-approval">
-    <div class="g2 mb16">
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Rota Approval Workflow</div></div>
-        <table class="tbl">
-          <thead><tr><th>Department</th><th>Period</th><th>Supervisor</th><th>Status</th><th></th></tr></thead>
-          <tbody id="rota-approval-tbody">
-            <tr data-empty-state="1"><td colspan="5" style="color:var(--text3);text-align:center">No rota submissions yet.</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Critical Rules</div></div>
-        <div class="toggle-row"><div><div>Block edits after payroll lock date</div><div class="toggle-copy">Payroll finalized periods cannot be changed.</div></div><input type="checkbox" checked></div>
-        <div class="toggle-row"><div><div>Require approval for published rota changes</div><div class="toggle-copy">Every published change needs remarks and audit logging.</div></div><input type="checkbox" checked></div>
-        <div class="toggle-row"><div><div>Prevent leave conflicts before publish</div><div class="toggle-copy">Approved leave blocks shift assignment.</div></div><input type="checkbox" checked></div>
-        <div class="toggle-row"><div><div>Send rota overtime to approval</div><div class="toggle-copy">Pre-approved overtime appears in OT workflow.</div></div><input type="checkbox" checked></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="tab-body" id="rota-reports">
-    <div class="card mb16">
-      <div class="card-hd"><div class="card-title">Rota Reports</div><button class="btn btn-g btn-sm" onclick="toast('Rota reports exported','ok')">Export</button></div>
-      <table class="tbl" data-keep-static="1">
-        <thead><tr><th>Report</th><th>Purpose</th><th>Status</th></tr></thead>
-        <tbody>
-          <tr><td>Weekly Rota Report</td><td>Staff schedule by week</td><td><span class="b b-g">Ready</span></td></tr>
-          <tr><td>Monthly Rota Report</td><td>Full month planning</td><td><span class="b b-g">Ready</span></td></tr>
-          <tr><td>Department Coverage</td><td>Staff shortage by shift</td><td><span class="b b-a">3 warnings</span></td></tr>
-          <tr><td>Employee Working Hours</td><td>Total planned hours</td><td><span class="b b-g">Ready</span></td></tr>
-          <tr><td>Shift Conflict Report</td><td>Leave, double shift, overlap issues</td><td><span class="b b-r">3 conflicts</span></td></tr>
-          <tr><td>Published Rota History</td><td>Audit tracking</td><td><span class="b b-g">Ready</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="g3">
-      <div class="setting-tile"><strong>Green</strong><p>Approved or published rota entry.</p></div>
-      <div class="setting-tile"><strong>Yellow</strong><p>Warning, staff shortage, or supervisor review.</p></div>
-      <div class="setting-tile"><strong>Red</strong><p>Conflict, blocked assignment, or rejected rota change.</p></div>
-    </div>
-  </div>
-</div>
-
 <!-- ═══════════════════ PAYROLL MODULE ═══════════════════ -->
 <div class="page" id="page-payroll">
   <div class="tabs">
@@ -2915,7 +2709,7 @@
   </div>
   <div class="tab-body on" id="doc-library">
     <div class="g2 mb16">
-      <div class="drop-zone" onclick="toast('Document upload picker opened','info')"><div style="font-size:32px;margin-bottom:8px">📎</div><div class="drop-title">Upload Documents</div><div class="drop-sub">Invoices, bills, receipts, contracts, audit files, trade licenses</div></div>
+      <div class="drop-zone" style="opacity:.55;cursor:not-allowed" onclick="toast('Document upload isn\'t available yet — coming soon','info')"><div style="font-size:32px;margin-bottom:8px">📎</div><div class="drop-title">Upload Documents</div><div class="drop-sub">Not available yet — invoices, bills, receipts, contracts, audit files, trade licenses</div></div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Storage Summary</div><span class="b b-g">Encrypted</span></div>
         <div class="risk-row"><span>Invoices</span><div class="risk-track"><div class="risk-fill" style="width:76%"></div></div><span class="mono">184</span></div>
@@ -2930,13 +2724,13 @@
   </div>
   <div class="tab-body" id="doc-receipts">
     <div class="card">
-      <div class="card-hd"><div class="card-title">Receipt Inbox</div><button class="btn btn-p btn-sm" onclick="toast('Receipt capture opened','info')">Capture Receipt</button></div>
+      <div class="card-hd"><div class="card-title">Receipt Inbox</div><button class="btn btn-g btn-sm" disabled title="Not available yet">Capture Receipt</button></div>
       <table class="tbl"><thead><tr><th>Receipt</th><th>Merchant</th><th>Date</th><th>Amount</th><th>Matched To</th><th>Status</th></tr></thead><tbody><tr><td>receipt_3391.jpg</td><td>Dubai Taxi</td><td>23 Jun</td><td class="mono">86.00</td><td>Travel Expense</td><td><span class="b b-g">Matched</span></td></tr><tr><td>receipt_3392.png</td><td>OfficeMart</td><td>22 Jun</td><td class="mono">420.00</td><td>Unassigned</td><td><span class="b b-a">Review</span></td></tr></tbody></table>
     </div>
   </div>
   <div class="tab-body" id="doc-audit">
     <div class="card">
-      <div class="card-hd"><div class="card-title">Audit Document Pack</div><button class="btn btn-g btn-sm" onclick="toast('Audit pack export prepared','ok')">Export Pack</button></div>
+      <div class="card-hd"><div class="card-title">Audit Document Pack</div><button class="btn btn-g btn-sm" disabled title="Not available yet">Export Pack</button></div>
       <div class="g3"><div class="setting-tile"><strong>VAT Evidence</strong><p>Tax invoices, export evidence, TRN validation, VAT workpapers.</p></div><div class="setting-tile"><strong>Payroll Evidence</strong><p>WPS files, payslips, approvals, payroll journals.</p></div><div class="setting-tile"><strong>Accounting Evidence</strong><p>Journals, ledgers, bank reconciliations, attachments.</p></div></div>
     </div>
   </div>
@@ -2957,11 +2751,12 @@
   </div>
   <div class="tab-body" id="notif-rules">
     <div class="card">
-      <div class="card-hd"><div class="card-title">Automation Rules</div><button class="btn btn-p btn-sm" onclick="toast('Notification rule builder opened','info')">+ New Rule</button></div>
-      <div class="toggle-row"><div><div>Invoice overdue reminder</div><div class="toggle-copy">Email + WhatsApp 3 days after due date.</div></div><input type="checkbox" checked></div>
-      <div class="toggle-row"><div><div>VAT return due alert</div><div class="toggle-copy">Notify admin 30, 14, and 3 days before deadline.</div></div><input type="checkbox" checked></div>
-      <div class="toggle-row"><div><div>Bank sync failure</div><div class="toggle-copy">Send in-app and email alert to finance users.</div></div><input type="checkbox" checked></div>
-      <div class="toggle-row"><div><div>Payroll approval reminder</div><div class="toggle-copy">Notify approvers before WPS preparation.</div></div><input type="checkbox"></div>
+      <div class="card-hd"><div class="card-title">Automation Rules</div><button class="btn btn-p btn-sm" disabled title="Not available yet">+ New Rule</button></div>
+      <div class="card-sub" style="margin-bottom:10px">Rule configuration isn't available yet — these are preview examples, not active settings.</div>
+      <div class="toggle-row" style="opacity:.6"><div><div>Invoice overdue reminder</div><div class="toggle-copy">Email + WhatsApp 3 days after due date.</div></div><input type="checkbox" checked disabled></div>
+      <div class="toggle-row" style="opacity:.6"><div><div>VAT return due alert</div><div class="toggle-copy">Notify admin 30, 14, and 3 days before deadline.</div></div><input type="checkbox" checked disabled></div>
+      <div class="toggle-row" style="opacity:.6"><div><div>Bank sync failure</div><div class="toggle-copy">Send in-app and email alert to finance users.</div></div><input type="checkbox" checked disabled></div>
+      <div class="toggle-row" style="opacity:.6"><div><div>Payroll approval reminder</div><div class="toggle-copy">Notify approvers before WPS preparation.</div></div><input type="checkbox" disabled></div>
     </div>
   </div>
   <div class="tab-body" id="notif-channels">
@@ -3439,9 +3234,6 @@
   </div><!-- /rep-layout -->
 </div>
 
-<!-- ═══════════════════ EXCEPTION CENTER ═══════════════════ -->
-<div class="page" id="page-exception"></div>
-
 <!-- ═══════════════════ SETTINGS MODULE ═══════════════════ -->
 <div class="page" id="page-settings">
   <div class="tabs">
@@ -3891,99 +3683,6 @@
           <tr><td colspan="6" style="color:var(--text3);text-align:center">Reading exception center...</td></tr>
         </tbody>
       </table>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════ MOBILE APP MODULE ═══════════════════ -->
-<div class="page" id="page-mobile">
-  <div class="tabs">
-    <div class="tab on" onclick="stab(this,'mob-preview')">App Preview</div>
-    <div class="tab" onclick="stab(this,'mob-features')">Features</div>
-  </div>
-
-  <div class="tab-body on" id="mob-preview">
-    <div class="g2">
-      <div class="card" style="text-align:center">
-        <div class="card-title" style="margin-bottom:16px">Mobile App — Home Screen</div>
-        <div style="background:var(--bg3);border-radius:24px;padding:20px;max-width:280px;margin:0 auto;text-align:left">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px"><span style="font-size:20px">📱</span><span style="font-weight:600">TaxFlow</span></div>
-          <div style="background:var(--surface);border-radius:12px;padding:12px;margin-bottom:8px">
-            <div style="font-size:11px;color:var(--text3)">Total Revenue</div>
-            <div style="font-size:18px;font-weight:700;color:var(--accent)">AED 2.4M</div>
-          </div>
-          <div style="background:var(--surface);border-radius:12px;padding:12px;margin-bottom:8px">
-            <div style="font-size:11px;color:var(--text3)">Pending Invoices</div>
-            <div style="font-size:18px;font-weight:700;color:var(--amber)">AED 84,200</div>
-          </div>
-          <div style="background:var(--surface);border-radius:12px;padding:12px">
-            <div style="font-size:11px;color:var(--text3)">VAT Due</div>
-            <div style="font-size:18px;font-weight:700;color:var(--green)">AED 16,410</div>
-          </div>
-        </div>
-      </div>
-      <div class="card" style="text-align:center">
-        <div class="card-title" style="margin-bottom:16px">Bottom Navigation</div>
-        <div style="background:var(--bg3);border-radius:24px;padding:20px;max-width:280px;margin:0 auto">
-          <div style="display:flex;justify-content:space-around;padding:12px 0;border-top:1px solid var(--border)">
-            <div style="text-align:center"><div style="font-size:20px">🏠</div><div style="font-size:10px;color:var(--accent)">Home</div></div>
-            <div style="text-align:center"><div style="font-size:20px">📄</div><div style="font-size:10px;color:var(--text3)">Invoices</div></div>
-            <div style="text-align:center"><div style="font-size:20px">💳</div><div style="font-size:10px;color:var(--text3)">Expenses</div></div>
-            <div style="text-align:center"><div style="font-size:20px">📦</div><div style="font-size:10px;color:var(--text3)">Stock</div></div>
-            <div style="text-align:center"><div style="font-size:20px">☰</div><div style="font-size:10px;color:var(--text3)">More</div></div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="card mt16">
-      <div class="card-hd"><div class="card-title">Mobile Invoice Creation</div></div>
-      <div style="background:var(--bg3);border-radius:24px;padding:20px;max-width:320px;margin:0 auto;text-align:left">
-        <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Customer</div>
-        <div style="background:var(--surface);border-radius:8px;padding:10px;margin-bottom:12px">Dubai Steel Co.</div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Items</div>
-        <div style="background:var(--surface);border-radius:8px;padding:10px;margin-bottom:12px">
-          <div style="display:flex;justify-content:space-between"><span>Steel Rods 12mm</span><span class="mono">42,000</span></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid var(--border)">
-          <span style="font-weight:600">Total</span><span class="mono" style="color:var(--accent);font-weight:600">AED 44,100</span>
-        </div>
-        <button class="btn btn-p" style="width:100%;margin-top:12px">💾 Save Invoice</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="tab-body" id="mob-features">
-    <div class="g3">
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Core Features</div></div>
-        <div style="font-size:13px;line-height:1.8">
-          <div>✓ Dashboard with KPIs</div>
-          <div>✓ Create & view invoices</div>
-          <div>✓ Expense capture & upload</div>
-          <div>✓ Stock level monitoring</div>
-          <div>✓ Attendance check-in</div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Technical</div></div>
-        <div style="font-size:13px;line-height:1.8">
-          <div>✓ iOS & Android native</div>
-          <div>✓ Offline capability</div>
-          <div>✓ Biometric login</div>
-          <div>✓ Push notifications</div>
-          <div>✓ REST API sync</div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Security</div></div>
-        <div style="font-size:13px;line-height:1.8">
-          <div>✓ Role-based access</div>
-          <div>✓ Data encryption</div>
-          <div>✓ Session management</div>
-          <div>✓ Audit logging</div>
-          <div>✓ MFA support</div>
-        </div>
-      </div>
     </div>
   </div>
 </div>
