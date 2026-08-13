@@ -122,6 +122,11 @@ def create_vat_return(
         )
     )
     row = db.query(VatReturn).filter(VatReturn.company_id == current_user.company_id, VatReturn.period == payload.period).first()
+    if row and row.filing_status == "filed":
+        raise HTTPException(
+            status_code=409,
+            detail=f"VAT return for period '{payload.period}' is already filed (FTA ref {row.fta_reference_no or 'n/a'}) and cannot be re-submitted. File an amendment through the FTA portal instead.",
+        )
     if not row:
         row = VatReturn(company_id=current_user.company_id, period=payload.period)
         db.add(row)
@@ -134,6 +139,8 @@ def create_vat_return(
     row.filing_status = payload.filing_status
     row.fta_reference_no = payload.fta_reference_no
     row.attachment = payload.attachment
+    if payload.filing_status == "filed":
+        row.filed_date = datetime.now(timezone.utc)
     db.commit()
     db.refresh(row)
     return row
@@ -163,6 +170,11 @@ def create_corporate_tax_return(
         .filter(CorporateTaxReturn.company_id == current_user.company_id, CorporateTaxReturn.tax_period == payload.tax_period)
         .first()
     )
+    if row and row.filing_status == "filed":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Corporate tax return for period '{payload.tax_period}' is already filed (ref {row.reference_no or 'n/a'}) and cannot be re-submitted. File an amendment through the FTA portal instead.",
+        )
     if not row:
         row = CorporateTaxReturn(company_id=current_user.company_id, tax_period=payload.tax_period)
         db.add(row)
@@ -176,6 +188,8 @@ def create_corporate_tax_return(
     row.filing_status = payload.filing_status
     row.reference_no = payload.reference_no
     row.attachment = payload.attachment
+    if payload.filing_status == "filed":
+        row.filed_date = datetime.now(timezone.utc)
     db.commit()
     db.refresh(row)
     return row
