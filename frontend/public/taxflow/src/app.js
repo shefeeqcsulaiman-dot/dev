@@ -16249,12 +16249,19 @@ function updateLeaveBalance(){
   const empRows=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')];
   if(!empRows.length){emptyTableMessage(tbody,'No employees in database yet.');return;}
   const leaveRows=[...document.querySelectorAll('#leave-tbody tr:not([data-empty-state])')];
-  // Bucketed by (employee, leave type) — previously every non-rejected leave
-  // row, regardless of type, was summed into one number and subtracted from
-  // Annual Leave's remaining balance, so taking Sick/Emergency/Unpaid leave
-  // silently drained the Annual figure while the separate "Sick Days" column
-  // stayed hardcoded at 90 forever.
-  const usedByType={};
+  // Bucketed by (employee, leave type, approved-vs-pending) — previously
+  // every non-rejected leave row, regardless of type, was summed into one
+  // "used" number and subtracted from Annual Leave's remaining balance, so
+  // taking Sick/Emergency/Unpaid leave silently drained the Annual figure
+  // while the separate "Sick Days" column stayed hardcoded at 90 forever.
+  // Pending requests are still held back against Remaining (a real backend
+  // over-entitlement check now blocks approving past what's left, so a
+  // pending hold here prevents someone stacking several unapproved
+  // overlapping requests that would each individually look fine) — but
+  // they're now shown in their own column instead of silently merged into
+  // "Used", which used to make it look like unapproved leave had already
+  // been taken.
+  const usedByType={},pendingByType={};
   leaveRows.forEach(row=>{
     const cells=[...row.cells];
     if(cells.length<6)return;
@@ -16262,9 +16269,14 @@ function updateLeaveBalance(){
     const type=cells[1]?.textContent.trim()||'Annual';
     const days=parseInt(cells[4]?.textContent||'0')||0;
     const status=(cells[5]?.textContent.trim()||'').toLowerCase();
-    if(status==='rejected'||!emp)return;
-    usedByType[emp]=usedByType[emp]||{};
-    usedByType[emp][type]=(usedByType[emp][type]||0)+days;
+    if(!emp)return;
+    if(status==='approved'){
+      usedByType[emp]=usedByType[emp]||{};
+      usedByType[emp][type]=(usedByType[emp][type]||0)+days;
+    }else if(status==='pending'){
+      pendingByType[emp]=pendingByType[emp]||{};
+      pendingByType[emp][type]=(pendingByType[emp][type]||0)+days;
+    }
   });
   tbody.innerHTML='';
   empRows.forEach(row=>{
@@ -16274,12 +16286,14 @@ function updateLeaveBalance(){
     const annualDays=leaveEntitlementDays(policy);
     const sickDays=90;
     const empUsed=usedByType[emp.name]||{};
+    const empPending=pendingByType[emp.name]||{};
     const used=empUsed['Annual']||0;
+    const pending=empPending['Annual']||0;
     const sickUsed=empUsed['Sick']||0;
-    const remaining=Math.max(0,annualDays-used);
+    const remaining=Math.max(0,annualDays-used-pending);
     const sickRemaining=Math.max(0,sickDays-sickUsed);
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${escapeHtml(emp.name)}</td><td class="mono">${annualDays}</td><td class="mono">${sickRemaining}</td><td class="mono">${used}</td><td class="mono" ${remaining<5?'style="color:var(--red)"':''}>${remaining}</td>`;
+    tr.innerHTML=`<td>${escapeHtml(emp.name)}</td><td class="mono">${annualDays}</td><td class="mono">${sickRemaining}</td><td class="mono">${used}</td><td class="mono">${pending}</td><td class="mono" ${remaining<5?'style="color:var(--red)"':''}>${remaining}</td>`;
     tbody.appendChild(tr);
   });
   if(!tbody.children.length)emptyTableMessage(tbody,'No employees in database yet.');
