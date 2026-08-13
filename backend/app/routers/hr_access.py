@@ -13,6 +13,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from jose import jwt
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth_principal import (
@@ -1019,7 +1020,17 @@ def check_in(
         status="open",
     )
     db.add(session)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # The existence check above has a check-then-insert race (no lock) —
+        # two near-simultaneous check-ins can both pass it. A partial unique
+        # index (company_id, employee_id) WHERE status='open' (main.py
+        # self-migration) is the actual guard; this turns the resulting
+        # constraint violation into the same clean 409 the pre-check above
+        # already returns, instead of an unhandled 500.
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already checked in")
     db.add(EmployeeLocationLog(
         company_id=emp.company_id, employee_id=emp.id, session_id=session.id,
         latitude=Decimal(str(payload.latitude)), longitude=Decimal(str(payload.longitude)),

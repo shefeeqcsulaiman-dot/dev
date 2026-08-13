@@ -100,7 +100,13 @@ def test_branch_scoped_employee_still_sees_branch_less_legacy_sessions(client, d
     company_id = r.json()["company"]["id"]
 
     emp_a = Employee(company_id=company_id, employee_no="BR-ISO-C", full_name="Business Bay Admin", branch_id=branch_a["id"])
-    db.add(emp_a)
+    # A separate employee for the legacy session — attendance_sessions has a
+    # partial unique index on (company_id, employee_id) WHERE status='open'
+    # (one open check-in per employee at a time), so the same employee can't
+    # hold two open sessions simultaneously the way this test used to model
+    # "branch session + legacy session" for one person.
+    emp_legacy = Employee(company_id=company_id, employee_no="BR-ISO-C2", full_name="Business Bay Legacy Staff")
+    db.add_all([emp_a, emp_legacy])
     db.commit()
 
     headers_a = _grant_role_and_login(client, auth_headers, emp_a.id, "branchtest.bizbay", ["employees:view"], "Administrator")
@@ -110,7 +116,7 @@ def test_branch_scoped_employee_still_sees_branch_less_legacy_sessions(client, d
     before = client.get("/api/v1/hr/dashboard", headers=headers_a).json()["active_sessions_now"]
 
     _open_session(db, company_id, emp_a.id, branch_a["id"])
-    _open_session(db, company_id, emp_a.id, None)  # legacy, pre-branch session
+    _open_session(db, company_id, emp_legacy.id, None)  # legacy, pre-branch session
 
     dash = client.get("/api/v1/hr/dashboard", headers=headers_a)
     assert dash.status_code == 200
@@ -129,7 +135,13 @@ def test_unassigned_employee_sees_all_branches_unchanged(client, db, auth_header
 
     emp_unassigned = Employee(company_id=company_id, employee_no="BR-ISO-D", full_name="HQ Admin")
     emp_a = Employee(company_id=company_id, employee_no="BR-ISO-E", full_name="Sharjah Staff", branch_id=branch_a["id"])
-    db.add_all([emp_unassigned, emp_a])
+    # A separate employee for the second branch's session — attendance_sessions
+    # has a partial unique index on (company_id, employee_id) WHERE
+    # status='open' (one open check-in per employee at a time), so the same
+    # employee can no longer hold two simultaneously-open sessions the way
+    # this test used to model "one open session per branch" for one person.
+    emp_b = Employee(company_id=company_id, employee_no="BR-ISO-F", full_name="Ajman Staff", branch_id=branch_b["id"])
+    db.add_all([emp_unassigned, emp_a, emp_b])
     db.commit()
 
     headers_unassigned = _grant_role_and_login(
@@ -141,7 +153,7 @@ def test_unassigned_employee_sees_all_branches_unchanged(client, db, auth_header
     before = client.get("/api/v1/hr/dashboard", headers=headers_unassigned).json()["active_sessions_now"]
 
     _open_session(db, company_id, emp_a.id, branch_a["id"])
-    _open_session(db, company_id, emp_a.id, branch_b["id"])
+    _open_session(db, company_id, emp_b.id, branch_b["id"])
 
     dash = client.get("/api/v1/hr/dashboard", headers=headers_unassigned)
     assert dash.status_code == 200

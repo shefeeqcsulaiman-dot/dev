@@ -451,6 +451,29 @@ def ensure_schema_updates() -> None:
             if "branch_id" not in existing_columns:
                 connection.execute(text("ALTER TABLE attendance_sessions ADD COLUMN branch_id VARCHAR(36)"))
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_attendance_sessions_branch_id ON attendance_sessions (branch_id)"))
+            # check_in() had a check-then-insert race (no lock, no unique
+            # constraint) — two near-simultaneous check-ins for the same
+            # employee could both pass the "already open?" query and both
+            # insert an "open" session. De-duplicate any that already exist
+            # (keep the most recent, force-close the rest the same way
+            # _maybe_auto_checkout() already does) before adding the unique
+            # index that stops it happening again — the index creation
+            # itself would otherwise fail outright if duplicates were present.
+            connection.execute(text("""
+                UPDATE attendance_sessions SET status='closed', auto_checkout=TRUE
+                WHERE status='open' AND id NOT IN (
+                    SELECT id FROM (
+                        SELECT id, ROW_NUMBER() OVER (
+                            PARTITION BY company_id, employee_id ORDER BY check_in DESC
+                        ) AS rn
+                        FROM attendance_sessions WHERE status='open'
+                    ) ranked WHERE rn = 1
+                )
+            """))
+            connection.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_attendance_sessions_open_per_employee "
+                "ON attendance_sessions (company_id, employee_id) WHERE status='open'"
+            ))
         if "biometric_devices" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("biometric_devices")}
             required_columns = {
