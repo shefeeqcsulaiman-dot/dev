@@ -2,7 +2,7 @@
 
 This is the authoritative reference for how TaxFlow gets attendance punches out of a customer's biometric hardware and into `AttendancePunch`. `docs/architecture.md` §15.1 links here rather than duplicating this detail.
 
-Four connection methods are **shipped and live** today; a fifth — a **TaxFlow Biometric Agent** — is a **proposed, not-yet-built** addition, documented here so the design is settled before implementation starts. This is additive: nothing shipped is being replaced. The Agent gives customers who can't expose a device or a BioTime server to the internet a way in, using the same downstream pipeline every other method already uses.
+Four connection methods are **shipped and live**; a fifth — a **TaxFlow Biometric Agent** — is being added alongside them, additive, nothing replaced. Its first mode (Agent → local BioTime) is **shipped as a v1 script** (`backend/biotime_agent.py`); its second mode (Agent → direct device) and all of the requested operational polish (Windows service packaging, auto-update, remote diagnostics, LAN discovery) are still **proposed, not yet built**. The Agent gives customers who can't expose a device or a BioTime server to the internet a way in, using the same downstream pipeline every other method already uses.
 
 ## 1. Connection Methods
 
@@ -21,7 +21,8 @@ Four connection methods are **shipped and live** today; a fifth — a **TaxFlow 
    │          │           │              │
    ▼          ▼           ▼              ▼
 zk_bridge   ADMS/Push   BioTime      TaxFlow Agent
- (shipped)  (shipped)   (shipped)     (proposed)
+ (shipped)  (shipped)   (shipped)   (Mode 2 shipped v1,
+                                     Mode 1 proposed)
    │          │           │              │
    ▼          ▼           ▼              ▼
 ZKTeco     ZKTeco ADMS  Customer's   ZKTeco/Anviz device
@@ -38,7 +39,8 @@ devices    Hikvision    server       the customer's BioTime
 | ZKTeco ADMS / HTTP Push | **Shipped** | Device calls us directly | Devices with native cloud-push support |
 | BioTime Server (pull) | **Shipped** | We call the customer's BioTime server | Customers already running BioTime 9.5, reachable from the internet |
 | Manual / CSV | **Shipped** | File import, no live connection | Backup, or hardware none of the above cover |
-| **TaxFlow Biometric Agent** | **Proposed** | Runs on the customer's LAN; talks to a device directly OR to a LAN-local BioTime server, then pushes to us | Customers who **cannot** expose a device or BioTime to the internet — the gap none of the four shipped methods cover |
+| **TaxFlow Agent — Mode 2** (`backend/biotime_agent.py`) | **Shipped (v1 script)** | Runs on the customer's LAN, pulls from a LAN-local BioTime server, pushes to us | Customers with a BioTime server that **cannot** be exposed to the internet |
+| **TaxFlow Agent — Mode 1** | **Proposed** | Same Agent, direct-to-device instead of via BioTime | Customers with ZKTeco/Anviz devices who also can't run `zk_bridge.py` reachably (functionally covered by `zk_bridge.py` already — lower priority) |
 
 `BiometricDevice` (`backend/app/models.py:995-1016`) is the shared table behind every method above; all converge on one `attendance_punches` table (`AttendancePunch`), tagged by `source` and `device_id`. Everything downstream — attendance sessions, late/early/overtime, payroll — is source-agnostic; see `docs/hrms-architecture.md` for that side. None of the existing API endpoints change to add the Agent — see §3.
 
@@ -66,52 +68,81 @@ Attendance Calculation  ->  Payroll / WPS
 
 **Current state, honestly**: this normalization already happens in *effect* — every source ends up writing the same `AttendancePunch` shape — but there isn't one shared adapter interface today. Each source has its own bespoke ingestion path (`biotime_sync.sync_biotime_device()` for BioTime, the punch-in endpoint `zk_bridge.py`/ADMS devices call, the CSV import handler) rather than implementing a common `Adapter.pull() -> list[NormalizedPunch]` contract. That's not a defect — four independent paths converging on one well-defined output table is a reasonable design at this scale — but if the Agent (§3) is built as a genuinely new adapter, it's worth deciding then whether to formalize a shared interface across all methods or keep adding sources as independent converging paths, which has worked fine so far.
 
-## 3. TaxFlow Biometric Agent (proposed — not yet built)
+## 3. TaxFlow Biometric Agent
 
 ### Why
 
-The four shipped methods all require the customer's network to be reachable in one direction or the other: `zk_bridge.py` needs someone to keep a script running and reachable enough to hit our API outbound (usually fine — outbound is rarely blocked); BioTime pull requires TaxFlow's servers to reach the customer's BioTime install *inbound*, which many customers' IT/security policy won't allow. There's currently no answer for "customer has ZKTeco devices or a BioTime server, but won't or can't open inbound access." The Agent closes that gap by always initiating outbound, like `zk_bridge.py` already does — it's a delivery/packaging problem, not a new protocol problem.
+The four shipped methods all require the customer's network to be reachable in one direction or the other: `zk_bridge.py` needs someone to keep a script running and reachable enough to hit our API outbound (usually fine — outbound is rarely blocked); BioTime pull requires TaxFlow's servers to reach the customer's BioTime install *inbound*, which many customers' IT/security policy won't allow. There's currently no answer for "customer has a BioTime server, but won't or can't open inbound access to it." The Agent closes that gap by always initiating outbound, like `zk_bridge.py` already does — it's a delivery/packaging problem, not a new protocol problem.
 
-### What it does
+### Mode 2 — Agent → local BioTime server (shipped, v1 script)
 
-Two modes, matching the two things a customer might have:
+`backend/biotime_agent.py` — a standalone script, sibling to `zk_bridge.py` in every way that matters: same config-file-then-env-var-then-default convention (`biotime_agent.conf`), same logging style, same "run manually or under PM2/systemd" usage, same per-device API key auth.
 
 ```text
-Mode 1 — Agent -> Device (direct)
-  Same protocol zk_bridge.py already speaks (ZKTeco TCP/IP, pyzk-compatible;
-  Anviz where supported). Difference is packaging and operational quality,
-  not the wire protocol.
-
-Mode 2 — Agent -> local BioTime server
-  Agent runs biotime_client.py's exact same calls (get_token,
-  list_transactions) but FROM the customer's LAN, against a BioTime server
-  that isn't reachable from the internet — then forwards the pulled
-  transactions to TaxFlow's existing punch-ingestion API, the same way
-  zk_bridge.py forwards direct-device punches today. TaxFlow's own backend
-  never talks to this BioTime server directly in this mode; the Agent is
-  the only thing that needs network access to it.
+biotime_agent.py, running ON the customer's LAN:
+        |
+        v
+  _get_token() / BioTime auth  -- duplicates biotime_client.py's exact
+        |                          get_token() request shape (kept in sync
+        v                          manually — this script can't import the
+  _list_transactions()             backend package, it runs standalone on
+        |                          a machine that doesn't have it installed)
+        v
+  Sort pulled transactions oldest-first, map fields (emp_code -> employee_id,
+  punch_state -> direction via the same in/out/unknown mapping as
+  biotime_sync._map_direction()), apply the fixed UTC offset
+        |
+        v
+  POST each punch to {API_BASE_URL}/api/v1/punch  (X-Device-Key header) --
+  the exact same short-alias endpoint and header zk_bridge.py already uses;
+  an Agent-pushed punch and a zk_bridge-pushed punch are indistinguishable
+  to the backend, both land with source="device"
+        |
+        v
+  Watermark (biotime_agent_state.json) only advances through a CONTIGUOUS
+  run of successful posts -- stops the whole cycle at the first failed
+  POST rather than skipping past it, so a transient failure can never
+  silently lose a punch. The backend's own idempotency guard (company +
+  employee + punch_time + device) makes re-sending an already-received
+  punch on the next cycle harmless, so this trades a little redundant
+  network traffic for a hard guarantee against data loss.
 ```
 
-Either mode ends at the same place: normalized punches pushed to `POST /api/v1/attendance/punch` (or a new Agent-specific ingestion endpoint, if per-Agent auth/versioning needs turn out to want one — an implementation decision, not an architecture one) using a per-device API key, identical in spirit to how `zk_bridge.py` authenticates today.
+Verified locally end-to-end against a mock BioTime server and a real backend: punches sync correctly with the right direction mapping (including an unrecognized `punch_state` correctly falling through to `"unknown"` rather than being guessed), a second sync cycle sends zero duplicates, and a script-level unit test confirmed the failure-safety behavior specifically — a mid-batch POST failure stops that cycle's watermark advance at the last success, and the next cycle correctly retries the failed punch and everything after it, in order, without re-sending what already succeeded.
 
-### Requested operational qualities (from this design discussion)
+**Setup** (`HRMS → Attendance → Devices → Add Device`): pick any `device_type` other than `"ZKTeco BioTime Server"` (that type is reserved for the built-in pull connection and issues no API key) — `"BioTime via Agent"` is a reasonable label. Copy the issued API key into `biotime_agent.conf` alongside the local BioTime server's own URL/username/password, then run the script on a machine that can reach that BioTime server.
+
+**Not yet done for this mode**: Windows service packaging, auto-update, remote diagnostics, LAN discovery — see below. v1 is deliberately just the script, matching where `zk_bridge.py` itself still is today.
+
+### Mode 1 — Agent → Device (proposed, not yet built)
+
+```text
+Same protocol zk_bridge.py already speaks (ZKTeco TCP/IP, pyzk-compatible;
+Anviz where supported). Difference would be packaging and operational
+quality, not the wire protocol — functionally, zk_bridge.py already covers
+this case, so building a second implementation of it is lower priority
+than the operational-polish items below, which would benefit BOTH modes
+once built.
+```
+
+### Requested operational qualities (not yet built, apply to both modes)
 
 - **Windows-based** — matches the environment most customer sites already run other on-prem software on.
-- **Auto-updating** — `zk_bridge.py` today requires a customer or reseller to manually pull updates; the Agent should update itself.
+- **Auto-updating** — `zk_bridge.py` and `biotime_agent.py` both today require a customer or reseller to manually pull updates; a real Agent product should update itself.
 - **Remotely diagnosable** — TaxFlow support should be able to see Agent health/last-sync/errors without a site visit or asking the customer to read logs over the phone (a natural extension of `BiometricDevice.last_sync` and the existing "Test Connection" pattern, surfaced per-Agent instead of per-device).
-- **LAN device discovery** — instead of a customer hand-typing a device IP (today's `ip_address`/`port` fields on `BiometricDevice`), the Agent scans the LAN and lets the customer pick from what it finds. Meaningfully lowers setup friction versus `zk_bridge.py`'s current manual-IP config file.
+- **LAN device discovery** — instead of a customer hand-typing a device IP (today's `ip_address`/`port` fields on `BiometricDevice`), the Agent scans the LAN and lets the customer pick from what it finds. Meaningfully lowers setup friction versus the current manual-IP/manual-URL config file approach.
 
 ### What does *not* change
 
-- `BiometricDevice`, `AttendancePunch`, and every existing API endpoint (`/api/v1/attendance/devices`, `.../{id}/test`, `.../{id}/biotime/sync`, the punch-ingestion endpoint) stay exactly as they are. The Agent is a new *client* of this existing surface, not a reason to redesign it.
+- `BiometricDevice`, `AttendancePunch`, and every existing API endpoint (`/api/v1/attendance/devices`, `.../{id}/test`, `.../{id}/biotime/sync`, `/api/v1/punch`) stay exactly as they are — confirmed by shipping Mode 2 without touching any of them. The Agent is a new *client* of this existing surface, not a reason to redesign it.
 - The four shipped methods are not deprecated by this. A customer who's already running `zk_bridge.py` successfully has no reason to migrate; the Agent is offered alongside as the option for customers the current four don't serve.
 - BioTime pull (§4) stays the right choice for a customer whose BioTime server genuinely is reachable from the internet — Agent Mode 2 exists specifically for the case where it isn't, not as a universal replacement for the simpler pull path.
 
-### Open questions before building
+### Open questions before building the operational-polish layer
 
 - Auto-update mechanism and integrity (signed releases? a TaxFlow-hosted update channel?) — a compromised auto-updater on a customer's LAN is a real blast-radius question worth deciding deliberately, not defaulting on.
 - LAN discovery's own security posture — scanning a customer's network is more intrusive than polling one known IP; needs explicit customer opt-in/scope, not silent broad scanning.
-- Whether Agent-pushed punches reuse the exact `zk_bridge.py`-style per-device API key model as-is, or need their own auth scheme given an Agent can proxy for *multiple* devices/a BioTime server at once, unlike one `zk_bridge.py` instance per device today.
+- Whether Agent-pushed punches keep the exact `zk_bridge.py`-style per-device API key model v1 shipped with, or need their own auth scheme once one Agent instance might proxy for *multiple* devices/BioTime servers at once, unlike one script instance per connection today.
 
 ## 4. BioTime Server Connection (shipped) — Deep Dive
 
