@@ -1919,6 +1919,27 @@ function closeRecent(){ document.getElementById('ov-recent').style.display='none
 // created but never reopened anywhere in the UI, so "Hold Order" quietly
 // went nowhere. Deletes the draft after loading it so it can't be resumed
 // twice into two different carts.
+// Deleting a held order's draft record also cascades to any stock movement
+// it had already accumulated (sync_domain_delete()'s posSales branch,
+// app_data.py) — but that only happens if this DELETE actually reaches the
+// backend. Previously a failed request here was swallowed by a bare
+// console.warn with no retry, leaving both the draft record and any real
+// stock deduction it made permanently orphaned with nothing telling the
+// user it happened. Retries a few times with backoff before giving up
+// loudly instead of silently.
+async function _deleteHeldOrderWithRetry(id,attempt=1){
+  try{
+    await api('/app-data?action=delete',{method:'POST',body:{collection:'posSales',record:{id}}});
+  }catch(e){
+    if(attempt<3){
+      await new Promise(r=>setTimeout(r,attempt*800));
+      return _deleteHeldOrderWithRetry(id,attempt+1);
+    }
+    console.warn('Failed to clear held order after resume:',e);
+    toast('Could not clear the held order on the server — it may reappear in Recent Orders. Delete it manually if so.','warn');
+  }
+}
+
 async function resumeSale(id){
   if(!id)return;
   if(_cart.length && !confirm('Resume this held order? Your current cart will be replaced.'))return;
@@ -1930,9 +1951,7 @@ async function resumeSale(id){
     const custEl=document.getElementById('pos-cust');
     if(custEl)custEl.value=draft.customer||'Walk-In Customer';
     if(draft.discount)document.getElementById('s-disc').value=draft.discount;
-    await api('/app-data?action=delete',{method:'POST',body:{collection:'posSales',record:{id:draft.id}}}).catch(e=>{
-      console.warn('Failed to clear held order after resume:',e);
-    });
+    await _deleteHeldOrderWithRetry(draft.id);
     renderCart();
     closeRecent();
     toast('Held order resumed — '+(draft.receipt_no||''),'ok');
