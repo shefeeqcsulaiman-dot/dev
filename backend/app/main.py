@@ -160,6 +160,18 @@ def create_app() -> FastAPI:
         if isinstance(exc, _HTTPEx):
             return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
         import logging
+        from sqlalchemy.exc import TimeoutError as _SQLATimeoutError
+        if isinstance(exc, _SQLATimeoutError):
+            # DB connection pool couldn't hand out a connection within
+            # pool_timeout -- the server is momentarily overloaded, not
+            # broken. 503+Retry-After is the correct signal for this
+            # (distinct from a real bug's 500) and is what the frontend's
+            # retry logic keys off of. Most callers of dashboard()/
+            # report_summary() never reach here at all -- reports.py's
+            # _cached_or_build() already falls back to stale cached data
+            # first; this only fires when there's truly nothing cached yet.
+            logging.getLogger("taxflow").warning("DB pool timeout on %s %s", request.method, request.url.path)
+            return JSONResponse(status_code=503, content={"detail": "Service temporarily busy, please retry."}, headers={"Retry-After": "3"})
         logging.getLogger("taxflow").error("Unhandled error on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
         return JSONResponse(status_code=500, content={"detail": "An internal error occurred."})
 

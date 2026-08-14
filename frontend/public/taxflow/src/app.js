@@ -3006,6 +3006,43 @@ function renderDashboardMeta(data){
   }
 }
 
+const REPORT_RETRY_DELAYS_MS=[400,1200]; // dashboard/summary retry backoff — see _fetchReportWithRetry()
+
+function _reportAbortSignal(ms=15000){
+  // Matches the existing _extractionAbortSignal() pattern — a hung request
+  // gets cancelled-and-retried instead of leaving the UI on "Loading..."
+  // indefinitely while waiting for DigitalOcean's own edge timeout.
+  const controller=new AbortController();
+  setTimeout(()=>controller.abort(),ms);
+  return controller.signal;
+}
+
+async function _fetchReportWithRetry(url){
+  // Bounded retry specifically for the two heaviest report endpoints
+  // (dashboard/summary): on a 500/503/504 or a client-side timeout, retry
+  // with short backoff before giving up — these are idempotent GETs, so
+  // always safe to retry. The backend now serves stale cached data instead
+  // of erroring whenever it can (reports.py's _cached_or_build()), so most
+  // transient overload never even reaches here; this is the secondary
+  // safety net for whatever still does, and often just quietly succeeds on
+  // the 2nd/3rd attempt as a concurrent burst clears. Deliberately scoped
+  // to these two call sites rather than added to authenticatedFetch()
+  // itself, since blanket-retrying every API call (including writes) would
+  // not be safe.
+  let lastErr=null;
+  for(let attempt=0;attempt<=REPORT_RETRY_DELAYS_MS.length;attempt++){
+    try{
+      const response=await authenticatedFetch(url,{signal:_reportAbortSignal()});
+      if(response.ok||![500,503,504].includes(response.status))return response;
+      lastErr=new Error('Report API returned '+response.status);
+    }catch(err){
+      lastErr=err.name==='AbortError'?new Error('Report request timed out'):err;
+    }
+    if(attempt<REPORT_RETRY_DELAYS_MS.length)await new Promise(r=>setTimeout(r,REPORT_RETRY_DELAYS_MS[attempt]));
+  }
+  throw lastErr;
+}
+
 async function syncDashboardFromDatabase(){
   const ready=await ensureBackendSession();
   if(!ready){
@@ -3017,7 +3054,7 @@ async function syncDashboardFromDatabase(){
   }
   if(!window.__taxflowFreshDashboardLoaded)renderCachedDashboardSnapshot();
   try{
-    const response=await authenticatedFetch(`${apiBaseUrl()}/reports/dashboard`);
+    const response=await _fetchReportWithRetry(`${apiBaseUrl()}/reports/dashboard`);
     if(!response.ok)throw new Error('Dashboard API returned '+response.status);
     const data=await response.json();
     window.__taxflowFreshDashboardLoaded=true;
@@ -3512,7 +3549,7 @@ async function syncReportsFromDatabase(){
   const ready=await ensureBackendSession();
   if(!ready)return;
   try{
-    const response=await authenticatedFetch(`${apiBaseUrl()}/reports/summary`);
+    const response=await _fetchReportWithRetry(`${apiBaseUrl()}/reports/summary`);
     if(!response.ok)throw new Error('Reports API returned '+response.status);
     const data=await response.json();
     if(data._version&&data._version===_lastReportVersion){

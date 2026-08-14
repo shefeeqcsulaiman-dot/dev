@@ -5,6 +5,7 @@ All values are JSON-serialised; keys are namespaced with "tf:".
 """
 import json
 import logging
+import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,45 @@ def set(key: str, value: Any, ttl: int = 60) -> None:
         r.setex(f"tf:{key}", ttl, json.dumps(value, default=str))
     except Exception:
         pass
+
+
+_STALE_SAFETY_NET_TTL = 24 * 60 * 60  # 1 day — see get_with_staleness()'s docstring
+
+
+def set_with_staleness(key: str, value: Any) -> None:
+    """Writes {data, cached_at} with a long (24h) TTL, instead of the short
+    freshness window a plain set() would use — see get_with_staleness()."""
+    r = _redis()
+    if r is None:
+        return
+    try:
+        envelope = {"data": value, "cached_at": time.time()}
+        r.setex(f"tf:{key}", _STALE_SAFETY_NET_TTL, json.dumps(envelope, default=str))
+    except Exception:
+        pass
+
+
+def get_with_staleness(key: str, fresh_seconds: int) -> tuple[Any | None, bool]:
+    """Returns (data, is_fresh). data is None if there's no cached value at
+    all (nothing written in the last 24h) or up to `fresh_seconds` old
+    ("here's current data") — or older than that but still present
+    ("stale but better than an error", the whole point of this pair of
+    functions: callers use this to serve a company's last-known dashboard/
+    summary when a fresh recompute fails under load, instead of a hard
+    error, for anyone who's loaded it at all in the last day."""
+    r = _redis()
+    if r is None:
+        return None, False
+    try:
+        raw = r.get(f"tf:{key}")
+        if raw is None:
+            return None, False
+        envelope = json.loads(raw)
+        cached_at = envelope.get("cached_at", 0)
+        is_fresh = (time.time() - cached_at) <= fresh_seconds
+        return envelope.get("data"), is_fresh
+    except Exception:
+        return None, False
 
 
 def delete(key: str) -> None:

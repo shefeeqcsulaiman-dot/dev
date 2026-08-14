@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, text
+from sqlalchemy.exc import TimeoutError as SQLATimeoutError
 from sqlalchemy.orm import Session
 
 import app.cache as cache
@@ -49,6 +50,33 @@ from app.models import (
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
+def _cached_or_build(key: str, fresh_ttl: int, build_fn) -> dict[str, Any]:
+    """Fresh cache hit -> return immediately. Otherwise call build_fn(); on
+    success, cache (with a 24h staleness safety net, see
+    cache.set_with_staleness()) and return the fresh result. On a DB
+    connection-pool timeout specifically (sqlalchemy.exc.TimeoutError,
+    raised when the pool can't hand out a connection within pool_timeout —
+    i.e. the server is overloaded, not a real bug) fall back to whatever
+    was last cached, even if stale, rather than a hard error -- for any
+    company that's loaded this report at all in the last day, a burst of
+    concurrent load becomes "you got slightly-old numbers" instead of a
+    500/503 to the user. Only lets the error propagate (to main.py's 503
+    handler) when there's truly nothing cached to fall back to."""
+    data, is_fresh = cache.get_with_staleness(key, fresh_ttl)
+    if is_fresh:
+        return data
+    try:
+        result = build_fn()
+    except SQLATimeoutError:
+        if data is not None:
+            stale = dict(data)
+            stale["stale"] = True
+            return stale
+        raise
+    cache.set_with_staleness(key, result)
+    return result
+
+
 @router.get("/dashboard")
 @limiter.limit("120/minute")
 def dashboard(request: Request, db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("reports:view"))) -> dict[str, Any]:
@@ -58,12 +86,7 @@ def dashboard(request: Request, db: Session = Depends(get_db), principal: Princi
     # this only changes WHO can view the same company-wide numbers, gated
     # behind reports:view same as trial_balance() already is.
     company_id = principal.company_id
-    cached = cache.get(f"dashboard:{company_id}")
-    if cached is not None:
-        return cached
-    result = _build_dashboard(db, company_id)
-    cache.set(f"dashboard:{company_id}", result, ttl=60)
-    return result
+    return _cached_or_build(f"dashboard:{company_id}", 60, lambda: _build_dashboard(db, company_id))
 
 
 def _build_dashboard(db: Session, company_id: str) -> dict[str, Any]:
@@ -633,15 +656,15 @@ def trial_balance(
 def report_summary(request: Request, db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("reports:view"))) -> dict[str, Any]:
     # See dashboard()'s comment above — same widening, same reasoning.
     company_id = principal.company_id
-    cached = cache.get(f"summary:{company_id}")
-    if cached is not None:
-        return cached
-    result = _build_summary(db, company_id)
-    # Stable fingerprint for frontend diff-check (skips re-render when data unchanged)
-    _sig = f"{result.get('dashboard',{}).get('revenue',0)}:{result.get('dashboard',{}).get('expenses',0)}:{result.get('dashboard',{}).get('net_profit',0)}"
-    result["_version"] = hashlib.md5(_sig.encode()).hexdigest()[:12]
-    cache.set(f"summary:{company_id}", result, ttl=120)
-    return result
+
+    def _build() -> dict[str, Any]:
+        result = _build_summary(db, company_id)
+        # Stable fingerprint for frontend diff-check (skips re-render when data unchanged)
+        _sig = f"{result.get('dashboard',{}).get('revenue',0)}:{result.get('dashboard',{}).get('expenses',0)}:{result.get('dashboard',{}).get('net_profit',0)}"
+        result["_version"] = hashlib.md5(_sig.encode()).hexdigest()[:12]
+        return result
+
+    return _cached_or_build(f"summary:{company_id}", 120, _build)
 
 
 def _is_recognized_revenue_status(status: object) -> bool:
