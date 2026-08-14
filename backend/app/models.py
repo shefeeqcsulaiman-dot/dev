@@ -273,6 +273,12 @@ class VoucherLine(Base):
 
 class GeneralLedgerEntry(Base, TimestampMixin):
     __tablename__ = "general_ledger_entries"
+    __table_args__ = (
+        # Backs create_gl_entries_from_journal()'s running-balance aggregate
+        # (accounting_posting.py) — filtered on exactly this triple, with
+        # only single-column indexes to work with before.
+        Index("ix_gl_entries_company_account_date", "company_id", "account_id", "entry_date"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)

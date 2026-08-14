@@ -287,35 +287,57 @@ def create_gl_entries_from_journal(
     )
     if existing:
         return
-    for journal_line in journal.lines:
-        # Compute running balance: opening_balance + sum of all prior GL entries for this account
-        account = db.query(Account).filter(Account.id == journal_line.account_id).first()
-        ob = money(account.opening_balance if account else 0)
-        ob_type = (account.opening_balance_type or "DR") if account else "DR"
-        running = ob if ob_type == "DR" else -ob
-        # Scoped to entries dated on or before this journal's own entry_date
-        # (not raw insertion order) and to the same branch — otherwise a
-        # backdated journal's stored "balance" snapshot would include
-        # chronologically-later entries, and two branches sharing an
-        # account would have their running balances mixed together. This
-        # is still only a point-in-time snapshot: entries already posted
-        # after this one's date are not retroactively recalculated when a
-        # backdated entry lands between them (documented limitation, not
-        # fixed here — would require rewriting every later entry's balance).
-        prior_query = db.query(
-            func.coalesce(func.sum(GeneralLedgerEntry.debit - GeneralLedgerEntry.credit), Decimal("0.00"))
-        ).filter(
-            GeneralLedgerEntry.account_id == journal_line.account_id,
-            GeneralLedgerEntry.company_id == journal.company_id,
-            GeneralLedgerEntry.entry_date <= journal.entry_date,
+
+    distinct_account_ids = {journal_line.account_id for journal_line in journal.lines}
+
+    # One query for every account this journal touches, instead of one
+    # query per line (a journal typically touches 2-4 distinct accounts
+    # even with 5+ lines — e.g. several sales lines all crediting "3000").
+    accounts_by_id = {a.id: a for a in db.query(Account).filter(Account.id.in_(distinct_account_ids)).all()}
+
+    # One aggregate query for the pre-existing balance of every distinct
+    # account this journal touches, instead of one per line. Scoped to
+    # entries dated on or before this journal's own entry_date (not raw
+    # insertion order) and to the same branch — otherwise a backdated
+    # journal's stored "balance" snapshot would include chronologically-
+    # later entries, and two branches sharing an account would have their
+    # running balances mixed together. This is still only a point-in-time
+    # snapshot: entries already posted after this one's date are not
+    # retroactively recalculated when a backdated entry lands between them
+    # (documented limitation, not fixed here — would require rewriting
+    # every later entry's balance).
+    #
+    # Safe to compute once instead of per line: none of THIS journal's own
+    # lines exist in the DB yet at this point (they're what this loop is
+    # about to insert), so this snapshot is exactly what the old per-line
+    # queries would each have produced via SQLAlchemy's autoflush (a query
+    # mid-loop saw any already-db.add()-ed rows from earlier in the SAME
+    # loop) — the running_by_account accumulator below reproduces that
+    # same same-account-multiple-lines chaining in memory instead.
+    prior_query = db.query(
+        GeneralLedgerEntry.account_id,
+        func.coalesce(func.sum(GeneralLedgerEntry.debit - GeneralLedgerEntry.credit), Decimal("0.00")),
+    ).filter(
+        GeneralLedgerEntry.account_id.in_(distinct_account_ids),
+        GeneralLedgerEntry.company_id == journal.company_id,
+        GeneralLedgerEntry.entry_date <= journal.entry_date,
+    )
+    if journal.branch_id:
+        prior_query = prior_query.filter(
+            (GeneralLedgerEntry.branch_id == journal.branch_id) | (GeneralLedgerEntry.branch_id.is_(None))
         )
-        if journal.branch_id:
-            prior_query = prior_query.filter(
-                (GeneralLedgerEntry.branch_id == journal.branch_id) | (GeneralLedgerEntry.branch_id.is_(None))
-            )
-        prior = prior_query.scalar()
-        running += money(prior or 0)
+    prior_by_account = dict(prior_query.group_by(GeneralLedgerEntry.account_id).all())
+
+    running_by_account: dict[str, Decimal] = {}
+    for journal_line in journal.lines:
+        account_id = journal_line.account_id
+        if account_id not in running_by_account:
+            account = accounts_by_id.get(account_id)
+            ob = money(account.opening_balance if account else 0)
+            ob_type = (account.opening_balance_type or "DR") if account else "DR"
+            running_by_account[account_id] = (ob if ob_type == "DR" else -ob) + money(prior_by_account.get(account_id, 0) or 0)
         line_net = money(journal_line.debit) - money(journal_line.credit)
+        running_by_account[account_id] += line_net
         db.add(
             GeneralLedgerEntry(
                 company_id=journal.company_id,
@@ -323,12 +345,12 @@ def create_gl_entries_from_journal(
                 entry_date=journal.entry_date,
                 voucher_no=voucher_no or journal.entry_number,
                 voucher_type=voucher_type or journal.source_module,
-                account_id=journal_line.account_id,
+                account_id=account_id,
                 journal_entry_id=journal.id,
                 journal_line_id=journal_line.id,
                 debit=money(journal_line.debit),
                 credit=money(journal_line.credit),
-                balance=running + line_net,
+                balance=running_by_account[account_id],
                 party=party,
                 cost_center=cost_center,
                 narration=journal_line.description or journal.description,

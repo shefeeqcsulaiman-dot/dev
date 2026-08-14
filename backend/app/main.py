@@ -543,6 +543,8 @@ def ensure_schema_updates() -> None:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_invoices_branch_id ON invoices (branch_id)"))
         if "tax_lines" in table_names:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_tax_lines_company_direction ON tax_lines (company_id, direction)"))
+        if "general_ledger_entries" in table_names:
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_gl_entries_company_account_date ON general_ledger_entries (company_id, account_id, entry_date)"))
         for branch_scoped_table in ("journal_entries", "general_ledger_entries", "source_transactions"):
             if branch_scoped_table in table_names:
                 existing_columns = {column["name"] for column in inspector.get_columns(branch_scoped_table)}
