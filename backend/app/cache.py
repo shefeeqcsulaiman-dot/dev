@@ -79,9 +79,16 @@ def delete_prefix(prefix: str) -> None:
 
 
 def invalidate_company(company_id: str) -> None:
-    """Bust all report caches for a company after a write operation."""
-    delete(f"dashboard:{company_id}")
-    delete(f"summary:{company_id}")
+    """Bust report caches for a company after a write operation.
+
+    dashboard/summary are deliberately NOT invalidated here (TTL-only, 60s/
+    120s respectively) — this fires on every single write anywhere in the
+    company, so with instant invalidation a live company with any regular
+    activity almost never got a cache hit on its two heaviest report
+    endpoints, paying full recompute cost (dozens of sequential queries)
+    on nearly every load. A dashboard/summary being up to 60-120s stale
+    after a write is an accepted tradeoff for a large jump in cache-hit
+    rate under real traffic."""
     # trial_balance is written per-branch (reports.py: f"trial_balance:{company_id}:{branch_id or 'all'}"),
     # so a plain delete() here never matched any actual key — the cache only
     # ever cleared itself via its own TTL, not on writes.

@@ -68,7 +68,6 @@ def dashboard(request: Request, db: Session = Depends(get_db), principal: Princi
 
 def _build_dashboard(db: Session, company_id: str) -> dict[str, Any]:
     app_sales = app_sales_invoice_records(db, company_id)
-    app_employees = app_data_payloads(db, company_id, "employees")
     app_purchases = app_purchase_records(db, company_id)
     revenue = money(db.query(func.coalesce(func.sum(Invoice.subtotal), 0)).filter(Invoice.company_id == company_id, Invoice.status != "draft").scalar())
     revenue += sum((record_amount(row, "subtotal", "net_amount", "amount") for row in app_sales if normalized_ref(row.get("status", "")) != "draft"), Decimal("0.00"))
@@ -87,6 +86,14 @@ def _build_dashboard(db: Session, company_id: str) -> dict[str, Any]:
     invoice_count = count(db, Invoice, company_id) + len(app_sales)
     employee_count = count(db, Employee, company_id)
     app_counts = app_data_counts(db, company_id)
+    table_counts = _company_table_counts(db, company_id, [
+        "accounts", "journal_entries", "tax_codes", "tax_lines", "warehouses",
+        "stock_product_mappings", "payroll_runs", "jobs", "documents",
+        "audit_logs", "exception_events", "receipts", "payments",
+    ])
+    source_tx_by_module = _source_transaction_module_counts(db, company_id)
+    sales_source_count = sum(source_tx_by_module.get(m, 0) for m in ("sales", "sales_invoice"))
+    purchase_source_count = sum(source_tx_by_module.get(m, 0) for m in ("purchase", "purchase_bill"))
     module_counts = {
         "invoice_count": invoice_count,
         "product_count": app_counts.get("products", 0),
@@ -98,23 +105,23 @@ def _build_dashboard(db: Session, company_id: str) -> dict[str, Any]:
         "bill_count": app_counts.get("bills", 0),
         "vendor_count": app_counts.get("vendors", 0),
         "payment_count": app_counts.get("payments", 0),
-        "sales_source_count": db.query(func.count(SourceTransaction.id)).filter(SourceTransaction.company_id == company_id, SourceTransaction.module.in_(["sales", "sales_invoice"])).scalar() or 0,
-        "purchase_source_count": db.query(func.count(SourceTransaction.id)).filter(SourceTransaction.company_id == company_id, SourceTransaction.module.in_(["purchase", "purchase_bill"])).scalar() or 0,
-        "account_count": count(db, Account, company_id),
-        "journal_count": count(db, JournalEntry, company_id),
-        "source_transaction_count": count(db, SourceTransaction, company_id),
-        "tax_code_count": count(db, TaxCode, company_id),
-        "tax_line_count": count(db, TaxLine, company_id),
-        "warehouse_count": count(db, Warehouse, company_id),
-        "inventory_mapping_count": count(db, StockProductMapping, company_id),
+        "sales_source_count": sales_source_count,
+        "purchase_source_count": purchase_source_count,
+        "account_count": table_counts.get("accounts", 0),
+        "journal_count": table_counts.get("journal_entries", 0),
+        "source_transaction_count": sum(source_tx_by_module.values()),
+        "tax_code_count": table_counts.get("tax_codes", 0),
+        "tax_line_count": table_counts.get("tax_lines", 0),
+        "warehouse_count": table_counts.get("warehouses", 0),
+        "inventory_mapping_count": table_counts.get("stock_product_mappings", 0),
         "employee_count": employee_count,
-        "payroll_run_count": count(db, PayrollRun, company_id),
-        "job_count": count(db, Job, company_id),
-        "document_count": count(db, Document, company_id),
-        "audit_count": count(db, AuditLog, company_id),
-        "exception_count": count(db, ExceptionEvent, company_id),
-        "receipt_count": count(db, Receipt, company_id),
-        "payment_receipt_count": count(db, Payment, company_id) + count(db, Receipt, company_id),
+        "payroll_run_count": table_counts.get("payroll_runs", 0),
+        "job_count": table_counts.get("jobs", 0),
+        "document_count": table_counts.get("documents", 0),
+        "audit_count": table_counts.get("audit_logs", 0),
+        "exception_count": table_counts.get("exception_events", 0),
+        "receipt_count": table_counts.get("receipts", 0),
+        "payment_receipt_count": table_counts.get("payments", 0) + table_counts.get("receipts", 0),
         "purchase_invoice_count": app_counts.get("purchaseInvoices", 0) + app_counts.get("purchaseDocuments", 0),
     }
     status = invoice_status(db, company_id, app_sales)
@@ -164,6 +171,33 @@ def amount(value: Decimal) -> str:
 
 def count(db: Session, model: object, company_id: str) -> int:
     return int(db.query(func.count(model.id)).filter(model.company_id == company_id).scalar() or 0)
+
+
+def _company_table_counts(db: Session, company_id: str, tables: list[str]) -> dict[str, int]:
+    """One round trip for N single-table `count(*) WHERE company_id=?`
+    queries, via UNION ALL over a fixed, hardcoded table-name list (never
+    request-derived, so string-building the table names in is safe — only
+    company_id is a bind parameter). Replaces dashboard()'s previous ~14
+    separate count() calls, one of the two biggest contributors to its
+    per-request query count."""
+    if not tables:
+        return {}
+    union_sql = " UNION ALL ".join(f"SELECT '{t}' AS k, count(*) AS n FROM {t} WHERE company_id = :cid" for t in tables)
+    rows = db.execute(text(union_sql), {"cid": company_id}).all()
+    return {k: int(n or 0) for k, n in rows}
+
+
+def _source_transaction_module_counts(db: Session, company_id: str) -> dict[str, int]:
+    """SourceTransaction count broken down by module, in one GROUP BY query
+    instead of three separate count() calls (plain total, sales-only,
+    purchase-only) each scanning the same table."""
+    rows = (
+        db.query(SourceTransaction.module, func.count(SourceTransaction.id))
+        .filter(SourceTransaction.company_id == company_id)
+        .group_by(SourceTransaction.module)
+        .all()
+    )
+    return {module: int(n or 0) for module, n in rows}
 
 
 def app_data_counts(db: Session, company_id: str) -> dict[str, int]:
@@ -471,23 +505,49 @@ def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
     }
 
 
+_INVOICE_STATUS_KEY = {"paid": "paid", "issued": "pending", "pending": "pending", "overdue": "overdue", "cancelled": "overdue", "draft": "draft"}
+
+
 def invoice_status(db: Session, company_id: str, app_sales: list[dict[str, Any]]) -> dict[str, dict[str, str | int]]:
-    # Total excludes drafts — drafts are not yet revenue
-    total_count = int(db.query(func.count(Invoice.id)).filter(Invoice.company_id == company_id, Invoice.status != "draft").scalar() or 0)
-    total_count += sum(1 for r in app_sales if normalized_ref(r.get("status", "")) != "draft")
-    total_amount = money(db.query(func.coalesce(func.sum(Invoice.subtotal), 0)).filter(Invoice.company_id == company_id, Invoice.status != "draft").scalar())
-    total_amount += sum((record_amount(row, "subtotal", "net_amount", "amount") for row in app_sales if normalized_ref(row.get("status", "")) != "draft"), Decimal("0.00"))
+    # Single GROUP BY replaces what was previously 2 setup queries + 2
+    # queries per bucket (4 buckets) = 10 queries total. Bucket names/amount
+    # semantics preserved exactly: bucket amounts sum Invoice.total (not
+    # subtotal), the overall "total" bucket sums Invoice.subtotal excluding
+    # drafts, and any Invoice.status value outside the 4 known buckets still
+    # counts toward "total" (if not draft) without landing in any bucket —
+    # all of this matched the original per-bucket-query version's behavior.
+    rows = (
+        db.query(Invoice.status, func.count(Invoice.id), func.coalesce(func.sum(Invoice.total), 0), func.coalesce(func.sum(Invoice.subtotal), 0))
+        .filter(Invoice.company_id == company_id)
+        .group_by(Invoice.status)
+        .all()
+    )
+    buckets: dict[str, dict[str, Any]] = {k: {"count": 0, "amount": Decimal("0.00")} for k in ("paid", "pending", "overdue", "draft")}
+    total_count = 0
+    total_amount = Decimal("0.00")
+    for status, row_count, row_total, row_subtotal in rows:
+        status_norm = normalized_ref(status)
+        row_count = int(row_count or 0)
+        key = _INVOICE_STATUS_KEY.get(status_norm)
+        if key:
+            buckets[key]["count"] += row_count
+            buckets[key]["amount"] += money(row_total)
+        if status_norm != "draft":
+            total_count += row_count
+            total_amount += money(row_subtotal)
+    for invoice in app_sales:
+        status = normalized_ref(invoice.get("status"))
+        if status != "draft":
+            total_count += 1
+            total_amount += record_amount(invoice, "subtotal", "net_amount", "amount")
+        key = _INVOICE_STATUS_KEY.get(status) or ("pending" if status in {"ready", "sent", "unpaid"} else None)
+        if key:
+            buckets[key]["count"] += 1
+            buckets[key]["amount"] += record_amount(invoice, "total", "amount", "net_amount")
     statuses: dict[str, dict[str, str | int]] = {}
-    for key, names in {"paid": ["paid"], "pending": ["issued", "pending"], "overdue": ["overdue", "cancelled"], "draft": ["draft"]}.items():
-        row_count = int(db.query(func.count(Invoice.id)).filter(Invoice.company_id == company_id, Invoice.status.in_(names)).scalar() or 0)
-        row_amount = money(db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(Invoice.company_id == company_id, Invoice.status.in_(names)).scalar())
-        for invoice in app_sales:
-            status = normalized_ref(invoice.get("status"))
-            if status in names or (key == "pending" and status in {"ready", "sent", "unpaid"}):
-                row_count += 1
-                row_amount += record_amount(invoice, "total", "amount", "net_amount")
-        pct = int((row_count / total_count) * 100) if total_count else 0
-        statuses[key] = {"count": row_count, "amount": amount(row_amount), "percentage": pct}
+    for key, vals in buckets.items():
+        pct = int((vals["count"] / total_count) * 100) if total_count else 0
+        statuses[key] = {"count": vals["count"], "amount": amount(vals["amount"]), "percentage": pct}
     statuses["total"] = {"count": total_count, "amount": amount(total_amount), "percentage": 100 if total_count else 0}
     return statuses
 
@@ -608,6 +668,9 @@ def _is_credit_note(row: dict[str, Any]) -> bool:
 def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
     app_sales = app_sales_invoice_records(db, company_id)
     app_purchases = app_purchase_records(db, company_id)
+    # Computed once and reused below (readiness.documents, ai.forecast_confidence,
+    # einvoicing.total) — previously 3 separate identical count(Invoice) round trips.
+    invoice_count_db = count(db, Invoice, company_id)
     recognized_app_sales = [
         row for row in app_sales if _is_recognized_revenue_status(row.get("status")) or _is_credit_note(row)
     ]
@@ -691,7 +754,7 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
             "readiness": {
                 "trn_checks": 100,
                 "vat_math": 100 if output_vat >= 0 and input_vat >= 0 else 0,
-                "documents": min(100, int((count(db, Document, company_id) / max(1, count(db, Invoice, company_id))) * 100)),
+                "documents": min(100, int((count(db, Document, company_id) / max(1, invoice_count_db)) * 100)),
                 "duplicates": 100,
             },
         },
@@ -720,7 +783,6 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
     _wc = working_capital_rows(db, company_id, _bs, revenue=revenue, purchases=purchases, ar_total=ar_total, ap_total=ap_total)
 
     # E-invoicing readiness metrics
-    invoice_count_db = count(db, Invoice, company_id)
     invoice_count_total = invoice_count_db + len(app_sales)
     app_with_trn = sum(1 for r in app_sales if str(r.get("customer_trn") or "").strip())
     trn_rate = int(app_with_trn / len(app_sales) * 100) if app_sales else 100
@@ -732,7 +794,7 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
         "trial_balance": trial_balance_rows(db, company_id),
         "aging": aging_rows,
         "ai": {
-            "forecast_confidence": 87 if count(db, Invoice, company_id) else 0,
+            "forecast_confidence": 87 if invoice_count_db else 0,
             "anomalies": int((1 if overdue_total else 0) + (1 if input_vat > output_vat else 0)),
             "potential_savings": amount(operating_expenses * Decimal("0.05")),
             "collection_upside": amount(overdue_total),
@@ -1175,6 +1237,17 @@ def report_ai_text(revenue: Decimal, gross_margin: Decimal, net_vat: Decimal, ov
 
 
 def general_ledger_rows(db: Session, company_id: str) -> list[dict[str, str]]:
+    # Unlike monthly_revenue_vat()'s ~7-month cutoff (that one only ever
+    # shows 6 months of trend data), a General Ledger legitimately wants a
+    # fuller history — but with no bound at all, ORDER BY Account.code first
+    # (not date first) meant the LIMIT below could get filled entirely by
+    # one or two accounts' full history before ever reaching others, and the
+    # underlying sort cost grows forever with a tenant's age regardless. A
+    # 1-year floor keeps the worst case bounded while still covering what
+    # anyone browsing a ledger normally needs; older entries remain in the
+    # DB and other reports (trial balance, GL account balances) are
+    # unaffected since they aggregate rather than list rows.
+    cutoff = _date.today() - timedelta(days=365)
     rows = (
         db.query(
             Account.code,
@@ -1191,7 +1264,7 @@ def general_ledger_rows(db: Session, company_id: str) -> list[dict[str, str]]:
             GeneralLedgerEntry.party,
         )
         .join(Account, Account.id == GeneralLedgerEntry.account_id)
-        .filter(GeneralLedgerEntry.company_id == company_id)
+        .filter(GeneralLedgerEntry.company_id == company_id, GeneralLedgerEntry.entry_date >= cutoff)
         .order_by(Account.code, GeneralLedgerEntry.entry_date, GeneralLedgerEntry.created_at)
         .limit(2000)
         .all()

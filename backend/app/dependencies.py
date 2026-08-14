@@ -1,4 +1,5 @@
 import json
+import logging
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -7,6 +8,8 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models import Branch, Company, User
 from app.security import is_impersonation_token_revoked, user_id_from_token
+
+logger = logging.getLogger(__name__)
 
 # Re-exported so routers keep importing all request-auth dependencies from
 # this one conventional module, whether the route needs admin-only,
@@ -26,6 +29,9 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     user_id = user_id_from_token(token)
     if not user_id:
+        # Diagnostic only, no behavior change — see user_id_from_token()'s
+        # log line for the underlying decode failure reason.
+        logger.warning("get_current_user: token resolved no user_id, returning 401")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid access token")
     # Only impersonation tokens carry a "jti", so this is a no-op (no extra Redis
     # round-trip) for every normal user session — it only applies to the rare
