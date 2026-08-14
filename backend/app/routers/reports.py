@@ -694,12 +694,13 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
     gross_profit = revenue - purchases
     net_profit = gross_profit - operating_expenses
     gross_margin = (gross_profit / revenue * Decimal("100")).quantize(Decimal("0.01")) if revenue else Decimal("0.00")
-    output_breakdown = tax_line_breakdown(db, company_id, "output")
+    tax_breakdown = tax_line_breakdown_both_directions(db, company_id)
+    output_breakdown = tax_breakdown["output"]
     output_taxable = output_breakdown["standard"] + output_breakdown["zero"] + output_breakdown["exempt"]
     output_taxable += sum((record_amount(row, "subtotal", "net_amount", "taxable_amount") for row in recognized_app_sales), Decimal("0.00"))
     output_vat = output_breakdown["vat"]
     output_vat += sum((record_amount(row, "vat_amount", "vat", "tax_amount") for row in recognized_app_sales), Decimal("0.00"))
-    input_breakdown = tax_line_breakdown(db, company_id, "input")
+    input_breakdown = tax_breakdown["input"]
     input_taxable = input_breakdown["standard"] + input_breakdown["zero"] + input_breakdown["exempt"]
     input_taxable += sum((record_amount(row, "net_amount", "subtotal", "taxable_amount") for row in app_purchases), Decimal("0.00"))
     input_vat = input_breakdown["vat"]
@@ -822,37 +823,48 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
     return result
 
 
-def tax_line_breakdown(db: Session, company_id: str, direction: str) -> dict[str, Decimal]:
+def tax_line_breakdown_both_directions(db: Session, company_id: str) -> dict[str, dict[str, Decimal]]:
     """Splits TaxLine taxable amounts into standard/zero-rated/exempt buckets
-    by joining to TaxCode, instead of assuming everything is standard-rated."""
+    per direction (output/input), by joining to TaxCode instead of assuming
+    everything is standard-rated. Both directions in 2 queries total instead
+    of calling a per-direction version twice (4 queries) — _build_summary is
+    the only caller and always wants both."""
+    empty = lambda: {"standard": Decimal("0.00"), "zero": Decimal("0.00"), "exempt": Decimal("0.00"), "vat": Decimal("0.00")}
+    result = {"output": empty(), "input": empty()}
     rows = (
-        db.query(TaxCode.code, func.coalesce(func.sum(TaxLine.taxable_amount), 0), func.coalesce(func.sum(TaxLine.tax_amount), 0))
+        db.query(TaxLine.direction, TaxCode.code, func.coalesce(func.sum(TaxLine.taxable_amount), 0), func.coalesce(func.sum(TaxLine.tax_amount), 0))
         .join(TaxLine, TaxLine.tax_code_id == TaxCode.id)
-        .filter(TaxLine.company_id == company_id, TaxLine.direction == direction)
-        .group_by(TaxCode.code)
+        .filter(TaxLine.company_id == company_id)
+        .group_by(TaxLine.direction, TaxCode.code)
         .all()
     )
-    # TaxLines without a resolved tax_code (tax_code_id is NULL) are still standard-rated by default.
-    untagged = (
-        db.query(func.coalesce(func.sum(TaxLine.taxable_amount), 0), func.coalesce(func.sum(TaxLine.tax_amount), 0))
-        .filter(TaxLine.company_id == company_id, TaxLine.direction == direction, TaxLine.tax_code_id.is_(None))
-        .first()
-    )
-    result = {"standard": Decimal("0.00"), "zero": Decimal("0.00"), "exempt": Decimal("0.00"), "vat": Decimal("0.00")}
-    for code, taxable, tax in rows:
+    for direction, code, taxable, tax in rows:
+        bucket = result.get(direction)
+        if bucket is None:
+            continue
         taxable_d = money(taxable)
         tax_d = money(tax)
         code_upper = str(code or "").upper()
         if "EXEMPT" in code_upper:
-            result["exempt"] += taxable_d
+            bucket["exempt"] += taxable_d
         elif "ZERO" in code_upper:
-            result["zero"] += taxable_d
+            bucket["zero"] += taxable_d
         else:
-            result["standard"] += taxable_d
-        result["vat"] += tax_d
-    if untagged:
-        result["standard"] += money(untagged[0])
-        result["vat"] += money(untagged[1])
+            bucket["standard"] += taxable_d
+        bucket["vat"] += tax_d
+    # TaxLines without a resolved tax_code (tax_code_id is NULL) are still standard-rated by default.
+    untagged_rows = (
+        db.query(TaxLine.direction, func.coalesce(func.sum(TaxLine.taxable_amount), 0), func.coalesce(func.sum(TaxLine.tax_amount), 0))
+        .filter(TaxLine.company_id == company_id, TaxLine.tax_code_id.is_(None))
+        .group_by(TaxLine.direction)
+        .all()
+    )
+    for direction, taxable, tax in untagged_rows:
+        bucket = result.get(direction)
+        if bucket is None:
+            continue
+        bucket["standard"] += money(taxable)
+        bucket["vat"] += money(tax)
     return result
 
 
