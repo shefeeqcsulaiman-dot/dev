@@ -2,9 +2,10 @@ import json
 import re
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
+from app.auth_principal import resolve_active_branch
 from app.database import get_db
 from app.dependencies import Principal, get_current_user, require_module, require_principal_permission
 from app.models import AppDataRecord, Employee, PayrollItem, PayrollRun, User, WpsBatch
@@ -154,24 +155,39 @@ def _overtime_pay(db: Session, company_id: str, employee_no: str, employee_name:
 
 @router.get("/employees", response_model=list[EmployeeOut])
 def list_employees(
+    branch_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("employees:view")),
 ) -> list[Employee]:
-    return db.query(Employee).filter(Employee.company_id == principal.company_id).order_by(Employee.employee_no).all()
+    query = db.query(Employee).filter(Employee.company_id == principal.company_id)
+    # Same two-tier branch scoping as accounting.py's list_journals()/
+    # reports.py's trial_balance_rows() — previously this returned the
+    # entire company's roster to any branch-scoped principal with
+    # employees:view, regardless of their own branch assignment.
+    resolved_branch_id = branch_id if principal.can_cross_branch("hrms") else resolve_active_branch(principal, branch_id)
+    if resolved_branch_id:
+        query = query.filter((Employee.branch_id == resolved_branch_id) | (Employee.branch_id.is_(None)))
+    return query.order_by(Employee.employee_no).all()
 
 
 @router.get("/runs", response_model=list[PayrollRunOut])
 def list_runs(
+    branch_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("payroll:view")),
 ) -> list[PayrollRun]:
-    return (
+    query = (
         db.query(PayrollRun)
         .options(joinedload(PayrollRun.items))
         .filter(PayrollRun.company_id == principal.company_id)
-        .order_by(PayrollRun.created_at.desc())
-        .all()
     )
+    # Same pattern — previously every branch's payroll runs and net-pay
+    # totals were visible to any branch-scoped principal, even though
+    # generate_payroll() itself was already branch-scoped at creation time.
+    resolved_branch_id = branch_id if principal.can_cross_branch("hrms") else resolve_active_branch(principal, branch_id)
+    if resolved_branch_id:
+        query = query.filter((PayrollRun.branch_id == resolved_branch_id) | (PayrollRun.branch_id.is_(None)))
+    return query.order_by(PayrollRun.created_at.desc()).all()
 
 
 @router.post("/generate", response_model=PayrollRunOut, status_code=201)

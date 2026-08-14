@@ -22,7 +22,7 @@ from app.models import (
     Branch, CashFlowForecastRecord, ClientError, Company, CompanyLocation,
     ConsolidationRecord, CorporateTaxRecord, CorporateTaxReturn, CostCenterRecord,
     CreditControlRecord, CustomerAgingSnapshot, DailyGlBalance, Document,
-    DomainEvent, Employee, EmployeeLocation, EmployeeLocationLog, EventOutbox,
+    DomainEvent, Employee, EmployeeBranchAccess, EmployeeLocation, EmployeeLocationLog, EventOutbox,
     EventProcessingLog, ExceptionEvent, FixedAssetRecord, GeneralLedgerEntry,
     InventoryBalanceSnapshot, InventoryValuationLayer, Invoice, InvoiceLine,
     ItemUnit, ItemUnitConversion, Job, JournalEntry, JournalLine, LeaveRequest,
@@ -458,6 +458,12 @@ def delete_company(
     db.query(AttendanceSession).filter(AttendanceSession.company_id == cid).delete(**s)
     emp_ids = db.query(Employee.id).filter(Employee.company_id == cid).subquery()
     db.query(EmployeeLocation).filter(EmployeeLocation.employee_id.in_(emp_ids)).delete(**s)
+    # Same shape as EmployeeLocation (no company_id column of its own, FKs
+    # into employees/branches) — previously missing here too, so any
+    # company that had granted multi-branch access (Branch Security Layer
+    # Phase 3) would hit the same FK IntegrityError this whole block was
+    # already written to avoid for GPS/RBAC/Leave.
+    db.query(EmployeeBranchAccess).filter(EmployeeBranchAccess.employee_id.in_(emp_ids)).delete(**s)
 
     # Tier 2 — tables that cross-reference other data tables
     db.query(BankReconciliationMatch).filter(BankReconciliationMatch.company_id == cid).delete(**s)
