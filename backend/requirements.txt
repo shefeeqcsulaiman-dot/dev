@@ -18,3 +18,4 @@ slowapi==0.1.9
 pyzk==0.9
 brotli-asgi==1.6.0
 httpx==0.28.1
+Faker==33.1.0
