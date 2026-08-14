@@ -259,6 +259,13 @@ Suggested targets:
 | Heavy report      | Under 10 seconds with cache     |
 | Bootstrap hydrate | Under 5 seconds (5,000 records) |
 
+**Actually run, 2026-08-14** (see `docs/architecture.md` §29 for the full writeup) — targets above were aspirational; here's what a real load test against production found and what's since changed:
+
+* **Dashboard, concurrent load**: started failing at 20 concurrent requests (10% errors), 20-30% by 30-100 concurrent, before that date's fixes. After query consolidation + caching + a `503`/retry layer: some bands improved (40-75 concurrent went from ~20-30% failures to clean), but 100-concurrent still showed errors — root cause traced further to two still-open gaps (Redis not confirmed active in production; exception handling not yet catching every DB-overload shape) rather than the query/caching work being insufficient.
+* **PostgreSQL query speed at real scale**: not tested against 1,500 tenants specifically, but a purpose-built 100-company/1M-invoice local dataset (`docs/architecture.md` §29.4) surfaced two genuine bugs neither obvious nor caught by demo-scale testing: `GET /invoices` had no pagination and hung 180+ seconds for a company with 5,000 invoices; `InvoiceLine.invoice_id` had no index at all, forcing a full scan of the entire `invoice_lines` table (1.5M+ rows) on every request regardless of company size. Both fixed — the general lesson: several of this session's worst findings only appeared once tested against genuinely large data, not the ~20-100-row demo seed this test matrix otherwise assumes. Any future performance test should use the bulk dataset, not the small one, for this reason.
+* **Concurrent writes are worse than concurrent reads, not just slower** — untested by the target table above, which only covers reads. A 50-concurrent `POST /invoices` test against a large company succeeded only 18% of the time initially (writes hold a DB connection for the whole multi-step posting chain, unlike a read); a GL-posting query optimization brought this to 26% locally, with the rest gated on infrastructure changes not yet applied. Worth adding a concurrent-write test case to this matrix, not just concurrent-read.
+* **Redis cache hit vs. cold load**: as of this date, *unconfirmed whether Redis is actually configured in production at all* — repeated identical requests showed no cache-hit speedup. This should be an explicit, easy first check in any future performance test pass, since every caching-dependent fix in §29 is otherwise silently inert.
+
 ## 8. Security Tests
 
 Required tests:
@@ -305,7 +312,10 @@ Key missing or incomplete areas:
 * Full role/permission enforcement across every API
 * Complete audit coverage for all sensitive actions
 * Production-level automated test suite
-* Purchase dashboard card totals showing correct amounts from DB
+
+~~Purchase dashboard card totals showing correct amounts from DB~~ —
+resolved (`reports.py::_purchase_summary()`, wired into both `dashboard()`
+and `report_summary()`, confirmed 2026-08-14).
 
 ## 10. Recommended Test Tools
 

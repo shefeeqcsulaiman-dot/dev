@@ -177,23 +177,43 @@ Browser
   |
   v
 DigitalOcean App Platform (nyc3)
-  2–6 × professional-s instances  (autoscale at 70% CPU)
+  3–6 × professional-s instances  (autoscale at 70% CPU — floor raised from
+  2 to 3 during the 2026-08-14 scaling pass, since CPU-based autoscaling
+  reacts over minutes and can't respond to a concurrency burst that
+  resolves in seconds; see §29)
   FastAPI served by uvicorn (4 workers per instance)
   Named routes: / → index.html, /hrms → hrms.html
   Static files: frontend/public/taxflow/ served at /taxflow/
   |
   v
 DigitalOcean Managed PostgreSQL (nyc3)
-  Connection pool: pool_size=10, max_overflow=15 per instance
-  Indexes: (company_id, collection), (company_id, collection, created_at)
+  Connection pool: pool_size=10, max_overflow=15 per instance (web tier)
+  Celery worker: pool_size=3, max_overflow=2 (explicitly capped — previously
+  unset, silently inheriting a larger code default x 4 prefork processes,
+  competing with the web tier for the same DB connection budget; see §29)
+  Indexes: (company_id, collection), (company_id, collection, created_at),
+  plus TaxLine(company_id, direction), GeneralLedgerEntry(company_id,
+  account_id, entry_date), InvoiceLine(invoice_id) added 2026-08-14 (§29)
   |
   v
 DigitalOcean Managed Redis
   Report cache: keys taxflow:report:{company_id}:*
-  Invalidated on any write to report-affecting collections
+  dashboard/summary: TTL-only (60s/120s) since 2026-08-14 — previously
+  invalidated on every write anywhere in the company, which meant a live
+  company with any regular activity almost never got a cache hit on its
+  two heaviest endpoints (§29). Other report keys (trial_balance,
+  vat_return, bootstrap) still invalidate on write.
+  ** As of 2026-08-14, REDIS_URL's actual production value was unconfirmed
+  — if it's still unset, every caching/fallback mechanism above is a no-op
+  regardless of the code being correct. Verify before relying on any of
+  this (§29). **
 ```
 
-Seeded local data (`taxflow-seed50-v2.db`, realistic UAE business records):
+**⚠ `.do/app.yaml`'s instance-floor and worker-pool values above describe what the file in this repo specifies, not necessarily what's live** — DigitalOcean App Platform does not auto-apply a spec change just because it's committed; it needs an explicit `doctl apps update <app-id> --spec .do/app.yaml` or the equivalent dashboard action. As of 2026-08-14 this had not yet been applied (§29).
+
+Seeded local data — two options depending on what you're testing:
+
+**Small, realistic** (`taxflow-seed50-v2.db`):
 
 ```text
 app_data_records (customers)        21  — UAE company names, TRNs, Emirates
@@ -217,6 +237,12 @@ stock_movements                     10+
 ```
 
 Seed script: `backend/seed_test_data.py` — idempotent, safe to re-run.
+
+**Large-scale, synthetic** (`backend/taxflow-bulk100.db`, local-only, git-ignored):
+100 companies × 10 branches × 95 employees × 5,000 sales + 5,000 purchase
+invoices each × 5 years of history — 20.5M+ rows total. Built for load
+testing at realistic scale; see §29.4 for how it's generated and why it
+replicates the accounting pipeline instead of calling it.
 
 ## 2. Revised High-Level Architecture
 
@@ -488,6 +514,24 @@ Rules:
 - Sub-ledgers must reconcile to GL control accounts.
 - Every posting must store source module and source ID.
 
+**Reality check, as implemented**: posting is fully synchronous, inside the
+same request that creates the source transaction (`create_invoice()` →
+`sync_sales_invoice_accounting()` → ... → `post_source_transaction()`,
+`module_integration.py`/`accounting_posting.py`) — not the async queue
+described in §6 below. One invoice creation does roughly 14-15 sequential
+DB round trips as of 2026-08-14 (down from ~22-23 before that date's
+optimization pass — see §29). `create_gl_entries_from_journal()`
+(`accounting_posting.py`) used to run 2 queries *per journal line* (an
+`Account` lookup and a `SUM(debit-credit)` running-balance aggregate) — for
+a 5-line journal, 11 queries where 3 now suffice: it fetches every account
+the journal touches in one query, and the running balance's pre-existing
+total for every distinct account in one grouped query, then accumulates in
+memory as lines are processed. This holds a DB connection for
+proportionally less time per write, which matters directly for how many
+concurrent writes the shared connection pool can sustain (§29) — a
+synchronous write holds its connection far longer than a read does, so
+under concurrent load, writes exhaust the pool much faster than reads did.
+
 ## 6. Posting Queue and Retry System
 
 Accounting posting should be asynchronous and reliable.
@@ -703,6 +747,21 @@ sales_invoice_tax_lines
 invoice_share_logs
 source_transactions
 ```
+
+`GET /api/v1/invoices` (`invoices.py::list_invoices()`) is paginated
+(`limit`, default 500, max 2000; `offset`) since 2026-08-14 — previously
+unbounded, which made this endpoint hang for 180+ seconds and never return
+for a company with 5,000 invoices. The dominant cost turned out to be a
+missing index, not just the missing pagination: `InvoiceLine.invoice_id`
+had none, so `joinedload(Invoice.lines)` required a full scan of the
+entire `invoice_lines` table (1.5M+ rows at real multi-tenant scale) on
+every single call, regardless of how few of the requesting company's own
+invoices were being fetched. Both fixed together bring the endpoint to a
+consistent ~2-2.5s regardless of limit/offset (§29). No frontend code
+calls this endpoint as of this writing — Sales UI reads through the
+`salesInvoices` `AppDataRecord` collection via the bootstrap endpoint
+instead (§22), deduped against real `Invoice` rows by
+`app_sales_invoice_records()` (`reports.py`).
 
 Current UI flow:
 
@@ -1884,6 +1943,14 @@ Do not generate production reports from dashboard totals.
 
 **Client-side rendering must be chunked for real data volumes.** `hydrateFromServer()`'s per-collection render loop (`renderRecordList()` in `app.js`) and the Ledger's journal-entry render loop both used to run as one uninterrupted synchronous pass over the full collection. Invisible at demo scale (dozens–hundreds of rows), but with genuinely large data (1000+ sales invoices, 2000+ journal entries — reproduced by seeding a production account to that volume) this blocked the browser's main thread long enough to trip Chrome's "Page Unresponsive" watchdog, even though the server had already answered and the data was correct. Both loops now yield every ~60 records via a microtask break (`await new Promise(r=>setTimeout(r,0))`) instead of running straight through. Any new render loop over a server-fetched collection should do the same once the collection can plausibly exceed a few hundred rows for a real company — the "instant" fix is pagination (previous section); the "even if paginated, rendering one page must not freeze the tab" fix is chunked yielding, and both are needed for a genuinely large dataset.
 
+**`/reports/dashboard` and `/reports/summary` are the two heaviest, most-frequently-hit endpoints in the app**, and were the starting point of a 2026-08-14 scaling investigation (full writeup in §29). As found then: `dashboard()` (`_build_dashboard`, `reports.py`) issued ~46 sequential DB round trips per uncached call before that date, mostly ~20 separate single-table `count()` queries and an `invoice_status()` loop running 2 queries per status bucket; `report_summary()` (`_build_summary`) issued 60-80+ (the estimate — the real number turned out closer to ~39, since a SQLAlchemy subquery some call sites looked like "2 queries" was actually composed into 1 by the ORM). Both are now consolidated: `module_counts`'s ~20 counts became one `UNION ALL` (`_company_table_counts()`), `invoice_status()`'s per-bucket loop became one `GROUP BY`, `tax_line_breakdown()`'s two per-direction calls became one grouped query for both directions at once (`tax_line_breakdown_both_directions()`). Result: dashboard ~46→~21 queries, summary ~39→~37 (most of that function's helpers were already efficient on inspection — see §29 for what was and wasn't worth touching).
+
+Both endpoints share a helper, `_cached_or_build()` (`reports.py`), that does two things beyond a plain cache-or-compute: (1) cache entries carry a `{data, cached_at}` envelope with a 24h safety-net TTL (`cache.set_with_staleness()`/`get_with_staleness()`) on top of their normal freshness window (60s dashboard, 120s summary) — a "fresh" hit returns immediately as before, but a cache-miss that then fails with a DB-overload-shaped exception (`sqlalchemy.exc.TimeoutError` or `OperationalError`) falls back to whatever was last cached, even if stale (marked `"stale": true` in the response), instead of a hard error — for any company that's loaded the report at all in the last day. (2) Only when there's truly nothing cached does the exception propagate, where `main.py`'s global exception handler turns it into a `503` + `Retry-After` instead of a generic `500` — semantically distinguishing "server is momentarily overloaded, safe to retry" from a real bug. `app.js`'s `syncDashboardFromDatabase()`/`syncReportsFromDatabase()` add a matching client-side layer: bounded retry (2 attempts, 400ms/1200ms backoff) specifically on `500`/`503`/`504`, plus a 15s `AbortController` timeout, before falling through to the existing stale-localStorage-snapshot UI.
+
+Cache invalidation for these two keys changed from instant (busted on every write anywhere in the company, via the `cache_invalidation` middleware in `main.py`) to TTL-only — see the Production section above for why.
+
+**None of this actually engages without Redis configured** — `cache.py` silently no-ops (`_redis()` returns `None`) when `REDIS_URL` is unset or `memory://`, at which point every request pays full recompute cost regardless of the work above, and the stale-fallback has nothing to ever fall back to. Confirm this is set before assuming any of the above is helping in a given environment.
+
 Core reports:
 
 - Trial Balance
@@ -2152,6 +2219,8 @@ Endpoints currently branch-scoped this way: `/hr/dashboard` and `/hr/live-locati
 **Deliberately NOT branch-scoped** (company-wide by design, not a gap): `/reports/dashboard` and `/reports/summary` (several data sources — `TaxLine`, `AuditLog`, `CorporateTaxRecord`, `BudgetRecord` — have no `branch_id` and may never need one; `PayrollRun` does have a `branch_id` now and is scoped at `/payroll/runs`, just not re-filtered again inside the dashboard aggregate); VAT/Corporate Tax returns (filed once per company per period under UAE law, not per branch); `/inventory/mappings` and the chart of accounts (shared master data). Vouchers, Payments, Receipts, BankAccounts, and every Corporate Accounting `*Record` model have no `branch_id` column at all yet — extending scoping there needs a schema migration, not just a query change.
 
 Cascade-delete completeness: `superadmin.py::delete_company()` must clean up every branch-scoped join table before deleting the `Employee`/`Branch` rows they point to, or the delete fails on an FK violation. `EmployeeBranchAccess` (no `company_id` column of its own — FKs only to `employees.id`/`branches.id`) was missing from this cascade until the 2026-08-14 fix; it's now cleaned up via an `emp_ids` subquery alongside `EmployeeLocation`, the existing reference pattern for any table that hangs off `Employee` without its own tenant column.
+
+**Superadmin console visibility**: `GET /superadmin/companies` returns each company's branches (name, code, city, status) and up to 200 employees (name, employee_no, department/designation, status, resolved branch_name) alongside the existing per-company user list — added 2026-08-14, mirroring the existing "Users" toggle-panel UI pattern in `superadmin.html` with matching "Branches"/"Employees" toggles. Employees are capped (200) since a roster can run into the hundreds/thousands unlike users or branches; `employee_count` (already returned) still reflects the true total past the cap.
 
 **Main Dashboard Access for branch employees**: a branch employee's HRMS login (`/hrms`) can also reach the main business dashboard (`/`, same app as the admin uses) if their assigned Role grants at least one `<module>:view` permission (`sales:view`, `pos:view`, `purchase:view`, `inventory:view`, `accounting:view`, `corporate:view`, `reports:view`, etc. — `_PERMISSION_CATALOG` in `hr_access.py`). A reciprocal "Main Dashboard" link appears on `hrms.html` when applicable; the sidebar on `index.html` shows only the modules the Role permits (`applyMainDashboardPermissionNav()` in `app.js`), and every widened endpoint enforces the same permission server-side via `require_principal_permission("module:view")` — a permission-less employee gets a session-preserving 403, never a forced logout (this was the actual bug being fixed: `authenticatedFetch()` treats 401 as "force logout," 403 as "valid session, no access to this call"). This module-visibility gate is independent of the branch data-scoping above: a branch employee with `accounting:view` sees the Accounting module, and within it, only their own branch's data.
 
@@ -2455,6 +2524,26 @@ Required controls:
 - Queue worker tenant validation
 - Period reopen approvals
 
+**Session timeout, as implemented**: a flat JWT expiry, not a sliding/idle
+timeout — `create_access_token()` (`security.py`) stamps `exp` at
+`now + ACCESS_TOKEN_EXPIRE_MINUTES` on issue and never renews it; there is
+no refresh-token flow. `ACCESS_TOKEN_EXPIRE_MINUTES` is **1440 (24h) in
+production** (`.do/app.yaml`) vs. a **60-minute default** in
+`config.py`/local `.env` — every login (admin `User`, HR `Employee`, and
+`Branch` tokens alike) gets the same fixed lifetime regardless of activity
+level; a session open and actively used for 23 hours expires at the same
+wall-clock instant as one left idle the whole time. No client-side idle
+timer exists either — `app.js` has no inactivity-based auto-logout; the
+only session-expiry UI (`"Session expired — please sign in again"`, line
+~2196) is reactive, shown only after a request actually comes back `401`.
+Expiry is enforced purely server-side via JWT signature+`exp` validation
+(`user_id_from_token()`, `security.py`) — a client can't extend its own
+session by any means short of a fresh `/auth/login` (or `/hr/login` /
+`/branches/login`) call. See §24's Force-logout entry above for the
+separate, already-fixed concern of *what the client does* when a 401
+arrives (was: always force-logout; now: only for a genuinely expired/
+invalid token, not a merely under-permissioned one).
+
 ## 25. Testing Architecture
 
 TaxFlow testing must prove business correctness across UI, API, accounting, VAT, inventory, security, audit, tenant isolation, posting, exception handling, and database integrity.
@@ -2693,3 +2782,56 @@ Payroll, rota, WPS, and eInvoicing after the financial core is stable
 ```
 
 This makes TaxFlow production-ready for ledger-centered accounting, tax-line VAT, UAE eInvoicing readiness, WPS payroll support, strong audit controls, period locking, and evidence-backed compliance.
+
+## 29. Performance & Scaling (2026-08-14)
+
+A production load test — read-only GET bursts against /reports/dashboard using the live admin account, ramping concurrency from 1 to 100 — found the app starting to fail at just **20 concurrent requests** (10% error rate, climbing to 20-30% at 30-100), with median latency growing from 2.7s to 5.3s under load, and even a single uncontended request already taking 1.4-2.5s. This section is the full writeup: what was found, what was fixed in code, and what's still open (infrastructure-only, not code) as of this date. Individual sections above cross-reference back here (§1.2, §5, §9, §18, §21.1) rather than duplicating detail.
+
+### 29.1 Root causes found
+
+1. **DB connection-pool budget smaller than it looks, unevenly shared.** Web tier: pool_size=10/max_overflow=15 per instance x 2 baseline instances (pre-fix) = 50 cluster-wide, before DigitalOcean's CPU-based autoscaling can react (minutes, not the seconds a concurrency burst lasts). The Celery worker set no pool env vars at all, silently inheriting the *larger* code default (pool_size=20/max_overflow=40) x its 4 prefork processes — a background queue competing harder for the same budget than the user-facing web tier. Postgres refusing a connection outright (its own max_connections ceiling, still unconfirmed as of this date) surfaces as a fast, generic 500.
+2. **Report endpoints chatty independent of concurrency** — see §18's dashboard/summary paragraphs for the exact before/after query counts. This alone explained the "slow even alone" symptom; it's serial chattiness, not contention.
+3. **Cache invalidated on every write** — see §18. Meant the "cold, full-cost" path was the common case for any company with regular activity, not the exception.
+4. **Intermittent 401s under load using a single valid, unexpired token** — investigated and ruled out as pool exhaustion (verified no code path converts a DB error to 401; it would surface as 500) and ruled out as rate-limiting (429, not 401; keyed per-IP not per-token). Leading hypothesis was a SECRET_KEY mismatch across instances/workers from a stale prior deploy; diagnostic logging was added at every token-validation failure point (security.py::user_id_from_token(), auth_principal.py::get_current_principal(), dependencies.py::get_current_user()) including a safe SHA-256 fingerprint of the resolved secret key (never the key itself) for cross-instance correlation — **not conclusively resolved**, needs live log data to confirm.
+5. **GL-posting per-line queries** — see §5's Accounting Core paragraph.
+6. **GET /invoices completely unpaginated, plus a genuinely missing index** — see §9.
+7. **Exception handling only caught the client-side pool-wait timeout, not the (found to be at least as common) server-side connection refusal** — main.py's global handler now catches both sqlalchemy.exc.TimeoutError and sqlalchemy.exc.OperationalError, routed through the same stale-cache-fallback / 503+Retry-After path (§18).
+
+### 29.2 Fixes shipped (code, all deployed)
+
+- reports.py: dashboard()/report_summary() query consolidation (§18)
+- New indexes: TaxLine(company_id, direction), GeneralLedgerEntry(company_id, account_id, entry_date), InvoiceLine(invoice_id) — all via the established self-migrating CREATE INDEX IF NOT EXISTS startup pattern in main.py, plus matching Index(...) model declarations
+- cache.py: TTL-only invalidation for dashboard/summary + stale-cache-serve-on-overload (§18)
+- main.py: 503+Retry-After for TimeoutError/OperationalError instead of a generic 500
+- app.js: bounded client-side retry-with-backoff + timeout for the two report loaders (§18)
+- accounting_posting.py: create_gl_entries_from_journal() batches account lookups and the running-balance aggregate per journal instead of per line — 11→3 queries for a typical 5-line journal (§5)
+- invoices.py: GET /invoices pagination (§9)
+- .do/app.yaml: web tier instance floor 2→3, Celery worker's DB pool explicitly capped (pool_size=3/max_overflow=2 vs. the previous unset-and-inheriting-a-larger-default) (§1.2)
+
+Every fix above was verified against a purpose-built 100-company/1M-invoice local dataset (§29.4) with a before/after correctness diff (byte-identical output except where a fix deliberately changes behavior, e.g. bounding a previously-unbounded report) before being trusted, plus the full backend/tests/ suite (217 tests) passing after each change.
+
+### 29.3 Still open — infrastructure/DO-dashboard actions, not code
+
+None of these can be applied by editing this repo; each needs direct action on the DigitalOcean dashboard (or doctl) and re-measurement afterward, not just an assumption that it helped:
+
+1. **Apply .do/app.yaml** — committing it does not change the live app's running config. Needs `doctl apps update <app-id> --spec .do/app.yaml` or the dashboard equivalent.
+2. **Confirm/set REDIS_URL** — as of this date, unconfirmed whether it's actually configured. Without it, every caching/stale-fallback mechanism in §29.2 is a silent no-op — this is a *prerequisite* for measuring whether anything else here is working, not an independent nice-to-have.
+3. **Confirm the managed Postgres plan's actual max_connections** (DO dashboard → Databases → cluster → Settings) — determines whether the pool rebalancing in .do/app.yaml is sufficient or the plan itself needs upgrading.
+4. **Set up DigitalOcean's connection pooler (PgBouncer)**, transaction-pooling mode, and point DATABASE_URL at the pooled port instead of the direct one (25060 today). Assessed as "worth considering" at a 200-concurrent-user target; assessed as *required* at a 500-user target — the connection math otherwise doesn't work regardless of how the app-side pool is tuned.
+5. **Re-examine rate limits** (default_limits=["300/minute"] global, bootstrap 60/minute, dashboard/summary 120/minute, all keyed per-IP in limiter.py) once Redis status (item 2) is known — the in-memory fallback backend means each of the ~4 workers x N instances keeps its own counter, making the *effective* limit inconsistent depending on which process a request lands on; separately, several real users sharing one office/NAT IP legitimately tripping these is a real, previously-observed failure mode (dashboard's limit was raised 30→120/minute earlier this session for exactly this reason).
+6. **Consider a Postgres read replica** for report/list traffic, separating it from the primary's write-path connection budget — a genuinely bigger architectural lever, proposed at the 500-user scale specifically.
+7. **Consider decoupling GL posting from the synchronous request path** onto the existing Celery worker — the invoice/purchase save would return once the source record exists, with GL/TaxLine posting completing moments later. Shrinks the write path's connection hold time significantly, at the cost of a real product behavior change (a brief window where a new transaction hasn't yet hit reports/VAT) touching every read path that currently assumes synchronous posting — needs deliberate buy-in, not a silent performance tweak.
+8. **Confirm CPU/instance size isn't the next bottleneck** once the DB-side items above land — everything diagnosed so far points at the database; check DO's instance-level CPU metrics before assuming professional-s (2 vCPU/2GB) needs to change.
+9. **Move off manual load-test scripts as the verification method** — every number in this section came from one-off scripted bursts. Real observability (DO's built-in metrics at minimum, or a proper APM) is needed for ongoing confidence at this scale rather than re-running a script by hand each time the question comes up.
+
+### 29.4 Bulk synthetic-data seed generator
+
+backend/scripts/run_bulk_seed.py + backend/scripts/bulk_seed/{tenants,ledger,verify}.py — built specifically to make the load testing above possible against realistic data volumes, and to make future performance verification repeatable. **Local/dev only, never production** — refuses to run (_check_target_is_safe()) against anything other than SQLite or a localhost/127.0.0.1 Postgres unless --allow-remote-host is also passed, in addition to always requiring --yes.
+
+Generates N companies (default 100), each with real branches/employees/customers/suppliers/products and a configurable volume of sales+purchase transactions (default 5,000 each per company = 1M total) spanning N years of history (default 5) — through the real accounting invariants (balanced debit=credit journals, correct control-account mapping, one TaxLine per transaction), not just raw inserted rows.
+
+**Why it replicates the posting pipeline instead of calling it**: create_gl_entries_from_journal()'s per-line running-balance aggregate (§5) makes calling the real per-invoice service functions in a loop non-viable at 1M-invoice scale — it's realistic but super-linearly slow as the ledger grows. The generator instead builds the same table shapes build_journal()/create_gl_entries_from_journal()/ensure_tax_line() would produce, but computes the GL running balance **in Python, incrementally, in chronological order per company** — provably equivalent given every seeded account's opening balance is 0 and every generated transaction is company-wide (branch_id=None, a deliberate simplification documented in ledger.py's module docstring, sidestepping the real function's per-branch running-balance partitioning). verify.py re-checks the result afterward: global debit=credit per company, and a spot-check of GeneralLedgerEntry.balance values against a fresh SQL recomputation.
+
+Measured full-run performance (100 companies, 1M invoices, local SQLite, this machine): 85.7 minutes, producing an 8.16 GB database with 20,576,802 total rows. Per-company throughput degrades as the file grows (8.6→1.2 companies/min) — SQLite-specific overhead (index maintenance, WAL/page-cache pressure on a multi-GB file), not the O(1)-per-row generation logic; untested against a local Postgres instance, which may behave differently. This dataset (backend/taxflow-bulk100.db, git-ignored) is also what every fix in §29.2 was verified against before being trusted.
+
+Admin login for any seeded company: admin{NNNN}@bulk.demo.taxflowapp.com (0001-0100) / Demo@12345.
