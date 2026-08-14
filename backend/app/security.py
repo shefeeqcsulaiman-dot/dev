@@ -1,3 +1,5 @@
+import hashlib
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -9,9 +11,18 @@ from app.config import get_settings
 from app.models import User
 
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 ALGORITHM = "HS256"
+
+# Never the key itself — a short, stable hash prefix logged alongside a
+# decode failure. If SECRET_KEY somehow differs across instances/workers
+# (e.g. a stale value left over from a prior redeploy), every instance would
+# otherwise fail identically-looking-but-differently-signed tokens with no
+# way to tell that apart from a genuinely invalid/expired token — this shows
+# up directly in logs as differing prefixes across instances.
+_SECRET_KEY_FINGERPRINT = hashlib.sha256(settings.secret_key.encode()).hexdigest()[:8]
 
 # Pre-computed dummy hash used when email not found — ensures constant-time
 # response regardless of whether the email exists (prevents timing enumeration)
@@ -54,7 +65,14 @@ def user_id_from_token(token: str) -> str | None:
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
         return payload.get("sub")
-    except JWTError:
+    except JWTError as exc:
+        # Diagnostic only, no behavior change — added after a load test found
+        # a single valid, unexpired token intermittently returning 401 under
+        # concurrent load, with no logged reason. secret_fp lets a genuine
+        # SECRET_KEY mismatch across instances/workers be spotted directly
+        # (differing fingerprints on the same "valid" token) instead of
+        # guessed at.
+        logger.warning("JWT decode failed: %s: %s (secret_fp=%s)", type(exc).__name__, exc, _SECRET_KEY_FINGERPRINT)
         return None
 
 

@@ -20,10 +20,15 @@ services:
       timeout_seconds: 10
       failure_threshold: 3
       success_threshold: 1
-    instance_count: 2
+    instance_count: 3
     instance_size_slug: professional-s   # 2 vCPU · 2 GB — handles ~500 concurrent users
     autoscaling:
-      min_instance_count: 2
+      # CPU-based autoscaling reacts over minutes, not seconds — useless
+      # against a short concurrent-request burst. Raised the static floor
+      # from 2 to 3 instances specifically to absorb bursts (e.g. ~200
+      # concurrent users) that resolve faster than autoscaling can respond.
+      # instance_count above must match this floor.
+      min_instance_count: 3
       max_instance_count: 6
       metrics:
         - type: CPU_UTILIZATION
@@ -68,6 +73,13 @@ services:
         value: https://app.etaxflow.com/api/v1
 
       # ── Workers & pool ────────────────────────────────────────────────
+      # Cluster-wide DB connection budget: this pool (10+15=25/instance) x
+      # instance_count (3) = 75 from the web tier, plus the worker's own
+      # small reserved slice below (20) = 95 total. Verify this against the
+      # managed Postgres plan's actual max_connections (DO dashboard ->
+      # Databases -> cluster -> Settings) before raising further — a pool
+      # budget that exceeds the DB's own ceiling is what caused the
+      # intermittent 500s this was tuned to fix, not too-small a pool.
       - key: WORKERS
         scope: RUN_TIME
         value: "6"
@@ -173,6 +185,25 @@ services:
       - key: CELERY_TASK_ALWAYS_EAGER
         scope: RUN_TIME
         value: "false"
+
+      # Previously unset here, so this service silently inherited the
+      # code's higher default (db_pool_size=20, db_max_overflow=40 in
+      # config.py) x 4 prefork processes (--concurrency=4 above) = a
+      # theoretical 240-connection ceiling for a background queue, dwarfing
+      # the web tier's own budget for the traffic that actually matters.
+      # 3+2=5/process x 4 = 20 max is a deliberately small, explicit
+      # reserved slice instead.
+      - key: DB_POOL_SIZE
+        scope: RUN_TIME
+        value: "3"
+
+      - key: DB_MAX_OVERFLOW
+        scope: RUN_TIME
+        value: "2"
+
+      - key: DB_POOL_TIMEOUT
+        scope: RUN_TIME
+        value: "30"
 
       - key: OPENAI_API_KEY
         scope: RUN_TIME

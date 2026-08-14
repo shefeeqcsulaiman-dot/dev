@@ -10,6 +10,7 @@ cross-cutting concern, not something that belongs bundled with the
 GPS/geofencing routes. hr_access.py imports them back from here.
 """
 
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -22,6 +23,8 @@ from app.database import get_db
 from app.models import Branch, Company, Employee, EmployeeBranchAccess, Permission, Role, RolePermission, User
 from app.module_catalog import BRANCH_ELIGIBLE_MODULES
 from app.security import is_impersonation_token_revoked, user_id_from_token
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 _EMP_PREFIX = "emp:"
@@ -313,6 +316,11 @@ def get_current_principal(request: Request, db: Session = Depends(get_db)) -> Pr
     principal = _principal_from_user_token(token, db)
     if principal:
         return principal
+    # Diagnostic only, no behavior change — see user_id_from_token()'s log
+    # line for the underlying decode failure (this fires once all three
+    # employee/branch/user resolution attempts came back empty for a
+    # request that looked like a normal Bearer token).
+    logger.warning("get_current_principal: all three token resolvers failed, returning 401")
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid access token")
 
 

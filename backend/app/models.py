@@ -403,6 +403,12 @@ class TaxCode(Base, TimestampMixin):
 
 class TaxLine(Base, TimestampMixin):
     __tablename__ = "tax_lines"
+    __table_args__ = (
+        # Backs dashboard()'s and tax_line_breakdown()'s repeated
+        # company_id + direction filters (reports.py) — previously only a
+        # single-column company_id index existed for this table.
+        Index("ix_tax_lines_company_direction", "company_id", "direction"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
