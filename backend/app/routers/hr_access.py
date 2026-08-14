@@ -838,7 +838,15 @@ def _location_out(loc: CompanyLocation) -> CompanyLocationOut:
 
 @gated_router.get("/company-locations", response_model=list[CompanyLocationOut])
 def list_company_locations(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> list[CompanyLocationOut]:
-    rows = db.query(CompanyLocation).filter(CompanyLocation.company_id == emp.company_id).order_by(CompanyLocation.location_name).all()
+    query = db.query(CompanyLocation).filter(CompanyLocation.company_id == emp.company_id)
+    # Same accessible-branches + NULL-stays-visible shape as
+    # _scope_attendance_to_branch() — previously this returned every
+    # branch's work locations to any branch-assigned employee.
+    if emp.branch_id:
+        accessible = {row[0] for row in db.query(EmployeeBranchAccess.branch_id).filter(EmployeeBranchAccess.employee_id == emp.id).all()}
+        accessible.add(emp.branch_id)
+        query = query.filter((CompanyLocation.branch_id.in_(accessible)) | (CompanyLocation.branch_id.is_(None)))
+    rows = query.order_by(CompanyLocation.location_name).all()
     return [_location_out(r) for r in rows]
 
 

@@ -68,6 +68,15 @@ def create_invoice(
     if existing:
         raise HTTPException(status_code=409, detail="Invoice number already exists for this company")
 
+    # Previously an explicit payload.branch_id was trusted outright — a
+    # branch-locked principal could attribute an invoice to a DIFFERENT
+    # branch than their own just by setting this field, unlike list_invoices()
+    # right above, which already validates ?branch_id= via
+    # resolve_active_branch(). Reject rather than silently substitute (as a
+    # read-side fallback would), so a write never lands somewhere the
+    # caller didn't intend without being told.
+    if payload.branch_id and not principal.can_cross_branch("sales") and payload.branch_id not in principal.accessible_branch_ids:
+        raise HTTPException(status_code=403, detail="You cannot create an invoice for a branch you don't have access to")
     invoice = Invoice(
         company_id=principal.company_id,
         branch_id=payload.branch_id or principal.branch_id,
