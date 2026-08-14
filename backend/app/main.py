@@ -160,17 +160,24 @@ def create_app() -> FastAPI:
         if isinstance(exc, _HTTPEx):
             return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
         import logging
+        from sqlalchemy.exc import OperationalError as _SQLAOperationalError
         from sqlalchemy.exc import TimeoutError as _SQLATimeoutError
-        if isinstance(exc, _SQLATimeoutError):
-            # DB connection pool couldn't hand out a connection within
-            # pool_timeout -- the server is momentarily overloaded, not
-            # broken. 503+Retry-After is the correct signal for this
+        if isinstance(exc, (_SQLATimeoutError, _SQLAOperationalError)):
+            # TimeoutError: the local connection pool couldn't hand out a
+            # connection within pool_timeout. OperationalError: the DB
+            # SERVER itself refused or dropped the connection (e.g. its own
+            # max_connections ceiling), a DBAPI-level failure distinct from
+            # the pool-side one above -- live load testing found this is at
+            # least as common as TimeoutError in practice, so both get the
+            # same treatment. Either way the server is momentarily
+            # overloaded, not broken: 503+Retry-After is the correct signal
             # (distinct from a real bug's 500) and is what the frontend's
             # retry logic keys off of. Most callers of dashboard()/
             # report_summary() never reach here at all -- reports.py's
             # _cached_or_build() already falls back to stale cached data
-            # first; this only fires when there's truly nothing cached yet.
-            logging.getLogger("taxflow").warning("DB pool timeout on %s %s", request.method, request.url.path)
+            # first for both exception types; this only fires when there's
+            # truly nothing cached yet.
+            logging.getLogger("taxflow").warning("DB overload (%s) on %s %s", type(exc).__name__, request.method, request.url.path)
             return JSONResponse(status_code=503, content={"detail": "Service temporarily busy, please retry."}, headers={"Retry-After": "3"})
         logging.getLogger("taxflow").error("Unhandled error on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
         return JSONResponse(status_code=500, content={"detail": "An internal error occurred."})
@@ -545,6 +552,8 @@ def ensure_schema_updates() -> None:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_tax_lines_company_direction ON tax_lines (company_id, direction)"))
         if "general_ledger_entries" in table_names:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_gl_entries_company_account_date ON general_ledger_entries (company_id, account_id, entry_date)"))
+        if "invoice_lines" in table_names:
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_invoice_lines_invoice_id ON invoice_lines (invoice_id)"))
         for branch_scoped_table in ("journal_entries", "general_ledger_entries", "source_transactions"):
             if branch_scoped_table in table_names:
                 existing_columns = {column["name"] for column in inspector.get_columns(branch_scoped_table)}

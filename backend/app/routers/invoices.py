@@ -29,6 +29,16 @@ def calculate_totals(invoice: Invoice) -> None:
 @router.get("", response_model=list[InvoiceOut])
 def list_invoices(
     branch_id: str | None = Query(default=None),
+    # Previously unbounded — a company with 5,000 invoices (~12,500 joined
+    # lines) made this query+serialize step take 180+ seconds and never
+    # actually return. Defaulting to 500 (matching the cap already used by
+    # /app-data/records/{collection}) bounds the worst case; an explicit
+    # limit up to 2000 is still available for a caller that wants more.
+    # Response shape (a bare list) is unchanged — no frontend code calls
+    # this endpoint today (confirmed via a repo-wide search), so there's no
+    # existing caller relying on getting every invoice back unbounded.
+    limit: int = Query(default=500, ge=1, le=2000),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
 ) -> list[Invoice]:
@@ -51,7 +61,7 @@ def list_invoices(
         active_branch = resolve_active_branch(principal, branch_id)
         if active_branch:
             query = query.filter((Invoice.branch_id == active_branch) | (Invoice.branch_id.is_(None)))
-    return query.order_by(Invoice.created_at.desc()).all()
+    return query.order_by(Invoice.created_at.desc()).offset(offset).limit(limit).all()
 
 
 @router.post("", response_model=InvoiceOut, status_code=201)

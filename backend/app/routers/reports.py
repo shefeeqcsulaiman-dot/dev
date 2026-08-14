@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, text
+from sqlalchemy.exc import OperationalError as SQLAOperationalError
 from sqlalchemy.exc import TimeoutError as SQLATimeoutError
 from sqlalchemy.orm import Session
 
@@ -54,20 +55,23 @@ def _cached_or_build(key: str, fresh_ttl: int, build_fn) -> dict[str, Any]:
     """Fresh cache hit -> return immediately. Otherwise call build_fn(); on
     success, cache (with a 24h staleness safety net, see
     cache.set_with_staleness()) and return the fresh result. On a DB
-    connection-pool timeout specifically (sqlalchemy.exc.TimeoutError,
-    raised when the pool can't hand out a connection within pool_timeout —
-    i.e. the server is overloaded, not a real bug) fall back to whatever
-    was last cached, even if stale, rather than a hard error -- for any
-    company that's loaded this report at all in the last day, a burst of
-    concurrent load becomes "you got slightly-old numbers" instead of a
-    500/503 to the user. Only lets the error propagate (to main.py's 503
-    handler) when there's truly nothing cached to fall back to."""
+    overload specifically -- sqlalchemy.exc.TimeoutError (the local
+    connection pool couldn't hand out a connection within pool_timeout) or
+    OperationalError (the DB SERVER itself refused/dropped the connection,
+    e.g. its own max_connections limit hit — confirmed via live load
+    testing to be at least as common as the pool-side TimeoutError in
+    practice, so both need the same treatment) -- fall back to whatever was
+    last cached, even if stale, rather than a hard error -- for any company
+    that's loaded this report at all in the last day, a burst of concurrent
+    load becomes "you got slightly-old numbers" instead of a 500/503 to the
+    user. Only lets the error propagate (to main.py's 503 handler) when
+    there's truly nothing cached to fall back to."""
     data, is_fresh = cache.get_with_staleness(key, fresh_ttl)
     if is_fresh:
         return data
     try:
         result = build_fn()
-    except SQLATimeoutError:
+    except (SQLATimeoutError, SQLAOperationalError):
         if data is not None:
             stale = dict(data)
             stale["stale"] = True

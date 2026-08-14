@@ -104,6 +104,15 @@ class Invoice(Base, TimestampMixin):
 
 class InvoiceLine(Base):
     __tablename__ = "invoice_lines"
+    __table_args__ = (
+        # list_invoices() (invoices.py) joinedload()s this relationship for
+        # every invoice returned -- with no index here, that join required a
+        # full scan of the entire invoice_lines table (1.5M+ rows across all
+        # tenants at real scale) for every single request, not just the
+        # requesting company's own rows. Found via live testing: a 10-row
+        # result took 5+ seconds without this index, ~0.1s with it.
+        Index("ix_invoice_lines_invoice_id", "invoice_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     invoice_id: Mapped[str] = mapped_column(ForeignKey("invoices.id"), nullable=False)
