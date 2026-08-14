@@ -112,6 +112,18 @@ def list_companies(db: Session = Depends(get_db), _: User = Depends(_require_sup
             .scalar()
             or 0
         )
+        branches = db.query(Branch).filter(Branch.company_id == company.id).order_by(Branch.name).all()
+        branch_names = {b.id: b.name for b in branches}
+        # Capped — a company's employee roster can run into the hundreds/
+        # thousands, unlike users/branches which stay small; employee_count
+        # above already conveys the true total for anything past this cap.
+        employees = (
+            db.query(Employee)
+            .filter(Employee.company_id == company.id)
+            .order_by(Employee.employee_no)
+            .limit(200)
+            .all()
+        )
         sub_users = [u for u in users if u.role not in ("admin", "superadmin")]
         try:
             mods = json.loads(company.modules_enabled) if company.modules_enabled else ALL_MODULES
@@ -155,6 +167,28 @@ def list_companies(db: Session = Depends(get_db), _: User = Depends(_require_sup
                     }
                     for u in users
                     if u.role != "superadmin"
+                ],
+                "branches": [
+                    {
+                        "id": b.id,
+                        "name": b.name,
+                        "code": b.code,
+                        "city": b.city,
+                        "status": b.status,
+                    }
+                    for b in branches
+                ],
+                "employees": [
+                    {
+                        "id": e.id,
+                        "employee_no": e.employee_no,
+                        "full_name": e.full_name,
+                        "department": e.department,
+                        "designation": e.designation,
+                        "status": e.status,
+                        "branch_name": branch_names.get(e.branch_id),
+                    }
+                    for e in employees
                 ],
             }
         )

@@ -765,12 +765,34 @@
           </div>
         </div>`;
       }).join('');
+      const branchList = (c.branches||[]).map(b=>{
+        const active = (b.status||'').toLowerCase()==='active';
+        const statusBadge = active ? '<span class="b b-g" style="font-size:10px;padding:1px 7px">Active</span>' : '<span class="b b-r" style="font-size:10px;padding:1px 7px">'+escHtml(b.status||'Inactive')+'</span>';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(99,130,200,.08)">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12.5px;font-weight:500">${escHtml(b.name||'—')} ${statusBadge}</div>
+            <div class="mono" style="color:#8896b3;font-size:11px">${escHtml(b.code||'No code')} · ${escHtml(b.city||'')}</div>
+          </div>
+        </div>`;
+      }).join('');
+      const employeeList = (c.employees||[]).map(e=>{
+        const active = (e.status||'').toLowerCase()==='active';
+        const statusBadge = active ? '<span class="b b-g" style="font-size:10px;padding:1px 7px">Active</span>' : '<span class="b b-r" style="font-size:10px;padding:1px 7px">'+escHtml(e.status||'Inactive')+'</span>';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(99,130,200,.08)">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12.5px;font-weight:500">${escHtml(e.full_name||'—')} ${statusBadge}</div>
+            <div class="mono" style="color:#8896b3;font-size:11px">${escHtml(e.employee_no||'')} · ${escHtml(e.designation||e.department||'')}${e.branch_name ? ' · '+escHtml(e.branch_name) : ''}</div>
+          </div>
+        </div>`;
+      }).join('');
+      const employeeMore = (c.employee_count||0) > (c.employees||[]).length
+        ? `<div style="color:#8896b3;font-size:11px;padding-top:6px">Showing ${(c.employees||[]).length} of ${c.employee_count} active employees</div>` : '';
       return `<tr>
         <td>
           <div style="font-weight:600">${escHtml(c.name)}</div>
           <div class="mono" style="font-size:11px;color:#8896b3">${escHtml(c.trn||'No TRN')} · ${escHtml(c.country||'')}</div>
         </td>
-        <td class="mono" style="font-size:12px">${c.employee_count||0} emp · ${(c.users||[]).filter(u=>u.role!=='superadmin').length} users</td>
+        <td class="mono" style="font-size:12px">${c.employee_count||0} emp · ${(c.branches||[]).length} branches · ${(c.users||[]).filter(u=>u.role!=='superadmin').length} users</td>
         <td>${expBadge}</td>
         <td style="font-size:11.5px;color:#8896b3">${c.created_at ? c.created_at.slice(0,10) : '—'}</td>
         <td>
@@ -779,6 +801,8 @@
             <button class="btn btn-g btn-sm" onclick="quickExtend('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}',7)">+7d</button>
             <button class="btn btn-g btn-sm" onclick="quickExtend('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}',365)">+1yr</button>
             <button class="btn btn-g btn-sm" onclick="toggleUsers('users-${escHtml(c.id)}')">Users</button>
+            <button class="btn btn-g btn-sm" onclick="toggleUsers('branches-${escHtml(c.id)}')">Branches</button>
+            <button class="btn btn-g btn-sm" onclick="toggleUsers('employees-${escHtml(c.id)}')">Employees</button>
             <button class="btn btn-g btn-sm" onclick="openAddUser('${escHtml(c.id)}','${escHtml(c.name)}')">+ User</button>
             <button class="btn btn-g btn-sm" onclick="openModules('${escHtml(c.id)}','${escHtml(c.name)}',${escHtml(JSON.stringify(c.modules_enabled||[]))})">Modules</button>
             <button class="btn btn-g btn-sm" style="color:#a78bfa" onclick="impersonateCompany('${escHtml(c.id)}','${escHtml(c.name)}')" title="Log in as this company's admin for support">Impersonate</button>
@@ -786,6 +810,13 @@
           </div>
           <div id="users-${escHtml(c.id)}" style="display:none;margin-top:10px;padding:8px;background:rgba(99,130,200,.05);border-radius:8px">
             ${userList||'<span style="color:#8896b3;font-size:12px">No users yet</span>'}
+          </div>
+          <div id="branches-${escHtml(c.id)}" style="display:none;margin-top:10px;padding:8px;background:rgba(99,130,200,.05);border-radius:8px">
+            ${branchList||'<span style="color:#8896b3;font-size:12px">No branches yet</span>'}
+          </div>
+          <div id="employees-${escHtml(c.id)}" style="display:none;margin-top:10px;padding:8px;background:rgba(99,130,200,.05);border-radius:8px">
+            ${employeeList||'<span style="color:#8896b3;font-size:12px">No employees yet</span>'}
+            ${employeeMore}
           </div>
         </td>
       </tr>`;
