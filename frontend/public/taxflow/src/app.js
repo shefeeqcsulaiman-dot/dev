@@ -10954,7 +10954,21 @@ function purUpload(inp){
   inp.value=''; // reset so same file can be re-selected
 }
 
+function isSupportedPurchaseFile(file){
+  // Mirrors the backend's actual accepted set (_ingest_purchase_file /
+  // PURCHASE_IMAGE_EXTENSIONS in app_data.py) — the <input accept="..."> and
+  // drop-zone alone don't enforce this (accept is bypassable via drag-drop,
+  // and neither path validated anything before this), so an unsupported
+  // file previously got queued and read only to fail on the backend
+  // round-trip minutes later instead of being rejected immediately.
+  return /\.(pdf|csv|xlsx|xlsm|xls|jpg|jpeg|png|bmp|webp|tif|tiff|zip)$/i.test(file.name);
+}
+
 function readAndAddFile(file){
+  if(!isSupportedPurchaseFile(file)){
+    toast('Unsupported file: '+file.name,'err');
+    return;
+  }
   const cat=document.getElementById('pur-cat')?.value||'Purchase Invoices';
   const period=document.getElementById('pur-period')?.value||'June 2024';
   const entry={name:file.name,size:file.size,type:file.type,base64:'',category:cat,period,status:'Reading',id:'F'+Date.now()+Math.random().toString(36).slice(2,6)};
@@ -11230,6 +11244,11 @@ function updatePurchaseValidationFileStatus(){
 
 // -- AI EXTRACTION via backend API ----------------------------------
 let _extractingCount=0;
+// Tracks position within a runOCR() batch so the shared #ext-prog label can
+// read "Extracting file 2 of 5..." instead of a generic "Extracting..." —
+// meaningful once multiple files are genuinely extracting concurrently.
+let _batchExtractTotal=0;
+let _batchExtractStarted=0;
 function _updateExtractBadge(){
   const badge=document.getElementById('extract-top-badge');
   const cnt=document.getElementById('extract-top-count');
@@ -11254,11 +11273,21 @@ async function extractSingleFile(entry){
   const extTab=document.querySelector('#page-purchase .tab:nth-child(2)');
   if(extTab)stab(extTab,'p-extract');
 
-  // Clear previous extraction cards so new file starts with a clean view
-  const extTbody=document.getElementById('ext-tbody');
-  if(extTbody)extTbody.innerHTML='';
+  // Clearing #ext-tbody here used to wipe every other file's already-shown
+  // cards on every single file's start — with runOCR() staging files 500ms
+  // apart via setTimeout (not awaited), several extractions are genuinely
+  // concurrent, so this reliably erased all but the last-completed file's
+  // results. appendExtractedRows() now owns clearing (only when the panel
+  // is still showing the empty-state placeholder), so nothing to do here.
 
   const ep=document.getElementById('ext-prog'),ef=document.getElementById('ext-fill'),epct=document.getElementById('ext-pct');
+  const eLabel=document.getElementById('ext-prog-label');
+  if(eLabel){
+    _batchExtractStarted++;
+    eLabel.textContent=(_batchExtractTotal>1&&_batchExtractStarted<=_batchExtractTotal)
+      ?`Extracting file ${_batchExtractStarted} of ${_batchExtractTotal}...`
+      :'Extracting...';
+  }
   if(ep)ep.style.display='block';
   if(ef)ef.classList.add('running');
   let prog=0;
@@ -11323,9 +11352,18 @@ function isExtractionErrorResult(invoices){
 async function appendExtractedRows(invoices,filename){
   const tbody=document.getElementById('ext-tbody');
   if(!tbody)return;
-  tbody.innerHTML='';
+  // Only clear the panel while it's still showing the initial empty-state
+  // placeholder — once real cards exist (this file's or an earlier file's
+  // in the same batch), every subsequent call must ADD to them, not wipe
+  // them. Matches appendSalesExtractedRows()'s equivalent guard.
+  if(tbody.querySelector('.ai-empty-state'))tbody.innerHTML='';
   if(!Array.isArray(invoices)||!invoices.length){
-    tbody.innerHTML=`<div class="ai-empty-state" style="color:var(--red)">No data extracted from ${escapeHtml(filename||'uploaded file')}.</div>`;
+    // A per-file card, not a page-replacing message — otherwise one file
+    // with no data would erase every other file's already-shown results.
+    const emptyCard=document.createElement('div');
+    emptyCard.className='ai-error-card';
+    emptyCard.innerHTML=`<strong>${escapeHtml(filename||'Upload')}</strong>: No data extracted from this file.`;
+    tbody.appendChild(emptyCard);
     return;
   }
   let fragment=document.createDocumentFragment();
@@ -13259,6 +13297,8 @@ function runOCR(){
   }
   if(ready.length===0){toast('No new files to extract. Upload files first.','warn');return;}
   ready.forEach(file=>{file.status='Ready';});
+  _batchExtractTotal=ready.length;
+  _batchExtractStarted=0;
   ready.forEach((f,i)=>setTimeout(()=>extractSingleFile(f),i*500));
 }
 
