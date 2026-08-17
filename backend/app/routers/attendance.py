@@ -10,6 +10,7 @@ Supported punch sources:
 
 import csv
 import io
+import ipaddress
 import json
 import pathlib
 import secrets
@@ -313,17 +314,43 @@ def test_device(
     if not device.ip_address:
         return {"ok": False, "message": "No IP address configured — add the device IP to test connectivity"}
 
+    week_ago = now - timedelta(days=7)
+    recent = db.query(func.count(AttendancePunch.id)).filter(
+        AttendancePunch.device_id == device.id,
+        AttendancePunch.punch_time >= week_ago,
+    ).scalar() or 0
+
+    # TCP/IP-mode devices exist specifically because they sit on a private LAN
+    # (that's the whole reason zk_bridge.py needs to run locally at all) —
+    # this endpoint runs on TaxFlow's own cloud servers, which can never
+    # actually reach a private-range IP. Attempting the socket connect for
+    # those previously produced a near-guaranteed, actively misleading
+    # "Timeout — device offline or wrong IP?" for every correctly-configured
+    # device. Fall back to the same recent-punch-count heuristic already used
+    # for push-type devices a few lines up instead of a doomed network call.
+    try:
+        is_private = ipaddress.ip_address(device.ip_address).is_private
+    except ValueError:
+        is_private = False
+
+    if is_private:
+        if recent:
+            return {"ok": True, "message": f"{recent} punches synced in the last 7 days — zk_bridge.py is running and reachable on the device's local network"}
+        return {
+            "ok": False,
+            "message": (
+                f"No punches synced yet. {device.ip_address} is a private/local network address — "
+                "TaxFlow's servers can't test it directly. Make sure zk_bridge.py is running on a PC "
+                "on the same network as the device (see Setup Guide)."
+            ),
+        }
+
     import socket
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(4)
         s.connect((device.ip_address, device.port))
         s.close()
-        week_ago = now - timedelta(days=7)
-        recent = db.query(func.count(AttendancePunch.id)).filter(
-            AttendancePunch.device_id == device.id,
-            AttendancePunch.punch_time >= week_ago,
-        ).scalar() or 0
         sync_note = f" · {recent} punches in last 7 days" if recent else " · no punches synced yet (is zk_bridge.py running?)"
         return {"ok": True, "message": f"Reachable — {device.ip_address}:{device.port} is open{sync_note}"}
     except socket.timeout:

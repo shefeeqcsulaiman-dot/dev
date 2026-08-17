@@ -1,0 +1,94 @@
+name: Build biometric bridge agents
+
+# Packages backend/zk_bridge.py and backend/biotime_agent.py into standalone
+# Windows executables (see backend/agent/README.md) and verifies the build
+# + basic runtime behavior on a real Windows machine. This does NOT verify
+# behavior against real ZKTeco/BioTime hardware — that needs on-site
+# validation, see the README's "what CI verifies vs. what doesn't" section.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/zk_bridge.py"
+      - "backend/biotime_agent.py"
+      - "backend/agent/**"
+      - ".github/workflows/build-biometric-agents.yml"
+  pull_request:
+    paths:
+      - "backend/zk_bridge.py"
+      - "backend/biotime_agent.py"
+      - "backend/agent/**"
+  workflow_dispatch: {}
+
+jobs:
+  build-and-verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        working-directory: backend/agent
+        run: pip install -r requirements-agent.txt
+
+      - name: Build TaxFlowZkBridge.exe
+        working-directory: backend/agent
+        run: pyinstaller --clean zk_bridge.spec
+
+      - name: Build TaxFlowBioTimeAgent.exe
+        working-directory: backend/agent
+        run: pyinstaller --clean biotime_agent.spec
+
+      - name: Verify both exes exist
+        working-directory: backend/agent
+        run: |
+          if (-not (Test-Path "dist\TaxFlowZkBridge.exe")) { throw "TaxFlowZkBridge.exe was not produced" }
+          if (-not (Test-Path "dist\TaxFlowBioTimeAgent.exe")) { throw "TaxFlowBioTimeAgent.exe was not produced" }
+
+      - name: TaxFlowZkBridge.exe fails clearly when unconfigured (no hang, no crash)
+        working-directory: backend/agent/dist
+        run: |
+          $p = Start-Process -FilePath ".\TaxFlowZkBridge.exe" -NoNewWindow -PassThru `
+               -RedirectStandardOutput zk_out.txt -RedirectStandardError zk_err.txt
+          $exited = $p.WaitForExit(15000)
+          if (-not $exited) { $p.Kill(); throw "Exe did not exit within 15s when run with no config — expected a fast, clear error" }
+          Get-Content zk_out.txt, zk_err.txt -ErrorAction SilentlyContinue
+          if ($p.ExitCode -eq 0) { throw "Expected a non-zero exit code when DEVICE_API_KEY/ZK_DEVICE_IP are unset" }
+
+      - name: TaxFlowBioTimeAgent.exe fails clearly when unconfigured (no hang, no crash)
+        working-directory: backend/agent/dist
+        run: |
+          $p = Start-Process -FilePath ".\TaxFlowBioTimeAgent.exe" -NoNewWindow -PassThru `
+               -RedirectStandardOutput bio_out.txt -RedirectStandardError bio_err.txt
+          $exited = $p.WaitForExit(15000)
+          if (-not $exited) { $p.Kill(); throw "Exe did not exit within 15s when run with no config — expected a fast, clear error" }
+          Get-Content bio_out.txt, bio_err.txt -ErrorAction SilentlyContinue
+          if ($p.ExitCode -eq 0) { throw "Expected a non-zero exit code when required settings are unset" }
+
+      - name: --install-startup registers a per-user Scheduled Task
+        working-directory: backend/agent/dist
+        run: |
+          $p = Start-Process -FilePath ".\TaxFlowZkBridge.exe" -ArgumentList "--install-startup" -NoNewWindow -PassThru -Wait `
+               -RedirectStandardOutput install_out.txt -RedirectStandardError install_err.txt
+          Get-Content install_out.txt, install_err.txt -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 0) { throw "install-startup did not succeed on this runner" }
+          schtasks /query /tn "TaxFlowZkBridge" /fo LIST
+          if ($LASTEXITCODE -ne 0) { throw "Scheduled task was reported created but schtasks /query can't find it" }
+
+      - name: Clean up the Scheduled Task created above
+        if: always()
+        run: schtasks /delete /tn "TaxFlowZkBridge" /f
+        continue-on-error: true
+
+      - name: Upload built executables
+        uses: actions/upload-artifact@v4
+        with:
+          name: biometric-agents-windows
+          path: |
+            backend/agent/dist/TaxFlowZkBridge.exe
+            backend/agent/dist/TaxFlowBioTimeAgent.exe
+          retention-days: 14

@@ -19635,6 +19635,14 @@ async function downloadBridgeScript(){
   }catch(e){toast('Download error: '+e,'warn');}
 }
 
+function downloadBioConfig(content){
+  const blob=new Blob([content],{type:'text/plain'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='zk_bridge.conf';a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+
 // ── SVG step icons ────────────────────────────────────────────────────────────
 const _BIO_ICONS={
   key:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="M21 2l-9.6 9.6"/><path d="M15.5 7.5l3 3L22 7l-3-3"/></svg>`,
@@ -19745,10 +19753,19 @@ function _buildBioGuideModes(apiKey, type, ip, port){
   const punchUrl=`${baseUrl}${admsEndpoint}`;
   const punchUrlWithKeyInPath=`${punchUrl}/${apiKey||'YOUR_DEVICE_KEY'}`;
   const keyDisplay=apiKey||'YOUR_DEVICE_KEY';
+  const hasRealKey=!!apiKey;
   const I=_BIO_ICONS;
   const tcpLabel=BIO_TCP_TYPES.has(type)?type.replace('ZKTeco ','').toUpperCase():'ZK';
   const pushLabel=(type==='ZKTeco ADMS'||BIO_PUSH_TYPES.has(type))?type:'Device';
   const confSnippet=`DEVICE_API_KEY=${keyDisplay}\nZK_DEVICE_IP=${ip||'192.168.1.201'}\nZK_DEVICE_PORT=${port||4370}\nAPI_BASE_URL=${baseUrl}`;
+  // Only offer a one-click download when the real (not-yet-hashed) key is in
+  // memory — showBioGuide() is also opened later from the device list's
+  // "Guide" button with apiKey=null, where confSnippet falls back to the
+  // literal placeholder text. A download button there would hand out a
+  // .conf file baked with "YOUR_DEVICE_KEY" and no obvious sign it's wrong.
+  const confDownloadBtn=hasRealKey
+    ?`<button onclick="downloadBioConfig(${jsonAttr(confSnippet)})" style="flex-shrink:0;padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;white-space:nowrap">⬇ Download</button>`
+    :`<span title="Only available right after creating the device — its key can't be retrieved afterward. Copy it from where you saved it and fill in the file above by hand, or delete and re-add the device." style="flex-shrink:0;padding:2px 8px;font-size:10px;border-radius:5px;border:1px dashed var(--border);color:var(--text3);white-space:nowrap;cursor:help">⬇ Download (unavailable)</span>`;
 
   const tcp={
     label:'TCP/IP Pull',
@@ -19761,9 +19778,12 @@ function _buildBioGuideModes(apiKey, type, ip, port){
         <strong>Tip:</strong> check the device's own menu first — <code>Menu → Comm → Cloud Server Setting</code> (wording varies). If it has that option, skip the script entirely: add it instead as <strong>ZKTeco ADMS</strong> (see the <em>HTTP / ADMS Push</em> tab above), which pushes punches directly with no bridge script needed. Older/basic terminals without this option still need the script below.
        </div>`},
       {icon:I.form, title:'Create zk_bridge.conf With These Values', color:'var(--accent)',
-       body:`Save this as <code>zk_bridge.conf</code> in the same folder as the script:<div style="display:flex;align-items:flex-start;gap:8px;margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px">
+       body:`Save this as <code>zk_bridge.conf</code> in the same folder as the script — or download it ready-made:<div style="display:flex;align-items:flex-start;gap:8px;margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px">
         <pre style="flex:1;margin:0;font-size:10.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all">${escapeHtml(confSnippet)}</pre>
-        <button onclick="_bioCopy(${jsonAttr(confSnippet)},this)" style="flex-shrink:0;padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;white-space:nowrap">Copy</button>
+        <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0">
+          <button onclick="_bioCopy(${jsonAttr(confSnippet)},this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;white-space:nowrap">Copy</button>
+          ${confDownloadBtn}
+        </div>
        </div>`},
       {icon:I.terminal, title:'Install pyzk and Run the Script', color:'var(--accent)',
        body:`On that same PC: <code>pip install pyzk requests</code>, then <code>python zk_bridge.py</code>. It connects to the device, polls every 30 seconds, and forwards new punches automatically — leave it running (use <code>pm2</code> or a service for production).`},

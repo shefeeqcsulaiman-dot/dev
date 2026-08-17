@@ -40,7 +40,11 @@ Usage
 4. Run:
        python biotime_agent.py
 
-   For systemd / PM2:
+   To keep it running automatically after a reboot without a terminal
+   window open (Windows only):
+       python biotime_agent.py --install-startup
+
+   For systemd / PM2 (Linux):
        pm2 start biotime_agent.py --interpreter python3 --name biotime-agent
 
 Environment variables (override defaults)
@@ -297,7 +301,38 @@ def _sync_once() -> None:
     log.info("Synced %d new punch(es) (%d found in window)", synced, len(parsed))
 
 
+# ── Windows startup registration ─────────────────────────────────────────────
+# Same per-user (no Administrator needed) Scheduled Task approach as
+# zk_bridge.py — deliberately duplicated rather than shared via an import;
+# both scripts are meant to be downloaded and run standalone as a single
+# file. Keep in sync with zk_bridge.py's _install_startup_task() if either
+# changes.
+
+def _install_startup_task(display_name: str) -> None:
+    if sys.platform != "win32":
+        sys.exit("--install-startup is only supported on Windows (uses schtasks).")
+    import subprocess
+    task_name = f"TaxFlow{display_name}"
+    if getattr(sys, "frozen", False):
+        command = f'"{sys.executable}"'
+    else:
+        command = f'"{sys.executable}" "{pathlib.Path(__file__).resolve()}"'
+    result = subprocess.run(
+        ["schtasks", "/create", "/sc", "onlogon", "/tn", task_name, "/tr", command, "/f"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        sys.exit(f"Failed to create scheduled task: {(result.stderr or result.stdout).strip()}")
+    print(f"Installed as a Windows Scheduled Task ('{task_name}') — it will start automatically the next time you log in.")
+    print(f'To run it immediately without logging out: schtasks /run /tn "{task_name}"')
+    print(f'To remove it later: schtasks /delete /tn "{task_name}" /f')
+
+
 def main() -> None:
+    if "--install-startup" in sys.argv:
+        _install_startup_task("BioTimeAgent")
+        return
+
     missing = [
         name for name, value in (
             ("BIOTIME_BASE_URL", BIOTIME_BASE_URL),

@@ -112,7 +112,7 @@ Verified locally end-to-end against a mock BioTime server and a real backend: pu
 
 **Setup** (`HRMS → Attendance → Devices → Add Device`): pick any `device_type` other than `"ZKTeco BioTime Server"` (that type is reserved for the built-in pull connection and issues no API key) — `"BioTime via Agent"` is a reasonable label. Copy the issued API key into `biotime_agent.conf` alongside the local BioTime server's own URL/username/password, then run the script on a machine that can reach that BioTime server.
 
-**Not yet done for this mode**: Windows service packaging, auto-update, remote diagnostics, LAN discovery — see below. v1 is deliberately just the script, matching where `zk_bridge.py` itself still is today.
+**Not yet done for this mode**: auto-update, remote diagnostics, LAN discovery — see below. Windows service packaging (the first of the four requested operational qualities) is now partially done — see the update below — applied directly to both `zk_bridge.py` and `biotime_agent.py` rather than requiring a separate "Mode 1"/"Mode 2" Agent build first.
 
 ### Mode 1 — Agent → Device (proposed, not yet built)
 
@@ -125,12 +125,55 @@ than the operational-polish items below, which would benefit BOTH modes
 once built.
 ```
 
-### Requested operational qualities (not yet built, apply to both modes)
+### Windows packaging (shipped, CI-verified — 2026-08-17 update)
 
-- **Windows-based** — matches the environment most customer sites already run other on-prem software on.
-- **Auto-updating** — `zk_bridge.py` and `biotime_agent.py` both today require a customer or reseller to manually pull updates; a real Agent product should update itself.
-- **Remotely diagnosable** — TaxFlow support should be able to see Agent health/last-sync/errors without a site visit or asking the customer to read logs over the phone (a natural extension of `BiometricDevice.last_sync` and the existing "Test Connection" pattern, surfaced per-Agent instead of per-device).
-- **LAN device discovery** — instead of a customer hand-typing a device IP (today's `ip_address`/`port` fields on `BiometricDevice`), the Agent scans the LAN and lets the customer pick from what it finds. Meaningfully lowers setup friction versus the current manual-IP/manual-URL config file approach.
+Rather than building a separate "Agent" binary before either script had any
+packaging at all, the operational-polish work below was applied directly to
+`zk_bridge.py` and `biotime_agent.py`:
+
+- Both scripts gained an `--install-startup` flag: registers a **per-user**
+  Windows Scheduled Task (`schtasks /create /sc onlogon ...`, no
+  Administrator elevation needed) so the script survives a reboot without a
+  terminal window staying open. Deliberately duplicated in both files
+  rather than shared via an import — each script is still meant to be
+  downloaded and run standalone, with no other project files alongside it.
+- `zk_bridge.py`'s previous behavior — log a warning and keep running
+  against the placeholder `192.168.1.201` IP when nothing was configured —
+  is now a hard, clear `sys.exit()` instead, matching the stricter
+  validation `biotime_agent.py` already had. An unconfigured install now
+  fails loudly and immediately rather than looping forever, silently
+  failing every cycle.
+- `backend/agent/` (new directory): PyInstaller specs package each script
+  into a single-file Windows `.exe` (`TaxFlowZkBridge.exe`,
+  `TaxFlowBioTimeAgent.exe`) — no separate Python install needed on the
+  customer's machine. See `backend/agent/README.md` for build steps and
+  two explicit caveats: the binaries are **unsigned** (will very likely
+  trigger a Windows SmartScreen warning on first run — not a bug, a known
+  PyInstaller heuristic trigger; "More info → Run anyway"), and
+  **auto-update is not implemented** — re-running the build and
+  re-downloading is the only update path today.
+- `.github/workflows/build-biometric-agents.yml` (new, and the first CI
+  workflow in this repo): a `windows-latest` runner builds both
+  executables and verifies the build succeeds, each exe fails fast and
+  clearly (not a hang or a crash) when unconfigured, and `--install-startup`
+  actually creates a working Scheduled Task. **What this does not verify**:
+  real protocol behavior against actual ZKTeco/BioTime hardware, or that
+  the Scheduled Task survives a real reboot on a real customer PC — both
+  need on-site validation before this is relied on operationally. (Locally
+  testing `--install-startup` during development hit `schtasks`
+  "Access is denied" in that specific sandboxed shell even for a per-user
+  task — the code's failure-handling path was confirmed correct there
+  [clean error, no crash], but the actual success path could only be
+  confirmed via the CI runner, which has normal Task Scheduler permissions.)
+
+**Still not done**: auto-update, remote diagnostics, LAN device discovery — unchanged from below, all three remain deliberately out of scope (see "Open questions" below for why).
+
+### Requested operational qualities (partially shipped — see above; auto-update/diagnostics/discovery not yet built)
+
+- ~~**Windows-based**~~ — packaging shipped 2026-08-17, see above. CI-verified; hardware/reboot behavior still needs on-site validation.
+- **Auto-updating** — `zk_bridge.py`, `biotime_agent.py`, and now the packaged `.exe`s all still require a customer or reseller to manually pull updates. Not attempted this pass — see "Open questions" below for why.
+- **Remotely diagnosable** — TaxFlow support should be able to see Agent health/last-sync/errors without a site visit or asking the customer to read logs over the phone (a natural extension of `BiometricDevice.last_sync` and the existing "Test Connection" pattern, surfaced per-Agent instead of per-device). Not attempted this pass.
+- **LAN device discovery** — instead of a customer hand-typing a device IP (today's `ip_address`/`port` fields on `BiometricDevice`), the Agent scans the LAN and lets the customer pick from what it finds. Meaningfully lowers setup friction versus the current manual-IP/manual-URL config file approach — but deliberately not attempted this pass, see "Open questions" below.
 
 ### What does *not* change
 

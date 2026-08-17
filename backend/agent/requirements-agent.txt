@@ -1,0 +1,7 @@
+# Build dependencies for packaging zk_bridge.py / biotime_agent.py into
+# standalone Windows executables. Separate from backend/requirements.txt —
+# these two scripts run standalone on a customer's own PC, not inside the
+# FastAPI backend, and PyInstaller itself is only ever needed at build time.
+pyinstaller>=6.10
+pyzk==0.9
+requests>=2.31

@@ -27,7 +27,11 @@ Usage
 4. Run:
        python zk_bridge.py
 
-   For systemd / PM2:
+   To keep it running automatically after a reboot without a terminal
+   window open (Windows only):
+       python zk_bridge.py --install-startup
+
+   For systemd / PM2 (Linux):
        pm2 start zk_bridge.py --interpreter python3 --name zk-bridge
 
 Environment variables (override defaults)
@@ -80,6 +84,10 @@ _conf = _load_conf()
 def _get(key: str, default: str = "") -> str:
     return _conf.get(key) or os.environ.get(key) or default
 
+def _is_explicitly_set(key: str) -> bool:
+    return key in _conf or key in os.environ
+
+_ZK_DEVICE_IP_EXPLICIT = _is_explicitly_set("ZK_DEVICE_IP")
 ZK_DEVICE_IP     = _get("ZK_DEVICE_IP",     "192.168.1.201")
 ZK_DEVICE_PORT   = int(_get("ZK_DEVICE_PORT", "4370"))
 ZK_POLL_INTERVAL = int(_get("ZK_POLL_INTERVAL", "30"))
@@ -213,13 +221,59 @@ def _run_pyzk() -> None:
 #  software needed for HTTP-push devices.
 
 
+# ── Windows startup registration ─────────────────────────────────────────────
+# Run `python zk_bridge.py --install-startup` (or the packaged .exe with the
+# same flag) once, and this registers a per-user Windows Scheduled Task that
+# starts the script automatically on login — no terminal window needs to stay
+# open, and no Administrator elevation is required (a machine-wide/SYSTEM
+# task would need that, undercutting the point of making this easier). This
+# is deliberately duplicated in biotime_agent.py rather than shared via an
+# import — both scripts are meant to be downloaded and run standalone as a
+# single file, with no other project files alongside them on a customer PC.
+
+def _install_startup_task(display_name: str) -> None:
+    if sys.platform != "win32":
+        sys.exit("--install-startup is only supported on Windows (uses schtasks).")
+    import subprocess
+    task_name = f"TaxFlow{display_name}"
+    if getattr(sys, "frozen", False):
+        # Packaged PyInstaller .exe — self-contained, no interpreter needed.
+        command = f'"{sys.executable}"'
+    else:
+        command = f'"{sys.executable}" "{pathlib.Path(__file__).resolve()}"'
+    result = subprocess.run(
+        ["schtasks", "/create", "/sc", "onlogon", "/tn", task_name, "/tr", command, "/f"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        sys.exit(f"Failed to create scheduled task: {(result.stderr or result.stdout).strip()}")
+    print(f"Installed as a Windows Scheduled Task ('{task_name}') — it will start automatically the next time you log in.")
+    print(f'To run it immediately without logging out: schtasks /run /tn "{task_name}"')
+    print(f'To remove it later: schtasks /delete /tn "{task_name}" /f')
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
+    if "--install-startup" in sys.argv:
+        _install_startup_task("ZkBridge")
+        return
+
     if not DEVICE_API_KEY:
         sys.exit("Error: DEVICE_API_KEY is not set. Generate one in HRMS → Settings → Biometric Devices.")
-    if not ZK_DEVICE_IP or ZK_DEVICE_IP == "192.168.1.201":
-        log.warning("ZK_DEVICE_IP is default (%s) — make sure this is correct", ZK_DEVICE_IP)
+    if not _ZK_DEVICE_IP_EXPLICIT:
+        # Previously just logged a warning and kept running against the
+        # placeholder IP — meaning a genuinely unconfigured install looped
+        # forever failing silently instead of stopping with an actionable
+        # message. A real device IP that happens to equal the placeholder
+        # value is still accepted; only a config-file/env var that was never
+        # actually set triggers this.
+        sys.exit(
+            "Error: no device IP configured. Add ZK_DEVICE_IP=<your device's IP> to "
+            "zk_bridge.conf next to this script (see HRMS -> Attendance -> Biometric "
+            "Devices -> Setup Guide for a ready-made download), or set it as an "
+            "environment variable."
+        )
 
     log.info("ZK Bridge starting — device: %s:%s  API: %s", ZK_DEVICE_IP, ZK_DEVICE_PORT, API_BASE_URL)
 
