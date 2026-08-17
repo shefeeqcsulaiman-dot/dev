@@ -144,6 +144,21 @@ class Job(Base, TimestampMixin):
     result: Mapped[str | None] = mapped_column(Text)
 
 
+class ImpersonationSession(Base, TimestampMixin):
+    """Tracks superadmin "log in as this user" sessions so they're visible
+    and force-endable from the superadmin dashboard, not just discoverable
+    after the fact by reading raw audit log rows. created_at doubles as
+    started_at; ended_at is set by /end-impersonation or a forced end."""
+    __tablename__ = "impersonation_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
+    superadmin_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    target_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    token_jti: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class Account(Base, TimestampMixin):
     __tablename__ = "accounts"
     __table_args__ = (UniqueConstraint("company_id", "code", name="uq_account_company_code"),)

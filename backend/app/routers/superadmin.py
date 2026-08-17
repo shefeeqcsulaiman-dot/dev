@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.limiter import limiter
@@ -24,8 +25,8 @@ from app.models import (
     CreditControlRecord, CustomerAgingSnapshot, DailyGlBalance, Document,
     DomainEvent, Employee, EmployeeBranchAccess, EmployeeLocation, EmployeeLocationLog, EventOutbox,
     EventProcessingLog, ExceptionEvent, FixedAssetRecord, GeneralLedgerEntry,
-    InventoryBalanceSnapshot, InventoryValuationLayer, Invoice, InvoiceLine,
-    ItemUnit, ItemUnitConversion, Job, JournalEntry, JournalLine, LeaveRequest,
+    ImpersonationSession, InventoryBalanceSnapshot, InventoryValuationLayer, Invoice, InvoiceLine,
+    ItemUnit, ItemUnitConversion, Job, JobStatus, JournalEntry, JournalLine, LeaveRequest,
     MonthEndCloseRecord, Payment, PayrollItem, PayrollRun, PeriodLock, PostingJob,
     Receipt, Role, RolePermission, SourceTransaction, SourceTransactionLine,
     StockAdjustmentApproval, StockMovement, StockProductMapping, TaxCode, TaxLine,
@@ -39,6 +40,7 @@ from app.security import (
 )
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
+settings = get_settings()
 
 
 def _require_superadmin(current_user: User = Depends(get_current_user)) -> User:
@@ -103,27 +105,52 @@ def list_companies(db: Session = Depends(get_db), _: User = Depends(_require_sup
         .order_by(Company.created_at.desc())
         .all()
     )
+    company_ids = [c.id for c in companies]
+
+    # Previously 4 queries PER company (users, employee_count, branches,
+    # employees) — O(n) round trips that scaled with tenant count, same
+    # shape as the /invoices and dashboard() chattiness fixed earlier this
+    # pass (see docs/architecture.md §29). Batched into 4 queries total,
+    # grouped into per-company buckets in Python.
+    users_by_company: dict[str, list[User]] = {}
+    if company_ids:
+        for u in db.query(User).filter(User.company_id.in_(company_ids)).all():
+            users_by_company.setdefault(u.company_id, []).append(u)
+
+    active_employee_counts: dict[str, int] = {}
+    if company_ids:
+        for cid, cnt in (
+            db.query(Employee.company_id, func.count(Employee.id))
+            .filter(Employee.company_id.in_(company_ids), Employee.status == "active")
+            .group_by(Employee.company_id)
+            .all()
+        ):
+            active_employee_counts[cid] = cnt
+
+    branches_by_company: dict[str, list[Branch]] = {}
+    if company_ids:
+        for b in db.query(Branch).filter(Branch.company_id.in_(company_ids)).order_by(Branch.name).all():
+            branches_by_company.setdefault(b.company_id, []).append(b)
+
+    # Still capped to 200 per company (a roster can run into the
+    # hundreds/thousands; active_employee_counts above already conveys the
+    # true total past this cap) — capped in Python after one fetch rather
+    # than with a per-company LIMIT, since that would need a window
+    # function to stay correct across companies in a single query.
+    employees_by_company: dict[str, list[Employee]] = {}
+    if company_ids:
+        for e in db.query(Employee).filter(Employee.company_id.in_(company_ids)).order_by(Employee.employee_no).all():
+            bucket = employees_by_company.setdefault(e.company_id, [])
+            if len(bucket) < 200:
+                bucket.append(e)
+
     result = []
     for company in companies:
-        users = db.query(User).filter(User.company_id == company.id).all()
-        employee_count = (
-            db.query(func.count(Employee.id))
-            .filter(Employee.company_id == company.id, Employee.status == "active")
-            .scalar()
-            or 0
-        )
-        branches = db.query(Branch).filter(Branch.company_id == company.id).order_by(Branch.name).all()
+        users = users_by_company.get(company.id, [])
+        employee_count = active_employee_counts.get(company.id, 0)
+        branches = branches_by_company.get(company.id, [])
         branch_names = {b.id: b.name for b in branches}
-        # Capped — a company's employee roster can run into the hundreds/
-        # thousands, unlike users/branches which stay small; employee_count
-        # above already conveys the true total for anything past this cap.
-        employees = (
-            db.query(Employee)
-            .filter(Employee.company_id == company.id)
-            .order_by(Employee.employee_no)
-            .limit(200)
-            .all()
-        )
+        employees = employees_by_company.get(company.id, [])
         sub_users = [u for u in users if u.role not in ("admin", "superadmin")]
         try:
             mods = json.loads(company.modules_enabled) if company.modules_enabled else ALL_MODULES
@@ -200,12 +227,23 @@ def set_expiry(
     company_id: str,
     body: SetExpiryIn,
     db: Session = Depends(get_db),
-    _: User = Depends(_require_superadmin),
+    superadmin: User = Depends(_require_superadmin),
 ):
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     company.subscription_expires_at = body.expires_at
+    # This doubles as Suspend Now (frontend passes today's date) — a
+    # login-blocking action for every user in the company, previously the
+    # only mutating endpoint in this file with no audit trail at all.
+    today = datetime.now(timezone.utc).date().isoformat()
+    if not body.expires_at:
+        action, detail = "clear_expiry", "Subscription expiry removed (no limit)"
+    elif body.expires_at <= today:
+        action, detail = "suspend_company", f"Suspended (expiry set to {body.expires_at})"
+    else:
+        action, detail = "set_expiry", f"Expiry set to {body.expires_at}"
+    _write_audit_blob(db, company_id, superadmin.email, action, detail, "Done")
     db.commit()
     return {"ok": True}
 
@@ -313,7 +351,7 @@ def add_user(
     company_id: str,
     body: AddUserIn,
     db: Session = Depends(get_db),
-    _: User = Depends(_require_superadmin),
+    superadmin: User = Depends(_require_superadmin),
 ):
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
@@ -330,6 +368,9 @@ def add_user(
         role=role,
     )
     db.add(user)
+    # A superadmin can create an admin-role user in any tenant — previously
+    # the only user-creation path in this file with no audit trail.
+    _write_audit_blob(db, company_id, superadmin.email, "add_user", f"{email} ({role})", "Done")
     db.commit()
     return {"ok": True, "user_id": user.id}
 
@@ -783,22 +824,26 @@ def usage_analytics(
     days = max(1, min(days, 90))
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
-    q = db.query(AppDataRecord.company_id, AppDataRecord.collection, AppDataRecord.created_at).filter(
-        AppDataRecord.created_at >= since
-    )
+    # Previously pulled every matching AppDataRecord row (company_id,
+    # collection, created_at) into Python and aggregated it there — fine at
+    # today's volume, but a company with heavy activity over 90 days could
+    # mean hundreds of thousands of rows crossing the wire just to be
+    # counted. Replaced with GROUP BY queries: each returns at most a few
+    # hundred rows (one per day, per company, or per collection — all
+    # small, bounded result sets) regardless of how many records exist.
+    base_filter = [AppDataRecord.created_at >= since]
     if company_id:
-        q = q.filter(AppDataRecord.company_id == company_id)
-    rows = q.all()
+        base_filter.append(AppDataRecord.company_id == company_id)
 
-    daily_counts: dict[str, int] = {}
-    company_counts: dict[str, int] = {}
-    module_counts: dict[str, int] = {}
-    for company_id, collection, created_at in rows:
-        day = created_at.date().isoformat() if created_at else "unknown"
-        daily_counts[day] = daily_counts.get(day, 0) + 1
-        company_counts[company_id] = company_counts.get(company_id, 0) + 1
-        module = _COLLECTION_MODULE_MAP.get(collection, "other")
-        module_counts[module] = module_counts.get(module, 0) + 1
+    total_records = db.query(func.count(AppDataRecord.id)).filter(*base_filter).scalar() or 0
+
+    daily_rows = (
+        db.query(func.date(AppDataRecord.created_at), func.count(AppDataRecord.id))
+        .filter(*base_filter)
+        .group_by(func.date(AppDataRecord.created_at))
+        .all()
+    )
+    daily_counts = {str(d): c for d, c in daily_rows}
 
     dates = [(datetime.now(timezone.utc).date() - timedelta(days=i)).isoformat() for i in range(days - 1, -1, -1)]
     daily_trend = [{"date": d, "count": daily_counts.get(d, 0)} for d in dates]
@@ -812,13 +857,31 @@ def usage_analytics(
     new_users_by_day = {str(d): c for d, c in new_users_rows}
     new_users_trend = [{"date": d, "count": new_users_by_day.get(d, 0)} for d in dates]
 
-    company_ids = list(company_counts.keys())
-    companies_by_id = {c.id: c.name for c in db.query(Company).filter(Company.id.in_(company_ids)).all()} if company_ids else {}
-    top_companies = sorted(
-        ({"company_id": cid, "company_name": companies_by_id.get(cid, cid), "count": cnt} for cid, cnt in company_counts.items()),
-        key=lambda x: x["count"], reverse=True,
-    )[:10]
+    top_company_rows = (
+        db.query(AppDataRecord.company_id, func.count(AppDataRecord.id).label("cnt"))
+        .filter(*base_filter)
+        .group_by(AppDataRecord.company_id)
+        .order_by(func.count(AppDataRecord.id).desc())
+        .limit(10)
+        .all()
+    )
+    top_company_ids = [cid for cid, _ in top_company_rows]
+    companies_by_id = {c.id: c.name for c in db.query(Company).filter(Company.id.in_(top_company_ids)).all()} if top_company_ids else {}
+    top_companies = [
+        {"company_id": cid, "company_name": companies_by_id.get(cid, cid), "count": cnt}
+        for cid, cnt in top_company_rows
+    ]
 
+    collection_rows = (
+        db.query(AppDataRecord.collection, func.count(AppDataRecord.id))
+        .filter(*base_filter)
+        .group_by(AppDataRecord.collection)
+        .all()
+    )
+    module_counts: dict[str, int] = {}
+    for collection, cnt in collection_rows:
+        module = _COLLECTION_MODULE_MAP.get(collection, "other")
+        module_counts[module] = module_counts.get(module, 0) + cnt
     module_breakdown = sorted(
         ({"module": m, "count": c} for m, c in module_counts.items()),
         key=lambda x: x["count"], reverse=True,
@@ -826,7 +889,7 @@ def usage_analytics(
 
     return {
         "days": days,
-        "total_records": len(rows),
+        "total_records": total_records,
         "daily_trend": daily_trend,
         "new_users_trend": new_users_trend,
         "top_companies": top_companies,
@@ -915,6 +978,63 @@ def system_health(
     }
 
 
+# ── Background job / queue health ───────────────────────────────────────────
+# PostingJob is the accounting posting pipeline (queued -> processing ->
+# posted, or failed — see module_integration.py/accounting_posting.py); Job
+# is the generic async-task queue (currently just vat_summary — worker.py).
+# Neither had any platform-wide visibility before this — a company's own
+# Exception Center already surfaces ITS failed PostingJobs, but there was no
+# way for a superadmin to see whether the worker is falling behind overall.
+
+@router.get("/job-health")
+def job_health(
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    posting_counts = dict(
+        db.query(PostingJob.status, func.count(PostingJob.id)).group_by(PostingJob.status).all()
+    )
+    job_counts = dict(
+        db.query(Job.status, func.count(Job.id)).group_by(Job.status).all()
+    )
+
+    recent_failed = (
+        db.query(PostingJob)
+        .filter(PostingJob.status == "failed")
+        .order_by(PostingJob.updated_at.desc())
+        .limit(20)
+        .all()
+    )
+    company_ids = {j.company_id for j in recent_failed}
+    companies_by_id = {c.id: c.name for c in db.query(Company).filter(Company.id.in_(company_ids)).all()} if company_ids else {}
+
+    return {
+        "posting_jobs": {
+            "queued": posting_counts.get("queued", 0),
+            "processing": posting_counts.get("processing", 0),
+            "posted": posting_counts.get("posted", 0),
+            "failed": posting_counts.get("failed", 0),
+        },
+        "background_jobs": {
+            "queued": job_counts.get(JobStatus.queued.value, 0),
+            "running": job_counts.get(JobStatus.running.value, 0),
+            "completed": job_counts.get(JobStatus.completed.value, 0),
+            "failed": job_counts.get(JobStatus.failed.value, 0),
+        },
+        "recent_failed_postings": [
+            {
+                "id": j.id,
+                "company_id": j.company_id,
+                "company_name": companies_by_id.get(j.company_id, j.company_id),
+                "retry_count": j.retry_count,
+                "error_message": j.error_message,
+                "updated_at": j.updated_at.isoformat() if j.updated_at else None,
+            }
+            for j in recent_failed
+        ],
+    }
+
+
 # ── Impersonation ─────────────────────────────────────────────────────────────
 # Superadmin can act as a company's admin for support. Every session start/end
 # is written to the same AppDataRecord "audit" collection the Audit Log panel
@@ -938,33 +1058,62 @@ def _write_audit_blob(db: Session, company_id: str, user_label: str, action: str
     ))
 
 
+class ImpersonateIn(BaseModel):
+    # Optional — omitted keeps the original "oldest active admin" default so
+    # existing callers/behavior don't change.
+    user_id: str | None = None
+
+
 @router.post("/companies/{company_id}/impersonate")
 @limiter.limit("20/minute")
 def impersonate_company(
     request: Request,
     company_id: str,
+    body: ImpersonateIn = ImpersonateIn(),
     db: Session = Depends(get_db),
     superadmin: User = Depends(_require_superadmin),
 ):
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
-    target = (
-        db.query(User)
-        .filter(User.company_id == company_id, User.role == "admin", User.is_active == True)  # noqa: E712
-        .order_by(User.created_at.asc())
-        .first()
-    )
-    if not target:
-        raise HTTPException(status_code=400, detail="This company has no active admin user to impersonate")
+
+    if body.user_id:
+        # Previously always the company's oldest active admin — no way to
+        # target a specific user for support/debugging a non-admin's view.
+        target = (
+            db.query(User)
+            .filter(User.id == body.user_id, User.company_id == company_id, User.is_active == True)  # noqa: E712
+            .first()
+        )
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found in this company, or inactive")
+    else:
+        target = (
+            db.query(User)
+            .filter(User.company_id == company_id, User.role == "admin", User.is_active == True)  # noqa: E712
+            .order_by(User.created_at.asc())
+            .first()
+        )
+        if not target:
+            raise HTTPException(status_code=400, detail="This company has no active admin user to impersonate")
 
     _write_audit_blob(
         db, company_id, f"Super Admin ({superadmin.email})",
         "Impersonation started", f"as {target.full_name} ({target.email})", "Started",
     )
-    db.commit()
 
     token = create_access_token(target.id, impersonated_by=superadmin.id)
+    revocation = impersonation_revocation_info(token)
+    if revocation:
+        jti, _ttl = revocation
+        db.add(ImpersonationSession(
+            superadmin_id=superadmin.id,
+            target_user_id=target.id,
+            company_id=company_id,
+            token_jti=jti,
+        ))
+    db.commit()
+
     return {
         "ok": True,
         "access_token": token,
@@ -992,12 +1141,76 @@ def end_impersonation(
         import app.cache as cache
         jti, ttl_seconds = revocation
         cache.set(f"revoked_imp:{jti}", True, ttl=ttl_seconds)
+        session_row = db.query(ImpersonationSession).filter(ImpersonationSession.token_jti == jti).first()
+        if session_row and not session_row.ended_at:
+            session_row.ended_at = datetime.now(timezone.utc)
     superadmin = db.query(User).filter(User.id == impersonator_id).first()
     _write_audit_blob(
         db, current_user.company_id, f"Super Admin ({superadmin.email if superadmin else impersonator_id})",
         "Impersonation ended", f"was viewing as {current_user.full_name} ({current_user.email})", "Ended",
     )
     db.commit()
+    return {"ok": True}
+
+
+@router.get("/impersonation-sessions")
+def list_impersonation_sessions(
+    active_only: bool = True,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    q = db.query(ImpersonationSession).order_by(ImpersonationSession.created_at.desc())
+    if active_only:
+        q = q.filter(ImpersonationSession.ended_at.is_(None))
+    rows = q.limit(100).all()
+
+    user_ids = {r.superadmin_id for r in rows} | {r.target_user_id for r in rows}
+    users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    company_ids = {r.company_id for r in rows}
+    companies_by_id = {c.id: c.name for c in db.query(Company).filter(Company.id.in_(company_ids)).all()} if company_ids else {}
+
+    now = datetime.now(timezone.utc)
+    result = []
+    for r in rows:
+        superadmin_u = users_by_id.get(r.superadmin_id)
+        target_u = users_by_id.get(r.target_user_id)
+        # Sessions naturally expire with the token (access_token_expire_minutes)
+        # even if "End Impersonation" was never clicked — surfaced so a stale
+        # row doesn't read as "still active" forever.
+        started_at = r.created_at if r.created_at.tzinfo else r.created_at.replace(tzinfo=timezone.utc)
+        expires_at = started_at + timedelta(minutes=settings.access_token_expire_minutes)
+        result.append({
+            "id": r.id,
+            "superadmin_email": superadmin_u.email if superadmin_u else r.superadmin_id,
+            "target_user_email": target_u.email if target_u else r.target_user_id,
+            "target_user_name": target_u.full_name if target_u else None,
+            "company_id": r.company_id,
+            "company_name": companies_by_id.get(r.company_id, r.company_id),
+            "started_at": r.created_at.isoformat() if r.created_at else None,
+            "ended_at": r.ended_at.isoformat() if r.ended_at else None,
+            "naturally_expired": r.ended_at is None and expires_at <= now,
+        })
+    return result
+
+
+@router.post("/impersonation-sessions/{session_id}/force-end")
+def force_end_impersonation_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    superadmin: User = Depends(_require_superadmin),
+):
+    row = db.query(ImpersonationSession).filter(ImpersonationSession.id == session_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not row.ended_at:
+        import app.cache as cache
+        cache.set(f"revoked_imp:{row.token_jti}", True, ttl=settings.access_token_expire_minutes * 60)
+        row.ended_at = datetime.now(timezone.utc)
+        _write_audit_blob(
+            db, row.company_id, f"Super Admin ({superadmin.email})",
+            "Impersonation force-ended", f"session {session_id}", "Ended",
+        )
+        db.commit()
     return {"ok": True}
 
 
@@ -1031,6 +1244,32 @@ def update_trial_status(request_id: str, body: TrialStatusIn, db: Session = Depe
     if not row:
         raise HTTPException(404, "Not found")
     row.status = body.status
+    db.commit()
+    return {"ok": True}
+
+
+# ── Self-service account ────────────────────────────────────────────────────
+# Deliberately scoped to "change my own password" only — managing OTHER
+# superadmin accounts (who can create/remove one) is a bigger access-control
+# decision than a dashboard-polish pass should make unprompted.
+
+class ChangeMyPasswordIn(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=6)
+
+
+@router.post("/change-my-password")
+@limiter.limit("10/hour")
+def change_my_password(
+    request: Request,
+    body: ChangeMyPasswordIn,
+    db: Session = Depends(get_db),
+    superadmin: User = Depends(_require_superadmin),
+):
+    if not superadmin.password_hash or not verify_password(body.current_password, superadmin.password_hash):
+        raise HTTPException(status_code=403, detail="Current password is incorrect")
+    superadmin.password_hash = hash_password(body.new_password)
+    _write_audit_blob(db, superadmin.company_id, superadmin.email, "change_own_password", superadmin.email, "Done")
     db.commit()
     return {"ok": True}
 

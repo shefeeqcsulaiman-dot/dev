@@ -120,6 +120,7 @@
   </div>
   <div class="topbar-right">
     <span class="topbar-user" id="sa-user-email"></span>
+    <button class="btn btn-g btn-sm" onclick="openModal('m-change-pwd')">Change Password</button>
     <button class="btn-logout" onclick="saLogout()">Sign Out</button>
   </div>
 </div>
@@ -277,6 +278,23 @@
   <div class="card" style="margin-top:20px">
     <div class="card-hd"><div class="card-title">Live Load</div></div>
     <div id="sa-health-load-wrap"><div class="loading-state">Loading…</div></div>
+  </div>
+  <div class="card" style="margin-top:20px">
+    <div class="card-hd">
+      <div>
+        <div class="card-title">Background Jobs</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">Accounting posting queue and async task queue, platform-wide</div>
+      </div>
+      <button class="btn btn-g btn-sm" onclick="loadJobHealth()">Refresh</button>
+    </div>
+    <div id="sa-health-jobs-wrap"><div class="loading-state">Loading…</div></div>
+  </div>
+  <div class="card" style="margin-top:20px">
+    <div class="card-hd">
+      <div class="card-title">Active Impersonation Sessions</div>
+      <button class="btn btn-g btn-sm" onclick="loadImpersonationSessions()">Refresh</button>
+    </div>
+    <div id="sa-imp-sessions-wrap"><div class="loading-state">Loading…</div></div>
   </div>
   <div class="card" style="margin-top:20px">
     <div class="card-hd"><div class="card-title">Error Rate Trend</div></div>
@@ -526,6 +544,21 @@
   </div>
 </div>
 
+<!-- Change My Password Modal -->
+<div class="overlay" id="m-change-pwd" onclick="if(event.target===this)closeModal('m-change-pwd')">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-title">Change Password</div>
+    <div class="modal-sub">Update your own super admin login password</div>
+    <div id="change-pwd-err" class="err-msg"></div>
+    <div class="fg"><label class="fl">Current Password</label><input class="fi" id="change-pwd-current" type="password" autocomplete="current-password"></div>
+    <div class="fg"><label class="fl">New Password</label><input class="fi" id="change-pwd-new" type="password" autocomplete="new-password" placeholder="At least 6 characters"></div>
+    <div class="modal-foot">
+      <button class="btn btn-g" onclick="closeModal('m-change-pwd')">Cancel</button>
+      <button class="btn btn-p" id="change-pwd-btn" onclick="doChangeMyPassword()">Save New Password</button>
+    </div>
+  </div>
+</div>
+
 <!-- Module Permissions Modal -->
 <div class="overlay" id="m-modules" onclick="if(event.target===this)closeModal('m-modules')">
   <div class="modal" style="max-width:580px">
@@ -580,7 +613,7 @@
   // ── Sidebar page switcher ──────────────────────────────────────
   const SA_PAGE_LOADERS={
     analytics: ()=>loadUsageAnalytics(),
-    health: ()=>{loadSystemHealth();startLiveLoadPolling();},
+    health: ()=>{loadSystemHealth();loadJobHealth();loadImpersonationSessions();startLiveLoadPolling();},
   };
   function saGo(page, el){
     document.querySelectorAll('.page-section').forEach(p=>p.classList.remove('on'));
@@ -670,6 +703,8 @@
         title: expiringList.length+' '+(expiringList.length===1?'company expires':'companies expire')+' within 7 days',
         body: expiringList.map(c=>`<strong>${escHtml(c.name)}</strong> — ${c.subscription_expires_at}`).join('<br>'),
         action:'Extend their subscriptions before they lose access.',
+        buttonLabel: 'Extend all by 30 days',
+        buttonFn: 'bulkExtendExpiring',
       });
     }
 
@@ -730,6 +765,7 @@
           <div style="font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:3px">${ins.title}</div>
           <div style="font-size:12.5px;color:var(--muted);line-height:1.5">${ins.body}</div>
           ${ins.action?`<div style="font-size:11.5px;color:${textc[ins.type]};margin-top:5px;font-weight:500">→ ${ins.action}</div>`:''}
+          ${ins.buttonFn?`<button class="btn btn-g btn-sm" style="margin-top:8px" onclick="${ins.buttonFn}()">${escHtml(ins.buttonLabel)}</button>`:''}
         </div>
       </div>
     `).join('');
@@ -765,6 +801,7 @@
           </div>
           <div style="display:flex;gap:5px;flex-shrink:0">
             <button class="btn btn-g btn-sm" onclick="openEditUser('${escHtml(c.id)}','${escHtml(u.id)}','${escHtml(u.full_name)}','${escHtml(u.email)}','${escHtml(u.role)}')">Edit</button>
+            ${active?`<button class="btn btn-g btn-sm" style="color:#a78bfa" onclick="impersonateAsUser('${escHtml(c.id)}','${escHtml(u.id)}','${escHtml(u.full_name)}','${escHtml(u.email)}')" title="Log in as this specific user">Impersonate</button>`:''}
             <button class="btn ${toggleCls} btn-sm" onclick="toggleUserStatus('${escHtml(c.id)}','${escHtml(u.id)}','${escHtml(u.email)}',${active})">${toggleLabel}</button>
             <button class="btn btn-r btn-sm" onclick="deleteUser('${escHtml(c.id)}','${escHtml(u.id)}','${escHtml(u.email)}')">Remove</button>
           </div>
@@ -1144,13 +1181,54 @@
   // ── Impersonate ───────────────────────────────────────────────
   async function impersonateCompany(companyId, companyName){
     if(!confirm(`Log in as ${companyName}'s admin? This is recorded in the Audit Log and visible via a banner while active.`)) return;
+    await doImpersonate(companyId, null);
+  }
+
+  async function impersonateAsUser(companyId, userId, userName, userEmail){
+    if(!confirm(`Log in as ${userName||userEmail} (${userEmail})? This is recorded in the Audit Log and visible via a banner while active.`)) return;
+    await doImpersonate(companyId, userId);
+  }
+
+  async function doImpersonate(companyId, userId){
     try{
-      const res=await apiFetch(`/superadmin/companies/${companyId}/impersonate`,{method:'POST'});
+      const res=await apiFetch(`/superadmin/companies/${companyId}/impersonate`,{method:'POST',body:JSON.stringify(userId?{user_id:userId}:{})});
       const data=await res.json();
       if(!res.ok){ alert(data.detail||'Impersonation failed.'); return; }
       localStorage.setItem('taxflow_superadmin_token', localStorage.getItem('taxflow_token'));
       localStorage.setItem('taxflow_token', data.access_token);
       window.location.replace('/');
+    }catch(err){ alert(err.message); }
+  }
+
+  // ── Active impersonation sessions ───────────────────────────────
+  async function loadImpersonationSessions(){
+    const wrap=document.getElementById('sa-imp-sessions-wrap');
+    if(!wrap) return;
+    try{
+      const res=await apiFetch('/superadmin/impersonation-sessions?active_only=true');
+      const rows=await res.json();
+      if(!rows.length){ wrap.innerHTML='<div class="loading-state" style="padding:16px">No active impersonation sessions.</div>'; return; }
+      wrap.innerHTML=`<div style="overflow-x:auto"><table class="tbl">
+        <thead><tr><th>Super Admin</th><th>Viewing As</th><th>Company</th><th>Started</th><th></th></tr></thead>
+        <tbody>${rows.map(r=>`<tr>
+          <td class="mono" style="font-size:12px">${escHtml(r.superadmin_email)}</td>
+          <td><div style="font-size:12.5px">${escHtml(r.target_user_name||'—')}</div><div class="mono" style="font-size:11px;color:#8896b3">${escHtml(r.target_user_email)}</div></td>
+          <td style="font-size:12.5px">${escHtml(r.company_name)}</td>
+          <td style="font-size:11.5px;color:#8896b3">${r.started_at?new Date(r.started_at).toLocaleString():'—'}${r.naturally_expired?' <span class="b b-a" style="font-size:10px">expired</span>':''}</td>
+          <td><button class="btn btn-r btn-sm" onclick="forceEndImpersonation('${escHtml(r.id)}')">Force End</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div>`;
+    }catch(err){
+      wrap.innerHTML='<div class="loading-state" style="color:var(--red)">Failed to load: '+escHtml(err.message)+'</div>';
+    }
+  }
+
+  async function forceEndImpersonation(sessionId){
+    if(!confirm('Force-end this impersonation session? The superadmin\'s active token for it will stop working immediately.')) return;
+    try{
+      const res=await apiFetch(`/superadmin/impersonation-sessions/${sessionId}/force-end`,{method:'POST'});
+      if(!res.ok){ const d=await res.json(); alert(d.detail||'Failed.'); return; }
+      loadImpersonationSessions();
     }catch(err){ alert(err.message); }
   }
 
@@ -1549,6 +1627,79 @@
   }
   function stopLiveLoadPolling(){
     if(_saHealthLoadTimer){clearInterval(_saHealthLoadTimer);_saHealthLoadTimer=null;}
+  }
+
+  async function loadJobHealth(){
+    const wrap=document.getElementById('sa-health-jobs-wrap');
+    wrap.innerHTML='<div class="loading-state"><span class="spinner"></span> Loading…</div>';
+    try{
+      const res=await apiFetch('/superadmin/job-health');
+      const data=await res.json();
+      const pj=data.posting_jobs, bj=data.background_jobs;
+      const failedRows=(data.recent_failed_postings||[]).map(j=>`<tr>
+        <td style="font-size:12.5px">${escHtml(j.company_name)}</td>
+        <td style="font-size:12px;color:var(--muted)">${escHtml(j.error_message||'—')}</td>
+        <td class="mono" style="font-size:11.5px">${j.retry_count}</td>
+        <td style="font-size:11.5px;color:#8896b3">${j.updated_at?new Date(j.updated_at).toLocaleString():'—'}</td>
+      </tr>`).join('');
+      wrap.innerHTML=`
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px">
+          <div class="stat-card"><div class="stat-label">Posting: Queued</div><div class="stat-val" style="font-size:18px">${pj.queued}</div></div>
+          <div class="stat-card"><div class="stat-label">Posting: Processing</div><div class="stat-val" style="font-size:18px">${pj.processing}</div></div>
+          <div class="stat-card"><div class="stat-label">Posting: Posted</div><div class="stat-val" style="font-size:18px;color:#3ecf8e">${pj.posted}</div></div>
+          <div class="stat-card" style="border-color:${pj.failed?'rgba(240,107,107,.35)':'rgba(99,130,200,.14)'}"><div class="stat-label">Posting: Failed</div><div class="stat-val" style="font-size:18px;color:${pj.failed?'var(--red)':'inherit'}">${pj.failed}</div></div>
+          <div class="stat-card"><div class="stat-label">Task Queue: Queued/Running</div><div class="stat-val" style="font-size:18px">${bj.queued+bj.running}</div></div>
+          <div class="stat-card" style="border-color:${bj.failed?'rgba(240,107,107,.35)':'rgba(99,130,200,.14)'}"><div class="stat-label">Task Queue: Failed</div><div class="stat-val" style="font-size:18px;color:${bj.failed?'var(--red)':'inherit'}">${bj.failed}</div></div>
+        </div>
+        ${failedRows?`<div style="margin-top:16px;overflow-x:auto"><table class="tbl">
+          <thead><tr><th>Company</th><th>Error</th><th>Retries</th><th>Last Updated</th></tr></thead>
+          <tbody>${failedRows}</tbody>
+        </table></div>`:''}`;
+    }catch(err){
+      wrap.innerHTML='<div class="loading-state" style="color:var(--red)">Failed to load: '+escHtml(err.message)+'</div>';
+    }
+  }
+
+  // ── Change my own password ──────────────────────────────────────
+  async function doChangeMyPassword(){
+    const btn=document.getElementById('change-pwd-btn');
+    const errEl=document.getElementById('change-pwd-err');
+    errEl.style.display='none';
+    const current=document.getElementById('change-pwd-current').value;
+    const next=document.getElementById('change-pwd-new').value;
+    if(!current||!next){ errEl.textContent='Both fields are required.'; errEl.style.display='block'; return; }
+    if(next.length<6){ errEl.textContent='New password must be at least 6 characters.'; errEl.style.display='block'; return; }
+    btn.disabled=true; btn.textContent='Saving…';
+    try{
+      const res=await apiFetch('/superadmin/change-my-password',{method:'POST',body:JSON.stringify({current_password:current,new_password:next})});
+      const data=await res.json();
+      if(!res.ok){ errEl.textContent=data.detail||'Failed to change password.'; errEl.style.display='block'; return; }
+      document.getElementById('change-pwd-current').value='';
+      document.getElementById('change-pwd-new').value='';
+      closeModal('m-change-pwd');
+      alert('Password updated.');
+    }catch(err){ errEl.textContent=err.message; errEl.style.display='block'; }
+    finally{ btn.disabled=false; btn.textContent='Save New Password'; }
+  }
+
+  // ── Bulk-extend companies expiring within 7 days ────────────────
+  async function bulkExtendExpiring(){
+    const now=new Date(); const in7=new Date(); in7.setDate(now.getDate()+7);
+    const targets=companies.filter(c=>{
+      const exp=c.subscription_expires_at?new Date(c.subscription_expires_at):null;
+      return exp && exp>now && exp<=in7;
+    });
+    if(!targets.length){ alert('Nothing to extend — refresh the Overview to recheck.'); return; }
+    if(!confirm(`Extend ${targets.length} ${targets.length===1?'company':'companies'} by 30 days each?`)) return;
+    const results=await Promise.allSettled(targets.map(c=>{
+      const base=new Date(c.subscription_expires_at);
+      base.setDate(base.getDate()+30);
+      const newExpiry=base.toISOString().slice(0,10);
+      return apiFetch(`/superadmin/companies/${c.id}/set-expiry`,{method:'POST',body:JSON.stringify({expires_at:newExpiry})});
+    }));
+    const failed=results.filter(r=>r.status==='rejected'||(r.value&&!r.value.ok)).length;
+    alert(failed ? `Extended ${targets.length-failed} of ${targets.length} — ${failed} failed.` : `Extended ${targets.length} companies by 30 days.`);
+    loadDashboard();
   }
 
   // ── Quick-extend subscription ─────────────────────────────────
