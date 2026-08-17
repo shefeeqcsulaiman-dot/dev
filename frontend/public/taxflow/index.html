@@ -1485,6 +1485,15 @@
         </div>
       </div>
       <div class="fg"><label class="fl">Additional Notes</label><textarea class="fi" id="mp-notes" rows="4"></textarea></div>
+      <div class="fg">
+        <label class="fl">Attach Supporting Document (optional)</label>
+        <input type="file" id="mp-attachment" accept=".pdf,.jpg,.jpeg,.png,.bmp,.webp,.tif,.tiff" style="display:none" onchange="handleManualPurchaseAttachment(this)">
+        <div class="flx" style="gap:8px;align-items:center">
+          <button type="button" class="btn btn-g btn-sm" onclick="document.getElementById('mp-attachment').click()">Choose File</button>
+          <span id="mp-attachment-name" style="font-size:12px;color:var(--text3)">No file attached — receipt/bill image or PDF, for bookkeeping reference</span>
+          <button type="button" class="btn btn-g btn-sm" id="mp-attachment-clear" style="display:none" onclick="clearManualPurchaseAttachment()">Remove</button>
+        </div>
+      </div>
     </div>
 
     <div class="card mb16">

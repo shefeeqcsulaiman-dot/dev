@@ -11776,7 +11776,33 @@ function purchaseAiRowHtml(inv,line,index,validation,filename){
     </div>`;
 }
 
-function purchaseRecordFromExtractedInvoice(inv){
+// Lazily-fetched, cached for the lifetime of one "Save All" run — a page
+// reload between extracting and saving empties uploadedFiles (nothing
+// re-hydrates it from the server on load), so the rescue below used to
+// silently save the purchase record with NO source_image at all whenever
+// that happened. Falls back to the server's own copy (already persisted by
+// persistPurchaseDocumentRecord() at upload time) instead of giving up.
+let _purchaseDocumentsServerCache=null;
+
+async function _fetchPurchaseDocumentFromServer(entryId){
+  if(!entryId)return null;
+  if(!_purchaseDocumentsServerCache){
+    _purchaseDocumentsServerCache=new Map();
+    try{
+      const res=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/purchaseDocuments?limit=500`);
+      if(res.ok){
+        const data=await res.json();
+        const rows=Array.isArray(data)?data:(data.records||[]);
+        rows.forEach(r=>{if(r&&r.id)_purchaseDocumentsServerCache.set(String(r.id),r);});
+      }
+    }catch(err){
+      console.warn('Could not fetch purchaseDocuments from server for source-image fallback:',err);
+    }
+  }
+  return _purchaseDocumentsServerCache.get(String(entryId))||null;
+}
+
+async function purchaseRecordFromExtractedInvoice(inv){
   const netAmount=purchaseAiNumber(inv.net_amount||inv.subtotal);
   const taxAmount=purchaseAiNumber(inv.tax_amount||inv.vat_amount);
   const shippingAmount=purchaseAiNumber(inv.shipping);
@@ -11786,8 +11812,13 @@ function purchaseRecordFromExtractedInvoice(inv){
   const total=purchaseAiNumber(inv.total)||(netAmount+taxAmount+shippingAmount)||lineSubtotal;
   const itemQuantity=purchaseLinesTotalQuantity(lines)||lines.length||1;
   const paid=purchaseAiNumber(inv.paid);
-  // Attach source image from the uploaded file entry
-  const sourceFile=inv._source_entry_id?uploadedFiles.find(f=>f.id===inv._source_entry_id):null;
+  // Attach source image from the uploaded file entry — falling back to the
+  // server's persisted copy if this browser session no longer has it in
+  // memory (see _fetchPurchaseDocumentFromServer above).
+  let sourceFile=inv._source_entry_id?uploadedFiles.find(f=>f.id===inv._source_entry_id):null;
+  if(!sourceFile?.base64&&inv._source_entry_id){
+    sourceFile=await _fetchPurchaseDocumentFromServer(inv._source_entry_id);
+  }
   const source_image=sourceFile?.base64||inv.source_image||'';
   const source_filename=sourceFile?.name||inv._source_filename||inv.source_filename||'';
   return {
@@ -11962,7 +11993,7 @@ async function storeExtractedPurchaseRecords(){
       reviewSaved++;
       markPurchaseAiInvoiceRows(inv.invoice_no,'Review',validation.issues.join('; ')||'Saved with review notes');
     }
-    const record=purchaseRecordFromExtractedInvoice(inv);
+    const record=await purchaseRecordFromExtractedInvoice(inv);
     const refKey=invoiceKey(record.ref||record.invoice_no);
     const existingRecord=findPurchaseRecordByRef(record.ref||record.invoice_no);
     const merged=existingRecord?mergePurchaseRecords(existingRecord,record):{record,mergedSameProduct:0,addedProducts:Array.isArray(record.lines)?record.lines.length:0};
@@ -13840,8 +13871,44 @@ function resetManualPurchase(){
   setText('mp-form-title','Add Purchase');
   setText('mp-form-sub','Manual supplier purchase entry with items, discounts, tax, shipping, and payment');
   setText('mp-save-btn','Save');
+  clearManualPurchaseAttachment();
   setManualPurchaseDefaults();
   configureManualPurchaseMode();
+}
+
+// -- Manual purchase supporting-document attachment -----------------
+// AI-extracted-and-saved purchases already keep their source image
+// (purchaseRecordFromExtractedInvoice -> source_image/source_filename,
+// shown later via the "View Invoice" button in Purchase Records /
+// openPurchaseInvoiceImage). Manually-entered purchases had no equivalent
+// way to attach a scanned receipt/bill for bookkeeping reference at all —
+// this reuses the exact same source_image/source_filename fields so the
+// existing viewer picks it up with no changes needed there.
+let _manualPurchaseAttachment=null; // {base64, name} | null
+
+function handleManualPurchaseAttachment(input){
+  const file=input.files&&input.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    _manualPurchaseAttachment={base64:e.target.result,name:file.name};
+    const nameEl=document.getElementById('mp-attachment-name');
+    if(nameEl)nameEl.textContent=file.name;
+    const clearBtn=document.getElementById('mp-attachment-clear');
+    if(clearBtn)clearBtn.style.display='';
+  };
+  reader.onerror=()=>toast('Could not read '+file.name,'err');
+  reader.readAsDataURL(file);
+}
+
+function clearManualPurchaseAttachment(){
+  _manualPurchaseAttachment=null;
+  const input=document.getElementById('mp-attachment');
+  if(input)input.value='';
+  const nameEl=document.getElementById('mp-attachment-name');
+  if(nameEl)nameEl.textContent='No file attached — receipt/bill image or PDF, for bookkeeping reference';
+  const clearBtn=document.getElementById('mp-attachment-clear');
+  if(clearBtn)clearBtn.style.display='none';
 }
 
 function startPurchaseTransaction(type='purchase'){
@@ -13933,7 +14000,13 @@ async function saveManualPurchase(){
     shipping_details:document.getElementById('mp-shipping-details')?.value||'',
     notes:document.getElementById('mp-notes')?.value||'',
     source:isReturn?'Purchase Return':isLPO?'Local PO':isFPO?'Foreign PO':'Manual',
-    document_type:isReturn?'Purchase Return':isLPO?'Local Purchase Order':isFPO?'Foreign Purchase Order':'Purchase Invoice'
+    document_type:isReturn?'Purchase Return':isLPO?'Local Purchase Order':isFPO?'Foreign Purchase Order':'Purchase Invoice',
+    // Same fields the AI-extraction save path uses (purchaseRecordFromExtractedInvoice)
+    // — buildPurchaseRecordRow/openPurchaseInvoiceImage already show a "View
+    // Invoice" button for any purchase record with source_image set, AI-origin
+    // or not.
+    source_image:_manualPurchaseAttachment?.base64||'',
+    source_filename:_manualPurchaseAttachment?.name||''
   };
   if(isPeriodLocked(record.date)){toast(`Period ${(record.date||'').slice(0,7)} is locked — unlock before saving`,'warn');return;}
   const wasEditing=Boolean(manualPurchaseEditingRef);
@@ -13953,6 +14026,10 @@ async function saveManualPurchase(){
       stockLevelsServerRefreshPaused=false;
       loadStockLevelsFromServer();
       toast(wasEditing?'Purchase updated in database':isReturn?'Purchase return saved to database':isLPO?'LPO saved to database':isFPO?'FPO saved to database':upsert.wasMerged?`Purchase merged: ${upsert.mergedSameProduct} same product updated, ${upsert.addedProducts} new product line(s)`:'Purchase saved to database','ok');
+      // Prevent the same attachment silently re-applying to the next
+      // purchase saved in this same form session (the rest of the form's
+      // fields already carry over as-is — existing behavior, unchanged).
+      clearManualPurchaseAttachment();
     })
     .catch(()=>{
       stockLevelsServerRefreshPaused=false;
