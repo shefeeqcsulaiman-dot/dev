@@ -872,6 +872,27 @@ def system_health(
     total_users = db.query(func.count(User.id)).scalar() or 0
     total_records = db.query(func.count(AppDataRecord.id)).scalar() or 0
 
+    from app.request_metrics import snapshot as _load_snapshot
+    load = _load_snapshot()
+
+    # QueuePool exposes size()/checkedout(); other pool classes (e.g. local
+    # SQLite's) may not — this is a monitoring nicety, never worth a 500 if
+    # the pool type doesn't support it. max_overflow read off the pool
+    # itself (private attr, no public accessor exists) rather than
+    # settings.db_max_overflow — database.py only passes that setting on
+    # the Postgres branch, so for local SQLite it'd silently report a
+    # ceiling the engine was never actually configured with.
+    pool = db.get_bind().pool
+    db_pool = None
+    try:
+        max_overflow = getattr(pool, "_max_overflow", 0)
+        db_pool = {
+            "checked_out": pool.checkedout(),
+            "capacity": pool.size() + max_overflow,
+        }
+    except Exception:
+        pass
+
     return {
         "db_ok": db_ok,
         "db_latency_ms": db_latency_ms,
@@ -882,6 +903,15 @@ def system_health(
             "users": total_users,
             "records": total_records,
         },
+        "load": {
+            "in_flight_requests": load["in_flight"],
+            "requests_this_minute": load["requests_this_minute"],
+            # False means these numbers are this one worker process only,
+            # not the whole cluster — Redis isn't confirmed active in
+            # production as of the 2026-08-14 scaling pass (docs/architecture.md §29.3).
+            "cluster_wide": load["cluster_wide"],
+        },
+        "db_pool": db_pool,
     }
 
 

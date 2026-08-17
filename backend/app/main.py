@@ -138,6 +138,21 @@ def create_app() -> FastAPI:
         return response
 
     @app.middleware("http")
+    async def request_load_tracking(request: Request, call_next):
+        # Feeds the superadmin "Live Load" panel (system-health) — scoped to
+        # /api/v1/ only so static asset traffic doesn't dilute the signal of
+        # how many actual app requests are in flight right now.
+        from app.request_metrics import request_finished, request_started
+        is_api = "/api/v1/" in request.url.path
+        if is_api:
+            request_started()
+        try:
+            return await call_next(request)
+        finally:
+            if is_api:
+                request_finished()
+
+    @app.middleware("http")
     async def static_cache_headers(request: Request, call_next):
         response = await call_next(request)
         if request.method == "GET" and response.status_code == 200 and "cache-control" not in response.headers:

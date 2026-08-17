@@ -95,6 +95,63 @@ def get_with_staleness(key: str, fresh_seconds: int) -> tuple[Any | None, bool]:
         return None, False
 
 
+def available() -> bool:
+    """True if Redis is actually connected — callers use this to distinguish
+    "0 requests right now" from "no cluster-wide data, Redis is down"."""
+    return _redis() is not None
+
+
+def incr_gauge(key: str) -> None:
+    """Increment a live counter with no expiry (e.g. in-flight request count) —
+    paired incr_gauge()/decr_gauge() calls around a unit of work. No-ops
+    without Redis; see request_metrics.py for the in-memory fallback."""
+    r = _redis()
+    if r is None:
+        return
+    try:
+        r.incr(f"tf:{key}")
+    except Exception:
+        pass
+
+
+def decr_gauge(key: str) -> None:
+    r = _redis()
+    if r is None:
+        return
+    try:
+        r.decr(f"tf:{key}")
+    except Exception:
+        pass
+
+
+def get_gauge(key: str) -> int | None:
+    """None means Redis is unavailable (caller should fall back), not that
+    the count is unknown/zero — an untouched gauge reads back as 0."""
+    r = _redis()
+    if r is None:
+        return None
+    try:
+        raw = r.get(f"tf:{key}")
+        return int(raw) if raw is not None else 0
+    except Exception:
+        return None
+
+
+def incr_window(key: str, ttl: int) -> None:
+    """Increment a counter that expires after `ttl` seconds — used for
+    fixed-window rate counters (e.g. "requests this minute")."""
+    r = _redis()
+    if r is None:
+        return
+    try:
+        pipe = r.pipeline()
+        pipe.incr(f"tf:{key}")
+        pipe.expire(f"tf:{key}", ttl)
+        pipe.execute()
+    except Exception:
+        pass
+
+
 def delete(key: str) -> None:
     r = _redis()
     if r is None:
