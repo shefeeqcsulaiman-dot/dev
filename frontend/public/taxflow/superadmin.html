@@ -513,6 +513,11 @@
     </div>
     <div id="create-err" class="err-msg"></div>
     <div class="fg"><label class="fl">Company Name</label><input class="fi" id="c-name" placeholder="Acme LLC"></div>
+    <div class="fg">
+      <label class="fl">Country</label>
+      <select class="fi" id="c-country" onchange="onCreateCompanyCountryChange()"></select>
+      <div id="c-country-hint" style="font-size:11px;color:var(--muted);margin-top:5px"></div>
+    </div>
     <div class="fr2">
       <div class="fg"><label class="fl">TRN (optional)</label><input class="fi mono" id="c-trn" placeholder="100000000000003"></div>
       <div class="fg"><label class="fl">Subscription Expiry</label><input class="fi" id="c-expiry" type="date"></div>
@@ -547,6 +552,7 @@
     <input type="hidden" id="edit-co-admin-user-id">
     <input type="hidden" id="edit-co-admin-role">
     <div class="fg"><label class="fl">Company Name</label><input class="fi" id="edit-co-name" placeholder="Acme LLC"></div>
+    <div class="fg"><label class="fl">Country</label><select class="fi" id="edit-co-country"></select></div>
     <div class="fr2">
       <div class="fg"><label class="fl">TRN (optional)</label><input class="fi mono" id="edit-co-trn" placeholder="100000000000003"></div>
       <div class="fg"><label class="fl">Subscription Expiry</label><input class="fi" id="edit-co-expiry" type="date"></div>
@@ -1114,10 +1120,40 @@
   }
 
   // ── Create company ────────────────────────────────────────────
+  // GCC + UK — the markets this deployment actually serves. Each entry's
+  // currency/vat_rate become the new company's defaults (still editable
+  // later in its own Settings) so a non-UAE company doesn't silently start
+  // out on AED/5% VAT, which was the only option before this list existed.
+  const SA_CREATE_COUNTRIES=[
+    {name:'United Arab Emirates',currency:'AED',vat:5},
+    {name:'Saudi Arabia',currency:'SAR',vat:15},
+    {name:'Bahrain',currency:'BHD',vat:10},
+    {name:'Kuwait',currency:'KWD',vat:0},
+    {name:'Oman',currency:'OMR',vat:5},
+    {name:'Qatar',currency:'QAR',vat:0},
+    {name:'United Kingdom',currency:'GBP',vat:20},
+  ];
+
+  function populateCreateCountrySelect(selectedName){
+    const sel=document.getElementById('c-country');
+    if(!sel)return;
+    sel.innerHTML=SA_CREATE_COUNTRIES.map(c=>`<option value="${escHtml(c.name)}"${c.name===selectedName?' selected':''}>${escHtml(c.name)}</option>`).join('');
+    onCreateCompanyCountryChange();
+  }
+
+  function onCreateCompanyCountryChange(){
+    const sel=document.getElementById('c-country');
+    const hint=document.getElementById('c-country-hint');
+    if(!sel||!hint)return;
+    const country=SA_CREATE_COUNTRIES.find(c=>c.name===sel.value)||SA_CREATE_COUNTRIES[0];
+    hint.textContent=`Default currency ${country.currency}, VAT ${country.vat}% — editable later in the company's own Settings.`;
+  }
+
   function openCreateCompany(){
     document.getElementById('create-err').style.display='none';
     ['c-name','c-trn','c-email','c-fullname','c-password'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
     const ex=document.getElementById('c-expiry'); if(ex) ex.value='';
+    populateCreateCountrySelect('United Arab Emirates');
     openModal('m-create');
     buildModGrid('c-mod-grid', MODULE_DEFS.map(m=>m.key));
   }
@@ -1133,10 +1169,12 @@
     const trn = document.getElementById('c-trn').value.trim()||null;
     const expiry = document.getElementById('c-expiry').value||null;
     const modules = getCheckedModules('c-mod-grid');
+    const countryName=document.getElementById('c-country')?.value||'United Arab Emirates';
+    const countryDef=SA_CREATE_COUNTRIES.find(c=>c.name===countryName)||SA_CREATE_COUNTRIES[0];
     if(!name||!email||!password){ errEl.textContent='Company name, email and password are required.'; errEl.style.display='block'; return; }
     btn.disabled=true; btn.textContent='Creating…';
     try{
-      const res = await apiFetch('/superadmin/companies',{method:'POST',body:JSON.stringify({name,email,password,full_name:fullName,trn,expires_at:expiry,modules})});
+      const res = await apiFetch('/superadmin/companies',{method:'POST',body:JSON.stringify({name,email,password,full_name:fullName,trn,expires_at:expiry,modules,country:countryDef.name,currency:countryDef.currency,vat_rate:countryDef.vat})});
       const data = await res.json();
       if(!res.ok){ errEl.textContent=data.detail||'Failed to create company.'; errEl.style.display='block'; return; }
       closeModal('m-create');
@@ -1153,6 +1191,12 @@
     document.getElementById('edit-co-err').style.display='none';
     document.getElementById('edit-co-id').value=c.id;
     document.getElementById('edit-co-name').value=c.name||'';
+    const editCountrySel=document.getElementById('edit-co-country');
+    if(editCountrySel){
+      const current=c.country||'United Arab Emirates';
+      const known=SA_CREATE_COUNTRIES.some(x=>x.name===current);
+      editCountrySel.innerHTML=(known?SA_CREATE_COUNTRIES:[{name:current},...SA_CREATE_COUNTRIES]).map(x=>`<option value="${escHtml(x.name)}"${x.name===current?' selected':''}>${escHtml(x.name)}</option>`).join('');
+    }
     document.getElementById('edit-co-trn').value=c.trn||'';
     document.getElementById('edit-co-expiry').value=c.subscription_expires_at?c.subscription_expires_at.slice(0,10):'';
     const admin=(c.users||[]).find(u=>u.role==='admin')||(c.users||[])[0]||null;
@@ -1180,7 +1224,7 @@
     // Settings page; the backend PATCH only touches fields it's sent
     // non-null (see update_company in superadmin.py), so omitting them here
     // never erases existing profile data.
-    const body={ name, trn:val('edit-co-trn') };
+    const body={ name, trn:val('edit-co-trn'), country:document.getElementById('edit-co-country')?.value||null };
     const modules=getCheckedModules('edit-co-mod-grid');
     const adminUserId=document.getElementById('edit-co-admin-user-id').value;
     const adminRole=document.getElementById('edit-co-admin-role').value||'admin';

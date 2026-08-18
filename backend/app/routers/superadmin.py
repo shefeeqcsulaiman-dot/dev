@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -80,6 +81,9 @@ class CreateCompanyIn(BaseModel):
     trn: str | None = None
     expires_at: str | None = None
     modules: list[str] | None = None
+    country: str | None = None
+    currency: str | None = None
+    vat_rate: Decimal | None = None
 
 
 
@@ -281,10 +285,18 @@ def create_company(
     company = Company(
         name=body.name.strip(),
         trn=body.trn or None,
-        country="United Arab Emirates",
+        country=(body.country or "United Arab Emirates").strip() or "United Arab Emirates",
         subscription_expires_at=body.expires_at,
         modules_enabled=json.dumps(mods),
     )
+    # currency/vat_rate otherwise fall back to the Company model's own
+    # defaults (AED/5.00) — only set explicitly when the frontend sends a
+    # non-UAE country's values, same optional-override pattern
+    # update_company() already uses.
+    if body.currency:
+        company.currency = body.currency.strip()
+    if body.vat_rate is not None:
+        company.vat_rate = body.vat_rate
     db.add(company)
     db.flush()
     full_name = body.full_name.strip() or (body.name.strip() + " Admin")
