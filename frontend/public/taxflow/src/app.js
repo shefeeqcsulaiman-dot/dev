@@ -5828,12 +5828,13 @@ function collectPaymentDocuments(type=document.getElementById('payment-type')?.v
     const purchases=[...document.querySelectorAll('#purchase-record-tbody tr:not([data-empty-state])')].map(row=>{
       const rec=purchaseRecordFromRow(row);
       if(!rec||!rec.ref)return null;
-      const total=rec.total||parseAmount(row.children[9]?.textContent||'0');
+      // +1 vs. the pre-reorder indices — Actions is now column 0 in this table.
+      const total=rec.total||parseAmount(row.children[10]?.textContent||'0');
       const remaining=remainingBalance(rec.ref,total);
       return {
         ref:rec.ref,
-        contact:rec.supplier||rec.vendor||row.children[2]?.textContent.trim()||'',
-        date:rec.date||row.children[3]?.textContent.trim()||'',
+        contact:rec.supplier||rec.vendor||row.children[3]?.textContent.trim()||'',
+        date:rec.date||row.children[4]?.textContent.trim()||'',
         amount:remaining,
         original_amount:total,
         status:rec.status||'Pending',
@@ -6815,7 +6816,7 @@ function buildPurchaseRecordRow(purchase){
   const sourceClass=source.toLowerCase().includes('ai')?'b-p':'b-gray';
   // Show image icon if source_image stored in record OR a matching uploaded document exists
   const hasImage=Boolean(normalizedPurchase.source_image)||uploadedFiles.some(f=>f.base64&&Array.isArray(f.invoices)&&f.invoices.some(inv=>invoiceKey(inv.invoice_no)===invoiceKey(ref)));
-  row.innerHTML=`<td class="mono">${escapeHtml(ref)}</td><td>${escapeHtml(purchaseRecordProductSummary(normalizedPurchase))}</td><td>${escapeHtml(normalizedPurchase.supplier||'-')}</td><td>${escapeHtml(normalizedPurchase.date||'-')}</td><td>${escapeHtml(normalizedPurchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(normalizedPurchase.net_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.tax_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.shipping||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.total||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.paid||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.due||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b ${sourceClass}">${escapeHtml(source)}</span></td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td data-action-col="1"><div class="row-actions"><button class="icon-btn edit" type="button" title="Edit" aria-label="Edit purchase" onclick="editPurchaseRecord(this)">${editIconSvg()}</button><button class="icon-btn view" type="button" title="View" aria-label="View purchase" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button>${hasImage?`<button class="icon-btn invoice-img" type="button" title="View Invoice" aria-label="View invoice image" onclick="openPurchaseInvoiceImage(this)">${invoiceImageIconSvg()}</button>`:`<button class="icon-btn copy" type="button" title="Copy" aria-label="Copy purchase" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button>`}<button class="icon-btn danger" type="button" title="Delete" aria-label="Delete purchase" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td>`;
+  row.innerHTML=`<td data-action-col="1"><div class="row-actions"><button class="icon-btn edit" type="button" title="Edit" aria-label="Edit purchase" onclick="editPurchaseRecord(this)">${editIconSvg()}</button><button class="icon-btn view" type="button" title="View" aria-label="View purchase" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button>${hasImage?`<button class="icon-btn invoice-img" type="button" title="View Invoice" aria-label="View invoice image" onclick="openPurchaseInvoiceImage(this)">${invoiceImageIconSvg()}</button>`:`<button class="icon-btn copy" type="button" title="Copy" aria-label="Copy purchase" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button>`}<button class="icon-btn danger" type="button" title="Delete" aria-label="Delete purchase" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td><td class="mono">${escapeHtml(ref)}</td><td>${escapeHtml(purchaseRecordProductSummary(normalizedPurchase))}</td><td>${escapeHtml(normalizedPurchase.supplier||'-')}</td><td>${escapeHtml(normalizedPurchase.date||'-')}</td><td>${escapeHtml(normalizedPurchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(normalizedPurchase.net_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.tax_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.shipping||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.total||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.paid||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.due||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b ${sourceClass}">${escapeHtml(source)}</span></td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td>`;
   return row;
 }
 
@@ -12194,7 +12195,9 @@ async function savePurchaseRecordsInChunks(records,onProgress){
 function purchaseRecordRowMap(){
   const map=new Map();
   document.querySelectorAll('#purchase-record-tbody tr:not([data-empty-state])').forEach(row=>{
-    const key=invoiceKey(row.children[0]?.textContent);
+    // row.dataset.purchaseRef, not the first <td> — Actions is now the
+    // first column in this table.
+    const key=invoiceKey(row.dataset.purchaseRef);
     if(key)map.set(key,row);
   });
   return map;
@@ -12256,7 +12259,7 @@ function upsertExtractedPurchaseRecord(record){
     return 'created';
   }
   const existingRow=[...tbody.querySelectorAll('tr:not([data-empty-state])')]
-    .find(row=>row.children[0]?.textContent.trim().toLowerCase()===ref);
+    .find(row=>(row.dataset.purchaseRef||'').trim().toLowerCase()===ref);
   if(!existingRow){
     renderPurchaseRecord(record);
     return 'created';
@@ -13121,8 +13124,10 @@ function purchaseAiInvoiceCounts(){
 }
 
 function purchaseRecordRefSet(){
-  return new Set([...document.querySelectorAll('#purchase-record-tbody tr:not([data-empty-state]) td:first-child')]
-    .map(td=>invoiceKey(td.textContent))
+  // row.dataset.purchaseRef, not the first <td> — Actions is now the first
+  // column in this table (td:first-child used to be Ref).
+  return new Set([...document.querySelectorAll('#purchase-record-tbody tr:not([data-empty-state])')]
+    .map(row=>invoiceKey(row.dataset.purchaseRef||''))
     .filter(Boolean));
 }
 
@@ -13598,7 +13603,7 @@ function findPurchaseRecordByRef(ref){
   const cached=[...purchaseRecordCache.values()].find(record=>purchaseRecordRefKey(record)===key);
   if(cached)return cached;
   const row=[...document.querySelectorAll('#purchase-record-tbody tr:not([data-empty-state])')]
-    .find(item=>purchaseRecordRefKey(item.children[0]?.textContent)===key);
+    .find(item=>purchaseRecordRefKey(item.dataset.purchaseRef)===key);
   return row?purchaseRecordFromRow(row):null;
 }
 
@@ -14027,7 +14032,7 @@ async function saveManualPurchase(){
   if(isPeriodLocked(record.date)){toast(`Period ${(record.date||'').slice(0,7)} is locked — unlock before saving`,'warn');return;}
   const wasEditing=Boolean(manualPurchaseEditingRef);
   if(manualPurchaseEditingRef){
-    [...document.querySelectorAll('#purchase-record-tbody tr')].find(row=>row.children[0]?.textContent.trim()===manualPurchaseEditingRef)?.remove();
+    [...document.querySelectorAll('#purchase-record-tbody tr')].find(row=>row.dataset.purchaseRef===manualPurchaseEditingRef)?.remove();
     purchaseRecordCache.delete(manualPurchaseEditingRef);
   }
   setInventoryTableCleared(false);
@@ -14073,22 +14078,31 @@ function purchaseRecordFromRow(row){
   if(row.dataset.purchaseRecord){
     try{return JSON.parse(row.dataset.purchaseRecord);}catch(err){console.warn('Purchase row data parse failed:',err);}
   }
+  // Column order: Actions, Ref, Product, Supplier, Date, Location, Items,
+  // Net, Tax, Shipping, Total, Paid, Due, Source, Status — Actions moved to
+  // the front of #purchase-record-tbody specifically (LPO/FPO tables kept
+  // their original order, which is why this shift doesn't apply there —
+  // this function is effectively a rarely-hit fallback for when
+  // row.dataset.purchaseRecord is missing, since buildPurchaseRecordRow()/
+  // buildLPORow()/buildFPORow() always set it).
   const cells=row.children;
+  const isPurchaseRecordsRow=row.closest('#purchase-record-tbody')!=null;
+  const o=isPurchaseRecordsRow?1:0;
   return {
-    ref:cells[0]?.textContent.trim()||'',
-    product_name:cells[1]?.textContent.trim()||'',
-    supplier:cells[2]?.textContent.trim()||'',
-    date:cells[3]?.textContent.trim()||'',
-    location:cells[4]?.textContent.trim()||'',
-    items:parseAmount(cells[5]?.textContent),
-    net_amount:parseAmount(cells[6]?.textContent),
-    tax_amount:parseAmount(cells[7]?.textContent),
-    shipping:parseAmount(cells[8]?.textContent),
-    total:parseAmount(cells[9]?.textContent),
-    paid:parseAmount(cells[10]?.textContent),
-    due:parseAmount(cells[11]?.textContent),
-    source:cells[12]?.textContent.trim()||'Manual',
-    status:cells[13]?.textContent.trim()||'Draft'
+    ref:cells[o]?.textContent.trim()||'',
+    product_name:cells[o+1]?.textContent.trim()||'',
+    supplier:cells[o+2]?.textContent.trim()||'',
+    date:cells[o+3]?.textContent.trim()||'',
+    location:cells[o+4]?.textContent.trim()||'',
+    items:parseAmount(cells[o+5]?.textContent),
+    net_amount:parseAmount(cells[o+6]?.textContent),
+    tax_amount:parseAmount(cells[o+7]?.textContent),
+    shipping:parseAmount(cells[o+8]?.textContent),
+    total:parseAmount(cells[o+9]?.textContent),
+    paid:parseAmount(cells[o+10]?.textContent),
+    due:parseAmount(cells[o+11]?.textContent),
+    source:cells[o+12]?.textContent.trim()||'Manual',
+    status:cells[o+13]?.textContent.trim()||'Draft'
   };
 }
 
