@@ -1116,6 +1116,8 @@ let _payMethod  = 'cash';
 let _lastSale   = null;
 let _recentItems = []; // most-recent-first, session-only, for the Recent Items quick action
 let POS_CURRENCY = 'AED';
+let POS_TRN = '';
+let POS_COUNTRY = '';
 
 // ── Auth ─────────────────────────────────────────────────────────────
 async function checkAuth(){
@@ -1129,6 +1131,8 @@ async function checkAuth(){
       const company = await api('/companies/current');
       if(company.name) localStorage.setItem('taxflow_company_name', company.name);
       POS_CURRENCY = company.currency || 'AED';
+      POS_TRN = company.trn || '';
+      POS_COUNTRY = company.country || '';
       const curEl=document.getElementById('bot-total-cur');
       if(curEl)curEl.textContent=POS_CURRENCY;
     }catch{}
@@ -1567,7 +1571,7 @@ async function completeSale(){
     total:+total.toFixed(4), payment_method:_payMethod,
     cash_tendered:+tendered.toFixed(4), change:+change.toFixed(4),
     card_ref:cardRef, multi_cash:+multiCash.toFixed(4), multi_card:+multiCard.toFixed(4),
-    company_name:CONAME(),
+    company_name:CONAME(), created_at:new Date().toISOString(),
   };
 
   const okBtn=document.getElementById('pay-ok');
@@ -1690,6 +1694,7 @@ async function creditSale(){
     subtotal:+sub.toFixed(4),vat:+vat.toFixed(4),discount:+disc.toFixed(4),
     order_tax:+tax.toFixed(4),shipping:+ship.toFixed(4),packing:+pack.toFixed(4),
     total:+total.toFixed(4),payment_method:'credit',company_name:CONAME(),
+    created_at:new Date().toISOString(),
   };
   const creditBtn=document.getElementById('btn-credit-sale');
   if(creditBtn)creditBtn.disabled=true;
@@ -1707,10 +1712,55 @@ async function creditSale(){
   }
 }
 
+// ── ZATCA (Saudi Arabia) QR ─────────────────────────────────────────────
+// Standalone port of app.js's zatcaTlvField()/zatcaQrValue() — pos.html has
+// no shared module scope with app.js (separate <script>, no import), so the
+// TLV encoder is duplicated here rather than reaching across pages.
+function posZatcaTlvField(tag,value){
+  const valueBytes=new TextEncoder().encode(String(value==null?'':value));
+  if(valueBytes.length>255){
+    return posZatcaTlvField(tag,new TextDecoder().decode(valueBytes.slice(0,255)));
+  }
+  const field=new Uint8Array(2+valueBytes.length);
+  field[0]=tag;
+  field[1]=valueBytes.length;
+  field.set(valueBytes,2);
+  return field;
+}
+function posZatcaQrValue(sale){
+  const fields=[
+    posZatcaTlvField(1,CONAME()),
+    posZatcaTlvField(2,POS_TRN),
+    posZatcaTlvField(3,sale.created_at||`${sale.date}T00:00:00Z`),
+    posZatcaTlvField(4,Number(sale.total||0).toFixed(2)),
+    posZatcaTlvField(5,Number(sale.vat||0).toFixed(2)),
+  ];
+  const totalLength=fields.reduce((sum,f)=>sum+f.length,0);
+  const bytes=new Uint8Array(totalLength);
+  let offset=0;
+  fields.forEach(f=>{bytes.set(f,offset);offset+=f.length;});
+  let binary='';
+  bytes.forEach(b=>{binary+=String.fromCharCode(b);});
+  return btoa(binary);
+}
+
 // ── Short invoice link for POS ────────────────────────────────────────
 let _posShortUrl='';
 async function genPosShortLink(sale){
   _posShortUrl='';
+  // Saudi companies get a ZATCA-compliant TLV QR (readable by ZATCA
+  // scanners) instead of the online-invoice-link QR every other company
+  // gets — same encoding as Settings > Invoice Design uses for regular
+  // sales invoices. The short link is still published below for the
+  // "View invoice" text line in shared receipts, just not what the QR
+  // image itself encodes for a Saudi company.
+  if(POS_COUNTRY==='Saudi Arabia'){
+    const qrEl=document.getElementById('rcpt-qr');
+    if(qrEl){
+      const qrSrc='https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data='+encodeURIComponent(posZatcaQrValue(sale));
+      qrEl.outerHTML=`<img id="rcpt-qr" src="${qrSrc}" alt="ZATCA invoice QR code" width="120" height="120" style="display:block;margin:0 auto;border-radius:8px;border:1px solid var(--bd)">`;
+    }
+  }
   try{
     const payload={
       company:{name:CONAME(),logo:'TaxFlow',trn:'',address:'',bank:'',bankName:'',accountName:'',accountNumber:'',iban:'',swiftCode:'',paymentLink:'',footer:'Thank you for your business',color:'#2563eb',taxLabel:'Tax Invoice',trnLabel:'TRN',customerTrnLabel:'Customer TRN',enableRtl:false,enableArabic:false,language:'English'},
@@ -1724,18 +1774,25 @@ async function genPosShortLink(sale){
     const r=await api('/share/invoice',{method:'POST',body:{payload}});
     if(r?.code){
       _posShortUrl=window.location.origin+'/i/'+r.code;
-      const qrEl=document.getElementById('rcpt-qr');
-      if(qrEl){
-        const qrSrc='https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data='+encodeURIComponent(_posShortUrl);
-        qrEl.outerHTML=`<img id="rcpt-qr" src="${qrSrc}" alt="Invoice QR code" width="120" height="120" style="display:block;margin:0 auto;border-radius:8px;border:1px solid var(--bd)">`;
+      // ZATCA QR already rendered above for a Saudi company — the online
+      // link is still published (for the "View invoice" text line) but
+      // must not overwrite the TLV QR image once this fetch resolves.
+      if(POS_COUNTRY!=='Saudi Arabia'){
+        const qrEl=document.getElementById('rcpt-qr');
+        if(qrEl){
+          const qrSrc='https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data='+encodeURIComponent(_posShortUrl);
+          qrEl.outerHTML=`<img id="rcpt-qr" src="${qrSrc}" alt="Invoice QR code" width="120" height="120" style="display:block;margin:0 auto;border-radius:8px;border:1px solid var(--bd)">`;
+        }
       }
-    }else{
+    }else if(POS_COUNTRY!=='Saudi Arabia'){
       const qrEl=document.getElementById('rcpt-qr');
       if(qrEl){qrEl.textContent='Online link unavailable';}
     }
   }catch{
-    const qrEl=document.getElementById('rcpt-qr');
-    if(qrEl){qrEl.textContent='Online link unavailable';}
+    if(POS_COUNTRY!=='Saudi Arabia'){
+      const qrEl=document.getElementById('rcpt-qr');
+      if(qrEl){qrEl.textContent='Online link unavailable';}
+    }
   }
 }
 
@@ -1748,6 +1805,7 @@ const RCPT_AR={
   cashTendered:'المبلغ المستلم',change:'المتبقي',viewInvoice:'عرض الفاتورة',
   thankYou:'شكراً لتعاملكم معنا',
   refund:'إشعار دائن',originalReceipt:'الإيصال الأصلي',reason:'السبب',
+  zatcaHint:'رمز الاستجابة السريعة المتوافق مع هيئة الزكاة والضريبة والجمارك',
 };
 function bl(en,arKey){ return `${esc(en)}<span class="rcpt-ar">${esc(RCPT_AR[arKey]||'')}</span>`; }
 
@@ -1803,7 +1861,7 @@ function showReceipt(sale){
     <hr class="rcpt-hr">
     ${isRefund?'':`<div class="rcpt-qr-wrap" id="rcpt-qr-wrap">
       <div class="rcpt-qr-loading" id="rcpt-qr">Generating QR code…</div>
-      <div class="rcpt-qr-hint">${bl('Scan to view invoice online','viewInvoice')}</div>
+      <div class="rcpt-qr-hint">${POS_COUNTRY==='Saudi Arabia'?bl('ZATCA-compliant invoice QR','zatcaHint'):bl('Scan to view invoice online','viewInvoice')}</div>
     </div>`}
     <p style="text-align:center;font-size:10px;color:var(--t3);margin-top:6px">Thank you for your business!<span class="rcpt-ar">${RCPT_AR.thankYou}</span></p>`;
   const titleEl=document.getElementById('rcpt-modal-title');
