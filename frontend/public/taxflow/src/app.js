@@ -6880,7 +6880,7 @@ function openPurchaseInvoiceImage(btn){
     overlay=document.createElement('div');
     overlay.className='overlay';
     overlay.id='m-invoice-image';
-    overlay.onclick=e=>{if(e.target===overlay)overlay.style.display='none';};
+    overlay.onclick=e=>{if(e.target===overlay)overlay.classList.remove('on');};
     overlay.innerHTML=`
       <div class="modal" style="max-width:900px;width:95vw;padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:90vh">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)">
@@ -6890,7 +6890,7 @@ function openPurchaseInvoiceImage(btn){
           </div>
           <div style="display:flex;gap:8px;align-items:center">
             <a id="inv-img-download" class="btn btn-g btn-sm" download style="text-decoration:none">Download</a>
-            <button class="btn btn-g btn-sm" onclick="document.getElementById('m-invoice-image').style.display='none'">Close</button>
+            <button class="btn btn-g btn-sm" onclick="document.getElementById('m-invoice-image').classList.remove('on')">Close</button>
           </div>
         </div>
         <div id="inv-img-body" style="flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding:16px;background:var(--bg2)"></div>
@@ -6927,7 +6927,7 @@ function openPurchaseInvoiceImage(btn){
     note.textContent=`No inline preview available for ${filename||'this file type'} — use Download above to open the original file.`;
     body.appendChild(note);
   }
-  overlay.style.display='flex';
+  overlay.classList.add('on');
 }
 
 function purchaseRecordProductSummary(purchase={}){
