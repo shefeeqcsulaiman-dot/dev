@@ -2571,6 +2571,25 @@ async function removeLogo(){
 function applyCompanyToUi(company){
   if(!company)return;
   currentCompany=company;
+  // initInvoiceLayouts() (app init) can run before this — the async company
+  // fetch isn't guaranteed to resolve first — so a freshly-created Saudi
+  // company's ZATCA QR default may have been computed against a still-empty
+  // currentCompany and cached to localStorage as the wrong 'invoice_url'.
+  // Only touches the still-pristine, never-saved default (see
+  // _invoiceLayoutsPristine's declaration) — a layout the user has actually
+  // edited/saved is never overwritten here.
+  if(_invoiceLayoutsPristine&&Array.isArray(_invoiceLayouts)&&_invoiceLayouts.length){
+    const wantedQrType=company.country==='Saudi Arabia'?'zatca_qr':'invoice_url';
+    const defaultLayout=_invoiceLayouts.find(l=>l.isDefault);
+    if(defaultLayout&&defaultLayout.qrCodeType!==wantedQrType&&(defaultLayout.qrCodeType==='invoice_url'||defaultLayout.qrCodeType==='zatca_qr')){
+      defaultLayout.qrCodeType=wantedQrType;
+      if(_activeLayoutId===defaultLayout.id){
+        const qrField=document.getElementById('inv-layout-qr-type');
+        if(qrField)qrField.value=wantedQrType;
+      }
+      _ilSave();
+    }
+  }
   const set=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val||'';};
   // Core fields
   set('set-company-name',company.name);
@@ -4341,6 +4360,14 @@ function renderAuditLog(entries=[]){
 }
 
 function persistSalesInvoice(inv){
+  // Stamped once, here — not in buildDraftInvoice(), which rebuilds on
+  // every form edit for the live preview and would re-stamp on every
+  // keystroke. Only set if missing, so re-saving/editing an invoice that
+  // already has one doesn't overwrite its real creation time. This is also
+  // what the ZATCA QR code (invoiceQrValue -> zatcaQrValue) uses for its
+  // required timestamp field — previously invoices carried no time
+  // component at all, only a date.
+  if(!inv.created_at)inv.created_at=new Date().toISOString();
   saveServer('salesInvoices',inv);
 }
 
@@ -9109,7 +9136,13 @@ function defaultInvoiceLayout(){
     showCompanyStamp:false,
     showAuthorizedSignature:true,
     signatureLabel:'Authorized Signature',
-    qrCodeType:'invoice_url'
+    // Default only — same "editable later in Settings" pattern as the
+    // per-country currency/VAT-rate defaults set at company creation
+    // (superadmin.html SA_CREATE_COUNTRIES). A Saudi company gets a QR code
+    // actually readable by ZATCA out of the box instead of silently
+    // inheriting the UAE-oriented default; any company can still pick
+    // ZATCA QR manually via the Invoice Layout settings dropdown.
+    qrCodeType:currentCompany?.country==='Saudi Arabia'?'zatca_qr':'invoice_url'
   };
 }
 
@@ -9331,6 +9364,17 @@ function goToInvoiceDesignSettings(){
 let _invoiceLayouts=[];
 let _activeLayoutId=null;
 const _IL_KEY='tf_invoice_layouts';
+// True only for the freshly-constructed, never-saved default layout set —
+// see initInvoiceLayouts()'s "no localStorage yet" branch and
+// applyCompanyToUi()'s correction step below. initInvoiceLayouts() runs
+// during app init before currentCompany is guaranteed to be populated (the
+// company profile fetch is async), so defaultInvoiceLayout()'s
+// country-based qrCodeType default can compute against a not-yet-loaded
+// company and then get locked into localStorage via _ilSave() — permanently
+// wrong until the user visits Settings. This flag lets applyCompanyToUi()
+// safely re-derive it once real company data arrives, without ever
+// touching a layout the user has actually saved/customized.
+let _invoiceLayoutsPristine=false;
 
 function _ilSave(){try{localStorage.setItem(_IL_KEY,JSON.stringify(_invoiceLayouts));}catch{}}
 
@@ -9347,6 +9391,7 @@ function initInvoiceLayouts(){
   try{_invoiceLayouts=JSON.parse(localStorage.getItem(_IL_KEY)||'null')||[];}catch{_invoiceLayouts=[];}
   if(!_invoiceLayouts.length){
     _invoiceLayouts=[{id:'layout-default',name:'Default',isDefault:true,...defaultInvoiceLayout()},statementInvoiceLayoutPreset()];
+    _invoiceLayoutsPristine=true;
     _ilSave();
   }else if(!_invoiceLayouts.some(l=>l.template==='Statement (Pay Online)')){
     // one-time migration: add the new built-in design as a 2nd, non-default option without touching existing layouts
@@ -9482,6 +9527,7 @@ function deleteInvoiceLayout(id){
 
 async function saveInvoiceLayout(){
   // Capture current form → update active slot
+  _invoiceLayoutsPristine=false;
   const layout=getInvoiceLayout();
   const idx=_invoiceLayouts.findIndex(l=>l.id===_activeLayoutId);
   if(idx>=0){_invoiceLayouts[idx]={..._invoiceLayouts[idx],...layout};_ilSave();renderInvoiceLayoutGallery();_ilUpdateNameBadge();}
@@ -9781,7 +9827,68 @@ function publicInvoiceUrl(inv=currentSalesInvoice){
   return url.toString();
 }
 
+// ZATCA (Saudi Arabia) Phase 1 simplified-invoice QR — TLV (Tag-Length-Value)
+// byte sequence, Base64-encoded. Five tags in order: 1=seller name,
+// 2=VAT registration number, 3=invoice timestamp, 4=invoice total (incl.
+// VAT), 5=VAT total. Each field is [1-byte tag][1-byte UTF-8 length][UTF-8
+// value bytes]. This is the structural "Generation phase" QR — no
+// cryptographic signing (that's ZATCA Phase 2, a separate government
+// integration, not attempted here).
+function zatcaTlvField(tag,value){
+  // TextEncoder, not value.length — JS string .length counts UTF-16 code
+  // units, not bytes, which is wrong for non-ASCII (Arabic seller names are
+  // the normal case here) and would desync every tag after a multi-byte one.
+  const valueBytes=new TextEncoder().encode(String(value==null?'':value));
+  if(valueBytes.length>255){
+    // TLV length is a single byte (0-255) per spec — truncate rather than
+    // overflow into a byte that would be misread as part of the next tag.
+    // Only realistically reachable for an unusually long seller name.
+    return zatcaTlvField(tag,new TextDecoder().decode(valueBytes.slice(0,255)));
+  }
+  const field=new Uint8Array(2+valueBytes.length);
+  field[0]=tag;
+  field[1]=valueBytes.length;
+  field.set(valueBytes,2);
+  return field;
+}
+
+function zatcaQrValue(inv,layout){
+  const sellerName=layout?.company||currentCompany?.name||'';
+  // Same 15-digit registration-number field UAE's TRN uses — ZATCA calls it
+  // a VAT number, not a rename of the underlying data.
+  const vatNumber=currentCompany?.trn||document.getElementById('set-company-trn')?.value||'';
+  // inv.created_at (stamped once at save time, see persistSalesInvoice())
+  // carries real time-of-day; older records that predate that stamp only
+  // have a date, so midnight UTC is used as a documented approximation
+  // rather than leaving the required timestamp field empty.
+  const timestamp=inv?.created_at||`${inv?.date||new Date().toISOString().slice(0,10)}T00:00:00Z`;
+  const total=Number(inv?.total||0).toFixed(2);
+  const vatTotal=Number(inv?.vat_amount||0).toFixed(2);
+
+  const fields=[
+    zatcaTlvField(1,sellerName),
+    zatcaTlvField(2,vatNumber),
+    zatcaTlvField(3,timestamp),
+    zatcaTlvField(4,total),
+    zatcaTlvField(5,vatTotal),
+  ];
+  const totalLength=fields.reduce((sum,f)=>sum+f.length,0);
+  const bytes=new Uint8Array(totalLength);
+  let offset=0;
+  fields.forEach(f=>{bytes.set(f,offset);offset+=f.length;});
+
+  // Binary-safe base64: map each byte 1:1 to a char code before btoa(),
+  // rather than btoa() on a JS string directly, which assumes one
+  // UTF-16 code unit per byte and corrupts anything non-ASCII.
+  let binary='';
+  bytes.forEach(b=>{binary+=String.fromCharCode(b);});
+  return btoa(binary);
+}
+
 function invoiceQrValue(inv=currentSalesInvoice,layout=getInvoiceLayout()){
+  if(layout.qrCodeType==='zatca_qr'){
+    return zatcaQrValue(inv,layout);
+  }
   if(layout.qrCodeType==='uae_vat_qr'){
     const companyTrn=currentCompany?.trn||document.getElementById('set-company-trn')?.value||'';
     return [
@@ -23027,6 +23134,7 @@ function convertQuotation(btn){
     invoice_no:invoiceNo,
     customer:quote.customer||'Customer',
     date:new Date().toISOString().split('T')[0],
+    created_at:new Date().toISOString(),
     due_date:'30 days',
     subtotal:parseAmount(quote.subtotal),
     vat_amount:parseAmount(quote.vat_amount),
