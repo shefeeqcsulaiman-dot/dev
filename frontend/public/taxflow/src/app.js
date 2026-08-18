@@ -3082,6 +3082,7 @@ async function syncDashboardFromDatabase(){
     renderDashboardMeta(data);
     syncSidebarCounts(data);
     renderFullDashboardFromDatabase(data);
+    syncBranchPerformanceFromDatabase();
   }catch(err){
     console.warn('Dashboard database sync failed:',err);
     setDashboardStat('Total Revenue + VAT','—','Check backend connection');
@@ -3094,6 +3095,54 @@ async function syncDashboardFromDatabase(){
       if(el)el.innerHTML=errHtml;
     });
   }
+}
+
+async function syncBranchPerformanceFromDatabase(){
+  const list=document.getElementById('dash-branch-list');
+  if(!list)return;
+  try{
+    const response=await authenticatedFetch(`${apiBaseUrl()}/reports/branch-performance`);
+    if(!response.ok)throw new Error('Branch performance API returned '+response.status);
+    const data=await response.json();
+    renderBranchPerformance(data);
+  }catch(err){
+    console.warn('Branch performance sync failed:',err);
+    list.innerHTML='<div style="font-size:12px;color:var(--text3);text-align:center;padding:16px 0">Could not load branch performance.</div>';
+  }
+}
+
+function renderBranchPerformance(data){
+  const list=document.getElementById('dash-branch-list');
+  if(!list)return;
+  const branches=Array.isArray(data?.branches)?data.branches:[];
+  const rows=[...branches];
+  if(data?.unassigned)rows.push(data.unassigned);
+  if(!data?.has_branches){
+    list.innerHTML=`<div style="font-size:12px;color:var(--text3);text-align:center;padding:16px 4px;line-height:1.5">No branches set up yet. Add branches in Settings to see revenue and profit broken down per branch.</div>`;
+    return;
+  }
+  if(!rows.length){
+    list.innerHTML=`<div style="font-size:12px;color:var(--text3);text-align:center;padding:16px 4px;line-height:1.5">No branch-attributed sales or purchases yet.</div>`;
+    return;
+  }
+  list.innerHTML=rows.map(row=>{
+    const profit=Number(row.profit||0);
+    const profitColor=profit>=0?'#16a34a':'#dc2626';
+    const isUnassigned=row.branch_id===null||row.branch_id===undefined;
+    const name=isUnassigned?'Unassigned (Head Office)':(row.name||'Unnamed Branch');
+    const pending=row.invoices_pending||{count:0,amount:'0.00'};
+    const collected=row.invoices_collected||{count:0,amount:'0.00'};
+    return `<div style="border:1px solid var(--border);border-radius:10px;padding:9px 11px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:12.5px;font-weight:700;color:var(--text1)${isUnassigned?';font-style:italic;opacity:.8':''}">${escapeHtml(name)}</span>
+        <span class="mono" style="font-size:13px;font-weight:700;color:${profitColor}">${formatAed(profit)}</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;font-size:10.5px;color:var(--text3)">
+        <span>Pending: <span class="mono" style="color:var(--text2)">${pending.count} · ${formatAed(pending.amount)}</span></span>
+        <span>Collected: <span class="mono" style="color:var(--text2)">${collected.count} · ${formatAed(collected.amount)}</span></span>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function renderCachedDashboardSnapshot(){
@@ -16109,14 +16158,6 @@ function refreshHrmsKpis(){
   set('hrms-kpi-present',presentToday||'0');
   const trendEl=document.getElementById('hrms-kpi-present-trend');
   if(trendEl&&empCount>0)trendEl.innerHTML='<span>'+Math.round(presentToday/empCount*100)+'% of total</span>';
-  // Sync dashboard sidebar Staff Attendance card
-  set('dash-att-present',presentToday||'0');
-  set('dash-att-total',empCount||'0');
-  set('dash-att-leave',onLeaveToday||'0');
-  const absentToday=Math.max(0,empCount-presentToday-onLeaveToday);
-  set('dash-att-absent',absentToday||'0');
-  const attBar=document.getElementById('dash-att-bar');
-  if(attBar&&empCount>0)attBar.style.width=Math.min(100,Math.round(presentToday/empCount*100))+'%';
   // Dashboard alert tiles
   set('hrms-dash-expiry',criticalExpiry||'0');
   set('hrms-dash-ot',pendingOT||'0');

@@ -21,6 +21,7 @@ from app.models import (
     AppDataRecord,
     AuditLog,
     AuditLogDetail,
+    Branch,
     BudgetRecord,
     CashFlowForecastRecord,
     ConsolidationRecord,
@@ -91,6 +92,13 @@ def dashboard(request: Request, db: Session = Depends(get_db), principal: Princi
     # behind reports:view same as trial_balance() already is.
     company_id = principal.company_id
     return _cached_or_build(f"dashboard:{company_id}", 60, lambda: _build_dashboard(db, company_id))
+
+
+@router.get("/branch-performance")
+@limiter.limit("120/minute")
+def branch_performance(request: Request, db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("reports:view"))) -> dict[str, Any]:
+    company_id = principal.company_id
+    return _cached_or_build(f"branch_performance:{company_id}", 60, lambda: _build_branch_performance(db, company_id))
 
 
 def _build_dashboard(db: Session, company_id: str) -> dict[str, Any]:
@@ -252,6 +260,26 @@ def app_data_payloads(db: Session, company_id: str, collection: str) -> list[dic
         if isinstance(data, dict):
             payloads.append(data)
     return payloads
+
+
+def app_data_payloads_with_branch(db: Session, company_id: str, collection: str) -> list[tuple[dict[str, Any], str | None]]:
+    """Same as app_data_payloads() but also returns each row's AppDataRecord.branch_id
+    (server-stamped at write time, see app_data.py — NULL for records saved by an
+    admin/User principal rather than a branch-scoped Employee/Branch login)."""
+    rows = (
+        db.query(AppDataRecord.payload, AppDataRecord.branch_id)
+        .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == collection)
+        .all()
+    )
+    out: list[tuple[dict[str, Any], str | None]] = []
+    for payload, branch_id in rows:
+        try:
+            data = json.loads(payload or "{}")
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if isinstance(data, dict):
+            out.append((data, branch_id))
+    return out
 
 
 def normalized_ref(value: object) -> str:
@@ -577,6 +605,93 @@ def invoice_status(db: Session, company_id: str, app_sales: list[dict[str, Any]]
         statuses[key] = {"count": vals["count"], "amount": amount(vals["amount"]), "percentage": pct}
     statuses["total"] = {"count": total_count, "amount": amount(total_amount), "percentage": 100 if total_count else 0}
     return statuses
+
+
+def _build_branch_performance(db: Session, company_id: str) -> dict[str, Any]:
+    """Per-branch revenue/purchases/profit + pending vs collected invoices.
+
+    Deliberately reads ONLY AppDataRecord.branch_id, not Invoice.branch_id or
+    SourceTransaction.branch_id (the "real" posted mirrors _build_summary()
+    etc. read for company-wide totals). Those posting paths stamp branch_id
+    from the acting principal at post time (see app_data.py's
+    sync_domain_model()/approve_and_post_source()), not from the original
+    record's own branch_id — so a record explicitly tagged with a branch_id
+    in its payload (the override path app_data.py's save endpoint honors)
+    can still post a SourceTransaction/Invoice with branch_id=NULL. Deduping
+    AppDataRecord rows against those tables (the way app_sales_invoice_records()/
+    app_purchase_records() do for company-wide totals) would then silently
+    drop that row's amount from every branch bucket once it posts. The
+    AppDataRecord.branch_id column is the one place branch attribution is
+    actually reliable, so this reads it directly and doesn't dedupe against
+    the posted tables — safe here because, unlike _build_summary(), nothing
+    in this function also sums those posted tables to combine with it.
+
+    Records saved by a company admin (branch_id NULL) land in the
+    "unassigned" bucket rather than being dropped, since for most companies
+    that's still the majority of the data."""
+    branches = db.query(Branch).filter(Branch.company_id == company_id).all()
+    branch_names = {b.id: b.name for b in branches}
+
+    buckets: dict[str | None, dict[str, Decimal | int]] = {}
+
+    def bucket(branch_id: str | None) -> dict[str, Decimal | int]:
+        return buckets.setdefault(branch_id, {
+            "revenue": Decimal("0.00"), "purchases": Decimal("0.00"),
+            "paid_count": 0, "paid_amount": Decimal("0.00"),
+            "pending_count": 0, "pending_amount": Decimal("0.00"),
+        })
+
+    for row, branch_id in app_data_payloads_with_branch(db, company_id, "salesInvoices"):
+        status = normalized_ref(row.get("status"))
+        b = bucket(branch_id)
+        if status != "draft":
+            b["revenue"] += record_amount(row, "subtotal", "net_amount", "amount")
+        key = _INVOICE_STATUS_KEY.get(status) or ("pending" if status in {"ready", "sent", "unpaid"} else None)
+        if key == "paid":
+            b["paid_count"] += 1
+            b["paid_amount"] += record_amount(row, "total", "amount", "net_amount")
+        elif key in ("pending", "overdue"):
+            b["pending_count"] += 1
+            b["pending_amount"] += record_amount(row, "total", "amount", "net_amount")
+
+    for row, branch_id in app_data_payloads_with_branch(db, company_id, "purchaseRecords"):
+        bucket(branch_id)["purchases"] += _purchase_row_amount(row)
+    for row, branch_id in app_data_payloads_with_branch(db, company_id, "bills"):
+        bucket(branch_id)["purchases"] += _purchase_row_amount(row)
+
+    def to_row(branch_id: str | None, name: str, vals: dict[str, Decimal | int]) -> dict[str, Any]:
+        revenue = vals["revenue"]
+        profit = revenue - vals["purchases"]
+        margin = (profit / revenue * Decimal("100")).quantize(Decimal("0.01")) if revenue else Decimal("0.00")
+        return {
+            "branch_id": branch_id,
+            "name": name,
+            "revenue": amount(revenue),
+            "purchases": amount(vals["purchases"]),
+            "profit": amount(profit),
+            "margin_pct": amount(margin),
+            "invoices_collected": {"count": vals["paid_count"], "amount": amount(vals["paid_amount"])},
+            "invoices_pending": {"count": vals["pending_count"], "amount": amount(vals["pending_amount"])},
+        }
+
+    rows = [
+        to_row(branch_id, branch_names.get(branch_id, "Unnamed Branch"), vals)
+        for branch_id, vals in buckets.items()
+        if branch_id is not None
+    ]
+    rows.sort(key=lambda r: Decimal(r["profit"]), reverse=True)
+
+    unassigned_vals = buckets.get(None)
+    has_unassigned_activity = bool(unassigned_vals) and any(
+        unassigned_vals[k] for k in ("revenue", "purchases", "paid_count", "pending_count")
+    )
+    unassigned = to_row(None, "Unassigned", unassigned_vals) if has_unassigned_activity else None
+
+    return {
+        "has_branches": len(branches) > 0,
+        "branches": rows,
+        "unassigned": unassigned,
+    }
 
 
 
