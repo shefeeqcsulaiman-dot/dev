@@ -13375,17 +13375,34 @@ async function wipeAllCompanyData(){
   }
 }
 
-async function clearPendingUploads(){
-  const toDelete=uploadedFiles.filter(f=>{
+// A file only counts as "incomplete" (safe to auto-clean) if it was NEVER
+// successfully extracted — Extracting/Extracted must never be deletion
+// candidates. This used to also treat "extracted but not yet Save All'd"
+// (saved.size<invoices.length) as incomplete, which is the NORMAL state for
+// every file between "Run Extraction" and "Save All", not an abandoned
+// upload — and since extractSingleFile() switches to this tab (line ~11273)
+// for EVERY file it processes, extracting file #2 of a multi-file batch
+// would silently delete file #1's already-extracted source document (both
+// in memory AND on the server, via deleteServer() below) before it was ever
+// saved. Extracting is additionally protected against the tab-switch race:
+// extractSingleFile() sets status='Extracting' before switching tabs, so by
+// the time this runs mid-extraction, invoices is still empty — without the
+// status guard that alone reads as "incomplete" too.
+function _incompleteUploadFiles(){
+  return uploadedFiles.filter(f=>{
     if(f.category==='Purchase Records')return false;
+    if(f.status==='Extracting'||f.status==='Extracted')return false;
     const invoices=Array.isArray(f.invoices)?f.invoices:[];
-    const saved=f.savedInvoiceNos instanceof Set?f.savedInvoiceNos:new Set(f.savedInvoiceNos||[]);
-    return invoices.length===0||saved.size<invoices.length;
+    return invoices.length===0;
   });
+}
+
+async function clearPendingUploads(){
+  const toDelete=_incompleteUploadFiles();
   if(!toDelete.length){toast('No incomplete uploads to clear','warn');return;}
   const confirmed=await appConfirm({
     title:'Clear Incomplete Uploads',
-    message:`Remove ${toDelete.length} incomplete upload(s)? Files and extraction data not yet saved to purchase records will be deleted.`,
+    message:`Remove ${toDelete.length} incomplete upload(s)? These were never successfully extracted. Files that were extracted but not yet saved are kept — use Save All for those instead.`,
     okText:'Clear All',
     tone:'danger'
   });
@@ -13406,12 +13423,11 @@ async function clearPendingUploads(){
 }
 
 async function autoClearIncompleteUploads(){
-  const toDelete=uploadedFiles.filter(f=>{
-    if(f.category==='Purchase Records')return false;
-    const invoices=Array.isArray(f.invoices)?f.invoices:[];
-    const saved=f.savedInvoiceNos instanceof Set?f.savedInvoiceNos:new Set(f.savedInvoiceNos||[]);
-    return invoices.length===0||saved.size<invoices.length;
-  });
+  // This fires on EVERY switch to the AI Extraction tab, including the one
+  // extractSingleFile() itself triggers for every file it processes (see
+  // _incompleteUploadFiles()'s comment) — so its deletion criteria must be
+  // conservative, not just clearPendingUploads()'s manual-button criteria.
+  const toDelete=_incompleteUploadFiles();
   if(!toDelete.length)return;
   Promise.all(toDelete.map(f=>deleteServer('purchaseDocuments',{id:f.id}))).catch(()=>{});
   const deleteIds=new Set(toDelete.map(f=>f.id));
