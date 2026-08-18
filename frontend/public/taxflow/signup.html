@@ -252,12 +252,17 @@
         <input id="email" type="email" placeholder="you@company.com" autocomplete="email">
       </div>
 
+      <div class="field">
+        <label>Country <span class="req">*</span></label>
+        <select id="country" onchange="onSignupCountryChange()"></select>
+      </div>
+
       <div class="row2">
         <div class="field">
           <label>Phone / WhatsApp</label>
           <div class="phone-wrap">
             <div class="phone-prefix">
-              <img src="https://flagcdn.com/w40/ae.png" alt="UAE"> +971
+              <img id="phone-flag" src="https://flagcdn.com/w40/ae.png" alt="UAE"> <span id="phone-code">+971</span>
             </div>
             <input id="phone" type="tel" placeholder="50 000 0000" inputmode="numeric">
           </div>
@@ -332,6 +337,34 @@
     return window.location.protocol+'//'+h+'/api/v1';
   }
 
+  // GCC + UK — the markets this deployment serves (same list/defaults as
+  // the superadmin "New Company" country selector). Country picked here
+  // also picks the phone prefix/flag shown next to the phone field; the
+  // backend applies the matching currency/VAT default for the new company.
+  var SIGNUP_COUNTRIES=[
+    {name:'United Arab Emirates',flag:'ae',code:'+971'},
+    {name:'Saudi Arabia',flag:'sa',code:'+966'},
+    {name:'Bahrain',flag:'bh',code:'+973'},
+    {name:'Kuwait',flag:'kw',code:'+965'},
+    {name:'Oman',flag:'om',code:'+968'},
+    {name:'Qatar',flag:'qa',code:'+974'},
+    {name:'United Kingdom',flag:'gb',code:'+44'},
+  ];
+
+  (function populateSignupCountrySelect(){
+    var sel=document.getElementById('country');
+    sel.innerHTML=SIGNUP_COUNTRIES.map(function(c){return '<option value="'+c.name+'">'+c.name+'</option>';}).join('');
+    onSignupCountryChange();
+  })();
+
+  function onSignupCountryChange(){
+    var sel=document.getElementById('country');
+    var c=SIGNUP_COUNTRIES.filter(function(x){return x.name===sel.value;})[0]||SIGNUP_COUNTRIES[0];
+    document.getElementById('phone-flag').src='https://flagcdn.com/w40/'+c.flag+'.png';
+    document.getElementById('phone-flag').alt=c.name;
+    document.getElementById('phone-code').textContent=c.code;
+  }
+
   function togglePwd(id,btn){
     var inp=document.getElementById(id);
     var isText=inp.type==='text';
@@ -380,6 +413,8 @@
     var fullName=document.getElementById('full_name').value.trim();
     var company=document.getElementById('company_name').value.trim();
     var email=document.getElementById('email').value.trim();
+    var country=document.getElementById('country').value;
+    var phoneCode=document.getElementById('phone-code').textContent;
     var phone=document.getElementById('phone').value.trim();
     var empCount=document.getElementById('employee_count').value;
     var pwd=document.getElementById('password').value;
@@ -393,8 +428,8 @@
 
     btn.disabled=true;btn.textContent='Creating your account…';
 
-    var body={full_name:fullName,email:email,password:pwd,company_name:company};
-    if(phone)body.phone='+971 '+phone;
+    var body={full_name:fullName,email:email,password:pwd,company_name:company,country:country};
+    if(phone)body.phone=phoneCode+' '+phone;
     if(empCount)body.employee_count=empCount;
 
     try{
@@ -407,7 +442,7 @@
         // also log trial request with notes/interest
         fetch(apiBase()+'/auth/trial-request',{
           method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({full_name:fullName,company_name:company,email:email,phone:phone?'+971 '+phone:null,employee_count:empCount||null})
+          body:JSON.stringify({full_name:fullName,company_name:company,email:email,phone:phone?phoneCode+' '+phone:null,employee_count:empCount||null})
         }).catch(function(){});
         localStorage.setItem('taxflow_token',data.access_token);
         document.getElementById('form-body').style.display='none';

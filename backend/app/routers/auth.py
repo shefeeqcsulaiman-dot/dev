@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -8,17 +9,28 @@ from app.company_defaults import seed_company_defaults
 from app.database import get_db
 from app.dependencies import Principal, assert_company_active, get_current_principal, get_current_user
 from app.limiter import limiter
+from app.module_catalog import ALL_MODULES
 from pydantic import BaseModel
 
 from app.models import Branch, Company, TrialRequest, User
 from app.schemas import LoginRequest, RegisterRequest, Token, UserOut
 from app.security import authenticate_user, create_access_token, hash_password, impersonator_id_from_token
 
-_ALL_MODULES = [
-    "sales", "quotations", "pos", "purchase", "inventory", "expense",
-    "bank", "accounting", "corporate", "reports", "hrms", "ess",
-    "notifications", "expert", "exception", "ai",
-]
+# GCC + UK — the markets this deployment serves, same list/defaults as the
+# superadmin "New Company" country selector (see CreateCompanyIn in
+# superadmin.py) — kept in sync so a self-serve signup and a superadmin-
+# created company land on identical currency/VAT defaults for the same
+# country. Company.currency/vat_rate stay editable later in Settings either
+# way; this only avoids a non-UAE signup silently starting on AED/5% VAT.
+_COUNTRY_DEFAULTS = {
+    "United Arab Emirates": {"currency": "AED", "vat_rate": "5.00"},
+    "Saudi Arabia": {"currency": "SAR", "vat_rate": "15.00"},
+    "Bahrain": {"currency": "BHD", "vat_rate": "10.00"},
+    "Kuwait": {"currency": "KWD", "vat_rate": "0.00"},
+    "Oman": {"currency": "OMR", "vat_rate": "5.00"},
+    "Qatar": {"currency": "QAR", "vat_rate": "0.00"},
+    "United Kingdom": {"currency": "GBP", "vat_rate": "20.00"},
+}
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -46,13 +58,18 @@ def register(request: Request, payload: RegisterRequest, db: Session = Depends(g
     if db.query(User).filter(User.email == payload.email.lower()).first():
         raise HTTPException(status_code=409, detail="Registration failed")
     trial_expires = (datetime.now(timezone.utc) + timedelta(days=3)).strftime("%Y-%m-%d")
+    country = (payload.country or "United Arab Emirates").strip() or "United Arab Emirates"
+    country_defaults = _COUNTRY_DEFAULTS.get(country)
     company = Company(
         name=payload.company_name,
         trn=payload.trn or None,
-        country="United Arab Emirates",
+        country=country,
         subscription_expires_at=trial_expires,
-        modules_enabled=json.dumps(_ALL_MODULES),
+        modules_enabled=json.dumps(ALL_MODULES),
     )
+    if country_defaults:
+        company.currency = country_defaults["currency"]
+        company.vat_rate = Decimal(country_defaults["vat_rate"])
     db.add(company)
     db.flush()
     # A company with no chart of accounts can never post a single

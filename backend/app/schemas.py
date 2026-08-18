@@ -25,6 +25,7 @@ class RegisterRequest(BaseModel):
     business_type: str | None = None
     emirate: str | None = None
     trn: str | None = None
+    country: str | None = None
     employee_count: int | None = Field(default=None, ge=0)
     plan: str = "starter"
 
