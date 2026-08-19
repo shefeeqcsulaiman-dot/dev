@@ -104,6 +104,8 @@ class BranchOut(BaseModel):
     code: str | None = None
     city: str | None = None
     address: str | None = None
+    country: str | None = None
+    currency: str | None = None
     status: str = "Active"
     # Branch Login Phase 1: JSON-text column on the ORM side (same storage
     # convention as Company.modules_enabled), list on the wire. NULL/None =
@@ -133,6 +135,8 @@ class BranchCreate(BaseModel):
     code: str | None = None
     city: str | None = None
     address: str | None = None
+    country: str | None = None
+    currency: str | None = None
     status: str = "Active"
     modules_enabled: list[str] | None = None
     username: str | None = None
@@ -144,6 +148,8 @@ class BranchUpdate(BaseModel):
     code: str | None = None
     city: str | None = None
     address: str | None = None
+    country: str | None = None
+    currency: str | None = None
     status: str | None = None
     modules_enabled: list[str] | None = None
     username: str | None = None

@@ -1103,6 +1103,15 @@ class Branch(Base, TimestampMixin):
     code: Mapped[str | None] = mapped_column(String(20))
     city: Mapped[str | None] = mapped_column(String(80))
     address: Mapped[str | None] = mapped_column(String(400))
+    # Reference-only fields, same GCC+UK list/derivation as the company
+    # signup and superadmin "New Company" country pickers — a branch may
+    # legitimately operate in a different country than its parent Company
+    # (e.g. a UAE company with a Saudi branch). Deliberately doesn't affect
+    # how any transaction/invoice/VAT actually gets computed today — those
+    # still use the parent Company's own currency/vat_rate, unchanged; this
+    # is just what the branch is labeled/reported as in the UI.
+    country: Mapped[str | None] = mapped_column(String(60))
+    currency: Mapped[str | None] = mapped_column(String(10))
     # "Active"/"Inactive" (capitalized) — matches the pre-existing Settings >
     # Departments & Branches UI convention this replaces the backing store
     # for; keep in sync with frontend/public/taxflow/src/app.js's branch

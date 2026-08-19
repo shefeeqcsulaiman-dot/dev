@@ -153,6 +153,8 @@ def create_branch(
         code=(payload.code or "").strip() or None,
         city=(payload.city or "").strip() or None,
         address=(payload.address or "").strip() or None,
+        country=(payload.country or "").strip() or None,
+        currency=(payload.currency or "").strip() or None,
         status=payload.status or "active",
         modules_enabled=modules_enabled,
     )
@@ -180,7 +182,7 @@ def update_branch(
         raise HTTPException(status_code=404, detail="Branch not found")
     if payload.name:
         branch.name = payload.name.strip()
-    for field in ("code", "city", "address"):
+    for field in ("code", "city", "address", "country", "currency"):
         val = getattr(payload, field, None)
         if val is not None:
             setattr(branch, field, val.strip() or None)

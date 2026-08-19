@@ -17793,17 +17793,51 @@ async function filterEmpRoles(){
 function renderBranchTable(){
   const row=b=>{
     const statusCls=b.status==='Active'?'b-g':'b-gray';
+    const countryLabel=b.country?`${escapeHtml(b.country)}${b.currency?' · '+escapeHtml(b.currency):''}`:'—';
     return `<tr>
       <td class="mono" style="font-size:11px">${escapeHtml(b.code||'—')}</td>
       <td style="font-weight:600">${escapeHtml(b.name)}</td>
       <td style="color:var(--text3);font-size:12px">${escapeHtml(b.city||'—')}</td>
+      <td style="color:var(--text3);font-size:12px">${countryLabel}</td>
       <td><span class="b ${statusCls}">${escapeHtml(b.status)}</span></td>
       <td style="white-space:nowrap"><button class="icon-btn edit" title="Edit branch" onclick="showBranchModal('${b.id}')">${editIconSvg()}</button><button class="btn btn-r btn-xs" title="Delete branch" onclick="deleteBranch('${b.id}')" style="margin-left:4px">×</button></td>
     </tr>`;
   };
-  const empty='<tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px">No branches yet. Click + Add Branch.</td></tr>';
+  const empty='<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:24px">No branches yet. Click + Add Branch.</td></tr>';
   const html=_branchList.length?_branchList.map(row).join(''):empty;
   document.querySelectorAll('#branch-tbody').forEach(tb=>{tb.innerHTML=html;});
+}
+
+// GCC + UK — same list/derivation as signup.html's SIGNUP_COUNTRIES and
+// superadmin.html's SA_CREATE_COUNTRIES. A branch may legitimately operate
+// in a different country than its parent Company; this is reference data
+// only (see the Branch model comment) — a branch's invoices/VAT still use
+// the parent Company's own currency/vat_rate, unchanged.
+const BRANCH_COUNTRIES=[
+  {name:'United Arab Emirates',currency:'AED'},
+  {name:'Saudi Arabia',currency:'SAR'},
+  {name:'Bahrain',currency:'BHD'},
+  {name:'Kuwait',currency:'KWD'},
+  {name:'Oman',currency:'OMR'},
+  {name:'Qatar',currency:'QAR'},
+  {name:'United Kingdom',currency:'GBP'},
+];
+
+function populateBranchCountrySelect(selectedName){
+  const sel=document.getElementById('branch-country');
+  if(!sel)return;
+  const known=BRANCH_COUNTRIES.some(c=>c.name===selectedName);
+  const options=selectedName&&!known?[{name:selectedName,currency:''},...BRANCH_COUNTRIES]:BRANCH_COUNTRIES;
+  sel.innerHTML=options.map(c=>`<option value="${escapeHtml(c.name)}"${c.name===selectedName?' selected':''}>${escapeHtml(c.name)}</option>`).join('');
+  onBranchCountryChange();
+}
+
+function onBranchCountryChange(){
+  const sel=document.getElementById('branch-country');
+  const currencyEl=document.getElementById('branch-currency');
+  if(!sel||!currencyEl)return;
+  const match=BRANCH_COUNTRIES.find(c=>c.name===sel.value);
+  currencyEl.value=match?.currency||'';
 }
 
 // Branch Login Phase 1 — the Main-Dashboard-business subset of company
@@ -17868,6 +17902,7 @@ function showBranchModal(id){
   document.getElementById('branch-code').value=b?.code||'';
   document.getElementById('branch-city').value=b?.city||'';
   document.getElementById('branch-status').value=b?.status||'Active';
+  populateBranchCountrySelect(b?.country||currentCompany?.country||'United Arab Emirates');
   buildBranchModGrid(b?(b.modules_enabled??null):null);
   document.getElementById('branch-username').value=b?.username||'';
   document.getElementById('branch-password').value='';
@@ -17887,6 +17922,8 @@ async function saveBranchModal(){
     name,
     code:(document.getElementById('branch-code')?.value||'').trim().toUpperCase().slice(0,6)||name.slice(0,3).toUpperCase(),
     city:(document.getElementById('branch-city')?.value||'').trim(),
+    country:(document.getElementById('branch-country')?.value||'').trim(),
+    currency:(document.getElementById('branch-currency')?.value||'').trim(),
     status:document.getElementById('branch-status')?.value||'Active',
     modules_enabled:getCheckedBranchModules(),
   };

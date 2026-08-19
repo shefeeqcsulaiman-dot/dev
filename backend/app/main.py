@@ -594,6 +594,8 @@ def ensure_schema_updates() -> None:
                 "password_changed_at": "TIMESTAMP WITH TIME ZONE",
                 "last_login": "TIMESTAMP WITH TIME ZONE",
                 "last_activity": "TIMESTAMP WITH TIME ZONE",
+                "country": "VARCHAR(60)",
+                "currency": "VARCHAR(10)",
             }
             for column_name, column_type in required_columns.items():
                 if column_name not in existing_columns:

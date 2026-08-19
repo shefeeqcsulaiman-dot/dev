@@ -3341,8 +3341,8 @@
         <button class="btn btn-p btn-sm" onclick="showBranchModal()">+ Add Branch</button>
       </div>
       <table class="tbl">
-        <thead><tr><th>Code</th><th>Branch Name</th><th>City / Emirate</th><th>Status</th><th></th></tr></thead>
-        <tbody id="branch-tbody"><tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px">Loading branches…</td></tr></tbody>
+        <thead><tr><th>Code</th><th>Branch Name</th><th>City / Emirate</th><th>Country</th><th>Status</th><th></th></tr></thead>
+        <tbody id="branch-tbody"><tr><td colspan="6" style="color:var(--text3);text-align:center;padding:24px">Loading branches…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -5503,6 +5503,11 @@ period_locks ─&lt; audit_logs
       <div class="fg"><label class="fl">City / Emirate</label><input class="fi" id="branch-city" placeholder="e.g. Dubai"></div>
       <div class="fg"><label class="fl">Status</label><select class="fi" id="branch-status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
     </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Country</label><select class="fi" id="branch-country" onchange="onBranchCountryChange()"></select></div>
+      <div class="fg"><label class="fl">Currency</label><input class="fi" id="branch-currency" readonly style="background:var(--surface2);color:var(--text3)"></div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:-8px;margin-bottom:10px">Reference only — this branch's invoices and VAT still use the company's own currency/VAT rate in Settings.</div>
 
     <div style="margin:14px 0 10px">
       <label class="fl">Module Access</label>
