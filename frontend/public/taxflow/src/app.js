@@ -2621,6 +2621,11 @@ function applyCompanyToUi(company){
   if(taxVatDisplay)taxVatDisplay.value=vatRateNum+'%';
   window.COMPANY_CURRENCY=company.currency||'AED';
   window.COMPANY_VAT_RATE=vatRateNum;
+  // Create Invoice tab's totals default to a static "AED 0.00" in the HTML
+  // (index.html) until the user edits a line item — refresh them here too,
+  // so a non-AED company doesn't see the wrong currency on a freshly
+  // opened, untouched invoice form.
+  if(document.getElementById('subtotal'))calcLine();
   // Company registration page fields
   set('co-name',company.name);
   set('co-trade-name',company.trade_name);
@@ -9097,12 +9102,11 @@ function refreshSalesInvoiceKpis(){
     else if(sl.includes('overdue'))overdue+=amount;
     else pending+=amount;
   });
-  const fmt=n=>'AED '+n.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
-  set('sinv-kpi-total',fmt(total));
-  set('sinv-kpi-collected',fmt(collected));
-  set('sinv-kpi-pending',fmt(pending));
-  set('sinv-kpi-overdue',fmt(overdue));
+  set('sinv-kpi-total',formatAed(total));
+  set('sinv-kpi-collected',formatAed(collected));
+  set('sinv-kpi-pending',formatAed(pending));
+  set('sinv-kpi-overdue',formatAed(overdue));
 }
 
 function parseAmount(value){
@@ -9998,9 +10002,9 @@ function invoicePdfHtml(inv=currentInvoiceForShare()){
       *{box-sizing:border-box}body{margin:0;background:#fff;color:#172033;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.45}.sheet{max-width:900px;margin:0 auto;padding:34px}.bar{height:7px;background:${accent};margin:-34px -34px 28px}.head{display:grid;grid-template-columns:1fr 280px;gap:24px;border-bottom:1px solid #e5eaf2;padding-bottom:22px}.brand{display:flex;gap:14px}.logo{width:58px;height:58px;border-radius:12px;background:${accent};color:#fff;display:grid;place-items:center;font-size:20px;font-weight:800}.company{font-size:22px;font-weight:800}.muted{color:#667085;font-size:12px;margin-top:3px}.right{text-align:right}.label{font-size:30px;font-weight:900;text-transform:uppercase}.badge{display:inline-block;margin-top:8px;border:1px solid #d8e2ff;color:${accent};border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;text-transform:uppercase}.grid{display:grid;grid-template-columns:1fr 280px;gap:16px;margin:22px 0}.panel{border:1px solid #e5eaf2;border-radius:8px;padding:14px}.kicker{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#667085;font-weight:700;margin-bottom:7px}.party{font-size:17px;font-weight:800}.row{display:flex;justify-content:space-between;gap:12px;color:#667085;padding:4px 0}.row strong{color:#172033;text-align:right}table{width:100%;border-collapse:collapse;border:1px solid #e5eaf2;border-radius:8px;overflow:hidden}th{background:#f3f6fb;color:#667085;text-transform:uppercase;font-size:10px;letter-spacing:.5px;text-align:left;padding:10px}td{padding:11px 10px;border-top:1px solid #e5eaf2}.num{text-align:right;white-space:nowrap}.summary{display:grid;grid-template-columns:1fr 300px;gap:20px;margin-top:22px}.notes{border-left:4px solid ${accent};padding-left:12px;color:#667085}.totals{border:1px solid #e5eaf2;border-radius:8px;padding:14px}.total,.grand{display:flex;justify-content:space-between;gap:14px}.total{color:#667085;padding:4px 0}.grand{border-top:1px solid #e5eaf2;margin-top:8px;padding-top:12px;font-size:19px;font-weight:900}.grand strong{color:${accent}}.link{margin-top:14px;font-size:11px;color:#667085;word-break:break-all}[dir=rtl] .right{text-align:left}[dir=rtl] th{text-align:right}[dir=rtl] .num{text-align:left}[dir=rtl] .notes{border-left:0;border-right:4px solid ${accent};padding-left:0;padding-right:12px}@media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.sheet{padding:24px}.bar{margin:-24px -24px 24px}.no-print{display:none}}
     </style></head><body><main class="sheet"><div class="bar"></div>
       <section class="head" dir="${company.enableRtl?'rtl':'ltr'}"><div class="brand">${_logoPdfHtml(initials)}<div><div class="company">${escapeHtml(company.name||'TaxFlow')}</div><div class="muted">${escapeHtml(company.address||'')}</div><div class="muted">${escapeHtml(company.trnLabel||'TRN')} ${escapeHtml(company.trn||'not set')}</div></div></div><div class="right"><div class="label">${escapeHtml(company.taxLabel||'Tax Invoice')}</div><div>${escapeHtml(invoice.invoice_no||'Draft')}</div><span class="badge">${escapeHtml(invoice.status||'Draft')}</span></div></section>
-      <section class="grid" dir="${company.enableRtl?'rtl':'ltr'}"><div class="panel"><div class="kicker">${escapeHtml(labels.billTo||'Bill To')}</div><div class="party">${escapeHtml(invoice.customer||'Customer')}</div><div class="muted">${escapeHtml(company.customerTrnLabel||'Customer TRN')} ${escapeHtml(invoice.customer_trn||'not provided')}</div><div class="muted">${escapeHtml(invoice.customer_address||'')}</div></div><div class="panel"><div class="row"><span>${escapeHtml(labels.issueDate||'Issue Date')}</span><strong>${escapeHtml(invoice.date||'-')}</strong></div><div class="row"><span>${escapeHtml(labels.dueDate||'Due Date')}</span><strong>${escapeHtml(invoice.due_date||'-')}</strong></div><div class="row"><span>${escapeHtml(labels.paymentTerms||'Terms')}</span><strong>${escapeHtml(invoice.terms||'Net 30')}</strong></div><div class="row"><span>${escapeHtml(labels.currency||'Currency')}</span><strong>AED</strong></div></div></section>
+      <section class="grid" dir="${company.enableRtl?'rtl':'ltr'}"><div class="panel"><div class="kicker">${escapeHtml(labels.billTo||'Bill To')}</div><div class="party">${escapeHtml(invoice.customer||'Customer')}</div><div class="muted">${escapeHtml(company.customerTrnLabel||'Customer TRN')} ${escapeHtml(invoice.customer_trn||'not provided')}</div><div class="muted">${escapeHtml(invoice.customer_address||'')}</div></div><div class="panel"><div class="row"><span>${escapeHtml(labels.issueDate||'Issue Date')}</span><strong>${escapeHtml(invoice.date||'-')}</strong></div><div class="row"><span>${escapeHtml(labels.dueDate||'Due Date')}</span><strong>${escapeHtml(invoice.due_date||'-')}</strong></div><div class="row"><span>${escapeHtml(labels.paymentTerms||'Terms')}</span><strong>${escapeHtml(invoice.terms||'Net 30')}</strong></div><div class="row"><span>${escapeHtml(labels.currency||'Currency')}</span><strong>${AED_SYMBOL}</strong></div></div></section>
       <table dir="${company.enableRtl?'rtl':'ltr'}"><thead><tr><th>#</th><th>${escapeHtml(labels.product||'Product')}</th><th>${escapeHtml(labels.unit||'Unit')}</th><th class="num">${escapeHtml(labels.quantity||'Qty')}</th><th class="num">${escapeHtml(labels.unitPrice||'Unit Price')}</th><th class="num">${escapeHtml(labels.amount||'Amount')}</th></tr></thead><tbody>${lines.map((line,index)=>`<tr><td>${index+1}</td><td><strong>${escapeHtml(line.description||'Item')}</strong></td><td>${escapeHtml(line.unit||'PCS')}</td><td class="num">${escapeHtml(line.qty||1)}</td><td class="num">${fmt(line.price)}</td><td class="num">${fmt(line.amount)}</td></tr>`).join('')}</tbody></table>
-      <section class="summary" dir="${company.enableRtl?'rtl':'ltr'}"><div class="notes"><div class="kicker">${escapeHtml(labels.paymentDetails||'Payment Details')}</div><div style="margin-top:8px">${escapeHtml(company.footer||'')}</div><div class="link">Online view: ${escapeHtml(_shortUrlCache.get(inv?.invoice_no||'draft')||publicInvoiceUrl(inv))}</div></div><div class="totals"><div class="total"><span>${escapeHtml(labels.subtotal||'Subtotal')}</span><strong>AED ${fmt(invoice.subtotal)}</strong></div><div class="total"><span>${escapeHtml(labels.vat||'VAT')}</span><strong>AED ${fmt(invoice.vat_amount)}</strong></div><div class="grand"><span>${escapeHtml(labels.total||'Total')}</span><strong>AED ${fmt(invoice.total)}</strong></div></div></section>
+      <section class="summary" dir="${company.enableRtl?'rtl':'ltr'}"><div class="notes"><div class="kicker">${escapeHtml(labels.paymentDetails||'Payment Details')}</div><div style="margin-top:8px">${escapeHtml(company.footer||'')}</div><div class="link">Online view: ${escapeHtml(_shortUrlCache.get(inv?.invoice_no||'draft')||publicInvoiceUrl(inv))}</div></div><div class="totals"><div class="total"><span>${escapeHtml(labels.subtotal||'Subtotal')}</span><strong>${AED_SYMBOL} ${fmt(invoice.subtotal)}</strong></div><div class="total"><span>${escapeHtml(labels.vat||'VAT')}</span><strong>${AED_SYMBOL} ${fmt(invoice.vat_amount)}</strong></div><div class="grand"><span>${escapeHtml(labels.total||'Total')}</span><strong>${AED_SYMBOL} ${fmt(invoice.total)}</strong></div></div></section>
     </main><script>window.onload=()=>setTimeout(()=>window.print(),250);<\/script></body></html>`;
 }
 
@@ -10071,9 +10075,9 @@ function invoicePdfTextLines(inv){
     output.push(`${String(index+1).padEnd(4,' ')} ${desc} ${qty} ${price} ${amount}`);
   });
   output.push('');
-  output.push(`Subtotal: AED ${fmt(inv?.subtotal)}`);
-  output.push(`VAT:      AED ${fmt(inv?.vat_amount)}`);
-  output.push(`Total:    AED ${fmt(inv?.total)}`);
+  output.push(`Subtotal: ${AED_SYMBOL} ${fmt(inv?.subtotal)}`);
+  output.push(`VAT:      ${AED_SYMBOL} ${fmt(inv?.vat_amount)}`);
+  output.push(`Total:    ${AED_SYMBOL} ${fmt(inv?.total)}`);
   output.push('');
   const cachedShort=_shortUrlCache.get(inv?.invoice_no||'draft');
   output.push(`Online view: ${cachedShort||publicInvoiceUrl(inv)}`);
@@ -10408,11 +10412,11 @@ function salesInvoiceClassicStatementHtml(inv,ctx){
           ${layout.footer?`<p>${escapeHtml(layout.footer)}</p>`:''}
         </div>
         <div class="icx-totals">
-          <div class="row"><span>${escapeHtml(labels.subtotal||'Subtotal')} (exc. tax)</span><strong>AED ${fmt(subtotal)}</strong></div>
-          <div class="row"><span>${escapeHtml(labels.vat||'Tax')}</span><strong>AED ${fmt(vat)}</strong></div>
-          <div class="row grand"><span>Total Amount (inc. tax)</span><strong>AED ${fmt(total)}</strong></div>
-          <div class="row"><span>Total paid</span><strong>AED ${fmt(paidAmount)}</strong></div>
-          <div class="due"><span>${escapeHtml(labels.balanceDue||'Balance due')}</span><strong>AED ${fmt(balanceDue)}</strong></div>
+          <div class="row"><span>${escapeHtml(labels.subtotal||'Subtotal')} (exc. tax)</span><strong>${AED_SYMBOL} ${fmt(subtotal)}</strong></div>
+          <div class="row"><span>${escapeHtml(labels.vat||'Tax')}</span><strong>${AED_SYMBOL} ${fmt(vat)}</strong></div>
+          <div class="row grand"><span>Total Amount (inc. tax)</span><strong>${AED_SYMBOL} ${fmt(total)}</strong></div>
+          <div class="row"><span>Total paid</span><strong>${AED_SYMBOL} ${fmt(paidAmount)}</strong></div>
+          <div class="due"><span>${escapeHtml(labels.balanceDue||'Balance due')}</span><strong>${AED_SYMBOL} ${fmt(balanceDue)}</strong></div>
         </div>
       </div>
 
@@ -10425,7 +10429,7 @@ function salesInvoiceClassicStatementHtml(inv,ctx){
         <strong>How to pay</strong>
         <span>Invoice number: ${escapeHtml(inv.invoice_no||'Draft')}</span>
         <span>${escapeHtml(labels.dueDate||'Due date')}: ${escapeHtml(dueDate)}</span>
-        <span>Balance due: AED ${fmt(balanceDue)}</span>
+        <span>Balance due: ${AED_SYMBOL} ${fmt(balanceDue)}</span>
       </div>
 
       <div class="icx-pay-cols">
@@ -10451,7 +10455,7 @@ function salesInvoiceClassicStatementHtml(inv,ctx){
         <span>Page 1 of 1</span>
         <span>Invoice no: ${escapeHtml(inv.invoice_no||'Draft')}</span>
         <span>${escapeHtml(labels.dueDate||'Due date')}: ${escapeHtml(dueDate)}</span>
-        <span>Balance due: AED ${fmt(balanceDue)}</span>
+        <span>Balance due: ${AED_SYMBOL} ${fmt(balanceDue)}</span>
       </div>
     </div>`;
 }
@@ -10581,10 +10585,10 @@ function renderSalesInvoicePreview(inv){
           </div>`:''}
         </div>
         <div class="invoice-total-card">
-          ${layout.taxSummary?`<div class="invoice-total-row"><span>${escapeHtml(labels.subtotal)}</span><strong class="mono">${'AED'} ${fmt(subtotal)}</strong></div>
-          <div class="invoice-total-row"><span>${escapeHtml(labels.vat)} ${vatRate}%</span><strong class="mono">${'AED'} ${fmt(vat)}</strong></div>`:''}
-          <div class="invoice-grand"><span>${escapeHtml(labels.total)}</span><strong class="mono">${'AED'} ${fmt(total)}</strong></div>
-          <div class="invoice-due"><span>${escapeHtml(labels.balanceDue)}</span><strong class="mono">AED ${fmt(balanceDue)}</strong></div>
+          ${layout.taxSummary?`<div class="invoice-total-row"><span>${escapeHtml(labels.subtotal)}</span><strong class="mono">${AED_SYMBOL} ${fmt(subtotal)}</strong></div>
+          <div class="invoice-total-row"><span>${escapeHtml(labels.vat)} ${vatRate}%</span><strong class="mono">${AED_SYMBOL} ${fmt(vat)}</strong></div>`:''}
+          <div class="invoice-grand"><span>${escapeHtml(labels.total)}</span><strong class="mono">${AED_SYMBOL} ${fmt(total)}</strong></div>
+          <div class="invoice-due"><span>${escapeHtml(labels.balanceDue)}</span><strong class="mono">${AED_SYMBOL} ${fmt(balanceDue)}</strong></div>
         </div>
       </div>
 
@@ -14765,9 +14769,9 @@ function calcLine(inp){
     sub+=parseAmount(r.querySelector('.inv-qty')?.value)*parseAmount(r.querySelector('.inv-price')?.value);
   });
   const vat=sub*(currentVatRate()/100),tot=sub+vat;
-  document.getElementById('subtotal').textContent='AED '+sub.toLocaleString('en-AE',{minimumFractionDigits:2});
-  document.getElementById('vat-amt').textContent='AED '+vat.toLocaleString('en-AE',{minimumFractionDigits:2});
-  document.getElementById('inv-total').textContent='AED '+tot.toLocaleString('en-AE',{minimumFractionDigits:2});
+  document.getElementById('subtotal').textContent=formatAed(sub);
+  document.getElementById('vat-amt').textContent=formatAed(vat);
+  document.getElementById('inv-total').textContent=formatAed(tot);
   updateSalesInvPreview();
 }
 function updateSalesInvPreview(){
