@@ -1254,17 +1254,26 @@ async function loadProducts(){
 
 function buildChips(){
   const bar = document.getElementById('pchips');
+  // data-chip-value (HTML-escaped via esc()) + reading it back through
+  // this.dataset in the shared onclick, rather than interpolating the
+  // value straight into the onclick attribute — JSON.stringify() produces
+  // a double-quoted JS string literal, which collides with the onclick
+  // attribute's own double-quote delimiter for any category/brand name
+  // containing a double quote (or corrupts the parse in browsers that
+  // don't tolerate the resulting malformed HTML), truncating the handler
+  // and throwing "Unexpected end of input" on click instead of filtering.
+  const chipBtn = val => `<button class="pchip" data-chip-value="${esc(val)}" onclick="filterChip(this.dataset.chipValue,this)">${esc(val)}</button>`;
   if(_filterMode==='cat'){
     const cats = [...new Set(_products.map(p=>p.category||'').filter(Boolean))].sort();
     bar.innerHTML = '<button class="pchip on" onclick="filterChip(\'\',this)">All</button>'+
-      cats.map(c=>`<button class="pchip" onclick="filterChip(${JSON.stringify(c)},this)">${esc(c)}</button>`).join('');
+      cats.map(chipBtn).join('');
   }else{
     const brands = [...new Set(_products.map(p=>p.supplier_name||'').filter(Boolean))].sort();
     if(!brands.length){
       bar.innerHTML = '<span style="font-size:11.5px;color:var(--t3);padding:4px 8px">No brand data — add brand to products</span>';
     }else{
       bar.innerHTML = '<button class="pchip on" onclick="filterChip(\'\',this)">All</button>'+
-        brands.map(b=>`<button class="pchip" onclick="filterChip(${JSON.stringify(b)},this)">${esc(b)}</button>`).join('');
+        brands.map(chipBtn).join('');
     }
   }
   _activeChip = '';
