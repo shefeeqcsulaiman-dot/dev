@@ -14,9 +14,11 @@ VAT report. Found via an E2E test that created a real invoice against a
 company with no seeded accounts and traced the missing journal entry back
 to this exact failure mode.
 """
+import json
+
 from sqlalchemy.orm import Session
 
-from app.models import Account, TaxCode, VoucherType
+from app.models import Account, AppDataRecord, TaxCode, VoucherType
 
 
 def seed_accounts(db: Session, company_id: str) -> None:
@@ -82,8 +84,54 @@ def seed_tax_codes(db: Session, company_id: str) -> None:
             db.add(TaxCode(company_id=company_id, code=code, name=name, rate=rate, recoverable=recoverable, reporting_box=box))
 
 
+def seed_sales_units(db: Session, company_id: str) -> None:
+    """Settings > Purchase Settings > Unit Setup (index.html) shows EACH/TON/
+    HOUR as if they were pre-populated rows, but that table is static HTML —
+    clearStaticDemoData() (app.js) unconditionally wipes it on every page
+    load (same generic sweep as every other "looks seeded, isn't real" table
+    in that function), and it's then re-populated purely from this
+    company's own salesUnits AppDataRecord rows. A company with none (every
+    company before this function existed, since nothing ever wrote them)
+    sees an empty Unit Setup table and an Item Master unit dropdown with
+    only "PCS" — the on-screen EACH/TON/HOUR were never actually available
+    to select, just a visual placeholder nobody had wired up. Writes real
+    AppDataRecord rows so the table (and Item Master / POS unit dropdowns
+    fed from it) show something usable from day one. Same record shape
+    saveSalesUnit() (app.js) writes when a user adds one manually, so a
+    later manual edit/save of "KG" etc. updates this row rather than
+    duplicating it (record_key for salesUnits is "code", see app_data.py's
+    record_key())."""
+    units = [
+        ("EACH", "Each", "Quantity", 0),
+        ("KG", "Kilogram", "Weight", 2),
+        ("TON", "Ton", "Weight", 2),
+        ("HOUR", "Hour", "Time", 2),
+    ]
+    for code, name, unit_type, decimals in units:
+        existing = (
+            db.query(AppDataRecord)
+            .filter(
+                AppDataRecord.company_id == company_id,
+                AppDataRecord.collection == "salesUnits",
+                AppDataRecord.record_key == code,
+            )
+            .first()
+        )
+        if existing:
+            continue
+        db.add(
+            AppDataRecord(
+                company_id=company_id,
+                collection="salesUnits",
+                record_key=code,
+                payload=json.dumps({"code": code, "name": name, "type": unit_type, "decimals": decimals, "status": "Active"}),
+            )
+        )
+
+
 def seed_company_defaults(db: Session, company_id: str) -> None:
     """Everything a company needs before it can post a single transaction."""
     seed_accounts(db, company_id)
     seed_voucher_types(db, company_id)
     seed_tax_codes(db, company_id)
+    seed_sales_units(db, company_id)

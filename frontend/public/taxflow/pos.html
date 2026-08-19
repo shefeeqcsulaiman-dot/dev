@@ -1427,7 +1427,10 @@ function changeQty(id,delta){
 function setQty(id,val){
   const item=_cart.find(i=>i.id===id);
   if(!item)return;
-  const nq=Math.max(0,parseInt(val)||0);
+  // parseFloat, not parseInt — a weight-based item (unit KG etc.) needs a
+  // fractional quantity like 0.25 (250g); parseInt('0.25') silently
+  // truncated to 0, which the very next line then deleted from the cart.
+  const nq=Math.max(0,parseFloat(val)||0);
   if(nq===0)_cart=_cart.filter(i=>i.id!==id);
   else item.qty=nq;
   renderCart();
@@ -1479,7 +1482,7 @@ function renderCart(){
         </div>
         <div class="pcart-qty">
           <button onclick="changeQty('${sid}',-1)">−</button>
-          <input type="number" value="${item.qty}" min="1" onchange="setQty('${sid}',this.value)">
+          <input type="number" value="${item.qty}" min="0" step="0.01" onchange="setQty('${sid}',this.value)">
           <button onclick="changeQty('${sid}',1)">+</button>
         </div>
         <div class="pcart-amt" title="Ex-VAT: ${POS_CURRENCY} ${lineEx.toFixed(2)} + VAT: ${POS_CURRENCY} ${lineVat.toFixed(2)}">${POS_CURRENCY} ${lineInc.toFixed(2)}</div>
