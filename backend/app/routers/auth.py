@@ -41,7 +41,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)) -> Token:
     user = authenticate_user(db, payload.email, payload.password)
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="We couldn't sign you in — check your email and password and try again")
     # Unlike the vague "incorrect email or password" above (deliberate,
     # avoids leaking account existence), a suspended company gets its own
     # clear message here — this is about company standing, not credentials,

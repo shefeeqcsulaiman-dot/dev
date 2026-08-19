@@ -254,10 +254,10 @@ def branch_login(request: Request, payload: BranchLoginRequest, db: Session = De
     branch = db.query(Branch).filter(Branch.username.ilike(username)).first()
     if not branch:
         pwd_context.verify(payload.password, _DUMMY_HASH)
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="We couldn't sign you in — check your username and password and try again")
 
     if not branch.password_hash or not pwd_context.verify(payload.password, branch.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="We couldn't sign you in — check your username and password and try again")
     if branch.status != "Active":
         raise HTTPException(status_code=403, detail="This branch is disabled")
 

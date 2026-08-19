@@ -125,16 +125,16 @@ def ess_login(request: Request, payload: EssLoginRequest, db: Session = Depends(
     if not emp:
         # constant-time dummy check
         pwd_context.verify(password, "$2b$12$Z2HUw9SswHis7rcngsd7iOdXn/b9HafcmcwJx9D39ozeKwrSy22r.")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="We couldn't sign you in — check your username and password and try again")
 
     stored_hash = emp.password_hash
     if not stored_hash:
         # default password = employee_no
         if password != emp.employee_no:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="We couldn't sign you in — check your username and password and try again")
     else:
         if not pwd_context.verify(password, stored_hash):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="We couldn't sign you in — check your username and password and try again")
 
     if not emp.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal access has been disabled for this account")

@@ -315,14 +315,14 @@ def hr_login(request: Request, payload: HrLoginRequest, db: Session = Depends(ge
 
     if not emp:
         pwd_context.verify(payload.password, "$2b$12$Z2HUw9SswHis7rcngsd7iOdXn/b9HafcmcwJx9D39ozeKwrSy22r.")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="We couldn't sign you in — check your username and password and try again")
 
     stored_hash = emp.password_hash
     if not stored_hash:
         if payload.password != emp.employee_no:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="We couldn't sign you in — check your username and password and try again")
     elif not pwd_context.verify(payload.password, stored_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="We couldn't sign you in — check your username and password and try again")
 
     if not emp.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")

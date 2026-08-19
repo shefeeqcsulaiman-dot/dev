@@ -1205,7 +1205,7 @@ async function posLogin(e){
     const ok=await checkAuth();
     if(ok){ renderCart(); await loadProducts(); loadPosCustomers(); }
   }catch(ex){
-    err.textContent=ex.message||'Invalid email or password';
+    err.textContent=ex.message||"We couldn't sign you in — check your email and password and try again.";
     err.style.display='block';
     btn.textContent='Sign In'; btn.disabled=false;
   }

@@ -245,7 +245,7 @@
         localStorage.setItem(ESS_TOKEN_KEY, d.access_token);
         showApp();
       } else {
-        err.textContent = d.detail || 'Invalid credentials.';
+        err.textContent = d.detail || "We couldn't sign you in — check your username and password and try again.";
         err.style.display = 'block';
         btn.disabled = false; btn.textContent = 'Sign In';
       }
