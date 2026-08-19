@@ -129,9 +129,41 @@ def seed_sales_units(db: Session, company_id: str) -> None:
         )
 
 
+def seed_service_types(db: Session, company_id: str) -> None:
+    """POS's Service Type dropdown (pos.html) used to be a fixed, hardcoded
+    Dine In/Takeaway/Delivery/Online list with no backend representation at
+    all. Now that it's editable in Settings > Purchase Settings > Service
+    Types, a brand-new company needs to start with the same four options it
+    always had, as real serviceTypes AppDataRecord rows the POS dropdown and
+    the Settings table both read from — same shape saveServiceType() (app.js)
+    writes, so a later manual add/edit doesn't duplicate these."""
+    names = ["Dine In", "Takeaway", "Delivery", "Online"]
+    for name in names:
+        existing = (
+            db.query(AppDataRecord)
+            .filter(
+                AppDataRecord.company_id == company_id,
+                AppDataRecord.collection == "serviceTypes",
+                AppDataRecord.record_key == name,
+            )
+            .first()
+        )
+        if existing:
+            continue
+        db.add(
+            AppDataRecord(
+                company_id=company_id,
+                collection="serviceTypes",
+                record_key=name,
+                payload=json.dumps({"name": name, "status": "Active"}),
+            )
+        )
+
+
 def seed_company_defaults(db: Session, company_id: str) -> None:
     """Everything a company needs before it can post a single transaction."""
     seed_accounts(db, company_id)
     seed_voucher_types(db, company_id)
     seed_tax_codes(db, company_id)
     seed_sales_units(db, company_id)
+    seed_service_types(db, company_id)

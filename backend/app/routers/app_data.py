@@ -131,7 +131,7 @@ _BRANCH_FILTERED_COLLECTIONS = frozenset({
 _COLLECTION_MODULE: dict[str, str] = {
     "salesInvoices": "sales", "salesCategories": "sales",
     "quotations": "quotations", "quotationLayout": "quotations",
-    "posSales": "pos",
+    "posSales": "pos", "serviceTypes": "pos",
     "bills": "purchase", "purchaseRecords": "purchase", "purchaseDocuments": "purchase",
     "stockMovements": "inventory",
     "expenses": "expense",
@@ -303,6 +303,7 @@ def record_key(collection: str, record: dict[str, Any]) -> str | None:
         "invoiceLayout": "company",
         "salesCategories": "name",
         "salesUnits": "code",
+        "serviceTypes": "name",
         "purchaseRecords": "ref",
         "purchaseDocuments": "id",
         "journalDrafts": "ref",
@@ -470,7 +471,7 @@ _COLLECTIONS_BY_MODULE: dict[str, list[str]] = {
     # reference data needed by more than one module, so they're duplicated
     # across every module list that plausibly needs them; the union below
     # dedupes naturally.
-    "sales": ["salesInvoices", "salesCategories", "salesUnits", "customers", "products"],
+    "sales": ["salesInvoices", "salesCategories", "salesUnits", "serviceTypes", "customers", "products"],
     "quotations": ["quotations", "quotationLayout"],
     "purchase": ["bills", "purchaseDocuments", "vendors", "products"],
     "inventory": ["products"],

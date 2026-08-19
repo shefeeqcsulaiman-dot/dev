@@ -1607,6 +1607,20 @@
         </table>
       </div>
     </div>
+    <div class="card mb16">
+      <div class="card-hd"><div><div class="card-title">Service Types</div><div class="card-sub">Order types offered at POS — Dine In, Takeaway, Delivery, etc.</div></div></div>
+      <div class="fr2 mb12">
+        <div class="fg" style="margin:0"><label class="fl">Service Type Name</label><input class="fi" id="pos-service-type-name" placeholder="e.g. Dine In"></div>
+        <div class="fg" style="margin:0"><label class="fl">Status</label><select class="fi" id="pos-service-type-status"><option>Active</option><option>Inactive</option></select></div>
+      </div>
+      <div class="flx-b mb16"><span class="card-sub">New service types appear in the POS Service Type dropdown.</span><button class="btn btn-p btn-sm" onclick="saveServiceType()">+ Add Service Type</button></div>
+      <table class="tbl">
+        <thead><tr><th>Name</th><th>Status</th><th></th></tr></thead>
+        <tbody id="pos-service-type-tbody">
+          <tr data-empty-state="1"><td colspan="3" style="color:var(--text3);text-align:center">Loading service types…</td></tr>
+        </tbody>
+      </table>
+    </div>
     <div class="card" style="border-color:rgba(240,107,107,.3)">
       <div class="card-hd"><div><div class="card-title" style="color:var(--red)">Danger Zone</div><div class="card-sub">Irreversible operations — data cannot be recovered</div></div></div>
       <div class="flx" style="gap:10px;flex-wrap:wrap">

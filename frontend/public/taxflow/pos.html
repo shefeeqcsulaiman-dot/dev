@@ -1203,7 +1203,7 @@ async function posLogin(e){
     document.getElementById('pos-auth').style.display='none';
     btn.textContent='Sign In'; btn.disabled=false;
     const ok=await checkAuth();
-    if(ok){ renderCart(); await loadProducts(); loadPosCustomers(); }
+    if(ok){ renderCart(); await loadProducts(); loadPosCustomers(); loadPosServiceTypes(); loadPosStaff(); }
   }catch(ex){
     err.textContent=ex.message||"We couldn't sign you in — check your email and password and try again.";
     err.style.display='block';
@@ -1569,6 +1569,7 @@ async function completeSale(){
   const customer=(document.getElementById('pos-cust')?.value||'').trim()||'Walk-In Customer';
   const serviceType=document.getElementById('pos-service-type')?.value||'';
   const table=document.getElementById('pos-table')?.value||'';
+  const staff=document.getElementById('pos-staff')?.value||'';
   const tendered=_payMethod==='cash'?(parseFloat(document.getElementById('pay-tender')?.value)||total):total;
   const change=_payMethod==='cash'?Math.max(0,tendered-total):0;
   const cardRef=(document.getElementById('pay-cardref')?.value||'').trim();
@@ -1576,7 +1577,7 @@ async function completeSale(){
   const multiCard=_payMethod==='multi'?parseFloat(document.getElementById('pay-multi-card')?.value)||0:0;
 
   const sale={
-    id:rcptNo, receipt_no:rcptNo, date, customer, service_type:serviceType, table,
+    id:rcptNo, receipt_no:rcptNo, date, customer, service_type:serviceType, table, staff,
     items:_cart.map(i=>({...i, line_total:+(i.price*i.qty).toFixed(4), line_vat:+(i.price*i.qty*i.vatRate/100).toFixed(4)})),
     subtotal:+sub.toFixed(4), vat:+vat.toFixed(4),
     discount:+disc.toFixed(4), order_tax:+tax.toFixed(4), shipping:+ship.toFixed(4), packing:+pack.toFixed(4),
@@ -2231,6 +2232,46 @@ function toast(msg,type='ok'){
 // Branch-scoped server-side (a Branch Login only sees its own customers;
 // an admin/User login sees all, via _BRANCH_FILTERED_COLLECTIONS in
 // app_data.py) — this just renders whatever the backend already filtered.
+async function loadPosServiceTypes(){
+  try{
+    const data = await api('/app-data/records/serviceTypes?limit=100');
+    const sel = document.getElementById('pos-service-type');
+    if(!sel)return;
+    const current = sel.value;
+    const names = (data.records||[])
+      .filter(t=>(t.status||'Active')==='Active')
+      .map(t=>t.name).filter(Boolean);
+    // Fallback to the original fixed list if the company hasn't got any
+    // service types yet (e.g. an older company that predates seeding) —
+    // never leave the dropdown with just the placeholder.
+    const list = names.length ? names : ['Dine In','Takeaway','Delivery','Online'];
+    sel.innerHTML = '<option value="">Service type</option>' +
+      list.map(name=>`<option${name===current?' selected':''}>${esc(name)}</option>`).join('');
+  }catch(e){
+    console.warn('Service type list failed to load:', e);
+  }
+}
+
+async function loadPosStaff(){
+  try{
+    const data = await api('/app-data/records/employees?limit=500');
+    const sel = document.getElementById('pos-staff');
+    if(!sel)return;
+    const current = sel.value;
+    const names = (data.records||[])
+      .filter(e=>(e.status||'Active')==='Active')
+      .map(e=>e.name).filter(Boolean).sort();
+    sel.innerHTML = '<option value="">Staff</option>' +
+      names.map(name=>`<option${name===current?' selected':''}>${esc(name)}</option>`).join('');
+  }catch(e){
+    // Employees is HRMS-gated (assert_collection_module_enabled) — a
+    // company running POS without HRMS enabled gets a 403 here, same as
+    // it always would have; fail quietly and leave the dropdown at just
+    // the placeholder rather than surfacing an error for an expected case.
+    console.warn('Staff list failed to load:', e);
+  }
+}
+
 async function loadPosCustomers(){
   try{
     const data = await api('/app-data/records/customers?limit=500');
@@ -2336,6 +2377,8 @@ async function saveNewProduct(){
   renderCart();
   await loadProducts();
   loadPosCustomers();
+  loadPosServiceTypes();
+  loadPosStaff();
 })();
 
 document.addEventListener('click', e => {

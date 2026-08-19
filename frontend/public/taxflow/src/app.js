@@ -5443,6 +5443,27 @@ function renderSalesUnitRecord(unit){
   syncInventoryItemOptions();
 }
 
+function renderServiceTypeRecord(serviceType){
+  const tbody=document.getElementById('pos-service-type-tbody');
+  const name=(serviceType?.name||'').trim();
+  if(!tbody||!name||hasFirstCellValue(tbody,name))return;
+  const status=serviceType.status||'Active';
+  const row=document.createElement('tr');
+  row.dataset.serverRecord='serviceTypes';
+  row.innerHTML=`<td>${escapeHtml(name)}</td><td><span class="b ${status==='Active'?'b-g':'b-gray'}">${escapeHtml(status)}</span></td><td><button class="btn btn-r btn-xs" title="Delete" onclick="deleteServiceType(this)">×</button></td>`;
+  removeEmptyState(tbody);
+  tbody.prepend(row);
+}
+
+function deleteServiceType(btn){
+  const row=btn.closest('tr');
+  const name=row?.children[0]?.textContent.trim();
+  if(!row||!name)return;
+  if(!confirm(`Remove service type "${name}"?`))return;
+  row.remove();
+  deleteServer('serviceTypes',{name});
+}
+
 // Populated during bootstrap hydration — used as reliable source for purchase dashboard stats
 const _hydratedBills=[];
 
@@ -8125,6 +8146,7 @@ function hydrateFromServer(){
       await _yield();
       renderStats.salesCategories=await renderRecordList(data.salesCategories,renderSalesCategoryRecord,'sales category');
       renderStats.salesUnits=await renderRecordList(data.salesUnits,renderSalesUnitRecord,'sales unit');
+      renderStats.serviceTypes=await renderRecordList(data.serviceTypes,renderServiceTypeRecord,'service type');
       await _yield();
       renderStats.customers=await renderRecordList(data.customers,renderCustomerRecord,'customer');
       renderStats.users=await renderRecordList(data.users,renderUserRecord,'user');
@@ -15046,6 +15068,22 @@ function saveSalesUnit(){
   syncInventoryItemOptions();
   toast('Unit added','ok');
   audit('Added unit',name,'Saved');
+}
+
+function saveServiceType(){
+  const name=(document.getElementById('pos-service-type-name')?.value||'').trim();
+  const status=document.getElementById('pos-service-type-status')?.value||'Active';
+  if(!name){
+    toast('Enter service type name','warn');
+    return;
+  }
+  renderServiceTypeRecord({name,status});
+  saveServer('serviceTypes',{name,status});
+  const field=document.getElementById('pos-service-type-name');
+  if(field)field.value='';
+  refreshEnhancedTable(document.getElementById('pos-service-type-tbody')?.closest('table'));
+  toast('Service type added','ok');
+  audit('Added service type',name,'Saved');
 }
 
 function openAddProductFromInvoice(){
