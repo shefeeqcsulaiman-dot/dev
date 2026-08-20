@@ -206,7 +206,7 @@ button{cursor:pointer;border:none;background:none;}
 }
 .pcart-qty button:hover{background:var(--acc);border-color:var(--acc);color:#fff;}
 .pcart-qty input{
-  width:34px;text-align:center;background:var(--cart2);border:1px solid var(--cart-bd);
+  width:68px;text-align:center;background:var(--cart2);border:1px solid var(--cart-bd);
   border-radius:6px;padding:2px 0;font-size:12px;color:var(--cart-t1);height:26px;
 }
 .pcart-qty input:focus{outline:none;border-color:var(--acc);}
@@ -666,14 +666,6 @@ button{cursor:pointer;border:none;background:none;}
             <option>Takeaway</option>
             <option>Delivery</option>
             <option>Online</option>
-          </select>
-          <div class="pctrl-ico" style="flex-shrink:0">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="7" width="14" height="2"/><path d="M3 9v4M13 9v4M2 7V4a1 1 0 011-1h10a1 1 0 011 1v3"/></svg>
-          </div>
-          <select class="pctrl-sel" id="pos-table" style="max-width:80px">
-            <option value="">Table</option>
-            <option>Table 1</option><option>Table 2</option><option>Table 3</option>
-            <option>Table 4</option><option>Table 5</option>
           </select>
           <div class="pctrl-ico" style="flex-shrink:0">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 9a3 3 0 100-6 3 3 0 000 6z"/><path d="M2 14s1-4 6-4 6 4 6 4"/></svg>
@@ -1203,7 +1195,7 @@ async function posLogin(e){
     document.getElementById('pos-auth').style.display='none';
     btn.textContent='Sign In'; btn.disabled=false;
     const ok=await checkAuth();
-    if(ok){ renderCart(); await loadProducts(); loadPosCustomers(); loadPosServiceTypes(); loadPosStaff(); }
+    if(ok){ renderCart(); await loadProducts(); loadPosCustomers(); loadPosServiceTypes(); loadPosStaff(); loadPosWeightUnits(); }
   }catch(ex){
     err.textContent=ex.message||"We couldn't sign you in — check your email and password and try again.";
     err.style.display='block';
@@ -1380,7 +1372,6 @@ function renderGrid(){
   }
   grid.innerHTML = prods.map((p,idx)=>{
     const price = Number(p.selling_price||p.price||p.unit_price||p.sales_price||p.cost||0);
-    const vatRate = parseVat(p.vat);
     const color = tileColor(p.name||'');
     const init  = tileInit(p.name||'');
     return `<div class="ptile" onclick="addToCart(${idx})">
@@ -1390,7 +1381,7 @@ function renderGrid(){
       </div>
       <div class="ptile-name">${esc(p.name||'')}</div>
       <div class="ptile-bottom">
-        <div><div class="ptile-price">${POS_CURRENCY} ${price.toFixed(2)}</div>${vatRate?`<div class="ptile-vat">+${vatRate}% VAT</div>`:''}</div>
+        <div><div class="ptile-price">${POS_CURRENCY} ${price.toFixed(2)}</div></div>
         <span class="ptile-add" title="Add to cart">+</span>
       </div>
     </div>`;
@@ -1398,6 +1389,13 @@ function renderGrid(){
 }
 
 // ── Cart ─────────────────────────────────────────────────────────────
+// Unit names whose salesUnits type is "Weight" (e.g. "Kilogram") — see
+// loadPosWeightUnits(). A flat "+1" per tap makes no sense for a
+// weight-priced item (an arbitrary 1kg jump); re-tapping one already in
+// the cart instead focuses the qty box so the cashier types the
+// customer's actual total weight directly.
+let _posWeightUnits = new Set();
+
 function addToCart(idx){
   const p = (window._posRendered||_products)[idx];
   if(!p) return;
@@ -1405,7 +1403,14 @@ function addToCart(idx){
   const price = Number(p.selling_price||p.price||p.unit_price||p.sales_price||p.cost||0);
   const vatRate = parseVat(p.vat);
   const ex = _cart.find(i=>i.id===id);
-  if(ex){ ex.qty++; }
+  if(ex){
+    if(_posWeightUnits.has(p.unit)){
+      const input=document.querySelector('.pcart-qty input[data-cart-id="'+CSS.escape(id)+'"]');
+      if(input){ input.focus(); input.select(); }
+      return;
+    }
+    ex.qty++;
+  }
   else { _cart.push({id, code:p.code||'', name:p.name||'', price, vatRate, qty:1, unit:p.unit||'PCS'}); }
   // Self-contained snapshot, not an index into the currently-rendered/
   // filtered grid — that array reshuffles on every search/chip change, so
@@ -1482,7 +1487,7 @@ function renderCart(){
         </div>
         <div class="pcart-qty">
           <button onclick="changeQty('${sid}',-1)">−</button>
-          <input type="number" value="${item.qty}" min="0" step="0.01" onchange="setQty('${sid}',this.value)">
+          <input type="number" value="${item.qty}" min="0" step="0.01" data-cart-id="${esc(item.id)}" onchange="setQty('${sid}',this.value)">
           <button onclick="changeQty('${sid}',1)">+</button>
         </div>
         <div class="pcart-amt" title="Ex-VAT: ${POS_CURRENCY} ${lineEx.toFixed(2)} + VAT: ${POS_CURRENCY} ${lineVat.toFixed(2)}">${POS_CURRENCY} ${lineInc.toFixed(2)}</div>
@@ -1568,7 +1573,6 @@ async function completeSale(){
   const date=new Date().toISOString().slice(0,10);
   const customer=(document.getElementById('pos-cust')?.value||'').trim()||'Walk-In Customer';
   const serviceType=document.getElementById('pos-service-type')?.value||'';
-  const table=document.getElementById('pos-table')?.value||'';
   const staff=document.getElementById('pos-staff')?.value||'';
   const tendered=_payMethod==='cash'?(parseFloat(document.getElementById('pay-tender')?.value)||total):total;
   const change=_payMethod==='cash'?Math.max(0,tendered-total):0;
@@ -1577,7 +1581,7 @@ async function completeSale(){
   const multiCard=_payMethod==='multi'?parseFloat(document.getElementById('pay-multi-card')?.value)||0:0;
 
   const sale={
-    id:rcptNo, receipt_no:rcptNo, date, customer, service_type:serviceType, table, staff,
+    id:rcptNo, receipt_no:rcptNo, date, customer, service_type:serviceType, staff,
     items:_cart.map(i=>({...i, line_total:+(i.price*i.qty).toFixed(4), line_vat:+(i.price*i.qty*i.vatRate/100).toFixed(4)})),
     subtotal:+sub.toFixed(4), vat:+vat.toFixed(4),
     discount:+disc.toFixed(4), order_tax:+tax.toFixed(4), shipping:+ship.toFixed(4), packing:+pack.toFixed(4),
@@ -2272,6 +2276,17 @@ async function loadPosStaff(){
   }
 }
 
+async function loadPosWeightUnits(){
+  try{
+    const data = await api('/app-data/records/salesUnits?limit=100');
+    _posWeightUnits = new Set(
+      (data.records||[]).filter(u=>u.type==='Weight').map(u=>u.name).filter(Boolean)
+    );
+  }catch(e){
+    console.warn('Weight unit list failed to load:', e);
+  }
+}
+
 async function loadPosCustomers(){
   try{
     const data = await api('/app-data/records/customers?limit=500');
@@ -2379,6 +2394,7 @@ async function saveNewProduct(){
   loadPosCustomers();
   loadPosServiceTypes();
   loadPosStaff();
+  loadPosWeightUnits();
 })();
 
 document.addEventListener('click', e => {
