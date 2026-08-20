@@ -702,6 +702,15 @@ function openEmpEdit(emp){
 }
 
 function saveEmployee(){
+  // Captured before the modal title gets reset back to "Add Employee"
+  // below — editEmployeeFromRow() sets it to "Edit Employee" when opening
+  // the form to edit an existing record, the only signal this function has
+  // for which toast/audit-log wording to use. This variable was referenced
+  // at the bottom of this function but never declared anywhere, throwing
+  // "isEdit is not defined" on every single save — the record itself still
+  // saved correctly, but the ReferenceError meant neither the success toast
+  // nor the audit() call ever ran.
+  const isEdit=document.querySelector('#m-emp .modal-title')?.textContent==='Edit Employee';
   const passportFile=document.getElementById('emp-passport-file')?.files?.[0];
   const workPermitFile=document.getElementById('emp-work-permit-file')?.files?.[0];
   const medicalFile=document.getElementById('emp-medical-file')?.files?.[0];
@@ -3570,7 +3579,7 @@ function renderCfoRecommendations(data){
   const ar=parseAmount(kpis.open_invoice_amount||0);
   const ap=parseAmount(kpis.total_payable||0);
   if(ar>0&&ap>0&&ar>ap*1.5){
-    recs.push({color:'#f59e0b',bg:'rgba(245,158,11,.1)',icon:'⚠',title:'High receivables exposure',desc:`AED ${formatAed(ar)} AR vs AED ${formatAed(ap)} AP — chase collections`});
+    recs.push({color:'#f59e0b',bg:'rgba(245,158,11,.1)',icon:'⚠',title:'High receivables exposure',desc:`${formatAed(ar)} AR vs ${formatAed(ap)} AP — chase collections`});
   }
 
   const overdue=Number((status.overdue||{}).count||0);
@@ -3580,7 +3589,7 @@ function renderCfoRecommendations(data){
 
   const vatPayable=parseAmount(kpis.vat_payable||0);
   if(vatPayable>0){
-    recs.push({color:'#6366f1',bg:'rgba(99,102,241,.1)',icon:'$',title:'VAT liability outstanding',desc:`Net VAT due: AED ${formatAed(vatPayable)} — plan for filing`});
+    recs.push({color:'#6366f1',bg:'rgba(99,102,241,.1)',icon:'$',title:'VAT liability outstanding',desc:`Net VAT due: ${formatAed(vatPayable)} — plan for filing`});
   }
 
   const revTrend=Number(kpis.revenue_trend||0);
