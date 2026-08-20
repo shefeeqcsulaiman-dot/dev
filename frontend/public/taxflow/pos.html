@@ -1217,7 +1217,12 @@ async function api(path, opts={}){
     headers:{'Authorization':'Bearer '+TOKEN(),'Content-Type':'application/json',...(opts.headers||{})},
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
-  if(!res.ok) throw new Error(await res.text().catch(()=>res.status));
+  if(!res.ok){
+    let detail=`Request failed (${res.status})`;
+    try{ const j=await res.json(); detail=j.detail||j.message||detail; }catch{}
+    throw new Error(detail);
+  }
+  if(res.status===204)return null;
   return res.json();
 }
 async function saveRec(collection, record){
@@ -1677,23 +1682,32 @@ function posToInvoice(sale, status){
 }
 
 // ── Save As ───────────────────────────────────────────────────────────
+let _savingAs=false;
 async function saveAs(status){
   if(!_cart.length){toast('Cart is empty','warn');return;}
-  const {sub,vat,total,disc,tax,ship,pack}=cartTotals();
-  const _rno=(status==='draft'?'DRAFT-':status==='quotation'?'QUOTE-':'HOLD-')+genRcptNo();
-  const rec={
-    id:_rno, receipt_no:_rno,
-    status, date:new Date().toISOString().slice(0,10),
-    customer:(document.getElementById('pos-cust')?.value||'Walk-In Customer'),
-    items:_cart.map(i=>({...i})),
-    subtotal:+sub.toFixed(4),vat:+vat.toFixed(4),discount:+disc.toFixed(4),
-    order_tax:+tax.toFixed(4),shipping:+ship.toFixed(4),packing:+pack.toFixed(4),
-    total:+total.toFixed(4),
-  };
+  // Triggered from two different buttons (top-bar icon + Hold Order quick
+  // action) with no single shared element to disable, so guard the async
+  // operation itself against a rapid double-click firing two saves.
+  if(_savingAs)return;
+  _savingAs=true;
   try{
+    const {sub,vat,total,disc,tax,ship,pack}=cartTotals();
+    const _rno=(status==='draft'?'DRAFT-':status==='quotation'?'QUOTE-':'HOLD-')+genRcptNo();
+    const rec={
+      id:_rno, receipt_no:_rno,
+      status, date:new Date().toISOString().slice(0,10),
+      customer:(document.getElementById('pos-cust')?.value||'Walk-In Customer'),
+      service_type:document.getElementById('pos-service-type')?.value||'',
+      staff:document.getElementById('pos-staff')?.value||'',
+      items:_cart.map(i=>({...i})),
+      subtotal:+sub.toFixed(4),vat:+vat.toFixed(4),discount:+disc.toFixed(4),
+      order_tax:+tax.toFixed(4),shipping:+ship.toFixed(4),packing:+pack.toFixed(4),
+      total:+total.toFixed(4),
+    };
     await saveRec('posSales',rec);
     toast(status.charAt(0).toUpperCase()+status.slice(1)+' saved — '+rec.receipt_no,'ok');
   }catch(e){ toast('Failed: '+e.message,'err'); }
+  finally{ _savingAs=false; }
 }
 
 // ── Credit Sale ───────────────────────────────────────────────────────
@@ -2033,7 +2047,17 @@ async function resumeSale(id){
     _cart=(draft.items||[]).map(i=>({id:i.id,code:i.code||'',name:i.name,price:i.price,vatRate:i.vatRate,qty:i.qty,unit:i.unit||'PCS'}));
     const custEl=document.getElementById('pos-cust');
     if(custEl)custEl.value=draft.customer||'Walk-In Customer';
-    if(draft.discount)document.getElementById('s-disc').value=draft.discount;
+    // != null (not truthy) so a genuinely-saved 0 still restores instead of
+    // silently leaving the field at whatever it currently shows.
+    if(draft.discount!=null)document.getElementById('s-disc').value=draft.discount;
+    if(draft.order_tax!=null)document.getElementById('s-tax').value=draft.order_tax;
+    if(draft.shipping!=null)document.getElementById('s-ship').value=draft.shipping;
+    if(draft.packing!=null)document.getElementById('s-pack').value=draft.packing;
+    const svcEl=document.getElementById('pos-service-type');
+    if(svcEl)svcEl.value=draft.service_type||'';
+    const staffEl=document.getElementById('pos-staff');
+    if(staffEl)staffEl.value=draft.staff||'';
+    recalc();
     await _deleteHeldOrderWithRetry(draft.id);
     renderCart();
     closeRecent();
