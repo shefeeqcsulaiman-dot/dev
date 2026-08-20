@@ -19754,6 +19754,52 @@ function getPayrollRows(){
   return [...document.querySelectorAll('#payroll-tbody tr')];
 }
 
+const PAYROLL_MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+// The Payroll period picker (#pay-period, hrms.html) used to be three
+// hardcoded options — "June/May/April 2024" — with no way to select or
+// even label a current-dated run at all. Builds the current month plus the
+// previous 5 as real, selectable options instead.
+function populatePayrollPeriods(){
+  const sel=document.getElementById('pay-period');
+  if(!sel)return;
+  const now=new Date();
+  const periods=[];
+  for(let i=0;i<6;i++){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    periods.push(`${PAYROLL_MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`);
+  }
+  const current=sel.value;
+  sel.innerHTML=periods.map(p=>`<option${p===current?' selected':''}>${p}</option>`).join('');
+  onPayrollPeriodChange();
+}
+
+// Replaces the previous onchange handler (toast('Payroll period
+// changed','info')) — that was a pure no-op, the card title, WPS Salary
+// Month/File Sequence, and Journal Reference/Posting Date fields never
+// actually reflected whichever period was selected, permanently showing
+// whatever was hardcoded in the HTML.
+function onPayrollPeriodChange(){
+  const sel=document.getElementById('pay-period');
+  const period=sel?.value||'';
+  if(!period)return;
+  const [monthName,yearStr]=period.split(' ');
+  const monthIdx=PAYROLL_MONTH_NAMES.indexOf(monthName);
+  const year=parseInt(yearStr,10)||new Date().getFullYear();
+  const setText=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
+  const setVal=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val;};
+  setText('pay-run-title','Payroll Run — '+period);
+  setText('pay-stat-period',period);
+  if(monthIdx>=0){
+    const mm=String(monthIdx+1).padStart(2,'0');
+    setVal('wps-salary-month',period);
+    setVal('wps-file-seq',`SIF-${year}-${mm}-001`);
+    setVal('pay-je-ref-display',`PAY-JE-${year}${mm}`);
+    const lastDay=new Date(year,monthIdx+1,0).getDate();
+    setVal('pay-posting-date',`${year}-${mm}-${String(lastDay).padStart(2,'0')}`);
+  }
+}
+
 function recalcPayroll(){
   const rows=getPayrollRows();
   let gross=0,deductions=0,netTotal=0,exceptions=0;
@@ -20829,10 +20875,17 @@ function previewStaticPayslip(name,net){
 }
 
 function publishPayslips(){
+  // Was claiming "published to employee email and mobile app" — this app
+  // has no email/push-notification delivery pipeline for payslips at all,
+  // so that never actually happened; the only real effect was writing a
+  // marker record nothing else reads. Real payslip generation is the
+  // separate Approve Payroll -> /payroll/generate flow, which does work
+  // and does reach an employee's ESS payslip view. Honest wording until an
+  // actual delivery mechanism exists, rather than a fabricated success claim.
   const period=document.getElementById('pay-period')?.value||'';
   saveServer('payrollRuns',{id:`PUB-${Date.now()}`,period,status:'Published',published_at:new Date().toISOString()});
-  toast('Payslips published to employee email and mobile app ✓','ok');
-  audit('Published payslips',period,'Published');
+  toast('Payroll run marked as published — payslips are generated via Approve Payroll','info');
+  audit('Marked payroll run as published',period,'Published');
 }
 
 function postPayrollJournal(){

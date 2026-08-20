@@ -2196,7 +2196,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 
   <div class="tab-body on" id="pay-run">
     <div class="g4 mb16">
-      <div class="stat"><div class="stat-lbl">Gross Payroll</div><div class="stat-val" id="pay-stat-gross" style="color:var(--accent)">AED 0</div><div class="stat-delta">June 2024</div></div>
+      <div class="stat"><div class="stat-lbl">Gross Payroll</div><div class="stat-val" id="pay-stat-gross" style="color:var(--accent)">AED 0</div><div class="stat-delta" id="pay-stat-period">—</div></div>
       <div class="stat"><div class="stat-lbl">Deductions</div><div class="stat-val" id="pay-stat-ded" style="color:var(--amber)">AED 0</div><div class="stat-delta">loans · absence · penalties</div></div>
       <div class="stat"><div class="stat-lbl">Net Pay</div><div class="stat-val" id="pay-stat-net" style="color:var(--green)">AED 0</div><div class="stat-delta">ready for WPS</div></div>
       <div class="stat"><div class="stat-lbl">Exceptions</div><div class="stat-val" id="pay-stat-exc" style="color:var(--red)">0</div><div class="stat-delta">need review</div></div>
@@ -2204,9 +2204,9 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 
     <div class="card mb16">
       <div class="card-hd">
-        <div><div class="card-title">Payroll Run — June 2024</div><div class="card-sub">Attendance, leave, overtime, advances, and WPS validation</div></div>
+        <div><div class="card-title" id="pay-run-title">Payroll Run</div><div class="card-sub">Attendance, leave, overtime, advances, and WPS validation</div></div>
         <div class="flx">
-          <select class="fi" style="width:140px" id="pay-period" onchange="toast('Payroll period changed','info')"><option>June 2024</option><option>May 2024</option><option>April 2024</option></select>
+          <select class="fi" style="width:140px" id="pay-period" onchange="onPayrollPeriodChange()"></select>
           <button class="btn btn-g btn-sm" onclick="recalcPayroll()">Recalculate</button>
           <button class="btn btn-p btn-sm" onclick="runPayroll()">Run Payroll</button>
         </div>
@@ -2385,9 +2385,9 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       </div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Controls</div></div>
-        <div class="fg"><label class="fl">Journal Reference</label><input class="fi mono" value="PAY-JE-2024-06"></div>
+        <div class="fg"><label class="fl">Journal Reference</label><input class="fi mono" id="pay-je-ref-display"></div>
         <div class="fg"><label class="fl">Cost Center Split</label><select class="fi"><option>By Department</option><option>Single Payroll Cost Center</option><option>By Employee</option></select></div>
-        <div class="fg"><label class="fl">Posting Date</label><input class="fi" type="date" value="2024-06-30"></div>
+        <div class="fg"><label class="fl">Posting Date</label><input class="fi" type="date" id="pay-posting-date"></div>
         <button class="btn btn-g" onclick="toast('Payroll accrual reversal scheduled','ok')">Schedule Reversal</button>
       </div>
     </div>

@@ -440,7 +440,7 @@
           '<div class="payslip-status">' + p.run_status + '</div>' +
           '<div class="payslip-period">' + p.period + '</div>' +
           row('Basic', p.basic) + row('Allowances', p.allowances) +
-          row('Overtime', p.overtime) + row('Deductions', '- ' + p.deductions) +
+          row('Overtime', p.overtime) + row('Deductions', p.deductions) +
           '<div class="payslip-row net"><span>Net Pay</span><span>AED ' + fmt(p.net_pay) + '</span></div>' +
           '</div>';
       }).join('') + '</div>';
@@ -450,7 +450,16 @@
   function row(label, val) {
     return '<div class="payslip-row"><span>' + label + '</span><span>AED ' + fmt(val) + '</span></div>';
   }
-  function fmt(n) { return Number(n).toLocaleString('en-AE', {minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function fmt(n) {
+    // row('Deductions', '- ' + p.deductions) used to pre-concatenate a text
+    // prefix before the number, so Number() on that string ("- 50" — note
+    // the space Number() can't parse, or "- undefined" when payroll hadn't
+    // populated a deductions value at all) was ALWAYS NaN, not just when
+    // deductions was missing. Now passed the raw number; this guard still
+    // covers a genuinely missing/non-numeric value defensively.
+    var v = Number(n);
+    return (isNaN(v) ? 0 : v).toLocaleString('en-AE', {minimumFractionDigits:2,maximumFractionDigits:2});
+  }
 
   function showApp() {
     document.getElementById('login-screen').style.display = 'none';
