@@ -866,13 +866,12 @@ button{cursor:pointer;border:none;background:none;}
 <div class="ov" id="ov-rcpt" style="display:none">
   <div class="ov-box ov-rcpt">
     <button class="ov-close" onclick="closeRcpt()" title="Close">✕</button>
-    <div class="ov-title" style="margin-bottom:12px" id="rcpt-modal-title">Sale Complete ✓</div>
     <div class="rcpt" id="rcpt-body"></div>
     <div class="rcpt-actions">
+      <button class="rcpt-btn rcpt-btn-new" onclick="newSale()">+ New Sale</button>
       <button class="rcpt-btn" onclick="printRcpt()">🖨 Print</button>
       <button class="rcpt-btn" onclick="shareRcpt('whatsapp')">💬 WhatsApp</button>
       <button class="rcpt-btn" onclick="shareRcpt('email')">✉ Email</button>
-      <button class="rcpt-btn rcpt-btn-new" onclick="newSale()">+ New Sale</button>
     </div>
   </div>
 </div>
@@ -1611,6 +1610,7 @@ async function completeSale(){
     });
     _lastSale=sale;
     closePay();
+    resetPosCart();
     showReceipt(sale);
   }catch(e){
     toast('Failed to save sale: '+e.message,'err');
@@ -1881,8 +1881,6 @@ function showReceipt(sale){
       <div class="rcpt-qr-hint">${POS_COUNTRY==='Saudi Arabia'?bl('ZATCA-compliant invoice QR','zatcaHint'):bl('Scan to view invoice online','viewInvoice')}</div>
     </div>`}
     <p style="text-align:center;font-size:10px;color:var(--t3);margin-top:6px">Thank you for your business!<span class="rcpt-ar">${RCPT_AR.thankYou}</span></p>`;
-  const titleEl=document.getElementById('rcpt-modal-title');
-  if(titleEl)titleEl.textContent=isRefund?'Refund Complete ✓':'Sale Complete ✓';
   document.getElementById('ov-rcpt').style.display='flex';
   // genPosShortLink() POSTs a hardcoded status:'Paid' payload and publishes
   // a public share link — wrong for a negative-amount refund document.
@@ -1937,12 +1935,18 @@ function closeRcpt(){
   document.getElementById('ov-rcpt').style.display='none';
 }
 
-function newSale(){
-  document.getElementById('ov-rcpt').style.display='none';
+function resetPosCart(){
   _cart=[];
   document.getElementById('pos-cust').value='Walk-In Customer';
   ['s-disc','s-tax','s-ship','s-pack'].forEach(id=>{ const el=document.getElementById(id); if(el)el.value='0'; });
   renderCart();
+}
+
+function newSale(){
+  // The cart is already cleared the moment the sale completes (see
+  // completeSale()) — this just dismisses the receipt modal so the ✕ close
+  // button and "+ New Sale" behave identically for what's left in the cart.
+  document.getElementById('ov-rcpt').style.display='none';
 }
 
 // ── Recent Transactions ───────────────────────────────────────────────
