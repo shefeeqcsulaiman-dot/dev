@@ -3044,15 +3044,21 @@ function syncSidebarCounts(data){
 
 function renderDashboardMeta(data){
   const meta=data.dashboard_meta||{};
-  if(meta.title)META.dashboard.t=meta.title;
-  if(meta.subtitle)META.dashboard.s=meta.subtitle;
+  // The backend never actually sends dashboard_meta today, so meta.title/
+  // subtitle are always undefined — caching the resolved fallback text here
+  // (not just the raw meta fields) is what lets a later go('dashboard') call
+  // pick up real text instead of index.html's static "Loading dashboard from
+  // database" placeholder, even if this ran while the dashboard page wasn't
+  // visible yet and skipped the direct DOM write below.
+  META.dashboard.t=meta.title||'Dashboard';
+  META.dashboard.s=meta.subtitle||'Dashboard loaded from database records';
   const dashboardVisible=document.getElementById('page-dashboard')?.classList.contains('on');
   if(dashboardVisible){
     const title=document.getElementById('ptitle');
     const sub=document.getElementById('psub');
     const arDash=_appLang==='ar'?_META_AR.dashboard:null;
-    if(title)title.textContent=arDash?.t||(meta.title||'Dashboard');
-    if(sub)sub.textContent=arDash?.s||(meta.subtitle||'Dashboard loaded from database records');
+    if(title)title.textContent=arDash?.t||META.dashboard.t;
+    if(sub)sub.textContent=arDash?.s||META.dashboard.s;
   }
 }
 
@@ -3125,6 +3131,10 @@ async function syncDashboardFromDatabase(){
       const el=document.getElementById(id);
       if(el)el.innerHTML=errHtml;
     });
+    if(!window.__taxflowFreshDashboardLoaded&&!window.__taxflowDashboardRetried){
+      window.__taxflowDashboardRetried=true;
+      setTimeout(()=>syncDashboardFromDatabase(),3000);
+    }
   }
 }
 
@@ -9983,6 +9993,10 @@ function zatcaQrValue(inv,layout){
   // Same 15-digit registration-number field UAE's TRN uses — ZATCA calls it
   // a VAT number, not a rename of the underlying data.
   const vatNumber=currentCompany?.trn||document.getElementById('set-company-trn')?.value||'';
+  if(!vatNumber&&!window.__taxflowZatcaTrnWarned){
+    window.__taxflowZatcaTrnWarned=true;
+    toast('ZATCA QR code is missing the VAT number — add your company TRN in Settings','warn');
+  }
   // inv.created_at (stamped once at save time, see persistSalesInvoice())
   // carries real time-of-day; older records that predate that stamp only
   // have a date, so midnight UTC is used as a documented approximation
@@ -16254,11 +16268,21 @@ function refreshHrmsKpis(){
   set('hrms-kpi-leave',onLeaveToday||'0');
   set('hrms-kpi-pending',(pendingLeave+pendingOT+pendingCorr)||'0');
   set('hrms-kpi-payroll',payrollNetTotal>0?fmtAed(payrollNetTotal):'—');
-  // Present Today = total employees minus those on approved leave today
-  const presentToday=Math.max(0,empCount-onLeaveToday);
-  set('hrms-kpi-present',presentToday||'0');
+  // Present Today: show the leave-based estimate immediately, then overwrite
+  // with the real punch-based count from /attendance/today once it resolves
+  // — this is the same punch data the Attendance Trend chart draws from, so
+  // the two can no longer silently disagree (e.g. KPI claiming everyone is
+  // present while the trend chart shows near-zero actual check-ins).
+  const presentFallback=Math.max(0,empCount-onLeaveToday);
+  set('hrms-kpi-present',presentFallback||'0');
   const trendEl=document.getElementById('hrms-kpi-present-trend');
-  if(trendEl&&empCount>0)trendEl.innerHTML='<span>'+Math.round(presentToday/empCount*100)+'% of total</span>';
+  if(trendEl&&empCount>0)trendEl.innerHTML='<span>'+Math.round(presentFallback/empCount*100)+'% of total</span>';
+  moduleApi('/attendance/today').then(data=>{
+    const presentToday=data?.present_count;
+    if(typeof presentToday!=='number')return;
+    set('hrms-kpi-present',presentToday||'0');
+    if(trendEl&&empCount>0)trendEl.innerHTML='<span>'+Math.round(presentToday/empCount*100)+'% of total</span>';
+  }).catch(()=>{});
   // Dashboard alert tiles
   set('hrms-dash-expiry',criticalExpiry||'0');
   set('hrms-dash-ot',pendingOT||'0');
@@ -18289,6 +18313,7 @@ function saveJobRequisition(){
   const salFrom=document.getElementById('req-sal-from')?.value||'';
   const salTo=document.getElementById('req-sal-to')?.value||'';
   if(!title){toast('Job title is required','warn');return;}
+  if((salFrom&&isNaN(Number(salFrom)))||(salTo&&isNaN(Number(salTo)))){toast('Salary range must be numeric','err');return;}
   const record={id:`REQ-${Date.now()}`,title,department:dept,positions,employmentType:empType,location,date,salaryFrom:salFrom,salaryTo:salTo,status:'Pending Approval'};
   renderJobRequisitionRecord(record);
   saveServer('jobRequisitions',record);
@@ -18307,7 +18332,7 @@ function renderJobRequisitionRecord(rec){
   const statusCls=rec.status==='Open'?'b-g':rec.status==='Closed'?'b-gray':'b-a';
   const isPending=rec.status==='Pending Approval'||!rec.status;
   const salFrom=rec.salaryFrom,salTo=rec.salaryTo;
-  const salRange=salFrom&&salTo?`AED ${Number(salFrom).toLocaleString()}–${Number(salTo).toLocaleString()}`:(salFrom?`AED ${Number(salFrom).toLocaleString()}+`:'—');
+  const salRange=salFrom&&salTo?`${AED_SYMBOL} ${Number(salFrom).toLocaleString()}–${Number(salTo).toLocaleString()}`:(salFrom?`${AED_SYMBOL} ${Number(salFrom).toLocaleString()}+`:'—');
   const actions=isPending
     ?`<div class="flx"><button class="btn btn-success btn-sm" onclick="approveJobRequisition(this)">Approve</button><button class="btn btn-g btn-sm" onclick="toast('Posting to job boards','info')">Post</button></div>`
     :`<button class="btn btn-g btn-sm" onclick="toast('Posting to job boards','info')">Post</button>`;
@@ -22718,11 +22743,12 @@ function saveBill(){
 function saveVendor(){
   const name=(document.getElementById('vendor-name')?.value||'').trim();
   const trn=(document.getElementById('vendor-trn')?.value||'').replace(/\D/g,'');
-  const category=document.getElementById('vendor-category')?.value||'Services';
+  const category=document.getElementById('vendor-category')?.value||'';
   const email=(document.getElementById('vendor-email')?.value||'').trim();
   const phone=(document.getElementById('vendor-phone')?.value||'').trim();
   const address=(document.getElementById('vendor-address')?.value||'').trim();
   if(!name){toast('Vendor name is required','err');return;}
+  if(!category){toast('Select a vendor category','err');return;}
   if(trn&&trn.length!==15){toast('Vendor TRN must be 15 digits','err');return;}
   renderVendorRecord({name,trn,category,email,phone,address});
   syncSupplierOptions(name);
