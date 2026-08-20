@@ -832,6 +832,7 @@ button{cursor:pointer;border:none;background:none;}
 <!-- ── Payment modal ── -->
 <div class="ov" id="ov-pay" style="display:none">
   <div class="ov-box">
+    <button class="ov-close" onclick="closePay()" title="Close">✕</button>
     <div class="ov-title" id="pay-title">Cash Payment</div>
     <div class="ov-sub">Review and confirm the payment</div>
     <div class="ov-total" id="pay-total">AED 0.00</div>
@@ -872,9 +873,9 @@ button{cursor:pointer;border:none;background:none;}
     <button class="ov-close" onclick="closeRcpt()" title="Close">✕</button>
     <div class="rcpt-actions" style="margin-bottom:12px">
       <button class="rcpt-btn rcpt-btn-new" onclick="newSale()">+ New Sale</button>
-      <button class="rcpt-btn" onclick="printRcpt()">🖨 Print</button>
-      <button class="rcpt-btn" onclick="shareRcpt('whatsapp')">💬 WhatsApp</button>
-      <button class="rcpt-btn" onclick="shareRcpt('email')">✉ Email</button>
+      <button class="rcpt-btn" onclick="printRcpt()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="6" width="10" height="6" rx="1"/><path d="M4 6V3h8v3M5 12h6v2H5z"/></svg>Print</button>
+      <button class="rcpt-btn" onclick="shareRcpt('whatsapp')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4a2 2 0 012-2h8a2 2 0 012 2v5a2 2 0 01-2 2H6l-3 3V4z"/></svg>WhatsApp</button>
+      <button class="rcpt-btn" onclick="shareRcpt('email')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M2 4l6 5 6-5"/></svg>Email</button>
     </div>
     <div class="rcpt" id="rcpt-body"></div>
   </div>
@@ -883,15 +884,13 @@ button{cursor:pointer;border:none;background:none;}
 <!-- ── Recent Transactions modal ── -->
 <div class="ov" id="ov-recent" style="display:none">
   <div class="ov-box ov-recent">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-      <div class="ov-title">Recent Transactions</div>
-      <button onclick="closeRecent()" style="background:none;border:none;font-size:18px;color:var(--t3);line-height:1;cursor:pointer;padding:4px;border-radius:6px;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--t3)'">✕</button>
-    </div>
+    <button class="ov-close" onclick="closeRecent()" title="Close">✕</button>
+    <div class="ov-title" style="margin-bottom:14px">Recent Transactions</div>
     <div class="ov-recent-body" id="ov-recent-body">
       <div style="padding:40px;text-align:center;color:var(--t3)">Loading…</div>
     </div>
     <div style="margin-top:14px">
-      <button class="rcpt-btn" style="width:100%" onclick="closeRecent()">Close</button>
+      <button class="ov-cancel" style="width:100%" onclick="closeRecent()">Close</button>
     </div>
   </div>
 </div>
@@ -899,14 +898,12 @@ button{cursor:pointer;border:none;background:none;}
 <!-- ── Recent Items (quick re-add) ── -->
 <div class="ov" id="ov-recent-items" style="display:none">
   <div class="ov-box" style="width:380px;max-height:calc(100vh - 80px);overflow-y:auto">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div class="ov-title">Recent Items</div>
-      <button onclick="closeRecentItems()" style="background:none;border:none;font-size:18px;color:var(--t3);line-height:1;cursor:pointer;padding:4px;border-radius:6px;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--t3)'">✕</button>
-    </div>
+    <button class="ov-close" onclick="closeRecentItems()" title="Close">✕</button>
+    <div class="ov-title" style="margin-bottom:10px">Recent Items</div>
     <div class="ov-sub" style="margin-bottom:10px">Items added to the cart this session — tap Add to add another</div>
     <div id="ov-recent-items-body"></div>
     <div style="margin-top:14px">
-      <button class="rcpt-btn" style="width:100%" onclick="closeRecentItems()">Close</button>
+      <button class="ov-cancel" style="width:100%" onclick="closeRecentItems()">Close</button>
     </div>
   </div>
 </div>
@@ -914,10 +911,8 @@ button{cursor:pointer;border:none;background:none;}
 <!-- ── Refund (Sales Return) ── -->
 <div class="ov" id="ov-refund" style="display:none">
   <div class="ov-box" style="width:400px;max-height:calc(100vh - 80px);overflow-y:auto">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div class="ov-title">Refund Sale</div>
-      <button onclick="closeRefund()" style="background:none;border:none;font-size:18px;color:var(--t3);line-height:1;cursor:pointer;padding:4px;border-radius:6px;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--t3)'">✕</button>
-    </div>
+    <button class="ov-close" onclick="closeRefund()" title="Close">✕</button>
+    <div class="ov-title" style="margin-bottom:10px">Refund Sale</div>
     <div class="ov-sub" style="margin-bottom:10px">This will reverse the sale's stock and reduce reported revenue/VAT — it cannot be undone</div>
     <div style="background:var(--sf3, #f5f5f7);border-radius:10px;padding:12px;margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--t3);margin-bottom:4px"><span id="refund-receipt"></span><span id="refund-date"></span></div>
@@ -939,14 +934,12 @@ button{cursor:pointer;border:none;background:none;}
 <!-- ── Price Check ── -->
 <div class="ov" id="ov-price-check" style="display:none">
   <div class="ov-box" style="width:380px;max-height:calc(100vh - 80px);overflow-y:auto">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div class="ov-title">Price Check</div>
-      <button onclick="closePriceCheck()" style="background:none;border:none;font-size:18px;color:var(--t3);line-height:1;cursor:pointer;padding:4px;border-radius:6px;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--t3)'">✕</button>
-    </div>
+    <button class="ov-close" onclick="closePriceCheck()" title="Close">✕</button>
+    <div class="ov-title" style="margin-bottom:10px">Price Check</div>
     <input type="text" id="pc-query" placeholder="Search by name or code…" oninput="renderPriceCheckResults(this.value)" style="margin-bottom:10px">
     <div id="pc-results"></div>
     <div style="margin-top:14px">
-      <button class="rcpt-btn" style="width:100%" onclick="closePriceCheck()">Close</button>
+      <button class="ov-cancel" style="width:100%" onclick="closePriceCheck()">Close</button>
     </div>
   </div>
 </div>
@@ -954,14 +947,12 @@ button{cursor:pointer;border:none;background:none;}
 <!-- ── Stock Lookup ── -->
 <div class="ov" id="ov-stock-lookup" style="display:none">
   <div class="ov-box" style="width:380px;max-height:calc(100vh - 80px);overflow-y:auto">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div class="ov-title">Stock Lookup</div>
-      <button onclick="closeStockLookup()" style="background:none;border:none;font-size:18px;color:var(--t3);line-height:1;cursor:pointer;padding:4px;border-radius:6px;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--t3)'">✕</button>
-    </div>
+    <button class="ov-close" onclick="closeStockLookup()" title="Close">✕</button>
+    <div class="ov-title" style="margin-bottom:10px">Stock Lookup</div>
     <input type="text" id="sl-query" placeholder="Search by name or code…" oninput="renderStockLookupResults(this.value)" style="margin-bottom:10px">
     <div id="sl-results"></div>
     <div style="margin-top:14px">
-      <button class="rcpt-btn" style="width:100%" onclick="closeStockLookup()">Close</button>
+      <button class="ov-cancel" style="width:100%" onclick="closeStockLookup()">Close</button>
     </div>
   </div>
 </div>
@@ -1008,6 +999,7 @@ button{cursor:pointer;border:none;background:none;}
 <!-- ── Add Customer Modal ── -->
 <div class="ov" id="ov-add-cust" style="display:none">
   <div class="ov-box" style="width:410px">
+    <button class="ov-close" onclick="document.getElementById('ov-add-cust').style.display='none'" title="Close">✕</button>
     <div class="ov-title">Add Customer</div>
     <div class="ov-sub">New customer will be saved to the database</div>
     <label>Full Name *</label>
@@ -1030,6 +1022,7 @@ button{cursor:pointer;border:none;background:none;}
 <!-- ── Add Product Modal ── -->
 <div class="ov" id="ov-add-prod" style="display:none">
   <div class="ov-box" style="width:460px;max-height:calc(100vh - 60px);overflow-y:auto">
+    <button class="ov-close" onclick="document.getElementById('ov-add-prod').style.display='none'" title="Close">✕</button>
     <div class="ov-title">Add Product</div>
     <div class="ov-sub">New product will be saved to Inventory</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 14px">
