@@ -451,37 +451,44 @@ button{cursor:pointer;border:none;background:none;}
 /* Receipt modal — bilingual (EN/AR) tax invoice */
 .ov-rcpt{width:440px;max-height:calc(100vh - 80px);overflow-y:auto;}
 .rcpt-ar{direction:rtl;unicode-bidi:isolate;font-family:'Segoe UI',Tahoma,Arial,sans-serif;}
+/* The receipt card always renders on a fixed white "paper" background,
+   same as the @media print rules further down — it's meant to look
+   identical whether printed, shared, or viewed in dark mode, so its
+   text uses fixed light-mode-equivalent colors instead of the theme
+   tokens (which flip to near-white in dark mode and become invisible
+   against this permanently-white card). */
 .rcpt{
   font-family:var(--fn);font-size:12px;
-  border:1px solid var(--bd);border-radius:14px;padding:20px;
+  border:1px solid #e2e8f0;border-radius:14px;padding:20px;
   margin-bottom:16px;background:#fff;line-height:1.6;box-shadow:var(--shadow-sm);
+  color:#0f172a;
 }
-.rcpt-hd{text-align:center;margin-bottom:12px;padding-bottom:12px;border-bottom:2px solid var(--t1);}
-.rcpt-hd h2{font-size:16px;margin:0 0 2px;font-weight:800;color:var(--t1);}
+.rcpt-hd{text-align:center;margin-bottom:12px;padding-bottom:12px;border-bottom:2px solid #0f172a;}
+.rcpt-hd h2{font-size:16px;margin:0 0 2px;font-weight:800;color:#0f172a;}
 .rcpt-hd .rcpt-heading{font-size:11px;font-weight:700;color:var(--acc);letter-spacing:.3px;margin-top:2px;}
 .rcpt-hd .rcpt-heading .rcpt-ar{margin-inline-start:6px;color:var(--acc2);}
-.rcpt-hd p{font-size:10.5px;color:var(--t3);margin-top:3px;}
-.rcpt-hr{border:none;border-top:1px dashed var(--bd2);margin:10px 0;}
+.rcpt-hd p{font-size:10.5px;color:#94a3b8;margin-top:3px;}
+.rcpt-hr{border:none;border-top:1px dashed #cbd5e1;margin:10px 0;}
 .rcpt-row{display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;padding:2px 0;gap:8px;}
-.rcpt-lbl{color:var(--t2);}
-.rcpt-lbl .rcpt-ar{font-size:10px;color:var(--t3);margin-inline-start:5px;}
+.rcpt-lbl{color:#475569;}
+.rcpt-lbl .rcpt-ar{font-size:10px;color:#94a3b8;margin-inline-start:5px;}
 .rcpt-tbl{width:100%;border-collapse:collapse;font-size:11.5px;}
-.rcpt-tbl thead td{border-bottom:1.5px solid var(--bd2);padding-bottom:6px;color:var(--t2);}
+.rcpt-tbl thead td{border-bottom:1.5px solid #cbd5e1;padding-bottom:6px;color:#475569;}
 .rcpt-tbl td{padding:4px 0;vertical-align:top;}
 .rcpt-tbl td:last-child{text-align:right;font-variant-numeric:tabular-nums;}
-.rcpt-th-ar{display:block;font-size:9px;font-weight:500;color:var(--t3);}
-.rcpt-total{display:flex;justify-content:space-between;font-weight:800;font-size:15px;padding:8px 0 0;color:var(--t1);}
-.rcpt-total .rcpt-ar{font-size:11px;font-weight:700;color:var(--t3);margin-inline-start:6px;}
+.rcpt-th-ar{display:block;font-size:9px;font-weight:500;color:#94a3b8;}
+.rcpt-total{display:flex;justify-content:space-between;font-weight:800;font-size:15px;padding:8px 0 0;color:#0f172a;}
+.rcpt-total .rcpt-ar{font-size:11px;font-weight:700;color:#94a3b8;margin-inline-start:6px;}
 .rcpt-orderno{
   text-align:center;font-size:17px;font-weight:900;color:var(--acc2);
-  letter-spacing:.3px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed var(--bd2);
+  letter-spacing:.3px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed #cbd5e1;
 }
 .rcpt-qr-wrap{text-align:center;padding:6px 0 2px;}
 .rcpt-qr-loading{
-  width:120px;height:120px;margin:0 auto;border-radius:8px;border:1px dashed var(--bd2);
-  display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--t3);text-align:center;padding:8px;
+  width:120px;height:120px;margin:0 auto;border-radius:8px;border:1px dashed #cbd5e1;
+  display:flex;align-items:center;justify-content:center;font-size:10px;color:#94a3b8;text-align:center;padding:8px;
 }
-.rcpt-qr-hint{font-size:9.5px;color:var(--t3);margin-top:6px;}
+.rcpt-qr-hint{font-size:9.5px;color:#94a3b8;margin-top:6px;}
 .rcpt-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;}
 .rcpt-btn{
   padding:8px 4px;border-radius:9px;border:1.5px solid var(--bd);
@@ -1891,7 +1898,7 @@ function showReceipt(sale){
       <div class="rcpt-qr-loading" id="rcpt-qr">Generating QR code…</div>
       <div class="rcpt-qr-hint">${POS_COUNTRY==='Saudi Arabia'?bl('ZATCA-compliant invoice QR','zatcaHint'):bl('Scan to view invoice online','viewInvoice')}</div>
     </div>`}
-    <p style="text-align:center;font-size:10px;color:var(--t3);margin-top:6px">Thank you for your business!<span class="rcpt-ar">${RCPT_AR.thankYou}</span></p>`;
+    <p style="text-align:center;font-size:10px;color:#94a3b8;margin-top:6px">Thank you for your business!<span class="rcpt-ar">${RCPT_AR.thankYou}</span></p>`;
   document.getElementById('ov-rcpt').style.display='flex';
   // genPosShortLink() POSTs a hardcoded status:'Paid' payload and publishes
   // a public share link — wrong for a negative-amount refund document.
