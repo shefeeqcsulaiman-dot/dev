@@ -9107,7 +9107,17 @@ function addSalesInvoiceRow(inv,options={persist:true}){
     if(oldRow)oldRow.remove();
     deleteServer('salesInvoices',{invoice_no:editingRef}).catch(()=>{});
   }
-  if(options.persist)persistSalesInvoice({...inv,source,status});
+  // !==false, not a truthy check on options.persist directly — a caller
+  // passing a partial options object (e.g. {editingInvoiceNo:...}, as
+  // saveDraftInvoice() does) doesn't get the {persist:true} default merged
+  // in (JS defaults only apply when the whole argument is omitted), so
+  // options.persist silently reads as undefined and this never fired —
+  // every manually-created/edited invoice was saved to the on-screen table
+  // only and never sent to the backend at all. Persist is now the default
+  // unless a caller explicitly opts out with {persist:false} (hydration
+  // from the server, and the Quotation->Invoice path which saves via its
+  // own separate saveServer() call right after).
+  if(options.persist!==false)persistSalesInvoice({...inv,source,status});
   if(!isHydratingFromServer)refreshSalesInvoiceKpis();
   return true;
 }
@@ -22024,12 +22034,18 @@ function getTableRows(table){
   return [...table.querySelectorAll(':scope > tr')].filter(row=>!row.closest('thead'));
 }
 
+// Rows that carry real page structure — a "no records yet" placeholder, a
+// preview-summary row, or a totals/section-header row using a colspan cell
+// (Trial Balance's Total row, General Ledger's per-voucher header carrying
+// the Reverse/Delete buttons, Balance Sheet/P&L section rows, etc.) — as
+// opposed to one paginatable/searchable data record. These must never be
+// hidden by search or pagination.
+function isStructuralTableRow(row){
+  return row.dataset.emptyState==='1' || row.dataset.previewSummary==='1' || !!row.querySelector('td[colspan]');
+}
+
 function getTableDataRows(table){
-  return getTableRows(table).filter(row=>
-    row.dataset.emptyState!=='1' &&
-    row.dataset.previewSummary!=='1' &&
-    !row.querySelector('td[colspan]')
-  );
+  return getTableRows(table).filter(row=>!isStructuralTableRow(row));
 }
 
 // Scopes an enhanced table to a subset of rows (e.g. a status/stage filter
@@ -22077,6 +22093,19 @@ function refreshEnhancedTable(table){
   const pageRows=matched.slice(start,end);
   const visible=new Set(pageRows);
   rows.forEach(row=>{
+    if(isStructuralTableRow(row)){
+      // Totals/section-header rows stay visible regardless of search or
+      // pagination — they summarize the whole table, not one page of it.
+      // The one exception is a genuine "no records yet" placeholder, which
+      // should only show when there really are zero data rows (in practice
+      // emptyTableMessage()/removeEmptyState() already keep these from
+      // coexisting with real rows, but this keeps the toggle correct even
+      // if that invariant is ever violated).
+      const hide=row.dataset.emptyState==='1'&&dataRows.length>0;
+      row.style.display=hide?'none':'';
+      row.hidden=hide;
+      return;
+    }
     row.style.display=visible.has(row)?'':'none';
     row.hidden=!visible.has(row);
   });
