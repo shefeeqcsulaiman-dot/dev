@@ -22,24 +22,44 @@ from app.models import Account, AppDataRecord, TaxCode, VoucherType
 
 
 def seed_accounts(db: Session, company_id: str) -> None:
-    accounts = [
-        ("1000", "Cash and Bank", "asset", True, True),
-        ("1100", "Accounts Receivable", "asset", False, True),
-        ("1200", "Inventory", "asset", False, True),
-        ("2100", "Accounts Payable", "liability", False, True),
-        ("2200", "VAT Output Payable", "liability", False, True),
-        ("2210", "VAT Input Recoverable", "asset", False, True),
-        ("2300", "Corporate Tax Payable", "liability", False, True),
-        ("3000", "Sales Income", "sales", False, False),
-        ("4000", "Purchases", "purchase", False, False),
-        ("5000", "Cost of Goods Sold", "direct expense", False, False),
-        ("5100", "Corporate Tax Expense", "indirect expense", False, False),
-        ("6000", "Salary Expense", "indirect expense", False, False),
+    # Group-level parents so a new company's Chart of Accounts renders as a
+    # tree out of the box instead of 12 unrelated flat rows. Groups are
+    # purely organizational (is_group=True) — posting logic looks up leaf
+    # accounts by their own code (e.g. 1100, 2200), so nesting them under a
+    # parent does not affect where transactions post.
+    groups = [
+        ("100", "Assets", "asset"),
+        ("200", "Liabilities", "liability"),
+        ("300", "Income", "sales"),
+        ("400", "Expenses", "purchase"),
     ]
-    for code, name, account_type, is_bank_cash, is_control in accounts:
+    group_ids: dict[str, str] = {}
+    for code, name, group_type in groups:
+        group = db.query(Account).filter(Account.company_id == company_id, Account.code == code).first()
+        if not group:
+            group = Account(company_id=company_id, code=code, name=name, type=group_type, level=1, is_group=True, node_type="MAIN_LEDGER")
+            db.add(group)
+            db.flush()
+        group_ids[code] = group.id
+
+    accounts = [
+        ("1000", "Cash and Bank", "asset", True, True, "100"),
+        ("1100", "Accounts Receivable", "asset", False, True, "100"),
+        ("1200", "Inventory", "asset", False, True, "100"),
+        ("2100", "Accounts Payable", "liability", False, True, "200"),
+        ("2200", "VAT Output Payable", "liability", False, True, "200"),
+        ("2210", "VAT Input Recoverable", "asset", False, True, "100"),
+        ("2300", "Corporate Tax Payable", "liability", False, True, "200"),
+        ("3000", "Sales Income", "sales", False, False, "300"),
+        ("4000", "Purchases", "purchase", False, False, "400"),
+        ("5000", "Cost of Goods Sold", "direct expense", False, False, "400"),
+        ("5100", "Corporate Tax Expense", "indirect expense", False, False, "400"),
+        ("6000", "Salary Expense", "indirect expense", False, False, "400"),
+    ]
+    for code, name, account_type, is_bank_cash, is_control, group_code in accounts:
         account = db.query(Account).filter(Account.company_id == company_id, Account.code == code).first()
         if not account:
-            db.add(Account(company_id=company_id, code=code, name=name, type=account_type, is_bank_cash=is_bank_cash, is_control_account=is_control))
+            db.add(Account(company_id=company_id, code=code, name=name, type=account_type, is_bank_cash=is_bank_cash, is_control_account=is_control, parent_account_id=group_ids[group_code], level=5, node_type="POSTING_LEDGER"))
 
 
 def seed_voucher_types(db: Session, company_id: str) -> None:
