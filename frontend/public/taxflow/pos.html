@@ -483,14 +483,17 @@ button{cursor:pointer;border:none;background:none;}
   display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--t3);text-align:center;padding:8px;
 }
 .rcpt-qr-hint{font-size:9.5px;color:var(--t3);margin-top:6px;}
-.rcpt-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.rcpt-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;}
 .rcpt-btn{
-  padding:11px;border-radius:11px;border:1.5px solid var(--bd);
-  background:var(--sf2);color:var(--t1);font-size:12px;font-weight:700;
-  transition:all .14s;
+  padding:8px 4px;border-radius:9px;border:1.5px solid var(--bd);
+  background:var(--sf2);color:var(--t1);font-size:11px;font-weight:600;
+  transition:all .14s;white-space:nowrap;
 }
 .rcpt-btn:hover{border-color:var(--acc);color:var(--acc);}
-.rcpt-btn-new{grid-column:span 2;background:var(--acc);color:#fff;border-color:var(--acc);}
+.rcpt-btn-new{
+  grid-column:span 3;padding:11px;font-size:12.5px;font-weight:700;
+  background:var(--acc);color:#fff;border-color:var(--acc);
+}
 .rcpt-btn-new:hover{background:var(--acc2);color:#fff;}
 
 /* Recent transactions */
@@ -866,7 +869,7 @@ button{cursor:pointer;border:none;background:none;}
 <div class="ov" id="ov-rcpt" style="display:none">
   <div class="ov-box ov-rcpt">
     <button class="ov-close" onclick="closeRcpt()" title="Close">✕</button>
-    <div class="rcpt-actions" style="margin-bottom:14px">
+    <div class="rcpt-actions" style="margin-bottom:12px">
       <button class="rcpt-btn rcpt-btn-new" onclick="newSale()">+ New Sale</button>
       <button class="rcpt-btn" onclick="printRcpt()">🖨 Print</button>
       <button class="rcpt-btn" onclick="shareRcpt('whatsapp')">💬 WhatsApp</button>
