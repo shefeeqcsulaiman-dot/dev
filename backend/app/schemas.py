@@ -26,7 +26,15 @@ class RegisterRequest(BaseModel):
     emirate: str | None = None
     trn: str | None = None
     country: str | None = None
-    employee_count: int | None = Field(default=None, ge=0)
+    # Display-range string ("1–10", "500+"), same convention as the
+    # separate /auth/trial-request endpoint's TrialRequestIn.employee_count
+    # (auth.py) and TrialRequest.employee_count (models.py, String column)
+    # — this field was typed int here, so signup.html's dropdown (which
+    # always sends a range string) crashed every registration with a 422
+    # the moment a user picked any option in it. Not currently read or
+    # stored anywhere inside register() itself, so there's no downstream
+    # numeric-use to preserve; str just needs to not reject the real input.
+    employee_count: str | None = None
     plan: str = "starter"
 
     @field_validator("trn")

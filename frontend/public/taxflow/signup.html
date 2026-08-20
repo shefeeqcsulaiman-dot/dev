@@ -449,7 +449,16 @@
         document.getElementById('success-box').style.display='block';
         setTimeout(function(){window.location.replace('/');},1800);
       }else{
-        var msg=data.detail||'Registration failed. Please try again.';
+        // FastAPI validation errors (422) send `detail` as an ARRAY of
+        // {msg,loc,...} objects, not a string — assigning that straight to
+        // .textContent rendered the literal text "[object Object]" with no
+        // useful information. Extract each item's own .msg instead.
+        var msg='Registration failed. Please try again.';
+        if(Array.isArray(data.detail)&&data.detail.length){
+          msg=data.detail.map(function(d){return d&&d.msg?d.msg:JSON.stringify(d);}).join(' ');
+        }else if(typeof data.detail==='string'&&data.detail){
+          msg=data.detail;
+        }
         if(resp.status===409)msg='An account with this email already exists. Please sign in instead.';
         show(msg);
         btn.disabled=false;btn.textContent='Get My Free Trial';
