@@ -1138,7 +1138,7 @@
           <div class="sinv-totals-wrap">
             <div class="sinv-totals-box">
               <div class="sinv-tot-row"><span>Subtotal</span><span id="subtotal" class="mono">AED 0.00</span></div>
-              <div class="sinv-tot-row sinv-vat-row"><span>VAT (5%)</span><span id="vat-amt" class="mono">AED 0.00</span></div>
+              <div class="sinv-tot-row sinv-vat-row"><span id="sinv-vat-label">VAT (5%)</span><span id="vat-amt" class="mono">AED 0.00</span></div>
               <div class="sinv-tot-grand"><span id="sales-total-label">Total Due</span><strong id="inv-total" class="mono">AED 0.00</strong></div>
             </div>
           </div>
@@ -1177,7 +1177,7 @@
             <div class="sinv-prev-row"><span>Due</span><span id="sinv-prev-due">&#x2014;</span></div>
             <div class="sinv-prev-divider"></div>
             <div class="sinv-prev-row"><span>Subtotal</span><span id="sinv-prev-sub" class="mono">AED 0.00</span></div>
-            <div class="sinv-prev-row sinv-prev-vat"><span>VAT 5%</span><span id="sinv-prev-vat" class="mono">AED 0.00</span></div>
+            <div class="sinv-prev-row sinv-prev-vat"><span id="sinv-prev-vat-label">VAT 5%</span><span id="sinv-prev-vat" class="mono">AED 0.00</span></div>
             <div class="sinv-prev-total-row"><span>Total Due</span><strong id="sinv-prev-total" class="mono">AED 0.00</strong></div>
           </div>
           <div class="sinv-preview-actions">
@@ -2287,8 +2287,8 @@
       <div class="fg"><label class="fl">Narration</label><div style="display:flex;gap:6px;align-items:center"><input class="fi" id="journal-desc" placeholder="e.g. Paid supplier invoice #123 — AI will suggest accounts" style="flex:1"><button class="btn btn-g btn-sm" id="ai-suggest-btn" onclick="aiSuggestVoucherAccounts()" title="AI account suggestion based on voucher type and narration">✨ AI Suggest</button></div></div>
       <div style="display:grid;grid-template-columns:3fr 1fr 1fr 28px;gap:8px;margin-bottom:8px">
         <div style="font-size:10.5px;color:var(--text3);text-transform:uppercase">Account</div>
-        <div style="font-size:10.5px;color:var(--text3);text-transform:uppercase">Debit (AED)</div>
-        <div style="font-size:10.5px;color:var(--text3);text-transform:uppercase">Credit (AED)</div>
+        <div style="font-size:10.5px;color:var(--text3);text-transform:uppercase" data-currency-label>Debit (AED)</div>
+        <div style="font-size:10.5px;color:var(--text3);text-transform:uppercase" data-currency-label>Credit (AED)</div>
         <div></div>
       </div>
       <div id="journal-lines"></div>
@@ -2323,7 +2323,7 @@
         </div>
       </div>
       <table class="tbl" data-default-page-size="all">
-        <thead><tr><th>Date</th><th>Ref No.</th><th>Description</th><th>Debit (AED)</th><th>Credit (AED)</th><th>Balance (AED)</th></tr></thead>
+        <thead><tr><th>Date</th><th>Ref No.</th><th>Description</th><th data-currency-label>Debit (AED)</th><th data-currency-label>Credit (AED)</th><th data-currency-label>Balance (AED)</th></tr></thead>
         <tbody id="ledger-tbody">
           <tr data-account="Accounts Receivable"><td>20 Jun</td><td class="mono">INV-0848</td><td>Dubai Steel Co. — Invoice</td><td class="mono">44,100</td><td>—</td><td class="mono">44,100</td></tr>
           <tr data-account="Cash & Cash Equivalents"><td>18 Jun</td><td class="mono">JE-0012</td><td>Payment received</td><td>—</td><td class="mono">44,100</td><td class="mono">0</td></tr>
@@ -2956,10 +2956,10 @@
         </div>
         <div class="g2">
           <div class="card"><div class="section-hd">Assets</div>
-            <table class="tbl"><thead><tr><th>Code</th><th>Account</th><th style="text-align:right">AED</th></tr></thead>
+            <table class="tbl"><thead><tr><th>Code</th><th>Account</th><th style="text-align:right" data-currency-label>AED</th></tr></thead>
             <tbody id="rep-bs-assets"><tr><td colspan="3" style="color:var(--text3);text-align:center">Loading…</td></tr></tbody></table></div>
           <div class="card"><div class="section-hd">Liabilities &amp; Equity</div>
-            <table class="tbl"><thead><tr><th>Section</th><th>Account</th><th style="text-align:right">AED</th></tr></thead>
+            <table class="tbl"><thead><tr><th>Section</th><th>Account</th><th style="text-align:right" data-currency-label>AED</th></tr></thead>
             <tbody id="rep-bs-liabilities-equity"><tr><td colspan="3" style="color:var(--text3);text-align:center">Loading…</td></tr></tbody></table></div>
         </div>
       </div>
@@ -2980,7 +2980,7 @@
       <!-- TRIAL BALANCE -->
       <div class="rep-panel" id="rep-tb">
         <div class="rep-panel-head"><h2 class="rep-title">Trial Balance</h2><div class="flx" style="gap:6px"><button class="btn btn-g btn-sm" onclick="exportActiveReportExcel()">⬇ Excel</button><button class="btn btn-p btn-sm" onclick="exportActiveReportPdf()">⬇ PDF</button></div></div>
-        <div class="card"><table class="tbl"><thead><tr><th>Code</th><th>Account Name</th><th style="text-align:right">Debit (AED)</th><th style="text-align:right">Credit (AED)</th></tr></thead>
+        <div class="card"><table class="tbl"><thead><tr><th>Code</th><th>Account Name</th><th style="text-align:right" data-currency-label>Debit (AED)</th><th style="text-align:right" data-currency-label>Credit (AED)</th></tr></thead>
         <tbody id="rep-tb-body"><tr><td colspan="4" style="color:var(--text3);text-align:center">Loading…</td></tr></tbody></table></div>
       </div>
 
@@ -3024,10 +3024,10 @@
         <div class="rep-panel-head"><h2 class="rep-title">VAT Reports</h2><div class="flx" style="gap:6px"><button class="btn btn-g btn-sm" onclick="exportActiveReportExcel()">⬇ Excel</button><button class="btn btn-p btn-sm" onclick="exportActiveReportPdf()">⬇ PDF</button></div></div>
         <div class="g2 mb16">
           <div class="card"><div class="section-hd">Output VAT (Sales)</div>
-            <table class="tbl"><thead><tr><th>Box</th><th>Description</th><th style="text-align:right">Amount (AED)</th></tr></thead>
+            <table class="tbl"><thead><tr><th>Box</th><th>Description</th><th style="text-align:right" data-currency-label>Amount (AED)</th></tr></thead>
             <tbody id="rep-vat-output"><tr><td colspan="3" style="color:var(--text3);text-align:center">Loading…</td></tr></tbody></table></div>
           <div class="card"><div class="section-hd">Input VAT (Purchases)</div>
-            <table class="tbl"><thead><tr><th>Box</th><th>Description</th><th style="text-align:right">Amount (AED)</th></tr></thead>
+            <table class="tbl"><thead><tr><th>Box</th><th>Description</th><th style="text-align:right" data-currency-label>Amount (AED)</th></tr></thead>
             <tbody id="rep-vat-input"><tr><td colspan="3" style="color:var(--text3);text-align:center">Loading…</td></tr></tbody></table></div>
         </div>
         <div class="card"><div class="section-hd">Settlement</div>

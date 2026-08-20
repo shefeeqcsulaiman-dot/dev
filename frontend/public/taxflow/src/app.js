@@ -2454,6 +2454,21 @@ window.COMPANY_CURRENCY=window.COMPANY_CURRENCY||'AED';
 function currentCurrency(){return window.COMPANY_CURRENCY||'AED';}
 Object.defineProperty(window,'AED_SYMBOL',{get:currentCurrency,configurable:true});
 
+// Several report/ledger column headers (Trial Balance, General Ledger,
+// Balance Sheet, VAT Reports) are static HTML that always said "AED" —
+// the amounts underneath them already correctly use the company's real
+// currency via formatAed()/currentCurrency(), but the header label never
+// updated, so a non-AED company's own tables were headed "Debit (AED)"
+// etc. regardless. Call after COMPANY_CURRENCY is set. Idempotent — only
+// ever replaces the literal substring "AED", so re-running after it's
+// already been swapped to e.g. "SAR" is a safe no-op.
+function syncCurrencyHeaderLabels(){
+  const currency=currentCurrency();
+  document.querySelectorAll('[data-currency-label]').forEach(el=>{
+    el.textContent=el.textContent.replace(/\bAED\b/,currency);
+  });
+}
+
 // The company's configured VAT rate (Settings > Tax Settings) — set from
 // applyCompanyToUi() same as COMPANY_CURRENCY above. Several VAT
 // calculations across Sales/Quotations/Purchase-AI validation used to
@@ -2630,11 +2645,13 @@ function applyCompanyToUi(company){
   if(taxVatDisplay)taxVatDisplay.value=vatRateNum+'%';
   window.COMPANY_CURRENCY=company.currency||'AED';
   window.COMPANY_VAT_RATE=vatRateNum;
+  syncCurrencyHeaderLabels();
   // Create Invoice tab's totals default to a static "AED 0.00" in the HTML
   // (index.html) until the user edits a line item — refresh them here too,
   // so a non-AED company doesn't see the wrong currency on a freshly
   // opened, untouched invoice form.
   if(document.getElementById('subtotal'))calcLine();
+  if(document.getElementById('pay-period'))populatePayrollPeriods();
   // Company registration page fields
   set('co-name',company.name);
   set('co-trade-name',company.trade_name);
@@ -5662,7 +5679,16 @@ function syncSupplierOptions(selected=''){
   const names=[...document.querySelectorAll('#vendor-tbody tr:not([data-empty-state]) td:first-child')]
     .map(td=>td.textContent.trim())
     .filter(Boolean);
-  const existing=[...select.options].map(option=>option.value||option.textContent.trim()).filter(Boolean);
+  // option.value alone, no `||option.textContent` fallback — a real vendor
+  // option (rendered with no explicit value attribute below) already
+  // defaults its .value to its own name text, so the fallback was never
+  // needed for those. It WAS wrong for the placeholder
+  // (`<option value="">Please Select</option>`): .value there correctly
+  // reads as '' (filtered out by .filter(Boolean) below), but the fallback
+  // used its *text* "Please Select" instead, re-adding it as if it were a
+  // real vendor name on every call — permanently, since it then had a
+  // non-empty .value on the next pass too.
+  const existing=[...select.options].map(option=>option.value).filter(Boolean);
   const all=[...new Set([...existing, ...names])];
   select.innerHTML='<option value="">Please Select</option>'+all.map(name=>`<option>${escapeHtml(name)}</option>`).join('');
   if(current&&all.includes(current))select.value=current;
@@ -9184,7 +9210,13 @@ function defaultInvoiceLayout(){
     company:currentCompany?.name||'',
     trnMode:'show',
     taxLabel:'Tax Invoice',
-    address:currentCompany?.address||'Dubai, United Arab Emirates',
+    // Was hardcoded to 'Dubai, United Arab Emirates' regardless of the
+    // company's real country — a fresh Saudi/other-country company with no
+    // address saved yet showed a UAE city on its own tax invoice. Falls
+    // back to the company's actual country (still honest, just less
+    // specific than a full address) rather than a wrong one, and to '' if
+    // even that isn't known yet.
+    address:currentCompany?.address||currentCompany?.country||'',
     terms:'Net 30',
     dueDays:'30',
     currency:'AED 1,234.00',
@@ -14813,6 +14845,14 @@ function calcLine(inp){
   document.getElementById('subtotal').textContent=formatAed(sub);
   document.getElementById('vat-amt').textContent=formatAed(vat);
   document.getElementById('inv-total').textContent=formatAed(tot);
+  // These two labels were static HTML always reading "VAT (5%)"/"VAT 5%"
+  // regardless of the company's actual configured VAT rate — only the
+  // numeric amount above ever updated.
+  const vatLabelText=`VAT (${currentVatRate()}%)`;
+  const vatLabel=document.getElementById('sinv-vat-label');
+  if(vatLabel)vatLabel.textContent=vatLabelText;
+  const vatPrevLabel=document.getElementById('sinv-prev-vat-label');
+  if(vatPrevLabel)vatPrevLabel.textContent=`VAT ${currentVatRate()}%`;
   updateSalesInvPreview();
 }
 function updateSalesInvPreview(){
@@ -22617,6 +22657,7 @@ function saveBill(){
   const lbody=document.getElementById('bill-lines');if(lbody)lbody.innerHTML='';
   const le=document.getElementById('bill-lines-empty');if(le)le.style.display='';
   recalcBill();
+  _refreshBillPageStats();
   toast('Vendor bill saved','ok');
   audit('Saved vendor bill',billNo,'Saved');
 }
@@ -22675,6 +22716,7 @@ function savePayment(){
   renderPaymentRecord(record);
   saveServer('payments',record);
   if(primaryDoc)markPaymentDocumentPaid(record);
+  if(isSupplierPaymentType(type))_refreshBillPageStats();
   closeM('m-payment');
   toast(`${isSupplierPaymentType(type)?'Payment':'Receipt'} recorded — AED ${amount.toLocaleString('en-AE',{minimumFractionDigits:2})}`,'ok');
   audit('Recorded payment',ref,'Posted');
@@ -23170,7 +23212,7 @@ function renderQuotationPreview(quote){
           <div class="invoice-meta-row"><span>Quotation No.</span><strong>${escapeHtml(quote.quote_no||'Draft')}</strong></div>
           <div class="invoice-meta-row"><span>Date</span><strong>${escapeHtml(quote.date||'-')}</strong></div>
           ${layout.showValidity?`<div class="invoice-meta-row"><span>${escapeHtml(layout.validityLabel||'Valid Until')}</span><strong>${escapeHtml(quote.valid_until||'-')}</strong></div>`:''}
-          <div class="invoice-meta-row"><span>Currency</span><strong>AED</strong></div>
+          <div class="invoice-meta-row"><span>Currency</span><strong>${AED_SYMBOL}</strong></div>
         </div>
       </div>
 
@@ -23188,9 +23230,9 @@ function renderQuotationPreview(quote){
           <div class="invoice-muted" style="margin-top:8px">${escapeHtml(layout.footer||'')}</div>
         </div>
         <div class="invoice-total-card">
-          <div class="invoice-total-row"><span>Subtotal</span><strong class="mono">AED ${fmt(subtotal)}</strong></div>
-          ${layout.showVat?`<div class="invoice-total-row"><span>VAT 5%</span><strong class="mono">AED ${fmt(vat)}</strong></div>`:''}
-          <div class="invoice-grand"><span>Total</span><strong class="mono">AED ${fmt(total)}</strong></div>
+          <div class="invoice-total-row"><span>Subtotal</span><strong class="mono">${AED_SYMBOL} ${fmt(subtotal)}</strong></div>
+          ${layout.showVat?`<div class="invoice-total-row"><span>VAT ${currentVatRate()}%</span><strong class="mono">${AED_SYMBOL} ${fmt(vat)}</strong></div>`:''}
+          <div class="invoice-grand"><span>Total</span><strong class="mono">${AED_SYMBOL} ${fmt(total)}</strong></div>
         </div>
       </div>
 
@@ -23212,9 +23254,9 @@ function quotationPdfHtml(quote=currentQuotation){
     <style>*{box-sizing:border-box}body{margin:0;background:#fff;color:#172033;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.45}.sheet{max-width:900px;margin:0 auto;padding:34px}.bar{height:7px;background:${accent};margin:-34px -34px 28px}.head{display:grid;grid-template-columns:1fr 280px;gap:24px;border-bottom:1px solid #e5eaf2;padding-bottom:22px}.brand{display:flex;gap:14px}.logo{width:58px;height:58px;border-radius:12px;background:${accent};color:#fff;display:grid;place-items:center;font-size:20px;font-weight:800}.company{font-size:22px;font-weight:800}.muted{color:#667085;font-size:12px;margin-top:3px}.right{text-align:right}.label{font-size:30px;font-weight:900;text-transform:uppercase}.badge{display:inline-block;margin-top:8px;border:1px solid #d8e2ff;color:${accent};border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;text-transform:uppercase}.grid{display:grid;grid-template-columns:1fr 280px;gap:16px;margin:22px 0}.panel{border:1px solid #e5eaf2;border-radius:8px;padding:14px}.kicker{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#667085;font-weight:700;margin-bottom:7px}.party{font-size:17px;font-weight:800}.row{display:flex;justify-content:space-between;gap:12px;color:#667085;padding:4px 0}.row strong{color:#172033;text-align:right}table{width:100%;border-collapse:collapse;border:1px solid #e5eaf2;border-radius:8px;overflow:hidden}th{background:#f3f6fb;color:#667085;text-transform:uppercase;font-size:10px;letter-spacing:.5px;text-align:left;padding:10px}td{padding:11px 10px;border-top:1px solid #e5eaf2}.num{text-align:right;white-space:nowrap}.summary{display:grid;grid-template-columns:1fr 300px;gap:20px;margin-top:22px}.notes{border-left:4px solid ${accent};padding-left:12px;color:#667085}.totals{border:1px solid #e5eaf2;border-radius:8px;padding:14px}.total,.grand{display:flex;justify-content:space-between;gap:14px}.total{color:#667085;padding:4px 0}.grand{border-top:1px solid #e5eaf2;margin-top:8px;padding-top:12px;font-size:19px;font-weight:900}.grand strong{color:${accent}}@media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.sheet{padding:24px}.bar{margin:-24px -24px 24px}}</style>
     </head><body><main class="sheet"><div class="bar"></div>
       <section class="head"><div class="brand">${_logoPdfHtml(initials)}<div><div class="company">${escapeHtml(layout.company||'TaxFlow')}</div><div class="muted">${escapeHtml(layout.address||'')}</div><div class="muted">${escapeHtml(layout.trnLabel||'TRN')} ${escapeHtml(companyTrn||'not set')}</div></div></div><div class="right"><div class="label">${escapeHtml(layout.quotationHeading||'Quotation')}</div><div>${escapeHtml(quote?.quote_no||'Draft')}</div><span class="badge">${escapeHtml(quote?.status||'Draft')}</span></div></section>
-      <section class="grid"><div class="panel"><div class="kicker">${escapeHtml(layout.quoteToLabel||'Quote To')}</div><div class="party">${escapeHtml(quote?.customer||'Customer')}</div><div class="muted">${escapeHtml(quote?.subject||'')}</div></div><div class="panel"><div class="row"><span>Date</span><strong>${escapeHtml(quote?.date||'-')}</strong></div>${layout.showValidity?`<div class="row"><span>${escapeHtml(layout.validityLabel||'Valid Until')}</span><strong>${escapeHtml(quote?.valid_until||'-')}</strong></div>`:''}<div class="row"><span>Currency</span><strong>AED</strong></div></div></section>
+      <section class="grid"><div class="panel"><div class="kicker">${escapeHtml(layout.quoteToLabel||'Quote To')}</div><div class="party">${escapeHtml(quote?.customer||'Customer')}</div><div class="muted">${escapeHtml(quote?.subject||'')}</div></div><div class="panel"><div class="row"><span>Date</span><strong>${escapeHtml(quote?.date||'-')}</strong></div>${layout.showValidity?`<div class="row"><span>${escapeHtml(layout.validityLabel||'Valid Until')}</span><strong>${escapeHtml(quote?.valid_until||'-')}</strong></div>`:''}<div class="row"><span>Currency</span><strong>${AED_SYMBOL}</strong></div></div></section>
       <table><thead><tr><th>#</th><th>Product</th><th class="num">Qty</th><th class="num">Unit Price</th><th class="num">Amount</th></tr></thead><tbody>${lines.map((line,index)=>`<tr><td>${index+1}</td><td><strong>${escapeHtml(line.description||line.item||'Item')}</strong></td><td class="num">${escapeHtml(line.qty||line.quantity||1)}</td><td class="num">${fmt(line.price||line.unit_price)}</td><td class="num">${fmt(line.amount)}</td></tr>`).join('')}</tbody></table>
-      <section class="summary"><div class="notes"><div class="kicker">Terms & Payment Details</div><div>${escapeHtml(layout.quotationTerms||layout.terms||'')}</div><div style="margin-top:8px">${escapeHtml(layout.footer||'')}</div></div><div class="totals"><div class="total"><span>Subtotal</span><strong>AED ${fmt(subtotal)}</strong></div>${layout.showVat?`<div class="total"><span>VAT 5%</span><strong>AED ${fmt(vat)}</strong></div>`:''}<div class="grand"><span>Total</span><strong>AED ${fmt(total)}</strong></div></div></section>
+      <section class="summary"><div class="notes"><div class="kicker">Terms & Payment Details</div><div>${escapeHtml(layout.quotationTerms||layout.terms||'')}</div><div style="margin-top:8px">${escapeHtml(layout.footer||'')}</div></div><div class="totals"><div class="total"><span>Subtotal</span><strong>${AED_SYMBOL} ${fmt(subtotal)}</strong></div>${layout.showVat?`<div class="total"><span>VAT ${currentVatRate()}%</span><strong>${AED_SYMBOL} ${fmt(vat)}</strong></div>`:''}<div class="grand"><span>Total</span><strong>${AED_SYMBOL} ${fmt(total)}</strong></div></div></section>
     </main><script>window.onload=()=>setTimeout(()=>window.print(),250);<\/script></body></html>`;
 }
 
