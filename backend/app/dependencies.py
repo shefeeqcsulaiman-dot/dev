@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.models import Branch, Company, User
+from app.module_catalog import BRANCH_ELIGIBLE_MODULES
 from app.security import is_impersonation_token_revoked, user_id_from_token
 
 logger = logging.getLogger(__name__)
@@ -99,7 +100,19 @@ def require_module(module_key: str):
         # (today's identity) and the Branch identity itself (Phase 2),
         # since both carry principal.branch_id. No branch_id (admin, or an
         # unassigned employee) means this block never runs, unchanged.
-        if principal.branch_id:
+        #
+        # Only for modules a branch can actually toggle at all
+        # (BRANCH_ELIGIBLE_MODULES, module_catalog.py) — hrms/ess are
+        # deliberately excluded from that list because HR/ESS access is
+        # meant to depend purely on an Employee's own Role, never on which
+        # branch they're assigned to (see that list's own docstring). Since
+        # a branch's modules_enabled can never contain "hrms"/"ess" (branches.py
+        # rejects it) and the empty-list case reads as "restricted, nothing
+        # allowed", skipping this block for those two module keys was the
+        # missing piece — without it, saving a branch with ANY explicit
+        # module selection permanently 403'd every one of its employees out
+        # of HRMS/ESS with no way to fix it from the UI.
+        if principal.branch_id and module_key in BRANCH_ELIGIBLE_MODULES:
             branch_modules = db.query(Branch.modules_enabled).filter(Branch.id == principal.branch_id).scalar()
             if not branch_allows_module(branch_modules, module_key):
                 raise HTTPException(
