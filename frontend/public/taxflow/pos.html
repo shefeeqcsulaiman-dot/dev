@@ -9,11 +9,11 @@
   --bg:#f1f5f9;--sf:#ffffff;--sf2:#f8fafc;--sf3:#f1f5f9;
   --bd:#e2e8f0;--bd2:#cbd5e1;
   --t1:#0f172a;--t2:#475569;--t3:#94a3b8;
-  --acc:#6366f1;--acc2:#4f46e5;--acc-bg:#eef2ff;
-  --grn:#22c55e;--grn2:#16a34a;
-  --teal:#14b8a6;--teal2:#0d9488;
-  --red:#ef4444;--red2:#dc2626;
-  --amb:#f59e0b;--pur:#8b5cf6;
+  --acc:#6366f1;--acc2:#4f46e5;--acc-bg:#eef2ff;--acc-bg2:#ede9fe;
+  --grn:#22c55e;--grn2:#16a34a;--grn-bg:#f0fdf4;--grn-bd:#bbf7d0;
+  --teal:#14b8a6;--teal2:#0d9488;--teal-bg:#f0fdfa;--teal-bd:#99f6e4;
+  --red:#ef4444;--red2:#dc2626;--red-bg:#fef2f2;--red-bd:#fecaca;
+  --amb:#f59e0b;--pur:#8b5cf6;--pur-bg:#f5f3ff;--pur-bd:#ddd6fe;
   /* Cart/top-bar panel — light theme (was a dark navy panel; kept the same
      --cart-* token names so every rule below still works unchanged, just
      repointed to light values). */
@@ -29,7 +29,11 @@
 body.pos-dark{
   --bg:#0b1120;--sf:#1e293b;--sf2:#334155;--sf3:#1e293b;
   --bd:#334155;--bd2:#475569;--t1:#f8fafc;--t2:#cbd5e1;--t3:#94a3b8;
-  --acc-bg:#312e81;
+  --acc-bg:#312e81;--acc-bg2:#4338ca;
+  --grn-bg:rgba(34,197,94,.12);--grn-bd:rgba(34,197,94,.35);
+  --teal-bg:rgba(20,184,166,.14);--teal-bd:rgba(20,184,166,.35);
+  --red-bg:rgba(239,68,68,.12);--red-bd:rgba(239,68,68,.35);
+  --pur-bg:rgba(139,92,246,.14);--pur-bd:rgba(139,92,246,.35);
   --cart:#1e293b;--cart2:#334155;--cart3:#475569;
   --cart-bd:#475569;--cart-t1:#f8fafc;--cart-t2:#cbd5e1;--cart-t3:#94a3b8;
 }
@@ -166,7 +170,7 @@ button{cursor:pointer;border:none;background:none;}
 /* Cart list */
 .pcart{flex:1;display:flex;flex-direction:column;overflow:hidden;}
 .pcart-hd{
-  display:grid;grid-template-columns:1fr 100px 88px 30px;
+  display:grid;grid-template-columns:1fr 128px 88px 30px;
   padding:8px 14px;border-bottom:1px solid var(--cart-bd);
   font-size:10px;font-weight:700;color:var(--cart-t3);
   text-transform:uppercase;letter-spacing:.6px;flex-shrink:0;
@@ -185,12 +189,12 @@ button{cursor:pointer;border:none;background:none;}
 }
 .pcart-empty-ico{
   width:88px;height:88px;border-radius:50%;
-  background:radial-gradient(circle at 35% 30%,#ede9fe,var(--acc-bg));
+  background:radial-gradient(circle at 35% 30%,var(--acc-bg2),var(--acc-bg));
   display:flex;align-items:center;justify-content:center;color:var(--acc);
 }
 .pcart-empty b{color:var(--acc2);font-size:14px;font-weight:800;}
 .pcart-row{
-  display:grid;grid-template-columns:1fr 100px 88px 30px;
+  display:grid;grid-template-columns:1fr 128px 88px 30px;
   padding:12px 14px;border-bottom:1px solid var(--cart-bd);
   align-items:center;transition:background .1s;
 }
@@ -271,15 +275,15 @@ button{cursor:pointer;border:none;background:none;}
 .pbtn svg{width:18px;height:18px;flex-shrink:0;}
 .pbtn:disabled{opacity:.35;cursor:not-allowed;}
 .pbtn:not(:disabled):active{transform:scale(.96);}
-.pbtn.cancel{background:#fef2f2;color:var(--red);border-color:#fecaca;}
+.pbtn.cancel{background:var(--red-bg);color:var(--red);border-color:var(--red-bd);}
 .pbtn.cancel:not(:disabled):hover{background:var(--red);color:#fff;border-color:var(--red);}
-.pbtn.credit{background:#f5f3ff;color:var(--pur);border-color:#ddd6fe;}
+.pbtn.credit{background:var(--pur-bg);color:var(--pur);border-color:var(--pur-bd);}
 .pbtn.credit:not(:disabled):hover{background:var(--pur);color:#fff;border-color:var(--pur);}
 .pbtn.card{background:var(--acc-bg);color:var(--acc2);border-color:#c7d2fe;}
 .pbtn.card:not(:disabled):hover{background:var(--acc);color:#fff;border-color:var(--acc);}
-.pbtn.multi{background:#f0fdfa;color:var(--teal2);border-color:#99f6e4;}
+.pbtn.multi{background:var(--teal-bg);color:var(--teal2);border-color:var(--teal-bd);}
 .pbtn.multi:not(:disabled):hover{background:var(--teal);color:#fff;border-color:var(--teal);}
-.pbtn.cash{background:#f0fdf4;color:var(--grn2);border-color:#bbf7d0;}
+.pbtn.cash{background:var(--grn-bg);color:var(--grn2);border-color:var(--grn-bd);}
 .pbtn.cash:not(:disabled):hover{background:var(--grn);color:#fff;border-color:var(--grn);}
 
 /* ══ RIGHT — Products panel ═════════════════════════════════ */
@@ -359,11 +363,6 @@ button{cursor:pointer;border:none;background:none;}
 .ptile-name{font-size:12px;font-weight:700;color:var(--t1);line-height:1.35;word-break:break-word;min-height:2.6em;}
 .ptile-bottom{display:flex;align-items:flex-end;justify-content:space-between;gap:6px;}
 .ptile-price{font-size:14.5px;font-weight:900;color:var(--acc2);letter-spacing:-.2px;}
-.ptile-vat{
-  display:inline-block;margin-top:3px;
-  font-size:9px;color:var(--t3);background:var(--sf3);
-  border-radius:4px;padding:1px 6px;border:1px solid var(--bd);
-}
 .ptile-add{
   width:28px;height:28px;border-radius:50%;background:var(--acc);color:#fff;
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
@@ -371,7 +370,7 @@ button{cursor:pointer;border:none;background:none;}
   transition:all .14s;
 }
 .ptile:hover .ptile-add{background:var(--acc2);transform:scale(1.08);}
-.pgrid-empty{grid-column:1/-1;text-align:center;padding:60px 16px;color:var(--t3);line-height:2.2;}
+.pgrid-empty{grid-column:1/-1;text-align:center;padding:60px 16px;color:var(--t2);line-height:2.2;}
 .pgrid-empty svg{opacity:.25;margin-bottom:6px;}
 
 /* Quick actions strip */
@@ -488,7 +487,9 @@ button{cursor:pointer;border:none;background:none;}
   padding:8px 4px;border-radius:9px;border:1.5px solid var(--bd);
   background:var(--sf2);color:var(--t1);font-size:11px;font-weight:600;
   transition:all .14s;white-space:nowrap;
+  display:flex;align-items:center;justify-content:center;gap:4px;
 }
+.rcpt-btn svg{width:13px;height:13px;flex-shrink:0;}
 .rcpt-btn:hover{border-color:var(--acc);color:var(--acc);}
 .rcpt-btn-new{
   grid-column:span 3;padding:11px;font-size:12.5px;font-weight:700;
@@ -514,7 +515,7 @@ button{cursor:pointer;border:none;background:none;}
   background:var(--cart2);border:1px solid var(--cart-bd);border-radius:20px;
   padding:40px;width:360px;box-shadow:0 30px 80px rgba(0,0,0,.4);
 }
-.pos-auth-logo{font-size:13px;font-weight:800;color:#a5b4fc;letter-spacing:.5px;margin-bottom:20px;
+.pos-auth-logo{font-size:13px;font-weight:800;color:var(--acc2);letter-spacing:.5px;margin-bottom:20px;
   text-transform:uppercase;display:flex;align-items:center;gap:8px;}
 .pos-auth-logo svg{width:22px;height:22px;background:var(--acc);border-radius:8px;padding:4px;color:#fff;}
 .pos-auth-box h2{font-size:22px;font-weight:800;margin-bottom:4px;color:var(--cart-t1);}
@@ -526,7 +527,7 @@ button{cursor:pointer;border:none;background:none;}
   transition:border-color .15s;font-family:var(--fn);
 }
 .pos-auth-box input:focus{outline:none;border-color:var(--acc);}
-.pos-auth-err{font-size:12px;color:#fca5a5;margin-bottom:10px;display:none;background:rgba(239,68,68,.12);border-radius:8px;padding:8px 12px;}
+.pos-auth-err{font-size:12px;color:var(--red2);margin-bottom:10px;display:none;background:rgba(239,68,68,.12);border-radius:8px;padding:8px 12px;}
 .pos-auth-btn{
   width:100%;height:46px;border:none;border-radius:11px;
   background:var(--acc);color:#fff;font-size:14px;font-weight:800;cursor:pointer;
@@ -673,7 +674,7 @@ button{cursor:pointer;border:none;background:none;}
           <div class="pctrl-ico" style="flex-shrink:0">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 9a3 3 0 100-6 3 3 0 000 6z"/><path d="M2 14s1-4 6-4 6 4 6 4"/></svg>
           </div>
-          <select class="pctrl-sel" id="pos-staff" style="max-width:80px">
+          <select class="pctrl-sel" id="pos-staff">
             <option value="">Staff</option>
           </select>
         </div>
@@ -693,7 +694,7 @@ button{cursor:pointer;border:none;background:none;}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" width="34" height="34"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a4 4 0 00-8 0v2"/></svg>
             </div>
             <b>Your cart is empty</b>
-            <span style="font-size:11px;color:var(--cart-t3)">Tap a product from the right to add it to the cart</span>
+            <span style="font-size:11px;color:var(--cart-t2)">Tap a product from the right to add it to the cart</span>
           </div>
         </div>
       </div>
@@ -1475,7 +1476,7 @@ function recalc(){ renderSummary(); }
 function renderCart(){
   const body = document.getElementById('pcart-body');
   if(!_cart.length){
-    body.innerHTML = '<div class="pcart-empty"><div class="pcart-empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" width="34" height="34"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a4 4 0 00-8 0v2"/></svg></div><b>Your cart is empty</b><span style="font-size:11px;color:var(--cart-t3)">Tap a product from the right to add it to the cart</span></div>';
+    body.innerHTML = '<div class="pcart-empty"><div class="pcart-empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" width="34" height="34"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a4 4 0 00-8 0v2"/></svg></div><b>Your cart is empty</b><span style="font-size:11px;color:var(--cart-t2)">Tap a product from the right to add it to the cart</span></div>';
   }else{
     body.innerHTML = _cart.map((item)=>{
       const lineEx  = item.price * item.qty;
