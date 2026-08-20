@@ -380,3 +380,127 @@ def test_corporate_tax_return_applies_small_business_relief_threshold(client, au
     assert Decimal(payload["taxable_income"]) == Decimal("500400.00")
     # Only the amount above AED 375,000 is taxed: (500400 - 375000) * 9% = 11286.00
     assert Decimal(payload["corporate_tax_payable"]) == Decimal("11286.00")
+
+
+def test_pos_refund_reverses_output_vat_without_full_ledger_posting(client, auth_headers):
+    """POS refunds (negative-signed salesInvoices credit notes) deliberately
+    skip sync_sales_invoice()/build_journal() — build_journal() rejects
+    negative amounts, and this app has a documented decision not to give
+    returns full ledger posting. But /tax/vat-return only ever sums TaxLine
+    rows, and skipping full posting meant a refund never created one, so it
+    silently never reduced output VAT owed even though it correctly reduces
+    reported revenue. ensure_credit_note_tax_line() closes that specific gap
+    with a standalone TaxLine — this test proves the VAT reversal works,
+    is idempotent on re-save, and creates no JournalEntry."""
+    period = datetime.now(timezone.utc).strftime("%Y-%m")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    sale = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={
+            "collection": "salesInvoices",
+            "record": {
+                "invoice_no": "POS-REFUND-TEST-001",
+                "document_type": "Tax Invoice",
+                "source": "POS",
+                "status": "Paid",
+                "date": today,
+                "customer": "Walk-In Customer",
+                "subtotal": 100,
+                "vat_amount": 5,
+                "total": 105,
+                "lines": [{"description": "Test Item", "qty": 1, "unit_price": 100, "tax_rate": 5}],
+            },
+        },
+    )
+    assert sale.status_code == 200, sale.text
+
+    vat_after_sale = client.get(f"/api/v1/tax/vat-return?period={period}", headers=auth_headers).json()
+    output_after_sale = Decimal(vat_after_sale["output_vat"])
+    assert output_after_sale >= Decimal("5.00")
+
+    journals_before_refund = client.get("/api/v1/journal", headers=auth_headers).json()["records"]
+    journal_count_before_refund = len(journals_before_refund)
+
+    refund_record = {
+        "invoice_no": "POS-REFUND-TEST-001-R",
+        "reference_no": "POS-REFUND-TEST-001",
+        "document_type": "Sales Return",
+        "source": "POS Return",
+        "status": "Return",
+        "date": today,
+        "customer": "Walk-In Customer",
+        "subtotal": -100,
+        "vat_amount": -5,
+        "total": -105,
+    }
+    refund = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={"collection": "salesInvoices", "record": refund_record},
+    )
+    assert refund.status_code == 200, refund.text
+
+    vat_after_refund = client.get(f"/api/v1/tax/vat-return?period={period}", headers=auth_headers).json()
+    output_after_refund = Decimal(vat_after_refund["output_vat"])
+    assert output_after_refund == output_after_sale - Decimal("5.00")
+
+    journals_after_refund = client.get("/api/v1/journal", headers=auth_headers).json()["records"]
+    assert len(journals_after_refund) == journal_count_before_refund, "refund must not create any JournalEntry"
+
+    # Re-saving the identical refund (e.g. a client retry) must not double-count.
+    refund_again = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={"collection": "salesInvoices", "record": refund_record},
+    )
+    assert refund_again.status_code == 200, refund_again.text
+    vat_after_retry = client.get(f"/api/v1/tax/vat-return?period={period}", headers=auth_headers).json()
+    assert Decimal(vat_after_retry["output_vat"]) == output_after_refund
+
+    tax_lines = client.get("/api/v1/tax/lines", headers=auth_headers).json()
+    credit_note_lines = [t for t in tax_lines if Decimal(t["tax_amount"]) == Decimal("-5.00")]
+    assert len(credit_note_lines) == 1, "exactly one TaxLine for the refund, not two, after the duplicate save"
+
+
+def test_hand_keyed_positive_sales_return_does_not_use_credit_note_tax_line_path(client, auth_headers):
+    """A legacy hand-keyed Sales Return (positive amounts) is NOT a
+    negative-signed POS credit note — _is_credit_note_record() only matches
+    on sign, so this must flow through the normal sync_sales_invoice() path
+    exactly as before, and must NOT also pick up a TaxLine from the new
+    ensure_credit_note_tax_line() path (which is scoped to negative-signed
+    records only)."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    # auth_headers reuses one fixed-TRN company across the whole test
+    # session, so other tests in this file may have already left negative
+    # TaxLines behind (e.g. the POS refund test above) — compare before/after
+    # counts for THIS save rather than asserting an absolute zero.
+    tax_lines_before = client.get("/api/v1/tax/lines", headers=auth_headers).json()
+    negative_count_before = len([t for t in tax_lines_before if Decimal(t["tax_amount"]) < 0])
+
+    saved = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={
+            "collection": "salesInvoices",
+            "record": {
+                "invoice_no": "HANDKEYED-RETURN-TEST-001",
+                "document_type": "Sales Return",
+                "source": "Sales",
+                "status": "Return",
+                "date": today,
+                "customer": "Walk-In Customer",
+                "subtotal": 100,
+                "vat_amount": 5,
+                "total": 105,
+                "lines": [{"description": "Returned Item", "qty": 1, "unit_price": 100, "tax_rate": 5}],
+            },
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    tax_lines_after = client.get("/api/v1/tax/lines", headers=auth_headers).json()
+    negative_count_after = len([t for t in tax_lines_after if Decimal(t["tax_amount"]) < 0])
+    assert negative_count_after == negative_count_before, "a positive-amount hand-keyed return must not produce a credit-note-style reversal TaxLine"

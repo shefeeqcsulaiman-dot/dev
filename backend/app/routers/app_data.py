@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 import app.cache as cache
+from app.accounting_posting import ensure_credit_note_tax_line
 from app.config import get_settings
 from app.database import get_db
 from app.auth_principal import resolve_active_branch
@@ -1369,17 +1370,33 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
     elif collection == "salesInvoices":
         if not _is_credit_note_record(record):
             sync_sales_invoice(db, principal, record)
-        # A negative-signed credit note (POS Sales Return v1) deliberately
-        # skips sync_sales_invoice(): build_journal() rejects negative
-        # subtotal/vat/total (raises PostingError), and creating a real
-        # Invoice row here would make app_sales_invoice_records() (reports.py)
-        # dedupe this app-data record out of every report in favor of that
-        # Invoice row — whose own status filtering excludes "return" anyway.
-        # Reports read the credit note straight from app-data instead (see
-        # _is_credit_note() in reports.py). Legacy hand-keyed Sales Returns
-        # in the main Sales module are stored with POSITIVE amounts and are
-        # deliberately unaffected by this — see _is_credit_note_record()'s
-        # own docstring.
+        else:
+            # A negative-signed credit note (POS Sales Return v1) deliberately
+            # skips sync_sales_invoice(): build_journal() rejects negative
+            # subtotal/vat/total (raises PostingError), and creating a real
+            # Invoice row here would make app_sales_invoice_records() (reports.py)
+            # dedupe this app-data record out of every report in favor of that
+            # Invoice row — whose own status filtering excludes "return" anyway.
+            # Reports read the credit note straight from app-data instead (see
+            # _is_credit_note() in reports.py). Legacy hand-keyed Sales Returns
+            # in the main Sales module are stored with POSITIVE amounts and are
+            # deliberately unaffected by this — see _is_credit_note_record()'s
+            # own docstring.
+            #
+            # /tax/vat-return only ever sums TaxLine rows, which the above
+            # skip means a POS refund never creates — so it correctly reduces
+            # reported revenue but silently never reduced output VAT owed.
+            # Close that specific gap with a standalone TaxLine (no
+            # SourceTransaction/JournalEntry/GL row), which keeps "no full
+            # ledger posting for returns" untouched.
+            period = str(record.get("date") or "")[:7] or _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m")
+            ensure_credit_note_tax_line(
+                db, principal.company_id,
+                reference=str(record.get("invoice_no") or record.get("reference_no") or ""),
+                taxable_amount=decimal_value(record.get("subtotal")),
+                tax_amount=decimal_value(record.get("vat_amount")),
+                period=period,
+            )
 
     elif collection == "bills":
         reference = str(record.get("bill_no") or f"BILL-{record.get('id') or record.get('_id') or uuid4().hex[:8]}")

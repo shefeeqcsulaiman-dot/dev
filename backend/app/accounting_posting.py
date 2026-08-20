@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -267,6 +268,50 @@ def ensure_tax_line(db: Session, transaction: SourceTransaction) -> None:
             direction="output" if transaction.module in {"sales", "sales_invoice"} else "input",
             taxable_amount=money(transaction.subtotal),
             tax_amount=money(transaction.vat),
+            period=period,
+        )
+    )
+
+
+def ensure_credit_note_tax_line(
+    db: Session,
+    company_id: str,
+    reference: str,
+    taxable_amount: Decimal,
+    tax_amount: Decimal,
+    period: str,
+) -> None:
+    """Reverse output VAT for a POS/app-data credit note (negative-signed
+    Sales Return) that deliberately skips full ledger posting — see
+    sync_domain_model()'s salesInvoices branch in app_data.py. This only
+    ever touches the standalone TaxLine table /tax/vat-return sums; it does
+    not create a SourceTransaction, JournalEntry, or GeneralLedgerEntry, so
+    the "no full ledger posting for returns" decision stays untouched.
+
+    Credit notes have no SourceTransaction.id to key dedup off (TaxLine.
+    source_id has no FK constraint, so a synthetic id is safe here), so a
+    deterministic uuid5 of (company_id, reference) stands in for it —
+    re-saving the same credit note record is then a safe no-op instead of
+    double-counting the VAT reversal.
+    """
+    if not money(taxable_amount):
+        return
+    synthetic_id = str(uuid5(NAMESPACE_URL, f"credit-note:{company_id}:{reference}"))
+    exists = (
+        db.query(TaxLine)
+        .filter(TaxLine.company_id == company_id, TaxLine.source_id == synthetic_id)
+        .first()
+    )
+    if exists:
+        return
+    db.add(
+        TaxLine(
+            company_id=company_id,
+            source_id=synthetic_id,
+            tax_code_id=None,
+            direction="output",
+            taxable_amount=money(taxable_amount),
+            tax_amount=money(tax_amount),
             period=period,
         )
     )
