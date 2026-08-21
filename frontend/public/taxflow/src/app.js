@@ -1854,6 +1854,14 @@ function openInventoryItemModal(editRow=null){
     if(saveBtn)saveBtn.textContent='Add Item';
     if(codeField)codeField.readOnly=false;
   }
+  const photoPreview=document.getElementById('inv-item-photo-preview');
+  if(photoPreview){
+    const existingImage=editRow?.dataset.image||'';
+    photoPreview.dataset.image=existingImage;
+    photoPreview.innerHTML=existingImage
+      ?`<img src="${existingImage}" style="width:100%;height:100%;object-fit:cover">`
+      :'<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="var(--text3)" stroke-width="1.4"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
+  }
   showM('m-inv-item');
   setTimeout(()=>document.getElementById('inv-item-name')?.focus(),50);
 }
@@ -1880,6 +1888,7 @@ function saveInventoryItem(){
   const maxStock=parseAmount(v('inv-item-max'));
   const supplier=v('inv-item-supplier');
   const status=v('inv-item-status')||'Active';
+  const image=document.getElementById('inv-item-photo-preview')?.dataset.image||'';
   if(!name){toast('Enter item name','warn');return;}
   if(!category){toast('Select category from database','warn');return;}
   if(!unit){toast('Select unit of measure from database','warn');return;}
@@ -1912,6 +1921,7 @@ function saveInventoryItem(){
         existingRow.dataset.tracking=tracking;existingRow.dataset.type=type;
         existingRow.dataset.vat=vat;existingRow.dataset.status=status;
         existingRow.dataset.description=description;existingRow.dataset.openingDate=openingDate;
+        existingRow.dataset.image=image;
         existingRow.innerHTML=_buildItemRowHtml(htmlArgs);
         ensureInventoryBulkSelection();
         refreshEnhancedTable(tbody.closest('table'));
@@ -1924,11 +1934,12 @@ function saveInventoryItem(){
       row.dataset.tracking=tracking;row.dataset.type=type;row.dataset.vat=vat;
       row.dataset.status=status;row.dataset.minStock=minStock;row.dataset.maxStock=maxStock;
       row.dataset.description=description;row.dataset.openingDate=openingDate;
+      row.dataset.image=image;
       row.innerHTML=_buildItemRowHtml(htmlArgs);
       tbody.prepend(row);syncStockLevelsFromProducts();
     }
   }
-  saveServer('products',{code,name,type,description,category,unit,cost,selling_price:sellingPrice,vat,tracking,opening_date:openingDate,reorder_level:reorderLevel,min_stock:minStock,max_stock:maxStock,supplier_name:supplier,status});
+  saveServer('products',{code,name,type,description,category,unit,cost,selling_price:sellingPrice,vat,tracking,image,opening_date:openingDate,reorder_level:reorderLevel,min_stock:minStock,max_stock:maxStock,supplier_name:supplier,status});
   syncStockMappingFromItems();
   closeM('m-inv-item');
   document.querySelectorAll('#m-inv-item input').forEach(i=>i.value='');
@@ -4841,6 +4852,7 @@ function renderProductRecord(product,options={}){
   row.dataset.maxStock=product.max_stock??product.maxStock??0;
   row.dataset.description=product.description||'';
   row.dataset.openingDate=product.opening_date||'';
+  row.dataset.image=product.image||'';
   row.innerHTML=_buildItemRowHtml({code:product.code||'PRD',name:product.name,type,category:product.category||'Materials',unit:product.unit||'Each',tracking,vatText,vatClass,trackingClass,statusClass,status});
   if(codeKey)_productCodeSet.add(codeKey);
   _productNameSet.add(nameKey);
@@ -6966,7 +6978,9 @@ function buildPurchaseRecordRow(purchase){
   const sourceClass=source.toLowerCase().includes('ai')?'b-p':'b-gray';
   // Show image icon if source_image stored in record OR a matching uploaded document exists
   const hasImage=Boolean(normalizedPurchase.source_image)||uploadedFiles.some(f=>f.base64&&Array.isArray(f.invoices)&&f.invoices.some(inv=>invoiceKey(inv.invoice_no)===invoiceKey(ref)));
-  row.innerHTML=`<td data-action-col="1"><div class="row-actions"><button class="icon-btn edit" type="button" title="Edit" aria-label="Edit purchase" onclick="editPurchaseRecord(this)">${editIconSvg()}</button><button class="icon-btn view" type="button" title="View" aria-label="View purchase" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button>${hasImage?`<button class="icon-btn invoice-img" type="button" title="View Invoice" aria-label="View invoice image" onclick="openPurchaseInvoiceImage(this)">${invoiceImageIconSvg()}</button>`:`<button class="icon-btn copy" type="button" title="Copy" aria-label="Copy purchase" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button>`}<button class="icon-btn danger" type="button" title="Delete" aria-label="Delete purchase" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td><td class="mono">${escapeHtml(ref)}</td><td>${escapeHtml(purchaseRecordProductSummary(normalizedPurchase))}</td><td>${escapeHtml(normalizedPurchase.supplier||'-')}</td><td>${escapeHtml(normalizedPurchase.date||'-')}</td><td>${escapeHtml(normalizedPurchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(normalizedPurchase.net_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.tax_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.shipping||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.total||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.paid||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.due||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b ${sourceClass}">${escapeHtml(source)}</span></td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td>`;
+  const thumb=purchaseRecordThumbnail(normalizedPurchase);
+  const thumbHtml=thumb?`<img src="${escapeHtml(thumb)}" style="width:26px;height:26px;border-radius:6px;object-fit:cover;flex-shrink:0" alt="">`:'';
+  row.innerHTML=`<td data-action-col="1"><div class="row-actions"><button class="icon-btn edit" type="button" title="Edit" aria-label="Edit purchase" onclick="editPurchaseRecord(this)">${editIconSvg()}</button><button class="icon-btn view" type="button" title="View" aria-label="View purchase" onclick="openPurchaseRecordPreview(this)">${viewIconSvg()}</button>${hasImage?`<button class="icon-btn invoice-img" type="button" title="View Invoice" aria-label="View invoice image" onclick="openPurchaseInvoiceImage(this)">${invoiceImageIconSvg()}</button>`:`<button class="icon-btn copy" type="button" title="Copy" aria-label="Copy purchase" onclick="copyPurchaseRecord(this)">${copyIconSvg()}</button>`}<button class="icon-btn danger" type="button" title="Delete" aria-label="Delete purchase" onclick="deletePurchaseRecord(this)">${deleteIconSvg()}</button></div></td><td class="mono">${escapeHtml(ref)}</td><td><div style="display:flex;align-items:center;gap:8px">${thumbHtml}<span>${escapeHtml(purchaseRecordProductSummary(normalizedPurchase))}</span></div></td><td>${escapeHtml(normalizedPurchase.supplier||'-')}</td><td>${escapeHtml(normalizedPurchase.date||'-')}</td><td>${escapeHtml(normalizedPurchase.location||'-')}</td><td class="mono">${Number(quantity||0).toLocaleString('en-AE',{maximumFractionDigits:4})}</td><td class="mono">${Number(normalizedPurchase.net_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.tax_amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.shipping||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.total||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.paid||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(normalizedPurchase.due||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b ${sourceClass}">${escapeHtml(source)}</span></td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td>`;
   return row;
 }
 
@@ -7058,6 +7072,32 @@ function purchaseRecordProductSummary(purchase={}){
   const names=[...new Set(lines.map(line=>purchaseAiProductName(line)||line.product||line.name||line.description||'').filter(Boolean))];
   if(names.length>1)return `${names[0]} +${names.length-1}`;
   return names[0]||purchase.product||purchase.product_name||purchase.item_name||'-';
+}
+
+// Item Master (#prod-tbody) is the only place a product's uploaded image
+// lives (row.dataset.image, set by saveInventoryItem()) — purchase records
+// only carry a SKU/name per line, so a purchase list thumbnail has to look
+// the image up by matching against the already-rendered Item Master rows
+// rather than fetching anything separately.
+function productImageForPurchaseLine(sku,name){
+  const tbody=document.getElementById('prod-tbody');
+  if(!tbody||(!sku&&!name))return '';
+  const skuLower=String(sku||'').trim().toLowerCase();
+  const nameLower=String(name||'').trim().toLowerCase();
+  const row=[...tbody.querySelectorAll('tr:not([data-empty-state])')].find(r=>
+    (skuLower&&inventoryRowCellText(r,0).trim().toLowerCase()===skuLower)||
+    (nameLower&&inventoryRowCellText(r,1).trim().toLowerCase()===nameLower)
+  );
+  return row?.dataset.image||'';
+}
+
+function purchaseRecordThumbnail(purchase={}){
+  const lines=Array.isArray(purchase.lines)?purchase.lines:[];
+  const first=lines[0];
+  if(!first)return '';
+  const sku=first.sku||first.code||'';
+  const name=purchaseAiProductName(first)||first.product||first.name||first.description||'';
+  return productImageForPurchaseLine(sku,name);
 }
 
 function renderPurchaseRecord(purchase,options={}){
@@ -16804,6 +16844,22 @@ function previewEmpPhoto(input){
   if(!preview||!input.files||!input.files[0])return;
   const reader=new FileReader();
   reader.onload=e=>{preview.innerHTML=`<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`};
+  reader.readAsDataURL(input.files[0]);
+}
+
+// Compressed (not the raw upload) — this ends up embedded in every saved
+// products AppDataRecord and gets fetched on every POS page load across
+// however many products exist, so keeping it small matters a lot more
+// here than for a single employee's own profile photo.
+async function previewInvItemPhoto(input){
+  const preview=document.getElementById('inv-item-photo-preview');
+  if(!preview||!input.files||!input.files[0])return;
+  const reader=new FileReader();
+  reader.onload=async e=>{
+    const compressed=await compressImageBase64(e.target.result,400,400,0.75);
+    preview.dataset.image=compressed;
+    preview.innerHTML=`<img src="${compressed}" style="width:100%;height:100%;object-fit:cover">`;
+  };
   reader.readAsDataURL(input.files[0]);
 }
 

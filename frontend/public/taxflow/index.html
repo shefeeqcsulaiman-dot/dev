@@ -5190,7 +5190,19 @@ period_locks ─&lt; audit_logs
 
 <div class="overlay" id="m-inv-item" onclick="closeOvBg(event,'m-inv-item')">
   <div class="modal modal-lg"><div class="modal-title" id="inv-item-modal-title">Add Inventory Item</div><div class="modal-sub">Item details, pricing, stock settings, and supplier</div>
-    <div class="fr3"><div class="fg"><label class="fl">Item Code</label><input class="fi mono" id="inv-item-code" placeholder="ITM-005"></div><div class="fg"><label class="fl">Item Type</label><select class="fi" id="inv-item-type"><option>Stock Item</option><option>Service</option><option>Consumable</option><option>Raw Material</option><option>Finished Good</option></select></div><div class="fg"><label class="fl">Status</label><select class="fi" id="inv-item-status"><option>Active</option><option>Inactive</option><option>Draft</option></select></div></div>
+    <div style="display:flex;gap:16px;align-items:flex-start">
+      <div style="flex:1">
+        <div class="fr3"><div class="fg"><label class="fl">Item Code</label><input class="fi mono" id="inv-item-code" placeholder="ITM-005"></div><div class="fg"><label class="fl">Item Type</label><select class="fi" id="inv-item-type"><option>Stock Item</option><option>Service</option><option>Consumable</option><option>Raw Material</option><option>Finished Good</option></select></div><div class="fg"><label class="fl">Status</label><select class="fi" id="inv-item-status"><option>Active</option><option>Inactive</option><option>Draft</option></select></div></div>
+      </div>
+      <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:20px">
+        <div id="inv-item-photo-preview" style="width:88px;height:88px;border-radius:12px;background:var(--bg3);border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden">
+          <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="var(--text3)" stroke-width="1.4"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        </div>
+        <label style="font-size:11px;color:var(--accent);cursor:pointer;text-align:center">
+          <input type="file" id="inv-item-photo-file" accept="image/*" style="display:none" onchange="previewInvItemPhoto(this)">Upload Photo
+        </label>
+      </div>
+    </div>
     <div class="fg"><label class="fl">Item Name</label><input class="fi" id="inv-item-name" placeholder="Full item name"></div>
     <div class="fg"><label class="fl">Description</label><input class="fi" id="inv-item-description" placeholder="Short description (optional)"></div>
     <div class="fr2">

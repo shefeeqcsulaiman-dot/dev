@@ -1397,9 +1397,12 @@ function renderGrid(){
     const price = Number(p.selling_price||p.price||p.unit_price||p.sales_price||p.cost||0);
     const color = tileColor(p.name||'');
     const init  = tileInit(p.name||'');
+    const imgHtml = p.image
+      ? `<img src="${esc(p.image)}" class="ptile-img" style="object-fit:cover" alt="">`
+      : `<div class="ptile-img" style="background:${color}">${esc(init)}</div>`;
     return `<div class="ptile" onclick="addToCart(${idx})">
       <div class="ptile-top">
-        <div class="ptile-img" style="background:${color}">${esc(init)}</div>
+        ${imgHtml}
         ${idx===0?'<span class="ptile-fav" title="Favorite"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2.09 4.26 4.7.68-3.4 3.31.8 4.68L8 11.77l-4.2 2.21.8-4.68-3.4-3.31 4.7-.68z"/></svg></span>':''}
       </div>
       <div class="ptile-name">${esc(p.name||'')}</div>
