@@ -166,6 +166,7 @@ def _run_pyzk() -> None:
     global _last_punch_time
 
     while True:
+        conn = None
         try:
             conn = zk.connect()
             conn.disable_device()
@@ -198,11 +199,27 @@ def _run_pyzk() -> None:
             log.info("Synced %d new punches (total on device: %d)", new_punches, len(attendances))
             if new_punches and _last_punch_time is not None:
                 _save_last_punch_time(_last_punch_time)
-            conn.enable_device()
-            conn.disconnect()
 
         except Exception as exc:
             log.error("ZK error: %s", exc)
+        finally:
+            # disable_device() above puts the physical scanner in a locked/
+            # busy state until enable_device() runs — previously that call
+            # (and disconnect()) only ran on the happy path, so any error in
+            # between (e.g. get_attendance() failing on a dropped connection)
+            # left the device unable to accept punches, and the socket open,
+            # until the device's own internal timeout eventually recovered
+            # it. Always attempt both, independently, once a connection was
+            # actually established.
+            if conn is not None:
+                try:
+                    conn.enable_device()
+                except Exception as exc:
+                    log.error("Failed to re-enable device after error: %s", exc)
+                try:
+                    conn.disconnect()
+                except Exception as exc:
+                    log.error("Failed to disconnect cleanly: %s", exc)
 
         time.sleep(ZK_POLL_INTERVAL)
 
