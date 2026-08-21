@@ -20225,6 +20225,7 @@ const _BIO_ICONS={
   download:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
   terminal:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`,
   csv:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>`,
+  badge:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><circle cx="12" cy="10" r="3"/><path d="M7 18c0-2.5 2.2-4 5-4s5 1.5 5 4"/></svg>`,
 };
 
 // ── Flow diagrams ─────────────────────────────────────────────────────────────
@@ -20358,8 +20359,11 @@ function _buildBioGuideModes(apiKey, type, ip, port){
        </div>`},
       {icon:I.terminal, title:'Install pyzk and Run the Script', color:'var(--accent)',
        body:`On that same PC: <code>pip install pyzk requests</code>, then <code>python zk_bridge.py</code>. It connects to the device, polls every 30 seconds, and forwards new punches automatically — leave it running (use <code>pm2</code> or a service for production).`},
+      {icon:I.badge, title:'Enroll Employees With Matching IDs', color:'var(--amber)',
+       body:`<strong>This step is required, not optional</strong> — TaxFlow has no separate "biometric ID" field. It matches a punch to an employee by comparing the device's own <strong>User ID</strong> to that employee's <strong>Employee ID</strong> in TaxFlow (Staff → Employees), as plain text.<br><br>
+       When enrolling each employee's fingerprint/face on the device, set the device's <em>User ID</em> field to their exact TaxFlow Employee ID — not their name, not a number the device assigns automatically. If it doesn't match exactly, the punch still reaches TaxFlow but won't attach to that employee anywhere (Present Today, payslips, attendance reports).`},
       {icon:I.check, title:'Test — Punch In &amp; Check Sync Log', color:'#10b981',
-       body:'With <code>zk_bridge.py</code> running, scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within about 30 seconds. If it doesn\'t, check the device IP/port and API key in <code>zk_bridge.conf</code>.'},
+       body:'With <code>zk_bridge.py</code> running, scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within about 30 seconds, attributed to the employee whose ID matches. If it doesn\'t, check the device IP/port and API key in <code>zk_bridge.conf</code> — or if it appears but isn\'t linked to the right employee, re-check the enrolled User ID against step 4.'},
     ]
   };
 
@@ -20425,8 +20429,11 @@ function _buildBioGuideModes(apiKey, type, ip, port){
         <code style="word-break:break-all;display:inline-block;margin-top:3px">${punchUrlWithKeyInPath}</code>
        </div>
        <div style="margin-top:6px">Save the configuration. The device will now push every punch directly to TaxFlow within seconds of each scan.</div>`},
+      {icon:I.badge, title:'Enroll Employees With Matching IDs', color:'var(--amber)',
+       body:`<strong>This step is required, not optional</strong> — TaxFlow has no separate "biometric ID" field. It matches a punch to an employee by comparing the device's own <strong>User ID</strong> to that employee's <strong>Employee ID</strong> in TaxFlow (Staff → Employees), as plain text.<br><br>
+       When enrolling each employee's fingerprint/face on the device, set the device's <em>User ID</em> field to their exact TaxFlow Employee ID — not their name, not a number the device assigns automatically. If it doesn't match exactly, the punch still reaches TaxFlow but won't attach to that employee anywhere (Present Today, payslips, attendance reports).`},
       {icon:I.check, title:'Test — Punch In &amp; Check Sync Log', color:'#10b981',
-       body:'Scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within a few seconds. If it doesn\'t, check the IP address and Device Key in your device settings.'},
+       body:'Scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within a few seconds, attributed to the employee whose ID matches. If it doesn\'t, check the IP address and Device Key in your device settings — or if it appears but isn\'t linked to the right employee, re-check the enrolled User ID against the previous step.'},
     ]
   };
 
@@ -20436,7 +20443,7 @@ function _buildBioGuideModes(apiKey, type, ip, port){
     diagram:_bioDiagramCSV(),
     steps:[
       {icon:I.csv, title:'Export and Import a CSV', color:'var(--accent)',
-       body:'No live connection to configure. Export the attendance log from the device\'s own software, then click <strong>↑ Import CSV</strong> in the Sync Activity Log. Required columns: <code>employee_id, punch_time</code> (optional: <code>employee_name, direction</code>).'},
+       body:'No live connection to configure. Export the attendance log from the device\'s own software, then click <strong>↑ Import CSV</strong> in the Sync Activity Log. Required columns: <code>employee_id, punch_time</code> (optional: <code>employee_name, direction</code>).<br><br><strong>The <code>employee_id</code> column must contain each employee\'s exact TaxFlow Employee ID</strong> (Staff → Employees) — not the device\'s own internal user number, unless you enrolled employees on the device using their TaxFlow Employee ID as the User ID. A row whose ID doesn\'t match any employee still imports, it just won\'t attach to anyone.'},
     ]
   };
 
