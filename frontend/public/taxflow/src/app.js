@@ -20562,13 +20562,18 @@ async function refreshAttendanceToday(){
     set('att-stat-sync',new Date().toLocaleTimeString('en-AE'));
     const kpiEl=document.getElementById('hrms-kpi-present');
     if(kpiEl&&count>0)kpiEl.textContent=count;
+    // Headcount must update regardless of whether anyone's punched in today
+    // — this used to sit after the empty-punches early return below, so on
+    // any company with zero attendance data (i.e. most fresh companies) the
+    // tile stayed frozen at its clearStaticDemoData() default of "0"
+    // instead of the real employee count.
+    const empTotal=document.querySelectorAll('#employee-tbody tr:not([data-empty-state])').length;
+    set('att-stat-total',empTotal||'—');
     if(!tbody)return;
     if(!ids.length){
       tbody.innerHTML='<tr data-empty-state><td colspan="4" style="text-align:center;color:var(--text3);padding:32px">No punch-ins recorded for today yet.</td></tr>';
       return;
     }
-    const empTotal=document.querySelectorAll('#employee-tbody tr:not([data-empty-state])').length;
-    set('att-stat-total',empTotal||'—');
     tbody.innerHTML='';
     ids.forEach(empId=>{
       const tr=document.createElement('tr');
