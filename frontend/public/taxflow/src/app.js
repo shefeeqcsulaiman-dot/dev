@@ -6200,7 +6200,7 @@ function renderSupplierPaymentCard(payment){
   card.className='pay-card';
   card.dataset.payRef=payment.ref;
   card.innerHTML=`
-    <div class="pay-card-head">
+    <div class="pay-card-head" onclick="this.closest('.pay-card').classList.toggle('expanded')">
       <div class="pay-card-icon">💸</div>
       <div class="pay-card-info">
         <div class="pay-card-ref">${escapeHtml(payment.ref)}</div>
@@ -6208,8 +6208,11 @@ function renderSupplierPaymentCard(payment){
         <div class="pay-card-date">${escapeHtml(payment.date||'')}</div>
       </div>
       <div class="pay-card-right">
-        <div class="pay-card-amount">AED ${totalAmt}</div>
-        <div class="pay-card-amount-label">PAID</div>
+        <div style="text-align:right">
+          <div class="pay-card-amount">AED ${totalAmt}</div>
+          <div class="pay-card-amount-label">PAID</div>
+        </div>
+        <svg class="pay-card-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6l4 4 4-4"/></svg>
       </div>
     </div>
     <div class="pay-card-body">
