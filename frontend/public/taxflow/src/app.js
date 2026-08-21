@@ -9932,7 +9932,12 @@ function defaultPosReceiptSettings(){
   return {
     id:'pos-receipt-settings',
     company:'',
+    companyAr:'',
     address:'',
+    addressAr:'',
+    phone:'',
+    heading:'Tax Invoice | فاتورة ضريبية',
+    vatLabel:'VAT ID | الرقم الضريبي',
     showLogo:false,
     showTrn:true,
     footer:'Thank you for your business',
@@ -9941,31 +9946,52 @@ function defaultPosReceiptSettings(){
   };
 }
 
+// "English | Arabic" pairs — same convention Invoice Design already uses
+// for its own bilingual labels (inv-layout-heading-label etc.) — so a
+// receipt can print a Saudi-style "Simplified Tax Invoice | فاتورة ضريبية
+// مبسطة" heading or a custom VAT ID label without a second, parallel field.
+function splitBilingualLabel(value,fallback){
+  const raw=String(value||fallback||'').split('|');
+  return {en:(raw[0]||'').trim(),ar:(raw[1]||'').trim()};
+}
+
 let savedPosReceiptSettings=defaultPosReceiptSettings();
 
 function setPosReceiptDesignFields(record={}){
   savedPosReceiptSettings={...defaultPosReceiptSettings(),...record};
   const s=savedPosReceiptSettings;
-  const company=document.getElementById('pos-rcpt-company');if(company)company.value=s.company||'';
-  const address=document.getElementById('pos-rcpt-address');if(address)address.value=s.address||'';
+  const set=(id,value)=>{const el=document.getElementById(id);if(el)el.value=value||'';};
+  set('pos-rcpt-company',s.company);
+  set('pos-rcpt-company-ar',s.companyAr);
+  set('pos-rcpt-address',s.address);
+  set('pos-rcpt-address-ar',s.addressAr);
+  set('pos-rcpt-phone',s.phone);
+  set('pos-rcpt-heading',s.heading);
+  set('pos-rcpt-vat-label',s.vatLabel);
+  set('pos-rcpt-footer',s.footer);
   const showLogo=document.getElementById('pos-rcpt-show-logo');if(showLogo)showLogo.checked=Boolean(s.showLogo);
   const showTrn=document.getElementById('pos-rcpt-show-trn');if(showTrn)showTrn.checked=s.showTrn!==false;
-  const footer=document.getElementById('pos-rcpt-footer');if(footer)footer.value=s.footer||'';
   const showQr=document.getElementById('pos-rcpt-show-qr');if(showQr)showQr.checked=s.showQr!==false;
   const paper=document.getElementById('pos-rcpt-paper');if(paper)paper.value=s.paperWidth||'80mm';
 }
 
 function readPosReceiptDesignFields(){
   const base=savedPosReceiptSettings||defaultPosReceiptSettings();
+  const val=id=>document.getElementById(id)?.value;
   return {
     id:'pos-receipt-settings',
-    company:(document.getElementById('pos-rcpt-company')?.value||'').trim(),
-    address:(document.getElementById('pos-rcpt-address')?.value||'').trim(),
+    company:(val('pos-rcpt-company')||'').trim(),
+    companyAr:(val('pos-rcpt-company-ar')||'').trim(),
+    address:(val('pos-rcpt-address')||'').trim(),
+    addressAr:(val('pos-rcpt-address-ar')||'').trim(),
+    phone:(val('pos-rcpt-phone')||'').trim(),
+    heading:(val('pos-rcpt-heading')||'').trim()||base.heading,
+    vatLabel:(val('pos-rcpt-vat-label')||'').trim()||base.vatLabel,
     showLogo:document.getElementById('pos-rcpt-show-logo')?.checked??base.showLogo,
     showTrn:document.getElementById('pos-rcpt-show-trn')?.checked??base.showTrn,
-    footer:(document.getElementById('pos-rcpt-footer')?.value||'').trim(),
+    footer:(val('pos-rcpt-footer')||'').trim(),
     showQr:document.getElementById('pos-rcpt-show-qr')?.checked??base.showQr,
-    paperWidth:document.getElementById('pos-rcpt-paper')?.value||base.paperWidth||'80mm'
+    paperWidth:val('pos-rcpt-paper')||base.paperWidth||'80mm'
   };
 }
 
@@ -9974,12 +10000,18 @@ function updatePosReceiptPreview(){
   if(!preview)return;
   const s=readPosReceiptDesignFields();
   const width=s.paperWidth==='58mm'?'150px':'200px';
+  const heading=splitBilingualLabel(s.heading,'Tax Invoice | فاتورة ضريبية');
+  const vatLabel=splitBilingualLabel(s.vatLabel,'VAT ID | الرقم الضريبي');
   preview.innerHTML=`
     <div style="background:#fff;color:#111;font-family:'DM Mono',monospace;font-size:11px;line-height:1.6;width:${width};margin:0 auto;padding:14px 10px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.15)">
       ${s.showLogo?`<div style="text-align:center;font-size:20px;margin-bottom:4px">🧾</div>`:''}
       <div style="text-align:center;font-weight:700">${escapeHtml(s.company||currentCompany?.name||'Your Company')}</div>
+      ${s.companyAr?`<div style="text-align:center;font-weight:700" dir="rtl">${escapeHtml(s.companyAr)}</div>`:''}
       ${s.address?`<div style="text-align:center;color:#555">${escapeHtml(s.address)}</div>`:''}
-      ${s.showTrn?`<div style="text-align:center;color:#555">TRN: ${escapeHtml(currentCompany?.trn||'not set')}</div>`:''}
+      ${s.addressAr?`<div style="text-align:center;color:#555" dir="rtl">${escapeHtml(s.addressAr)}</div>`:''}
+      ${s.phone?`<div style="text-align:center;color:#555">${escapeHtml(s.phone)}</div>`:''}
+      <div style="text-align:center;font-size:10px;color:#888;margin-top:2px">${escapeHtml(heading.en)}${heading.ar?' / '+escapeHtml(heading.ar):''}</div>
+      ${s.showTrn?`<div style="text-align:center;color:#555">${escapeHtml(vatLabel.en)}${vatLabel.ar?' / '+escapeHtml(vatLabel.ar):''}: ${escapeHtml(currentCompany?.trn||'not set')}</div>`:''}
       <div style="border-top:1px dashed #999;margin:8px 0"></div>
       <div style="display:flex;justify-content:space-between"><span>1x Sample Item</span><span>25.00</span></div>
       <div style="display:flex;justify-content:space-between;color:#555"><span>VAT</span><span>1.25</span></div>

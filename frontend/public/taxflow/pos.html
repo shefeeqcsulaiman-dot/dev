@@ -1121,7 +1121,13 @@ let POS_LOGO = '';
 // sibling of Invoice Design for the printed receipt. Defaults here mirror
 // defaultPosReceiptSettings() in app.js so a company that never opened that
 // tab still gets sensible receipts.
-let POS_RECEIPT = {company:'',address:'',showLogo:false,showTrn:true,footer:'Thank you for your business',showQr:true,paperWidth:'80mm'};
+let POS_RECEIPT = {company:'',companyAr:'',address:'',addressAr:'',phone:'',heading:'Tax Invoice | فاتورة ضريبية',vatLabel:'VAT ID | الرقم الضريبي',showLogo:false,showTrn:true,footer:'Thank you for your business',showQr:true,paperWidth:'80mm'};
+// Splits a "English | Arabic" pair — same POS Settings convention as
+// splitBilingualLabel() in app.js (pos.html has no shared scope with it).
+function posSplitBilingual(value,fallback){
+  const raw=String(value||fallback||'').split('|');
+  return {en:(raw[0]||'').trim(),ar:(raw[1]||'').trim()};
+}
 
 // ── Auth ─────────────────────────────────────────────────────────────
 async function checkAuth(){
@@ -1896,13 +1902,18 @@ function showReceipt(sale){
     :sale.payment_method==='multi'
     ?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Cash','cash')}</span><span>${POS_CURRENCY} ${Number(sale.multi_cash||0).toFixed(2)}</span></div><div class="rcpt-row"><span class="rcpt-lbl">${bl('Card','card')}</span><span>${POS_CURRENCY} ${Number(sale.multi_card||0).toFixed(2)}</span></div>`:'';
 
+  const rcptHeading=posSplitBilingual(POS_RECEIPT.heading,'Tax Invoice | فاتورة ضريبية');
+  const rcptVatLabel=posSplitBilingual(POS_RECEIPT.vatLabel,'VAT ID | الرقم الضريبي');
   document.getElementById('rcpt-body').innerHTML=`
     <div class="rcpt-hd">
       ${POS_RECEIPT.showLogo&&POS_LOGO?`<img src="${POS_LOGO}" alt="" style="max-height:36px;max-width:160px;margin:0 auto 6px;display:block">`:''}
       <h2>${esc(POS_RECEIPT.company||CONAME())}</h2>
+      ${POS_RECEIPT.companyAr?`<h2 dir="rtl" style="font-family:'Segoe UI',Tahoma,Arial,sans-serif">${esc(POS_RECEIPT.companyAr)}</h2>`:''}
       ${POS_RECEIPT.address?`<p style="margin-top:0">${esc(POS_RECEIPT.address)}</p>`:''}
-      ${POS_RECEIPT.showTrn&&POS_TRN?`<p style="margin-top:0">TRN: ${esc(POS_TRN)}</p>`:''}
-      <div class="rcpt-heading">${isRefund?'REFUND / CREDIT NOTE':'TAX INVOICE'}<span class="rcpt-ar">${isRefund?RCPT_AR.refund:RCPT_AR.taxInvoice}</span></div>
+      ${POS_RECEIPT.addressAr?`<p style="margin-top:0" dir="rtl">${esc(POS_RECEIPT.addressAr)}</p>`:''}
+      ${POS_RECEIPT.phone?`<p style="margin-top:0">${esc(POS_RECEIPT.phone)}</p>`:''}
+      ${POS_RECEIPT.showTrn&&POS_TRN?`<p style="margin-top:0">${esc(rcptVatLabel.en)}${rcptVatLabel.ar?`<span class="rcpt-ar">${esc(rcptVatLabel.ar)}</span>`:''}: ${esc(POS_TRN)}</p>`:''}
+      <div class="rcpt-heading">${isRefund?`REFUND / CREDIT NOTE<span class="rcpt-ar">${RCPT_AR.refund}</span>`:`${esc(rcptHeading.en)}${rcptHeading.ar?`<span class="rcpt-ar">${esc(rcptHeading.ar)}</span>`:''}`}</div>
       <p>${esc(sale.date)}</p>
     </div>
     <div class="rcpt-orderno">${esc(sale.receipt_no)}</div>
