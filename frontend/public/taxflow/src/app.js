@@ -20140,9 +20140,14 @@ async function loadBioSyncLog(){
       const srcBadge=p.source==='csv'?'<span style="color:var(--purple)">CSV</span>':p.source==='device'?'<span style="color:var(--blue)">BIO</span>':'<span style="color:var(--text3)">MAN</span>';
       const name=escapeHtml(p.employee_name||p.employee_id);
       const dev=p.device_name?` · ${escapeHtml(p.device_name)}`:'';
+      // No employee has this ID (Staff → Employees) — the punch was stored
+      // but will never attach to anyone anywhere else in the app (Present
+      // Today, payslips, attendance reports). Flag it here since this log
+      // is the one place an admin could actually notice.
+      const unmatchedBadge=p.matched===false?' <span style="color:var(--red)" title="No employee has this ID — check Staff → Employees">⚠ Unmatched</span>':'';
       const row=document.createElement('div');
       row.style.cssText='padding:3px 6px;border-bottom:1px solid var(--divider)';
-      row.innerHTML=`<span style="color:${dirClr}">${dirIcon} ${timeStr}</span>  ${srcBadge}  <strong>${name}</strong>${dev}  <span style="color:var(--text3)">${escapeHtml(p.direction)}</span>`;
+      row.innerHTML=`<span style="color:${dirClr}">${dirIcon} ${timeStr}</span>  ${srcBadge}  <strong>${name}</strong>${dev}  <span style="color:var(--text3)">${escapeHtml(p.direction)}</span>${unmatchedBadge}`;
       log.appendChild(row);
     });
   }catch(e){

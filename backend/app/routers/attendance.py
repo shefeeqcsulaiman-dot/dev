@@ -9,6 +9,7 @@ Supported punch sources:
 """
 
 import csv
+import hashlib
 import io
 import ipaddress
 import json
@@ -22,14 +23,17 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, U
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+import app.cache as cache
+import app.timezone_utils as timezone_utils
 from app import biotime_client, biotime_sync, crypto
 from app.database import get_db
 from app.auth_principal import resolve_active_branch
 from app.dependencies import Principal, get_current_user, require_module, require_principal_permission
 from app.limiter import limiter
-from app.models import AttendancePunch, BiometricDevice, Employee, User
+from app.models import AttendancePunch, BiometricDevice, Company, Employee, User
 from app.security import verify_password, hash_password
 
 # router carries only the device-facing punch/adms endpoints (auth is via
@@ -87,15 +91,17 @@ class DeviceOut(BaseModel):
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-# UAE Standard Time has no DST, so this fixed offset is safe for the whole
-# app's target market. Devices (ZKTeco/Suprema/Hikvision/Anviz) and CSV
-# imports report their own local wall-clock time with no timezone info —
-# treating that naive value as if it were already UTC (rather than converting
-# it) makes every punch appear ~4 hours in the future and get rejected.
-_DEVICE_UTC_OFFSET = timedelta(hours=4)
+# Devices (ZKTeco/Suprema/Hikvision/Anviz) and CSV imports report their own
+# local wall-clock time with no timezone info — treating that naive value as
+# if it were already UTC (rather than converting it) makes every punch
+# appear hours in the future and get rejected. The conversion offset used to
+# be a single hardcoded UAE+4 constant here, silently wrong for any other
+# GCC company — see timezone_utils.company_utc_offset(), resolved per
+# company at each call site below.
+_DEVICE_UTC_OFFSET = timedelta(hours=timezone_utils._DEFAULT_OFFSET_HOURS)
 
 
-def _parse_time(ts: str | None) -> datetime:
+def _parse_time(ts: str | None, offset: timedelta = _DEVICE_UTC_OFFSET) -> datetime:
     if not ts:
         return datetime.now(UTC)
     for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%SZ", "%d/%m/%Y %H:%M:%S"):
@@ -103,7 +109,7 @@ def _parse_time(ts: str | None) -> datetime:
             naive = datetime.strptime(ts, fmt)
             if fmt.endswith("Z"):
                 return naive.replace(tzinfo=UTC)
-            return (naive - _DEVICE_UTC_OFFSET).replace(tzinfo=UTC)
+            return (naive - offset).replace(tzinfo=UTC)
         except ValueError:
             continue
     try:
@@ -112,19 +118,42 @@ def _parse_time(ts: str | None) -> datetime:
         return datetime.now(UTC)
 
 
-def _local_date(punch_time_utc: datetime) -> str:
-    """Calendar date in UAE local time — punches near midnight UTC must not
-    bucket into the wrong business day."""
-    return (punch_time_utc + _DEVICE_UTC_OFFSET).strftime("%Y-%m-%d")
+def _local_date(punch_time_utc: datetime, offset: timedelta = _DEVICE_UTC_OFFSET) -> str:
+    """Calendar date in the company's local time — punches near midnight UTC
+    must not bucket into the wrong business day."""
+    return (punch_time_utc + offset).strftime("%Y-%m-%d")
 
 
-def _local_today():
-    """Today's date in UAE local time, matching how punch_date is bucketed."""
-    return (datetime.now(UTC) + _DEVICE_UTC_OFFSET).date()
+def _local_today(offset: timedelta = _DEVICE_UTC_OFFSET):
+    """Today's date in the company's local time, matching how punch_date is bucketed."""
+    return (datetime.now(UTC) + offset).date()
+
+
+def _company_offset(db: Session, company_id: str) -> timedelta:
+    country = db.query(Company.country).filter(Company.id == company_id).scalar()
+    return timezone_utils.company_utc_offset(country)
 
 
 def _get_device_company(x_device_key: str, db: Session) -> tuple[str, BiometricDevice]:
-    """Resolve company_id from device API key (for ZK bridge / webhook auth)."""
+    """Resolve company_id from device API key (for ZK bridge / webhook auth).
+
+    Bcrypt-verifying against every active device across every company on
+    every single punch is expensive (~100-300ms each) and can't be scoped
+    down before a match is found — a request carrying ANY non-empty key
+    string forces this full scan, with no authentication required to
+    trigger it. A short-TTL cache (keyed by a one-way SHA-256 hash of the
+    actual key, never the key itself) short-circuits the *repeat* lookups a
+    legitimate device makes every ~30s; a genuinely invalid/attacker key
+    still forces a full scan on every attempt, but that's already bounded
+    by the 60/minute per-IP rate limit on the routes that call this."""
+    cache_key = f"device_key:{hashlib.sha256(x_device_key.encode()).hexdigest()}"
+    cached_device_id = cache.get(cache_key)
+    if cached_device_id:
+        device = db.query(BiometricDevice).filter(
+            BiometricDevice.id == cached_device_id, BiometricDevice.status == "active"
+        ).first()
+        if device:
+            return device.company_id, device
     devices = db.query(BiometricDevice).filter(
         BiometricDevice.status == "active",
         BiometricDevice.api_key_hash.isnot(None),
@@ -132,10 +161,23 @@ def _get_device_company(x_device_key: str, db: Session) -> tuple[str, BiometricD
     for device in devices:
         try:
             if verify_password(x_device_key, device.api_key_hash):
+                cache.set(cache_key, device.id, ttl=300)
                 return device.company_id, device
         except Exception:
             continue
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid device key")
+
+
+def require_device_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Device management issues one-time API keys and decrypts/uses stored
+    BioTime passwords (Test Connection, Sync Now) — restrict to company
+    admins, matching the pattern already used for other destructive/
+    credential-sensitive actions (see app_data.py's wipe-company-data
+    check). Read-only listing (list_devices) stays open to any HRMS user;
+    DeviceOut never includes a credential."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only company admins can manage biometric devices")
+    return current_user
 
 
 # ── Device management ─────────────────────────────────────────────────────────
@@ -167,7 +209,7 @@ def list_devices(
 def add_device(
     body: DeviceCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_device_admin),
 ) -> dict[str, Any]:
     # BioTime Server: a pull connection to the customer's own BioTime
     # install, not a device we issue a push key to — no api_key_hash.
@@ -221,7 +263,7 @@ def add_device(
 def delete_device(
     device_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_device_admin),
 ) -> None:
     device = db.query(BiometricDevice).filter(
         BiometricDevice.id == device_id,
@@ -247,7 +289,7 @@ _BIOTIME_TYPES = {"ZKTeco BioTime Server"}
 def test_device(
     device_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_device_admin),
 ) -> dict[str, Any]:
     device = db.query(BiometricDevice).filter(
         BiometricDevice.id == device_id,
@@ -365,7 +407,7 @@ def test_device(
 def sync_biotime_device_now(
     device_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_device_admin),
 ) -> dict[str, Any]:
     """Manual "Sync Now" — pulls attendance from the company's own BioTime
     server. Same code path (biotime_sync.sync_biotime_device) the periodic
@@ -453,7 +495,8 @@ async def _record_punch(request: Request, db: Session, current_user: User | None
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    punch_time = _parse_time(body.punch_time)
+    offset = _company_offset(db, company_id)
+    punch_time = _parse_time(body.punch_time, offset)
 
     # Reject punches more than 5 minutes in the future (prevents date manipulation)
     now = datetime.now(UTC)
@@ -464,7 +507,7 @@ async def _record_punch(request: Request, db: Session, current_user: User | None
     if device_key and punch_time < now - timedelta(days=90):
         raise HTTPException(status_code=422, detail="Punch time is too old (>90 days)")
 
-    punch_date = _local_date(punch_time)
+    punch_date = _local_date(punch_time, offset)
     employee_id = body.employee_id.strip()
 
     # Idempotency guard: a bridge restart replays its whole in-memory backlog
@@ -493,7 +536,23 @@ async def _record_punch(request: Request, db: Session, current_user: User | None
         source="device" if device_key else "manual",
     )
     db.add(punch)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # The SELECT-based check above raced with another concurrent
+        # request for the identical punch and lost — uq_attendance_punch_dedup
+        # (models.py) caught what the app-level check couldn't. Same
+        # idempotent response as the check above, not an error.
+        db.rollback()
+        existing = db.query(AttendancePunch).filter(
+            AttendancePunch.company_id == company_id,
+            AttendancePunch.employee_id == employee_id,
+            AttendancePunch.punch_time == punch_time,
+            AttendancePunch.device_id == device_id,
+        ).first()
+        if existing:
+            return {"ok": True, "id": existing.id, "duplicate": True}
+        raise
     return {"ok": True, "id": punch.id}
 
 
@@ -581,6 +640,7 @@ async def import_csv(
     if not required.issubset(headers):
         raise HTTPException(400, f"CSV must contain columns: {', '.join(required)}. Found: {', '.join(headers)}")
 
+    offset = _company_offset(db, current_user.company_id)
     inserted = 0
     skipped = 0
     for row in reader:
@@ -590,13 +650,13 @@ async def import_csv(
         if not emp_id or not ts_raw:
             skipped += 1
             continue
-        punch_time = _parse_time(ts_raw)
+        punch_time = _parse_time(ts_raw, offset)
         punch = AttendancePunch(
             company_id=current_user.company_id,
             employee_id=emp_id,
             employee_name=norm.get("employee_name") or None,
             punch_time=punch_time,
-            punch_date=_local_date(punch_time),
+            punch_date=_local_date(punch_time, offset),
             direction=norm.get("direction", "in"),
             source="csv",
         )
@@ -633,7 +693,7 @@ def attendance_today(
     principal: Principal = Depends(require_principal_permission("attendance:view")),
 ) -> dict[str, Any]:
     """Return today's punch-in count for the Present Today KPI."""
-    today = _local_today().isoformat()
+    today = _local_today(_company_offset(db, principal.company_id)).isoformat()
     rows = _branch_scope_punches(db.query(AttendancePunch), principal, branch_id).filter(
         AttendancePunch.company_id == principal.company_id,
         AttendancePunch.punch_date == today,
@@ -656,7 +716,7 @@ def attendance_trend(
 ) -> dict[str, Any]:
     """Return daily punch-in unique-employee counts for the last N days (for Attendance Trend chart)."""
     days = max(7, min(days, 90))
-    today = _local_today()
+    today = _local_today(_company_offset(db, principal.company_id))
     start = today - timedelta(days=days - 1)
 
     query = db.query(
@@ -687,6 +747,15 @@ def recent_punches(
     rows = _branch_scope_punches(db.query(AttendancePunch), principal, branch_id).filter(
         AttendancePunch.company_id == principal.company_id,
     ).order_by(AttendancePunch.punch_time.desc()).limit(limit).all()
+    # A punch's employee_id is matched against Employee.employee_no by plain
+    # string equality (see _branch_scope_punches' own docstring) — nothing
+    # validates this at ingestion time, so a device enrolled with the wrong
+    # ID silently never attaches to anyone. Surface that here so an admin
+    # troubleshooting a "punch arrived but employee shows absent" report has
+    # something to look at, rather than every punch looking equally valid.
+    valid_employee_nos = {
+        e.employee_no for e in db.query(Employee.employee_no).filter(Employee.company_id == principal.company_id).all()
+    }
     return {"punches": [
         {
             "id": r.id,
@@ -697,6 +766,7 @@ def recent_punches(
             "direction": r.direction,
             "device_name": r.device_name,
             "source": r.source,
+            "matched": r.employee_id in valid_employee_nos,
         }
         for r in rows
     ]}
@@ -709,7 +779,7 @@ def attendance_summary(
     principal: Principal = Depends(require_principal_permission("attendance:view")),
 ) -> dict[str, Any]:
     """Recent 7-day attendance overview."""
-    today = _local_today()
+    today = _local_today(_company_offset(db, principal.company_id))
     week_start = (today - timedelta(days=6)).isoformat()
     query = db.query(
         AttendancePunch.punch_date,

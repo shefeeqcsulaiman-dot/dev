@@ -1060,7 +1060,17 @@ class BiometricDevice(Base, TimestampMixin):
 
 class AttendancePunch(Base, TimestampMixin):
     __tablename__ = "attendance_punches"
-    __table_args__ = (Index("ix_att_punch_company_date", "company_id", "punch_date"),)
+    __table_args__ = (
+        Index("ix_att_punch_company_date", "company_id", "punch_date"),
+        # Backstop against the app-level SELECT-then-INSERT dedupe in
+        # _record_punch()/sync_biotime_device() losing a race under genuine
+        # concurrency (e.g. an ADMS webhook retry landing at the same moment
+        # as a legitimate second delivery) — device_id is NULL for manual/
+        # CSV punches, and SQL NULLs never collide with each other, so this
+        # only constrains device-driven punches, which is exactly the gap
+        # that was unprotected.
+        UniqueConstraint("company_id", "device_id", "employee_id", "punch_time", name="uq_attendance_punch_dedup"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)

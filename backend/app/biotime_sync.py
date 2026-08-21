@@ -5,27 +5,25 @@ code path, so isolation and dedupe behave the same regardless of trigger.
 """
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+import app.timezone_utils as timezone_utils
 from app import biotime_client, crypto
-from app.models import AttendancePunch, BiometricDevice
+from app.models import AttendancePunch, BiometricDevice, Company
 
-# Matches the fixed UAE-offset convention already used in routers/attendance.py
-# (_DEVICE_UTC_OFFSET) — BioTime, like the other device sources, reports
-# local wall-clock time with no timezone info attached.
-_DEVICE_UTC_OFFSET = timedelta(hours=4)
 _FIRST_SYNC_LOOKBACK = timedelta(hours=24)
 
 
-def _local_date(punch_time_utc: datetime) -> str:
-    return (punch_time_utc + _DEVICE_UTC_OFFSET).strftime("%Y-%m-%d")
+def _local_date(punch_time_utc: datetime, offset: timedelta) -> str:
+    return (punch_time_utc + offset).strftime("%Y-%m-%d")
 
 
-def _parse_punch_time(raw: str) -> datetime | None:
+def _parse_punch_time(raw: str, offset: timedelta) -> datetime | None:
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
         try:
             naive = datetime.strptime(raw, fmt)
-            return (naive - _DEVICE_UTC_OFFSET).replace(tzinfo=UTC)
+            return (naive - offset).replace(tzinfo=UTC)
         except (ValueError, TypeError):
             continue
     return None
@@ -52,6 +50,9 @@ def sync_biotime_device(db: Session, device: BiometricDevice) -> int:
     company than the caller's own session."""
     if not device.biotime_base_url or not device.biotime_username or not device.biotime_password_enc:
         raise ValueError("BioTime connection is not fully configured")
+
+    company_country = db.query(Company.country).filter(Company.id == device.company_id).scalar()
+    offset = timezone_utils.company_utc_offset(company_country)
 
     password = crypto.decrypt_secret(device.biotime_password_enc)
     token, expires_at = biotime_client.get_valid_token(
@@ -95,7 +96,7 @@ def sync_biotime_device(db: Session, device: BiometricDevice) -> int:
         raw_time = row.get("punch_time") or row.get("upload_time")
         if not emp_code or not raw_time:
             continue
-        punch_time = _parse_punch_time(str(raw_time))
+        punch_time = _parse_punch_time(str(raw_time), offset)
         if not punch_time:
             continue
         key = _key(emp_code, punch_time)
@@ -107,7 +108,7 @@ def sync_biotime_device(db: Session, device: BiometricDevice) -> int:
             employee_id=emp_code,
             employee_name=row.get("emp_name") or row.get("first_name"),
             punch_time=punch_time,
-            punch_date=_local_date(punch_time),
+            punch_date=_local_date(punch_time, offset),
             direction=_map_direction(row),
             device_id=device.id,
             device_name=row.get("terminal_alias") or row.get("terminal_sn") or device.name,
@@ -117,5 +118,15 @@ def sync_biotime_device(db: Session, device: BiometricDevice) -> int:
 
     device.last_sync = now
     db.add(device)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # A concurrent sync for the same device (manual "Sync Now" landing
+        # at the same moment as the scheduled Celery beat tick) already
+        # inserted one or more of these rows — the in-memory `seen` dedupe
+        # above only sees this run's own view, so uq_attendance_punch_dedup
+        # (models.py) is the real backstop here. Not an error: the other
+        # run's insert already achieved the same outcome.
+        db.rollback()
+        return 0
     return inserted

@@ -137,3 +137,64 @@ def test_cross_tenant_cannot_sync_test_or_delete_others_device(client, auth_head
     # Confirm it's genuinely untouched from company A's own view.
     still_there = client.get("/api/v1/attendance/devices", headers=auth_headers)
     assert any(d["id"] == device_id for d in still_there.json())
+
+
+def test_sync_uses_saudi_offset_not_hardcoded_uae(client, auth_headers, db, monkeypatch):
+    """The UTC offset used to be a single hardcoded UAE+4 constant — silently
+    wrong for any other GCC company. A Saudi Arabia company (UTC+3) synced
+    punch must convert using a 3-hour offset, not 4."""
+    updated = client.put("/api/v1/companies/current", headers=auth_headers, json={"country": "Saudi Arabia"})
+    assert updated.status_code == 200, updated.text
+
+    device_id = _add_biotime_device(client, auth_headers, name="Riyadh Gate")
+    monkeypatch.setattr(biotime_client, "get_token", lambda base_url, username, password: "fake-token")
+    # 09:00 local time in Riyadh (UTC+3) is 06:00 UTC — if the code still used
+    # the old hardcoded UAE+4 offset this would wrongly compute 05:00 UTC.
+    local_punch_str = "2026-01-15 09:00:00"
+    monkeypatch.setattr(biotime_client, "list_transactions", lambda base_url, token, start_time, end_time: [
+        {"emp_code": "EMP-SA-001", "punch_time": local_punch_str, "punch_state": "0", "terminal_alias": "Riyadh Gate"},
+    ])
+
+    resp = client.post(f"/api/v1/attendance/devices/{device_id}/biotime/sync", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["synced"] == 1
+
+    punch = db.query(AttendancePunch).filter(AttendancePunch.device_id == device_id).one()
+    # SQLite round-trips DateTime(timezone=True) as naive (see biotime_sync.py's
+    # own _key() comment for the same quirk) — compare the naive readback against
+    # a naive literal rather than a tz-aware one.
+    assert punch.punch_time == datetime(2026, 1, 15, 6, 0, 0)
+    assert punch.punch_date == "2026-01-15"
+
+
+def test_attendance_punch_dedup_constraint_rejects_true_duplicate(db, auth_headers, client):
+    """Direct model-level check that uq_attendance_punch_dedup (models.py)
+    actually exists and rejects a true duplicate — the backstop the
+    application-level SELECT-then-INSERT dedupe relies on under
+    concurrency. Resolve a real company_id via the API rather than
+    hardcoding one, matching this file's existing fixture style."""
+    from sqlalchemy.exc import IntegrityError
+
+    company = client.get("/api/v1/companies/current", headers=auth_headers).json()
+    punch_time = datetime(2026, 2, 1, 8, 0, 0, tzinfo=UTC)
+    first = AttendancePunch(
+        company_id=company["id"], employee_id="EMP-DEDUP-001", punch_time=punch_time,
+        punch_date="2026-02-01", direction="in", device_id="dedup-test-device", source="device",
+    )
+    db.add(first)
+    db.commit()
+
+    dup = AttendancePunch(
+        company_id=company["id"], employee_id="EMP-DEDUP-001", punch_time=punch_time,
+        punch_date="2026-02-01", direction="in", device_id="dedup-test-device", source="device",
+    )
+    db.add(dup)
+    try:
+        db.commit()
+        assert False, "expected IntegrityError from uq_attendance_punch_dedup"
+    except IntegrityError:
+        db.rollback()
+
+    assert db.query(AttendancePunch).filter(
+        AttendancePunch.company_id == company["id"], AttendancePunch.employee_id == "EMP-DEDUP-001"
+    ).count() == 1

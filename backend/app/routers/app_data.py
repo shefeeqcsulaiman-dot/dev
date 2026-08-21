@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 import app.cache as cache
+import app.timezone_utils as timezone_utils
 from app.accounting_posting import ensure_credit_note_tax_line
 from app.config import get_settings
 from app.database import get_db
@@ -62,11 +63,10 @@ from app.models import (
     User,
 )
 
-# Local time offset punches are recorded in — mirrors attendance.py's own
-# _DEVICE_UTC_OFFSET (not imported directly to avoid a cross-router
-# dependency for one constant; both must be changed together if the
-# company's timezone ever becomes configurable instead of UAE-fixed).
-_ATTENDANCE_UTC_OFFSET = _dt.timedelta(hours=4)
+# Local time offset punches are recorded in — resolved per company via
+# timezone_utils.company_utc_offset(), the same shared helper attendance.py
+# and biotime_sync.py use, now that the offset is no longer a single
+# hardcoded UAE constant.
 
 
 router = APIRouter(prefix="/app-data", tags=["app data"])
@@ -1499,6 +1499,8 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
                     emp_no = emp.employee_no
             punch_date = str(record.get("date") or "").strip()
             if correction_id and emp_no and punch_date:
+                company_country = db.query(Company.country).filter(Company.id == principal.company_id).scalar()
+                attendance_offset = timezone_utils.company_utc_offset(company_country)
                 # Delete-then-recreate by (employee, date, source) so
                 # re-approving after an edit, or approving twice, always
                 # converges to the request's current values instead of
@@ -1517,7 +1519,7 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
                         local_dt = _dt.datetime.strptime(f"{punch_date} {time_str}", "%Y-%m-%d %H:%M")
                     except ValueError:
                         continue
-                    punch_time = (local_dt - _ATTENDANCE_UTC_OFFSET).replace(tzinfo=_dt.timezone.utc)
+                    punch_time = (local_dt - attendance_offset).replace(tzinfo=_dt.timezone.utc)
                     db.add(
                         AttendancePunch(
                             company_id=principal.company_id,
