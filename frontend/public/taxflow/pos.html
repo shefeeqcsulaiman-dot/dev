@@ -226,56 +226,56 @@ button{cursor:pointer;border:none;background:none;}
 .pcart-del:hover{background:rgba(239,68,68,.1);color:var(--red);}
 
 /* Summary & Totals */
-.psum{padding:12px 14px;border-top:1px solid var(--cart-bd);background:var(--cart);flex-shrink:0;}
+.psum{padding:10px 14px;border-top:1px solid var(--cart-bd);background:var(--cart);flex-shrink:0;}
 
-.psum-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;}
+.psum-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:8px;}
 .psum-stat{display:flex;flex-direction:column;gap:2px;}
 .psum-stat label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--cart-t3);}
 .psum-stat b{font-size:14px;font-weight:800;color:var(--cart-t1);font-variant-numeric:tabular-nums;}
 .psum-stat.hi b{color:var(--acc2);}
 
 .psum-adjs{
-  display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;
-  padding-top:10px;border-top:1px solid var(--cart-bd);
+  display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;
+  padding-top:8px;border-top:1px solid var(--cart-bd);
 }
-.psum-adj{display:flex;flex-direction:column;gap:4px;}
+.psum-adj{display:flex;flex-direction:column;gap:3px;}
 .psum-adj label{
-  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+  font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
   color:var(--cart-t3);
 }
 .psum-adj input{
-  width:100%;background:var(--cart2);border:1.5px solid var(--cart-bd);border-radius:9px;
-  padding:9px 12px;font-size:16px;font-weight:700;color:var(--cart-t1);
+  width:100%;background:var(--cart2);border:1.5px solid var(--cart-bd);border-radius:8px;
+  padding:6px 9px;font-size:13px;font-weight:700;color:var(--cart-t1);
   text-align:right;transition:border-color .12s;
 }
 .psum-adj input:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px rgba(99,102,241,.2);}
 
 /* Payment bar — 2 rows: Pay/Cancel/Credit, then Card/Cash/Split */
 .pbot{
-  display:flex;flex-direction:column;gap:8px;
-  padding:12px 14px;background:var(--cart);
+  display:flex;flex-direction:column;gap:6px;
+  padding:10px 14px;background:var(--cart);
   border-top:1px solid var(--cart-bd);flex-shrink:0;
 }
-.pbot-row1{display:flex;align-items:stretch;gap:8px;}
+.pbot-row1{display:flex;align-items:stretch;gap:6px;}
 .pbot-pay{
   flex:2;display:flex;flex-direction:column;justify-content:center;gap:1px;
-  background:linear-gradient(135deg,var(--acc),var(--acc2));border-radius:12px;padding:10px 16px;
+  background:linear-gradient(135deg,var(--acc),var(--acc2));border-radius:11px;padding:7px 14px;
   border:none;transition:all .15s;box-shadow:0 4px 14px rgba(99,102,241,.3);
 }
 .pbot-pay:hover{box-shadow:0 6px 20px rgba(99,102,241,.4);transform:translateY(-1px);}
 .pbot-pay:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;transform:none;}
-.pbot-pay-lbl{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.5px;}
-.pbot-pay-lbl svg{width:12px;height:12px;}
-.pbot-pay-val{display:flex;align-items:center;justify-content:space-between;font-size:19px;font-weight:900;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:-.5px;white-space:nowrap;}
-.pbot-pay-val svg{width:16px;height:16px;flex-shrink:0;}
+.pbot-pay-lbl{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.5px;}
+.pbot-pay-lbl svg{width:11px;height:11px;}
+.pbot-pay-val{display:flex;align-items:center;justify-content:space-between;font-size:16px;font-weight:900;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:-.5px;white-space:nowrap;}
+.pbot-pay-val svg{width:14px;height:14px;flex-shrink:0;}
 .pbot-methods{display:flex;gap:6px;flex:1;}
 .pbtn{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:3px;padding:8px 6px;border-radius:11px;border:1.5px solid transparent;
-  font-size:11px;font-weight:700;flex:1;height:52px;
+  gap:2px;padding:6px 4px;border-radius:10px;border:1.5px solid transparent;
+  font-size:10px;font-weight:700;flex:1;height:42px;
   transition:all .15s;
 }
-.pbtn svg{width:18px;height:18px;flex-shrink:0;}
+.pbtn svg{width:15px;height:15px;flex-shrink:0;}
 .pbtn:disabled{opacity:.35;cursor:not-allowed;}
 .pbtn:not(:disabled):active{transform:scale(.96);}
 .pbtn.cancel{background:var(--red-bg);color:var(--red);border-color:var(--red-bd);}
