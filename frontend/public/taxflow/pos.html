@@ -1560,8 +1560,11 @@ function renderCart(){
 }
 
 function renderSummary(){
-  const {sub, vat, total, items, vatLabel} = cartTotals();
-  setText('s-items', items);
+  const {sub, vat, total, vatLabel} = cartTotals();
+  // "Items" reads as "how many products are in the cart" — was previously
+  // cartTotals().items (a summed quantity, e.g. 6 for a single product line
+  // with qty 6), which looked wrong for exactly that case.
+  setText('s-items', _cart.length);
   setText('s-sub',   sub.toFixed(2));
   setText('s-vat',   vat.toFixed(2));
   setText('bot-total', total.toFixed(2));
