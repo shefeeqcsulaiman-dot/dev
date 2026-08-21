@@ -434,3 +434,73 @@ def test_stock_tracking_no_skips_movements_but_keeps_item_visible(client, auth_h
     stock_yes = client.get("/api/v1/inventory/stock-levels", headers=auth_headers)
     row_yes = next(r for r in stock_yes.json() if r["code"] == "YES-TRACK-SKU")
     assert Decimal(str(row_yes["current_stock"])) == Decimal("4.00")
+
+
+def test_low_confidence_ai_extraction_saves_purchase_without_minting_product(client, auth_headers, db):
+    """A low-confidence/error-flagged AI-extracted purchase (Purchases > AI
+    Extraction) previously auto-created a brand-new, unconfirmed
+    StockProductMapping from whatever (possibly wrong) product text was
+    extracted — exactly like a clean extraction would. purchaseRecordFromExtractedInvoice()
+    now stamps needs_product_review on the saved record when confidence is
+    low or the row was error-flagged; sync_purchase_stock() must save the
+    purchase itself (supplier/amount/date all real) but skip auto-creating
+    a product for an SKU/name it doesn't already recognize."""
+    purchase = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={
+            "collection": "purchaseRecords",
+            "record": {
+                "ref": "PUR-LOWCONF-001",
+                "supplier": "Uncertain Extraction Supplier",
+                "net_amount": 200,
+                "tax_amount": 10,
+                "total": 210,
+                "needs_product_review": True,
+                "lines": [{"sku": "MAYBE-WRONG-SKU", "product": "Possibly Misread Item", "quantity": 5, "unit_cost": 40, "unit_cost_before_tax": 40, "line_total": 200}],
+            },
+        },
+    )
+    assert purchase.status_code == 200, purchase.text
+
+    # The purchase record itself must still be a real, saved purchase.
+    purchases = client.get("/api/v1/app-data/records/purchaseRecords", headers=auth_headers).json()
+    saved = next(r for r in purchases["records"] if r.get("ref") == "PUR-LOWCONF-001")
+    assert saved["supplier"] == "Uncertain Extraction Supplier"
+    assert Decimal(str(saved["total"])) == Decimal("210")
+
+    # No product/mapping/movement must have been minted from the uncertain line.
+    assert db.query(StockProductMapping).filter(StockProductMapping.sku == "MAYBE-WRONG-SKU").count() == 0
+    stock_levels = client.get("/api/v1/inventory/stock-levels", headers=auth_headers)
+    assert not any(r["code"] == "MAYBE-WRONG-SKU" for r in stock_levels.json())
+
+    # If the SKU already exists (e.g. from a confident extraction/manual
+    # entry earlier), a later low-confidence purchase referencing it must
+    # still record a normal stock movement — allow_create only blocks
+    # inventing a NEW item, not using an already-known one.
+    existing_product = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={"collection": "products", "record": {"code": "ALREADY-KNOWN-SKU", "name": "Already Known Item", "category": "QA", "unit": "PCS"}},
+    )
+    assert existing_product.status_code == 200, existing_product.text
+    second_purchase = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={
+            "collection": "purchaseRecords",
+            "record": {
+                "ref": "PUR-LOWCONF-002",
+                "supplier": "Uncertain Extraction Supplier",
+                "net_amount": 100,
+                "tax_amount": 5,
+                "total": 105,
+                "needs_product_review": True,
+                "lines": [{"sku": "ALREADY-KNOWN-SKU", "product": "Already Known Item", "quantity": 3, "unit_cost": 33.33, "unit_cost_before_tax": 33.33, "line_total": 100}],
+            },
+        },
+    )
+    assert second_purchase.status_code == 200, second_purchase.text
+    stock_known = client.get("/api/v1/inventory/stock-levels", headers=auth_headers)
+    row_known = next(r for r in stock_known.json() if r["code"] == "ALREADY-KNOWN-SKU")
+    assert Decimal(str(row_known["current_stock"])) == Decimal("3.00")

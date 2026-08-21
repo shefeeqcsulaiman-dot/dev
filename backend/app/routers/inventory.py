@@ -525,6 +525,11 @@ def stock_mapping_for_purchase_line(
             .first()
         )
     if not mapping:
+        # Same rule as purchase_line_stock_mapping() (app_data.py): a
+        # low-confidence/error-flagged AI extraction shouldn't silently
+        # mint a brand-new Inventory item from possibly-wrong product text.
+        if record.get("needs_product_review"):
+            return None
         mapping = StockProductMapping(
             company_id=principal.company_id,
             sku=sku or product[:60],

@@ -1596,6 +1596,7 @@ def sync_purchase_stock(db: Session, principal: Principal, record: dict[str, Any
     if not isinstance(lines, list):
         lines = []
     branch_id = str(record.get("branch_id") or "").strip() or principal.branch_id
+    allow_create_mapping = not bool(record.get("needs_product_review"))
     db.query(StockMovement).filter(
         StockMovement.company_id == principal.company_id,
         StockMovement.movement_type == "purchase",
@@ -1614,7 +1615,7 @@ def sync_purchase_stock(db: Session, principal: Principal, record: dict[str, Any
         quantity = decimal_value(line.get("quantity") or line.get("qty") or line.get("purchase_qty") or line.get("qty_invoiced"))
         if quantity <= 0:
             continue
-        mapping = purchase_line_stock_mapping(db, principal, line, record)
+        mapping = purchase_line_stock_mapping(db, principal, line, record, allow_create=allow_create_mapping)
         if not mapping:
             continue
         # Item Master's "Stock Tracking: No/Optional" — the item still
@@ -1726,6 +1727,7 @@ def purchase_line_stock_mapping(
     principal: Principal,
     line: dict[str, Any],
     record: dict[str, Any],
+    allow_create: bool = True,
 ) -> StockProductMapping | None:
     sku = str(line.get("sku") or line.get("code") or "").strip()
     product = str(line.get("product") or line.get("name") or line.get("description") or "").strip()
@@ -1745,6 +1747,13 @@ def purchase_line_stock_mapping(
             .first()
         )
     if not mapping:
+        # A low-confidence/error-flagged AI extraction (needs_product_review
+        # on the purchase record) can't be trusted enough to silently mint a
+        # brand-new Inventory item from its possibly-wrong product text —
+        # the purchase itself still saves, this line just stays unmapped
+        # until a person picks or creates the real product.
+        if not allow_create:
+            return None
         mapping = StockProductMapping(
             company_id=principal.company_id,
             sku=sku or product[:60],

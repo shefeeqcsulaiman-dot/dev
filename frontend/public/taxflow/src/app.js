@@ -12087,6 +12087,14 @@ async function purchaseRecordFromExtractedInvoice(inv){
     source:'AI Upload',
     status:'Pending Payment',
     extraction_status:status,
+    // A low-confidence or error-flagged extraction can still have SOME
+    // usable header data (supplier/date/total) worth saving as a real
+    // purchase record, but its line-item product names/SKUs aren't
+    // trustworthy enough to silently mint brand-new Inventory items from —
+    // sync_purchase_stock() (app_data.py) checks this to skip auto-creating
+    // a StockProductMapping for lines it can't already match to an
+    // existing one, leaving them unmapped for manual review instead.
+    needs_product_review:purchaseAiNumber(inv.confidence)<70||String(inv.status||'').toLowerCase()==='error'||Boolean(inv.extraction_error),
     supplier_trn:inv.supplier_trn||'',
     bill_to:inv.bill_to||'',
     currency:inv.currency||'AED',
