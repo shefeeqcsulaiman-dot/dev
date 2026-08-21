@@ -4901,7 +4901,7 @@ function syncStockLevelsFromProducts(){
       }
       existing.available=Number(existing.available||0)+addedQty;
       if(!existing.unit&&item.unit)existing.unit=item.unit;
-    }else{
+    }else if(!item.needsReview){
       addStockItemAliases(stockByKey,item);
     }
   });
@@ -5323,8 +5323,19 @@ function purchaseStockItems(){
         reorderLevel:0,
         purchase_rate:0,
         _rate_qty:0,
-        source:'purchase'
+        source:'purchase',
+        // Mirrors the allow_create guard in purchase_line_stock_mapping()
+        // (app_data.py) on the client side — this map exists purely so an
+        // unmapped purchase line still shows *something* in Stock Dashboard
+        // before a real Item Master product exists for it, but a low-
+        // confidence/error-flagged AI extraction can't be trusted to invent
+        // that something from possibly-wrong line text. Once any
+        // non-flagged record contributes to this key, it's vouched for and
+        // stays visible even if a later needs_product_review purchase also
+        // references it.
+        needsReview:Boolean(record?.needs_product_review)
       };
+      if(!record?.needs_product_review)existing.needsReview=false;
       // Weighted average purchase rate
       if(stockSign>0&&unitCost>0){
         const newTotalQty=existing._rate_qty+quantity;
