@@ -1122,17 +1122,29 @@ async function checkAuth(){
     // Employee/branch-login token — /auth/me is User-only and would 401 an
     // Employee out of POS entirely. See Branch Management Phase 6.
     await api('/auth/whoami');
-    try{
-      const company = await api('/companies/current');
-      if(company.name) localStorage.setItem('taxflow_company_name', company.name);
-      POS_CURRENCY = company.currency || 'AED';
-      POS_TRN = company.trn || '';
-      POS_COUNTRY = company.country || '';
-      const curEl=document.getElementById('bot-total-cur');
-      if(curEl)curEl.textContent=POS_CURRENCY;
-    }catch{}
+    await refreshCompanyInfo();
     return true;
   }catch{ document.getElementById('pos-auth').style.display='flex'; return false; }
+}
+
+// A POS terminal is often left logged in for a whole shift — checkAuth()
+// only runs once at login, so company.name/currency/TRN cached from that
+// moment silently went stale if an admin edited Settings (e.g. Legal
+// Company Name) in another tab/session while the terminal stayed open,
+// showing the OLD name on every new sale rung up afterward. Re-fetching
+// right before a sale/refund is completed (see completeSale()/
+// confirmRefund()) keeps the receipt correct without needing the cashier
+// to reload the page mid-shift.
+async function refreshCompanyInfo(){
+  try{
+    const company = await api('/companies/current');
+    if(company.name) localStorage.setItem('taxflow_company_name', company.name);
+    POS_CURRENCY = company.currency || 'AED';
+    POS_TRN = company.trn || '';
+    POS_COUNTRY = company.country || '';
+    const curEl=document.getElementById('bot-total-cur');
+    if(curEl)curEl.textContent=POS_CURRENCY;
+  }catch{}
 }
 async function posLogin(e){
   e.preventDefault();
@@ -1572,6 +1584,7 @@ function closePay(){ document.getElementById('ov-pay').style.display='none'; }
 
 async function completeSale(){
   if(!_cart.length)return;
+  await refreshCompanyInfo();
   const {sub,vat,total,items,disc,tax,ship,pack}=cartTotals();
   if(_payMethod==='cash'){
     const tendered=parseFloat(document.getElementById('pay-tender')?.value)||0;
@@ -2107,6 +2120,7 @@ async function confirmRefund(){
   if(!orig)return;
   const reason=(document.getElementById('refund-reason')?.value||'').trim();
   if(!reason){toast('Enter a reason for the refund','warn');return;}
+  await refreshCompanyInfo();
   const btn=document.getElementById('refund-confirm-btn');
   if(btn)btn.disabled=true;
   try{
