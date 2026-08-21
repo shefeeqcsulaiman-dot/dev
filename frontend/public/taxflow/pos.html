@@ -41,8 +41,11 @@ body.pos-dark{
 html,body{height:100%;overflow:hidden;font-family:var(--fn);background:var(--bg);color:var(--t1);font-size:13px;transition:background .2s;}
 input,select,button,textarea{font-family:var(--fn);}
 button{cursor:pointer;border:none;background:none;}
-::-webkit-scrollbar{width:4px;height:4px;}
-::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:4px;}
+*{scrollbar-width:thin;scrollbar-color:var(--bd2) transparent;}
+::-webkit-scrollbar{width:8px;height:8px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:999px;}
+::-webkit-scrollbar-thumb:hover{background:var(--acc);}
 
 /* ══ App shell ══════════════════════════════════════════════ */
 #pos-app{display:flex;flex-direction:column;height:100vh;overflow:hidden;}

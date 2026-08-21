@@ -45,10 +45,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .hidden{display:none!important;}
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:80;opacity:0;pointer-events:none;transition:opacity .2s;}
 .scrim.on{opacity:1;pointer-events:auto;}
-*{scrollbar-width:thin;scrollbar-color:var(--surface3) transparent;}
-::-webkit-scrollbar{width:8px;height:8px;}
+/* --surface3 (previously used here) sits too close to the background in
+   both themes to read as a persistently visible scrollbar outside the
+   main .content area's own stronger override below — --border3 is
+   already tuned for exactly this and used everywhere else a visible
+   scrollbar mattered, so it's now the one global default instead of two
+   different-strength scrollbar looks across the app. */
+*{scrollbar-width:thin;scrollbar-color:var(--border3) transparent;}
+::-webkit-scrollbar{width:10px;height:10px;}
 ::-webkit-scrollbar-track{background:transparent;}
-::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:999px;border:2px solid transparent;background-clip:padding-box;}
+::-webkit-scrollbar-thumb{background:var(--border3);border-radius:999px;border:2px solid transparent;background-clip:padding-box;}
 ::-webkit-scrollbar-thumb:hover{background:var(--accent);background-clip:padding-box;}
 
 /* ── SIDEBAR ── */
