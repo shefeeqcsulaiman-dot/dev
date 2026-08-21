@@ -9948,7 +9948,8 @@ function defaultPosReceiptSettings(){
     addressAr:'',
     phone:'',
     heading:'Tax Invoice | فاتورة ضريبية',
-    vatLabel:'VAT ID | الرقم الضريبي',
+    vatLabel:'VAT | الرقم الضريبي',
+    vatNumber:'',
     showLogo:false,
     showTrn:true,
     footer:'Thank you for your business',
@@ -9979,6 +9980,7 @@ function setPosReceiptDesignFields(record={}){
   set('pos-rcpt-phone',s.phone);
   set('pos-rcpt-heading',s.heading);
   set('pos-rcpt-vat-label',s.vatLabel);
+  set('pos-rcpt-vat-number',s.vatNumber);
   set('pos-rcpt-footer',s.footer);
   const showLogo=document.getElementById('pos-rcpt-show-logo');if(showLogo)showLogo.checked=Boolean(s.showLogo);
   const showTrn=document.getElementById('pos-rcpt-show-trn');if(showTrn)showTrn.checked=s.showTrn!==false;
@@ -9998,6 +10000,7 @@ function readPosReceiptDesignFields(){
     phone:(val('pos-rcpt-phone')||'').trim(),
     heading:(val('pos-rcpt-heading')||'').trim()||base.heading,
     vatLabel:(val('pos-rcpt-vat-label')||'').trim()||base.vatLabel,
+    vatNumber:(val('pos-rcpt-vat-number')||'').trim(),
     showLogo:document.getElementById('pos-rcpt-show-logo')?.checked??base.showLogo,
     showTrn:document.getElementById('pos-rcpt-show-trn')?.checked??base.showTrn,
     footer:(val('pos-rcpt-footer')||'').trim(),
@@ -10012,7 +10015,7 @@ function updatePosReceiptPreview(){
   const s=readPosReceiptDesignFields();
   const width=s.paperWidth==='58mm'?'150px':'200px';
   const heading=splitBilingualLabel(s.heading,'Tax Invoice | فاتورة ضريبية');
-  const vatLabel=splitBilingualLabel(s.vatLabel,'VAT ID | الرقم الضريبي');
+  const vatLabel=splitBilingualLabel(s.vatLabel,'VAT | الرقم الضريبي');
   preview.innerHTML=`
     <div style="background:#fff;color:#111;font-family:'DM Mono',monospace;font-size:11px;line-height:1.6;width:${width};margin:0 auto;padding:14px 10px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.15)">
       ${s.showLogo?`<div style="text-align:center;font-size:20px;margin-bottom:4px">🧾</div>`:''}
@@ -10022,7 +10025,7 @@ function updatePosReceiptPreview(){
       ${s.addressAr?`<div style="text-align:center;color:#555" dir="rtl">${escapeHtml(s.addressAr)}</div>`:''}
       ${s.phone?`<div style="text-align:center;color:#555">${escapeHtml(s.phone)}</div>`:''}
       <div style="text-align:center;font-size:10px;color:#888;margin-top:2px">${escapeHtml(heading.en)}${heading.ar?' / '+escapeHtml(heading.ar):''}</div>
-      ${s.showTrn?`<div style="text-align:center;color:#555">${escapeHtml(vatLabel.en)}${vatLabel.ar?' / '+escapeHtml(vatLabel.ar):''}: ${escapeHtml(currentCompany?.trn||'not set')}</div>`:''}
+      ${s.showTrn?`<div style="text-align:center;color:#555">${escapeHtml(vatLabel.en)}${vatLabel.ar?' / '+escapeHtml(vatLabel.ar):''}: ${escapeHtml(s.vatNumber||currentCompany?.trn||'not set')}</div>`:''}
       <div style="border-top:1px dashed #999;margin:8px 0"></div>
       <div style="display:flex;justify-content:space-between"><span>1x Sample Item</span><span>25.00</span></div>
       <div style="display:flex;justify-content:space-between;color:#555"><span>VAT</span><span>1.25</span></div>

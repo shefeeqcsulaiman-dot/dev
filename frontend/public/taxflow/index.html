@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=6d878e0d54" as="style">
-<link rel="preload" href="src/app.js?v=5c4f48a81e" as="script">
+<link rel="preload" href="src/app.js?v=bbdae4eefa" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=6d878e0d54">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
@@ -3636,9 +3636,12 @@
           </div>
           <div class="fr2">
             <div class="toggle-row"><div><div>Show Logo</div><div class="toggle-copy">Print the company logo at the top of the receipt.</div></div><input type="checkbox" id="pos-rcpt-show-logo" onchange="updatePosReceiptPreview()"></div>
-            <div class="toggle-row"><div><div>Show TRN</div><div class="toggle-copy">Display the business TRN/VAT ID on the printed receipt.</div></div><input type="checkbox" id="pos-rcpt-show-trn" checked onchange="updatePosReceiptPreview()"></div>
+            <div class="toggle-row"><div><div>Show VAT Number</div><div class="toggle-copy">Display the VAT number on the printed receipt.</div></div><input type="checkbox" id="pos-rcpt-show-trn" checked onchange="updatePosReceiptPreview()"></div>
           </div>
-          <div class="fg"><label class="fl">VAT ID Label</label><input class="fi arabic-capable" id="pos-rcpt-vat-label" value="VAT ID | الرقم الضريبي" dir="auto" oninput="updatePosReceiptPreview()"></div>
+          <div class="fr2">
+            <div class="fg"><label class="fl">VAT Label</label><input class="fi arabic-capable" id="pos-rcpt-vat-label" value="VAT | الرقم الضريبي" dir="auto" oninput="updatePosReceiptPreview()"></div>
+            <div class="fg"><label class="fl">VAT Number</label><input class="fi mono" id="pos-rcpt-vat-number" placeholder="Defaults to company TRN" dir="auto" oninput="updatePosReceiptPreview()"></div>
+          </div>
           <div class="section-hd">Footer &amp; QR</div>
           <div class="fg"><label class="fl">Footer Message</label><input class="fi" id="pos-rcpt-footer" value="Thank you for your business" dir="auto" oninput="updatePosReceiptPreview()"></div>
           <div class="fr2">
@@ -5592,6 +5595,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=5c4f48a81e" defer></script>
+<script src="src/app.js?v=bbdae4eefa" defer></script>
 </body>
 </html>
