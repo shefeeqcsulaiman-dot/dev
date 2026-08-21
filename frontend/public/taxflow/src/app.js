@@ -8377,6 +8377,9 @@ function hydrateFromServer(){
       setQuotationLayoutFields(quotationLayoutRecord);
       updateQuotationLayoutPreview();
     }
+    const posReceiptRecord=Array.isArray(data.posReceiptSettings)?data.posReceiptSettings[data.posReceiptSettings.length-1]:data.posReceiptSettings;
+    if(posReceiptRecord)setPosReceiptDesignFields(posReceiptRecord);
+    updatePosReceiptPreview();
     if(Array.isArray(data.audit)&&data.audit.length){
       renderAuditLog(data.audit);
     }
@@ -9915,6 +9918,89 @@ async function saveQuotationLayout(){
   }catch(err){
     console.warn('Quotation layout save failed:',err);
     toast('Quotation layout could not be saved','err');
+  }
+}
+
+// ── POS Receipt Design — a deliberately trimmed-down sibling of the full
+// Invoice Design Layout above: a POS receipt is printed on an 80mm/58mm
+// thermal roll, not A4, so most Invoice Design fields (payment terms, bank
+// details, bilingual labels, signatures...) don't apply. A fixed `id` (not
+// a per-record key like invoiceLayout's "company") keeps this a true
+// singleton — one row upserted in place, never a growing list to pick the
+// "latest" from.
+function defaultPosReceiptSettings(){
+  return {
+    id:'pos-receipt-settings',
+    company:'',
+    address:'',
+    showLogo:false,
+    showTrn:true,
+    footer:'Thank you for your business',
+    showQr:true,
+    paperWidth:'80mm'
+  };
+}
+
+let savedPosReceiptSettings=defaultPosReceiptSettings();
+
+function setPosReceiptDesignFields(record={}){
+  savedPosReceiptSettings={...defaultPosReceiptSettings(),...record};
+  const s=savedPosReceiptSettings;
+  const company=document.getElementById('pos-rcpt-company');if(company)company.value=s.company||'';
+  const address=document.getElementById('pos-rcpt-address');if(address)address.value=s.address||'';
+  const showLogo=document.getElementById('pos-rcpt-show-logo');if(showLogo)showLogo.checked=Boolean(s.showLogo);
+  const showTrn=document.getElementById('pos-rcpt-show-trn');if(showTrn)showTrn.checked=s.showTrn!==false;
+  const footer=document.getElementById('pos-rcpt-footer');if(footer)footer.value=s.footer||'';
+  const showQr=document.getElementById('pos-rcpt-show-qr');if(showQr)showQr.checked=s.showQr!==false;
+  const paper=document.getElementById('pos-rcpt-paper');if(paper)paper.value=s.paperWidth||'80mm';
+}
+
+function readPosReceiptDesignFields(){
+  const base=savedPosReceiptSettings||defaultPosReceiptSettings();
+  return {
+    id:'pos-receipt-settings',
+    company:(document.getElementById('pos-rcpt-company')?.value||'').trim(),
+    address:(document.getElementById('pos-rcpt-address')?.value||'').trim(),
+    showLogo:document.getElementById('pos-rcpt-show-logo')?.checked??base.showLogo,
+    showTrn:document.getElementById('pos-rcpt-show-trn')?.checked??base.showTrn,
+    footer:(document.getElementById('pos-rcpt-footer')?.value||'').trim(),
+    showQr:document.getElementById('pos-rcpt-show-qr')?.checked??base.showQr,
+    paperWidth:document.getElementById('pos-rcpt-paper')?.value||base.paperWidth||'80mm'
+  };
+}
+
+function updatePosReceiptPreview(){
+  const preview=document.getElementById('pos-receipt-preview');
+  if(!preview)return;
+  const s=readPosReceiptDesignFields();
+  const width=s.paperWidth==='58mm'?'150px':'200px';
+  preview.innerHTML=`
+    <div style="background:#fff;color:#111;font-family:'DM Mono',monospace;font-size:11px;line-height:1.6;width:${width};margin:0 auto;padding:14px 10px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.15)">
+      ${s.showLogo?`<div style="text-align:center;font-size:20px;margin-bottom:4px">🧾</div>`:''}
+      <div style="text-align:center;font-weight:700">${escapeHtml(s.company||currentCompany?.name||'Your Company')}</div>
+      ${s.address?`<div style="text-align:center;color:#555">${escapeHtml(s.address)}</div>`:''}
+      ${s.showTrn?`<div style="text-align:center;color:#555">TRN: ${escapeHtml(currentCompany?.trn||'not set')}</div>`:''}
+      <div style="border-top:1px dashed #999;margin:8px 0"></div>
+      <div style="display:flex;justify-content:space-between"><span>1x Sample Item</span><span>25.00</span></div>
+      <div style="display:flex;justify-content:space-between;color:#555"><span>VAT</span><span>1.25</span></div>
+      <div style="border-top:1px dashed #999;margin:8px 0"></div>
+      <div style="display:flex;justify-content:space-between;font-weight:700"><span>TOTAL</span><span>26.25</span></div>
+      ${s.showQr?`<div style="text-align:center;margin-top:8px;font-size:26px">▦</div>`:''}
+      ${s.footer?`<div style="text-align:center;color:#555;margin-top:6px">${escapeHtml(s.footer)}</div>`:''}
+    </div>`;
+}
+
+async function savePosReceiptDesign(){
+  const settings=readPosReceiptDesignFields();
+  try{
+    await saveServer('posReceiptSettings',settings,{throwOnError:true});
+    savedPosReceiptSettings=settings;
+    updatePosReceiptPreview();
+    toast('POS receipt design saved','ok');
+    audit('Saved POS receipt design',settings.company||'POS Receipt','Saved');
+  }catch(err){
+    console.warn('POS receipt design save failed:',err);
+    toast('POS receipt design could not be saved','err');
   }
 }
 
@@ -12204,7 +12290,12 @@ function autoSyncUnitsAndCategoriesFromPurchaseLines(records){
       }
 
       // ── Products / Items ───────────────────────────────────────────────────
-      const productName=(line.product||line.name||line.description||line.item||'').trim();
+      // A low-confidence/error-flagged extraction (needs_product_review) can't
+      // be trusted to silently mint a new Item Master product from its
+      // possibly-wrong line text — mirrors the allow_create guard in
+      // purchase_line_stock_mapping() (app_data.py), which this function
+      // otherwise bypassed entirely since it writes to 'products' directly.
+      const productName=record.needs_product_review?'':(line.product||line.name||line.description||line.item||'').trim();
       if(productName){
         const nameKey=productName.toLowerCase();
         const rawCode=(line.sku||line.code||'').trim();

@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=6d878e0d54" as="style">
-<link rel="preload" href="src/app.js?v=38c4ff90c1" as="script">
+<link rel="preload" href="src/app.js?v=6ad764f273" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=6d878e0d54">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
@@ -3234,6 +3234,7 @@
     <div class="tab" onclick="stab(this,'set-notif')">Notifications</div>
     <div class="tab" onclick="stab(this,'set-docs')">Invoice Design</div>
     <div class="tab" onclick="stab(this,'set-quotation-docs')">Quotation Design</div>
+    <div class="tab" onclick="stab(this,'set-pos')">POS Settings</div>
     <div class="tab" onclick="stab(this,'set-backup')">Backup & Audit</div>
     <div class="tab" data-module-gate="exception" onclick="stab(this,'set-exception');loadExceptionCenter()">Exception Center</div>
   </div>
@@ -3611,6 +3612,32 @@
           <div class="fg"><label class="fl">Footer Message</label><input class="fi" id="quote-layout-footer" value="Prices are valid only until the validity date shown." dir="auto" oninput="updateQuotationLayoutPreview()"></div>
         </div>
         <div class="chart-panel" id="quotation-layout-preview"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="set-pos">
+    <div class="card mb16">
+      <div class="card-hd"><div><div class="card-title">POS Receipt Design</div><div class="card-sub">A trimmed-down version of Invoice Design for printed POS receipts — header, TRN, footer, QR, and paper width</div></div><button class="btn btn-p btn-sm" onclick="savePosReceiptDesign()">Save</button></div>
+      <div class="g2">
+        <div>
+          <div class="section-hd">Header</div>
+          <div class="fr2">
+            <div class="fg"><label class="fl">Company Display Name</label><input class="fi" id="pos-rcpt-company" placeholder="Defaults to company name" dir="auto" oninput="updatePosReceiptPreview()"></div>
+            <div class="fg"><label class="fl">Header Address</label><input class="fi" id="pos-rcpt-address" placeholder="e.g. Dubai, United Arab Emirates" dir="auto" oninput="updatePosReceiptPreview()"></div>
+          </div>
+          <div class="fr2">
+            <div class="toggle-row"><div><div>Show Logo</div><div class="toggle-copy">Print the company logo at the top of the receipt.</div></div><input type="checkbox" id="pos-rcpt-show-logo" onchange="updatePosReceiptPreview()"></div>
+            <div class="toggle-row"><div><div>Show TRN</div><div class="toggle-copy">Display the business TRN on the printed receipt.</div></div><input type="checkbox" id="pos-rcpt-show-trn" checked onchange="updatePosReceiptPreview()"></div>
+          </div>
+          <div class="section-hd">Footer &amp; QR</div>
+          <div class="fg"><label class="fl">Footer Message</label><input class="fi" id="pos-rcpt-footer" value="Thank you for your business" dir="auto" oninput="updatePosReceiptPreview()"></div>
+          <div class="fr2">
+            <div class="toggle-row"><div><div>Show QR Code</div><div class="toggle-copy">Print a scannable invoice QR on the receipt.</div></div><input type="checkbox" id="pos-rcpt-show-qr" checked onchange="updatePosReceiptPreview()"></div>
+            <div class="fg"><label class="fl">Paper Width</label><select class="fi" id="pos-rcpt-paper" onchange="updatePosReceiptPreview()"><option value="80mm">80mm</option><option value="58mm">58mm</option></select></div>
+          </div>
+        </div>
+        <div class="chart-panel" id="pos-receipt-preview"></div>
       </div>
     </div>
   </div>
@@ -5556,6 +5583,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=38c4ff90c1" defer></script>
+<script src="src/app.js?v=6ad764f273" defer></script>
 </body>
 </html>

@@ -1116,6 +1116,12 @@ let _recentItems = []; // most-recent-first, session-only, for the Recent Items 
 let POS_CURRENCY = 'AED';
 let POS_TRN = '';
 let POS_COUNTRY = '';
+let POS_LOGO = '';
+// Settings > POS Settings > POS Receipt Design (app.js) — trimmed-down
+// sibling of Invoice Design for the printed receipt. Defaults here mirror
+// defaultPosReceiptSettings() in app.js so a company that never opened that
+// tab still gets sensible receipts.
+let POS_RECEIPT = {company:'',address:'',showLogo:false,showTrn:true,footer:'Thank you for your business',showQr:true,paperWidth:'80mm'};
 
 // ── Auth ─────────────────────────────────────────────────────────────
 async function checkAuth(){
@@ -1145,8 +1151,14 @@ async function refreshCompanyInfo(){
     POS_CURRENCY = company.currency || 'AED';
     POS_TRN = company.trn || '';
     POS_COUNTRY = company.country || '';
+    POS_LOGO = company.logo || '';
     const curEl=document.getElementById('bot-total-cur');
     if(curEl)curEl.textContent=POS_CURRENCY;
+  }catch{}
+  try{
+    const data = await api('/app-data/records/posReceiptSettings?limit=1');
+    const rec = (data.records||[])[0];
+    if(rec)POS_RECEIPT = {...POS_RECEIPT, ...rec};
   }catch{}
 }
 async function posLogin(e){
@@ -1886,7 +1898,10 @@ function showReceipt(sale){
 
   document.getElementById('rcpt-body').innerHTML=`
     <div class="rcpt-hd">
-      <h2>${esc(CONAME())}</h2>
+      ${POS_RECEIPT.showLogo&&POS_LOGO?`<img src="${POS_LOGO}" alt="" style="max-height:36px;max-width:160px;margin:0 auto 6px;display:block">`:''}
+      <h2>${esc(POS_RECEIPT.company||CONAME())}</h2>
+      ${POS_RECEIPT.address?`<p style="margin-top:0">${esc(POS_RECEIPT.address)}</p>`:''}
+      ${POS_RECEIPT.showTrn&&POS_TRN?`<p style="margin-top:0">TRN: ${esc(POS_TRN)}</p>`:''}
       <div class="rcpt-heading">${isRefund?'REFUND / CREDIT NOTE':'TAX INVOICE'}<span class="rcpt-ar">${isRefund?RCPT_AR.refund:RCPT_AR.taxInvoice}</span></div>
       <p>${esc(sale.date)}</p>
     </div>
@@ -1913,24 +1928,31 @@ function showReceipt(sale){
     <div class="rcpt-row"><span class="rcpt-lbl">${bl('Payment','payment')}</span><span>${esc(payLabel[0])}<span class="rcpt-ar">${RCPT_AR[payLabel[1]]||''}</span></span></div>
     ${payInfo}
     <hr class="rcpt-hr">
-    ${isRefund?'':`<div class="rcpt-qr-wrap" id="rcpt-qr-wrap">
+    ${(!isRefund&&POS_RECEIPT.showQr!==false)?`<div class="rcpt-qr-wrap" id="rcpt-qr-wrap">
       <div class="rcpt-qr-loading" id="rcpt-qr">Generating QR code…</div>
       <div class="rcpt-qr-hint">${POS_COUNTRY==='Saudi Arabia'?bl('ZATCA-compliant invoice QR','zatcaHint'):bl('Scan to view invoice online','viewInvoice')}</div>
-    </div>`}
-    <p style="text-align:center;font-size:10px;color:#94a3b8;margin-top:6px">Thank you for your business!<span class="rcpt-ar">${RCPT_AR.thankYou}</span></p>`;
+    </div>`:''}
+    <p style="text-align:center;font-size:10px;color:#94a3b8;margin-top:6px">${esc(POS_RECEIPT.footer||'Thank you for your business')}</p>`;
   document.getElementById('ov-rcpt').style.display='flex';
+  const rcptEl=document.getElementById('rcpt-body');
+  rcptEl.style.maxWidth=POS_RECEIPT.paperWidth==='58mm'?'240px':'';
+  rcptEl.style.margin=POS_RECEIPT.paperWidth==='58mm'?'0 auto 16px':'';
   // genPosShortLink() POSTs a hardcoded status:'Paid' payload and publishes
   // a public share link — wrong for a negative-amount refund document.
-  if(!isRefund)genPosShortLink(sale);
+  // Also gated on showQr: the QR block above wouldn't be in the DOM to
+  // receive genPosShortLink()'s <img> swap, and there's no reason to publish
+  // a public share link for a receipt whose printed QR is disabled.
+  if(!isRefund&&POS_RECEIPT.showQr!==false)genPosShortLink(sale);
 }
 
 function printRcpt(){
   const html=document.getElementById('rcpt-body')?.innerHTML||'';
-  const w=window.open('','_blank','width=380,height=620');
+  const maxWidth=POS_RECEIPT.paperWidth==='58mm'?220:320;
+  const w=window.open('','_blank','width='+(maxWidth+60)+',height=620');
   if(!w){toast('Allow popups to print','warn');return;}
   w.document.write(`<!doctype html><html><head><title>Receipt</title><style>
     *{box-sizing:border-box}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:12px;padding:16px;max-width:320px;margin:0 auto;color:#000;background:#fff}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:12px;padding:16px;max-width:${maxWidth}px;margin:0 auto;color:#000;background:#fff}
     .rcpt-ar{direction:rtl;unicode-bidi:isolate;font-family:'Segoe UI',Tahoma,Arial,sans-serif;}
     .rcpt-hd{text-align:center;margin-bottom:10px;padding-bottom:10px;border-bottom:2px solid #000}
     .rcpt-hd h2{font-size:15px;margin:0 0 2px;font-weight:800}
