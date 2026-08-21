@@ -605,6 +605,11 @@ class StockProductMapping(Base, TimestampMixin):
     # user actually opens and saves the mapping. Only the explicit save path
     # (PUT /inventory/mappings/{id} / POST /inventory/mappings) sets this True.
     mapping_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    # "Yes"/"No"/"Optional" from the Item Master's Stock Tracking field.
+    # "No"/"Optional" both mean: the item still appears in Stock Levels, but
+    # purchases/POS sales don't create StockMovement rows or deduct
+    # quantity for it — see sync_purchase_stock()/sync_pos_stock().
+    tracking: Mapped[str] = mapped_column(String(20), default="Yes")
 
 
 class StockMovement(Base, TimestampMixin):

@@ -15206,7 +15206,7 @@ function saveProd(){
   row.dataset.supplier=supplier;
   row.innerHTML=`<td class="mono">${escapeHtml(code)}</td><td>${escapeHtml(name)}</td><td>Stock Item</td><td>${escapeHtml(category)}</td><td>${escapeHtml(unit)}</td><td>Main Store</td><td><span class="b ${tracking==='No'?'b-gray':'b-g'}">${escapeHtml(tracking)}</span></td><td><span class="b ${vatClass}">${escapeHtml(vatText)}</span></td><td><span class="b ${status==='Active'?'b-g':'b-gray'}">${escapeHtml(status)}</span></td>`;
   tbody.prepend(row);
-  saveServer('products',{code,name,category,unit,cost,price,vat,supplier_name:supplier,reorder_level:reorderLevel,status});
+  saveServer('products',{code,name,category,unit,cost,price,vat,tracking,supplier_name:supplier,reorder_level:reorderLevel,status});
   syncStockLevelsFromProducts();
   syncStockMappingFromItems();
   refreshInvoiceProductSuggestions();

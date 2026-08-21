@@ -539,6 +539,7 @@ def ensure_schema_updates() -> None:
                 # application code explicitly sets this False on auto-create
                 # and True only on an explicit user save (see models.py).
                 "mapping_confirmed": "BOOLEAN DEFAULT TRUE",
+                "tracking": "VARCHAR(20) DEFAULT 'Yes'",
             }
             for column_name, column_type in required_columns.items():
                 if column_name not in existing_columns:

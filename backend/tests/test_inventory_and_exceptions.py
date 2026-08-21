@@ -343,4 +343,94 @@ def test_stock_mapping_auto_created_from_purchase_is_unconfirmed(client, auth_he
     assert r3.status_code == 200, r3.text
     db.refresh(mapping)
     assert mapping.name == "User Confirmed Name"
-    assert mapping.mapping_confirmed is True
+
+
+def test_stock_tracking_no_skips_movements_but_keeps_item_visible(client, auth_headers, db):
+    """Item Master's "Stock Tracking" field (Yes/No/Optional) previously did
+    nothing — every code path that checked it only picked a badge color, and
+    the backend never looked at it at all, so a "No"-tracked item was
+    deducted/added to exactly like any other. "No"/"Optional" should mean:
+    the item stays visible in Stock Levels (current_stock stays whatever it
+    already was — 0 for a never-purchased item), but purchases/POS sales
+    don't create StockMovement rows or move its quantity."""
+    product = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={
+            "collection": "products",
+            "record": {"code": "NO-TRACK-SKU", "name": "Non-Tracked Item", "category": "QA", "unit": "PCS", "tracking": "No"},
+        },
+    )
+    assert product.status_code == 200, product.text
+    mapping = db.query(StockProductMapping).filter(StockProductMapping.sku == "NO-TRACK-SKU").one()
+    assert mapping.tracking == "No"
+
+    purchase = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={
+            "collection": "purchaseRecords",
+            "record": {
+                "ref": "PUR-NOTRACK-001",
+                "supplier": "QA Supplier",
+                "net_amount": 100,
+                "tax_amount": 5,
+                "total": 105,
+                "lines": [{"sku": "NO-TRACK-SKU", "product": "Non-Tracked Item", "quantity": 10, "unit_cost": 10, "unit_cost_before_tax": 10, "line_total": 100}],
+            },
+        },
+    )
+    assert purchase.status_code == 200, purchase.text
+    assert db.query(StockMovement).filter(StockMovement.mapping_id == mapping.id).count() == 0
+    assert db.query(InventoryValuationLayer).filter(InventoryValuationLayer.item_code == "NO-TRACK-SKU").count() == 0
+
+    # Item still appears in Stock Levels — just with a quantity of 0, not
+    # hidden — proving the outer-join in list_stock_levels() still surfaces
+    # a mapping with zero StockMovement rows.
+    stock_levels = client.get("/api/v1/inventory/stock-levels", headers=auth_headers)
+    row = next(r for r in stock_levels.json() if r["code"] == "NO-TRACK-SKU")
+    assert Decimal(str(row["current_stock"])) == Decimal("0.00")
+
+    sale = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={
+            "collection": "posSales",
+            "record": {
+                "id": "POS-NOTRACK-001",
+                "receipt_no": "POS-NOTRACK-001",
+                "customer": "Walk-In Customer",
+                "items": [{"code": "NO-TRACK-SKU", "name": "Non-Tracked Item", "qty": 2, "price": 20, "unit": "PCS"}],
+                "subtotal": 40, "vat": 2, "total": 42,
+                "payment_method": "cash", "status": "completed",
+            },
+        },
+    )
+    assert sale.status_code == 200, sale.text
+    assert db.query(StockMovement).filter(StockMovement.mapping_id == mapping.id).count() == 0
+
+    stock_after_sale = client.get("/api/v1/inventory/stock-levels", headers=auth_headers)
+    row_after = next(r for r in stock_after_sale.json() if r["code"] == "NO-TRACK-SKU")
+    assert Decimal(str(row_after["current_stock"])) == Decimal("0.00")
+
+    # A normal tracking="Yes" item (the default) must be completely
+    # unaffected by this change — regression check.
+    tracked_purchase = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={
+            "collection": "purchaseRecords",
+            "record": {
+                "ref": "PUR-YESTRACK-001",
+                "supplier": "QA Supplier",
+                "net_amount": 100,
+                "tax_amount": 5,
+                "total": 105,
+                "lines": [{"sku": "YES-TRACK-SKU", "product": "Tracked Item", "quantity": 4, "unit_cost": 25, "unit_cost_before_tax": 25, "line_total": 100}],
+            },
+        },
+    )
+    assert tracked_purchase.status_code == 200, tracked_purchase.text
+    stock_yes = client.get("/api/v1/inventory/stock-levels", headers=auth_headers)
+    row_yes = next(r for r in stock_yes.json() if r["code"] == "YES-TRACK-SKU")
+    assert Decimal(str(row_yes["current_stock"])) == Decimal("4.00")

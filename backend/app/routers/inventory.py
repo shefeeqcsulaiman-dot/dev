@@ -414,6 +414,8 @@ def backfill_purchase_stock_movements(db: Session, principal: Principal) -> None
             mapping = stock_mapping_for_purchase_line(db, principal, record, line)
             if not mapping:
                 continue
+            if mapping.tracking in ("No", "Optional"):
+                continue
             unit_cost = decimal_value(line.get("unit_cost_before_tax") or line.get("unit_cost") or line.get("purchase_unit_cost") or line.get("cost"))
             db.add(
                 StockMovement(

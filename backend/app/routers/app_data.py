@@ -1351,6 +1351,9 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
             if purchase_cost > 0:
                 mapping.cost = purchase_cost
             mapping.tax_code = "ZERO" if "0" in str(record.get("vat", "")) and "5" not in str(record.get("vat", "")) else "VAT5"
+            tracking = str(record.get("tracking") or "").strip()
+            if tracking:
+                mapping.tracking = tracking
 
     elif collection == "accounts":
         code = str(record.get("code") or "").strip()
@@ -1614,6 +1617,11 @@ def sync_purchase_stock(db: Session, principal: Principal, record: dict[str, Any
         mapping = purchase_line_stock_mapping(db, principal, line, record)
         if not mapping:
             continue
+        # Item Master's "Stock Tracking: No/Optional" — the item still
+        # appears in Stock Levels (nothing here deletes its existing
+        # balance), but this purchase shouldn't move its quantity.
+        if mapping.tracking in ("No", "Optional"):
+            continue
         unit_cost = decimal_value(
             line.get("unit_cost_before_tax")
             or line.get("unit_cost")
@@ -1692,6 +1700,10 @@ def sync_pos_stock(db: Session, principal: Principal, record: dict[str, Any], re
         # so it's directly reusable here without a POS-specific variant.
         mapping = purchase_line_stock_mapping(db, principal, item, record)
         if not mapping:
+            continue
+        # Item Master's "Stock Tracking: No/Optional" — sell it normally,
+        # just don't deduct/return quantity for it.
+        if mapping.tracking in ("No", "Optional"):
             continue
         unit_cost = decimal_value(item.get("price") or item.get("unit_cost"))
         db.add(
