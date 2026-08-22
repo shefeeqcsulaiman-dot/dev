@@ -14461,10 +14461,17 @@ async function saveManualPurchase(){
     discount_value:parseAmount(document.getElementById('mp-discount')?.value),
     tax_type:document.getElementById('mp-tax')?.value||'None',
     lines,
-    payment_method:document.getElementById('mp-pay-method')?.value||'Cash',
-    payment_account:document.getElementById('mp-pay-account')?.value||'None',
+    // The Payment Method dropdown always has SOME option selected (it has
+    // no blank choice), so it defaulted to "Cash" even when the "Add
+    // Payment > Amount" field was left at 0 — a purchase saved with
+    // nothing actually paid (status already correctly computes "Pending
+    // Payment" above from the same totals.paid) still recorded
+    // payment_method:'Cash', implying cash changed hands when it didn't.
+    // Only trust the dropdown once a real payment amount backs it up.
+    payment_method:totals.paid>0?(document.getElementById('mp-pay-method')?.value||'Cash'):'Credit',
+    payment_account:totals.paid>0?(document.getElementById('mp-pay-account')?.value||'None'):'None',
     payment_note:document.getElementById('mp-pay-note')?.value||'',
-    paid_on:document.getElementById('mp-paid-on')?.value||'',
+    paid_on:totals.paid>0?(document.getElementById('mp-paid-on')?.value||''):'',
     shipping_details:document.getElementById('mp-shipping-details')?.value||'',
     notes:document.getElementById('mp-notes')?.value||'',
     source:isReturn?'Purchase Return':isLPO?'Local PO':isFPO?'Foreign PO':'Manual',
