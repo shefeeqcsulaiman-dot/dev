@@ -53,6 +53,7 @@ from app.models import (
     JournalLine,
     Payment,
     PostingJob,
+    PayrollItem,
     PayrollRun,
     Receipt,
     SourceTransaction,
@@ -878,6 +879,31 @@ def export_db_dump(
         .order_by(SourceTransaction.created_at.asc())
         .all()
     )
+    # "Journal & Accounts" in the Download Backup UI promises "chart of
+    # accounts AND ledger entries" — accounts (rows_acc, above) covers the
+    # first half, but nothing here queried the actual posted ledger before
+    # this. GeneralLedgerEntry is the real posted GL (create_gl_entries_
+    # from_journal(), accounting_posting.py), the same table Trial Balance/
+    # Balance Sheet/GL reports read — journal_entries/journal_lines are the
+    # pre-posting form of the same data, so dumping the GL avoids doubling
+    # every transaction into two overlapping representations.
+    rows_gl = (
+        db.query(GeneralLedgerEntry)
+        .filter(GeneralLedgerEntry.company_id == company_id)
+        .order_by(GeneralLedgerEntry.entry_date.asc())
+        .all()
+    )
+    # "Payroll & HR" likewise promises "payroll data", not just employee
+    # master records (rows_emp, above) — payroll_runs/payroll_items were
+    # never queried at all.
+    rows_pr = (
+        db.query(PayrollRun).filter(PayrollRun.company_id == company_id).order_by(PayrollRun.period.asc()).all()
+    )
+    pr_ids = [r.id for r in rows_pr]
+    rows_pi = (
+        db.query(PayrollItem).filter(PayrollItem.run_id.in_(pr_ids)).all()
+        if pr_ids else []
+    )
 
     # ── helpers (operate on plain Python values — no DB access) ──────
     def _esc(val: Any) -> str:
@@ -960,8 +986,34 @@ def export_db_dump(
             lines.append(_insert("source_transactions", cols, r))
         lines.append("\n")
 
+    if rows_gl:
+        cols = ["id", "company_id", "branch_id", "entry_date", "voucher_no", "voucher_type",
+                "account_id", "journal_entry_id", "journal_line_id", "debit", "credit",
+                "balance", "party", "cost_center", "narration"]
+        lines.append(f"-- general_ledger_entries ({len(rows_gl)} rows)\n")
+        for r in rows_gl:
+            lines.append(_insert("general_ledger_entries", cols, r))
+        lines.append("\n")
+
+    if rows_pr:
+        cols = ["id", "company_id", "branch_id", "period", "status", "gross_total", "deductions_total", "net_total", "created_at", "updated_at"]
+        lines.append(f"-- payroll_runs ({len(rows_pr)} rows)\n")
+        for r in rows_pr:
+            lines.append(_insert("payroll_runs", cols, r))
+        lines.append("\n")
+
+    if rows_pi:
+        cols = ["id", "run_id", "employee_id", "basic", "allowances", "overtime", "deductions", "net_pay", "wps_status"]
+        lines.append(f"-- payroll_items ({len(rows_pi)} rows)\n")
+        for r in rows_pi:
+            lines.append(_insert("payroll_items", cols, r))
+        lines.append("\n")
+
     lines.append("COMMIT;\n")
-    lines.append(f"\n-- {len(rows_adr)} data records · {len(rows_inv)} invoices · {len(rows_acc)} accounts · {len(rows_audit)} audit entries\n")
+    lines.append(
+        f"\n-- {len(rows_adr)} data records · {len(rows_inv)} invoices · {len(rows_acc)} accounts · "
+        f"{len(rows_gl)} ledger entries · {len(rows_pr)} payroll runs · {len(rows_audit)} audit entries\n"
+    )
 
     sql_text = "".join(lines)
     fname = f"taxflow-db-{company_id[:8]}-{date_str}.sql"
