@@ -23260,10 +23260,15 @@ function _backupModuleFilter(){
 
 function _applyModuleFilter(data){
   const include=_backupModuleFilter();
-  const invCols=['salesInvoices','quotations','salesCategories','salesUnits','customers','creditControl'];
+  // "_db" suffixed keys (app_data.py's export_all_data()) are the real
+  // relational tables (Invoice, Account, GeneralLedgerEntry, Employee,
+  // PayrollRun/Item, SourceTransaction) that the AppDataRecord collections
+  // above them don't cover at all — grouped under the same category
+  // toggles as their legacy-collection counterparts.
+  const invCols=['salesInvoices','quotations','salesCategories','salesUnits','customers','creditControl','invoices_db','invoice_lines_db'];
   const purCols=['purchaseRecords','purchaseDocuments','bills','vendors','payments','receipts'];
-  const jnlCols=['accounts','ledger','journalDrafts','bankAccounts','bankTransactions','vatReturns','corporateTax','fixedAssets','accrualsPrepayments','costCenters','budgets','cashFlowForecasts','consolidation','relatedPartyTransactions'];
-  const hrCols=['employees','rotaShifts','rotaAssignments','rotaSwaps','rotaApprovals','rotaDrafts'];
+  const jnlCols=['accounts','ledger','journalDrafts','bankAccounts','bankTransactions','vatReturns','corporateTax','fixedAssets','accrualsPrepayments','costCenters','budgets','cashFlowForecasts','consolidation','relatedPartyTransactions','accounts_db','general_ledger_db','source_transactions_db'];
+  const hrCols=['employees','rotaShifts','rotaAssignments','rotaSwaps','rotaApprovals','rotaDrafts','employees_db','payroll_runs_db','payroll_items_db'];
   const filtered={};
   Object.keys(data).forEach(k=>{
     if(k==='audit'&&!include.audit)return;
@@ -23304,6 +23309,19 @@ async function downloadExcelBackup(){
       ['VAT Returns',   ['vatReturns']],
       ['Expenses',      ['expenses']],
       ['Audit Log',     ['audit']],
+      // Real relational tables (export_all_data(), app_data.py) — kept as
+      // their own sheets rather than merged into the legacy-collection
+      // sheets above (e.g. "Invoices"/"Accounts"), since their row shapes
+      // don't match and mixing them would produce a sheet with
+      // inconsistent columns.
+      ['Invoices (Posted)',    ['invoices_db']],
+      ['Invoice Lines',        ['invoice_lines_db']],
+      ['Chart of Accounts',    ['accounts_db']],
+      ['General Ledger',       ['general_ledger_db']],
+      ['Source Transactions',  ['source_transactions_db']],
+      ['Employees (HR)',       ['employees_db']],
+      ['Payroll Runs',         ['payroll_runs_db']],
+      ['Payroll Items',        ['payroll_items_db']],
     ];
 
     sheetMap.forEach(([sheetName,keys])=>{

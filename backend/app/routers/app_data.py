@@ -710,6 +710,22 @@ def list_company_users(
     }
 
 
+def _export_row_to_dict(obj: Any, cols: list[str]) -> dict[str, Any]:
+    """Plain-JSON-safe dict for a real ORM row (Decimal/datetime aren't
+    natively serializable) — the export_db_dump() SQL path already has its
+    own equivalent (_v()/_esc()), this is the JSON/dict-shaped counterpart
+    for export_all_data() below."""
+    out: dict[str, Any] = {}
+    for col in cols:
+        val = getattr(obj, col, None)
+        if isinstance(val, Decimal):
+            val = str(val)
+        elif isinstance(val, (_dt.datetime, _dt.date)):
+            val = val.isoformat()
+        out[col] = val
+    return out
+
+
 @router.get("/export")
 @limiter.limit("10/minute")
 def export_all_data(
@@ -717,15 +733,77 @@ def export_all_data(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, object]:
+    company_id = current_user.company_id
     records = (
         db.query(AppDataRecord)
-        .filter(AppDataRecord.company_id == current_user.company_id)
+        .filter(AppDataRecord.company_id == company_id)
         .order_by(AppDataRecord.created_at.asc())
         .all()
     )
     grouped: dict[str, list[dict[str, Any]]] = {}
     for item in records:
         grouped.setdefault(item.collection, []).append(serialize(item))
+
+    # Real relational tables the AppDataRecord collections above don't
+    # cover at all — Settings > Backup & Audit's category toggles (Invoices
+    # & Sales / Purchases & Bills / Journal & Accounts / Payroll & HR)
+    # describe this data, but until now nothing in this JSON/Excel export
+    # path ever queried it (export_db_dump()'s .sql path already did, or
+    # does after its own recent fix). "_db" suffix keeps these distinct
+    # from any same-named AppDataRecord collection (e.g. "employees" as a
+    # legacy JSON blob vs. the real Employee table here).
+    invoice_cols = ["id", "invoice_number", "customer_name", "customer_trn", "issue_date",
+                     "due_date", "currency", "subtotal", "vat", "total", "status", "notes"]
+    invoices_db = [
+        _export_row_to_dict(inv, invoice_cols)
+        for inv in db.query(Invoice).filter(Invoice.company_id == company_id).order_by(Invoice.created_at.asc()).all()
+    ]
+    invoice_ids = [row["id"] for row in invoices_db]
+    invoice_line_cols = ["id", "invoice_id", "description", "quantity", "unit_price", "vat_rate", "line_total"]
+    invoice_lines_db = (
+        [
+            _export_row_to_dict(line, invoice_line_cols)
+            for line in db.query(InvoiceLine).filter(InvoiceLine.invoice_id.in_(invoice_ids)).all()
+        ]
+        if invoice_ids else []
+    )
+    source_txn_cols = ["id", "module", "reference", "party_name", "subtotal", "vat", "total", "status"]
+    source_transactions_db = [
+        _export_row_to_dict(row, source_txn_cols)
+        for row in db.query(SourceTransaction).filter(SourceTransaction.company_id == company_id)
+        .order_by(SourceTransaction.created_at.asc()).all()
+    ]
+    account_cols = ["id", "code", "name", "type", "is_group", "parent_id"]
+    accounts_db = [
+        _export_row_to_dict(acc, account_cols)
+        for acc in db.query(Account).filter(Account.company_id == company_id).order_by(Account.code.asc()).all()
+    ]
+    gl_cols = ["id", "entry_date", "voucher_no", "voucher_type", "account_id",
+               "debit", "credit", "balance", "party", "cost_center", "narration"]
+    general_ledger_db = [
+        _export_row_to_dict(row, gl_cols)
+        for row in db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == company_id)
+        .order_by(GeneralLedgerEntry.entry_date.asc()).all()
+    ]
+    employee_cols = ["id", "employee_no", "full_name", "department", "designation", "basic_salary", "status"]
+    employees_db = [
+        _export_row_to_dict(emp, employee_cols)
+        for emp in db.query(Employee).filter(Employee.company_id == company_id).all()
+    ]
+    payroll_run_cols = ["id", "period", "status", "gross_total", "deductions_total", "net_total"]
+    payroll_runs_db = [
+        _export_row_to_dict(run, payroll_run_cols)
+        for run in db.query(PayrollRun).filter(PayrollRun.company_id == company_id).order_by(PayrollRun.period.asc()).all()
+    ]
+    payroll_run_ids = [row["id"] for row in payroll_runs_db]
+    payroll_item_cols = ["id", "run_id", "employee_id", "basic", "allowances", "overtime", "deductions", "net_pay", "wps_status"]
+    payroll_items_db = (
+        [
+            _export_row_to_dict(item, payroll_item_cols)
+            for item in db.query(PayrollItem).filter(PayrollItem.run_id.in_(payroll_run_ids)).all()
+        ]
+        if payroll_run_ids else []
+    )
 
     audit_rows = (
         db.query(AuditLog)
@@ -771,6 +849,14 @@ def export_all_data(
             **grouped,
             "audit": audit,
             "users": users,
+            "invoices_db": invoices_db,
+            "invoice_lines_db": invoice_lines_db,
+            "source_transactions_db": source_transactions_db,
+            "accounts_db": accounts_db,
+            "general_ledger_db": general_ledger_db,
+            "employees_db": employees_db,
+            "payroll_runs_db": payroll_runs_db,
+            "payroll_items_db": payroll_items_db,
         },
     }
 
