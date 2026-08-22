@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
+from app.company_defaults import seed_company_defaults
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_current_user
@@ -299,6 +300,15 @@ def create_company(
         company.vat_rate = body.vat_rate
     db.add(company)
     db.flush()
+    # Same reason /auth/register (self-serve signup) calls this: a company
+    # with no chart of accounts can never post a single transaction —
+    # post_source_transaction() requires control accounts 1100/2200 to
+    # exist and fails the posting job silently otherwise, so every invoice/
+    # purchase saved fine in the UI but never reached the ledger, VAT
+    # report, or any financial statement. This endpoint never called it, so
+    # every tenant created via the Super Admin panel started financially
+    # non-functional the same way self-serve signups once did.
+    seed_company_defaults(db, company.id)
     full_name = body.full_name.strip() or (body.name.strip() + " Admin")
     user = User(
         company_id=company.id,
