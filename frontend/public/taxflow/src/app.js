@@ -2390,6 +2390,16 @@ function _withActiveBranchParam(url){
 // matching the backend's own "empty list unless genuinely multi-branch"
 // convention for who.accessible_branches.
 function applyBranchSwitcherFromWhoami(who){
+  const nameEl=document.getElementById('tb-branch-name');
+  const nameText=document.getElementById('tb-branch-name-text');
+  if(nameEl&&nameText){
+    if(who?.branch_name){
+      nameText.textContent=who.branch_name;
+      nameEl.style.display='flex';
+    }else{
+      nameEl.style.display='none';
+    }
+  }
   window.ACCESSIBLE_BRANCHES=Array.isArray(who?.accessible_branches)?who.accessible_branches:[];
   const containers=document.querySelectorAll('[data-branch-switcher]');
   if(window.ACCESSIBLE_BRANCHES.length>1){
@@ -23993,24 +24003,30 @@ function initApp(){
   setManualPurchaseDefaults();
   configureSalesFormMode();
   configureManualPurchaseMode();
-  // syncCompanyFromDatabase/loadUsersIntoTable/syncDashboardFromDatabase all
-  // call User-only endpoints (/companies/current, /app-data/users,
-  // /reports/dashboard) — for an HRMS sub-user (Employee principal) or a
-  // Branch Login Phase 2 session (Branch principal) those 401 (no User row
-  // matches an "emp:"/"branch:" subject), which authenticatedFetch
-  // correctly treats as an invalid session and force-logs them out before
-  // the page even renders. None of the three are relevant to either
-  // non-admin session: company display comes from applyHrmsPermissionNav()/
-  // applyMainDashboardPermissionNav() (/auth/whoami), the dashboard here is
-  // the main-app one, and the users table doesn't apply. hydrateFromServer()
-  // (bootstrap) is already principal-aware and runs for every session kind.
+  // syncCompanyFromDatabase/loadUsersIntoTable call User-only endpoints
+  // (/companies/current — actually widened to any Principal since Branch
+  // Management Phase 6, but left gated here for company-display purposes
+  // since applyHrmsPermissionNav()/applyMainDashboardPermissionNav()
+  // already cover that via /auth/whoami; /app-data/users is genuinely
+  // User-only) — for an HRMS sub-user (Employee principal) or a Branch
+  // Login Phase 2 session (Branch principal) a true User-only 401 (no User
+  // row matches an "emp:"/"branch:" subject) is treated as an invalid
+  // session and force-logs them out before the page even renders.
+  //
+  // syncDashboardFromDatabase() used to be lumped in with these two, but
+  // /reports/dashboard (and /reports/branch-performance, which it also
+  // calls) use require_principal_permission("reports:view") — Principal-
+  // aware, not User-only — so it never actually risked that 401. Gating it
+  // here instead left every Dashboard stat tile at its static "AED 0.00"
+  // placeholder forever for a Branch/Employee session with Reports access
+  // (Main Dashboard Branch Access), since nothing else ever populated them.
   if(!['employee','branch'].includes(localStorage.getItem('taxflow_principal_kind'))){
     syncCompanyFromDatabase();
     renderBusinessLocationRows();
     loadUsersIntoTable();
-    enhancePageTables('page-dashboard');
-    syncDashboardFromDatabase().catch(err=>console.warn('Dashboard sync failed during init:',err));
   }
+  enhancePageTables('page-dashboard');
+  syncDashboardFromDatabase().catch(err=>console.warn('Dashboard sync failed during init:',err));
   hydrateFromServer().catch(err=>console.warn('Database hydrate failed during init:',err));
   const _lastPage=window.HRMS_STANDALONE?'hrms':localStorage.getItem('taxflow_current_page');
   setTimeout(()=>go(_lastPage||'dashboard'),400);

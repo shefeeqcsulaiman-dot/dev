@@ -129,6 +129,12 @@ class WhoAmIOut(BaseModel):
     # case sends an empty list, so the frontend switcher only ever renders
     # when there's an actual choice to make).
     accessible_branches: list[AccessibleBranchOut] = []
+    # Unlike accessible_branches above (deliberately empty in the common
+    # single-branch case — nothing to switch between), this is always
+    # populated whenever branch_id is set, single or multi. A Branch Login
+    # session or a branch-assigned Employee otherwise has no way to tell
+    # which branch's data they're looking at anywhere in the UI.
+    branch_name: str | None = None
 
 
 @router.get("/whoami", response_model=WhoAmIOut)
@@ -141,6 +147,11 @@ def whoami(db: Session = Depends(get_db), principal: Principal = Depends(get_cur
     if len(principal.accessible_branch_ids) > 1:
         rows = db.query(Branch.id, Branch.name).filter(Branch.id.in_(principal.accessible_branch_ids)).all()
         accessible_branches = [AccessibleBranchOut(id=bid, name=name) for bid, name in rows]
+    branch_name: str | None = None
+    if principal.branch:
+        branch_name = principal.branch.name
+    elif principal.branch_id:
+        branch_name = db.query(Branch.name).filter(Branch.id == principal.branch_id).scalar()
     if principal.user:
         principal_id = principal.user.id
     elif principal.employee:
@@ -158,6 +169,7 @@ def whoami(db: Session = Depends(get_db), principal: Principal = Depends(get_cur
         role_name=principal.role_name,
         branch_id=principal.branch_id,
         accessible_branches=accessible_branches,
+        branch_name=branch_name,
     )
 
 

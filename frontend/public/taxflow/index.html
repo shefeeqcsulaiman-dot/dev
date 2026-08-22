@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=6d878e0d54" as="style">
-<link rel="preload" href="src/app.js?v=684e571130" as="script">
+<link rel="preload" href="src/app.js?v=df1b45b401" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=6d878e0d54">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
@@ -141,6 +141,15 @@
       <div class="dash-lang-toggle" id="dash-lang-toggle" title="Switch language / تغيير اللغة">
         <button class="dash-lang-btn active" id="dash-lang-en" onclick="setAppLang('en')">EN</button>
         <button class="dash-lang-btn" id="dash-lang-ar" onclick="setAppLang('ar')">عربي</button>
+      </div>
+      <!-- Always-visible branch identification (applyBranchSwitcherFromWhoami,
+           app.js) — a Branch Login session or a branch-assigned Employee has
+           no other on-screen indication of which branch's data they're
+           looking at, since the switcher right below only renders when
+           there's more than one branch to choose between. -->
+      <div id="tb-branch-name" style="display:none;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text2);background:var(--surface2);padding:5px 10px;border-radius:8px" title="Current branch">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="flex-shrink:0;opacity:.6"><path d="M4 2v12M12 2v12M4 5h8M4 11h8"/></svg>
+        <span id="tb-branch-name-text"></span>
       </div>
       <!-- Branch Security Layer Phase 3 — only shown for a login with more
            than one accessible branch (applyBranchSwitcherFromWhoami, app.js);
@@ -5595,6 +5604,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=684e571130" defer></script>
+<script src="src/app.js?v=df1b45b401" defer></script>
 </body>
 </html>
