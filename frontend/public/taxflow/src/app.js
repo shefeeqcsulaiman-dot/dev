@@ -3328,8 +3328,15 @@ function renderDashboardHero(data,kpis={},counts={}){
   setTrend('dash-profit-trend',Number(kpis.profit_trend||0));
 
   // Revenue card detail rows (amount-based collection rate)
+  // invoice_status buckets (reports.py) sum Invoice.total (VAT-inclusive)
+  // per status, but the "total" bucket itself sums Invoice.subtotal (VAT-
+  // exclusive) — dividing the inclusive paidAmt by the exclusive revenueNet
+  // inflated the rate by the VAT rate (105% for a fully-collected 5%-VAT
+  // book: 105 paid / 100 net). Compare against `revenue` (revenueNet +
+  // output VAT — the actual Total Invoice figure) instead, so both sides
+  // of the ratio are VAT-inclusive.
   const paidAmt=parseAmount(paidInv.amount||0);
-  const colRate=revenueNet>0?Math.round(paidAmt/revenueNet*100):0;
+  const colRate=revenue>0?Math.round(paidAmt/revenue*100):0;
   set('dash-rev-collected',formatAed(paidAmt));
   set('dash-rev-paid-count',Number(paidInv.count||0));
   set('dash-rev-rate',colRate+'%');
@@ -3338,10 +3345,15 @@ function renderDashboardHero(data,kpis={},counts={}){
   if(revBar)revBar.style.width=Math.min(colRate,100)+'%';
 
 
-  // Liquid Position card
+  // Liquid Position card — liqAR uses the same VAT-inclusive `revenue` as
+  // colRate above (paidAmt is inclusive). liqAP keeps purchasesNet:
+  // purPaidAmt's VAT-inclusiveness isn't consistent here — it can come from
+  // _purchase_summary (inclusive) or _computeLocalPurchaseStats()'s bill
+  // fallback (net), so switching its denominator isn't a safe like-for-like
+  // fix without auditing that function separately.
   const purPaidAmt=parseAmount(purSum.paid||0);
   const liqCash=Math.max(0,paidAmt-purPaidAmt);
-  const liqAR=Math.max(0,revenueNet-paidAmt);
+  const liqAR=Math.max(0,revenue-paidAmt);
   const liqAP=Math.max(0,purchasesNet-purPaidAmt);
   const liqNet=liqCash+liqAR-liqAP;
   set('dash-liquid-net',formatAed(liqNet));
