@@ -454,6 +454,23 @@
   </div>
   </div><!-- /page-trials -->
 
+  <!-- Trial Request Details Modal -->
+  <div class="overlay" id="m-trial-view" onclick="if(event.target===this)closeModal('m-trial-view')">
+    <div class="modal">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+        <div>
+          <div class="modal-title">Trial Request</div>
+          <div class="modal-sub">Full details from the signup page</div>
+        </div>
+        <button onclick="closeModal('m-trial-view')" style="background:none;border:none;cursor:pointer;color:#8896b3;font-size:20px;line-height:1;padding:0;flex-shrink:0" title="Close">&times;</button>
+      </div>
+      <div id="trial-view-body" style="display:flex;flex-direction:column;gap:10px;margin-top:8px"></div>
+      <div class="modal-foot">
+        <button class="btn btn-g" onclick="closeModal('m-trial-view')">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div class="page-section" id="page-audit">
   <!-- Audit Log Panel -->
   <div class="card">
@@ -1515,6 +1532,7 @@
   // ── Trial requests ────────────────────────────────────────────
   const TRIAL_STATUS_LABELS={new:'New',contacted:'Contacted',converted:'Converted',closed:'Closed'};
   const TRIAL_STATUS_COLORS={new:'#2563eb',contacted:'#d97706',converted:'#16a34a',closed:'#6b7280'};
+  let _trialRequestsById={};
 
   async function loadTrialRequests(){
     const wrap=document.getElementById('sa-trials-wrap');
@@ -1522,6 +1540,8 @@
     try{
       const res=await apiFetch('/superadmin/trial-requests');
       const rows=await res.json();
+      _trialRequestsById={};
+      rows.forEach(r=>{_trialRequestsById[r.id]=r;});
       const badge=document.getElementById('sa-trial-badge');
       const newCount=rows.filter(r=>r.status==='new').length;
       if(newCount){badge.textContent=newCount+' new';badge.style.display='inline';}
@@ -1532,7 +1552,7 @@
       if(trialStat)trialStat.textContent=rows.length+(newCount?' ('+newCount+' new)':'');
       if(!rows.length){wrap.innerHTML='<div class="loading-state" style="color:var(--muted)">No trial requests yet.</div>';return;}
       let html=`<table class="sa-table"><thead><tr>
-        <th>Date</th><th>Name</th><th>Company</th><th>Email</th><th>Phone</th><th>Employees</th><th>Status</th>
+        <th>Date</th><th>Name</th><th>Company</th><th>Email</th><th>Phone</th><th>Employees</th><th>Interest</th><th>Status</th><th></th>
       </tr></thead><tbody>`;
       rows.forEach(r=>{
         const d=r.created_at?r.created_at.slice(0,10):'—';
@@ -1540,21 +1560,54 @@
         const sl=TRIAL_STATUS_LABELS[r.status]||r.status;
         html+=`<tr>
           <td style="font-size:11.5px;color:var(--muted)">${d}</td>
-          <td><strong>${r.full_name||'—'}</strong></td>
-          <td>${r.company_name||'—'}</td>
-          <td><a href="mailto:${r.email}" style="color:#4f8ef0">${r.email}</a></td>
-          <td>${r.phone||'—'}</td>
-          <td>${r.employee_count||'—'}</td>
+          <td><strong>${escHtml(r.full_name||'—')}</strong></td>
+          <td>${escHtml(r.company_name||'—')}</td>
+          <td><a href="mailto:${escHtml(r.email)}" style="color:#4f8ef0">${escHtml(r.email)}</a></td>
+          <td>${escHtml(r.phone||'—')}</td>
+          <td>${escHtml(r.employee_count||'—')}</td>
+          <td>${escHtml(r.interest||'—')}</td>
           <td>
             <select onchange="updateTrialStatus('${r.id}',this.value)" style="padding:3px 6px;border:1.5px solid ${sc};border-radius:6px;font-size:11.5px;color:${sc};background:transparent;font-weight:600;cursor:pointer;outline:none">
               ${Object.keys(TRIAL_STATUS_LABELS).map(k=>`<option value="${k}"${k===r.status?' selected':''}>${TRIAL_STATUS_LABELS[k]}</option>`).join('')}
             </select>
+          </td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-g btn-sm" onclick="viewTrialRequest('${r.id}')" title="View full details">View</button>
+            <button class="btn btn-r btn-sm" onclick="deleteTrialRequest('${r.id}')" title="Delete this trial request">Delete</button>
           </td>
         </tr>`;
       });
       html+='</tbody></table>';
       wrap.innerHTML=html;
     }catch(e){wrap.innerHTML='<div class="loading-state" style="color:var(--red)">Failed to load trial requests.</div>';}
+  }
+
+  function viewTrialRequest(id){
+    const r=_trialRequestsById[id];
+    if(!r)return;
+    const field=(label,value)=>`<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px">${escHtml(label)}</div><div style="font-size:13.5px">${value}</div></div>`;
+    const body=document.getElementById('trial-view-body');
+    body.innerHTML=[
+      field('Submitted', r.created_at?new Date(r.created_at).toLocaleString():'—'),
+      field('Full Name', escHtml(r.full_name||'—')),
+      field('Company Name', escHtml(r.company_name||'—')),
+      field('Email', `<a href="mailto:${escHtml(r.email)}" style="color:#4f8ef0">${escHtml(r.email||'—')}</a>`),
+      field('Phone', escHtml(r.phone||'—')),
+      field('Employee Count', escHtml(r.employee_count||'—')),
+      field('Interest', escHtml(r.interest||'—')),
+      field('Status', TRIAL_STATUS_LABELS[r.status]||r.status||'—'),
+      field('Notes', r.notes?`<div style="white-space:pre-wrap">${escHtml(r.notes)}</div>`:'—'),
+    ].join('');
+    openModal('m-trial-view');
+  }
+
+  async function deleteTrialRequest(id){
+    const r=_trialRequestsById[id];
+    if(!confirm(`Delete the trial request from ${r?.company_name||r?.email||'this lead'}? This cannot be undone.`))return;
+    try{
+      await apiFetch('/superadmin/trial-requests/'+id,{method:'DELETE'});
+      loadTrialRequests();
+    }catch(e){alert('Failed to delete trial request.');}
   }
 
   async function updateTrialStatus(id,status){

@@ -1270,6 +1270,18 @@ def update_trial_status(request_id: str, body: TrialStatusIn, db: Session = Depe
     return {"ok": True}
 
 
+@router.delete("/trial-requests/{request_id}", status_code=204)
+def delete_trial_request(request_id: str, db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
+    # No _write_audit_blob() call here — that writes an AppDataRecord row
+    # with a company_id FK to companies.id, and a trial request is a
+    # pre-signup inbound lead with no company of its own to attach one to.
+    row = db.query(TrialRequest).filter(TrialRequest.id == request_id).first()
+    if not row:
+        raise HTTPException(404, "Not found")
+    db.delete(row)
+    db.commit()
+
+
 # ── Self-service account ────────────────────────────────────────────────────
 # Deliberately scoped to "change my own password" only — managing OTHER
 # superadmin accounts (who can create/remove one) is a bigger access-control
