@@ -84,14 +84,24 @@ def _cached_or_build(key: str, fresh_ttl: int, build_fn) -> dict[str, Any]:
 
 @router.get("/dashboard")
 @limiter.limit("120/minute")
-def dashboard(request: Request, db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("reports:view"))) -> dict[str, Any]:
-    # Widened from admin-only in the "Main Dashboard Access" phase — still
-    # company-wide/unfiltered (no branch_id anywhere in this function's data
-    # sources), a deliberate, previously-reaffirmed decision that stands;
-    # this only changes WHO can view the same company-wide numbers, gated
-    # behind reports:view same as trial_balance() already is.
+def dashboard(
+    request: Request,
+    branch_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("reports:view")),
+) -> dict[str, Any]:
+    # Widened from admin-only in the "Main Dashboard Access" phase. Was
+    # unconditionally company-wide regardless of who asked; now scoped the
+    # same way trial_balance() already is — a branch-locked Employee/Branch
+    # principal sees only their own branch's revenue/purchases/invoices,
+    # an admin (or a "reports:view_all_branches" employee) sees everything
+    # by default and can opt into one branch via ?branch_id=.
     company_id = principal.company_id
-    return _cached_or_build(f"dashboard:{company_id}", 60, lambda: _build_dashboard(db, company_id))
+    resolved_branch_id = branch_id if principal.can_cross_branch("reports") else resolve_active_branch(principal, branch_id)
+    # Cache key includes branch_id so one branch's result is never served
+    # to another branch or to the unscoped company-wide view.
+    cache_key = f"dashboard:{company_id}:{resolved_branch_id or 'all'}"
+    return _cached_or_build(cache_key, 60, lambda: _build_dashboard(db, company_id, resolved_branch_id))
 
 
 @router.get("/branch-performance")
@@ -101,15 +111,33 @@ def branch_performance(request: Request, db: Session = Depends(get_db), principa
     return _cached_or_build(f"branch_performance:{company_id}", 60, lambda: _build_branch_performance(db, company_id))
 
 
-def _build_dashboard(db: Session, company_id: str) -> dict[str, Any]:
-    app_sales = app_sales_invoice_records(db, company_id)
-    app_purchases = app_purchase_records(db, company_id)
-    revenue = money(db.query(func.coalesce(func.sum(Invoice.subtotal), 0)).filter(Invoice.company_id == company_id, Invoice.status != "draft").scalar())
+def _build_dashboard(db: Session, company_id: str, branch_id: str | None = None) -> dict[str, Any]:
+    # branch_id scopes revenue/purchases/invoices — the figures a branch
+    # manager actually asked to see broken out per branch. Staff/payroll
+    # deliberately stay company-wide even when branch_id is set: HRMS/ESS
+    # access is explicitly never branch-gated anywhere else in this app
+    # (module_catalog.py's BRANCH_ELIGIBLE_MODULES excludes "hrms"/"ess" for
+    # exactly this reason — "governed purely by an Employee's own Role,
+    # never by which branch they're assigned to"), and VAT (TaxLine) has no
+    # branch_id column to filter on at all. module_counts/recent_activity
+    # (audit log) are unfiltered admin/system-health figures, not
+    # branch-owned business data, so they stay company-wide too.
+    app_sales = app_sales_invoice_records(db, company_id, branch_id)
+    app_purchases = app_purchase_records(db, company_id, branch_id)
+    revenue_query = db.query(func.coalesce(func.sum(Invoice.subtotal), 0)).filter(Invoice.company_id == company_id, Invoice.status != "draft")
+    open_count_query = db.query(func.count(Invoice.id)).filter(Invoice.company_id == company_id, Invoice.status != "paid")
+    open_amount_query = db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(Invoice.company_id == company_id, Invoice.status != "paid")
+    if branch_id:
+        branch_filter = (Invoice.branch_id == branch_id) | (Invoice.branch_id.is_(None))
+        revenue_query = revenue_query.filter(branch_filter)
+        open_count_query = open_count_query.filter(branch_filter)
+        open_amount_query = open_amount_query.filter(branch_filter)
+    revenue = money(revenue_query.scalar())
     revenue += sum((record_amount(row, "subtotal", "net_amount", "amount") for row in app_sales if normalized_ref(row.get("status", "")) != "draft"), Decimal("0.00"))
-    open_invoice_count = int(db.query(func.count(Invoice.id)).filter(Invoice.company_id == company_id, Invoice.status != "paid").scalar() or 0)
+    open_invoice_count = int(open_count_query.scalar() or 0)
     app_open_sales = [row for row in app_sales if not is_paid_status(row.get("status")) and not _is_credit_note(row)]
     open_invoice_count += len(app_open_sales)
-    open_invoice_amount = money(db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(Invoice.company_id == company_id, Invoice.status != "paid").scalar())
+    open_invoice_amount = money(open_amount_query.scalar())
     open_invoice_amount += sum((record_amount(row, "total", "amount", "net_amount") for row in app_open_sales), Decimal("0.00"))
     payroll_net = money(db.query(func.coalesce(func.sum(PayrollRun.net_total), 0)).filter(PayrollRun.company_id == company_id).scalar())
     output_vat = money(db.query(func.coalesce(func.sum(TaxLine.tax_amount), 0)).filter(TaxLine.company_id == company_id, TaxLine.direction == "output").scalar())
@@ -159,8 +187,8 @@ def _build_dashboard(db: Session, company_id: str) -> dict[str, Any]:
         "payment_receipt_count": table_counts.get("payments", 0) + table_counts.get("receipts", 0),
         "purchase_invoice_count": app_counts.get("purchaseInvoices", 0) + app_counts.get("purchaseDocuments", 0),
     }
-    status = invoice_status(db, company_id, app_sales)
-    pur_summary = _purchase_summary(db, company_id)
+    status = invoice_status(db, company_id, app_sales, branch_id)
+    pur_summary = _purchase_summary(db, company_id, branch_id)
     return {
         "kpis": {
             "revenue": amount(revenue),
@@ -174,9 +202,9 @@ def _build_dashboard(db: Session, company_id: str) -> dict[str, Any]:
             "staff_present": employee_count,
             "payroll_net": amount(payroll_net),
         },
-        "monthly_revenue_vat": monthly_revenue_vat(db, company_id, app_sales),
+        "monthly_revenue_vat": monthly_revenue_vat(db, company_id, app_sales, branch_id),
         "recent_activity": recent_activity(db, company_id),
-        "top_customers": top_customers(db, company_id, app_sales),
+        "top_customers": top_customers(db, company_id, app_sales, branch_id),
         "invoice_status": status,
         "purchase_summary": pur_summary,
         "staff_today": {
@@ -286,14 +314,26 @@ def normalized_ref(value: object) -> str:
     return str(value or "").strip().lower()
 
 
-def app_sales_invoice_records(db: Session, company_id: str) -> list[dict[str, Any]]:
+def _branch_row_included(row_branch_id: str | None, branch_id: str | None) -> bool:
+    """Same rule _posted_journal_line_totals() uses for JournalEntry.branch_id:
+    an unscoped caller (branch_id=None) sees everything; a branch-scoped
+    caller sees its own branch's rows PLUS any row with no branch_id at all
+    (predates Branch Management, or was saved by an admin/User principal —
+    see app_data_payloads_with_branch()'s own docstring) rather than losing
+    that data entirely."""
+    return branch_id is None or row_branch_id == branch_id or row_branch_id is None
+
+
+def app_sales_invoice_records(db: Session, company_id: str, branch_id: str | None = None) -> list[dict[str, Any]]:
     existing_refs = {
         normalized_ref(value)
         for (value,) in db.query(Invoice.invoice_number).filter(Invoice.company_id == company_id).all()
         if normalized_ref(value)
     }
     records = []
-    for row in app_data_payloads(db, company_id, "salesInvoices"):
+    for row, row_branch_id in app_data_payloads_with_branch(db, company_id, "salesInvoices"):
+        if not _branch_row_included(row_branch_id, branch_id):
+            continue
         invoice_ref = normalized_ref(row.get("invoice_no") or row.get("invoice_number") or row.get("ref"))
         if invoice_ref and invoice_ref in existing_refs:
             continue
@@ -301,7 +341,7 @@ def app_sales_invoice_records(db: Session, company_id: str) -> list[dict[str, An
     return records
 
 
-def app_purchase_records(db: Session, company_id: str) -> list[dict[str, Any]]:
+def app_purchase_records(db: Session, company_id: str, branch_id: str | None = None) -> list[dict[str, Any]]:
     """purchaseRecords + bills app-data rows, deduped against purchases that
     already posted a real input TaxLine (saving a purchaseRecords or bills
     row triggers sync_purchase_accounting()/sync_bill_accounting() ->
@@ -327,7 +367,9 @@ def app_purchase_records(db: Session, company_id: str) -> list[dict[str, Any]]:
         if normalized_ref(reference)
     }
     records = []
-    for row in app_data_payloads(db, company_id, "purchaseRecords"):
+    for row, row_branch_id in app_data_payloads_with_branch(db, company_id, "purchaseRecords"):
+        if not _branch_row_included(row_branch_id, branch_id):
+            continue
         # Mirrors app_data.py's sync_domain_model() reference formula for
         # purchaseRecords, so a row with no ref/invoice_no still dedupes
         # correctly against the "PURCHASE-{id}" fallback reference its own
@@ -339,7 +381,9 @@ def app_purchase_records(db: Session, company_id: str) -> list[dict[str, Any]]:
         if purchase_ref and purchase_ref in existing_refs:
             continue
         records.append(row)
-    for row in app_data_payloads(db, company_id, "bills"):
+    for row, row_branch_id in app_data_payloads_with_branch(db, company_id, "bills"):
+        if not _branch_row_included(row_branch_id, branch_id):
+            continue
         # Mirrors app_data.py's sync_domain_model() reference formula for bills.
         bill_ref = normalized_ref(
             row.get("bill_no")
@@ -371,7 +415,7 @@ def period_label(value: object) -> str:
     return str(value)[:7]
 
 
-def monthly_revenue_vat(db: Session, company_id: str, app_sales: list[dict[str, Any]]) -> list[dict[str, str]]:
+def monthly_revenue_vat(db: Session, company_id: str, app_sales: list[dict[str, Any]], branch_id: str | None = None) -> list[dict[str, str]]:
     periods: dict[str, dict[str, Decimal]] = {}
     # This function only ever returns the most recent 6 periods (see the
     # [-6:] below), but previously queried a company's ENTIRE invoice/
@@ -380,7 +424,10 @@ def monthly_revenue_vat(db: Session, company_id: str, app_sales: list[dict[str, 
     # for edge-of-month safety) keeps the query cost roughly constant
     # regardless of company age, with no behavior change to the output.
     cutoff = (_date.today().replace(day=1) - timedelta(days=210)).replace(day=1)
-    invoices = db.query(Invoice).filter(Invoice.company_id == company_id, Invoice.created_at >= cutoff).all()
+    invoice_query = db.query(Invoice).filter(Invoice.company_id == company_id, Invoice.created_at >= cutoff)
+    if branch_id:
+        invoice_query = invoice_query.filter((Invoice.branch_id == branch_id) | (Invoice.branch_id.is_(None)))
+    invoices = invoice_query.all()
     for invoice in invoices:
         item = periods.setdefault(period_label(invoice.created_at), {"sales": Decimal("0.00"), "purchases": Decimal("0.00"), "output_vat": Decimal("0.00"), "input_vat": Decimal("0.00")})
         item["sales"] += money(invoice.total)
@@ -389,15 +436,14 @@ def monthly_revenue_vat(db: Session, company_id: str, app_sales: list[dict[str, 
         item = periods.setdefault(period_label(invoice.get("date") or invoice.get("created_at")), {"sales": Decimal("0.00"), "purchases": Decimal("0.00"), "output_vat": Decimal("0.00"), "input_vat": Decimal("0.00")})
         item["sales"] += record_amount(invoice, "total", "amount", "net_amount")
         item["output_vat"] += record_amount(invoice, "vat_amount", "vat", "tax_amount")
-    purchases = (
-        db.query(SourceTransaction)
-        .filter(
-            SourceTransaction.company_id == company_id,
-            SourceTransaction.module.in_(["purchase", "purchase_bill"]),
-            SourceTransaction.created_at >= cutoff,
-        )
-        .all()
-    )
+    purchase_filters = [
+        SourceTransaction.company_id == company_id,
+        SourceTransaction.module.in_(["purchase", "purchase_bill"]),
+        SourceTransaction.created_at >= cutoff,
+    ]
+    if branch_id:
+        purchase_filters.append((SourceTransaction.branch_id == branch_id) | (SourceTransaction.branch_id.is_(None)))
+    purchases = db.query(SourceTransaction).filter(*purchase_filters).all()
     for purchase in purchases:
         item = periods.setdefault(period_label(purchase.created_at), {"sales": Decimal("0.00"), "purchases": Decimal("0.00"), "output_vat": Decimal("0.00"), "input_vat": Decimal("0.00")})
         item["purchases"] += money(purchase.total)
@@ -436,11 +482,15 @@ def recent_activity(db: Session, company_id: str) -> list[dict[str, str]]:
     ]
 
 
-def top_customers(db: Session, company_id: str, app_sales: list[dict[str, Any]]) -> list[dict[str, str]]:
-    rows = (
+def top_customers(db: Session, company_id: str, app_sales: list[dict[str, Any]], branch_id: str | None = None) -> list[dict[str, str]]:
+    query = (
         db.query(Invoice.customer_name, func.coalesce(func.sum(Invoice.total), 0).label("total"))
         .filter(Invoice.company_id == company_id)
-        .group_by(Invoice.customer_name)
+    )
+    if branch_id:
+        query = query.filter((Invoice.branch_id == branch_id) | (Invoice.branch_id.is_(None)))
+    rows = (
+        query.group_by(Invoice.customer_name)
         .order_by(func.coalesce(func.sum(Invoice.total), 0).desc())
         .limit(5)
         .all()
@@ -494,11 +544,14 @@ def _purchase_row_net(row: dict[str, Any]) -> Decimal:
     return total - vat if total else Decimal("0.00")
 
 
-def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
-    records = (
-        app_data_payloads(db, company_id, "purchaseRecords")
-        + app_data_payloads(db, company_id, "bills")
-    )
+def _purchase_summary(db: Session, company_id: str, branch_id: str | None = None) -> dict[str, Any]:
+    records = [
+        row for row, row_branch_id in (
+            app_data_payloads_with_branch(db, company_id, "purchaseRecords")
+            + app_data_payloads_with_branch(db, company_id, "bills")
+        )
+        if _branch_row_included(row_branch_id, branch_id)
+    ]
     total = Decimal("0")
     net_total = Decimal("0")
     paid_amount = Decimal("0")
@@ -520,31 +573,27 @@ def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
 
     # Fallback to SourceTransaction when no AppDataRecord entries exist
     if total == Decimal("0") and total_count == 0:
+        st_filters = [
+            SourceTransaction.company_id == company_id,
+            SourceTransaction.module.in_(["purchase", "purchase_bill"]),
+        ]
+        if branch_id:
+            st_filters.append((SourceTransaction.branch_id == branch_id) | (SourceTransaction.branch_id.is_(None)))
         total = money(
             db.query(func.coalesce(func.sum(SourceTransaction.total), 0))
-            .filter(
-                SourceTransaction.company_id == company_id,
-                SourceTransaction.module.in_(["purchase", "purchase_bill"]),
-            )
+            .filter(*st_filters)
             .scalar()
         )
         net_total = total  # SourceTransaction has no separate net field
         total_count = int(
             db.query(func.count(SourceTransaction.id))
-            .filter(
-                SourceTransaction.company_id == company_id,
-                SourceTransaction.module.in_(["purchase", "purchase_bill"]),
-            )
+            .filter(*st_filters)
             .scalar() or 0
         )
         if paid_amount == Decimal("0"):
             paid_amount = money(
                 db.query(func.coalesce(func.sum(SourceTransaction.total), 0))
-                .filter(
-                    SourceTransaction.company_id == company_id,
-                    SourceTransaction.module.in_(["purchase", "purchase_bill"]),
-                    SourceTransaction.status.in_(["paid", "posted", "complete", "completed", "received", "settled"]),
-                )
+                .filter(*st_filters, SourceTransaction.status.in_(["paid", "posted", "complete", "completed", "received", "settled"]))
                 .scalar()
             )
 
@@ -563,7 +612,7 @@ def _purchase_summary(db: Session, company_id: str) -> dict[str, Any]:
 _INVOICE_STATUS_KEY = {"paid": "paid", "issued": "pending", "pending": "pending", "overdue": "overdue", "cancelled": "overdue", "draft": "draft"}
 
 
-def invoice_status(db: Session, company_id: str, app_sales: list[dict[str, Any]]) -> dict[str, dict[str, str | int]]:
+def invoice_status(db: Session, company_id: str, app_sales: list[dict[str, Any]], branch_id: str | None = None) -> dict[str, dict[str, str | int]]:
     # Single GROUP BY replaces what was previously 2 setup queries + 2
     # queries per bucket (4 buckets) = 10 queries total. Bucket names/amount
     # semantics preserved exactly: bucket amounts sum Invoice.total (not
@@ -571,12 +620,14 @@ def invoice_status(db: Session, company_id: str, app_sales: list[dict[str, Any]]
     # drafts, and any Invoice.status value outside the 4 known buckets still
     # counts toward "total" (if not draft) without landing in any bucket —
     # all of this matched the original per-bucket-query version's behavior.
-    rows = (
+    query = (
         db.query(Invoice.status, func.count(Invoice.id), func.coalesce(func.sum(Invoice.total), 0), func.coalesce(func.sum(Invoice.subtotal), 0))
         .filter(Invoice.company_id == company_id)
-        .group_by(Invoice.status)
-        .all()
     )
+    if branch_id:
+        # Same NULL-stays-visible rule as _posted_journal_line_totals().
+        query = query.filter((Invoice.branch_id == branch_id) | (Invoice.branch_id.is_(None)))
+    rows = query.group_by(Invoice.status).all()
     buckets: dict[str, dict[str, Any]] = {k: {"count": 0, "amount": Decimal("0.00")} for k in ("paid", "pending", "overdue", "draft")}
     total_count = 0
     total_amount = Decimal("0.00")

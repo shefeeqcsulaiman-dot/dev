@@ -2374,7 +2374,7 @@ async function fetchWithBackendFallback(url,options={}){
 // a new endpoint server-side means adding its path here too.
 window.ACTIVE_BRANCH_ID=window.ACTIVE_BRANCH_ID||(()=>{try{return localStorage.getItem('taxflow_active_branch_id')||null;}catch{return null;}})();
 window.ACCESSIBLE_BRANCHES=window.ACCESSIBLE_BRANCHES||[];
-const _BRANCH_AWARE_PATH_RE=/\/(invoices|inventory\/stock-levels|inventory\/stock-movements|reports\/trial-balance|hr\/live-locations|journal|general-ledger|app-data\/records\/(purchaseRecords|posSales|salesInvoices))(\?|$)/;
+const _BRANCH_AWARE_PATH_RE=/\/(invoices|inventory\/stock-levels|inventory\/stock-movements|reports\/trial-balance|reports\/dashboard|hr\/live-locations|journal|general-ledger|app-data\/records\/(purchaseRecords|posSales|salesInvoices))(\?|$)/;
 function _withActiveBranchParam(url){
   if(!window.ACTIVE_BRANCH_ID)return url;
   if(typeof url!=='string'||!_BRANCH_AWARE_PATH_RE.test(url))return url;
@@ -2429,6 +2429,14 @@ async function switchActiveBranch(branchId){
   toast('Switched branch — refreshing…','ok');
   if(typeof hydrateFromServer==='function'){
     try{await hydrateFromServer();}catch(e){console.warn('[switchActiveBranch] refresh failed',e);}
+  }
+  // Dashboard KPI tiles are populated by syncDashboardFromDatabase()
+  // separately from bootstrap (hydrateFromServer() above) — without this,
+  // switching branch while already on the Dashboard left every dash-* tile
+  // showing the previous branch's (or company-wide) numbers until the next
+  // full page load.
+  if(typeof syncDashboardFromDatabase==='function'){
+    try{await syncDashboardFromDatabase();}catch(e){console.warn('[switchActiveBranch] dashboard refresh failed',e);}
   }
 }
 
