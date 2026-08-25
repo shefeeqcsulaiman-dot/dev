@@ -122,21 +122,6 @@
     }
     .phone-prefix img{width:20px;height:14px;object-fit:cover;border-radius:2px;}
     .phone-wrap input{flex:1;min-width:0;}
-    .pwd-wrap{position:relative;}
-    .pwd-wrap input{padding-right:42px;}
-    .pwd-eye{
-      position:absolute;right:13px;top:50%;transform:translateY(-50%);
-      background:none;border:none;cursor:pointer;padding:0;
-      color:#9ca3af;line-height:0;
-    }
-    .pwd-eye:hover{color:#374151;}
-    .pwd-strength{height:3px;border-radius:3px;margin-top:6px;background:#e5e7eb;overflow:hidden;}
-    .pwd-strength-bar{height:100%;border-radius:3px;transition:width .3s,background .3s;width:0}
-    .pwd-hint{font-size:11px;color:#9ca3af;margin-top:4px;}
-    .match-hint{font-size:11px;margin-top:4px;}
-    .divider{display:flex;align-items:center;gap:10px;margin:18px 0 16px;}
-    .divider::before,.divider::after{content:'';flex:1;height:1px;background:#e5e7eb;}
-    .divider span{font-size:11px;color:#9ca3af;white-space:nowrap;}
     .btn{
       width:100%;padding:13px;
       background:linear-gradient(135deg,#073D7F,#4f8ef0);
@@ -236,7 +221,7 @@
 <div class="right">
   <div class="form-card">
     <div class="form-title">Book Your Free 3-Day Trial</div>
-    <div class="form-sub">Fill in your details and get started now.</div>
+    <div class="form-sub">Fill in your details and our team will reach out to set you up.</div>
 
     <div id="err-box" class="err-box"></div>
 
@@ -291,38 +276,13 @@
         <textarea id="message" placeholder="Tell us a bit about what you're looking for..."></textarea>
       </div>
 
-      <div class="divider"><span>Set your password</span></div>
-
-      <div class="field">
-        <label>Password <span class="req">*</span></label>
-        <div class="pwd-wrap">
-          <input id="password" type="password" placeholder="Min. 6 characters" autocomplete="new-password">
-          <button class="pwd-eye" type="button" onclick="togglePwd('password',this)" tabindex="-1">
-            <svg id="eye-password" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          </button>
-        </div>
-        <div class="pwd-strength"><div id="pwd-bar" class="pwd-strength-bar"></div></div>
-        <div id="pwd-hint" class="pwd-hint"></div>
-      </div>
-
-      <div class="field">
-        <label>Confirm Password <span class="req">*</span></label>
-        <div class="pwd-wrap">
-          <input id="confirm_password" type="password" placeholder="Re-enter password" autocomplete="new-password">
-          <button class="pwd-eye" type="button" onclick="togglePwd('confirm_password',this)" tabindex="-1">
-            <svg id="eye-confirm_password" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          </button>
-        </div>
-        <div id="match-hint" class="match-hint"></div>
-      </div>
-
-      <button id="btn" class="btn" onclick="signUp()">Get My Free Trial</button>
+      <button id="btn" class="btn" onclick="requestTrial()">Request My Free Trial</button>
     </div>
 
     <div id="success-box" class="success-box">
       <div class="s-icon">🎉</div>
-      <h3>Account created successfully!</h3>
-      <p>Your 3-day free trial is active. Redirecting you to the dashboard…</p>
+      <h3>Request received!</h3>
+      <p>Thanks for your interest — our team will reach out shortly to set up your 3-day free trial.</p>
     </div>
 
     <div class="signin-link">Already have an account? <a href="/login">Sign in</a></div>
@@ -347,10 +307,12 @@
     return window.location.protocol+'//'+h+'/api/v1';
   }
 
-  // GCC + UK — the markets this deployment serves (same list/defaults as
-  // the superadmin "New Company" country selector). Country picked here
-  // also picks the phone prefix/flag shown next to the phone field; the
-  // backend applies the matching currency/VAT default for the new company.
+  // GCC + UK — the markets this deployment serves. Country picked here
+  // only drives the phone prefix/flag shown next to the phone field and is
+  // passed along as context in the trial request's notes — this form no
+  // longer creates a company/account, so there's no currency/VAT default
+  // to apply here anymore (that happens later when the team actually
+  // creates the account via Super Admin > Create Company).
   var SIGNUP_COUNTRIES=[
     {name:'United Arab Emirates',flag:'ae',code:'+971'},
     {name:'Saudi Arabia',flag:'sa',code:'+966'},
@@ -375,47 +337,7 @@
     document.getElementById('phone-code').textContent=c.code;
   }
 
-  function togglePwd(id,btn){
-    var inp=document.getElementById(id);
-    var isText=inp.type==='text';
-    inp.type=isText?'password':'text';
-    var svg=document.getElementById('eye-'+id);
-    svg.innerHTML=isText
-      ?'<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
-      :'<path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>';
-  }
-
-  document.getElementById('password').addEventListener('input',function(){
-    var v=this.value;
-    var bar=document.getElementById('pwd-bar');
-    var hint=document.getElementById('pwd-hint');
-    if(!v){bar.style.width='0';hint.textContent='';return;}
-    var s=0;
-    if(v.length>=6)s++;
-    if(v.length>=10)s++;
-    if(/[A-Z]/.test(v))s++;
-    if(/[0-9]/.test(v))s++;
-    if(/[^A-Za-z0-9]/.test(v))s++;
-    var pct=['0%','25%','50%','75%','100%'][s];
-    var col=['#e5e7eb','#f87171','#fb923c','#facc15','#4ade80'][s];
-    var lbl=['','Weak','Fair','Good','Strong','Very Strong'][s];
-    bar.style.width=pct;bar.style.background=col;
-    hint.textContent=lbl;hint.style.color=col;
-    checkMatch();
-  });
-
-  document.getElementById('confirm_password').addEventListener('input',checkMatch);
-
-  function checkMatch(){
-    var p=document.getElementById('password').value;
-    var c=document.getElementById('confirm_password').value;
-    var h=document.getElementById('match-hint');
-    if(!c){h.textContent='';return;}
-    if(p===c){h.textContent='✓ Passwords match';h.style.color='#16a34a';}
-    else{h.textContent='✗ Passwords do not match';h.style.color='#dc2626';}
-  }
-
-  async function signUp(){
+  async function requestTrial(){
     var btn=document.getElementById('btn');
     var err=document.getElementById('err-box');
     err.style.display='none';
@@ -428,55 +350,45 @@
     var phone=document.getElementById('phone').value.trim();
     var empCount=document.getElementById('employee_count').value;
     var message=document.getElementById('message').value.trim();
-    var pwd=document.getElementById('password').value;
-    var cpwd=document.getElementById('confirm_password').value;
 
     if(!fullName){show('Please enter your full name.');return;}
     if(!company){show('Please enter your company name.');return;}
     if(!email||!email.includes('@')){show('Please enter a valid email address.');return;}
-    if(!pwd||pwd.length<6){show('Password must be at least 6 characters.');return;}
-    if(pwd!==cpwd){show('Passwords do not match. Please re-enter.');return;}
 
-    btn.disabled=true;btn.textContent='Creating your account…';
+    btn.disabled=true;btn.textContent='Sending…';
 
-    var body={full_name:fullName,email:email,password:pwd,company_name:company,country:country};
-    if(phone)body.phone=phoneCode+' '+phone;
-    if(empCount)body.employee_count=empCount;
-
+    // No account/login is created here — this only notifies the super
+    // admin of an inbound lead (Super Admin > Trial Requests). Account
+    // creation for a company is a separate, manual step the team does
+    // after following up, not an instant self-serve action from this page.
     try{
-      var resp=await fetch(apiBase()+'/auth/register',{
+      var resp=await fetch(apiBase()+'/auth/trial-request',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(body)
+        body:JSON.stringify({
+          full_name:fullName,company_name:company,email:email,
+          phone:phone?phoneCode+' '+phone:null,employee_count:empCount||null,
+          // TrialRequestIn has no dedicated country field — folded into
+          // notes instead of dropped, so the follow-up team still sees it.
+          notes:(country?'Country: '+country:'')+(country&&message?'\n\n':'')+(message||'')||null
+        })
       });
-      var data=await resp.json();
-      if(resp.ok&&data.access_token){
-        // also log trial request with notes/interest
-        fetch(apiBase()+'/auth/trial-request',{
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({full_name:fullName,company_name:company,email:email,phone:phone?phoneCode+' '+phone:null,employee_count:empCount||null,notes:message||null})
-        }).catch(function(){});
-        localStorage.setItem('taxflow_token',data.access_token);
+      var data=await resp.json().catch(function(){return{};});
+      if(resp.ok){
         document.getElementById('form-body').style.display='none';
         document.getElementById('success-box').style.display='block';
-        setTimeout(function(){window.location.replace('/');},1800);
       }else{
-        // FastAPI validation errors (422) send `detail` as an ARRAY of
-        // {msg,loc,...} objects, not a string — assigning that straight to
-        // .textContent rendered the literal text "[object Object]" with no
-        // useful information. Extract each item's own .msg instead.
-        var msg='Registration failed. Please try again.';
+        var msg='Could not send your request. Please try again.';
         if(Array.isArray(data.detail)&&data.detail.length){
           msg=data.detail.map(function(d){return d&&d.msg?d.msg:JSON.stringify(d);}).join(' ');
         }else if(typeof data.detail==='string'&&data.detail){
           msg=data.detail;
         }
-        if(resp.status===409)msg='An account with this email already exists. Please sign in instead.';
         show(msg);
-        btn.disabled=false;btn.textContent='Get My Free Trial';
+        btn.disabled=false;btn.textContent='Request My Free Trial';
       }
     }catch(e){
       show('Cannot reach server. Please try again.');
-      btn.disabled=false;btn.textContent='Get My Free Trial';
+      btn.disabled=false;btn.textContent='Request My Free Trial';
     }
   }
 
