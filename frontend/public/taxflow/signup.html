@@ -286,6 +286,11 @@
         </div>
       </div>
 
+      <div class="field">
+        <label>How can we help? <span style="color:#94a3b8;font-weight:400">(optional)</span></label>
+        <textarea id="message" placeholder="Tell us a bit about what you're looking for..."></textarea>
+      </div>
+
       <div class="divider"><span>Set your password</span></div>
 
       <div class="field">
@@ -422,6 +427,7 @@
     var phoneCode=document.getElementById('phone-code').textContent;
     var phone=document.getElementById('phone').value.trim();
     var empCount=document.getElementById('employee_count').value;
+    var message=document.getElementById('message').value.trim();
     var pwd=document.getElementById('password').value;
     var cpwd=document.getElementById('confirm_password').value;
 
@@ -447,7 +453,7 @@
         // also log trial request with notes/interest
         fetch(apiBase()+'/auth/trial-request',{
           method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({full_name:fullName,company_name:company,email:email,phone:phone?phoneCode+' '+phone:null,employee_count:empCount||null})
+          body:JSON.stringify({full_name:fullName,company_name:company,email:email,phone:phone?phoneCode+' '+phone:null,employee_count:empCount||null,notes:message||null})
         }).catch(function(){});
         localStorage.setItem('taxflow_token',data.access_token);
         document.getElementById('form-body').style.display='none';
