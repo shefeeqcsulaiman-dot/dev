@@ -1084,6 +1084,9 @@
         <div style="font-size:var(--fs-sm);font-weight:500">${escHtml(b.name||'—')} ${statusBadge}</div>
         <div class="mono" style="color:var(--muted);font-size:var(--fs-xs)">${escHtml(b.code||'No code')} · ${escHtml(b.city||'')}</div>
       </div>
+      <div style="display:flex;gap:5px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+        ${active?`<button class="btn btn-g btn-sm" style="color:#a78bfa" onclick="impersonateAsBranch('${escHtml(_drawerCompanyId)}','${escHtml(b.id)}','${escHtml(b.name)}')" title="Log in as this branch, on the branch-scoped main dashboard">Impersonate</button>`:''}
+      </div>
     </div>`;
   }
   function _drawerEmployeeRow(e){
@@ -1478,26 +1481,49 @@
   // ── Impersonate ───────────────────────────────────────────────
   async function impersonateCompany(companyId, companyName){
     if(!confirm(`Log in as ${companyName}'s admin? This is recorded in the Audit Log and visible via a banner while active.`)) return;
-    await doImpersonate(companyId, null);
+    await doImpersonate(companyId, {});
   }
 
   async function impersonateAsUser(companyId, userId, userName, userEmail){
     if(!confirm(`Log in as ${userName||userEmail} (${userEmail})? This is recorded in the Audit Log and visible via a banner while active.`)) return;
-    await doImpersonate(companyId, userId);
+    await doImpersonate(companyId, {user_id:userId});
   }
 
-  async function doImpersonate(companyId, userId){
+  async function impersonateAsBranch(companyId, branchId, branchName){
+    if(!confirm(`Log in as branch "${branchName}"? This is recorded in the Audit Log and visible via a banner while active. You'll land on the main dashboard scoped to this branch's own data, exactly as it would see it.`)) return;
+    await doImpersonate(companyId, {branch_id:branchId}, 'branch');
+  }
+
+  async function doImpersonate(companyId, body, principalKind){
     try{
-      const res=await apiFetch(`/superadmin/companies/${companyId}/impersonate`,{method:'POST',body:JSON.stringify(userId?{user_id:userId}:{})});
+      const res=await apiFetch(`/superadmin/companies/${companyId}/impersonate`,{method:'POST',body:JSON.stringify(body||{})});
       const data=await res.json();
       if(!res.ok){ alert(data.detail||'Impersonation failed.'); return; }
       localStorage.setItem('taxflow_superadmin_token', localStorage.getItem('taxflow_token'));
       localStorage.setItem('taxflow_token', data.access_token);
+      // A branch-impersonation token needs the main app to treat this
+      // session as a Branch Login (branch-scoped dashboard, /auth/whoami
+      // instead of the admin-only /auth/me, which would 401 and force-log
+      // it out) — cleared for a user/company impersonation since that
+      // lands as a real admin session.
+      if(principalKind) localStorage.setItem('taxflow_principal_kind', principalKind);
+      else localStorage.removeItem('taxflow_principal_kind');
       window.location.replace('/');
     }catch(err){ alert(err.message); }
   }
 
   // ── Active impersonation sessions ───────────────────────────────
+  function _impersonationSessionRow(r){
+    const isBranch=r.target_kind==='branch';
+    return `<tr>
+      <td class="mono" style="font-size:12px">${escHtml(r.superadmin_email)}</td>
+      <td><div style="font-size:12.5px">${escHtml(r.target_user_name||'—')}${isBranch?' <span class="b b-b" style="font-size:9.5px;padding:1px 6px">Branch</span>':''}</div>${r.target_user_email?`<div class="mono" style="font-size:11px;color:#8896b3">${escHtml(r.target_user_email)}</div>`:''}</td>
+      <td style="font-size:12.5px">${escHtml(r.company_name)}</td>
+      <td style="font-size:11.5px;color:#8896b3">${r.started_at?new Date(r.started_at).toLocaleString():'—'}${r.naturally_expired?' <span class="b b-a" style="font-size:10px">expired</span>':''}</td>
+      <td><button class="btn btn-r btn-sm" onclick="forceEndImpersonation('${escHtml(r.id)}')">Force End</button></td>
+    </tr>`;
+  }
+
   async function loadImpersonationSessions(){
     const wrap=document.getElementById('sa-imp-sessions-wrap');
     if(!wrap) return;
@@ -1507,13 +1533,7 @@
       if(!rows.length){ wrap.innerHTML='<div class="loading-state" style="padding:16px">No active impersonation sessions.</div>'; return; }
       wrap.innerHTML=`<div style="overflow-x:auto"><table class="tbl">
         <thead><tr><th>Super Admin</th><th>Viewing As</th><th>Company</th><th>Started</th><th></th></tr></thead>
-        <tbody>${rows.map(r=>`<tr>
-          <td class="mono" style="font-size:12px">${escHtml(r.superadmin_email)}</td>
-          <td><div style="font-size:12.5px">${escHtml(r.target_user_name||'—')}</div><div class="mono" style="font-size:11px;color:#8896b3">${escHtml(r.target_user_email)}</div></td>
-          <td style="font-size:12.5px">${escHtml(r.company_name)}</td>
-          <td style="font-size:11.5px;color:#8896b3">${r.started_at?new Date(r.started_at).toLocaleString():'—'}${r.naturally_expired?' <span class="b b-a" style="font-size:10px">expired</span>':''}</td>
-          <td><button class="btn btn-r btn-sm" onclick="forceEndImpersonation('${escHtml(r.id)}')">Force End</button></td>
-        </tr>`).join('')}</tbody>
+        <tbody>${rows.map(_impersonationSessionRow).join('')}</tbody>
       </table></div>`;
     }catch(err){
       wrap.innerHTML='<div class="loading-state" style="color:var(--red)">Failed to load: '+escHtml(err.message)+'</div>';

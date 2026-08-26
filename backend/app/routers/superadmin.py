@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.company_defaults import seed_company_defaults
 from app.config import get_settings
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import Principal, get_current_principal, get_current_user
 from app.limiter import limiter
 # Re-exported here under the same name for every pre-existing call site in
 # this file — moved to app/module_catalog.py (Branch Login Phase 1) so core
@@ -38,7 +38,8 @@ from app.models import (
 from app.schemas import CompanyUpdate
 from app.security import (
     create_access_token, hash_password, impersonation_revocation_info,
-    impersonator_id_from_token, user_id_from_token, verify_password,
+    impersonator_id_from_token, revoke_impersonation_jti, user_id_from_token,
+    verify_password,
 )
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
@@ -1084,6 +1085,17 @@ class ImpersonateIn(BaseModel):
     # Optional — omitted keeps the original "oldest active admin" default so
     # existing callers/behavior don't change.
     user_id: str | None = None
+    # Impersonate a Branch Login identity instead of a company admin user —
+    # mutually exclusive with user_id (branch_id wins if both are somehow
+    # sent). See impersonate_company() below.
+    branch_id: str | None = None
+
+
+# Same value as branches.py's own _BRANCH_PREFIX / auth_principal.py's
+# _BRANCH_PREFIX — duplicated rather than imported (matching how
+# auth_principal.py already duplicates it independently of branches.py)
+# to avoid a reverse import into a router module for one constant.
+_BRANCH_TOKEN_PREFIX = "branch:"
 
 
 @router.post("/companies/{company_id}/impersonate")
@@ -1098,6 +1110,37 @@ def impersonate_company(
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
+
+    if body.branch_id:
+        # Impersonate a Branch Login identity instead of a company admin
+        # user — lands the superadmin on the branch-scoped main dashboard
+        # (Dashboard branch-scoping, reports.py) exactly as that branch
+        # would see it, not the company-wide admin view.
+        branch = db.query(Branch).filter(Branch.id == body.branch_id, Branch.company_id == company_id).first()
+        if not branch:
+            raise HTTPException(status_code=404, detail="Branch not found in this company")
+        _write_audit_blob(
+            db, company_id, f"Super Admin ({superadmin.email})",
+            "Impersonation started", f"as branch {branch.name}", "Started",
+        )
+        token = create_access_token(_BRANCH_TOKEN_PREFIX + branch.id, impersonated_by=superadmin.id)
+        revocation = impersonation_revocation_info(token)
+        if revocation:
+            jti, _ttl = revocation
+            db.add(ImpersonationSession(
+                superadmin_id=superadmin.id,
+                target_branch_id=branch.id,
+                company_id=company_id,
+                token_jti=jti,
+            ))
+        db.commit()
+        return {
+            "ok": True,
+            "access_token": token,
+            "user": None,
+            "branch": {"id": branch.id, "name": branch.name},
+            "company": {"id": company.id, "name": company.name},
+        }
 
     if body.user_id:
         # Previously always the company's oldest active admin — no way to
@@ -1140,6 +1183,7 @@ def impersonate_company(
         "ok": True,
         "access_token": token,
         "user": {"id": target.id, "email": target.email, "full_name": target.full_name},
+        "branch": None,
         "company": {"id": company.id, "name": company.name},
     }
 
@@ -1148,7 +1192,11 @@ def impersonate_company(
 def end_impersonation(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    # Principal, not User — a branch-impersonation session's active token is
+    # a Branch Login identity (see impersonate_company()), which
+    # get_current_user (User-only) would simply 401 on, making this endpoint
+    # uncallable from exactly the session it needs to end.
+    principal: Principal = Depends(get_current_principal),
 ):
     auth = request.headers.get("authorization", "")
     raw_token = auth.removeprefix("Bearer ").strip() if auth.startswith("Bearer ") else ""
@@ -1160,16 +1208,16 @@ def end_impersonation(
     # expires, up to access_token_expire_minutes later.
     revocation = impersonation_revocation_info(raw_token)
     if revocation:
-        import app.cache as cache
         jti, ttl_seconds = revocation
-        cache.set(f"revoked_imp:{jti}", True, ttl=ttl_seconds)
+        revoke_impersonation_jti(jti, ttl_seconds)
         session_row = db.query(ImpersonationSession).filter(ImpersonationSession.token_jti == jti).first()
         if session_row and not session_row.ended_at:
             session_row.ended_at = datetime.now(timezone.utc)
     superadmin = db.query(User).filter(User.id == impersonator_id).first()
+    viewed_as = f"{principal.user.full_name} ({principal.user.email})" if principal.user else principal.display_name
     _write_audit_blob(
-        db, current_user.company_id, f"Super Admin ({superadmin.email if superadmin else impersonator_id})",
-        "Impersonation ended", f"was viewing as {current_user.full_name} ({current_user.email})", "Ended",
+        db, principal.company_id, f"Super Admin ({superadmin.email if superadmin else impersonator_id})",
+        "Impersonation ended", f"was viewing as {viewed_as}", "Ended",
     )
     db.commit()
     return {"ok": True}
@@ -1186,8 +1234,10 @@ def list_impersonation_sessions(
         q = q.filter(ImpersonationSession.ended_at.is_(None))
     rows = q.limit(100).all()
 
-    user_ids = {r.superadmin_id for r in rows} | {r.target_user_id for r in rows}
+    user_ids = {r.superadmin_id for r in rows} | {r.target_user_id for r in rows if r.target_user_id}
     users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    branch_ids = {r.target_branch_id for r in rows if r.target_branch_id}
+    branches_by_id = {b.id: b.name for b in db.query(Branch).filter(Branch.id.in_(branch_ids)).all()} if branch_ids else {}
     company_ids = {r.company_id for r in rows}
     companies_by_id = {c.id: c.name for c in db.query(Company).filter(Company.id.in_(company_ids)).all()} if company_ids else {}
 
@@ -1195,7 +1245,8 @@ def list_impersonation_sessions(
     result = []
     for r in rows:
         superadmin_u = users_by_id.get(r.superadmin_id)
-        target_u = users_by_id.get(r.target_user_id)
+        target_u = users_by_id.get(r.target_user_id) if r.target_user_id else None
+        is_branch = bool(r.target_branch_id)
         # Sessions naturally expire with the token (access_token_expire_minutes)
         # even if "End Impersonation" was never clicked — surfaced so a stale
         # row doesn't read as "still active" forever.
@@ -1204,8 +1255,9 @@ def list_impersonation_sessions(
         result.append({
             "id": r.id,
             "superadmin_email": superadmin_u.email if superadmin_u else r.superadmin_id,
-            "target_user_email": target_u.email if target_u else r.target_user_id,
-            "target_user_name": target_u.full_name if target_u else None,
+            "target_kind": "branch" if is_branch else "user",
+            "target_user_email": (target_u.email if target_u else r.target_user_id) if not is_branch else None,
+            "target_user_name": (target_u.full_name if target_u else None) if not is_branch else branches_by_id.get(r.target_branch_id, r.target_branch_id),
             "company_id": r.company_id,
             "company_name": companies_by_id.get(r.company_id, r.company_id),
             "started_at": r.created_at.isoformat() if r.created_at else None,
@@ -1225,8 +1277,7 @@ def force_end_impersonation_session(
     if not row:
         raise HTTPException(status_code=404, detail="Session not found")
     if not row.ended_at:
-        import app.cache as cache
-        cache.set(f"revoked_imp:{row.token_jti}", True, ttl=settings.access_token_expire_minutes * 60)
+        revoke_impersonation_jti(row.token_jti, settings.access_token_expire_minutes * 60)
         row.ended_at = datetime.now(timezone.utc)
         _write_audit_blob(
             db, row.company_id, f"Super Admin ({superadmin.email})",

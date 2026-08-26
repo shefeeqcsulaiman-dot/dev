@@ -568,6 +568,28 @@ def ensure_schema_updates() -> None:
                 "CREATE INDEX IF NOT EXISTS ix_biometric_devices_serial_number "
                 "ON biometric_devices (serial_number)"
             ))
+        if "impersonation_sessions" in table_names:
+            existing_columns = {column["name"] for column in inspector.get_columns("impersonation_sessions")}
+            if "target_branch_id" not in existing_columns:
+                connection.execute(text("ALTER TABLE impersonation_sessions ADD COLUMN target_branch_id VARCHAR(36)"))
+            # target_user_id was NOT NULL from this table's original creation
+            # (impersonation only ever targeted a company admin user) — a new
+            # "impersonate as branch" session (superadmin.py) has no target
+            # user at all. Postgres needs an explicit ALTER to relax this;
+            # harmless/idempotent to re-run, and a no-op once already
+            # nullable. SQLite (local dev/tests) recreates this table fresh
+            # via Base.metadata.create_all() before this ever runs, so it
+            # picks up the model's nullable=True directly and doesn't need
+            # ALTER COLUMN at all (which SQLite's ALTER TABLE can't do anyway).
+            if not settings.database_url.startswith("sqlite"):
+                try:
+                    connection.execute(text(
+                        "ALTER TABLE impersonation_sessions ALTER COLUMN target_user_id DROP NOT NULL"
+                    ))
+                except Exception as alter_exc:
+                    logging.getLogger("taxflow").error(
+                        "Could not relax impersonation_sessions.target_user_id NOT NULL: %s", alter_exc
+                    )
         if "stock_product_mappings" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("stock_product_mappings")}
             required_columns = {

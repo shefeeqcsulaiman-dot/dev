@@ -153,7 +153,13 @@ class ImpersonationSession(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     superadmin_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
-    target_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # Exactly one of target_user_id/target_branch_id is set, depending on
+    # whether the superadmin impersonated a company admin user (original
+    # feature) or a Branch Login identity (see impersonate_company(),
+    # superadmin.py). Both nullable rather than a discriminator column,
+    # since the FK itself already tells you which kind a row is.
+    target_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    target_branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), nullable=True)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
     token_jti: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

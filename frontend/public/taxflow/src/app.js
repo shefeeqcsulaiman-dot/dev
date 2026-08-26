@@ -2311,6 +2311,12 @@ async function exitImpersonation(){
     localStorage.setItem('taxflow_token',superadminToken);
     localStorage.removeItem('taxflow_superadmin_token');
   }
+  // Only ever set for a branch-impersonation session (see superadmin.html's
+  // doImpersonate()) — must not survive back into the superadmin's own
+  // restored admin session, or their next visit to '/' would be wrongly
+  // treated as a Branch Login.
+  localStorage.removeItem('taxflow_principal_kind');
+  localStorage.removeItem('taxflow_active_branch_id');
   window.location.replace('/superadmin');
 }
 
@@ -2823,6 +2829,12 @@ async function applyMainDashboardPermissionNav(){
     if(!resp||!resp.ok)return;
     const who=await resp.json();
     applyBranchSwitcherFromWhoami(who);
+    // applyRoleBasedNav() (the equivalent call for a User/admin session) is
+    // never invoked for an employee/branch principal_kind (see initApp()),
+    // so this is the only place a Branch-impersonation session's banner can
+    // render — /auth/whoami is what a branch token can actually call,
+    // unlike the User-only /auth/me applyRoleBasedNav() uses.
+    renderImpersonationBanner(who.impersonated_by,{name:currentCompany?.name||''},who.display_name);
     if(who.is_admin){window.MAIN_ALLOWED_MODULES=null;return;}
     const allowed=new Set((who.permissions||[]).filter(p=>p.endsWith(':view')).map(p=>p.split(':')[0]));
     window.MAIN_ALLOWED_MODULES=allowed;
@@ -3181,6 +3193,16 @@ async function syncBranchPerformanceFromDatabase(){
   }
 }
 
+// "View as branch" is an admin-only lightweight filter (no new token, no
+// audit log — see viewDashboardAsBranch()/exitBranchDashboardView() below),
+// distinct from Super Admin's real impersonation (superadmin.html). Gated
+// on principal_kind being absent (=admin per the same convention initApp()
+// uses) so a Branch Login viewing its own single row here never sees a
+// button offering to switch into a branch it has no cross-branch access to.
+function _isAdminPrincipal(){
+  try{return !localStorage.getItem('taxflow_principal_kind');}catch{return true;}
+}
+
 function renderBranchPerformance(data){
   const list=document.getElementById('dash-branch-list');
   if(!list)return;
@@ -3195,16 +3217,31 @@ function renderBranchPerformance(data){
     list.innerHTML=`<div style="font-size:12px;color:var(--text3);text-align:center;padding:16px 4px;line-height:1.5">No branch-attributed sales or purchases yet.</div>`;
     return;
   }
-  list.innerHTML=rows.map(row=>{
+  const canViewAs=_isAdminPrincipal();
+  const activeId=window.ACTIVE_BRANCH_ID||null;
+  window.__branchPerfNameById=window.__branchPerfNameById||{};
+  const activeRow=activeId?rows.find(r=>r.branch_id===activeId):null;
+  const banner=(canViewAs&&activeRow)?`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:6px 10px;margin-bottom:8px;font-size:11.5px;color:#3730a3">
+    <span>Viewing dashboard as <strong>${escapeHtml(activeRow.name||'branch')}</strong></span>
+    <button class="btn btn-g btn-sm" style="padding:2px 8px;font-size:11px;flex-shrink:0" onclick="exitBranchDashboardView()">View All Branches</button>
+  </div>`:'';
+  list.innerHTML=banner+rows.map(row=>{
     const profit=Number(row.profit||0);
     const profitColor=profit>=0?'#16a34a':'#dc2626';
     const isUnassigned=row.branch_id===null||row.branch_id===undefined;
     const name=isUnassigned?'Head Office':(row.name||'Unnamed Branch');
     const pending=row.invoices_pending||{count:0,amount:'0.00'};
     const collected=row.invoices_collected||{count:0,amount:'0.00'};
+    const isActive=!isUnassigned&&row.branch_id===activeId;
+    if(!isUnassigned)window.__branchPerfNameById[row.branch_id]=name;
+    // data-branch-id + a delegated onclick lookup (not the name inlined into
+    // the attribute) — a branch name containing a quote/apostrophe inlined
+    // straight into onclick="" corrupts the HTML (same bug class as the POS
+    // JSON.stringify()-in-onclick issue fixed earlier).
+    const viewBtn=(canViewAs&&!isUnassigned&&!isActive)?`<button class="btn btn-g btn-sm" style="padding:2px 8px;font-size:10.5px;margin-left:8px" data-branch-id="${escapeHtml(row.branch_id)}" onclick="viewDashboardAsBranch(this.dataset.branchId)" title="View the main dashboard scoped to this branch's own data">View as</button>`:'';
     return `<div style="border:1px solid var(--border);border-radius:10px;padding:9px 11px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <span style="font-size:12.5px;font-weight:700;color:var(--text1)">${escapeHtml(name)}</span>
+        <span style="font-size:12.5px;font-weight:700;color:var(--text1);display:flex;align-items:center">${escapeHtml(name)}${viewBtn}</span>
         <span class="mono" style="font-size:13px;font-weight:700;color:${profitColor}">${formatAed(profit)}</span>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;font-size:10.5px;color:var(--text3)">
@@ -3213,6 +3250,23 @@ function renderBranchPerformance(data){
       </div>
     </div>`;
   }).join('');
+}
+
+async function viewDashboardAsBranch(branchId){
+  if(!branchId)return;
+  // switchActiveBranch()'s own syncDashboardFromDatabase() call already
+  // re-renders the Branch Performance card (it calls
+  // syncBranchPerformanceFromDatabase() on success) — no extra fetch needed
+  // here, just the branch switch itself.
+  await switchActiveBranch(branchId);
+}
+
+async function exitBranchDashboardView(){
+  window.ACTIVE_BRANCH_ID=null;
+  try{localStorage.removeItem('taxflow_active_branch_id');}catch{}
+  toast('Showing all branches','ok');
+  if(typeof hydrateFromServer==='function'){try{await hydrateFromServer();}catch(e){console.warn('[exitBranchDashboardView] refresh failed',e);}}
+  if(typeof syncDashboardFromDatabase==='function'){try{await syncDashboardFromDatabase();}catch(e){console.warn('[exitBranchDashboardView] dashboard refresh failed',e);}}
 }
 
 function renderCachedDashboardSnapshot(){

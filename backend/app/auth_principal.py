@@ -254,6 +254,12 @@ def _principal_from_branch_token(token: str, db: Session) -> Principal | None:
     branch_id = _branch_id_from_token(token)
     if not branch_id:
         return None
+    if is_impersonation_token_revoked(token):
+        # Mirrors _principal_from_user_token()'s check — without this, an
+        # ended "impersonate as branch" session (superadmin.py) kept working
+        # as that branch until the token's natural expiry, defeating End
+        # Impersonation entirely for this principal kind.
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Impersonation session has ended")
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
     if not branch:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Branch not found")

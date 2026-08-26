@@ -103,6 +103,25 @@ def impersonation_revocation_info(token: str) -> tuple[str, int] | None:
     return (jti, max(remaining, 1))
 
 
+# Process-local fallback so "End Impersonation" actually revokes the token
+# even when Redis isn't configured/reachable (app.cache.set() silently
+# no-ops then — see its module docstring). Without this, ending an
+# impersonation session only updated the audit log/DB row while the token
+# itself kept working until its natural expiry, for BOTH the original
+# User-target impersonation and the newer branch-target one. Doesn't survive
+# a process restart and isn't shared across worker processes/instances —
+# real multi-instance deployments still need Redis for that — but it's
+# strictly better than "never revokes at all" for single-process/no-Redis
+# setups, which is exactly what local dev and the test suite run under.
+_revoked_impersonation_jtis: dict[str, float] = {}
+
+
+def revoke_impersonation_jti(jti: str, ttl_seconds: int) -> None:
+    import app.cache as cache
+    cache.set(f"revoked_imp:{jti}", True, ttl=ttl_seconds)
+    _revoked_impersonation_jtis[jti] = datetime.now(UTC).timestamp() + ttl_seconds
+
+
 def is_impersonation_token_revoked(token: str) -> bool:
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
@@ -112,4 +131,7 @@ def is_impersonation_token_revoked(token: str) -> bool:
     if not payload.get("imp") or not jti:
         return False
     import app.cache as cache
-    return bool(cache.get(f"revoked_imp:{jti}"))
+    if cache.get(f"revoked_imp:{jti}"):
+        return True
+    expiry = _revoked_impersonation_jtis.get(jti)
+    return bool(expiry and expiry > datetime.now(UTC).timestamp())

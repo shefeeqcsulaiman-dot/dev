@@ -135,14 +135,30 @@ class WhoAmIOut(BaseModel):
     # session or a branch-assigned Employee otherwise has no way to tell
     # which branch's data they're looking at anywhere in the UI.
     branch_name: str | None = None
+    # Only ever set for a Branch principal impersonation session
+    # (superadmin.py's impersonate_company(), branch_id path) — /auth/me's
+    # own impersonated_by only covers a User target, so a branch-scoped
+    # session had no way to know it was being impersonated at all, and the
+    # frontend's impersonation banner (driven by /auth/me) never rendered
+    # for one. Employee tokens are never impersonated today, so this stays
+    # None for kind="employee".
+    impersonated_by: dict | None = None
 
 
 @router.get("/whoami", response_model=WhoAmIOut)
-def whoami(db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> WhoAmIOut:
+def whoami(request: Request, db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> WhoAmIOut:
     """Identity check that works for any of the three login paths (admin
     User, HRMS Employee sub-user, or Branch Login Phase 2's Branch entity) —
     the one call the frontend makes to decide what to show, instead of
     guessing which of /auth/me or /hr/me applies."""
+    impersonated_by: dict | None = None
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        impersonator_id = impersonator_id_from_token(auth_header.removeprefix("Bearer ").strip())
+        if impersonator_id:
+            impersonator = db.query(User).filter(User.id == impersonator_id).first()
+            if impersonator:
+                impersonated_by = {"id": impersonator.id, "email": impersonator.email}
     accessible_branches: list[AccessibleBranchOut] = []
     if len(principal.accessible_branch_ids) > 1:
         rows = db.query(Branch.id, Branch.name).filter(Branch.id.in_(principal.accessible_branch_ids)).all()
@@ -170,6 +186,7 @@ def whoami(db: Session = Depends(get_db), principal: Principal = Depends(get_cur
         branch_id=principal.branch_id,
         accessible_branches=accessible_branches,
         branch_name=branch_name,
+        impersonated_by=impersonated_by,
     )
 
 
