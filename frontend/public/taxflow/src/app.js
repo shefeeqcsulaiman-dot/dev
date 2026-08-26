@@ -1,4 +1,4 @@
-const META={dashboard:{t:'Dashboard',s:'Loading dashboard from database',a:'',ao:null},company:{t:'Company Registration',s:'UAE Trade License & FTA Details',a:'Save All',ao:()=>toast('All changes saved','ok')},sales:{t:'Sales & Invoices',s:'Upload - AI Extraction - Validation - Invoices',a:'+ New Invoice',ao:()=>{go('sales');setTimeout(()=>stab(document.querySelectorAll('#page-sales .tab')[4],'s-create'),50)}},purchase:{t:'Purchases',s:'Upload - AI Extraction - Validation',a:'Upload Files',ao:()=>document.getElementById('pur-file').click()},bank:{t:'Bank & Payments',s:'Accounts - transactions - receipts - payments - reconciliation',a:'+ Record Payment',ao:()=>openPaymentModal('Customer Receipt')},inventory:{t:'Inventory',s:'Stock - Items - Movements',a:'+ Add Item',ao:()=>openInventoryItemModal()},expense:{t:'Expenses',s:'AI Upload - Create - Approvals - List',a:'+ New Expense',ao:()=>{go('expense');setTimeout(()=>stab(document.querySelectorAll('#page-expense .tab')[1],'exp-create'),50)}},accounting:{t:'Accounting',s:'Chart - Journal - Ledger',a:'+ New Entry',ao:()=>showM('m-acc')},reports:{t:'Reports',s:'VAT - P&L - Trial Balance',a:'Export PDF',ao:()=>toast('Exporting report...','info')},settings:{t:'Settings',s:'General - Users - Tax',a:'Save All',ao:()=>toast('Settings saved','ok')},staff:{t:'Staff Management',s:'Attendance - Leave - Corrections - Biometric',a:'+ Add Employee',ao:()=>showM('m-emp')},expert:{t:'Expert Review',s:'Find CA experts - Submit for review',a:'+ New Request',ao:()=>showM('m-newreview')},design:{t:'System Design',s:'Functional Spec - Fields - Validations - API',a:'Export Spec',ao:()=>toast('Exporting FRD to PDF...','info')}};
+const META={dashboard:{t:'Head Office Dashboard',s:'Loading dashboard from database',a:'',ao:null},company:{t:'Company Registration',s:'UAE Trade License & FTA Details',a:'Save All',ao:()=>toast('All changes saved','ok')},sales:{t:'Sales & Invoices',s:'Upload - AI Extraction - Validation - Invoices',a:'+ New Invoice',ao:()=>{go('sales');setTimeout(()=>stab(document.querySelectorAll('#page-sales .tab')[4],'s-create'),50)}},purchase:{t:'Purchases',s:'Upload - AI Extraction - Validation',a:'Upload Files',ao:()=>document.getElementById('pur-file').click()},bank:{t:'Bank & Payments',s:'Accounts - transactions - receipts - payments - reconciliation',a:'+ Record Payment',ao:()=>openPaymentModal('Customer Receipt')},inventory:{t:'Inventory',s:'Stock - Items - Movements',a:'+ Add Item',ao:()=>openInventoryItemModal()},expense:{t:'Expenses',s:'AI Upload - Create - Approvals - List',a:'+ New Expense',ao:()=>{go('expense');setTimeout(()=>stab(document.querySelectorAll('#page-expense .tab')[1],'exp-create'),50)}},accounting:{t:'Accounting',s:'Chart - Journal - Ledger',a:'+ New Entry',ao:()=>showM('m-acc')},reports:{t:'Reports',s:'VAT - P&L - Trial Balance',a:'Export PDF',ao:()=>toast('Exporting report...','info')},settings:{t:'Settings',s:'General - Users - Tax',a:'Save All',ao:()=>toast('Settings saved','ok')},staff:{t:'Staff Management',s:'Attendance - Leave - Corrections - Biometric',a:'+ Add Employee',ao:()=>showM('m-emp')},expert:{t:'Expert Review',s:'Find CA experts - Submit for review',a:'+ New Request',ao:()=>showM('m-newreview')},design:{t:'System Design',s:'Functional Spec - Fields - Validations - API',a:'Export Spec',ao:()=>toast('Exporting FRD to PDF...','info')}};
 META.settings={t:'Settings',s:'Company - Users - Tax - Security - Integrations - Invoice Design',a:'Save All',ao:()=>toast('Settings saved','ok')};
 META.payroll={t:'Payroll',s:'Salary run - WPS/SIF - Payslips - Posting',a:'Run Payroll',ao:()=>{go('payroll');setTimeout(()=>runPayroll(),50)}};
 META.sales={t:'Sales & Invoices',s:'Upload - AI Extraction - Validation - Invoices',a:'+ New',ao:()=>openSalesAddChoice()};
@@ -2406,6 +2406,10 @@ function applyBranchSwitcherFromWhoami(who){
       nameEl.style.display='none';
     }
   }
+  // Only for a genuine Branch Login/employee session — an admin's own
+  // dashboard title is driven separately by renderBranchPerformance()'s
+  // "View as" toggle, which this whoami-driven call has no visibility into.
+  if(!_isAdminPrincipal())_setDashboardTitle(who?.branch_name||null);
   window.ACCESSIBLE_BRANCHES=Array.isArray(who?.accessible_branches)?who.accessible_branches:[];
   const containers=document.querySelectorAll('[data-branch-switcher]');
   if(window.ACCESSIBLE_BRANCHES.length>1){
@@ -3203,6 +3207,21 @@ function _isAdminPrincipal(){
   try{return !localStorage.getItem('taxflow_principal_kind');}catch{return true;}
 }
 
+// Keeps the Dashboard page header honest about which branch's data is on
+// screen — "Head Office Dashboard" (META.dashboard.t) by default, or
+// "<Branch> Dashboard" whenever a branch is actually the active scope,
+// whether that's a genuine Branch Login/employee session (branchName from
+// /auth/whoami, see applyBranchSwitcherFromWhoami()) or an admin using the
+// "View as" toggle above (see renderBranchPerformance()). Only touches
+// #ptitle while Dashboard is the visible page, so it can't clobber another
+// page's title if a background sync fires after the user navigated away.
+function _setDashboardTitle(branchName){
+  const page=document.getElementById('page-dashboard');
+  if(!page||!page.classList.contains('on'))return;
+  const el=document.getElementById('ptitle');
+  if(el)el.textContent=branchName?`${branchName} Dashboard`:(META.dashboard?.t||'Head Office Dashboard');
+}
+
 function renderBranchPerformance(data){
   const list=document.getElementById('dash-branch-list');
   if(!list)return;
@@ -3221,6 +3240,7 @@ function renderBranchPerformance(data){
   const activeId=window.ACTIVE_BRANCH_ID||null;
   window.__branchPerfNameById=window.__branchPerfNameById||{};
   const activeRow=activeId?rows.find(r=>r.branch_id===activeId):null;
+  if(canViewAs)_setDashboardTitle(activeRow?activeRow.name:null);
   const banner=(canViewAs&&activeRow)?`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:6px 10px;margin-bottom:8px;font-size:11.5px;color:#3730a3">
     <span>Viewing dashboard as <strong>${escapeHtml(activeRow.name||'branch')}</strong></span>
     <button class="btn btn-g btn-sm" style="padding:2px 8px;font-size:11px;flex-shrink:0" onclick="exitBranchDashboardView()">View All Branches</button>
@@ -3264,6 +3284,7 @@ async function viewDashboardAsBranch(branchId){
 async function exitBranchDashboardView(){
   window.ACTIVE_BRANCH_ID=null;
   try{localStorage.removeItem('taxflow_active_branch_id');}catch{}
+  _setDashboardTitle(null);
   toast('Showing all branches','ok');
   if(typeof hydrateFromServer==='function'){try{await hydrateFromServer();}catch(e){console.warn('[exitBranchDashboardView] refresh failed',e);}}
   if(typeof syncDashboardFromDatabase==='function'){try{await syncDashboardFromDatabase();}catch(e){console.warn('[exitBranchDashboardView] dashboard refresh failed',e);}}
