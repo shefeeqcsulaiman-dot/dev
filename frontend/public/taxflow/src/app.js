@@ -18241,9 +18241,10 @@ function renderBranchTable(){
       <td style="color:var(--text3);font-size:12px">${escapeHtml(b.city||'—')}</td>
       <td style="color:var(--text3);font-size:12px">${countryLabel}</td>
       <td><span class="b ${statusCls}">${escapeHtml(b.status)}</span></td>
+      <td style="white-space:nowrap"><button class="icon-btn view" title="View branch" onclick="showBranchModal('${b.id}',true)">${viewIconSvg()}</button><button class="icon-btn edit" title="Edit branch" onclick="showBranchModal('${b.id}')" style="margin-left:4px">${editIconSvg()}</button></td>
     </tr>`;
   };
-  const empty='<tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px">No branches yet. Click + Add Branch.</td></tr>';
+  const empty='<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:24px">No branches yet. Click + Add Branch.</td></tr>';
   const html=_branchList.length?_branchList.map(row).join(''):empty;
   document.querySelectorAll('#branch-tbody').forEach(tb=>{tb.innerHTML=html;});
 }
@@ -18333,10 +18334,16 @@ function getCheckedBranchModules(){
   return [...document.querySelectorAll('#branch-mod-grid .branch-mod-cb:checked')].map(cb=>cb.value);
 }
 
-function showBranchModal(id){
+// viewOnly renders the same modal read-only (fields disabled, Save hidden)
+// instead of a separate view modal — Branches / Locations offers View +
+// Edit per row but Delete was deliberately dropped entirely (not just from
+// the table), so branch-delete-btn always stays hidden here regardless of
+// mode; deleteBranch()/deleteBranchFromModal() are kept for the seeded
+// scripts/history that reference them but are unreachable from this UI.
+function showBranchModal(id,viewOnly){
   const titleEl=document.getElementById('branch-modal-title');
   const b=id?_branchList.find(x=>x.id===id):null;
-  if(titleEl)titleEl.textContent=b?'Edit Branch':'Add Branch';
+  if(titleEl)titleEl.textContent=viewOnly?'View Branch':(b?'Edit Branch':'Add Branch');
   document.getElementById('branch-edit-id').value=id||'';
   document.getElementById('branch-name').value=b?.name||'';
   document.getElementById('branch-code').value=b?.code||'';
@@ -18349,9 +18356,18 @@ function showBranchModal(id){
   const pwHint=document.getElementById('branch-pw-hint');
   if(pwHint)pwHint.textContent=b?.has_password?'(leave blank to keep current password)':'(required to enable branch login)';
   const delBtn=document.getElementById('branch-delete-btn');
-  if(delBtn)delBtn.style.display=id?'':'none';
+  if(delBtn)delBtn.style.display='none';
+  ['branch-name','branch-code','branch-city','branch-status','branch-country','branch-username','branch-password'].forEach(fid=>{
+    const el=document.getElementById(fid);
+    if(el)el.disabled=!!viewOnly;
+  });
+  document.querySelectorAll('#branch-mod-grid input').forEach(cb=>{cb.disabled=!!viewOnly;});
+  const saveBtn=document.getElementById('branch-save-btn');
+  if(saveBtn)saveBtn.style.display=viewOnly?'none':'';
+  const cancelBtn=document.getElementById('branch-cancel-btn');
+  if(cancelBtn)cancelBtn.textContent=viewOnly?'Close':'Cancel';
   showM('m-branch');
-  setTimeout(()=>document.getElementById('branch-name').focus(),120);
+  if(!viewOnly)setTimeout(()=>document.getElementById('branch-name').focus(),120);
 }
 
 async function saveBranchModal(){
