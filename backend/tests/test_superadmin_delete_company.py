@@ -10,9 +10,10 @@ via a live report of exactly that error when deleting a real company."""
 from datetime import UTC, datetime
 
 from app.models import (
-    Account, AttendanceSession, Company, CompanyLocation, Employee,
-    EmployeeLocation, EmployeeLocationLog, GeneralLedgerEntry, JournalEntry,
-    JournalLine, LeaveRequest, Permission, Role, RolePermission, User,
+    Account, AttendanceSession, Branch, Company, CompanyLocation, Employee,
+    EmployeeLocation, EmployeeLocationLog, GeneralLedgerEntry,
+    ImpersonationSession, JournalEntry, JournalLine, LeaveRequest,
+    Permission, Role, RolePermission, User,
 )
 from app.security import hash_password
 
@@ -103,6 +104,37 @@ def test_delete_company_with_hrms_gps_and_rbac_data(client, db):
     assert db.query(CompanyLocation).filter(CompanyLocation.company_id == target.id).count() == 0
     assert db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == target.id).count() == 0
     assert db.query(JournalEntry).filter(JournalEntry.company_id == target.id).count() == 0
+
+
+def test_delete_company_previously_impersonated_as_branch(client, db):
+    """A company that was ever targeted by Super Admin > Impersonate (as
+    either a branch or a company-admin user) left an ImpersonationSession
+    row whose target_branch_id/target_user_id/company_id FK straight into
+    this company's own data — delete_company() never cleaned those up, so
+    any such company could no longer be deleted at all (FK IntegrityError,
+    surfaced as a generic "An internal error occurred"), reproduced live by
+    deleting a company that had just been used to test the branch-
+    impersonation feature."""
+    _login_client_ref["client"] = client
+    target = Company(name="Impersonated Target Co", trn="TARGET-DELETE-IMPERSONATED")
+    db.add(target)
+    db.flush()
+    branch = Branch(company_id=target.id, name="Del Test Branch")
+    db.add(branch)
+    db.commit()
+
+    headers = _make_superadmin(db)
+    imp = client.post(
+        f"/api/v1/superadmin/companies/{target.id}/impersonate",
+        headers=headers, json={"branch_id": branch.id},
+    )
+    assert imp.status_code == 200, imp.text
+    assert db.query(ImpersonationSession).filter(ImpersonationSession.company_id == target.id).count() == 1
+
+    r = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={"password": "test12345"})
+    assert r.status_code == 200, r.text
+    assert db.query(Company).filter(Company.id == target.id).first() is None
+    assert db.query(ImpersonationSession).filter(ImpersonationSession.company_id == target.id).count() == 0
 
 
 def test_delete_company_rejects_wrong_password(client, db):

@@ -612,6 +612,16 @@ def delete_company(
     db.query(Job).filter(Job.company_id == cid).delete(**s)
     db.query(AppDataRecord).filter(AppDataRecord.company_id == cid).delete(**s)
     db.query(ClientError).filter(ClientError.company_id == cid).delete(**s)
+    # ImpersonationSession.target_user_id/target_branch_id FK into this
+    # company's users/branches (always set together with company_id == cid
+    # by impersonate_company() — see superadmin_id there, which belongs to
+    # the SUPERADMIN's own company instead and is unaffected by this
+    # delete). Previously missing entirely, so any company that had ever
+    # been impersonated (Super Admin > Impersonate) could no longer be
+    # deleted at all — surfaced only as a generic "An internal error
+    # occurred" from the FK IntegrityError, same failure shape as the
+    # GPS/RBAC/Leave gaps fixed above.
+    db.query(ImpersonationSession).filter(ImpersonationSession.company_id == cid).delete(**s)
 
     # Role/CompanyLocation can only go now — Employee.role_id and
     # Employee.work_location_id reference them, and Employee is deleted above.
