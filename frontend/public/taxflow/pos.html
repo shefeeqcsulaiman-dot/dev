@@ -1083,6 +1083,26 @@ button{cursor:pointer;border:none;background:none;}
         <label>Supplier / Brand</label>
         <input type="text" id="ap-supplier" placeholder="e.g. Samsung">
       </div>
+      <div>
+        <label>Stock Tracking</label>
+        <select id="ap-tracking" style="width:100%;height:42px;background:var(--sf2);border:1.5px solid var(--bd);border-radius:10px;padding:0 12px;color:var(--t1);font-size:13px;margin-bottom:12px;font-family:var(--fn)">
+          <option value="Yes">Yes</option>
+          <option value="No">No</option>
+          <option value="Optional">Optional</option>
+        </select>
+      </div>
+      <div>
+        <label>Reorder Level</label>
+        <input type="number" id="ap-reorder" placeholder="e.g. 50" min="0" step="1">
+      </div>
+      <div>
+        <label>Status</label>
+        <select id="ap-status" style="width:100%;height:42px;background:var(--sf2);border:1.5px solid var(--bd);border-radius:10px;padding:0 12px;color:var(--t1);font-size:13px;margin-bottom:12px;font-family:var(--fn)">
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
+          <option value="Draft">Draft</option>
+        </select>
+      </div>
     </div>
     <div class="ov-btns" style="margin-top:4px">
       <button class="ov-cancel" onclick="document.getElementById('ov-add-prod').style.display='none'">Cancel</button>
@@ -2445,12 +2465,16 @@ async function saveNewCustomer(){
 
 // ── Add Product ───────────────────────────────────────────────────────
 function openAddProduct(){
-  ['ap-name','ap-code','ap-price','ap-cost','ap-unit','ap-category','ap-supplier'].forEach(id=>{
+  ['ap-name','ap-code','ap-price','ap-cost','ap-unit','ap-category','ap-supplier','ap-reorder'].forEach(id=>{
     const el=document.getElementById(id);
     if(el) el.value= id==='ap-unit'?'PCS':'';
   });
   const vat=document.getElementById('ap-vat');
   if(vat) vat.value='5%';
+  const tracking=document.getElementById('ap-tracking');
+  if(tracking) tracking.value='Yes';
+  const statusEl=document.getElementById('ap-status');
+  if(statusEl) statusEl.value='Active';
   document.getElementById('ov-add-prod').style.display='flex';
   setTimeout(()=>document.getElementById('ap-name')?.focus(),80);
 }
@@ -2462,17 +2486,26 @@ async function saveNewProduct(){
   if(!code){ toast('Product code / SKU is required','err'); return; }
   const price=parseFloat(document.getElementById('ap-price')?.value||'0')||0;
   if(!price){ toast('Selling price must be greater than 0','err'); return; }
+  // Field names/values match saveProd()'s payload exactly (app.js, the
+  // dashboard's own Add Product modal) — both write into the same
+  // AppDataRecord "products" collection, so a product added from either
+  // place needs to look identical everywhere else it's read (Inventory,
+  // Stock Dashboard, invoice/purchase line suggestions). This used to send
+  // selling_price/tracking:'None' instead, which those other screens don't
+  // recognize — Stock Tracking and Status silently never took effect for
+  // any product added from POS.
   const record={
     name, code,
-    selling_price: price,
+    price,
     cost: parseFloat(document.getElementById('ap-cost')?.value||'0')||0,
     vat: document.getElementById('ap-vat')?.value||'5%',
     unit: (document.getElementById('ap-unit')?.value||'PCS').trim(),
     category: (document.getElementById('ap-category')?.value||'').trim(),
     supplier_name: (document.getElementById('ap-supplier')?.value||'').trim(),
     type: 'Product',
-    status: 'Active',
-    tracking: 'None',
+    status: document.getElementById('ap-status')?.value||'Active',
+    tracking: document.getElementById('ap-tracking')?.value||'Yes',
+    reorder_level: parseFloat(document.getElementById('ap-reorder')?.value||'0')||0,
   };
   try{
     const btn=document.querySelector('#ov-add-prod .ov-confirm');
