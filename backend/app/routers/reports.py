@@ -108,7 +108,20 @@ def dashboard(
 @limiter.limit("120/minute")
 def branch_performance(request: Request, db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("reports:view"))) -> dict[str, Any]:
     company_id = principal.company_id
-    return _cached_or_build(f"branch_performance:{company_id}", 60, lambda: _build_branch_performance(db, company_id))
+    data = _cached_or_build(f"branch_performance:{company_id}", 60, lambda: _build_branch_performance(db, company_id))
+    if principal.can_cross_branch("reports"):
+        return data
+    # A Branch Login (or a branch-locked Employee) must only ever see its own
+    # branch's row here, not every other branch's revenue/profit — the
+    # underlying build is cached company-wide (correct, since the data
+    # itself doesn't vary by requester), so this filters the response per
+    # request instead of computing/caching a separate copy per branch.
+    allowed = principal.accessible_branch_ids
+    return {
+        "has_branches": data["has_branches"],
+        "branches": [row for row in data["branches"] if row["branch_id"] in allowed],
+        "unassigned": None,
+    }
 
 
 def _build_dashboard(db: Session, company_id: str, branch_id: str | None = None) -> dict[str, Any]:
