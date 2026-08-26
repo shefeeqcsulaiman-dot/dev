@@ -3095,7 +3095,7 @@ function renderDashboardMeta(data){
   // pick up real text instead of index.html's static "Loading dashboard from
   // database" placeholder, even if this ran while the dashboard page wasn't
   // visible yet and skipped the direct DOM write below.
-  META.dashboard.t=meta.title||'Dashboard';
+  META.dashboard.t=meta.title||'Head Office Dashboard';
   META.dashboard.s=meta.subtitle||'Dashboard loaded from database records';
   const dashboardVisible=document.getElementById('page-dashboard')?.classList.contains('on');
   if(dashboardVisible){
