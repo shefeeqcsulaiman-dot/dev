@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=6d878e0d54" as="style">
-<link rel="preload" href="src/app.js?v=4935af415b" as="script">
+<link rel="preload" href="src/app.js?v=8f8eebc607" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=6d878e0d54">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
@@ -130,7 +130,7 @@
     <button class="btn btn-g back-btn" id="back-btn" type="button" onclick="goBack()" title="Go back" disabled>← Back</button>
     <div class="tb-info">
       <div class="tb-title" id="ptitle">Head Office Dashboard</div>
-      <div id="psub" class="tb-sub">Loading dashboard from database</div>
+      <div id="psub" class="tb-sub"></div>
     </div>
     <div class="tb-right">
       <button class="btn btn-g hidden" id="extract-top-badge" onclick="go('purchase')" title="AI extraction in progress" style="background:rgba(108,92,231,.12);border-color:rgba(108,92,231,.3);color:var(--primary)">⟳ Extracting <span id="extract-top-count">0</span></button>
@@ -5604,6 +5604,6 @@ period_locks ─&lt; audit_logs
 </div>
 
 <script src="config.js"></script>
-<script src="src/app.js?v=4935af415b" defer></script>
+<script src="src/app.js?v=8f8eebc607" defer></script>
 </body>
 </html>
