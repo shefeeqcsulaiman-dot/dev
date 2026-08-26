@@ -66,7 +66,7 @@ class PunchIn(BaseModel):
 
 class DeviceCreate(BaseModel):
     name: str
-    device_type: str = "ZKTeco F Series"  # ZKTeco F/K/iClock/SpeedFace/ProFace/G/UA/IN/MB Series | ZKTeco ADMS | Suprema | Hikvision | Anviz | ZKTeco BioTime Server | Manual
+    device_type: str = "ZKTeco F Series"  # ZKTeco F/K/iClock/SpeedFace/ProFace/G/UA/IN/MB Series | ZKTeco ADMS | ZKTeco ADMS Classic | Suprema | Hikvision | Anviz | ZKTeco BioTime Server | Manual
     ip_address: str | None = None
     port: int = 4370
     location: str | None = None
@@ -74,6 +74,10 @@ class DeviceCreate(BaseModel):
     biotime_base_url: str | None = None
     biotime_username: str | None = None
     biotime_password: str | None = None
+    # ZKTeco ADMS Classic only (device_type == "ZKTeco ADMS Classic") — the
+    # device's own hardware serial number, since real ADMS identifies itself
+    # this way instead of a bearer key (see iclock_router below).
+    serial_number: str | None = None
 
 
 class DeviceOut(BaseModel):
@@ -87,6 +91,7 @@ class DeviceOut(BaseModel):
     last_sync: str | None
     biotime_base_url: str | None = None
     biotime_username: str | None = None
+    serial_number: str | None = None
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -202,6 +207,7 @@ def list_devices(
         last_sync=d.last_sync.isoformat() if d.last_sync else None,
         biotime_base_url=d.biotime_base_url,
         biotime_username=d.biotime_username,
+        serial_number=d.serial_number,
     ) for d in devices]
 
 
@@ -234,6 +240,38 @@ def add_device(
             "name": device.name,
             "device_type": device.device_type,
             "message": "BioTime connection saved. Click Sync Now to pull attendance, or wait for the next automatic sync (every 5 minutes).",
+        }
+
+    # ZKTeco ADMS Classic: identified by hardware serial number, not a
+    # bearer key — the device's own menu only has a Server IP + Port field,
+    # nothing to paste a generated key into.
+    if body.device_type in _ADMS_CLASSIC_TYPES:
+        serial = (body.serial_number or "").strip()
+        if not serial:
+            raise HTTPException(400, "Device serial number is required for ZKTeco ADMS Classic")
+        existing = db.query(BiometricDevice).filter(
+            BiometricDevice.serial_number == serial,
+            BiometricDevice.status == "active",
+        ).first()
+        if existing:
+            raise HTTPException(409, "A device with this serial number is already registered")
+        device = BiometricDevice(
+            company_id=current_user.company_id,
+            name=body.name,
+            device_type=body.device_type,
+            serial_number=serial,
+            location=body.location,
+            status="active",
+        )
+        db.add(device)
+        db.commit()
+        db.refresh(device)
+        return {
+            "id": device.id,
+            "name": device.name,
+            "device_type": device.device_type,
+            "serial_number": device.serial_number,
+            "message": "Device registered. On the device's own menu, set Server IP/Port to point at this server — no API key needed, the device identifies itself by its serial number.",
         }
 
     raw_key = secrets.token_urlsafe(32)
@@ -283,6 +321,9 @@ _TCP_TYPES = {
 }
 _PUSH_TYPES = {"Suprema", "Hikvision", "ZKTeco ADMS"}
 _BIOTIME_TYPES = {"ZKTeco BioTime Server"}
+# Real ZKTeco ADMS Cloud Server Mode — identified by hardware serial number
+# via the iclock_router routes below, not the bearer-key flow _PUSH_TYPES uses.
+_ADMS_CLASSIC_TYPES = {"ZKTeco ADMS Classic"}
 
 
 @gated_router.post("/devices/{device_id}/test")
@@ -318,7 +359,7 @@ def test_device(
         return {"ok": True, "message": f"Connected — {len(terminals)} terminal(s) on this BioTime server: {names}{more}"}
 
     # ── HTTP Push / ADMS devices: they call us, we can't call them ────────────
-    if device.device_type in _PUSH_TYPES:
+    if device.device_type in _PUSH_TYPES or device.device_type in _ADMS_CLASSIC_TYPES:
         week_ago = now - timedelta(days=7)
         recent = db.query(func.count(AttendancePunch.id)).filter(
             AttendancePunch.device_id == device.id,
@@ -476,6 +517,81 @@ async def _parse_punch_body(request: Request) -> dict[str, Any]:
     )
 
 
+def _ingest_device_punch(
+    db: Session,
+    company_id: str,
+    device_id: str | None,
+    device_name: str,
+    employee_id: str,
+    punch_time: datetime,
+    direction: str = "unknown",
+    employee_name: str | None = None,
+    source: str = "device",
+) -> dict[str, Any]:
+    """Shared punch-insert core used by both the single-punch webhook path
+    (_record_punch, below) and the ADMS-classic batch upload handler
+    (adms_upload) — one dedupe/idempotency/insert implementation instead of
+    two. Returns {"ok": False, "error": "future"|"too_old"} for a rejected
+    punch rather than raising, since a batch upload must skip one bad line
+    and keep processing the rest instead of failing the whole request."""
+    now = datetime.now(UTC)
+    if punch_time > now + timedelta(minutes=5):
+        return {"ok": False, "error": "future"}
+    # Reject punches older than 90 days (prevents replay / mass backdating
+    # attacks) — only for device-sourced punches, same as the original check.
+    if device_id and punch_time < now - timedelta(days=90):
+        return {"ok": False, "error": "too_old"}
+
+    offset = _company_offset(db, company_id)
+    punch_date = _local_date(punch_time, offset)
+    employee_id = employee_id.strip()
+
+    # Idempotency guard: a bridge restart replays its whole in-memory backlog
+    # (last-synced marker is best-effort), so the same device punch can arrive
+    # more than once. Treat an identical (device, employee, timestamp) as the
+    # same punch instead of inserting a duplicate row.
+    if device_id:
+        existing = db.query(AttendancePunch).filter(
+            AttendancePunch.company_id == company_id,
+            AttendancePunch.employee_id == employee_id,
+            AttendancePunch.punch_time == punch_time,
+            AttendancePunch.device_id == device_id,
+        ).first()
+        if existing:
+            return {"ok": True, "id": existing.id, "duplicate": True}
+
+    punch = AttendancePunch(
+        company_id=company_id,
+        employee_id=employee_id,
+        employee_name=employee_name,
+        punch_time=punch_time,
+        punch_date=punch_date,
+        direction=direction,
+        device_id=device_id,
+        device_name=device_name,
+        source=source,
+    )
+    db.add(punch)
+    try:
+        db.commit()
+    except IntegrityError:
+        # The SELECT-based check above raced with another concurrent
+        # request for the identical punch and lost — uq_attendance_punch_dedup
+        # (models.py) caught what the app-level check couldn't. Same
+        # idempotent response as the check above, not an error.
+        db.rollback()
+        existing = db.query(AttendancePunch).filter(
+            AttendancePunch.company_id == company_id,
+            AttendancePunch.employee_id == employee_id,
+            AttendancePunch.punch_time == punch_time,
+            AttendancePunch.device_id == device_id,
+        ).first()
+        if existing:
+            return {"ok": True, "id": existing.id, "duplicate": True}
+        raise
+    return {"ok": True, "id": punch.id}
+
+
 async def _record_punch(request: Request, db: Session, current_user: User | None, device_key: str | None) -> dict[str, Any]:
     if current_user:
         company_id = current_user.company_id
@@ -498,62 +614,16 @@ async def _record_punch(request: Request, db: Session, current_user: User | None
     offset = _company_offset(db, company_id)
     punch_time = _parse_time(body.punch_time, offset)
 
-    # Reject punches more than 5 minutes in the future (prevents date manipulation)
-    now = datetime.now(UTC)
-    if punch_time > now + timedelta(minutes=5):
-        raise HTTPException(status_code=422, detail="Punch time is in the future")
-
-    # Reject punches older than 90 days (prevents replay / mass backdating attacks)
-    if device_key and punch_time < now - timedelta(days=90):
-        raise HTTPException(status_code=422, detail="Punch time is too old (>90 days)")
-
-    punch_date = _local_date(punch_time, offset)
-    employee_id = body.employee_id.strip()
-
-    # Idempotency guard: a bridge restart replays its whole in-memory backlog
-    # (last-synced marker is best-effort), so the same device punch can arrive
-    # more than once. Treat an identical (device, employee, timestamp) as the
-    # same punch instead of inserting a duplicate row.
-    if device_id:
-        existing = db.query(AttendancePunch).filter(
-            AttendancePunch.company_id == company_id,
-            AttendancePunch.employee_id == employee_id,
-            AttendancePunch.punch_time == punch_time,
-            AttendancePunch.device_id == device_id,
-        ).first()
-        if existing:
-            return {"ok": True, "id": existing.id, "duplicate": True}
-
-    punch = AttendancePunch(
-        company_id=company_id,
-        employee_id=employee_id,
-        employee_name=body.employee_name,
-        punch_time=punch_time,
-        punch_date=punch_date,
-        direction=body.direction,
-        device_id=device_id,
-        device_name=device_name,
+    result = _ingest_device_punch(
+        db, company_id, device_id, device_name,
+        body.employee_id, punch_time, body.direction, body.employee_name,
         source="device" if device_key else "manual",
     )
-    db.add(punch)
-    try:
-        db.commit()
-    except IntegrityError:
-        # The SELECT-based check above raced with another concurrent
-        # request for the identical punch and lost — uq_attendance_punch_dedup
-        # (models.py) caught what the app-level check couldn't. Same
-        # idempotent response as the check above, not an error.
-        db.rollback()
-        existing = db.query(AttendancePunch).filter(
-            AttendancePunch.company_id == company_id,
-            AttendancePunch.employee_id == employee_id,
-            AttendancePunch.punch_time == punch_time,
-            AttendancePunch.device_id == device_id,
-        ).first()
-        if existing:
-            return {"ok": True, "id": existing.id, "duplicate": True}
-        raise
-    return {"ok": True, "id": punch.id}
+    if result.get("error") == "future":
+        raise HTTPException(status_code=422, detail="Punch time is in the future")
+    if result.get("error") == "too_old":
+        raise HTTPException(status_code=422, detail="Punch time is too old (>90 days)")
+    return result
 
 
 @router.post("/punch", status_code=201)
@@ -612,6 +682,130 @@ short_router.add_api_route(
     "/adms/{path_device_key}", record_punch_key_in_path, methods=["POST"], status_code=201,
     summary="Short descriptive alias, device key in the URL path",
 )
+
+
+# ── ZKTeco ADMS Classic (real iClock wire protocol) ─────────────────────────
+#
+# Everything above (record_punch/adms aliases) is a webhook-style endpoint:
+# it accepts JSON/form/query bodies at whatever URL the device's own "custom
+# server" field is pointed at, authenticated by a bearer-style device key.
+# That only works for devices whose firmware actually lets you type a custom
+# URL and a key/header. A device limited to genuine ZKTeco "ADMS Cloud
+# Server Mode" instead has just a fixed Server IP + Port field — no
+# custom path, no header, no key. Its firmware hardcodes three request
+# shapes it will always make to whatever host:port you give it:
+#   GET  /iclock/cdata?SN=<serial>&...      (handshake / option negotiation)
+#   POST /iclock/cdata?SN=<serial>&table=ATTLOG   (tab-separated punch batch)
+#   GET  /iclock/getrequest?SN=<serial>     (poll for pending remote commands)
+# identified by the device's own hardware serial number, not a key — so
+# this needs its own router mounted at the true server root (main.py),
+# not under /api/v1 like everything else, since the device can't be told
+# to use any other path.
+iclock_router = APIRouter(tags=["attendance"])
+
+
+def _get_device_by_serial(db: Session, serial_number: str) -> BiometricDevice:
+    device = db.query(BiometricDevice).filter(
+        BiometricDevice.serial_number == serial_number,
+        BiometricDevice.status == "active",
+    ).first()
+    if not device:
+        # Deliberately not auto-registering an unknown serial — same
+        # provision-before-connect model as the device-key flow (add_device()
+        # above), where an admin must add the device (and here, type in its
+        # serial number) before it's allowed to push anything.
+        raise HTTPException(status_code=404, detail="Unknown device serial number — add this device in Biometric Integration first")
+    return device
+
+
+@iclock_router.get("/iclock/cdata")
+@limiter.limit("60/minute")
+def adms_classic_handshake(
+    request: Request,
+    SN: str = Query(...),
+    db: Session = Depends(get_db),
+) -> PlainTextResponse:
+    """Handshake the device makes on startup/reconnect before it starts
+    POSTing data. Real firmware mostly just needs a 200 with this key=value
+    shape to consider the server reachable and move on to uploading —
+    exact tuning of these values (poll delay etc.) may need adjusting
+    against real hardware; kept deliberately conservative here."""
+    device = _get_device_by_serial(db, SN)
+    device.last_sync = datetime.now(UTC)
+    db.commit()
+    lines = [
+        f"GET OPTION FROM: {SN}",
+        "Stamp=9999",
+        "OpStamp=9999",
+        "ErrorDelay=30",
+        "Delay=30",
+        "TransFlag=1111000000",
+        "Realtime=1",
+        "Encrypt=None",
+    ]
+    return PlainTextResponse("\n".join(lines) + "\n")
+
+
+@iclock_router.post("/iclock/cdata")
+@limiter.limit("60/minute")
+async def adms_classic_upload(
+    request: Request,
+    SN: str = Query(...),
+    table: str = Query(default="ATTLOG"),
+    db: Session = Depends(get_db),
+) -> PlainTextResponse:
+    """Batch punch upload. Real ADMS ATTLOG bodies are one punch per line,
+    tab-separated: <UserID>\\t<Timestamp>\\t<Status>\\t<VerifyMode>\\t...
+    (Status 1 = check-out, anything else treated as check-in — firmware
+    varies on this, it's a best-effort mapping). Bad/unparseable lines are
+    skipped rather than failing the whole batch, since one malformed line
+    from a device shouldn't drop the rest of its backlog."""
+    device = _get_device_by_serial(db, SN)
+    if table.upper() != "ATTLOG":
+        # OPERLOG (enrollment/user-management data) or other tables — nothing
+        # for us to ingest, just acknowledge so the device doesn't retry forever.
+        return PlainTextResponse("OK")
+
+    raw = (await request.body()).decode("utf-8", errors="ignore")
+    offset = _company_offset(db, device.company_id)
+    count = 0
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        user_id, ts_raw = parts[0].strip(), parts[1].strip()
+        status_code = parts[2].strip() if len(parts) > 2 else ""
+        if not user_id or not ts_raw:
+            continue
+        direction = "out" if status_code == "1" else "in"
+        punch_time = _parse_time(ts_raw, offset)
+        result = _ingest_device_punch(
+            db, device.company_id, device.id, device.name,
+            user_id, punch_time, direction, source="device",
+        )
+        if result.get("ok"):
+            count += 1
+
+    device.last_sync = datetime.now(UTC)
+    db.commit()
+    return PlainTextResponse(f"OK: {count}")
+
+
+@iclock_router.get("/iclock/getrequest")
+@limiter.limit("60/minute")
+def adms_classic_get_request(
+    request: Request,
+    SN: str = Query(...),
+    db: Session = Depends(get_db),
+) -> PlainTextResponse:
+    """Device polls this for pending remote commands (e.g. reboot, sync
+    time). We never queue any, so always acknowledge empty — the device
+    just moves on and tries again on its own schedule."""
+    _get_device_by_serial(db, SN)
+    return PlainTextResponse("OK")
 
 
 # ── CSV Import ────────────────────────────────────────────────────────────────

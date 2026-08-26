@@ -20278,12 +20278,15 @@ async function loadBiometricDevices(){
       const statusCls=d.status==='active'?'b-g':'b-r';
       const lastSync=d.last_sync?new Date(d.last_sync).toLocaleString('en-AE'):'Never';
       const isBioTime=BIO_BIOTIME_TYPES.has(d.device_type);
+      const isAdmsClassic=BIO_ADMS_CLASSIC_TYPES.has(d.device_type);
       const addrCol=isBioTime
         ?`<td class="mono" colspan="2" style="font-size:11px">${escapeHtml((d.biotime_base_url||'—').replace(/^https?:\/\//,''))}</td>`
+        :isAdmsClassic
+        ?`<td class="mono" colspan="2" style="font-size:11px">SN: ${escapeHtml(d.serial_number||'—')}</td>`
         :`<td class="mono">${escapeHtml(d.ip_address||'—')}</td><td class="mono">${d.port||'—'}</td>`;
       const actionsCol=isBioTime
         ?`<button class="btn btn-p btn-sm" onclick="syncBiometricDeviceNow('${escapeHtml(d.id)}',this)">Sync Now</button><button class="btn btn-g btn-sm" onclick="testBiometricDevice('${escapeHtml(d.id)}',this)">Test</button>`
-        :`<button class="btn btn-p btn-sm" onclick="showBioGuide(null,'${escapeHtml(d.device_type)}','${escapeHtml(d.ip_address||'')}',${d.port||4370})">Guide</button><button class="btn btn-g btn-sm" onclick="testBiometricDevice('${escapeHtml(d.id)}',this)">Test</button>`;
+        :`<button class="btn btn-p btn-sm" onclick="showBioGuide(null,'${escapeHtml(d.device_type)}','${escapeHtml(d.ip_address||'')}',${d.port||4370},'${escapeHtml(d.serial_number||'')}')">Guide</button><button class="btn btn-g btn-sm" onclick="testBiometricDevice('${escapeHtml(d.id)}',this)">Test</button>`;
       tr.innerHTML=`<td>${escapeHtml(d.name)}</td><td><span class="b b-b" style="font-size:10px">${escapeHtml(d.device_type)}</span></td>${addrCol}<td>${escapeHtml(d.location||'—')}</td><td><span class="b ${statusCls}">${escapeHtml(d.status)}</span></td><td class="mono" style="font-size:11px">${lastSync}</td><td><div class="flx">${actionsCol}<button class="btn btn-danger btn-sm" onclick="deleteBiometricDevice('${escapeHtml(d.id)}',this)">Remove</button></div></td>`;
       tbody.appendChild(tr);
     });
@@ -20332,16 +20335,22 @@ async function loadBioSyncLog(){
 const BIO_TCP_TYPES=new Set(['ZKTeco F Series','ZKTeco K Series','ZKTeco iClock','ZKTeco X Face Pro','ZKTeco SpeedFace','ZKTeco ProFace','ZKTeco G Series','ZKTeco UA Series','ZKTeco IN Series','ZKTeco MB Series','ZKTeco','Anviz']);
 const BIO_PUSH_TYPES=new Set(['ZKTeco ADMS','Suprema','Hikvision']);
 const BIO_BIOTIME_TYPES=new Set(['ZKTeco BioTime Server']);
+// Real ZKTeco ADMS Cloud Server Mode — a device whose own menu has only a
+// fixed Server IP + Port field (no custom URL/header, unlike BIO_PUSH_TYPES
+// above), identified by hardware serial number instead of a device key.
+const BIO_ADMS_CLASSIC_TYPES=new Set(['ZKTeco ADMS Classic']);
 
 function onBioDevTypeChange(val){
   const hint=document.getElementById('bio-dev-mode-hint');
   const netRow=document.getElementById('bio-dev-net-row');
   const biotimeRow=document.getElementById('bio-dev-biotime-row');
+  const serialRow=document.getElementById('bio-dev-serial-row');
   const portEl=document.getElementById('bio-dev-port');
   const saveBtn=document.getElementById('bio-dev-save-btn');
   if(!hint)return;
   if(biotimeRow)biotimeRow.style.display=BIO_BIOTIME_TYPES.has(val)?'':'none';
-  if(saveBtn)saveBtn.textContent=BIO_BIOTIME_TYPES.has(val)?'Connect BioTime Server':'Add Device & Get Device Key';
+  if(serialRow)serialRow.style.display=BIO_ADMS_CLASSIC_TYPES.has(val)?'':'none';
+  if(saveBtn)saveBtn.textContent=BIO_BIOTIME_TYPES.has(val)?'Connect BioTime Server':(BIO_ADMS_CLASSIC_TYPES.has(val)?'Add Device':'Add Device & Get Device Key');
   if(val==='Manual'){
     hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--bg2);color:var(--text3)';
     hint.innerHTML='<strong>Mode: Manual / CSV</strong> — No device connection needed. Use the <em>Import CSV</em> button to upload attendance records.';
@@ -20349,6 +20358,10 @@ function onBioDevTypeChange(val){
   } else if(val==='ZKTeco ADMS'){
     hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--amber-bg);color:var(--amber)';
     hint.innerHTML='<strong>Mode: ADMS Cloud Push</strong> — On the device panel, set: <em>ADMS Server → this server\'s URL</em>. The device pushes punches automatically. No bridge script needed.';
+    if(netRow)netRow.style.display='none';
+  } else if(BIO_ADMS_CLASSIC_TYPES.has(val)){
+    hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--amber-bg);color:var(--amber)';
+    hint.innerHTML='<strong>Mode: ADMS Classic (Cloud Server)</strong> — For devices whose own menu only has a Server IP + Port field, nothing configurable. No key needed — the device identifies itself by its own serial number, entered below. No bridge script needed.';
     if(netRow)netRow.style.display='none';
   } else if(BIO_BIOTIME_TYPES.has(val)){
     hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--blue-bg);color:var(--blue)';
@@ -20498,8 +20511,10 @@ function _copyFallback(text,label='Device Key'){
 
 let _bioGuideModes=null;
 
-function _buildBioGuideModes(apiKey, type, ip, port){
+function _buildBioGuideModes(apiKey, type, ip, port, serialNumber){
   const baseUrl=(window.TAXFLOW_API_BASE_URL||'https://app.etaxflow.com').replace(/\/$/,'');
+  const baseHost=baseUrl.replace(/^https?:\/\//,'');
+  const serialDisplay=serialNumber||'YOUR_DEVICE_SERIAL';
   const admsEndpoint='/api/v1/adms';
   const punchUrl=`${baseUrl}${admsEndpoint}`;
   const punchUrlWithKeyInPath=`${punchUrl}/${apiKey||'YOUR_DEVICE_KEY'}`;
@@ -20626,7 +20641,40 @@ function _buildBioGuideModes(apiKey, type, ip, port){
     ]
   };
 
-  return {push,tcp,manual};
+  const admsClassic={
+    label:'ADMS Classic',
+    tag:'No bridge script, no key — for devices with a Server IP + Port field only',
+    diagram:_bioDiagramPush('Your device'),
+    steps:[
+      {icon:I.badge, title:'No Device Key Needed', color:'var(--accent)',
+       body:`This device type identifies itself by its own hardware serial number instead of a key. You already entered it when adding the device: <code style="word-break:break-all">${escapeHtml(serialDisplay)}</code>. Find it on the device itself if you need to double check — usually <code>Menu → System Info → Device Info</code> (wording varies by model).`},
+      {icon:I.monitor, title:'Open Comm → Cloud Server Setting on the Device', color:'var(--accent)',
+       body:`On the device's own screen/menu (not a web browser — this device type has no admin webpage), find its Cloud Server / ADMS setting — commonly <code>Menu → Comm → Cloud Server Setting</code>. Unlike the HTTP/ADMS Push tab, there is usually no field for a custom path, header, or key here — just Server Address and Port.`},
+      {icon:I.form, title:'Enter Server Address and Port', color:'var(--accent)',
+       body:`<table style="font-size:11px;border-collapse:collapse;width:100%;margin-top:4px">
+        <tr style="background:rgba(99,102,241,.07)">
+          <td style="padding:5px 10px 5px 8px;color:var(--text3);white-space:nowrap;font-weight:600;width:110px">Server Address</td>
+          <td style="padding:5px 8px"><code>${escapeHtml(baseHost)}</code></td>
+          <td style="padding:5px 8px 5px 0;width:52px"><button onclick="_bioCopy('${baseHost.replace(/'/g,"\\'")}',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer;white-space:nowrap">Copy</button></td>
+        </tr>
+        <tr>
+          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Port</td>
+          <td style="padding:5px 8px"><code>443</code></td>
+          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('443',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
+        </tr>
+       </table>
+       <div style="margin-top:8px;padding:7px 10px;background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)">
+        <strong>Important:</strong> this server only accepts HTTPS. Many older ADMS-only terminals only speak plain HTTP and cannot reach an HTTPS-only host at all — if the device has an "Enable SSL/TLS" toggle next to this setting, turn it on. If it doesn't have one, this device's firmware likely can't push here directly regardless of what's entered — use the <em>TCP/IP Pull</em> tab (bridge script) instead.
+       </div>`},
+      {icon:I.badge, title:'Enroll Employees With Matching IDs', color:'var(--amber)',
+       body:`<strong>This step is required, not optional</strong> — TaxFlow has no separate "biometric ID" field. It matches a punch to an employee by comparing the device's own <strong>User ID</strong> to that employee's <strong>Employee ID</strong> in TaxFlow (Staff → Employees), as plain text.<br><br>
+       When enrolling each employee's fingerprint/face on the device, set the device's <em>User ID</em> field to their exact TaxFlow Employee ID — not their name, not a number the device assigns automatically. If it doesn't match exactly, the punch still reaches TaxFlow but won't attach to that employee anywhere (Present Today, payslips, attendance reports).`},
+      {icon:I.check, title:'Test — Punch In &amp; Check Sync Log', color:'#10b981',
+       body:'Scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within a few seconds. If it doesn\'t appear at all, double-check the Server Address/Port on the device and whether it needs SSL enabled — or if it appears but isn\'t linked to the right employee, re-check the enrolled User ID against the previous step.'},
+    ]
+  };
+
+  return {push,tcp,manual,admsClassic};
 }
 
 function _renderBioGuideSteps(steps){
@@ -20644,9 +20692,10 @@ function _renderBioGuideSteps(steps){
     </div>`).join('');
 }
 
-const BIO_MODE_ORDER=['push','tcp','manual'];
+const BIO_MODE_ORDER=['push','admsClassic','tcp','manual'];
 const _BIO_MODE_HINT={
   push:'Easiest — device sends punches to TaxFlow directly',
+  admsClassic:'For a Server IP + Port only field — no URL/key to type',
   tcp:'Needs a script running on an office PC',
   manual:'No live connection — export/import only',
 };
@@ -20671,7 +20720,7 @@ function switchBioGuideMode(mode){
   });
 }
 
-function showBioGuide(apiKey, type, ip, port){
+function showBioGuide(apiKey, type, ip, port, serialNumber){
   const keyEl=document.getElementById('bio-key-val');
   const keyRow=document.getElementById('bio-guide-key-row');
   const keyAvail=document.getElementById('bio-key-available');
@@ -20679,15 +20728,19 @@ function showBioGuide(apiKey, type, ip, port){
   const keyDisplay_el=document.getElementById('bio-key-val-display');
   const tabsEl=document.getElementById('bio-guide-tabs');
 
+  const isAdmsClassic=BIO_ADMS_CLASSIC_TYPES.has(type);
   if(keyEl) keyEl.value=apiKey||'';
   if(keyDisplay_el) keyDisplay_el.textContent=apiKey||'';
-  if(keyRow) keyRow.style.display='';
+  // ADMS Classic never has a device key at all (identified by serial number
+  // instead) — showing the "key not available, re-add the device" box would
+  // be actively wrong for it, not just empty.
+  if(keyRow) keyRow.style.display=isAdmsClassic?'none':'';
   if(keyAvail) keyAvail.style.display=apiKey?'':'none';
   if(keyMissing) keyMissing.style.display=apiKey?'none':'';
 
-  const modes=_buildBioGuideModes(apiKey,type,ip,port);
-  const recommended=type==='Manual'?'manual':(BIO_TCP_TYPES.has(type)?'tcp':'push');
-  const defaultTab=type==='Manual'?'manual':'push';
+  const modes=_buildBioGuideModes(apiKey,type,ip,port,serialNumber);
+  const recommended=type==='Manual'?'manual':(isAdmsClassic?'admsClassic':(BIO_TCP_TYPES.has(type)?'tcp':'push'));
+  const defaultTab=type==='Manual'?'manual':(isAdmsClassic?'admsClassic':'push');
   _bioGuideModes={modes,recommended};
 
   if(tabsEl){
@@ -20731,6 +20784,18 @@ async function saveBiometricDevice(){
       ['bio-dev-name','bio-dev-location','bio-dev-biotime-url','bio-dev-biotime-user','bio-dev-biotime-pass'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
       await loadBiometricDevices();
     }catch(e){toast('Failed to connect BioTime server: '+e,'warn');}
+    return;
+  }
+
+  if(BIO_ADMS_CLASSIC_TYPES.has(type)){
+    const serial=(document.getElementById('bio-dev-serial')?.value||'').trim();
+    if(!serial){toast('Device serial number is required','warn');return;}
+    try{
+      const res=await moduleApi('/attendance/devices',{method:'POST',body:{name,device_type:type,serial_number:serial,location:loc||null}});
+      closeM('m-bio-device');
+      ['bio-dev-name','bio-dev-serial','bio-dev-location'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+      showBioGuide(null,type,null,null,res.serial_number||serial);
+    }catch(e){toast('Failed to add device: '+e,'warn');}
     return;
   }
 

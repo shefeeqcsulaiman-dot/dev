@@ -1045,6 +1045,13 @@ class BiometricDevice(Base, TimestampMixin):
     port: Mapped[int] = mapped_column(Integer, default=4370)
     location: Mapped[str | None] = mapped_column(String(120))
     api_key_hash: Mapped[str | None] = mapped_column(String(255))
+    # ZKTeco ADMS Classic only (device_type == "ZKTeco ADMS Classic") — real
+    # ADMS Cloud Server Mode identifies a device by its own hardware serial
+    # number (see iclock_router, attendance.py), not a bearer key, since the
+    # device's own menu has no field to paste one into. NULL for every other
+    # device type. No hard uniqueness constraint — add_device() already
+    # checks for a duplicate serial at the app layer before creating one.
+    serial_number: Mapped[str | None] = mapped_column(String(40), index=True)
     status: Mapped[str] = mapped_column(String(30), default="active")
     last_sync: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

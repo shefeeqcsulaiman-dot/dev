@@ -2,7 +2,9 @@
 
 This is the authoritative reference for how TaxFlow gets attendance punches out of a customer's biometric hardware and into `AttendancePunch`. `docs/architecture.md` §15.1 links here rather than duplicating this detail.
 
-Four connection methods are **shipped and live**; a fifth — a **TaxFlow Biometric Agent** — is being added alongside them, additive, nothing replaced. Its first mode (Agent → local BioTime) is **shipped as a v1 script** (`backend/biotime_agent.py`); its second mode (Agent → direct device) and all of the requested operational polish (Windows service packaging, auto-update, remote diagnostics, LAN discovery) are still **proposed, not yet built**. The Agent gives customers who can't expose a device or a BioTime server to the internet a way in, using the same downstream pipeline every other method already uses.
+Five connection methods are **shipped and live**; a sixth — a **TaxFlow Biometric Agent** — is being added alongside them, additive, nothing replaced. Its first mode (Agent → local BioTime) is **shipped as a v1 script** (`backend/biotime_agent.py`); its second mode (Agent → direct device) and all of the requested operational polish (Windows service packaging, auto-update, remote diagnostics, LAN discovery) are still **proposed, not yet built**. The Agent gives customers who can't expose a device or a BioTime server to the internet a way in, using the same downstream pipeline every other method already uses.
+
+**ADMS vs. ADMS Classic** — "ADMS / HTTP Push" (shipped earlier) is a generic webhook: it works for any device firmware that lets you type an arbitrary server URL plus a custom header or key. **ADMS Classic** (added 2026-08-26) is the *other* case: a device whose own menu has only a fixed Server IP + Port field — the real ZKTeco "ADMS Cloud Server Mode" wire protocol (`GET/POST /iclock/cdata?SN=...`, `GET /iclock/getrequest?SN=...`), identified by hardware serial number instead of a bearer key. These routes are mounted at the true server root (`app.include_router(attendance.iclock_router)`, no `/api/v1` prefix) since the device's firmware hardcodes that exact path and can't be pointed anywhere else. See `attendance.py`'s `iclock_router`, `_get_device_by_serial()`, and `_ingest_device_punch()` (the dedupe/insert core shared with the regular webhook path). Known limitation: many ADMS-Classic-only terminals speak plain HTTP, not HTTPS/TLS — a device without an SSL toggle on that menu screen cannot reach a TLS-only host like `app.etaxflow.com` regardless of what's configured; those customers still need `zk_bridge.py`.
 
 ## 1. Connection Methods
 
@@ -36,7 +38,8 @@ devices    Hikvision    server       the customer's BioTime
 | Method | Status | Direction | Best for |
 | --- | --- | --- | --- |
 | `zk_bridge.py` → TaxFlow | **Shipped** | On-prem script polls the device, pushes punches to us via API key | Existing direct-TCP/IP ZKTeco/Anviz customers |
-| ZKTeco ADMS / HTTP Push | **Shipped** | Device calls us directly | Devices with native cloud-push support |
+| ZKTeco ADMS / HTTP Push | **Shipped** | Device calls us directly (custom URL + key/header) | Devices with configurable cloud-push support |
+| ZKTeco ADMS Classic | **Shipped** | Device calls `/iclock/cdata` directly (fixed Server IP + Port, serial-number identity, no key) | Devices whose menu offers only a Server IP + Port field |
 | BioTime Server (pull) | **Shipped** | We call the customer's BioTime server | Customers already running BioTime 9.5, reachable from the internet |
 | Manual / CSV | **Shipped** | File import, no live connection | Backup, or hardware none of the above cover |
 | **TaxFlow Agent — Mode 2** (`backend/biotime_agent.py`) | **Shipped (v1 script)** | Runs on the customer's LAN, pulls from a LAN-local BioTime server, pushes to us | Customers with a BioTime server that **cannot** be exposed to the internet |

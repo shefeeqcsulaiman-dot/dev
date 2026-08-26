@@ -365,6 +365,11 @@ def create_app() -> FastAPI:
     app.include_router(attendance.router, prefix="/api/v1")
     app.include_router(attendance.gated_router, prefix="/api/v1")
     app.include_router(attendance.short_router, prefix="/api/v1")
+    # No /api/v1 prefix, deliberately — a real ZKTeco ADMS Cloud Server Mode
+    # device hardcodes /iclock/cdata and /iclock/getrequest at the server
+    # root (only Server IP + Port are configurable on the device itself, no
+    # custom path), so these routes must live exactly there.
+    app.include_router(attendance.iclock_router)
     app.include_router(ai.router, prefix="/api/v1")
     app.include_router(hr_ai.router, prefix="/api/v1")
     app.include_router(invoice_share.router, prefix="/api/v1")
@@ -547,10 +552,22 @@ def ensure_schema_updates() -> None:
                 "biotime_password_enc": "TEXT",
                 "biotime_token": "TEXT",
                 "biotime_token_expires_at": "TIMESTAMP WITH TIME ZONE",
+                # ZKTeco ADMS Classic (real iClock wire protocol) identifies a
+                # device by its own hardware serial number, not a bearer key.
+                "serial_number": "VARCHAR(40)",
             }
             for column_name, column_type in required_columns.items():
                 if column_name not in existing_columns:
                     connection.execute(text(f"ALTER TABLE biometric_devices ADD COLUMN {column_name} {column_type}"))
+            # Unconditional CREATE INDEX IF NOT EXISTS (not gated on the
+            # column having just been added) — same idempotent-every-startup
+            # pattern as uq_attendance_punch_dedup above; gating it on
+            # existing_columns would silently skip creating the index forever
+            # on any deploy where the column already existed from a prior run.
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_biometric_devices_serial_number "
+                "ON biometric_devices (serial_number)"
+            ))
         if "stock_product_mappings" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("stock_product_mappings")}
             required_columns = {
