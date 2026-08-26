@@ -18241,10 +18241,9 @@ function renderBranchTable(){
       <td style="color:var(--text3);font-size:12px">${escapeHtml(b.city||'—')}</td>
       <td style="color:var(--text3);font-size:12px">${countryLabel}</td>
       <td><span class="b ${statusCls}">${escapeHtml(b.status)}</span></td>
-      <td style="white-space:nowrap"><button class="icon-btn view" title="View branch" onclick="showBranchModal('${b.id}',true)">${viewIconSvg()}</button><button class="icon-btn edit" title="Edit branch" onclick="showBranchModal('${b.id}')" style="margin-left:4px">${editIconSvg()}</button></td>
     </tr>`;
   };
-  const empty='<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:24px">No branches yet. Click + Add Branch.</td></tr>';
+  const empty='<tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px">No branches yet. Click + Add Branch.</td></tr>';
   const html=_branchList.length?_branchList.map(row).join(''):empty;
   document.querySelectorAll('#branch-tbody').forEach(tb=>{tb.innerHTML=html;});
 }
