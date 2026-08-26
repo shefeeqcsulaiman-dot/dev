@@ -3199,12 +3199,12 @@ function renderBranchPerformance(data){
     const profit=Number(row.profit||0);
     const profitColor=profit>=0?'#16a34a':'#dc2626';
     const isUnassigned=row.branch_id===null||row.branch_id===undefined;
-    const name=isUnassigned?'Unassigned (Head Office)':(row.name||'Unnamed Branch');
+    const name=isUnassigned?'Head Office':(row.name||'Unnamed Branch');
     const pending=row.invoices_pending||{count:0,amount:'0.00'};
     const collected=row.invoices_collected||{count:0,amount:'0.00'};
     return `<div style="border:1px solid var(--border);border-radius:10px;padding:9px 11px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <span style="font-size:12.5px;font-weight:700;color:var(--text1)${isUnassigned?';font-style:italic;opacity:.8':''}">${escapeHtml(name)}</span>
+        <span style="font-size:12.5px;font-weight:700;color:var(--text1)">${escapeHtml(name)}</span>
         <span class="mono" style="font-size:13px;font-weight:700;color:${profitColor}">${formatAed(profit)}</span>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;font-size:10.5px;color:var(--text3)">
