@@ -887,13 +887,22 @@ def attendance_today(
     principal: Principal = Depends(require_principal_permission("attendance:view")),
 ) -> dict[str, Any]:
     """Return today's punch-in count for the Present Today KPI."""
-    today = _local_today(_company_offset(db, principal.company_id)).isoformat()
+    offset = _company_offset(db, principal.company_id)
+    today = _local_today(offset).isoformat()
     rows = _branch_scope_punches(db.query(AttendancePunch), principal, branch_id).filter(
         AttendancePunch.company_id == principal.company_id,
         AttendancePunch.punch_date == today,
         AttendancePunch.direction == "in",
-    ).all()
-    unique_employees = sorted({r.employee_id for r in rows})
+    ).order_by(AttendancePunch.punch_time.asc()).all()
+    # First "in" punch of the day per employee — the "Check In" column
+    # previously showed today's date (res.date, the same value for every
+    # row) instead of an actual time, because this endpoint never computed
+    # a per-employee punch time at all. Rows are ordered ascending above so
+    # the first occurrence for each employee_id is their earliest punch.
+    first_punch_by_employee: dict[str, datetime] = {}
+    for r in rows:
+        first_punch_by_employee.setdefault(r.employee_id, r.punch_time)
+    unique_employees = sorted(first_punch_by_employee.keys())
     # A punch's employee_id is matched against Employee.employee_no by plain
     # string equality (same rule the Sync Activity Log's "Unmatched" badge
     # uses, recent_punches() above) — Today's Attendance previously showed
@@ -910,6 +919,7 @@ def attendance_today(
             "employee_id": emp_id,
             "employee_name": employees_by_no[emp_id].full_name if emp_id in employees_by_no else None,
             "matched": emp_id in employees_by_no,
+            "check_in_time": (first_punch_by_employee[emp_id] + offset).strftime("%H:%M"),
         }
         for emp_id in unique_employees
     ]

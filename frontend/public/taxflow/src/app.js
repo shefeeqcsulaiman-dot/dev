@@ -56,6 +56,7 @@ function runPageWarmup(page){
     bindEditActions();
     bindGenericAddActions();
     if(page==='rota'){
+      _fixStaleRotaDateDefaults();
       seedDefaultRotaShifts();
       renderRotaBoards();
       updateRotaStats();
@@ -19000,6 +19001,34 @@ function weekStartValue(){
   return document.getElementById('rota-week-start')?.value||document.getElementById('rota-dept-week-start')?.value||new Date().toISOString().slice(0,10);
 }
 
+// Weeks run Mon-Sun (ROTA_WEEK_DAYS above) — returns this Monday's date.
+function _currentRotaWeekStart(){
+  const d=new Date();
+  const day=d.getDay(); // 0=Sun..6=Sat
+  const diffToMonday=day===0?-6:1-day;
+  d.setDate(d.getDate()+diffToMonday);
+  return d.toISOString().slice(0,10);
+}
+
+// The Week Start / Month inputs across Weekly, Monthly, and Department Rota
+// ship with a hardcoded static default in the HTML (2026-05-04 / 2026-05) —
+// nothing ever pointed them at today's actual date, so every fresh visit
+// silently opened whatever week that hardcoded date fell in instead of the
+// current one. Only overwrites while still holding that exact stale
+// literal, so a date the user has already changed (to anything else,
+// including a deliberately different past/future week) is never clobbered
+// by a later re-warmup of this same page.
+function _fixStaleRotaDateDefaults(){
+  const weekEl=document.getElementById('rota-week-start');
+  const deptWeekEl=document.getElementById('rota-dept-week-start');
+  const monthEl=document.getElementById('rota-month-value');
+  const currentWeek=_currentRotaWeekStart();
+  const currentMonth=currentWeek.slice(0,7);
+  if(weekEl&&weekEl.value==='2026-05-04')weekEl.value=currentWeek;
+  if(deptWeekEl&&deptWeekEl.value==='2026-05-04')deptWeekEl.value=currentWeek;
+  if(monthEl&&monthEl.value==='2026-05')monthEl.value=currentMonth;
+}
+
 function weekDateFromStart(start,offset){
   const date=new Date(`${start}T00:00:00`);
   if(Number.isNaN(date.getTime()))return start;
@@ -21033,7 +21062,11 @@ async function refreshAttendanceToday(){
       const label=emp.employee_name
         ?`${escapeHtml(emp.employee_name)} <span class="mono" style="color:var(--text3);font-size:11px">(${escapeHtml(emp.employee_id)})</span>`
         :`${escapeHtml(emp.employee_id)} <span style="color:var(--red)" title="No employee has this ID — check Staff → Employees">⚠ Unmatched</span>`;
-      tr.innerHTML=`<td>${label}</td><td class="mono">${res.date||'—'}</td><td><span class="b b-g">Biometric</span></td><td><span class="b b-g">Present</span></td>`;
+      // check_in_time is the employee's first "in" punch of the day, in
+      // company-local time (HH:MM) — this column previously just repeated
+      // today's date (the same value on every row) since the backend never
+      // computed a per-employee punch time at all.
+      tr.innerHTML=`<td>${label}</td><td class="mono">${escapeHtml(emp.check_in_time||'—')}</td><td><span class="b b-g">Biometric</span></td><td><span class="b b-g">Present</span></td>`;
       tbody.appendChild(tr);
     });
   }catch(e){
