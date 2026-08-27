@@ -2395,7 +2395,16 @@ function _withActiveBranchParam(url){
 // entirely unless there's an actual choice to make (>1 accessible branch),
 // matching the backend's own "empty list unless genuinely multi-branch"
 // convention for who.accessible_branches.
+// Cached for syncReportsFromDatabase()'s own gate — mirrors reports.py's
+// "principal.branch_id set AND not can_cross_branch('reports')" condition
+// exactly, so an ordinary company-wide Employee (branch_id=None) isn't
+// wrongly treated as branch-restricted just for not being the admin User.
+window.__principalBranchId=window.__principalBranchId||null;
+window.__principalCanCrossBranchReports=window.__principalCanCrossBranchReports||false;
+
 function applyBranchSwitcherFromWhoami(who){
+  window.__principalBranchId=who?.branch_id||null;
+  window.__principalCanCrossBranchReports=!!(who?.is_admin||(who?.permissions||[]).includes('reports:view_all_branches'));
   const nameEl=document.getElementById('tb-branch-name');
   const nameText=document.getElementById('tb-branch-name-text');
   if(nameEl&&nameText){
@@ -3771,6 +3780,20 @@ function showReport(id){
 
 let _lastReportVersion=null;
 async function syncReportsFromDatabase(){
+  // /reports/summary backs the entire module (P&L, Balance Sheet, GL,
+  // Ledgers, Aging, VAT, Inventory, Bank Recon, Fixed Assets, every BI/
+  // Compliance report — even the "Trial Balance" tab, despite a separate
+  // branch-aware /reports/trial-balance endpoint existing server-side; the
+  // frontend never actually calls it). None of it is branch-scoped, so the
+  // backend now 403s this call for a Branch Login/branch-locked Employee
+  // (reports.py's report_summary()) rather than serving unscoped company
+  // data. Skip the call entirely and show a clear notice instead of
+  // letting every panel fail into a confusing "could not load" toast.
+  const reportsLayout=document.querySelector('#page-reports .rep-layout');
+  if(window.__principalBranchId&&!window.__principalCanCrossBranchReports){
+    if(reportsLayout)reportsLayout.innerHTML='<div style="grid-column:1/-1;padding:60px 20px;text-align:center;color:var(--text3)">Company-wide reports aren\'t available for a branch login yet — this is limited to the main Dashboard for now.</div>';
+    return;
+  }
   const ready=await ensureBackendSession();
   if(!ready)return;
   try{

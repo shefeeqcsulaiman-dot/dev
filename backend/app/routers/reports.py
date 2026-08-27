@@ -4,7 +4,7 @@ from datetime import date as _date, timedelta
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, text
 from sqlalchemy.exc import OperationalError as SQLAOperationalError
 from sqlalchemy.exc import TimeoutError as SQLATimeoutError
@@ -772,6 +772,8 @@ def debug_purchase(
     purchase data through it; now gated the same as every other report."""
     import json as _json
     company_id = principal.company_id
+    if principal.branch_id and not principal.can_cross_branch("reports"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not available to a branch login.")
     rows = (
         db.query(AppDataRecord)
         .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection.in_(["bills", "purchaseRecords"]))
@@ -839,6 +841,29 @@ def trial_balance(
 def report_summary(request: Request, db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("reports:view"))) -> dict[str, Any]:
     # See dashboard()'s comment above — same widening, same reasoning.
     company_id = principal.company_id
+    # _build_summary() has no branch_id parameter at all — it's company-wide
+    # by construction, and backs almost every report in the sidebar (P&L,
+    # Balance Sheet, Cash Flow, GL, Ledgers, AR/AP Aging, VAT, Inventory,
+    # Bank Reconciliation, Fixed Assets, every BI/Compliance report). A
+    # Branch Login (or a branch-locked Employee) granted the "reports"
+    # module — a real, already-possible admin choice, "reports" is in
+    # BRANCH_ELIGIBLE_MODULES — could otherwise see the ENTIRE company's
+    # financials through here, not just its own branch. Blocking outright
+    # until each report is properly branch-scoped, rather than silently
+    # serving unscoped data to a principal that should never see it.
+    #
+    # Gated on principal.branch_id being SET, not just can_cross_branch()
+    # alone — an ordinary company-wide Employee (e.g. an Accountant-role
+    # sub-user with no branch assignment at all) has branch_id=None and
+    # would otherwise get wrongly blocked here too; only a principal
+    # actually tied to one specific branch is the real risk this guards
+    # against. Matches resolve_active_branch()'s own "0 accessible branches
+    # = pass through unrestricted" convention elsewhere in this file.
+    if principal.branch_id and not principal.can_cross_branch("reports"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Company-wide reports aren't available to a branch login yet — branch-level reporting is currently limited to the Dashboard and Trial Balance.",
+        )
 
     def _build() -> dict[str, Any]:
         result = _build_summary(db, company_id)
