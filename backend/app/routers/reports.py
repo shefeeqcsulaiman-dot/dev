@@ -838,41 +838,35 @@ def trial_balance(
 
 @router.get("/summary")
 @limiter.limit("120/minute")
-def report_summary(request: Request, db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("reports:view"))) -> dict[str, Any]:
+def report_summary(
+    request: Request,
+    branch_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("reports:view")),
+) -> dict[str, Any]:
     # See dashboard()'s comment above — same widening, same reasoning.
     company_id = principal.company_id
-    # _build_summary() has no branch_id parameter at all — it's company-wide
-    # by construction, and backs almost every report in the sidebar (P&L,
-    # Balance Sheet, Cash Flow, GL, Ledgers, AR/AP Aging, VAT, Inventory,
-    # Bank Reconciliation, Fixed Assets, every BI/Compliance report). A
-    # Branch Login (or a branch-locked Employee) granted the "reports"
-    # module — a real, already-possible admin choice, "reports" is in
-    # BRANCH_ELIGIBLE_MODULES — could otherwise see the ENTIRE company's
-    # financials through here, not just its own branch. Blocking outright
-    # until each report is properly branch-scoped, rather than silently
-    # serving unscoped data to a principal that should never see it.
-    #
-    # Gated on principal.branch_id being SET, not just can_cross_branch()
-    # alone — an ordinary company-wide Employee (e.g. an Accountant-role
-    # sub-user with no branch assignment at all) has branch_id=None and
-    # would otherwise get wrongly blocked here too; only a principal
-    # actually tied to one specific branch is the real risk this guards
-    # against. Matches resolve_active_branch()'s own "0 accessible branches
-    # = pass through unrestricted" convention elsewhere in this file.
-    if principal.branch_id and not principal.can_cross_branch("reports"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Company-wide reports aren't available to a branch login yet — branch-level reporting is currently limited to the Dashboard and Trial Balance.",
-        )
+    # Most sections of _build_summary() are now branch-scoped (revenue,
+    # purchases, payroll, expenses, balance sheet, trial balance, GL,
+    # customer/supplier ledger, AR/AP aging, revenue intelligence) via the
+    # same resolve_active_branch()/can_cross_branch() pattern dashboard()
+    # uses — a Branch Login now sees its OWN branch's numbers instead of
+    # either the whole company's (the original leak) or a hard 403 (this
+    # endpoint's first fix). A few sections remain company-wide because
+    # their backing tables have no branch_id column at all — see the
+    # comments inside _build_summary() next to corporate/assets/
+    # budget_cash/control and the VAT TaxLine breakdown.
+    resolved_branch_id = branch_id if principal.can_cross_branch("reports") else resolve_active_branch(principal, branch_id)
 
     def _build() -> dict[str, Any]:
-        result = _build_summary(db, company_id)
+        result = _build_summary(db, company_id, resolved_branch_id)
         # Stable fingerprint for frontend diff-check (skips re-render when data unchanged)
         _sig = f"{result.get('dashboard',{}).get('revenue',0)}:{result.get('dashboard',{}).get('expenses',0)}:{result.get('dashboard',{}).get('net_profit',0)}"
         result["_version"] = hashlib.md5(_sig.encode()).hexdigest()[:12]
         return result
 
-    return _cached_or_build(f"summary:{company_id}", 120, _build)
+    cache_key = f"summary:{company_id}:{resolved_branch_id or 'all'}"
+    return _cached_or_build(cache_key, 120, _build)
 
 
 def _is_recognized_revenue_status(status: object) -> bool:
@@ -896,35 +890,44 @@ def _is_credit_note(row: dict[str, Any]) -> bool:
     return "return" in text and record_amount(row, "total", "amount", "net_amount") < 0
 
 
-def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
-    app_sales = app_sales_invoice_records(db, company_id)
-    app_purchases = app_purchase_records(db, company_id)
+def _build_summary(db: Session, company_id: str, branch_id: str | None = None) -> dict[str, Any]:
+    app_sales = app_sales_invoice_records(db, company_id, branch_id)
+    app_purchases = app_purchase_records(db, company_id, branch_id)
     # Computed once and reused below (readiness.documents, ai.forecast_confidence,
     # einvoicing.total) — previously 3 separate identical count(Invoice) round trips.
+    # Deliberately company-wide even when branch_id is set — a documents/
+    # e-invoicing readiness score isn't a financial figure a branch could
+    # leak, and scoping it would need its own branch-filtered count() variant.
     invoice_count_db = count(db, Invoice, company_id)
     recognized_app_sales = [
         row for row in app_sales if _is_recognized_revenue_status(row.get("status")) or _is_credit_note(row)
     ]
-    revenue = money(
-        db.query(func.coalesce(func.sum(Invoice.total), 0))
-        .filter(Invoice.company_id == company_id, Invoice.status.in_(["issued", "paid"]))
-        .scalar()
-    )
+    revenue_filter = [Invoice.company_id == company_id, Invoice.status.in_(["issued", "paid"])]
+    expense_filter = [SourceTransaction.company_id == company_id, SourceTransaction.module.in_(["expense", "expenses"])]
+    payroll_filter = [PayrollRun.company_id == company_id]
+    if branch_id:
+        revenue_filter.append((Invoice.branch_id == branch_id) | (Invoice.branch_id.is_(None)))
+        expense_filter.append((SourceTransaction.branch_id == branch_id) | (SourceTransaction.branch_id.is_(None)))
+        payroll_filter.append((PayrollRun.branch_id == branch_id) | (PayrollRun.branch_id.is_(None)))
+    revenue = money(db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(*revenue_filter).scalar())
     revenue += sum((record_amount(row, "total", "amount", "net_amount") for row in recognized_app_sales), Decimal("0.00"))
     # Use same SQL JSON extraction as _purchase_summary to cover all field variants
-    purchases = money(_purchase_summary(db, company_id)["total"])
-    payroll = money(db.query(func.coalesce(func.sum(PayrollRun.net_total), 0)).filter(PayrollRun.company_id == company_id).scalar())
-    expenses = money(
-        db.query(func.coalesce(func.sum(SourceTransaction.total), 0))
-        .filter(SourceTransaction.company_id == company_id, SourceTransaction.module.in_(["expense", "expenses"]))
-        .scalar()
-    )
+    purchases = money(_purchase_summary(db, company_id, branch_id)["total"])
+    payroll = money(db.query(func.coalesce(func.sum(PayrollRun.net_total), 0)).filter(*payroll_filter).scalar())
+    expenses = money(db.query(func.coalesce(func.sum(SourceTransaction.total), 0)).filter(*expense_filter).scalar())
+    # app_data "expenses" collection has no branch_id column of its own
+    # (AppDataRecord.branch_id does, but expenses aren't written through the
+    # branch-aware save path today) — left company-wide, same as corporate/
+    # assets/budget_cash/control below.
     app_expenses = app_data_payloads(db, company_id, "expenses")
     expenses += sum((record_amount(row, "total", "amount", "net_amount") for row in app_expenses), Decimal("0.00"))
     operating_expenses = expenses + payroll
     gross_profit = revenue - purchases
     net_profit = gross_profit - operating_expenses
     gross_margin = (gross_profit / revenue * Decimal("100")).quantize(Decimal("0.01")) if revenue else Decimal("0.00")
+    # TaxLine has no branch_id column, so the DB-sourced portion of the VAT
+    # breakdown stays company-wide regardless of branch_id — only the
+    # app_sales/app_purchases additions immediately below are branch-scoped.
     tax_breakdown = tax_line_breakdown_both_directions(db, company_id)
     output_breakdown = tax_breakdown["output"]
     output_taxable = output_breakdown["standard"] + output_breakdown["zero"] + output_breakdown["exempt"]
@@ -936,11 +939,11 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
     input_taxable += sum((record_amount(row, "net_amount", "subtotal", "taxable_amount") for row in app_purchases), Decimal("0.00"))
     input_vat = input_breakdown["vat"]
     input_vat += sum((record_amount(row, "tax_amount", "vat_amount", "vat") for row in app_purchases), Decimal("0.00"))
-    aging_rows = receivables_aging(db, company_id, app_sales)
+    aging_rows = receivables_aging(db, company_id, app_sales, branch_id)
     ar_total = sum(money(row["total"]) for row in aging_rows)
     overdue_total = sum(money(row["d31_60"]) + money(row["d61_90"]) + money(row["over90"]) for row in aging_rows)
     risk_score = "Low" if overdue_total == 0 else "Medium" if overdue_total < ar_total / Decimal("2") else "High"
-    monthly = monthly_revenue_vat(db, company_id, app_sales)
+    monthly = monthly_revenue_vat(db, company_id, app_sales, branch_id)
     result = {
         "dashboard": {
             "revenue": amount(revenue),
@@ -1009,8 +1012,8 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
             },
         },
     }
-    _bs = balance_sheet_rows(db, company_id)
-    _ap_aging = ap_aging_rows(db, company_id, app_purchases)
+    _bs = balance_sheet_rows(db, company_id, branch_id)
+    _ap_aging = ap_aging_rows(db, company_id, app_purchases, branch_id)
     ap_total = sum(money(r["total"]) for r in _ap_aging)
     _wc = working_capital_rows(db, company_id, _bs, revenue=revenue, purchases=purchases, ar_total=ar_total, ap_total=ap_total)
 
@@ -1023,7 +1026,7 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
 
     result.update({
         "balance_sheet": _bs,
-        "trial_balance": trial_balance_rows(db, company_id),
+        "trial_balance": trial_balance_rows(db, company_id, branch_id),
         "aging": aging_rows,
         "ai": {
             "forecast_confidence": 87 if invoice_count_db else 0,
@@ -1033,15 +1036,22 @@ def _build_summary(db: Session, company_id: str) -> dict[str, Any]:
             "anomalies_list": anomaly_rows(overdue_total, input_vat, output_vat, payroll),
             "report_text": report_ai_text(revenue, gross_margin, output_vat - input_vat, overdue_total, net_profit),
         },
+        # These four sections are backed by tables with no branch_id column
+        # at all (CorporateTaxRecord/ConsolidationRecord, FixedAssetRecord/
+        # AccrualPrepaymentRecord, BudgetRecord/CashFlowForecastRecord,
+        # CostCenterRecord/MonthEndCloseRecord/AuditLog) — company-wide
+        # regardless of branch_id, same as the Dashboard's own documented
+        # exceptions (VAT/staff/payroll). Would need a schema migration plus
+        # write-side changes to make branch-aware.
         "corporate": corporate_report_rows(db, company_id, net_profit),
         "assets": asset_report_rows(db, company_id),
         "budget_cash": budget_cash_rows(db, company_id, revenue, purchases, operating_expenses, net_profit),
         "control": control_report_rows(db, company_id, revenue, purchases, net_profit),
-        "general_ledger": general_ledger_rows(db, company_id),
-        "customer_ledger": customer_ledger_rows(db, company_id, app_sales),
-        "supplier_ledger": supplier_ledger_rows(db, company_id, app_purchases),
+        "general_ledger": general_ledger_rows(db, company_id, branch_id),
+        "customer_ledger": customer_ledger_rows(db, company_id, app_sales, branch_id),
+        "supplier_ledger": supplier_ledger_rows(db, company_id, app_purchases, branch_id),
         "ap_aging": _ap_aging,
-        "revenue_intelligence": revenue_intelligence_rows(db, company_id, app_sales, monthly),
+        "revenue_intelligence": revenue_intelligence_rows(db, company_id, app_sales, monthly, branch_id),
         "working_capital": _wc,
         "ai_health": ai_health_score(revenue, gross_margin, net_profit, money(_wc["current_ratio"]), overdue_total, ar_total),
         "einvoicing": {
@@ -1144,8 +1154,8 @@ def trial_balance_rows(db: Session, company_id: str, branch_id: str | None = Non
     return result
 
 
-def balance_sheet_rows(db: Session, company_id: str) -> dict[str, Any]:
-    jl_totals = _posted_journal_line_totals(db, company_id)
+def balance_sheet_rows(db: Session, company_id: str, branch_id: str | None = None) -> dict[str, Any]:
+    jl_totals = _posted_journal_line_totals(db, company_id, branch_id)
     rows = (
         db.query(Account.code, Account.name, Account.type, Account.opening_balance, Account.opening_balance_type, jl_totals.c.debit, jl_totals.c.credit)
         .outerjoin(jl_totals, jl_totals.c.account_id == Account.id)
@@ -1212,15 +1222,18 @@ def _add_to_aging_bucket(buckets: dict[str, Decimal], value: Decimal, days_overd
         buckets["over90"] += value
 
 
-def receivables_aging(db: Session, company_id: str, app_sales: list[dict[str, Any]]) -> list[dict[str, str]]:
+def receivables_aging(db: Session, company_id: str, app_sales: list[dict[str, Any]], branch_id: str | None = None) -> list[dict[str, str]]:
     result: dict[str, dict[str, Decimal]] = {}
 
     # DB invoices — no due_date field; use created_at + 30 days as proxy
-    db_rows = (
-        db.query(Invoice.customer_name, Invoice.total, Invoice.created_at)
-        .filter(Invoice.company_id == company_id, Invoice.status != "paid")
-        .all()
+    query = db.query(Invoice.customer_name, Invoice.total, Invoice.created_at).filter(
+        Invoice.company_id == company_id, Invoice.status != "paid"
     )
+    if branch_id:
+        # NULL branch_id = predates Branch Management — stays visible to a
+        # branch-scoped viewer, same rule used throughout this file.
+        query = query.filter((Invoice.branch_id == branch_id) | (Invoice.branch_id.is_(None)))
+    db_rows = query.all()
     for customer, total, created_at in db_rows:
         key = str(customer or "Unknown").strip() or "Unknown"
         e = result.setdefault(key, {k: Decimal("0") for k in ("current", "d1_30", "d31_60", "d61_90", "over90")})
@@ -1479,7 +1492,7 @@ def report_ai_text(revenue: Decimal, gross_margin: Decimal, net_vat: Decimal, ov
     )
 
 
-def general_ledger_rows(db: Session, company_id: str) -> list[dict[str, str]]:
+def general_ledger_rows(db: Session, company_id: str, branch_id: str | None = None) -> list[dict[str, str]]:
     # Unlike monthly_revenue_vat()'s ~7-month cutoff (that one only ever
     # shows 6 months of trend data), a General Ledger legitimately wants a
     # fuller history — but with no bound at all, ORDER BY Account.code first
@@ -1508,7 +1521,11 @@ def general_ledger_rows(db: Session, company_id: str) -> list[dict[str, str]]:
         )
         .join(Account, Account.id == GeneralLedgerEntry.account_id)
         .filter(GeneralLedgerEntry.company_id == company_id, GeneralLedgerEntry.entry_date >= cutoff)
-        .order_by(Account.code, GeneralLedgerEntry.entry_date, GeneralLedgerEntry.created_at)
+    )
+    if branch_id:
+        rows = rows.filter((GeneralLedgerEntry.branch_id == branch_id) | (GeneralLedgerEntry.branch_id.is_(None)))
+    rows = (
+        rows.order_by(Account.code, GeneralLedgerEntry.entry_date, GeneralLedgerEntry.created_at)
         .limit(2000)
         .all()
     )
@@ -1551,12 +1568,15 @@ def general_ledger_rows(db: Session, company_id: str) -> list[dict[str, str]]:
     return result
 
 
-def customer_ledger_rows(db: Session, company_id: str, app_sales: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def customer_ledger_rows(db: Session, company_id: str, app_sales: list[dict[str, Any]], branch_id: str | None = None) -> list[dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
+    invoice_filter = [Invoice.company_id == company_id]
+    if branch_id:
+        invoice_filter.append((Invoice.branch_id == branch_id) | (Invoice.branch_id.is_(None)))
     # Single source of truth: Invoice table only
     for name, total, cnt in (
         db.query(Invoice.customer_name, func.coalesce(func.sum(Invoice.total), 0), func.count(Invoice.id))
-        .filter(Invoice.company_id == company_id)
+        .filter(*invoice_filter)
         .group_by(Invoice.customer_name)
         .all()
     ):
@@ -1567,7 +1587,7 @@ def customer_ledger_rows(db: Session, company_id: str, app_sales: list[dict[str,
     # Include app_sales only if not already in Invoice table (check by reference)
     invoice_refs = {
         str(r[0] or "").strip()
-        for r in db.query(Invoice.invoice_number).filter(Invoice.company_id == company_id).all()
+        for r in db.query(Invoice.invoice_number).filter(*invoice_filter).all()
     }
     for row in app_sales:
         ref = str(row.get("invoice_no") or row.get("invoice_number") or row.get("reference") or "").strip()
@@ -1583,12 +1603,15 @@ def customer_ledger_rows(db: Session, company_id: str, app_sales: list[dict[str,
     )[:100]
 
 
-def supplier_ledger_rows(db: Session, company_id: str, app_purchases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def supplier_ledger_rows(db: Session, company_id: str, app_purchases: list[dict[str, Any]], branch_id: str | None = None) -> list[dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
+    st_filter = [SourceTransaction.company_id == company_id, SourceTransaction.module.in_(["purchase", "purchase_bill", "expense", "expenses"])]
+    if branch_id:
+        st_filter.append((SourceTransaction.branch_id == branch_id) | (SourceTransaction.branch_id.is_(None)))
     # Single source of truth: SourceTransaction only (purchase modules)
     for name, total, cnt in (
         db.query(SourceTransaction.party_name, func.coalesce(func.sum(SourceTransaction.total), 0), func.count(SourceTransaction.id))
-        .filter(SourceTransaction.company_id == company_id, SourceTransaction.module.in_(["purchase", "purchase_bill", "expense", "expenses"]))
+        .filter(*st_filter)
         .group_by(SourceTransaction.party_name)
         .all()
     ):
@@ -1599,10 +1622,7 @@ def supplier_ledger_rows(db: Session, company_id: str, app_purchases: list[dict[
     # Include app_purchases only if not already in SourceTransaction (check by reference)
     st_refs = {
         str(r[0] or "").strip()
-        for r in db.query(SourceTransaction.reference).filter(
-            SourceTransaction.company_id == company_id,
-            SourceTransaction.module.in_(["purchase", "purchase_bill", "expense", "expenses"])
-        ).all()
+        for r in db.query(SourceTransaction.reference).filter(*st_filter).all()
     }
     for row in app_purchases:
         ref = str(row.get("invoice_no") or row.get("reference") or "").strip()
@@ -1618,13 +1638,16 @@ def supplier_ledger_rows(db: Session, company_id: str, app_purchases: list[dict[
     )[:100]
 
 
-def ap_aging_rows(db: Session, company_id: str, app_purchases: list[dict[str, Any]]) -> list[dict[str, str]]:
+def ap_aging_rows(db: Session, company_id: str, app_purchases: list[dict[str, Any]], branch_id: str | None = None) -> list[dict[str, str]]:
     result: dict[str, dict[str, Decimal]] = {}
 
+    ap_filter = [SourceTransaction.company_id == company_id, SourceTransaction.module.in_(["purchase", "purchase_bill"]), SourceTransaction.status != "paid"]
+    if branch_id:
+        ap_filter.append((SourceTransaction.branch_id == branch_id) | (SourceTransaction.branch_id.is_(None)))
     # SourceTransaction — no due_date; use created_at + 30 days as proxy
     for party, total, created_at in (
         db.query(SourceTransaction.party_name, func.coalesce(func.sum(SourceTransaction.total), 0), func.max(SourceTransaction.created_at))
-        .filter(SourceTransaction.company_id == company_id, SourceTransaction.module.in_(["purchase", "purchase_bill"]), SourceTransaction.status != "paid")
+        .filter(*ap_filter)
         .group_by(SourceTransaction.party_name)
         .all()
     ):
@@ -1657,10 +1680,13 @@ def ap_aging_rows(db: Session, company_id: str, app_purchases: list[dict[str, An
     )
 
 
-def revenue_intelligence_rows(db: Session, company_id: str, app_sales: list[dict[str, Any]], monthly: list[dict[str, Any]]) -> dict[str, Any]:
+def revenue_intelligence_rows(db: Session, company_id: str, app_sales: list[dict[str, Any]], monthly: list[dict[str, Any]], branch_id: str | None = None) -> dict[str, Any]:
+    ri_filter = [Invoice.company_id == company_id]
+    if branch_id:
+        ri_filter.append((Invoice.branch_id == branch_id) | (Invoice.branch_id.is_(None)))
     by_customer = (
         db.query(Invoice.customer_name, func.coalesce(func.sum(Invoice.total), 0))
-        .filter(Invoice.company_id == company_id)
+        .filter(*ri_filter)
         .group_by(Invoice.customer_name)
         .order_by(func.coalesce(func.sum(Invoice.total), 0).desc())
         .limit(10)

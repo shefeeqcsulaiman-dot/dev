@@ -232,7 +232,7 @@ function go(page){
   _navSubs.forEach(s=>s.classList.remove('on'));
   localStorage.setItem('taxflow_current_page',page);
   closeSidebar();
-  if(page==='reports')syncReportsFromDatabase();
+  if(page==='reports'){loadReportsBranchSelector();syncReportsFromDatabase();}
   if(page==='exception')loadExceptionCenter();
   if(page==='expense')loadExpenseVendors();
   if(page==='recruitment')scheduleIdleTask(refreshRecruitmentStats,100);
@@ -2380,7 +2380,7 @@ async function fetchWithBackendFallback(url,options={}){
 // a new endpoint server-side means adding its path here too.
 window.ACTIVE_BRANCH_ID=window.ACTIVE_BRANCH_ID||(()=>{try{return localStorage.getItem('taxflow_active_branch_id')||null;}catch{return null;}})();
 window.ACCESSIBLE_BRANCHES=window.ACCESSIBLE_BRANCHES||[];
-const _BRANCH_AWARE_PATH_RE=/\/(invoices|inventory\/stock-levels|inventory\/stock-movements|reports\/trial-balance|reports\/dashboard|hr\/live-locations|journal|general-ledger|app-data\/records\/(purchaseRecords|posSales|salesInvoices))(\?|$)/;
+const _BRANCH_AWARE_PATH_RE=/\/(invoices|inventory\/stock-levels|inventory\/stock-movements|reports\/trial-balance|reports\/dashboard|reports\/summary|hr\/live-locations|journal|general-ledger|app-data\/records\/(purchaseRecords|posSales|salesInvoices))(\?|$)/;
 function _withActiveBranchParam(url){
   if(!window.ACTIVE_BRANCH_ID)return url;
   if(typeof url!=='string'||!_BRANCH_AWARE_PATH_RE.test(url))return url;
@@ -2395,16 +2395,7 @@ function _withActiveBranchParam(url){
 // entirely unless there's an actual choice to make (>1 accessible branch),
 // matching the backend's own "empty list unless genuinely multi-branch"
 // convention for who.accessible_branches.
-// Cached for syncReportsFromDatabase()'s own gate — mirrors reports.py's
-// "principal.branch_id set AND not can_cross_branch('reports')" condition
-// exactly, so an ordinary company-wide Employee (branch_id=None) isn't
-// wrongly treated as branch-restricted just for not being the admin User.
-window.__principalBranchId=window.__principalBranchId||null;
-window.__principalCanCrossBranchReports=window.__principalCanCrossBranchReports||false;
-
 function applyBranchSwitcherFromWhoami(who){
-  window.__principalBranchId=who?.branch_id||null;
-  window.__principalCanCrossBranchReports=!!(who?.is_admin||(who?.permissions||[]).includes('reports:view_all_branches'));
   const nameEl=document.getElementById('tb-branch-name');
   const nameText=document.getElementById('tb-branch-name-text');
   if(nameEl&&nameText){
@@ -3778,22 +3769,50 @@ function showReport(id){
   if(latestReportSummary)renderReportsFromDatabase(latestReportSummary);
 }
 
+// Admin-only branch filter for the whole Reports module — reuses the same
+// window.ACTIVE_BRANCH_ID mechanism as the Dashboard's "View as" toggle
+// (renderBranchPerformance()), so switching branch here also affects the
+// Dashboard if the admin navigates back, and vice versa. Not shown for a
+// Branch Login (single branch, nothing to pick — already auto-scoped
+// server-side) or a company with no branches configured at all.
 let _lastReportVersion=null;
+async function loadReportsBranchSelector(){
+  const fg=document.getElementById('rep-branch-fg');
+  const sel=document.getElementById('rep-branch-select');
+  if(!fg||!sel||!_isAdminPrincipal())return;
+  try{
+    const response=await authenticatedFetch(`${apiBaseUrl()}/reports/branch-performance`);
+    if(!response.ok)return;
+    const data=await response.json();
+    const branches=Array.isArray(data?.branches)?data.branches:[];
+    if(!branches.length){fg.style.display='none';return;}
+    sel.innerHTML='<option value="">All Branches</option>'+branches.map(b=>
+      `<option value="${escapeHtml(b.branch_id)}" ${b.branch_id===window.ACTIVE_BRANCH_ID?'selected':''}>${escapeHtml(b.name||'Unnamed Branch')}</option>`
+    ).join('');
+    fg.style.display='';
+  }catch(e){console.warn('[loadReportsBranchSelector] failed',e);}
+}
+
+async function changeReportsBranch(branchId){
+  window.ACTIVE_BRANCH_ID=branchId||null;
+  try{
+    if(branchId)localStorage.setItem('taxflow_active_branch_id',branchId);
+    else localStorage.removeItem('taxflow_active_branch_id');
+  }catch{}
+  _lastReportVersion=null; // force re-render even if the version hash happens to match
+  await syncReportsFromDatabase();
+}
+
 async function syncReportsFromDatabase(){
-  // /reports/summary backs the entire module (P&L, Balance Sheet, GL,
-  // Ledgers, Aging, VAT, Inventory, Bank Recon, Fixed Assets, every BI/
-  // Compliance report — even the "Trial Balance" tab, despite a separate
-  // branch-aware /reports/trial-balance endpoint existing server-side; the
-  // frontend never actually calls it). None of it is branch-scoped, so the
-  // backend now 403s this call for a Branch Login/branch-locked Employee
-  // (reports.py's report_summary()) rather than serving unscoped company
-  // data. Skip the call entirely and show a clear notice instead of
-  // letting every panel fail into a confusing "could not load" toast.
-  const reportsLayout=document.querySelector('#page-reports .rep-layout');
-  if(window.__principalBranchId&&!window.__principalCanCrossBranchReports){
-    if(reportsLayout)reportsLayout.innerHTML='<div style="grid-column:1/-1;padding:60px 20px;text-align:center;color:var(--text3)">Company-wide reports aren\'t available for a branch login yet — this is limited to the main Dashboard for now.</div>';
-    return;
-  }
+  // /reports/summary is now branch-scoped server-side (reports.py's
+  // report_summary()/_build_summary()) — a Branch Login automatically gets
+  // its own branch's numbers with no query param needed (resolve_active_branch()
+  // falls back to principal.branch_id), and an admin gets everything unless
+  // window.ACTIVE_BRANCH_ID is set (see the Branch selector wired up via
+  // loadReportsBranchSelector()/changeReportsBranch() below, and
+  // _BRANCH_AWARE_PATH_RE which auto-appends branch_id= to this call).
+  const branchNote=document.getElementById('rep-branch-note');
+  if(branchNote)branchNote.style.display=window.ACTIVE_BRANCH_ID?'':'none';
   const ready=await ensureBackendSession();
   if(!ready)return;
   try{
