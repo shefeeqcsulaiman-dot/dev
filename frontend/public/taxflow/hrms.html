@@ -980,24 +980,6 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       </div>
     </div>
 
-    <!-- Setup Guide -->
-    <div class="card mb16">
-      <div class="card-hd"><div class="card-title">Setup Guide</div></div>
-      <div class="g3">
-        <div class="setting-tile">
-          <strong>ZKTeco / iClock (TCP/IP)</strong>
-          <p>1. Add device here to get an API key.<br>2. Download <code>zk_bridge.py</code> from the server.<br>3. Run: <code>DEVICE_API_KEY=xxx ZK_DEVICE_IP=192.168.1.x python zk_bridge.py</code><br>4. Punches stream automatically every 30 seconds.</p>
-        </div>
-        <div class="setting-tile">
-          <strong>HTTP Push (Suprema / Hikvision)</strong>
-          <p>Configure the device's webhook to POST to:<br><code style="word-break:break-all">/api/v1/punch</code><br>with header <code>X-Device-Key: &lt;your_key&gt;</code> and JSON body: <code>{"employee_id":"…","punch_time":"…","direction":"in"}</code></p>
-        </div>
-        <div class="setting-tile">
-          <strong>CSV Import (any device)</strong>
-          <p>Export attendance log from your device software. Required columns: <code>employee_id, punch_time</code> (YYYY-MM-DD HH:MM:SS). Optional: <code>employee_name, direction</code>. Click <strong>↑ Import CSV</strong> in the Today's Attendance card.</p>
-        </div>
-      </div>
-    </div>
   </div>
 
   <div class="tab-body" id="hr-ot">
