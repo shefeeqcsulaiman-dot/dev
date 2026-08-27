@@ -18783,6 +18783,21 @@ function approveLoanAdvance(btn){
   audit('Salary advance approved',row.children[0]?.textContent||'','Approved');
 }
 
+// Previously a fake `toast('Extra staff requested','warn')` with no effect
+// at all — opens a real, trackable Job Requisition instead (the same
+// Recruitment flow "+ New Requisition" uses), pre-filled with whichever
+// department Department Rota is currently showing.
+function requestExtraStaff(){
+  const dept=document.getElementById('rota-dept-department')?.value||'';
+  showM('m-recruitment');
+  if(dept){
+    const sel=document.getElementById('req-dept');
+    if(sel&&[...sel.options].some(o=>o.value===dept))sel.value=dept;
+  }
+  const title=document.getElementById('req-title');
+  if(title&&!title.value)title.value=dept?`${dept} — Additional Staff`:'Additional Staff';
+}
+
 function saveJobRequisition(){
   const title=document.getElementById('req-title')?.value.trim()||'';
   const dept=document.getElementById('req-dept')?.value||'';
@@ -19153,12 +19168,19 @@ function weekDateFromStart(start,offset){
   return date.toISOString().slice(0,10);
 }
 
+// Previously silently capped at 24 with no indication anything was cut —
+// a company with more staff than that simply couldn't schedule everyone
+// through Weekly/Monthly Rota at all, with no error, no "showing 24 of 68",
+// nothing. Raised well above any realistic single-company headcount for
+// this app's target market; renderWeeklyRotaBoard()/renderMonthlyRotaBoard()
+// surface a visible notice if a roster somehow still exceeds it.
+const ROTA_STAFF_DISPLAY_CAP=300;
 function currentRotaStaff(){
   const rows=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')].map(row=>{
     const emp=employeeFromDirectoryRow(row);
     return {id:emp.id||'',name:emp.name||'',department:emp.department||'Management',role:emp.designation||'Employee',location:emp.location||'Dubai HQ'};
   }).filter(staff=>staff.id&&staff.name);
-  return rows.length?rows.slice(0,24):ROTA_DEFAULT_STAFF;
+  return rows.length?rows.slice(0,ROTA_STAFF_DISPLAY_CAP):ROTA_DEFAULT_STAFF;
 }
 
 function rotaAssignmentId(employeeId,date){
@@ -19392,16 +19414,25 @@ function assignmentFor(staff,date,day){
   });
 }
 
+// If a company's own roster is somehow bigger than ROTA_STAFF_DISPLAY_CAP,
+// say so on screen instead of silently dropping the rest with no signal.
+function _rotaTruncationNoticeHtml(){
+  const total=document.querySelectorAll('#employee-tbody tr:not([data-empty-state])').length;
+  if(total<=ROTA_STAFF_DISPLAY_CAP)return '';
+  return `<div class="empty-card" style="color:var(--amber);margin-bottom:8px">Showing the first ${ROTA_STAFF_DISPLAY_CAP} of ${total} employees — use the Department filter to narrow this down.</div>`;
+}
+
 function renderWeeklyRotaBoard(){
   const board=document.getElementById('rota-weekly-board');
   if(!board)return;
   const start=weekStartValue();
   const staffRows=filteredRotaStaff('week');
+  const notice=_rotaTruncationNoticeHtml();
   if(!staffRows.length){
-    board.innerHTML='<div class="empty-card">No staff found for this filter.</div>';
+    board.innerHTML=notice+'<div class="empty-card">No staff found for this filter.</div>';
     return;
   }
-  board.innerHTML=staffRows.map(staff=>{
+  board.innerHTML=notice+staffRows.map(staff=>{
     const cells=ROTA_WEEK_DAYS.map((day,index)=>{
       const date=weekDateFromStart(start,index);
       const assignment=assignmentFor(staff,date,day);
@@ -19442,11 +19473,12 @@ function renderMonthlyRotaBoard(){
   if(!board)return;
   const month=document.getElementById('rota-month-value')?.value||weekStartValue().slice(0,7);
   const staffRows=filteredRotaStaff('month');
-  board.innerHTML=staffRows.map(staff=>{
+  const notice=_rotaTruncationNoticeHtml();
+  board.innerHTML=notice+(staffRows.map(staff=>{
     const items=[...rotaAssignmentsById.values()].filter(item=>item.employee_id===staff.id&&item.date?.startsWith(month)).sort((a,b)=>a.date.localeCompare(b.date));
     const chips=items.length?items.map(item=>`<span class="rota-month-chip">${escapeHtml(item.date.slice(8))} ${escapeHtml(item.code)}</span>`).join(''):'<span class="card-sub">No saved assignments this month</span>';
     return `<div class="rota-month-card"><div><strong>${escapeHtml(staff.name)}</strong><span>${escapeHtml(staff.department)} · ${escapeHtml(staff.role)}</span></div><div class="rota-month-days">${chips}</div></div>`;
-  }).join('')||'<div class="empty-card">No staff found for this month.</div>';
+  }).join('')||'<div class="empty-card">No staff found for this month.</div>');
 }
 
 function renderDepartmentRota(){
@@ -19520,20 +19552,58 @@ function renderRotaShiftRecord(shift){
   const tbody=document.getElementById('rota-shift-tbody');
   const code=String(shift?.code||shift?.shift_code||'').trim();
   if(!tbody||!code)return;
-  const duplicate=[...tbody.querySelectorAll('tr:not([data-empty-state])')]
-    .some(row=>(row.children[1]?.textContent||'').trim().toLowerCase()===code.toLowerCase());
-  if(duplicate)return;
+  // Previously skipped rendering entirely on a code match ("if duplicate
+  // return") — harmless for the initial load, but meant editShift() saving
+  // an edited shift (same code, changed fields) silently failed to update
+  // the visible row at all. Replacing the existing row in place instead
+  // makes both re-seeding and editing work the same way.
+  const existing=[...tbody.querySelectorAll('tr:not([data-empty-state])')]
+    .find(row=>(row.children[1]?.textContent||'').trim().toLowerCase()===code.toLowerCase());
+  if(existing)existing.remove();
   const start=shift.start||shift.start_time||'';
   const end=shift.end||shift.end_time||'';
   const breakMinutes=shift.break_minutes??shift.break??0;
   const row=document.createElement('tr');
   row.dataset.serverRecord='rotaShifts';
   row.dataset.shift=JSON.stringify(shift);
-  row.innerHTML=`<td>${escapeHtml(shift.name||shift.shift_name||code)}</td><td class="mono">${escapeHtml(code)}</td><td class="mono">${escapeHtml(start||'-')}</td><td class="mono">${escapeHtml(end||'-')}</td><td>${escapeHtml(String(breakMinutes||0))}m</td><td>${escapeHtml(shift.hours||shiftHours(start,end,breakMinutes))}</td><td>${escapeHtml(shift.grace||shift.grace_period||'-')}</td><td>${escapeHtml(shift.ot_after||shift.overtime_after||'-')}</td><td>${rotaBadge(shift.status||'Active')}</td><td><button class="btn btn-g btn-sm" onclick="toast('Shift loaded from database','info')">View</button></td>`;
+  row.innerHTML=`<td>${escapeHtml(shift.name||shift.shift_name||code)}</td><td class="mono">${escapeHtml(code)}</td><td class="mono">${escapeHtml(start||'-')}</td><td class="mono">${escapeHtml(end||'-')}</td><td>${escapeHtml(String(breakMinutes||0))}m</td><td>${escapeHtml(shift.hours||shiftHours(start,end,breakMinutes))}</td><td>${escapeHtml(shift.grace||shift.grace_period||'-')}</td><td>${escapeHtml(shift.ot_after||shift.overtime_after||'-')}</td><td>${rotaBadge(shift.status||'Active')}</td><td><div class="flx"><button class="btn btn-g btn-sm" onclick="editShift(this)">Edit</button><button class="btn btn-danger btn-sm" onclick="deleteShift(this)">Delete</button></div></td>`;
   removeEmptyState(tbody);
-  if(options.prepend===false)tbody.appendChild(row);
+  if(existing||options.prepend===false)tbody.appendChild(row);
   else tbody.prepend(row);
   updateRotaStats();
+}
+
+// "View" was a dead button (toast only) — Shift Setup previously had no
+// way at all to fix a typo or change a saved shift's timing/break/grace
+// without deleting and re-adding it.
+function editShift(btn){
+  const row=btn.closest('tr');
+  let shift={};try{shift=JSON.parse(row.dataset.shift||'{}');}catch{}
+  if(!shift.code)return;
+  setFieldValue(document.getElementById('shift-name'),shift.name||shift.shift_name||'');
+  setFieldValue(document.getElementById('shift-code'),shift.code);
+  setFieldValue(document.getElementById('shift-start'),shift.start||shift.start_time||'09:00');
+  setFieldValue(document.getElementById('shift-end'),shift.end||shift.end_time||'18:00');
+  setFieldValue(document.getElementById('shift-break'),String(shift.break_minutes??shift.break??60));
+  setFieldValue(document.getElementById('shift-grace'),shift.grace||shift.grace_period||'');
+  setFieldValue(document.getElementById('shift-ot-after'),shift.ot_after||shift.overtime_after||'');
+  setSelectValue(document.getElementById('shift-status'),shift.status||'Active');
+  const titleEl=document.querySelector('#m-shift .modal-title');
+  const btnEl=document.querySelector('#m-shift .btn-p');
+  if(titleEl)titleEl.textContent='Edit Shift';
+  if(btnEl)btnEl.textContent='Save Changes';
+  showM('m-shift');
+}
+
+function deleteShift(btn){
+  const row=btn.closest('tr');
+  let shift={};try{shift=JSON.parse(row.dataset.shift||'{}');}catch{}
+  if(!confirm(`Delete shift "${shift.name||shift.code||'this shift'}"?`))return;
+  row.remove();
+  updateRotaStats();
+  if(shift.code)deleteServer('rotaShifts',shift);
+  toast('Shift deleted','warn');
+  audit('Deleted rota shift',shift.code||'','Deleted');
 }
 
 function buildShiftRecordFromForm(){
@@ -19572,6 +19642,12 @@ async function saveShift(){
   ['shift-name','shift-code','shift-break','shift-grace','shift-ot-after'].forEach(id=>setFieldValue(document.getElementById(id),''));
   setFieldValue(document.getElementById('shift-start'),'09:00');
   setFieldValue(document.getElementById('shift-end'),'18:00');
+  // Reset back from editShift()'s "Edit Shift"/"Save Changes" relabeling —
+  // otherwise the next "+ Add Shift" click kept showing the edit-mode title.
+  const titleEl=document.querySelector('#m-shift .modal-title');
+  const btnEl=document.querySelector('#m-shift .btn-p');
+  if(titleEl)titleEl.textContent='Add Shift';
+  if(btnEl)btnEl.textContent='Save Shift';
   if(saved)toast('Shift saved to database','ok');
   audit('Saved rota shift',record.code,saved?'Saved':'Local only');
 }
@@ -20106,10 +20182,27 @@ function approveRotaRow(btn,msg='Rota approved'){
   const statusCell=row.querySelector('td:nth-last-child(2)');
   if(statusCell)statusCell.innerHTML='<span class="b b-g">Approved</span>';
   row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm">View</button>';
-  const payload=row.dataset.swap?JSON.parse(row.dataset.swap||'{}'):JSON.parse(row.dataset.approval||'{}');
-  if(payload.id)saveServer(row.dataset.swap?'rotaSwaps':'rotaApprovals',{...payload,status:'Approved'});
+  const isSwap=!!row.dataset.swap;
+  const payload=isSwap?JSON.parse(row.dataset.swap||'{}'):JSON.parse(row.dataset.approval||'{}');
+  if(payload.id)saveServer(isSwap?'rotaSwaps':'rotaApprovals',{...payload,status:'Approved'});
+  // sync_domain_model() (app_data.py) already swaps the two referenced
+  // rotaAssignments' employee fields for real on the backend the moment
+  // this save lands — but the client's own rotaAssignmentsById cache (what
+  // Weekly/Monthly/Department Rota actually render from) had no idea that
+  // happened, so the open rota board kept showing the OLD assignment until
+  // the next full page reload. Apply the identical swap locally too.
+  if(isSwap&&payload.assignment_a_id&&payload.assignment_b_id&&payload.assignment_a_id!==payload.assignment_b_id){
+    const a=rotaAssignmentsById.get(payload.assignment_a_id);
+    const b=rotaAssignmentsById.get(payload.assignment_b_id);
+    if(a&&b){
+      ['employee_id','employee_name','role','department','location'].forEach(field=>{
+        const tmp=a[field];a[field]=b[field];b[field]=tmp;
+      });
+      renderRotaBoards();
+    }
+  }
   updateRotaStats();
-  toast(msg+' ?','ok');
+  toast(msg+' ✓','ok');
   audit(msg,'Rota Planning','Approved');
 }
 
