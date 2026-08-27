@@ -419,7 +419,11 @@ function showM(id){
   if(id==='m-leave')populateLeaveEmployeeSelect();
   if(id==='m-loan')populateHrEmployeeSelect('loan-employee');
   if(id==='m-loan-advance')populateHrEmployeeSelect('advance-employee');
-  if(id==='m-ot')populateHrEmployeeSelect('ot-employee-sel');
+  // updateOtMultiplier() previously only ran on #ot-type's onchange / #ot-hours's
+  // oninput — leaving the type on its default and submitting straight away sent
+  // whatever the HTML shipped with (1.25×) instead of the configured rate, and
+  // #ot-hours stayed blank/0 until the user touched it. Populate both on open.
+  if(id==='m-ot'){populateHrEmployeeSelect('ot-employee-sel');updateOtMultiplier();}
   if(id==='m-att-correction')populateHrEmployeeSelect('corr-employee');
   if(id==='m-shift-swap'){populateHrEmployeeSelect('swap-employee-a');populateHrEmployeeSelect('swap-employee-b');}
   setTimeout(()=>modal.querySelector('input,select,textarea,button:not(.modal-x)')?.focus(),30);
@@ -653,6 +657,9 @@ function openEmpEdit(emp){
   setV('emp-designation',emp.designation);
   setV('emp-supervisor',emp.supervisor);
   setV('emp-salary',emp.salary);
+  setV('emp-housing-allowance',emp.housing_allowance||0);
+  setV('emp-transport-allowance',emp.transport_allowance||0);
+  setV('emp-other-allowance',emp.other_allowance||0);
   setSel('emp-contract',emp.contract);
   setSel('emp-branch',emp.branch||emp.location);
   // pre-filter roles then set saved role
@@ -728,6 +735,9 @@ function saveEmployee(){
     shift_hours_type:employeeFormValue('emp-shift-hours-type','weekly'),
     shift_hours:parseAmount(employeeFormValue('emp-shift-hours','0'))||0,
     salary:parseAmount(employeeFormValue('emp-salary','0')),
+    housing_allowance:parseAmount(employeeFormValue('emp-housing-allowance','0'))||0,
+    transport_allowance:parseAmount(employeeFormValue('emp-transport-allowance','0'))||0,
+    other_allowance:parseAmount(employeeFormValue('emp-other-allowance','0'))||0,
     contract:employeeFormValue('emp-contract','Full-Time'),
     location:employeeFormValue('emp-location','Dubai HQ'),
     branch:employeeFormValue('emp-branch','Dubai HQ'),
@@ -1007,8 +1017,8 @@ function renderPayrollEmployeeRecord(employee){
     <td>${escapeHtml(employee.name)}</td>
     <td><span class="b b-t">${escapeHtml(employee.department||'Monthly')}</span></td>
     <td class="mono">${Number(employee.salary||0).toLocaleString('en-AE',{minimumFractionDigits:0,maximumFractionDigits:0})}</td>
-    <td class="mono">0</td>
-    <td class="mono">0</td>
+    <td class="mono">${Number(employee.housing_allowance||0).toLocaleString('en-AE',{minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+    <td class="mono">${Number(employee.transport_allowance||0).toLocaleString('en-AE',{minimumFractionDigits:0,maximumFractionDigits:0})}</td>
     <td class="mono" ${employee.iban?'':'style="color:var(--amber)"'}>${escapeHtml(bankText)}</td>
     <td class="mono">${escapeHtml('WPS-'+String(employee.id||'').replace(/\D/g,'').padStart(3,'0'))}</td>
     <td><span class="b ${employee.iban?'b-g':'b-a'}">${employee.iban?'Complete':'Review'}</span></td>`;
@@ -1032,6 +1042,10 @@ function renderPayrollRunRow(employee){
   const existing=[...tbody.querySelectorAll('tr:not([data-empty-state])')].find(r=>r.dataset.employeeId===employee.id);
   if(existing)existing.remove();
   const salary=Number(employee.salary||0);
+  // Previously always hardcoded to 0.00 with no source anywhere — real
+  // allowances are now captured on the employee record (see the Employee
+  // form's Housing/Transport/Other Allowance fields).
+  const allowances=Number(employee.housing_allowance||0)+Number(employee.transport_allowance||0)+Number(employee.other_allowance||0);
   const row=document.createElement('tr');
   row.dataset.employeeId=employee.id;
   row.dataset.wps=employee.iban?'ok':'missing';
@@ -1039,10 +1053,10 @@ function renderPayrollRunRow(employee){
   row.innerHTML=`
     <td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px">${escapeHtml(initialsFromName(employee.name))}</div><div class="pay-emp-name">${escapeHtml(employee.name)}<div class="card-sub">${escapeHtml(employee.department||'')}</div></div></div></td>
     <td><input class="fi mono pay-basic" style="width:90px;padding:4px 6px;font-size:12px" value="${salary.toFixed(2)}" onchange="recalcPayroll()"></td>
-    <td><input class="fi mono pay-allow" style="width:90px;padding:4px 6px;font-size:12px" value="0.00" onchange="recalcPayroll()"></td>
+    <td><input class="fi mono pay-allow" style="width:90px;padding:4px 6px;font-size:12px" value="${allowances.toFixed(2)}" onchange="recalcPayroll()"></td>
     <td><input class="fi mono pay-ot" style="width:70px;padding:4px 6px;font-size:12px" value="0.00" onchange="recalcPayroll()"></td>
     <td><input class="fi mono pay-ded" style="width:70px;padding:4px 6px;font-size:12px" value="0.00" onchange="recalcPayroll()"></td>
-    <td class="mono pay-net">${fmt(salary)}</td>
+    <td class="mono pay-net">${fmt(salary+allowances)}</td>
     <td><span class="b ${employee.iban?'b-g':'b-a'}">${employee.iban?'OK':'Review'}</span></td>
     <td><span class="b b-b pay-status">Ready</span></td>
     <td><button class="btn btn-g btn-sm" onclick="previewPayslip(this)">Payslip</button></td>`;
@@ -17063,57 +17077,43 @@ function renderLeaveCalendar(){
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-function updateLeaveBalance(){
+// Previously scraped #leave-tbody/#employee-tbody DOM rows entirely — never
+// called the real GET /leave/balance endpoint (dead code before this fix),
+// had no leave-year filter, joined on employee NAME (merging two same-named
+// employees' balances together), and hardcoded the Sick cap to 90 with no
+// way for a company's actual configured cap to apply. Now calls the real
+// endpoint so every number shown matches exactly what
+// approve_leave_request() will actually enforce; Pending is still shown for
+// visibility (fetched from /leave/requests) but — matching the backend's
+// own over-entitlement check, which only ever counts approved days —
+// Remaining is no longer pre-reduced by it.
+async function updateLeaveBalance(){
   const tbody=document.getElementById('leave-balance-tbody');
   if(!tbody)return;
-  const empRows=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')];
-  if(!empRows.length){emptyTableMessage(tbody,'No employees in database yet.');return;}
-  const leaveRows=[...document.querySelectorAll('#leave-tbody tr:not([data-empty-state])')];
-  // Bucketed by (employee, leave type, approved-vs-pending) — previously
-  // every non-rejected leave row, regardless of type, was summed into one
-  // "used" number and subtracted from Annual Leave's remaining balance, so
-  // taking Sick/Emergency/Unpaid leave silently drained the Annual figure
-  // while the separate "Sick Days" column stayed hardcoded at 90 forever.
-  // Pending requests are still held back against Remaining (a real backend
-  // over-entitlement check now blocks approving past what's left, so a
-  // pending hold here prevents someone stacking several unapproved
-  // overlapping requests that would each individually look fine) — but
-  // they're now shown in their own column instead of silently merged into
-  // "Used", which used to make it look like unapproved leave had already
-  // been taken.
-  const usedByType={},pendingByType={};
-  leaveRows.forEach(row=>{
-    const cells=[...row.cells];
-    if(cells.length<6)return;
-    const emp=cells[0]?.textContent.trim();
-    const type=cells[1]?.textContent.trim()||'Annual';
-    const days=parseInt(cells[4]?.textContent||'0')||0;
-    const status=(cells[5]?.textContent.trim()||'').toLowerCase();
-    if(!emp)return;
-    if(status==='approved'){
-      usedByType[emp]=usedByType[emp]||{};
-      usedByType[emp][type]=(usedByType[emp][type]||0)+days;
-    }else if(status==='pending'){
-      pendingByType[emp]=pendingByType[emp]||{};
-      pendingByType[emp][type]=(pendingByType[emp][type]||0)+days;
+  let balances=[];
+  try{
+    const res=await authenticatedFetch(`${apiBaseUrl()}/leave/balance`);
+    if(res.ok)balances=await res.json();
+  }catch(e){console.warn('[updateLeaveBalance] balance fetch failed',e);}
+  if(!Array.isArray(balances)||!balances.length){emptyTableMessage(tbody,'No employees in database yet.');return;}
+
+  const pendingByEmployee={};
+  try{
+    const reqRes=await authenticatedFetch(`${apiBaseUrl()}/leave/requests`);
+    if(reqRes.ok){
+      const requests=await reqRes.json();
+      (Array.isArray(requests)?requests:[]).filter(r=>r.status==='pending'&&r.leave_type==='Annual Leave').forEach(r=>{
+        pendingByEmployee[r.employee_id]=(pendingByEmployee[r.employee_id]||0)+(Number(r.days)||0);
+      });
     }
-  });
+  }catch(e){console.warn('[updateLeaveBalance] requests fetch failed',e);}
+
   tbody.innerHTML='';
-  empRows.forEach(row=>{
-    const emp=employeeFromDirectoryRow(row);
-    if(!emp.name)return;
-    const policy=emp.leave_policy||'UAE Standard';
-    const annualDays=leaveEntitlementDays(policy);
-    const sickDays=90;
-    const empUsed=usedByType[emp.name]||{};
-    const empPending=pendingByType[emp.name]||{};
-    const used=empUsed['Annual']||0;
-    const pending=empPending['Annual']||0;
-    const sickUsed=empUsed['Sick']||0;
-    const remaining=Math.max(0,annualDays-used-pending);
-    const sickRemaining=Math.max(0,sickDays-sickUsed);
+  balances.forEach(b=>{
+    const sick=b.by_type?.['Sick Leave']||{remaining:90};
+    const pending=pendingByEmployee[b.employee_id]||0;
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${escapeHtml(emp.name)}</td><td class="mono">${annualDays}</td><td class="mono">${sickRemaining}</td><td class="mono">${used}</td><td class="mono">${pending}</td><td class="mono" ${remaining<5?'style="color:var(--red)"':''}>${remaining}</td>`;
+    tr.innerHTML=`<td>${escapeHtml(b.employee_name)}</td><td class="mono">${b.annual_entitlement}</td><td class="mono">${sick.remaining}</td><td class="mono">${b.used}</td><td class="mono">${pending}</td><td class="mono" ${b.remaining<5?'style="color:var(--red)"':''}>${b.remaining}</td>`;
     tbody.appendChild(tr);
   });
   if(!tbody.children.length)emptyTableMessage(tbody,'No employees in database yet.');
@@ -17127,10 +17127,11 @@ function updateOtMultiplier(){
   // Read the actual configured rates from HR Settings > OT Rules (saved via
   // saveOtRules(), reloaded into these fields by _applyOtRulesConfig()) —
   // previously hardcoded 1.25/1.5 regardless of what an admin had configured.
-  const normalRate=parseFloat(document.getElementById('ot-mult-normal')?.value)||1.25;
-  const weekendRate=parseFloat(document.getElementById('ot-mult-weekend')?.value)||1.5;
-  const holidayRate=parseFloat(document.getElementById('ot-mult-holiday')?.value)||weekendRate;
-  const ramadanRate=parseFloat(document.getElementById('ot-mult-ramadan')?.value)||normalRate;
+  const cfg=_otRulesConfigCache||{};
+  const normalRate=parseFloat(document.getElementById('ot-mult-normal')?.value??cfg.multNormal)||1.25;
+  const weekendRate=parseFloat(document.getElementById('ot-mult-weekend')?.value??cfg.multWeekend)||1.5;
+  const holidayRate=parseFloat(document.getElementById('ot-mult-holiday')?.value??cfg.multHoliday)||weekendRate;
+  const ramadanRate=parseFloat(document.getElementById('ot-mult-ramadan')?.value??cfg.multRamadan)||normalRate;
   let mult=`${normalRate}×`,note='UAE Labour Law';
   if(type==='weekend'){mult=`${weekendRate}×`;note='Weekend rate';}
   else if(type==='holiday'){mult=`${holidayRate}×`;note='Holiday rate';}
@@ -17619,8 +17620,15 @@ function saveOtRules(){
   toast('OT Rules saved','ok');
 }
 
+// Cached so updateOtMultiplier() can still read the configured rates on
+// pages (index.html's copy of the Submit OT modal) that have no
+// #ot-mult-normal/weekend/holiday/ramadan settings inputs of their own to
+// read from — those inputs only exist on hrms.html's HR Settings tab, but
+// this hydration function runs on every page via the shared bootstrap.
+let _otRulesConfigCache=null;
 function _applyOtRulesConfig(rule){
   if(!rule)return;
+  _otRulesConfigCache=rule;
   const setVal=(id,v)=>{const el=document.getElementById(id);if(el&&v!==undefined&&v!==null)el.value=v;};
   const radio=document.querySelector(`input[name="ot-rate-type"][value="${rule.rateType}"]`);
   if(radio)radio.checked=true;
@@ -18624,28 +18632,41 @@ function renderLoanRecord(rec){
   const balance=Number(rec.balance??rec.amount)||0;
   const tr=document.createElement('tr');
   tr.dataset.recordId=rec.id;
+  tr.dataset.record=JSON.stringify(rec);
   tr.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td>${escapeHtml(rec.type)}</td><td class="mono">AED ${amount.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td class="mono">AED ${Number(rec.emi||0).toFixed(2)}</td><td class="mono">AED ${balance.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td><span class="b ${statusCls}">${escapeHtml(rec.status||'Pending')}</span></td><td>${actions}</td>`;
   tbody.prepend(tr);
 }
 
+// Previously saved only {id,status} — save_app_record() does a full payload
+// overwrite, not a merge, so that silently destroyed employee_id/balance/
+// emi on approval, and _employee_loan_deductions() (payroll.py) could never
+// match the record again — every approved loan deducted AED 0.00 forever.
+// Spreading the full stored record first (same pattern approveOT() uses)
+// keeps them intact.
 function approveLoan(btn){
   const row=btn.closest('tr');
-  const id=row.dataset.recordId;
   row.querySelector('.b').className='b b-g';
   row.querySelector('.b').textContent='Approved';
   row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm" onclick="toast(\'Loan detail\',\'info\')">View</button>';
-  if(id)saveServer('employeeLoans',{id,status:'Approved'});
+  let payload={};try{payload=JSON.parse(row.dataset.record||'{}');}catch{}
+  payload={...payload,status:'Approved'};
+  row.dataset.record=JSON.stringify(payload);
+  const id=row.dataset.recordId;
+  if(id)saveServer('employeeLoans',{...payload,id});
   toast('Loan approved ✓','ok');
   audit('Loan approved',row.children[0]?.textContent||'','Approved');
 }
 
 function rejectLoan(btn){
   const row=btn.closest('tr');
-  const id=row.dataset.recordId;
   row.querySelector('.b').className='b b-r';
   row.querySelector('.b').textContent='Rejected';
   row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm" onclick="toast(\'Loan detail\',\'info\')">View</button>';
-  if(id)saveServer('employeeLoans',{id,status:'Rejected'});
+  let payload={};try{payload=JSON.parse(row.dataset.record||'{}');}catch{}
+  payload={...payload,status:'Rejected'};
+  row.dataset.record=JSON.stringify(payload);
+  const id=row.dataset.recordId;
+  if(id)saveServer('employeeLoans',{...payload,id});
   toast('Loan rejected','warn');
   audit('Loan rejected',row.children[0]?.textContent||'','Rejected');
 }
@@ -18679,17 +18700,22 @@ function renderLoanAdvanceRecord(rec){
   const requestedStr=rec.requested?new Date(rec.requested).toLocaleDateString('en-GB'):new Date().toLocaleDateString('en-GB');
   const tr=document.createElement('tr');
   tr.dataset.recordId=rec.id;
+  tr.dataset.record=JSON.stringify(rec);
   tr.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td class="mono">${escapeHtml(rec.month)}</td><td class="mono">AED ${Number(rec.amount||0).toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td>${requestedStr}</td><td><span class="b ${statusCls}">${escapeHtml(rec.status||'Pending')}</span></td><td>${actions}</td>`;
   tbody.prepend(tr);
 }
 
+// See approveLoan()'s comment — same full-payload-overwrite bug, same fix.
 function approveLoanAdvance(btn){
   const row=btn.closest('tr');
-  const id=row.dataset.recordId;
   row.querySelector('.b').className='b b-g';
   row.querySelector('.b').textContent='Approved';
   row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm" onclick="toast(\'Advance detail\',\'info\')">View</button>';
-  if(id)saveServer('salaryAdvances',{id,status:'Approved'});
+  let payload={};try{payload=JSON.parse(row.dataset.record||'{}');}catch{}
+  payload={...payload,status:'Approved'};
+  row.dataset.record=JSON.stringify(payload);
+  const id=row.dataset.recordId;
+  if(id)saveServer('salaryAdvances',{...payload,id});
   toast('Advance approved ✓','ok');
   audit('Salary advance approved',row.children[0]?.textContent||'','Approved');
 }
@@ -18905,9 +18931,19 @@ function adjustOT(btn){
   const cell=row.querySelector('td:nth-child(5)');
   const next=prompt('Adjusted OT hours',cell.textContent.replace('h','').trim());
   if(!next)return;
-  cell.textContent=Number(next).toFixed(1)+'h';
+  const hours=Number(next);
+  cell.textContent=hours.toFixed(1)+'h';
   row.querySelector('td:nth-child(6)').innerHTML='<span class="b b-a">Adjusted</span>';
   toast('Overtime hours adjusted for HR review','warn');
+  // Previously wrote only to cell.textContent — an adjustment vanished on
+  // reload and, since payroll's OT deduction reads the stored ot_hours
+  // field (not the rendered cell), was silently ignored by payroll too.
+  // Persist through the same saveServer path approveOT()/rejectOT() use.
+  let payload={};try{payload=JSON.parse(row.dataset.record||'{}');}catch{}
+  payload={...payload,ot_hours:hours,otHours:hours,status:'Adjusted'};
+  row.dataset.record=JSON.stringify(payload);
+  const id=row.dataset.recordId;
+  if(id)saveServer('overtimeRequests',{...payload,id});
   audit('Overtime adjusted','HR Overtime','Adjusted');
 }
 
@@ -19002,12 +19038,12 @@ const ROTA_WEEK_DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const ROTA_DEFAULT_STAFF=[];
 
 const ROTA_EDIT_DEFAULTS={
-  Morning:{code:'M',start:'09:00',end:'18:00',mark:'Shift',className:'approved',icon:'✓'},
-  Evening:{code:'E',start:'14:00',end:'22:00',mark:'Shift',className:'approved',icon:'✓'},
-  Night:{code:'N',start:'21:00',end:'06:00',mark:'Shift',className:'night',icon:'✓'},
-  Off:{code:'OFF',start:'',end:'',mark:'Off',className:'off',icon:'•'},
-  Leave:{code:'L',start:'',end:'',mark:'Leave',className:'draft',icon:'○'},
-  Overtime:{code:'OT',start:'18:00',end:'20:00',mark:'OT',className:'overtime',icon:'!'}
+  Morning:{code:'M',start:'09:00',end:'18:00',mark:'Shift',className:'approved',icon:'✓',break_minutes:60},
+  Evening:{code:'E',start:'14:00',end:'22:00',mark:'Shift',className:'approved',icon:'✓',break_minutes:60},
+  Night:{code:'N',start:'21:00',end:'06:00',mark:'Shift',className:'night',icon:'✓',break_minutes:60},
+  Off:{code:'OFF',start:'',end:'',mark:'Off',className:'off',icon:'•',break_minutes:0},
+  Leave:{code:'L',start:'',end:'',mark:'Leave',className:'draft',icon:'○',break_minutes:0},
+  Overtime:{code:'OT',start:'18:00',end:'20:00',mark:'OT',className:'overtime',icon:'!',break_minutes:0}
 };
 
 function rotaCellTypeFromCode(code){
@@ -19087,6 +19123,10 @@ function normalizeRotaAssignment(record={}){
     mark:record.mark||defaults.mark,
     className:record.className||record.class_name||defaults.className,
     notes:record.notes||'',
+    // rotaHours() used to hardcode this at 0 no matter what the cell editor's
+    // own Break field said — Shift Setup and the rota disagreed on a shift's
+    // real hours. Carried through save/normalize like every other field now.
+    break_minutes:record.break_minutes!=null?Number(record.break_minutes):(record.breakMinutes!=null?Number(record.breakMinutes):(defaults.break_minutes??0)),
     status:record.status||'Draft',
     updated_at:record.updated_at||new Date().toISOString()
   };
@@ -19111,7 +19151,7 @@ function rotaCellHtml(assignment){
 
 function rotaHours(assignment){
   if(!assignment||['OFF','L'].includes(String(assignment.code||'').toUpperCase()))return 0;
-  const hours=parseFloat(shiftHours(assignment.start,assignment.end,0));
+  const hours=parseFloat(shiftHours(assignment.start,assignment.end,assignment.break_minutes||0));
   return Number.isFinite(hours)?hours:0;
 }
 
@@ -19129,7 +19169,7 @@ function openRotaCellEditor(cell){
   populateRotaEditTypeSelect(type);
   setFieldValue(document.getElementById('rota-edit-start'),start&&start!=='-'?start:'');
   setFieldValue(document.getElementById('rota-edit-end'),end&&end!=='-'?end:'');
-  setFieldValue(document.getElementById('rota-edit-break'),'60');
+  setFieldValue(document.getElementById('rota-edit-break'),String(assignment?.break_minutes??ROTA_EDIT_DEFAULTS[type]?.break_minutes??60));
   setSelectValue(document.getElementById('rota-edit-mark'),assignment?.mark||ROTA_EDIT_DEFAULTS[type]?.mark||'Shift');
   setFieldValue(document.getElementById('rota-edit-notes'),assignment?.notes||'');
   showM('m-edit-shift');
@@ -19216,6 +19256,7 @@ function saveActiveRotaAssignmentFromModal(forceOff=false){
     end,
     mark,
     className,
+    break_minutes:forceOff?0:Number(document.getElementById('rota-edit-break')?.value)||0,
     notes:forceOff?'':document.getElementById('rota-edit-notes')?.value||'',
     status:document.getElementById('rota-weekly-status')?.textContent?.trim()||'Draft',
     updated_at:new Date().toISOString()
@@ -21193,7 +21234,16 @@ function _getAttendanceEmployees(){
 function markAllPresent(){
   const emps=_getAttendanceEmployees();
   _renderAttendanceRows(emps,[]);
-  toast(`${emps.length} employee${emps.length===1?'':'s'} marked Present`,'ok');
+}
+
+// Wired to the "No — All Present" button, which previously just closed the
+// modal with no save at all — the roll call table looked confirmed but no
+// record of it existed anywhere once the modal closed.
+async function confirmAllPresent(){
+  closeM('m-att-check');
+  const emps=_getAttendanceEmployees();
+  await _saveManualAttendance(emps,[]);
+  toast(`${emps.length} employee${emps.length===1?'':'s'} marked Present — attendance saved`,'ok');
 }
 
 function openAbsencePicker(){
@@ -21216,13 +21266,14 @@ function openAbsencePicker(){
   showM('m-absence-picker');
 }
 
-function confirmAbsences(){
+async function confirmAbsences(){
   const emps=_getAttendanceEmployees();
   const absent=[...document.querySelectorAll('#absence-picker-list input[type=checkbox]:checked')]
     .map(cb=>cb.dataset.emp);
   closeM('m-absence-picker');
   // Re-render full table with absent set (all others stay Present)
   _renderAttendanceRows(emps,absent);
+  await _saveManualAttendance(emps,absent);
   const presentCount=emps.length-absent.length;
   if(absent.length)
     toast(`${presentCount} Present · ${absent.length} Absent — attendance saved`,'ok');
@@ -21230,6 +21281,36 @@ function confirmAbsences(){
     toast(`All ${emps.length} employees marked Present`,'ok');
 }
 
+// Previously both callers showed an "attendance saved" toast with no
+// saveServer()/moduleApi() call anywhere — the marked rows were DOM-only
+// and vanished the next time refreshAttendanceToday() ran. Records one
+// manual "in" punch per present employee (absent employees get no punch at
+// all, matching how presence is already determined everywhere else in the
+// app — no punch that day = absent); a failure for one employee is logged
+// and skipped rather than aborting the rest of the roll call.
+async function _saveManualAttendance(emps,absentNames){
+  const absentSet=new Set((absentNames||[]).map(n=>n.toLowerCase()));
+  const present=emps.filter(e=>!absentSet.has((e.name||'').toLowerCase()));
+  for(const e of present){
+    if(!e.id)continue;
+    try{
+      await authenticatedFetch(`${apiBaseUrl()}/attendance/punch`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({employee_id:String(e.id),employee_name:e.name||'',direction:'in'}),
+      });
+    }catch(err){console.warn('[_saveManualAttendance] failed for',e.name,err);}
+  }
+  audit('Manual attendance roll call saved',`${present.length} present, ${absentSet.size} absent`,'Saved');
+  if(typeof refreshAttendanceToday==='function')refreshAttendanceToday();
+}
+
+// Trimmed to the real 4 columns the #att-today-tbody header actually has
+// (Employee/Check In/Source/Status) — this used to emit 7 <td>s (also
+// Check Out/Hours/Late/OT), silently misaligning every column after the
+// first, with Hours/Late/OT rendered as permanent placeholder dashes since
+// a manual present/absent roll call has no real check-out time or shift
+// data to compute them from in the first place.
 function _renderAttendanceRows(emps,absentNames){
   const tbody=document.getElementById('att-today-tbody');
   if(!tbody)return;
@@ -21237,7 +21318,7 @@ function _renderAttendanceRows(emps,absentNames){
   const timeStr=now.toLocaleTimeString('en-AE',{hour:'2-digit',minute:'2-digit',hour12:true});
   const absentSet=new Set(absentNames.map(n=>n.toLowerCase()));
   if(!emps.length){
-    tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">No active employees. Add employees to track attendance.</td></tr>';
+    tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:24px">No active employees. Add employees to track attendance.</td></tr>';
     return;
   }
   tbody.innerHTML=emps.map(e=>{
@@ -21245,20 +21326,13 @@ function _renderAttendanceRows(emps,absentNames){
     const statusCls=isAbsent?'b-r':'b-g';
     const statusLabel=isAbsent?'Absent':'Present';
     const checkIn=isAbsent?'—':timeStr;
-    const checkOut='—';
-    const hours=isAbsent?'—':'—';
-    const late=isAbsent?'—':'0 min';
-    const ot='—';
     return `<tr>
       <td><div style="display:flex;align-items:center;gap:8px">
         <div class="co-av" style="width:26px;height:26px;font-size:10px">${escapeHtml(initialsFromName(e.name))}</div>
         <div><div style="font-weight:600;font-size:12px">${escapeHtml(e.name)}</div><div style="font-size:10px;color:var(--text3)">${escapeHtml(e.department||'')}</div></div>
       </div></td>
       <td class="mono" style="font-size:12px">${checkIn}</td>
-      <td class="mono" style="font-size:12px">${checkOut}</td>
-      <td class="mono" style="font-size:12px">${hours}</td>
-      <td style="font-size:12px">${late}</td>
-      <td style="font-size:12px">${ot}</td>
+      <td><span class="b b-gray">Manual</span></td>
       <td><span class="b ${statusCls}">${statusLabel}</span></td>
     </tr>`;
   }).join('');
@@ -21399,7 +21473,14 @@ function generateSIF(){
   // SCR — Salary Credit Records
   rows.forEach((row,i)=>{
     const info=getPayrollRowInfo(row);
-    const emp=[...document.querySelectorAll('#payroll-employee-tbody tr')].find(r=>r.textContent.includes(info.name));
+    // Matched by the real employee id both tables already carry in
+    // dataset.employeeId (set by renderPayrollRunRow()/
+    // renderPayrollEmployeeRecord()) — previously matched by
+    // `r.textContent.includes(info.name)`, a plain substring search, so
+    // "Ali" matched the IBAN row for "Ali Hassan" and salary could be
+    // transferred to the wrong bank account entirely.
+    const realEmployeeId=row.dataset.employeeId||'';
+    const emp=realEmployeeId&&document.querySelector(`#payroll-employee-tbody tr[data-employee-id="${CSS.escape(realEmployeeId)}"]`);
     const iban=emp?.querySelector('.mono')?.textContent?.trim()||'';
     const bank=emp?.cells?.[2]?.textContent?.trim()||'';
     const empId='EMP-'+String(i+1).padStart(3,'0');

@@ -3,6 +3,7 @@ import re
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth_principal import resolve_active_branch
@@ -14,11 +15,41 @@ from app.schemas import EmployeeOut, PayrollGenerate, PayrollRunOut, WpsBatchOut
 
 router = APIRouter(prefix="/payroll", tags=["payroll"], dependencies=[Depends(require_module("hrms"))])
 
-# Standard UAE MOHRE convention for converting a monthly basic salary into an
-# hourly rate: 30 calendar days x 8 working hours/day. No other convention
-# exists anywhere else in this codebase (the OT Rules settings screen only
-# ever writes multiplier config, never a resolved per-employee hourly rate).
-_OT_HOURS_PER_MONTH = Decimal("240")
+# Fallback only — HR Settings > OT Rules (workDays x workHours, saved to the
+# "hr_settings" AppDataRecord as record id "ot-rules-config") is the real
+# source of truth and is read per-company in generate_payroll() below. This
+# 22 x 8 = 176 default matches that screen's own on-page example formula
+# (app.js's saveOtRules()/updateOtMultiplier()) exactly, so an unconfigured
+# company sees the same number the settings screen itself would show.
+# Previously hardcoded to 240 (30 x 8) with a comment claiming no other
+# convention existed anywhere else in the codebase — the OT Rules screen
+# already showed the admin a 176-hour formula on the same page, so every
+# unconfigured-default company was paying OT at roughly 176/240 = 73% of the
+# rate its own settings page promised.
+_DEFAULT_OT_HOURS_PER_MONTH = Decimal("176")
+
+
+def _ot_hours_per_month(db: Session, company_id: str) -> Decimal:
+    row = (
+        db.query(AppDataRecord)
+        .filter(
+            AppDataRecord.company_id == company_id,
+            AppDataRecord.collection == "hr_settings",
+            AppDataRecord.record_key == "ot-rules-config",
+        )
+        .first()
+    )
+    if row:
+        data = _payload(row)
+        try:
+            work_days = Decimal(str(data.get("workDays") or "22"))
+            work_hours = Decimal(str(data.get("workHours") or "8"))
+            total = work_days * work_hours
+            if total > 0:
+                return total
+        except Exception:
+            pass
+    return _DEFAULT_OT_HOURS_PER_MONTH
 
 
 def money(value: object) -> Decimal:
@@ -121,7 +152,7 @@ def _salary_advance_deductions(db: Session, company_id: str, employee_no: str, e
     return total
 
 
-def _overtime_pay(db: Session, company_id: str, employee_no: str, employee_name: str, period: str, basic_salary: Decimal) -> Decimal:
+def _overtime_pay(db: Session, company_id: str, employee_no: str, employee_name: str, period: str, basic_salary: Decimal, ot_hours_per_month: Decimal) -> Decimal:
     """Sum of approved overtime for this employee in this period, at the
     multiplier the requester's own OT-type selection resolved to when they
     submitted it (see updateOtMultiplier() in app.js) - not recomputed here,
@@ -129,7 +160,7 @@ def _overtime_pay(db: Session, company_id: str, employee_no: str, employee_name:
     employee_id-first matching as the deduction helpers, so two employees
     sharing a full name don't each get credited the other's OT hours."""
     key = _name_key(employee_name)
-    hourly_rate = money(basic_salary) / _OT_HOURS_PER_MONTH
+    hourly_rate = money(basic_salary) / ot_hours_per_month
     total = Decimal("0.00")
     for row in _app_records(db, company_id, "overtimeRequests"):
         data = _payload(row)
@@ -196,11 +227,20 @@ def generate_payroll(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> PayrollRun:
-    existing = db.query(PayrollRun).filter(
-        PayrollRun.company_id == current_user.company_id,
-        PayrollRun.period == payload.period,
-        PayrollRun.branch_id == payload.branch_id,
-    ).first()
+    # A branch-scoped run and a company-wide run (branch_id=None) for the
+    # same period used to be treated as non-conflicting (different
+    # branch_id), even though a company-wide run's employee_query below has
+    # no branch filter at all and re-includes everyone the branch run
+    # already paid — same employee gets two full salaries, and any loan/
+    # advance balance the first run touched gets drained a second time.
+    # A request conflicts with any existing run for the period that is
+    # itself company-wide (covers everyone already), that matches the same
+    # branch, or when the new request is itself company-wide (which would
+    # re-cover every existing branch-scoped run).
+    conflict_filters = [PayrollRun.company_id == current_user.company_id, PayrollRun.period == payload.period]
+    if payload.branch_id:
+        conflict_filters.append(or_(PayrollRun.branch_id.is_(None), PayrollRun.branch_id == payload.branch_id))
+    existing = db.query(PayrollRun).filter(*conflict_filters).first()
     if existing:
         raise HTTPException(status_code=409, detail=f"Payroll run for {payload.period} already exists")
 
@@ -211,13 +251,14 @@ def generate_payroll(
     if not employees:
         raise HTTPException(status_code=422, detail="No active employees found")
 
+    ot_hours_per_month = _ot_hours_per_month(db, current_user.company_id)
     run = PayrollRun(company_id=current_user.company_id, branch_id=payload.branch_id, period=payload.period, status="draft")
     gross_total = Decimal("0.00")
     deductions_total = Decimal("0.00")
     net_total = Decimal("0.00")
     for employee in employees:
-        allowances = Decimal("0.00")
-        overtime = _overtime_pay(db, current_user.company_id, employee.employee_no, employee.full_name, payload.period, employee.basic_salary)
+        allowances = money(employee.housing_allowance) + money(employee.transport_allowance) + money(employee.other_allowance)
+        overtime = _overtime_pay(db, current_user.company_id, employee.employee_no, employee.full_name, payload.period, employee.basic_salary, ot_hours_per_month)
         loan_deduction = _employee_loan_deductions(db, current_user.company_id, employee.employee_no, employee.full_name, payload.period)
         advance_deduction = _salary_advance_deductions(db, current_user.company_id, employee.employee_no, employee.full_name, payload.period)
         deductions = loan_deduction + advance_deduction

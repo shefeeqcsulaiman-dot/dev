@@ -702,6 +702,12 @@ class Employee(Base, TimestampMixin):
     department: Mapped[str] = mapped_column(String(80), default="Operations")
     designation: Mapped[str] = mapped_column(String(80), default="Staff")
     basic_salary: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    # Payroll previously hardcoded "allowances = 0.00" with nowhere for a
+    # real figure to come from at all — these three columns are the actual
+    # source generate_payroll() (payroll.py) now sums into that field.
+    housing_allowance: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    transport_allowance: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    other_allowance: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     iban: Mapped[str | None] = mapped_column(String(40))
     wps_id: Mapped[str | None] = mapped_column(String(40))
     status: Mapped[str] = mapped_column(String(30), default="active")

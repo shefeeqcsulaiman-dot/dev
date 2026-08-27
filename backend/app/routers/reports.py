@@ -913,7 +913,13 @@ def _build_summary(db: Session, company_id: str, branch_id: str | None = None) -
     revenue += sum((record_amount(row, "total", "amount", "net_amount") for row in recognized_app_sales), Decimal("0.00"))
     # Use same SQL JSON extraction as _purchase_summary to cover all field variants
     purchases = money(_purchase_summary(db, company_id, branch_id)["total"])
-    payroll = money(db.query(func.coalesce(func.sum(PayrollRun.net_total), 0)).filter(*payroll_filter).scalar())
+    # Gross, not net — a loan/advance deduction is a balance-sheet recovery
+    # on the employee's own liability, not a reduction in what the company
+    # actually spent on payroll. Summing net_total here understated payroll
+    # expense (and so overstated net profit) by exactly the deduction
+    # amount. gross_total is already computed and stored by
+    # generate_payroll(), just never read by anything until now.
+    payroll = money(db.query(func.coalesce(func.sum(PayrollRun.gross_total), 0)).filter(*payroll_filter).scalar())
     expenses = money(db.query(func.coalesce(func.sum(SourceTransaction.total), 0)).filter(*expense_filter).scalar())
     # app_data "expenses" collection has no branch_id column of its own
     # (AppDataRecord.branch_id does, but expenses aren't written through the

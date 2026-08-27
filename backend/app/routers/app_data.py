@@ -1606,6 +1606,9 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
             salary = decimal_value(record.get("salary") or record.get("basic_salary") or 0)
             if salary > 0:
                 emp.basic_salary = salary
+            emp.housing_allowance = decimal_value(record.get("housing_allowance") or 0)
+            emp.transport_allowance = decimal_value(record.get("transport_allowance") or 0)
+            emp.other_allowance = decimal_value(record.get("other_allowance") or 0)
             iban = str(record.get("iban") or "").strip()
             if iban:
                 emp.iban = iban

@@ -462,6 +462,12 @@ def ensure_schema_updates() -> None:
                 "last_login": "TIMESTAMP WITH TIME ZONE",
                 "last_activity": "TIMESTAMP WITH TIME ZONE",
                 "password_changed_at": "TIMESTAMP WITH TIME ZONE",
+                # Payroll's allowances field was hardcoded to 0.00 with no
+                # column anywhere to source a real figure from — see
+                # payroll.py's generate_payroll().
+                "housing_allowance": "NUMERIC(12,2) DEFAULT 0",
+                "transport_allowance": "NUMERIC(12,2) DEFAULT 0",
+                "other_allowance": "NUMERIC(12,2) DEFAULT 0",
             }
             for column_name, column_type in required_columns.items():
                 if column_name not in existing_columns:

@@ -60,6 +60,55 @@ def _leave_entitlement_days(employee_no: str, policies: dict[str, str]) -> int:
     return _LEAVE_POLICY_DAYS.get(policies.get(employee_no, ""), 21)
 
 
+# Only "Annual Leave" ever had its cap enforced at approval time — Sick,
+# Emergency, Maternity, Paternity, and Hajj all had configured caps in HR
+# Settings > Leave Types that nothing ever actually checked, so an employee
+# could be approved for an unlimited number of days of any of them. These
+# match that settings screen's own defaults; an admin's saved leave_types
+# table (read below) overrides them per company. Unpaid Leave and Work From
+# Home are deliberately excluded — neither is a capped entitlement.
+_DEFAULT_LEAVE_TYPE_CAPS = {
+    "Annual Leave": 21,
+    "Sick Leave": 90,
+    "Emergency Leave": 5,
+    "Maternity Leave": 60,
+    "Paternity Leave": 5,
+    "Hajj Leave": 30,
+}
+_UNCAPPED_LEAVE_TYPES = {"Unpaid Leave", "Work From Home"}
+
+
+def _leave_type_caps(db: Session, company_id: str) -> dict[str, int]:
+    """leave_type -> configured day cap, from HR Settings > Leave Types
+    (the "hrLeavePolicy" blob's leave_types list) — falls back to the
+    defaults above for any type the admin hasn't customized."""
+    caps = dict(_DEFAULT_LEAVE_TYPE_CAPS)
+    row = (
+        db.query(AppDataRecord)
+        .filter(
+            AppDataRecord.company_id == company_id,
+            AppDataRecord.collection == "hrLeavePolicy",
+            AppDataRecord.record_key == "leave-policy",
+        )
+        .first()
+    )
+    if row:
+        try:
+            data = json.loads(row.payload or "{}")
+        except (TypeError, json.JSONDecodeError):
+            data = {}
+        for entry in (data.get("leave_types") or []) if isinstance(data, dict) else []:
+            type_name = str(entry.get("type") or "").strip()
+            days_raw = entry.get("days")
+            if not type_name or days_raw in (None, ""):
+                continue
+            try:
+                caps[type_name] = int(float(days_raw))
+            except (TypeError, ValueError):
+                continue
+    return caps
+
+
 class LeaveRequestOut(BaseModel):
     id: str
     employee_id: str
@@ -177,16 +226,28 @@ def approve_leave_request(
             detail=f"This request overlaps an already-approved leave request ({overlap.start_date} to {overlap.end_date})",
         )
 
-    if req.leave_type == "Annual Leave":
-        policies = _employee_leave_policies(db, principal.company_id)
-        emp_for_policy = db.query(Employee).filter(Employee.id == req.employee_id).first()
-        entitlement = _leave_entitlement_days(emp_for_policy.employee_no if emp_for_policy else "", policies)
-        used = _annual_used_days(db, principal.company_id, req.employee_id, exclude_request_id=req.id)
-        if used + req.days > entitlement:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Approving this would use {used + req.days} days against a {entitlement}-day entitlement ({entitlement - used} remaining)",
-            )
+    # Previously only "Annual Leave" had any cap enforced here — Sick,
+    # Emergency, Maternity, Paternity, and Hajj all had configured caps in
+    # HR Settings > Leave Types that nothing ever checked, so any of them
+    # could be approved for an unlimited number of days. Annual Leave keeps
+    # its existing per-employee-policy entitlement (_leave_entitlement_days);
+    # every other capped type uses the flat company-wide cap from
+    # _leave_type_caps() instead, matching how the Leave Types settings
+    # screen actually presents them (one cap per type, not per policy).
+    if req.leave_type not in _UNCAPPED_LEAVE_TYPES:
+        if req.leave_type == "Annual Leave":
+            policies = _employee_leave_policies(db, principal.company_id)
+            emp_for_policy = db.query(Employee).filter(Employee.id == req.employee_id).first()
+            entitlement = _leave_entitlement_days(emp_for_policy.employee_no if emp_for_policy else "", policies)
+        else:
+            entitlement = _leave_type_caps(db, principal.company_id).get(req.leave_type)
+        if entitlement is not None:
+            used = _used_days_for_type(db, principal.company_id, req.employee_id, req.leave_type, exclude_request_id=req.id)
+            if used + req.days > entitlement:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Approving this would use {used + req.days} days against a {entitlement}-day entitlement ({entitlement - used} remaining)",
+                )
 
     req.status = "approved"
     _set_approver(req, principal)
@@ -222,23 +283,52 @@ def delete_leave_request(
     principal: Principal = Depends(require_principal_permission("leave:delete")),
 ) -> None:
     req = db.query(LeaveRequest).filter(LeaveRequest.id == request_id, LeaveRequest.company_id == principal.company_id).first()
-    if req:
-        db.delete(req)
-        db.commit()
+    if not req:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+    # An approved request already reduced the employee's real entitlement
+    # for the year — deleting it with no guard silently restored that
+    # entitlement (no status check, no trace at all), letting the same
+    # employee be approved for a second block of leave against a cap that
+    # was never actually available again. Only a pending/rejected request
+    # (never actually consumed entitlement) can be deleted outright; an
+    # approved one must be rejected/reversed through the request's own
+    # status workflow first, which at least leaves the approval and its
+    # approver on record.
+    if req.status == "approved":
+        raise HTTPException(
+            status_code=400,
+            detail="An approved leave request cannot be deleted directly — reject or reverse it first so the entitlement change stays on record.",
+        )
+    db.delete(req)
+    db.commit()
 
 
-def _annual_used_days(db: Session, company_id: str, employee_id: str, exclude_request_id: str | None = None) -> int:
-    year_start = f"{datetime.now(timezone.utc).year}-01-01"
+def _used_days_for_type(db: Session, company_id: str, employee_id: str, leave_type: str, exclude_request_id: str | None = None) -> int:
+    # Attributed entirely to the year the request STARTS in (a request
+    # spanning a year boundary, e.g. 28 Dec - 5 Jan, counts fully against
+    # the starting year's entitlement — a simple, documented rule, not an
+    # attempt to pro-rate across the boundary). Previously had no upper
+    # bound at all: an approved request starting in a FUTURE year was
+    # still >= this year's Jan 1, so it silently drained the CURRENT
+    # year's balance forever.
+    year = datetime.now(timezone.utc).year
+    year_start = f"{year}-01-01"
+    year_end = f"{year + 1}-01-01"
     query = db.query(LeaveRequest).filter(
         LeaveRequest.company_id == company_id,
         LeaveRequest.employee_id == employee_id,
         LeaveRequest.status == "approved",
-        LeaveRequest.leave_type == "Annual Leave",
+        LeaveRequest.leave_type == leave_type,
         LeaveRequest.start_date >= year_start,
+        LeaveRequest.start_date < year_end,
     )
     if exclude_request_id:
         query = query.filter(LeaveRequest.id != exclude_request_id)
     return sum(r.days for r in query.all())
+
+
+def _annual_used_days(db: Session, company_id: str, employee_id: str, exclude_request_id: str | None = None) -> int:
+    return _used_days_for_type(db, company_id, employee_id, "Annual Leave", exclude_request_id)
 
 
 @router.get("/balance")
@@ -246,15 +336,32 @@ def leave_balance(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("leave:view")),
 ) -> list[dict]:
-    """Annual-leave days used (approved, non-rejected) per employee this calendar year."""
+    """Leave days used (approved, this calendar year) per active employee —
+    Annual Leave (top-level annual_entitlement/used/remaining, kept for
+    backward compatibility) plus a by_type breakdown for every other capped
+    leave type. This was previously dead code — the frontend's own Leave
+    Balance Summary table scraped #leave-tbody DOM rows instead of calling
+    this endpoint at all, with no leave-year filter, a name-based (not
+    employee_id) join that merged two same-named employees' balances
+    together, and a hardcoded Sick cap of 90 with no company-setting
+    override. Calling this endpoint instead means the number shown always
+    matches exactly what approve_leave_request() will actually enforce."""
     employees = db.query(Employee).filter(Employee.company_id == principal.company_id, Employee.status == "active").all()
     policies = _employee_leave_policies(db, principal.company_id)
-    return [
-        {
+    caps = _leave_type_caps(db, principal.company_id)
+    result = []
+    for e in employees:
+        annual_entitlement = _leave_entitlement_days(e.employee_no, policies)
+        annual_used = _used_days_for_type(db, principal.company_id, e.id, "Annual Leave")
+        by_type = {}
+        for leave_type, cap in caps.items():
+            used = annual_used if leave_type == "Annual Leave" else _used_days_for_type(db, principal.company_id, e.id, leave_type)
+            by_type[leave_type] = {"entitlement": cap, "used": used, "remaining": max(0, cap - used)}
+        result.append({
             "employee_id": e.id, "employee_name": e.full_name,
-            "annual_entitlement": (entitlement := _leave_entitlement_days(e.employee_no, policies)),
-            "used": (used := _annual_used_days(db, principal.company_id, e.id)),
-            "remaining": max(0, entitlement - used),
-        }
-        for e in employees
-    ]
+            "annual_entitlement": annual_entitlement,
+            "used": annual_used,
+            "remaining": max(0, annual_entitlement - annual_used),
+            "by_type": by_type,
+        })
+    return result
