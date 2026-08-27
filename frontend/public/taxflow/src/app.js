@@ -16619,7 +16619,13 @@ function renderOrgChart(){
 }
 
 function refreshHrmsKpis(){
-  const empCount=document.querySelectorAll('#employee-tbody tr:not([data-empty-state])').length;
+  // "Total Employees" tile's own subtitle promises "active headcount" —
+  // previously counted every row regardless of status, so a company that
+  // deactivates (rather than deletes) departed staff saw its headcount
+  // permanently inflated by everyone who ever left, and the derived
+  // Present-Today percentage was diluted by people who can't be present.
+  const empCount=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')]
+    .filter(row=>employeeFromDirectoryRow(row).status!=='Inactive').length;
   const leaveRows=[...document.querySelectorAll('#leave-tbody tr:not([data-empty-state])')];
   const otRows=[...document.querySelectorAll('#ot-tbody tr:not([data-empty-state])')];
   const corrRows=[...document.querySelectorAll('#corrections-tbody tr:not([data-empty-state])')];
