@@ -740,7 +740,20 @@ function saveEmployee(){
     role_id:employeeFormValue('emp-role'),
     role_name:(()=>{const rid=employeeFormValue('emp-role');const r=_hrRolesCache.find(x=>x.id===rid);return r?r.role_name:'';})(),
     cost_center:employeeFormValue('emp-cost-center'),
-    status:'Active',
+    // The Edit modal has no Status field at all, so this used to hardcode
+    // 'Active' on every single save — editing an Inactive employee (e.g.
+    // just to fix a phone number) silently flipped them back to Active.
+    // Preserve whatever status the row already had when editing; only a
+    // genuinely new employee defaults to Active.
+    status:(()=>{
+      if(!isEdit)return 'Active';
+      const empId=employeeFormValue('emp-id','');
+      const existingRow=[...document.querySelectorAll('#employee-tbody tr')].find(row=>{
+        try{return JSON.parse(row.dataset.employee||'{}').id===empId;}catch{return false;}
+      });
+      if(!existingRow)return 'Active';
+      try{return JSON.parse(existingRow.dataset.employee).status||'Active';}catch{return 'Active';}
+    })(),
     created_at:new Date().toISOString(),
     emirates_id:employeeFormValue('emp-emirates-id'),
     nationality:employeeFormValue('emp-nationality'),
@@ -819,8 +832,8 @@ function renderEmployeeRecord(employee){
     <td>${escapeHtml(employee.supervisor)}</td>
     <td>${(()=>{const h=Number(employee.shift_hours||0);if(h>0){const t=(employee.shift_hours_type||'weekly');const label=t.charAt(0).toUpperCase()+t.slice(1)+' · '+h+'h';return `<span class="b b-b">${escapeHtml(label)}</span>`;}return employee.shift?`<span class="b b-b">${escapeHtml(employee.shift)}</span>`:'<span style="color:var(--text3)">—</span>';})()}</td>
     <td class="mono">${Number(employee.salary||0).toLocaleString('en-AE',{minimumFractionDigits:0,maximumFractionDigits:0})}</td>
-    <td><span class="b b-g">${escapeHtml(employee.status)}</span></td>
-    <td data-action-col="1"><div class="row-actions"><button class="btn btn-g btn-sm" onclick="openEmployeeProfile(this)">View</button> <button class="icon-btn edit" type="button" title="Edit" onclick="editEmployeeFromRow(this)">${editIconSvg()}</button> <button class="icon-btn danger" type="button" title="Delete" onclick="deleteEmployeeFromRow(this)">${deleteIconSvg()}</button></div></td>`;
+    <td><span class="b ${employee.status==='Inactive'?'b-gray':'b-g'}">${escapeHtml(employee.status||'Active')}</span></td>
+    <td data-action-col="1"><div class="row-actions"><button class="btn btn-g btn-sm" onclick="openEmployeeProfile(this)">View</button> <button class="icon-btn edit" type="button" title="Edit" onclick="editEmployeeFromRow(this)">${editIconSvg()}</button> <button class="btn btn-g btn-sm" onclick="toggleEmployeeStatusFromRow(this)">${employee.status==='Inactive'?'Activate':'Deactivate'}</button></div></td>`;
   tbody.prepend(row);
   const table=tbody.closest('table');
   const state=tableEnhanceState.get(table);
@@ -843,19 +856,24 @@ function editEmployeeFromRow(btn){
   openEmpEdit(emp);
 }
 
-function deleteEmployeeFromRow(btn){
+// Delete was replaced with a status toggle per direct request — an
+// employee's history (payroll, leave, attendance) shouldn't disappear just
+// because they've left; Inactive keeps the record while excluding them
+// from active-staff lists elsewhere (payroll run, rota, etc. already key
+// off employee.status).
+function toggleEmployeeStatusFromRow(btn){
   const row=btn.closest('tr');
   if(!row)return;
   let emp={};
   try{emp=JSON.parse(row.dataset.employee||'{}');}catch{}
-  const name=emp.name||row.querySelector('td:nth-child(2)')?.textContent.trim()||'this employee';
-  if(!confirm(`Delete ${name}? This cannot be undone.`))return;
-  deleteServer('employees',emp);
-  const table=row.closest('table');
-  row.remove();
-  if(table)refreshEnhancedTable(table);
-  toast(`${name} deleted`,'ok');
-  audit('Deleted employee',emp.id||'','Removed');
+  if(!emp.id)emp=employeeFromDirectoryRow(row);
+  const newStatus=emp.status==='Inactive'?'Active':'Inactive';
+  emp.status=newStatus;
+  renderEmployeeRecord(emp);
+  if(typeof renderPayrollEmployeeRecord==='function')renderPayrollEmployeeRecord(emp);
+  saveServer('employees',emp);
+  toast(`${emp.name||'Employee'} marked ${newStatus}`,'ok');
+  audit('Employee status changed',emp.id||'',newStatus);
 }
 
 function employeeFromDirectoryRow(row){
