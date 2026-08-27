@@ -538,8 +538,11 @@ def _ingest_device_punch(
     if punch_time > now + timedelta(minutes=5):
         return {"ok": False, "error": "future"}
     # Reject punches older than 90 days (prevents replay / mass backdating
-    # attacks) — only for device-sourced punches, same as the original check.
-    if device_id and punch_time < now - timedelta(days=90):
+    # attacks). Previously gated behind `if device_id:`, so the CSV import
+    # path (device_id always None — an admin file upload, not a device) and
+    # manual single punches skipped this entirely; there's nothing
+    # device-specific about the risk this guards against.
+    if punch_time < now - timedelta(days=90):
         return {"ok": False, "error": "too_old"}
 
     offset = _company_offset(db, company_id)
@@ -548,17 +551,23 @@ def _ingest_device_punch(
 
     # Idempotency guard: a bridge restart replays its whole in-memory backlog
     # (last-synced marker is best-effort), so the same device punch can arrive
-    # more than once. Treat an identical (device, employee, timestamp) as the
-    # same punch instead of inserting a duplicate row.
-    if device_id:
-        existing = db.query(AttendancePunch).filter(
-            AttendancePunch.company_id == company_id,
-            AttendancePunch.employee_id == employee_id,
-            AttendancePunch.punch_time == punch_time,
-            AttendancePunch.device_id == device_id,
-        ).first()
-        if existing:
-            return {"ok": True, "id": existing.id, "duplicate": True}
+    # more than once — and the same is just as true of re-uploading the same
+    # attendance CSV file. Previously gated behind `if device_id:`, so CSV
+    # rows (device_id always None) never got this check at all; the DB-level
+    # uq_attendance_punch_dedup constraint doesn't help either, since two
+    # rows with device_id=NULL never collide under a UNIQUE constraint. The
+    # (company_id, employee_id, punch_time, device_id) tuple is still a
+    # correct identity key with device_id=None — SQLAlchemy compiles
+    # `== None` to `IS NULL`, matching every other NULL-device_id row for
+    # that same employee/timestamp, exactly the semantics wanted.
+    existing = db.query(AttendancePunch).filter(
+        AttendancePunch.company_id == company_id,
+        AttendancePunch.employee_id == employee_id,
+        AttendancePunch.punch_time == punch_time,
+        AttendancePunch.device_id == device_id,
+    ).first()
+    if existing:
+        return {"ok": True, "id": existing.id, "duplicate": True}
 
     punch = AttendancePunch(
         company_id=company_id,
@@ -837,6 +846,8 @@ async def import_csv(
     offset = _company_offset(db, current_user.company_id)
     inserted = 0
     skipped = 0
+    duplicates = 0
+    rejected = 0
     for row in reader:
         norm = {k.strip().lower(): (v or "").strip() for k, v in row.items()}
         emp_id = norm.get("employee_id", "")
@@ -845,20 +856,27 @@ async def import_csv(
             skipped += 1
             continue
         punch_time = _parse_time(ts_raw, offset)
-        punch = AttendancePunch(
-            company_id=current_user.company_id,
-            employee_id=emp_id,
-            employee_name=norm.get("employee_name") or None,
-            punch_time=punch_time,
-            punch_date=_local_date(punch_time, offset),
-            direction=norm.get("direction", "in"),
-            source="csv",
+        # Previously built and inserted an AttendancePunch row directly here,
+        # bypassing every check the device/manual ingestion paths go
+        # through — a future-dated or 90+ day old row imported without
+        # complaint, and re-uploading the same CSV file duplicated every
+        # single punch in it forever (no device_id for a NULL-safe DB
+        # constraint to catch). Routing through the shared helper gives CSV
+        # rows the exact same future/90-day/dedupe guarantees.
+        result = _ingest_device_punch(
+            db, current_user.company_id, None, "CSV Import",
+            emp_id, punch_time, norm.get("direction", "in"),
+            norm.get("employee_name") or None, source="csv",
         )
-        db.add(punch)
-        inserted += 1
+        if result.get("ok"):
+            if result.get("duplicate"):
+                duplicates += 1
+            else:
+                inserted += 1
+        else:
+            rejected += 1
 
-    db.commit()
-    return {"imported": inserted, "skipped": skipped}
+    return {"imported": inserted, "skipped": skipped, "duplicates": duplicates, "rejected": rejected}
 
 
 # ── Dashboard data ────────────────────────────────────────────────────────────

@@ -7,11 +7,17 @@ HRMS audit:
     other configured leave type (Sick, Emergency, Maternity, Paternity,
     Hajj) could be approved without limit;
   - an approved leave request could be deleted outright, silently restoring
-    the entitlement it had already consumed with no trace.
+    the entitlement it had already consumed with no trace;
+  - Annual Leave requests were always counted in flat calendar days, even
+    for the 3 of 6 named policies that are explicitly Working-day
+    entitlements (weekends excluded);
+  - an admin's day-count edit to a named policy in HR Settings > Leave
+    Policy never reached the backend's entitlement enforcement at all.
 """
+import json
 from datetime import datetime, timezone
 
-from app.models import Employee, LeaveRequest
+from app.models import AppDataRecord, Employee, LeaveRequest
 
 
 def _company_id(client, auth_headers):
@@ -34,6 +40,14 @@ def _seed_leave_request(db, company_id, employee_id, leave_type, start_date, end
     db.commit()
     db.refresh(req)
     return req
+
+
+def _seed_app_record(db, company_id, collection, record_key, payload):
+    row = AppDataRecord(company_id=company_id, collection=collection, record_key=record_key,
+                         payload=json.dumps(payload))
+    db.add(row)
+    db.commit()
+    return row
 
 
 def test_leave_balance_excludes_approved_requests_starting_a_future_year(client, db, auth_headers):
@@ -82,3 +96,41 @@ def test_delete_leave_request_blocks_approved_but_allows_pending(client, db, aut
                                    f"{year}-04-01", f"{year}-04-03", 3, status="pending")
     r2 = client.delete(f"/api/v1/leave/requests/{pending.id}", headers=auth_headers)
     assert r2.status_code == 204, r2.text
+
+
+def test_annual_leave_request_uses_working_day_count_for_working_basis_policy(client, db, auth_headers):
+    company_id = _company_id(client, auth_headers)
+    emp = _seed_employee(db, company_id, employee_no="LV-TEST-WORKING")
+    # Assign a Working-basis named policy via the employees app-data blob —
+    # the SQL Employee model has no leave_policy column of its own.
+    _seed_app_record(db, company_id, "employees", emp.employee_no, {
+        "id": emp.employee_no, "leave_policy": "Internal 22 Working",
+    })
+    # 2026-08-03 (Mon) to 2026-08-09 (Sun): 7 calendar days, but only 5
+    # working days once the Sat/Sun weekend is excluded.
+    r = client.post("/api/v1/leave/requests", headers=auth_headers, json={
+        "employee_id": emp.id, "leave_type": "Annual Leave",
+        "start_date": "2026-08-03", "end_date": "2026-08-09",
+    })
+    assert r.status_code == 201, r.text
+    assert r.json()["days"] == 5
+
+
+def test_leave_policy_admin_edit_overrides_backend_entitlement(client, db, auth_headers):
+    # The frontend's own copy of the policy day-count map already synced
+    # with an admin's HR Settings edit; the backend copy — the one actually
+    # enforced at approval time via /leave/balance and approve_leave_request
+    # — previously stayed a frozen literal forever.
+    company_id = _company_id(client, auth_headers)
+    emp = _seed_employee(db, company_id, employee_no="LV-TEST-POLICYSYNC")
+    _seed_app_record(db, company_id, "employees", emp.employee_no, {
+        "id": emp.employee_no, "leave_policy": "Internal 22 Working",
+    })
+    _seed_app_record(db, company_id, "hrLeavePolicy", "leave-policy", {
+        "leave_policies": [{"value": "Internal 22 Working", "days": "25", "basis": "Working"}],
+    })
+
+    r = client.get("/api/v1/leave/balance", headers=auth_headers)
+    assert r.status_code == 200, r.text
+    row = next(b for b in r.json() if b["employee_id"] == emp.id)
+    assert row["annual_entitlement"] == 25

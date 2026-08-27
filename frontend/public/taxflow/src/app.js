@@ -685,6 +685,7 @@ function openEmpEdit(emp){
   setV('emp-passport-no',emp.passport_no);
   setV('emp-passport-expiry',emp.passport_expiry);
   setV('emp-labor-card',emp.labor_card);
+  setV('emp-labor-card-expiry',emp.labor_card_expiry);
   setV('emp-driving-license',emp.driving_license);
   setV('emp-driving-expiry',emp.driving_expiry);
   setSel('emp-insurance-type',emp.insurance_type);
@@ -782,6 +783,7 @@ function saveEmployee(){
     passport_expiry:employeeFormValue('emp-passport-expiry'),
     eid_expiry:employeeFormValue('emp-eid-expiry'),
     labor_card:employeeFormValue('emp-labor-card'),
+    labor_card_expiry:employeeFormValue('emp-labor-card-expiry'),
     driving_license:employeeFormValue('emp-driving-license'),
     driving_expiry:employeeFormValue('emp-driving-expiry'),
     insurance_type:employeeFormValue('emp-insurance-type'),
@@ -1013,6 +1015,20 @@ function renderPayrollEmployeeRecord(employee){
   const bankText=employee.iban?`${employee.salary_bank||'Bank'} · ${String(employee.iban).slice(0,5)}...`:'Missing';
   const row=document.createElement('tr');
   row.dataset.employeeId=employee.id;
+  // Real Labour Card number, so the SIF generator can label each employee
+  // by their actual MOL identifier instead of fabricating one from wherever
+  // their row happens to land in the table (see generateSIF()/
+  // renderSifPreview()) — re-sorting or re-rendering the table used to
+  // change an employee's "id" between two consecutive SIF files.
+  row.dataset.laborCard=employee.labor_card||'';
+  // Full, untruncated values for the SIF generator — the visible bankText
+  // cell below intentionally truncates the IBAN for display
+  // ("...slice(0,5)+'...'"), so reading it back out of the DOM (as the SIF
+  // generator previously did via the row's first .mono cell — which was
+  // actually the SALARY column, not this one at all) produced either the
+  // wrong number entirely or a half-IBAN no bank could ever accept.
+  row.dataset.iban=employee.iban||'';
+  row.dataset.bank=employee.salary_bank||'';
   row.innerHTML=`
     <td>${escapeHtml(employee.name)}</td>
     <td><span class="b b-t">${escapeHtml(employee.department||'Monthly')}</span></td>
@@ -16626,12 +16642,6 @@ function refreshHrmsKpis(){
   const payrollRuns=document.querySelectorAll('#payroll-tbody tr:not([data-empty-state])').length;
   const loanRows=document.querySelectorAll('#loans-tbody tr:not([data-empty-state])').length;
   const openRecs=document.querySelectorAll('#requisitions-tbody tr:not([data-empty-state])').length;
-  // Count docs expiring within 30 days from expiry-tbody
-  const expiryRows=[...document.querySelectorAll('#expiry-tbody tr:not([data-empty-state])')];
-  const criticalExpiry=expiryRows.filter(r=>{
-    const d=parseInt(r.cells[3]?.textContent)||999;
-    return d>=0&&d<=30;
-  }).length;
   // Compute net payroll AED total from payroll-tbody .pay-net cells
   let payrollNetTotal=0;
   document.querySelectorAll('#payroll-tbody tr:not([data-empty-state]) .pay-net').forEach(cell=>{
@@ -16658,8 +16668,15 @@ function refreshHrmsKpis(){
     set('hrms-kpi-present',presentToday||'0');
     if(trendEl&&empCount>0)trendEl.innerHTML='<span>'+Math.round(presentToday/empCount*100)+'% of total</span>';
   }).catch(()=>{});
-  // Dashboard alert tiles
-  set('hrms-dash-expiry',criticalExpiry||'0');
+  // Dashboard alert tiles. hrms-dash-expiry is deliberately NOT set here —
+  // refreshExpiryAlerts() is the single source of truth for it (computed
+  // from real employee expiry dates, not by re-parsing this tab's already-
+  // rendered "X days" table text). Both functions used to write this same
+  // element with different numbers, and a `parseInt(...)||999` fallback
+  // there additionally miscounted any document expiring exactly today
+  // (parseInt("0 days") is falsy, so `0||999` silently became 999 and got
+  // excluded from the 0-30-day critical bucket) — whichever function's
+  // setTimeout happened to fire last decided which wrong number won.
   set('hrms-dash-ot',pendingOT||'0');
   set('hrms-dash-recs',openRecs||'0');
   set('hrms-dash-loans',loanRows||'0');
@@ -16789,8 +16806,15 @@ function refreshHrmsDashboard(){
   document.querySelectorAll('#leave-tbody tr:not([data-empty-state])').forEach(row=>{
     const cells=[...row.cells];
     const typeText=(cells[1]?.textContent||'').trim();
-    const status=(cells[5]?.textContent||'').trim();
-    if(status==='Rejected')return;
+    // renderLeaveTable() writes the backend's real lowercase status strings
+    // ('approved'/'pending'/'rejected') into textContent — only CSS
+    // capitalizes them for display (see refreshHrmsKpis()'s onLeaveToday
+    // fix above for the same bug class). Comparing against 'Rejected'
+    // (capitalized) never matched, so every rejected — and every merely
+    // pending — request was still counted as "used" leave here. Only an
+    // actually-approved request has consumed any entitlement.
+    const status=(cells[5]?.textContent||'').trim().toLowerCase();
+    if(status!=='approved')return;
     // Check year (from date cell)
     const fromStr=cells[2]?.textContent.trim()||'';
     if(fromStr&&!fromStr.startsWith(thisYear))return;
@@ -18516,7 +18540,7 @@ function refreshExpiryAlerts(){
   const empRows=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')];
   if(!empRows.length){
     tbody.innerHTML='<tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">Add employees with document expiry dates to see alerts here.</td></tr>';
-    ['expiry-30','expiry-90','expiry-valid','expiry-missing'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='0';});
+    ['expiry-30','expiry-90','expiry-valid','expiry-missing','hrms-dash-expiry'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='0';});
     return;
   }
   const today=new Date();today.setHours(0,0,0,0);
@@ -18526,8 +18550,14 @@ function refreshExpiryAlerts(){
     if(!emp.name)return;
     const add=(label,dateStr)=>{
       if(!dateStr)return docs.push({emp:emp.name,label,date:null,days:null});
-      const d=new Date(dateStr);if(isNaN(d))return docs.push({emp:emp.name,label,date:null,days:null});
-      const days=Math.ceil((d-today)/86400000);
+      // Parsed as LOCAL midnight (matching `today` above), not UTC midnight
+      // — new Date("2026-08-27") parses as 2026-08-27T00:00:00Z, which in
+      // any timezone ahead of UTC (e.g. UAE, +4) is still "yesterday
+      // evening" locally. Diffing that against a local-midnight `today`
+      // made every expiry look ~1 day further away than it really is — a
+      // document expiring TODAY showed "Due in 1 day" instead of "Expired".
+      const d=new Date(`${dateStr}T00:00:00`);if(isNaN(d))return docs.push({emp:emp.name,label,date:null,days:null});
+      const days=Math.round((d-today)/86400000);
       docs.push({emp:emp.name,label,date:d,days,dateStr});
     };
     add('Visa / Work Permit',emp.visa_expiry||emp.visaExpiry);
@@ -18535,6 +18565,9 @@ function refreshExpiryAlerts(){
     add('Emirates ID',emp.eid_expiry||emp.eidExpiry);
     add('Insurance',emp.insurance_expiry||emp.insuranceExpiry);
     add('Driving License',emp.driving_expiry||emp.drivingExpiry);
+    // Previously never scanned at all, despite this tracker's own card-sub
+    // text already advertising "...Labor Card" as covered.
+    add('Labor Card',emp.labor_card_expiry||emp.laborCardExpiry);
   });
   let cnt30=0,cnt90=0,cntValid=0,cntMissing=0;
   const typeCnt30={passport:0,visa:0,eid:0,insurance:0,driving:0};
@@ -19150,7 +19183,10 @@ function rotaCellHtml(assignment){
 }
 
 function rotaHours(assignment){
-  if(!assignment||['OFF','L'].includes(String(assignment.code||'').toUpperCase()))return 0;
+  // PH (Public Holiday) previously fell through to the same hours math as a
+  // real shift whenever the cell still carried a shift's start/end times —
+  // a holiday isn't worked time any more than an OFF/Leave day is.
+  if(!assignment||['OFF','L','PH'].includes(String(assignment.code||'').toUpperCase()))return 0;
   const hours=parseFloat(shiftHours(assignment.start,assignment.end,assignment.break_minutes||0));
   return Number.isFinite(hours)?hours:0;
 }
@@ -19238,8 +19274,12 @@ function saveActiveRotaAssignmentFromModal(forceOff=false){
   const mark=forceOff?'Off':document.getElementById('rota-edit-mark')?.value||defaults.mark;
   const start=forceOff?'':document.getElementById('rota-edit-start')?.value||defaults.start;
   const end=forceOff?'':document.getElementById('rota-edit-end')?.value||defaults.end;
-  const className=mark==='Off'?'off':mark==='Leave'?'draft':mark==='OT'?'overtime':mark==='Holiday'?'holiday':defaults.className;
-  const code=mark==='Off'?'OFF':mark==='Leave'?'L':mark==='OT'?'OT':mark==='Holiday'?'PH':defaults.code;
+  // "Training" previously fell through to defaults.className/defaults.code
+  // (whatever the selected Shift Type was, e.g. Morning -> 'M'/'approved')
+  // — a training day rendered pixel-for-pixel identical to a real worked
+  // shift, with no way to tell them apart on the board.
+  const className=mark==='Off'?'off':mark==='Leave'?'draft':mark==='OT'?'overtime':mark==='Holiday'?'holiday':mark==='Training'?'training':defaults.className;
+  const code=mark==='Off'?'OFF':mark==='Leave'?'L':mark==='OT'?'OT':mark==='Holiday'?'PH':mark==='Training'?'TR':defaults.code;
   const existing=activeRotaCell.dataset.assignment?normalizeRotaAssignment(JSON.parse(activeRotaCell.dataset.assignment)):{};
   const assignment=normalizeRotaAssignment({
     ...existing,
@@ -19387,8 +19427,16 @@ function renderDepartmentRota(){
   const assignments=selectedWeekAssignments('dept');
   const counts={M:0,E:0,N:0,OT:0};
   assignments.forEach(item=>{if(counts[item.code]!==undefined)counts[item.code]+=1;});
+  // Shared with the "Coverage Ready" check below — previously that check
+  // only tested `Object.values(counts).every(Boolean)` (every shift type
+  // has AT LEAST ONE person, i.e. count !== 0), completely ignoring the
+  // per-type `required` numbers rendered right here, so a single person
+  // covering the whole week already read "Coverage Ready" even with
+  // Morning needing 5 and Night needing 2.
+  const REQUIRED={M:5,E:3,N:2,OT:1};
   if(coverage){
-    coverage.innerHTML=[['Morning','M',5],['Evening','E',3],['Night','N',2],['Overtime','OT',1]].map(([label,code,required])=>{
+    coverage.innerHTML=[['Morning','M'],['Evening','E'],['Night','N'],['Overtime','OT']].map(([label,code])=>{
+      const required=REQUIRED[code];
       const assigned=counts[code]||0;
       const pct=Math.min(100,Math.round((assigned/required)*100));
       const cls=assigned>=required?'b-g':assigned?'b-a':'b-r';
@@ -19402,11 +19450,11 @@ function renderDepartmentRota(){
       return `<tr><td>${escapeHtml(staff.name)}</td><td>${escapeHtml(staff.department)}</td><td class="mono">${hours.toFixed(1)}</td><td>${rotaBadge(hours?'Scheduled':'Open')}</td></tr>`;
     }).join('')||'<tr data-empty-state="1"><td colspan="4" style="color:var(--text3);text-align:center">No staff found.</td></tr>';
   }
-  const short=Object.values(counts).every(Boolean);
+  const covered=Object.keys(REQUIRED).every(code=>(counts[code]||0)>=REQUIRED[code]);
   const status=document.getElementById('rota-dept-status');
   if(status){
-    status.className=`b ${short?'b-g':'b-a'}`;
-    status.textContent=short?'Coverage Ready':'Needs Coverage Review';
+    status.className=`b ${covered?'b-g':'b-a'}`;
+    status.textContent=covered?'Coverage Ready':'Needs Coverage Review';
   }
 }
 
@@ -21206,7 +21254,11 @@ async function importAttendanceCsv(input){
     const resp=await fetch(`${base}/api/v1/attendance/import-csv`,{method:'POST',headers:{Authorization:`Bearer ${token}`},body:formData});
     const res=await resp.json();
     if(resp.ok){
-      toast(`Imported ${res.imported} records (${res.skipped} skipped)`,'ok');
+      // duplicates/rejected are new — re-uploading the same file (or a file
+      // with a future-dated/90+-day-old row) previously imported every row
+      // again with no feedback that anything was actually skipped.
+      const extra=[res.duplicates?`${res.duplicates} duplicate`:'',res.rejected?`${res.rejected} rejected`:''].filter(Boolean).join(', ');
+      toast(`Imported ${res.imported} records (${res.skipped} skipped${extra?', '+extra:''})`,'ok');
       refreshAttendanceToday();
       loadAttendanceTrend();
     } else {
@@ -21442,16 +21494,51 @@ function renderSifPreview(rows){
   const tbody=document.getElementById('sif-preview-tbody');
   if(!tbody)return;
   if(!rows.length){emptyTableMessage(tbody,'No payroll rows — run payroll first.');return;}
-  tbody.innerHTML=rows.map((row,i)=>{
+  const period=document.getElementById('pay-period')?.value||document.getElementById('wps-salary-month')?.value||'';
+  const daysWorked=_sifDaysInPeriod(period);
+  tbody.innerHTML=rows.map(row=>{
     const info=getPayrollRowInfo(row);
     const ok=row.dataset.wps==='ok';
-    const empRow=[...document.querySelectorAll('#payroll-employee-tbody tr')].find(r=>r.textContent.includes(info.name));
-    const iban=ok?(empRow?.querySelector('.mono')?.textContent?.trim()||''):'';
-    const bank=ok?(empRow?.cells?.[2]?.textContent?.trim()||''):'';
-    const empId='EMP-'+String(i+1).padStart(3,'0');
+    const {empId,iban,bank}=_sifEmployeeRecord(row);
     const missing=' style="color:var(--amber)"';
-    return `<tr><td>SCR</td><td class="mono">${escapeHtml(empId)}</td><td${ok?'':missing}>${ok?escapeHtml(bank):'Missing'}</td><td class="mono"${ok?'':missing}>${ok?escapeHtml(iban):'Missing'}</td><td class="mono">${info.basic.toFixed(2)}</td><td class="mono">${(info.allow+info.ot).toFixed(2)}</td><td class="mono">30</td><td class="mono">${info.net.toFixed(2)}</td></tr>`;
+    return `<tr><td>SCR</td><td class="mono">${escapeHtml(empId)}</td><td${ok?'':missing}>${ok?escapeHtml(bank):'Missing'}</td><td class="mono"${ok?'':missing}>${ok?escapeHtml(iban):'Missing'}</td><td class="mono">${info.basic.toFixed(2)}</td><td class="mono">${(info.allow+info.ot).toFixed(2)}</td><td class="mono">${daysWorked}</td><td class="mono">${info.net.toFixed(2)}</td></tr>`;
   }).join('');
+}
+
+// Real calendar days in a "YYYY-MM" period (28-31, not a flat 30 every
+// month) — used as the SIF "days worked" field when there's no per-employee
+// unpaid-leave adjustment to apply. new Date(year, month, 0) rolls back to
+// the last day of the PREVIOUS month when month is 1-indexed like this,
+// which is exactly the last day of the target month.
+function _sifDaysInPeriod(period){
+  const m=/^(\d{4})-(\d{2})$/.exec(period||'');
+  if(!m)return 30;
+  return new Date(Number(m[1]),Number(m[2]),0).getDate();
+}
+
+// Looks up the real employee record backing a #payroll-tbody row, by the
+// employee id both tables already carry in dataset.employeeId (set by
+// renderPayrollRunRow()/renderPayrollEmployeeRecord()) — previously matched
+// by `r.textContent.includes(info.name)`, a plain substring search, so
+// "Ali" matched the record for "Ali Hassan" and salary could be transferred
+// to the wrong bank account entirely.
+function _sifEmployeeRecord(row){
+  const realEmployeeId=row.dataset.employeeId||'';
+  const emp=realEmployeeId&&document.querySelector(`#payroll-employee-tbody tr[data-employee-id="${CSS.escape(realEmployeeId)}"]`);
+  return {
+    // Real Labour Card / MOL number when captured, falling back to the
+    // real (stable) employee id — never a row-position index, which
+    // changed an employee's "id" between two consecutive SIF files
+    // whenever the table was re-sorted or re-rendered.
+    empId:emp?.dataset.laborCard||realEmployeeId||'',
+    // Full, untruncated values — the visible bankText cell intentionally
+    // truncates the IBAN for display, so reading it back out of the DOM
+    // (as this used to, via the row's first .mono cell — which was
+    // actually the SALARY column, not IBAN at all) produced either the
+    // wrong number or a half-IBAN no bank could ever accept.
+    iban:emp?.dataset.iban||'',
+    bank:emp?.dataset.bank||'',
+  };
 }
 
 function generateSIF(){
@@ -21461,6 +21548,7 @@ function generateSIF(){
   const salaryMonth=(document.getElementById('wps-salary-month')?.value||'').trim();
   const payDate=document.getElementById('pay-date')?.value||new Date().toISOString().split('T')[0];
   const period=document.getElementById('pay-period')?.value||salaryMonth;
+  const daysWorked=_sifDaysInPeriod(period);
   const rows=getPayrollRows().filter(r=>r.dataset.wps==='ok');
   if(!rows.length){toast('No validated employees — run payroll first','warn');return;}
 
@@ -21471,20 +21559,10 @@ function generateSIF(){
   // EHR — Employer Header Record
   lines.push(`EHR|${molId}|${today}|${period}|${fileSeq}|${rows.length}|${rows.reduce((s,r)=>s+getPayrollRowInfo(r).net,0).toFixed(2)}`);
   // SCR — Salary Credit Records
-  rows.forEach((row,i)=>{
+  rows.forEach(row=>{
     const info=getPayrollRowInfo(row);
-    // Matched by the real employee id both tables already carry in
-    // dataset.employeeId (set by renderPayrollRunRow()/
-    // renderPayrollEmployeeRecord()) — previously matched by
-    // `r.textContent.includes(info.name)`, a plain substring search, so
-    // "Ali" matched the IBAN row for "Ali Hassan" and salary could be
-    // transferred to the wrong bank account entirely.
-    const realEmployeeId=row.dataset.employeeId||'';
-    const emp=realEmployeeId&&document.querySelector(`#payroll-employee-tbody tr[data-employee-id="${CSS.escape(realEmployeeId)}"]`);
-    const iban=emp?.querySelector('.mono')?.textContent?.trim()||'';
-    const bank=emp?.cells?.[2]?.textContent?.trim()||'';
-    const empId='EMP-'+String(i+1).padStart(3,'0');
-    lines.push(`SCR|${empId}|${bank}|${transferDate}|${empId}|${info.name}|30|${info.basic.toFixed(2)}|${(info.allow+info.ot).toFixed(2)}|${info.ded.toFixed(2)}|${info.net.toFixed(2)}|IBAN|${iban}`);
+    const {empId,iban,bank}=_sifEmployeeRecord(row);
+    lines.push(`SCR|${empId}|${bank}|${transferDate}|${empId}|${info.name}|${daysWorked}|${info.basic.toFixed(2)}|${(info.allow+info.ot).toFixed(2)}|${info.ded.toFixed(2)}|${info.net.toFixed(2)}|IBAN|${iban}`);
   });
   // ETR — Employer Trailer Record
   const totNet=rows.reduce((s,r)=>s+getPayrollRowInfo(r).net,0);

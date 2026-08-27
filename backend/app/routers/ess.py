@@ -5,6 +5,7 @@ from jose import JWTError, jwt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+import app.timezone_utils as timezone_utils
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import assert_company_active, company_allows_module
@@ -202,10 +203,17 @@ def ess_attendance(request: Request, db: Session = Depends(get_db)) -> list:
         .limit(90)
         .all()
     )
+    # Same company-local offset attendance.py's /today endpoint already
+    # applies (see _company_offset() there) — previously this returned
+    # punch_time in raw UTC with no adjustment at all, so the same punch
+    # showed a different clock time on the ESS portal than it did on the
+    # HRMS Today's Attendance screen.
+    country = db.query(Company.country).filter(Company.id == emp.company_id).scalar()
+    offset = timezone_utils.company_utc_offset(country)
     return [
         {
             "punch_date": p.punch_date,
-            "punch_time": str(p.punch_time),
+            "punch_time": str(p.punch_time + offset),
             "direction": p.direction,
             "source": p.source,
         }

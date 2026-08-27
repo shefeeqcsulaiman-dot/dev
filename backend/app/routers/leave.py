@@ -1,5 +1,5 @@
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -33,6 +33,80 @@ _LEAVE_POLICY_DAYS = {
     "Contractor": 14,
 }
 
+# Matches each named policy's "Basis" column default in HR Settings > Leave
+# Policy > Named Leave Policies. Three of the six are explicitly Working-day
+# entitlements (weekends excluded from the count), not Calendar-day ones —
+# create_leave_request() below previously counted every leave request's
+# days as flat calendar days regardless of the assigned policy's basis, a
+# ~40% overcount against entitlement for anyone on a Working-day policy
+# (a 22-working-day fortnight off spans 30-31 calendar days).
+_DEFAULT_LEAVE_POLICY_BASIS = {
+    "UAE 30 Calendar": "Calendar",
+    "UAE Standard": "Calendar",
+    "Internal 22 Working": "Working",
+    "Internal 29 Working": "Working",
+    "Executive 30 Working": "Working",
+    "Contractor": "Calendar",
+}
+
+# UAE Labour Law weekend is Saturday+Sunday for most employers (date.weekday():
+# Mon=0 ... Sat=5, Sun=6) — used only for Working-basis policies above.
+_UAE_WEEKEND_WEEKDAYS = {5, 6}
+
+
+def _working_days_count(start: date, end: date) -> int:
+    days = 0
+    current = start
+    while current <= end:
+        if current.weekday() not in _UAE_WEEKEND_WEEKDAYS:
+            days += 1
+        current += timedelta(days=1)
+    return days
+
+
+def _effective_leave_policy_configs(db: Session, company_id: str) -> dict[str, dict]:
+    """policy value -> {"days": int, "basis": "Calendar"|"Working"}, merging
+    the hardcoded defaults above with whatever an admin has actually saved
+    in HR Settings > Leave Policy (the "hrLeavePolicy" blob's leave_policies
+    list, written by saveLeavePolicies() in app.js). The frontend's own copy
+    of this map already synced with admin edits (_applyLeavePolicyDaysToMap
+    in app.js) — this backend copy, the one actually enforced at approval
+    time, previously stayed a frozen literal forever, so the UI and the real
+    enforcement gate could disagree indefinitely."""
+    configs = {
+        name: {"days": days, "basis": _DEFAULT_LEAVE_POLICY_BASIS.get(name, "Calendar")}
+        for name, days in _LEAVE_POLICY_DAYS.items()
+    }
+    row = (
+        db.query(AppDataRecord)
+        .filter(
+            AppDataRecord.company_id == company_id,
+            AppDataRecord.collection == "hrLeavePolicy",
+            AppDataRecord.record_key == "leave-policy",
+        )
+        .first()
+    )
+    if row:
+        try:
+            data = json.loads(row.payload or "{}")
+        except (TypeError, json.JSONDecodeError):
+            data = {}
+        for entry in (data.get("leave_policies") or []) if isinstance(data, dict) else []:
+            value = str(entry.get("value") or "").strip()
+            if not value:
+                continue
+            cfg = configs.setdefault(value, {"days": 21, "basis": "Calendar"})
+            days_raw = entry.get("days")
+            if days_raw not in (None, ""):
+                try:
+                    cfg["days"] = int(float(days_raw))
+                except (TypeError, ValueError):
+                    pass
+            basis = str(entry.get("basis") or "").strip()
+            if basis in ("Calendar", "Working"):
+                cfg["basis"] = basis
+    return configs
+
 
 def _employee_leave_policies(db: Session, company_id: str) -> dict[str, str]:
     """employee_no -> leave_policy string, from the employees app-data blob."""
@@ -56,8 +130,11 @@ def _employee_leave_policies(db: Session, company_id: str) -> dict[str, str]:
     return policies
 
 
-def _leave_entitlement_days(employee_no: str, policies: dict[str, str]) -> int:
-    return _LEAVE_POLICY_DAYS.get(policies.get(employee_no, ""), 21)
+def _leave_entitlement_days(employee_no: str, policies: dict[str, str], configs: dict[str, dict] | None = None) -> int:
+    name = policies.get(employee_no, "")
+    if configs is not None and name in configs:
+        return configs[name]["days"]
+    return _LEAVE_POLICY_DAYS.get(name, 21)
 
 
 # Only "Annual Leave" ever had its cap enforced at approval time — Sick,
@@ -168,6 +245,15 @@ def create_leave_request(
     if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
     days = (payload.end_date - payload.start_date).days + 1
+    # Only Annual Leave is counted against a named policy's Working/Calendar
+    # basis — Sick/Emergency/etc. leave types are governed by their own flat
+    # per-type caps (see _leave_type_caps), which are always calendar days.
+    if payload.leave_type == "Annual Leave":
+        policy_name = _employee_leave_policies(db, principal.company_id).get(emp.employee_no, "")
+        configs = _effective_leave_policy_configs(db, principal.company_id)
+        basis = configs.get(policy_name, {}).get("basis", _DEFAULT_LEAVE_POLICY_BASIS.get(policy_name, "Calendar"))
+        if basis == "Working":
+            days = _working_days_count(payload.start_date, payload.end_date)
     req = LeaveRequest(
         company_id=principal.company_id, employee_id=emp.id, leave_type=payload.leave_type,
         start_date=payload.start_date.isoformat(), end_date=payload.end_date.isoformat(),
@@ -238,7 +324,8 @@ def approve_leave_request(
         if req.leave_type == "Annual Leave":
             policies = _employee_leave_policies(db, principal.company_id)
             emp_for_policy = db.query(Employee).filter(Employee.id == req.employee_id).first()
-            entitlement = _leave_entitlement_days(emp_for_policy.employee_no if emp_for_policy else "", policies)
+            configs = _effective_leave_policy_configs(db, principal.company_id)
+            entitlement = _leave_entitlement_days(emp_for_policy.employee_no if emp_for_policy else "", policies, configs)
         else:
             entitlement = _leave_type_caps(db, principal.company_id).get(req.leave_type)
         if entitlement is not None:
@@ -348,10 +435,11 @@ def leave_balance(
     matches exactly what approve_leave_request() will actually enforce."""
     employees = db.query(Employee).filter(Employee.company_id == principal.company_id, Employee.status == "active").all()
     policies = _employee_leave_policies(db, principal.company_id)
+    configs = _effective_leave_policy_configs(db, principal.company_id)
     caps = _leave_type_caps(db, principal.company_id)
     result = []
     for e in employees:
-        annual_entitlement = _leave_entitlement_days(e.employee_no, policies)
+        annual_entitlement = _leave_entitlement_days(e.employee_no, policies, configs)
         annual_used = _used_days_for_type(db, principal.company_id, e.id, "Annual Leave")
         by_type = {}
         for leave_type, cap in caps.items():
