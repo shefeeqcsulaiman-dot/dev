@@ -21264,7 +21264,14 @@ function _renderAttendanceRows(emps,absentNames){
   }).join('');
 }
 
-function renderAttendanceCalendar(){
+// Company-wide daily summary: Present (green) if anyone punched in that
+// day, Absent (red) if a working day passed with zero punches at all, Leave
+// (amber) — takes priority over both — if approved leave that day covers a
+// disproportionate share of active headcount (>=20%, minimum 1 person, so
+// it still means something for a small company). Only days up to today get
+// a color at all; future days have no data yet and stay neutral, same as
+// weekends (styled separately, never colored by this logic).
+async function renderAttendanceCalendar(){
   const grid=document.getElementById('att-cal-grid');
   const title=document.getElementById('att-cal-title');
   if(!grid)return;
@@ -21284,11 +21291,52 @@ function renderAttendanceCalendar(){
     blank.className='cal-day wknd';
     grid.appendChild(blank);
   }
+
+  const presentCountByDate={};
+  const leaveCountByDate={};
+  try{
+    const trendRes=await authenticatedFetch(`${apiBaseUrl()}/attendance/trend?days=${Math.max(7,today)}`);
+    if(trendRes.ok){
+      const trend=await trendRes.json();
+      (trend.dates||[]).forEach((d,i)=>{presentCountByDate[d]=trend.counts?.[i]||0;});
+    }
+  }catch(e){console.warn('[renderAttendanceCalendar] trend fetch failed',e);}
+  try{
+    const leaveRes=await authenticatedFetch(`${apiBaseUrl()}/leave/requests`);
+    if(leaveRes.ok){
+      const requests=await leaveRes.json();
+      const monthStr=String(month+1).padStart(2,'0');
+      requests.filter(r=>r.status==='approved').forEach(r=>{
+        const start=new Date(r.start_date+'T00:00:00');
+        const end=new Date(r.end_date+'T00:00:00');
+        for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+          if(d.getFullYear()===year&&d.getMonth()===month){
+            const key=`${year}-${monthStr}-${String(d.getDate()).padStart(2,'0')}`;
+            leaveCountByDate[key]=(leaveCountByDate[key]||0)+1;
+          }
+        }
+      });
+    }
+  }catch(e){console.warn('[renderAttendanceCalendar] leave fetch failed',e);}
+
+  const headcount=document.querySelectorAll('#employee-tbody tr:not([data-empty-state])').length;
+  const leaveThreshold=Math.max(1,Math.ceil(headcount*0.2));
+  const monthStr=String(month+1).padStart(2,'0');
+
   for(let d=1;d<=daysInMonth;d++){
     const dayOfWeek=new Date(year,month,d).getDay();
     const isWknd=dayOfWeek===0||dayOfWeek===6;
     const div=document.createElement('div');
-    div.className='cal-day'+(isWknd?' wknd':d===today?' today':'');
+    let cls='cal-day'+(isWknd?' wknd':d===today?' today':'');
+    if(!isWknd&&d<=today){
+      const key=`${year}-${monthStr}-${String(d).padStart(2,'0')}`;
+      const leaveCount=leaveCountByDate[key]||0;
+      const present=presentCountByDate[key]||0;
+      if(leaveCount>=leaveThreshold)cls+=' leave';
+      else if(present>0)cls+=' present';
+      else cls+=' absent';
+    }
+    div.className=cls;
     div.textContent=d;
     grid.appendChild(div);
   }
