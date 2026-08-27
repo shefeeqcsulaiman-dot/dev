@@ -17637,7 +17637,16 @@ function selectOtHours(type){
 function saveOtRules(){
   const rateType=document.querySelector('input[name="ot-rate-type"]:checked')?.value||'fixed';
   const hoursType=document.querySelector('input[name="ot-hours-type"]:checked')?.value||'hours';
-  const rule={id:'ot-rules-config',rateType,hoursType,fixedRate:document.getElementById('ot-fixed-rate')?.value,workDays:document.getElementById('ot-work-days')?.value,workHours:document.getElementById('ot-work-hours')?.value,multNormal:document.getElementById('ot-mult-normal')?.value,multWeekend:document.getElementById('ot-mult-weekend')?.value,multHoliday:document.getElementById('ot-mult-holiday')?.value,multRamadan:document.getElementById('ot-mult-ramadan')?.value};
+  // Named OT Rules previously lived only in #ot-rules-tbody's DOM rows —
+  // addNamedOtRule() built the row and nothing else, so the whole table
+  // was gone on the next page load. Bundled into this same hr_settings
+  // record (same pattern hrLeavePolicy nests its leave_types/leave_policies
+  // lists) rather than as separate AppDataRecord rows, since it's a small
+  // admin-managed list, not per-employee data.
+  const namedRules=[...document.querySelectorAll('#ot-rules-tbody tr')].map(tr=>{
+    try{return JSON.parse(tr.dataset.rule||'');}catch{return null;}
+  }).filter(Boolean);
+  const rule={id:'ot-rules-config',rateType,hoursType,fixedRate:document.getElementById('ot-fixed-rate')?.value,workDays:document.getElementById('ot-work-days')?.value,workHours:document.getElementById('ot-work-hours')?.value,multNormal:document.getElementById('ot-mult-normal')?.value,multWeekend:document.getElementById('ot-mult-weekend')?.value,multHoliday:document.getElementById('ot-mult-holiday')?.value,multRamadan:document.getElementById('ot-mult-ramadan')?.value,namedRules};
   saveServer('hr_settings',rule);
   // Refresh OT policy selects
   _syncOtPolicySelects(rateType);
@@ -17665,7 +17674,27 @@ function _applyOtRulesConfig(rule){
   setVal('ot-mult-weekend',rule.multWeekend);
   setVal('ot-mult-holiday',rule.multHoliday);
   setVal('ot-mult-ramadan',rule.multRamadan);
+  // Rebuild the Named OT Rules table from the saved list — previously
+  // nothing repopulated #ot-rules-tbody on load at all, so it was always
+  // empty on a fresh page visit regardless of what had been added before.
+  const tbody=document.getElementById('ot-rules-tbody');
+  if(tbody&&Array.isArray(rule.namedRules)){
+    tbody.innerHTML='';
+    rule.namedRules.forEach(r=>_renderNamedOtRuleRow(r));
+  }
   _syncOtPolicySelects(rule.rateType);
+}
+
+function _renderNamedOtRuleRow(rule){
+  const tbody=document.getElementById('ot-rules-tbody');
+  if(!tbody)return;
+  const {name,rateType,hoursType,multNormal:mn,multWeekend:mw,multHoliday:mh}=rule;
+  const rateLabel=rateType==='fixed'?'<span class="b b-g">Fixed</span>':rateType==='monthly'?'<span class="b b-b">Monthly-Based</span>':'<span class="b" style="background:var(--bg3)">Other</span>';
+  const hoursLabel=hoursType==='hours'?'<span class="b" style="background:var(--bg3)">Based on Hours</span>':hoursType==='days'?'<span class="b b-a">Based on Days</span>':'<span class="b" style="background:var(--bg3)">Other</span>';
+  const tr=document.createElement('tr');
+  tr.dataset.rule=JSON.stringify(rule);
+  tr.innerHTML=`<td>${escapeHtml(name)}</td><td>${rateLabel}</td><td>${hoursLabel}</td><td>${escapeHtml(String(mn))}</td><td>${escapeHtml(String(mw))}</td><td>${escapeHtml(String(mh))}</td><td>All Employees</td><td><button class="btn btn-g btn-sm" onclick="this.closest('tr').remove();_syncOtPolicySelects();saveOtRules()">Delete</button></td>`;
+  tbody.appendChild(tr);
 }
 function _syncOtPolicySelects(rateType){
   // Update emp-ot-rate select to reflect named rules from tbody
@@ -17684,20 +17713,21 @@ function _syncOtPolicySelects(rateType){
 function addNamedOtRule(){
   const name=prompt('Rule Name (e.g. "Weekend Premium OT"):');
   if(!name?.trim())return;
-  const rateType=document.querySelector('input[name="ot-rate-type"]:checked')?.value||'fixed';
-  const hoursType=document.querySelector('input[name="ot-hours-type"]:checked')?.value||'hours';
-  const mn=document.getElementById('ot-mult-normal')?.value||'1.25';
-  const mw=document.getElementById('ot-mult-weekend')?.value||'1.50';
-  const mh=document.getElementById('ot-mult-holiday')?.value||'1.50';
-  const tbody=document.getElementById('ot-rules-tbody');
-  if(!tbody)return;
-  const rateLabel=rateType==='fixed'?'<span class="b b-g">Fixed</span>':rateType==='monthly'?'<span class="b b-b">Monthly-Based</span>':'<span class="b" style="background:var(--bg3)">Other</span>';
-  const hoursLabel=hoursType==='hours'?'<span class="b" style="background:var(--bg3)">Based on Hours</span>':hoursType==='days'?'<span class="b b-a">Based on Days</span>':'<span class="b" style="background:var(--bg3)">Other</span>';
-  const tr=document.createElement('tr');
-  tr.innerHTML=`<td>${escapeHtml(name.trim())}</td><td>${rateLabel}</td><td>${hoursLabel}</td><td>${mn}</td><td>${mw}</td><td>${mh}</td><td>All Employees</td><td><button class="btn btn-g btn-sm" onclick="this.closest('tr').remove();_syncOtPolicySelects()">Delete</button></td>`;
-  tbody.appendChild(tr);
+  if(!document.getElementById('ot-rules-tbody'))return;
+  const rule={
+    name:name.trim(),
+    rateType:document.querySelector('input[name="ot-rate-type"]:checked')?.value||'fixed',
+    hoursType:document.querySelector('input[name="ot-hours-type"]:checked')?.value||'hours',
+    multNormal:document.getElementById('ot-mult-normal')?.value||'1.25',
+    multWeekend:document.getElementById('ot-mult-weekend')?.value||'1.50',
+    multHoliday:document.getElementById('ot-mult-holiday')?.value||'1.50',
+  };
+  _renderNamedOtRuleRow(rule);
   _syncOtPolicySelects();
-  toast(`OT rule "${name.trim()}" added`,'ok');
+  // Previously DOM-only (tbody.appendChild and nothing else) — the whole
+  // Named OT Rules table was gone on the next page load.
+  saveOtRules();
+  toast(`OT rule "${rule.name}" added`,'ok');
 }
 // -- HR USERS & ROLES ------------------------------------------------------
 // Backed by the real Employee.username/password_hash/role_id columns and the

@@ -224,10 +224,15 @@ def ess_attendance(request: Request, db: Session = Depends(get_db)) -> list:
 @router.get("/payslips")
 def ess_payslips(request: Request, db: Session = Depends(get_db)) -> list:
     emp = ess_bearer(request, db)
+    # PayrollItem.employee_id alone isn't practically exploitable (Employee.id
+    # is a globally-unique UUID, never reused across companies), but an
+    # explicit company_id filter costs nothing and matches the
+    # defense-in-depth scoping every other cross-tenant query in this app
+    # already uses rather than relying on an incidental UUID property.
     items = (
         db.query(PayrollItem, PayrollRun.period, PayrollRun.status)
         .join(PayrollRun, PayrollItem.run_id == PayrollRun.id)
-        .filter(PayrollItem.employee_id == emp.id)
+        .filter(PayrollItem.employee_id == emp.id, PayrollRun.company_id == emp.company_id)
         .order_by(PayrollRun.period.desc())
         .limit(24)
         .all()

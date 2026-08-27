@@ -1,10 +1,11 @@
 import json
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.auth_principal import resolve_active_branch
 from app.database import get_db
 from app.dependencies import Principal, require_module, require_principal_permission
 from app.models import AppDataRecord, Employee, LeaveRequest
@@ -210,17 +211,38 @@ def _out(r: LeaveRequest, emp: Employee) -> LeaveRequestOut:
 
 @router.get("/requests", response_model=list[LeaveRequestOut])
 def list_leave_requests(
+    branch_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("leave:view")),
 ) -> list[LeaveRequestOut]:
-    rows = (
+    query = (
         db.query(LeaveRequest, Employee)
         .join(Employee, Employee.id == LeaveRequest.employee_id)
         .filter(LeaveRequest.company_id == principal.company_id)
-        .order_by(LeaveRequest.created_at.desc())
-        .all()
     )
+    # Same two-tier branch scoping payroll.py's list_employees()/list_runs()
+    # already use — previously this endpoint (and /balance, and every
+    # single-request action below) had no branch check at all, so a
+    # branch-locked employee with "leave:view"/"leave:edit" could see and
+    # act on every other branch's leave requests.
+    resolved_branch_id = branch_id if principal.can_cross_branch("hrms") else resolve_active_branch(principal, branch_id)
+    if resolved_branch_id:
+        query = query.filter((Employee.branch_id == resolved_branch_id) | (Employee.branch_id.is_(None)))
+    rows = query.order_by(LeaveRequest.created_at.desc()).all()
     return [_out(r, e) for r, e in rows]
+
+
+def _assert_employee_branch_access(principal: Principal, employee: Employee) -> None:
+    """Mirrors the query-level filter above for the single-request action
+    endpoints (create/approve/reject/delete), which act on one specific
+    employee_id rather than a list — a branch-scoped principal must not be
+    able to touch a leave request for an employee outside their own
+    branch(es) just because they know its id."""
+    if principal.can_cross_branch("hrms"):
+        return
+    accessible = principal.accessible_branch_ids
+    if employee.branch_id and accessible and employee.branch_id not in accessible:
+        raise HTTPException(status_code=404, detail="Employee not found")
 
 
 class LeaveRequestIn(BaseModel):
@@ -244,6 +266,30 @@ def create_leave_request(
     emp = db.query(Employee).filter(Employee.id == payload.employee_id, Employee.company_id == principal.company_id).first()
     if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
+    _assert_employee_branch_access(principal, emp)
+    # Previously only enforced at approval time — a second overlapping
+    # request could sit pending indefinitely with no warning until someone
+    # tried to approve it. Catching it at creation surfaces the conflict
+    # immediately to whoever is filing the request. approve_leave_request()
+    # keeps its own copy of this check too, since a request that didn't
+    # overlap anything when created can still collide with something
+    # approved afterwards.
+    overlap = (
+        db.query(LeaveRequest)
+        .filter(
+            LeaveRequest.company_id == principal.company_id,
+            LeaveRequest.employee_id == emp.id,
+            LeaveRequest.status.in_(("pending", "approved")),
+            LeaveRequest.start_date <= payload.end_date.isoformat(),
+            LeaveRequest.end_date >= payload.start_date.isoformat(),
+        )
+        .first()
+    )
+    if overlap:
+        raise HTTPException(
+            status_code=409,
+            detail=f"This overlaps an existing {overlap.status} leave request ({overlap.start_date} to {overlap.end_date})",
+        )
     days = (payload.end_date - payload.start_date).days + 1
     # Only Annual Leave is counted against a named policy's Working/Calendar
     # basis — Sick/Emergency/etc. leave types are governed by their own flat
@@ -264,10 +310,17 @@ def create_leave_request(
     return _out(req, emp)
 
 
-def _get_request(db: Session, request_id: str, company_id: str) -> LeaveRequest:
-    req = db.query(LeaveRequest).filter(LeaveRequest.id == request_id, LeaveRequest.company_id == company_id).first()
+def _get_request(db: Session, request_id: str, principal: Principal) -> LeaveRequest:
+    req = db.query(LeaveRequest).filter(LeaveRequest.id == request_id, LeaveRequest.company_id == principal.company_id).first()
     if not req:
         raise HTTPException(status_code=404, detail="Leave request not found")
+    # Same branch check as create_leave_request() — previously a
+    # branch-scoped principal could approve/reject/delete any leave
+    # request in the company just by knowing (or guessing) its id, since
+    # this only ever checked company_id.
+    emp = db.query(Employee).filter(Employee.id == req.employee_id).first()
+    if emp:
+        _assert_employee_branch_access(principal, emp)
     return req
 
 
@@ -288,7 +341,7 @@ def approve_leave_request(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("leave:edit")),
 ) -> LeaveRequestOut:
-    req = _get_request(db, request_id, principal.company_id)
+    req = _get_request(db, request_id, principal)
     if req.status != "pending":
         raise HTTPException(status_code=400, detail=f"Request is already {req.status}")
     if principal.kind == "employee" and principal.employee and principal.employee.id == req.employee_id:
@@ -351,7 +404,7 @@ def reject_leave_request(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("leave:edit")),
 ) -> LeaveRequestOut:
-    req = _get_request(db, request_id, principal.company_id)
+    req = _get_request(db, request_id, principal)
     if req.status != "pending":
         raise HTTPException(status_code=400, detail=f"Request is already {req.status}")
     req.status = "rejected"
@@ -369,9 +422,7 @@ def delete_leave_request(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("leave:delete")),
 ) -> None:
-    req = db.query(LeaveRequest).filter(LeaveRequest.id == request_id, LeaveRequest.company_id == principal.company_id).first()
-    if not req:
-        raise HTTPException(status_code=404, detail="Leave request not found")
+    req = _get_request(db, request_id, principal)
     # An approved request already reduced the employee's real entitlement
     # for the year — deleting it with no guard silently restored that
     # entitlement (no status check, no trace at all), letting the same
@@ -420,6 +471,7 @@ def _annual_used_days(db: Session, company_id: str, employee_id: str, exclude_re
 
 @router.get("/balance")
 def leave_balance(
+    branch_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("leave:view")),
 ) -> list[dict]:
@@ -433,7 +485,13 @@ def leave_balance(
     together, and a hardcoded Sick cap of 90 with no company-setting
     override. Calling this endpoint instead means the number shown always
     matches exactly what approve_leave_request() will actually enforce."""
-    employees = db.query(Employee).filter(Employee.company_id == principal.company_id, Employee.status == "active").all()
+    employee_query = db.query(Employee).filter(Employee.company_id == principal.company_id, Employee.status == "active")
+    # Same branch scoping as /requests above — previously company-wide
+    # regardless of the caller's own branch assignment.
+    resolved_branch_id = branch_id if principal.can_cross_branch("hrms") else resolve_active_branch(principal, branch_id)
+    if resolved_branch_id:
+        employee_query = employee_query.filter((Employee.branch_id == resolved_branch_id) | (Employee.branch_id.is_(None)))
+    employees = employee_query.all()
     policies = _employee_leave_policies(db, principal.company_id)
     configs = _effective_leave_policy_configs(db, principal.company_id)
     caps = _leave_type_caps(db, principal.company_id)
