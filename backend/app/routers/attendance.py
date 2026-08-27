@@ -893,11 +893,31 @@ def attendance_today(
         AttendancePunch.punch_date == today,
         AttendancePunch.direction == "in",
     ).all()
-    unique_employees = {r.employee_id for r in rows}
+    unique_employees = sorted({r.employee_id for r in rows})
+    # A punch's employee_id is matched against Employee.employee_no by plain
+    # string equality (same rule the Sync Activity Log's "Unmatched" badge
+    # uses, recent_punches() above) — Today's Attendance previously showed
+    # the raw device employee_id with no name lookup against Staff ->
+    # Employees at all.
+    employees_by_no = {
+        e.employee_no: e
+        for e in db.query(Employee).filter(
+            Employee.company_id == principal.company_id, Employee.employee_no.in_(unique_employees)
+        ).all()
+    }
+    employees = [
+        {
+            "employee_id": emp_id,
+            "employee_name": employees_by_no[emp_id].full_name if emp_id in employees_by_no else None,
+            "matched": emp_id in employees_by_no,
+        }
+        for emp_id in unique_employees
+    ]
     return {
         "date": today,
         "present_count": len(unique_employees),
-        "employee_ids": sorted(unique_employees),
+        "employee_ids": unique_employees,
+        "employees": employees,
     }
 
 

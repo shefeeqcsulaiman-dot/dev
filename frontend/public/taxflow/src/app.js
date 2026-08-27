@@ -21024,9 +21024,16 @@ async function refreshAttendanceToday(){
       return;
     }
     tbody.innerHTML='';
-    ids.forEach(empId=>{
+    // Real name matched from Staff -> Employees (Employee.employee_no ==
+    // punch employee_id) — previously just showed the raw device ID with
+    // no lookup against the actual employee record at all.
+    const employees=Array.isArray(res.employees)?res.employees:ids.map(id=>({employee_id:id,employee_name:null,matched:false}));
+    employees.forEach(emp=>{
       const tr=document.createElement('tr');
-      tr.innerHTML=`<td>${escapeHtml(empId)}</td><td class="mono">${res.date||'—'}</td><td><span class="b b-g">Biometric</span></td><td><span class="b b-g">Present</span></td>`;
+      const label=emp.employee_name
+        ?`${escapeHtml(emp.employee_name)} <span class="mono" style="color:var(--text3);font-size:11px">(${escapeHtml(emp.employee_id)})</span>`
+        :`${escapeHtml(emp.employee_id)} <span style="color:var(--red)" title="No employee has this ID — check Staff → Employees">⚠ Unmatched</span>`;
+      tr.innerHTML=`<td>${label}</td><td class="mono">${res.date||'—'}</td><td><span class="b b-g">Biometric</span></td><td><span class="b b-g">Present</span></td>`;
       tbody.appendChild(tr);
     });
   }catch(e){

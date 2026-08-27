@@ -77,6 +77,35 @@ def test_sync_log_flags_unmatched_employee_id(client, auth_headers, db):
     assert punches["NO-SUCH-EMPLOYEE-ID"]["matched"] is False
 
 
+def test_today_attendance_shows_matched_employee_name(client, auth_headers, db):
+    """Today's Attendance (HRMS dashboard) previously showed the raw device
+    employee_id with no lookup against Staff -> Employees at all — an admin
+    had no way to tell WHO was actually present without cross-referencing
+    IDs by hand. Now it must resolve the real name the same way the Sync
+    Activity Log's "matched" flag does."""
+    admin_user = db.query(User).filter(User.email == "qa-admin@taxflowqa.com").one()
+    db.add(Employee(company_id=admin_user.company_id, employee_no="TODAY-MATCHED-001", full_name="Present Employee"))
+    db.commit()
+
+    matched = client.post("/api/v1/attendance/punch", headers=auth_headers, json={
+        "employee_id": "TODAY-MATCHED-001", "direction": "in",
+    })
+    assert matched.status_code == 201, matched.text
+
+    unmatched = client.post("/api/v1/attendance/punch", headers=auth_headers, json={
+        "employee_id": "TODAY-NO-SUCH-EMPLOYEE", "direction": "in",
+    })
+    assert unmatched.status_code == 201, unmatched.text
+
+    today = client.get("/api/v1/attendance/today", headers=auth_headers)
+    assert today.status_code == 200, today.text
+    employees = {e["employee_id"]: e for e in today.json()["employees"]}
+    assert employees["TODAY-MATCHED-001"]["employee_name"] == "Present Employee"
+    assert employees["TODAY-MATCHED-001"]["matched"] is True
+    assert employees["TODAY-NO-SUCH-EMPLOYEE"]["employee_name"] is None
+    assert employees["TODAY-NO-SUCH-EMPLOYEE"]["matched"] is False
+
+
 def test_device_key_lookup_is_cached_after_first_match(client, auth_headers, monkeypatch):
     """_get_device_company() previously bcrypt-verified against every active
     device on every single request, even for a device that had already been
