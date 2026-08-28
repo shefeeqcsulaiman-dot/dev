@@ -20777,11 +20777,15 @@ function onBioDevTypeChange(val){
 // you is already wired to your device, nothing left to fill in by hand.
 async function downloadBridgeScript(apiKey,ip,port){
   try{
-    const token=localStorage.getItem('taxflow_token')||'';
-    const base=(window.TAXFLOW_API_BASE_URL||'').replace(/\/$/,'')||'http://localhost:8000';
-    const resp=await fetch(`${base}/api/v1/attendance/bridge-script`,{
-      headers:{Authorization:`Bearer ${token}`}
-    });
+    // window.TAXFLOW_API_BASE_URL is never actually set anywhere in this
+    // app — every read of it always fell through to the '||' fallback.
+    // That fallback used to be the literal string 'http://localhost:8000',
+    // so on the real deployed site this always tried to fetch an address
+    // on the visitor's OWN machine (nothing listening there for anyone but
+    // a local dev), failing instantly with "TypeError: Failed to fetch".
+    // apiBaseUrl() is the same same-origin-aware helper every other API
+    // call in this app already uses (already includes "/api/v1").
+    const resp=await authenticatedFetch(`${apiBaseUrl()}/attendance/bridge-script`);
     if(!resp.ok){toast('Download failed: '+resp.status,'warn');return;}
     let text=await resp.text();
     if(apiKey){
@@ -20791,10 +20795,11 @@ async function downloadBridgeScript(apiKey,ip,port){
       // precedence) — and so _is_explicitly_set() sees these as genuinely
       // configured, not just a literal default, which is the same
       // distinction the script's own "no device IP configured" exit check
-      // already depends on.
+      // already depends on. API_BASE_URL needs the bare origin (the script
+      // appends /api/v1/... itself) — window.location.origin, not apiBaseUrl().
       const inject=[
         `_conf.setdefault("DEVICE_API_KEY", ${JSON.stringify(apiKey)})`,
-        `_conf.setdefault("API_BASE_URL", ${JSON.stringify(base)})`,
+        `_conf.setdefault("API_BASE_URL", ${JSON.stringify(window.location.origin)})`,
         ip?`_conf.setdefault("ZK_DEVICE_IP", ${JSON.stringify(String(ip))})`:null,
         port?`_conf.setdefault("ZK_DEVICE_PORT", ${JSON.stringify(String(port))})`:null,
       ].filter(Boolean).join('\n');
@@ -20820,16 +20825,16 @@ async function downloadBridgeScript(apiKey,ip,port){
 // this can't accidentally touch a same-looking value elsewhere in the file).
 async function downloadReportScript(apiKey,ip,port){
   try{
-    const token=localStorage.getItem('taxflow_token')||'';
-    const base=(window.TAXFLOW_API_BASE_URL||'').replace(/\/$/,'')||'http://localhost:8000';
-    const resp=await fetch(`${base}/api/v1/attendance/report-script`,{
-      headers:{Authorization:`Bearer ${token}`}
-    });
+    // See downloadBridgeScript()'s comment — window.TAXFLOW_API_BASE_URL is
+    // never actually set, so this used to always try localhost:8000 and
+    // fail with "TypeError: Failed to fetch" on the real deployed site.
+    const resp=await authenticatedFetch(`${apiBaseUrl()}/attendance/report-script`);
     if(!resp.ok){toast('Download failed: '+resp.status,'warn');return;}
     let text=await resp.text();
     if(apiKey){
+      const origin=window.location.origin;
       text=text.replace(/^ETAXFLOW_DEVICE_KEY\s*=\s*".*?"/m,`ETAXFLOW_DEVICE_KEY = ${JSON.stringify(apiKey)}`);
-      text=text.replace(/^ETAXFLOW_URL\s*=\s*".*?"/m,`ETAXFLOW_URL = ${JSON.stringify(base+'/api/v1/adms')}`);
+      text=text.replace(/^ETAXFLOW_URL\s*=\s*".*?"/m,`ETAXFLOW_URL = ${JSON.stringify(origin+'/api/v1/adms')}`);
       text=text.replace(/^PUSH_TO_ETAXFLOW\s*=\s*\w+/m,'PUSH_TO_ETAXFLOW = True');
       if(ip)text=text.replace(/^DEVICE_IP\s*=\s*".*?"/m,`DEVICE_IP = ${JSON.stringify(String(ip))}`);
       if(port)text=text.replace(/^DEVICE_PORT\s*=\s*\d+/m,`DEVICE_PORT = ${Number(port)}`);
@@ -20957,7 +20962,11 @@ function _copyFallback(text,label='Device Key'){
 let _bioGuideModes=null;
 
 function _buildBioGuideModes(apiKey, type, ip, port, serialNumber){
-  const baseUrl=(window.TAXFLOW_API_BASE_URL||'https://app.etaxflow.com').replace(/\/$/,'');
+  // window.TAXFLOW_API_BASE_URL is never actually set anywhere in this app
+  // (see downloadBridgeScript()'s comment) — window.location.origin is the
+  // same bare-origin value apiBaseUrl() itself derives from, and works
+  // correctly in local dev too instead of always pointing at production.
+  const baseUrl=window.location.origin;
   const keyDisplay=apiKey||'YOUR_DEVICE_KEY';
   const hasRealKey=!!apiKey;
   const I=_BIO_ICONS;
@@ -21326,8 +21335,14 @@ async function importAttendanceCsv(input){
   formData.append('file',file);
   try{
     const token=localStorage.getItem('taxflow_token')||'';
-    const base=(window.TAXFLOW_API_BASE_URL||'').replace(/\/$/, '')||'http://localhost:8000';
-    const resp=await fetch(`${base}/api/v1/attendance/import-csv`,{method:'POST',headers:{Authorization:`Bearer ${token}`},body:formData});
+    // window.TAXFLOW_API_BASE_URL is never actually set anywhere in this
+    // app, so this always fell through to 'http://localhost:8000' on the
+    // real deployed site — CSV import has been silently broken in
+    // production ("TypeError: Failed to fetch") this whole time. A plain
+    // fetch (not authenticatedFetch()) is kept deliberately: backendHeaders()
+    // hardcodes Content-Type: application/json, which would corrupt this
+    // multipart FormData upload's own auto-generated boundary header.
+    const resp=await fetch(`${apiBaseUrl()}/attendance/import-csv`,{method:'POST',headers:{Authorization:`Bearer ${token}`},body:formData});
     const res=await resp.json();
     if(resp.ok){
       // duplicates/rejected are new — re-uploading the same file (or a file
