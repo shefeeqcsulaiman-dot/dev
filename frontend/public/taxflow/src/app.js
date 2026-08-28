@@ -18378,15 +18378,25 @@ async function filterEmpRoles(){
 }
 
 function renderBranchTable(){
+  // Header is Code | Branch Name | City/Emirate | Status | (actions) — 5
+  // columns. Country/currency (reference-only, see BRANCH_COUNTRIES) is
+  // folded into the City cell rather than given its own column so the
+  // row shape matches the header exactly; previously this row emitted
+  // country as its own 4th <td>, which silently pushed the status badge
+  // into the actions column and left country data mislabeled under the
+  // "Status" header — with no View/Edit buttons ever rendered at all.
   const row=b=>{
     const statusCls=b.status==='Active'?'b-g':'b-gray';
-    const countryLabel=b.country?`${escapeHtml(b.country)}${b.currency?' · '+escapeHtml(b.currency):''}`:'—';
+    const cityLabel=[b.city,b.country].filter(Boolean).join(', ')||'—';
     return `<tr>
       <td class="mono" style="font-size:11px">${escapeHtml(b.code||'—')}</td>
       <td style="font-weight:600">${escapeHtml(b.name)}</td>
-      <td style="color:var(--text3);font-size:12px">${escapeHtml(b.city||'—')}</td>
-      <td style="color:var(--text3);font-size:12px">${countryLabel}</td>
+      <td style="color:var(--text3);font-size:12px">${escapeHtml(cityLabel)}</td>
       <td><span class="b ${statusCls}">${escapeHtml(b.status)}</span></td>
+      <td style="white-space:nowrap">
+        <button class="icon-btn" title="View branch" onclick="showBranchModal('${escapeHtml(b.id)}',true)">${viewIconSvg()}</button>
+        <button class="icon-btn edit" title="Edit branch" onclick="showBranchModal('${escapeHtml(b.id)}')">${editIconSvg()}</button>
+      </td>
     </tr>`;
   };
   const empty='<tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px">No branches yet. Click + Add Branch.</td></tr>';
