@@ -20777,7 +20777,13 @@ function onBioDevTypeChange(val){
   }
 }
 
-async function downloadBridgeScript(){
+// apiKey/ip/port are only ever real when this is called right after
+// creating the device (showBioGuide() has them in memory) — previously
+// this always handed out the bare generic template, requiring a SEPARATE
+// zk_bridge.conf download/creation step (see downloadBioConfig()) before
+// the script could actually connect to anything. Now the one file it hands
+// you is already wired to your device, nothing left to fill in by hand.
+async function downloadBridgeScript(apiKey,ip,port){
   try{
     const token=localStorage.getItem('taxflow_token')||'';
     const base=(window.TAXFLOW_API_BASE_URL||'').replace(/\/$/,'')||'http://localhost:8000';
@@ -20785,12 +20791,30 @@ async function downloadBridgeScript(){
       headers:{Authorization:`Bearer ${token}`}
     });
     if(!resp.ok){toast('Download failed: '+resp.status,'warn');return;}
-    const text=await resp.text();
+    let text=await resp.text();
+    if(apiKey){
+      // Injected as _conf.setdefault(...) right after _load_conf() runs, so
+      // a real zk_bridge.conf a user drops next to this file later still
+      // takes priority (matches the script's own documented config
+      // precedence) — and so _is_explicitly_set() sees these as genuinely
+      // configured, not just a literal default, which is the same
+      // distinction the script's own "no device IP configured" exit check
+      // already depends on.
+      const inject=[
+        `_conf.setdefault("DEVICE_API_KEY", ${JSON.stringify(apiKey)})`,
+        `_conf.setdefault("API_BASE_URL", ${JSON.stringify(base)})`,
+        ip?`_conf.setdefault("ZK_DEVICE_IP", ${JSON.stringify(String(ip))})`:null,
+        port?`_conf.setdefault("ZK_DEVICE_PORT", ${JSON.stringify(String(port))})`:null,
+      ].filter(Boolean).join('\n');
+      const marker='_conf = _load_conf()';
+      if(text.includes(marker))text=text.replace(marker,`${marker}\n${inject}`);
+    }
     const blob=new Blob([text],{type:'text/plain'});
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
     a.href=url;a.download='zk_bridge.py';a.click();
     setTimeout(()=>URL.revokeObjectURL(url),2000);
+    if(apiKey)toast('zk_bridge.py downloaded — ready to run, no separate config file needed','ok');
   }catch(e){toast('Download error: '+e,'warn');}
 }
 
@@ -20929,31 +20953,49 @@ function _buildBioGuideModes(apiKey, type, ip, port, serialNumber){
     ?`<button onclick="downloadBioConfig(${jsonAttr(confSnippet)})" style="flex-shrink:0;padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;white-space:nowrap">⬇ Download</button>`
     :`<span title="Only available right after creating the device — its key can't be retrieved afterward. Copy it from where you saved it and fill in the file above by hand, or delete and re-add the device." style="flex-shrink:0;padding:2px 8px;font-size:10px;border-radius:5px;border:1px dashed var(--border);color:var(--text3);white-space:nowrap;cursor:help">⬇ Download (unavailable)</span>`;
 
+  // A real key (right after creating the device) means the download can be
+  // baked with everything it needs — one file, nothing left to configure by
+  // hand. Reopening this guide later from the device list has no key to
+  // give it (see confDownloadBtn's own comment above for why), so that case
+  // falls back to the old generic-script + manual-conf two-step flow.
+  const downloadStep=hasRealKey
+    ? {icon:I.download, title:'Download Your Ready-to-Run Script', color:'var(--accent)',
+       body:`These devices are pulled over TCP/IP by a small script that runs on a PC on the <strong>same network</strong> as the device — they are not webhook devices. This copy already has your Device Key${ip?', device IP,':''} and API address baked in — nothing left to edit.<br><button onclick="downloadBridgeScript(${jsonAttr(apiKey)},${jsonAttr(ip||'')},${jsonAttr(String(port||''))})" style="margin-top:6px;padding:5px 12px;font-size:11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-weight:600">⬇ Download zk_bridge.py</button>
+       <div style="margin-top:8px;padding:7px 10px;background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)">
+        <strong>Tip:</strong> check the device's own menu first — <code>Menu → Comm → Cloud Server Setting</code> (wording varies). If it has that option, skip the script entirely: add it instead as <strong>ZKTeco ADMS</strong> (see the <em>HTTP / ADMS Push</em> tab above), which pushes punches directly with no bridge script needed. Older/basic terminals without this option still need the script above.
+       </div>
+       ${!ip?`<div style="margin-top:8px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)"><strong>No device IP was set when this device was added</strong> — open the downloaded file in a text editor and set <code>ZK_DEVICE_IP</code> in the config block near the top, or create a <code>zk_bridge.conf</code> next to it (see the details below).</div>`:''}
+       <details style="margin-top:8px"><summary style="cursor:pointer;font-size:10.5px;color:var(--text3)">Prefer a separate config file instead? (e.g. to reuse one script across several devices)</summary>
+        <div style="margin-top:6px;display:flex;align-items:flex-start;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px">
+         <pre style="flex:1;margin:0;font-size:10.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all">${escapeHtml(confSnippet)}</pre>
+         <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0">
+           <button onclick="_bioCopy(${jsonAttr(confSnippet)},this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;white-space:nowrap">Copy</button>
+           ${confDownloadBtn}
+         </div>
+        </div>
+        <div style="margin-top:5px;font-size:10.5px;color:var(--text3)">Save as <code>zk_bridge.conf</code> next to a plain (non-baked) copy of the script — a real config file always takes priority over what's baked into the script.</div>
+       </details>`}
+    : {icon:I.download, title:'Download the Bridge Script', color:'var(--accent)',
+       body:`These devices are pulled over TCP/IP by a small script that runs on a PC on the <strong>same network</strong> as the device — they are not webhook devices.<br><button onclick="downloadBridgeScript()" style="margin-top:6px;padding:5px 12px;font-size:11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-weight:600">⬇ Download zk_bridge.py</button>
+       <div style="margin-top:8px;padding:7px 10px;background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)">
+        <strong>Tip:</strong> check the device's own menu first — <code>Menu → Comm → Cloud Server Setting</code> (wording varies). If it has that option, skip the script entirely: add it instead as <strong>ZKTeco ADMS</strong> (see the <em>HTTP / ADMS Push</em> tab above), which pushes punches directly with no bridge script needed. Older/basic terminals without this option still need the script below.
+       </div>
+       <div style="margin-top:8px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)">This guide was reopened after the device was already created, so its Device Key can no longer be baked in automatically (it's only ever shown once) — create <code>zk_bridge.conf</code> by hand next to the script with the values below, using the key you saved earlier.</div>
+       <div style="margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px"><pre style="margin:0;font-size:10.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all">${escapeHtml(confSnippet)}</pre></div>`};
+
   const tcp={
     label:'TCP/IP Pull',
     tag:'Bridge script · ZKTeco F/K/iClock/X Face Pro/SpeedFace/ProFace/G/UA/IN/MB Series, Anviz',
     diagram:_bioDiagramTCP(tcpLabel),
     steps:[
-      {icon:I.download, title:'Download the Bridge Script', color:'var(--accent)',
-       body:`These devices are pulled over TCP/IP by a small script that runs on a PC on the <strong>same network</strong> as the device — they are not webhook devices.<br><button onclick="downloadBridgeScript()" style="margin-top:6px;padding:5px 12px;font-size:11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-weight:600">⬇ Download zk_bridge.py</button>
-       <div style="margin-top:8px;padding:7px 10px;background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)">
-        <strong>Tip:</strong> check the device's own menu first — <code>Menu → Comm → Cloud Server Setting</code> (wording varies). If it has that option, skip the script entirely: add it instead as <strong>ZKTeco ADMS</strong> (see the <em>HTTP / ADMS Push</em> tab above), which pushes punches directly with no bridge script needed. Older/basic terminals without this option still need the script below.
-       </div>`},
-      {icon:I.form, title:'Create zk_bridge.conf With These Values', color:'var(--accent)',
-       body:`Save this as <code>zk_bridge.conf</code> in the same folder as the script — or download it ready-made:<div style="display:flex;align-items:flex-start;gap:8px;margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px">
-        <pre style="flex:1;margin:0;font-size:10.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all">${escapeHtml(confSnippet)}</pre>
-        <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0">
-          <button onclick="_bioCopy(${jsonAttr(confSnippet)},this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;white-space:nowrap">Copy</button>
-          ${confDownloadBtn}
-        </div>
-       </div>`},
+      downloadStep,
       {icon:I.terminal, title:'Install pyzk and Run the Script', color:'var(--accent)',
        body:`On that same PC: <code>pip install pyzk requests</code>, then <code>python zk_bridge.py</code>. It connects to the device, polls every 30 seconds, and forwards new punches automatically — leave it running (use <code>pm2</code> or a service for production).`},
       {icon:I.badge, title:'Enroll Employees With Matching IDs', color:'var(--amber)',
        body:`<strong>This step is required, not optional</strong> — TaxFlow has no separate "biometric ID" field. It matches a punch to an employee by comparing the device's own <strong>User ID</strong> to that employee's <strong>Employee ID</strong> in TaxFlow (Staff → Employees), as plain text.<br><br>
        When enrolling each employee's fingerprint/face on the device, set the device's <em>User ID</em> field to their exact TaxFlow Employee ID — not their name, not a number the device assigns automatically. If it doesn't match exactly, the punch still reaches TaxFlow but won't attach to that employee anywhere (Present Today, payslips, attendance reports).`},
       {icon:I.check, title:'Test — Punch In &amp; Check Sync Log', color:'#10b981',
-       body:'With <code>zk_bridge.py</code> running, scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within about 30 seconds, attributed to the employee whose ID matches. If it doesn\'t, check the device IP/port and API key in <code>zk_bridge.conf</code> — or if it appears but isn\'t linked to the right employee, re-check the enrolled User ID against step 4.'},
+       body:'With <code>zk_bridge.py</code> running, scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within about 30 seconds, attributed to the employee whose ID matches. If it doesn\'t, check the device IP/port and API key — or if it appears but isn\'t linked to the right employee, re-check the enrolled User ID against the previous step.'},
     ]
   };
 
