@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=29c22be740" as="style">
-<link rel="preload" href="src/app.js?v=30c37c44d6" as="script">
+<link rel="preload" href="src/app.js?v=3323422452" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=29c22be740">
 <style>
@@ -1986,7 +1986,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       </div>
       <div class="flx" style="gap:8px;flex-wrap:wrap;align-items:center;padding-bottom:8px;border-bottom:1px solid var(--border1)">
         <button class="btn btn-g btn-sm" onclick="copyPreviousRota()">Copy Previous</button>
-        <button class="btn btn-g btn-sm" onclick="autoGenerateRota()">Auto Fill 4 Staff</button>
+        <button class="btn btn-g btn-sm" onclick="autoGenerateRota()">Auto Fill All Staff</button>
         <button class="btn btn-g btn-sm" onclick="saveRotaDraft()">Save Draft</button>
         <button class="btn btn-warn btn-sm" onclick="submitRotaApproval()">Submit Approval</button>
         <button class="btn btn-p btn-sm" onclick="publishRota()">Publish Rota</button>
@@ -2450,7 +2450,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 <div class="overlay" id="m-bio-device" onclick="closeOvBg(event,'m-bio-device')">
   <div class="modal" style="max-width:520px">
     <div class="modal-title">Add Biometric Device</div>
-    <div class="modal-sub">ZKTeco · Suprema · Hikvision · Anviz · ADMS · ADMS Classic · Manual</div>
+    <div class="modal-sub">ZKTeco · Anviz · BioTime · Manual</div>
     <div class="fr2">
       <div class="fg"><label class="fl">Device Name</label><input class="fi" id="bio-dev-name" placeholder="Main Entrance Scanner"></div>
       <div class="fg">
@@ -2468,20 +2468,10 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
             <option value="ZKTeco IN Series">IN Series — IN05, IN02 (Face + Fingerprint + Card)</option>
             <option value="ZKTeco MB Series">MB Series — MB360, MB460 (Multi-biometric)</option>
             <option value="ZKTeco">ZKTeco — Other / Generic TCP/IP</option>
-          </optgroup>
-          <optgroup label="ZKTeco — ADMS Cloud Push">
-            <option value="ZKTeco ADMS">ZKTeco ADMS (Push Mode — device calls server)</option>
-          </optgroup>
-          <optgroup label="ZKTeco — ADMS Classic (Server IP:Port only, no URL/key field)">
-            <option value="ZKTeco ADMS Classic">ZKTeco ADMS Classic — Cloud Server Mode</option>
+            <option value="Anviz">Anviz — C2 Pro, OA1000 (TCP/IP)</option>
           </optgroup>
           <optgroup label="ZKTeco — BioTime Server (Pull via REST API)">
             <option value="ZKTeco BioTime Server">BioTime 9.5 Server — connect to your existing BioTime install</option>
-          </optgroup>
-          <optgroup label="Other Brands — HTTP Push">
-            <option value="Suprema">Suprema — BioStation A2, CoreStation</option>
-            <option value="Hikvision">Hikvision — DS-K1T Series, MinMoe</option>
-            <option value="Anviz">Anviz — C2 Pro, OA1000 (TCP/IP)</option>
           </optgroup>
           <option value="Manual">Manual / CSV Import Only</option>
         </select>
@@ -2500,9 +2490,6 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         <div class="fg"><label class="fl">Username</label><input class="fi" id="bio-dev-biotime-user" autocomplete="off" placeholder="BioTime login username"></div>
         <div class="fg"><label class="fl">Password</label><input class="fi" id="bio-dev-biotime-pass" type="password" autocomplete="new-password" placeholder="BioTime login password"></div>
       </div>
-    </div>
-    <div id="bio-dev-serial-row" style="display:none">
-      <div class="fg"><label class="fl">Device Serial Number</label><input class="fi mono" id="bio-dev-serial" placeholder="e.g. AB1234567890" autocomplete="off"></div>
     </div>
     <div class="fg"><label class="fl">Location / Description</label><input class="fi" id="bio-dev-location" placeholder="Reception, Factory Gate, Office Door…"></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-bio-device')">Cancel</button><button class="btn btn-p" id="bio-dev-save-btn" onclick="saveBiometricDevice()">Add Device &amp; Get Device Key</button></div>
@@ -2713,7 +2700,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=30c37c44d6" defer></script>
+<script src="src/app.js?v=3323422452" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

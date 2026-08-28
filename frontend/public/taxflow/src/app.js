@@ -20101,7 +20101,11 @@ function copyPreviousRota(){
 
 function autoGenerateRota(){
   const start=weekStartValue();
-  const staffRows=filteredRotaStaff('week').slice(0,4);
+  // Previously .slice(0,4) — silently auto-filled only the first 4
+  // (department-)filtered staff no matter how many there actually were,
+  // matching the button's own old "Auto Fill 4 Staff" label. Now fills
+  // everyone the current filter shows.
+  const staffRows=filteredRotaStaff('week');
   staffRows.forEach((staff,staffIndex)=>{
     ROTA_WEEK_DAYS.forEach((day,index)=>{
       const isOff=index===((staffIndex+2)%7)||index===6;
@@ -20142,7 +20146,9 @@ function copyPreviousMonthRota(){
 function autoGenerateMonthlyRota(){
   const month=document.getElementById('rota-month-value')?.value||weekStartValue().slice(0,7);
   const start=`${month}-01`;
-  const staffRows=filteredRotaStaff('month').slice(0,4);
+  // Same fix as autoGenerateRota() above — previously capped at the first
+  // 4 filtered staff regardless of the real roster size.
+  const staffRows=filteredRotaStaff('month');
   staffRows.forEach((staff,staffIndex)=>{
     for(let index=0;index<28;index++){
       const date=weekDateFromStart(start,index);
@@ -20729,43 +20735,29 @@ async function loadBioSyncLog(){
 }
 
 const BIO_TCP_TYPES=new Set(['ZKTeco F Series','ZKTeco K Series','ZKTeco iClock','ZKTeco X Face Pro','ZKTeco SpeedFace','ZKTeco ProFace','ZKTeco G Series','ZKTeco UA Series','ZKTeco IN Series','ZKTeco MB Series','ZKTeco','Anviz']);
-const BIO_PUSH_TYPES=new Set(['ZKTeco ADMS','Suprema','Hikvision']);
 const BIO_BIOTIME_TYPES=new Set(['ZKTeco BioTime Server']);
-// Real ZKTeco ADMS Cloud Server Mode — a device whose own menu has only a
-// fixed Server IP + Port field (no custom URL/header, unlike BIO_PUSH_TYPES
-// above), identified by hardware serial number instead of a device key.
+// HTTP/ADMS Push and ADMS Classic were removed from "Add Device" and the
+// Setup Guide (only TCP/IP Pull, BioTime, and Manual/CSV remain selectable)
+// — this set is kept only so the device LIST can still render/label any
+// pre-existing device of this type correctly; no new one can be created.
 const BIO_ADMS_CLASSIC_TYPES=new Set(['ZKTeco ADMS Classic']);
 
 function onBioDevTypeChange(val){
   const hint=document.getElementById('bio-dev-mode-hint');
   const netRow=document.getElementById('bio-dev-net-row');
   const biotimeRow=document.getElementById('bio-dev-biotime-row');
-  const serialRow=document.getElementById('bio-dev-serial-row');
   const portEl=document.getElementById('bio-dev-port');
   const saveBtn=document.getElementById('bio-dev-save-btn');
   if(!hint)return;
   if(biotimeRow)biotimeRow.style.display=BIO_BIOTIME_TYPES.has(val)?'':'none';
-  if(serialRow)serialRow.style.display=BIO_ADMS_CLASSIC_TYPES.has(val)?'':'none';
-  if(saveBtn)saveBtn.textContent=BIO_BIOTIME_TYPES.has(val)?'Connect BioTime Server':(BIO_ADMS_CLASSIC_TYPES.has(val)?'Add Device':'Add Device & Get Device Key');
+  if(saveBtn)saveBtn.textContent=BIO_BIOTIME_TYPES.has(val)?'Connect BioTime Server':'Add Device & Get Device Key';
   if(val==='Manual'){
     hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--bg2);color:var(--text3)';
     hint.innerHTML='<strong>Mode: Manual / CSV</strong> — No device connection needed. Use the <em>Import CSV</em> button to upload attendance records.';
     if(netRow)netRow.style.display='none';
-  } else if(val==='ZKTeco ADMS'){
-    hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--amber-bg);color:var(--amber)';
-    hint.innerHTML='<strong>Mode: ADMS Cloud Push</strong> — On the device panel, set: <em>ADMS Server → this server\'s URL</em>. The device pushes punches automatically. No bridge script needed.';
-    if(netRow)netRow.style.display='none';
-  } else if(BIO_ADMS_CLASSIC_TYPES.has(val)){
-    hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--amber-bg);color:var(--amber)';
-    hint.innerHTML='<strong>Mode: ADMS Classic (Cloud Server)</strong> — For devices whose own menu only has a Server IP + Port field, nothing configurable. No key needed — the device identifies itself by its own serial number, entered below. No bridge script needed.';
-    if(netRow)netRow.style.display='none';
   } else if(BIO_BIOTIME_TYPES.has(val)){
     hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--blue-bg);color:var(--blue)';
     hint.innerHTML='<strong>Mode: BioTime Pull</strong> — TaxFlow connects directly to your existing BioTime server every 5 minutes and pulls attendance for all its terminals. No bridge software needed. Requires each employee\'s <em>Employee No.</em> to match their BioTime personnel ID.';
-    if(netRow)netRow.style.display='none';
-  } else if(BIO_PUSH_TYPES.has(val)){
-    hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--amber-bg);color:var(--amber)';
-    hint.innerHTML='<strong>Mode: HTTP Webhook Push</strong> — Configure the device to POST punches to <code>/api/v1/punch</code> with header <code>X-Device-Key: &lt;key&gt;</code>.';
     if(netRow)netRow.style.display='none';
   } else {
     hint.style.cssText='margin:8px 0 12px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;background:var(--blue-bg);color:var(--blue)';
@@ -20966,16 +20958,10 @@ let _bioGuideModes=null;
 
 function _buildBioGuideModes(apiKey, type, ip, port, serialNumber){
   const baseUrl=(window.TAXFLOW_API_BASE_URL||'https://app.etaxflow.com').replace(/\/$/,'');
-  const baseHost=baseUrl.replace(/^https?:\/\//,'');
-  const serialDisplay=serialNumber||'YOUR_DEVICE_SERIAL';
-  const admsEndpoint='/api/v1/adms';
-  const punchUrl=`${baseUrl}${admsEndpoint}`;
-  const punchUrlWithKeyInPath=`${punchUrl}/${apiKey||'YOUR_DEVICE_KEY'}`;
   const keyDisplay=apiKey||'YOUR_DEVICE_KEY';
   const hasRealKey=!!apiKey;
   const I=_BIO_ICONS;
   const tcpLabel=BIO_TCP_TYPES.has(type)?type.replace('ZKTeco ','').toUpperCase():'ZK';
-  const pushLabel=(type==='ZKTeco ADMS'||BIO_PUSH_TYPES.has(type))?type:'Device';
   const confSnippet=`DEVICE_API_KEY=${keyDisplay}\nZK_DEVICE_IP=${ip||'192.168.1.201'}\nZK_DEVICE_PORT=${port||4370}\nAPI_BASE_URL=${baseUrl}`;
   // Only offer a one-click download when the real (not-yet-hashed) key is in
   // memory — showBioGuide() is also opened later from the device list's
@@ -20994,9 +20980,6 @@ function _buildBioGuideModes(apiKey, type, ip, port, serialNumber){
   const downloadStep=hasRealKey
     ? {icon:I.download, title:'Download Your Ready-to-Run Script', color:'var(--accent)',
        body:`These devices are pulled over TCP/IP by a small script that runs on a PC on the <strong>same network</strong> as the device — they are not webhook devices. This copy already has your Device Key${ip?', device IP,':''} and API address baked in — nothing left to edit.<br><button onclick="downloadBridgeScript(${jsonAttr(apiKey)},${jsonAttr(ip||'')},${jsonAttr(String(port||''))})" style="margin-top:6px;padding:5px 12px;font-size:11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-weight:600">⬇ Download zk_bridge.py</button>
-       <div style="margin-top:8px;padding:7px 10px;background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)">
-        <strong>Tip:</strong> check the device's own menu first — <code>Menu → Comm → Cloud Server Setting</code> (wording varies). If it has that option, skip the script entirely: add it instead as <strong>ZKTeco ADMS</strong> (see the <em>HTTP / ADMS Push</em> tab above), which pushes punches directly with no bridge script needed. Older/basic terminals without this option still need the script above.
-       </div>
        ${!ip?`<div style="margin-top:8px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)"><strong>No device IP was set when this device was added</strong> — open the downloaded file in a text editor and set <code>ZK_DEVICE_IP</code> in the config block near the top, or create a <code>zk_bridge.conf</code> next to it (see the details below).</div>`:''}
        <div style="margin-top:8px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)">
         <strong>Also want a local daily CSV/Excel attendance report</strong> (Clock In/Out per session, OT, Under Time, Absent — not just live sync)? Download <code>daily_attendance_report.py</code> instead — same Device Key/IP/API address already baked in, but meant to run once a day (e.g. via Task Scheduler) rather than continuously.
@@ -21014,9 +20997,6 @@ function _buildBioGuideModes(apiKey, type, ip, port, serialNumber){
        </details>`}
     : {icon:I.download, title:'Download the Bridge Script', color:'var(--accent)',
        body:`These devices are pulled over TCP/IP by a small script that runs on a PC on the <strong>same network</strong> as the device — they are not webhook devices.<br><button onclick="downloadBridgeScript()" style="margin-top:6px;padding:5px 12px;font-size:11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-weight:600">⬇ Download zk_bridge.py</button>
-       <div style="margin-top:8px;padding:7px 10px;background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)">
-        <strong>Tip:</strong> check the device's own menu first — <code>Menu → Comm → Cloud Server Setting</code> (wording varies). If it has that option, skip the script entirely: add it instead as <strong>ZKTeco ADMS</strong> (see the <em>HTTP / ADMS Push</em> tab above), which pushes punches directly with no bridge script needed. Older/basic terminals without this option still need the script below.
-       </div>
        <div style="margin-top:8px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)">This guide was reopened after the device was already created, so its Device Key can no longer be baked in automatically (it's only ever shown once) — create <code>zk_bridge.conf</code> by hand next to the script with the values below, using the key you saved earlier.</div>
        <div style="margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px"><pre style="margin:0;font-size:10.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all">${escapeHtml(confSnippet)}</pre></div>
        <div style="margin-top:8px;font-size:10.5px;color:var(--text3)">Also want a local daily CSV/Excel attendance report instead of (or alongside) live sync? <button onclick="downloadReportScript()" style="margin-left:2px;padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg2);cursor:pointer">⬇ daily_attendance_report.py</button> — same manual config as above, using the same <code>ETAXFLOW_DEVICE_KEY</code>/<code>DEVICE_IP</code> variable names.</div>`};
@@ -21037,76 +21017,6 @@ function _buildBioGuideModes(apiKey, type, ip, port, serialNumber){
     ]
   };
 
-  const push={
-    label:'HTTP / ADMS Push',
-    tag:'No bridge script needed · works with ZKTeco ADMS, Suprema, Hikvision, Anviz and most cloud-push devices',
-    diagram:_bioDiagramPush(pushLabel),
-    steps:[
-      {icon:I.key, title:'Copy the Device Key', color:'var(--accent)',
-       body:'The Device Key is shown above — copy it now. You will enter it into the device in step 3 (either as a header value, or as part of the URL — see the note below).'},
-      {icon:I.monitor, title:'Open the Device Cloud / ADMS Settings', color:'var(--accent)',
-       body:`On a PC on the <strong>same network</strong> as the device, go to <code>http://&lt;device-ip&gt;</code> and sign in. Every manufacturer names this menu differently — look for a communication/network setting labeled one of:
-       <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">
-        ${['ADMS','Cloud Server','HTTP Push','Push Service','Web Service'].map(t=>`<span style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px 9px;font-size:10.5px;font-weight:600">${t}</span>`).join('')}
-       </div>
-       <div style="margin-top:9px;font-size:10.5px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.03em">Examples — exact path varies by model/firmware</div>
-       <div style="display:flex;flex-direction:column;gap:4px;margin-top:5px">
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>ZKTeco</strong> — admin / 12345 → Menu → Communication → <em>Cloud Server / ADMS</em></div>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Hikvision</strong> — admin / 12345 → Configuration → Network → Advanced → <em>Platform Access / HTTP Listening</em></div>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px"><strong>Suprema</strong> — admin / admin → Settings → Server → <em>BioStar / HTTP Push</em></div>
-       </div>`},
-      {icon:I.form, title:'Enter These Details and Save', color:'var(--accent)',
-       body:`<table style="font-size:11px;border-collapse:collapse;width:100%;margin-top:4px">
-        <tr style="background:rgba(99,102,241,.07)">
-          <td style="padding:5px 10px 5px 8px;color:var(--text3);white-space:nowrap;font-weight:600;width:90px">Server Address</td>
-          <td style="padding:5px 8px"><code style="word-break:break-all">${baseUrl}</code></td>
-          <td style="padding:5px 8px 5px 0;width:52px"><button onclick="_bioCopy('${baseUrl.replace(/'/g,"\\'")}',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer;white-space:nowrap">Copy</button></td>
-        </tr>
-        <tr>
-          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Endpoint</td>
-          <td style="padding:5px 8px"><code>${admsEndpoint}</code></td>
-          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('${admsEndpoint}',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
-        </tr>
-        <tr style="background:rgba(99,102,241,.07)">
-          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Port</td>
-          <td style="padding:5px 8px"><code>443</code></td>
-          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('443',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
-        </tr>
-        <tr>
-          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Protocol / SSL</td>
-          <td style="padding:5px 8px"><code>HTTPS</code> — SSL enabled</td>
-          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('HTTPS',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
-        </tr>
-        <tr style="background:rgba(99,102,241,.07)">
-          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Header name</td>
-          <td style="padding:5px 8px"><code>X-Device-Key</code></td>
-          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('X-Device-Key',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
-        </tr>
-        <tr>
-          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Device Key</td>
-          <td style="padding:5px 8px"><code style="word-break:break-all;font-size:10px">${keyDisplay}</code></td>
-          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy(${jsonAttr(keyDisplay)},this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
-        </tr>
-        <tr style="background:rgba(99,102,241,.07)">
-          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Data format</td>
-          <td colspan="2" style="padding:5px 8px;color:var(--text2)">TaxFlow accepts whatever the device sends — JSON, form-urlencoded, or plain key=value pairs. No specific format needs to be selected on the device.</td>
-        </tr>
-       </table>
-       <div style="margin-top:8px;padding:7px 10px;background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)">
-        <strong>Can't send a custom header?</strong> Many ADMS devices can't set <code>X-Device-Key</code>. Use the Device Key in the URL instead — either as a query string:<br>
-        <code style="word-break:break-all;display:inline-block;margin-top:3px">${punchUrl}?device_key=${keyDisplay}</code><br>
-        or as part of the path:<br>
-        <code style="word-break:break-all;display:inline-block;margin-top:3px">${punchUrlWithKeyInPath}</code>
-       </div>
-       <div style="margin-top:6px">Save the configuration. The device will now push every punch directly to TaxFlow within seconds of each scan.</div>`},
-      {icon:I.badge, title:'Enroll Employees With Matching IDs', color:'var(--amber)',
-       body:`<strong>This step is required, not optional</strong> — TaxFlow has no separate "biometric ID" field. It matches a punch to an employee by comparing the device's own <strong>User ID</strong> to that employee's <strong>Employee ID</strong> in TaxFlow (Staff → Employees), as plain text.<br><br>
-       When enrolling each employee's fingerprint/face on the device, set the device's <em>User ID</em> field to their exact TaxFlow Employee ID — not their name, not a number the device assigns automatically. If it doesn't match exactly, the punch still reaches TaxFlow but won't attach to that employee anywhere (Present Today, payslips, attendance reports).`},
-      {icon:I.check, title:'Test — Punch In &amp; Check Sync Log', color:'#10b981',
-       body:'Scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within a few seconds, attributed to the employee whose ID matches. If it doesn\'t, check the IP address and Device Key in your device settings — or if it appears but isn\'t linked to the right employee, re-check the enrolled User ID against the previous step.'},
-    ]
-  };
-
   const manual={
     label:'Manual / CSV',
     tag:'No live connection · any device with an export function',
@@ -21117,40 +21027,7 @@ function _buildBioGuideModes(apiKey, type, ip, port, serialNumber){
     ]
   };
 
-  const admsClassic={
-    label:'ADMS Classic',
-    tag:'No bridge script, no key — for devices with a Server IP + Port field only',
-    diagram:_bioDiagramPush('Your device'),
-    steps:[
-      {icon:I.badge, title:'No Device Key Needed', color:'var(--accent)',
-       body:`This device type identifies itself by its own hardware serial number instead of a key. You already entered it when adding the device: <code style="word-break:break-all">${escapeHtml(serialDisplay)}</code>. Find it on the device itself if you need to double check — usually <code>Menu → System Info → Device Info</code> (wording varies by model).`},
-      {icon:I.monitor, title:'Open Comm → Cloud Server Setting on the Device', color:'var(--accent)',
-       body:`On the device's own screen/menu (not a web browser — this device type has no admin webpage), find its Cloud Server / ADMS setting — commonly <code>Menu → Comm → Cloud Server Setting</code>. Unlike the HTTP/ADMS Push tab, there is usually no field for a custom path, header, or key here — just Server Address and Port.`},
-      {icon:I.form, title:'Enter Server Address and Port', color:'var(--accent)',
-       body:`<table style="font-size:11px;border-collapse:collapse;width:100%;margin-top:4px">
-        <tr style="background:rgba(99,102,241,.07)">
-          <td style="padding:5px 10px 5px 8px;color:var(--text3);white-space:nowrap;font-weight:600;width:110px">Server Address</td>
-          <td style="padding:5px 8px"><code>${escapeHtml(baseHost)}</code></td>
-          <td style="padding:5px 8px 5px 0;width:52px"><button onclick="_bioCopy('${baseHost.replace(/'/g,"\\'")}',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer;white-space:nowrap">Copy</button></td>
-        </tr>
-        <tr>
-          <td style="padding:5px 10px 5px 8px;color:var(--text3);font-weight:600">Port</td>
-          <td style="padding:5px 8px"><code>443</code></td>
-          <td style="padding:5px 8px 5px 0"><button onclick="_bioCopy('443',this)" style="padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Copy</button></td>
-        </tr>
-       </table>
-       <div style="margin-top:8px;padding:7px 10px;background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)">
-        <strong>Important:</strong> this server only accepts HTTPS. Many older ADMS-only terminals only speak plain HTTP and cannot reach an HTTPS-only host at all — if the device has an "Enable SSL/TLS" toggle next to this setting, turn it on. If it doesn't have one, this device's firmware likely can't push here directly regardless of what's entered — use the <em>TCP/IP Pull</em> tab (bridge script) instead.
-       </div>`},
-      {icon:I.badge, title:'Enroll Employees With Matching IDs', color:'var(--amber)',
-       body:`<strong>This step is required, not optional</strong> — TaxFlow has no separate "biometric ID" field. It matches a punch to an employee by comparing the device's own <strong>User ID</strong> to that employee's <strong>Employee ID</strong> in TaxFlow (Staff → Employees), as plain text.<br><br>
-       When enrolling each employee's fingerprint/face on the device, set the device's <em>User ID</em> field to their exact TaxFlow Employee ID — not their name, not a number the device assigns automatically. If it doesn't match exactly, the punch still reaches TaxFlow but won't attach to that employee anywhere (Present Today, payslips, attendance reports).`},
-      {icon:I.check, title:'Test — Punch In &amp; Check Sync Log', color:'#10b981',
-       body:'Scan your finger or card on the device → click <strong>⟳ Refresh</strong> on the <strong>Sync Activity Log</strong>. The punch record should appear within a few seconds. If it doesn\'t appear at all, double-check the Server Address/Port on the device and whether it needs SSL enabled — or if it appears but isn\'t linked to the right employee, re-check the enrolled User ID against the previous step.'},
-    ]
-  };
-
-  return {push,tcp,manual,admsClassic};
+  return {tcp,manual};
 }
 
 function _renderBioGuideSteps(steps){
@@ -21168,10 +21045,8 @@ function _renderBioGuideSteps(steps){
     </div>`).join('');
 }
 
-const BIO_MODE_ORDER=['push','admsClassic','tcp','manual'];
+const BIO_MODE_ORDER=['tcp','manual'];
 const _BIO_MODE_HINT={
-  push:'Easiest — device sends punches to TaxFlow directly',
-  admsClassic:'For a Server IP + Port only field — no URL/key to type',
   tcp:'Needs a script running on an office PC',
   manual:'No live connection — export/import only',
 };
@@ -21215,8 +21090,12 @@ function showBioGuide(apiKey, type, ip, port, serialNumber){
   if(keyMissing) keyMissing.style.display=apiKey?'none':'';
 
   const modes=_buildBioGuideModes(apiKey,type,ip,port,serialNumber);
-  const recommended=type==='Manual'?'manual':(isAdmsClassic?'admsClassic':(BIO_TCP_TYPES.has(type)?'tcp':'push'));
-  const defaultTab=type==='Manual'?'manual':(isAdmsClassic?'admsClassic':'push');
+  // Only 'tcp'/'manual' are real modes now (HTTP/ADMS Push and ADMS Classic
+  // were removed) — anything else (including a legacy device of one of
+  // those now-unsupported types, if one ever exists) falls back to 'tcp'
+  // rather than a mode key _buildBioGuideModes() no longer builds at all.
+  const recommended=type==='Manual'?'manual':'tcp';
+  const defaultTab=recommended;
   _bioGuideModes={modes,recommended};
 
   if(tabsEl){
@@ -21260,18 +21139,6 @@ async function saveBiometricDevice(){
       ['bio-dev-name','bio-dev-location','bio-dev-biotime-url','bio-dev-biotime-user','bio-dev-biotime-pass'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
       await loadBiometricDevices();
     }catch(e){toast('Failed to connect BioTime server: '+e,'warn');}
-    return;
-  }
-
-  if(BIO_ADMS_CLASSIC_TYPES.has(type)){
-    const serial=(document.getElementById('bio-dev-serial')?.value||'').trim();
-    if(!serial){toast('Device serial number is required','warn');return;}
-    try{
-      const res=await moduleApi('/attendance/devices',{method:'POST',body:{name,device_type:type,serial_number:serial,location:loc||null}});
-      closeM('m-bio-device');
-      ['bio-dev-name','bio-dev-serial','bio-dev-location'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-      showBioGuide(null,type,null,null,res.serial_number||serial);
-    }catch(e){toast('Failed to add device: '+e,'warn');}
     return;
   }
 
