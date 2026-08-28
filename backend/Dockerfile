@@ -32,6 +32,14 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/app ./app
+# Sibling of backend/app/ — download_bridge_script()/download_report_script()
+# (app/routers/attendance.py) look for these at .parent.parent.parent (i.e.
+# /app here), matching where this COPY lands them. Previously only
+# `backend/app` was copied into the image, so both endpoints 404'd in
+# production ("Bridge script not found on server") despite the files
+# existing in the repo and working from a local checkout the whole time.
+COPY backend/zk_bridge.py ./zk_bridge.py
+COPY backend/daily_attendance_report.py ./daily_attendance_report.py
 COPY frontend/public ./frontend/public
 COPY --from=frontend-build /build/public/taxflow/src/app.min.js ./frontend/public/taxflow/src/app.min.js
 COPY --from=frontend-build /build/public/taxflow/index.html ./frontend/public/taxflow/index.html
