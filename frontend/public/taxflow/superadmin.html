@@ -762,7 +762,14 @@
 
   async function apiFetch(path, options={}){
     const res = await fetch(apiBase()+path, {...options, headers:{...authHeaders(),...(options.headers||{})}});
-    if(res.status===401||res.status===403){ saLogout(); throw new Error('Session expired'); }
+    // 401 = invalid/expired token -> the session really is gone, log out.
+    // 403 = a valid session that's simply not allowed to do THIS one thing
+    // (same distinction authenticatedFetch() in app.js already makes) --
+    // previously treated identically, so any permission-scoped superadmin
+    // action that came back 403 forcibly logged out an otherwise-valid
+    // session and threw a misleading "Session expired".
+    if(res.status===401){ saLogout(); throw new Error('Session expired'); }
+    if(res.status===403){ throw new Error('Not permitted for this action'); }
     return res;
   }
 

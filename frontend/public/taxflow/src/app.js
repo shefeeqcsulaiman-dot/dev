@@ -2261,8 +2261,14 @@ function localApiUrlFor(url){
   }
 }
 
-function showLoginOverlay(){
-  try{toast('Session expired — please sign in again','warn');}catch{}
+// expired=true (default): a real session existed and got rejected (a
+// stored token that's actually invalid/expired) — "Session expired" is
+// accurate. expired=false: ensureBackendSession() calls this when there's
+// no token in storage AT ALL, which covers a brand-new visitor who never
+// logged in on this browser, or someone who cleared storage — telling
+// them their SESSION "expired" is wrong; there was never one to expire.
+function showLoginOverlay(expired=true){
+  try{toast(expired?'Session expired — please sign in again':'Please sign in to continue','warn');}catch{}
   setTimeout(()=>window.location.replace('/login'),1200);
 }
 function hideLoginOverlay(){ /* overlay removed — login handled by /login page */ }
@@ -2375,7 +2381,7 @@ async function ensureBackendSession(){
   if(['localhost','127.0.0.1','::1',''].includes(host)&&!['employee','branch'].includes(localStorage.getItem('taxflow_principal_kind'))){
     return loginLocalBackend();
   }
-  showLoginOverlay();
+  showLoginOverlay(false);
   return false;
 }
 
