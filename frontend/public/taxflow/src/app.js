@@ -13,6 +13,13 @@ META.rota={t:'Rota Planning',s:'Shift setup - Weekly rota - Coverage - Swap requ
 META.hrms={t:'HRMS Dashboard',s:'Employees · Attendance · Leave · OT · Payroll · Compliance Overview',a:'+ Add Employee',ao:()=>{if(window.HRMS_STANDALONE){go('staff');setTimeout(()=>openEmpModal(),50);}else{window.open('/hrms','_blank');}}};
 META.recruitment={t:'Recruitment ATS',s:'Job Requisitions - Candidates - Interviews - Offer Letters - Onboarding',a:'+ New Requisition',ao:()=>showM('m-recruitment')};
 META['hrms-ext']={t:'HR Modules',s:'Performance - Training - Asset Management - ESS - Manager Portal',a:'',ao:null};
+// Previously had no META entry at all — the "AI Insights" sidebar nav item
+// (hrms.html) calls go('hrms-ai'), and go() unconditionally reads
+// META[page].t/.s with no null-check, throwing "Cannot read properties of
+// undefined (reading 't')" and leaving navigation broken for that click
+// (the page itself does exist — #page-hrms-ai — this was purely a missing
+// title/subtitle registration).
+META['hrms-ai']={t:'HRMS AI Assistant',s:'CV Parser - Attrition Risk - Payroll Anomalies - Compliance - Leave Analysis',a:'',ao:null};
 META.accounting={t:'Accounting',s:'Chart - Vouchers - Ledger - Filing - Bank Recon',a:'+ Voucher',ao:()=>{go('accounting');setTimeout(()=>stab(document.querySelectorAll('#page-accounting .tab')[1],'acc-voucher'),50)}};
 META.corporate={t:'Corporate Accounting',s:'Corporate tax - Assets - Accruals - Cost centers - Budgets',a:'Tax Report',ao:()=>{go('corporate');setTimeout(()=>stab(document.querySelectorAll('#page-corporate .tab')[0],'corp-tax-tab'),50)}};
 META.reports={t:'Reports',s:'VAT - P&L - Balance Sheet - Trial Balance',a:'Export PDF',ao:()=>exportActiveReportPdf()};
@@ -216,7 +223,11 @@ function go(page){
     corpPage?.querySelector('.tab')?.classList.add('on');
     document.getElementById('corp-tax-tab')?.classList.add('on');
   }
-  const m=META[page];
+  // Falls back to a plain title derived from the page id itself instead of
+  // hard-crashing navigation — a page with a real #page-<id> element but no
+  // META[<id>] registration (see META['hrms-ai']'s own comment for how this
+  // was actually hit) previously threw here with no page title ever set.
+  const m=META[page]||{t:page.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),s:'',a:'',ao:null};
   const mAr=_appLang==='ar'?(_META_AR[page]||{}):null;
   document.getElementById('ptitle').textContent=mAr?.t||m.t;
   document.getElementById('psub').textContent=mAr?.s||m.s;

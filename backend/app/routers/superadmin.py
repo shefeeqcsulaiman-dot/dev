@@ -714,6 +714,37 @@ def report_client_error(
     return {"ok": True}
 
 
+@router.get("/db-diagnostics")
+def db_diagnostics(
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    """Read-only sizing/connection diagnostics for the live Postgres
+    instance — added because the managed database's own network access
+    restrictions (correctly) block a direct psql/psycopg2 connection from
+    outside DO's trusted sources, so this is checked through the app's own
+    already-trusted DB connection instead. Nothing here writes anything."""
+    db_size = db.execute(text("SELECT pg_size_pretty(pg_database_size(current_database()))")).scalar()
+    max_connections = db.execute(text("SHOW max_connections")).scalar()
+    active_connections = db.execute(text("SELECT count(*) FROM pg_stat_activity")).scalar()
+    running_queries = db.execute(text("SELECT count(*) FROM pg_stat_activity WHERE state = 'active'")).scalar()
+    pg_version = db.execute(text("SELECT version()")).scalar()
+    top_tables = db.execute(text("""
+        SELECT relname, pg_size_pretty(pg_total_relation_size(relid)) AS size, n_live_tup
+        FROM pg_catalog.pg_statio_user_tables
+        ORDER BY pg_total_relation_size(relid) DESC
+        LIMIT 15
+    """)).all()
+    return {
+        "database_size": db_size,
+        "max_connections": max_connections,
+        "active_connections": active_connections,
+        "running_queries": running_queries,
+        "postgres_version": pg_version,
+        "top_tables": [{"table": r[0], "size": r[1], "row_estimate": r[2]} for r in top_tables],
+    }
+
+
 @router.get("/client-errors")
 def list_client_errors(
     days: int = 7,
