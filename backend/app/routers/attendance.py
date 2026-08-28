@@ -1014,6 +1014,25 @@ def recent_punches(
     ]}
 
 
+@gated_router.delete("/punches/{punch_id}", status_code=204, response_model=None)
+def delete_punch(
+    punch_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("attendance:edit")),
+) -> None:
+    """Remove a single erroneous/test punch from the Sync Activity Log —
+    previously there was no way to clean up a bad row at all (a mis-scanned
+    device punch, an unmatched employee_id typo, a diagnostic test punch)
+    short of a superadmin wiping the entire company's attendance history."""
+    punch = db.query(AttendancePunch).filter(
+        AttendancePunch.id == punch_id, AttendancePunch.company_id == principal.company_id,
+    ).first()
+    if not punch:
+        raise HTTPException(status_code=404, detail="Punch record not found")
+    db.delete(punch)
+    db.commit()
+
+
 @gated_router.get("/summary")
 def attendance_summary(
     branch_id: str | None = Query(default=None),
@@ -1054,3 +1073,24 @@ def download_bridge_script(
                 headers={"Content-Disposition": "attachment; filename=zk_bridge.py"},
             )
     raise HTTPException(404, "Bridge script not found on server")
+
+
+@gated_router.get("/report-script")
+def download_report_script(
+    current_user: User = Depends(get_current_user),
+) -> PlainTextResponse:
+    """Serve daily_attendance_report.py as a downloadable file — unlike
+    zk_bridge.py (a continuous live-sync loop), this is a once-a-day batch
+    script that also produces a local CSV/Excel attendance report each run."""
+    candidates = [
+        pathlib.Path(__file__).parent.parent.parent / "daily_attendance_report.py",
+        pathlib.Path(__file__).parent.parent.parent.parent / "backend" / "daily_attendance_report.py",
+    ]
+    for path in candidates:
+        if path.exists():
+            content = path.read_text(encoding="utf-8")
+            return PlainTextResponse(
+                content=content,
+                headers={"Content-Disposition": "attachment; filename=daily_attendance_report.py"},
+            )
+    raise HTTPException(404, "Report script not found on server")

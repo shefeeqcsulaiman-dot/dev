@@ -20818,6 +20818,39 @@ async function downloadBridgeScript(apiKey,ip,port){
   }catch(e){toast('Download error: '+e,'warn');}
 }
 
+// Same idea as downloadBridgeScript(), for the OTHER downloadable script —
+// daily_attendance_report.py is a once-a-day batch job (Task Scheduler,
+// not a continuously-running process) that also builds a local CSV/Excel
+// attendance report each run, not just a live sync. It has no _load_conf()
+// mechanism to hook into like zk_bridge.py does, so the key/IP/port/base
+// URL are injected by replacing its plain top-level config constants
+// directly (each matched by variable name at the start of its own line, so
+// this can't accidentally touch a same-looking value elsewhere in the file).
+async function downloadReportScript(apiKey,ip,port){
+  try{
+    const token=localStorage.getItem('taxflow_token')||'';
+    const base=(window.TAXFLOW_API_BASE_URL||'').replace(/\/$/,'')||'http://localhost:8000';
+    const resp=await fetch(`${base}/api/v1/attendance/report-script`,{
+      headers:{Authorization:`Bearer ${token}`}
+    });
+    if(!resp.ok){toast('Download failed: '+resp.status,'warn');return;}
+    let text=await resp.text();
+    if(apiKey){
+      text=text.replace(/^ETAXFLOW_DEVICE_KEY\s*=\s*".*?"/m,`ETAXFLOW_DEVICE_KEY = ${JSON.stringify(apiKey)}`);
+      text=text.replace(/^ETAXFLOW_URL\s*=\s*".*?"/m,`ETAXFLOW_URL = ${JSON.stringify(base+'/api/v1/adms')}`);
+      text=text.replace(/^PUSH_TO_ETAXFLOW\s*=\s*\w+/m,'PUSH_TO_ETAXFLOW = True');
+      if(ip)text=text.replace(/^DEVICE_IP\s*=\s*".*?"/m,`DEVICE_IP = ${JSON.stringify(String(ip))}`);
+      if(port)text=text.replace(/^DEVICE_PORT\s*=\s*\d+/m,`DEVICE_PORT = ${Number(port)}`);
+    }
+    const blob=new Blob([text],{type:'text/plain'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download='daily_attendance_report.py';a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),2000);
+    if(apiKey)toast('daily_attendance_report.py downloaded — ready to run, no separate config file needed','ok');
+  }catch(e){toast('Download error: '+e,'warn');}
+}
+
 function downloadBioConfig(content){
   const blob=new Blob([content],{type:'text/plain'});
   const url=URL.createObjectURL(blob);
@@ -20965,6 +20998,10 @@ function _buildBioGuideModes(apiKey, type, ip, port, serialNumber){
         <strong>Tip:</strong> check the device's own menu first — <code>Menu → Comm → Cloud Server Setting</code> (wording varies). If it has that option, skip the script entirely: add it instead as <strong>ZKTeco ADMS</strong> (see the <em>HTTP / ADMS Push</em> tab above), which pushes punches directly with no bridge script needed. Older/basic terminals without this option still need the script above.
        </div>
        ${!ip?`<div style="margin-top:8px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)"><strong>No device IP was set when this device was added</strong> — open the downloaded file in a text editor and set <code>ZK_DEVICE_IP</code> in the config block near the top, or create a <code>zk_bridge.conf</code> next to it (see the details below).</div>`:''}
+       <div style="margin-top:8px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)">
+        <strong>Also want a local daily CSV/Excel attendance report</strong> (Clock In/Out per session, OT, Under Time, Absent — not just live sync)? Download <code>daily_attendance_report.py</code> instead — same Device Key/IP/API address already baked in, but meant to run once a day (e.g. via Task Scheduler) rather than continuously.
+        <div><button onclick="downloadReportScript(${jsonAttr(apiKey)},${jsonAttr(ip||'')},${jsonAttr(String(port||''))})" style="margin-top:6px;padding:5px 12px;font-size:11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-weight:600">⬇ Download daily_attendance_report.py</button></div>
+       </div>
        <details style="margin-top:8px"><summary style="cursor:pointer;font-size:10.5px;color:var(--text3)">Prefer a separate config file instead? (e.g. to reuse one script across several devices)</summary>
         <div style="margin-top:6px;display:flex;align-items:flex-start;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px">
          <pre style="flex:1;margin:0;font-size:10.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all">${escapeHtml(confSnippet)}</pre>
@@ -20981,7 +21018,8 @@ function _buildBioGuideModes(apiKey, type, ip, port, serialNumber){
         <strong>Tip:</strong> check the device's own menu first — <code>Menu → Comm → Cloud Server Setting</code> (wording varies). If it has that option, skip the script entirely: add it instead as <strong>ZKTeco ADMS</strong> (see the <em>HTTP / ADMS Push</em> tab above), which pushes punches directly with no bridge script needed. Older/basic terminals without this option still need the script below.
        </div>
        <div style="margin-top:8px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;font-size:10.5px;line-height:1.6;color:var(--text2)">This guide was reopened after the device was already created, so its Device Key can no longer be baked in automatically (it's only ever shown once) — create <code>zk_bridge.conf</code> by hand next to the script with the values below, using the key you saved earlier.</div>
-       <div style="margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px"><pre style="margin:0;font-size:10.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all">${escapeHtml(confSnippet)}</pre></div>`};
+       <div style="margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px"><pre style="margin:0;font-size:10.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all">${escapeHtml(confSnippet)}</pre></div>
+       <div style="margin-top:8px;font-size:10.5px;color:var(--text3)">Also want a local daily CSV/Excel attendance report instead of (or alongside) live sync? <button onclick="downloadReportScript()" style="margin-left:2px;padding:2px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg2);cursor:pointer">⬇ daily_attendance_report.py</button> — same manual config as above, using the same <code>ETAXFLOW_DEVICE_KEY</code>/<code>DEVICE_IP</code> variable names.</div>`};
 
   const tcp={
     label:'TCP/IP Pull',
