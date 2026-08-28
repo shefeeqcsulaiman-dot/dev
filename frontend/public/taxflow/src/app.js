@@ -18385,15 +18385,26 @@ function renderBranchTable(){
   // country as its own 4th <td>, which silently pushed the status badge
   // into the actions column and left country data mislabeled under the
   // "Status" header — with no View/Edit buttons ever rendered at all.
+  const canViewAs=_isAdminPrincipal();
   const row=b=>{
     const statusCls=b.status==='Active'?'b-g':'b-gray';
     const cityLabel=[b.city,b.country].filter(Boolean).join(', ')||'—';
+    // "View as" mirrors the Branch Performance card's own toggle (same
+    // viewDashboardAsBranch()) — this was the only place in the app to
+    // reach it before was that dashboard card, which itself only ever
+    // listed a branch once it had at least one transaction (see the
+    // _build_branch_performance() fix). Restricted to Active branches:
+    // an inactive branch isn't meant to be browsed day-to-day.
+    const viewAsBtn=(canViewAs&&b.status==='Active'&&b.id!==window.ACTIVE_BRANCH_ID)
+      ?`<button class="btn btn-g btn-sm" style="padding:2px 8px;font-size:10.5px" title="View the main dashboard scoped to this branch's own data" onclick="viewDashboardAsBranch('${escapeHtml(b.id)}');go('dashboard')">View as</button>`
+      :'';
     return `<tr>
       <td class="mono" style="font-size:11px">${escapeHtml(b.code||'—')}</td>
       <td style="font-weight:600">${escapeHtml(b.name)}</td>
       <td style="color:var(--text3);font-size:12px">${escapeHtml(cityLabel)}</td>
       <td><span class="b ${statusCls}">${escapeHtml(b.status)}</span></td>
-      <td style="white-space:nowrap">
+      <td style="white-space:nowrap;display:flex;gap:4px;align-items:center">
+        ${viewAsBtn}
         <button class="icon-btn" title="View branch" onclick="showBranchModal('${escapeHtml(b.id)}',true)">${viewIconSvg()}</button>
         <button class="icon-btn edit" title="Edit branch" onclick="showBranchModal('${escapeHtml(b.id)}')">${editIconSvg()}</button>
       </td>

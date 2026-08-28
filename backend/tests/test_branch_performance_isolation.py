@@ -55,3 +55,21 @@ def test_branch_login_only_sees_its_own_branch(client, auth_headers, db):
     assert scoped_ids == {branch_a["id"]}
     assert branch_b["id"] not in scoped_ids
     assert scoped_data["unassigned"] is None
+
+
+def test_branch_with_zero_activity_still_listed(client, auth_headers):
+    """A brand-new branch with no invoices/purchases/bills yet must still
+    appear in `branches` (with zero figures) — previously it was silently
+    dropped because `bucket()` was only ever populated from actual
+    transaction rows, so head office had no "View as" row to click for a
+    branch until it had at least one transaction."""
+    quiet_branch = _create_branch(client, auth_headers, "Perf Isolation Quiet Branch")
+
+    resp = client.get("/api/v1/reports/branch-performance", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["has_branches"] is True
+    row = next((r for r in data["branches"] if r["branch_id"] == quiet_branch["id"]), None)
+    assert row is not None, "zero-activity branch missing from branch-performance response"
+    assert row["revenue"] == "0.00"
+    assert row["profit"] == "0.00"

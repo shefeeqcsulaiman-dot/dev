@@ -723,6 +723,17 @@ def _build_branch_performance(db: Session, company_id: str) -> dict[str, Any]:
     for row, branch_id in app_data_payloads_with_branch(db, company_id, "bills"):
         bucket(branch_id)["purchases"] += _purchase_row_amount(row)
 
+    # Every real Branch must appear in the response even with zero activity
+    # so far — otherwise a newly created (or simply quiet) branch never
+    # shows up in the Branch Performance card at all, and head office has no
+    # "View as" row to click to view its (empty) dashboard. Without this,
+    # `bucket()` above is only ever called for branch_ids that already have
+    # at least one salesInvoices/purchaseRecords/bills row, silently
+    # dropping every branch with no transactions yet from `branches` below
+    # despite `has_branches` correctly reporting True.
+    for b in branches:
+        bucket(b.id)
+
     def to_row(branch_id: str | None, name: str, vals: dict[str, Decimal | int]) -> dict[str, Any]:
         revenue = vals["revenue"]
         profit = revenue - vals["purchases"]
