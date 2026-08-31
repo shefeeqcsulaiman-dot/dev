@@ -8543,6 +8543,18 @@ function hydrateFromServer(){
         if(otCfg){
           _applyOtRulesConfig(otCfg);
         }
+        const weekendCfg=Array.isArray(_deferred2.hr_settings)
+          ?_deferred2.hr_settings.find(x=>x.id==='weekend-policy-config')
+          :null;
+        if(weekendCfg){
+          _applyWeekendPolicyConfig(weekendCfg);
+          // This hydration is deferred (idle-scheduled, see the setTimeout
+          // this whole block runs in) -- if the Attendance Calendar already
+          // rendered once on page load using the Sat/Sun default before this
+          // config arrived, refresh it now so a non-default weekend policy
+          // doesn't require a manual page reload to take effect.
+          renderAttendanceCalendar();
+        }
         await loadLeavePoliciesFromServer();
         await loadHolidaysFromServer();
       }finally{isHydratingFromServer=false;}
@@ -17094,12 +17106,17 @@ function renderLeaveCalendar(){
   // Day headers
   const days=Array.from({length:daysInMonth},(_,i)=>i+1);
   const today=new Date();
+  // Same shared weekend definition as the Attendance Calendar (see
+  // _companyWeekendDaySet()) -- was independently hardcoded to Sat/Sun here
+  // too, so the two calendars could disagree about which days are the
+  // weekend for a company that's actually configured for Fri/Sat.
+  const weekendDays=_companyWeekendDaySet();
   let html='<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:11px"><thead><tr>';
   html+='<th style="padding:6px 8px;background:var(--surface2);min-width:120px;text-align:left;border-bottom:1px solid var(--border)">Employee</th>';
   days.forEach(d=>{
     const isToday=year===today.getFullYear()&&month===today.getMonth()&&d===today.getDate();
     const dow=new Date(year,month,d).toLocaleString('en-AE',{weekday:'short'}).slice(0,2);
-    const isWeekend=[0,6].includes(new Date(year,month,d).getDay());
+    const isWeekend=weekendDays?weekendDays.has(new Date(year,month,d).getDay()):false;
     html+=`<th style="padding:4px 2px;text-align:center;min-width:28px;background:${isToday?'rgba(108,92,231,.15)':isWeekend?'var(--hover)':'var(--surface2)'};border-bottom:1px solid var(--border);color:${isWeekend?'var(--muted)':'var(--text)'}"><div>${d}</div><div style="font-size:9px;color:var(--muted)">${dow}</div></th>`;
   });
   html+='</tr></thead><tbody>';
@@ -17108,7 +17125,7 @@ function renderLeaveCalendar(){
     days.forEach(d=>{
       const key=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
       const type=empLeave[emp][key];
-      const isWeekend=[0,6].includes(new Date(year,month,d).getDay());
+      const isWeekend=weekendDays?weekendDays.has(new Date(year,month,d).getDay()):false;
       const bg=type?(typeColour[type.replace(' Leave','')]||'rgba(108,92,231,.2)'):(isWeekend?'var(--hover)':'');
       html+=`<td style="padding:2px;text-align:center;border-bottom:1px solid var(--border);background:${bg}" title="${type||''}">${type?'●':''}</td>`;
     });
@@ -17706,6 +17723,39 @@ function _applyOtRulesConfig(rule){
     rule.namedRules.forEach(r=>_renderNamedOtRuleRow(r));
   }
   _syncOtPolicySelects(rule.rateType);
+}
+
+// The company's real weekend, as a Set of JS getDay() values (0=Sun..6=Sat).
+// Both renderAttendanceCalendar() and the Rota grid used to hardcode
+// [0,6] (Sat/Sun) unconditionally -- for a company that actually runs
+// Sun-Thu with Fri/Sat off (still the majority convention for UAE private-
+// sector SMEs), that mismarks their real day off (Friday) as "Absent" and
+// silently drops any real attendance/leave data that falls on their actual
+// working Sunday. Defaults to Sat/Sun (the previous hardcoded behavior) so
+// nothing changes for a company that never touches the setting. "custom"
+// (or an unrecognized value) returns null -- meaning "don't guess", since
+// there's no single global rule that can represent a rota-driven off-day
+// pattern; callers should skip weekend-specific styling entirely in that case.
+let _companyWeekendDaysCache=new Set([0,6]);
+function _companyWeekendDaySet(){
+  return _companyWeekendDaysCache;
+}
+function _applyWeekendPolicyConfig(cfg){
+  const mode=cfg?.mode||'sat_sun';
+  _companyWeekendDaysCache=mode==='fri_sat'?new Set([5,6]):mode==='custom'?null:new Set([0,6]);
+  const sel=document.getElementById('hr-weekend-policy');
+  if(sel)sel.value=mode;
+}
+function saveHrRules(){
+  // Only the Weekend Policy field on this card is actually persisted today
+  // -- Late Grace Period/Minimum OT/Maximum Daily OT/Approval Hierarchy
+  // remain display-only, same as before this fix; not expanding that scope
+  // here.
+  const mode=document.getElementById('hr-weekend-policy')?.value||'sat_sun';
+  saveServer('hr_settings',{id:'weekend-policy-config',mode});
+  _applyWeekendPolicyConfig({mode});
+  renderAttendanceCalendar();
+  toast('HR rules saved','ok');
 }
 
 function _renderNamedOtRuleRow(rule){
@@ -21577,10 +21627,15 @@ async function renderAttendanceCalendar(){
   const headcount=document.querySelectorAll('#employee-tbody tr:not([data-empty-state])').length;
   const leaveThreshold=Math.max(1,Math.ceil(headcount*0.2));
   const monthStr=String(month+1).padStart(2,'0');
+  // See _companyWeekendDaySet() -- Sat/Sun by default, but configurable via
+  // HR Settings > HR Rules > Weekend Policy so a company that actually runs
+  // Sun-Thu (Fri/Sat off) doesn't get its real day off marked "Absent" and
+  // its real working Sunday silently excluded from the calendar entirely.
+  const weekendDays=_companyWeekendDaySet();
 
   for(let d=1;d<=daysInMonth;d++){
     const dayOfWeek=new Date(year,month,d).getDay();
-    const isWknd=dayOfWeek===0||dayOfWeek===6;
+    const isWknd=weekendDays?weekendDays.has(dayOfWeek):false;
     const div=document.createElement('div');
     let cls='cal-day'+(isWknd?' wknd':d===today?' today':'');
     if(!isWknd&&d<=today){

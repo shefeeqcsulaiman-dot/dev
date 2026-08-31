@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=29c22be740" as="style">
-<link rel="preload" href="src/app.js?v=7a0efbbadd" as="script">
+<link rel="preload" href="src/app.js?v=9cec7c5eaa" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=29c22be740">
 <style>
@@ -1530,14 +1530,20 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         <div id="hrs-general" class="hrs-section">
     <!-- HR Rules -->
     <div class="card mb16">
-      <div class="card-hd"><div class="card-title">HR Rules</div><button class="btn btn-p btn-sm" onclick="toast('HR rules saved','ok')">Save Rules</button></div>
+      <div class="card-hd"><div class="card-title">HR Rules</div><button class="btn btn-p btn-sm" onclick="saveHrRules()">Save Rules</button></div>
       <div class="fr2">
         <div class="fg"><label class="fl">Late Grace Period</label><input class="fi mono" value="10 minutes"></div>
         <div class="fg"><label class="fl">Minimum OT</label><input class="fi mono" value="30 minutes"></div>
       </div>
       <div class="fr2">
         <div class="fg"><label class="fl">Maximum Daily OT</label><input class="fi mono" value="4 hours"></div>
-        <div class="fg"><label class="fl">Weekend Policy</label><select class="fi"><option>Saturday-Sunday Off</option><option>Friday Off</option><option>Custom by rota</option></select></div>
+        <!-- The only field on this card that's actually wired up (saveHrRules()) —
+             everything else here is still display-only. This one drives which
+             2 days the Attendance Calendar and Rota grid both treat as the
+             weekend (see _companyWeekendDaySet() in app.js); it used to be a
+             hardcoded Saturday/Sunday assumption everywhere with no setting
+             behind this dropdown at all. -->
+        <div class="fg"><label class="fl">Weekend Policy</label><select class="fi" id="hr-weekend-policy"><option value="sat_sun">Saturday–Sunday Off</option><option value="fri_sat">Friday–Saturday Off</option><option value="custom">Custom by rota</option></select></div>
       </div>
       <div class="fg"><label class="fl">Approval Hierarchy</label><select class="fi"><option>Employee - Supervisor - HR - Payroll</option><option>Employee - HR - Payroll</option><option>Department based</option></select></div>
     </div>
@@ -2700,7 +2706,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=7a0efbbadd" defer></script>
+<script src="src/app.js?v=9cec7c5eaa" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
