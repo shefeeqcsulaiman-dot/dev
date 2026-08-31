@@ -1220,6 +1220,23 @@ body:not(.theme-light) .mb3-vat-side{background:linear-gradient(180deg,rgba(139,
 .rota-month-card span{font-size:11px;color:var(--text3);}
 .rota-month-days{display:flex;gap:6px;flex-wrap:wrap;}
 .rota-month-chip{border:1px solid var(--border2);border-radius:99px;padding:4px 8px;background:var(--surface);font-size:11px;color:var(--text2);}
+/* Monthly Staff Overview — spreadsheet-style week grid (one block per
+   Mon-Sun week touching the selected month, employees as rows, days as
+   columns) replacing the old per-employee chip-list layout. Cell coloring
+   reuses .rota-cell's existing classes (off/approved/overtime/etc.) via
+   rotaCellHtml() so it stays consistent with the Weekly Schedule board and
+   theme-aware in both light and dark mode. */
+.rota-month-week-block{border:1px solid var(--border);border-radius:8px;background:var(--bg3);overflow:hidden;}
+.rota-month-week-hd{padding:8px 12px;font-size:12.5px;font-weight:700;background:var(--surface2);border-bottom:1px solid var(--border);color:var(--text);}
+.rota-month-table{width:100%;border-collapse:collapse;font-size:11.5px;}
+.rota-month-table th,.rota-month-table td{padding:6px 8px;border:1px solid var(--border);text-align:center;vertical-align:middle;}
+.rota-month-table thead th{background:var(--surface);font-weight:600;color:var(--text2);white-space:nowrap;}
+.rota-month-hd-date{font-size:10px;color:var(--text3);font-weight:400;margin-top:1px;}
+.rota-month-staff-cell{text-align:left;white-space:nowrap;background:var(--surface2);}
+.rota-month-staff-cell strong{display:block;font-size:12px;}
+.rota-month-staff-cell span{display:block;font-size:10px;color:var(--text3);}
+.rota-month-table tbody tr:nth-child(even) .rota-month-staff-cell{background:var(--accent-glow);}
+.rota-month-table .rota-cell{min-width:0;width:100%;border-radius:6px;padding:4px 5px;cursor:default;}
 .rota-coverage-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
 .rota-coverage-card{border:1px solid var(--border);border-radius:8px;background:var(--bg3);padding:12px;display:grid;gap:8px;}
 .rota-coverage-card strong{font-size:13px;}

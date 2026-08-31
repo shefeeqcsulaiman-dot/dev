@@ -19235,7 +19235,9 @@ function _currentRotaWeekStart(){
   const day=d.getDay(); // 0=Sun..6=Sat
   const diffToMonday=day===0?-6:1-day;
   d.setDate(d.getDate()+diffToMonday);
-  return d.toISOString().slice(0,10);
+  // See weekDateFromStart()'s comment — same toISOString()/UTC pitfall,
+  // fixed the same way.
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
 // The Week Start / Month inputs across Weekly, Monthly, and Department Rota
@@ -19257,11 +19259,20 @@ function _fixStaleRotaDateDefaults(){
   if(monthEl&&monthEl.value==='2026-05')monthEl.value=currentMonth;
 }
 
+// Deliberately does NOT go through toISOString() — that converts to UTC,
+// and this Date is anchored at LOCAL midnight, which is always the
+// PREVIOUS calendar day in UTC for any timezone ahead of it (UAE included,
+// this app's actual target market: UTC+4 local midnight = 20:00 UTC the
+// day before). That silently shifted every date this function ever
+// returned back by one full day, at any offset, for every UAE-timezone
+// browser — every Rota cell's date label AND its save/lookup key. Reading
+// the local date components back out after the arithmetic avoids the UTC
+// round-trip entirely.
 function weekDateFromStart(start,offset){
   const date=new Date(`${start}T00:00:00`);
   if(Number.isNaN(date.getTime()))return start;
   date.setDate(date.getDate()+offset);
-  return date.toISOString().slice(0,10);
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
 }
 
 // Previously silently capped at 24 with no indication anything was cut —
@@ -19564,17 +19575,65 @@ function renderRotaSummary(){
   }
 }
 
+// Monday on/before the given date, as YYYY-MM-DD. See weekDateFromStart()'s
+// comment for why this reads local date components back out instead of
+// going through toISOString().
+function _mondayOnOrBefore(dateStr){
+  const d=new Date(`${dateStr}T00:00:00`);
+  const dow=d.getDay()||7; // Mon=1..Sun=7
+  d.setDate(d.getDate()-(dow-1));
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// Standard ISO-8601 week number (the week containing that date's Thursday) —
+// matches the "Week N" labeling convention of a typical manually-built
+// staff rota spreadsheet.
+function _isoWeekNumber(dateStr){
+  const d=new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate()+4-(d.getDay()||7));
+  const yearStart=new Date(d.getFullYear(),0,1);
+  return Math.ceil((((d-yearStart)/86400000)+1)/7);
+}
+
+const ROTA_MONTH_DAY_NAMES=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+
 function renderMonthlyRotaBoard(){
   const board=document.getElementById('rota-monthly-board');
   if(!board)return;
   const month=document.getElementById('rota-month-value')?.value||weekStartValue().slice(0,7);
   const staffRows=filteredRotaStaff('month');
   const notice=_rotaTruncationNoticeHtml();
-  board.innerHTML=notice+(staffRows.map(staff=>{
-    const items=[...rotaAssignmentsById.values()].filter(item=>item.employee_id===staff.id&&item.date?.startsWith(month)).sort((a,b)=>a.date.localeCompare(b.date));
-    const chips=items.length?items.map(item=>`<span class="rota-month-chip">${escapeHtml(item.date.slice(8))} ${escapeHtml(item.code)}</span>`).join(''):'<span class="card-sub">No saved assignments this month</span>';
-    return `<div class="rota-month-card"><div><strong>${escapeHtml(staff.name)}</strong><span>${escapeHtml(staff.department)} · ${escapeHtml(staff.role)}</span></div><div class="rota-month-days">${chips}</div></div>`;
-  }).join('')||'<div class="empty-card">No staff found for this month.</div>');
+  if(!staffRows.length){
+    board.innerHTML=notice+'<div class="empty-card">No staff found for this month.</div>';
+    return;
+  }
+  const [y,m]=month.split('-').map(Number);
+  if(!y||!m){board.innerHTML=notice+'<div class="empty-card">Select a month.</div>';return;}
+  const monthStart=`${month}-01`;
+  const monthEnd=`${month}-${String(new Date(y,m,0).getDate()).padStart(2,'0')}`;
+  // Every Mon-Sun week that touches the selected month, in full — the first
+  // and last week can spill a day or two into the adjacent month (same as a
+  // real weekly-numbered rota sheet), rather than clipping mid-week.
+  const weekStarts=[];
+  for(let cursor=_mondayOnOrBefore(monthStart);cursor<=monthEnd;cursor=weekDateFromStart(cursor,7)){
+    weekStarts.push(cursor);
+  }
+  const blocks=weekStarts.map(weekStart=>{
+    const dates=ROTA_WEEK_DAYS.map((_,i)=>weekDateFromStart(weekStart,i));
+    const weekNo=_isoWeekNumber(dates[3]); // Thursday-anchored per ISO 8601
+    const headCells=ROTA_MONTH_DAY_NAMES.map((name,i)=>
+      `<th>${name}<div class="rota-month-hd-date">${escapeHtml(dates[i].slice(8,10))}/${escapeHtml(dates[i].slice(5,7))}</div></th>`
+    ).join('');
+    const rows=staffRows.map(staff=>{
+      const cells=ROTA_WEEK_DAYS.map((day,i)=>`<td>${rotaCellHtml(assignmentFor(staff,dates[i],day))}</td>`).join('');
+      return `<tr><td class="rota-month-staff-cell"><strong>${escapeHtml(staff.name)}</strong><span>${escapeHtml(staff.department)} · ${escapeHtml(staff.role)}</span></td>${cells}</tr>`;
+    }).join('');
+    return `<div class="rota-month-week-block">
+      <div class="rota-month-week-hd">Week ${weekNo} · ${dates[0].slice(8,10)}/${dates[0].slice(5,7)} – ${dates[6].slice(8,10)}/${dates[6].slice(5,7)}</div>
+      <div style="overflow-x:auto"><table class="rota-month-table"><thead><tr><th style="text-align:left">Staff</th>${headCells}</tr></thead><tbody>${rows}</tbody></table></div>
+    </div>`;
+  }).join('');
+  board.innerHTML=notice+blocks;
 }
 
 function renderDepartmentRota(){
