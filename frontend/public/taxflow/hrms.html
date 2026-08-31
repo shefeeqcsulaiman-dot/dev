@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=29c22be740" as="style">
-<link rel="preload" href="src/app.js?v=9cec7c5eaa" as="script">
+<link rel="preload" href="src/app.js?v=2d13b521a9" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=29c22be740">
 <style>
@@ -226,7 +226,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 4h14M1 8h9M1 12h6"/><circle cx="13" cy="11" r="2.5"/><path d="M13 9.5v1.5l1 1"/></svg>
       HR Workflow
     </div>
-    <div class="nav" data-module="reports" onclick="go('payroll')">
+    <div class="nav" data-module="reports" onclick="go('hrms-reports')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12l4-4 3 3 5-6"/><path d="M10 6h4v4"/></svg>
       Reports &amp; Analytics
     </div>
@@ -2170,6 +2170,35 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   </div>
 </div>
 
+<!-- ═══════════════════ HR REPORTS MODULE ═══════════════════ -->
+<!-- "Reports & Analytics" previously just opened the Payroll page — there
+     was no reports screen, and no attendance report anywhere in HRMS at
+     all. Attendance is the first report here; Leave/Payroll/Turnover
+     reports can be added as further tabs the same way. -->
+<div class="page" id="page-hrms-reports">
+  <div class="tabs">
+    <div class="tab on" onclick="stab(this,'hrr-attendance')">Attendance Report</div>
+  </div>
+
+  <div class="tab-body on" id="hrr-attendance">
+    <div class="card mb16">
+      <div class="card-hd">
+        <div><div class="card-title">Attendance Report</div><div class="card-sub" id="hrr-att-sub">Per-employee present/absent/leave days and hours for the selected month</div></div>
+        <div class="flx">
+          <input class="fi" style="width:150px" type="month" id="hrr-att-period" onchange="loadHrAttendanceReport()">
+          <button class="btn btn-g btn-sm" onclick="downloadHrAttendanceReportCsv()">Export</button>
+        </div>
+      </div>
+      <table class="tbl" data-delete-actions-bound="skip">
+        <thead><tr><th>Employee</th><th>Department</th><th>Present</th><th>Absent</th><th>Leave</th><th>Total Hours</th><th>OT Hours</th></tr></thead>
+        <tbody id="hrr-att-tbody">
+          <tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════════ PAYROLL MODULE ═══════════════════ -->
 <div class="page" id="page-payroll">
   <div class="tabs">
@@ -2706,7 +2735,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=9cec7c5eaa" defer></script>
+<script src="src/app.js?v=2d13b521a9" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

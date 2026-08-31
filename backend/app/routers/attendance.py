@@ -14,8 +14,10 @@ import io
 import ipaddress
 import json
 import pathlib
+import re
 import secrets
-from datetime import UTC, datetime, timedelta, timezone
+from calendar import monthrange
+from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import parse_qsl
 
@@ -33,7 +35,7 @@ from app.database import get_db
 from app.auth_principal import resolve_active_branch
 from app.dependencies import Principal, get_current_user, require_module, require_principal_permission
 from app.limiter import limiter
-from app.models import AttendancePunch, BiometricDevice, Company, Employee, User
+from app.models import AppDataRecord, AttendancePunch, BiometricDevice, Company, Employee, LeaveRequest, User
 from app.security import verify_password, hash_password
 
 # router carries only the device-facing punch/adms endpoints (auth is via
@@ -975,6 +977,173 @@ def attendance_trend(
     dates = [(start + timedelta(days=i)).isoformat() for i in range(days)]
     counts = [day_map.get(d, 0) for d in dates]
     return {"dates": dates, "counts": counts}
+
+
+def _weekend_day_set(db: Session, company_id: str) -> set[int] | None:
+    """Reads the same hr_settings weekend-policy-config record app.js's
+    _companyWeekendDaySet() writes (HR Settings > HR Rules > Weekend
+    Policy) — {0,6} (Sat/Sun) by default, {5,6} for Fri/Sat, or None for
+    "custom" (don't guess; every day counts as a working day). Returned
+    values use JS getDay() convention (0=Sun..6=Sat) to stay consistent
+    with the frontend, converted from Python's date.weekday() (0=Mon)
+    below via (weekday+1)%7."""
+    row = db.query(AppDataRecord.payload).filter(
+        AppDataRecord.company_id == company_id,
+        AppDataRecord.collection == "hr_settings",
+        AppDataRecord.record_key == "weekend-policy-config",
+    ).first()
+    mode = None
+    if row:
+        try:
+            mode = json.loads(row[0]).get("mode")
+        except (ValueError, TypeError, AttributeError):
+            mode = None
+    if mode == "fri_sat":
+        return {5, 6}
+    if mode == "custom":
+        return None
+    return {0, 6}
+
+
+def _standard_hours_per_day(db: Session, company_id: str) -> float:
+    row = db.query(AppDataRecord.payload).filter(
+        AppDataRecord.company_id == company_id,
+        AppDataRecord.collection == "hr_settings",
+        AppDataRecord.record_key == "ot-rules-config",
+    ).first()
+    if row:
+        try:
+            return float(json.loads(row[0]).get("workHours") or 8)
+        except (ValueError, TypeError, AttributeError):
+            pass
+    return 8.0
+
+
+@gated_router.get("/monthly-report")
+def attendance_monthly_report(
+    period: str | None = Query(default=None, description="YYYY-MM, defaults to the current month"),
+    branch_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("attendance:view")),
+) -> dict[str, Any]:
+    """Per-employee monthly attendance summary for the HRMS Reports page --
+    previously "Reports & Analytics" in the HRMS sidebar just opened the
+    Payroll page (no reports screen existed, no attendance report anywhere
+    in HRMS at all).
+
+    Present/absent/leave are all counted in "working days" (weekend days
+    per _weekend_day_set() excluded), so the three numbers are comparable
+    and absent_days = working_days - present_days - leave_days lines up.
+    Total/OT hours are a first-punch-to-last-punch-per-day approximation
+    (not real in/out session pairing) -- adequate for a summary report,
+    not a payroll-grade calculation; see zk_bridge.py/daily_attendance_
+    report.py for the real direction-aware pairing used elsewhere."""
+    offset = _company_offset(db, principal.company_id)
+    today = _local_today(offset)
+    if period:
+        m = re.match(r"^(\d{4})-(\d{2})$", period)
+        if not m:
+            raise HTTPException(status_code=400, detail="period must be in YYYY-MM format")
+        year, month = int(m.group(1)), int(m.group(2))
+    else:
+        year, month = today.year, today.month
+        period = f"{year:04d}-{month:02d}"
+    if not (1 <= month <= 12):
+        raise HTTPException(status_code=400, detail="period must be in YYYY-MM format")
+
+    start = date(year, month, 1)
+    last_day = date(year, month, monthrange(year, month)[1])
+    period_end = min(last_day, today)
+
+    weekend_days = _weekend_day_set(db, principal.company_id)
+    standard_hours = _standard_hours_per_day(db, principal.company_id)
+
+    working_days: list[date] = []
+    d = start
+    while d <= period_end:
+        js_dow = (d.weekday() + 1) % 7
+        if weekend_days is None or js_dow not in weekend_days:
+            working_days.append(d)
+        d += timedelta(days=1)
+    working_day_set = {wd.isoformat() for wd in working_days}
+
+    resolved_branch_id = branch_id if principal.can_cross_branch("attendance") else resolve_active_branch(principal, branch_id)
+    emp_query = db.query(Employee).filter(Employee.company_id == principal.company_id, Employee.status == "active")
+    if resolved_branch_id:
+        emp_query = emp_query.filter((Employee.branch_id == resolved_branch_id) | (Employee.branch_id.is_(None)))
+    employees = emp_query.all()
+    if not employees:
+        return {"period": period, "working_days": len(working_days), "standard_hours_per_day": standard_hours, "employees": []}
+
+    emp_nos = [e.employee_no for e in employees]
+    punch_query = db.query(
+        AttendancePunch.employee_id,
+        AttendancePunch.punch_date,
+        func.min(AttendancePunch.punch_time).label("first_ts"),
+        func.max(AttendancePunch.punch_time).label("last_ts"),
+        func.count(AttendancePunch.id).label("cnt"),
+    ).filter(
+        AttendancePunch.company_id == principal.company_id,
+        AttendancePunch.employee_id.in_(emp_nos),
+        AttendancePunch.punch_date >= start.isoformat(),
+        AttendancePunch.punch_date <= period_end.isoformat(),
+    ).group_by(AttendancePunch.employee_id, AttendancePunch.punch_date).all()
+
+    punch_by_emp: dict[str, dict[str, Any]] = {}
+    for r in punch_query:
+        punch_by_emp.setdefault(r.employee_id, {})[r.punch_date] = r
+
+    emp_ids = [e.id for e in employees]
+    leave_rows = db.query(LeaveRequest).filter(
+        LeaveRequest.company_id == principal.company_id,
+        LeaveRequest.employee_id.in_(emp_ids),
+        LeaveRequest.status == "approved",
+        LeaveRequest.start_date <= period_end.isoformat(),
+        LeaveRequest.end_date >= start.isoformat(),
+    ).all()
+    leave_days_by_emp: dict[str, int] = {}
+    for lr in leave_rows:
+        lr_start = max(start, date.fromisoformat(lr.start_date))
+        lr_end = min(period_end, date.fromisoformat(lr.end_date))
+        d = lr_start
+        while d <= lr_end:
+            if d.isoformat() in working_day_set:
+                leave_days_by_emp[lr.employee_id] = leave_days_by_emp.get(lr.employee_id, 0) + 1
+            d += timedelta(days=1)
+
+    result = []
+    for emp in employees:
+        days = punch_by_emp.get(emp.employee_no, {})
+        present_days = sum(1 for pd in days if pd in working_day_set)
+        total_hours = 0.0
+        ot_hours = 0.0
+        for row in days.values():
+            if row.cnt < 2 or not row.first_ts or not row.last_ts:
+                continue
+            day_hours = (row.last_ts - row.first_ts).total_seconds() / 3600
+            total_hours += day_hours
+            ot_hours += max(0.0, day_hours - standard_hours)
+        leave_days = leave_days_by_emp.get(emp.id, 0)
+        absent_days = max(0, len(working_days) - present_days - leave_days)
+        result.append({
+            "employee_id": emp.id,
+            "employee_no": emp.employee_no,
+            "employee_name": emp.full_name,
+            "department": emp.department,
+            "present_days": present_days,
+            "absent_days": absent_days,
+            "leave_days": leave_days,
+            "total_hours": f"{total_hours:.2f}",
+            "ot_hours": f"{ot_hours:.2f}",
+        })
+    result.sort(key=lambda r: r["employee_name"] or "")
+
+    return {
+        "period": period,
+        "working_days": len(working_days),
+        "standard_hours_per_day": standard_hours,
+        "employees": result,
+    }
 
 
 @gated_router.get("/punches")

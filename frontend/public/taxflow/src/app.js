@@ -20,6 +20,7 @@ META['hrms-ext']={t:'HR Modules',s:'Performance - Training - Asset Management - 
 // (the page itself does exist — #page-hrms-ai — this was purely a missing
 // title/subtitle registration).
 META['hrms-ai']={t:'HRMS AI Assistant',s:'CV Parser - Attrition Risk - Payroll Anomalies - Compliance - Leave Analysis',a:'',ao:null};
+META['hrms-reports']={t:'Reports & Analytics',s:'Attendance, leave, and payroll reports for HR',a:'',ao:null};
 META.accounting={t:'Accounting',s:'Chart - Vouchers - Ledger - Filing - Bank Recon',a:'+ Voucher',ao:()=>{go('accounting');setTimeout(()=>stab(document.querySelectorAll('#page-accounting .tab')[1],'acc-voucher'),50)}};
 META.corporate={t:'Corporate Accounting',s:'Corporate tax - Assets - Accruals - Cost centers - Budgets',a:'Tax Report',ao:()=>{go('corporate');setTimeout(()=>stab(document.querySelectorAll('#page-corporate .tab')[0],'corp-tax-tab'),50)}};
 META.reports={t:'Reports',s:'VAT - P&L - Balance Sheet - Trial Balance',a:'Export PDF',ao:()=>exportActiveReportPdf()};
@@ -245,6 +246,7 @@ function go(page){
   localStorage.setItem('taxflow_current_page',page);
   closeSidebar();
   if(page==='reports'){loadReportsBranchSelector();syncReportsFromDatabase();}
+  if(page==='hrms-reports')loadHrAttendanceReport();
   if(page==='exception')loadExceptionCenter();
   if(page==='expense')loadExpenseVendors();
   if(page==='recruitment')scheduleIdleTask(refreshRecruitmentStats,100);
@@ -21650,6 +21652,68 @@ async function renderAttendanceCalendar(){
     div.textContent=d;
     grid.appendChild(div);
   }
+}
+
+// ── HR Reports: Attendance Report ───────────────────────────────────────
+// "Reports & Analytics" in the sidebar previously just opened the Payroll
+// page — no reports screen existed anywhere in HRMS. Backed by GET
+// /attendance/monthly-report (present/absent/leave days + hours per
+// employee for a selected month, respecting the same weekend policy as
+// the Attendance Calendar — see _companyWeekendDaySet()).
+let _hrAttReportCache=null;
+function loadHrAttendanceReport(){
+  const periodInput=document.getElementById('hrr-att-period');
+  if(periodInput&&!periodInput.value){
+    const now=new Date();
+    periodInput.value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+  const period=periodInput?.value||'';
+  const tbody=document.getElementById('hrr-att-tbody');
+  if(tbody)tbody.innerHTML='<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">Loading…</td></tr>';
+  authenticatedFetch(`${apiBaseUrl()}/attendance/monthly-report${period?`?period=${encodeURIComponent(period)}`:''}`)
+    .then(r=>r.ok?r.json():Promise.reject(new Error('Report API returned '+r.status)))
+    .then(data=>{
+      _hrAttReportCache=data;
+      const sub=document.getElementById('hrr-att-sub');
+      if(sub)sub.textContent=`${data.working_days} working day(s) this period — per-employee present/absent/leave days and hours`;
+      const rows=data.employees||[];
+      if(!tbody)return;
+      tbody.innerHTML=rows.length?rows.map(e=>`<tr>
+        <td style="font-weight:600">${escapeHtml(e.employee_name||'—')}</td>
+        <td style="color:var(--text3);font-size:12px">${escapeHtml(e.department||'—')}</td>
+        <td class="mono">${e.present_days}</td>
+        <td class="mono"${e.absent_days>0?' style="color:var(--red)"':''}>${e.absent_days}</td>
+        <td class="mono">${e.leave_days}</td>
+        <td class="mono">${e.total_hours}</td>
+        <td class="mono">${e.ot_hours}</td>
+      </tr>`).join(''):'<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">No active employees.</td></tr>';
+    })
+    .catch(e=>{
+      console.warn('[loadHrAttendanceReport]',e);
+      if(tbody)tbody.innerHTML='<tr><td colspan="7" style="color:var(--red);text-align:center;padding:24px">Could not load attendance report.</td></tr>';
+    });
+}
+
+function downloadHrAttendanceReportCsv(){
+  const data=_hrAttReportCache;
+  if(!data||!(data.employees||[]).length){toast('No report data to export — load the report first','warn');return;}
+  const escape=v=>{const s=String(v??'');return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s;};
+  const headers=['Employee','Department','Present Days','Absent Days','Leave Days','Total Hours','OT Hours'];
+  const rows=data.employees.map(e=>[e.employee_name,e.department,e.present_days,e.absent_days,e.leave_days,e.total_hours,e.ot_hours]);
+  const companyName=document.getElementById('sb-company-name')?.textContent||'TaxFlow HRMS';
+  const csv=[
+    `${companyName} — Attendance Report`,
+    `Period: ${data.period} · Working Days: ${data.working_days}`,
+    `Generated: ${new Date().toLocaleDateString('en-GB')}`,
+    '',
+    headers.map(escape).join(','),
+    ...rows.map(r=>r.map(escape).join(',')),
+  ].join('\r\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`Attendance_Report_${data.period}.csv`;a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
 
 function validateWPS(){
