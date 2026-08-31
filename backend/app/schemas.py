@@ -65,7 +65,16 @@ class CompanyOut(BaseModel):
     po_box: str | None = None
     phone: str | None = None
     website: str | None = None
-    logo: str | None = None
+    # The raw base64 logo used to be inlined here directly -- this response
+    # is fetched fresh on every single page load (index.html/hrms.html are
+    # separate documents, not an SPA), and its old ETag was keyed on
+    # company.updated_at, so editing ANY company field re-invalidated the
+    # cached logo bytes too even though the logo itself hadn't changed.
+    # GET /companies/{id}/logo now serves the actual image, independently
+    # and immutably cacheable via logo_version (a hash of the logo content
+    # itself, unaffected by unrelated company edits).
+    has_logo: bool = False
+    logo_version: str | None = None
     fta_username: str | None = None
     departments: str | None = None
     branches: str | None = None

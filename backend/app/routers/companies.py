@@ -1,3 +1,7 @@
+import base64
+import hashlib
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
@@ -7,6 +11,23 @@ from app.schemas import CompanyOut, CompanyUpdate
 
 
 router = APIRouter(prefix="/companies", tags=["companies"])
+
+_DATA_URL_RE = re.compile(r"^data:([\w/+.-]+);base64,(.+)$", re.DOTALL)
+
+
+def _to_company_out(company: Company) -> CompanyOut:
+    """CompanyOut.model_validate() alone can't populate has_logo/logo_version
+    -- they're derived from `logo`, not a same-named column -- so both GET
+    and PUT /current build the response through here instead of leaving the
+    PUT response with the schema's bare defaults (has_logo=False always)."""
+    out = CompanyOut.model_validate(company)
+    if company.logo:
+        out.has_logo = True
+        # Hash of the logo's own content only -- deliberately NOT
+        # company.updated_at, which changes on every unrelated field edit.
+        out.logo_version = hashlib.sha256(company.logo.encode()).hexdigest()[:12]
+    return out
+
 
 # Fields that must never be set to NULL (DB NOT NULL constraint)
 _REQUIRED_FIELDS = {"name", "country"}
@@ -41,10 +62,12 @@ def current_company(
         company = db.query(Company).filter(Company.id == principal.company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="No company found")
-    # This response can carry a large base64 logo, and is fetched on every page
-    # load. ETag it on (id, updated_at) so a browser that already has the
-    # current copy gets a tiny 304 instead of re-downloading it — the JSON
-    # shape and data returned when it DOES change are completely unchanged.
+    # Fetched on every page load (index.html/hrms.html are separate
+    # documents, not an SPA) — ETag on (id, updated_at) so a browser that
+    # already has the current copy gets a tiny 304 instead of re-downloading
+    # it. The logo itself no longer rides along in this payload at all (see
+    # CompanyOut/_to_company_out()) — GET /companies/{id}/logo serves that
+    # separately with its own content-based cache key.
     etag = f'"{company.id}-{company.updated_at.isoformat()}"'
     if request.headers.get("if-none-match") == etag:
         return Response(
@@ -52,10 +75,47 @@ def current_company(
             headers={"ETag": etag, "Cache-Control": "private, max-age=0, must-revalidate"},
         )
     return Response(
-        content=CompanyOut.model_validate(company).model_dump_json(),
+        content=_to_company_out(company).model_dump_json(),
         media_type="application/json",
         headers={"ETag": etag, "Cache-Control": "private, max-age=0, must-revalidate"},
     )
+
+
+@router.get("/{company_id}/logo")
+def company_logo(company_id: str, request: Request, db: Session = Depends(get_db)):
+    """Serves a company's logo as a real, independently-cacheable image
+    response — previously this same base64 blob was embedded directly
+    inside GET /companies/current, which is fetched fresh on every single
+    page load, and whose ETag was keyed on company.updated_at, so editing
+    ANY company field (address, phone, anything) invalidated the cached
+    logo too even though the logo itself hadn't changed, forcing a ~465KB
+    re-download on the very next load regardless.
+
+    Deliberately public/unauthenticated: a <img src="..."> tag can't attach
+    an Authorization header, and a company's logo already appears on
+    unauthenticated-facing documents (invoice/quotation PDFs a customer
+    receives) — it isn't sensitive. company_id is a UUID, not guessable or
+    enumerable, so this doesn't expose anything an attacker could target."""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company or not company.logo:
+        raise HTTPException(status_code=404, detail="No logo")
+    m = _DATA_URL_RE.match(company.logo)
+    if not m:
+        raise HTTPException(status_code=404, detail="No logo")
+    content_type, b64data = m.group(1), m.group(2)
+    try:
+        raw = base64.b64decode(b64data)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=404, detail="No logo")
+    # Content-based ETag (see _to_company_out()'s logo_version) — the
+    # frontend also appends ?v=<logo_version> to this URL, so a re-uploaded
+    # logo gets a brand-new URL immediately rather than waiting up to
+    # max-age for a stale cached copy to expire.
+    etag = f'"{hashlib.sha256(raw).hexdigest()[:16]}"'
+    headers = {"ETag": etag, "Cache-Control": "public, max-age=31536000, immutable"}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(content=raw, media_type=content_type, headers=headers)
 
 
 @router.put("/current", response_model=CompanyOut)
@@ -84,6 +144,15 @@ def update_company(
         val = getattr(payload, field, None)
         if val is not None:
             setattr(company, field, val or None)
+    # Every field above intentionally treats null-or-omitted as "leave
+    # unchanged" (e.g. branch login's password field has the same "None =
+    # don't touch" convention). logo is the one exception: removeLogo()
+    # explicitly PUTs {logo: null} expecting it to actually clear the
+    # field, which the loop above could never do -- model_fields_set is
+    # what distinguishes "the client sent logo: null" from "the client
+    # didn't mention logo at all", which a plain None can't.
+    if "logo" in payload.model_fields_set and payload.logo is None:
+        company.logo = None
 
     # Required fields: only update when a non-empty value is provided
     if payload.name:
@@ -102,4 +171,4 @@ def update_company(
     db.add(company)
     db.commit()
     db.refresh(company)
-    return company
+    return _to_company_out(company)

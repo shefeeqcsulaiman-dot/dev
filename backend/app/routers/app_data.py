@@ -1,5 +1,6 @@
 import base64
 import csv
+import hashlib
 import html
 import io
 import json
@@ -667,7 +668,13 @@ def bootstrap(
             "po_box": company.po_box,
             "phone": company.phone,
             "website": company.website,
-            "logo": company.logo,
+            # The raw base64 logo used to ride along in this bootstrap blob
+            # too (fetched on every page load, ~780KB of it) — same fix as
+            # GET /companies/current (companies.py): has_logo/logo_version
+            # only, real bytes served separately and immutably-cacheable via
+            # GET /companies/{id}/logo?v=<logo_version>.
+            "has_logo": bool(company.logo),
+            "logo_version": hashlib.sha256(company.logo.encode()).hexdigest()[:12] if company.logo else None,
             "modules_enabled": _parse_modules_enabled(company.modules_enabled),
         }
 

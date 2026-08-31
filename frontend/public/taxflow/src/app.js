@@ -2800,10 +2800,17 @@ function applyCompanyToUi(company){
   if(layoutCompany&&!layoutCompany.dataset.userEdited)setFieldValue(layoutCompany,company.name||'');
   const layoutAddr=document.getElementById('inv-layout-address');
   if(layoutAddr&&!layoutAddr.dataset.userEdited&&company.address)setFieldValue(layoutAddr,company.address);
-  // Logo + company name sync
-  if(company.logo){
-    localStorage.setItem(_LOGO_KEY,company.logo);
-  } else if(!company.logo&&localStorage.getItem(_LOGO_KEY)){
+  // Logo + company name sync — the server no longer sends the raw base64
+  // logo here at all (it used to inline the full ~780KB blob into every
+  // single bootstrap/companies-current response); has_logo/logo_version
+  // point at the real, independently and immutably-cacheable image URL
+  // instead. A plain URL works exactly like a data: URI everywhere this
+  // localStorage value is consumed (_logoHtml()/_applyLogoEverywhere()/
+  // _logoPdfHtml() all just interpolate it into an <img src>), so none of
+  // them needed to change.
+  if(company.has_logo&&company.id){
+    localStorage.setItem(_LOGO_KEY,`${apiBaseUrl()}/companies/${company.id}/logo?v=${company.logo_version||''}`);
+  } else if(!company.has_logo&&localStorage.getItem(_LOGO_KEY)){
     localStorage.removeItem(_LOGO_KEY);
   }
   if(company.name)localStorage.setItem('taxflow_company_name',company.name);
