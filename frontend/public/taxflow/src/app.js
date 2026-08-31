@@ -18277,7 +18277,7 @@ function _syncDeptBranchSelectsFromList(){
   const names=_deptList.filter(d=>d.status!=='Inactive').map(d=>d.name);
   const deptOpts='<option value="">— Select Department —</option>'+names.map(d=>`<option>${escapeHtml(d)}</option>`).join('');
   const deptAllOpts='<option value="">All Departments</option>'+names.map(d=>`<option>${escapeHtml(d)}</option>`).join('');
-  document.querySelectorAll('#emp-department,#req-dept').forEach(sel=>{
+  document.querySelectorAll('#emp-department,#req-dept,#task-department').forEach(sel=>{
     const cur=sel.value; sel.innerHTML=deptOpts; if(cur)sel.value=cur;
   });
   document.querySelectorAll('[id$="-department-filter"],[id="hrms-dept-filter"],#rota-week-department,#rota-month-department,#rota-dept-department').forEach(sel=>{
@@ -21848,11 +21848,14 @@ function downloadHrAttendanceReportCsv(){
 // Backed by the generic AppDataRecord 'tasks' collection (same pattern as
 // employeeLoans/jobRequisitions — a small admin-managed list, not a
 // per-employee ledger needing its own dedicated table). Kanban board with
-// 3 fixed columns (To Do / In Progress / Done); click-to-move rather than
-// drag-and-drop, admin/manager-only for now (no ESS-side view yet).
+// 3 fixed columns (To Do / In Progress / Done), plus a flat Table view;
+// click-to-move rather than drag-and-drop, admin/manager-only for now (no
+// ESS-side view yet).
 let _taskListCache=[];
+let _taskViewMode='board'; // 'board' | 'table'
 const TASK_STATUSES=['todo','in_progress','done'];
 const TASK_STATUS_LABEL={todo:'To Do',in_progress:'In Progress',done:'Done'};
+const TASK_REPEAT_LABEL={none:'—',daily:'Daily',weekly:'Weekly',monthly:'Monthly'};
 
 async function loadTasks(){
   await populateTaskAssigneeSelect();
@@ -21864,7 +21867,56 @@ async function loadTasks(){
     console.warn('[loadTasks]',e);
     _taskListCache=[];
   }
+  await _processRepeatingTasks();
   renderTaskBoard();
+}
+
+// Checked once per page visit (this feature is Tier 2/JSON-backed, not
+// worth a dedicated backend scheduler yet — see docs/hrms-architecture.md
+// §6). For any repeating task whose due date has already passed and that
+// hasn't spawned its next occurrence yet, creates a fresh copy (new id,
+// same details/assignee, status reset to To Do, due date advanced by the
+// repeat interval) and flags the original with next_spawned so it's never
+// spawned twice. The original is left exactly as it was — still visibly
+// overdue if it was never finished — rather than silently marking it Done.
+function _nextRepeatDueDate(dueDate,repeat){
+  const d=new Date(`${dueDate}T00:00:00`);
+  if(repeat==='daily'){
+    d.setDate(d.getDate()+1);
+  }else if(repeat==='weekly'){
+    d.setDate(d.getDate()+7);
+  }else if(repeat==='monthly'){
+    // A bare setMonth(+1) on e.g. 31 Jan overflows into "31 Feb", which
+    // JS Date silently rolls forward into 3 Mar instead of clamping —
+    // anchor to day 1 first, then clamp back to the target month's own
+    // last day so a month-end repeating task always lands on THAT
+    // month's end, not several days into the next one.
+    const day=d.getDate();
+    d.setDate(1);
+    d.setMonth(d.getMonth()+1);
+    const lastDay=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+    d.setDate(Math.min(day,lastDay));
+  }else{
+    return null;
+  }
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+async function _processRepeatingTasks(){
+  const today=new Date();
+  const todayStr=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const due=_taskListCache.filter(t=>t.repeat&&t.repeat!=='none'&&t.due_date&&t.due_date<todayStr&&!t.next_spawned);
+  for(const t of due){
+    const nextDue=_nextRepeatDueDate(t.due_date,t.repeat);
+    if(!nextDue)continue;
+    const clone={
+      ...t,id:`TASK-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+      due_date:nextDue,status:'todo',next_spawned:false,created_at:new Date().toISOString(),
+    };
+    t.next_spawned=true;
+    await saveServer('tasks',t);
+    await saveServer('tasks',clone);
+    _taskListCache.push(clone);
+  }
 }
 
 async function populateTaskAssigneeSelect(){
@@ -21889,25 +21941,67 @@ async function populateTaskAssigneeSelect(){
   }catch(e){/* dropdowns just stay empty on failure */}
 }
 
+// Unique task NAMES seen so far, most-recently-used first — lets Add Task
+// offer "Load From Previous Task" so a recurring type of task (same name/
+// department/details/priority) doesn't need retyping from scratch every
+// time it's assigned to someone new. Only ever used to PRE-FILL a new,
+// blank task — picking one never edits the original.
+function _renderTaskTemplateOptions(){
+  const sel=document.getElementById('task-template');
+  if(!sel)return;
+  const seen=new Set();
+  const opts=[];
+  [..._taskListCache].reverse().forEach(t=>{
+    if(!t.title||seen.has(t.title))return;
+    seen.add(t.title);
+    opts.push(t);
+  });
+  sel.innerHTML='<option value="">— Start blank —</option>'+
+    opts.map(t=>`<option value="${escapeHtml(t.id)}">${escapeHtml(t.title)}</option>`).join('');
+  sel.value='';
+}
+
+function applyTaskTemplate(){
+  const id=document.getElementById('task-template')?.value;
+  if(!id)return;
+  const t=_taskListCache.find(x=>x.id===id);
+  if(!t)return;
+  // Name/department/details/priority/repeat carry over; due date and
+  // assignee are deliberately left for the user to set fresh — those are
+  // exactly the two things that should usually differ on a reused task.
+  document.getElementById('task-title').value=t.title||'';
+  document.getElementById('task-department').value=t.department||'';
+  document.getElementById('task-description').value=t.description||'';
+  document.getElementById('task-priority').value=t.priority||'Medium';
+  document.getElementById('task-repeat').value=t.repeat||'none';
+}
+
 function showTaskModal(id){
   const t=id?_taskListCache.find(x=>x.id===id):null;
   document.getElementById('task-modal-title').textContent=t?'Edit Task':'Add Task';
   document.getElementById('task-edit-id').value=id||'';
   document.getElementById('task-title').value=t?.title||'';
+  document.getElementById('task-department').value=t?.department||'';
   document.getElementById('task-description').value=t?.description||'';
   document.getElementById('task-assignee').value=t?.assigned_to||'';
   document.getElementById('task-priority').value=t?.priority||'Medium';
   document.getElementById('task-due-date').value=t?.due_date||'';
   document.getElementById('task-status').value=t?.status||'todo';
+  document.getElementById('task-repeat').value=t?.repeat||'none';
   const delBtn=document.getElementById('task-delete-btn');
   if(delBtn)delBtn.style.display=t?'':'none';
+  // The "load from previous task" shortcut only makes sense when starting
+  // a brand-new task — editing an existing one already has its own data.
+  const templateRow=document.getElementById('task-template-row');
+  if(templateRow)templateRow.style.display=t?'none':'';
+  if(!t)_renderTaskTemplateOptions();
   showM('m-task');
   setTimeout(()=>document.getElementById('task-title').focus(),120);
 }
 
 async function saveTaskModal(){
   const title=(document.getElementById('task-title')?.value||'').trim();
-  if(!title){toast('Task title is required','warn');return;}
+  if(!title){toast('Task name is required','warn');return;}
   const id=document.getElementById('task-edit-id')?.value||`TASK-${Date.now()}`;
   const assigneeSel=document.getElementById('task-assignee');
   const assigneeOpt=assigneeSel?.selectedOptions?.[0];
@@ -21915,12 +22009,18 @@ async function saveTaskModal(){
   const task={
     id,
     title,
+    department:document.getElementById('task-department')?.value||'',
     description:(document.getElementById('task-description')?.value||'').trim(),
     assigned_to:assigneeSel?.value||'',
     assigned_to_name:assigneeSel?.value?(assigneeOpt?.dataset.name||''):'',
     priority:document.getElementById('task-priority')?.value||'Medium',
     due_date:document.getElementById('task-due-date')?.value||'',
     status:document.getElementById('task-status')?.value||'todo',
+    repeat:document.getElementById('task-repeat')?.value||'none',
+    // Editing an existing task's own due date forward re-arms its repeat
+    // (it's no longer "already spawned" for its new date); a brand-new
+    // task obviously hasn't spawned anything yet either.
+    next_spawned:existing&&existing.due_date===document.getElementById('task-due-date')?.value?(existing.next_spawned||false):false,
     created_at:existing?.created_at||new Date().toISOString(),
   };
   await saveServer('tasks',task);
@@ -21934,11 +22034,16 @@ async function saveTaskModal(){
 async function deleteTaskFromModal(){
   const id=document.getElementById('task-edit-id')?.value;
   if(!id)return;
+  await deleteTaskDirect(id);
+  hideM('m-task');
+}
+
+async function deleteTaskDirect(id){
   const t=_taskListCache.find(x=>x.id===id);
-  if(!confirm(`Delete task "${t?.title||'this task'}"?`))return;
+  if(!t)return;
+  if(!confirm(`Delete task "${t.title||'this task'}"?`))return;
   await deleteServer('tasks',{id});
   _taskListCache=_taskListCache.filter(x=>x.id!==id);
-  hideM('m-task');
   renderTaskBoard();
   toast('Task deleted','ok');
 }
@@ -21957,12 +22062,13 @@ async function moveTaskStatus(id,newStatus){
 function _taskCardHtml(t){
   const priorityCls=t.priority==='High'?'b-r':t.priority==='Low'?'b-g':'b-a';
   const overdue=t.due_date&&t.status!=='done'&&t.due_date<new Date().toISOString().slice(0,10);
-  const dueHtml=t.due_date?`<span class="task-card-due${overdue?' overdue':''}">${overdue?'⚠ ':''}${escapeHtml(t.due_date)}</span>`:'';
+  const dueHtml=t.due_date?`<span class="task-card-due${overdue?' overdue':''}">${overdue?'⚠ ':''}${escapeHtml(t.due_date)}${t.repeat&&t.repeat!=='none'?' ↻':''}</span>`:'';
   const idx=TASK_STATUSES.indexOf(t.status);
   const prevStatus=idx>0?TASK_STATUSES[idx-1]:null;
   const nextStatus=idx<TASK_STATUSES.length-1?TASK_STATUSES[idx+1]:null;
   return `<div class="task-card" data-task-id="${escapeHtml(t.id)}">
     <div class="task-card-title" onclick="showTaskModal('${escapeHtml(t.id)}')">${escapeHtml(t.title)}</div>
+    ${t.department?`<div class="task-card-desc" style="margin-bottom:2px">${escapeHtml(t.department)}</div>`:''}
     ${t.description?`<div class="task-card-desc">${escapeHtml(t.description)}</div>`:''}
     <div class="task-card-meta">
       <div class="task-card-assignee">
@@ -21982,11 +22088,39 @@ function _taskCardHtml(t){
   </div>`;
 }
 
+function _taskTableRowHtml(t){
+  const priorityCls=t.priority==='High'?'b-r':t.priority==='Low'?'b-g':'b-a';
+  const overdue=t.due_date&&t.status!=='done'&&t.due_date<new Date().toISOString().slice(0,10);
+  const statusCls=t.status==='done'?'b-g':t.status==='in_progress'?'b-b':'b-gray';
+  return `<tr>
+    <td style="font-weight:600">${escapeHtml(t.assigned_to_name||'Unassigned')}</td>
+    <td style="color:var(--text3);font-size:12px">${escapeHtml(t.department||'—')}</td>
+    <td>${escapeHtml(t.title)}</td>
+    <td><span class="b ${priorityCls}">${escapeHtml(t.priority||'Medium')}</span></td>
+    <td class="mono"${overdue?' style="color:var(--red)"':''}>${escapeHtml(t.due_date||'—')}</td>
+    <td>${escapeHtml(TASK_REPEAT_LABEL[t.repeat||'none']||'—')}</td>
+    <td><span class="b ${statusCls}">${escapeHtml(TASK_STATUS_LABEL[t.status||'todo'])}</span></td>
+    <td style="white-space:nowrap"><button class="icon-btn edit" title="Edit" onclick="showTaskModal('${escapeHtml(t.id)}')">${editIconSvg()}</button> <button class="icon-btn danger" title="Delete" onclick="deleteTaskDirect('${escapeHtml(t.id)}')">${deleteIconSvg()}</button></td>
+  </tr>`;
+}
+
+function setTaskViewMode(mode){
+  _taskViewMode=mode;
+  document.getElementById('task-view-tab-board')?.classList.toggle('on',mode==='board');
+  document.getElementById('task-view-tab-table')?.classList.toggle('on',mode==='table');
+  const board=document.getElementById('task-board');
+  const table=document.getElementById('task-table-view');
+  if(board)board.style.display=mode==='board'?'':'none';
+  if(table)table.style.display=mode==='table'?'':'none';
+}
+
 function renderTaskBoard(){
+  const deptFilter=document.getElementById('task-department-filter')?.value||'';
   const empFilter=document.getElementById('task-filter-employee')?.value||'';
   const priorityFilter=document.getElementById('task-filter-priority')?.value||'';
   const search=(document.getElementById('task-filter-search')?.value||'').trim().toLowerCase();
   const filtered=_taskListCache.filter(t=>{
+    if(deptFilter&&t.department!==deptFilter)return false;
     if(empFilter&&t.assigned_to!==empFilter)return false;
     if(priorityFilter&&t.priority!==priorityFilter)return false;
     if(search&&!(t.title||'').toLowerCase().includes(search))return false;
@@ -22000,6 +22134,11 @@ function renderTaskBoard(){
     const listEl=document.getElementById(`task-list-${status}`);
     if(listEl)listEl.innerHTML=list.length?list.map(_taskCardHtml).join(''):'<div class="task-empty-col">No tasks</div>';
   });
+  const tableBody=document.getElementById('task-table-tbody');
+  if(tableBody){
+    const rows=[...filtered].sort((a,b)=>(a.due_date||'9999').localeCompare(b.due_date||'9999'));
+    tableBody.innerHTML=rows.length?rows.map(_taskTableRowHtml).join(''):'<tr><td colspan="8" style="color:var(--text3);text-align:center;padding:24px">No tasks</td></tr>';
+  }
 }
 
 function validateWPS(){

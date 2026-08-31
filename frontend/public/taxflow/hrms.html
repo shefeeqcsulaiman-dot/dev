@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=14cbdb756f" as="style">
-<link rel="preload" href="src/app.js?v=4ac21a7bee" as="script">
+<link rel="preload" href="src/app.js?v=ac32dba12d" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=14cbdb756f">
 <style>
@@ -2210,10 +2210,15 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div><div class="card-title">Task Management</div><div class="card-sub">Create tasks and allocate them to employees</div></div>
       <button class="btn btn-p btn-sm" onclick="showTaskModal()">+ Add Task</button>
     </div>
-    <div class="fr3">
+    <div class="fr4">
+      <div class="fg"><label class="fl">Department</label><select class="fi" id="task-department-filter" onchange="renderTaskBoard()"><option value="">All Departments</option></select></div>
       <div class="fg"><label class="fl">Assigned To</label><select class="fi" id="task-filter-employee" onchange="renderTaskBoard()"><option value="">All Employees</option></select></div>
       <div class="fg"><label class="fl">Priority</label><select class="fi" id="task-filter-priority" onchange="renderTaskBoard()"><option value="">All Priorities</option><option>Low</option><option>Medium</option><option>High</option></select></div>
-      <div class="fg"><label class="fl">Search</label><input class="fi" id="task-filter-search" placeholder="Search title…" oninput="renderTaskBoard()"></div>
+      <div class="fg"><label class="fl">Search</label><input class="fi" id="task-filter-search" placeholder="Search name…" oninput="renderTaskBoard()"></div>
+    </div>
+    <div class="tabs" style="margin-top:8px">
+      <div class="tab on" id="task-view-tab-board" onclick="setTaskViewMode('board')">Board</div>
+      <div class="tab" id="task-view-tab-table" onclick="setTaskViewMode('table')">Table</div>
     </div>
   </div>
 
@@ -2231,6 +2236,15 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div id="task-list-done"></div>
     </div>
   </div>
+
+  <div class="card" id="task-table-view" style="display:none">
+    <table class="tbl" data-delete-actions-bound="skip">
+      <thead><tr><th>Employee</th><th>Department</th><th>Task Name</th><th>Priority</th><th>Due Date</th><th>Repeat</th><th>Status</th><th></th></tr></thead>
+      <tbody id="task-table-tbody">
+        <tr><td colspan="8" style="color:var(--text3);text-align:center;padding:24px">No tasks</td></tr>
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <!-- ═══════════════════ TASK MODAL ═══════════════════ -->
@@ -2239,15 +2253,20 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="modal-title" id="task-modal-title">Add Task</div>
     <div class="modal-sub">Task details and employee allocation</div>
     <input type="hidden" id="task-edit-id">
-    <div class="fg"><label class="fl">Title <span style="color:var(--red)">*</span></label><input class="fi" id="task-title" placeholder="e.g. Prepare Q3 payroll summary"></div>
-    <div class="fg"><label class="fl">Description</label><textarea class="fi" id="task-description" rows="3" placeholder="Details, context, or instructions…"></textarea></div>
+    <div class="fg" id="task-template-row"><label class="fl">Load From Previous Task</label><select class="fi" id="task-template" onchange="applyTaskTemplate()"><option value="">— Start blank —</option></select></div>
+    <div class="fg"><label class="fl">Task Name <span style="color:var(--red)">*</span></label><input class="fi" id="task-title" placeholder="e.g. Prepare Q3 payroll summary"></div>
     <div class="fr2">
+      <div class="fg"><label class="fl">Department</label><select class="fi" id="task-department"><option value="">— Select Department —</option></select></div>
       <div class="fg"><label class="fl">Assign To</label><select class="fi" id="task-assignee"><option value="">— Unassigned —</option></select></div>
+    </div>
+    <div class="fg"><label class="fl">Task Details</label><textarea class="fi" id="task-description" rows="3" placeholder="Details, context, or instructions…"></textarea></div>
+    <div class="fr2">
       <div class="fg"><label class="fl">Priority</label><select class="fi" id="task-priority"><option>Low</option><option selected>Medium</option><option>High</option></select></div>
+      <div class="fg"><label class="fl">Status</label><select class="fi" id="task-status"><option value="todo">To Do</option><option value="in_progress">In Progress</option><option value="done">Done</option></select></div>
     </div>
     <div class="fr2">
       <div class="fg"><label class="fl">Due Date</label><input class="fi" id="task-due-date" type="date"></div>
-      <div class="fg"><label class="fl">Status</label><select class="fi" id="task-status"><option value="todo">To Do</option><option value="in_progress">In Progress</option><option value="done">Done</option></select></div>
+      <div class="fg"><label class="fl">Repeat</label><select class="fi" id="task-repeat"><option value="none">Does not repeat</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
     </div>
     <div class="modal-foot">
       <button id="task-delete-btn" class="btn btn-r" style="display:none;margin-right:auto" onclick="deleteTaskFromModal()">Delete</button>
@@ -2793,7 +2812,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=4ac21a7bee" defer></script>
+<script src="src/app.js?v=ac32dba12d" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
