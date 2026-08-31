@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=25a9e218e4" as="style">
-<link rel="preload" href="src/app.js?v=b2f3d067ce" as="script">
+<link rel="preload" href="src/styles.css?v=14cbdb756f" as="style">
+<link rel="preload" href="src/app.js?v=4ac21a7bee" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=25a9e218e4">
+<link rel="stylesheet" href="src/styles.css?v=14cbdb756f">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -225,6 +225,10 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="nav" data-module="hr_workflow" onclick="go('staff')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 4h14M1 8h9M1 12h6"/><circle cx="13" cy="11" r="2.5"/><path d="M13 9.5v1.5l1 1"/></svg>
       HR Workflow
+    </div>
+    <div class="nav" data-module="hr_workflow" onclick="go('tasks')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 8l2 2 4-4"/></svg>
+      Task Management
     </div>
     <div class="nav" data-module="reports" onclick="go('hrms-reports')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12l4-4 3 3 5-6"/><path d="M10 6h4v4"/></svg>
@@ -2199,6 +2203,60 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   </div>
 </div>
 
+<!-- ═══════════════════ TASK MANAGEMENT MODULE ═══════════════════ -->
+<div class="page" id="page-tasks">
+  <div class="card mb16">
+    <div class="card-hd">
+      <div><div class="card-title">Task Management</div><div class="card-sub">Create tasks and allocate them to employees</div></div>
+      <button class="btn btn-p btn-sm" onclick="showTaskModal()">+ Add Task</button>
+    </div>
+    <div class="fr3">
+      <div class="fg"><label class="fl">Assigned To</label><select class="fi" id="task-filter-employee" onchange="renderTaskBoard()"><option value="">All Employees</option></select></div>
+      <div class="fg"><label class="fl">Priority</label><select class="fi" id="task-filter-priority" onchange="renderTaskBoard()"><option value="">All Priorities</option><option>Low</option><option>Medium</option><option>High</option></select></div>
+      <div class="fg"><label class="fl">Search</label><input class="fi" id="task-filter-search" placeholder="Search title…" oninput="renderTaskBoard()"></div>
+    </div>
+  </div>
+
+  <div class="task-board" id="task-board">
+    <div class="task-col" data-status="todo">
+      <div class="task-col-hd"><span>To Do</span><span class="task-col-count" id="task-count-todo">0</span></div>
+      <div id="task-list-todo"></div>
+    </div>
+    <div class="task-col" data-status="in_progress">
+      <div class="task-col-hd"><span>In Progress</span><span class="task-col-count" id="task-count-in_progress">0</span></div>
+      <div id="task-list-in_progress"></div>
+    </div>
+    <div class="task-col" data-status="done">
+      <div class="task-col-hd"><span>Done</span><span class="task-col-count" id="task-count-done">0</span></div>
+      <div id="task-list-done"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ TASK MODAL ═══════════════════ -->
+<div class="overlay" id="m-task" onclick="closeOvBg(event,'m-task')">
+  <div class="modal">
+    <div class="modal-title" id="task-modal-title">Add Task</div>
+    <div class="modal-sub">Task details and employee allocation</div>
+    <input type="hidden" id="task-edit-id">
+    <div class="fg"><label class="fl">Title <span style="color:var(--red)">*</span></label><input class="fi" id="task-title" placeholder="e.g. Prepare Q3 payroll summary"></div>
+    <div class="fg"><label class="fl">Description</label><textarea class="fi" id="task-description" rows="3" placeholder="Details, context, or instructions…"></textarea></div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Assign To</label><select class="fi" id="task-assignee"><option value="">— Unassigned —</option></select></div>
+      <div class="fg"><label class="fl">Priority</label><select class="fi" id="task-priority"><option>Low</option><option selected>Medium</option><option>High</option></select></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Due Date</label><input class="fi" id="task-due-date" type="date"></div>
+      <div class="fg"><label class="fl">Status</label><select class="fi" id="task-status"><option value="todo">To Do</option><option value="in_progress">In Progress</option><option value="done">Done</option></select></div>
+    </div>
+    <div class="modal-foot">
+      <button id="task-delete-btn" class="btn btn-r" style="display:none;margin-right:auto" onclick="deleteTaskFromModal()">Delete</button>
+      <button class="btn btn-g" onclick="hideM('m-task')">Cancel</button>
+      <button class="btn btn-p" onclick="saveTaskModal()">Save Task</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════════ PAYROLL MODULE ═══════════════════ -->
 <div class="page" id="page-payroll">
   <div class="tabs">
@@ -2735,7 +2793,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=b2f3d067ce" defer></script>
+<script src="src/app.js?v=4ac21a7bee" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

@@ -190,7 +190,12 @@ def list_employees(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("employees:view")),
 ) -> list[Employee]:
-    query = db.query(Employee).filter(Employee.company_id == principal.company_id)
+    # Active only — this feeds employee-picker dropdowns (Leave request
+    # assignee, GPS location assignment, Task assignee) that have no reason
+    # to offer an Inactive employee as a choice; previously returned every
+    # employee regardless of status, the same "Inactive leaking through"
+    # bug class already fixed for Rota/Attendance elsewhere.
+    query = db.query(Employee).filter(Employee.company_id == principal.company_id, Employee.status == "active")
     # Same two-tier branch scoping as accounting.py's list_journals()/
     # reports.py's trial_balance_rows() — previously this returned the
     # entire company's roster to any branch-scoped principal with

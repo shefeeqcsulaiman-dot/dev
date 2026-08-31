@@ -21,6 +21,7 @@ META['hrms-ext']={t:'HR Modules',s:'Performance - Training - Asset Management - 
 // title/subtitle registration).
 META['hrms-ai']={t:'HRMS AI Assistant',s:'CV Parser - Attrition Risk - Payroll Anomalies - Compliance - Leave Analysis',a:'',ao:null};
 META['hrms-reports']={t:'Reports & Analytics',s:'Attendance, leave, and payroll reports for HR',a:'',ao:null};
+META['tasks']={t:'Task Management',s:'Create tasks and allocate them to employees',a:'',ao:null};
 META.accounting={t:'Accounting',s:'Chart - Vouchers - Ledger - Filing - Bank Recon',a:'+ Voucher',ao:()=>{go('accounting');setTimeout(()=>stab(document.querySelectorAll('#page-accounting .tab')[1],'acc-voucher'),50)}};
 META.corporate={t:'Corporate Accounting',s:'Corporate tax - Assets - Accruals - Cost centers - Budgets',a:'Tax Report',ao:()=>{go('corporate');setTimeout(()=>stab(document.querySelectorAll('#page-corporate .tab')[0],'corp-tax-tab'),50)}};
 META.reports={t:'Reports',s:'VAT - P&L - Balance Sheet - Trial Balance',a:'Export PDF',ao:()=>exportActiveReportPdf()};
@@ -247,6 +248,7 @@ function go(page){
   closeSidebar();
   if(page==='reports'){loadReportsBranchSelector();syncReportsFromDatabase();}
   if(page==='hrms-reports')loadHrAttendanceReport();
+  if(page==='tasks')loadTasks();
   if(page==='exception')loadExceptionCenter();
   if(page==='expense')loadExpenseVendors();
   if(page==='recruitment')scheduleIdleTask(refreshRecruitmentStats,100);
@@ -21840,6 +21842,164 @@ function downloadHrAttendanceReportCsv(){
   const a=document.createElement('a');
   a.href=url;a.download=`Attendance_Report_${data.period}.csv`;a.click();
   setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+
+// ── Task Management ─────────────────────────────────────────────────────
+// Backed by the generic AppDataRecord 'tasks' collection (same pattern as
+// employeeLoans/jobRequisitions — a small admin-managed list, not a
+// per-employee ledger needing its own dedicated table). Kanban board with
+// 3 fixed columns (To Do / In Progress / Done); click-to-move rather than
+// drag-and-drop, admin/manager-only for now (no ESS-side view yet).
+let _taskListCache=[];
+const TASK_STATUSES=['todo','in_progress','done'];
+const TASK_STATUS_LABEL={todo:'To Do',in_progress:'In Progress',done:'Done'};
+
+async function loadTasks(){
+  await populateTaskAssigneeSelect();
+  try{
+    const r=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/tasks?limit=500`);
+    const data=r.ok?await r.json():null;
+    _taskListCache=Array.isArray(data?.records)?data.records:[];
+  }catch(e){
+    console.warn('[loadTasks]',e);
+    _taskListCache=[];
+  }
+  renderTaskBoard();
+}
+
+async function populateTaskAssigneeSelect(){
+  const modalSel=document.getElementById('task-assignee');
+  const filterSel=document.getElementById('task-filter-employee');
+  if(!modalSel&&!filterSel)return;
+  try{
+    const r=await authenticatedFetch(`${apiBaseUrl()}/payroll/employees`);
+    const employees=r.ok?await r.json():[];
+    if(modalSel){
+      const prev=modalSel.value;
+      modalSel.innerHTML='<option value="">— Unassigned —</option>'+
+        employees.map(e=>`<option value="${escapeHtml(e.id)}" data-name="${escapeHtml(e.full_name)}">${escapeHtml(e.full_name)} (${escapeHtml(e.employee_no)})</option>`).join('');
+      if(prev)modalSel.value=prev;
+    }
+    if(filterSel){
+      const prev=filterSel.value;
+      filterSel.innerHTML='<option value="">All Employees</option>'+
+        employees.map(e=>`<option value="${escapeHtml(e.id)}">${escapeHtml(e.full_name)}</option>`).join('');
+      if(prev)filterSel.value=prev;
+    }
+  }catch(e){/* dropdowns just stay empty on failure */}
+}
+
+function showTaskModal(id){
+  const t=id?_taskListCache.find(x=>x.id===id):null;
+  document.getElementById('task-modal-title').textContent=t?'Edit Task':'Add Task';
+  document.getElementById('task-edit-id').value=id||'';
+  document.getElementById('task-title').value=t?.title||'';
+  document.getElementById('task-description').value=t?.description||'';
+  document.getElementById('task-assignee').value=t?.assigned_to||'';
+  document.getElementById('task-priority').value=t?.priority||'Medium';
+  document.getElementById('task-due-date').value=t?.due_date||'';
+  document.getElementById('task-status').value=t?.status||'todo';
+  const delBtn=document.getElementById('task-delete-btn');
+  if(delBtn)delBtn.style.display=t?'':'none';
+  showM('m-task');
+  setTimeout(()=>document.getElementById('task-title').focus(),120);
+}
+
+async function saveTaskModal(){
+  const title=(document.getElementById('task-title')?.value||'').trim();
+  if(!title){toast('Task title is required','warn');return;}
+  const id=document.getElementById('task-edit-id')?.value||`TASK-${Date.now()}`;
+  const assigneeSel=document.getElementById('task-assignee');
+  const assigneeOpt=assigneeSel?.selectedOptions?.[0];
+  const existing=_taskListCache.find(x=>x.id===id);
+  const task={
+    id,
+    title,
+    description:(document.getElementById('task-description')?.value||'').trim(),
+    assigned_to:assigneeSel?.value||'',
+    assigned_to_name:assigneeSel?.value?(assigneeOpt?.dataset.name||''):'',
+    priority:document.getElementById('task-priority')?.value||'Medium',
+    due_date:document.getElementById('task-due-date')?.value||'',
+    status:document.getElementById('task-status')?.value||'todo',
+    created_at:existing?.created_at||new Date().toISOString(),
+  };
+  await saveServer('tasks',task);
+  const idx=_taskListCache.findIndex(x=>x.id===id);
+  if(idx>=0)_taskListCache[idx]=task;else _taskListCache.push(task);
+  hideM('m-task');
+  renderTaskBoard();
+  toast(`Task ${existing?'updated':'added'}`,'ok');
+}
+
+async function deleteTaskFromModal(){
+  const id=document.getElementById('task-edit-id')?.value;
+  if(!id)return;
+  const t=_taskListCache.find(x=>x.id===id);
+  if(!confirm(`Delete task "${t?.title||'this task'}"?`))return;
+  await deleteServer('tasks',{id});
+  _taskListCache=_taskListCache.filter(x=>x.id!==id);
+  hideM('m-task');
+  renderTaskBoard();
+  toast('Task deleted','ok');
+}
+
+// Quick move from the card's ← / → buttons — no need to open the modal
+// just to shift a task one column over.
+async function moveTaskStatus(id,newStatus){
+  const idx=_taskListCache.findIndex(x=>x.id===id);
+  if(idx<0)return;
+  const task={..._taskListCache[idx],status:newStatus};
+  _taskListCache[idx]=task;
+  renderTaskBoard();
+  await saveServer('tasks',task);
+}
+
+function _taskCardHtml(t){
+  const priorityCls=t.priority==='High'?'b-r':t.priority==='Low'?'b-g':'b-a';
+  const overdue=t.due_date&&t.status!=='done'&&t.due_date<new Date().toISOString().slice(0,10);
+  const dueHtml=t.due_date?`<span class="task-card-due${overdue?' overdue':''}">${overdue?'⚠ ':''}${escapeHtml(t.due_date)}</span>`:'';
+  const idx=TASK_STATUSES.indexOf(t.status);
+  const prevStatus=idx>0?TASK_STATUSES[idx-1]:null;
+  const nextStatus=idx<TASK_STATUSES.length-1?TASK_STATUSES[idx+1]:null;
+  return `<div class="task-card" data-task-id="${escapeHtml(t.id)}">
+    <div class="task-card-title" onclick="showTaskModal('${escapeHtml(t.id)}')">${escapeHtml(t.title)}</div>
+    ${t.description?`<div class="task-card-desc">${escapeHtml(t.description)}</div>`:''}
+    <div class="task-card-meta">
+      <div class="task-card-assignee">
+        <div class="co-av" style="width:18px;height:18px;font-size:8px;flex-shrink:0">${escapeHtml(initialsFromName(t.assigned_to_name||'?'))}</div>
+        <span>${escapeHtml(t.assigned_to_name||'Unassigned')}</span>
+      </div>
+      ${dueHtml}
+    </div>
+    <div class="task-card-actions">
+      <span class="b ${priorityCls}">${escapeHtml(t.priority||'Medium')}</span>
+      <div class="task-card-move">
+        ${prevStatus?`<button class="icon-btn" title="Move to ${escapeHtml(TASK_STATUS_LABEL[prevStatus])}" onclick="moveTaskStatus('${escapeHtml(t.id)}','${prevStatus}')">←</button>`:''}
+        ${nextStatus?`<button class="icon-btn" title="Move to ${escapeHtml(TASK_STATUS_LABEL[nextStatus])}" onclick="moveTaskStatus('${escapeHtml(t.id)}','${nextStatus}')">→</button>`:''}
+        <button class="icon-btn edit" title="Edit" onclick="showTaskModal('${escapeHtml(t.id)}')">${editIconSvg()}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderTaskBoard(){
+  const empFilter=document.getElementById('task-filter-employee')?.value||'';
+  const priorityFilter=document.getElementById('task-filter-priority')?.value||'';
+  const search=(document.getElementById('task-filter-search')?.value||'').trim().toLowerCase();
+  const filtered=_taskListCache.filter(t=>{
+    if(empFilter&&t.assigned_to!==empFilter)return false;
+    if(priorityFilter&&t.priority!==priorityFilter)return false;
+    if(search&&!(t.title||'').toLowerCase().includes(search))return false;
+    return true;
+  });
+  TASK_STATUSES.forEach(status=>{
+    const list=filtered.filter(t=>(t.status||'todo')===status)
+      .sort((a,b)=>(a.due_date||'9999').localeCompare(b.due_date||'9999'));
+    const countEl=document.getElementById(`task-count-${status}`);
+    if(countEl)countEl.textContent=list.length;
+    const listEl=document.getElementById(`task-list-${status}`);
+    if(listEl)listEl.innerHTML=list.length?list.map(_taskCardHtml).join(''):'<div class="task-empty-col">No tasks</div>';
+  });
 }
 
 function validateWPS(){
