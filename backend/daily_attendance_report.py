@@ -247,7 +247,6 @@ def build_formatted_report(punches_df, roster_df):
         punches_df["user_id"] = punches_df["user_id"].astype(str)
 
     if not punches_df.empty:
-        punches_df["date"] = punches_df["timestamp"].dt.date
         punches_df = punches_df.sort_values(["user_id", "timestamp"])
 
     # Cover every date in the report window, AND any date that actually has
@@ -256,29 +255,42 @@ def build_formatted_report(punches_df, roster_df):
     today = datetime.now().date()
     window_dates = set(today - timedelta(days=i) for i in range(DAYS_BACK, -1, -1))
 
-    punches_lookup = {}
+    # Pairing is done per EMPLOYEE across their full punch history, not per
+    # calendar date -- grouping by date before pairing used to split an
+    # overnight shift (clock in 23:50, clock out 00:10 the next day) into two
+    # unrelated buckets: the clock-in was left permanently "open" (no Clock
+    # Out shown) on the first day, and the clock-out became a stray "out"
+    # with nothing to pair against on the next day, silently dropped by
+    # pair_punches(). Pairing across the whole timeline first, then
+    # attributing each resulting session to the calendar date its Clock In
+    # falls on, keeps overnight shifts intact end to end.
+    raw_dates_by_user = {}    # (user_id, date) -> True, for Absent detection only
+    pairs_by_user_date = {}   # (user_id, date) -> list of (clock_in, clock_out_or_None)
+
     if not punches_df.empty:
-        # Each value is a list of (timestamp, direction) tuples -- direction
-        # is what dedupe_punches()/pair_punches() need to pair sessions
-        # correctly instead of guessing by position.
+        # Each event is a (timestamp, direction) tuple -- direction is what
+        # dedupe_punches()/pair_punches() need to pair sessions correctly
+        # instead of guessing by position.
         has_punch_col = "punch" in punches_df.columns
-        punches_lookup = {
-            key: [
+        for user_id, group in punches_df.groupby("user_id"):
+            events = [
                 (ts, _punch_direction(code if has_punch_col else None))
                 for ts, code in zip(
                     group["timestamp"],
                     group["punch"] if has_punch_col else [None] * len(group),
                 )
             ]
-            for key, group in punches_df.groupby(["user_id", "date"])
-        }
-        punch_dates = set(d for (_, d) in punches_lookup.keys())
-    else:
-        punch_dates = set()
+            for ts, _direction in events:
+                raw_dates_by_user[(user_id, ts.date())] = True
+            events = dedupe_punches(events)
+            for cin, cout in pair_punches(events):
+                pairs_by_user_date.setdefault((user_id, cin.date()), []).append((cin, cout))
+
+    punch_dates = set(d for (_, d) in raw_dates_by_user.keys())
 
     all_dates = sorted(window_dates | punch_dates)
     log(f"Report will cover dates: {[d.strftime('%d/%m/%Y') for d in all_dates]}")
-    log(f"Punch records available for {len(punches_lookup)} (employee, date) combinations")
+    log(f"Punch records available for {len(raw_dates_by_user)} (employee, date) combinations")
 
     report_rows = []
 
@@ -286,9 +298,8 @@ def build_formatted_report(punches_df, roster_df):
         for _, emp in roster_df.iterrows():
             user_id = emp["user_id"]
             name = emp["name"]
-            events = punches_lookup.get((user_id, date), [])
-            events = dedupe_punches(events)
-            pairs = pair_punches(events)[:MAX_SESSIONS]
+            pairs = pairs_by_user_date.get((user_id, date), [])
+            has_activity = raw_dates_by_user.get((user_id, date), False)
 
             row = {
                 "Emp No.": user_id,
@@ -298,18 +309,30 @@ def build_formatted_report(punches_df, roster_df):
                 "Date": date.strftime("%d/%m/%Y"),
             }
 
+            # Total work is summed from EVERY session that day, not just the
+            # first MAX_SESSIONS shown in the printed columns below --
+            # previously `pairs` was sliced to MAX_SESSIONS before this total
+            # was computed, so a 6th+ punch-pair's hours vanished from Total
+            # in time/OT/Under Time entirely instead of just being left off
+            # the display.
             total_work = timedelta()
+            for cin, cout in pairs:
+                if cout:
+                    total_work += cout - cin
 
+            shown_pairs = pairs[:MAX_SESSIONS]
             for idx in range(MAX_SESSIONS):
                 n = idx + 1
-                if idx < len(pairs):
-                    cin, cout = pairs[idx]
+                if idx < len(shown_pairs):
+                    cin, cout = shown_pairs[idx]
                     row[f"Clock In {n}"] = cin.strftime("%H:%M")
                     if cout:
-                        row[f"Clock Out {n}"] = cout.strftime("%H:%M")
-                        work_time = cout - cin
-                        total_work += work_time
-                        row[f"Work Time {n}"] = format_hm(work_time)
+                        # "(+1)" flags a clock-out that landed on the next
+                        # calendar day (overnight shift) so the time isn't
+                        # misread as earlier than the clock-in.
+                        suffix = " (+1)" if cout.date() != cin.date() else ""
+                        row[f"Clock Out {n}"] = cout.strftime("%H:%M") + suffix
+                        row[f"Work Time {n}"] = format_hm(cout - cin)
                     else:
                         row[f"Clock Out {n}"] = ""
                         row[f"Work Time {n}"] = ""
@@ -326,7 +349,7 @@ def build_formatted_report(punches_df, roster_df):
 
             row["OT"] = format_hm(timedelta(hours=ot_hours))
             row["Under Time"] = format_hm(timedelta(hours=under_hours))
-            row["Absent"] = "Yes" if len(events) == 0 else ""
+            row["Absent"] = "Yes" if not has_activity else ""
             row["SICK"] = ""   # manual / from HRMS leave records
             row["Holiday"] = ""  # manual / from HRMS holiday calendar
 
