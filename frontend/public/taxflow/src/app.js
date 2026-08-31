@@ -21661,6 +21661,12 @@ async function renderAttendanceCalendar(){
 // employee for a selected month, respecting the same weekend policy as
 // the Attendance Calendar — see _companyWeekendDaySet()).
 let _hrAttReportCache=null;
+// Sort state for the Present/Absent columns — {key:'present_days'|'absent_days'|null, dir:1|-1}.
+// Descending by default on first click of a column: for both Present and
+// Absent, the numbers people actually want to see first are the extremes
+// (most absences to chase up, most present to recognize), not the zeros.
+let _hrAttSort={key:null,dir:-1};
+
 function loadHrAttendanceReport(){
   const periodInput=document.getElementById('hrr-att-period');
   if(periodInput&&!periodInput.value){
@@ -21668,6 +21674,7 @@ function loadHrAttendanceReport(){
     periodInput.value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   }
   const period=periodInput?.value||'';
+  _hrAttSort={key:null,dir:-1};
   const tbody=document.getElementById('hrr-att-tbody');
   if(tbody)tbody.innerHTML='<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">Loading…</td></tr>';
   authenticatedFetch(`${apiBaseUrl()}/attendance/monthly-report${period?`?period=${encodeURIComponent(period)}`:''}`)
@@ -21676,22 +21683,41 @@ function loadHrAttendanceReport(){
       _hrAttReportCache=data;
       const sub=document.getElementById('hrr-att-sub');
       if(sub)sub.textContent=`${data.working_days} working day(s) this period — per-employee present/absent/leave days and hours`;
-      const rows=data.employees||[];
-      if(!tbody)return;
-      tbody.innerHTML=rows.length?rows.map(e=>`<tr>
-        <td style="font-weight:600">${escapeHtml(e.employee_name||'—')}</td>
-        <td style="color:var(--text3);font-size:12px">${escapeHtml(e.department||'—')}</td>
-        <td class="mono">${e.present_days}</td>
-        <td class="mono"${e.absent_days>0?' style="color:var(--red)"':''}>${e.absent_days}</td>
-        <td class="mono">${e.leave_days}</td>
-        <td class="mono">${e.total_hours}</td>
-        <td class="mono">${e.ot_hours}</td>
-      </tr>`).join(''):'<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">No active employees.</td></tr>';
+      _renderHrAttReportRows();
     })
     .catch(e=>{
       console.warn('[loadHrAttendanceReport]',e);
       if(tbody)tbody.innerHTML='<tr><td colspan="7" style="color:var(--red);text-align:center;padding:24px">Could not load attendance report.</td></tr>';
     });
+}
+
+// Clicking the Present/Absent header sorts by that column, toggling
+// direction on repeat clicks of the same column; picking the other column
+// resets to descending. Purely a client-side re-sort of the already-loaded
+// report — no re-fetch needed.
+function sortHrAttendanceReport(key){
+  _hrAttSort=_hrAttSort.key===key?{key,dir:-_hrAttSort.dir}:{key,dir:-1};
+  _renderHrAttReportRows();
+}
+
+function _renderHrAttReportRows(){
+  const tbody=document.getElementById('hrr-att-tbody');
+  if(!tbody)return;
+  let rows=[...(_hrAttReportCache?.employees||[])];
+  const {key,dir}=_hrAttSort;
+  if(key)rows.sort((a,b)=>(Number(a[key])-Number(b[key]))*dir||(a.employee_name||'').localeCompare(b.employee_name||''));
+  const arrow=k=>key===k?(dir===1?' ▲':' ▼'):'';
+  document.querySelectorAll('#hrr-att-thead-present').forEach(th=>{th.textContent='Present'+arrow('present_days');});
+  document.querySelectorAll('#hrr-att-thead-absent').forEach(th=>{th.textContent='Absent'+arrow('absent_days');});
+  tbody.innerHTML=rows.length?rows.map(e=>`<tr>
+    <td style="font-weight:600">${escapeHtml(e.employee_name||'—')}</td>
+    <td style="color:var(--text3);font-size:12px">${escapeHtml(e.department||'—')}</td>
+    <td class="mono">${e.present_days}</td>
+    <td class="mono"${e.absent_days>0?' style="color:var(--red)"':''}>${e.absent_days}</td>
+    <td class="mono">${e.leave_days}</td>
+    <td class="mono">${e.total_hours}</td>
+    <td class="mono">${e.ot_hours}</td>
+  </tr>`).join(''):'<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">No active employees.</td></tr>';
 }
 
 function downloadHrAttendanceReportCsv(){

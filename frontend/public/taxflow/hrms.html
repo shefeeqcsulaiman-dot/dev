@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=29c22be740" as="style">
-<link rel="preload" href="src/app.js?v=2d13b521a9" as="script">
+<link rel="preload" href="src/app.js?v=1c321892a9" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=29c22be740">
 <style>
@@ -2190,7 +2190,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         </div>
       </div>
       <table class="tbl" data-delete-actions-bound="skip">
-        <thead><tr><th>Employee</th><th>Department</th><th>Present</th><th>Absent</th><th>Leave</th><th>Total Hours</th><th>OT Hours</th></tr></thead>
+        <thead><tr><th>Employee</th><th>Department</th><th id="hrr-att-thead-present" style="cursor:pointer;user-select:none" onclick="sortHrAttendanceReport('present_days')" title="Click to sort">Present</th><th id="hrr-att-thead-absent" style="cursor:pointer;user-select:none" onclick="sortHrAttendanceReport('absent_days')" title="Click to sort">Absent</th><th>Leave</th><th>Total Hours</th><th>OT Hours</th></tr></thead>
         <tbody id="hrr-att-tbody">
           <tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">Loading…</td></tr>
         </tbody>
@@ -2735,7 +2735,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=2d13b521a9" defer></script>
+<script src="src/app.js?v=1c321892a9" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
