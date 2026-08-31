@@ -837,10 +837,21 @@ function saveEmployee(){
   audit(isEdit?'Updated employee':'Created employee',employee.id,'Saved');
 }
 
+// Numeric-aware sort key for an employee id: pulls out the first run of
+// digits so "52" and "EMP-012" both sort on their number (52, 12) rather
+// than as plain strings (which would put "EMP-012" before "52" — and "10"
+// before "2" — regardless of magnitude). Ids with no digits at all sort
+// last rather than first.
+function _employeeIdSortValue(id){
+  const m=String(id||'').match(/\d+/);
+  return m?parseInt(m[0],10):Infinity;
+}
+
 function renderEmployeeRecord(employee){
   const tbody=document.getElementById('employee-tbody');
   if(!tbody)return;
-  const existing=[...tbody.querySelectorAll('tr')].find(row=>{
+  const rows=[...tbody.querySelectorAll('tr')];
+  const existing=rows.find(row=>{
     const data=row.dataset.employee?JSON.parse(row.dataset.employee):null;
     const id=row.querySelector('td:first-child')?.textContent.trim();
     return data?.id===employee.id||id===employee.id;
@@ -859,7 +870,17 @@ function renderEmployeeRecord(employee){
     <td class="mono">${Number(employee.salary||0).toLocaleString('en-AE',{minimumFractionDigits:0,maximumFractionDigits:0})}</td>
     <td><span class="b ${employee.status==='Inactive'?'b-gray':'b-g'}">${escapeHtml(employee.status||'Active')}</span></td>
     <td data-action-col="1"><div class="row-actions"><button class="btn btn-g btn-sm" onclick="openEmployeeProfile(this)">View</button> <button class="icon-btn edit" type="button" title="Edit" onclick="editEmployeeFromRow(this)">${editIconSvg()}</button> <button class="btn btn-g btn-sm" onclick="toggleEmployeeStatusFromRow(this)">${employee.status==='Inactive'?'Activate':'Deactivate'}</button></div></td>`;
-  tbody.prepend(row);
+  // Employee Directory is kept sorted by Employee No. ascending (numeric-
+  // aware) rather than newest-added-first — tbody.prepend() previously put
+  // whichever employee was most recently created/edited at the very top
+  // regardless of their actual number.
+  const newVal=_employeeIdSortValue(employee.id);
+  const nextSibling=rows.filter(r=>r!==existing).find(r=>{
+    const rid=r.dataset.employee?JSON.parse(r.dataset.employee).id:r.querySelector('td:first-child')?.textContent.trim();
+    return _employeeIdSortValue(rid)>newVal;
+  });
+  if(nextSibling)tbody.insertBefore(row,nextSibling);
+  else tbody.appendChild(row);
   const table=tbody.closest('table');
   const state=tableEnhanceState.get(table);
   if(state){
@@ -19285,8 +19306,12 @@ const ROTA_STAFF_DISPLAY_CAP=300;
 function currentRotaStaff(){
   const rows=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')].map(row=>{
     const emp=employeeFromDirectoryRow(row);
-    return {id:emp.id||'',name:emp.name||'',department:emp.department||'Management',role:emp.designation||'Employee',location:emp.location||'Dubai HQ'};
-  }).filter(staff=>staff.id&&staff.name);
+    return {id:emp.id||'',name:emp.name||'',department:emp.department||'Management',role:emp.designation||'Employee',location:emp.location||'Dubai HQ',status:emp.status||'Active'};
+  // An Inactive employee's OWN past rota assignments are left untouched in
+  // the backend — this only stops them appearing as a schedulable row going
+  // forward, same as _getAttendanceEmployees() already does for Today's
+  // Attendance's manual roll call.
+  }).filter(staff=>staff.id&&staff.name&&staff.status!=='Inactive');
   return rows.length?rows.slice(0,ROTA_STAFF_DISPLAY_CAP):ROTA_DEFAULT_STAFF;
 }
 
@@ -19523,8 +19548,15 @@ function assignmentFor(staff,date,day){
 
 // If a company's own roster is somehow bigger than ROTA_STAFF_DISPLAY_CAP,
 // say so on screen instead of silently dropping the rest with no signal.
+// Counts active employees only (same filter as currentRotaStaff(), computed
+// separately here rather than via currentRotaStaff().length since that
+// function's own return value is already capped at ROTA_STAFF_DISPLAY_CAP
+// — using it here would make "showing N of total" always report total<=cap
+// and this notice would never fire).
 function _rotaTruncationNoticeHtml(){
-  const total=document.querySelectorAll('#employee-tbody tr:not([data-empty-state])').length;
+  const total=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')]
+    .map(row=>employeeFromDirectoryRow(row))
+    .filter(emp=>emp?.id&&emp?.name&&(emp.status||'Active')!=='Inactive').length;
   if(total<=ROTA_STAFF_DISPLAY_CAP)return '';
   return `<div class="empty-card" style="color:var(--amber);margin-bottom:8px">Showing the first ${ROTA_STAFF_DISPLAY_CAP} of ${total} employees — use the Department filter to narrow this down.</div>`;
 }
@@ -21386,7 +21418,9 @@ async function refreshAttendanceToday(){
     // any company with zero attendance data (i.e. most fresh companies) the
     // tile stayed frozen at its clearStaticDemoData() default of "0"
     // instead of the real employee count.
-    const empTotal=document.querySelectorAll('#employee-tbody tr:not([data-empty-state])').length;
+    // Active only — same "Total Employees shouldn't count Inactive staff"
+    // rule already applied elsewhere (dashboard KPI, currentRotaStaff()).
+    const empTotal=_getAttendanceEmployees().length;
     set('att-stat-total',empTotal||'—');
     if(!tbody)return;
     if(!ids.length){
