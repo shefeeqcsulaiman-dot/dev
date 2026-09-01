@@ -44,11 +44,56 @@
     .content{max-width:860px;margin:0 auto;padding:24px 16px;width:100%}
 
     /* ── TABS ── */
-    .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:24px}
-    .tab{padding:10px 18px;font-size:13px;font-weight:500;color:var(--text3);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:inherit;transition:color .15s,border-color .15s}
+    .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:24px;overflow-x:auto;scrollbar-width:none}
+    .tabs::-webkit-scrollbar{display:none}
+    .tab{padding:10px 16px;font-size:13px;font-weight:500;color:var(--text3);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:inherit;transition:color .15s,border-color .15s;white-space:nowrap;flex-shrink:0}
     .tab.on{color:var(--accent);border-bottom-color:var(--accent)}
     .tab-body{display:none}
     .tab-body.on{display:block}
+
+    /* ── DASHBOARD ── */
+    .dash-hero{background:linear-gradient(135deg,#073D7F,#1d4ed8 55%,#3b82f6);border-radius:16px;padding:22px 24px;display:flex;align-items:center;gap:16px;margin-bottom:18px;color:#fff}
+    .dash-avatar{width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;font-family:'Space Grotesk',sans-serif;flex-shrink:0}
+    .dash-name{font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:700}
+    .dash-role{font-size:12.5px;opacity:.85;margin-top:2px}
+    .dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+    .dash-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;cursor:pointer;transition:transform .15s,box-shadow .15s}
+    .dash-card:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(15,23,42,.08)}
+    .dash-card-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;margin-bottom:10px}
+    .dash-card-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:4px}
+    .dash-card-value{font-size:15px;font-weight:700;color:var(--text)}
+    .dash-card-sub{font-size:11.5px;color:var(--text3);margin-top:2px}
+    .dash-section-title{font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:22px 0 10px}
+
+    /* ── STATUS BADGES (leave / task) ── */
+    .st-badge{display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600}
+    .st-pending{background:#fef3c7;color:#92400e}
+    .st-approved{background:#dcfce7;color:#166534}
+    .st-rejected{background:#fee2e2;color:#991b1b}
+    .st-todo{background:#e0e7ff;color:#3730a3}
+    .st-progress{background:#fef3c7;color:#92400e}
+    .st-done{background:#dcfce7;color:#166534}
+    .pri-high{color:var(--red);font-weight:600}
+    .pri-medium{color:#d97706;font-weight:600}
+    .pri-low{color:var(--green);font-weight:600}
+
+    /* ── MODAL (Request Leave) ── */
+    .ess-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:100;align-items:center;justify-content:center;padding:16px}
+    .ess-overlay.on{display:flex}
+    .ess-modal{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto}
+    .ess-modal-title{font-size:16px;font-weight:700;margin-bottom:16px;font-family:'Space Grotesk',sans-serif}
+    .fr2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    select.ess-select{width:100%;padding:11px 15px;border:1.5px solid #d1d5db;border-radius:9px;font-size:14px;font-family:inherit;color:#111827;background:#f9fafb;outline:none}
+    .btn-ghost{padding:11px 18px;background:none;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;cursor:pointer;color:var(--text2)}
+    .leave-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+    .leave-type{font-size:13.5px;font-weight:700;color:var(--text)}
+    .leave-dates{font-size:12px;color:var(--text3);margin-top:2px}
+    .leave-reason{font-size:12px;color:var(--text2);margin-top:6px}
+    .rota-row{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:8px}
+    .rota-date-chip{width:44px;height:44px;border-radius:10px;background:#eff6ff;color:#1d4ed8;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;font-family:'Space Grotesk',sans-serif}
+    .rota-date-chip .d{font-size:15px;font-weight:700;line-height:1}
+    .rota-date-chip .m{font-size:9px;text-transform:uppercase;font-weight:600}
+    .task-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:8px}
 
     /* ── CARDS ── */
     .card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px}
@@ -118,15 +163,57 @@
   </div>
   <div class="content">
     <div class="tabs">
-      <button class="tab on" onclick="essTab(this,'profile')">Profile</button>
+      <button class="tab on" onclick="essTab(this,'dashboard')">Dashboard</button>
       <button class="tab" onclick="essTab(this,'attendance')">Attendance</button>
-      <button class="tab" onclick="essTab(this,'gps');refreshGpsStatus()">GPS Check-In</button>
+      <button class="tab" onclick="essTab(this,'leave')">Leave</button>
+      <button class="tab" onclick="essTab(this,'rota')">Rota</button>
+      <button class="tab" onclick="essTab(this,'tasks')">Tasks</button>
       <button class="tab" onclick="essTab(this,'payslips')">Payslips</button>
+      <button class="tab" onclick="essTab(this,'gps');refreshGpsStatus()">GPS Check-In</button>
+      <button class="tab" onclick="essTab(this,'profile')">Profile</button>
       <button class="tab" id="ess-team-tab-btn" style="display:none" onclick="essTab(this,'team');loadTeamView()">Team</button>
     </div>
 
+    <!-- Dashboard -->
+    <div class="tab-body on" id="tb-dashboard">
+      <div class="dash-hero">
+        <div class="dash-avatar" id="dash-avatar">—</div>
+        <div>
+          <div class="dash-name" id="dash-name">—</div>
+          <div class="dash-role" id="dash-role">—</div>
+        </div>
+      </div>
+      <div class="dash-grid">
+        <div class="dash-card" onclick="document.querySelector('.tab[onclick*=attendance]').click()">
+          <div class="dash-card-icon" style="background:#eff6ff;color:#2563eb">🕒</div>
+          <div class="dash-card-label">Today</div>
+          <div class="dash-card-value" id="dash-att-status">—</div>
+        </div>
+        <div class="dash-card" onclick="document.querySelector('.tab[onclick*=leave]').click()">
+          <div class="dash-card-icon" style="background:#faf5ff;color:#7c3aed">🌴</div>
+          <div class="dash-card-label">Leave</div>
+          <div class="dash-card-value" id="dash-leave-status">—</div>
+        </div>
+        <div class="dash-card" onclick="document.querySelector('.tab[onclick*=rota]').click()">
+          <div class="dash-card-icon" style="background:#f0fdf4;color:#16a34a">📅</div>
+          <div class="dash-card-label">Next Shift</div>
+          <div class="dash-card-value" id="dash-next-shift">—</div>
+        </div>
+        <div class="dash-card" onclick="document.querySelector('.tab[onclick*=tasks]').click()">
+          <div class="dash-card-icon" style="background:#fff7ed;color:#ea580c">✓</div>
+          <div class="dash-card-label">Open Tasks</div>
+          <div class="dash-card-value" id="dash-tasks-count">—</div>
+        </div>
+        <div class="dash-card" onclick="document.querySelector('.tab[onclick*=payslips]').click()">
+          <div class="dash-card-icon" style="background:#fef2f2;color:#dc2626">💰</div>
+          <div class="dash-card-label">Last Payslip</div>
+          <div class="dash-card-value" id="dash-last-payslip">—</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Profile -->
-    <div class="tab-body on" id="tb-profile">
+    <div class="tab-body" id="tb-profile">
       <div class="card" id="profile-card">
         <div class="card-title">My Information</div>
         <div class="profile-row" id="profile-fields">
@@ -162,6 +249,33 @@
       </div>
     </div>
 
+    <!-- Leave -->
+    <div class="tab-body" id="tb-leave">
+      <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span>My Leave Requests</span>
+          <button class="btn-login" style="width:auto;padding:8px 16px;font-size:12.5px" onclick="essOpenLeaveModal()">+ Request Leave</button>
+        </div>
+        <div id="leave-content" class="loading">Loading…</div>
+      </div>
+    </div>
+
+    <!-- Rota -->
+    <div class="tab-body" id="tb-rota">
+      <div class="card">
+        <div class="card-title">My Upcoming Shifts (next 30 days)</div>
+        <div id="rota-content" class="loading">Loading…</div>
+      </div>
+    </div>
+
+    <!-- Tasks -->
+    <div class="tab-body" id="tb-tasks">
+      <div class="card">
+        <div class="card-title">My Tasks</div>
+        <div id="tasks-content" class="loading">Loading…</div>
+      </div>
+    </div>
+
     <!-- GPS Check-In -->
     <div class="tab-body" id="tb-gps">
       <div class="card">
@@ -192,6 +306,41 @@
           </table>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Request Leave modal -->
+<div class="ess-overlay" id="leave-modal-overlay" onclick="if(event.target===this)essCloseLeaveModal()">
+  <div class="ess-modal">
+    <div class="ess-modal-title">Request Leave</div>
+    <div id="leave-form-err" class="err-box"></div>
+    <div class="field">
+      <label for="leave-type">Leave Type</label>
+      <select id="leave-type" class="ess-select">
+        <option>Annual Leave</option>
+        <option>Sick Leave</option>
+        <option>Casual Leave</option>
+        <option>Emergency Leave</option>
+        <option>Maternity Leave</option>
+        <option>Paternity Leave</option>
+        <option>Unpaid Leave</option>
+        <option>Lieu Days</option>
+        <option>Hajj Leave</option>
+        <option>Work From Home</option>
+      </select>
+    </div>
+    <div class="fr2">
+      <div class="field"><label for="leave-start">Start Date</label><input id="leave-start" type="date"></div>
+      <div class="field"><label for="leave-end">End Date</label><input id="leave-end" type="date"></div>
+    </div>
+    <div class="field last">
+      <label for="leave-reason">Reason (optional)</label>
+      <input id="leave-reason" type="text" placeholder="Brief reason for HR">
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn-ghost" onclick="essCloseLeaveModal()">Cancel</button>
+      <button id="leave-submit-btn" class="btn-login" style="width:auto;padding:11px 22px" onclick="essSubmitLeave()">Submit Request</button>
     </div>
   </div>
 </div>
@@ -397,6 +546,8 @@
     document.getElementById('tb-' + id).classList.add('on');
   }
 
+  var _essData = { attendance: [], leave: [], rota: [], tasks: [], payslips: [] };
+
   async function loadProfile() {
     try {
       var r = await fetch(apiBase() + '/ess/me', {headers: essHeaders()});
@@ -409,6 +560,13 @@
         kv('Department', emp.department) +
         kv('Designation', emp.designation) +
         kv('Status', '<span class="badge' + (emp.status !== 'active' ? ' inactive' : '') + '">' + emp.status + '</span>');
+      var initial = (emp.full_name || '?').trim().charAt(0).toUpperCase();
+      var avEl = document.getElementById('dash-avatar');
+      if (avEl) avEl.textContent = initial;
+      var nameEl = document.getElementById('dash-name');
+      if (nameEl) nameEl.textContent = emp.full_name;
+      var roleEl = document.getElementById('dash-role');
+      if (roleEl) roleEl.textContent = (emp.designation || '') + (emp.designation && emp.department ? ' · ' : '') + (emp.department || '');
     } catch(e) { console.error(e); }
   }
 
@@ -421,15 +579,19 @@
       var r = await fetch(apiBase() + '/ess/attendance', {headers: essHeaders()});
       if (r.status === 401) { essLogout(); return; }
       var rows = await r.json();
+      _essData.attendance = rows;
       var body = document.getElementById('att-body');
-      if (!rows.length) { body.innerHTML = '<tr><td colspan="4" class="empty">No attendance records found.</td></tr>'; return; }
-      body.innerHTML = rows.map(function(p) {
-        var dir = p.direction === 'in'
-          ? '<span class="dir-in">↑ IN</span>'
-          : '<span class="dir-out">↓ OUT</span>';
-        var t = p.punch_time ? p.punch_time.substring(11,16) : '—';
-        return '<tr><td>' + p.punch_date + '</td><td>' + t + '</td><td>' + dir + '</td><td>' + p.source + '</td></tr>';
-      }).join('');
+      if (!rows.length) { body.innerHTML = '<tr><td colspan="4" class="empty">No attendance records found.</td></tr>'; }
+      else {
+        body.innerHTML = rows.map(function(p) {
+          var dir = p.direction === 'in'
+            ? '<span class="dir-in">↑ IN</span>'
+            : '<span class="dir-out">↓ OUT</span>';
+          var t = p.punch_time ? p.punch_time.substring(11,16) : '—';
+          return '<tr><td>' + p.punch_date + '</td><td>' + t + '</td><td>' + dir + '</td><td>' + p.source + '</td></tr>';
+        }).join('');
+      }
+      updateDashboard();
     } catch(e) { document.getElementById('att-body').innerHTML = '<tr><td colspan="4" class="empty">Failed to load.</td></tr>'; }
   }
 
@@ -438,18 +600,191 @@
       var r = await fetch(apiBase() + '/ess/payslips', {headers: essHeaders()});
       if (r.status === 401) { essLogout(); return; }
       var items = await r.json();
+      _essData.payslips = items;
       var el = document.getElementById('payslip-content');
-      if (!items.length) { el.innerHTML = '<div class="empty">No payslips found.</div>'; return; }
-      el.innerHTML = '<div class="payslip-grid">' + items.map(function(p) {
-        return '<div class="payslip-card">' +
-          '<div class="payslip-status">' + p.run_status + '</div>' +
-          '<div class="payslip-period">' + p.period + '</div>' +
-          row('Basic', p.basic) + row('Allowances', p.allowances) +
-          row('Overtime', p.overtime) + row('Deductions', p.deductions) +
-          '<div class="payslip-row net"><span>Net Pay</span><span>AED ' + fmt(p.net_pay) + '</span></div>' +
-          '</div>';
-      }).join('') + '</div>';
+      if (!items.length) { el.innerHTML = '<div class="empty">No payslips found.</div>'; }
+      else {
+        el.innerHTML = '<div class="payslip-grid">' + items.map(function(p) {
+          return '<div class="payslip-card">' +
+            '<div class="payslip-status">' + p.run_status + '</div>' +
+            '<div class="payslip-period">' + p.period + '</div>' +
+            row('Basic', p.basic) + row('Allowances', p.allowances) +
+            row('Overtime', p.overtime) + row('Deductions', p.deductions) +
+            '<div class="payslip-row net"><span>Net Pay</span><span>AED ' + fmt(p.net_pay) + '</span></div>' +
+            '</div>';
+        }).join('') + '</div>';
+      }
+      updateDashboard();
     } catch(e) { document.getElementById('payslip-content').innerHTML = '<div class="empty">Failed to load.</div>'; }
+  }
+
+  // ── Leave ──────────────────────────────────────────────────────────────
+  async function loadLeave() {
+    try {
+      var r = await fetch(apiBase() + '/ess/leave', {headers: essHeaders()});
+      if (r.status === 401) { essLogout(); return; }
+      var rows = await r.json();
+      _essData.leave = rows;
+      var el = document.getElementById('leave-content');
+      if (!rows.length) { el.innerHTML = '<div class="empty">No leave requests yet.</div>'; }
+      else {
+        el.innerHTML = rows.map(function(l) {
+          var st = (l.status || 'pending').toLowerCase();
+          return '<div class="leave-card">' +
+            '<div>' +
+              '<div class="leave-type">' + l.leave_type + '</div>' +
+              '<div class="leave-dates">' + l.start_date + ' → ' + l.end_date + ' (' + l.days + ' day' + (l.days === 1 ? '' : 's') + ')</div>' +
+              (l.reason ? '<div class="leave-reason">' + l.reason + '</div>' : '') +
+            '</div>' +
+            '<span class="st-badge st-' + st + '">' + (l.status || 'pending') + '</span>' +
+          '</div>';
+        }).join('');
+      }
+      updateDashboard();
+    } catch(e) { document.getElementById('leave-content').innerHTML = '<div class="empty">Failed to load.</div>'; }
+  }
+
+  function essOpenLeaveModal() {
+    document.getElementById('leave-form-err').style.display = 'none';
+    document.getElementById('leave-type').value = 'Annual Leave';
+    document.getElementById('leave-start').value = '';
+    document.getElementById('leave-end').value = '';
+    document.getElementById('leave-reason').value = '';
+    document.getElementById('leave-modal-overlay').classList.add('on');
+  }
+  function essCloseLeaveModal() {
+    document.getElementById('leave-modal-overlay').classList.remove('on');
+  }
+  async function essSubmitLeave() {
+    var btn = document.getElementById('leave-submit-btn');
+    var err = document.getElementById('leave-form-err');
+    err.style.display = 'none';
+    var type = document.getElementById('leave-type').value;
+    var start = document.getElementById('leave-start').value;
+    var end = document.getElementById('leave-end').value;
+    var reason = document.getElementById('leave-reason').value;
+    if (!start || !end) { err.textContent = 'Please choose both a start and end date.'; err.style.display = 'block'; return; }
+    btn.disabled = true; btn.textContent = 'Submitting…';
+    try {
+      var r = await fetch(apiBase() + '/ess/leave', {
+        method: 'POST', headers: essHeaders(),
+        body: JSON.stringify({leave_type: type, start_date: start, end_date: end, reason: reason || null})
+      });
+      var d = await r.json();
+      if (r.ok) { essCloseLeaveModal(); loadLeave(); }
+      else { err.textContent = d.detail || 'Could not submit leave request.'; err.style.display = 'block'; }
+    } catch(e) {
+      err.textContent = 'Cannot reach server. Please try again.'; err.style.display = 'block';
+    }
+    btn.disabled = false; btn.textContent = 'Submit Request';
+  }
+
+  // ── Rota ───────────────────────────────────────────────────────────────
+  async function loadRota() {
+    try {
+      var r = await fetch(apiBase() + '/ess/rota', {headers: essHeaders()});
+      if (r.status === 401) { essLogout(); return; }
+      var rows = await r.json();
+      _essData.rota = rows;
+      var el = document.getElementById('rota-content');
+      if (!rows.length) { el.innerHTML = '<div class="empty">No shifts scheduled in the next 30 days.</div>'; }
+      else {
+        el.innerHTML = rows.map(function(a) {
+          var d = new Date((a.date || '') + 'T00:00:00');
+          var valid = !isNaN(d.getTime());
+          var dayNum = valid ? d.getDate() : '—';
+          var monthShort = valid ? d.toLocaleDateString('en-US', {month: 'short'}) : '';
+          var timeRange = (a.start || '') + (a.end ? (' – ' + a.end) : '');
+          return '<div class="rota-row">' +
+            '<div class="rota-date-chip"><div class="d">' + dayNum + '</div><div class="m">' + monthShort + '</div></div>' +
+            '<div style="flex:1">' +
+              '<div style="font-weight:600;font-size:13.5px">' + (a.type || a.code || 'Shift') + '</div>' +
+              '<div style="font-size:12px;color:var(--text3)">' + timeRange + (a.location ? (' · ' + a.location) : '') + '</div>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+      }
+      updateDashboard();
+    } catch(e) { document.getElementById('rota-content').innerHTML = '<div class="empty">Failed to load.</div>'; }
+  }
+
+  // ── Tasks ──────────────────────────────────────────────────────────────
+  function _taskStatusLabel(status) {
+    var s = status === 'in_progress' ? 'progress' : (status || 'todo');
+    var labels = {todo: 'To Do', progress: 'In Progress', done: 'Done'};
+    return {cls: labels[s] ? s : 'todo', text: labels[s] || s};
+  }
+
+  async function loadTasks() {
+    try {
+      var r = await fetch(apiBase() + '/ess/tasks', {headers: essHeaders()});
+      if (r.status === 401) { essLogout(); return; }
+      var rows = await r.json();
+      _essData.tasks = rows;
+      var el = document.getElementById('tasks-content');
+      if (!rows.length) { el.innerHTML = '<div class="empty">No tasks assigned to you.</div>'; }
+      else {
+        el.innerHTML = rows.map(function(t) {
+          var st = _taskStatusLabel(t.status);
+          var priClass = 'pri-' + (t.priority || 'Medium').toLowerCase();
+          return '<div class="task-row">' +
+            '<div>' +
+              '<div style="font-weight:600;font-size:13.5px">' + (t.title || 'Untitled task') + '</div>' +
+              (t.description ? '<div style="font-size:12px;color:var(--text2);margin-top:4px">' + t.description + '</div>' : '') +
+              '<div style="font-size:11.5px;color:var(--text3);margin-top:6px">' +
+                (t.due_date ? ('Due ' + t.due_date + ' · ') : '') +
+                '<span class="' + priClass + '">' + (t.priority || 'Medium') + ' priority</span>' +
+              '</div>' +
+            '</div>' +
+            '<span class="st-badge st-' + st.cls + '">' + st.text + '</span>' +
+          '</div>';
+        }).join('');
+      }
+      updateDashboard();
+    } catch(e) { document.getElementById('tasks-content').innerHTML = '<div class="empty">Failed to load.</div>'; }
+  }
+
+  // ── Dashboard summary — derived entirely from data the other tabs'
+  // loaders already fetched (_essData), so opening the portal never fires
+  // an extra request just for the summary tiles. Called (harmlessly, and
+  // idempotently) by every loader as it resolves, since they don't all
+  // finish at the same time.
+  function fmtShortDate(iso) {
+    try {
+      var d = new Date(iso + 'T00:00:00');
+      if (isNaN(d.getTime())) return iso;
+      return d.toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'});
+    } catch(e) { return iso; }
+  }
+
+  function updateDashboard() {
+    var todayStr = new Date().toISOString().slice(0, 10);
+    var attEl = document.getElementById('dash-att-status');
+    if (attEl) {
+      var todaysPunches = _essData.attendance.filter(function(p) { return p.punch_date === todayStr; });
+      if (!todaysPunches.length) attEl.textContent = 'Not clocked in';
+      else attEl.textContent = todaysPunches[0].direction === 'in' ? 'Checked In' : 'Checked Out';
+    }
+    var leaveEl = document.getElementById('dash-leave-status');
+    if (leaveEl) {
+      var pending = _essData.leave.filter(function(l) { return l.status === 'pending'; }).length;
+      leaveEl.textContent = pending ? (pending + ' Pending') : 'All clear';
+    }
+    var nextEl = document.getElementById('dash-next-shift');
+    if (nextEl) {
+      var upcoming = _essData.rota[0];
+      nextEl.textContent = upcoming ? (fmtShortDate(upcoming.date) + (upcoming.code ? ' · ' + upcoming.code : '')) : 'No upcoming shifts';
+    }
+    var tasksEl = document.getElementById('dash-tasks-count');
+    if (tasksEl) {
+      var open = _essData.tasks.filter(function(t) { return t.status !== 'done'; }).length;
+      tasksEl.textContent = open ? (open + ' Open') : 'All done';
+    }
+    var paySlipEl = document.getElementById('dash-last-payslip');
+    if (paySlipEl) {
+      var latest = _essData.payslips[0];
+      paySlipEl.textContent = latest ? ('AED ' + fmt(latest.net_pay)) : '—';
+    }
   }
 
   function row(label, val) {
@@ -472,6 +807,9 @@
     loadProfile();
     loadAttendance();
     loadPayslips();
+    loadLeave();
+    loadRota();
+    loadTasks();
     loadRoleAndPermissions();
   }
 

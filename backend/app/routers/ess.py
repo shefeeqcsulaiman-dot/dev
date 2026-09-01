@@ -1,4 +1,5 @@
-from datetime import UTC, datetime, timedelta
+import json
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from jose import JWTError, jwt
@@ -10,7 +11,8 @@ from app.config import get_settings
 from app.database import get_db
 from app.dependencies import assert_company_active, company_allows_module
 from app.limiter import limiter
-from app.models import Company, Employee, PayrollItem, PayrollRun
+from app.models import AppDataRecord, Company, Employee, LeaveRequest, PayrollItem, PayrollRun
+from app.routers.leave import _ALLOWED_TYPES
 from app.security import pwd_context
 
 router = APIRouter(prefix="/ess", tags=["ess"])
@@ -249,3 +251,130 @@ def ess_payslips(request: Request, db: Session = Depends(get_db)) -> list:
         }
         for item, period, run_status in items
     ]
+
+
+def _leave_out(r: LeaveRequest) -> dict:
+    return {
+        "id": r.id, "leave_type": r.leave_type, "start_date": r.start_date, "end_date": r.end_date,
+        "days": r.days, "reason": r.reason, "status": r.status,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+    }
+
+
+@router.get("/leave")
+def ess_leave(request: Request, db: Session = Depends(get_db)) -> list:
+    """The employee's own leave request history -- scoped by emp.id from the
+    ESS token, the same "you can only ever see your own record" model
+    /ess/attendance and /ess/payslips already use. Deliberately does not
+    reuse GET /leave/requests (that endpoint lists the whole company for an
+    HR/Manager Principal and is gated by leave:view, which an ESS token,
+    not being a Principal at all, could never satisfy anyway)."""
+    emp = ess_bearer(request, db)
+    rows = (
+        db.query(LeaveRequest)
+        .filter(LeaveRequest.company_id == emp.company_id, LeaveRequest.employee_id == emp.id)
+        .order_by(LeaveRequest.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return [_leave_out(r) for r in rows]
+
+
+class EssLeaveRequestIn(BaseModel):
+    leave_type: str
+    start_date: date
+    end_date: date
+    reason: str | None = None
+
+
+@router.post("/leave", status_code=201)
+def ess_create_leave(payload: EssLeaveRequestIn, request: Request, db: Session = Depends(get_db)) -> dict:
+    """Lets an employee file their own leave request directly from the
+    portal, rather than needing HR to enter it on their behalf in HRMS --
+    previously the only leave-related thing ESS could do was nothing at
+    all, leave was entirely HR-side. Mirrors create_leave_request()
+    (leave.py)'s validation (allowed types, no overlapping pending/approved
+    request) but always targets emp.id from the ESS token itself -- there
+    is no employee_id field to trust from the request body here."""
+    emp = ess_bearer(request, db)
+    if payload.leave_type not in _ALLOWED_TYPES:
+        raise HTTPException(status_code=400, detail="Unrecognized leave type")
+    if payload.end_date < payload.start_date:
+        raise HTTPException(status_code=400, detail="End date cannot be before start date")
+    overlap = (
+        db.query(LeaveRequest)
+        .filter(
+            LeaveRequest.company_id == emp.company_id,
+            LeaveRequest.employee_id == emp.id,
+            LeaveRequest.status.in_(("pending", "approved")),
+            LeaveRequest.start_date <= payload.end_date.isoformat(),
+            LeaveRequest.end_date >= payload.start_date.isoformat(),
+        )
+        .first()
+    )
+    if overlap:
+        raise HTTPException(
+            status_code=409,
+            detail=f"This overlaps an existing {overlap.status} leave request ({overlap.start_date} to {overlap.end_date})",
+        )
+    days = (payload.end_date - payload.start_date).days + 1
+    req = LeaveRequest(
+        company_id=emp.company_id, employee_id=emp.id, leave_type=payload.leave_type,
+        start_date=payload.start_date.isoformat(), end_date=payload.end_date.isoformat(),
+        days=days, reason=payload.reason, status="pending",
+    )
+    db.add(req)
+    db.commit()
+    return _leave_out(req)
+
+
+def _employee_app_data_records(db: Session, company_id: str, collection: str) -> list[dict]:
+    """Tier-2 collections (Task Management, Rota) live in the generic
+    AppDataRecord JSON bridge, not their own tables, so there's no SQL
+    column to filter "this employee's rows" by -- every row for the
+    collection has to be pulled and parsed, same approach attendance.py's
+    Holiday Calendar lookup already uses for the same kind of collection."""
+    rows = db.query(AppDataRecord.payload).filter(
+        AppDataRecord.company_id == company_id, AppDataRecord.collection == collection,
+    ).all()
+    out = []
+    for (raw,) in rows:
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(parsed, dict):
+            out.append(parsed)
+    return out
+
+
+@router.get("/tasks")
+def ess_tasks(request: Request, db: Session = Depends(get_db)) -> list:
+    """Only tasks assigned to THIS employee (payload.assigned_to == emp.id,
+    the same Employee.id the Task Management "Assign To" dropdown saves --
+    see populateTaskAssigneeSelect() in app.js) -- never the whole board."""
+    emp = ess_bearer(request, db)
+    tasks = _employee_app_data_records(db, emp.company_id, "tasks")
+    mine = [t for t in tasks if t.get("assigned_to") == emp.id]
+    mine.sort(key=lambda t: t.get("due_date") or "9999-99-99")
+    return mine
+
+
+@router.get("/rota")
+def ess_rota(request: Request, db: Session = Depends(get_db)) -> list:
+    """Only this employee's own rota assignments (payload.employee_id ==
+    emp.id), within a recent-past-to-near-future window -- an employee's
+    full rota history could be large and nobody needs to see last year's
+    shifts on their phone. Matches the 30-day window most of the rest of
+    HRMS already defaults to for "recent" data."""
+    emp = ess_bearer(request, db)
+    assignments = _employee_app_data_records(db, emp.company_id, "rotaAssignments")
+    today = date.today()
+    window_start = (today - timedelta(days=7)).isoformat()
+    window_end = (today + timedelta(days=30)).isoformat()
+    mine = [
+        a for a in assignments
+        if a.get("employee_id") == emp.id and window_start <= (a.get("date") or "") <= window_end
+    ]
+    mine.sort(key=lambda a: a.get("date") or "")
+    return mine
