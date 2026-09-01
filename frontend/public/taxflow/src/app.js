@@ -290,8 +290,14 @@ function stab(el,target){
   // means every path that reaches this tab loads it correctly exactly
   // once, including the tab's own literal click (now removed from its
   // onclick to avoid firing these twice on a direct click).
+  // openAttendanceCheck() (the "Do you have any absences today?" modal)
+  // is deliberately NOT included here — that one shouldn't pop up
+  // automatically every single time this tab is opened (it did before
+  // this fix too, via the tab's own onclick; moving it into stab() would
+  // have made an already-questionable auto-popup fire from even MORE
+  // places, like the sidebar). It's now a real "📋 Daily Check" button
+  // instead, same section as Correction/Import CSV/Sync Now.
   if(target==='hr-att'){
-    openAttendanceCheck();
     refreshAttendanceToday();
     loadAttendanceTrend();
     renderHrAccessPanel();
@@ -21722,18 +21728,41 @@ let _attCalLeaveNamesByDate={};
 // it still means something for a small company). Only days up to today get
 // a color at all; future days have no data yet and stay neutral, same as
 // weekends (styled separately, never colored by this logic).
+// Previously always hardcoded to the current month with no way to view
+// any other one at all. Defaults to today's real month/year on first load.
+let _attCalYear=null;
+let _attCalMonth=null;
+function attCalNav(dir){
+  const now=new Date();
+  if(_attCalYear===null){_attCalYear=now.getFullYear();_attCalMonth=now.getMonth();}
+  _attCalMonth+=dir;
+  if(_attCalMonth>11){_attCalMonth=0;_attCalYear++;}
+  if(_attCalMonth<0){_attCalMonth=11;_attCalYear--;}
+  renderAttendanceCalendar();
+}
+
 async function renderAttendanceCalendar(){
   const grid=document.getElementById('att-cal-grid');
   const title=document.getElementById('att-cal-title');
   if(!grid)return;
   const now=new Date();
-  const year=now.getFullYear();
-  const month=now.getMonth();
-  const monthName=now.toLocaleString('en-AE',{month:'long'});
+  if(_attCalYear===null){_attCalYear=now.getFullYear();_attCalMonth=now.getMonth();}
+  const year=_attCalYear;
+  const month=_attCalMonth;
+  const monthName=new Date(year,month,1).toLocaleString('en-AE',{month:'long'});
   if(title)title.textContent=`${monthName} ${year} — Attendance Calendar`;
   const firstDay=new Date(year,month,1).getDay();
   const daysInMonth=new Date(year,month+1,0).getDate();
-  const today=now.getDate();
+  // The real "today" (day-of-month) only means something when the
+  // calendar is actually showing the real current month — viewing a past
+  // month should color every one of its days (they've all already
+  // happened), and a future month should color none (nothing has
+  // happened yet), not reuse today's day-of-month number from a
+  // different month.
+  const isCurrentMonth=year===now.getFullYear()&&month===now.getMonth();
+  const isFutureMonth=year>now.getFullYear()||(year===now.getFullYear()&&month>now.getMonth());
+  const today=isFutureMonth?0:(isCurrentMonth?now.getDate():daysInMonth);
+  const monthStr=String(month+1).padStart(2,'0');
   const dayNames=[...grid.querySelectorAll('.cal-day-name')];
   grid.innerHTML='';
   dayNames.forEach(n=>grid.appendChild(n));
@@ -21750,7 +21779,12 @@ async function renderAttendanceCalendar(){
   // openAttendanceDayDetail() below.
   _attCalLeaveNamesByDate={};
   try{
-    const trendRes=await authenticatedFetch(`${apiBaseUrl()}/attendance/trend?days=${Math.max(7,today)}`);
+    // period= (added alongside the month-nav feature) returns exactly this
+    // calendar month regardless of today's date — days=Math.max(7,today)
+    // only ever worked for the current month (it's a rolling "last N days
+    // ending today" window), which is why navigating to any other month
+    // needed this in the first place.
+    const trendRes=await authenticatedFetch(`${apiBaseUrl()}/attendance/trend?period=${year}-${monthStr}`);
     if(trendRes.ok){
       const trend=await trendRes.json();
       (trend.dates||[]).forEach((d,i)=>{presentCountByDate[d]=trend.counts?.[i]||0;});
@@ -21760,7 +21794,6 @@ async function renderAttendanceCalendar(){
     const leaveRes=await authenticatedFetch(`${apiBaseUrl()}/leave/requests`);
     if(leaveRes.ok){
       const requests=await leaveRes.json();
-      const monthStr=String(month+1).padStart(2,'0');
       requests.filter(r=>r.status==='approved').forEach(r=>{
         const start=new Date(r.start_date+'T00:00:00');
         const end=new Date(r.end_date+'T00:00:00');
@@ -21777,7 +21810,6 @@ async function renderAttendanceCalendar(){
 
   const headcount=document.querySelectorAll('#employee-tbody tr:not([data-empty-state])').length;
   const leaveThreshold=Math.max(1,Math.ceil(headcount*0.2));
-  const monthStr=String(month+1).padStart(2,'0');
   // See _companyWeekendDaySet() -- Sat/Sun by default, but configurable via
   // HR Settings > HR Rules > Weekend Policy so a company that actually runs
   // Sun-Thu (Fri/Sat off) doesn't get its real day off marked "Absent" and
@@ -21788,7 +21820,8 @@ async function renderAttendanceCalendar(){
     const dayOfWeek=new Date(year,month,d).getDay();
     const isWknd=weekendDays?weekendDays.has(dayOfWeek):false;
     const div=document.createElement('div');
-    let cls='cal-day'+(isWknd?' wknd':d===today?' today':'');
+    const isRealToday=isCurrentMonth&&d===now.getDate();
+    let cls='cal-day'+(isWknd?' wknd':isRealToday?' today':'');
     const key=`${year}-${monthStr}-${String(d).padStart(2,'0')}`;
     if(!isWknd&&d<=today){
       const leaveCount=leaveCountByDate[key]||0;
@@ -21906,7 +21939,7 @@ function _renderHrAttReportRows(){
   document.querySelectorAll('#hrr-att-thead-present').forEach(th=>{th.textContent='Present'+arrow('present_days');});
   document.querySelectorAll('#hrr-att-thead-absent').forEach(th=>{th.textContent='Absent'+arrow('absent_days');});
   tbody.innerHTML=rows.length?rows.map(e=>`<tr>
-    <td style="font-weight:600">${escapeHtml(e.employee_name||'—')}</td>
+    <td style="font-weight:600;color:var(--accent);cursor:pointer" onclick="openEmployeeAttendanceDetail('${escapeHtml(e.employee_id)}','${escapeHtml(e.employee_name||'')}')" title="View day-by-day attendance">${escapeHtml(e.employee_name||'—')}</td>
     <td style="color:var(--text3);font-size:12px">${escapeHtml(e.department||'—')}</td>
     <td class="mono">${e.present_days}</td>
     <td class="mono"${e.absent_days>0?' style="color:var(--red)"':''}>${e.absent_days}</td>
@@ -21938,6 +21971,54 @@ function downloadHrAttendanceReportCsv(){
   setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
 
+// Clicking an employee's name in the Attendance Report previously did
+// nothing — this opens a day-by-day drill-down for that employee, backed
+// by GET /attendance/employee-daily, with its own month picker (defaults
+// to whatever month the report itself was showing).
+let _empAttDetailId=null;
+function openEmployeeAttendanceDetail(employeeId,employeeName){
+  _empAttDetailId=employeeId;
+  document.getElementById('emp-att-detail-title').textContent=employeeName||'Attendance';
+  const periodInput=document.getElementById('emp-att-detail-period');
+  if(periodInput)periodInput.value=document.getElementById('hrr-att-period')?.value||_hrAttReportCache?.period||'';
+  showM('m-emp-att-detail');
+  loadEmployeeAttendanceDetail();
+}
+
+const EMP_ATT_STATUS_BADGE={
+  present:'<span class="b b-g">Present</span>',
+  absent:'<span class="b b-r">Absent</span>',
+  leave:'<span class="b b-a">Leave</span>',
+  weekend:'<span class="b b-gray">Weekend</span>',
+  upcoming:'<span class="b b-gray">—</span>',
+};
+
+async function loadEmployeeAttendanceDetail(){
+  const tbody=document.getElementById('emp-att-detail-tbody');
+  if(!_empAttDetailId||!tbody)return;
+  const period=document.getElementById('emp-att-detail-period')?.value||'';
+  tbody.innerHTML='<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr>';
+  try{
+    const r=await authenticatedFetch(`${apiBaseUrl()}/attendance/employee-daily?employee_id=${encodeURIComponent(_empAttDetailId)}${period?`&period=${encodeURIComponent(period)}`:''}`);
+    if(!r.ok)throw new Error('Request failed ('+r.status+')');
+    const data=await r.json();
+    const sub=document.getElementById('emp-att-detail-sub');
+    if(sub)sub.textContent=`${data.department||''} — ${data.period}`;
+    const days=data.days||[];
+    tbody.innerHTML=days.length?days.map(d=>`<tr>
+      <td class="mono">${escapeHtml(d.date)}</td>
+      <td>${escapeHtml(d.day_name)}</td>
+      <td class="mono">${escapeHtml(d.check_in||'—')}</td>
+      <td class="mono">${escapeHtml(d.check_out||'—')}</td>
+      <td class="mono">${d.hours&&d.hours!=='0.00'?escapeHtml(d.hours):'—'}</td>
+      <td>${EMP_ATT_STATUS_BADGE[d.status]||escapeHtml(d.status)}</td>
+    </tr>`).join(''):'<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">No data for this month.</td></tr>';
+  }catch(e){
+    console.warn('[loadEmployeeAttendanceDetail]',e);
+    tbody.innerHTML='<tr><td colspan="6" style="color:var(--red);text-align:center;padding:20px">Could not load attendance for this employee.</td></tr>';
+  }
+}
+
 // ── Task Management ─────────────────────────────────────────────────────
 // Backed by the generic AppDataRecord 'tasks' collection (same pattern as
 // employeeLoans/jobRequisitions — a small admin-managed list, not a
@@ -21947,14 +22028,16 @@ function downloadHrAttendanceReportCsv(){
 // ESS-side view yet).
 let _taskListCache=[];
 let _taskViewMode='board'; // 'board' | 'table'
-// In Progress column removed per request — down to a 2-state board (To
-// Do/Done), with To Do given the freed-up width instead of splitting it
-// evenly. in_progress stays in TASK_STATUS_LABEL only so a pre-existing
-// task record still stored with that status renders a readable label
-// instead of "undefined" (see renderTaskBoard()'s bucketing below) —
-// it's not a selectable status anywhere anymore.
-const TASK_STATUSES=['todo','done'];
-const TASK_STATUS_LABEL={todo:'To Do',in_progress:'In Progress',done:'Done'};
+const TASK_STATUSES=['todo','progress','done'];
+const TASK_STATUS_LABEL={todo:'To Do',progress:'Progress',in_progress:'Progress',done:'Done'};
+// 'in_progress' was this status's key before the column was briefly
+// removed and re-added as 'progress' — bucketed here so a task saved
+// under the old key still lands in the right column instead of falling
+// through to To Do.
+function _normalizeTaskStatus(status){
+  if(status==='in_progress')return 'progress';
+  return TASK_STATUSES.includes(status)?status:'todo';
+}
 const TASK_REPEAT_LABEL={none:'—',daily:'Daily',weekly:'Weekly',monthly:'Monthly'};
 
 async function loadTasks(){
@@ -22155,11 +22238,7 @@ function showTaskModal(id){
   document.getElementById('task-assignee').value=t?.assigned_to||'';
   document.getElementById('task-priority').value=t?.priority||'Medium';
   document.getElementById('task-due-date').value=t?.due_date||'';
-  // Bucket a legacy 'in_progress' record to 'todo' — that option no
-  // longer exists in this select since In Progress was removed as a
-  // column, and setting .value to a missing option would leave nothing
-  // selected at all.
-  document.getElementById('task-status').value=t?.status==='done'?'done':'todo';
+  document.getElementById('task-status').value=t?_normalizeTaskStatus(t.status):'todo';
   document.getElementById('task-repeat').value=t?.repeat||'none';
   const progressVal=t?.status==='done'?100:(t?.progress||0);
   document.getElementById('task-progress').value=progressVal;
@@ -22248,10 +22327,7 @@ function _taskCardHtml(t){
   const priorityCls=t.priority==='High'?'b-r':t.priority==='Low'?'b-g':'b-a';
   const overdue=t.due_date&&t.status!=='done'&&t.due_date<new Date().toISOString().slice(0,10);
   const dueHtml=t.due_date?`<span class="task-card-due${overdue?' overdue':''}">${overdue?'⚠ ':''}${escapeHtml(t.due_date)}${t.repeat&&t.repeat!=='none'?' ↻':''}</span>`:'';
-  // Buckets a legacy 'in_progress' record the same way renderTaskBoard()'s
-  // column grouping does, so its move button matches where it's actually
-  // showing rather than pointing at itself.
-  const idx=TASK_STATUSES.indexOf(t.status==='done'?'done':'todo');
+  const idx=TASK_STATUSES.indexOf(_normalizeTaskStatus(t.status));
   const prevStatus=idx>0?TASK_STATUSES[idx-1]:null;
   const nextStatus=idx<TASK_STATUSES.length-1?TASK_STATUSES[idx+1]:null;
   const progress=t.status==='done'?100:(t.progress||0);
@@ -22281,7 +22357,8 @@ function _taskCardHtml(t){
 function _taskTableRowHtml(t){
   const priorityCls=t.priority==='High'?'b-r':t.priority==='Low'?'b-g':'b-a';
   const overdue=t.due_date&&t.status!=='done'&&t.due_date<new Date().toISOString().slice(0,10);
-  const statusCls=t.status==='done'?'b-g':t.status==='in_progress'?'b-b':'b-gray';
+  const normStatus=_normalizeTaskStatus(t.status);
+  const statusCls=normStatus==='done'?'b-g':normStatus==='progress'?'b-b':'b-gray';
   const progress=t.status==='done'?100:(t.progress||0);
   return `<tr>
     <td style="font-weight:600">${escapeHtml(t.assigned_to_name||'Unassigned')}</td>
@@ -22325,11 +22402,7 @@ function renderTaskBoard(){
     return true;
   });
   TASK_STATUSES.forEach(status=>{
-    // Any pre-existing task still stored with the removed 'in_progress'
-    // status buckets into To Do here — work that isn't Done is still "to
-    // do" under this 2-state model, and this never touches the stored
-    // value itself (see _taskCardHtml()'s own move-button logic below).
-    const list=filtered.filter(t=>((t.status||'todo')==='done'?'done':'todo')===status)
+    const list=filtered.filter(t=>_normalizeTaskStatus(t.status)===status)
       .sort((a,b)=>(a.due_date||'9999').localeCompare(b.due_date||'9999'));
     const countEl=document.getElementById(`task-count-${status}`);
     if(countEl)countEl.textContent=list.length;

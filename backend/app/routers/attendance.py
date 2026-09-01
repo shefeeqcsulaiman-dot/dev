@@ -965,14 +965,31 @@ def attendance_today(
 @gated_router.get("/trend")
 def attendance_trend(
     days: int = 30,
+    period: str | None = Query(default=None, description="YYYY-MM -- overrides `days`, returns exactly that month"),
     branch_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("attendance:view")),
 ) -> dict[str, Any]:
-    """Return daily punch-in unique-employee counts for the last N days (for Attendance Trend chart)."""
-    days = max(7, min(days, 90))
-    today = _local_today(_company_offset(db, principal.company_id))
-    start = today - timedelta(days=days - 1)
+    """Return daily punch-in unique-employee counts for the last N days
+    (for Attendance Trend chart), or for one explicit calendar month when
+    `period` is given -- the Attendance Calendar previously had no way to
+    view any month but the current one, since this endpoint could only
+    ever answer "the last N days ending today"."""
+    offset = _company_offset(db, principal.company_id)
+    today = _local_today(offset)
+    if period:
+        m = re.match(r"^(\d{4})-(\d{2})$", period)
+        if not m:
+            raise HTTPException(status_code=400, detail="period must be in YYYY-MM format")
+        year, month = int(m.group(1)), int(m.group(2))
+        if not (1 <= month <= 12):
+            raise HTTPException(status_code=400, detail="period must be in YYYY-MM format")
+        start = date(year, month, 1)
+        last_day = date(year, month, monthrange(year, month)[1])
+        days = (last_day - start).days + 1
+    else:
+        days = max(7, min(days, 90))
+        start = today - timedelta(days=days - 1)
 
     query = db.query(
         AttendancePunch.punch_date,
@@ -981,6 +998,7 @@ def attendance_trend(
     rows = _branch_scope_punches(query, principal, branch_id).filter(
         AttendancePunch.company_id == principal.company_id,
         AttendancePunch.punch_date >= start.isoformat(),
+        AttendancePunch.punch_date <= (start + timedelta(days=days - 1)).isoformat(),
         AttendancePunch.direction == "in",
     ).group_by(AttendancePunch.punch_date).all()
 
@@ -1154,6 +1172,115 @@ def attendance_monthly_report(
         "working_days": len(working_days),
         "standard_hours_per_day": standard_hours,
         "employees": result,
+    }
+
+
+@gated_router.get("/employee-daily")
+def attendance_employee_daily(
+    employee_id: str,
+    period: str | None = Query(default=None, description="YYYY-MM, defaults to the current month"),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("attendance:view")),
+) -> dict[str, Any]:
+    """Day-by-day attendance for ONE employee across a month -- the
+    drill-down behind the Attendance Report's per-employee rows, which
+    previously only showed month-level totals with no way to see which
+    specific days actually contributed to them."""
+    emp = db.query(Employee).filter(
+        Employee.id == employee_id, Employee.company_id == principal.company_id,
+    ).first()
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    offset = _company_offset(db, principal.company_id)
+    today = _local_today(offset)
+    if period:
+        m = re.match(r"^(\d{4})-(\d{2})$", period)
+        if not m:
+            raise HTTPException(status_code=400, detail="period must be in YYYY-MM format")
+        year, month = int(m.group(1)), int(m.group(2))
+    else:
+        year, month = today.year, today.month
+        period = f"{year:04d}-{month:02d}"
+    if not (1 <= month <= 12):
+        raise HTTPException(status_code=400, detail="period must be in YYYY-MM format")
+
+    start = date(year, month, 1)
+    last_day = date(year, month, monthrange(year, month)[1])
+    weekend_days = _weekend_day_set(db, principal.company_id)
+
+    punch_rows = db.query(
+        AttendancePunch.punch_date,
+        func.min(AttendancePunch.punch_time).label("first_ts"),
+        func.max(AttendancePunch.punch_time).label("last_ts"),
+        func.count(AttendancePunch.id).label("cnt"),
+    ).filter(
+        AttendancePunch.company_id == principal.company_id,
+        AttendancePunch.employee_id == emp.employee_no,
+        AttendancePunch.punch_date >= start.isoformat(),
+        AttendancePunch.punch_date <= last_day.isoformat(),
+    ).group_by(AttendancePunch.punch_date).all()
+    punch_by_date = {r.punch_date: r for r in punch_rows}
+
+    leave_rows = db.query(LeaveRequest).filter(
+        LeaveRequest.company_id == principal.company_id,
+        LeaveRequest.employee_id == emp.id,
+        LeaveRequest.status == "approved",
+        LeaveRequest.start_date <= last_day.isoformat(),
+        LeaveRequest.end_date >= start.isoformat(),
+    ).all()
+    leave_dates: set[str] = set()
+    for lr in leave_rows:
+        lr_start = max(start, date.fromisoformat(lr.start_date))
+        lr_end = min(last_day, date.fromisoformat(lr.end_date))
+        d = lr_start
+        while d <= lr_end:
+            leave_dates.add(d.isoformat())
+            d += timedelta(days=1)
+
+    days = []
+    d = start
+    while d <= last_day:
+        iso = d.isoformat()
+        js_dow = (d.weekday() + 1) % 7
+        is_weekend = weekend_days is not None and js_dow in weekend_days
+        row = punch_by_date.get(iso)
+        check_in = check_out = None
+        hours = 0.0
+        if row and row.cnt and row.first_ts:
+            check_in = (row.first_ts + offset).strftime("%H:%M")
+            if row.cnt >= 2 and row.last_ts:
+                check_out = (row.last_ts + offset).strftime("%H:%M")
+                hours = (row.last_ts - row.first_ts).total_seconds() / 3600
+        is_leave = iso in leave_dates
+        if d > today:
+            status = "upcoming"
+        elif is_weekend:
+            status = "weekend"
+        elif is_leave:
+            status = "leave"
+        elif row:
+            status = "present"
+        else:
+            status = "absent"
+        days.append({
+            "date": iso,
+            "day_name": d.strftime("%a"),
+            "is_weekend": is_weekend,
+            "status": status,
+            "check_in": check_in,
+            "check_out": check_out,
+            "hours": f"{hours:.2f}",
+        })
+        d += timedelta(days=1)
+
+    return {
+        "employee_id": emp.id,
+        "employee_no": emp.employee_no,
+        "employee_name": emp.full_name,
+        "department": emp.department,
+        "period": period,
+        "days": days,
     }
 
 

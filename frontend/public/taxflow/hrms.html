@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=336b9d7876" as="style">
-<link rel="preload" href="src/app.js?v=c28b6d5bb0" as="script">
+<link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
+<link rel="preload" href="src/app.js?v=3282102734" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=336b9d7876">
+<link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -886,6 +886,8 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         <div class="card-hd">
           <div class="card-title" id="att-cal-title">Attendance Calendar</div>
           <div class="flx">
+            <button class="icon-btn" title="Previous month" onclick="attCalNav(-1)">←</button>
+            <button class="icon-btn" title="Next month" onclick="attCalNav(1)">→</button>
             <span class="b b-g" style="font-size:10px">Present</span>
             <span class="b b-r" style="font-size:10px">Absent</span>
             <span class="b b-a" style="font-size:10px">Leave</span>
@@ -914,6 +916,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
           <button class="btn btn-g" onclick="showM('m-att-correction')">+ Correction</button>
           <button class="btn btn-g" onclick="document.getElementById('att-csv-input').click()">↑ Import CSV</button>
           <input type="file" id="att-csv-input" accept=".csv" style="display:none" onchange="importAttendanceCsv(this)">
+          <button class="btn btn-g" onclick="openAttendanceCheck()">📋 Daily Check</button>
           <button class="btn btn-p" onclick="refreshAttendanceToday()">⟳ Sync Now</button>
         </div>
       </div>
@@ -2212,6 +2215,27 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   </div>
 </div>
 
+<!-- ═══════════════════ ATTENDANCE REPORT — EMPLOYEE DETAIL ═══════════════════ -->
+<!-- Clicking an employee's name in the Attendance Report previously did
+     nothing — this is the day-by-day drill-down for whichever employee
+     and month is selected (see openEmployeeAttendanceDetail()). -->
+<div class="overlay" id="m-emp-att-detail" onclick="closeOvBg(event,'m-emp-att-detail')">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-title" id="emp-att-detail-title">Attendance</div>
+    <div class="modal-sub" id="emp-att-detail-sub"></div>
+    <div class="flx" style="margin-bottom:10px">
+      <input class="fi" style="width:150px" type="month" id="emp-att-detail-period" onchange="loadEmployeeAttendanceDetail()">
+    </div>
+    <div style="max-height:60vh;overflow-y:auto">
+      <table class="tbl" data-delete-actions-bound="skip">
+        <thead><tr><th>Date</th><th>Day</th><th>Check In</th><th>Check Out</th><th>Hours</th><th>Status</th></tr></thead>
+        <tbody id="emp-att-detail-tbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="hideM('m-emp-att-detail')">Close</button></div>
+  </div>
+</div>
+
 <!-- ═══════════════════ TASK MANAGEMENT MODULE ═══════════════════ -->
 <div class="page" id="page-tasks">
   <div class="card mb16">
@@ -2234,10 +2258,14 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     </div>
   </div>
 
-  <div class="task-board task-board-2col" id="task-board">
-    <div class="task-col task-col-wide" data-status="todo">
+  <div class="task-board" id="task-board">
+    <div class="task-col" data-status="todo">
       <div class="task-col-hd"><span>To Do</span><span class="task-col-count" id="task-count-todo">0</span></div>
       <div id="task-list-todo"></div>
+    </div>
+    <div class="task-col" data-status="progress">
+      <div class="task-col-hd"><span>Progress</span><span class="task-col-count" id="task-count-progress">0</span></div>
+      <div id="task-list-progress"></div>
     </div>
     <div class="task-col" data-status="done">
       <div class="task-col-hd"><span>Done</span><span class="task-col-count" id="task-count-done">0</span></div>
@@ -2271,7 +2299,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="fg"><label class="fl">Task Details</label><textarea class="fi" id="task-description" rows="3" placeholder="Details, context, or instructions…"></textarea></div>
     <div class="fr2">
       <div class="fg"><label class="fl">Priority</label><select class="fi" id="task-priority"><option>Low</option><option selected>Medium</option><option>High</option></select></div>
-      <div class="fg"><label class="fl">Status</label><select class="fi" id="task-status"><option value="todo">To Do</option><option value="done">Done</option></select></div>
+      <div class="fg"><label class="fl">Status</label><select class="fi" id="task-status"><option value="todo">To Do</option><option value="progress">Progress</option><option value="done">Done</option></select></div>
     </div>
     <!-- Progress replaces the removed In Progress column — a continuous
          0-100% instead of a 3rd discrete status, so how far along a To Do
@@ -2852,7 +2880,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=c28b6d5bb0" defer></script>
+<script src="src/app.js?v=3282102734" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

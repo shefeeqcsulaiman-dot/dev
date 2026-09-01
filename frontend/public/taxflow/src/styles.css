@@ -1222,10 +1222,6 @@ body:not(.theme-light) .mb3-vat-side{background:linear-gradient(180deg,rgba(139,
 .rota-month-chip{border:1px solid var(--border2);border-radius:99px;padding:4px 8px;background:var(--surface);font-size:11px;color:var(--text2);}
 /* ── Task Management (Kanban board) ─────────────────────────────────── */
 .task-board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start;}
-/* In Progress removed — To Do gets the freed-up width rather than an even
-   2-way split with Done. */
-.task-board-2col{grid-template-columns:2fr 1fr;}
-.task-col-wide .task-col-hd{font-size:13px;}
 .task-col{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px;min-height:140px;}
 .task-col-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font-size:12.5px;font-weight:700;color:var(--text);}
 .task-col-count{font-size:11px;font-weight:600;color:var(--text3);background:var(--surface);border:1px solid var(--border2);border-radius:99px;padding:1px 8px;}
