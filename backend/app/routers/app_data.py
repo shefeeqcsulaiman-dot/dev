@@ -503,6 +503,26 @@ def _allowed_bootstrap_collections(principal: Principal) -> set[str] | None:
     return allowed
 
 
+# hrms.html (window.HRMS_STANDALONE) never renders anything from the
+# Sales/Purchase/Accounting/Corporate modules, but before this existed it
+# still paid for all of it: an admin User's unrestricted bootstrap (the
+# `is_admin -> None` case above) sent, and hydrateFromServer() then parsed
+# and rendered, the company's full product/invoice/quotation/ledger/etc.
+# history on every HRMS page load. `?scope=hrms` (passed by login.html's
+# HRMS-redirect preload and by hydrateFromServer() when HRMS_STANDALONE)
+# restricts the response to just the modules the HRMS portal actually
+# reads, intersected with (never widening) whatever an Employee principal's
+# own permissions already allow.
+_HRMS_SCOPE_MODULES = [
+    "employees", "leave", "attendance", "rota", "overtime", "loans",
+    "recruitment", "payroll", "bank", "notifications",
+]
+
+
+def _hrms_scope_collections() -> set[str]:
+    return {c for m in _HRMS_SCOPE_MODULES for c in _COLLECTIONS_BY_MODULE.get(m, [])}
+
+
 def _parse_modules_enabled(raw: str | None) -> list[str] | None:
     """Superadmin's per-company Module Permissions (companies.modules_enabled,
     a JSON array) — None means "not restricted, show everything" (matches
@@ -521,6 +541,7 @@ def _parse_modules_enabled(raw: str | None) -> list[str] | None:
 @limiter.limit("60/minute")
 def bootstrap(
     request: Request,
+    scope: str | None = None,
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
 ) -> dict[str, object]:
@@ -535,14 +556,20 @@ def bootstrap(
     # worth the risk for a lower-traffic path. 8s is short enough that
     # staleness is barely noticeable but still absorbs bursts of repeated
     # calls (e.g. clicking through several pages in quick succession).
+    # `scope` is folded into the cache key so an HRMS-scoped response can
+    # never be served back to a full-dashboard request or vice versa.
+    cache_key = f"bootstrap:{principal.company_id}:{scope}" if scope else f"bootstrap:{principal.company_id}"
     if principal.is_admin:
-        cached = cache.get(f"bootstrap:{principal.company_id}")
+        cached = cache.get(cache_key)
         if cached is not None:
             return cached
 
     _backfill_employee_branch_ids(db, principal.company_id)
     cap = get_settings().bootstrap_record_cap
     allowed_collections = _allowed_bootstrap_collections(principal)
+    if scope == "hrms":
+        hrms_collections = _hrms_scope_collections()
+        allowed_collections = hrms_collections if allowed_collections is None else (allowed_collections & hrms_collections)
     # Collections with large record counts are fetched with DB-level LIMIT to avoid
     # loading and deserializing thousands of rows that will be discarded in Python.
     _HEAVY_COLLECTIONS = {c for c, n in _BOOTSTRAP_COLLECTION_CAPS.items() if n <= 500}
@@ -687,7 +714,7 @@ def bootstrap(
     }
     result = {"ok": True, "data": data, "truncated_collections": truncated}
     if principal.is_admin:
-        cache.set(f"bootstrap:{principal.company_id}", result, ttl=8)
+        cache.set(cache_key, result, ttl=8)
     return result
 
 

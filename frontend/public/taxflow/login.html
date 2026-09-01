@@ -118,7 +118,7 @@
       var r=await fetch(apiBase()+'/auth/whoami',{headers:{'Authorization':'Bearer '+t}});
       if(!r.ok)return;
       var who=await r.json();
-      if(who.kind==='employee'){preloadAndRedirect('/hrms',t);return;}
+      if(who.kind==='employee'){preloadAndRedirect('/hrms',t,'hrms');return;}
       if(who.kind==='branch'){preloadAndRedirect('/',t);return;}
       // Admin: /auth/whoami doesn't carry the admin/superadmin distinction,
       // /auth/me already does — check that only for the User path.
@@ -155,8 +155,14 @@
   // is simply abandoned and the dashboard falls back to fetching its own
   // bootstrap data on load — see hydrateFromServer() /
   // _takeBootstrapPreloadCache() in app.js.
-  function preloadAndRedirect(url,token){
-    var prefetch=fetch(apiBase()+'/app-data?action=bootstrap',{headers:{'Authorization':'Bearer '+token}})
+  function preloadAndRedirect(url,token,scope){
+    // scope='hrms' (passed for the employee-kind -> /hrms redirect) trims the
+    // prefetched payload to HR-relevant collections only, on the backend —
+    // see _hrms_scope_collections() in app_data.py — so an HRMS sub-user's
+    // login doesn't pay for Sales/Purchase/Accounting data hrms.html never
+    // renders, matching hydrateFromServer()'s own scoping in app.js.
+    var scopeParam=scope?'&scope='+encodeURIComponent(scope):'';
+    var prefetch=fetch(apiBase()+'/app-data?action=bootstrap'+scopeParam,{headers:{'Authorization':'Bearer '+token}})
       .then(function(r){return r.ok?r.json():null;})
       .then(function(json){
         if(json){

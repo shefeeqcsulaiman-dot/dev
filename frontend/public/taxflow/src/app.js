@@ -4544,7 +4544,8 @@ function toggleNightMode(enabled){
 async function apiRequest(action,payload,options={}){
   await ensureBackendSession();
   const endpoint=APP_CONFIG.apiEndpoint||`${apiBaseUrl()}/app-data`;
-  const response=await authenticatedFetch(`${endpoint}?action=${encodeURIComponent(action)}`,{
+  const extraQuery=options.query?Object.entries(options.query).map(([k,v])=>`&${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join(''):'';
+  const response=await authenticatedFetch(`${endpoint}?action=${encodeURIComponent(action)}${extraQuery}`,{
     method:options.method||'POST',
     body:options.method==='GET'?undefined:JSON.stringify(payload||{})
   });
@@ -8495,35 +8496,45 @@ function _takeMePreloadCache(){
 
 function hydrateFromServer(){
   const _yield=()=>new Promise(r=>setTimeout(r,0));
+  // hrms.html never renders Sales/Purchase/Accounting/Corporate data, but
+  // used to fetch AND parse AND render all of it anyway on every HRMS page
+  // load (loading time scaled with the company's total invoice/product/
+  // ledger history, not with its headcount). scope='hrms' tells the
+  // backend to only return HR-relevant collections (see _hrms_scope_
+  // collections() in app_data.py) — this branch then skips the matching
+  // render work client-side too, instead of looping over arrays the
+  // server has already emptied out.
   const _bootstrapPromise=Promise.resolve(_takeBootstrapPreloadCache())
-    .then(cached=>cached||apiRequest('bootstrap',{}, {method:'GET'}));
+    .then(cached=>cached||apiRequest('bootstrap',{}, {method:'GET',query:window.HRMS_STANDALONE?{scope:'hrms'}:undefined}));
   return _bootstrapPromise.then(async ({data})=>{
     if(!data)return;
     isHydratingFromServer=true;
     const renderStats={};
-    const productRows=Array.isArray(data.products)?data.products.filter(product=>!isDemoProductRecord(product)):[];
+    const productRows=window.HRMS_STANDALONE?[]:(Array.isArray(data.products)?data.products.filter(product=>!isDemoProductRecord(product)):[]);
     try{
       financePaymentsByRef.clear();
       financeBankAccountsByKey.clear();
       if(data.company)applyCompanyToUi(data.company);
-      // ── Phase 1: critical collections — yield between each to avoid blocking ──
-      await _yield();
-      renderStats.products=_renderProductsBatch(productRows);
-      await _yield();
-      renderStats.salesCategories=await renderRecordList(data.salesCategories,renderSalesCategoryRecord,'sales category');
-      renderStats.salesUnits=await renderRecordList(data.salesUnits,renderSalesUnitRecord,'sales unit');
-      renderStats.serviceTypes=await renderRecordList(data.serviceTypes,renderServiceTypeRecord,'service type');
-      await _yield();
-      renderStats.customers=await renderRecordList(data.customers,renderCustomerRecord,'customer');
-      renderStats.users=await renderRecordList(data.users,renderUserRecord,'user');
-      await _yield();
-      renderStats.salesInvoices=await renderRecordList(data.salesInvoices,inv=>addSalesInvoiceRow(inv,{persist:false}),'sales invoice');
-      await _yield();
-      renderStats.quotations=await renderRecordList(data.quotations,renderQuotationRecord,'quotation');
-      await _yield();
-      renderStats.accounts=await renderRecordList(data.accounts,renderAccountRecord,'account');
-      renderStats.purchaseRecords={rendered:0,failed:0,total:0,lazy:true};
-      loadPurchaseDocumentsFromServer(data.purchaseDocuments||[],[]);
+      if(!window.HRMS_STANDALONE){
+        // ── Phase 1: critical collections — yield between each to avoid blocking ──
+        await _yield();
+        renderStats.products=_renderProductsBatch(productRows);
+        await _yield();
+        renderStats.salesCategories=await renderRecordList(data.salesCategories,renderSalesCategoryRecord,'sales category');
+        renderStats.salesUnits=await renderRecordList(data.salesUnits,renderSalesUnitRecord,'sales unit');
+        renderStats.serviceTypes=await renderRecordList(data.serviceTypes,renderServiceTypeRecord,'service type');
+        await _yield();
+        renderStats.customers=await renderRecordList(data.customers,renderCustomerRecord,'customer');
+        renderStats.users=await renderRecordList(data.users,renderUserRecord,'user');
+        await _yield();
+        renderStats.salesInvoices=await renderRecordList(data.salesInvoices,inv=>addSalesInvoiceRow(inv,{persist:false}),'sales invoice');
+        await _yield();
+        renderStats.quotations=await renderRecordList(data.quotations,renderQuotationRecord,'quotation');
+        await _yield();
+        renderStats.accounts=await renderRecordList(data.accounts,renderAccountRecord,'account');
+        renderStats.purchaseRecords={rendered:0,failed:0,total:0,lazy:true};
+        loadPurchaseDocumentsFromServer(data.purchaseDocuments||[],[]);
+      }
     }finally{
       isHydratingFromServer=false;
     }
@@ -8536,18 +8547,25 @@ function hydrateFromServer(){
           renderEmployeeRecord(record);
           renderPayrollEmployeeRecord(record);
         },'employee');
+        // bankAccounts feeds Payroll's SIF/bank-transfer IBAN lookups, so it's
+        // kept for HRMS too; payments/expenses/bills/vendors below are
+        // Purchase/Accounting-only and never rendered on hrms.html.
         renderStats.bankAccounts=await renderRecordList(_deferred2.bankAccounts,renderBankAccountRecord,'bank account');
-        await _yield();
-        renderStats.payments=await renderRecordList(_deferred2.payments,renderPaymentRecord,'payment');
-        renderStats.expenses=await renderRecordList(_deferred2.expenses,renderExpenseRecord,'expense');
-        await _yield();
-        if(Array.isArray(_deferred2.bills)){_hydratedBills.length=0;_hydratedBills.push(..._deferred2.bills);}
-        renderStats.bills=await renderRecordList(_deferred2.bills,renderBillRecord,'bill');
-        renderStats.vendors=await renderRecordList(_deferred2.vendors,renderVendorRecord,'vendor');
-        _refreshPurchaseDashboardCard();
+        if(!window.HRMS_STANDALONE){
+          await _yield();
+          renderStats.payments=await renderRecordList(_deferred2.payments,renderPaymentRecord,'payment');
+          renderStats.expenses=await renderRecordList(_deferred2.expenses,renderExpenseRecord,'expense');
+          await _yield();
+          if(Array.isArray(_deferred2.bills)){_hydratedBills.length=0;_hydratedBills.push(..._deferred2.bills);}
+          renderStats.bills=await renderRecordList(_deferred2.bills,renderBillRecord,'bill');
+          renderStats.vendors=await renderRecordList(_deferred2.vendors,renderVendorRecord,'vendor');
+          _refreshPurchaseDashboardCard();
+        }
       }finally{isHydratingFromServer=false;}
-      updateFinanceFromDatabaseRecords();
-      updateAccountSelectors();
+      if(!window.HRMS_STANDALONE){
+        updateFinanceFromDatabaseRecords();
+        updateAccountSelectors();
+      }
     },600);
     // ── Phase 3: HR/rota — render after a longer idle window ────────────────
     scheduleIdleTask(async ()=>{

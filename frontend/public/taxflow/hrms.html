@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=b30ed43390" as="script">
+<link rel="preload" href="src/app.js?v=d9a393f522" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
@@ -2886,7 +2886,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=b30ed43390" defer></script>
+<script src="src/app.js?v=d9a393f522" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
@@ -2900,17 +2900,12 @@ function hrsTab(section){
   if(section==='leave'&&typeof loadLeavePoliciesFromServer==='function')loadLeavePoliciesFromServer();
   if(section==='holidays'&&typeof loadHolidaysFromServer==='function')loadHolidaysFromServer();
 }
-document.addEventListener('DOMContentLoaded',function(){
-  setTimeout(function(){
-    if(typeof go==='function'){
-      go('hrms');
-      // First refresh after Phase 2 hydration (~600ms delay in hydrateFromServer)
-      setTimeout(function(){if(typeof refreshHrmsKpis==='function')refreshHrmsKpis();},900);
-      // Second refresh after Phase 3 HR data hydration (~1400ms delay)
-      setTimeout(function(){if(typeof refreshHrmsKpis==='function')refreshHrmsKpis();},2000);
-    }
-  },300);
-});
+// The actual go('hrms') + refreshHrmsKpis() schedule lives in the single
+// DOMContentLoaded handler further down (it does everything this used to
+// do, plus donut/badge/expiry-alert updates) — this was a duplicate of
+// that block from an earlier edit, running go('hrms') a 2nd/3rd time and
+// refreshHrmsKpis() (DOM table scans + an /attendance/today call each
+// time) up to 5x total on every single HRMS page load for no benefit.
 </script>
 <!-- HRMS AI ASSISTANT PAGE -->
 <div class="page" id="page-hrms-ai">
@@ -3294,9 +3289,12 @@ document.addEventListener('DOMContentLoaded',function(){
     }
   },300);
 
-  // KPI refresh schedule
+  // KPI refresh schedule -- one early pass (after Phase 2 hydration settles)
+  // and one final pass bundled with the dashboard chart (after Phase 3);
+  // a 3rd redundant call used to sit here at 2000ms, between these two,
+  // re-scanning the same tables and re-hitting /attendance/today for no
+  // additional freshness.
   setTimeout(function(){if(typeof refreshHrmsKpis==='function')refreshHrmsKpis();},900);
-  setTimeout(function(){if(typeof refreshHrmsKpis==='function')refreshHrmsKpis();},2000);
   setTimeout(function(){
     if(typeof refreshHrmsKpis==='function')refreshHrmsKpis();
     if(typeof refreshHrmsDashboard==='function')refreshHrmsDashboard();

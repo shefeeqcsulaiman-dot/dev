@@ -219,6 +219,53 @@ def test_bootstrap_hr_only_role_unaffected_by_new_collections(client, db, auth_h
     assert "ledger" not in data
 
 
+def test_bootstrap_hrms_scope_hides_non_hr_data_even_for_admin(client, db, auth_headers):
+    # An admin User's bootstrap is normally unrestricted (allowed_collections
+    # is None) -- ?scope=hrms is the one thing that narrows it even for an
+    # admin, so hrms.html's hydrateFromServer() doesn't pay to fetch/parse/
+    # render the company's full Sales/Purchase/Accounting/Corporate history
+    # on every HRMS page load.
+    saved = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={"collection": "salesInvoices", "record": {"invoice_no": "HRMS-SCOPE-SI-001", "customer": "Scope Test Customer", "status": "issued", "subtotal": "100.00", "total": "105.00", "vat_amount": "5.00"}},
+    )
+    assert saved.status_code == 200, saved.text
+    saved = client.post(
+        "/api/v1/app-data?action=save",
+        headers=auth_headers,
+        json={"collection": "employees", "record": {"id": "HRMS-SCOPE-EMP-001", "name": "Scope Test Employee", "department": "Operations"}},
+    )
+    assert saved.status_code == 200, saved.text
+
+    r = client.get("/api/v1/app-data?scope=hrms", headers=auth_headers)
+    assert r.status_code == 200, r.text
+    data = r.json()["data"]
+    assert "employees" in data
+    for collection in ("salesInvoices", "bills", "ledger", "products", "quotations", "vendors"):
+        assert collection not in data, f"{collection} should not be visible under scope=hrms"
+
+    # The unscoped call for the SAME admin must still see everything --
+    # scope=hrms narrows, it never widens or leaks into the normal path.
+    r_full = client.get("/api/v1/app-data", headers=auth_headers)
+    assert r_full.status_code == 200, r_full.text
+    assert "salesInvoices" in r_full.json()["data"]
+
+
+def test_bootstrap_hrms_scope_intersects_with_employee_permissions(client, db, auth_headers):
+    # For a non-admin Employee principal, scope=hrms must never WIDEN what
+    # their role already permits -- it only ever narrows further.
+    emp = _new_employee(db, _company_id(client, auth_headers), "HRMS-SCOPE-004")
+    headers = _grant_role_and_login(client, auth_headers, emp.id, "md.hrmsscope", ["sales:view"], "Sales Scope Test")
+
+    r = client.get("/api/v1/app-data?scope=hrms", headers=headers)
+    assert r.status_code == 200, r.text
+    data = r.json()["data"]
+    # sales:view isn't in the HRMS scope module list, so intersecting with
+    # it leaves nothing from that role visible.
+    assert "salesInvoices" not in data
+
+
 def test_company_module_gate_and_role_permission_gate_both_enforce(client, db):
     # Two independent gates: require_module("accounting") (company-wide,
     # superadmin-controlled) and accounting:view (per-role). A branch
