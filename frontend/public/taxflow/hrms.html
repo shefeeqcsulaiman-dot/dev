@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=3282102734" as="script">
+<link rel="preload" href="src/app.js?v=2e898b6b13" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
@@ -2289,7 +2289,6 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="modal-title" id="task-modal-title">Add Task</div>
     <div class="modal-sub">Task details and employee allocation</div>
     <input type="hidden" id="task-edit-id">
-    <div class="fg" id="task-template-row"><label class="fl">Load From Previous Task</label><select class="fi" id="task-template" onchange="applyTaskTemplate()"><option value="">— Start blank —</option></select></div>
     <div class="fg"><label class="fl">Task Name <span style="color:var(--red)">*</span></label><input class="fi" id="task-title" placeholder="e.g. Prepare Q3 payroll summary"></div>
     <div class="fg"><label class="fl">Department</label><select class="fi" id="task-department"><option value="">— Select Department —</option></select></div>
     <!-- Assign To only shows when editing an already-assigned task (see
@@ -2880,7 +2879,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=3282102734" defer></script>
+<script src="src/app.js?v=2e898b6b13" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

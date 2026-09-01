@@ -22200,34 +22200,6 @@ async function confirmAssignTask(){
   toast(`"${task.title}" assigned to ${employeeName}`,'ok');
 }
 
-// Unique task NAMES seen so far, most-recently-used first — lets Add Task
-// offer "Load From Previous Task" so a recurring type of task (same name/
-// department/details/priority) doesn't need retyping from scratch every
-// time it's assigned to someone new. Only ever used to PRE-FILL a new,
-// blank task — picking one never edits the original.
-function _renderTaskTemplateOptions(){
-  const sel=document.getElementById('task-template');
-  if(!sel)return;
-  sel.innerHTML='<option value="">— Start blank —</option>'+
-    _uniqueTaskTemplates().map(t=>`<option value="${escapeHtml(t.id)}">${escapeHtml(t.title)}</option>`).join('');
-  sel.value='';
-}
-
-function applyTaskTemplate(){
-  const id=document.getElementById('task-template')?.value;
-  if(!id)return;
-  const t=_taskListCache.find(x=>x.id===id);
-  if(!t)return;
-  // Name/department/details/priority/repeat carry over; due date and
-  // assignee are deliberately left for the user to set fresh — those are
-  // exactly the two things that should usually differ on a reused task.
-  document.getElementById('task-title').value=t.title||'';
-  document.getElementById('task-department').value=t.department||'';
-  document.getElementById('task-description').value=t.description||'';
-  document.getElementById('task-priority').value=t.priority||'Medium';
-  document.getElementById('task-repeat').value=t.repeat||'none';
-}
-
 function showTaskModal(id){
   const t=id?_taskListCache.find(x=>x.id===id):null;
   document.getElementById('task-modal-title').textContent=t?'Edit Task':'Add Task';
@@ -22245,11 +22217,6 @@ function showTaskModal(id){
   document.getElementById('task-progress-value').textContent=progressVal;
   const delBtn=document.getElementById('task-delete-btn');
   if(delBtn)delBtn.style.display=t?'':'none';
-  // The "load from previous task" shortcut only makes sense when starting
-  // a brand-new task — editing an existing one already has its own data.
-  const templateRow=document.getElementById('task-template-row');
-  if(templateRow)templateRow.style.display=t?'none':'';
-  if(!t)_renderTaskTemplateOptions();
   // Assign To only shows when editing an already-assigned task — a new
   // task no longer collects an assignee here at all; that happens from
   // the To Do column's per-employee assign panel instead.
