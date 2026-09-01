@@ -602,6 +602,7 @@
       var items = await r.json();
       _essData.payslips = items;
       var el = document.getElementById('payslip-content');
+      el.classList.remove('loading');
       if (!items.length) { el.innerHTML = '<div class="empty">No payslips found.</div>'; }
       else {
         el.innerHTML = '<div class="payslip-grid">' + items.map(function(p) {
@@ -615,7 +616,7 @@
         }).join('') + '</div>';
       }
       updateDashboard();
-    } catch(e) { document.getElementById('payslip-content').innerHTML = '<div class="empty">Failed to load.</div>'; }
+    } catch(e) { var pEl = document.getElementById('payslip-content'); pEl.classList.remove('loading'); pEl.innerHTML = '<div class="empty">Failed to load.</div>'; }
   }
 
   // ── Leave ──────────────────────────────────────────────────────────────
@@ -626,6 +627,7 @@
       var rows = await r.json();
       _essData.leave = rows;
       var el = document.getElementById('leave-content');
+      el.classList.remove('loading');
       if (!rows.length) { el.innerHTML = '<div class="empty">No leave requests yet.</div>'; }
       else {
         el.innerHTML = rows.map(function(l) {
@@ -641,7 +643,7 @@
         }).join('');
       }
       updateDashboard();
-    } catch(e) { document.getElementById('leave-content').innerHTML = '<div class="empty">Failed to load.</div>'; }
+    } catch(e) { var lEl = document.getElementById('leave-content'); lEl.classList.remove('loading'); lEl.innerHTML = '<div class="empty">Failed to load.</div>'; }
   }
 
   function essOpenLeaveModal() {
@@ -687,6 +689,7 @@
       var rows = await r.json();
       _essData.rota = rows;
       var el = document.getElementById('rota-content');
+      el.classList.remove('loading');
       if (!rows.length) { el.innerHTML = '<div class="empty">No shifts scheduled in the next 30 days.</div>'; }
       else {
         el.innerHTML = rows.map(function(a) {
@@ -698,14 +701,14 @@
           return '<div class="rota-row">' +
             '<div class="rota-date-chip"><div class="d">' + dayNum + '</div><div class="m">' + monthShort + '</div></div>' +
             '<div style="flex:1">' +
-              '<div style="font-weight:600;font-size:13.5px">' + (a.type || a.code || 'Shift') + '</div>' +
+              '<div style="font-weight:600;font-size:13.5px;color:var(--text)">' + (a.type || a.code || 'Shift') + '</div>' +
               '<div style="font-size:12px;color:var(--text3)">' + timeRange + (a.location ? (' · ' + a.location) : '') + '</div>' +
             '</div>' +
           '</div>';
         }).join('');
       }
       updateDashboard();
-    } catch(e) { document.getElementById('rota-content').innerHTML = '<div class="empty">Failed to load.</div>'; }
+    } catch(e) { var roEl = document.getElementById('rota-content'); roEl.classList.remove('loading'); roEl.innerHTML = '<div class="empty">Failed to load.</div>'; }
   }
 
   // ── Tasks ──────────────────────────────────────────────────────────────
@@ -722,6 +725,7 @@
       var rows = await r.json();
       _essData.tasks = rows;
       var el = document.getElementById('tasks-content');
+      el.classList.remove('loading');
       if (!rows.length) { el.innerHTML = '<div class="empty">No tasks assigned to you.</div>'; }
       else {
         el.innerHTML = rows.map(function(t) {
@@ -729,7 +733,7 @@
           var priClass = 'pri-' + (t.priority || 'Medium').toLowerCase();
           return '<div class="task-row">' +
             '<div>' +
-              '<div style="font-weight:600;font-size:13.5px">' + (t.title || 'Untitled task') + '</div>' +
+              '<div style="font-weight:600;font-size:13.5px;color:var(--text)">' + (t.title || 'Untitled task') + '</div>' +
               (t.description ? '<div style="font-size:12px;color:var(--text2);margin-top:4px">' + t.description + '</div>' : '') +
               '<div style="font-size:11.5px;color:var(--text3);margin-top:6px">' +
                 (t.due_date ? ('Due ' + t.due_date + ' · ') : '') +
@@ -741,7 +745,7 @@
         }).join('');
       }
       updateDashboard();
-    } catch(e) { document.getElementById('tasks-content').innerHTML = '<div class="empty">Failed to load.</div>'; }
+    } catch(e) { var tEl = document.getElementById('tasks-content'); tEl.classList.remove('loading'); tEl.innerHTML = '<div class="empty">Failed to load.</div>'; }
   }
 
   // ── Dashboard summary — derived entirely from data the other tabs'
