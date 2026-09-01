@@ -352,12 +352,29 @@ function closeSidebar(){
   if(window.innerWidth<=1100)toggleSidebar(false);
 }
 
+// go('staff') highlights every sidebar item whose onclick text contains
+// 'staff' (Employees AND HR Workflow both call go('staff') with nothing to
+// tell them apart) plus unconditionally re-highlights Dashboard (its own
+// hardcoded "keep staff nav highlighted" fallback) -- so every sidebar
+// item that shares the #page-staff container (Employees, Attendance,
+// Leave, Overtime, Loans & Advances, HR Workflow) ended up lighting up
+// Dashboard + Employees + HR Workflow together, regardless of which one
+// was actually clicked, and never itself. Called after go('staff') to
+// correct the sidebar down to just the one item that actually matches
+// navKey (via data-staff-nav) -- or none, for a goHrmsTab() call with no
+// sidebar entry of its own (e.g. Corrections, Expiry Alerts).
+function _hrmsFixStaffNavHighlight(navKey){
+  document.querySelectorAll('.sb .nav.on').forEach(n=>n.classList.remove('on'));
+  document.querySelector(`.sb .nav[data-staff-nav="${navKey}"]`)?.classList.add('on');
+}
+
 function goHrmsTab(n,id){
   if(window.HRMS_STANDALONE){
     if(!_hrmsNavAllowed(`goHrmsTab(${n},'${id}')`)){_hrmsBlockNav();return;}
     const tab=document.querySelector('#page-staff .tab:nth-child('+n+')');
     if(tab)stab(tab,id);
     go('staff');
+    _hrmsFixStaffNavHighlight(id);
   }else{
     window.open('/hrms','_blank');
   }
