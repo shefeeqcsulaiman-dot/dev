@@ -21686,6 +21686,10 @@ function _renderAttendanceRows(emps,absentNames){
   }).join('');
 }
 
+// Populated fresh by each renderAttendanceCalendar() call — see
+// openAttendanceDayDetail()'s use of it below.
+let _attCalLeaveNamesByDate={};
+
 // Company-wide daily summary: Present (green) if anyone punched in that
 // day, Absent (red) if a working day passed with zero punches at all, Leave
 // (amber) — takes priority over both — if approved leave that day covers a
@@ -21716,6 +21720,10 @@ async function renderAttendanceCalendar(){
 
   const presentCountByDate={};
   const leaveCountByDate={};
+  // Names (not just counts) per date, so clicking a day can show WHO was
+  // on leave that day without a second round trip — see
+  // openAttendanceDayDetail() below.
+  _attCalLeaveNamesByDate={};
   try{
     const trendRes=await authenticatedFetch(`${apiBaseUrl()}/attendance/trend?days=${Math.max(7,today)}`);
     if(trendRes.ok){
@@ -21735,6 +21743,7 @@ async function renderAttendanceCalendar(){
           if(d.getFullYear()===year&&d.getMonth()===month){
             const key=`${year}-${monthStr}-${String(d.getDate()).padStart(2,'0')}`;
             leaveCountByDate[key]=(leaveCountByDate[key]||0)+1;
+            (_attCalLeaveNamesByDate[key]=_attCalLeaveNamesByDate[key]||[]).push({name:r.employee_name,type:r.leave_type});
           }
         }
       });
@@ -21755,8 +21764,8 @@ async function renderAttendanceCalendar(){
     const isWknd=weekendDays?weekendDays.has(dayOfWeek):false;
     const div=document.createElement('div');
     let cls='cal-day'+(isWknd?' wknd':d===today?' today':'');
+    const key=`${year}-${monthStr}-${String(d).padStart(2,'0')}`;
     if(!isWknd&&d<=today){
-      const key=`${year}-${monthStr}-${String(d).padStart(2,'0')}`;
       const leaveCount=leaveCountByDate[key]||0;
       const present=presentCountByDate[key]||0;
       if(leaveCount>=leaveThreshold)cls+=' leave';
@@ -21765,7 +21774,54 @@ async function renderAttendanceCalendar(){
     }
     div.className=cls;
     div.textContent=d;
+    // Previously no click handler at all on any day cell — selecting a
+    // date loaded nothing. Every real day is clickable (including
+    // weekends/future days); openAttendanceDayDetail() itself handles the
+    // "nothing to show yet" case for a future date gracefully.
+    div.style.cursor='pointer';
+    div.onclick=()=>openAttendanceDayDetail(key);
     grid.appendChild(div);
+  }
+}
+
+// Fired by clicking a calendar day — previously selecting a date did
+// nothing at all. Fetches that specific day's punch-in roll call (the
+// same data Today's Attendance shows, now widened via GET /attendance/
+// today?date=... to accept any date) and combines it with the leave
+// names already gathered by this same render pass, so the popup answers
+// "who was actually present/absent/on leave" for the day clicked.
+async function openAttendanceDayDetail(dateStr){
+  const modalTitle=document.getElementById('att-day-modal-title');
+  const body=document.getElementById('att-day-modal-body');
+  if(!body)return;
+  const niceDate=new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-AE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  if(modalTitle)modalTitle.textContent=niceDate;
+  body.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px">Loading…</div>';
+  showM('m-att-day');
+  const leaveList=_attCalLeaveNamesByDate[dateStr]||[];
+  const leaveNames=new Set(leaveList.map(l=>l.name));
+  try{
+    const res=await authenticatedFetch(`${apiBaseUrl()}/attendance/today?date=${encodeURIComponent(dateStr)}`);
+    const data=res.ok?await res.json():{employees:[]};
+    const present=Array.isArray(data.employees)?data.employees:[];
+    const totalActive=_getAttendanceEmployees().length;
+    const absentCount=Math.max(0,totalActive-present.length-leaveList.length);
+    const section=(label,cls,rows)=>rows.length?`<div style="margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">${escapeHtml(label)} (${rows.length})</div>
+      ${rows.map(r=>`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12.5px;border-bottom:1px solid var(--border2)"><span>${escapeHtml(r.name)}</span><span class="b ${cls}" style="font-size:10px">${escapeHtml(r.detail)}</span></div>`).join('')}
+    </div>`:'';
+    body.innerHTML=`
+      <div class="flx" style="gap:16px;margin-bottom:12px">
+        <div><div style="font-size:20px;font-weight:700;color:var(--green)">${present.length}</div><div style="font-size:11px;color:var(--text3)">Present</div></div>
+        <div><div style="font-size:20px;font-weight:700;color:var(--amber)">${leaveList.length}</div><div style="font-size:11px;color:var(--text3)">On Leave</div></div>
+        <div><div style="font-size:20px;font-weight:700;color:var(--red)">${absentCount}</div><div style="font-size:11px;color:var(--text3)">Absent</div></div>
+      </div>
+      ${section('Present',present.length?'b-g':'',present.map(e=>({name:e.employee_name||e.employee_id,detail:e.check_in_time||'—'})))}
+      ${section('On Leave','b-a',leaveList.map(l=>({name:l.name,detail:l.type||'Leave'})))}
+      ${(!present.length&&!leaveList.length)?'<div style="text-align:center;color:var(--text3);padding:16px 0">No punches or leave recorded for this day.</div>':''}
+    `;
+  }catch(e){
+    body.innerHTML='<div style="text-align:center;color:var(--red);padding:20px">Could not load this day\'s attendance.</div>';
   }
 }
 
@@ -21982,45 +22038,36 @@ function _uniqueTaskTemplates(){
   return opts;
 }
 
-// To Do's employee-assignment panel: one row per active employee (filtered
-// by the page's own Department filter, so narrowing that also narrows who
-// you're assigning to), each with a dropdown of already-saved task names
-// and an Assign button — this is now the ONLY way a task gets its first
-// assignee, since Add Task no longer collects one (see showTaskModal()).
-function _renderTaskAssignPanel(){
-  const panel=document.getElementById('task-assign-employees');
-  if(!panel)return;
-  const deptFilter=document.getElementById('task-department-filter')?.value||'';
-  const search=(document.getElementById('task-assign-search')?.value||'').trim().toLowerCase();
-  let employees=deptFilter?_taskEmployeeListCache.filter(e=>e.department===deptFilter):_taskEmployeeListCache;
-  if(search)employees=employees.filter(e=>e.full_name.toLowerCase().includes(search));
+// "+ Assign Task" button/modal: select an employee, select a saved task
+// name, Assign — this is the ONLY way a task gets its first assignee,
+// since Add Task no longer collects one (see showTaskModal()). Replaced
+// an earlier per-employee-row panel that lived inside the To Do column
+// itself — that ate into the width To Do was widened to make room for
+// actual task cards, not an employee picker.
+function showAssignTaskModal(){
+  const empSel=document.getElementById('assign-task-employee');
+  const taskSel=document.getElementById('assign-task-template');
+  if(empSel){
+    empSel.innerHTML='<option value="">— Select Employee —</option>'+
+      _taskEmployeeListCache.map(e=>`<option value="${escapeHtml(e.id)}" data-name="${escapeHtml(e.full_name)}">${escapeHtml(e.full_name)}</option>`).join('');
+  }
   const templates=_uniqueTaskTemplates();
-  if(!employees.length){
-    panel.innerHTML=`<div class="task-assign-empty">${search?'No employees match that search.':'No active employees found.'}</div>`;
-    return;
+  if(taskSel){
+    taskSel.innerHTML=templates.length
+      ?'<option value="">— Select Task —</option>'+templates.map(t=>`<option value="${escapeHtml(t.id)}">${escapeHtml(t.title)}</option>`).join('')
+      :'<option value="">No saved tasks yet — click + Add Task first</option>';
   }
-  if(!templates.length){
-    panel.innerHTML='<div class="task-assign-empty">Click "+ Add Task" first to create a task name, then assign it here.</div>';
-    return;
-  }
-  const optionsHtml='<option value="">Select task…</option>'+
-    templates.map(t=>`<option value="${escapeHtml(t.id)}">${escapeHtml(t.title)}</option>`).join('');
-  panel.innerHTML=employees.map(e=>`
-    <div class="task-assign-row">
-      <div class="task-assign-name">
-        <div class="co-av" style="width:18px;height:18px;font-size:8px;flex-shrink:0">${escapeHtml(initialsFromName(e.full_name))}</div>
-        <span>${escapeHtml(e.full_name)}</span>
-      </div>
-      <select id="task-assign-pick-${escapeHtml(e.id)}">${optionsHtml}</select>
-      <button class="btn btn-p btn-sm" onclick="assignSavedTaskToEmployee('${escapeHtml(e.id)}','${escapeHtml(e.full_name)}')">Assign</button>
-    </div>
-  `).join('');
+  showM('m-assign-task');
 }
 
-async function assignSavedTaskToEmployee(employeeId,employeeName){
-  const sel=document.getElementById(`task-assign-pick-${employeeId}`);
-  const templateId=sel?.value;
-  if(!templateId){toast('Select a saved task first','warn');return;}
+async function confirmAssignTask(){
+  const empSel=document.getElementById('assign-task-employee');
+  const taskSel=document.getElementById('assign-task-template');
+  const employeeId=empSel?.value;
+  const employeeName=empSel?.selectedOptions?.[0]?.dataset.name||'';
+  const templateId=taskSel?.value;
+  if(!employeeId){toast('Select an employee','warn');return;}
+  if(!templateId){toast('Select a task','warn');return;}
   const source=_taskListCache.find(x=>x.id===templateId);
   if(!source)return;
   const task={
@@ -22033,12 +22080,14 @@ async function assignSavedTaskToEmployee(employeeId,employeeName){
     priority:source.priority||'Medium',
     due_date:'',
     status:'todo',
+    progress:0,
     repeat:source.repeat||'none',
     next_spawned:false,
     created_at:new Date().toISOString(),
   };
   await saveServer('tasks',task);
   _taskListCache.push(task);
+  hideM('m-assign-task');
   renderTaskBoard();
   toast(`"${task.title}" assigned to ${employeeName}`,'ok');
 }
@@ -22087,6 +22136,9 @@ function showTaskModal(id){
   // selected at all.
   document.getElementById('task-status').value=t?.status==='done'?'done':'todo';
   document.getElementById('task-repeat').value=t?.repeat||'none';
+  const progressVal=t?.status==='done'?100:(t?.progress||0);
+  document.getElementById('task-progress').value=progressVal;
+  document.getElementById('task-progress-value').textContent=progressVal;
   const delBtn=document.getElementById('task-delete-btn');
   if(delBtn)delBtn.style.display=t?'':'none';
   // The "load from previous task" shortcut only makes sense when starting
@@ -22120,6 +22172,9 @@ async function saveTaskModal(){
     priority:document.getElementById('task-priority')?.value||'Medium',
     due_date:document.getElementById('task-due-date')?.value||'',
     status:document.getElementById('task-status')?.value||'todo',
+    // Done always reads back as 100% regardless of what the slider was
+    // left at — a finished task is fully done by definition.
+    progress:document.getElementById('task-status')?.value==='done'?100:Number(document.getElementById('task-progress')?.value||0),
     repeat:document.getElementById('task-repeat')?.value||'none',
     // Editing an existing task's own due date forward re-arms its repeat
     // (it's no longer "already spawned" for its new date); a brand-new
@@ -22157,7 +22212,8 @@ async function deleteTaskDirect(id){
 async function moveTaskStatus(id,newStatus){
   const idx=_taskListCache.findIndex(x=>x.id===id);
   if(idx<0)return;
-  const task={..._taskListCache[idx],status:newStatus};
+  // A finished task is 100% by definition, same rule saveTaskModal() uses.
+  const task={..._taskListCache[idx],status:newStatus,progress:newStatus==='done'?100:(_taskListCache[idx].progress||0)};
   _taskListCache[idx]=task;
   renderTaskBoard();
   await saveServer('tasks',task);
@@ -22173,10 +22229,12 @@ function _taskCardHtml(t){
   const idx=TASK_STATUSES.indexOf(t.status==='done'?'done':'todo');
   const prevStatus=idx>0?TASK_STATUSES[idx-1]:null;
   const nextStatus=idx<TASK_STATUSES.length-1?TASK_STATUSES[idx+1]:null;
+  const progress=t.status==='done'?100:(t.progress||0);
   return `<div class="task-card" data-task-id="${escapeHtml(t.id)}">
     <div class="task-card-title" onclick="showTaskModal('${escapeHtml(t.id)}')">${escapeHtml(t.title)}</div>
     ${t.department?`<div class="task-card-desc" style="margin-bottom:2px">${escapeHtml(t.department)}</div>`:''}
     ${t.description?`<div class="task-card-desc">${escapeHtml(t.description)}</div>`:''}
+    <div class="task-progress-bar" title="${progress}% complete"><div class="task-progress-fill" style="width:${progress}%"></div></div>
     <div class="task-card-meta">
       <div class="task-card-assignee">
         <div class="co-av" style="width:18px;height:18px;font-size:8px;flex-shrink:0">${escapeHtml(initialsFromName(t.assigned_to_name||'?'))}</div>
@@ -22199,6 +22257,7 @@ function _taskTableRowHtml(t){
   const priorityCls=t.priority==='High'?'b-r':t.priority==='Low'?'b-g':'b-a';
   const overdue=t.due_date&&t.status!=='done'&&t.due_date<new Date().toISOString().slice(0,10);
   const statusCls=t.status==='done'?'b-g':t.status==='in_progress'?'b-b':'b-gray';
+  const progress=t.status==='done'?100:(t.progress||0);
   return `<tr>
     <td style="font-weight:600">${escapeHtml(t.assigned_to_name||'Unassigned')}</td>
     <td style="color:var(--text3);font-size:12px">${escapeHtml(t.department||'—')}</td>
@@ -22207,6 +22266,7 @@ function _taskTableRowHtml(t){
     <td class="mono"${overdue?' style="color:var(--red)"':''}>${escapeHtml(t.due_date||'—')}</td>
     <td>${escapeHtml(TASK_REPEAT_LABEL[t.repeat||'none']||'—')}</td>
     <td><span class="b ${statusCls}">${escapeHtml(TASK_STATUS_LABEL[t.status||'todo'])}</span></td>
+    <td style="min-width:70px"><div class="task-progress-bar" title="${progress}% complete"><div class="task-progress-fill" style="width:${progress}%"></div></div></td>
     <td style="white-space:nowrap"><button class="icon-btn edit" title="Edit" onclick="showTaskModal('${escapeHtml(t.id)}')">${editIconSvg()}</button> <button class="icon-btn danger" title="Delete" onclick="deleteTaskDirect('${escapeHtml(t.id)}')">${deleteIconSvg()}</button></td>
   </tr>`;
 }
@@ -22222,7 +22282,6 @@ function setTaskViewMode(mode){
 }
 
 function renderTaskBoard(){
-  _renderTaskAssignPanel();
   const deptFilter=document.getElementById('task-department-filter')?.value||'';
   const empFilter=document.getElementById('task-filter-employee')?.value||'';
   const priorityFilter=document.getElementById('task-filter-priority')?.value||'';
@@ -22255,7 +22314,7 @@ function renderTaskBoard(){
   const tableBody=document.getElementById('task-table-tbody');
   if(tableBody){
     const rows=[...filtered].sort((a,b)=>(a.due_date||'9999').localeCompare(b.due_date||'9999'));
-    tableBody.innerHTML=rows.length?rows.map(_taskTableRowHtml).join(''):'<tr><td colspan="8" style="color:var(--text3);text-align:center;padding:24px">No tasks</td></tr>';
+    tableBody.innerHTML=rows.length?rows.map(_taskTableRowHtml).join(''):'<tr><td colspan="9" style="color:var(--text3);text-align:center;padding:24px">No tasks</td></tr>';
   }
 }
 

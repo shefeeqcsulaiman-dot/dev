@@ -903,12 +903,23 @@ def _branch_scope_punches(query, principal: Principal, branch_id: str | None):
 @gated_router.get("/today")
 def attendance_today(
     branch_id: str | None = Query(default=None),
+    date: str | None = Query(default=None, description="YYYY-MM-DD; defaults to today"),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("attendance:view")),
 ) -> dict[str, Any]:
-    """Return today's punch-in count for the Present Today KPI."""
+    """Return punch-in details for a given day (defaults to today) --
+    originally just today's count for the Present Today KPI, widened to
+    accept an explicit `date` so the Attendance Calendar can show the same
+    per-employee breakdown for whichever day was clicked, not only today."""
     offset = _company_offset(db, principal.company_id)
-    today = _local_today(offset).isoformat()
+    if date:
+        try:
+            datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="date must be in YYYY-MM-DD format")
+        today = date
+    else:
+        today = _local_today(offset).isoformat()
     rows = _branch_scope_punches(db.query(AttendancePunch), principal, branch_id).filter(
         AttendancePunch.company_id == principal.company_id,
         AttendancePunch.punch_date == today,

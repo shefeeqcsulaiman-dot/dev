@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=2a75ebf833" as="style">
-<link rel="preload" href="src/app.js?v=78f30b0d28" as="script">
+<link rel="preload" href="src/styles.css?v=336b9d7876" as="style">
+<link rel="preload" href="src/app.js?v=0cfa4ad8f8" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=2a75ebf833">
+<link rel="stylesheet" href="src/styles.css?v=336b9d7876">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -2208,7 +2208,10 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   <div class="card mb16">
     <div class="card-hd">
       <div><div class="card-title">Task Management</div><div class="card-sub">Create tasks and allocate them to employees</div></div>
-      <button class="btn btn-p btn-sm" onclick="showTaskModal()">+ Add Task</button>
+      <div class="flx" style="gap:6px">
+        <button class="btn btn-g btn-sm" onclick="showAssignTaskModal()">+ Assign Task</button>
+        <button class="btn btn-p btn-sm" onclick="showTaskModal()">+ Add Task</button>
+      </div>
     </div>
     <div class="fr4">
       <div class="fg"><label class="fl">Department</label><select class="fi" id="task-department-filter" onchange="renderTaskBoard()"><option value="">All Departments</option></select></div>
@@ -2225,8 +2228,6 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   <div class="task-board task-board-2col" id="task-board">
     <div class="task-col task-col-wide" data-status="todo">
       <div class="task-col-hd"><span>To Do</span><span class="task-col-count" id="task-count-todo">0</span></div>
-      <input class="fi" id="task-assign-search" placeholder="Search employee to assign…" style="margin-bottom:6px;font-size:11.5px;padding:5px 8px" oninput="_renderTaskAssignPanel()">
-      <div class="task-assign-panel" id="task-assign-employees"></div>
       <div id="task-list-todo"></div>
     </div>
     <div class="task-col" data-status="done">
@@ -2237,9 +2238,9 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 
   <div class="card" id="task-table-view" style="display:none">
     <table class="tbl" data-delete-actions-bound="skip">
-      <thead><tr><th>Employee</th><th>Department</th><th>Task Name</th><th>Priority</th><th>Due Date</th><th>Repeat</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Employee</th><th>Department</th><th>Task Name</th><th>Priority</th><th>Due Date</th><th>Repeat</th><th>Status</th><th>Progress</th><th></th></tr></thead>
       <tbody id="task-table-tbody">
-        <tr><td colspan="8" style="color:var(--text3);text-align:center;padding:24px">No tasks</td></tr>
+        <tr><td colspan="9" style="color:var(--text3);text-align:center;padding:24px">No tasks</td></tr>
       </tbody>
     </table>
   </div>
@@ -2255,15 +2256,19 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="fg"><label class="fl">Task Name <span style="color:var(--red)">*</span></label><input class="fi" id="task-title" placeholder="e.g. Prepare Q3 payroll summary"></div>
     <div class="fg"><label class="fl">Department</label><select class="fi" id="task-department"><option value="">— Select Department —</option></select></div>
     <!-- Assign To only shows when editing an already-assigned task (see
-         showTaskModal()) — assigning now happens from the To Do column's
-         employee list, picking one of these saved task names, not at
-         creation time here. -->
+         showTaskModal()) — a brand-new task no longer collects an assignee
+         here at all; that's the "+ Assign Task" button/modal's job. -->
     <div class="fg" id="task-assignee-row" style="display:none"><label class="fl">Assign To</label><select class="fi" id="task-assignee"><option value="">— Unassigned —</option></select></div>
     <div class="fg"><label class="fl">Task Details</label><textarea class="fi" id="task-description" rows="3" placeholder="Details, context, or instructions…"></textarea></div>
     <div class="fr2">
       <div class="fg"><label class="fl">Priority</label><select class="fi" id="task-priority"><option>Low</option><option selected>Medium</option><option>High</option></select></div>
       <div class="fg"><label class="fl">Status</label><select class="fi" id="task-status"><option value="todo">To Do</option><option value="done">Done</option></select></div>
     </div>
+    <!-- Progress replaces the removed In Progress column — a continuous
+         0-100% instead of a 3rd discrete status, so how far along a To Do
+         task is can still be tracked without a dedicated board column.
+         Moving Status to Done snaps this to 100 (see saveTaskModal()). -->
+    <div class="fg"><label class="fl">Progress (<span id="task-progress-value">0</span>%)</label><input class="fi" id="task-progress" type="range" min="0" max="100" step="5" value="0" oninput="document.getElementById('task-progress-value').textContent=this.value"></div>
     <div class="fr2">
       <div class="fg"><label class="fl">Due Date</label><input class="fi" id="task-due-date" type="date"></div>
       <div class="fg"><label class="fl">Repeat</label><select class="fi" id="task-repeat"><option value="none">Does not repeat</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
@@ -2272,6 +2277,20 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <button id="task-delete-btn" class="btn btn-r" style="display:none;margin-right:auto" onclick="deleteTaskFromModal()">Delete</button>
       <button class="btn btn-g" onclick="hideM('m-task')">Cancel</button>
       <button class="btn btn-p" onclick="saveTaskModal()">Save Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ ASSIGN TASK MODAL ═══════════════════ -->
+<div class="overlay" id="m-assign-task" onclick="closeOvBg(event,'m-assign-task')">
+  <div class="modal">
+    <div class="modal-title">Assign Task</div>
+    <div class="modal-sub">Pick who it's for and which saved task to give them</div>
+    <div class="fg"><label class="fl">Employee <span style="color:var(--red)">*</span></label><select class="fi" id="assign-task-employee"><option value="">— Select Employee —</option></select></div>
+    <div class="fg"><label class="fl">Task <span style="color:var(--red)">*</span></label><select class="fi" id="assign-task-template"><option value="">— Select Task —</option></select></div>
+    <div class="modal-foot">
+      <button class="btn btn-g" onclick="hideM('m-assign-task')">Cancel</button>
+      <button class="btn btn-p" onclick="confirmAssignTask()">Assign</button>
     </div>
   </div>
 </div>
@@ -2750,6 +2769,18 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   </div>
 </div>
 
+<!-- ═══════════════════ ATTENDANCE CALENDAR — DAY DETAIL ═══════════════════ -->
+<!-- Clicking a calendar day previously did nothing at all — this is what
+     now loads for whichever date was selected (see openAttendanceDayDetail()). -->
+<div class="overlay" id="m-att-day" onclick="closeOvBg(event,'m-att-day')">
+  <div class="modal">
+    <div class="modal-title" id="att-day-modal-title">Attendance</div>
+    <div class="modal-sub">Present / on leave / absent for this day</div>
+    <div id="att-day-modal-body"></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="hideM('m-att-day')">Close</button></div>
+  </div>
+</div>
+
 <!-- ═══════════════════ BRANCH MODAL ═══════════════════ -->
 <div class="overlay" id="m-branch" onclick="closeOvBg(event,'m-branch')">
   <div class="modal">
@@ -2812,7 +2843,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=78f30b0d28" defer></script>
+<script src="src/app.js?v=0cfa4ad8f8" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
