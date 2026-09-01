@@ -280,6 +280,22 @@ function stab(el,target){
   if(String(target||'').startsWith('inv-'))setTimeout(()=>ensureInventoryBulkSelection(),80);
   if(target==='p-records')goToPurchaseRecordsPage(1);
   if(target==='hr-leave')scheduleIdleTask(updateLeaveBalance,50);
+  // Previously only wired into the Attendance tab element's own inline
+  // onclick (hrms.html) — any OTHER path that lands on this tab
+  // programmatically (goHrmsTab(2,'hr-att'), used by the sidebar's own
+  // "Attendance" nav item and the AI Insights "View Attendance" link)
+  // never called any of these, leaving every stat/table/chart on the tab
+  // permanently stuck at zero/"Loading…" with no error and no retry —
+  // confirmed live: waited 6s, nothing ever resolved. Centralizing here
+  // means every path that reaches this tab loads it correctly exactly
+  // once, including the tab's own literal click (now removed from its
+  // onclick to avoid firing these twice on a direct click).
+  if(target==='hr-att'){
+    openAttendanceCheck();
+    refreshAttendanceToday();
+    loadAttendanceTrend();
+    renderHrAccessPanel();
+  }
   if(target==='acc-voucher')prepareJournalForm();
   if(target==='bk-reconcile')loadBankReconItems();
   if(target==='acc-ledger')loadAccountingFromDb();
@@ -16735,6 +16751,15 @@ function refreshHrmsKpis(){
     set('hrms-kpi-present',presentToday||'0');
     if(trendEl&&empCount>0)trendEl.innerHTML='<span>'+Math.round(presentToday/empCount*100)+'% of total</span>';
   }).catch(()=>{});
+  // Dashboard's own "Workforce Attendance Trend" card (.hrms-line-chart-wrap)
+  // was a hardcoded "no data" placeholder with nothing to ever load real
+  // data into it — the only function that could populate it
+  // (_updateDashboardAttTrend()) was only ever reached by first visiting
+  // the Attendance tab, so the Dashboard itself never showed it even for a
+  // company with months of real punch history. refreshHrmsKpis() already
+  // runs on Dashboard load (see hrms.html's setTimeout calls), so this is
+  // the natural place to trigger it instead of relying on that side effect.
+  if(typeof loadAttendanceTrend==='function')loadAttendanceTrend();
   // Dashboard alert tiles. hrms-dash-expiry is deliberately NOT set here —
   // refreshExpiryAlerts() is the single source of truth for it (computed
   // from real employee expiry dates, not by re-parsing this tab's already-

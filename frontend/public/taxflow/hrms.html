@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=336b9d7876" as="style">
-<link rel="preload" href="src/app.js?v=0cfa4ad8f8" as="script">
+<link rel="preload" href="src/app.js?v=c28b6d5bb0" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=336b9d7876">
 <style>
@@ -416,9 +416,18 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       </svg>
     </div>
     <div style="padding:14px 18px 16px;flex:1">
-      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100px;gap:8px">
-        <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="#d1d5db" stroke-width="2"><circle cx="16" cy="16" r="12"/><path d="M16 9v7l4 4"/></svg>
-        <div style="font-size:12px;color:var(--text3);text-align:center">No attendance log data yet.<br>Daily check-in tracking not yet enabled.</div>
+      <!-- _updateDashboardAttTrend() (called from loadAttendanceTrend(),
+           which refreshHrmsKpis() now also triggers on Dashboard load, see
+           app.js) replaces this whole placeholder with a real SVG chart
+           once real punch data exists. Previously had no hook here at
+           all — this stayed a hardcoded "no data" message permanently,
+           even for a company with months of real attendance data, because
+           nothing could ever find it to replace it. -->
+      <div class="hrms-line-chart-wrap" style="height:100px">
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:8px">
+          <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="#d1d5db" stroke-width="2"><circle cx="16" cy="16" r="12"/><path d="M16 9v7l4 4"/></svg>
+          <div style="font-size:12px;color:var(--text3);text-align:center">No attendance log data yet.<br>Daily check-in tracking not yet enabled.</div>
+        </div>
       </div>
     </div>
   </div>
@@ -812,7 +821,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 <div class="page" id="page-staff">
   <div class="tabs">
     <div class="tab on" onclick="stab(this,'hr-emp')">Employees</div>
-    <div class="tab" onclick="stab(this,'hr-att');openAttendanceCheck();refreshAttendanceToday();loadAttendanceTrend();renderHrAccessPanel()">Attendance</div>
+    <div class="tab" onclick="stab(this,'hr-att')">Attendance</div>
     <div class="tab" onclick="stab(this,'hr-ot')">Overtime</div>
     <div class="tab" onclick="stab(this,'hr-leave');loadLeaveRequests()">Leave Management</div>
     <div class="tab" onclick="stab(this,'hr-corrections')">Corrections</div>
@@ -2843,7 +2852,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=0cfa4ad8f8" defer></script>
+<script src="src/app.js?v=c28b6d5bb0" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
