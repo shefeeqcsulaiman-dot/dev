@@ -21420,6 +21420,13 @@ async function refreshAttendanceToday(){
     const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
     set('att-stat-present',count);
     set('att-stat-sync',new Date().toLocaleTimeString('en-AE'));
+    // #att-time used to be a static, never-updated "Live" label with no
+    // actual date anywhere on the card. res.date is the company-LOCAL
+    // today (backend's _local_today()) — using it here instead of the
+    // browser's own new Date() keeps it consistent with which punches
+    // this same response actually counts as "today" for this company.
+    const dateStr=res.date?new Date(`${res.date}T00:00:00`):new Date();
+    set('att-time',dateStr.toLocaleDateString('en-AE',{weekday:'short',day:'numeric',month:'short',year:'numeric'}));
     const kpiEl=document.getElementById('hrms-kpi-present');
     if(kpiEl&&count>0)kpiEl.textContent=count;
     // Headcount must update regardless of whether anyone's punched in today
@@ -21454,6 +21461,12 @@ async function refreshAttendanceToday(){
       tbody.appendChild(tr);
     });
   }catch(e){
+    // Still show today's date even when the API call itself fails (e.g.
+    // no biometric connected yet, the common case this empty-state text
+    // below is written for) — falls back to the browser's own local date
+    // since there's no company-local date available from a failed call.
+    const dateEl=document.getElementById('att-time');
+    if(dateEl)dateEl.textContent=new Date().toLocaleDateString('en-AE',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
     if(tbody)tbody.innerHTML='<tr data-empty-state><td colspan="4" style="text-align:center;color:var(--text3);padding:32px">Biometric not connected yet. Import CSV or connect a device.</td></tr>';
   }
 }
