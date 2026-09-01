@@ -21991,10 +21991,12 @@ function _renderTaskAssignPanel(){
   const panel=document.getElementById('task-assign-employees');
   if(!panel)return;
   const deptFilter=document.getElementById('task-department-filter')?.value||'';
-  const employees=deptFilter?_taskEmployeeListCache.filter(e=>e.department===deptFilter):_taskEmployeeListCache;
+  const search=(document.getElementById('task-assign-search')?.value||'').trim().toLowerCase();
+  let employees=deptFilter?_taskEmployeeListCache.filter(e=>e.department===deptFilter):_taskEmployeeListCache;
+  if(search)employees=employees.filter(e=>e.full_name.toLowerCase().includes(search));
   const templates=_uniqueTaskTemplates();
   if(!employees.length){
-    panel.innerHTML='<div class="task-assign-empty">No active employees found.</div>';
+    panel.innerHTML=`<div class="task-assign-empty">${search?'No employees match that search.':'No active employees found.'}</div>`;
     return;
   }
   if(!templates.length){
