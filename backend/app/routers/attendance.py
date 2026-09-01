@@ -1176,6 +1176,15 @@ def attendance_monthly_report(
 
 
 _EMPLOYEE_DAILY_MAX_SESSIONS = 3
+# Some entry-only devices (a dwell/proximity sensor, a simple turnstile that
+# only signals "someone passed through") re-read the same physical entry
+# several times within seconds of each other. Without this, each re-read
+# closed the still-open session with no checkout and opened a new one --
+# one real entry could fill (and exceed) _EMPLOYEE_DAILY_MAX_SESSIONS with
+# near-duplicate rows, all missing a checkout, before the day's actual
+# second entry (if any) ever got a slot. A repeat "in" within this window of
+# the currently-open one is treated as the same entry and collapsed instead.
+_DWELL_DUPLICATE_WINDOW = timedelta(minutes=5)
 
 
 def _pair_day_punches(events: list[tuple[datetime, str]]) -> list[tuple[datetime, datetime | None]]:
@@ -1191,6 +1200,8 @@ def _pair_day_punches(events: list[tuple[datetime, str]]) -> list[tuple[datetime
     for ts, direction in events:
         if direction == "in":
             if open_in is not None:
+                if ts - open_in <= _DWELL_DUPLICATE_WINDOW:
+                    continue  # sensor-bounce re-read of the still-open entry
                 pairs.append((open_in, None))
             open_in = ts
         else:
@@ -1337,6 +1348,10 @@ def attendance_employee_daily(
             "date": iso,
             "day_name": d.strftime("%a"),
             "is_weekend": is_weekend,
+            # Lets the UI tell "hasn't checked out yet today" (still possibly
+            # coming) apart from "day is over, no checkout was ever recorded"
+            # (e.g. an entry-only device) -- both look identical otherwise.
+            "is_today": d == today,
             "status": status,
             "sessions": sessions,
             "total_hours": f"{total_hours:.2f}",

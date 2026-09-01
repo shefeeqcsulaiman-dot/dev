@@ -3,7 +3,7 @@ Report's per-employee rows. Mirrors daily_attendance_report.py's column
 set (Emp No./AC-No./Day/Name/Date/up to 3 Clock In-Out-Work Time triples/
 Total/OT/Under Time/Absent/SICK/Holiday) with proper direction-aware
 session pairing, not just a first-punch/last-punch summary."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.models import AppDataRecord, AttendancePunch, Employee, LeaveRequest
 import json
@@ -88,6 +88,59 @@ def test_employee_daily_breakdown(client, db, auth_headers):
     assert by_date["2026-08-29"]["status"] == "weekend"  # a Saturday under fri_sat
     assert by_date["2026-08-25"]["status"] == "absent"   # a working day, no punch, no leave
     assert by_date["2026-08-25"]["absent"] == "Yes"
+
+
+def test_employee_daily_collapses_dwell_duplicate_inpunches(client, db, auth_headers):
+    # A dwell/proximity-sensor-style device can re-read the same physical
+    # entry several times within seconds -- without collapsing, each re-read
+    # would close the still-open session with no checkout and open a new
+    # one, turning ONE real entry into several spurious no-checkout rows.
+    # 2026-08-06 deliberately avoids the exact dates other test files assert
+    # whole-company punch counts against (e.g. test_attendance_today_date_
+    # param.py uses 2026-08-20/21) -- auth_headers reuses one shared company
+    # for the whole pytest session, so seeding a punch on one of those dates
+    # here would silently inflate that other test's count and fail it.
+    company_id = _company_id(client, auth_headers)
+    emp = _seed_employee(db, company_id, "ATT-DAILY-DWELL", "Dwell Duplicate Test")
+    _seed_punch(db, company_id, "ATT-DAILY-DWELL", "2026-08-06", 9, 20, direction="in")
+    _seed_punch(db, company_id, "ATT-DAILY-DWELL", "2026-08-06", 9, 22, direction="in")
+    _seed_punch(db, company_id, "ATT-DAILY-DWELL", "2026-08-06", 9, 24, direction="in")
+
+    r = client.get(f"/api/v1/attendance/employee-daily?employee_id={emp.id}&period=2026-08", headers=auth_headers)
+    assert r.status_code == 200, r.text
+    by_date = {d["date"]: d for d in r.json()["days"]}
+    d20 = by_date["2026-08-06"]
+    assert d20["status"] == "present"
+    non_empty_sessions = [s for s in d20["sessions"] if s["clock_in"]]
+    # All 3 near-simultaneous "in" punches collapse into exactly 1 session,
+    # not 3 separate ones.
+    assert len(non_empty_sessions) == 1
+    assert non_empty_sessions[0]["clock_out"] is None
+
+
+def test_employee_daily_marks_is_today(client, db, auth_headers):
+    company_id = _company_id(client, auth_headers)
+    emp = _seed_employee(db, company_id, "ATT-DAILY-TODAY", "Is Today Test")
+    # Derived the same way _local_today()/_company_offset() compute "today"
+    # for a "United Arab Emirates" company (UTC+4, this fixture's default)
+    # -- using the real current instant for both, rather than a fixed
+    # calendar date, so this stays correct no matter when the suite runs.
+    now_utc = datetime.now(timezone.utc)
+    today_local_date = (now_utc + timedelta(hours=4)).date().isoformat()
+    period = today_local_date[:7]
+    p = AttendancePunch(
+        company_id=company_id, employee_id="ATT-DAILY-TODAY", employee_name=None,
+        punch_time=now_utc, punch_date=today_local_date, direction="in", source="device",
+    )
+    db.add(p)
+    db.commit()
+
+    r = client.get(f"/api/v1/attendance/employee-daily?employee_id={emp.id}&period={period}", headers=auth_headers)
+    assert r.status_code == 200, r.text
+    by_date = {d["date"]: d for d in r.json()["days"]}
+    assert by_date[today_local_date]["is_today"] is True
+    other_date = next(d for d in by_date if d != today_local_date)
+    assert by_date[other_date]["is_today"] is False
 
 
 def test_employee_daily_404_for_unknown_employee(client, auth_headers):

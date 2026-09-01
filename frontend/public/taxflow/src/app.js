@@ -22068,7 +22068,17 @@ function openEmployeeAttendanceDetail(employeeId,employeeName){
 // that downloadable report agree on what a day looks like.
 function _empAttDetailRowHtml(d){
   const sessions=d.sessions||[];
-  const sessionCells=sessions.map(s=>`<td>${s.clock_in?escapeHtml(s.clock_in):'—'}</td><td>${s.clock_out?escapeHtml(s.clock_out):'—'}</td><td>${s.work_time?escapeHtml(s.work_time):'—'}</td>`).join('');
+  // A blank Clock Out means two different things depending on the day: for
+  // TODAY it can just mean "hasn't left yet" (still possibly coming), but
+  // for a day that's already over it means no checkout was ever recorded --
+  // e.g. an entry-only device (a dwell/proximity sensor, a simple turnstile)
+  // that structurally never sends an "out" signal. Previously both looked
+  // identical (a bare "—"), which read as a bug on every single past day
+  // for anyone tracked by that kind of device.
+  const sessionCells=sessions.map(s=>{
+    const clockOutCell=s.clock_out?escapeHtml(s.clock_out):(s.clock_in&&!d.is_today?'<span style="color:var(--text3);font-style:italic">No checkout</span>':'—');
+    return `<td>${s.clock_in?escapeHtml(s.clock_in):'—'}</td><td>${clockOutCell}</td><td>${s.work_time?escapeHtml(s.work_time):'—'}</td>`;
+  }).join('');
   const rowStyle=d.status==='weekend'||d.status==='upcoming'?' style="color:var(--text3)"':d.status==='absent'?' style="color:var(--red)"':'';
   return `<tr${rowStyle}>
     <td>${escapeHtml(d.emp_no||'')}</td>
