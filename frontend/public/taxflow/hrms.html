@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=f22dc49b5f" as="style">
-<link rel="preload" href="src/app.js?v=8ff5f6a9bd" as="script">
+<link rel="preload" href="src/styles.css?v=2a75ebf833" as="style">
+<link rel="preload" href="src/app.js?v=367ef9ca87" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=f22dc49b5f">
+<link rel="stylesheet" href="src/styles.css?v=2a75ebf833">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -2222,15 +2222,11 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     </div>
   </div>
 
-  <div class="task-board" id="task-board">
-    <div class="task-col" data-status="todo">
+  <div class="task-board task-board-2col" id="task-board">
+    <div class="task-col task-col-wide" data-status="todo">
       <div class="task-col-hd"><span>To Do</span><span class="task-col-count" id="task-count-todo">0</span></div>
       <div class="task-assign-panel" id="task-assign-employees"></div>
       <div id="task-list-todo"></div>
-    </div>
-    <div class="task-col" data-status="in_progress">
-      <div class="task-col-hd"><span>In Progress</span><span class="task-col-count" id="task-count-in_progress">0</span></div>
-      <div id="task-list-in_progress"></div>
     </div>
     <div class="task-col" data-status="done">
       <div class="task-col-hd"><span>Done</span><span class="task-col-count" id="task-count-done">0</span></div>
@@ -2265,7 +2261,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <div class="fg"><label class="fl">Task Details</label><textarea class="fi" id="task-description" rows="3" placeholder="Details, context, or instructions…"></textarea></div>
     <div class="fr2">
       <div class="fg"><label class="fl">Priority</label><select class="fi" id="task-priority"><option>Low</option><option selected>Medium</option><option>High</option></select></div>
-      <div class="fg"><label class="fl">Status</label><select class="fi" id="task-status"><option value="todo">To Do</option><option value="in_progress">In Progress</option><option value="done">Done</option></select></div>
+      <div class="fg"><label class="fl">Status</label><select class="fi" id="task-status"><option value="todo">To Do</option><option value="done">Done</option></select></div>
     </div>
     <div class="fr2">
       <div class="fg"><label class="fl">Due Date</label><input class="fi" id="task-due-date" type="date"></div>
@@ -2815,7 +2811,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=8ff5f6a9bd" defer></script>
+<script src="src/app.js?v=367ef9ca87" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

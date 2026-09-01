@@ -21853,7 +21853,13 @@ function downloadHrAttendanceReportCsv(){
 // ESS-side view yet).
 let _taskListCache=[];
 let _taskViewMode='board'; // 'board' | 'table'
-const TASK_STATUSES=['todo','in_progress','done'];
+// In Progress column removed per request — down to a 2-state board (To
+// Do/Done), with To Do given the freed-up width instead of splitting it
+// evenly. in_progress stays in TASK_STATUS_LABEL only so a pre-existing
+// task record still stored with that status renders a readable label
+// instead of "undefined" (see renderTaskBoard()'s bucketing below) —
+// it's not a selectable status anywhere anymore.
+const TASK_STATUSES=['todo','done'];
 const TASK_STATUS_LABEL={todo:'To Do',in_progress:'In Progress',done:'Done'};
 const TASK_REPEAT_LABEL={none:'—',daily:'Daily',weekly:'Weekly',monthly:'Monthly'};
 
@@ -22060,7 +22066,11 @@ function showTaskModal(id){
   document.getElementById('task-assignee').value=t?.assigned_to||'';
   document.getElementById('task-priority').value=t?.priority||'Medium';
   document.getElementById('task-due-date').value=t?.due_date||'';
-  document.getElementById('task-status').value=t?.status||'todo';
+  // Bucket a legacy 'in_progress' record to 'todo' — that option no
+  // longer exists in this select since In Progress was removed as a
+  // column, and setting .value to a missing option would leave nothing
+  // selected at all.
+  document.getElementById('task-status').value=t?.status==='done'?'done':'todo';
   document.getElementById('task-repeat').value=t?.repeat||'none';
   const delBtn=document.getElementById('task-delete-btn');
   if(delBtn)delBtn.style.display=t?'':'none';
@@ -22142,7 +22152,10 @@ function _taskCardHtml(t){
   const priorityCls=t.priority==='High'?'b-r':t.priority==='Low'?'b-g':'b-a';
   const overdue=t.due_date&&t.status!=='done'&&t.due_date<new Date().toISOString().slice(0,10);
   const dueHtml=t.due_date?`<span class="task-card-due${overdue?' overdue':''}">${overdue?'⚠ ':''}${escapeHtml(t.due_date)}${t.repeat&&t.repeat!=='none'?' ↻':''}</span>`:'';
-  const idx=TASK_STATUSES.indexOf(t.status);
+  // Buckets a legacy 'in_progress' record the same way renderTaskBoard()'s
+  // column grouping does, so its move button matches where it's actually
+  // showing rather than pointing at itself.
+  const idx=TASK_STATUSES.indexOf(t.status==='done'?'done':'todo');
   const prevStatus=idx>0?TASK_STATUSES[idx-1]:null;
   const nextStatus=idx<TASK_STATUSES.length-1?TASK_STATUSES[idx+1]:null;
   return `<div class="task-card" data-task-id="${escapeHtml(t.id)}">
@@ -22213,7 +22226,11 @@ function renderTaskBoard(){
     return true;
   });
   TASK_STATUSES.forEach(status=>{
-    const list=filtered.filter(t=>(t.status||'todo')===status)
+    // Any pre-existing task still stored with the removed 'in_progress'
+    // status buckets into To Do here — work that isn't Done is still "to
+    // do" under this 2-state model, and this never touches the stored
+    // value itself (see _taskCardHtml()'s own move-button logic below).
+    const list=filtered.filter(t=>((t.status||'todo')==='done'?'done':'todo')===status)
       .sort((a,b)=>(a.due_date||'9999').localeCompare(b.due_date||'9999'));
     const countEl=document.getElementById(`task-count-${status}`);
     if(countEl)countEl.textContent=list.length;
