@@ -1175,6 +1175,33 @@ def attendance_monthly_report(
     }
 
 
+_EMPLOYEE_DAILY_MAX_SESSIONS = 3
+
+
+def _pair_day_punches(events: list[tuple[datetime, str]]) -> list[tuple[datetime, datetime | None]]:
+    """Direction-aware in/out pairing for one day's already-time-sorted
+    punches -- same state machine as zk_bridge.py/daily_attendance_
+    report.py's pair_punches(), reimplemented here in pure Python (no
+    pandas, which isn't a backend dependency) rather than imported, since
+    those scripts also do numeric ZKTeco-code-to-direction mapping this
+    endpoint doesn't need: AttendancePunch.direction is already a clean
+    "in"/"out" string by the time it reaches the database."""
+    pairs: list[tuple[datetime, datetime | None]] = []
+    open_in: datetime | None = None
+    for ts, direction in events:
+        if direction == "in":
+            if open_in is not None:
+                pairs.append((open_in, None))
+            open_in = ts
+        else:
+            if open_in is not None:
+                pairs.append((open_in, ts))
+                open_in = None
+    if open_in is not None:
+        pairs.append((open_in, None))
+    return pairs
+
+
 @gated_router.get("/employee-daily")
 def attendance_employee_daily(
     employee_id: str,
@@ -1183,9 +1210,12 @@ def attendance_employee_daily(
     principal: Principal = Depends(require_principal_permission("attendance:view")),
 ) -> dict[str, Any]:
     """Day-by-day attendance for ONE employee across a month -- the
-    drill-down behind the Attendance Report's per-employee rows, which
-    previously only showed month-level totals with no way to see which
-    specific days actually contributed to them."""
+    drill-down behind the Attendance Report's per-employee rows. Mirrors
+    the column set of the downloadable daily_attendance_report.py sheet
+    (Emp No./AC-No./Day/Name/Date/up to 3 Clock In-Out-Work Time triples/
+    Total/OT/Under Time/Absent/SICK/Holiday) so the on-screen popup and
+    that offline report agree on what a day's attendance actually looks
+    like, instead of the earlier single first-punch/last-punch summary."""
     emp = db.query(Employee).filter(
         Employee.id == employee_id, Employee.company_id == principal.company_id,
     ).first()
@@ -1208,19 +1238,17 @@ def attendance_employee_daily(
     start = date(year, month, 1)
     last_day = date(year, month, monthrange(year, month)[1])
     weekend_days = _weekend_day_set(db, principal.company_id)
+    standard_hours = _standard_hours_per_day(db, principal.company_id)
 
-    punch_rows = db.query(
-        AttendancePunch.punch_date,
-        func.min(AttendancePunch.punch_time).label("first_ts"),
-        func.max(AttendancePunch.punch_time).label("last_ts"),
-        func.count(AttendancePunch.id).label("cnt"),
-    ).filter(
+    punch_rows = db.query(AttendancePunch.punch_date, AttendancePunch.punch_time, AttendancePunch.direction).filter(
         AttendancePunch.company_id == principal.company_id,
         AttendancePunch.employee_id == emp.employee_no,
         AttendancePunch.punch_date >= start.isoformat(),
         AttendancePunch.punch_date <= last_day.isoformat(),
-    ).group_by(AttendancePunch.punch_date).all()
-    punch_by_date = {r.punch_date: r for r in punch_rows}
+    ).order_by(AttendancePunch.punch_time.asc()).all()
+    events_by_date: dict[str, list[tuple[datetime, str]]] = {}
+    for r in punch_rows:
+        events_by_date.setdefault(r.punch_date, []).append((r.punch_time, r.direction or "in"))
 
     leave_rows = db.query(LeaveRequest).filter(
         LeaveRequest.company_id == principal.company_id,
@@ -1230,13 +1258,35 @@ def attendance_employee_daily(
         LeaveRequest.end_date >= start.isoformat(),
     ).all()
     leave_dates: set[str] = set()
+    sick_dates: set[str] = set()
     for lr in leave_rows:
         lr_start = max(start, date.fromisoformat(lr.start_date))
         lr_end = min(last_day, date.fromisoformat(lr.end_date))
         d = lr_start
         while d <= lr_end:
             leave_dates.add(d.isoformat())
+            if "sick" in (lr.leave_type or "").lower():
+                sick_dates.add(d.isoformat())
             d += timedelta(days=1)
+
+    # Best-effort: the Holiday Calendar is still a Tier 2 (AppDataRecord)
+    # feature (see docs/hrms-architecture.md), so this reads whatever
+    # ISO-format date field a saved holiday row actually has -- a holiday
+    # saved in some other date format simply won't match here rather than
+    # this guessing at parsing it, same "don't fabricate" principle as
+    # daily_attendance_report.py leaving this column blank entirely.
+    holiday_dates: set[str] = set()
+    for rec in db.query(AppDataRecord.payload).filter(
+        AppDataRecord.company_id == principal.company_id,
+        AppDataRecord.collection == "hrHolidays",
+    ).all():
+        try:
+            payload = json.loads(rec[0])
+        except (ValueError, TypeError):
+            continue
+        raw_date = str(payload.get("date") or payload.get("holiday_date") or "")
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", raw_date):
+            holiday_dates.add(raw_date)
 
     days = []
     d = start
@@ -1244,33 +1294,57 @@ def attendance_employee_daily(
         iso = d.isoformat()
         js_dow = (d.weekday() + 1) % 7
         is_weekend = weekend_days is not None and js_dow in weekend_days
-        row = punch_by_date.get(iso)
-        check_in = check_out = None
-        hours = 0.0
-        if row and row.cnt and row.first_ts:
-            check_in = (row.first_ts + offset).strftime("%H:%M")
-            if row.cnt >= 2 and row.last_ts:
-                check_out = (row.last_ts + offset).strftime("%H:%M")
-                hours = (row.last_ts - row.first_ts).total_seconds() / 3600
         is_leave = iso in leave_dates
+        is_sick = iso in sick_dates
+        is_holiday = iso in holiday_dates
+
+        events = sorted(events_by_date.get(iso, []), key=lambda e: e[0])
+        pairs = _pair_day_punches(events)
+        total_seconds = sum((cout - cin).total_seconds() for cin, cout in pairs if cout)
+        total_hours = total_seconds / 3600
+        shown_pairs = pairs[:_EMPLOYEE_DAILY_MAX_SESSIONS]
+        sessions = []
+        for cin, cout in shown_pairs:
+            work_hours = (cout - cin).total_seconds() / 3600 if cout else None
+            sessions.append({
+                "clock_in": (cin + offset).strftime("%H:%M"),
+                "clock_out": (cout + offset).strftime("%H:%M") if cout else None,
+                "work_time": f"{work_hours:.2f}" if work_hours is not None else None,
+            })
+        while len(sessions) < _EMPLOYEE_DAILY_MAX_SESSIONS:
+            sessions.append({"clock_in": None, "clock_out": None, "work_time": None})
+
+        has_punches = bool(events)
         if d > today:
             status = "upcoming"
         elif is_weekend:
             status = "weekend"
+        elif is_holiday:
+            status = "holiday"
+        elif is_sick:
+            status = "sick"
         elif is_leave:
             status = "leave"
-        elif row:
+        elif has_punches:
             status = "present"
         else:
             status = "absent"
+        is_absent = status == "absent"
+
         days.append({
+            "emp_no": emp.employee_no,
+            "ac_no": emp.employee_no,
             "date": iso,
             "day_name": d.strftime("%a"),
             "is_weekend": is_weekend,
             "status": status,
-            "check_in": check_in,
-            "check_out": check_out,
-            "hours": f"{hours:.2f}",
+            "sessions": sessions,
+            "total_hours": f"{total_hours:.2f}",
+            "ot_hours": f"{max(0.0, total_hours - standard_hours):.2f}" if has_punches else "0.00",
+            "under_hours": f"{max(0.0, standard_hours - total_hours):.2f}" if has_punches and not (is_weekend or is_leave or is_holiday) else "0.00",
+            "absent": "Yes" if is_absent else "",
+            "sick": "Yes" if is_sick else "",
+            "holiday": "Yes" if is_holiday else "",
         })
         d += timedelta(days=1)
 
@@ -1280,6 +1354,8 @@ def attendance_employee_daily(
         "employee_name": emp.full_name,
         "department": emp.department,
         "period": period,
+        "standard_hours_per_day": standard_hours,
+        "max_sessions": _EMPLOYEE_DAILY_MAX_SESSIONS,
         "days": days,
     }
 

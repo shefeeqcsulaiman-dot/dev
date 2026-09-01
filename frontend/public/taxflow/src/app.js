@@ -21444,8 +21444,17 @@ async function deleteBiometricDevice(id,btn){
 
 async function refreshAttendanceToday(){
   const tbody=document.getElementById('att-today-tbody');
+  // Previously always "today" with no way to look at any other day —
+  // defaults the picker to today on first load, then honors whichever
+  // date is selected on every subsequent refresh/re-render.
+  const dateInput=document.getElementById('att-today-date');
+  if(dateInput&&!dateInput.value){
+    const now=new Date();
+    dateInput.value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  }
+  const selectedDate=dateInput?.value||'';
   try{
-    const res=await moduleApi('/attendance/today');
+    const res=await moduleApi(`/attendance/today${selectedDate?`?date=${encodeURIComponent(selectedDate)}`:''}`);
     const count=res.present_count||0;
     const ids=res.employee_ids||[];
     const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
@@ -21976,8 +21985,10 @@ function downloadHrAttendanceReportCsv(){
 // by GET /attendance/employee-daily, with its own month picker (defaults
 // to whatever month the report itself was showing).
 let _empAttDetailId=null;
+let _empAttDetailName='';
 function openEmployeeAttendanceDetail(employeeId,employeeName){
   _empAttDetailId=employeeId;
+  _empAttDetailName=employeeName||'';
   document.getElementById('emp-att-detail-title').textContent=employeeName||'Attendance';
   const periodInput=document.getElementById('emp-att-detail-period');
   if(periodInput)periodInput.value=document.getElementById('hrr-att-period')?.value||_hrAttReportCache?.period||'';
@@ -21985,19 +21996,35 @@ function openEmployeeAttendanceDetail(employeeId,employeeName){
   loadEmployeeAttendanceDetail();
 }
 
-const EMP_ATT_STATUS_BADGE={
-  present:'<span class="b b-g">Present</span>',
-  absent:'<span class="b b-r">Absent</span>',
-  leave:'<span class="b b-a">Leave</span>',
-  weekend:'<span class="b b-gray">Weekend</span>',
-  upcoming:'<span class="b b-gray">—</span>',
-};
+// Row cells mirror daily_attendance_report.py's own column set exactly
+// (Emp No./AC-No./Day/Name/Date/up to 3 Clock In-Out-Work Time triples/
+// Total/OT/Under Time/Absent/SICK/Holiday) so the on-screen popup and
+// that downloadable report agree on what a day looks like.
+function _empAttDetailRowHtml(d){
+  const sessions=d.sessions||[];
+  const sessionCells=sessions.map(s=>`<td>${s.clock_in?escapeHtml(s.clock_in):'—'}</td><td>${s.clock_out?escapeHtml(s.clock_out):'—'}</td><td>${s.work_time?escapeHtml(s.work_time):'—'}</td>`).join('');
+  const rowStyle=d.status==='weekend'||d.status==='upcoming'?' style="color:var(--text3)"':d.status==='absent'?' style="color:var(--red)"':'';
+  return `<tr${rowStyle}>
+    <td>${escapeHtml(d.emp_no||'')}</td>
+    <td>${escapeHtml(d.ac_no||'')}</td>
+    <td>${escapeHtml(d.day_name)}</td>
+    <td>${escapeHtml(_empAttDetailName)}</td>
+    <td>${escapeHtml(d.date)}</td>
+    ${sessionCells}
+    <td>${d.total_hours&&d.total_hours!=='0.00'?escapeHtml(d.total_hours):'—'}</td>
+    <td>${d.ot_hours&&d.ot_hours!=='0.00'?escapeHtml(d.ot_hours):'—'}</td>
+    <td>${d.under_hours&&d.under_hours!=='0.00'?escapeHtml(d.under_hours):'—'}</td>
+    <td>${escapeHtml(d.absent||'')}</td>
+    <td>${escapeHtml(d.sick||'')}</td>
+    <td>${escapeHtml(d.holiday||'')}</td>
+  </tr>`;
+}
 
 async function loadEmployeeAttendanceDetail(){
   const tbody=document.getElementById('emp-att-detail-tbody');
   if(!_empAttDetailId||!tbody)return;
   const period=document.getElementById('emp-att-detail-period')?.value||'';
-  tbody.innerHTML='<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr>';
+  tbody.innerHTML='<tr><td colspan="20" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr>';
   try{
     const r=await authenticatedFetch(`${apiBaseUrl()}/attendance/employee-daily?employee_id=${encodeURIComponent(_empAttDetailId)}${period?`&period=${encodeURIComponent(period)}`:''}`);
     if(!r.ok)throw new Error('Request failed ('+r.status+')');
@@ -22005,17 +22032,10 @@ async function loadEmployeeAttendanceDetail(){
     const sub=document.getElementById('emp-att-detail-sub');
     if(sub)sub.textContent=`${data.department||''} — ${data.period}`;
     const days=data.days||[];
-    tbody.innerHTML=days.length?days.map(d=>`<tr>
-      <td class="mono">${escapeHtml(d.date)}</td>
-      <td>${escapeHtml(d.day_name)}</td>
-      <td class="mono">${escapeHtml(d.check_in||'—')}</td>
-      <td class="mono">${escapeHtml(d.check_out||'—')}</td>
-      <td class="mono">${d.hours&&d.hours!=='0.00'?escapeHtml(d.hours):'—'}</td>
-      <td>${EMP_ATT_STATUS_BADGE[d.status]||escapeHtml(d.status)}</td>
-    </tr>`).join(''):'<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">No data for this month.</td></tr>';
+    tbody.innerHTML=days.length?days.map(_empAttDetailRowHtml).join(''):'<tr><td colspan="20" style="color:var(--text3);text-align:center;padding:20px">No data for this month.</td></tr>';
   }catch(e){
     console.warn('[loadEmployeeAttendanceDetail]',e);
-    tbody.innerHTML='<tr><td colspan="6" style="color:var(--red);text-align:center;padding:20px">Could not load attendance for this employee.</td></tr>';
+    tbody.innerHTML='<tr><td colspan="20" style="color:var(--red);text-align:center;padding:20px">Could not load attendance for this employee.</td></tr>';
   }
 }
 

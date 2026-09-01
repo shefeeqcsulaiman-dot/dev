@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=2e898b6b13" as="script">
+<link rel="preload" href="src/app.js?v=b30ed43390" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
@@ -901,6 +901,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
         <div class="card-hd">
           <div class="card-title">Today's Attendance</div>
           <div class="flx" style="gap:6px">
+            <input class="fi mono" type="date" id="att-today-date" style="width:140px;padding:4px 6px;font-size:12px" onchange="refreshAttendanceToday()">
             <span id="att-time" class="mono" style="font-size:12px;color:var(--accent)">Live</span>
             <button class="btn btn-g btn-sm" onclick="refreshAttendanceToday()">⟳ Refresh</button>
           </div>
@@ -2220,15 +2221,21 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
      nothing — this is the day-by-day drill-down for whichever employee
      and month is selected (see openEmployeeAttendanceDetail()). -->
 <div class="overlay" id="m-emp-att-detail" onclick="closeOvBg(event,'m-emp-att-detail')">
-  <div class="modal" style="max-width:560px">
+  <div class="modal" style="max-width:96vw;width:1180px">
     <div class="modal-title" id="emp-att-detail-title">Attendance</div>
     <div class="modal-sub" id="emp-att-detail-sub"></div>
     <div class="flx" style="margin-bottom:10px">
       <input class="fi" style="width:150px" type="month" id="emp-att-detail-period" onchange="loadEmployeeAttendanceDetail()">
     </div>
-    <div style="max-height:60vh;overflow-y:auto">
-      <table class="tbl" data-delete-actions-bound="skip">
-        <thead><tr><th>Date</th><th>Day</th><th>Check In</th><th>Check Out</th><th>Hours</th><th>Status</th></tr></thead>
+    <div style="max-height:65vh;overflow:auto">
+      <table class="tbl mono" data-delete-actions-bound="skip" style="font-size:11px;white-space:nowrap">
+        <thead><tr>
+          <th>Emp No.</th><th>AC-No.</th><th>Day</th><th>Name</th><th>Date</th>
+          <th>Clock In 1</th><th>Clock Out</th><th>Work Time</th>
+          <th>Clock In 2</th><th>Clock Out</th><th>Work Time</th>
+          <th>Clock In 3</th><th>Clock Out</th><th>Work Time</th>
+          <th>Total in time</th><th>OT</th><th>Under Time</th><th>Absent</th><th>SICK</th><th>Holiday</th>
+        </tr></thead>
         <tbody id="emp-att-detail-tbody"></tbody>
       </table>
     </div>
@@ -2879,7 +2886,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=2e898b6b13" defer></script>
+<script src="src/app.js?v=b30ed43390" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
