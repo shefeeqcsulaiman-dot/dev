@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=14cbdb756f" as="style">
-<link rel="preload" href="src/app.js?v=ac32dba12d" as="script">
+<link rel="preload" href="src/styles.css?v=f22dc49b5f" as="style">
+<link rel="preload" href="src/app.js?v=8ff5f6a9bd" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=14cbdb756f">
+<link rel="stylesheet" href="src/styles.css?v=f22dc49b5f">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -2225,6 +2225,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   <div class="task-board" id="task-board">
     <div class="task-col" data-status="todo">
       <div class="task-col-hd"><span>To Do</span><span class="task-col-count" id="task-count-todo">0</span></div>
+      <div class="task-assign-panel" id="task-assign-employees"></div>
       <div id="task-list-todo"></div>
     </div>
     <div class="task-col" data-status="in_progress">
@@ -2255,10 +2256,12 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     <input type="hidden" id="task-edit-id">
     <div class="fg" id="task-template-row"><label class="fl">Load From Previous Task</label><select class="fi" id="task-template" onchange="applyTaskTemplate()"><option value="">— Start blank —</option></select></div>
     <div class="fg"><label class="fl">Task Name <span style="color:var(--red)">*</span></label><input class="fi" id="task-title" placeholder="e.g. Prepare Q3 payroll summary"></div>
-    <div class="fr2">
-      <div class="fg"><label class="fl">Department</label><select class="fi" id="task-department"><option value="">— Select Department —</option></select></div>
-      <div class="fg"><label class="fl">Assign To</label><select class="fi" id="task-assignee"><option value="">— Unassigned —</option></select></div>
-    </div>
+    <div class="fg"><label class="fl">Department</label><select class="fi" id="task-department"><option value="">— Select Department —</option></select></div>
+    <!-- Assign To only shows when editing an already-assigned task (see
+         showTaskModal()) — assigning now happens from the To Do column's
+         employee list, picking one of these saved task names, not at
+         creation time here. -->
+    <div class="fg" id="task-assignee-row" style="display:none"><label class="fl">Assign To</label><select class="fi" id="task-assignee"><option value="">— Unassigned —</option></select></div>
     <div class="fg"><label class="fl">Task Details</label><textarea class="fi" id="task-description" rows="3" placeholder="Details, context, or instructions…"></textarea></div>
     <div class="fr2">
       <div class="fg"><label class="fl">Priority</label><select class="fi" id="task-priority"><option>Low</option><option selected>Medium</option><option>High</option></select></div>
@@ -2812,7 +2815,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=ac32dba12d" defer></script>
+<script src="src/app.js?v=8ff5f6a9bd" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

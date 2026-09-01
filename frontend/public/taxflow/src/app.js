@@ -21919,26 +21919,107 @@ async function _processRepeatingTasks(){
   }
 }
 
+// Shared across the modal's Assign To (edit mode only), the page's
+// Assigned To filter, and the To Do column's per-employee assign panel —
+// one fetch, three consumers, always active-only (see GET /payroll/
+// employees' own fix).
+let _taskEmployeeListCache=[];
+
 async function populateTaskAssigneeSelect(){
   const modalSel=document.getElementById('task-assignee');
   const filterSel=document.getElementById('task-filter-employee');
-  if(!modalSel&&!filterSel)return;
   try{
     const r=await authenticatedFetch(`${apiBaseUrl()}/payroll/employees`);
-    const employees=r.ok?await r.json():[];
-    if(modalSel){
-      const prev=modalSel.value;
-      modalSel.innerHTML='<option value="">— Unassigned —</option>'+
-        employees.map(e=>`<option value="${escapeHtml(e.id)}" data-name="${escapeHtml(e.full_name)}">${escapeHtml(e.full_name)} (${escapeHtml(e.employee_no)})</option>`).join('');
-      if(prev)modalSel.value=prev;
-    }
-    if(filterSel){
-      const prev=filterSel.value;
-      filterSel.innerHTML='<option value="">All Employees</option>'+
-        employees.map(e=>`<option value="${escapeHtml(e.id)}">${escapeHtml(e.full_name)}</option>`).join('');
-      if(prev)filterSel.value=prev;
-    }
-  }catch(e){/* dropdowns just stay empty on failure */}
+    _taskEmployeeListCache=r.ok?await r.json():[];
+  }catch(e){
+    _taskEmployeeListCache=[];
+  }
+  const employees=_taskEmployeeListCache;
+  if(modalSel){
+    const prev=modalSel.value;
+    modalSel.innerHTML='<option value="">— Unassigned —</option>'+
+      employees.map(e=>`<option value="${escapeHtml(e.id)}" data-name="${escapeHtml(e.full_name)}">${escapeHtml(e.full_name)} (${escapeHtml(e.employee_no)})</option>`).join('');
+    if(prev)modalSel.value=prev;
+  }
+  if(filterSel){
+    const prev=filterSel.value;
+    filterSel.innerHTML='<option value="">All Employees</option>'+
+      employees.map(e=>`<option value="${escapeHtml(e.id)}">${escapeHtml(e.full_name)}</option>`).join('');
+    if(prev)filterSel.value=prev;
+  }
+}
+
+// Unique task NAMES seen so far (most-recently-used instance per name) —
+// shared by the modal's "Load From Previous Task" dropdown and the To Do
+// column's per-employee assign picker below.
+function _uniqueTaskTemplates(){
+  const seen=new Set();
+  const opts=[];
+  [..._taskListCache].reverse().forEach(t=>{
+    if(!t.title||seen.has(t.title))return;
+    seen.add(t.title);
+    opts.push(t);
+  });
+  return opts;
+}
+
+// To Do's employee-assignment panel: one row per active employee (filtered
+// by the page's own Department filter, so narrowing that also narrows who
+// you're assigning to), each with a dropdown of already-saved task names
+// and an Assign button — this is now the ONLY way a task gets its first
+// assignee, since Add Task no longer collects one (see showTaskModal()).
+function _renderTaskAssignPanel(){
+  const panel=document.getElementById('task-assign-employees');
+  if(!panel)return;
+  const deptFilter=document.getElementById('task-department-filter')?.value||'';
+  const employees=deptFilter?_taskEmployeeListCache.filter(e=>e.department===deptFilter):_taskEmployeeListCache;
+  const templates=_uniqueTaskTemplates();
+  if(!employees.length){
+    panel.innerHTML='<div class="task-assign-empty">No active employees found.</div>';
+    return;
+  }
+  if(!templates.length){
+    panel.innerHTML='<div class="task-assign-empty">Click "+ Add Task" first to create a task name, then assign it here.</div>';
+    return;
+  }
+  const optionsHtml='<option value="">Select task…</option>'+
+    templates.map(t=>`<option value="${escapeHtml(t.id)}">${escapeHtml(t.title)}</option>`).join('');
+  panel.innerHTML=employees.map(e=>`
+    <div class="task-assign-row">
+      <div class="task-assign-name">
+        <div class="co-av" style="width:18px;height:18px;font-size:8px;flex-shrink:0">${escapeHtml(initialsFromName(e.full_name))}</div>
+        <span>${escapeHtml(e.full_name)}</span>
+      </div>
+      <select id="task-assign-pick-${escapeHtml(e.id)}">${optionsHtml}</select>
+      <button class="btn btn-p btn-sm" onclick="assignSavedTaskToEmployee('${escapeHtml(e.id)}','${escapeHtml(e.full_name)}')">Assign</button>
+    </div>
+  `).join('');
+}
+
+async function assignSavedTaskToEmployee(employeeId,employeeName){
+  const sel=document.getElementById(`task-assign-pick-${employeeId}`);
+  const templateId=sel?.value;
+  if(!templateId){toast('Select a saved task first','warn');return;}
+  const source=_taskListCache.find(x=>x.id===templateId);
+  if(!source)return;
+  const task={
+    id:`TASK-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+    title:source.title,
+    department:source.department||'',
+    description:source.description||'',
+    assigned_to:employeeId,
+    assigned_to_name:employeeName,
+    priority:source.priority||'Medium',
+    due_date:'',
+    status:'todo',
+    repeat:source.repeat||'none',
+    next_spawned:false,
+    created_at:new Date().toISOString(),
+  };
+  await saveServer('tasks',task);
+  _taskListCache.push(task);
+  renderTaskBoard();
+  toast(`"${task.title}" assigned to ${employeeName}`,'ok');
 }
 
 // Unique task NAMES seen so far, most-recently-used first — lets Add Task
@@ -21949,15 +22030,8 @@ async function populateTaskAssigneeSelect(){
 function _renderTaskTemplateOptions(){
   const sel=document.getElementById('task-template');
   if(!sel)return;
-  const seen=new Set();
-  const opts=[];
-  [..._taskListCache].reverse().forEach(t=>{
-    if(!t.title||seen.has(t.title))return;
-    seen.add(t.title);
-    opts.push(t);
-  });
   sel.innerHTML='<option value="">— Start blank —</option>'+
-    opts.map(t=>`<option value="${escapeHtml(t.id)}">${escapeHtml(t.title)}</option>`).join('');
+    _uniqueTaskTemplates().map(t=>`<option value="${escapeHtml(t.id)}">${escapeHtml(t.title)}</option>`).join('');
   sel.value='';
 }
 
@@ -21995,6 +22069,11 @@ function showTaskModal(id){
   const templateRow=document.getElementById('task-template-row');
   if(templateRow)templateRow.style.display=t?'none':'';
   if(!t)_renderTaskTemplateOptions();
+  // Assign To only shows when editing an already-assigned task — a new
+  // task no longer collects an assignee here at all; that happens from
+  // the To Do column's per-employee assign panel instead.
+  const assigneeRow=document.getElementById('task-assignee-row');
+  if(assigneeRow)assigneeRow.style.display=t?'':'none';
   showM('m-task');
   setTimeout(()=>document.getElementById('task-title').focus(),120);
 }
@@ -22115,11 +22194,18 @@ function setTaskViewMode(mode){
 }
 
 function renderTaskBoard(){
+  _renderTaskAssignPanel();
   const deptFilter=document.getElementById('task-department-filter')?.value||'';
   const empFilter=document.getElementById('task-filter-employee')?.value||'';
   const priorityFilter=document.getElementById('task-filter-priority')?.value||'';
   const search=(document.getElementById('task-filter-search')?.value||'').trim().toLowerCase();
   const filtered=_taskListCache.filter(t=>{
+    // Add Task no longer collects an assignee — a saved task with no
+    // assigned_to yet is a reusable name/template only (offered in the To
+    // Do assign panel and the modal's "Load From Previous Task" dropdown),
+    // not a real card on the board/table until someone's actually
+    // assigned to it.
+    if(!t.assigned_to)return false;
     if(deptFilter&&t.department!==deptFilter)return false;
     if(empFilter&&t.assigned_to!==empFilter)return false;
     if(priorityFilter&&t.priority!==priorityFilter)return false;
