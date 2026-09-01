@@ -235,6 +235,20 @@ _BOOTSTRAP_COLLECTION_CAPS: dict[str, int] = {
     "payrollRuns": 50,
     "payrollAdjustments": 300,
     "audit": 50,
+    # rotaAssignments had no cap at all until this was added -- on one live
+    # account it had grown to 2,508 rows (~950KB, JSON-encoded), dwarfing
+    # every other HR collection combined and dominating hrms.html's load
+    # time almost by itself. Capped to match every sibling collection
+    # above, ordered by created_at like the rest of this cap mechanism --
+    # but unlike leave/loan/OT requests (created close to the date they're
+    # about), rota assignments can be bulk-created for future weeks in one
+    # batch, so "most recently created" doesn't reliably mean "most
+    # relevant date". If a manager reports an older month's rota looking
+    # empty on this page, that's this cap, not a data-loss bug -- the fix
+    # is a dedicated GET /rota/assignments?month=YYYY-MM endpoint (mirroring
+    # how leaveRequests already moved off this bootstrap blob), not a
+    # bigger number here.
+    "rotaAssignments": 500,
 }
 
 

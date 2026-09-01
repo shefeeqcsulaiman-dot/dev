@@ -266,6 +266,29 @@ def test_bootstrap_hrms_scope_intersects_with_employee_permissions(client, db, a
     assert "salesInvoices" not in data
 
 
+def test_bootstrap_caps_rota_assignments(client, db, auth_headers):
+    # rotaAssignments previously had no cap at all -- on one live account it
+    # had grown to 2,508 rows and dominated hrms.html's bootstrap payload
+    # almost by itself. Now capped like every sibling HR collection.
+    import json as _json
+
+    from app.models import AppDataRecord
+
+    company_id = _company_id(client, auth_headers)
+    for i in range(510):
+        db.add(AppDataRecord(
+            company_id=company_id, collection="rotaAssignments", record_key=f"RA-{i}",
+            payload=_json.dumps({"id": f"RA-{i}", "employee_id": "x", "date": "2026-08-01"}),
+        ))
+    db.commit()
+
+    r = client.get("/api/v1/app-data", headers=auth_headers)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert len(data["data"]["rotaAssignments"]) == 500
+    assert "rotaAssignments" in data["truncated_collections"]
+
+
 def test_company_module_gate_and_role_permission_gate_both_enforce(client, db):
     # Two independent gates: require_module("accounting") (company-wide,
     # superadmin-controlled) and accounting:view (per-role). A branch
