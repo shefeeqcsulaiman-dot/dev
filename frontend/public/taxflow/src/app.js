@@ -405,13 +405,20 @@ function goHrmsExtTab(n,id){
   }
 }
 
+// Feeds New Loan / Salary Advance / Submit OT / Attendance Correction /
+// Shift Swap (both sides) -- the one employee-picker left in the app that
+// scraped #employee-tbody with no active/inactive filter at all, unlike
+// every sibling picker (currentRotaStaff(), _getAttendanceEmployees(),
+// /payroll/employees-backed selects). An Inactive employee should stay
+// visible in the Employee Directory itself (their history/records are
+// kept), but has no reason to be offered here for brand-new work.
 function populateHrEmployeeSelect(id){
   const sel=document.getElementById(id);
   if(!sel)return;
   sel.innerHTML='<option value="">— select employee —</option>';
   document.querySelectorAll('#employee-tbody tr:not([data-empty-state])').forEach(row=>{
     const emp=employeeFromDirectoryRow(row);
-    if(!emp||!emp.name||emp.name==='Employee')return;
+    if(!emp||!emp.name||emp.name==='Employee'||emp.status==='Inactive')return;
     const opt=document.createElement('option');
     opt.value=emp.name;
     opt.dataset.empId=emp.id||'';
@@ -18246,10 +18253,15 @@ async function _saveDeptsBranchesToDb(){
 // ── Department data store ─────────────────────────────────────────────
 let _deptList=[];
 
+// Active-only, matching the "Total Employees" dashboard KPI's own headcount
+// rule (an Inactive employee's department shouldn't look more staffed than
+// it really is).
 function _deptEmployeeCount(name){
   return [...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')].filter(r=>{
     const cells=[...r.querySelectorAll('td')];
-    return (cells[3]?.textContent||'').trim()===name;
+    const dept=(cells[3]?.textContent||'').trim();
+    const status=(cells[8]?.textContent||'').trim();
+    return dept===name&&status!=='Inactive';
   }).length;
 }
 
@@ -18800,7 +18812,10 @@ function refreshExpiryAlerts(){
   const docs=[];
   empRows.forEach(row=>{
     const emp=employeeFromDirectoryRow(row);
-    if(!emp.name)return;
+    // A departed employee's visa/EID/etc. isn't actionable HR work — don't
+    // alert on it (same "Inactive stays in the Directory, not anywhere
+    // else" rule as the employee-picker dropdowns).
+    if(!emp.name||emp.status==='Inactive')return;
     const add=(label,dateStr)=>{
       if(!dateStr)return docs.push({emp:emp.name,label,date:null,days:null});
       // Parsed as LOCAL midnight (matching `today` above), not UTC midnight
