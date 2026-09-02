@@ -2835,3 +2835,32 @@ Generates N companies (default 100), each with real branches/employees/customers
 Measured full-run performance (100 companies, 1M invoices, local SQLite, this machine): 85.7 minutes, producing an 8.16 GB database with 20,576,802 total rows. Per-company throughput degrades as the file grows (8.6→1.2 companies/min) — SQLite-specific overhead (index maintenance, WAL/page-cache pressure on a multi-GB file), not the O(1)-per-row generation logic; untested against a local Postgres instance, which may behave differently. This dataset (backend/taxflow-bulk100.db, git-ignored) is also what every fix in §29.2 was verified against before being trusted.
 
 Admin login for any seeded company: admin{NNNN}@bulk.demo.taxflowapp.com (0001-0100) / Demo@12345.
+
+## 30. HRMS Page Load Performance (2026-09-01)
+
+A separate, narrower performance pass from §29 — specifically "HRMS feels slow to load," diagnosed live against the production admin account rather than a synthetic load test. Measured before/after with a Playwright probe hitting the deployed app directly.
+
+### 30.1 Root cause
+
+`hydrateFromServer()` (app.js) is shared verbatim between `index.html` (main dashboard) and `hrms.html` (HRMS portal) — it unconditionally fetched the full `GET /app-data` bootstrap blob on every page load, including hrms.html, which never renders products/sales invoices/quotations/accounts/purchase documents/bills/vendors/payments/expenses/ledger. Measured live: **972KB and ~4.1s** for that one fetch+parse, before any HR data even started loading.
+
+Separately, `rotaAssignments` was the one HR-relevant AppDataRecord collection with **no cap at all** in `_BOOTSTRAP_COLLECTION_CAPS` (app_data.py) — every sibling collection (loans, leave, overtime, candidates) is capped at 500 — and had grown to 2,508 rows (~950KB) on the live account, alone accounting for >95% of even the HR-only portion of the payload.
+
+A third, unrelated contributor: two separate `DOMContentLoaded` handlers had accumulated in hrms.html from different edits, both independently scheduling `go('hrms')` + `refreshHrmsKpis()` (a DOM table scan + an `/attendance/today` call each time) on overlapping timers — `refreshHrmsKpis()` alone fired up to 5x within the first 2.5s of every single page load.
+
+### 30.2 Fixes shipped
+
+- **`GET /app-data?scope=hrms`** (app_data.py) — new opt-in query param restricting the bootstrap response to HR-relevant collections only (`_hrms_scope_collections()`: employees, leave, attendance, rota, overtime, loans, recruitment, payroll, bank, notifications), intersected with — never widening — whatever an Employee principal's own role permissions already allow via the existing `_allowed_bootstrap_collections()`. Response cache key is scope-aware (`bootstrap:{company_id}:{scope}`) so a scoped and unscoped response can never cross-serve. `hydrateFromServer()` passes it when `window.HRMS_STANDALONE`, and skips the matching Sales/Purchase/Accounting render passes client-side too (not just relying on the server returning empty arrays). `login.html`'s employee-kind login redirect (`preloadAndRedirect('/hrms', t, 'hrms')`) passes the same scope for its bootstrap prefetch.
+- **`rotaAssignments` added to `_BOOTSTRAP_COLLECTION_CAPS`, capped at 500** — same pattern and same "most recently created" ordering as every sibling collection. Documented caveat inline: unlike leave/loan requests (created close to the date they're about), rota assignments can be bulk-created for future weeks in one batch, so this cap could in theory make an older month's rota look sparse on the bootstrap-only path — the real long-term fix is a dedicated `GET /rota/assignments?month=YYYY-MM` endpoint mirroring how `leaveRequests` already moved off this blob (§7's Loans/Recruitment/Performance/Training/Assets Tier 2→Tier 1 migration note in hrms-architecture.md applies equally here). This cap benefits index.html too, since it isn't scope-gated.
+- **hrms.html**: removed the duplicate `DOMContentLoaded` handler; the survivor's `refreshHrmsKpis()` schedule trimmed from 3 calls (900/2000/2500ms) to 2 (900/2500ms).
+
+### 30.3 Measured result (same account, before/after)
+
+| | Before | After |
+|---|---|---|
+| Bootstrap payload (HRMS page) | 972 KB | 187 KB |
+| Bootstrap fetch time | ~4.1s | ~1.2s |
+| Bootstrap payload (main dashboard, unscoped) | 972 KB | 280 KB (rotaAssignments cap alone) |
+| `refreshHrmsKpis()` calls per HRMS page load | up to 5 | 2 |
+
+Verified via a Playwright probe (`page.evaluate` timing a direct `fetch('/api/v1/app-data?scope=hrms')` call from within the loaded page) rather than trusting local reasoning alone — the actual bottleneck (`rotaAssignments`, not Sales/Purchase data as first assumed) only became clear after measuring the scoped response's own collection-by-collection byte breakdown.

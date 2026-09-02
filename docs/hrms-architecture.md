@@ -401,6 +401,24 @@ that actually runs Sun-Thu doesn't have its real day off scored as
 approximation — adequate for a summary report, not claiming the same
 in/out session pairing rigor as `zk_bridge.py`/`daily_attendance_report.py`.
 
+`/attendance/employee-daily` (the Attendance Report's per-employee
+drill-down, and the popup behind clicking an employee name there) does
+claim that rigor: `_pair_day_punches()` (attendance.py) reimplements
+`zk_bridge.py`/`daily_attendance_report.py`'s direction-aware in/out state
+machine in pure Python (no pandas — not a backend dependency) rather than
+importing those scripts, and pairs into up to 3 sessions/day with real
+per-session and total hours, not a single first/last-punch span. It also
+collapses a repeat "in" event within 5 minutes of the currently-open one
+into the same session (`_DWELL_DUPLICATE_WINDOW`) — a dwell/proximity
+sensor or simple entry-only turnstile can re-read one physical entry
+several times in quick succession, which without this would turn one real
+entry into a burst of spurious no-checkout sessions, filling (and
+exceeding) the 3-session cap before a genuinely later, distinct entry that
+day ever got a slot. Each day carries an `is_today` flag so the UI can
+tell "hasn't checked out yet, might still" (today) apart from "no checkout
+was ever recorded" (a past day, most likely an entry-only device) — both
+looked like an identical bare blank before this distinction existed.
+
 ### Leave (Tier 1)
 
 ```text
@@ -452,16 +470,37 @@ password itself if password_hash was never set -- see §9.1)
 POST /api/v1/ess/login -> JWT scoped to employee_id (not a user account)
         |
         v
-GET /ess/me, /ess/attendance, /ess/payslips
+GET /ess/me, /ess/attendance, /ess/payslips, /ess/leave, /ess/tasks, /ess/rota
+POST /ess/leave (submit a new request)
         |
         v
-Employee-only views over Tier 1 tables (attendance_punches, payroll_items)
-        |
-        v
-Leave/OT requests are not yet submittable from ESS at all -- when they
-are, they should point at the same /api/v1/leave/requests endpoint HR
-admin already uses, not a separate path.
+Employee-only views, each independently filtered by emp.id/emp.company_id
+from the token -- never a client-supplied id:
+  - attendance_punches, payroll_items (Tier 1, own SQL columns)
+  - leave_requests (Tier 1, own employee_id column)
+  - tasks, rotaAssignments (Tier 2 AppDataRecord -- see below)
 ```
+
+Leave requests ARE submittable from ESS (2026-09-02) — `POST /ess/leave`
+mirrors `POST /leave/requests`'s validation (allowed types, no
+overlapping pending/approved request) but always targets the token's own
+employee, never a body-supplied `employee_id`, and does not require a
+Principal/RBAC permission the way `/leave/requests` does (an ESS token is
+not a Principal at all — see `ess_bearer()`). Deliberately a separate
+endpoint rather than pointing ESS at `/leave/requests` directly, since
+that endpoint's `require_principal_permission("leave:edit")` gate can
+never be satisfied by an ESS token.
+
+`/ess/tasks` and `/ess/rota` are the two Tier 2 (AppDataRecord)
+collections ESS reads — there's no SQL column to filter "this employee's
+rows" by, so the whole collection is pulled per company and filtered in
+Python (`payload.assigned_to == emp.id` / `payload.employee_id ==
+emp.id`), the same workaround the Holiday Calendar lookup in
+`attendance.py` already uses for the same class of problem. `/ess/rota`
+additionally narrows to a 7-days-back/30-days-forward window — an
+employee's full rota history could be large (see §30 in
+docs/architecture.md on the `rotaAssignments` cap) and nobody needs last
+year's shifts on their phone.
 
 ### Employee Login & RBAC (Tier 1 — built)
 
@@ -573,9 +612,11 @@ Once employee expiry fields move to real ORM columns (§6), this should become a
 POST   /api/v1/attendance/punch
 POST   /api/v1/attendance/punch/{device_key}
 POST   /api/v1/attendance/import-csv
-GET    /api/v1/attendance/today
-GET    /api/v1/attendance/trend
+GET    /api/v1/attendance/today          (optional ?date=YYYY-MM-DD, default today)
+GET    /api/v1/attendance/trend          (optional ?period=YYYY-MM, else ?days=N)
 GET    /api/v1/attendance/monthly-report
+GET    /api/v1/attendance/employee-daily (?employee_id=&period=YYYY-MM -- proper
+                                           session pairing, see §7 above)
 GET    /api/v1/attendance/punches
 DELETE /api/v1/attendance/punches/{id}
 GET    /api/v1/attendance/summary
@@ -626,6 +667,9 @@ GET    /api/v1/ess/me
 POST   /api/v1/ess/change-password
 GET    /api/v1/ess/attendance
 GET    /api/v1/ess/payslips
+GET/POST /api/v1/ess/leave    (own history / submit a new request)
+GET    /api/v1/ess/tasks      (own assigned tasks only)
+GET    /api/v1/ess/rota       (own upcoming shifts only, -7d/+30d window)
 
 POST   /api/v1/ai/hr/cv-parse
 POST   /api/v1/ai/hr/payroll-anomaly
