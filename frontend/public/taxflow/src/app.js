@@ -20027,6 +20027,27 @@ function saveRotaSwap(){
   audit('Submitted shift swap',record.id,'Pending');
 }
 
+// approval.period only ever stores the week's Monday start date
+// (weekStartValue(), a bare "YYYY-MM-DD") -- the Rota Approval table's own
+// column header calls it "Period", and the placeholder demo row it
+// replaced showed a real range ("03-09 May"), but every actual approval
+// record rendered just that one ISO date with no end date or day-name
+// context, telling an approver nothing about which week they're
+// actually being asked to approve. Weeks run Mon-Sun (see
+// _currentRotaWeekStart()'s comment) -- the end date is always start+6.
+function _formatRotaPeriodRange(periodStr){
+  const start=new Date(`${periodStr}T00:00:00`);
+  if(isNaN(start.getTime()))return periodStr||'-';
+  const end=new Date(start);
+  end.setDate(end.getDate()+6);
+  const dayFmt=d=>String(d.getDate()).padStart(2,'0');
+  const sameMonth=start.getMonth()===end.getMonth()&&start.getFullYear()===end.getFullYear();
+  const monthYear=d=>d.toLocaleDateString('en-GB',{month:'short',year:'numeric'});
+  return sameMonth
+    ?`${dayFmt(start)}–${dayFmt(end)} ${monthYear(end)}`
+    :`${dayFmt(start)} ${start.toLocaleDateString('en-GB',{month:'short'})} – ${dayFmt(end)} ${monthYear(end)}`;
+}
+
 function renderRotaApprovalRecord(approval){
   const tbody=document.getElementById('rota-approval-tbody');
   const id=String(approval?.id||'').trim();
@@ -20040,7 +20061,8 @@ function renderRotaApprovalRecord(approval){
   row.dataset.serverRecord='rotaApprovals';
   row.dataset.approval=JSON.stringify(approval);
   const status=approval.status||'Pending Supervisor Review';
-  row.innerHTML=`<td>${escapeHtml(approval.department||'All')}</td><td>${escapeHtml(approval.period||'-')}</td><td>${escapeHtml(approval.supervisor||'-')}</td><td>${rotaBadge(status)}</td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="approveRotaRow(this,'Rota approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="rejectRotaRow(this,'Rota rejected')">Reject</button></div></td>`;
+  const periodLabel=approval.period?_formatRotaPeriodRange(approval.period):'-';
+  row.innerHTML=`<td>${escapeHtml(approval.department||'All')}</td><td>${escapeHtml(periodLabel)}</td><td>${escapeHtml(approval.supervisor||'-')}</td><td>${rotaBadge(status)}</td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="approveRotaRow(this,'Rota approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="rejectRotaRow(this,'Rota rejected')">Reject</button></div></td>`;
   removeEmptyState(tbody);
   tbody.prepend(row);
   updateRotaStats();
