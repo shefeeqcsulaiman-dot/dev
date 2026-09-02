@@ -279,7 +279,19 @@ function stab(el,target){
   if(target==='inv-movement')loadStockMovements();
   if(String(target||'').startsWith('inv-'))setTimeout(()=>ensureInventoryBulkSelection(),80);
   if(target==='p-records')goToPurchaseRecordsPage(1);
-  if(target==='hr-leave')scheduleIdleTask(updateLeaveBalance,50);
+  // loadLeaveRequests() was previously only wired into the Leave
+  // Management tab's own inline onclick (hrms.html) -- every OTHER real
+  // path that lands here (the sidebar's "Leave" nav item, the Dashboard's
+  // Pending Approvals "View all" link, the notifications icon, the
+  // approvals-row quick action) all call goHrmsTab(4,'hr-leave'), which
+  // only runs stab() itself, never a tab element's own onclick chain. The
+  // Leave Requests table was therefore permanently stuck on "No database
+  // records yet" through every one of those paths, even with real
+  // pending/approved requests in the database -- only literally re-
+  // clicking the already-selected inner tab strip item ever loaded it.
+  // Centralized here, matching hr-att's existing fix below for the same
+  // bug class.
+  if(target==='hr-leave'){scheduleIdleTask(updateLeaveBalance,50);loadLeaveRequests();}
   // Previously only wired into the Attendance tab element's own inline
   // onclick (hrms.html) — any OTHER path that lands on this tab
   // programmatically (goHrmsTab(2,'hr-att'), used by the sidebar's own
@@ -16736,6 +16748,10 @@ function renderOrgChart(){
   wrap.innerHTML=`<div style="display:flex;gap:32px;justify-content:center;padding:12px 16px;flex-wrap:wrap">${roots.map(r=>nodeHtml(r,0)).join('<div style="width:1px;background:transparent"></div>')}</div>`;
 }
 
+// Guards the one-time proactive loadLeaveRequests() call inside
+// refreshHrmsKpis() below from re-firing on its own follow-up invocation
+// (and every later Dashboard-load call) — see that call site's comment.
+let _hrmsLeaveKpiSynced=false;
 function refreshHrmsKpis(){
   // "Total Employees" tile's own subtitle promises "active headcount" —
   // previously counted every row regardless of status, so a company that
@@ -16801,6 +16817,21 @@ function refreshHrmsKpis(){
   // runs on Dashboard load (see hrms.html's setTimeout calls), so this is
   // the natural place to trigger it instead of relying on that side effect.
   if(typeof loadAttendanceTrend==='function')loadAttendanceTrend();
+  // Same staleness class as the two fixes above, for the same reason: Leave
+  // moved to a real Tier 1 table and (unlike OT/Corrections, still
+  // populated by bootstrap hydration on every page load regardless of
+  // which tab a user visits) is now ONLY ever loaded by loadLeaveRequests(),
+  // which nothing on Dashboard load ever called — #leave-tbody stayed
+  // permanently empty for anyone who hadn't already visited Leave
+  // Management this session, silently pinning "On Leave" AND the Pending
+  // Approvals "Leave Requests" badge at 0 even with real pending/approved
+  // requests in the database. Fired once per page load (_hrmsLeaveKpiSynced
+  // guard) and this whole function re-run once it resolves, rather than
+  // duplicating its leave-derived KPI math here.
+  if(!_hrmsLeaveKpiSynced&&typeof loadLeaveRequests==='function'){
+    _hrmsLeaveKpiSynced=true;
+    loadLeaveRequests().then(refreshHrmsKpis).catch(()=>{});
+  }
   // Dashboard alert tiles. hrms-dash-expiry is deliberately NOT set here —
   // refreshExpiryAlerts() is the single source of truth for it (computed
   // from real employee expiry dates, not by re-parsing this tab's already-
