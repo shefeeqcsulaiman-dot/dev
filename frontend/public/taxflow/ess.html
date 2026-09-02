@@ -183,6 +183,18 @@
           <div class="dash-role" id="dash-role">—</div>
         </div>
       </div>
+
+      <!-- Today's Attendance -- the real detail behind the "Today" tile
+           below: actual check-in time + source, from the same biometric
+           punch data the Attendance tab shows. This is deliberately
+           separate from GPS Check-In (a different mechanism, its own tab)
+           -- a biometric punch isn't something ESS can "check out" of with
+           a button here, it's device-reported. -->
+      <div class="card" id="dash-today-card" style="margin-bottom:18px">
+        <div class="card-title" style="margin-bottom:10px">Today's Attendance</div>
+        <div id="dash-today-detail" style="font-size:13.5px;color:var(--text2)">—</div>
+      </div>
+
       <div class="dash-grid">
         <div class="dash-card" onclick="document.querySelector('.tab[onclick*=attendance]').click()">
           <div class="dash-card-icon" style="background:#eff6ff;color:#2563eb">🕒</div>
@@ -209,6 +221,15 @@
           <div class="dash-card-label">Last Payslip</div>
           <div class="dash-card-value" id="dash-last-payslip">—</div>
         </div>
+      </div>
+
+      <!-- My Requests -- leave is the only request type ESS has real,
+           submittable history for today; a Requests hub spanning OT/
+           attendance-correction/shift-swap needs those features to exist
+           first (they don't yet -- see the reply this shipped alongside). -->
+      <div class="dash-section-title">My Requests</div>
+      <div id="dash-requests-list">
+        <div class="loading">Loading…</div>
       </div>
     </div>
 
@@ -564,10 +585,17 @@
       var avEl = document.getElementById('dash-avatar');
       if (avEl) avEl.textContent = initial;
       var nameEl = document.getElementById('dash-name');
-      if (nameEl) nameEl.textContent = emp.full_name;
+      if (nameEl) nameEl.textContent = _essGreeting() + ', ' + (emp.full_name || '').split(' ')[0] + ' 👋';
       var roleEl = document.getElementById('dash-role');
       if (roleEl) roleEl.textContent = (emp.designation || '') + (emp.designation && emp.department ? ' · ' : '') + (emp.department || '');
     } catch(e) { console.error(e); }
+  }
+
+  function _essGreeting() {
+    var h = new Date().getHours();
+    if (h < 12) return 'Good Morning';
+    if (h < 17) return 'Good Afternoon';
+    return 'Good Evening';
   }
 
   function kv(label, value) {
@@ -763,11 +791,52 @@
 
   function updateDashboard() {
     var todayStr = new Date().toISOString().slice(0, 10);
+    var todaysPunches = _essData.attendance.filter(function(p) { return p.punch_date === todayStr; });
     var attEl = document.getElementById('dash-att-status');
     if (attEl) {
-      var todaysPunches = _essData.attendance.filter(function(p) { return p.punch_date === todayStr; });
       if (!todaysPunches.length) attEl.textContent = 'Not clocked in';
       else attEl.textContent = todaysPunches[0].direction === 'in' ? 'Checked In' : 'Checked Out';
+    }
+    var todayDetailEl = document.getElementById('dash-today-detail');
+    if (todayDetailEl) {
+      if (!todaysPunches.length) {
+        todayDetailEl.innerHTML = '<span style="color:var(--text3)">No punches recorded yet today.</span>';
+      } else {
+        // _essData.attendance is already sorted newest-first by the API.
+        var latest = todaysPunches[0];
+        var firstIn = todaysPunches.slice().reverse().filter(function(p) { return p.direction === 'in'; })[0];
+        var dot = latest.direction === 'in' ? '🟢' : '🔴';
+        var statusText = latest.direction === 'in' ? 'Checked In' : 'Checked Out';
+        var t = latest.punch_time ? latest.punch_time.substring(11, 16) : '—';
+        var firstInTime = firstIn ? firstIn.punch_time.substring(11, 16) : t;
+        todayDetailEl.innerHTML =
+          dot + ' <strong>' + statusText + '</strong> at ' + t +
+          (firstIn && firstIn !== latest ? ' <span style="color:var(--text3)">· first check-in ' + firstInTime + '</span>' : '') +
+          '<div style="font-size:11.5px;color:var(--text3);margin-top:6px">' +
+            todaysPunches.length + ' punch' + (todaysPunches.length === 1 ? '' : 'es') + ' today · via ' + (latest.source || 'device') +
+          '</div>';
+      }
+    }
+    var reqEl = document.getElementById('dash-requests-list');
+    if (reqEl) {
+      var recent = _essData.leave.slice(0, 3);
+      if (!recent.length) {
+        reqEl.innerHTML = '<div class="empty" style="padding:16px 0">No requests yet.</div>';
+      } else {
+        reqEl.innerHTML = recent.map(function(l) {
+          var st = (l.status || 'pending').toLowerCase();
+          return '<div class="leave-card" style="cursor:pointer" onclick="document.querySelector(\'.tab[onclick*=leave]\').click()">' +
+            '<div>' +
+              '<div class="leave-type">' + l.leave_type + '</div>' +
+              '<div class="leave-dates">' + l.start_date + ' → ' + l.end_date + '</div>' +
+            '</div>' +
+            '<span class="st-badge st-' + st + '">' + (l.status || 'pending') + '</span>' +
+          '</div>';
+        }).join('');
+        if (_essData.leave.length > 3) {
+          reqEl.innerHTML += '<div style="text-align:center;margin-top:4px"><a style="font-size:12.5px;color:var(--accent);cursor:pointer" onclick="document.querySelector(\'.tab[onclick*=leave]\').click()">View all →</a></div>';
+        }
+      }
     }
     var leaveEl = document.getElementById('dash-leave-status');
     if (leaveEl) {
