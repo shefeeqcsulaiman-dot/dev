@@ -4810,6 +4810,7 @@ function clearStaticDemoData(){
     'rota-shift-tbody':'No shifts in database yet.',
     'rota-swap-tbody':'No shift swap requests in database yet.',
     'rota-approval-tbody':'No rota approvals in database yet.',
+    'holidays-tbody':'No holidays configured yet — click + Add Holiday to get started.',
     'expense-tbody':'No expenses in database yet.',
     'expense-approval-tbody':'No pending expenses for approval.',
     'prod-tbody':'No products in database yet.',
@@ -20186,16 +20187,13 @@ function applyRotaRepeat(){
 function _renderHolidayRow(rec){
   const tbody=document.getElementById('holidays-tbody');
   if(!tbody)return;
-  // First real saved holiday clears the two hardcoded demo rows (Eid Al
-  // Adha / Islamic New Year) — those were never real company data, just
-  // placeholders standing in for an empty table.
-  tbody.querySelectorAll('tr[data-demo-row]').forEach(tr=>tr.remove());
   const existing=tbody.querySelector(`tr[data-holiday-id="${CSS.escape(rec.id)}"]`);
   const statusBadge=rec.status==='Planned'?'<span class="b b-a">Planned</span>':'<span class="b b-g">Active</span>';
   const paidBadge=rec.paid===false||rec.paid==='No'?'<span class="b" style="background:var(--bg3)">No</span>':'<span class="b b-g">Yes</span>';
   const html=`<td>${escapeHtml(rec.display_date||rec.date||'')}</td><td>${escapeHtml(rec.name||'')}</td><td>${escapeHtml(rec.location||'All branches')}</td><td>${paidBadge}</td><td>${statusBadge}</td><td><button class="btn btn-g btn-xs" onclick="deleteHoliday('${escapeHtml(rec.id)}')">×</button></td>`;
   if(existing){existing.innerHTML=html;}
   else{
+    removeEmptyState(tbody);
     const tr=document.createElement('tr');
     tr.dataset.holidayId=rec.id;
     tr.innerHTML=html;
@@ -20235,7 +20233,10 @@ async function loadHolidaysFromServer(){
     if(!response.ok)return;
     const data=await response.json();
     const records=Array.isArray(data.records)?data.records:[];
-    if(!records.length)return; // keep the two demo rows when no company data exists yet
+    // clearStaticDemoData() already put the real "No holidays configured
+    // yet" empty-state message in the table on page load; nothing to do
+    // here when there's genuinely no company data.
+    if(!records.length)return;
     records.forEach(_renderHolidayRow);
   }catch(e){console.warn('Failed to load holidays:',e);}
 }

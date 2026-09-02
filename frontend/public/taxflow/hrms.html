@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=fa2fc89c74" as="script">
+<link rel="preload" href="src/app.js?v=3ee6f24f15" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
@@ -1578,10 +1578,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div class="card-hd"><div class="card-title">Holiday Calendar</div><button class="btn btn-g btn-sm" onclick="addHoliday()">+ Add Holiday</button></div>
       <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Date</th><th>Holiday</th><th>Location</th><th>Paid</th><th>Status</th><th></th></tr></thead>
-        <tbody id="holidays-tbody" data-keep-static="1">
-          <tr data-demo-row><td>16 Jun</td><td>Eid Al Adha</td><td>All branches</td><td><span class="b b-g">Yes</span></td><td><span class="b b-g">Active</span></td><td></td></tr>
-          <tr data-demo-row><td>07 Jul</td><td>Islamic New Year</td><td>All branches</td><td><span class="b b-g">Yes</span></td><td><span class="b b-a">Planned</span></td><td></td></tr>
-        </tbody>
+        <tbody id="holidays-tbody"></tbody>
       </table>
     </div>
 
@@ -2888,7 +2885,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=fa2fc89c74" defer></script>
+<script src="src/app.js?v=3ee6f24f15" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
