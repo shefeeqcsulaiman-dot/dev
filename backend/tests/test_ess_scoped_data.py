@@ -110,12 +110,18 @@ def test_ess_rota_scoped_to_employee_and_date_window(client, db, auth_headers):
     in_window = (today + timedelta(days=3)).isoformat()
     out_of_window = (today + timedelta(days=90)).isoformat()
 
+    # rotaAssignments.employee_id is keyed by employee_no, NOT Employee.id --
+    # confirmed against live production data (Rota's own currentRotaStaff()/
+    # employeeFromDirectoryRow() in app.js reads the Employee Directory
+    # table's visible "ID" column, which is employee_no). A different
+    # convention from "tasks".assigned_to (real Employee.id UUID) -- see
+    # ess_rota()'s own docstring in ess.py for the full story.
     db.add(AppDataRecord(company_id=company_id, collection="rotaAssignments", record_key="RA-A-1",
-                          payload=json.dumps({"id": "RA-A-1", "employee_id": emp_a.id, "date": in_window, "code": "M", "start": "08:00", "end": "16:00"})))
+                          payload=json.dumps({"id": "RA-A-1", "employee_id": emp_a.employee_no, "date": in_window, "code": "M", "start": "08:00", "end": "16:00"})))
     db.add(AppDataRecord(company_id=company_id, collection="rotaAssignments", record_key="RA-A-2",
-                          payload=json.dumps({"id": "RA-A-2", "employee_id": emp_a.id, "date": out_of_window, "code": "M", "start": "08:00", "end": "16:00"})))
+                          payload=json.dumps({"id": "RA-A-2", "employee_id": emp_a.employee_no, "date": out_of_window, "code": "M", "start": "08:00", "end": "16:00"})))
     db.add(AppDataRecord(company_id=company_id, collection="rotaAssignments", record_key="RA-B-1",
-                          payload=json.dumps({"id": "RA-B-1", "employee_id": emp_b.id, "date": in_window, "code": "E", "start": "16:00", "end": "00:00"})))
+                          payload=json.dumps({"id": "RA-B-1", "employee_id": emp_b.employee_no, "date": in_window, "code": "E", "start": "16:00", "end": "00:00"})))
     db.commit()
 
     r = client.get("/api/v1/ess/rota", headers=headers_a)

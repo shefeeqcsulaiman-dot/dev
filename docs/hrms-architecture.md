@@ -494,13 +494,31 @@ never be satisfied by an ESS token.
 `/ess/tasks` and `/ess/rota` are the two Tier 2 (AppDataRecord)
 collections ESS reads — there's no SQL column to filter "this employee's
 rows" by, so the whole collection is pulled per company and filtered in
-Python (`payload.assigned_to == emp.id` / `payload.employee_id ==
-emp.id`), the same workaround the Holiday Calendar lookup in
-`attendance.py` already uses for the same class of problem. `/ess/rota`
-additionally narrows to a 7-days-back/30-days-forward window — an
-employee's full rota history could be large (see §30 in
-docs/architecture.md on the `rotaAssignments` cap) and nobody needs last
-year's shifts on their phone.
+Python, the same workaround the Holiday Calendar lookup in `attendance.py`
+already uses for the same class of problem. `/ess/rota` additionally
+narrows to a 7-days-back/30-days-forward window — an employee's full rota
+history could be large (see §30 in docs/architecture.md on the
+`rotaAssignments` cap) and nobody needs last year's shifts on their phone.
+
+**The two collections use different, inconsistent employee-identifier
+conventions — a real gotcha, not a design choice.** `tasks.assigned_to`
+is the real `Employee.id` UUID (`populateTaskAssigneeSelect()` in app.js
+populates the assignee `<select>` from `/payroll/employees`, whose `id`
+field is the UUID). `rotaAssignments.employee_id` is the employee's
+`employee_no` string instead (`currentRotaStaff()`/
+`employeeFromDirectoryRow()` in app.js build a rota row's `staff.id` by
+reading the Employee Directory table's visible "ID" *column*, which
+displays `employee_no`, not the UUID — confirmed against live production
+data: 100% of `rotaAssignments` rows use `employee_no`-shaped values like
+`"22"`, zero use UUIDs). `/ess/rota` matches on `emp.employee_no`
+accordingly — an earlier version (shipped 2026-09-02, fixed same day)
+matched on `emp.id` by assuming the Tasks convention applied here too,
+which silently returned an empty rota for every real employee with real
+rota data, caught only when live-tested against an employee who actually
+had assignments rather than the synthetic fixture data used at ship time.
+Any future Tier 2 collection touching an employee reference needs its own
+convention verified against real saved data before assuming either
+pattern — don't extrapolate from a sibling collection.
 
 ### Employee Login & RBAC (Tier 1 — built)
 

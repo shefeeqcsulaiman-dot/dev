@@ -362,11 +362,22 @@ def ess_tasks(request: Request, db: Session = Depends(get_db)) -> list:
 
 @router.get("/rota")
 def ess_rota(request: Request, db: Session = Depends(get_db)) -> list:
-    """Only this employee's own rota assignments (payload.employee_id ==
-    emp.id), within a recent-past-to-near-future window -- an employee's
-    full rota history could be large and nobody needs to see last year's
-    shifts on their phone. Matches the 30-day window most of the rest of
-    HRMS already defaults to for "recent" data."""
+    """Only this employee's own rota assignments, within a recent-past-to-
+    near-future window -- an employee's full rota history could be large
+    and nobody needs to see last year's shifts on their phone. Matches the
+    30-day window most of the rest of HRMS already defaults to for
+    "recent" data.
+
+    Matched by employee_no, NOT emp.id -- confirmed against live data that
+    Rota (app.js's currentRotaStaff()/employeeFromDirectoryRow()) keys
+    every rotaAssignments row's employee_id off the Employee Directory
+    table's visible "ID" column, which displays employee_no, not the
+    Employee.id UUID. This is a genuinely different convention from Task
+    Management (populateTaskAssigneeSelect() keys "tasks".assigned_to off
+    the real Employee.id UUID) -- the two Tier 2 collections are NOT
+    consistent with each other. An earlier version of this endpoint
+    (2026-09-02) assumed the Tasks convention here too and silently
+    returned empty for every real employee with real rota data."""
     emp = ess_bearer(request, db)
     assignments = _employee_app_data_records(db, emp.company_id, "rotaAssignments")
     today = date.today()
@@ -374,7 +385,7 @@ def ess_rota(request: Request, db: Session = Depends(get_db)) -> list:
     window_end = (today + timedelta(days=30)).isoformat()
     mine = [
         a for a in assignments
-        if a.get("employee_id") == emp.id and window_start <= (a.get("date") or "") <= window_end
+        if a.get("employee_id") == emp.employee_no and window_start <= (a.get("date") or "") <= window_end
     ]
     mine.sort(key=lambda a: a.get("date") or "")
     return mine
