@@ -106,8 +106,10 @@ def test_today_attendance_shows_matched_employee_name(client, auth_headers, db):
     assert employees["TODAY-NO-SUCH-EMPLOYEE"]["matched"] is False
     # check_in_time previously didn't exist at all — the "Check In" column
     # showed today's date (the same value on every row) instead of a time.
+    # Seconds included (not just HH:MM) so employees who punched within the
+    # same minute don't visually collapse into an apparently-identical time.
     import re
-    assert re.fullmatch(r"\d{2}:\d{2}", employees["TODAY-MATCHED-001"]["check_in_time"])
+    assert re.fullmatch(r"\d{2}:\d{2}:\d{2}", employees["TODAY-MATCHED-001"]["check_in_time"])
 
 
 def test_device_key_lookup_is_cached_after_first_match(client, auth_headers, monkeypatch):

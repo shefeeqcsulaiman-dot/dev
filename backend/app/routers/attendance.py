@@ -953,7 +953,15 @@ def attendance_today(
             "employee_id": emp_id,
             "employee_name": employees_by_no[emp_id].full_name if emp_id in employees_by_no else None,
             "matched": emp_id in employees_by_no,
-            "check_in_time": (first_punch_by_employee[emp_id] + offset).strftime("%H:%M"),
+            # Seconds included deliberately -- at minute precision, several
+            # employees queued at the same scanner around shift start (e.g.
+            # 09:08:03, 09:08:19, 09:08:41) all display as the identical
+            # "09:08" and read as a bug even though the underlying punches
+            # are genuinely distinct. Showing seconds is also the fastest
+            # way to tell that case apart from a real duplicate-timestamp
+            # ingestion bug, if one ever turns up (literally identical to
+            # the second, not just the same minute).
+            "check_in_time": (first_punch_by_employee[emp_id] + offset).strftime("%H:%M:%S"),
             # Real punch source ("device"/"biotime" = an actual biometric
             # scanner, "csv"/"manual"/"correction" = not). The frontend
             # previously printed a hardcoded "Biometric" badge on every row
