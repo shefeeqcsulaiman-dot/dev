@@ -117,10 +117,27 @@
     .leave-type{font-size:13.5px;font-weight:700;color:var(--text)}
     .leave-dates{font-size:12px;color:var(--text3);margin-top:2px}
     .leave-reason{font-size:12px;color:var(--text2);margin-top:6px}
-    .rota-row{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:8px}
-    .rota-date-chip{width:44px;height:44px;border-radius:10px;background:#eff6ff;color:#1d4ed8;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;font-family:'Space Grotesk',sans-serif}
-    .rota-date-chip .d{font-size:15px;font-weight:700;line-height:1}
-    .rota-date-chip .m{font-size:9px;text-transform:uppercase;font-weight:600}
+    /* Week-group headers, same look as .dash-section-title so the list reads
+       as "this week / next week / ..." instead of one undifferentiated
+       30-day column an employee has to scan date-by-date. */
+    .rota-week-label{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:18px 0 8px}
+    .rota-week-label:first-child{margin-top:0}
+    .rota-row{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:8px}
+    .rota-row.is-today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+    .rota-today-pill{display:inline-block;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 7px;border-radius:99px;background:var(--accent);color:#fff;margin-left:8px;vertical-align:middle}
+    .rota-date-chip{width:46px;height:46px;border-radius:10px;background:#eff6ff;color:#1d4ed8;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;font-family:'Space Grotesk',sans-serif}
+    .rota-date-chip .dow{font-size:9px;text-transform:uppercase;font-weight:700;opacity:.75;line-height:1}
+    .rota-date-chip .d{font-size:16px;font-weight:700;line-height:1.15}
+    /* Shift-type coloring — same pastel pairs already used for leave/task
+       status badges elsewhere in ESS, reused here so an Off day, approved
+       Leave, a Public Holiday, and a real working Shift read as visibly
+       different things instead of identical blue rows with different text. */
+    .rota-type-off .rota-date-chip{background:#f1f5f9;color:var(--text3)}
+    .rota-type-leave .rota-date-chip{background:#e0e7ff;color:#3730a3}
+    .rota-type-holiday .rota-date-chip{background:#dcfce7;color:#166534}
+    .rota-type-ot .rota-date-chip{background:#fef3c7;color:#92400e}
+    .rota-type-training .rota-date-chip{background:#ccfbf1;color:#0f766e}
+    .rota-type-off .rota-shift-title,.rota-type-off .rota-shift-sub{color:var(--text3)}
     .task-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:8px}
 
     /* ── CARDS ── */
@@ -804,6 +821,43 @@
   }
 
   // ── Rota ───────────────────────────────────────────────────────────────
+  // Type-specific styling/labels so an Off day, approved Leave, a Public
+  // Holiday, Overtime, and Training read as visibly different row kinds
+  // instead of identically-styled "Shift" rows with different text — and so
+  // non-working days (Off/Leave/Holiday) don't show a meaningless blank
+  // time range where a real shift's start–end would normally go.
+  function _rotaTypeMeta(rawType) {
+    var t = (rawType || 'shift').toLowerCase();
+    var map = {
+      shift:    {cls: '',                  fallback: 'Scheduled shift'},
+      off:      {cls: 'rota-type-off',     fallback: 'Day off — no shift'},
+      leave:    {cls: 'rota-type-leave',   fallback: 'On approved leave'},
+      holiday:  {cls: 'rota-type-holiday', fallback: 'Public holiday'},
+      ot:       {cls: 'rota-type-ot',      fallback: 'Overtime shift'},
+      overtime: {cls: 'rota-type-ot',      fallback: 'Overtime shift'},
+      training: {cls: 'rota-type-training',fallback: 'Training session'},
+    };
+    return map[t] || {cls: '', fallback: 'Scheduled'};
+  }
+  function _mondayOf(d) {
+    var day = d.getDay();
+    var m = new Date(d);
+    m.setDate(d.getDate() + (day === 0 ? -6 : 1) - day);
+    m.setHours(0, 0, 0, 0);
+    return m;
+  }
+  // Groups the flat 30-day list under "This Week" / "Next Week" / a dated
+  // range for weeks further out — a single unbroken 30-row column made it
+  // hard to tell at a glance which shifts were coming up soon vs. weeks away.
+  function _rotaWeekLabel(shiftDate, thisMonday) {
+    var mon = _mondayOf(shiftDate);
+    var diffWeeks = Math.round((mon - thisMonday) / (7 * 86400000));
+    if (diffWeeks <= 0) return 'This Week';
+    if (diffWeeks === 1) return 'Next Week';
+    var end = new Date(mon); end.setDate(mon.getDate() + 6);
+    var fmt = function(d) { return d.toLocaleDateString('en-US', {month: 'short', day: 'numeric'}); };
+    return fmt(mon) + ' – ' + fmt(end);
+  }
   async function loadRota() {
     try {
       var r = await fetch(apiBase() + '/ess/rota', {headers: essHeaders()});
@@ -814,20 +868,37 @@
       el.classList.remove('loading');
       if (!rows.length) { el.innerHTML = '<div class="empty">No shifts scheduled in the next 30 days.</div>'; }
       else {
-        el.innerHTML = rows.map(function(a) {
+        var today = new Date(); today.setHours(0, 0, 0, 0);
+        var tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+        var thisMonday = _mondayOf(today);
+        var lastWeekLabel = null;
+        var html = '';
+        rows.forEach(function(a) {
           var d = new Date((a.date || '') + 'T00:00:00');
           var valid = !isNaN(d.getTime());
+          var weekLabel = valid ? _rotaWeekLabel(d, thisMonday) : 'Upcoming';
+          if (weekLabel !== lastWeekLabel) {
+            html += '<div class="rota-week-label">' + weekLabel + '</div>';
+            lastWeekLabel = weekLabel;
+          }
+          var dowShort = valid ? d.toLocaleDateString('en-US', {weekday: 'short'}) : '';
           var dayNum = valid ? d.getDate() : '—';
-          var monthShort = valid ? d.toLocaleDateString('en-US', {month: 'short'}) : '';
+          var isToday = valid && d.getTime() === today.getTime();
+          var isTomorrow = valid && d.getTime() === tomorrow.getTime();
+          var meta = _rotaTypeMeta(a.type || a.code);
           var timeRange = (a.start || '') + (a.end ? (' – ' + a.end) : '');
-          return '<div class="rota-row">' +
-            '<div class="rota-date-chip"><div class="d">' + dayNum + '</div><div class="m">' + monthShort + '</div></div>' +
-            '<div style="flex:1">' +
-              '<div style="font-weight:600;font-size:13.5px;color:var(--text)">' + (a.type || a.code || 'Shift') + '</div>' +
-              '<div style="font-size:12px;color:var(--text3)">' + timeRange + (a.location ? (' · ' + a.location) : '') + '</div>' +
+          var subText = timeRange || meta.fallback;
+          var titleText = (a.type || a.code || 'Shift') +
+            (isToday ? '<span class="rota-today-pill">Today</span>' : (isTomorrow ? '<span class="rota-today-pill">Tomorrow</span>' : ''));
+          html += '<div class="rota-row ' + meta.cls + (isToday ? ' is-today' : '') + '">' +
+            '<div class="rota-date-chip"><div class="dow">' + dowShort + '</div><div class="d">' + dayNum + '</div></div>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div class="rota-shift-title" style="font-weight:600;font-size:13.5px;color:var(--text)">' + titleText + '</div>' +
+              '<div class="rota-shift-sub" style="font-size:12px;color:var(--text3)">' + subText + (a.location ? (' · ' + a.location) : '') + '</div>' +
             '</div>' +
           '</div>';
-        }).join('');
+        });
+        el.innerHTML = html;
       }
       updateDashboard();
     } catch(e) { var roEl = document.getElementById('rota-content'); roEl.classList.remove('loading'); roEl.innerHTML = '<div class="empty">Failed to load.</div>'; }

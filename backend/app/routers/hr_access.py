@@ -13,6 +13,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from jose import jwt
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -644,9 +645,18 @@ def admin_list_employee_portal_access(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("hr_settings:view", "employees:view")),
 ) -> list[AdminEmployeePortalOut]:
+    # Inactive employees with no portal access don't belong in a "grant
+    # access" list (same "don't offer inactive staff in add/select surfaces"
+    # rule already applied to the employee pickers elsewhere) -- but an
+    # inactive employee who was ALREADY granted a login must stay visible
+    # here, or there'd be no way left in the UI to revoke it, leaving a
+    # terminated employee's ESS credentials silently active forever.
     employees = (
         db.query(Employee)
-        .filter(Employee.company_id == principal.company_id)
+        .filter(
+            Employee.company_id == principal.company_id,
+            or_(Employee.status == "active", Employee.username.isnot(None)),
+        )
         .order_by(Employee.employee_no)
         .all()
     )

@@ -21546,6 +21546,21 @@ async function deleteBiometricDevice(id,btn){
 
 // ── Attendance: Today's data from API ─────────────────────────────────────────
 
+// Maps AttendancePunch.source (backend truth: "device"/"biotime" = a real
+// scanner tap, "csv"/"manual"/"correction" = not) to the Today's Attendance
+// badge. Previously every row said "Biometric" unconditionally.
+function _attendanceSourceBadge(source){
+  const map={
+    device:['Biometric','b-g'],
+    biotime:['Biometric','b-g'],
+    csv:['CSV Import','b-b'],
+    correction:['Correction','b-a'],
+    manual:['Manual','b-b'],
+  };
+  const [label,cls]=map[source]||['Manual','b-b'];
+  return `<span class="b ${cls}">${label}</span>`;
+}
+
 async function refreshAttendanceToday(){
   const tbody=document.getElementById('att-today-tbody');
   // Previously always "today" with no way to look at any other day —
@@ -21601,7 +21616,10 @@ async function refreshAttendanceToday(){
       // company-local time (HH:MM) — this column previously just repeated
       // today's date (the same value on every row) since the backend never
       // computed a per-employee punch time at all.
-      tr.innerHTML=`<td>${label}</td><td class="mono">${escapeHtml(emp.check_in_time||'—')}</td><td><span class="b b-g">Biometric</span></td><td><span class="b b-g">Present</span></td>`;
+      // Source badge previously hardcoded "Biometric" on every row no matter
+      // how the punch actually got in (CSV import, manual entry, a
+      // correction) — misrepresenting non-device data as a real scanner tap.
+      tr.innerHTML=`<td>${label}</td><td class="mono">${escapeHtml(emp.check_in_time||'—')}</td><td>${_attendanceSourceBadge(emp.source)}</td><td><span class="b b-g">Present</span></td>`;
       tbody.appendChild(tr);
     });
   }catch(e){

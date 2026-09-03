@@ -931,8 +931,11 @@ def attendance_today(
     # a per-employee punch time at all. Rows are ordered ascending above so
     # the first occurrence for each employee_id is their earliest punch.
     first_punch_by_employee: dict[str, datetime] = {}
+    first_source_by_employee: dict[str, str] = {}
     for r in rows:
-        first_punch_by_employee.setdefault(r.employee_id, r.punch_time)
+        if r.employee_id not in first_punch_by_employee:
+            first_punch_by_employee[r.employee_id] = r.punch_time
+            first_source_by_employee[r.employee_id] = r.source or "manual"
     unique_employees = sorted(first_punch_by_employee.keys())
     # A punch's employee_id is matched against Employee.employee_no by plain
     # string equality (same rule the Sync Activity Log's "Unmatched" badge
@@ -951,6 +954,12 @@ def attendance_today(
             "employee_name": employees_by_no[emp_id].full_name if emp_id in employees_by_no else None,
             "matched": emp_id in employees_by_no,
             "check_in_time": (first_punch_by_employee[emp_id] + offset).strftime("%H:%M"),
+            # Real punch source ("device"/"biotime" = an actual biometric
+            # scanner, "csv"/"manual"/"correction" = not). The frontend
+            # previously printed a hardcoded "Biometric" badge on every row
+            # regardless of this value, which misrepresented CSV-imported
+            # or manually-entered punches as device taps.
+            "source": first_source_by_employee[emp_id],
         }
         for emp_id in unique_employees
     ]
