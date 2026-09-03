@@ -907,6 +907,14 @@ function _employeeIdSortValue(id){
   return m?parseInt(m[0],10):Infinity;
 }
 
+// [statusRank, idValue] — Inactive employees always sort after every Active
+// one (statusRank 1 vs 0), by request, rather than being interleaved with
+// Active staff purely by Employee No. Within each status group, still
+// numeric-aware ascending by id.
+function _employeeSortKey(status,id){
+  return [String(status||'Active').trim()==='Inactive'?1:0,_employeeIdSortValue(id)];
+}
+
 function renderEmployeeRecord(employee){
   const tbody=document.getElementById('employee-tbody');
   if(!tbody)return;
@@ -933,11 +941,17 @@ function renderEmployeeRecord(employee){
   // Employee Directory is kept sorted by Employee No. ascending (numeric-
   // aware) rather than newest-added-first — tbody.prepend() previously put
   // whichever employee was most recently created/edited at the very top
-  // regardless of their actual number.
-  const newVal=_employeeIdSortValue(employee.id);
+  // regardless of their actual number. Inactive employees are additionally
+  // sunk below every Active one (see _employeeSortKey) rather than being
+  // interleaved by number with active staff — toggling an employee to
+  // Inactive re-inserts their row here too, so Deactivate immediately moves
+  // them down instead of leaving them in their old numeric position.
+  const newKey=_employeeSortKey(employee.status,employee.id);
   const nextSibling=rows.filter(r=>r!==existing).find(r=>{
-    const rid=r.dataset.employee?JSON.parse(r.dataset.employee).id:r.querySelector('td:first-child')?.textContent.trim();
-    return _employeeIdSortValue(rid)>newVal;
+    const rdata=r.dataset.employee?JSON.parse(r.dataset.employee):null;
+    const rid=rdata?.id??r.querySelector('td:first-child')?.textContent.trim();
+    const rkey=_employeeSortKey(rdata?.status,rid);
+    return rkey[0]>newKey[0]||(rkey[0]===newKey[0]&&rkey[1]>newKey[1]);
   });
   if(nextSibling)tbody.insertBefore(row,nextSibling);
   else tbody.appendChild(row);
