@@ -21649,7 +21649,20 @@ async function loadAttendanceTrend(){
       return;
     }
     const chart=_renderAttendanceBarChart(dates,counts,{width:400,height:80,showLabels:true,showAvgLine:true});
-    container.innerHTML=chart.svg;
+    // Legend — the muted/tracked color split, the weekend shading, and the
+    // avg line previously had no key explaining what any of them meant.
+    // "Before tracking began" only applies (and is only shown) when the
+    // chart actually contains a muted stretch.
+    const legendItems=[
+      ['var(--accent)','Present'],
+      ...(chart.firstActiveIdx>0?[['var(--text3)','Before tracking began',0.4]]:[]),
+    ];
+    const swatches=legendItems.map(([color,label,op])=>
+      `<span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:${color};opacity:${op??1};display:inline-block"></span>${label}</span>`
+    ).join('');
+    const avgKey=chart.avg>0?`<span style="display:flex;align-items:center;gap:5px"><span style="width:12px;border-top:1.5px dashed var(--amber);display:inline-block"></span>Average</span>`:'';
+    const legend=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;padding:0 4px;font-size:10.5px;color:var(--text3)">${swatches}${avgKey}<span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:var(--text3);opacity:.14;display:inline-block"></span>Weekend</span></div>`;
+    container.innerHTML=chart.svg+legend;
     if(sub)sub.textContent=chart.subText;
     // Also update dashboard Attendance Trend card
     _updateDashboardAttTrend(dates,counts);
@@ -21669,6 +21682,17 @@ async function loadAttendanceTrend(){
 // (pre-tracking days are drawn in muted gray, not the same blue as real
 // data, so they still read as "before tracking" at a glance); the average
 // now only counts from the first day any company-wide punch exists.
+//
+// Redesign (2026-09-03): colors moved from hardcoded hex to theme tokens
+// (via style="" rather than the fill="" attribute — SVG presentation
+// attributes don't reliably resolve var() the way an inline style does)
+// so the chart doesn't stay light-only once HRMS is viewed in dark mode;
+// weekend columns get a faint background band since UAE Fri/Sat naturally
+// read as near-zero and previously looked identical to a real attendance
+// gap; today's bar gets an accent outline + "Today" label the same way
+// the ESS "My Upcoming Shifts" redesign highlights the current day; and a
+// small legend was added since the muted/tracked color split and the avg
+// line previously had no key explaining what they meant.
 function _renderAttendanceBarChart(dates,counts,{width:W,height:H,showLabels=false,showAvgLine=false,fullSize=false}={}){
   const PAD=4;
   const n=dates.length;
@@ -21677,33 +21701,53 @@ function _renderAttendanceBarChart(dates,counts,{width:W,height:H,showLabels=fal
   const trackedCounts=firstActiveIdx>=0?counts.slice(firstActiveIdx):counts;
   const avg=trackedCounts.length?Math.round(trackedCounts.reduce((a,b)=>a+b,0)/trackedCounts.length):0;
   const slotW=(W-PAD*2)/n;
-  const barW=Math.max(1,slotW*0.62);
+  const barW=Math.max(1,slotW*0.64);
+  const todayIso=new Date().toISOString().slice(0,10);
+  const gradId='attTrendGrad'+Math.random().toString(36).slice(2,8);
+  const weekendBands=dates.map((iso,i)=>{
+    const dow=new Date(iso+'T00:00:00').getDay();
+    if(dow!==5&&dow!==6)return ''; // UAE weekend: Friday/Saturday
+    const x=(PAD+i*slotW).toFixed(1);
+    return `<rect x="${x}" y="0" width="${slotW.toFixed(1)}" height="${H}" style="fill:var(--text3)" fill-opacity="0.06"/>`;
+  }).join('');
   const bars=counts.map((c,i)=>{
     const barH=c>0?Math.max(2,(c/max)*(H-PAD*2)):0;
     const x=PAD+i*slotW+(slotW-barW)/2;
     const y=H-PAD-barH;
     const tracked=firstActiveIdx<0||i>=firstActiveIdx;
-    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" rx="1.5" fill="${tracked?'#3b82f6':'#d1d5db'}"><title>${dates[i]}: ${c} present</title></rect>`;
+    const isToday=dates[i]===todayIso;
+    const fillStyle=tracked?`fill:url(#${gradId})`:'fill:var(--text3);fill-opacity:0.3';
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(barH,1).toFixed(1)}" rx="2" style="${fillStyle}"${isToday?` stroke="var(--accent)" stroke-width="1.5"`:''}><title>${dates[i]}: ${c} present${isToday?' (today)':''}</title></rect>`;
   }).join('');
   let avgLine='';
   if(showAvgLine&&firstActiveIdx>=0&&avg>0){
     const avgY=(H-PAD-(avg/max)*(H-PAD*2)).toFixed(1);
     const x1=(PAD+firstActiveIdx*slotW).toFixed(1);
-    avgLine=`<line x1="${x1}" y1="${avgY}" x2="${(W-PAD).toFixed(1)}" y2="${avgY}" stroke="#f59e0b" stroke-width="1" stroke-dasharray="3,3"/>`;
+    avgLine=`<line x1="${x1}" y1="${avgY}" x2="${(W-PAD).toFixed(1)}" y2="${avgY}" style="stroke:var(--amber)" stroke-width="1" stroke-dasharray="3,3"/>`+
+      `<text x="${(W-PAD).toFixed(1)}" y="${(Number(avgY)-3).toFixed(1)}" text-anchor="end" font-size="8.5" font-weight="700" style="fill:var(--amber)">avg ${avg}</text>`;
+  }
+  let todayMarker='';
+  if(showLabels){
+    const todayIdx=dates.indexOf(todayIso);
+    if(todayIdx>=0){
+      const x=(PAD+todayIdx*slotW+slotW/2).toFixed(1);
+      todayMarker=`<text x="${x}" y="${H+14}" text-anchor="middle" font-size="8.5" font-weight="700" style="fill:var(--accent)">Today</text>`;
+    }
   }
   let labels='';
   if(showLabels){
     labels=[0,Math.floor((n-1)/2),n-1].map(i=>{
-      if(!dates[i])return '';
+      if(!dates[i]||dates[i]===todayIso)return ''; // "Today" marker above already covers this slot
       const x=(PAD+i*slotW+slotW/2).toFixed(1);
-      return `<text x="${x}" y="${H+14}" text-anchor="middle" font-size="9" fill="#9ca3af">${dates[i].slice(5)}</text>`;
+      return `<text x="${x}" y="${H+14}" text-anchor="middle" font-size="9" style="fill:var(--text3)">${dates[i].slice(5)}</text>`;
     }).join('');
   }
   const labelSpace=showLabels?18:0;
   const svgAttrs=fullSize
     ?`viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:100%"`
     :`viewBox="0 0 ${W} ${H+labelSpace}" width="100%" style="overflow:visible"`;
-  const svg=`<svg ${svgAttrs}>${bars}${avgLine}${labels}</svg>`;
+  const defs=`<defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" style="stop-color:var(--accent2,var(--accent))"/><stop offset="100%" style="stop-color:var(--accent)"/></linearGradient></defs>`;
+  const svg=`<svg ${svgAttrs}>${defs}${weekendBands}${bars}${avgLine}${labels}${todayMarker}</svg>`;
   const subText=firstActiveIdx>0
     ?`Avg ${avg} employees/day since tracking began (${_fmtTrendDate(dates[firstActiveIdx])}) — earlier days had no device data`
     :`Avg ${avg} employees/day over last ${n} days`;
