@@ -171,6 +171,17 @@ def _run_pyzk() -> None:
             conn = zk.connect()
             conn.disable_device()
             log.info("Connected to device at %s:%s", ZK_DEVICE_IP, ZK_DEVICE_PORT)
+            # Printed every cycle (not just at startup) so it's visible in
+            # whatever window/log the operator is actually looking at when
+            # diagnosing a wrong clock-in time -- this offset assumption is
+            # the single most common source of a systematically-wrong
+            # (not random) check-in time: if the device's own clock isn't
+            # ACTUALLY set to this offset from UTC, every punch converts
+            # wrong by a fixed number of hours.
+            log.info("Device-to-UTC offset assumed: +%.1fh (DEVICE_UTC_OFFSET_HOURS) -- "
+                     "if check-in times are off by a fixed number of hours, this is almost "
+                     "always the culprit: verify the device's own clock/timezone setting "
+                     "matches this value, not the server's.", DEVICE_UTC_OFFSET_HOURS)
 
             users = {u.user_id: u.name for u in conn.get_users()}
             log.info("Loaded %d users from device", len(users))
@@ -178,6 +189,7 @@ def _run_pyzk() -> None:
             attendances = conn.get_attendance()
             new_punches = 0
             for att in attendances:
+                raw_device_time = att.timestamp  # device's own local wall-clock reading, unconverted
                 punch_time = att.timestamp
                 if isinstance(punch_time, datetime) and punch_time.tzinfo is None:
                     # Device clock is local time, not UTC — convert before mislabeling
@@ -191,6 +203,17 @@ def _run_pyzk() -> None:
                 direction = "out" if getattr(att, "punch", 0) == 1 else "in"
                 emp_name = users.get(att.user_id, "")
                 ok = _post_punch(att.user_id, emp_name, punch_time, direction)
+                # Logged for every punch actually sent (not just a summary
+                # count) so "which data is getting sent" is directly visible
+                # in the console -- compare raw_device_time against what your
+                # own eyes/watch saw at the scanner to confirm the offset
+                # above is correct for this device.
+                log.info(
+                    "Punch %s: user=%s (%s) direction=%s device_clock=%s -> sent_utc=%s",
+                    "OK" if ok else "FAILED",
+                    att.user_id, emp_name or "unknown name", direction,
+                    raw_device_time, punch_time.isoformat(),
+                )
                 if ok:
                     new_punches += 1
                     if _last_punch_time is None or punch_time > _last_punch_time:
