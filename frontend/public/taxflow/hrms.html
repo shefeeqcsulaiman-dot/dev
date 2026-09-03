@@ -52,31 +52,41 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 .content{background:#f2f4f8!important;padding:0!important;}
 /* ── HRMS-specific styles ────────────────────────────────── */
 .hrms-topbar{display:flex;align-items:center;gap:12px;padding:0 20px;height:62px;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:10;flex-shrink:0;}
-.hrms-search{flex:1;max-width:380px;display:flex;align-items:center;gap:8px;background:#f4f7fb;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px;}
-.hrms-search input{border:none;background:none;outline:none;font-size:13px;color:#6b7280;width:100%;}
-.hrms-search svg{flex-shrink:0;opacity:.38;color:#374151;}
+/* Theme-token conversion (2026-09-03): this block previously hardcoded
+   light-only hex colors (#fff cards, #111827 text, #e2e8f0 borders, etc.)
+   with no dark-mode counterpart, even though the app's own nightMode
+   toggle (app.js, toggles body.theme-light) already re-themes every other
+   page via the shared src/styles.css tokens. Structural chrome below now
+   reads from those tokens so the dashboard actually re-themes instead of
+   staying stuck as white cards on a dark page. Semantic icon-tint colors
+   scattered through the dashboard markup (KPI/approval/alert icon
+   backgrounds) are left as-is -- small saturated accent badges, not page
+   chrome, and reads fine on either background. */
+.hrms-search{flex:1;max-width:380px;display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 14px;}
+.hrms-search input{border:none;background:none;outline:none;font-size:13px;color:var(--text3);width:100%;}
+.hrms-search svg{flex-shrink:0;opacity:.38;color:var(--text2);}
 .tb-right-hrms{display:flex;align-items:center;gap:6px;margin-left:auto;}
-.hm-icon-btn{position:relative;width:38px;height:38px;border-radius:50%;background:#f4f7fb;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#374151;transition:background .15s;flex-shrink:0;}
-.hm-icon-btn:hover{background:#e8edf5;}
-.hm-badge{position:absolute;top:0px;right:0px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;border-radius:99px;min-width:16px;height:16px;display:flex;align-items:center;justify-content:center;padding:0 3px;line-height:1;border:1.5px solid #fff;}
-.hm-user{display:flex;align-items:center;gap:8px;padding:6px 12px;background:#f4f7fb;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;margin-left:4px;}
+.hm-icon-btn{position:relative;width:38px;height:38px;border-radius:50%;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:background .15s;flex-shrink:0;}
+.hm-icon-btn:hover{background:var(--surface2);}
+.hm-badge{position:absolute;top:0px;right:0px;background:var(--red);color:#fff;font-size:9px;font-weight:700;border-radius:99px;min-width:16px;height:16px;display:flex;align-items:center;justify-content:center;padding:0 3px;line-height:1;border:1.5px solid var(--bg2);}
+.hm-user{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;cursor:pointer;margin-left:4px;}
 .hm-avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#4f8ef7,#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;flex-shrink:0;}
-.hm-user-name{font-size:12.5px;font-weight:600;color:#111827;white-space:nowrap;}
-.hm-user-role{font-size:10px;color:#9ca3af;}
-.hm-date{display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280;background:#f4f7fb;border:1px solid #e2e8f0;border-radius:7px;padding:6px 11px;white-space:nowrap;margin-left:4px;}
+.hm-user-name{font-size:12.5px;font-weight:600;color:var(--text);white-space:nowrap;}
+.hm-user-role{font-size:10px;color:var(--text3);}
+.hm-date{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:6px 11px;white-space:nowrap;margin-left:4px;}
 /* ── KPI Cards ───────────────────────────────────────────── */
 .hrms-kpi-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:18px;}
 @media(max-width:1280px){.hrms-kpi-grid{grid-template-columns:repeat(3,1fr);}}
-.hrms-kpi-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;display:flex;align-items:flex-start;gap:12px;transition:box-shadow .15s,transform .15s;}
+.hrms-kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;align-items:flex-start;gap:12px;transition:box-shadow .15s,transform .15s;}
 .hrms-kpi-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.09);transform:translateY(-1px);}
 .hrms-kpi-icon{width:48px;height:48px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.hrms-kpi-val{font-size:21px;font-weight:700;color:#111827;line-height:1.1;margin:2px 0 1px;}
-.hrms-kpi-lbl{font-size:11px;color:#6b7280;font-weight:500;margin-bottom:2px;}
+.hrms-kpi-val{font-size:21px;font-weight:700;color:var(--text);line-height:1.1;margin:2px 0 1px;}
+.hrms-kpi-lbl{font-size:11px;color:var(--text3);font-weight:500;margin-bottom:2px;}
 .hrms-kpi-trend{font-size:10.5px;display:flex;align-items:center;gap:3px;}
-.hrms-kpi-trend.up{color:#10b981;}
-.hrms-kpi-trend.dn{color:#ef4444;}
-.hrms-kpi-trend.nt{color:#6b7280;}
-.hrms-kpi-action{font-size:10.5px;color:#3b82f6;cursor:pointer;margin-top:2px;display:block;}
+.hrms-kpi-trend.up{color:var(--green);}
+.hrms-kpi-trend.dn{color:var(--red);}
+.hrms-kpi-trend.nt{color:var(--text3);}
+.hrms-kpi-action{font-size:10.5px;color:var(--accent);cursor:pointer;margin-top:2px;display:block;}
 /* ── Section layout ──────────────────────────────────────── */
 .hrms-dash-inner{padding:18px 20px;overflow-y:auto;height:calc(100vh - 62px);}
 .hrms-chart-grid{display:grid;grid-template-columns:2fr 1.1fr 1.1fr;gap:16px;margin-bottom:16px;}
@@ -85,77 +95,89 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 .hrms-ai-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px;}
 @media(max-width:1280px){.hrms-chart-grid{grid-template-columns:1fr 1fr;}.hrms-mid-grid,.hrms-bot-grid{grid-template-columns:1fr 1fr;}.hrms-ai-grid{grid-template-columns:repeat(3,1fr);}}
 /* ── Card base ───────────────────────────────────────────── */
-.hc{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px;}
+.hc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;}
 .hc-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
-.hc-title{font-size:13.5px;font-weight:700;color:#111827;}
-.hc-sub{font-size:11px;color:#9ca3af;}
-.hc-select{background:#f4f7fb;border:1px solid #e2e8f0;border-radius:6px;padding:3px 8px;font-size:11px;color:#374151;cursor:pointer;}
+.hc-title{font-size:13.5px;font-weight:700;color:var(--text);}
+.hc-sub{font-size:11px;color:var(--text3);}
+.hc-select{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:3px 8px;font-size:11px;color:var(--text2);cursor:pointer;}
 /* ── Donut Charts (SVG) ──────────────────────────────────── */
 .hc-donut-wrap{display:flex;align-items:center;gap:16px;}
 .hc-donut{position:relative;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
 .hc-donut-center{position:absolute;text-align:center;}
-.hc-donut-val{font-size:16px;font-weight:700;color:#111827;line-height:1;}
-.hc-donut-lbl{font-size:9.5px;color:#9ca3af;margin-top:2px;}
+.hc-donut-val{font-size:16px;font-weight:700;color:var(--text);line-height:1;}
+.hc-donut-lbl{font-size:9.5px;color:var(--text3);margin-top:2px;}
 /* ── Legend ──────────────────────────────────────────────── */
 .hc-legend{display:flex;flex-direction:column;gap:5px;}
 .hc-legend-row{display:flex;align-items:center;gap:6px;}
 .hc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-.hc-leg-name{font-size:11.5px;color:#374151;flex:1;white-space:nowrap;}
-.hc-leg-val{font-size:11px;font-weight:600;color:#111827;min-width:28px;text-align:right;}
-.hc-leg-pct{font-size:10px;color:#9ca3af;min-width:38px;text-align:right;}
+.hc-leg-name{font-size:11.5px;color:var(--text2);flex:1;white-space:nowrap;}
+.hc-leg-val{font-size:11px;font-weight:600;color:var(--text);min-width:28px;text-align:right;}
+.hc-leg-pct{font-size:10px;color:var(--text3);min-width:38px;text-align:right;}
 /* ── Progress Bars ───────────────────────────────────────── */
 .hc-progress-list{display:flex;flex-direction:column;gap:10px;}
 .hc-progress-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
-.hc-prog-lbl{font-size:12px;color:#374151;font-weight:500;display:flex;align-items:center;gap:7px;}
+.hc-prog-lbl{font-size:12px;color:var(--text2);font-weight:500;display:flex;align-items:center;gap:7px;}
 .hc-prog-icon{width:24px;height:24px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.hc-prog-val{font-size:11px;color:#6b7280;}
-.hc-prog-bar{height:6px;background:#f0f2f7;border-radius:99px;overflow:hidden;margin-top:4px;}
+.hc-prog-val{font-size:11px;color:var(--text3);}
+.hc-prog-bar{height:6px;background:var(--bg3);border-radius:99px;overflow:hidden;margin-top:4px;}
 .hc-prog-fill{height:100%;border-radius:99px;}
 /* ── Funnel ──────────────────────────────────────────────── */
 .hc-funnel{display:flex;flex-direction:column;gap:5px;padding:4px 0;}
 .hc-funnel-row{display:flex;align-items:center;gap:8px;}
-.hc-funnel-lbl{font-size:11px;color:#6b7280;width:78px;flex-shrink:0;}
+.hc-funnel-lbl{font-size:11px;color:var(--text3);width:78px;flex-shrink:0;}
 .hc-funnel-bar-wrap{flex:1;height:22px;display:flex;align-items:center;}
 .hc-funnel-bar{height:100%;border-radius:3px;min-width:6px;}
-.hc-funnel-cnt{font-size:12px;font-weight:600;color:#111827;width:32px;text-align:right;flex-shrink:0;}
+.hc-funnel-cnt{font-size:12px;font-weight:600;color:var(--text);width:32px;text-align:right;flex-shrink:0;}
 /* ── Approval list ───────────────────────────────────────── */
 .hc-approvals{display:flex;flex-direction:column;gap:6px;}
-.hc-appr-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;}
+.hc-appr-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);}
 .hc-appr-row:last-child{border-bottom:none;}
 .hc-appr-icon{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.hc-appr-name{font-size:12.5px;color:#374151;font-weight:500;flex:1;}
+.hc-appr-name{font-size:12.5px;color:var(--text2);font-weight:500;flex:1;}
 .hc-appr-badge{font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;white-space:nowrap;}
 /* ── Compliance alerts ───────────────────────────────────── */
-.hc-alert-title{font-size:12.5px;font-weight:700;color:#b91c1c;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.hc-alert-title{font-size:12.5px;font-weight:700;color:var(--red);margin-bottom:10px;display:flex;align-items:center;gap:6px;}
 .hc-alert-list{display:flex;flex-direction:column;gap:5px;}
-.hc-alert-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:7px;background:#fef9f9;}
-.hc-alert-dot{width:7px;height:7px;border-radius:50%;background:#ef4444;flex-shrink:0;}
-.hc-alert-name{font-size:12px;color:#374151;flex:1;}
-.hc-alert-cnt{font-size:12px;font-weight:700;color:#ef4444;}
+.hc-alert-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:7px;background:var(--red-bg);}
+.hc-alert-dot{width:7px;height:7px;border-radius:50%;background:var(--red);flex-shrink:0;}
+.hc-alert-name{font-size:12px;color:var(--text2);flex:1;}
+.hc-alert-cnt{font-size:12px;font-weight:700;color:var(--red);}
 /* ── Bar chart ───────────────────────────────────────────── */
 .hc-bar-chart{display:flex;align-items:flex-end;justify-content:space-between;height:90px;gap:6px;padding-bottom:16px;position:relative;}
-.hc-bar-chart::after{content:'';position:absolute;bottom:16px;left:0;right:0;height:1px;background:#f0f2f7;}
+.hc-bar-chart::after{content:'';position:absolute;bottom:16px;left:0;right:0;height:1px;background:var(--border);}
 .hc-bar-col{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;}
 .hc-bar{width:100%;border-radius:4px 4px 0 0;min-height:4px;transition:height .4s;}
-.hc-bar-val{font-size:9.5px;font-weight:700;color:#374151;}
-.hc-bar-lbl{font-size:9px;color:#9ca3af;white-space:nowrap;}
+.hc-bar-val{font-size:9.5px;font-weight:700;color:var(--text2);}
+.hc-bar-lbl{font-size:9px;color:var(--text3);white-space:nowrap;}
 /* ── AI Insight cards ────────────────────────────────────── */
-.hc-ai{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px;}
+.hc-ai{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;}
 .hc-ai-hd{display:flex;align-items:flex-start;gap:8px;margin-bottom:9px;}
 .hc-ai-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.hc-ai-title{font-size:11.5px;font-weight:700;color:#111827;line-height:1.3;}
-.hc-ai-sub{font-size:10px;color:#9ca3af;margin-top:1px;}
+.hc-ai-title{font-size:11.5px;font-weight:700;color:var(--text);line-height:1.3;}
+.hc-ai-sub{font-size:10px;color:var(--text3);margin-top:1px;}
 .hc-ai-body{display:flex;flex-direction:column;gap:4px;}
 .hc-ai-row{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;}
-.hc-ai-name{color:#374151;}
+.hc-ai-name{color:var(--text2);}
 .hc-ai-pct{font-weight:700;}
-.hc-ai-link{font-size:10.5px;color:#3b82f6;margin-top:8px;cursor:pointer;display:block;}
+.hc-ai-link{font-size:10.5px;color:var(--accent);margin-top:8px;cursor:pointer;display:block;}
 /* ── Sidebar user footer ─────────────────────────────────── */
 .hrms-sb-user{display:flex;align-items:center;gap:9px;padding:12px 16px 10px;}
 .hrms-sb-av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#4f8ef7,#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0;}
 .hrms-sb-name{font-size:12px;font-weight:600;color:rgba(255,255,255,.82);}
 .hrms-sb-co{font-size:10px;color:rgba(255,255,255,.35);}
-.hrms-section-lbl{font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;margin-top:4px;}
+.hrms-section-lbl{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;margin-top:4px;}
+/* ── Sidebar "more" disclosure (Assets & Training) ─────────────── */
+.hc-more-toggle{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;font-size:13.5px;font-weight:700;color:var(--text);}
+.hc-more-toggle::-webkit-details-marker{display:none;}
+.hc-more-toggle .hc-more-chevron{transition:transform .15s;color:var(--text3);flex-shrink:0;}
+details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
+.hc-more-body{display:flex;flex-direction:column;gap:16px;margin-top:16px;}
+.hc-more-divider{border-top:1px solid var(--border);padding-top:16px;}
+/* ── Dashboard mobile: KPI row scrolls instead of stacking 6-high ── */
+@media(max-width:760px){
+  .hrms-kpi-row{display:flex!important;overflow-x:auto;gap:12px!important;padding-bottom:4px;-webkit-overflow-scrolling:touch;}
+  .hrms-kpi-row>.hrms-kpi-card{flex:0 0 210px;}
+}
 </style>
 </head>
 <body class="theme-light">
@@ -313,7 +335,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 <div class="mb3-main">
 
 <!-- ── KPI Row (3 × 2) ───────────────────────────────────────────── -->
-<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px">
+<div class="hrms-kpi-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px">
   <!-- 1. Total Employees -->
   <div class="hrms-kpi-card">
     <div class="hrms-kpi-icon" style="background:#eff6ff">
@@ -427,7 +449,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
            nothing could ever find it to replace it. -->
       <div class="hrms-line-chart-wrap" style="height:100px">
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:8px">
-          <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="#d1d5db" stroke-width="2"><circle cx="16" cy="16" r="12"/><path d="M16 9v7l4 4"/></svg>
+          <svg viewBox="0 0 32 32" width="28" height="28" fill="none" style="stroke:var(--text3)" stroke-width="2"><circle cx="16" cy="16" r="12"/><path d="M16 9v7l4 4"/></svg>
           <div style="font-size:12px;color:var(--text3);text-align:center">No attendance log data yet.<br>Daily check-in tracking not yet enabled.</div>
         </div>
       </div>
@@ -442,7 +464,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div class="hc-donut-wrap" style="align-items:flex-start">
         <div class="hc-donut">
           <svg id="hrms-dept-svg" viewBox="0 0 100 100" width="90" height="90">
-            <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="12"/>
+            <circle cx="50" cy="50" r="38" fill="none" style="stroke:var(--border)" stroke-width="12"/>
           </svg>
           <div class="hc-donut-center">
             <div class="hc-donut-val" id="hrms-dept-total">—</div>
@@ -458,7 +480,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div class="hc-donut-wrap" style="align-items:flex-start">
         <div class="hc-donut">
           <svg id="hrms-type-svg" viewBox="0 0 100 100" width="90" height="90">
-            <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="12"/>
+            <circle cx="50" cy="50" r="38" fill="none" style="stroke:var(--border)" stroke-width="12"/>
           </svg>
           <div class="hc-donut-center">
             <div class="hc-donut-val" id="hrms-type-total">—</div>
@@ -502,15 +524,15 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
       <div style="display:flex;align-items:center;gap:14px">
         <div class="hc-donut" style="flex-shrink:0">
           <svg viewBox="0 0 100 100" width="80" height="80">
-            <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="13"/>
+            <circle cx="50" cy="50" r="38" fill="none" style="stroke:var(--border)" stroke-width="13"/>
             <circle cx="50" cy="50" r="38" fill="none" stroke="#3b82f6" stroke-width="13" stroke-dasharray="185.7 53.1" stroke-dashoffset="0" transform="rotate(-90 50 50)"/>
             <circle cx="50" cy="50" r="38" fill="none" stroke="#f59e0b" stroke-width="13" stroke-dasharray="31.4 207.4" stroke-dashoffset="-185.7" transform="rotate(-90 50 50)"/>
             <circle cx="50" cy="50" r="38" fill="none" stroke="#10b981" stroke-width="13" stroke-dasharray="9.4 229.4" stroke-dashoffset="-217.1" transform="rotate(-90 50 50)"/>
             <circle cx="50" cy="50" r="38" fill="none" stroke="#ef4444" stroke-width="13" stroke-dasharray="12.6 226.2" stroke-dashoffset="-226.5" transform="rotate(-90 50 50)"/>
           </svg>
           <div class="hc-donut-center">
-            <div style="font-size:9px;font-weight:700;color:#111827">AED</div>
-            <div style="font-size:13px;font-weight:700;color:#111827;line-height:1" id="hrms-payroll-total">—</div>
+            <div style="font-size:9px;font-weight:700;color:var(--text)">AED</div>
+            <div style="font-size:13px;font-weight:700;color:var(--text);line-height:1" id="hrms-payroll-total">—</div>
           </div>
         </div>
         <div style="flex:1;display:flex;flex-direction:column;gap:5px;font-size:11.5px">
@@ -518,7 +540,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
           <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block"></span>Allowances</span><span style="font-weight:600" id="hrms-pay-allow">—</span></div>
           <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#10b981;display:inline-block"></span>Overtime</span><span style="font-weight:600" id="hrms-pay-ot-total">—</span></div>
           <div style="display:flex;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block"></span>Deductions</span><span style="font-weight:600" id="hrms-pay-ded">—</span></div>
-          <div style="border-top:1px solid #f0f2f7;margin-top:4px;padding-top:4px;display:flex;justify-content:space-between;font-weight:700"><span>Net Payroll</span><span id="hrms-pay-net">—</span></div>
+          <div style="border-top:1px solid var(--border);margin-top:4px;padding-top:4px;display:flex;justify-content:space-between;font-weight:700"><span>Net Payroll</span><span id="hrms-pay-net">—</span></div>
         </div>
       </div>
     </div>
@@ -718,7 +740,6 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   <div class="mb3-side-card" style="padding:16px">
     <div class="hc-hd" style="margin-bottom:12px">
       <div class="hc-title">Leave Summary</div>
-      <select class="hc-select"><option>This Month</option><option>This Year</option></select>
     </div>
     <div class="hc-progress-list">
       <div>
@@ -756,7 +777,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
   <div class="mb3-side-card" style="padding:16px">
     <div class="hc-hd" style="margin-bottom:10px">
       <div class="hc-title">Document Expiry Summary</div>
-      <select class="hc-select"><option>This Month</option><option>Next 3 Months</option></select>
+      <div class="hc-sub">≤ 30 days</div>
     </div>
     <div class="hc-bar-chart" style="align-items:flex-end;height:90px">
       <div class="hc-bar-col"><div class="hc-bar-val" id="hrms-expbar-passport-val">0</div><div class="hc-bar" id="hrms-expbar-passport-bar" style="height:0px;background:#ef4444;width:100%"></div><div class="hc-bar-lbl">Passport</div></div>
@@ -767,48 +788,58 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
     </div>
   </div>
 
-  <!-- Assets Overview -->
+  <!-- Assets & Training (collapsed by default -- lower-urgency overview
+       widgets that mostly duplicate their own full pages; grouped under
+       one disclosure so the sidebar isn't 7 full-height cards deep,
+       2026-09-03) -->
   <div class="mb3-side-card" style="padding:16px">
-    <div class="hc-hd" style="margin-bottom:12px"><div class="hc-title">Assets Overview</div></div>
-    <div class="hc-donut-wrap">
-      <div class="hc-donut" style="flex-shrink:0">
-        <svg id="hrms-assets-svg" viewBox="0 0 100 100" width="80" height="80">
-          <circle cx="50" cy="50" r="38" fill="none" stroke="#f0f2f7" stroke-width="12"/>
-        </svg>
-        <div class="hc-donut-center">
-          <div class="hc-donut-val" id="hrms-assets-total">0</div>
-          <div class="hc-donut-lbl">Assets</div>
+    <details>
+      <summary class="hc-more-toggle">
+        Assets &amp; Training
+        <svg class="hc-more-chevron" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3l5 5-5 5"/></svg>
+      </summary>
+      <div class="hc-more-body">
+        <div>
+          <div class="hc-hd" style="margin-bottom:12px"><div class="hc-title">Assets Overview</div></div>
+          <div class="hc-donut-wrap">
+            <div class="hc-donut" style="flex-shrink:0">
+              <svg id="hrms-assets-svg" viewBox="0 0 100 100" width="80" height="80">
+                <circle cx="50" cy="50" r="38" fill="none" style="stroke:var(--border)" stroke-width="12"/>
+              </svg>
+              <div class="hc-donut-center">
+                <div class="hc-donut-val" id="hrms-assets-total">0</div>
+                <div class="hc-donut-lbl">Assets</div>
+              </div>
+            </div>
+            <div class="hc-legend" id="hrms-assets-legend" style="font-size:11px">
+              <div style="font-size:11px;color:var(--text3)">No assets assigned yet.<br><a style="color:var(--accent);cursor:pointer" onclick="goHrmsExtTab(3,'hrext-assets')">Go to Asset Management →</a></div>
+            </div>
+          </div>
+        </div>
+        <div class="hc-more-divider">
+          <div class="hc-hd" style="margin-bottom:12px"><div class="hc-title">Training Overview</div></div>
+          <div class="hc-progress-list">
+            <div>
+              <div class="hc-progress-hd">
+                <div class="hc-prog-lbl">Training Programs</div>
+                <div class="hc-prog-val" id="hrms-train-programs">0</div>
+              </div>
+              <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-train-programs-fill" style="width:0%;background:#10b981"></div></div>
+            </div>
+            <div>
+              <div class="hc-progress-hd">
+                <div class="hc-prog-lbl">Certifications Tracked</div>
+                <div class="hc-prog-val" id="hrms-train-certs">0</div>
+              </div>
+              <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-train-certs-fill" style="width:0%;background:#f59e0b"></div></div>
+            </div>
+            <div style="margin-top:8px">
+              <div style="font-size:11px;color:var(--text3)"><a style="color:var(--accent);cursor:pointer" onclick="goHrmsExtTab(2,'hrext-train')">Go to Training Management →</a></div>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="hc-legend" id="hrms-assets-legend" style="font-size:11px">
-        <div style="font-size:11px;color:var(--text3)">No assets assigned yet.<br><a style="color:#3b82f6;cursor:pointer" onclick="goHrmsExtTab(3,'hrext-assets')">Go to Asset Management →</a></div>
-      </div>
-    </div>
-  </div>
-
-
-  <!-- Training Overview -->
-  <div class="mb3-side-card" style="padding:16px">
-    <div class="hc-hd" style="margin-bottom:12px"><div class="hc-title">Training Overview</div></div>
-    <div class="hc-progress-list">
-      <div>
-        <div class="hc-progress-hd">
-          <div class="hc-prog-lbl">Training Programs</div>
-          <div class="hc-prog-val" id="hrms-train-programs">0</div>
-        </div>
-        <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-train-programs-fill" style="width:0%;background:#10b981"></div></div>
-      </div>
-      <div>
-        <div class="hc-progress-hd">
-          <div class="hc-prog-lbl">Certifications Tracked</div>
-          <div class="hc-prog-val" id="hrms-train-certs">0</div>
-        </div>
-        <div class="hc-prog-bar"><div class="hc-prog-fill" id="hrms-train-certs-fill" style="width:0%;background:#f59e0b"></div></div>
-      </div>
-      <div style="margin-top:8px">
-        <div style="font-size:11px;color:var(--text3)"><a style="color:#3b82f6;cursor:pointer" onclick="goHrmsExtTab(2,'hrext-train')">Go to Training Management →</a></div>
-      </div>
-    </div>
+    </details>
   </div>
 
   <!-- User Handbook -->
