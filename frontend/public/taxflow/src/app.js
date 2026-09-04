@@ -158,6 +158,14 @@ function _cachedNavEls(){
 }
 
 function go(page){
+  // hrms.html's own boot sequence schedules a forced go('hrms') 300ms after
+  // DOMContentLoaded to establish the default Dashboard view -- unconditional,
+  // so a real sidebar click landing before that timer fires (a slow initial
+  // load, or just a fast click) got silently overridden back to Dashboard a
+  // moment later. Exposed as a real window property (not a plain module-level
+  // let/const, which a classic <script> doesn't expose to hrms.html's own
+  // inline <script> block) so that boot-time call can check it first.
+  window._hrmsAnyNavHappened=true;
   // 'staff' and 'hrms-ext' are shared containers for several differently-
   // permissioned tabs (Employees vs HR Workflow; Performance/Training/
   // Assets) — gating them here would block a legitimately-permitted tab's
@@ -380,6 +388,20 @@ function _hrmsFixStaffNavHighlight(navKey){
   document.querySelector(`.sb .nav[data-staff-nav="${navKey}"]`)?.classList.add('on');
 }
 
+// Same problem as _hrmsFixStaffNavHighlight, for #page-hrms-ext's own
+// shared container: Performance/Training/Assets previously all called bare
+// go('hrms-ext') with no tab argument, so clicking any of them just showed
+// whichever internal tab was last active rather than the one actually
+// clicked — and since all three onclick attributes contained the literal
+// substring 'hrms-ext', go()'s generic nav highlighter lit up all three
+// sidebar items together regardless of which was clicked. Now called from
+// goHrmsExtTab() after go('hrms-ext') to both open the right tab AND
+// highlight only the one matching sidebar entry.
+function _hrmsFixExtNavHighlight(navKey){
+  document.querySelectorAll('.sb .nav.on').forEach(n=>n.classList.remove('on'));
+  document.querySelector(`.sb .nav[data-hrext-nav="${navKey}"]`)?.classList.add('on');
+}
+
 function goHrmsTab(n,id){
   if(window.HRMS_STANDALONE){
     if(!_hrmsNavAllowed(`goHrmsTab(${n},'${id}')`)){_hrmsBlockNav();return;}
@@ -400,6 +422,7 @@ function goHrmsExtTab(n,id){
     const tab=document.querySelector('#page-hrms-ext .tab:nth-child('+n+')');
     if(tab)stab(tab,id);
     go('hrms-ext');
+    _hrmsFixExtNavHighlight(id);
   }else{
     window.open('/hrms','_blank');
   }
@@ -25672,7 +25695,12 @@ function initApp(){
   syncDashboardFromDatabase().catch(err=>console.warn('Dashboard sync failed during init:',err));
   hydrateFromServer().catch(err=>console.warn('Database hydrate failed during init:',err));
   const _lastPage=window.HRMS_STANDALONE?'hrms':localStorage.getItem('taxflow_current_page');
-  setTimeout(()=>go(_lastPage||'dashboard'),400);
+  // Unconditional before this guard -- a real sidebar click landing in the
+  // ~400ms between initApp() running and this timer firing (a slow initial
+  // load, or just a fast click) got silently overridden back to whatever
+  // page this resolves to, most visibly on hrms.html where it's hardcoded
+  // to 'hrms' (Dashboard) regardless of anything the user already clicked.
+  setTimeout(()=>{if(!window._hrmsAnyNavHappened)go(_lastPage||'dashboard');},400);
   scheduleIdleTask(()=>{
     updateAccountSelectors();
     recalcJournal();

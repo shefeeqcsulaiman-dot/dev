@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=4d9d8ae946" as="script">
+<link rel="preload" href="src/app.js?v=56c2f73861" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
@@ -200,6 +200,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>
       Dashboard
     </div>
+    <div class="hrms-section-lbl">Workforce</div>
     <div class="nav" data-module="employees" data-staff-nav="hr-emp" onclick="goHrmsTab(1,'hr-emp')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><circle cx="12.5" cy="5" r="1.8"/><path d="M14.5 13c0-2-1.3-3-2.5-3.5"/></svg>
       Employees
@@ -216,6 +217,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8c0-2.8 2.2-5 5-5s5 2.2 5 5v4H3V8z"/><path d="M1 12h14M6 3.5C6 2 7 1 8 1s2 1 2 2.5"/></svg>
       Leave
     </div>
+    <div class="hrms-section-lbl">Payroll</div>
     <div class="nav" data-module="payroll" onclick="go('payroll')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6h12M5 10h3M10 10h1"/></svg>
       Payroll
@@ -228,19 +230,20 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="9" rx="1"/><path d="M2 7.5h12M8 7.5V4M6 11h4"/></svg>
       Loans &amp; Advances
     </div>
+    <div class="hrms-section-lbl">Talent</div>
     <div class="nav" data-module="recruitment" onclick="go('recruitment')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="5" r="3"/><path d="M1 14c0-3 2.5-5 6-5s6 2 6 5"/><path d="M13 2l1 1-2.5 2.5-1-1"/></svg>
       Recruitment (ATS)
     </div>
-    <div class="nav" data-module="performance" onclick="go('hrms-ext')">
+    <div class="nav" data-module="performance" data-hrext-nav="hrext-perf" onclick="goHrmsExtTab(1,'hrext-perf')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2l1.2 3.5H13l-2.9 2 1.1 3.5L8 9.2l-3.2 1.8 1.1-3.5L3 5.5h3.8z"/></svg>
       Performance
     </div>
-    <div class="nav" data-module="performance" onclick="go('hrms-ext')">
+    <div class="nav" data-module="performance" data-hrext-nav="hrext-train" onclick="goHrmsExtTab(2,'hrext-train')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 13V8a5 5 0 0110 0v5M1 13h14"/><circle cx="8" cy="7" r="2"/></svg>
       Training
     </div>
-    <div class="nav" data-module="performance" onclick="go('hrms-ext')">
+    <div class="nav" data-module="performance" data-hrext-nav="hrext-assets" onclick="goHrmsExtTab(3,'hrext-assets')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="8" width="4" height="5" rx="1"/><rect x="6" y="5.5" width="4" height="7.5" rx="1"/><rect x="10.5" y="3" width="4" height="10" rx="1"/></svg>
       Assets
     </div>
@@ -250,6 +253,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
          Management below still shares its hr_workflow permission key
          (see _PERMISSION_CATALOG in hr_access.py) for RBAC purposes; that
          grouping is unrelated to this sidebar entry and is left alone. -->
+    <div class="hrms-section-lbl">Operations</div>
     <div class="nav" data-module="hr_workflow" onclick="go('tasks')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 8l2 2 4-4"/></svg>
       Task Management
@@ -262,6 +266,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2c1.5 0 3 1 3.5 2.5S11 8 8 9c-3 1-3.5 2-3.5 3.5"/><circle cx="8" cy="13.5" r=".8" fill="currentColor" stroke="none"/></svg>
       AI Insights
     </div>
+    <div class="hrms-section-lbl">Settings</div>
     <div class="nav" data-module="hr_settings" id="nav-hr-settings" onclick="go('hr-settings')">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.5 1.5M11.3 11.3l1.5 1.5M3.2 12.8l1.5-1.5M11.3 4.7l1.5-1.5"/></svg>
       HR Settings
@@ -2923,7 +2928,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=4d9d8ae946" defer></script>
+<script src="src/app.js?v=56c2f73861" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
@@ -3289,10 +3294,17 @@ document.addEventListener('DOMContentLoaded',function(){
     }
   },800);
 
-  // Navigate to HRMS dashboard
+  // Navigate to HRMS dashboard -- skipped if the user already clicked
+  // somewhere else in the sidebar before this fired (see window.
+  // _hrmsAnyNavHappened's comment in app.js's go()) so a real navigation
+  // during the boot window doesn't get silently overridden back to
+  // Dashboard a moment later. The nested KPI-badge population below still
+  // runs regardless -- those elements (notification badge, approval
+  // counts) live in the persistent shell, not the Dashboard page itself,
+  // so they're worth refreshing either way.
   setTimeout(function(){
+    if(typeof go==='function'&&!window._hrmsAnyNavHappened)go('hrms');
     if(typeof go==='function'){
-      go('hrms');
       // Update donut centers with real employee count
       setTimeout(function(){
         var empEl=document.getElementById('hrms-kpi-emp');
