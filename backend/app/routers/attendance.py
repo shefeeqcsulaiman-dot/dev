@@ -519,6 +519,54 @@ async def _parse_punch_body(request: Request) -> dict[str, Any]:
     )
 
 
+# Older/locally-edited copies of daily_attendance_report.py push a wide,
+# aggregated daily-report row ({"Date": "DD/MM/YYYY", "Clock In 1": "HH:MM",
+# "Clock Out 1": "HH:MM", ...} — the same shape as the downloadable CSV
+# report) instead of the raw single-punch shape ({"employee_id",
+# "punch_time", "direction"}) the fixed version of that script and
+# zk_bridge.py/biotime_agent.py send. Before this, PunchIn's pydantic model
+# silently ignored every "Clock In N"/"Date" field it didn't recognize,
+# defaulted punch_time to "now" (the push time, not the real scan time),
+# and inserted a punch for every row regardless of whether the employee
+# actually clocked in that day — an absent employee's blank-"Clock In 1"
+# row still became a false "in" punch. Detecting and parsing this shape
+# properly here means the office PC's script never needs to be updated for
+# this to be fixed.
+_WIDE_PAYLOAD_SESSION_COUNT = 5
+
+
+def _is_wide_report_payload(raw_data: dict[str, Any]) -> bool:
+    return "Clock In 1" in raw_data
+
+
+def _parse_wide_report_events(raw_data: dict[str, Any], offset: timedelta) -> list[tuple[datetime, str]]:
+    """Extract individual (punch_time_utc, direction) events from a wide
+    daily-report-shaped payload. A row with no "Clock In"/"Clock Out" values
+    at all (an absent day) yields zero events — deliberately: that's what
+    stops an absent employee's placeholder row from registering as a real
+    punch, which is exactly the bug class this parsing exists to avoid."""
+    date_raw = str(raw_data.get("Date") or "").strip()
+    if not date_raw:
+        return []
+    try:
+        datetime.strptime(date_raw, "%d/%m/%Y")
+    except ValueError:
+        return []
+
+    events: list[tuple[datetime, str]] = []
+    for n in range(1, _WIDE_PAYLOAD_SESSION_COUNT + 1):
+        for field, direction in ((f"Clock In {n}", "in"), (f"Clock Out {n}", "out")):
+            time_raw = str(raw_data.get(field) or "").strip()
+            if not time_raw:
+                continue
+            try:
+                local_dt = datetime.strptime(f"{date_raw} {time_raw}", "%d/%m/%Y %H:%M")
+            except ValueError:
+                continue
+            events.append(((local_dt - offset).replace(tzinfo=UTC), direction))
+    return events
+
+
 def _ingest_device_punch(
     db: Session,
     company_id: str,
@@ -617,12 +665,39 @@ async def _record_punch(request: Request, db: Session, current_user: User | None
         raise HTTPException(status_code=401, detail="Authentication required")
 
     raw_data = await _parse_punch_body(request)
+    offset = _company_offset(db, company_id)
+
+    if _is_wide_report_payload(raw_data):
+        employee_id = str(raw_data.get("employee_id") or raw_data.get("Emp No.") or "").strip()
+        if not employee_id:
+            raise HTTPException(status_code=422, detail="employee_id (or 'Emp No.') is required")
+        employee_name = raw_data.get("employee_name") or raw_data.get("Name") or None
+        events = _parse_wide_report_events(raw_data, offset)
+        if not events:
+            # Nothing to record (e.g. an absent-day placeholder row with no
+            # Clock In/Out at all) — explicitly not an error, and
+            # explicitly not a punch.
+            return {"ok": True, "inserted": 0, "duplicates": 0, "events": 0}
+        inserted = duplicates = rejected = 0
+        for punch_time, direction in events:
+            result = _ingest_device_punch(
+                db, company_id, device_id, device_name,
+                employee_id, punch_time, direction, employee_name,
+                source="device" if device_key else "manual",
+            )
+            if not result.get("ok"):
+                rejected += 1
+            elif result.get("duplicate"):
+                duplicates += 1
+            else:
+                inserted += 1
+        return {"ok": True, "inserted": inserted, "duplicates": duplicates, "rejected": rejected, "events": len(events)}
+
     try:
         body = PunchIn(**raw_data)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    offset = _company_offset(db, company_id)
     punch_time = _parse_time(body.punch_time, offset)
 
     result = _ingest_device_punch(
