@@ -1103,6 +1103,52 @@ class AttendancePunch(Base, TimestampMixin):
     source: Mapped[str] = mapped_column(String(32), default="manual")
 
 
+class AttendanceDetail(Base, TimestampMixin):
+    """One row per (company, employee, calendar day) — replaces AttendancePunch's
+    one-row-per-scan-event model with a day-aggregate shape (see docs/architecture.md
+    attendance migration notes). `raw_events` retains every individual scan as a JSON
+    list so per-event listing/delete (Sync Activity Log) and real in/out pairing
+    (employee-daily drill-down) remain possible on top of the aggregate columns.
+    During the migration's safety-net window, writers also keep AttendancePunch
+    updated in parallel (see app/attendance_store.py) so a rollback loses nothing."""
+    __tablename__ = "attendance_details"
+    __table_args__ = (
+        Index("ix_att_details_company_date", "company_id", "work_date"),
+        UniqueConstraint("company_id", "employee_id", "work_date", name="uq_attendance_details_day"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    employee_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    employee_name: Mapped[str | None] = mapped_column(String(255))
+    work_date: Mapped[str] = mapped_column(String(10), nullable=False)
+
+    clock_in_1: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    clock_out_1: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    work_seconds_1: Mapped[int | None] = mapped_column(Integer)
+    clock_in_2: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    clock_out_2: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    work_seconds_2: Mapped[int | None] = mapped_column(Integer)
+    clock_in_3: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    clock_out_3: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    work_seconds_3: Mapped[int | None] = mapped_column(Integer)
+    clock_in_4: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    clock_out_4: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    work_seconds_4: Mapped[int | None] = mapped_column(Integer)
+    clock_in_5: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    clock_out_5: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    work_seconds_5: Mapped[int | None] = mapped_column(Integer)
+
+    total_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    ot_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    under_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    session_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # JSON list of every individual scan for this day: {id, punch_time (UTC
+    # ISO), direction, device_id, device_name, source, employee_name}.
+    raw_events: Mapped[str] = mapped_column(Text, default="[]")
+
+
 class Role(Base, TimestampMixin):
     __tablename__ = "roles"
 
