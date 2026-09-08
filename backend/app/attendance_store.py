@@ -389,7 +389,10 @@ def flatten_events(rows: list[AttendanceDetail], offset: timedelta) -> list[dict
     """Explode AttendanceDetail rows' raw_events into individual per-punch
     dicts with local time applied — the shape /punches (Sync Activity Log)
     and ess.py's /attendance endpoints need, previously read directly off
-    AttendancePunch rows."""
+    AttendancePunch rows. "punch_time" is a raw datetime, not pre-formatted
+    -- the two callers previously serialized it differently
+    (.isoformat() vs str()), so formatting is left to each caller rather
+    than baking one format in here."""
     out: list[dict] = []
     for row in rows:
         try:
@@ -406,7 +409,7 @@ def flatten_events(rows: list[AttendanceDetail], offset: timedelta) -> list[dict
                 "employee_id": row.employee_id,
                 "employee_name": e.get("employee_name") or row.employee_name,
                 "punch_date": row.work_date,
-                "punch_time": (punch_time + offset).isoformat(),
+                "punch_time": punch_time + offset,
                 "direction": e.get("direction"),
                 "device_id": e.get("device_id"),
                 "device_name": e.get("device_name"),

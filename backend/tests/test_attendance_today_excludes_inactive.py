@@ -8,7 +8,8 @@ device-sync bug that punches every enrolled ID regardless of employment
 status) must not show up as checked in."""
 from datetime import datetime, timezone
 
-from app.models import AttendancePunch, Employee
+from app import attendance_store
+from app.models import Employee
 
 
 def _company_id(client, headers):
@@ -24,12 +25,11 @@ def _seed_employee(db, company_id, employee_no, full_name, status="active"):
 
 
 def _seed_punch(db, company_id, employee_id, punch_date, hour):
-    db.add(AttendancePunch(
-        company_id=company_id, employee_id=employee_id, employee_name=None,
+    attendance_store.upsert_attendance_event(
+        db, company_id=company_id, employee_id=employee_id,
         punch_time=datetime(2026, 9, 8, hour, 0, tzinfo=timezone.utc),
-        punch_date=punch_date, direction="in", source="device",
-    ))
-    db.commit()
+        direction="in", source="device",
+    )
 
 
 def test_inactive_employee_punch_does_not_count_as_present(client, db, auth_headers):

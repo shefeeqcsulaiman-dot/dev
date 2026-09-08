@@ -5,18 +5,13 @@ code path, so isolation and dedupe behave the same regardless of trigger.
 """
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import app.timezone_utils as timezone_utils
-from app import biotime_client, crypto
-from app.models import AttendancePunch, BiometricDevice, Company
+from app import attendance_store, biotime_client, crypto
+from app.models import BiometricDevice, Company
 
 _FIRST_SYNC_LOOKBACK = timedelta(hours=24)
-
-
-def _local_date(punch_time_utc: datetime, offset: timedelta) -> str:
-    return (punch_time_utc + offset).strftime("%Y-%m-%d")
 
 
 def _parse_punch_time(raw: str, offset: timedelta) -> datetime | None:
@@ -44,10 +39,15 @@ def _map_direction(row: dict) -> str:
 
 def sync_biotime_device(db: Session, device: BiometricDevice) -> int:
     """Pulls transactions since the device's last sync (or the last 24h on
-    first run), inserts new AttendancePunch rows, and advances last_sync.
-    Every DB operation here is scoped to device.company_id / device.id —
-    callers must never invoke this with a device belonging to a different
-    company than the caller's own session."""
+    first run) and writes each one through attendance_store's shared
+    upsert_attendance_event() — the same concurrency-safe dedup/pairing/
+    legacy-mirroring used by the device webhook path and approved
+    corrections, replacing this function's own in-memory `seen`-set
+    preload and manual IntegrityError recovery (both now redundant: the
+    shared upsert does its own per-event dedup under a row lock). Every DB
+    operation here is scoped to device.company_id / device.id — callers
+    must never invoke this with a device belonging to a different company
+    than the caller's own session."""
     if not device.biotime_base_url or not device.biotime_username or not device.biotime_password_enc:
         raise ValueError("BioTime connection is not fully configured")
 
@@ -70,26 +70,6 @@ def sync_biotime_device(db: Session, device: BiometricDevice) -> int:
 
     rows = biotime_client.list_transactions(device.biotime_base_url, token, start, now)
 
-    # De-dupe against this device's full punch history rather than only
-    # what's >= `start` — `start` is `last_sync`, which advances every run,
-    # so a transaction BioTime re-returns from an overlapping window (or a
-    # backfilled older punch) would otherwise fall outside the dedupe check
-    # on a later sync and get inserted twice.
-    # Keyed on isoformat strings, not raw datetimes — SQLite round-trips
-    # DateTime(timezone=True) columns as naive (tzinfo stripped), so comparing
-    # a freshly-parsed tz-aware datetime against one read back from the DB
-    # would silently never match and defeat the dedupe entirely.
-    def _key(emp_id: str, dt: datetime) -> tuple[str, str]:
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=UTC)
-        return (emp_id, dt.isoformat())
-
-    existing = db.query(AttendancePunch.employee_id, AttendancePunch.punch_time).filter(
-        AttendancePunch.company_id == device.company_id,
-        AttendancePunch.device_id == device.id,
-    ).all()
-    seen = {_key(emp_id, punch_time) for emp_id, punch_time in existing}
-
     inserted = 0
     for row in rows:
         emp_code = str(row.get("emp_code") or row.get("employee") or "").strip()
@@ -99,34 +79,21 @@ def sync_biotime_device(db: Session, device: BiometricDevice) -> int:
         punch_time = _parse_punch_time(str(raw_time), offset)
         if not punch_time:
             continue
-        key = _key(emp_code, punch_time)
-        if key in seen:
-            continue
-        seen.add(key)
-        db.add(AttendancePunch(
+        result = attendance_store.upsert_attendance_event(
+            db,
             company_id=device.company_id,
             employee_id=emp_code,
-            employee_name=row.get("emp_name") or row.get("first_name"),
             punch_time=punch_time,
-            punch_date=_local_date(punch_time, offset),
             direction=_map_direction(row),
+            employee_name=row.get("emp_name") or row.get("first_name"),
             device_id=device.id,
             device_name=row.get("terminal_alias") or row.get("terminal_sn") or device.name,
             source="biotime",
-        ))
-        inserted += 1
+        )
+        if result.get("ok") and not result.get("duplicate"):
+            inserted += 1
 
     device.last_sync = now
     db.add(device)
-    try:
-        db.commit()
-    except IntegrityError:
-        # A concurrent sync for the same device (manual "Sync Now" landing
-        # at the same moment as the scheduled Celery beat tick) already
-        # inserted one or more of these rows — the in-memory `seen` dedupe
-        # above only sees this run's own view, so uq_attendance_punch_dedup
-        # (models.py) is the real backstop here. Not an error: the other
-        # run's insert already achieved the same outcome.
-        db.rollback()
-        return 0
+    db.commit()
     return inserted

@@ -6,7 +6,8 @@ depending on which screen you looked at it from."""
 from datetime import datetime, timezone
 
 import app.timezone_utils as timezone_utils
-from app.models import AttendancePunch, Company, Employee
+from app import attendance_store
+from app.models import Company, Employee
 
 
 def test_ess_attendance_applies_company_local_offset(client, db, auth_headers):
@@ -38,12 +39,10 @@ def test_ess_attendance_applies_company_local_offset(client, db, auth_headers):
     # offset, not just a same-day shift.
     punch_time_utc = datetime(2026, 8, 20, 21, 30, tzinfo=timezone.utc)
     local_time = punch_time_utc + offset
-    punch = AttendancePunch(
-        company_id=company_id, employee_id=emp.employee_no, employee_name=emp.full_name,
-        punch_time=punch_time_utc, punch_date=local_time.strftime("%Y-%m-%d"), direction="in", source="device",
+    attendance_store.upsert_attendance_event(
+        db, company_id=company_id, employee_id=emp.employee_no, employee_name=emp.full_name,
+        punch_time=punch_time_utc, direction="in", source="device",
     )
-    db.add(punch)
-    db.commit()
 
     login = client.post("/api/v1/ess/login", json={"username": "ess.test.attendance", "password": "esstest123"})
     assert login.status_code == 200, login.text

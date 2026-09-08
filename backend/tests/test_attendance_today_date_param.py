@@ -5,7 +5,7 @@ optional `date` param so clicking a calendar day can show that day's real
 roll call."""
 from datetime import datetime, timezone
 
-from app.models import AttendancePunch
+from app import attendance_store
 
 
 def _company_id(client, headers):
@@ -14,12 +14,11 @@ def _company_id(client, headers):
 
 def test_today_endpoint_accepts_explicit_past_date(client, db, auth_headers):
     company_id = _company_id(client, auth_headers)
-    db.add(AttendancePunch(
-        company_id=company_id, employee_id="ATT-DATE-001", employee_name="Date Param Test",
+    attendance_store.upsert_attendance_event(
+        db, company_id=company_id, employee_id="ATT-DATE-001", employee_name="Date Param Test",
         punch_time=datetime(2026, 8, 20, 8, 0, tzinfo=timezone.utc),
-        punch_date="2026-08-20", direction="in", source="device",
-    ))
-    db.commit()
+        direction="in", source="device",
+    )
 
     r = client.get("/api/v1/attendance/today?date=2026-08-20", headers=auth_headers)
     assert r.status_code == 200, r.text

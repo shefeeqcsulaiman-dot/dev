@@ -5,7 +5,8 @@ anywhere in HRMS at all."""
 import json
 from datetime import datetime, timezone
 
-from app.models import AppDataRecord, AttendancePunch, Employee, LeaveRequest
+from app import attendance_store
+from app.models import AppDataRecord, Employee, LeaveRequest
 
 
 def _company_id(client, auth_headers):
@@ -22,14 +23,11 @@ def _seed_employee(db, company_id, employee_no, full_name):
 
 
 def _seed_punch(db, company_id, employee_no, punch_date, hour, minute=0, direction="in"):
-    p = AttendancePunch(
-        company_id=company_id, employee_id=employee_no, employee_name=None,
+    return attendance_store.upsert_attendance_event(
+        db, company_id=company_id, employee_id=employee_no,
         punch_time=datetime(2026, 8, int(punch_date[-2:]), hour, minute, tzinfo=timezone.utc),
-        punch_date=punch_date, direction=direction, source="device",
+        direction=direction, source="device",
     )
-    db.add(p)
-    db.commit()
-    return p
 
 
 def _seed_app_record(db, company_id, collection, record_key, payload):

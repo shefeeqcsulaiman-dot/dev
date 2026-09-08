@@ -30,12 +30,13 @@ from sqlalchemy.orm import Session
 
 import app.cache as cache
 import app.timezone_utils as timezone_utils
-from app import biotime_client, biotime_sync, crypto
+from app import attendance_store, biotime_client, biotime_sync, crypto
+from app.attendance_store import _pair_day_punches
 from app.database import get_db
 from app.auth_principal import resolve_active_branch
 from app.dependencies import Principal, get_current_user, require_module, require_principal_permission
 from app.limiter import limiter
-from app.models import AppDataRecord, AttendancePunch, BiometricDevice, Company, Employee, LeaveRequest, User
+from app.models import AppDataRecord, AttendanceDetail, AttendancePunch, BiometricDevice, Company, Employee, LeaveRequest, User
 from app.security import verify_password, hash_password
 
 # router carries only the device-facing punch/adms endpoints (auth is via
@@ -583,7 +584,16 @@ def _ingest_device_punch(
     (adms_upload) — one dedupe/idempotency/insert implementation instead of
     two. Returns {"ok": False, "error": "future"|"too_old"} for a rejected
     punch rather than raising, since a batch upload must skip one bad line
-    and keep processing the rest instead of failing the whole request."""
+    and keep processing the rest instead of failing the whole request.
+
+    Delegates the actual write to attendance_store.upsert_attendance_event()
+    — the single, concurrency-safe upsert shared by every ingestion path
+    (this one, BioTime sync, approved attendance corrections) that also
+    mirrors the event into the legacy AttendancePunch table for the
+    migration's rollback-safety window, so nothing here inserts into
+    AttendancePunch directly any more. The returned "id" is the individual
+    scan event's id (not the day-row's), matching what /punches (Sync
+    Activity Log) and DELETE /punches/{id} already expect an "id" to mean."""
     now = datetime.now(UTC)
     if punch_time > now + timedelta(minutes=5):
         return {"ok": False, "error": "future"}
@@ -595,60 +605,20 @@ def _ingest_device_punch(
     if punch_time < now - timedelta(days=90):
         return {"ok": False, "error": "too_old"}
 
-    offset = _company_offset(db, company_id)
-    punch_date = _local_date(punch_time, offset)
-    employee_id = employee_id.strip()
-
-    # Idempotency guard: a bridge restart replays its whole in-memory backlog
-    # (last-synced marker is best-effort), so the same device punch can arrive
-    # more than once — and the same is just as true of re-uploading the same
-    # attendance CSV file. Previously gated behind `if device_id:`, so CSV
-    # rows (device_id always None) never got this check at all; the DB-level
-    # uq_attendance_punch_dedup constraint doesn't help either, since two
-    # rows with device_id=NULL never collide under a UNIQUE constraint. The
-    # (company_id, employee_id, punch_time, device_id) tuple is still a
-    # correct identity key with device_id=None — SQLAlchemy compiles
-    # `== None` to `IS NULL`, matching every other NULL-device_id row for
-    # that same employee/timestamp, exactly the semantics wanted.
-    existing = db.query(AttendancePunch).filter(
-        AttendancePunch.company_id == company_id,
-        AttendancePunch.employee_id == employee_id,
-        AttendancePunch.punch_time == punch_time,
-        AttendancePunch.device_id == device_id,
-    ).first()
-    if existing:
-        return {"ok": True, "id": existing.id, "duplicate": True}
-
-    punch = AttendancePunch(
+    result = attendance_store.upsert_attendance_event(
+        db,
         company_id=company_id,
         employee_id=employee_id,
-        employee_name=employee_name,
         punch_time=punch_time,
-        punch_date=punch_date,
         direction=direction,
+        employee_name=employee_name,
         device_id=device_id,
         device_name=device_name,
         source=source,
     )
-    db.add(punch)
-    try:
-        db.commit()
-    except IntegrityError:
-        # The SELECT-based check above raced with another concurrent
-        # request for the identical punch and lost — uq_attendance_punch_dedup
-        # (models.py) caught what the app-level check couldn't. Same
-        # idempotent response as the check above, not an error.
-        db.rollback()
-        existing = db.query(AttendancePunch).filter(
-            AttendancePunch.company_id == company_id,
-            AttendancePunch.employee_id == employee_id,
-            AttendancePunch.punch_time == punch_time,
-            AttendancePunch.device_id == device_id,
-        ).first()
-        if existing:
-            return {"ok": True, "id": existing.id, "duplicate": True}
-        raise
-    return {"ok": True, "id": punch.id}
+    if not result.get("ok"):
+        return result
+    return {"ok": True, "id": result.get("event_id") or result["id"], "duplicate": result.get("duplicate", False)}
 
 
 async def _record_punch(request: Request, db: Session, current_user: User | None, device_key: str | None) -> dict[str, Any]:
@@ -958,11 +928,11 @@ async def import_csv(
 
 # ── Dashboard data ────────────────────────────────────────────────────────────
 
-def _branch_scope_punches(query, principal: Principal, branch_id: str | None):
+def _branch_scope_details(query, principal: Principal, branch_id: str | None):
     """Same two-tier branch scoping as accounting.py's list_journals()/
-    payroll.py's list_runs() — previously these 4 endpoints filtered only by
+    payroll.py's list_runs() — previously these endpoints filtered only by
     company_id, so a branch-scoped principal saw every branch's attendance
-    data. AttendancePunch has no branch_id column of its own (employee_id
+    data. AttendanceDetail has no branch_id column of its own (employee_id
     here is the employee's business-facing employee_no, not a branch-aware
     FK), so scoping joins through Employee.branch_id instead of a direct
     column filter — hr_access.py's own _scope_attendance_to_branch() already
@@ -970,9 +940,29 @@ def _branch_scope_punches(query, principal: Principal, branch_id: str | None):
     resolved_branch_id = branch_id if principal.can_cross_branch("attendance") else resolve_active_branch(principal, branch_id)
     if not resolved_branch_id:
         return query
-    return query.join(Employee, Employee.employee_no == AttendancePunch.employee_id).filter(
+    return query.join(Employee, Employee.employee_no == AttendanceDetail.employee_id).filter(
         (Employee.branch_id == resolved_branch_id) | (Employee.branch_id.is_(None))
     )
+
+
+def _first_event_source(row: AttendanceDetail) -> str:
+    """Resolve the "source" of a day-row's clock_in_1 by matching it back
+    against the individual scan events in raw_events -- the flattened
+    clock_in_1/etc. columns don't carry source themselves."""
+    if row.clock_in_1 is None:
+        return "manual"
+    try:
+        events = json.loads(row.raw_events or "[]")
+    except (ValueError, TypeError):
+        return "manual"
+    for e in events:
+        try:
+            ts = datetime.fromisoformat(e["punch_time"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        if e.get("direction") == "in" and ts == row.clock_in_1:
+            return e.get("source") or "manual"
+    return "manual"
 
 
 @gated_router.get("/today")
@@ -995,22 +985,16 @@ def attendance_today(
         today = date
     else:
         today = _local_today(offset).isoformat()
-    rows = _branch_scope_punches(db.query(AttendancePunch), principal, branch_id).filter(
-        AttendancePunch.company_id == principal.company_id,
-        AttendancePunch.punch_date == today,
-        AttendancePunch.direction == "in",
-    ).order_by(AttendancePunch.punch_time.asc()).all()
-    # First "in" punch of the day per employee — the "Check In" column
-    # previously showed today's date (res.date, the same value for every
-    # row) instead of an actual time, because this endpoint never computed
-    # a per-employee punch time at all. Rows are ordered ascending above so
-    # the first occurrence for each employee_id is their earliest punch.
-    first_punch_by_employee: dict[str, datetime] = {}
-    first_source_by_employee: dict[str, str] = {}
-    for r in rows:
-        if r.employee_id not in first_punch_by_employee:
-            first_punch_by_employee[r.employee_id] = r.punch_time
-            first_source_by_employee[r.employee_id] = r.source or "manual"
+    rows = _branch_scope_details(db.query(AttendanceDetail), principal, branch_id).filter(
+        AttendanceDetail.company_id == principal.company_id,
+        AttendanceDetail.work_date == today,
+        AttendanceDetail.clock_in_1.isnot(None),
+    ).all()
+    # clock_in_1 IS the earliest "in" of the day by construction (pairing
+    # always fills session 1 first) -- no need to scan/sort punches here
+    # the way the old AttendancePunch-backed version had to.
+    first_punch_by_employee: dict[str, datetime] = {r.employee_id: r.clock_in_1 for r in rows}
+    first_source_by_employee: dict[str, str] = {r.employee_id: _first_event_source(r) for r in rows}
     unique_employees = sorted(first_punch_by_employee.keys())
     # A punch's employee_id is matched against Employee.employee_no by plain
     # string equality (same rule the Sync Activity Log's "Unmatched" badge
@@ -1098,18 +1082,20 @@ def attendance_trend(
         days = max(7, min(days, 90))
         start = today - timedelta(days=days - 1)
 
+    # One AttendanceDetail row IS one employee/day, so a plain COUNT(*) here
+    # replaces the old COUNT(DISTINCT employee_id) over individual punches.
     query = db.query(
-        AttendancePunch.punch_date,
-        func.count(func.distinct(AttendancePunch.employee_id)).label("cnt"),
+        AttendanceDetail.work_date,
+        func.count(AttendanceDetail.id).label("cnt"),
     )
-    rows = _branch_scope_punches(query, principal, branch_id).filter(
-        AttendancePunch.company_id == principal.company_id,
-        AttendancePunch.punch_date >= start.isoformat(),
-        AttendancePunch.punch_date <= (start + timedelta(days=days - 1)).isoformat(),
-        AttendancePunch.direction == "in",
-    ).group_by(AttendancePunch.punch_date).all()
+    rows = _branch_scope_details(query, principal, branch_id).filter(
+        AttendanceDetail.company_id == principal.company_id,
+        AttendanceDetail.work_date >= start.isoformat(),
+        AttendanceDetail.work_date <= (start + timedelta(days=days - 1)).isoformat(),
+        AttendanceDetail.clock_in_1.isnot(None),
+    ).group_by(AttendanceDetail.work_date).all()
 
-    day_map = {r.punch_date: r.cnt for r in rows}
+    day_map = {r.work_date: r.cnt for r in rows}
     dates = [(start + timedelta(days=i)).isoformat() for i in range(days)]
     counts = [day_map.get(d, 0) for d in dates]
     return {"dates": dates, "counts": counts}
@@ -1212,22 +1198,26 @@ def attendance_monthly_report(
         return {"period": period, "working_days": len(working_days), "standard_hours_per_day": standard_hours, "employees": []}
 
     emp_nos = [e.employee_no for e in employees]
-    punch_query = db.query(
-        AttendancePunch.employee_id,
-        AttendancePunch.punch_date,
-        func.min(AttendancePunch.punch_time).label("first_ts"),
-        func.max(AttendancePunch.punch_time).label("last_ts"),
-        func.count(AttendancePunch.id).label("cnt"),
+    # Reads real pairing-derived total/OT seconds straight off each day's
+    # AttendanceDetail row instead of the old MIN(punch_time)/MAX(punch_time)
+    # approximation -- since every row already has this computed by
+    # attendance_store at write time (the same pairing engine /employee-daily
+    # uses), consuming it here is strictly more accurate, not just simpler.
+    detail_rows = db.query(
+        AttendanceDetail.employee_id,
+        AttendanceDetail.work_date,
+        AttendanceDetail.total_seconds,
+        AttendanceDetail.ot_seconds,
     ).filter(
-        AttendancePunch.company_id == principal.company_id,
-        AttendancePunch.employee_id.in_(emp_nos),
-        AttendancePunch.punch_date >= start.isoformat(),
-        AttendancePunch.punch_date <= period_end.isoformat(),
-    ).group_by(AttendancePunch.employee_id, AttendancePunch.punch_date).all()
+        AttendanceDetail.company_id == principal.company_id,
+        AttendanceDetail.employee_id.in_(emp_nos),
+        AttendanceDetail.work_date >= start.isoformat(),
+        AttendanceDetail.work_date <= period_end.isoformat(),
+    ).all()
 
     punch_by_emp: dict[str, dict[str, Any]] = {}
-    for r in punch_query:
-        punch_by_emp.setdefault(r.employee_id, {})[r.punch_date] = r
+    for r in detail_rows:
+        punch_by_emp.setdefault(r.employee_id, {})[r.work_date] = r
 
     emp_ids = [e.id for e in employees]
     leave_rows = db.query(LeaveRequest).filter(
@@ -1251,14 +1241,16 @@ def attendance_monthly_report(
     for emp in employees:
         days = punch_by_emp.get(emp.employee_no, {})
         present_days = sum(1 for pd in days if pd in working_day_set)
-        total_hours = 0.0
-        ot_hours = 0.0
-        for row in days.values():
-            if row.cnt < 2 or not row.first_ts or not row.last_ts:
-                continue
-            day_hours = (row.last_ts - row.first_ts).total_seconds() / 3600
-            total_hours += day_hours
-            ot_hours += max(0.0, day_hours - standard_hours)
+        # total_hours from stored total_seconds (real pairing, standard-hours-
+        # independent) is safe to trust directly; OT is recomputed here
+        # against THIS company's configured standard_hours rather than
+        # trusting stored ot_seconds, which attendance_store computes at
+        # write time against a generic default that may not match this
+        # company's actual setting. OT is a sum of PER-DAY overages (a
+        # 10-hour day contributes 2 OT hours even if another day that month
+        # was short), not (total_hours - working_days * standard_hours).
+        total_hours = sum(row.total_seconds for row in days.values()) / 3600
+        ot_hours = sum(max(0.0, row.total_seconds / 3600 - standard_hours) for row in days.values())
         leave_days = leave_days_by_emp.get(emp.id, 0)
         absent_days = max(0, len(working_days) - present_days - leave_days)
         result.append({
@@ -1283,41 +1275,10 @@ def attendance_monthly_report(
 
 
 _EMPLOYEE_DAILY_MAX_SESSIONS = 3
-# Some entry-only devices (a dwell/proximity sensor, a simple turnstile that
-# only signals "someone passed through") re-read the same physical entry
-# several times within seconds of each other. Without this, each re-read
-# closed the still-open session with no checkout and opened a new one --
-# one real entry could fill (and exceed) _EMPLOYEE_DAILY_MAX_SESSIONS with
-# near-duplicate rows, all missing a checkout, before the day's actual
-# second entry (if any) ever got a slot. A repeat "in" within this window of
-# the currently-open one is treated as the same entry and collapsed instead.
-_DWELL_DUPLICATE_WINDOW = timedelta(minutes=5)
-
-
-def _pair_day_punches(events: list[tuple[datetime, str]]) -> list[tuple[datetime, datetime | None]]:
-    """Direction-aware in/out pairing for one day's already-time-sorted
-    punches -- same state machine as zk_bridge.py/daily_attendance_
-    report.py's pair_punches(), reimplemented here in pure Python (no
-    pandas, which isn't a backend dependency) rather than imported, since
-    those scripts also do numeric ZKTeco-code-to-direction mapping this
-    endpoint doesn't need: AttendancePunch.direction is already a clean
-    "in"/"out" string by the time it reaches the database."""
-    pairs: list[tuple[datetime, datetime | None]] = []
-    open_in: datetime | None = None
-    for ts, direction in events:
-        if direction == "in":
-            if open_in is not None:
-                if ts - open_in <= _DWELL_DUPLICATE_WINDOW:
-                    continue  # sensor-bounce re-read of the still-open entry
-                pairs.append((open_in, None))
-            open_in = ts
-        else:
-            if open_in is not None:
-                pairs.append((open_in, ts))
-                open_in = None
-    if open_in is not None:
-        pairs.append((open_in, None))
-    return pairs
+# The pairing state machine itself (_pair_day_punches) now lives in
+# attendance_store.py (imported at the top of this file) so both the live
+# per-request path here and the attendance_details backfill/live-write path
+# share one implementation instead of two independently-maintained copies.
 
 
 @gated_router.get("/employee-daily")
@@ -1358,15 +1319,20 @@ def attendance_employee_daily(
     weekend_days = _weekend_day_set(db, principal.company_id)
     standard_hours = _standard_hours_per_day(db, principal.company_id)
 
-    punch_rows = db.query(AttendancePunch.punch_date, AttendancePunch.punch_time, AttendancePunch.direction).filter(
-        AttendancePunch.company_id == principal.company_id,
-        AttendancePunch.employee_id == emp.employee_no,
-        AttendancePunch.punch_date >= start.isoformat(),
-        AttendancePunch.punch_date <= last_day.isoformat(),
-    ).order_by(AttendancePunch.punch_time.asc()).all()
-    events_by_date: dict[str, list[tuple[datetime, str]]] = {}
-    for r in punch_rows:
-        events_by_date.setdefault(r.punch_date, []).append((r.punch_time, r.direction or "in"))
+    # Reads each day's already-paired clock_in/out_N + total_seconds
+    # straight off AttendanceDetail (computed by attendance_store at write
+    # time using the same _pair_day_punches this endpoint used to call
+    # per-request) instead of re-fetching raw punches and re-pairing them
+    # here on every request.
+    details_by_date: dict[str, AttendanceDetail] = {
+        r.work_date: r
+        for r in db.query(AttendanceDetail).filter(
+            AttendanceDetail.company_id == principal.company_id,
+            AttendanceDetail.employee_id == emp.employee_no,
+            AttendanceDetail.work_date >= start.isoformat(),
+            AttendanceDetail.work_date <= last_day.isoformat(),
+        ).all()
+    }
 
     leave_rows = db.query(LeaveRequest).filter(
         LeaveRequest.company_id == principal.company_id,
@@ -1416,23 +1382,27 @@ def attendance_employee_daily(
         is_sick = iso in sick_dates
         is_holiday = iso in holiday_dates
 
-        events = sorted(events_by_date.get(iso, []), key=lambda e: e[0])
-        pairs = _pair_day_punches(events)
-        total_seconds = sum((cout - cin).total_seconds() for cin, cout in pairs if cout)
-        total_hours = total_seconds / 3600
-        shown_pairs = pairs[:_EMPLOYEE_DAILY_MAX_SESSIONS]
+        detail_row = details_by_date.get(iso)
+        total_hours = (detail_row.total_seconds / 3600) if detail_row else 0.0
         sessions = []
-        for cin, cout in shown_pairs:
-            work_hours = (cout - cin).total_seconds() / 3600 if cout else None
-            sessions.append({
-                "clock_in": (cin + offset).strftime("%H:%M"),
-                "clock_out": (cout + offset).strftime("%H:%M") if cout else None,
-                "work_time": f"{work_hours:.2f}" if work_hours is not None else None,
-            })
-        while len(sessions) < _EMPLOYEE_DAILY_MAX_SESSIONS:
-            sessions.append({"clock_in": None, "clock_out": None, "work_time": None})
+        if detail_row:
+            for n in range(1, _EMPLOYEE_DAILY_MAX_SESSIONS + 1):
+                cin = getattr(detail_row, f"clock_in_{n}")
+                cout = getattr(detail_row, f"clock_out_{n}")
+                work_seconds = getattr(detail_row, f"work_seconds_{n}")
+                sessions.append({
+                    "clock_in": (cin + offset).strftime("%H:%M") if cin else None,
+                    "clock_out": (cout + offset).strftime("%H:%M") if cout else None,
+                    "work_time": f"{work_seconds / 3600:.2f}" if work_seconds is not None else None,
+                })
+        else:
+            sessions = [{"clock_in": None, "clock_out": None, "work_time": None} for _ in range(_EMPLOYEE_DAILY_MAX_SESSIONS)]
 
-        has_punches = bool(events)
+        # Checking raw_events (not session_count) matches the old semantics
+        # exactly: "does any punch event exist that day" -- a lone orphan
+        # "out" with no preceding "in" produces zero pairs (session_count
+        # would be 0) but is still a real recorded event, not an absence.
+        has_punches = detail_row is not None and bool(json.loads(detail_row.raw_events or "[]"))
         if d > today:
             status = "upcoming"
         elif is_weekend:
@@ -1491,11 +1461,21 @@ def recent_punches(
 ) -> dict[str, Any]:
     """Return the most recent punch records for the sync activity log."""
     limit = max(1, min(limit, 200))
-    rows = _branch_scope_punches(db.query(AttendancePunch), principal, branch_id).filter(
-        AttendancePunch.company_id == principal.company_id,
-    ).order_by(AttendancePunch.punch_time.desc()).limit(limit).all()
+    # Fetch a bounded window of the most-recently-touched day-rows and
+    # flatten each one's raw_events into individual per-punch dicts, then
+    # sort/slice in Python -- AttendanceDetail stores a day's worth of scans
+    # per row, so "most recent N individual punches" can no longer be a
+    # single indexed SQL ORDER BY + LIMIT the way it was against the old
+    # one-row-per-punch AttendancePunch table. Acceptable trade-off at HRMS
+    # scale (limit capped at 200).
+    fetch_rows = _branch_scope_details(db.query(AttendanceDetail), principal, branch_id).filter(
+        AttendanceDetail.company_id == principal.company_id,
+    ).order_by(AttendanceDetail.updated_at.desc()).limit(min(limit * 5, 500)).all()
+    flattened = attendance_store.flatten_events(fetch_rows, timedelta(0))
+    flattened.sort(key=lambda e: e["punch_time"], reverse=True)
+    flattened = flattened[:limit]
     # A punch's employee_id is matched against Employee.employee_no by plain
-    # string equality (see _branch_scope_punches' own docstring) — nothing
+    # string equality (see _branch_scope_details' own docstring) — nothing
     # validates this at ingestion time, so a device enrolled with the wrong
     # ID silently never attaches to anyone. Surface that here so an admin
     # troubleshooting a "punch arrived but employee shows absent" report has
@@ -1505,17 +1485,17 @@ def recent_punches(
     }
     return {"punches": [
         {
-            "id": r.id,
-            "employee_id": r.employee_id,
-            "employee_name": r.employee_name,
-            "punch_time": r.punch_time.isoformat(),
-            "punch_date": r.punch_date,
-            "direction": r.direction,
-            "device_name": r.device_name,
-            "source": r.source,
-            "matched": r.employee_id in valid_employee_nos,
+            "id": e["id"],
+            "employee_id": e["employee_id"],
+            "employee_name": e["employee_name"],
+            "punch_time": e["punch_time"].isoformat(),
+            "punch_date": e["punch_date"],
+            "direction": e["direction"],
+            "device_name": e["device_name"],
+            "source": e["source"],
+            "matched": e["employee_id"] in valid_employee_nos,
         }
-        for r in rows
+        for e in flattened
     ]}
 
 
@@ -1529,13 +1509,8 @@ def delete_punch(
     previously there was no way to clean up a bad row at all (a mis-scanned
     device punch, an unmatched employee_id typo, a diagnostic test punch)
     short of a superadmin wiping the entire company's attendance history."""
-    punch = db.query(AttendancePunch).filter(
-        AttendancePunch.id == punch_id, AttendancePunch.company_id == principal.company_id,
-    ).first()
-    if not punch:
+    if not attendance_store.delete_event(db, principal.company_id, punch_id):
         raise HTTPException(status_code=404, detail="Punch record not found")
-    db.delete(punch)
-    db.commit()
 
 
 @gated_router.get("/summary")
@@ -1548,15 +1523,15 @@ def attendance_summary(
     today = _local_today(_company_offset(db, principal.company_id))
     week_start = (today - timedelta(days=6)).isoformat()
     query = db.query(
-        AttendancePunch.punch_date,
-        func.count(func.distinct(AttendancePunch.employee_id)).label("cnt"),
+        AttendanceDetail.work_date,
+        func.count(AttendanceDetail.id).label("cnt"),
     )
-    rows = _branch_scope_punches(query, principal, branch_id).filter(
-        AttendancePunch.company_id == principal.company_id,
-        AttendancePunch.punch_date >= week_start,
-        AttendancePunch.direction == "in",
-    ).group_by(AttendancePunch.punch_date).all()
-    return {"week": {r.punch_date: r.cnt for r in rows}}
+    rows = _branch_scope_details(query, principal, branch_id).filter(
+        AttendanceDetail.company_id == principal.company_id,
+        AttendanceDetail.work_date >= week_start,
+        AttendanceDetail.clock_in_1.isnot(None),
+    ).group_by(AttendanceDetail.work_date).all()
+    return {"week": {r.work_date: r.cnt for r in rows}}
 
 
 # ── Bridge script download ────────────────────────────────────────────────────

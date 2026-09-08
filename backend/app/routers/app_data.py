@@ -29,6 +29,7 @@ from starlette.concurrency import run_in_threadpool
 
 import app.cache as cache
 import app.timezone_utils as timezone_utils
+from app import attendance_store
 from app.accounting_posting import ensure_credit_note_tax_line
 from app.config import get_settings
 from app.database import get_db
@@ -40,7 +41,6 @@ from app.routers.inventory import consume_valuation_layers
 from app.models import (
     Account,
     AppDataRecord,
-    AttendancePunch,
     AuditLog,
     AuditLogDetail,
     Branch,
@@ -1671,9 +1671,10 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
         # {id,status:'Approved'} and nothing else ever happened, despite the
         # UI's own copy claiming "Approved corrections update attendance."
         # Applying it for real means inserting the requested check-in/
-        # check-out as real AttendancePunch rows once the request reaches
-        # "Approved" - the same table biometric/manual punches already
-        # write to, so it shows up in real attendance aggregation.
+        # check-out as real attendance events once the request reaches
+        # "Approved" - the same attendance_store path biometric/manual
+        # punches already write through, so it shows up in real attendance
+        # aggregation.
         if str(record.get("status") or "").strip().lower() == "approved":
             correction_id = str(record.get("id") or "").strip()
             emp_no = str(record.get("employee_id") or "").strip()
@@ -1693,13 +1694,13 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
                 # Delete-then-recreate by (employee, date, source) so
                 # re-approving after an edit, or approving twice, always
                 # converges to the request's current values instead of
-                # accumulating duplicate punches.
-                db.query(AttendancePunch).filter(
-                    AttendancePunch.company_id == principal.company_id,
-                    AttendancePunch.employee_id == emp_no,
-                    AttendancePunch.punch_date == punch_date,
-                    AttendancePunch.source == "correction",
-                ).delete(synchronize_session=False)
+                # accumulating duplicate punches. Consolidated onto the
+                # same shared attendance_store primitives BioTime sync and
+                # the device webhook path use, instead of a third
+                # independent insert/dedupe implementation.
+                attendance_store.remove_events_by_source(
+                    db, principal.company_id, emp_no, punch_date, "correction",
+                )
                 for time_field, direction in (("checkin", "in"), ("checkout", "out")):
                     time_str = str(record.get(time_field) or "").strip()
                     if not time_str:
@@ -1709,16 +1710,14 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
                     except ValueError:
                         continue
                     punch_time = (local_dt - attendance_offset).replace(tzinfo=_dt.timezone.utc)
-                    db.add(
-                        AttendancePunch(
-                            company_id=principal.company_id,
-                            employee_id=emp_no,
-                            employee_name=emp_name or None,
-                            punch_time=punch_time,
-                            punch_date=punch_date,
-                            direction=direction,
-                            source="correction",
-                        )
+                    attendance_store.upsert_attendance_event(
+                        db,
+                        company_id=principal.company_id,
+                        employee_id=emp_no,
+                        punch_time=punch_time,
+                        direction=direction,
+                        employee_name=emp_name or None,
+                        source="correction",
                     )
 
     elif collection == "rotaSwaps":

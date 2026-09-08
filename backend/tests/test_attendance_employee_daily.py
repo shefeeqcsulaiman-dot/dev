@@ -5,7 +5,8 @@ Total/OT/Under Time/Absent/SICK/Holiday) with proper direction-aware
 session pairing, not just a first-punch/last-punch summary."""
 from datetime import datetime, timedelta, timezone
 
-from app.models import AppDataRecord, AttendancePunch, Employee, LeaveRequest
+from app import attendance_store
+from app.models import AppDataRecord, Employee, LeaveRequest
 import json
 
 
@@ -23,13 +24,11 @@ def _seed_employee(db, company_id, employee_no, full_name):
 
 
 def _seed_punch(db, company_id, employee_no, punch_date, hour, minute=0, direction="in"):
-    p = AttendancePunch(
-        company_id=company_id, employee_id=employee_no, employee_name=None,
+    attendance_store.upsert_attendance_event(
+        db, company_id=company_id, employee_id=employee_no,
         punch_time=datetime(2026, 8, int(punch_date[-2:]), hour, minute, tzinfo=timezone.utc),
-        punch_date=punch_date, direction=direction, source="device",
+        direction=direction, source="device",
     )
-    db.add(p)
-    db.commit()
 
 
 def test_employee_daily_breakdown(client, db, auth_headers):
@@ -128,12 +127,10 @@ def test_employee_daily_marks_is_today(client, db, auth_headers):
     now_utc = datetime.now(timezone.utc)
     today_local_date = (now_utc + timedelta(hours=4)).date().isoformat()
     period = today_local_date[:7]
-    p = AttendancePunch(
-        company_id=company_id, employee_id="ATT-DAILY-TODAY", employee_name=None,
-        punch_time=now_utc, punch_date=today_local_date, direction="in", source="device",
+    attendance_store.upsert_attendance_event(
+        db, company_id=company_id, employee_id="ATT-DAILY-TODAY",
+        punch_time=now_utc, direction="in", source="device",
     )
-    db.add(p)
-    db.commit()
 
     r = client.get(f"/api/v1/attendance/employee-daily?employee_id={emp.id}&period={period}", headers=auth_headers)
     assert r.status_code == 200, r.text

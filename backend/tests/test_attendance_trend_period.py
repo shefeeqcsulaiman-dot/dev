@@ -5,7 +5,7 @@ from. Widened with an optional `period` (YYYY-MM) that returns exactly
 that calendar month regardless of today's date."""
 from datetime import datetime, timezone
 
-from app.models import AttendancePunch
+from app import attendance_store
 
 
 def _company_id(client, headers):
@@ -14,12 +14,11 @@ def _company_id(client, headers):
 
 def test_trend_with_period_returns_exact_month(client, db, auth_headers):
     company_id = _company_id(client, auth_headers)
-    db.add(AttendancePunch(
-        company_id=company_id, employee_id="ATT-TREND-001", employee_name="Trend Period Test",
+    attendance_store.upsert_attendance_event(
+        db, company_id=company_id, employee_id="ATT-TREND-001", employee_name="Trend Period Test",
         punch_time=datetime(2026, 6, 15, 8, tzinfo=timezone.utc),
-        punch_date="2026-06-15", direction="in", source="device",
-    ))
-    db.commit()
+        direction="in", source="device",
+    )
 
     r = client.get("/api/v1/attendance/trend?period=2026-06", headers=auth_headers)
     assert r.status_code == 200, r.text

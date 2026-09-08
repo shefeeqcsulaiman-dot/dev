@@ -194,15 +194,18 @@ def ess_change_password(
 @router.get("/attendance")
 def ess_attendance(request: Request, db: Session = Depends(get_db)) -> list:
     emp = ess_bearer(request, db)
-    from app.models import AttendancePunch
-    punches = (
-        db.query(AttendancePunch)
+    from app import attendance_store
+    from app.models import AttendanceDetail
+    # 60 days-with-a-row is a generous upper bound for "the last ~90
+    # individual punches" -- a day rarely has more than a couple of scans.
+    rows = (
+        db.query(AttendanceDetail)
         .filter(
-            AttendancePunch.company_id == emp.company_id,
-            AttendancePunch.employee_id == emp.employee_no,
+            AttendanceDetail.company_id == emp.company_id,
+            AttendanceDetail.employee_id == emp.employee_no,
         )
-        .order_by(AttendancePunch.punch_time.desc())
-        .limit(90)
+        .order_by(AttendanceDetail.work_date.desc())
+        .limit(60)
         .all()
     )
     # Same company-local offset attendance.py's /today endpoint already
@@ -212,14 +215,16 @@ def ess_attendance(request: Request, db: Session = Depends(get_db)) -> list:
     # HRMS Today's Attendance screen.
     country = db.query(Company.country).filter(Company.id == emp.company_id).scalar()
     offset = timezone_utils.company_utc_offset(country)
+    flattened = attendance_store.flatten_events(rows, offset)
+    flattened.sort(key=lambda e: e["punch_time"], reverse=True)
     return [
         {
-            "punch_date": p.punch_date,
-            "punch_time": str(p.punch_time + offset),
-            "direction": p.direction,
-            "source": p.source,
+            "punch_date": e["punch_date"],
+            "punch_time": str(e["punch_time"]),
+            "direction": e["direction"],
+            "source": e["source"],
         }
-        for p in punches
+        for e in flattened[:90]
     ]
 
 
