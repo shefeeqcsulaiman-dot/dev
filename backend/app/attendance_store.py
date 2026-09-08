@@ -306,27 +306,48 @@ def backfill_from_attendance_punches(db: Session, standard_hours: float = 8.0) -
     that's gone stale relative to punches inserted via a path not yet cut
     over to attendance_store.
 
-    Called from main.py's ensure_schema_updates(), wrapped there in a
-    try/except that logs but never blocks app startup."""
+    Called from main.py's ensure_schema_updates(), on its own background
+    thread so a large punch history (tens of thousands of groups) can never
+    block the app from becoming ready / passing health checks — an earlier
+    version ran this synchronously in-line and, at real production scale,
+    took minutes due to the one-query-per-group design below; that risked
+    every deploy either hanging past the platform's startup timeout or
+    silently never finishing (0 attendance_details rows despite tens of
+    thousands of punches existing, exactly what happened before this fix)."""
     groups: dict[tuple[str, str, str], list[AttendancePunch]] = {}
     for punch in db.query(AttendancePunch).order_by(AttendancePunch.punch_time.asc()).yield_per(1000):
         key = (punch.company_id, punch.employee_id, punch.punch_date)
         groups.setdefault(key, []).append(punch)
 
+    # Bulk-fetch every existing row's freshness in ONE query instead of one
+    # SELECT per group -- on a reconciliation run (the common case after the
+    # first backfill) almost every group is already up to date, so this
+    # turns tens of thousands of round trips into a single query plus work
+    # only for groups that actually changed.
+    existing_updated_at: dict[tuple[str, str, str], object] = {
+        (r.company_id, r.employee_id, r.work_date): r.updated_at
+        for r in db.query(
+            AttendanceDetail.company_id, AttendanceDetail.employee_id,
+            AttendanceDetail.work_date, AttendanceDetail.updated_at,
+        )
+    }
+
     created = updated = skipped = 0
-    for (company_id, employee_id, work_date), punches in groups.items():
+    for key, punches in groups.items():
+        company_id, employee_id, work_date = key
         latest_punch_update = max((p.updated_at or p.created_at) for p in punches)
-        row = db.query(AttendanceDetail).filter(
-            AttendanceDetail.company_id == company_id,
-            AttendanceDetail.employee_id == employee_id,
-            AttendanceDetail.work_date == work_date,
-        ).first()
-        if (
-            row is not None and row.updated_at is not None and latest_punch_update is not None
-            and row.updated_at >= latest_punch_update
-        ):
+        existing_ts = existing_updated_at.get(key)
+        if existing_ts is not None and latest_punch_update is not None and existing_ts >= latest_punch_update:
             skipped += 1
             continue
+
+        row = None
+        if key in existing_updated_at:
+            row = db.query(AttendanceDetail).filter(
+                AttendanceDetail.company_id == company_id,
+                AttendanceDetail.employee_id == employee_id,
+                AttendanceDetail.work_date == work_date,
+            ).first()
 
         sorted_punches = sorted(punches, key=lambda p: p.punch_time)
         events = [

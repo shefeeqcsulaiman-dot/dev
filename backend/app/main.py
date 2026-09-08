@@ -2,6 +2,7 @@ import hashlib
 import logging
 import os
 import pathlib
+import threading
 from typing import Any
 
 # Load .env into os.environ so os.environ.get() works for AI keys
@@ -568,20 +569,35 @@ def ensure_schema_updates() -> None:
             # test's app startup (TestClient re-fires the startup event per
             # test function) against a shared, ever-growing test DB;
             # attendance_store's own functions are exercised directly by
-            # tests instead. Uses its own ORM Session since the rest of
-            # this function works over a
-            # raw `connection`, and the backfill logic (grouping + reusing
-            # _pair_day_punches) is much clearer expressed with the ORM.
-            from app.attendance_store import backfill_from_attendance_punches
-            backfill_db = SessionLocal()
-            try:
-                result = backfill_from_attendance_punches(backfill_db)
-                logging.getLogger("taxflow").info("attendance_details backfill: %s", result)
-            except Exception as exc:
-                logging.getLogger("taxflow").error("attendance_details backfill failed (non-fatal): %s", exc)
-                backfill_db.rollback()
-            finally:
-                backfill_db.close()
+            # tests instead.
+            #
+            # Runs on a background thread, NOT inline here: at real
+            # production scale (confirmed: one company alone had 25,500
+            # (employee, day) groups) this took minutes to complete, which
+            # blocks ensure_schema_updates() -> startup() -> the app ever
+            # becoming ready, risking every future deploy either hanging
+            # past the platform's health-check timeout or getting killed
+            # mid-backfill before it ever commits a row (which is exactly
+            # what happened here — attendance_details stayed empty despite
+            # 55k+ punches existing, discovered while investigating a
+            # separate attendance report). Uses its own ORM Session (a
+            # fresh one per thread) since the rest of this function works
+            # over a raw `connection`, and the backfill logic (grouping +
+            # reusing _pair_day_punches) is much clearer expressed with the
+            # ORM.
+            def _run_attendance_backfill() -> None:
+                from app.attendance_store import backfill_from_attendance_punches
+                backfill_db = SessionLocal()
+                try:
+                    result = backfill_from_attendance_punches(backfill_db)
+                    logging.getLogger("taxflow").info("attendance_details backfill: %s", result)
+                except Exception as exc:
+                    logging.getLogger("taxflow").error("attendance_details backfill failed (non-fatal): %s", exc)
+                    backfill_db.rollback()
+                finally:
+                    backfill_db.close()
+
+            threading.Thread(target=_run_attendance_backfill, daemon=True, name="attendance-backfill").start()
         if "biometric_devices" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("biometric_devices")}
             required_columns = {

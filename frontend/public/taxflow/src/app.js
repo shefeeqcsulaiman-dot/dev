@@ -16838,15 +16838,16 @@ function refreshHrmsKpis(){
   set('hrms-kpi-leave',onLeaveToday||'0');
   set('hrms-kpi-pending',(pendingLeave+pendingOT+pendingCorr)||'0');
   set('hrms-kpi-payroll',payrollNetTotal>0?fmtAed(payrollNetTotal):'—');
-  // Present Today: show the leave-based estimate immediately, then overwrite
-  // with the real punch-based count from /attendance/today once it resolves
-  // — this is the same punch data the Attendance Trend chart draws from, so
-  // the two can no longer silently disagree (e.g. KPI claiming everyone is
-  // present while the trend chart shows near-zero actual check-ins).
-  const presentFallback=Math.max(0,empCount-onLeaveToday);
-  set('hrms-kpi-present',presentFallback||'0');
+  // Present Today: "active minus on approved leave" is not a valid stand-in
+  // for "present" — it silently counts anyone on an unfiled day off, or
+  // simply not yet clocked in (e.g. early in the day before any punches
+  // exist), as present. Showing that guess as a real number, even briefly,
+  // reads as "all active employees are present" when the truth may be zero
+  // punches recorded yet. Keep the tile at its loading placeholder ("—",
+  // hrms.html's own default) until the real punch-based count from
+  // /attendance/today actually resolves; on failure, stay at "—" rather
+  // than ever showing a fabricated present count.
   const trendEl=document.getElementById('hrms-kpi-present-trend');
-  if(trendEl&&empCount>0)trendEl.innerHTML='<span>'+Math.round(presentFallback/empCount*100)+'% of total</span>';
   moduleApi('/attendance/today').then(data=>{
     const presentToday=data?.present_count;
     if(typeof presentToday!=='number')return;
