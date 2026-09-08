@@ -1023,6 +1023,21 @@ def attendance_today(
             Employee.company_id == principal.company_id, Employee.employee_no.in_(unique_employees)
         ).all()
     }
+    # A punch matching a real employee record whose status isn't "active"
+    # (terminated/inactive) must never count as present — e.g. a
+    # since-deactivated employee's old badge still triggering a scan, or a
+    # device-side bulk sync bug hitting every enrolled ID regardless of
+    # employment status. Every other Employee query in this codebase
+    # (payroll.py, leave.py, hr_access.py, this file's own /monthly-report)
+    # already filters on Employee.status == "active" — this endpoint was
+    # the one place that didn't. Unmatched employee_ids (no Employee record
+    # at all) are deliberately left alone: that's the separate, intentional
+    # "Unmatched" signal recent_punches()/the Sync Activity Log already use
+    # to flag a device ID that doesn't correspond to any employee_no.
+    unique_employees = [
+        emp_id for emp_id in unique_employees
+        if emp_id not in employees_by_no or employees_by_no[emp_id].status == "active"
+    ]
     employees = [
         {
             "employee_id": emp_id,
