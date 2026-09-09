@@ -13,6 +13,7 @@ import hashlib
 import io
 import ipaddress
 import json
+import logging
 import pathlib
 import re
 import secrets
@@ -52,6 +53,8 @@ gated_router = APIRouter(prefix="/attendance", tags=["attendance"], dependencies
 # have this URL manually typed into a small on-device form, so shorter matters
 # here in a way it doesn't for the CRUD endpoints our own frontend calls.
 short_router = APIRouter(tags=["attendance"])
+
+log = logging.getLogger("taxflow")
 
 CIRC = 238.76  # SVG donut circumference reference (unused here, kept for JS)
 
@@ -945,6 +948,159 @@ async def import_csv(
             rejected += 1
 
     return {"imported": inserted, "skipped": skipped, "duplicates": duplicates, "rejected": rejected}
+
+
+class _ImportRowsBody(BaseModel):
+    rows: list[dict[str, Any]]
+
+
+def _parse_import_clock_field(time_raw: str, work_date: str, offset: timedelta) -> datetime | None:
+    """Accepts either a full ISO datetime -- "2026-09-09T07:29:00+04:00"
+    (offset-aware, converted directly) or "2026-09-09T07:29:00" (naive,
+    treated as company-local time) -- or a plain "HH:MM" local-time string
+    combined with the row's work_date. Returns None if neither parses."""
+    try:
+        dt = datetime.fromisoformat(time_raw)
+        return dt.astimezone(UTC) if dt.tzinfo is not None else (dt - offset).replace(tzinfo=UTC)
+    except ValueError:
+        pass
+    try:
+        local_dt = datetime.strptime(f"{work_date} {time_raw}", "%Y-%m-%d %H:%M")
+        return (local_dt - offset).replace(tzinfo=UTC)
+    except ValueError:
+        return None
+
+
+@gated_router.post("/import-rows", status_code=201)
+async def import_rows(
+    body: _ImportRowsBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Bulk-import already-computed daily attendance rows -- for migrating
+    historical data from another system, NOT a live-ingestion path. This is
+    a separate, additive endpoint precisely because a finished row's
+    total_seconds/session_count/etc. are things only this server's own
+    pairing computation (_pair_day_punches) can correctly produce; no real
+    device or bridge script has that information, which is why /punch and
+    /adms deliberately stay on their existing raw-event/wide-report shapes
+    and are untouched by this endpoint.
+
+    Each row's individual scan events (from `raw_events` if given, else
+    synthesized from `work_date` + `clock_in_N`/`clock_out_N`, each of
+    which accepts either "HH:MM" local time or a full ISO datetime) are
+    replayed one at a time through attendance_store.upsert_attendance_
+    event() -- the same shared, concurrency-safe upsert every other
+    ingestion path uses -- so an imported row gets pairing/totals
+    recomputed by the server rather than trusting whatever total_seconds/
+    session_count the caller sent. Fields that are always server-derived
+    (total_seconds, ot_seconds, under_seconds, session_count) are accepted
+    in the request shape for symmetry with a raw AttendanceDetail row, but
+    are ignored -- only employee_id, employee_name, work_date,
+    clock_in_1..5, clock_out_1..5, and raw_events are actually read.
+
+    Logged at INFO/WARNING (logger "taxflow") so a DigitalOcean deploy's
+    runtime log shows exactly what was accepted and how it was processed,
+    per request and per row -- this endpoint deals with data imported from
+    outside the app, where "why didn't this row show up" needs a paper
+    trail, unlike the high-volume device webhook paths that don't log per
+    punch.
+    """
+    offset = _company_offset(db, current_user.company_id)
+    log.info(
+        "import-rows: received company=%s user=%s rows=%d",
+        current_user.company_id, current_user.id, len(body.rows),
+    )
+    rows_processed = 0
+    events_inserted = events_duplicate = events_rejected = 0
+    row_errors: list[dict[str, Any]] = []
+
+    for idx, row in enumerate(body.rows):
+        employee_id = str(row.get("employee_id") or "").strip()
+        work_date = str(row.get("work_date") or "").strip()
+        if not employee_id:
+            log.warning("import-rows: row %d rejected: employee_id is required", idx)
+            row_errors.append({"row": idx, "error": "employee_id is required"})
+            continue
+        employee_name = row.get("employee_name") or None
+
+        events: list[tuple[datetime, str]] = []
+        raw_events = row.get("raw_events")
+        if raw_events:
+            # Already a genuine event log (e.g. transplanted from another
+            # AttendanceDetail row's export) -- these are stored as UTC
+            # ISO timestamps, unlike the clock_in_N fallback below, so no
+            # offset conversion here.
+            if isinstance(raw_events, str):
+                try:
+                    raw_events = json.loads(raw_events)
+                except (ValueError, TypeError):
+                    raw_events = []
+            for e in raw_events if isinstance(raw_events, list) else []:
+                try:
+                    events.append((datetime.fromisoformat(e["punch_time"]), e.get("direction") or "in"))
+                except (KeyError, ValueError, TypeError):
+                    continue
+        elif work_date:
+            try:
+                datetime.strptime(work_date, "%Y-%m-%d")
+            except ValueError:
+                log.warning("import-rows: row %d rejected: work_date %r must be YYYY-MM-DD", idx, work_date)
+                row_errors.append({"row": idx, "error": "work_date must be YYYY-MM-DD"})
+                continue
+            for n in range(1, 6):
+                for field, direction in ((f"clock_in_{n}", "in"), (f"clock_out_{n}", "out")):
+                    time_raw = str(row.get(field) or "").strip()
+                    if not time_raw:
+                        continue
+                    parsed = _parse_import_clock_field(time_raw, work_date, offset)
+                    if parsed is None:
+                        log.warning("import-rows: row %d field %s=%r could not be parsed, skipped", idx, field, time_raw)
+                        continue
+                    events.append((parsed, direction))
+        else:
+            log.warning("import-rows: row %d rejected: work_date or raw_events is required", idx)
+            row_errors.append({"row": idx, "error": "work_date or raw_events is required"})
+            continue
+
+        if not events:
+            log.warning("import-rows: row %d employee=%s rejected: no usable clock_in/out or raw_events found", idx, employee_id)
+            row_errors.append({"row": idx, "error": "no usable clock_in/out or raw_events found"})
+            continue
+
+        rows_processed += 1
+        row_inserted = row_duplicate = row_rejected = 0
+        for punch_time, direction in events:
+            result = attendance_store.upsert_attendance_event(
+                db, company_id=current_user.company_id, employee_id=employee_id,
+                punch_time=punch_time, direction=direction, employee_name=employee_name,
+                source="import",
+            )
+            if not result.get("ok"):
+                events_rejected += 1
+                row_rejected += 1
+            elif result.get("duplicate"):
+                events_duplicate += 1
+                row_duplicate += 1
+            else:
+                events_inserted += 1
+                row_inserted += 1
+        log.info(
+            "import-rows: row %d employee=%s work_date=%s events_found=%d inserted=%d duplicate=%d rejected=%d",
+            idx, employee_id, work_date or "(from raw_events)", len(events), row_inserted, row_duplicate, row_rejected,
+        )
+
+    log.info(
+        "import-rows: complete company=%s rows_received=%d rows_processed=%d events_inserted=%d "
+        "events_duplicate=%d events_rejected=%d row_errors=%d",
+        current_user.company_id, len(body.rows), rows_processed,
+        events_inserted, events_duplicate, events_rejected, len(row_errors),
+    )
+    return {
+        "ok": True, "rows_processed": rows_processed,
+        "events_inserted": events_inserted, "events_duplicate": events_duplicate, "events_rejected": events_rejected,
+        "row_errors": row_errors,
+    }
 
 
 # ── Dashboard data ────────────────────────────────────────────────────────────
