@@ -5,10 +5,11 @@ See biotime_client.py / biotime_sync.py / routers/attendance.py.
 biotime_client's network calls are monkeypatched throughout — no real HTTP
 call ever leaves this test.
 """
+import json
 from datetime import UTC, datetime, timedelta
 
 from app import biotime_client, crypto
-from app.models import AttendancePunch, BiometricDevice
+from app.models import AttendanceDetail, BiometricDevice
 
 
 def _add_biotime_device(client, headers, name="Main BioTime"):
@@ -80,26 +81,33 @@ def test_test_device_surfaces_connection_error(client, auth_headers, monkeypatch
 
 
 def test_sync_inserts_punches_scoped_to_company(client, auth_headers, db, monkeypatch):
+    # AttendanceDetail's identity is (company, employee, day) with no device
+    # dimension of its own (unlike the old AttendancePunch row-per-event
+    # table) -- a distinct employee_id per test avoids colliding with other
+    # tests in this file that also sync a punch "now" for the shared test
+    # company (see the "Shared Test-Company Pollution" convention other
+    # test files in this suite already follow).
     device_id = _add_biotime_device(client, auth_headers)
     monkeypatch.setattr(biotime_client, "get_token", lambda base_url, username, password: "fake-token")
 
     punch_time = (datetime.now(UTC) - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
     monkeypatch.setattr(biotime_client, "list_transactions", lambda base_url, token, start_time, end_time: [
-        {"emp_code": "EMP001", "punch_time": punch_time, "punch_state": "0", "terminal_alias": "Main Gate"},
+        {"emp_code": "EMP-SYNC-SCOPE-001", "punch_time": punch_time, "punch_state": "0", "terminal_alias": "Main Gate"},
     ])
 
     resp = client.post(f"/api/v1/attendance/devices/{device_id}/biotime/sync", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["synced"] == 1
 
-    punches = db.query(AttendancePunch).filter(AttendancePunch.device_id == device_id).all()
-    assert len(punches) == 1
-    assert punches[0].employee_id == "EMP001"
-    assert punches[0].direction == "in"
-    assert punches[0].source == "biotime"
+    row = db.query(AttendanceDetail).filter(AttendanceDetail.employee_id == "EMP-SYNC-SCOPE-001").one()
+    events = json.loads(row.raw_events)
+    assert len(events) == 1
+    assert events[0]["direction"] == "in"
+    assert events[0]["source"] == "biotime"
+    assert events[0]["device_id"] == device_id
 
     device = db.query(BiometricDevice).filter(BiometricDevice.id == device_id).first()
-    assert punches[0].company_id == device.company_id
+    assert row.company_id == device.company_id
 
 
 def test_sync_is_idempotent_across_repeated_runs(client, auth_headers, db, monkeypatch):
@@ -108,7 +116,7 @@ def test_sync_is_idempotent_across_repeated_runs(client, auth_headers, db, monke
 
     punch_time = (datetime.now(UTC) - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
     monkeypatch.setattr(biotime_client, "list_transactions", lambda base_url, token, start_time, end_time: [
-        {"emp_code": "EMP001", "punch_time": punch_time, "punch_state": "0", "terminal_alias": "Main Gate"},
+        {"emp_code": "EMP-SYNC-IDEMPOTENT-001", "punch_time": punch_time, "punch_state": "0", "terminal_alias": "Main Gate"},
     ])
 
     first = client.post(f"/api/v1/attendance/devices/{device_id}/biotime/sync", headers=auth_headers)
@@ -118,8 +126,8 @@ def test_sync_is_idempotent_across_repeated_runs(client, auth_headers, db, monke
     second = client.post(f"/api/v1/attendance/devices/{device_id}/biotime/sync", headers=auth_headers)
     assert second.json()["synced"] == 0
 
-    punches = db.query(AttendancePunch).filter(AttendancePunch.device_id == device_id).all()
-    assert len(punches) == 1
+    row = db.query(AttendanceDetail).filter(AttendanceDetail.employee_id == "EMP-SYNC-IDEMPOTENT-001").one()
+    assert len(json.loads(row.raw_events)) == 1
 
 
 def test_cross_tenant_cannot_sync_test_or_delete_others_device(client, auth_headers, second_tenant_headers):
@@ -159,42 +167,41 @@ def test_sync_uses_saudi_offset_not_hardcoded_uae(client, auth_headers, db, monk
     assert resp.status_code == 200, resp.text
     assert resp.json()["synced"] == 1
 
-    punch = db.query(AttendancePunch).filter(AttendancePunch.device_id == device_id).one()
-    # SQLite round-trips DateTime(timezone=True) as naive (see biotime_sync.py's
-    # own _key() comment for the same quirk) — compare the naive readback against
-    # a naive literal rather than a tz-aware one.
-    assert punch.punch_time == datetime(2026, 1, 15, 6, 0, 0)
-    assert punch.punch_date == "2026-01-15"
+    row = db.query(AttendanceDetail).filter(AttendanceDetail.employee_id == "EMP-SA-001").one()
+    # SQLite round-trips DateTime(timezone=True) as naive (same quirk noted
+    # elsewhere in this suite) — compare the naive readback against a naive
+    # literal rather than a tz-aware one.
+    assert row.clock_in_1 == datetime(2026, 1, 15, 6, 0, 0)
+    assert row.work_date == "2026-01-15"
 
 
-def test_attendance_punch_dedup_constraint_rejects_true_duplicate(db, auth_headers, client):
-    """Direct model-level check that uq_attendance_punch_dedup (models.py)
-    actually exists and rejects a true duplicate — the backstop the
-    application-level SELECT-then-INSERT dedupe relies on under
-    concurrency. Resolve a real company_id via the API rather than
-    hardcoding one, matching this file's existing fixture style."""
+def test_attendance_details_day_constraint_rejects_true_duplicate(db, auth_headers, client):
+    """Direct model-level check that uq_attendance_details_day (models.py)
+    actually exists and rejects a second row for the same (company,
+    employee, day) — the DB-level backstop upsert_attendance_event()'s
+    SELECT...FOR UPDATE-then-INSERT relies on under genuine concurrency
+    (two requests racing to create the first row for an employee's day).
+    Resolve a real company_id via the API rather than hardcoding one,
+    matching this file's existing fixture style."""
     from sqlalchemy.exc import IntegrityError
 
     company = client.get("/api/v1/companies/current", headers=auth_headers).json()
-    punch_time = datetime(2026, 2, 1, 8, 0, 0, tzinfo=UTC)
-    first = AttendancePunch(
-        company_id=company["id"], employee_id="EMP-DEDUP-001", punch_time=punch_time,
-        punch_date="2026-02-01", direction="in", device_id="dedup-test-device", source="device",
+    first = AttendanceDetail(
+        company_id=company["id"], employee_id="EMP-DEDUP-001", work_date="2026-02-01", raw_events="[]",
     )
     db.add(first)
     db.commit()
 
-    dup = AttendancePunch(
-        company_id=company["id"], employee_id="EMP-DEDUP-001", punch_time=punch_time,
-        punch_date="2026-02-01", direction="in", device_id="dedup-test-device", source="device",
+    dup = AttendanceDetail(
+        company_id=company["id"], employee_id="EMP-DEDUP-001", work_date="2026-02-01", raw_events="[]",
     )
     db.add(dup)
     try:
         db.commit()
-        assert False, "expected IntegrityError from uq_attendance_punch_dedup"
+        assert False, "expected IntegrityError from uq_attendance_details_day"
     except IntegrityError:
         db.rollback()
 
-    assert db.query(AttendancePunch).filter(
-        AttendancePunch.company_id == company["id"], AttendancePunch.employee_id == "EMP-DEDUP-001"
+    assert db.query(AttendanceDetail).filter(
+        AttendanceDetail.company_id == company["id"], AttendanceDetail.employee_id == "EMP-DEDUP-001"
     ).count() == 1

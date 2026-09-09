@@ -1077,40 +1077,14 @@ class BiometricDevice(Base, TimestampMixin):
     biotime_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
-class AttendancePunch(Base, TimestampMixin):
-    __tablename__ = "attendance_punches"
-    __table_args__ = (
-        Index("ix_att_punch_company_date", "company_id", "punch_date"),
-        # Backstop against the app-level SELECT-then-INSERT dedupe in
-        # _record_punch()/sync_biotime_device() losing a race under genuine
-        # concurrency (e.g. an ADMS webhook retry landing at the same moment
-        # as a legitimate second delivery) — device_id is NULL for manual/
-        # CSV punches, and SQL NULLs never collide with each other, so this
-        # only constrains device-driven punches, which is exactly the gap
-        # that was unprotected.
-        UniqueConstraint("company_id", "device_id", "employee_id", "punch_time", name="uq_attendance_punch_dedup"),
-    )
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
-    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
-    employee_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    employee_name: Mapped[str | None] = mapped_column(String(255))
-    punch_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    punch_date: Mapped[str] = mapped_column(String(10), nullable=False)
-    direction: Mapped[str] = mapped_column(String(10), default="in")
-    device_id: Mapped[str | None] = mapped_column(String(36))
-    device_name: Mapped[str | None] = mapped_column(String(120))
-    source: Mapped[str] = mapped_column(String(32), default="manual")
-
-
 class AttendanceDetail(Base, TimestampMixin):
-    """One row per (company, employee, calendar day) — replaces AttendancePunch's
-    one-row-per-scan-event model with a day-aggregate shape (see docs/architecture.md
-    attendance migration notes). `raw_events` retains every individual scan as a JSON
-    list so per-event listing/delete (Sync Activity Log) and real in/out pairing
-    (employee-daily drill-down) remain possible on top of the aggregate columns.
-    During the migration's safety-net window, writers also keep AttendancePunch
-    updated in parallel (see app/attendance_store.py) so a rollback loses nothing."""
+    """One row per (company, employee, calendar day) — the sole attendance-
+    event table (its one-row-per-scan-event predecessor, AttendancePunch,
+    was retired once this table had run as the sole source for every live
+    endpoint without issue; see git history for that table's schema).
+    `raw_events` retains every individual scan as a JSON list so per-event
+    listing/delete (Sync Activity Log) and real in/out pairing (employee-
+    daily drill-down) remain possible on top of the aggregate columns."""
     __tablename__ = "attendance_details"
     __table_args__ = (
         Index("ix_att_details_company_date", "company_id", "work_date"),

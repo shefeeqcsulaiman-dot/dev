@@ -6,9 +6,10 @@ it didn't recognize, defaulted punch_time to "now" (the push time, not the
 real scan time), and inserted a punch for every row regardless of whether
 the employee actually clocked in — an absent employee's blank "Clock In 1"
 row still became a false "in" punch."""
+import json
 
 from app import timezone_utils
-from app.models import AttendancePunch, Company
+from app.models import AttendanceDetail, Company
 
 
 def _wide_payload(employee_id="60", date="07/09/2026", clock_in_1="07:29", clock_out_1=""):
@@ -33,34 +34,33 @@ def test_wide_payload_records_real_scan_time_not_push_time(client, auth_headers,
     assert body["inserted"] == 1
     assert body["events"] == 1
 
-    punch = db.query(AttendancePunch).filter(AttendancePunch.employee_id == "60").order_by(AttendancePunch.punch_time.desc()).first()
-    assert punch is not None
-    assert punch.direction == "in"
+    row = db.query(AttendanceDetail).filter(AttendanceDetail.employee_id == "60").order_by(AttendanceDetail.work_date.desc()).first()
+    assert row is not None
+    assert row.clock_in_1 is not None
 
     # Don't assume UAE/+4: the "qa-admin" company is shared across the whole
     # test session (see conftest.ensure_user), and other test files may have
     # changed its country. Compute the real expected offset instead of
     # hardcoding it, so this doesn't flake under full-suite ordering.
-    country = db.query(Company.country).filter(Company.id == punch.company_id).scalar()
+    country = db.query(Company.country).filter(Company.id == row.company_id).scalar()
     offset = timezone_utils.company_utc_offset(country)
     expected_utc_minutes = (7 * 60 + 29) - int(offset.total_seconds() // 60)
     expected_hour, expected_minute = divmod(expected_utc_minutes % (24 * 60), 60)
     # 07:29 local -> expected_hour:expected_minute UTC, NOT "now" (the old bug).
-    assert punch.punch_time.hour == expected_hour and punch.punch_time.minute == expected_minute
+    assert row.clock_in_1.hour == expected_hour and row.clock_in_1.minute == expected_minute
 
 
 def test_wide_payload_absent_row_creates_no_punch(client, auth_headers, db):
     """A row with no Clock In/Out at all (an absent day) must not register
     as a present employee — this was the second half of the bug class."""
-    before = db.query(AttendancePunch).filter(AttendancePunch.employee_id == "61").count()
     resp = client.post("/api/v1/attendance/punch", headers=auth_headers, json=_wide_payload(employee_id="61", clock_in_1="", clock_out_1=""))
     assert resp.status_code == 201, resp.text
     body = resp.json()
     assert body["ok"] is True
     assert body["inserted"] == 0
     assert body["events"] == 0
-    after = db.query(AttendancePunch).filter(AttendancePunch.employee_id == "61").count()
-    assert after == before
+    row = db.query(AttendanceDetail).filter(AttendanceDetail.employee_id == "61").first()
+    assert row is None
 
 
 def test_wide_payload_records_both_clock_in_and_out(client, auth_headers, db):
@@ -72,8 +72,10 @@ def test_wide_payload_records_both_clock_in_and_out(client, auth_headers, db):
     body = resp.json()
     assert body["inserted"] == 2
     assert body["events"] == 2
-    punches = db.query(AttendancePunch).filter(AttendancePunch.employee_id == "62").order_by(AttendancePunch.punch_time.asc()).all()
-    assert [p.direction for p in punches] == ["in", "out"]
+    row = db.query(AttendanceDetail).filter(AttendanceDetail.employee_id == "62").first()
+    assert row is not None
+    assert row.clock_in_1 is not None
+    assert row.clock_out_1 is not None
 
 
 def test_wide_payload_replay_is_idempotent(client, auth_headers, db):
@@ -83,5 +85,7 @@ def test_wide_payload_replay_is_idempotent(client, auth_headers, db):
     assert first.json()["inserted"] == 1
     assert second.json()["duplicates"] == 1
     assert second.json()["inserted"] == 0
-    count = db.query(AttendancePunch).filter(AttendancePunch.employee_id == "63").count()
-    assert count == 1
+    row = db.query(AttendanceDetail).filter(AttendanceDetail.employee_id == "63").first()
+    assert row is not None
+    events = json.loads(row.raw_events)
+    assert len(events) == 1

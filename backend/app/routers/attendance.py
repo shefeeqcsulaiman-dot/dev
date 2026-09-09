@@ -25,7 +25,6 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, U
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import app.cache as cache
@@ -36,7 +35,7 @@ from app.database import get_db
 from app.auth_principal import resolve_active_branch
 from app.dependencies import Principal, get_current_user, require_module, require_principal_permission
 from app.limiter import limiter
-from app.models import AppDataRecord, AttendanceDetail, AttendancePunch, BiometricDevice, Company, Employee, LeaveRequest, User
+from app.models import AppDataRecord, AttendanceDetail, BiometricDevice, Company, Employee, LeaveRequest, User
 from app.security import verify_password, hash_password
 
 # router carries only the device-facing punch/adms endpoints (auth is via
@@ -329,6 +328,39 @@ _BIOTIME_TYPES = {"ZKTeco BioTime Server"}
 _ADMS_CLASSIC_TYPES = {"ZKTeco ADMS Classic"}
 
 
+def _count_matching_events(
+    db: Session, company_id: str, *, device_id: str | None = None, source: str | None = None,
+    since: datetime | None = None,
+) -> int:
+    """Scan AttendanceDetail.raw_events for events matching the given
+    filters -- used only by test_device()'s rare, admin-triggered
+    connectivity diagnostics (not a hot path), so an in-Python scan is an
+    acceptable trade-off rather than a dedicated indexed counter."""
+    query = db.query(AttendanceDetail.raw_events).filter(AttendanceDetail.company_id == company_id)
+    if since is not None:
+        query = query.filter(AttendanceDetail.updated_at >= since)
+    count = 0
+    for (raw,) in query.all():
+        try:
+            events = json.loads(raw or "[]")
+        except (ValueError, TypeError):
+            continue
+        for e in events:
+            if device_id is not None and e.get("device_id") != device_id:
+                continue
+            if source is not None and e.get("source") != source:
+                continue
+            if since is not None:
+                try:
+                    ts = datetime.fromisoformat(e["punch_time"])
+                except (KeyError, ValueError, TypeError):
+                    continue
+                if ts < since:
+                    continue
+            count += 1
+    return count
+
+
 @gated_router.post("/devices/{device_id}/test")
 def test_device(
     device_id: str,
@@ -364,10 +396,7 @@ def test_device(
     # ── HTTP Push / ADMS devices: they call us, we can't call them ────────────
     if device.device_type in _PUSH_TYPES or device.device_type in _ADMS_CLASSIC_TYPES:
         week_ago = now - timedelta(days=7)
-        recent = db.query(func.count(AttendancePunch.id)).filter(
-            AttendancePunch.device_id == device.id,
-            AttendancePunch.punch_time >= week_ago,
-        ).scalar() or 0
+        recent = _count_matching_events(db, current_user.company_id, device_id=device.id, since=week_ago)
 
         if device.last_sync:
             delta = now - device.last_sync.replace(tzinfo=UTC) if device.last_sync.tzinfo is None else now - device.last_sync
@@ -390,10 +419,7 @@ def test_device(
 
     # ── Manual / CSV: no connection to test ────────────────────────────────────
     if device.device_type == "Manual":
-        total = db.query(func.count(AttendancePunch.id)).filter(
-            AttendancePunch.company_id == current_user.company_id,
-            AttendancePunch.source == "csv",
-        ).scalar() or 0
+        total = _count_matching_events(db, current_user.company_id, source="csv")
         return {"ok": True, "message": f"CSV import device — {total} records imported total"}
 
     # ── TCP/IP devices: socket reachability check ──────────────────────────────
@@ -401,10 +427,7 @@ def test_device(
         return {"ok": False, "message": "No IP address configured — add the device IP to test connectivity"}
 
     week_ago = now - timedelta(days=7)
-    recent = db.query(func.count(AttendancePunch.id)).filter(
-        AttendancePunch.device_id == device.id,
-        AttendancePunch.punch_time >= week_ago,
-    ).scalar() or 0
+    recent = _count_matching_events(db, current_user.company_id, device_id=device.id, since=week_ago)
 
     # TCP/IP-mode devices exist specifically because they sit on a private LAN
     # (that's the whole reason zk_bridge.py needs to run locally at all) —
@@ -588,12 +611,10 @@ def _ingest_device_punch(
 
     Delegates the actual write to attendance_store.upsert_attendance_event()
     — the single, concurrency-safe upsert shared by every ingestion path
-    (this one, BioTime sync, approved attendance corrections) that also
-    mirrors the event into the legacy AttendancePunch table for the
-    migration's rollback-safety window, so nothing here inserts into
-    AttendancePunch directly any more. The returned "id" is the individual
-    scan event's id (not the day-row's), matching what /punches (Sync
-    Activity Log) and DELETE /punches/{id} already expect an "id" to mean."""
+    (this one, BioTime sync, approved attendance corrections). The
+    returned "id" is the individual scan event's id (not the day-row's),
+    matching what /punches (Sync Activity Log) and DELETE /punches/{id}
+    already expect an "id" to mean."""
     now = datetime.now(UTC)
     if punch_time > now + timedelta(minutes=5):
         return {"ok": False, "error": "future"}

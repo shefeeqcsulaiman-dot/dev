@@ -2,7 +2,6 @@ import hashlib
 import logging
 import os
 import pathlib
-import threading
 from typing import Any
 
 # Load .env into os.environ so os.environ.get() works for AI keys
@@ -520,84 +519,6 @@ def ensure_schema_updates() -> None:
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_attendance_sessions_open_per_employee "
                 "ON attendance_sessions (company_id, employee_id) WHERE status='open'"
             ))
-        if "attendance_punches" in table_names:
-            # Same class of bug as attendance_sessions above: a plain
-            # SELECT-then-INSERT dedupe in _record_punch()/
-            # sync_biotime_device() (no DB constraint, no row lock) could
-            # let two genuinely concurrent requests for the identical punch
-            # (e.g. an ADMS webhook retry racing a legitimate delivery) both
-            # insert a row. device_id is NULL for manual/CSV punches, and
-            # SQL NULLs never collide with each other in a unique index, so
-            # this only ever needs to consider device-driven rows — any true
-            # duplicate here is by definition the same physical punch
-            # (identical company/device/employee/timestamp), so keeping the
-            # earliest and discarding the rest is always safe, no ambiguity.
-            connection.execute(text("""
-                DELETE FROM attendance_punches WHERE device_id IS NOT NULL AND id NOT IN (
-                    SELECT id FROM (
-                        SELECT id, ROW_NUMBER() OVER (
-                            PARTITION BY company_id, device_id, employee_id, punch_time ORDER BY created_at ASC
-                        ) AS rn
-                        FROM attendance_punches WHERE device_id IS NOT NULL
-                    ) ranked WHERE rn = 1
-                )
-            """))
-            try:
-                connection.execute(text(
-                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_attendance_punch_dedup "
-                    "ON attendance_punches (company_id, device_id, employee_id, punch_time)"
-                ))
-            except Exception as idx_exc:
-                logging.getLogger("taxflow").error(
-                    "Could not create uq_attendance_punch_dedup even after de-duplicating: %s", idx_exc
-                )
-        if (
-            "attendance_details" in table_names and "attendance_punches" in table_names
-            and os.environ.get("TESTING", "").lower() not in ("1", "true", "yes")
-        ):
-            # Additive-only migration step (see attendance_details migration
-            # plan): reconstructs the new day-aggregate attendance_details
-            # table from the legacy attendance_punches event log. Nothing
-            # reads/writes attendance_details yet — this just keeps it
-            # backfilled/reconciled on every startup so there's a verified,
-            # observed-over-days dataset to cut real endpoints over to
-            # later, without a separate migration/backfill script to run
-            # by hand (this project has no Alembic — see the other blocks
-            # in this function for the established convention). Skipped
-            # under TESTING (same convention as limiter.py) — it's a
-            # full-table scan that would otherwise re-run on every single
-            # test's app startup (TestClient re-fires the startup event per
-            # test function) against a shared, ever-growing test DB;
-            # attendance_store's own functions are exercised directly by
-            # tests instead.
-            #
-            # Runs on a background thread, NOT inline here: at real
-            # production scale (confirmed: one company alone had 25,500
-            # (employee, day) groups) this took minutes to complete, which
-            # blocks ensure_schema_updates() -> startup() -> the app ever
-            # becoming ready, risking every future deploy either hanging
-            # past the platform's health-check timeout or getting killed
-            # mid-backfill before it ever commits a row (which is exactly
-            # what happened here — attendance_details stayed empty despite
-            # 55k+ punches existing, discovered while investigating a
-            # separate attendance report). Uses its own ORM Session (a
-            # fresh one per thread) since the rest of this function works
-            # over a raw `connection`, and the backfill logic (grouping +
-            # reusing _pair_day_punches) is much clearer expressed with the
-            # ORM.
-            def _run_attendance_backfill() -> None:
-                from app.attendance_store import backfill_from_attendance_punches
-                backfill_db = SessionLocal()
-                try:
-                    result = backfill_from_attendance_punches(backfill_db)
-                    logging.getLogger("taxflow").info("attendance_details backfill: %s", result)
-                except Exception as exc:
-                    logging.getLogger("taxflow").error("attendance_details backfill failed (non-fatal): %s", exc)
-                    backfill_db.rollback()
-                finally:
-                    backfill_db.close()
-
-            threading.Thread(target=_run_attendance_backfill, daemon=True, name="attendance-backfill").start()
         if "biometric_devices" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("biometric_devices")}
             required_columns = {

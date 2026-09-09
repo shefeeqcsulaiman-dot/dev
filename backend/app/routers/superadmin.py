@@ -20,7 +20,7 @@ from app.limiter import limiter
 from app.module_catalog import ALL_MODULES
 from app.models import (
     AccrualPrepaymentRecord, Account, AppDataRecord, ApprovalMatrixRecord,
-    AttendanceDetail, AttendancePunch, AttendanceSession, AuditLog, AuditLogDetail, BankAccount,
+    AttendanceDetail, AttendanceSession, AuditLog, AuditLogDetail, BankAccount,
     BankReconciliationMatch, BankStatementLine, BiometricDevice, BudgetRecord,
     Branch, CashFlowForecastRecord, ClientError, Company, CompanyLocation,
     ConsolidationRecord, CorporateTaxRecord, CorporateTaxReturn, CostCenterRecord,
@@ -604,10 +604,6 @@ def delete_company(
     db.query(StockProductMapping).filter(StockProductMapping.company_id == cid).delete(**s)
     db.query(ItemUnitConversion).filter(ItemUnitConversion.company_id == cid).delete(**s)
     db.query(ItemUnit).filter(ItemUnit.company_id == cid).delete(**s)
-    # Both tables during the attendance_details migration's safety-net
-    # window (AttendancePunch is still mirrored on every write) -- drop the
-    # AttendancePunch line once that table is finally retired.
-    db.query(AttendancePunch).filter(AttendancePunch.company_id == cid).delete(**s)
     db.query(AttendanceDetail).filter(AttendanceDetail.company_id == cid).delete(**s)
     db.query(BiometricDevice).filter(BiometricDevice.company_id == cid).delete(**s)
     db.query(ApprovalMatrixRecord).filter(ApprovalMatrixRecord.company_id == cid).delete(**s)

@@ -19309,7 +19309,7 @@ async function approveCorrection(btn){
   if(!id)return;
   try{
     // sync_domain_model()'s attendanceCorrections branch (app_data.py)
-    // applies the requested check-in/check-out as real AttendancePunch rows
+    // applies the requested check-in/check-out as real attendance events
     // when status transitions to Approved — previously this only flipped
     // the badge with no effect on attendance at all, despite the UI's own
     // copy claiming "Approved corrections update attendance."
@@ -21584,7 +21584,7 @@ async function deleteBiometricDevice(id,btn){
 
 // ── Attendance: Today's data from API ─────────────────────────────────────────
 
-// Maps AttendancePunch.source (backend truth: "device"/"biotime" = a real
+// Maps a punch event's "source" (backend truth: "device"/"biotime" = a real
 // scanner tap, "csv"/"manual"/"correction" = not) to the Today's Attendance
 // badge. Previously every row said "Biometric" unconditionally.
 function _attendanceSourceBadge(source){

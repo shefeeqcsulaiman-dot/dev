@@ -9,7 +9,8 @@ test_device() TCP/IP branch.
 """
 from datetime import UTC, datetime, timedelta
 
-from app.models import AttendancePunch, BiometricDevice
+from app import attendance_store
+from app.models import BiometricDevice
 
 
 def _add_tcp_device(client, headers, ip="192.168.1.201", name="Main Entrance"):
@@ -40,16 +41,11 @@ def test_private_ip_with_no_punches_reports_not_synced_without_socket_attempt(cl
 def test_private_ip_with_recent_punches_reports_synced(client, auth_headers, db):
     device_id = _add_tcp_device(client, auth_headers)
     device = db.query(BiometricDevice).filter(BiometricDevice.id == device_id).first()
-    db.add(AttendancePunch(
-        company_id=device.company_id,
-        device_id=device.id,
-        employee_id="EMP001",
-        punch_time=datetime.now(UTC) - timedelta(hours=1),
-        punch_date=(datetime.now(UTC) - timedelta(hours=1)).date().isoformat(),
-        direction="in",
-        source="device",
-    ))
-    db.commit()
+    attendance_store.upsert_attendance_event(
+        db, company_id=device.company_id, device_id=device.id, device_name=device.name,
+        employee_id="EMP001", punch_time=datetime.now(UTC) - timedelta(hours=1),
+        direction="in", source="device",
+    )
 
     resp = client.post(f"/api/v1/attendance/devices/{device_id}/test", headers=auth_headers)
     assert resp.status_code == 200

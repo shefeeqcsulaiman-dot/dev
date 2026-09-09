@@ -3,9 +3,10 @@ own menu only has a fixed Server IP + Port field (no custom URL/header, so
 the existing X-Device-Key webhook path, tested in
 test_biometric_attendance_security.py, doesn't apply). See attendance.py's
 iclock_router and _get_device_by_serial()."""
+import json
 from datetime import UTC, datetime, timedelta
 
-from app.models import AttendancePunch, Employee
+from app.models import AttendanceDetail, Employee
 
 
 def _add_adms_classic_device(client, auth_headers, serial="SN-TEST-0001", name="Front Door Scanner"):
@@ -89,14 +90,14 @@ def test_attlog_upload_creates_punches(client, auth_headers, db):
     assert resp.status_code == 200
     assert resp.text.strip() == "OK: 2"
 
-    punches = db.query(AttendancePunch).filter(
-        AttendancePunch.employee_id.in_(["ATTLOG-EMP-1", "ATTLOG-EMP-2"])
+    rows = db.query(AttendanceDetail).filter(
+        AttendanceDetail.employee_id.in_(["ATTLOG-EMP-1", "ATTLOG-EMP-2"])
     ).all()
-    assert len(punches) == 2
-    by_id = {p.employee_id: p for p in punches}
-    assert by_id["ATTLOG-EMP-1"].direction == "in"
-    assert by_id["ATTLOG-EMP-2"].direction == "out"
-    assert all(p.source == "device" for p in punches)
+    assert len(rows) == 2
+    by_id = {r.employee_id: json.loads(r.raw_events)[0] for r in rows}
+    assert by_id["ATTLOG-EMP-1"]["direction"] == "in"
+    assert by_id["ATTLOG-EMP-2"]["direction"] == "out"
+    assert all(e["source"] == "device" for e in by_id.values())
 
 
 def test_attlog_upload_dedupes_repeated_lines(client, auth_headers, db):
@@ -115,8 +116,8 @@ def test_attlog_upload_dedupes_repeated_lines(client, auth_headers, db):
     )
     assert second.status_code == 200
 
-    count = db.query(AttendancePunch).filter(AttendancePunch.employee_id == "DEDUPE-EMP-1").count()
-    assert count == 1
+    row = db.query(AttendanceDetail).filter(AttendanceDetail.employee_id == "DEDUPE-EMP-1").one()
+    assert len(json.loads(row.raw_events)) == 1
 
 
 def test_attlog_upload_matches_employee_by_employee_no(client, auth_headers, db):
@@ -155,7 +156,8 @@ def test_attlog_upload_ignores_malformed_lines(client, auth_headers, db):
     )
     assert resp.status_code == 200
     assert resp.text.strip() == "OK: 1"
-    assert db.query(AttendancePunch).filter(AttendancePunch.employee_id == "GOOD-EMP-1").count() == 1
+    row = db.query(AttendanceDetail).filter(AttendanceDetail.employee_id == "GOOD-EMP-1").one()
+    assert len(json.loads(row.raw_events)) == 1
 
 
 def test_non_attlog_table_acknowledged_without_ingesting(client, auth_headers, db):
