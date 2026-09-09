@@ -1027,21 +1027,39 @@ async def import_rows(
         events: list[tuple[datetime, str]] = []
         raw_events = row.get("raw_events")
         if raw_events:
-            # Already a genuine event log (e.g. transplanted from another
-            # AttendanceDetail row's export) -- these are stored as UTC
-            # ISO timestamps, unlike the clock_in_N fallback below, so no
-            # offset conversion here.
+            # Two supported shapes: a genuine event log (list of {punch_time,
+            # direction, ...} dicts, e.g. transplanted from another
+            # AttendanceDetail row's export -- UTC ISO timestamps, no offset
+            # conversion needed) OR a bare list of ISO timestamp strings with
+            # no explicit direction, which alternates in/out/in/out... by
+            # position (the only signal available) and is treated as
+            # company-local time via _parse_import_clock_field the same way
+            # clock_in_N/clock_out_N below are, since a bare string has no
+            # way to signal it's already UTC.
             if isinstance(raw_events, str):
                 try:
                     raw_events = json.loads(raw_events)
                 except (ValueError, TypeError):
                     raw_events = []
             for e in raw_events if isinstance(raw_events, list) else []:
-                try:
-                    events.append((datetime.fromisoformat(e["punch_time"]), e.get("direction") or "in"))
-                except (KeyError, ValueError, TypeError):
-                    continue
-        elif work_date:
+                if isinstance(e, dict):
+                    try:
+                        events.append((datetime.fromisoformat(e["punch_time"]), e.get("direction") or "in"))
+                    except (KeyError, ValueError, TypeError):
+                        continue
+                elif isinstance(e, str) and e.strip():
+                    parsed = _parse_import_clock_field(e.strip(), work_date, offset)
+                    if parsed is not None:
+                        events.append((parsed, "in" if len(events) % 2 == 0 else "out"))
+            if not events:
+                log.warning("import-rows: row %d employee=%s raw_events present but yielded no usable events, falling back to clock_in/out fields", idx, employee_id)
+
+        # Falls back to (or is the only path, if raw_events wasn't given)
+        # work_date + clock_in_N/clock_out_N -- also covers a caller that
+        # sends both raw_events and the flattened fields but in a raw_events
+        # shape we couldn't parse, so a recognizable clock_in_1/clock_out_1
+        # pair in the same payload isn't wasted.
+        if not events and work_date:
             try:
                 datetime.strptime(work_date, "%Y-%m-%d")
             except ValueError:
@@ -1058,14 +1076,14 @@ async def import_rows(
                         log.warning("import-rows: row %d field %s=%r could not be parsed, skipped", idx, field, time_raw)
                         continue
                     events.append((parsed, direction))
-        else:
-            log.warning("import-rows: row %d rejected: work_date or raw_events is required", idx)
-            row_errors.append({"row": idx, "error": "work_date or raw_events is required"})
-            continue
 
         if not events:
-            log.warning("import-rows: row %d employee=%s rejected: no usable clock_in/out or raw_events found", idx, employee_id)
-            row_errors.append({"row": idx, "error": "no usable clock_in/out or raw_events found"})
+            if not work_date and not raw_events:
+                log.warning("import-rows: row %d rejected: work_date or raw_events is required", idx)
+                row_errors.append({"row": idx, "error": "work_date or raw_events is required"})
+            else:
+                log.warning("import-rows: row %d employee=%s rejected: no usable clock_in/out or raw_events found", idx, employee_id)
+                row_errors.append({"row": idx, "error": "no usable clock_in/out or raw_events found"})
             continue
 
         rows_processed += 1

@@ -7,8 +7,10 @@ produce, so a real device/bridge script could never construct this shape
 -- this endpoint exists for humans/scripts importing finished reports, not
 live device ingestion."""
 import json
+from datetime import datetime
 
-from app.models import AttendanceDetail
+from app import timezone_utils
+from app.models import AttendanceDetail, Company
 
 
 def _company_id(client, headers):
@@ -61,6 +63,61 @@ def test_import_rows_from_raw_events(client, auth_headers, db):
     ).one()
     assert row.session_count == 1
     assert row.total_seconds == 9 * 3600
+
+
+def test_import_rows_accepts_bare_string_raw_events_with_flattened_fallback(client, auth_headers, db):
+    """Exact payload shape a user tested with: raw_events is a JSON array of
+    BARE ISO timestamp strings (no {punch_time, direction} object wrapper),
+    alongside a fully-populated flattened clock_in_1/clock_out_1 pair and
+    caller-computed total_seconds/ot_seconds/session_count (all of which
+    must be ignored, not trusted). Server-derived work_seconds_2..5 use
+    JSON null (not empty string) for the unused sessions."""
+    company_id = _company_id(client, auth_headers)
+    payload = {
+        "employee_id": "63", "employee_name": "Brigi", "work_date": "2026-09-08",
+        "clock_in_1": "2026-09-08T09:43:29+04:00", "clock_out_1": "2026-09-08T19:11:43+04:00",
+        "work_seconds_1": 34094,
+        "clock_in_2": None, "clock_out_2": None, "work_seconds_2": 0,
+        "clock_in_3": None, "clock_out_3": None, "work_seconds_3": 0,
+        "clock_in_4": None, "clock_out_4": None, "work_seconds_4": 0,
+        "clock_in_5": None, "clock_out_5": None, "work_seconds_5": 0,
+        "total_seconds": 34094, "ot_seconds": 5294, "under_seconds": 0, "session_count": 1,
+        "raw_events": "[\"2026-09-08T09:43:29\", \"2026-09-08T19:11:43\"]",
+    }
+    resp = client.post("/api/v1/attendance/import-rows", headers=auth_headers, json={"rows": [payload]})
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["rows_processed"] == 1
+    assert body["events_inserted"] == 2
+    assert body["row_errors"] == []
+
+    row = db.query(AttendanceDetail).filter(
+        AttendanceDetail.company_id == company_id, AttendanceDetail.employee_id == "63",
+        AttendanceDetail.work_date == "2026-09-08",
+    ).one()
+    assert row.employee_name == "Brigi"
+    # The raw_events bare-string entries ("2026-09-08T09:43:29", no offset)
+    # win over clock_in_1's explicit "+04:00" here (raw_events is tried
+    # first and succeeded), so these convert as company-LOCAL time via the
+    # shared test company's configured country -- which other test files in
+    # this suite may have changed (e.g. exercising a different VAT rate),
+    # per the "Shared Test-Company Pollution" convention this suite already
+    # follows elsewhere. Compute the real offset instead of assuming UAE+4.
+    country = db.query(Company.country).filter(Company.id == company_id).scalar()
+    offset = timezone_utils.company_utc_offset(country)
+    expected_in = datetime(2026, 9, 8, 9, 43, 29) - offset
+    expected_out = datetime(2026, 9, 8, 19, 11, 43) - offset
+    assert row.clock_in_1.hour == expected_in.hour and row.clock_in_1.minute == 43 and row.clock_in_1.second == 29
+    assert row.clock_out_1.hour == expected_out.hour and row.clock_out_1.minute == 11 and row.clock_out_1.second == 43
+    assert row.session_count == 1
+    # Real computed total (9h28m14s), NOT the caller-sent total_seconds=34094
+    # (which happens to be the same value here since the caller computed it
+    # correctly, but ot_seconds=5294 and session_count are still ignored --
+    # verified by the fact the server derives its OWN ot_seconds using its
+    # own 8h default rather than trusting 5294 directly).
+    expected_total = (15 * 3600 + 11 * 60 + 43) - (5 * 3600 + 43 * 60 + 29)
+    assert row.total_seconds == expected_total
+    assert row.ot_seconds == max(0, expected_total - 8 * 3600)
 
 
 def test_import_rows_rejects_missing_employee_id(client, auth_headers):

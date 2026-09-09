@@ -34,8 +34,14 @@ def test_wide_payload_records_real_scan_time_not_push_time(client, auth_headers,
     assert body["inserted"] == 1
     assert body["events"] == 1
 
-    row = db.query(AttendanceDetail).filter(AttendanceDetail.employee_id == "60").order_by(AttendanceDetail.work_date.desc()).first()
-    assert row is not None
+    # Scoped by work_date too, not just employee_id -- unscoped (or ordered
+    # by work_date desc across ALL of this employee_id's rows), this could
+    # nondeterministically pick up a different test's row for the same
+    # employee_id on a different date under the shared test company (see
+    # the "Shared Test-Company Pollution" convention this suite follows).
+    row = db.query(AttendanceDetail).filter(
+        AttendanceDetail.employee_id == "60", AttendanceDetail.work_date == "2026-09-07",
+    ).one()
     assert row.clock_in_1 is not None
 
     # Don't assume UAE/+4: the "qa-admin" company is shared across the whole
@@ -59,7 +65,9 @@ def test_wide_payload_absent_row_creates_no_punch(client, auth_headers, db):
     assert body["ok"] is True
     assert body["inserted"] == 0
     assert body["events"] == 0
-    row = db.query(AttendanceDetail).filter(AttendanceDetail.employee_id == "61").first()
+    row = db.query(AttendanceDetail).filter(
+        AttendanceDetail.employee_id == "61", AttendanceDetail.work_date == "2026-09-07",
+    ).first()
     assert row is None
 
 
@@ -72,8 +80,9 @@ def test_wide_payload_records_both_clock_in_and_out(client, auth_headers, db):
     body = resp.json()
     assert body["inserted"] == 2
     assert body["events"] == 2
-    row = db.query(AttendanceDetail).filter(AttendanceDetail.employee_id == "62").first()
-    assert row is not None
+    row = db.query(AttendanceDetail).filter(
+        AttendanceDetail.employee_id == "62", AttendanceDetail.work_date == "2026-09-07",
+    ).one()
     assert row.clock_in_1 is not None
     assert row.clock_out_1 is not None
 
@@ -85,7 +94,12 @@ def test_wide_payload_replay_is_idempotent(client, auth_headers, db):
     assert first.json()["inserted"] == 1
     assert second.json()["duplicates"] == 1
     assert second.json()["inserted"] == 0
-    row = db.query(AttendanceDetail).filter(AttendanceDetail.employee_id == "63").first()
-    assert row is not None
+    # Scoped by work_date too, not just employee_id -- unscoped, this could
+    # nondeterministically pick up a different test's row for the same
+    # employee_id on a different date under the shared test company (see
+    # the "Shared Test-Company Pollution" convention this suite follows).
+    row = db.query(AttendanceDetail).filter(
+        AttendanceDetail.employee_id == "63", AttendanceDetail.work_date == "2026-09-07",
+    ).one()
     events = json.loads(row.raw_events)
     assert len(events) == 1
