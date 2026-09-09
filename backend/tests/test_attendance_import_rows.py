@@ -191,3 +191,39 @@ def test_import_rows_does_not_change_punch_endpoint_shape(client, auth_headers, 
     )
     assert resp.status_code == 201, resp.text
     assert resp.json()["ok"] is True
+
+
+def test_import_rows_accepts_device_key_auth(client, auth_headers, db):
+    """An unattended remote script (no company login session) must be able
+    to push here the same way it already can to /punch and /adms -- e.g.
+    a scheduled daily_attendance_report.py-style script whose only
+    credential is a device API key."""
+    company_id = _company_id(client, auth_headers)
+    created = client.post("/api/v1/attendance/devices", json={
+        "name": "Import Rows Test Device", "device_type": "ZKTeco iClock",
+        "ip_address": "192.168.1.70", "port": 4370,
+    }, headers=auth_headers)
+    assert created.status_code == 201, created.text
+    api_key = created.json()["api_key"]
+
+    resp = client.post(
+        "/api/v1/attendance/import-rows",
+        headers={"X-Device-Key": api_key},
+        json={"rows": [{"employee_id": "IMPORT-DEVICEKEY-001", "work_date": "2026-08-19", "clock_in_1": "08:00"}]},
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["events_inserted"] == 1
+
+    row = db.query(AttendanceDetail).filter(
+        AttendanceDetail.company_id == company_id, AttendanceDetail.employee_id == "IMPORT-DEVICEKEY-001",
+    ).one()
+    assert row.clock_in_1 is not None
+
+
+def test_import_rows_rejects_no_auth_at_all(client):
+    resp = client.post(
+        "/api/v1/attendance/import-rows",
+        json={"rows": [{"employee_id": "NO-AUTH-001", "work_date": "2026-08-19", "clock_in_1": "08:00"}]},
+    )
+    assert resp.status_code == 401, resp.text

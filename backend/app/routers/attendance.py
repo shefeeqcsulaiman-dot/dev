@@ -971,20 +971,33 @@ def _parse_import_clock_field(time_raw: str, work_date: str, offset: timedelta) 
         return None
 
 
-@gated_router.post("/import-rows", status_code=201)
+@router.post("/import-rows", status_code=201)
+@limiter.limit("60/minute")
 async def import_rows(
+    request: Request,
     body: _ImportRowsBody,
+    x_device_key: str | None = Header(default=None),
+    device_key: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(_optional_user),
 ) -> dict[str, Any]:
     """Bulk-import already-computed daily attendance rows -- for migrating
-    historical data from another system, NOT a live-ingestion path. This is
-    a separate, additive endpoint precisely because a finished row's
-    total_seconds/session_count/etc. are things only this server's own
-    pairing computation (_pair_day_punches) can correctly produce; no real
-    device or bridge script has that information, which is why /punch and
-    /adms deliberately stay on their existing raw-event/wide-report shapes
-    and are untouched by this endpoint.
+    historical data from another system, or for an unattended remote
+    script pushing report-shaped rows on a schedule, NOT the per-scan
+    live-ingestion path. This is a separate, additive endpoint precisely
+    because a finished row's total_seconds/session_count/etc. are things
+    only this server's own pairing computation (_pair_day_punches) can
+    correctly produce; no real device or bridge script has that
+    information, which is why /punch and /adms deliberately stay on their
+    existing raw-event/wide-report shapes and are untouched by this
+    endpoint.
+
+    Accepts either an authenticated user (manual/admin import) OR an
+    X-Device-Key / ?device_key= (an unattended script running on a
+    schedule, same auth as /punch and /adms) -- lives on the un-gated
+    `router` rather than `gated_router` for the same reason /punch does:
+    a device has no company login session for require_module("hrms") to
+    check against.
 
     Each row's individual scan events (from `raw_events` if given, else
     synthesized from `work_date` + `clock_in_N`/`clock_out_N`, each of
@@ -1006,10 +1019,20 @@ async def import_rows(
     trail, unlike the high-volume device webhook paths that don't log per
     punch.
     """
-    offset = _company_offset(db, current_user.company_id)
+    key = x_device_key or device_key
+    if current_user:
+        company_id = current_user.company_id
+        actor = f"user:{current_user.id}"
+    elif key:
+        company_id, _device = _get_device_company(key, db)
+        actor = f"device:{_device.id}"
+    else:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    offset = _company_offset(db, company_id)
     log.info(
-        "import-rows: received company=%s user=%s rows=%d",
-        current_user.company_id, current_user.id, len(body.rows),
+        "import-rows: received company=%s actor=%s rows=%d",
+        company_id, actor, len(body.rows),
     )
     rows_processed = 0
     events_inserted = events_duplicate = events_rejected = 0
@@ -1090,7 +1113,7 @@ async def import_rows(
         row_inserted = row_duplicate = row_rejected = 0
         for punch_time, direction in events:
             result = attendance_store.upsert_attendance_event(
-                db, company_id=current_user.company_id, employee_id=employee_id,
+                db, company_id=company_id, employee_id=employee_id,
                 punch_time=punch_time, direction=direction, employee_name=employee_name,
                 source="import",
             )
@@ -1111,7 +1134,7 @@ async def import_rows(
     log.info(
         "import-rows: complete company=%s rows_received=%d rows_processed=%d events_inserted=%d "
         "events_duplicate=%d events_rejected=%d row_errors=%d",
-        current_user.company_id, len(body.rows), rows_processed,
+        company_id, len(body.rows), rows_processed,
         events_inserted, events_duplicate, events_rejected, len(row_errors),
     )
     return {
