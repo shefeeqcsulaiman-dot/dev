@@ -687,6 +687,44 @@ async def _record_punch(request: Request, db: Session, current_user: User | None
                 inserted += 1
         return {"ok": True, "inserted": inserted, "duplicates": duplicates, "rejected": rejected, "events": len(events)}
 
+    if _is_flattened_row_payload(raw_data):
+        # A payload shaped like an AttendanceDetail export (work_date +
+        # clock_in_N/clock_out_N or raw_events) arriving at the device
+        # webhook path -- e.g. a remote script still pointed at /adms
+        # instead of /attendance/import-rows. Handled the same way as the
+        # wide-report shape above: parse it properly here too, rather than
+        # letting it fall through to PunchIn (which doesn't recognize any
+        # of these field names and would silently default punch_time to
+        # "now" -- the original bug this whole shape-detection exists to
+        # avoid). Shares _extract_events_from_flattened_row with
+        # import_rows() so the two paths can never disagree on parsing.
+        employee_id = str(raw_data.get("employee_id") or "").strip()
+        if not employee_id:
+            raise HTTPException(status_code=422, detail="employee_id is required")
+        employee_name = raw_data.get("employee_name") or None
+        events, error = _extract_events_from_flattened_row(raw_data, offset)
+        if error:
+            raise HTTPException(status_code=422, detail=error)
+        if not events:
+            # Nothing to record (e.g. an absent-day row with no clock_in/
+            # out and no raw_events) — explicitly not an error, and
+            # explicitly not a punch.
+            return {"ok": True, "inserted": 0, "duplicates": 0, "events": 0}
+        inserted = duplicates = rejected = 0
+        for punch_time, direction in events:
+            result = _ingest_device_punch(
+                db, company_id, device_id, device_name,
+                employee_id, punch_time, direction, employee_name,
+                source="device" if device_key else "manual",
+            )
+            if not result.get("ok"):
+                rejected += 1
+            elif result.get("duplicate"):
+                duplicates += 1
+            else:
+                inserted += 1
+        return {"ok": True, "inserted": inserted, "duplicates": duplicates, "rejected": rejected, "events": len(events)}
+
     try:
         body = PunchIn(**raw_data)
     except ValidationError as exc:
@@ -954,6 +992,81 @@ class _ImportRowsBody(BaseModel):
     rows: list[dict[str, Any]]
 
 
+def _is_flattened_row_payload(raw_data: dict[str, Any]) -> bool:
+    """A payload shaped like an AttendanceDetail export (work_date +
+    clock_in_N/clock_out_N, or raw_events) rather than a single raw punch
+    (PunchIn's punch_time/direction) or the wide daily-report shape
+    ("Clock In 1", title-case). "work_date" is the unambiguous signal --
+    neither of the other two shapes ever uses that key."""
+    return "work_date" in raw_data
+
+
+def _extract_events_from_flattened_row(
+    row: dict[str, Any], offset: timedelta,
+) -> tuple[list[tuple[datetime, str]], str | None]:
+    """Shared by import_rows() and _record_punch()'s flattened-row branch:
+    extracts individual (punch_time_utc, direction) events from a row
+    shaped like an AttendanceDetail export. Returns (events, error) --
+    error is None even when events is empty for a row that legitimately
+    has nothing to record (e.g. a genuinely absent day: work_date given,
+    no clock_in/out anywhere, no raw_events) -- that's not malformed input,
+    it's the same "nothing to record" outcome the wide-report shape's own
+    absent-day handling already treats as success, not an error."""
+    work_date = str(row.get("work_date") or "").strip()
+    events: list[tuple[datetime, str]] = []
+    raw_events = row.get("raw_events")
+    if raw_events:
+        # Two supported shapes: a genuine event log (list of {punch_time,
+        # direction, ...} dicts, e.g. transplanted from another
+        # AttendanceDetail row's export -- UTC ISO timestamps, no offset
+        # conversion needed) OR a bare list of ISO timestamp strings with
+        # no explicit direction, which alternates in/out/in/out... by
+        # position (the only signal available) and is treated as
+        # company-local time via _parse_import_clock_field the same way
+        # clock_in_N/clock_out_N below are, since a bare string has no
+        # way to signal it's already UTC.
+        parsed_raw_events = raw_events
+        if isinstance(parsed_raw_events, str):
+            try:
+                parsed_raw_events = json.loads(parsed_raw_events)
+            except (ValueError, TypeError):
+                parsed_raw_events = []
+        for e in parsed_raw_events if isinstance(parsed_raw_events, list) else []:
+            if isinstance(e, dict):
+                try:
+                    events.append((datetime.fromisoformat(e["punch_time"]), e.get("direction") or "in"))
+                except (KeyError, ValueError, TypeError):
+                    continue
+            elif isinstance(e, str) and e.strip():
+                parsed = _parse_import_clock_field(e.strip(), work_date, offset)
+                if parsed is not None:
+                    events.append((parsed, "in" if len(events) % 2 == 0 else "out"))
+
+    # Falls back to (or is the only path, if raw_events wasn't given)
+    # work_date + clock_in_N/clock_out_N -- also covers a caller that
+    # sends both raw_events and the flattened fields but in a raw_events
+    # shape that yielded nothing, so a recognizable clock_in_1/clock_out_1
+    # pair in the same payload isn't wasted.
+    if not events and work_date:
+        try:
+            datetime.strptime(work_date, "%Y-%m-%d")
+        except ValueError:
+            return [], "work_date must be YYYY-MM-DD"
+        for n in range(1, 6):
+            for field, direction in ((f"clock_in_{n}", "in"), (f"clock_out_{n}", "out")):
+                time_raw = str(row.get(field) or "").strip()
+                if not time_raw:
+                    continue
+                parsed = _parse_import_clock_field(time_raw, work_date, offset)
+                if parsed is not None:
+                    events.append((parsed, direction))
+
+    if not events and not work_date and not raw_events:
+        return [], "work_date or raw_events is required"
+
+    return events, None
+
+
 def _parse_import_clock_field(time_raw: str, work_date: str, offset: timedelta) -> datetime | None:
     """Accepts either a full ISO datetime -- "2026-09-09T07:29:00+04:00"
     (offset-aware, converted directly) or "2026-09-09T07:29:00" (naive,
@@ -1047,66 +1160,17 @@ async def import_rows(
             continue
         employee_name = row.get("employee_name") or None
 
-        events: list[tuple[datetime, str]] = []
-        raw_events = row.get("raw_events")
-        if raw_events:
-            # Two supported shapes: a genuine event log (list of {punch_time,
-            # direction, ...} dicts, e.g. transplanted from another
-            # AttendanceDetail row's export -- UTC ISO timestamps, no offset
-            # conversion needed) OR a bare list of ISO timestamp strings with
-            # no explicit direction, which alternates in/out/in/out... by
-            # position (the only signal available) and is treated as
-            # company-local time via _parse_import_clock_field the same way
-            # clock_in_N/clock_out_N below are, since a bare string has no
-            # way to signal it's already UTC.
-            if isinstance(raw_events, str):
-                try:
-                    raw_events = json.loads(raw_events)
-                except (ValueError, TypeError):
-                    raw_events = []
-            for e in raw_events if isinstance(raw_events, list) else []:
-                if isinstance(e, dict):
-                    try:
-                        events.append((datetime.fromisoformat(e["punch_time"]), e.get("direction") or "in"))
-                    except (KeyError, ValueError, TypeError):
-                        continue
-                elif isinstance(e, str) and e.strip():
-                    parsed = _parse_import_clock_field(e.strip(), work_date, offset)
-                    if parsed is not None:
-                        events.append((parsed, "in" if len(events) % 2 == 0 else "out"))
-            if not events:
-                log.warning("import-rows: row %d employee=%s raw_events present but yielded no usable events, falling back to clock_in/out fields", idx, employee_id)
-
-        # Falls back to (or is the only path, if raw_events wasn't given)
-        # work_date + clock_in_N/clock_out_N -- also covers a caller that
-        # sends both raw_events and the flattened fields but in a raw_events
-        # shape we couldn't parse, so a recognizable clock_in_1/clock_out_1
-        # pair in the same payload isn't wasted.
-        if not events and work_date:
-            try:
-                datetime.strptime(work_date, "%Y-%m-%d")
-            except ValueError:
-                log.warning("import-rows: row %d rejected: work_date %r must be YYYY-MM-DD", idx, work_date)
-                row_errors.append({"row": idx, "error": "work_date must be YYYY-MM-DD"})
-                continue
-            for n in range(1, 6):
-                for field, direction in ((f"clock_in_{n}", "in"), (f"clock_out_{n}", "out")):
-                    time_raw = str(row.get(field) or "").strip()
-                    if not time_raw:
-                        continue
-                    parsed = _parse_import_clock_field(time_raw, work_date, offset)
-                    if parsed is None:
-                        log.warning("import-rows: row %d field %s=%r could not be parsed, skipped", idx, field, time_raw)
-                        continue
-                    events.append((parsed, direction))
-
+        events, error = _extract_events_from_flattened_row(row, offset)
+        if error:
+            log.warning("import-rows: row %d rejected: %s", idx, error)
+            row_errors.append({"row": idx, "error": error})
+            continue
         if not events:
-            if not work_date and not raw_events:
-                log.warning("import-rows: row %d rejected: work_date or raw_events is required", idx)
-                row_errors.append({"row": idx, "error": "work_date or raw_events is required"})
-            else:
-                log.warning("import-rows: row %d employee=%s rejected: no usable clock_in/out or raw_events found", idx, employee_id)
-                row_errors.append({"row": idx, "error": "no usable clock_in/out or raw_events found"})
+            # A genuinely absent day (work_date/raw_events given, nothing
+            # to record) -- not an error, same as the wide-report shape's
+            # own absent-day handling. Still counts as processed.
+            log.info("import-rows: row %d employee=%s work_date=%s -- no events (absent day)", idx, employee_id, work_date or "(from raw_events)")
+            rows_processed += 1
             continue
 
         rows_processed += 1
