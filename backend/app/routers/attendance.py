@@ -702,14 +702,25 @@ async def _record_punch(request: Request, db: Session, current_user: User | None
         if not employee_id:
             raise HTTPException(status_code=422, detail="employee_id is required")
         employee_name = raw_data.get("employee_name") or None
+        work_date = str(raw_data.get("work_date") or "").strip()
         events, error = _extract_events_from_flattened_row(raw_data, offset)
         if error:
             raise HTTPException(status_code=422, detail=error)
         if not events:
-            # Nothing to record (e.g. an absent-day row with no clock_in/
-            # out and no raw_events) — explicitly not an error, and
-            # explicitly not a punch.
-            return {"ok": True, "inserted": 0, "duplicates": 0, "events": 0}
+            # No clock_in/out and no raw_events -- a genuinely absent day.
+            # Not an error and not a punch, but (when a work_date is given)
+            # write an explicit ABSENT marker row rather than nothing, so
+            # the table positively records "sync ran, this employee had no
+            # punches" instead of the employee just being missing. No-op if
+            # a row already exists (see ensure_absent_day_row).
+            marked = False
+            if work_date:
+                res = attendance_store.ensure_absent_day_row(
+                    db, company_id=company_id, employee_id=employee_id,
+                    work_date=work_date, employee_name=employee_name,
+                )
+                marked = res.get("created", False)
+            return {"ok": True, "inserted": 0, "duplicates": 0, "events": 0, "absent_marked": marked}
         inserted = duplicates = rejected = 0
         for punch_time, direction in events:
             result = _ingest_device_punch(
@@ -1167,9 +1178,16 @@ async def import_rows(
             continue
         if not events:
             # A genuinely absent day (work_date/raw_events given, nothing
-            # to record) -- not an error, same as the wide-report shape's
-            # own absent-day handling. Still counts as processed.
-            log.info("import-rows: row %d employee=%s work_date=%s -- no events (absent day)", idx, employee_id, work_date or "(from raw_events)")
+            # to record) -- not an error. When a work_date is given, write
+            # an explicit ABSENT marker row (no-op if a row already
+            # exists), so the table positively records the absence rather
+            # than the employee just being missing for that date.
+            if work_date:
+                attendance_store.ensure_absent_day_row(
+                    db, company_id=company_id, employee_id=employee_id,
+                    work_date=work_date, employee_name=employee_name,
+                )
+            log.info("import-rows: row %d employee=%s work_date=%s -- no events (absent day marker)", idx, employee_id, work_date or "(from raw_events)")
             rows_processed += 1
             continue
 
@@ -1512,6 +1530,10 @@ def attendance_monthly_report(
         AttendanceDetail.employee_id.in_(emp_nos),
         AttendanceDetail.work_date >= start.isoformat(),
         AttendanceDetail.work_date <= period_end.isoformat(),
+        # Explicit ABSENT-marker rows (clock_in_1 NULL, all zeros) exist
+        # purely to positively record "no punches that day" -- they must
+        # not count toward present_days or the hours totals here.
+        AttendanceDetail.clock_in_1.isnot(None),
     ).all()
 
     punch_by_emp: dict[str, dict[str, Any]] = {}

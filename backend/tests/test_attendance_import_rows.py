@@ -132,6 +132,34 @@ def test_import_rows_rejects_missing_employee_id(client, auth_headers):
     assert body["row_errors"][0]["row"] == 0
 
 
+def test_import_rows_absent_row_writes_absent_marker(client, auth_headers, db):
+    company_id = _company_id(client, auth_headers)
+    resp = client.post(
+        "/api/v1/attendance/import-rows", headers=auth_headers,
+        json={"rows": [{
+            "employee_id": "IMPORT-ABSENT-01", "employee_name": "Absent Import",
+            "work_date": "2026-08-14", "clock_in_1": None, "clock_out_1": None,
+            "total_seconds": 0, "session_count": 0, "raw_events": "[]",
+        }]},
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["rows_processed"] == 1
+    assert body["events_inserted"] == 0
+    assert body["row_errors"] == []
+
+    row = db.query(AttendanceDetail).filter(
+        AttendanceDetail.company_id == company_id, AttendanceDetail.employee_id == "IMPORT-ABSENT-01",
+        AttendanceDetail.work_date == "2026-08-14",
+    ).one()
+    assert row.clock_in_1 is None
+    assert row.total_seconds == 0
+    assert row.ot_seconds == 0
+    assert row.under_seconds == 8 * 3600
+    assert row.session_count == 0
+    assert json.loads(row.raw_events) == []
+
+
 def test_import_rows_is_idempotent_on_replay(client, auth_headers, db):
     company_id = _company_id(client, auth_headers)
     payload = {"rows": [{

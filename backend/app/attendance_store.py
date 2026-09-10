@@ -32,37 +32,33 @@ _MAX_STORED_SESSIONS = 5
 # single day; this just bounds how large one day's raw_events blob can grow.
 _MAX_RAW_EVENTS_PER_DAY = 60
 
-# Some entry-only devices (a dwell/proximity sensor, a simple turnstile that
-# only signals "someone passed through") re-read the same physical entry
-# several times within seconds of each other. Without this, each re-read
-# would close the still-open session with no checkout and open a new one --
-# a repeat "in" within this window of the currently-open one is treated as
-# the same entry and collapsed instead. (Mirrors the constant of the same
-# name in attendance.py, which still owns the live endpoints until cutover.)
-_DWELL_DUPLICATE_WINDOW = timedelta(minutes=5)
-
-
 def _pair_day_punches(events: list[tuple[datetime, str]]) -> list[tuple[datetime, datetime | None]]:
     """Direction-aware in/out pairing for one day's already-time-sorted
-    punches -- same state machine as attendance.py's function of the same
-    name (and zk_bridge.py/daily_attendance_report.py's pair_punches()).
-    A repeat "in" within _DWELL_DUPLICATE_WINDOW of an already-open one is
-    a sensor bounce and is dropped; otherwise the open "in" closes with no
-    checkout and a new one opens. A trailing unclosed "in" at day-end
-    yields (clock_in, None)."""
+    punches. A session opens on an "in" and closes on the next "out".
+
+    While a session is already open, any further "in" before the closing
+    "out" is IGNORED -- it's a re-scan (dwell/turnstile devices re-read the
+    same entry) or a forgotten checkout followed by re-entry; either way
+    the FIRST "in" stays the session start, and no spurious incomplete
+    session is created for the extra "in"s. (This replaces an earlier
+    5-minute "sensor bounce" window that only collapsed rapid re-reads and
+    still emitted an incomplete (in, None) pair for anything slower.)
+
+    An "out" with no open session is dropped. A single unclosed "in" left
+    at day-end yields a trailing (clock_in, None) -- the caller
+    (_recompute_day_fields) decides whether that counts as "still on the
+    clock" (first shift, nothing completed) or an incomplete event to
+    ignore (a session already completed)."""
     pairs: list[tuple[datetime, datetime | None]] = []
     open_in: datetime | None = None
     for ts, direction in events:
         if direction == "in":
-            if open_in is not None:
-                if ts - open_in <= _DWELL_DUPLICATE_WINDOW:
-                    continue
-                pairs.append((open_in, None))
-            open_in = ts
-        else:
-            if open_in is not None:
-                pairs.append((open_in, ts))
-                open_in = None
+            if open_in is None:
+                open_in = ts
+            # else: already inside a session -- ignore this redundant "in".
+        elif open_in is not None:
+            pairs.append((open_in, ts))
+            open_in = None
     if open_in is not None:
         pairs.append((open_in, None))
     return pairs
@@ -81,17 +77,34 @@ def _recompute_day_fields(row: AttendanceDetail, events: list[dict], standard_ho
     """Re-derive every derived column on `row` from its full raw_events
     list. Always re-runs pairing over the whole day rather than patching
     incrementally, so a late/out-of-order event (e.g. a CSV backfill row
-    landing after live punches) always produces a correct day."""
+    landing after live punches) always produces a correct day.
+
+    Business rule: a SESSION requires BOTH a clock-in AND a clock-out. An
+    unmatched "in" (someone forgot to punch out, or a mid-day double-in)
+    is NOT a session -- it never bumps session_count, never contributes
+    working time, and never lands in a clock_in_N/clock_out_N column...
+    with ONE exception: an employee currently on their FIRST shift of the
+    day (a single open "in", nothing completed yet) keeps clock_in_1
+    populated so "present, still on the clock" is distinguishable from
+    "absent". Once any session has completed, a leftover open "in" is
+    treated as incomplete/missed-checkout data -- it stays in raw_events
+    for audit but is otherwise ignored here."""
     parsed = sorted(
         ((datetime.fromisoformat(e["punch_time"]), e.get("direction") or "in") for e in events),
         key=lambda t: t[0],
     )
     pairs = _pair_day_punches(parsed)
+    complete = [(cin, cout) for cin, cout in pairs if cout is not None]
+
+    in_progress = None
+    if not complete and pairs and pairs[-1][1] is None:
+        in_progress = pairs[-1]
+    display = complete + ([in_progress] if in_progress else [])
 
     for i in range(_MAX_STORED_SESSIONS):
         n = i + 1
-        if i < len(pairs):
-            cin, cout = pairs[i]
+        if i < len(display):
+            cin, cout = display[i]
             setattr(row, f"clock_in_{n}", cin)
             setattr(row, f"clock_out_{n}", cout)
             setattr(row, f"work_seconds_{n}", int((cout - cin).total_seconds()) if cout else None)
@@ -100,16 +113,15 @@ def _recompute_day_fields(row: AttendanceDetail, events: list[dict], standard_ho
             setattr(row, f"clock_out_{n}", None)
             setattr(row, f"work_seconds_{n}", None)
 
-    # Total/OT are summed from EVERY closed pair, not just the first
-    # _MAX_STORED_SESSIONS shown -- mirrors the precedent already in
-    # daily_attendance_report.py and attendance.py's own employee-daily
-    # endpoint (total_seconds = sum(... for cin, cout in pairs if cout)).
-    total_seconds = sum(int((cout - cin).total_seconds()) for cin, cout in pairs if cout)
+    # Total/OT/Under and session_count are from COMPLETE sessions only --
+    # every closed pair counts (not just the first _MAX_STORED_SESSIONS
+    # shown), an unmatched "in" counts for nothing.
+    total_seconds = sum(int((cout - cin).total_seconds()) for cin, cout in complete)
     standard_seconds = int(standard_hours * 3600)
     row.total_seconds = total_seconds
     row.ot_seconds = max(0, total_seconds - standard_seconds)
     row.under_seconds = max(0, standard_seconds - total_seconds)
-    row.session_count = len(pairs)
+    row.session_count = len(complete)
     row.raw_events = json.dumps(events)
 
 
@@ -199,6 +211,64 @@ def upsert_attendance_event(
         db.commit()
         return {"ok": True, "id": row.id, "event_id": event_id, "duplicate": False, "created_day_row": created}
 
+    return {"ok": False, "error": "conflict"}
+
+
+def ensure_absent_day_row(
+    db: Session, *, company_id: str, employee_id: str, work_date: str,
+    employee_name: str | None = None, standard_hours: float = 8.0,
+) -> dict:
+    """Record an explicit ABSENT marker for (company_id, employee_id,
+    work_date): a row with every clock_in/out NULL, total/OT 0,
+    under_seconds = a full standard day, session_count 0, raw_events [].
+
+    Creates the row ONLY if none exists yet -- if a row is already there
+    (an employee who genuinely clocked in, or a marker already written)
+    this is a no-op and never touches its events or derived fields. That
+    makes it safe to call unconditionally for every roster member a daily
+    report covers: present employees keep their real data, absent ones
+    get a positive "sync ran, no punches" record instead of just being
+    missing from the table.
+
+    A later real punch for the same day upgrades the marker to present
+    naturally -- upsert_attendance_event() finds this row, appends the
+    event, and _recompute_day_fields() rebuilds clock_in_1 etc. from
+    raw_events, so the NULLs are replaced with real times."""
+    employee_id = employee_id.strip()
+    for _attempt in range(3):
+        row = (
+            db.query(AttendanceDetail)
+            .filter(
+                AttendanceDetail.company_id == company_id,
+                AttendanceDetail.employee_id == employee_id,
+                AttendanceDetail.work_date == work_date,
+            )
+            .with_for_update()
+            .first()
+        )
+        if row is not None:
+            return {"ok": True, "created": False, "id": row.id}
+        row = AttendanceDetail(
+            company_id=company_id,
+            employee_id=employee_id,
+            employee_name=employee_name,
+            work_date=work_date,
+            raw_events="[]",
+            total_seconds=0,
+            ot_seconds=0,
+            under_seconds=int(standard_hours * 3600),
+            session_count=0,
+        )
+        db.add(row)
+        try:
+            db.flush()
+        except IntegrityError:
+            # Raced a concurrent insert (real punch or another marker) --
+            # retry; the SELECT above will now find it.
+            db.rollback()
+            continue
+        db.commit()
+        return {"ok": True, "created": True, "id": row.id}
     return {"ok": False, "error": "conflict"}
 
 
