@@ -182,6 +182,29 @@ def test_two_complete_sessions_still_produce_session_count_2(client, auth_header
     assert row.clock_in_2 is not None and row.clock_out_2 is not None
 
 
+def test_flattened_row_accepts_multi_month_historical_backfill(client, auth_headers, db):
+    """A dated report row older than the 90-day live-punch replay guard
+    (e.g. a one-time 3-month backfill) must be accepted -- it carries an
+    explicit work_date and is a deliberate import, not a replayed live
+    punch. The raw single-punch PunchIn path keeps the 90-day guard."""
+    from datetime import datetime, timedelta, timezone
+    old_day = (datetime.now(timezone.utc) - timedelta(days=100)).date().isoformat()
+    company_id = _company_id_helper(client, auth_headers)
+    payload = _flattened_row(
+        employee_id="78", employee_name="Backfill", work_date=old_day,
+        clock_in_1=f"{old_day}T08:00:00+04:00", clock_out_1=f"{old_day}T17:00:00+04:00",
+    )
+    resp = client.post("/api/v1/attendance/punch", headers=auth_headers, json=payload)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["inserted"] == 2
+    row = db.query(AttendanceDetail).filter(
+        AttendanceDetail.company_id == company_id, AttendanceDetail.employee_id == "78",
+        AttendanceDetail.work_date == old_day,
+    ).one()
+    assert row.session_count == 1
+    assert row.clock_in_1 is not None and row.clock_out_1 is not None
+
+
 def test_flattened_row_at_punch_via_device_key(client, auth_headers, db):
     """The actual production path: an X-Device-Key-authenticated request
     (no company login session), same as the real remote script uses."""

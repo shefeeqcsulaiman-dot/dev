@@ -604,6 +604,7 @@ def _ingest_device_punch(
     direction: str = "unknown",
     employee_name: str | None = None,
     source: str = "device",
+    max_age_days: int = 90,
 ) -> dict[str, Any]:
     """Shared punch-insert core used by both the single-punch webhook path
     (_record_punch, below) and the ADMS-classic batch upload handler
@@ -621,12 +622,13 @@ def _ingest_device_punch(
     now = datetime.now(UTC)
     if punch_time > now + timedelta(minutes=5):
         return {"ok": False, "error": "future"}
-    # Reject punches older than 90 days (prevents replay / mass backdating
-    # attacks). Previously gated behind `if device_id:`, so the CSV import
-    # path (device_id always None — an admin file upload, not a device) and
-    # manual single punches skipped this entirely; there's nothing
-    # device-specific about the risk this guards against.
-    if punch_time < now - timedelta(days=90):
+    # Reject punches older than max_age_days (prevents replay / mass
+    # backdating attacks on the raw single-punch stream). The dated report
+    # shapes (wide "Clock In 1" / flattened work_date) pass a much larger
+    # window since a one-time multi-month historical backfill from a device
+    # report is legitimate and carries an explicit date, not a replayed
+    # live punch.
+    if punch_time < now - timedelta(days=max_age_days):
         return {"ok": False, "error": "too_old"}
 
     result = attendance_store.upsert_attendance_event(
@@ -678,6 +680,10 @@ async def _record_punch(request: Request, db: Session, current_user: User | None
                 db, company_id, device_id, device_name,
                 employee_id, punch_time, direction, employee_name,
                 source="device" if device_key else "manual",
+                # A dated report row (wide "Clock In 1" / flattened
+                # work_date shape) may legitimately be a multi-month
+                # historical backfill -- allow ~13 months, not 90 days.
+                max_age_days=400,
             )
             if not result.get("ok"):
                 rejected += 1
@@ -727,6 +733,10 @@ async def _record_punch(request: Request, db: Session, current_user: User | None
                 db, company_id, device_id, device_name,
                 employee_id, punch_time, direction, employee_name,
                 source="device" if device_key else "manual",
+                # A dated report row (wide "Clock In 1" / flattened
+                # work_date shape) may legitimately be a multi-month
+                # historical backfill -- allow ~13 months, not 90 days.
+                max_age_days=400,
             )
             if not result.get("ok"):
                 rejected += 1
