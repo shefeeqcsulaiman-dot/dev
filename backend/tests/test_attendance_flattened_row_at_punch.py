@@ -134,11 +134,14 @@ def test_absent_marker_upgraded_to_present_by_later_punch(client, auth_headers, 
     assert rows[0].total_seconds == 0
 
 
-def test_trailing_unmatched_in_is_not_a_session(client, auth_headers, db):
+def test_trailing_unmatched_in_is_displayed_but_not_a_session(client, auth_headers, db):
     """Exact case from the Axl report: raw_events = [in, out, in] -- one
-    complete session plus a trailing unmatched "in". Must produce
-    session_count 1, clock_in_2/clock_out_2 NULL, total = the first
-    session only. The trailing "in" stays in raw_events for audit."""
+    complete session plus a trailing unmatched "in".
+
+    The trailing "in" is a GENUINE attendance event: it MUST appear in
+    clock_in_2 (with clock_out_2 NULL, work_seconds_2 0). But it is NOT a
+    completed session -- session_count stays 1, total_seconds counts the
+    first pair only, and it adds nothing to overtime."""
     company_id = _company_id_helper(client, auth_headers)
     payload = _flattened_row(
         employee_id="76", employee_name="Axl", work_date="2026-09-08",
@@ -154,13 +157,54 @@ def test_trailing_unmatched_in_is_not_a_session(client, auth_headers, db):
     assert row.session_count == 1
     assert row.clock_in_1 is not None
     assert row.clock_out_1 is not None
-    assert row.clock_in_2 is None
+    assert row.work_seconds_1 == 32120
+    # The trailing unmatched "in" IS displayed (genuine event) ...
+    country = db.query(Company.country).filter(Company.id == company_id).scalar()
+    offset = timezone_utils.company_utc_offset(country)
+    expected_in2 = datetime(2026, 9, 8, 16, 14, 7) - offset
+    assert row.clock_in_2 is not None
+    assert row.clock_in_2.replace(tzinfo=None).hour == expected_in2.hour
+    assert row.clock_in_2.replace(tzinfo=None).minute == 14
+    assert row.clock_in_2.replace(tzinfo=None).second == 7
+    # ... but it is not a completed session: no clock-out, zero work time.
     assert row.clock_out_2 is None
-    assert row.work_seconds_2 is None
+    assert row.work_seconds_2 == 0
     # first session only: 06:55:07 -> 15:50:27 = 8h55m20s = 32120s
     assert row.total_seconds == 32120
+    assert row.ot_seconds == 32120 - 8 * 3600  # 3320
+    assert row.under_seconds == 0
     # all 3 raw events preserved for audit
     assert len(json.loads(row.raw_events)) == 3
+
+
+def test_trailing_unmatched_in_after_two_sessions_lands_in_slot_3(client, auth_headers, db):
+    """[in, out, in, out, in] -- two complete sessions plus a trailing
+    unmatched "in". clock_in_3 MUST be populated (genuine event), with
+    clock_out_3 NULL and work_seconds_3 0, while session_count stays 2 and
+    total_seconds counts the two completed pairs only."""
+    company_id = _company_id_helper(client, auth_headers)
+    payload = _flattened_row(
+        employee_id="79", employee_name="Triple", work_date="2026-09-08",
+        raw_events=(
+            "[\"2026-09-08T06:55:00\", \"2026-09-08T15:50:00\", \"2026-09-08T16:14:00\", "
+            "\"2026-09-08T18:00:00\", \"2026-09-08T18:30:00\"]"
+        ),
+    )
+    resp = client.post("/api/v1/attendance/punch", headers=auth_headers, json=payload)
+    assert resp.status_code == 201, resp.text
+    row = db.query(AttendanceDetail).filter(
+        AttendanceDetail.company_id == company_id, AttendanceDetail.employee_id == "79",
+        AttendanceDetail.work_date == "2026-09-08",
+    ).one()
+    assert row.session_count == 2
+    assert row.clock_in_1 is not None and row.clock_out_1 is not None
+    assert row.clock_in_2 is not None and row.clock_out_2 is not None
+    assert row.clock_in_3 is not None
+    assert row.clock_out_3 is None
+    assert row.work_seconds_3 == 0
+    # (06:55->15:50 = 32100) + (16:14->18:00 = 6360) = 38460
+    assert row.total_seconds == 32100 + 6360
+    assert len(json.loads(row.raw_events)) == 5
 
 
 def test_two_complete_sessions_still_produce_session_count_2(client, auth_headers, db):

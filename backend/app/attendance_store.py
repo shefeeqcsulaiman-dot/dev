@@ -44,11 +44,17 @@ def _pair_day_punches(events: list[tuple[datetime, str]]) -> list[tuple[datetime
     5-minute "sensor bounce" window that only collapsed rapid re-reads and
     still emitted an incomplete (in, None) pair for anything slower.)
 
-    An "out" with no open session is dropped. A single unclosed "in" left
-    at day-end yields a trailing (clock_in, None) -- the caller
-    (_recompute_day_fields) decides whether that counts as "still on the
-    clock" (first shift, nothing completed) or an incomplete event to
-    ignore (a session already completed)."""
+    An "out" with no open session is not returned as a pair: it cannot form
+    a session, and slotting it into clock_out_1 would blank clock_in_1 and
+    hide an overnight-shift worker (whose "in" belongs to the prior day)
+    from every "who is present" view. It is still retained verbatim in
+    raw_events and the per-event Sync Activity Log.
+
+    A single unclosed "in" left at day-end yields a trailing
+    (clock_in, None). That is a GENUINE attendance event and
+    _recompute_day_fields always surfaces it in a clock_in_N column -- but
+    it is NOT a completed session, so it never counts toward session_count,
+    working time or overtime."""
     pairs: list[tuple[datetime, datetime | None]] = []
     open_in: datetime | None = None
     for ts, direction in events:
@@ -79,35 +85,46 @@ def _recompute_day_fields(row: AttendanceDetail, events: list[dict], standard_ho
     incrementally, so a late/out-of-order event (e.g. a CSV backfill row
     landing after live punches) always produces a correct day.
 
-    Business rule: a SESSION requires BOTH a clock-in AND a clock-out. An
-    unmatched "in" (someone forgot to punch out, or a mid-day double-in)
-    is NOT a session -- it never bumps session_count, never contributes
-    working time, and never lands in a clock_in_N/clock_out_N column...
-    with ONE exception: an employee currently on their FIRST shift of the
-    day (a single open "in", nothing completed yet) keeps clock_in_1
-    populated so "present, still on the clock" is distinguishable from
-    "absent". Once any session has completed, a leftover open "in" is
-    treated as incomplete/missed-checkout data -- it stays in raw_events
-    for audit but is otherwise ignored here."""
+    Two separate concepts, kept strictly apart:
+
+    * ATTENDANCE EVENTS -- every genuine scan. Preserved in full in
+      raw_events, and surfaced in the clock_in_N / clock_out_N columns as
+      far as the 5 display slots allow, in chronological order. A trailing
+      unmatched "in" (checkout never arrived) stays in clock_in_N with
+      clock_out_N NULL and work_seconds_N 0. It is NOT dropped just because
+      its "out" is missing.
+
+    * COMPLETED SESSIONS -- an "in" + "out" pair, nothing less. ONLY these
+      contribute to work_seconds_N, total_seconds, ot_seconds and
+      session_count. An unmatched event contributes zero to every one of
+      them.
+
+    created_at is the DB row-creation timestamp only and is NEVER read
+    here -- every clock value comes from a raw_events entry's punch_time."""
     parsed = sorted(
         ((datetime.fromisoformat(e["punch_time"]), e.get("direction") or "in") for e in events),
         key=lambda t: t[0],
     )
     pairs = _pair_day_punches(parsed)
-    complete = [(cin, cout) for cin, cout in pairs if cout is not None]
+    # A completed session needs BOTH ends. _pair_day_punches only ever
+    # leaves the LAST pair possibly half-open (a trailing unmatched "in").
+    complete = [(cin, cout) for cin, cout in pairs if cin is not None and cout is not None]
 
-    in_progress = None
-    if not complete and pairs and pairs[-1][1] is None:
-        in_progress = pairs[-1]
-    display = complete + ([in_progress] if in_progress else [])
-
+    # Display every pair in chronological order, up to the 5 stored slots --
+    # a trailing unmatched "in" is a real event and must stay visible even
+    # when an earlier session already completed.
+    display = pairs[:_MAX_STORED_SESSIONS]
     for i in range(_MAX_STORED_SESSIONS):
         n = i + 1
         if i < len(display):
             cin, cout = display[i]
             setattr(row, f"clock_in_{n}", cin)
             setattr(row, f"clock_out_{n}", cout)
-            setattr(row, f"work_seconds_{n}", int((cout - cin).total_seconds()) if cout else None)
+            # Real duration only for a completed pair. An unmatched event
+            # gets 0 -- a true value ("no working time"), never NULL, which
+            # is reserved for "this slot holds no event at all".
+            complete_pair = cin is not None and cout is not None
+            setattr(row, f"work_seconds_{n}", int((cout - cin).total_seconds()) if complete_pair else 0)
         else:
             setattr(row, f"clock_in_{n}", None)
             setattr(row, f"clock_out_{n}", None)
