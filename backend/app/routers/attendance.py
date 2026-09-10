@@ -1277,6 +1277,16 @@ def attendance_today(
     # the way the old AttendancePunch-backed version had to.
     first_punch_by_employee: dict[str, datetime] = {r.employee_id: r.clock_in_1 for r in rows}
     first_source_by_employee: dict[str, str] = {r.employee_id: _first_event_source(r) for r in rows}
+    # The day's LAST recorded checkout (highest-numbered non-null
+    # clock_out_N) -- None while the employee is still clocked in / never
+    # checked out.
+    last_out_by_employee: dict[str, datetime | None] = {
+        r.employee_id: next(
+            (getattr(r, f"clock_out_{n}") for n in range(5, 0, -1) if getattr(r, f"clock_out_{n}") is not None),
+            None,
+        )
+        for r in rows
+    }
     unique_employees = sorted(first_punch_by_employee.keys())
     # A punch's employee_id is matched against Employee.employee_no by plain
     # string equality (same rule the Sync Activity Log's "Unmatched" badge
@@ -1318,6 +1328,13 @@ def attendance_today(
             # ingestion bug, if one ever turns up (literally identical to
             # the second, not just the same minute).
             "check_in_time": (first_punch_by_employee[emp_id] + offset).strftime("%H:%M:%S"),
+            # The day's last checkout in company-local time, or None if the
+            # employee hasn't checked out (still on the clock, or an
+            # entry-only device that never records an "out").
+            "check_out_time": (
+                (last_out_by_employee[emp_id] + offset).strftime("%H:%M:%S")
+                if last_out_by_employee.get(emp_id) is not None else None
+            ),
             # Real punch source ("device"/"biotime" = an actual biometric
             # scanner, "csv"/"manual"/"correction" = not). The frontend
             # previously printed a hardcoded "Biometric" badge on every row

@@ -36,3 +36,35 @@ def test_today_endpoint_accepts_explicit_past_date(client, db, auth_headers):
 def test_today_endpoint_rejects_bad_date_format(client, auth_headers):
     r = client.get("/api/v1/attendance/today?date=not-a-date", headers=auth_headers)
     assert r.status_code == 400, r.text
+
+
+def test_today_endpoint_includes_check_out_time(client, db, auth_headers):
+    company_id = _company_id(client, auth_headers)
+    # Present-but-not-yet-checked-out.
+    attendance_store.upsert_attendance_event(
+        db, company_id=company_id, employee_id="ATT-CO-STILLIN", employee_name="Still In",
+        punch_time=datetime(2026, 8, 22, 4, 0, tzinfo=timezone.utc), direction="in", source="device",
+    )
+    # Present and checked out (in + out same day).
+    attendance_store.upsert_attendance_event(
+        db, company_id=company_id, employee_id="ATT-CO-DONE", employee_name="Went Home",
+        punch_time=datetime(2026, 8, 22, 4, 0, tzinfo=timezone.utc), direction="in", source="device",
+    )
+    attendance_store.upsert_attendance_event(
+        db, company_id=company_id, employee_id="ATT-CO-DONE", employee_name="Went Home",
+        punch_time=datetime(2026, 8, 22, 13, 0, tzinfo=timezone.utc), direction="out", source="device",
+    )
+
+    r = client.get("/api/v1/attendance/today?date=2026-08-22", headers=auth_headers)
+    assert r.status_code == 200, r.text
+    by_id = {e["employee_id"]: e for e in r.json()["employees"]}
+
+    assert by_id["ATT-CO-STILLIN"]["check_in_time"] is not None
+    assert by_id["ATT-CO-STILLIN"]["check_out_time"] is None
+
+    assert by_id["ATT-CO-DONE"]["check_in_time"] is not None
+    # 13:00 UTC + company offset (UAE +4 default) -> "17:00:00" local; other
+    # test files may have changed the shared company's country, so just
+    # assert it's populated and is a distinct HH:MM:SS string, not the exact value.
+    assert by_id["ATT-CO-DONE"]["check_out_time"] is not None
+    assert by_id["ATT-CO-DONE"]["check_out_time"] != by_id["ATT-CO-DONE"]["check_in_time"]

@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=eb0d5df907" as="script">
+<link rel="preload" href="src/app.js?v=07ae37c198" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
@@ -952,9 +952,9 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
           </div>
         </div>
         <table class="tbl" data-delete-actions-bound="skip">
-          <thead><tr><th>Employee</th><th>Check In</th><th>Source</th><th>Status</th></tr></thead>
+          <thead><tr><th>Employee</th><th>Check In</th><th>Check Out</th><th>Source</th><th>Status</th></tr></thead>
           <tbody id="att-today-tbody">
-            <tr data-empty-state><td colspan="4" style="text-align:center;color:var(--text3);padding:32px">No attendance records for today yet.<br>Connect a biometric device or import CSV to begin.</td></tr>
+            <tr data-empty-state><td colspan="5" style="text-align:center;color:var(--text3);padding:32px">No attendance records for today yet.<br>Connect a biometric device or import CSV to begin.</td></tr>
           </tbody>
         </table>
         <div class="divider"></div>
@@ -2928,7 +2928,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=eb0d5df907" defer></script>
+<script src="src/app.js?v=07ae37c198" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

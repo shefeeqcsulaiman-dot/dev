@@ -21637,7 +21637,7 @@ async function refreshAttendanceToday(){
     set('att-stat-total',empTotal||'—');
     if(!tbody)return;
     if(!ids.length){
-      tbody.innerHTML='<tr data-empty-state><td colspan="4" style="text-align:center;color:var(--text3);padding:32px">No punch-ins recorded for today yet.</td></tr>';
+      tbody.innerHTML='<tr data-empty-state><td colspan="5" style="text-align:center;color:var(--text3);padding:32px">No punch-ins recorded for today yet.</td></tr>';
       return;
     }
     tbody.innerHTML='';
@@ -21650,14 +21650,16 @@ async function refreshAttendanceToday(){
       const label=emp.employee_name
         ?`${escapeHtml(emp.employee_name)} <span class="mono" style="color:var(--text3);font-size:11px">(${escapeHtml(emp.employee_id)})</span>`
         :`${escapeHtml(emp.employee_id)} <span style="color:var(--red)" title="No employee has this ID — check Staff → Employees">⚠ Unmatched</span>`;
-      // check_in_time is the employee's first "in" punch of the day, in
-      // company-local time (HH:MM) — this column previously just repeated
-      // today's date (the same value on every row) since the backend never
-      // computed a per-employee punch time at all.
+      // check_in_time is the employee's first "in" punch of the day and
+      // check_out_time the day's last checkout (null while still on the
+      // clock / entry-only device), both in company-local time (HH:MM:SS).
       // Source badge previously hardcoded "Biometric" on every row no matter
       // how the punch actually got in (CSV import, manual entry, a
       // correction) — misrepresenting non-device data as a real scanner tap.
-      tr.innerHTML=`<td>${label}</td><td class="mono">${escapeHtml(emp.check_in_time||'—')}</td><td>${_attendanceSourceBadge(emp.source)}</td><td><span class="b b-g">Present</span></td>`;
+      const status=emp.check_out_time
+        ?'<span class="b" style="background:var(--bg3);color:var(--text2)">Checked out</span>'
+        :'<span class="b b-g">Present</span>';
+      tr.innerHTML=`<td>${label}</td><td class="mono">${escapeHtml(emp.check_in_time||'—')}</td><td class="mono">${escapeHtml(emp.check_out_time||'—')}</td><td>${_attendanceSourceBadge(emp.source)}</td><td>${status}</td>`;
       tbody.appendChild(tr);
     });
   }catch(e){
@@ -21667,7 +21669,7 @@ async function refreshAttendanceToday(){
     // since there's no company-local date available from a failed call.
     const dateEl=document.getElementById('att-time');
     if(dateEl)dateEl.textContent=new Date().toLocaleDateString('en-AE',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
-    if(tbody)tbody.innerHTML='<tr data-empty-state><td colspan="4" style="text-align:center;color:var(--text3);padding:32px">Biometric not connected yet. Import CSV or connect a device.</td></tr>';
+    if(tbody)tbody.innerHTML='<tr data-empty-state><td colspan="5" style="text-align:center;color:var(--text3);padding:32px">Biometric not connected yet. Import CSV or connect a device.</td></tr>';
   }
 }
 
@@ -21928,12 +21930,10 @@ async function _saveManualAttendance(emps,absentNames){
   if(typeof refreshAttendanceToday==='function')refreshAttendanceToday();
 }
 
-// Trimmed to the real 4 columns the #att-today-tbody header actually has
-// (Employee/Check In/Source/Status) — this used to emit 7 <td>s (also
-// Check Out/Hours/Late/OT), silently misaligning every column after the
-// first, with Hours/Late/OT rendered as permanent placeholder dashes since
-// a manual present/absent roll call has no real check-out time or shift
-// data to compute them from in the first place.
+// Matches the 5 columns the #att-today-tbody header actually has
+// (Employee/Check In/Check Out/Source/Status). Check Out is a permanent
+// dash here — a manual present/absent roll call has no real check-out
+// time (nor Hours/Late/OT, which is why those columns aren't shown at all).
 function _renderAttendanceRows(emps,absentNames){
   const tbody=document.getElementById('att-today-tbody');
   if(!tbody)return;
@@ -21941,7 +21941,7 @@ function _renderAttendanceRows(emps,absentNames){
   const timeStr=now.toLocaleTimeString('en-AE',{hour:'2-digit',minute:'2-digit',hour12:true});
   const absentSet=new Set(absentNames.map(n=>n.toLowerCase()));
   if(!emps.length){
-    tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:24px">No active employees. Add employees to track attendance.</td></tr>';
+    tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:24px">No active employees. Add employees to track attendance.</td></tr>';
     return;
   }
   tbody.innerHTML=emps.map(e=>{
@@ -21955,6 +21955,7 @@ function _renderAttendanceRows(emps,absentNames){
         <div><div style="font-weight:600;font-size:12px">${escapeHtml(e.name)}</div><div style="font-size:10px;color:var(--text3)">${escapeHtml(e.department||'')}</div></div>
       </div></td>
       <td class="mono" style="font-size:12px">${checkIn}</td>
+      <td class="mono" style="font-size:12px">—</td>
       <td><span class="b b-gray">Manual</span></td>
       <td><span class="b ${statusCls}">${statusLabel}</span></td>
     </tr>`;
@@ -22118,7 +22119,7 @@ async function openAttendanceDayDetail(dateStr){
         <div><div style="font-size:20px;font-weight:700;color:var(--amber)">${leaveList.length}</div><div style="font-size:11px;color:var(--text3)">On Leave</div></div>
         <div><div style="font-size:20px;font-weight:700;color:var(--red)">${absentCount}</div><div style="font-size:11px;color:var(--text3)">Absent</div></div>
       </div>
-      ${section('Present',present.length?'b-g':'',present.map(e=>({name:e.employee_name||e.employee_id,detail:e.check_in_time||'—'})))}
+      ${section('Present',present.length?'b-g':'',present.map(e=>({name:e.employee_name||e.employee_id,detail:e.check_out_time?`${e.check_in_time||'—'} → ${e.check_out_time}`:(e.check_in_time||'—')})))}
       ${section('On Leave','b-a',leaveList.map(l=>({name:l.name,detail:l.type||'Leave'})))}
       ${(!present.length&&!leaveList.length)?'<div style="text-align:center;color:var(--text3);padding:16px 0">No punches or leave recorded for this day.</div>':''}
     `;
