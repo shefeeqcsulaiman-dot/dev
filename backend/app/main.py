@@ -524,6 +524,16 @@ def ensure_schema_updates() -> None:
                 logging.getLogger("taxflow").error(
                     "Could not create uq_employees_username (likely duplicate usernames already exist): %s", idx_exc
                 )
+        if "roles" in table_names:
+            existing_columns = {column["name"] for column in inspector.get_columns("roles")}
+            if "department_scope" not in existing_columns:
+                # JSON-encoded list of department names. A role scoped to one
+                # or more departments grants its holder (once given ESS Portal
+                # Access) visibility of every employee in those departments —
+                # see GET /ess/team. Empty/NULL means "no department scoping"
+                # (the pre-existing behavior for every role created before
+                # this column existed).
+                connection.execute(text("ALTER TABLE roles ADD COLUMN department_scope TEXT"))
         if "company_locations" in table_names:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_company_locations_branch_id ON company_locations (branch_id)"))
         if "attendance_sessions" in table_names:

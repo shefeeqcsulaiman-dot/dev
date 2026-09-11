@@ -7,11 +7,12 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 import app.timezone_utils as timezone_utils
+from app.auth_principal import _role_department_scope
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import assert_company_active, company_allows_module
 from app.limiter import limiter
-from app.models import AppDataRecord, Company, Employee, LeaveRequest, PayrollItem, PayrollRun
+from app.models import AppDataRecord, Company, Employee, LeaveRequest, PayrollItem, PayrollRun, Role
 from app.routers.leave import _ALLOWED_TYPES
 from app.security import pwd_context
 
@@ -50,6 +51,16 @@ class EssEmployeeOut(BaseModel):
 class EssChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+
+
+class EssTeamMemberOut(BaseModel):
+    id: str
+    employee_no: str
+    full_name: str
+    department: str
+    designation: str
+    status: str
+    photo: str | None = None
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -167,6 +178,34 @@ def ess_me(request: Request, db: Session = Depends(get_db)) -> EssEmployeeOut:
         status=emp.status,
         photo=emp.photo,
     )
+
+
+@router.get("/team", response_model=list[EssTeamMemberOut])
+def ess_team(request: Request, db: Session = Depends(get_db)) -> list[EssTeamMemberOut]:
+    """Employee roster for the departments the logged-in employee's role is
+    scoped to (Add Custom Role's "Departments" field). Granting a role with
+    one or more departments assigned -- then giving that employee ESS Portal
+    Access -- is what turns this on; there's no separate permission
+    checkbox. Empty scope (every role created before this existed, and any
+    role left unscoped on purpose) means no team visibility here."""
+    emp = ess_bearer(request, db)
+    role = db.get(Role, emp.role_id) if emp.role_id else None
+    departments = _role_department_scope(role)
+    if not departments:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Your role is not scoped to any department")
+    rows = (
+        db.query(Employee)
+        .filter(Employee.company_id == emp.company_id, Employee.department.in_(departments))
+        .order_by(Employee.full_name)
+        .all()
+    )
+    return [
+        EssTeamMemberOut(
+            id=r.id, employee_no=r.employee_no, full_name=r.full_name, department=r.department,
+            designation=r.designation, status=r.status, photo=r.photo,
+        )
+        for r in rows
+    ]
 
 
 @router.post("/change-password")

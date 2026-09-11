@@ -6,6 +6,7 @@ subject prefix and secret key, so an /hr/login token also works against
 /ess/* routes and vice versa. See docs/hrms-architecture.md for the design.
 """
 
+import json
 import math
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -19,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.auth_principal import (
     Principal,
+    _role_department_scope,
     _role_permission_keys,
     get_current_employee,
     require_permission,
@@ -363,6 +365,8 @@ class HrMeOut(BaseModel):
     role_name: str | None = None
     permissions: list[str] = []
     work_location_id: str | None = None
+    # Non-empty -> GET /ess/team is available for this employee (see there).
+    department_scope: list[str] = []
 
 
 @gated_router.get("/me", response_model=HrMeOut)
@@ -378,6 +382,7 @@ def hr_me(db: Session = Depends(get_db), emp: Employee = Depends(get_current_emp
         role_name=role.role_name if role else None,
         permissions=perms,
         work_location_id=emp.work_location_id,
+        department_scope=_role_department_scope(role),
     )
 
 
@@ -448,12 +453,21 @@ class RoleOut(BaseModel):
     description: str | None = None
     is_system_role: bool
     permissions: list[str] = []
+    # Non-empty means this role's holder, once granted ESS Portal Access,
+    # sees the employee roster for these departments -- see GET /ess/team.
+    department_scope: list[str] = []
 
 
 class RoleCreateRequest(BaseModel):
     role_name: str
     description: str | None = None
     permission_keys: list[str] = []
+    department_scope: list[str] = []
+
+
+def _normalize_department_scope(names: list[str]) -> str | None:
+    cleaned = sorted({str(n).strip() for n in names if str(n).strip()})
+    return json.dumps(cleaned) if cleaned else None
 
 
 @gated_router.get("/roles", response_model=list[RoleOut])
@@ -464,6 +478,7 @@ def list_roles(db: Session = Depends(get_db), emp: Employee = Depends(get_curren
         RoleOut(
             id=r.id, role_name=r.role_name, description=r.description, is_system_role=r.is_system_role,
             permissions=sorted(_role_permission_keys(db, r)),
+            department_scope=_role_department_scope(r),
         )
         for r in roles
     ]
@@ -476,7 +491,10 @@ def create_role(
     emp: Employee = Depends(require_permission("hr:manage_roles")),
 ) -> RoleOut:
     catalog = _ensure_permission_catalog(db)
-    role = Role(company_id=emp.company_id, role_name=payload.role_name.strip(), description=payload.description)
+    role = Role(
+        company_id=emp.company_id, role_name=payload.role_name.strip(), description=payload.description,
+        department_scope=_normalize_department_scope(payload.department_scope),
+    )
     db.add(role)
     db.flush()
     for key in payload.permission_keys:
@@ -487,6 +505,7 @@ def create_role(
     return RoleOut(
         id=role.id, role_name=role.role_name, description=role.description, is_system_role=False,
         permissions=sorted(_role_permission_keys(db, role)),
+        department_scope=_role_department_scope(role),
     )
 
 
@@ -515,6 +534,11 @@ class AdminEmployeePortalOut(BaseModel):
     role_name: str | None = None
     is_active: bool
     has_password: bool
+    # The assigned role's department scope, if any -- once this employee has
+    # a portal username, this is exactly what they'll see in ESS's Team tab
+    # (GET /ess/team). Surfaced here so Users & Roles shows it up front,
+    # without an admin having to cross-reference the Roles & Permissions tab.
+    department_scope: list[str] = []
 
 
 @gated_router.get("/admin/permissions")
@@ -543,6 +567,7 @@ def admin_list_roles(
         RoleOut(
             id=r.id, role_name=r.role_name, description=r.description, is_system_role=r.is_system_role,
             permissions=sorted(_role_permission_keys(db, r)),
+            department_scope=_role_department_scope(r),
         )
         for r in roles
     ]
@@ -569,7 +594,10 @@ def admin_create_role(
         raise HTTPException(status_code=400, detail="Role name is required")
     if db.query(Role).filter(Role.company_id == principal.company_id, Role.role_name.ilike(role_name)).first():
         raise HTTPException(status_code=409, detail="A role with this name already exists")
-    role = Role(company_id=principal.company_id, role_name=role_name, description=payload.description)
+    role = Role(
+        company_id=principal.company_id, role_name=role_name, description=payload.description,
+        department_scope=_normalize_department_scope(payload.department_scope),
+    )
     db.add(role)
     db.flush()
     for key in payload.permission_keys:
@@ -580,6 +608,7 @@ def admin_create_role(
     return RoleOut(
         id=role.id, role_name=role.role_name, description=role.description, is_system_role=False,
         permissions=sorted(_role_permission_keys(db, role)),
+        department_scope=_role_department_scope(role),
     )
 
 
@@ -609,6 +638,7 @@ def admin_update_role(
         raise HTTPException(status_code=409, detail="A role with this name already exists")
     role.role_name = role_name
     role.description = payload.description
+    role.department_scope = _normalize_department_scope(payload.department_scope)
     db.add(role)
     db.query(RolePermission).filter(RolePermission.role_id == role.id).delete()
     for key in payload.permission_keys:
@@ -619,6 +649,7 @@ def admin_update_role(
     return RoleOut(
         id=role.id, role_name=role.role_name, description=role.description, is_system_role=False,
         permissions=sorted(_role_permission_keys(db, role)),
+        department_scope=_role_department_scope(role),
     )
 
 
@@ -668,6 +699,7 @@ def admin_list_employee_portal_access(
             username=e.username, role_id=e.role_id,
             role_name=roles_by_id[e.role_id].role_name if e.role_id in roles_by_id else None,
             is_active=e.is_active, has_password=bool(e.password_hash),
+            department_scope=_role_department_scope(roles_by_id.get(e.role_id)),
         )
         for e in employees
     ]

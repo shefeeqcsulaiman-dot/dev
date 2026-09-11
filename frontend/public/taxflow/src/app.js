@@ -18032,12 +18032,16 @@ function _renderHrUsersTable(){
     if(!hasAccess) statusBadge='<span class="b" style="background:var(--bg3)">No Access</span>';
     else if(!e.has_password) statusBadge='<span class="b b-a" title="Username is set but no password was ever saved — login with the custom username will fail until a password is set">No Password Set</span>';
     else statusBadge=e.is_active?'<span class="b b-g">Active</span>':'<span class="b b-r">Disabled</span>';
+    const deptScope=e.department_scope||[];
+    const roleCell=e.role_name
+      ?`<span class="b b-p" style="font-size:11px">${escapeHtml(e.role_name)}</span>`+(deptScope.length?`<div style="margin-top:3px;color:var(--accent);font-size:10px" title="Sees this department's roster in ESS once portal access is active">Team: ${deptScope.map(escapeHtml).join(', ')}</div>`:'')
+      :'<span style="color:var(--text3);font-size:12px">—</span>';
     return `<tr>
       <td style="font-size:12px">${escapeHtml(e.full_name)}</td>
       <td class="mono" style="font-size:12px">${escapeHtml(e.employee_no)}</td>
       <td style="font-size:12px">${escapeHtml(e.department||'—')}</td>
       <td><strong style="font-size:12px">${escapeHtml(e.username||'—')}</strong></td>
-      <td>${e.role_name?`<span class="b b-p" style="font-size:11px">${escapeHtml(e.role_name)}</span>`:'<span style="color:var(--text3);font-size:12px">—</span>'}</td>
+      <td>${roleCell}</td>
       <td>${statusBadge}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-g btn-xs" onclick="openAddHrUserModal('${escapeHtml(e.id)}')">${hasAccess?'Edit':'Grant Access'}</button>
@@ -18060,7 +18064,7 @@ function openAddHrUserModal(employeeId){
 
   const roleSel=document.getElementById('hr-user-role');
   if(roleSel){
-    roleSel.innerHTML='<option value="">— Select Role —</option>'+_hrRolesCache.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.role_name)}</option>`).join('');
+    roleSel.innerHTML='<option value="">— Select Role —</option>'+_hrRolesCache.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.role_name)}${r.department_scope&&r.department_scope.length?` (Team: ${r.department_scope.map(escapeHtml).join(', ')})`:''}</option>`).join('');
     roleSel.value=emp.role_id||'';
   }
   document.getElementById('hr-user-username').value=emp.username||'';
@@ -18522,9 +18526,13 @@ function renderRoleTable(){
     const actions=r.is_system_role
       ?'<span style="font-size:11px;color:var(--text3)">Default role</span>'
       :`<button class="icon-btn edit" title="Edit role" onclick="showRoleModal('${escapeHtml(r.id)}')">${editIconSvg()}</button> <button class="icon-btn danger" title="Delete role" onclick="deleteRole('${escapeHtml(r.id)}')">${deleteIconSvg()}</button>`;
+    const deptScope=r.department_scope||[];
+    const deptNote=deptScope.length
+      ?`<div style="margin-top:4px;color:var(--accent);font-size:10.5px">Team: ${deptScope.map(escapeHtml).join(', ')}</div>`
+      :'';
     return `<tr>
       <td style="font-weight:600">${escapeHtml(r.role_name)}</td>
-      <td style="color:var(--text3);font-size:12px">${escapeHtml(r.description||'—')}</td>
+      <td style="color:var(--text3);font-size:12px">${escapeHtml(r.description||'—')}${deptNote}</td>
       <td style="max-width:280px;line-height:1.8">${permBadges||'<span style="color:var(--text3)">—</span>'}</td>
       <td>${typeBadge}</td>
       <td style="white-space:nowrap">${actions}</td>
@@ -18558,6 +18566,15 @@ function showRoleModal(id){
   document.getElementById('role-name').value=role?.role_name||'';
   document.getElementById('role-description').value=role?.description||'';
 
+  const deptGrid=document.getElementById('role-dept-grid');
+  if(deptGrid){
+    const depts=_getDeptNames();
+    const checkedDepts=new Set(role?.department_scope||[]);
+    deptGrid.innerHTML=depts.length
+      ?depts.map(d=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-dept-cb" value="${escapeHtml(d)}" ${checkedDepts.has(d)?'checked':''}> ${escapeHtml(d)}</label>`).join('')
+      :'<div style="color:var(--text3);font-size:12px">No departments — add one in HR Settings first.</div>';
+  }
+
   const grid=document.getElementById('role-perm-grid');
   if(grid){
     if(!_hrPermissionsCatalogCache.length){
@@ -18586,8 +18603,9 @@ async function saveRoleModal(){
   const roleName=(document.getElementById('role-name')?.value||'').trim();
   const description=(document.getElementById('role-description')?.value||'').trim()||null;
   const permissionKeys=[...document.querySelectorAll('#m-role .role-perm-cb:checked')].map(cb=>cb.value);
+  const departmentScope=[...document.querySelectorAll('#m-role .role-dept-cb:checked')].map(cb=>cb.value);
   if(!roleName){toast('Enter a role name','warn');return;}
-  const body={role_name:roleName,description,permission_keys:permissionKeys};
+  const body={role_name:roleName,description,permission_keys:permissionKeys,department_scope:departmentScope};
   try{
     const url=editId?`${apiBaseUrl()}/hr/admin/roles/${editId}`:`${apiBaseUrl()}/hr/admin/roles`;
     const r=await fetch(url,{method:editId?'PUT':'POST',headers:backendHeaders(),body:JSON.stringify(body)});

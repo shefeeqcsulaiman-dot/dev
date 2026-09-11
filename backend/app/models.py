@@ -1136,6 +1136,10 @@ class Role(Base, TimestampMixin):
     role_name: Mapped[str] = mapped_column(String(80), nullable=False)
     description: Mapped[str | None] = mapped_column(String(255))
     is_system_role: Mapped[bool] = mapped_column(Boolean, default=False)
+    # JSON-encoded list of department names. Non-empty means an employee
+    # holding this role (once granted ESS Portal Access) can see every
+    # employee in these departments -- see GET /ess/team.
+    department_scope: Mapped[str | None] = mapped_column(Text)
 
 
 class Permission(Base):

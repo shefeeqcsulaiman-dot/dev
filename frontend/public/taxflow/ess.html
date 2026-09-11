@@ -242,7 +242,7 @@
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="3"/><path d="M2.5 14c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/></svg>
         Profile
       </div>
-      <div class="ess-nav tab" id="ess-team-tab-btn" style="display:none" onclick="essTab(this,'team');loadTeamView()">
+      <div class="ess-nav tab" id="ess-team-tab-btn" style="display:none" onclick="essTab(this,'team');loadTeamTab()">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="6" r="2.2"/><circle cx="11" cy="6" r="2.2"/><path d="M1 14c0-2.5 1.8-4 4-4s4 1.5 4 4M7 14c0-2.5 1.8-4 4-4s4 1.5 4 4"/></svg>
         Team
       </div>
@@ -417,7 +417,16 @@
 
     <!-- Team (role-gated: only shown for roles with hr:view_all_attendance) -->
     <div class="tab-body" id="tb-team">
-      <div class="card">
+      <div class="card" id="dept-team-card" style="display:none;margin-bottom:16px">
+        <div class="card-title" id="dept-team-title">Department Team</div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Employee</th><th>Department</th><th>Designation</th><th>Status</th></tr></thead>
+            <tbody id="dept-team-body"><tr><td colspan="4" class="loading">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" id="gps-team-card">
         <div class="card-title">Team — Live Attendance</div>
         <div class="tbl-wrap">
           <table>
@@ -1067,6 +1076,7 @@
   // elevated role (HR Manager, Administrator, Manager) sees an extra
   // "Team" tab here, without needing a separate HR-only login.
   var ESS_PERMISSIONS = [];
+  var ESS_DEPARTMENT_SCOPE = [];
 
   async function loadRoleAndPermissions() {
     try {
@@ -1074,11 +1084,38 @@
       if (!r.ok) return; // role/permissions are additive — a failure here shouldn't block the rest of ESS
       var d = await r.json();
       ESS_PERMISSIONS = d.permissions || [];
+      ESS_DEPARTMENT_SCOPE = d.department_scope || [];
       var badge = document.getElementById('ess-role-badge');
       if (badge && d.role_name) { badge.textContent = d.role_name; badge.style.display = 'inline-block'; }
+      // Either grants the Team tab: company-wide GPS visibility, or a
+      // department-scoped role (Add Custom Role's "Departments" field) --
+      // loadTeamTab() below shows only the card each one actually unlocks.
       var teamTab = document.getElementById('ess-team-tab-btn');
-      if (teamTab && ESS_PERMISSIONS.includes('hr:view_all_attendance')) teamTab.style.display = '';
+      if (teamTab && (ESS_PERMISSIONS.includes('hr:view_all_attendance') || ESS_DEPARTMENT_SCOPE.length)) teamTab.style.display = '';
     } catch(e) { /* role badge/Team tab just stay hidden on failure */ }
+  }
+
+  function loadTeamTab() {
+    if (ESS_DEPARTMENT_SCOPE.length) loadDeptTeamView(); else document.getElementById('dept-team-card').style.display = 'none';
+    if (ESS_PERMISSIONS.includes('hr:view_all_attendance')) { document.getElementById('gps-team-card').style.display = ''; loadTeamView(); }
+    else document.getElementById('gps-team-card').style.display = 'none';
+  }
+
+  async function loadDeptTeamView() {
+    var card = document.getElementById('dept-team-card');
+    var body = document.getElementById('dept-team-body');
+    card.style.display = '';
+    document.getElementById('dept-team-title').textContent = 'Department Team — ' + ESS_DEPARTMENT_SCOPE.join(', ');
+    try {
+      var r = await fetch(apiBase() + '/ess/team', {headers: essHeaders()});
+      if (r.status === 403) { body.innerHTML = '<tr><td colspan="4" class="empty">Your role is not scoped to any department.</td></tr>'; return; }
+      var rows = await r.json();
+      if (!rows.length) { body.innerHTML = '<tr><td colspan="4" class="empty">No employees found in this department.</td></tr>'; return; }
+      body.innerHTML = rows.map(function(e) {
+        var st = e.status !== 'active' ? '<span class="badge inactive">' + e.status + '</span>' : '<span class="badge">Active</span>';
+        return '<tr><td>' + e.full_name + '</td><td>' + e.department + '</td><td>' + e.designation + '</td><td>' + st + '</td></tr>';
+      }).join('');
+    } catch(e) { body.innerHTML = '<tr><td colspan="4" class="empty">Failed to load.</td></tr>'; }
   }
 
   async function loadTeamView() {

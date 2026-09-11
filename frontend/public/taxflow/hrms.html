@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=cc71104f09" as="script">
+<link rel="preload" href="src/app.js?v=b17289382e" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
@@ -2928,7 +2928,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=cc71104f09" defer></script>
+<script src="src/app.js?v=b17289382e" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
@@ -3369,6 +3369,11 @@ document.addEventListener('DOMContentLoaded',function(){
     <div class="fg">
       <label class="fl">Description</label>
       <input class="fi" id="role-description" placeholder="What this role is for" style="width:100%">
+    </div>
+    <div class="fg">
+      <label class="fl">Departments</label>
+      <div style="font-size:11.5px;color:var(--text3);margin:-2px 0 8px">Optional. Pick one or more departments to give this role's holder a Team roster in ESS, once they're granted Portal Access — showing every employee in the departments checked here.</div>
+      <div id="role-dept-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-height:150px;overflow-y:auto;padding:2px">Loading departments…</div>
     </div>
     <div style="margin-top:14px">
       <label class="fl" style="margin-bottom:10px">Permissions</label>

@@ -10,6 +10,7 @@ cross-cutting concern, not something that belongs bundled with the
 GPS/geofencing routes. hr_access.py imports them back from here.
 """
 
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -103,6 +104,22 @@ def _role_permission_keys(db: Session, role: Role | None) -> set[str]:
         .all()
     )
     return {f"{p.module}:{p.permission_name}" for p in rows}
+
+
+def _role_department_scope(role: Role | None) -> list[str]:
+    """Departments a role's holder can see the roster of, once granted ESS
+    Portal Access -- see GET /ess/team. Empty for a role with no department
+    scoping configured (the default, and every role created before this
+    field existed)."""
+    if not role or not role.department_scope:
+        return []
+    try:
+        parsed = json.loads(role.department_scope)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(d).strip() for d in parsed if str(d).strip()]
 
 
 def require_permission(*keys: str):
