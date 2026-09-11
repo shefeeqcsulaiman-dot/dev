@@ -44,6 +44,7 @@ class EssEmployeeOut(BaseModel):
     department: str
     designation: str
     status: str
+    photo: str | None = None
 
 
 class EssChangePasswordRequest(BaseModel):
@@ -164,6 +165,7 @@ def ess_me(request: Request, db: Session = Depends(get_db)) -> EssEmployeeOut:
         department=emp.department,
         designation=emp.designation,
         status=emp.status,
+        photo=emp.photo,
     )
 
 

@@ -1660,6 +1660,9 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
             iban = str(record.get("iban") or "").strip()
             if iban:
                 emp.iban = iban
+            photo = str(record.get("photo") or "").strip()
+            if photo:
+                emp.photo = photo
             branch_id = str(record.get("branch_id") or "").strip()
             if branch_id:
                 emp.branch_id = branch_id

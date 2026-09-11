@@ -685,8 +685,14 @@
       var initial = (emp.full_name || '?').trim().charAt(0).toUpperCase();
       var topNameEl = document.getElementById('ess-top-name');
       if (topNameEl) topNameEl.textContent = emp.full_name;
+      var avatarHtml = emp.photo
+        ? '<img src="' + emp.photo + '" style="width:100%;height:100%;object-fit:cover">'
+        : initial;
       var topAvEl = document.getElementById('ess-top-av');
-      if (topAvEl) topAvEl.textContent = initial;
+      if (topAvEl) {
+        topAvEl.innerHTML = avatarHtml;
+        topAvEl.style.overflow = emp.photo ? 'hidden' : '';
+      }
       document.getElementById('profile-fields').innerHTML =
         kv('Employee ID', emp.employee_no) +
         kv('Full Name', emp.full_name) +
@@ -694,7 +700,10 @@
         kv('Designation', emp.designation) +
         kv('Status', '<span class="badge' + (emp.status !== 'active' ? ' inactive' : '') + '">' + emp.status + '</span>');
       var avEl = document.getElementById('dash-avatar');
-      if (avEl) avEl.textContent = initial;
+      if (avEl) {
+        avEl.innerHTML = avatarHtml;
+        avEl.style.overflow = emp.photo ? 'hidden' : '';
+      }
       var nameEl = document.getElementById('dash-name');
       if (nameEl) nameEl.textContent = _essGreeting() + ', ' + (emp.full_name || '').split(' ')[0] + ' 👋';
       var roleEl = document.getElementById('dash-role');

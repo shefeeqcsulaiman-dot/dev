@@ -710,6 +710,11 @@ class Employee(Base, TimestampMixin):
     other_allowance: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     iban: Mapped[str | None] = mapped_column(String(40))
     wps_id: Mapped[str | None] = mapped_column(String(40))
+    # Compressed base64 data URL, mirrored from the "employees" AppDataRecord
+    # on save (see app_data.py's sync_domain_model) -- lets ESS and other
+    # SQL-backed readers show the same photo set in HRMS Edit Employee
+    # without depending on the JSON blob collection.
+    photo: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(30), default="active")
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
 

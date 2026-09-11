@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 import os
 import pathlib
@@ -468,10 +469,44 @@ def ensure_schema_updates() -> None:
                 "housing_allowance": "NUMERIC(12,2) DEFAULT 0",
                 "transport_allowance": "NUMERIC(12,2) DEFAULT 0",
                 "other_allowance": "NUMERIC(12,2) DEFAULT 0",
+                # Mirrors the "employees" AppDataRecord's photo field (a
+                # compressed base64 data URL) so ESS -- which reads this
+                # SQL table, not the AppDataRecord JSON blob -- can show it.
+                "photo": "TEXT",
             }
+            photo_column_is_new = "photo" not in existing_columns
             for column_name, column_type in required_columns.items():
                 if column_name not in existing_columns:
                     connection.execute(text(f"ALTER TABLE employees ADD COLUMN {column_name} {column_type}"))
+            if photo_column_is_new:
+                # One-time backfill, guarded on the column having just been
+                # created (so this doesn't re-scan app_data_records on every
+                # future startup): a photo saved from HRMS Edit Employee
+                # before this SQL column existed only ever landed in the
+                # "employees"/"staff" AppDataRecord JSON blob. Mirror it in
+                # now so those employees show up correctly in ESS without
+                # needing to be re-saved.
+                photo_rows = connection.execute(text(
+                    "SELECT company_id, payload FROM app_data_records WHERE collection IN ('employees', 'staff')"
+                )).fetchall()
+                for company_id, payload_raw in photo_rows:
+                    try:
+                        payload = json.loads(payload_raw or "{}")
+                    except (TypeError, ValueError):
+                        continue
+                    if not isinstance(payload, dict):
+                        continue
+                    photo = str(payload.get("photo") or "").strip()
+                    emp_no = str(payload.get("id") or "").strip()
+                    if not photo or not emp_no:
+                        continue
+                    connection.execute(
+                        text(
+                            "UPDATE employees SET photo=:photo WHERE company_id=:cid AND employee_no=:eno "
+                            "AND (photo IS NULL OR photo='')"
+                        ),
+                        {"photo": photo, "cid": company_id, "eno": emp_no},
+                    )
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_employees_branch_id ON employees (branch_id)"))
             # Portal usernames are unique platform-wide (not just per-company) so
             # /ess and /hr/login can look an employee up by username alone, with
