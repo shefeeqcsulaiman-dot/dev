@@ -791,6 +791,17 @@ function openEmpEdit(emp){
   setV('emp-iban',emp.iban);
   setV('emp-personal-code',emp.personal_code);
   setV('emp-routing-code',emp.routing_code);
+  // Restore the previously-saved photo into the preview box. Without this,
+  // the preview always reset to the empty placeholder icon on every Edit
+  // open, and saveEmployee() reads whatever <img> is (or isn't) in that box
+  // at save time -- so re-saving an edit without re-picking a new photo
+  // silently wiped out the employee's existing photo every time.
+  const photoEl=document.getElementById('emp-photo-preview');
+  if(photoEl){
+    photoEl.innerHTML=emp.photo
+      ?`<img src="${emp.photo}" style="width:100%;height:100%;object-fit:cover">`
+      :'<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="var(--text3)" stroke-width="1.4"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
+  }
   // Update modal title and button for edit mode
   const titleEl=document.querySelector('#m-emp .modal-title');
   const subEl=document.querySelector('#m-emp .modal-sub');
@@ -952,7 +963,7 @@ function renderEmployeeRecord(employee){
   row.dataset.employee=JSON.stringify(employee);
   row.innerHTML=`
     <td class="mono">${escapeHtml(employee.id)}</td>
-    <td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px">${escapeHtml(initialsFromName(employee.name))}</div><div>${escapeHtml(employee.name)}<div class="card-sub">${escapeHtml(employee.contract||'Full-time')} · ${escapeHtml(employee.location||'Dubai HQ')}</div></div></div></td>
+    <td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px${employee.photo?';padding:0;overflow:hidden':''}">${employee.photo?`<img src="${employee.photo}" style="width:100%;height:100%;object-fit:cover">`:escapeHtml(initialsFromName(employee.name))}</div><div>${escapeHtml(employee.name)}<div class="card-sub">${escapeHtml(employee.contract||'Full-time')} · ${escapeHtml(employee.location||'Dubai HQ')}</div></div></div></td>
     <td>${employee.nickname?escapeHtml(employee.nickname):'<span style="color:var(--text3)">—</span>'}</td>
     <td>${escapeHtml(employee.department)}</td>
     <td>${escapeHtml(employee.designation)}</td>
@@ -1086,7 +1097,7 @@ function openEmployeeProfile(btn){
       <div class="invoice-topbar"></div>
       <div class="invoice-head">
         <div class="invoice-brand">
-          <div class="invoice-logo">${escapeHtml(initialsFromName(employee.name))}</div>
+          <div class="invoice-logo"${employee.photo?' style="padding:0;overflow:hidden"':''}>${employee.photo?`<img src="${employee.photo}" style="width:100%;height:100%;object-fit:cover">`:escapeHtml(initialsFromName(employee.name))}</div>
           <div>
             <div class="invoice-company">${escapeHtml(employee.name||'Employee')}${employee.nickname?` <span style="font-size:13px;font-weight:400;color:var(--text3)">("${escapeHtml(employee.nickname)}")</span>`:''}</div>
             <div class="invoice-muted">${escapeHtml(employee.designation||'Designation')} · ${escapeHtml(employee.department||'Department')}</div>
@@ -17389,11 +17400,18 @@ function updateOtMultiplier(){
   }
 }
 
-function previewEmpPhoto(input){
+async function previewEmpPhoto(input){
   const preview=document.getElementById('emp-photo-preview');
   if(!preview||!input.files||!input.files[0])return;
   const reader=new FileReader();
-  reader.onload=e=>{preview.innerHTML=`<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`};
+  reader.onload=async e=>{
+    // Compressed, same as previewInvItemPhoto — an uncompressed phone-camera
+    // photo (several MB of base64) gets embedded straight into this
+    // employee's AppDataRecord, and the whole "employees" collection is
+    // fetched wholesale on every Employee Directory load.
+    const compressed=await compressImageBase64(e.target.result,500,500,0.8);
+    preview.innerHTML=`<img src="${compressed}" style="width:100%;height:100%;object-fit:cover">`;
+  };
   reader.readAsDataURL(input.files[0]);
 }
 
