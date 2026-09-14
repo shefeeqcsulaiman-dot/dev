@@ -1468,6 +1468,44 @@ def _standard_hours_per_day(db: Session, company_id: str) -> float:
     return 8.0
 
 
+def _late_rules(db: Session, company_id: str) -> tuple[str, int]:
+    """(standard_start_time "HH:MM", grace_minutes) for the Late Coming
+    Report -- a separate hr_settings record from ot-rules-config (OT is
+    about hours worked beyond standard; this is about arrival time, an
+    unrelated concept). Defaults to 09:00 with no grace period until an
+    admin configures one from the report itself."""
+    row = db.query(AppDataRecord.payload).filter(
+        AppDataRecord.company_id == company_id,
+        AppDataRecord.collection == "hr_settings",
+        AppDataRecord.record_key == "late-rules-config",
+    ).first()
+    if row:
+        try:
+            payload = json.loads(row[0])
+            start_time = str(payload.get("startTime") or "09:00").strip()
+            if not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", start_time):
+                start_time = "09:00"
+            grace_minutes = max(0, int(float(payload.get("graceMinutes") or 0)))
+            return start_time, grace_minutes
+        except (ValueError, TypeError, AttributeError):
+            pass
+    return "09:00", 0
+
+
+def _format_duration_hm(seconds: int | float | None) -> str:
+    """Format a duration in seconds as "H:MM" -- e.g. 34200 -> "9:30".
+
+    Never a decimal-hours number ("9.47"): that reads as if it might
+    already BE a clock-style time (h:mm), when it's actually 9h28m12s
+    (0.47*60 = 28.2 minutes, not 47) -- the exact misreading that made a
+    garbled attendance payload look like a real check-in time earlier.
+    Hours are not capped at 24 -- a monthly total like "168:30" is
+    expected here, not wall-clock time."""
+    total_minutes = round(max(0, seconds or 0) / 60)
+    hours, minutes = divmod(int(total_minutes), 60)
+    return f"{hours}:{minutes:02d}"
+
+
 @gated_router.get("/monthly-report")
 def attendance_monthly_report(
     period: str | None = Query(default=None, description="YYYY-MM, defaults to the current month"),
@@ -1580,8 +1618,9 @@ def attendance_monthly_report(
         # company's actual setting. OT is a sum of PER-DAY overages (a
         # 10-hour day contributes 2 OT hours even if another day that month
         # was short), not (total_hours - working_days * standard_hours).
-        total_hours = sum(row.total_seconds for row in days.values()) / 3600
-        ot_hours = sum(max(0.0, row.total_seconds / 3600 - standard_hours) for row in days.values())
+        standard_seconds = int(standard_hours * 3600)
+        total_seconds_month = sum(row.total_seconds for row in days.values())
+        ot_seconds_month = sum(max(0, row.total_seconds - standard_seconds) for row in days.values())
         leave_days = leave_days_by_emp.get(emp.id, 0)
         absent_days = max(0, len(working_days) - present_days - leave_days)
         result.append({
@@ -1592,8 +1631,11 @@ def attendance_monthly_report(
             "present_days": present_days,
             "absent_days": absent_days,
             "leave_days": leave_days,
-            "total_hours": f"{total_hours:.2f}",
-            "ot_hours": f"{ot_hours:.2f}",
+            # "H:MM" (e.g. "168:30"), not decimal hours -- see
+            # _format_duration_hm's docstring for why decimal hours here is
+            # actively misleading, not just less readable.
+            "total_hours": _format_duration_hm(total_seconds_month),
+            "ot_hours": _format_duration_hm(ot_seconds_month),
         })
     result.sort(key=lambda r: r["employee_name"] or "")
 
@@ -1601,6 +1643,111 @@ def attendance_monthly_report(
         "period": period,
         "working_days": len(working_days),
         "standard_hours_per_day": standard_hours,
+        "employees": result,
+    }
+
+
+@gated_router.get("/late-report")
+def attendance_late_report(
+    period: str | None = Query(default=None, description="YYYY-MM, defaults to the current month"),
+    branch_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("attendance:view")),
+) -> dict[str, Any]:
+    """Per-employee late-arrival summary for the month: how many working
+    days an employee's first clock-in (clock_in_1 -- the real earliest "in"
+    of the day, see attendance_today's comment on the same field) landed
+    after the configured standard start time plus grace period, and how
+    much total lateness that added up to. Mirrors attendance_monthly_
+    report's scoping (same working-day definition, branch handling) so the
+    two reports stay consistent."""
+    offset = _company_offset(db, principal.company_id)
+    today = _local_today(offset)
+    if period:
+        m = re.match(r"^(\d{4})-(\d{2})$", period)
+        if not m:
+            raise HTTPException(status_code=400, detail="period must be in YYYY-MM format")
+        year, month = int(m.group(1)), int(m.group(2))
+    else:
+        year, month = today.year, today.month
+        period = f"{year:04d}-{month:02d}"
+    if not (1 <= month <= 12):
+        raise HTTPException(status_code=400, detail="period must be in YYYY-MM format")
+
+    start = date(year, month, 1)
+    last_day = date(year, month, monthrange(year, month)[1])
+    period_end = min(last_day, today)
+
+    weekend_days = _weekend_day_set(db, principal.company_id)
+    start_time_str, grace_minutes = _late_rules(db, principal.company_id)
+    start_h, start_m = (int(part) for part in start_time_str.split(":"))
+
+    working_day_set: set[str] = set()
+    d = start
+    while d <= period_end:
+        js_dow = (d.weekday() + 1) % 7
+        if weekend_days is None or js_dow not in weekend_days:
+            working_day_set.add(d.isoformat())
+        d += timedelta(days=1)
+
+    resolved_branch_id = branch_id if principal.can_cross_branch("attendance") else resolve_active_branch(principal, branch_id)
+    emp_query = db.query(Employee).filter(Employee.company_id == principal.company_id, Employee.status == "active")
+    if resolved_branch_id:
+        emp_query = emp_query.filter((Employee.branch_id == resolved_branch_id) | (Employee.branch_id.is_(None)))
+    employees = emp_query.all()
+    if not employees:
+        return {"period": period, "standard_start_time": start_time_str, "grace_minutes": grace_minutes, "employees": []}
+
+    emp_nos = [e.employee_no for e in employees]
+    detail_rows = db.query(
+        AttendanceDetail.employee_id, AttendanceDetail.work_date, AttendanceDetail.clock_in_1,
+    ).filter(
+        AttendanceDetail.company_id == principal.company_id,
+        AttendanceDetail.employee_id.in_(emp_nos),
+        AttendanceDetail.work_date >= start.isoformat(),
+        AttendanceDetail.work_date <= period_end.isoformat(),
+        AttendanceDetail.clock_in_1.isnot(None),
+    ).all()
+
+    rows_by_emp: dict[str, list] = {}
+    for r in detail_rows:
+        if r.work_date not in working_day_set:
+            continue
+        rows_by_emp.setdefault(r.employee_id, []).append(r)
+
+    result = []
+    for emp in employees:
+        late_days = 0
+        total_late_seconds = 0.0
+        last_late_date: str | None = None
+        for r in rows_by_emp.get(emp.employee_no, []):
+            local_in = r.clock_in_1 + offset
+            scheduled = local_in.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
+            late_seconds = (local_in - scheduled).total_seconds() - grace_minutes * 60
+            if late_seconds > 0:
+                late_days += 1
+                total_late_seconds += late_seconds
+                if last_late_date is None or r.work_date > last_late_date:
+                    last_late_date = r.work_date
+        result.append({
+            "employee_id": emp.id,
+            "employee_no": emp.employee_no,
+            "employee_name": emp.full_name,
+            "department": emp.department,
+            "late_days": late_days,
+            "total_late_seconds": int(total_late_seconds),
+            # "H:MM", not decimal hours -- see _format_duration_hm.
+            "total_late": _format_duration_hm(total_late_seconds),
+            "last_late_date": last_late_date,
+        })
+    # Worst latecomers first by default -- the whole point of this report --
+    # then alphabetical for employees tied on both counts.
+    result.sort(key=lambda r: (-r["late_days"], -r["total_late_seconds"], r["employee_name"] or ""))
+
+    return {
+        "period": period,
+        "standard_start_time": start_time_str,
+        "grace_minutes": grace_minutes,
         "employees": result,
     }
 
@@ -1649,6 +1796,7 @@ def attendance_employee_daily(
     last_day = date(year, month, monthrange(year, month)[1])
     weekend_days = _weekend_day_set(db, principal.company_id)
     standard_hours = _standard_hours_per_day(db, principal.company_id)
+    standard_seconds_day = int(standard_hours * 3600)
 
     # Reads each day's already-paired clock_in/out_N + total_seconds
     # straight off AttendanceDetail (computed by attendance_store at write
@@ -1714,7 +1862,7 @@ def attendance_employee_daily(
         is_holiday = iso in holiday_dates
 
         detail_row = details_by_date.get(iso)
-        total_hours = (detail_row.total_seconds / 3600) if detail_row else 0.0
+        total_seconds_day = detail_row.total_seconds if detail_row else 0
         sessions = []
         if detail_row:
             for n in range(1, _EMPLOYEE_DAILY_MAX_SESSIONS + 1):
@@ -1724,7 +1872,8 @@ def attendance_employee_daily(
                 sessions.append({
                     "clock_in": (cin + offset).strftime("%H:%M") if cin else None,
                     "clock_out": (cout + offset).strftime("%H:%M") if cout else None,
-                    "work_time": f"{work_seconds / 3600:.2f}" if work_seconds is not None else None,
+                    # "H:MM", not decimal hours -- see _format_duration_hm.
+                    "work_time": _format_duration_hm(work_seconds) if work_seconds is not None else None,
                 })
         else:
             sessions = [{"clock_in": None, "clock_out": None, "work_time": None} for _ in range(_EMPLOYEE_DAILY_MAX_SESSIONS)]
@@ -1762,9 +1911,11 @@ def attendance_employee_daily(
             "is_today": d == today,
             "status": status,
             "sessions": sessions,
-            "total_hours": f"{total_hours:.2f}",
-            "ot_hours": f"{max(0.0, total_hours - standard_hours):.2f}" if has_punches else "0.00",
-            "under_hours": f"{max(0.0, standard_hours - total_hours):.2f}" if has_punches and not (is_weekend or is_leave or is_holiday) else "0.00",
+            # "H:MM", not decimal hours -- see _format_duration_hm's
+            # docstring: "8.95" looks like it could already be a time.
+            "total_hours": _format_duration_hm(total_seconds_day),
+            "ot_hours": _format_duration_hm(max(0, total_seconds_day - standard_seconds_day)) if has_punches else "0:00",
+            "under_hours": _format_duration_hm(max(0, standard_seconds_day - total_seconds_day)) if has_punches and not (is_weekend or is_leave or is_holiday) else "0:00",
             "absent": "Yes" if is_absent else "",
             "sick": "Yes" if is_sick else "",
             "holiday": "Yes" if is_holiday else "",

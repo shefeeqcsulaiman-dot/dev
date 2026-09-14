@@ -71,14 +71,16 @@ def test_employee_daily_breakdown(client, db, auth_headers):
     # by the endpoint -- punches were seeded in UTC.
     assert d26["sessions"][0]["clock_in"] == "12:00"
     assert d26["sessions"][0]["clock_out"] == "16:00"
-    assert d26["sessions"][0]["work_time"] == "4.00"
+    # "H:MM", not decimal hours -- "4.00" looks like it could be a time
+    # already, when decimal hours and h:mm only agree at :00/:30/etc.
+    assert d26["sessions"][0]["work_time"] == "4:00"
     assert d26["sessions"][1]["clock_in"] == "17:00"
     assert d26["sessions"][1]["clock_out"] == "21:00"
-    assert d26["sessions"][1]["work_time"] == "4.00"
+    assert d26["sessions"][1]["work_time"] == "4:00"
     assert d26["sessions"][2]["clock_in"] is None
-    assert d26["total_hours"] == "8.00"
-    assert d26["ot_hours"] == "0.00"
-    assert d26["under_hours"] == "0.00"
+    assert d26["total_hours"] == "8:00"
+    assert d26["ot_hours"] == "0:00"
+    assert d26["under_hours"] == "0:00"
 
     assert by_date["2026-08-24"]["status"] == "sick"
     assert by_date["2026-08-24"]["sick"] == "Yes"

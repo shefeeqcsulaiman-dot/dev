@@ -2237,6 +2237,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 <div class="page" id="page-hrms-reports">
   <div class="tabs">
     <div class="tab on" onclick="stab(this,'hrr-attendance')">Attendance Report</div>
+    <div class="tab" onclick="stab(this,'hrr-late');loadHrLateReport()">Late Coming Report</div>
   </div>
 
   <div class="tab-body on" id="hrr-attendance">
@@ -2252,6 +2253,30 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
         <thead><tr><th>Employee</th><th>Department</th><th id="hrr-att-thead-present" style="cursor:pointer;user-select:none" onclick="sortHrAttendanceReport('present_days')" title="Click to sort">Present</th><th id="hrr-att-thead-absent" style="cursor:pointer;user-select:none" onclick="sortHrAttendanceReport('absent_days')" title="Click to sort">Absent</th><th>Leave</th><th>Total Hours</th><th>OT Hours</th></tr></thead>
         <tbody id="hrr-att-tbody">
           <tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-body" id="hrr-late">
+    <div class="card mb16">
+      <div class="card-hd">
+        <div><div class="card-title">Late Coming Report</div><div class="card-sub" id="hrr-late-sub">Employees whose first check-in landed after the standard start time (+ grace period), for the selected month</div></div>
+        <div class="flx">
+          <input class="fi" style="width:150px" type="month" id="hrr-late-period" onchange="loadHrLateReport()">
+          <button class="btn btn-g btn-sm" onclick="downloadHrLateReportCsv()">Export</button>
+        </div>
+      </div>
+      <div class="flx" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin:-4px 0 14px;padding:10px 12px;background:var(--bg3);border-radius:8px">
+        <div class="fg" style="margin:0"><label class="fl">Standard Start Time</label><input class="fi mono" style="width:110px" type="time" id="late-start-time" value="09:00"></div>
+        <div class="fg" style="margin:0"><label class="fl">Grace Period (minutes)</label><input class="fi mono" style="width:90px" type="number" min="0" id="late-grace-minutes" value="0"></div>
+        <button class="btn btn-g btn-sm" onclick="saveLateRulesConfig()">Save</button>
+        <div style="font-size:11.5px;color:var(--text3);max-width:320px">A day only counts as late once check-in is later than start time + grace — applies from the next report load onward, not retroactively.</div>
+      </div>
+      <table class="tbl" data-delete-actions-bound="skip">
+        <thead><tr><th>Employee</th><th>Department</th><th id="hrr-late-thead-days" style="cursor:pointer;user-select:none" onclick="sortHrLateReport('late_days')" title="Click to sort">Late Days</th><th id="hrr-late-thead-total" style="cursor:pointer;user-select:none" onclick="sortHrLateReport('total_late_seconds')" title="Click to sort">Total Late</th><th>Last Late Date</th></tr></thead>
+        <tbody id="hrr-late-tbody">
+          <tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px">Loading…</td></tr>
         </tbody>
       </table>
     </div>

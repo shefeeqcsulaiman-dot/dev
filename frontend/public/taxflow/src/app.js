@@ -22252,18 +22252,105 @@ function downloadHrAttendanceReportCsv(){
   setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
 
+let _hrLateReportCache=null;
+let _hrLateSort={key:null,dir:-1};
+
+function loadHrLateReport(){
+  const periodInput=document.getElementById('hrr-late-period');
+  if(periodInput&&!periodInput.value){
+    const now=new Date();
+    periodInput.value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+  const period=periodInput?.value||'';
+  _hrLateSort={key:null,dir:-1};
+  const tbody=document.getElementById('hrr-late-tbody');
+  if(tbody)tbody.innerHTML='<tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px">Loading…</td></tr>';
+  authenticatedFetch(`${apiBaseUrl()}/attendance/late-report${period?`?period=${encodeURIComponent(period)}`:''}`)
+    .then(r=>r.ok?r.json():Promise.reject(new Error('Report API returned '+r.status)))
+    .then(data=>{
+      _hrLateReportCache=data;
+      const sub=document.getElementById('hrr-late-sub');
+      if(sub)sub.textContent=`Standard start ${data.standard_start_time}${data.grace_minutes?` (+${data.grace_minutes} min grace)`:''} — employees whose first check-in landed after that`;
+      // The report response is the source of truth for the configured
+      // rule -- keep the two inputs in sync with it rather than whatever
+      // was last typed (also how a fresh page load picks up what's saved).
+      const startEl=document.getElementById('late-start-time');
+      if(startEl)startEl.value=data.standard_start_time||'09:00';
+      const graceEl=document.getElementById('late-grace-minutes');
+      if(graceEl)graceEl.value=data.grace_minutes??0;
+      _renderHrLateReportRows();
+    })
+    .catch(e=>{
+      console.warn('[loadHrLateReport]',e);
+      if(tbody)tbody.innerHTML='<tr><td colspan="5" style="color:var(--red);text-align:center;padding:24px">Could not load late coming report.</td></tr>';
+    });
+}
+
+function sortHrLateReport(key){
+  _hrLateSort=_hrLateSort.key===key?{key,dir:-_hrLateSort.dir}:{key,dir:-1};
+  _renderHrLateReportRows();
+}
+
+function _renderHrLateReportRows(){
+  const tbody=document.getElementById('hrr-late-tbody');
+  if(!tbody)return;
+  let rows=[...(_hrLateReportCache?.employees||[])];
+  const {key,dir}=_hrLateSort;
+  if(key)rows.sort((a,b)=>(Number(a[key])-Number(b[key]))*dir||(a.employee_name||'').localeCompare(b.employee_name||''));
+  const arrow=k=>key===k?(dir===1?' ▲':' ▼'):'';
+  document.querySelectorAll('#hrr-late-thead-days').forEach(th=>{th.textContent='Late Days'+arrow('late_days');});
+  document.querySelectorAll('#hrr-late-thead-total').forEach(th=>{th.textContent='Total Late'+arrow('total_late_seconds');});
+  tbody.innerHTML=rows.length?rows.map(e=>`<tr>
+    <td style="font-weight:600;color:var(--accent);cursor:pointer" onclick="openEmployeeAttendanceDetail('${escapeHtml(e.employee_id)}','${escapeHtml(e.employee_name||'')}','${escapeHtml(_hrLateReportCache?.period||'')}')" title="View day-by-day attendance">${escapeHtml(e.employee_name||'—')}</td>
+    <td style="color:var(--text3);font-size:12px">${escapeHtml(e.department||'—')}</td>
+    <td class="mono"${e.late_days>0?' style="color:var(--red)"':''}>${e.late_days}</td>
+    <td class="mono">${e.late_days>0?escapeHtml(e.total_late):'—'}</td>
+    <td class="mono" style="font-size:12px">${escapeHtml(e.last_late_date||'—')}</td>
+  </tr>`).join(''):'<tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px">No active employees.</td></tr>';
+}
+
+function saveLateRulesConfig(){
+  const startTime=document.getElementById('late-start-time')?.value||'09:00';
+  const graceMinutes=Math.max(0,parseInt(document.getElementById('late-grace-minutes')?.value,10)||0);
+  saveServer('hr_settings',{id:'late-rules-config',startTime,graceMinutes},{throwOnError:true})
+    .then(()=>{toast('Late coming rule saved','ok');loadHrLateReport();})
+    .catch(()=>toast('Could not save — cannot reach server','err'));
+}
+
+function downloadHrLateReportCsv(){
+  const data=_hrLateReportCache;
+  if(!data||!(data.employees||[]).length){toast('No report data to export — load the report first','warn');return;}
+  const escape=v=>{const s=String(v??'');return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s;};
+  const headers=['Employee','Department','Late Days','Total Late','Last Late Date'];
+  const rows=data.employees.map(e=>[e.employee_name,e.department,e.late_days,e.total_late,e.last_late_date||'']);
+  const companyName=document.getElementById('sb-company-name')?.textContent||'TaxFlow HRMS';
+  const csv=[
+    `${companyName} — Late Coming Report`,
+    `Period: ${data.period} · Standard Start: ${data.standard_start_time} · Grace: ${data.grace_minutes} min`,
+    `Generated: ${new Date().toLocaleDateString('en-GB')}`,
+    '',
+    headers.map(escape).join(','),
+    ...rows.map(r=>r.map(escape).join(',')),
+  ].join('\r\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`Late_Coming_Report_${data.period}.csv`;a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+
 // Clicking an employee's name in the Attendance Report previously did
 // nothing — this opens a day-by-day drill-down for that employee, backed
 // by GET /attendance/employee-daily, with its own month picker (defaults
 // to whatever month the report itself was showing).
 let _empAttDetailId=null;
 let _empAttDetailName='';
-function openEmployeeAttendanceDetail(employeeId,employeeName){
+function openEmployeeAttendanceDetail(employeeId,employeeName,period){
   _empAttDetailId=employeeId;
   _empAttDetailName=employeeName||'';
   document.getElementById('emp-att-detail-title').textContent=employeeName||'Attendance';
   const periodInput=document.getElementById('emp-att-detail-period');
-  if(periodInput)periodInput.value=document.getElementById('hrr-att-period')?.value||_hrAttReportCache?.period||'';
+  if(periodInput)periodInput.value=period||document.getElementById('hrr-att-period')?.value||_hrAttReportCache?.period||'';
   showM('m-emp-att-detail');
   loadEmployeeAttendanceDetail();
 }
@@ -22293,9 +22380,9 @@ function _empAttDetailRowHtml(d){
     <td>${escapeHtml(_empAttDetailName)}</td>
     <td>${escapeHtml(d.date)}</td>
     ${sessionCells}
-    <td>${d.total_hours&&d.total_hours!=='0.00'?escapeHtml(d.total_hours):'—'}</td>
-    <td>${d.ot_hours&&d.ot_hours!=='0.00'?escapeHtml(d.ot_hours):'—'}</td>
-    <td>${d.under_hours&&d.under_hours!=='0.00'?escapeHtml(d.under_hours):'—'}</td>
+    <td>${d.total_hours&&d.total_hours!=='0:00'?escapeHtml(d.total_hours):'—'}</td>
+    <td>${d.ot_hours&&d.ot_hours!=='0:00'?escapeHtml(d.ot_hours):'—'}</td>
+    <td>${d.under_hours&&d.under_hours!=='0:00'?escapeHtml(d.under_hours):'—'}</td>
     <td>${escapeHtml(d.absent||'')}</td>
     <td>${escapeHtml(d.sick||'')}</td>
     <td>${escapeHtml(d.holiday||'')}</td>

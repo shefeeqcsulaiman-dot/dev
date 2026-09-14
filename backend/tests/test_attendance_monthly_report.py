@@ -68,8 +68,9 @@ def test_monthly_report_counts_present_absent_leave_and_hours(client, db, auth_h
     row = next(e for e in data["employees"] if e["employee_no"] == "ATT-RPT-001")
     assert row["present_days"] == 3
     assert row["leave_days"] == 1
-    assert row["total_hours"] == "21.00"   # 9 + 8 + 4
-    assert row["ot_hours"] == "1.00"       # only the 26th exceeded 8h
+    # "H:MM", not decimal hours -- see _format_duration_hm's docstring.
+    assert row["total_hours"] == "21:00"   # 9 + 8 + 4
+    assert row["ot_hours"] == "1:00"       # only the 26th exceeded 8h
     # absent_days = working_days - present_days - leave_days; sanity check
     # it's non-negative and consistent with the other three numbers.
     assert row["absent_days"] == data["working_days"] - row["present_days"] - row["leave_days"]
