@@ -13,7 +13,14 @@ from app.database import get_db
 from app.dependencies import assert_company_active, company_allows_module
 from app.limiter import limiter
 from app.models import AppDataRecord, Company, Employee, LeaveRequest, PayrollItem, PayrollRun, Role
-from app.routers.leave import _ALLOWED_TYPES
+from app.routers.leave import (
+    _ALLOWED_TYPES,
+    _effective_leave_policy_configs,
+    _employee_leave_policies,
+    _leave_entitlement_days,
+    _leave_type_caps,
+    _used_days_for_type,
+)
 from app.security import pwd_context
 
 router = APIRouter(prefix="/ess", tags=["ess"])
@@ -206,6 +213,35 @@ def ess_team(request: Request, db: Session = Depends(get_db)) -> list[EssTeamMem
         )
         for r in rows
     ]
+
+
+@router.get("/leave-balance")
+def ess_leave_balance(request: Request, db: Session = Depends(get_db)) -> dict:
+    """This employee's own leave balance for the Dashboard's Leave Balance
+    widget -- the same entitlement/used/remaining math /leave/balance
+    (HRMS's admin-only Leave Balance Summary, gated on leave:view) already
+    computes for every employee, scoped here to just the caller via the ESS
+    bearer token instead. Annual Leave uses the policy-driven entitlement
+    (_leave_entitlement_days, which can differ per employee's working-day
+    policy); every other type uses its configured HR Settings > Leave
+    Types cap -- both folded into one by_type dict, unlike /leave/balance's
+    top-level annual_entitlement + a separate (flat-cap) by_type entry kept
+    there only for that endpoint's own backward compatibility."""
+    emp = ess_bearer(request, db)
+    policies = _employee_leave_policies(db, emp.company_id)
+    configs = _effective_leave_policy_configs(db, emp.company_id)
+    caps = _leave_type_caps(db, emp.company_id)
+    annual_entitlement = _leave_entitlement_days(emp.employee_no, policies, configs)
+    annual_used = _used_days_for_type(db, emp.company_id, emp.id, "Annual Leave")
+    by_type = {}
+    for leave_type, cap in caps.items():
+        if leave_type == "Annual Leave":
+            entitlement, used = annual_entitlement, annual_used
+        else:
+            entitlement = cap
+            used = _used_days_for_type(db, emp.company_id, emp.id, leave_type)
+        by_type[leave_type] = {"entitlement": entitlement, "used": used, "remaining": max(0, entitlement - used)}
+    return {"by_type": by_type}
 
 
 @router.post("/change-password")

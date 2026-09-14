@@ -8,17 +8,41 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    :root{--accent:#1d4ed8;--accent2:#3b82f6;--bg:#f1f5f9;--surface:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--text3:#94a3b8;--red:#ef4444;--green:#10b981;}
-    body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
-    *{scrollbar-width:thin;scrollbar-color:#94a3b8 transparent;}
+    :root{--accent:#1d4ed8;--accent2:#3b82f6;--bg:#f1f5f9;--bg2:#f8fafc;--bg3:#f4f7fb;--surface:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--text3:#94a3b8;--red:#ef4444;--green:#10b981;--field-bg:#f9fafb;--field-border:#d1d5db;--field-text:#111827;--scrollbar:#94a3b8;--danger-bg:#fef2f2;--danger-border:#fecaca;--success-bg:#f0fdf4;--success-border:#bbf7d0;}
+    /* Dark mode: system preference by default (unless the user explicitly
+       picked "light" via the topbar toggle -- see essApplyTheme()), or an
+       explicit "dark" pick winning over system preference either way. Only
+       the app shell re-themes; the login card stays a fixed light card on
+       its own dark gradient backdrop regardless (a deliberate branded
+       look, not page content that should follow the viewer's theme). */
+    @media (prefers-color-scheme: dark){
+      :root:not([data-theme="light"]){
+        --bg:#0a0f1c;--bg2:#111827;--bg3:#161f33;--surface:#111827;--border:#243040;
+        --text:#e5e9f0;--text2:#9aa5b8;--text3:#64748b;
+        --field-bg:#0d1420;--field-border:#2a3646;--field-text:#e5e9f0;--scrollbar:#475569;
+        --danger-bg:#2a1418;--danger-border:#4a2129;--success-bg:#0f2318;--success-border:#1c3d2a;
+      }
+    }
+    :root[data-theme="dark"]{
+      --bg:#0a0f1c;--bg2:#111827;--bg3:#161f33;--surface:#111827;--border:#243040;
+      --text:#e5e9f0;--text2:#9aa5b8;--text3:#64748b;
+      --field-bg:#0d1420;--field-border:#2a3646;--field-text:#e5e9f0;--scrollbar:#475569;
+      --danger-bg:#2a1418;--danger-border:#4a2129;--success-bg:#0f2318;--success-border:#1c3d2a;
+    }
+    body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background-color .15s,color .15s;}
+    *{scrollbar-width:thin;scrollbar-color:var(--scrollbar) transparent;}
     ::-webkit-scrollbar{width:8px;height:8px;}
     ::-webkit-scrollbar-track{background:transparent;}
-    ::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:999px;}
+    ::-webkit-scrollbar-thumb{background:var(--scrollbar);border-radius:999px;}
     ::-webkit-scrollbar-thumb:hover{background:var(--accent);}
 
     /* ── LOGIN ── */
     #login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(145deg,#040d1e 0%,#0a1f4a 45%,#07163a 100%)}
-    .login-card{background:#fff;border-radius:20px;padding:44px 40px 36px;width:100%;max-width:420px;margin:20px;box-shadow:0 40px 120px rgba(0,0,0,.45)}
+    /* Always a light card regardless of theme (see the dark-mode comment
+       above) -- re-pins the alert-box tokens to their light values too, so
+       #login-err doesn't inherit dark mode's tinted colors onto this
+       always-white card. */
+    .login-card{--danger-bg:#fef2f2;--danger-border:#fecaca;--success-bg:#f0fdf4;--success-border:#bbf7d0;background:#fff;border-radius:20px;padding:44px 40px 36px;width:100%;max-width:420px;margin:20px;box-shadow:0 40px 120px rgba(0,0,0,.45)}
     .brand{text-align:center;margin-bottom:32px}
     .brand-logo{width:120px;height:auto;margin-bottom:10px}
     .brand-title{font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:700;color:var(--accent);margin-bottom:4px}
@@ -28,7 +52,8 @@
     .field input{width:100%;padding:11px 15px;border:1.5px solid #d1d5db;border-radius:9px;font-size:14px;font-family:inherit;color:#111827;background:#f9fafb;outline:none;transition:border-color .15s,box-shadow .15s}
     .field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(29,78,216,.12);background:#fff}
     .field.last{margin-bottom:24px}
-    .err-box{display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:9px;padding:11px 14px;font-size:13px;color:var(--red);margin-bottom:20px}
+    .err-box{display:none;background:var(--danger-bg);border:1px solid var(--danger-border);border-radius:9px;padding:11px 14px;font-size:13px;color:var(--red);margin-bottom:20px}
+    .success-box{background:var(--success-bg);border:1px solid var(--success-border);border-radius:9px;padding:11px 14px;font-size:13px;color:var(--green);margin-bottom:20px}
     .btn-login{width:100%;padding:13px;background:linear-gradient(135deg,#073D7F,#4f8ef0);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;letter-spacing:.1px;transition:filter .2s,opacity .2s}
     .btn-login:hover{filter:brightness(1.08)}
     .btn-login:disabled{opacity:.6;cursor:not-allowed;filter:none}
@@ -38,25 +63,27 @@
          dashboard's own layout language rather than ESS's previous
          standalone top-tab-strip design) ── */
     #app-screen{display:none;height:100vh;overflow:hidden}
-    .ess-sb{width:220px;min-width:220px;background:#f8fafc;border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;overflow-y:auto;flex-shrink:0}
+    .ess-sb{width:220px;min-width:220px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;overflow-y:auto;flex-shrink:0}
     .ess-sb-logo{padding:18px 18px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
     .ess-sb-logo-icon{width:34px;height:34px;border-radius:9px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
     .ess-sb-brand{font-family:'Space Grotesk',sans-serif;font-size:16.5px;font-weight:700;color:var(--text);letter-spacing:-.3px}
     .ess-sb-brand span{color:var(--accent)}
     .ess-sb-section{padding:14px 10px 6px;flex:1}
     .ess-nav{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;cursor:pointer;color:var(--text2);font-size:13px;font-weight:500;transition:all .15s;margin-bottom:2px}
-    .ess-nav:hover{background:#fff;color:var(--text)}
+    .ess-nav:hover{background:var(--surface);color:var(--text)}
     .ess-nav.on{background:rgba(29,78,216,.08);color:var(--accent);box-shadow:-3px 0 0 var(--accent) inset;font-weight:600}
     .ess-nav svg{width:16px;height:16px;flex-shrink:0;opacity:.75}
     .ess-nav.on svg{opacity:1}
     .ess-sb-foot{padding:14px;border-top:1px solid var(--border)}
     .ess-sb-foot .btn-ghost{width:100%;justify-content:center;display:flex;align-items:center;gap:6px}
     .ess-main{flex:1;display:flex;flex-direction:column;height:100vh;overflow:hidden;min-width:0}
-    .ess-topbar{display:flex;align-items:center;gap:14px;padding:0 22px;height:60px;min-height:60px;background:#fff;border-bottom:1px solid var(--border);flex-shrink:0}
+    .ess-topbar{display:flex;align-items:center;gap:14px;padding:0 22px;height:60px;min-height:60px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+    .ess-theme-toggle{background:var(--bg3);border:1px solid var(--border);border-radius:7px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:var(--text2);flex-shrink:0}
+    .ess-theme-toggle:hover{color:var(--accent);border-color:var(--accent)}
     .ess-tb-title{font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;color:var(--text);flex:1}
     .ess-tb-right{margin-left:auto;display:flex;align-items:center;gap:10px}
-    .ess-hm-date{font-size:12px;color:var(--text3);background:#f4f7fb;border:1px solid var(--border);border-radius:7px;padding:6px 11px;white-space:nowrap}
-    .ess-hm-user{display:flex;align-items:center;gap:8px;padding:5px 12px 5px 5px;background:#f4f7fb;border:1px solid var(--border);border-radius:8px}
+    .ess-hm-date{font-size:12px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:6px 11px;white-space:nowrap}
+    .ess-hm-user{display:flex;align-items:center;gap:8px;padding:5px 12px 5px 5px;background:var(--bg3);border:1px solid var(--border);border-radius:8px}
     .ess-hm-avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#4f8ef7,#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0}
     .ess-hm-name{font-size:12.5px;font-weight:600;color:var(--text);white-space:nowrap;line-height:1.3}
     .ess-hm-role{font-size:10px;color:var(--text3);line-height:1.3}
@@ -85,13 +112,21 @@
     .dash-name{font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:700}
     .dash-role{font-size:12.5px;opacity:.85;margin-top:2px}
     .dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
-    .dash-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;cursor:pointer;transition:transform .15s,box-shadow .15s}
+    .dash-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;cursor:pointer;transition:transform .15s,box-shadow .15s}
     .dash-card:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(15,23,42,.08)}
     .dash-card-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;margin-bottom:10px}
     .dash-card-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:4px}
     .dash-card-value{font-size:15px;font-weight:700;color:var(--text)}
     .dash-card-sub{font-size:11.5px;color:var(--text3);margin-top:2px}
     .dash-section-title{font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:22px 0 10px}
+    .leave-balance-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
+    .lb-item{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px}
+    .lb-item-type{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .lb-item-days{font-size:18px;font-weight:700;font-family:'Space Grotesk',sans-serif;color:var(--text)}
+    .lb-item-days span{font-size:10.5px;font-weight:500;color:var(--text3);font-family:'DM Sans',sans-serif}
+    .lb-bar{height:5px;border-radius:99px;background:var(--border);margin-top:9px;overflow:hidden}
+    .lb-bar-fill{height:100%;border-radius:99px;background:var(--accent)}
+    .lb-bar-fill.low{background:var(--red)}
 
     /* ── STATUS BADGES (leave / task) ── */
     .st-badge{display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600}
@@ -108,12 +143,12 @@
     /* ── MODAL (Request Leave) ── */
     .ess-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:100;align-items:center;justify-content:center;padding:16px}
     .ess-overlay.on{display:flex}
-    .ess-modal{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto}
+    .ess-modal{background:var(--surface);border-radius:16px;padding:24px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto}
     .ess-modal-title{font-size:16px;font-weight:700;margin-bottom:16px;font-family:'Space Grotesk',sans-serif}
     .fr2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    select.ess-select{width:100%;padding:11px 15px;border:1.5px solid #d1d5db;border-radius:9px;font-size:14px;font-family:inherit;color:#111827;background:#f9fafb;outline:none}
+    select.ess-select{width:100%;padding:11px 15px;border:1.5px solid var(--field-border);border-radius:9px;font-size:14px;font-family:inherit;color:var(--field-text);background:var(--field-bg);outline:none}
     .btn-ghost{padding:11px 18px;background:none;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;cursor:pointer;color:var(--text2)}
-    .leave-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+    .leave-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
     .leave-type{font-size:13.5px;font-weight:700;color:var(--text)}
     .leave-dates{font-size:12px;color:var(--text3);margin-top:2px}
     .leave-reason{font-size:12px;color:var(--text2);margin-top:6px}
@@ -138,10 +173,10 @@
     .rota-type-ot .rota-date-chip{background:#fef3c7;color:#92400e}
     .rota-type-training .rota-date-chip{background:#ccfbf1;color:#0f766e}
     .rota-type-off .rota-shift-title,.rota-type-off .rota-shift-sub{color:var(--text3)}
-    .task-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:8px}
+    .task-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:8px}
 
     /* ── CARDS ── */
-    .card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px}
     .card-title{font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px}
     .profile-row{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
     @media(max-width:500px){.profile-row{grid-template-columns:1fr}}
@@ -154,10 +189,10 @@
     /* ── TABLE ── */
     .tbl-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
     table{width:100%;border-collapse:collapse;font-size:13px}
-    th{background:#f8fafc;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 14px;text-align:left;border-bottom:1px solid var(--border)}
+    th{background:var(--bg2);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 14px;text-align:left;border-bottom:1px solid var(--border)}
     td{padding:11px 14px;border-bottom:1px solid var(--border);color:var(--text)}
     tr:last-child td{border-bottom:none}
-    tr:hover td{background:#f8fafc}
+    tr:hover td{background:var(--bg2)}
     .dir-in{color:var(--green);font-weight:600}
     .dir-out{color:var(--red);font-weight:600}
     .empty{text-align:center;padding:32px;color:var(--text3);font-size:13px}
@@ -165,12 +200,23 @@
 
     /* ── PAYSLIP CARD ── */
     .payslip-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
-    .payslip-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px}
+    .payslip-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px}
     .payslip-period{font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px}
     .payslip-row{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0}
     .payslip-row.net{border-top:1px solid var(--border);margin-top:6px;padding-top:6px;font-weight:700;font-size:13px}
     .payslip-status{font-size:10.5px;font-weight:600;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
   </style>
+  <script>
+    // Runs before body paints, so a saved/system dark preference applies
+    // immediately instead of flashing light-then-dark once the main
+    // script (bottom of body) gets to essApplyTheme's own init call.
+    (function(){
+      var saved=null;
+      try{saved=localStorage.getItem('ess_theme');}catch(e){}
+      var mode=(saved==='dark'||saved==='light')?saved:(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+      document.documentElement.setAttribute('data-theme',mode);
+    })();
+  </script>
 </head>
 <body>
 
@@ -261,6 +307,7 @@
       <div class="ess-tb-title" id="ess-tb-title">Dashboard</div>
       <div class="ess-tb-right">
         <span class="badge" id="ess-role-badge" style="display:none"></span>
+        <button class="ess-theme-toggle" id="ess-theme-toggle" onclick="essToggleTheme()" title="Switch theme">◐</button>
         <div class="ess-hm-date" id="ess-tb-date"></div>
         <div class="ess-hm-user">
           <div class="ess-hm-avatar" id="ess-top-av">—</div>
@@ -322,6 +369,16 @@
         </div>
       </div>
 
+      <!-- Leave Balance -- entitlement/used/remaining per leave type, from
+           the same policy/cap math HRMS's admin-only Leave Balance Summary
+           report uses (GET /ess/leave-balance, scoped to this employee). -->
+      <div class="card" id="dash-leave-balance-card" style="margin-bottom:18px">
+        <div class="card-title" style="margin-bottom:10px">Leave Balance</div>
+        <div id="dash-leave-balance" class="leave-balance-grid">
+          <div class="loading">Loading…</div>
+        </div>
+      </div>
+
       <!-- My Requests -- leave is the only request type ESS has real,
            submittable history for today; a Requests hub spanning OT/
            attendance-correction/shift-swap needs those features to exist
@@ -343,7 +400,7 @@
       <div class="card">
         <div class="card-title">Change Password</div>
         <div id="pw-err" class="err-box"></div>
-        <div id="pw-ok" style="display:none;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px;padding:11px 14px;font-size:13px;color:var(--green);margin-bottom:20px">Password updated.</div>
+        <div id="pw-ok" class="success-box" style="display:none">Password updated.</div>
         <div class="field">
           <label for="pw-current">Current Password</label>
           <input id="pw-current" type="password" placeholder="Current password" autocomplete="current-password">
@@ -684,6 +741,25 @@
     document.body.classList.toggle('ess-sb-open', open);
   }
 
+  // The <head> script (runs before body paints) already set data-theme
+  // from localStorage/system preference to avoid a flash -- this just
+  // keeps the toggle button's icon/title in sync with whatever that
+  // resolved to, and handles switching it afterward.
+  function essApplyTheme(mode) {
+    document.documentElement.setAttribute('data-theme', mode);
+    var btn = document.getElementById('ess-theme-toggle');
+    if (btn) {
+      btn.textContent = mode === 'dark' ? '☀' : '☾';
+      btn.title = mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+    }
+  }
+  function essToggleTheme() {
+    var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem('ess_theme', next); } catch (e) {}
+    essApplyTheme(next);
+  }
+  essApplyTheme(document.documentElement.getAttribute('data-theme') || 'light');
+
   var _essData = { attendance: [], leave: [], rota: [], tasks: [], payslips: [] };
 
   async function loadProfile() {
@@ -801,6 +877,32 @@
       }
       updateDashboard();
     } catch(e) { var lEl = document.getElementById('leave-content'); lEl.classList.remove('loading'); lEl.innerHTML = '<div class="empty">Failed to load.</div>'; }
+  }
+
+  // Dashboard's Leave Balance widget -- entitlement/used/remaining per
+  // type, from GET /ess/leave-balance (this employee's own numbers; the
+  // admin-only company-wide equivalent is HRMS's Leave Balance Summary).
+  async function loadLeaveBalance() {
+    var el = document.getElementById('dash-leave-balance');
+    if (!el) return;
+    try {
+      var r = await fetch(apiBase() + '/ess/leave-balance', {headers: essHeaders()});
+      if (r.status === 401) { essLogout(); return; }
+      if (!r.ok) throw new Error('bad response');
+      var data = await r.json();
+      var types = Object.keys(data.by_type || {});
+      if (!types.length) { el.innerHTML = '<div class="empty">No leave types configured yet.</div>'; return; }
+      el.innerHTML = types.map(function(type) {
+        var b = data.by_type[type];
+        var pct = b.entitlement > 0 ? Math.min(100, Math.round((b.used / b.entitlement) * 100)) : 0;
+        var low = b.entitlement > 0 && b.remaining <= Math.max(1, Math.round(b.entitlement * 0.15));
+        return '<div class="lb-item">' +
+          '<div class="lb-item-type">' + type + '</div>' +
+          '<div class="lb-item-days">' + b.remaining + ' <span>/ ' + b.entitlement + ' days left</span></div>' +
+          '<div class="lb-bar"><div class="lb-bar-fill' + (low ? ' low' : '') + '" style="width:' + pct + '%"></div></div>' +
+        '</div>';
+      }).join('');
+    } catch (e) { el.innerHTML = '<div class="empty">Failed to load.</div>'; }
   }
 
   function essOpenLeaveModal() {
@@ -1066,6 +1168,7 @@
     loadAttendance();
     loadPayslips();
     loadLeave();
+    loadLeaveBalance();
     loadRota();
     loadTasks();
     loadRoleAndPermissions();
