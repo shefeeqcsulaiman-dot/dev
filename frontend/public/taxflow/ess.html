@@ -818,6 +818,7 @@
         method: 'POST', headers: essHeaders(),
         body: JSON.stringify({current_password: current, new_password: next})
       });
+      if (r.status === 401) { essLogout(); return; }
       var d = await r.json();
       if (r.ok && d.ok) {
         ok.style.display = 'block';
@@ -890,6 +891,7 @@
         method: 'POST', headers: essHeaders(),
         body: JSON.stringify({latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy, device: navigator.userAgent.substring(0,120)})
       });
+      if (r.status === 401) { essLogout(); return; }
       var d = await r.json();
       if (r.ok) { await refreshGpsStatus(); }
       else { gpsSetStatus(d.detail || 'Check-in failed.', true); }
@@ -906,6 +908,7 @@
         method: 'POST', headers: essHeaders(),
         body: pos ? JSON.stringify({latitude: pos.coords.latitude, longitude: pos.coords.longitude}) : '{}'
       });
+      if (r.status === 401) { essLogout(); return; }
       var d = await r.json();
       if (r.ok) { stopGpsPingLoop(); await refreshGpsStatus(); }
       else { gpsSetStatus(d.detail || 'Check-out failed.', true); }
@@ -1237,6 +1240,7 @@
         method: 'POST', headers: essHeaders(),
         body: JSON.stringify({leave_type: type, start_date: start, end_date: end, reason: reason || null})
       });
+      if (r.status === 401) { essLogout(); return; }
       var d = await r.json();
       if (r.ok) { essCloseLeaveModal(); loadLeave(); }
       else { err.textContent = d.detail || 'Could not submit leave request.'; err.style.display = 'block'; }
@@ -1537,6 +1541,7 @@
     document.getElementById('dept-team-title').textContent = 'Department Team — ' + ESS_DEPARTMENT_SCOPE.join(', ');
     try {
       var r = await fetch(apiBase() + '/ess/team', {headers: essHeaders()});
+      if (r.status === 401) { essLogout(); return; }
       if (r.status === 403) { body.innerHTML = '<tr><td colspan="4" class="empty">Your role is not scoped to any department.</td></tr>'; return; }
       var rows = await r.json();
       if (!rows.length) { body.innerHTML = '<tr><td colspan="4" class="empty">No employees found in this department.</td></tr>'; return; }
@@ -1551,6 +1556,7 @@
     var body = document.getElementById('team-body');
     try {
       var r = await fetch(apiBase() + '/hr/live-locations', {headers: essHeaders()});
+      if (r.status === 401) { essLogout(); return; }
       if (r.status === 403) { body.innerHTML = '<tr><td colspan="4" class="empty">Your role does not have team visibility.</td></tr>'; return; }
       var rows = await r.json();
       if (!rows.length) { body.innerHTML = '<tr><td colspan="4" class="empty">No one is currently checked in.</td></tr>'; return; }
