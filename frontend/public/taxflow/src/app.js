@@ -2647,7 +2647,57 @@ async function switchActiveBranch(branchId){
   }
 }
 
-async function authenticatedFetch(url,options={}){
+// GET de-duplication: several independent widgets/loaders (e.g. on the
+// HRMS Dashboard) each fetch the same read-only endpoint on page load with
+// no coordination — a live network trace of one login showed /leave/
+// requests fetched 4x, /attendance/today 3x, /attendance/trend?days=30
+// 3x, /branches 2x, all within the same load.
+//
+// A first attempt only de-duplicated genuinely CONCURRENT (in-flight)
+// calls with zero cache lifetime beyond that. Verified against a live
+// server log that it made no difference at all: these loaders aren't
+// microtask-concurrent, they're independently triggered at different
+// points in the page's own init sequence (bootstrap hydration, a tab's
+// own setup, a KPI refresh) and each earlier call had already resolved
+// before the next identical one fired, so there was never anything
+// in-flight left to share.
+//
+// This is a short-lived (a few seconds) result cache instead. The
+// staleness window that opens is deliberately closed on the side that
+// actually matters: ANY write (non-GET) clears the whole cache first, so
+// a POST/PUT/PATCH/DELETE is never followed by a GET replaying pre-write
+// data — correctness is preserved exactly where it's observable to a
+// user, and the only thing served from cache is "the same read repeated
+// a moment later with no write in between", which is precisely the
+// pattern above. A failed request is evicted immediately (not left to
+// replay the same rejection for the rest of the window), and every
+// caller gets its own response.clone() so independent .json()/.text()
+// reads never race over one consumed body stream.
+const _getResponseCache=new Map();
+const _GET_CACHE_TTL_MS=3000;
+
+async function authenticatedFetch(url,rawOptions={}){
+  const method=(rawOptions.method||'GET').toUpperCase();
+  if(method!=='GET'||rawOptions.body){
+    _getResponseCache.clear();
+    return _authenticatedFetchUncached(url,rawOptions);
+  }
+  const key=url+'|'+JSON.stringify(rawOptions.headers||{});
+  const cached=_getResponseCache.get(key);
+  if(cached&&cached.expiresAt>Date.now()){
+    const response=await cached.promise;
+    return response.clone();
+  }
+  const promise=_authenticatedFetchUncached(url,rawOptions);
+  _getResponseCache.set(key,{promise,expiresAt:Date.now()+_GET_CACHE_TTL_MS});
+  promise.catch(()=>{
+    if(_getResponseCache.get(key)?.promise===promise)_getResponseCache.delete(key);
+  });
+  const response=await promise;
+  return response.clone();
+}
+
+async function _authenticatedFetchUncached(url,options={}){
   await ensureBackendSession();
   url=_withActiveBranchParam(url);
   const requestOptions={...options,headers:{...backendHeaders(),...(options.headers||{})}};
