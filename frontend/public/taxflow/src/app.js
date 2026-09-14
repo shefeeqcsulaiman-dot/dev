@@ -3974,9 +3974,12 @@ function renderCfoRecommendations(data){
   const recs=[];
 
   const ar=parseAmount(kpis.open_invoice_amount||0);
-  const ap=parseAmount(kpis.total_payable||0);
-  if(ar>0&&ap>0&&ar>ap*1.5){
-    recs.push({color:'#f59e0b',bg:'rgba(245,158,11,.1)',icon:'⚠',title:'High receivables exposure',desc:`${formatAed(ar)} AR vs ${formatAed(ap)} AP — chase collections`});
+  // kpis.total_payable never exists in /reports/dashboard, so this always
+  // read 0 and the rule never fired. total_purchases + payroll_net (both
+  // real fields on this endpoint) is used as a cash-outflow proxy instead.
+  const outflow=parseAmount(kpis.total_purchases||0)+parseAmount(kpis.payroll_net||0);
+  if(ar>0&&outflow>0&&ar>outflow*1.5){
+    recs.push({color:'#f59e0b',bg:'rgba(245,158,11,.1)',icon:'⚠',title:'High receivables exposure',desc:`${formatAed(ar)} open invoices vs ${formatAed(outflow)} purchases + payroll — chase collections`});
   }
 
   const overdue=Number((status.overdue||{}).count||0);
@@ -3989,11 +3992,27 @@ function renderCfoRecommendations(data){
     recs.push({color:'#6366f1',bg:'rgba(99,102,241,.1)',icon:'$',title:'VAT liability outstanding',desc:`Net VAT due: ${formatAed(vatPayable)} — plan for filing`});
   }
 
-  const revTrend=Number(kpis.revenue_trend||0);
-  if(revTrend<-2){
-    recs.push({color:'#ef4444',bg:'rgba(239,68,68,.1)',icon:'↓',title:'Revenue declining',desc:`${Math.abs(revTrend).toFixed(1)}% drop vs prior period — review pipeline`});
-  } else if(revTrend>10){
-    recs.push({color:'#10b981',bg:'rgba(16,185,129,.1)',icon:'↑',title:'Strong revenue growth',desc:`+${revTrend.toFixed(1)}% vs prior period — sustain momentum`});
+  // kpis.revenue_trend never exists either. monthly_revenue_vat (a real
+  // field on this endpoint) carries the last 6 periods' sales, so derive
+  // the trend from its last two entries instead.
+  const monthly=data.monthly_revenue_vat||[];
+  let revTrend=0;
+  if(monthly.length>=2){
+    const prevSales=parseAmount(monthly[monthly.length-2].sales||0);
+    const currSales=parseAmount(monthly[monthly.length-1].sales||0);
+    revTrend=prevSales>0?((currSales-prevSales)/prevSales)*100:0;
+  }
+  if(revTrend<-10){
+    recs.push({color:'#ef4444',bg:'rgba(239,68,68,.1)',icon:'↓',title:'Revenue declining',desc:`${Math.abs(revTrend).toFixed(1)}% drop vs prior month — review pipeline`});
+  } else if(revTrend>15){
+    recs.push({color:'#10b981',bg:'rgba(16,185,129,.1)',icon:'↑',title:'Strong revenue growth',desc:`+${revTrend.toFixed(1)}% vs prior month — sustain momentum`});
+  }
+
+  const revenueAmt=parseAmount(kpis.revenue||0);
+  const payrollAmt=parseAmount(kpis.payroll_net||0);
+  const payrollRatio=revenueAmt>0?(payrollAmt/revenueAmt)*100:0;
+  if(payrollRatio>40){
+    recs.push({color:'#f59e0b',bg:'rgba(245,158,11,.1)',icon:'♦',title:'Payroll cost ratio high',desc:`Payroll is ${payrollRatio.toFixed(0)}% of revenue this period — above the typical 40% benchmark`});
   }
 
   if(!recs.length){

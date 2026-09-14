@@ -961,6 +961,11 @@ def _build_summary(db: Session, company_id: str, branch_id: str | None = None) -
     overdue_total = sum(money(row["d31_60"]) + money(row["d61_90"]) + money(row["over90"]) for row in aging_rows)
     risk_score = "Low" if overdue_total == 0 else "Medium" if overdue_total < ar_total / Decimal("2") else "High"
     monthly = monthly_revenue_vat(db, company_id, app_sales, branch_id)
+    _bs = balance_sheet_rows(db, company_id, branch_id)
+    _ap_aging = ap_aging_rows(db, company_id, app_purchases, branch_id)
+    ap_total = sum(money(r["total"]) for r in _ap_aging)
+    _wc = working_capital_rows(db, company_id, _bs, revenue=revenue, purchases=purchases, ar_total=ar_total, ap_total=ap_total)
+    working_capital_value = Decimal(_wc["working_capital"])
     result = {
         "dashboard": {
             "revenue": amount(revenue),
@@ -977,7 +982,11 @@ def _build_summary(db: Session, company_id: str, branch_id: str | None = None) -
             ],
             "ai_score": 82 if risk_score == "Low" else 68 if risk_score == "Medium" else 45,
             "ai_summary": f"Reports are generated from database records: AED {amount(revenue)} revenue, AED {amount(purchases)} purchases, and AED {amount(output_vat - input_vat)} net VAT.",
-            "actions": suggested_actions(overdue_total, output_vat - input_vat, payroll),
+            "actions": suggested_actions(
+                overdue_total, output_vat - input_vat, payroll,
+                net_profit=net_profit, gross_margin=gross_margin, revenue=revenue,
+                ap_total=ap_total, ar_total=ar_total, working_capital=working_capital_value,
+            ),
         },
         "vat": {
             "period": monthly[-1]["period"] if monthly else "Current",
@@ -1029,10 +1038,6 @@ def _build_summary(db: Session, company_id: str, branch_id: str | None = None) -
             },
         },
     }
-    _bs = balance_sheet_rows(db, company_id, branch_id)
-    _ap_aging = ap_aging_rows(db, company_id, app_purchases, branch_id)
-    ap_total = sum(money(r["total"]) for r in _ap_aging)
-    _wc = working_capital_rows(db, company_id, _bs, revenue=revenue, purchases=purchases, ar_total=ar_total, ap_total=ap_total)
 
     # E-invoicing readiness metrics
     invoice_count_total = invoice_count_db + len(app_sales)
@@ -1041,16 +1046,22 @@ def _build_summary(db: Session, company_id: str, branch_id: str | None = None) -
     with_trn_total = app_with_trn + int(invoice_count_db * trn_rate / 100)
     einv_score = min(100, int((with_trn_total / max(1, invoice_count_total)) * 70) + 20) if invoice_count_total else 0
 
+    _ai_anomalies = anomaly_rows(
+        overdue_total, input_vat, output_vat, payroll,
+        net_profit=net_profit, gross_margin=gross_margin, revenue=revenue,
+        ap_total=ap_total, ar_total=ar_total, working_capital=working_capital_value,
+    )
+
     result.update({
         "balance_sheet": _bs,
         "trial_balance": trial_balance_rows(db, company_id, branch_id),
         "aging": aging_rows,
         "ai": {
             "forecast_confidence": 87 if invoice_count_db else 0,
-            "anomalies": int((1 if overdue_total else 0) + (1 if input_vat > output_vat else 0)),
+            "anomalies": len([r for r in _ai_anomalies if r["area"] != "Reports"]),
             "potential_savings": amount(operating_expenses * Decimal("0.05")),
             "collection_upside": amount(overdue_total),
-            "anomalies_list": anomaly_rows(overdue_total, input_vat, output_vat, payroll),
+            "anomalies_list": _ai_anomalies,
             "report_text": report_ai_text(revenue, gross_margin, output_vat - input_vat, overdue_total, net_profit),
         },
         # These four sections are backed by tables with no branch_id column
@@ -1302,24 +1313,65 @@ def receivables_mix(rows: list[dict[str, str]]) -> dict[str, Any]:
     }
 
 
-def suggested_actions(overdue_total: Decimal, net_vat: Decimal, payroll: Decimal) -> list[str]:
+def suggested_actions(
+    overdue_total: Decimal,
+    net_vat: Decimal,
+    payroll: Decimal,
+    net_profit: Decimal = Decimal("0"),
+    gross_margin: Decimal = Decimal("0"),
+    revenue: Decimal = Decimal("0"),
+    ap_total: Decimal = Decimal("0"),
+    ar_total: Decimal = Decimal("0"),
+    working_capital: Decimal = Decimal("0"),
+) -> list[str]:
     actions = []
     if overdue_total:
         actions.append(f"Follow up AED {amount(overdue_total)} overdue receivables.")
     actions.append(f"Review net VAT payable AED {amount(net_vat)} before filing.")
     if payroll:
         actions.append(f"Reconcile payroll net AED {amount(payroll)} against WPS records.")
+    if net_profit < 0:
+        actions.append(f"Net loss of AED {amount(-net_profit)} this period — review cost structure before next filing.")
+    if revenue and gross_margin < Decimal("15"):
+        actions.append(f"Gross margin is thin at {amount(gross_margin)}% — review pricing or cost of goods sold.")
+    if revenue and payroll and (payroll / revenue) > Decimal("0.40"):
+        actions.append(f"Payroll is {amount(payroll / revenue * Decimal('100'))}% of revenue — above the typical 40% benchmark.")
+    if ap_total and ar_total and ap_total > ar_total * Decimal("1.5"):
+        actions.append(f"Payables (AED {amount(ap_total)}) significantly exceed receivables (AED {amount(ar_total)}) — watch near-term cash outflow.")
+    if working_capital < 0:
+        actions.append(f"Working capital is negative (AED {amount(working_capital)}) — current liabilities exceed current assets.")
     if not actions:
         actions.append("No report exceptions found in the current database records.")
     return actions
 
 
-def anomaly_rows(overdue_total: Decimal, input_vat: Decimal, output_vat: Decimal, payroll: Decimal) -> list[dict[str, str]]:
+def anomaly_rows(
+    overdue_total: Decimal,
+    input_vat: Decimal,
+    output_vat: Decimal,
+    payroll: Decimal,
+    net_profit: Decimal = Decimal("0"),
+    gross_margin: Decimal = Decimal("0"),
+    revenue: Decimal = Decimal("0"),
+    ap_total: Decimal = Decimal("0"),
+    ar_total: Decimal = Decimal("0"),
+    working_capital: Decimal = Decimal("0"),
+) -> list[dict[str, str]]:
     rows = []
     if overdue_total:
         rows.append({"area": "Receivables", "signal": f"AED {amount(overdue_total)} outstanding", "impact": "Medium", "action": "Open"})
     if input_vat > output_vat:
         rows.append({"area": "VAT", "signal": "Input VAT is higher than output VAT", "impact": "Medium", "action": "Review"})
+    if net_profit < 0:
+        rows.append({"area": "Profitability", "signal": f"Net loss of AED {amount(-net_profit)} this period", "impact": "High", "action": "Review"})
+    if revenue and gross_margin < Decimal("15"):
+        rows.append({"area": "Margins", "signal": f"Gross margin is only {amount(gross_margin)}%", "impact": "Medium", "action": "Review"})
+    if revenue and payroll and (payroll / revenue) > Decimal("0.40"):
+        rows.append({"area": "Payroll", "signal": f"Payroll is {amount(payroll / revenue * Decimal('100'))}% of revenue", "impact": "Medium", "action": "Review"})
+    if ap_total and ar_total and ap_total > ar_total * Decimal("1.5"):
+        rows.append({"area": "Cash Flow", "signal": f"Payables exceed receivables by AED {amount(ap_total - ar_total)}", "impact": "Medium", "action": "Review"})
+    if working_capital < 0:
+        rows.append({"area": "Liquidity", "signal": f"Working capital is negative (AED {amount(working_capital)})", "impact": "High", "action": "Review"})
     if payroll:
         rows.append({"area": "Payroll", "signal": f"AED {amount(payroll)} payroll net included in reports", "impact": "Low", "action": "Check"})
     if not rows:
