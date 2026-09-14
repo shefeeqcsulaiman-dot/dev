@@ -95,3 +95,40 @@ def test_ess_leave_balance_uses_configured_leave_type_cap(client, db, auth_heade
             AppDataRecord.record_key == "leave-policy",
         ).delete()
         db.commit()
+
+
+def test_ess_leave_balance_annual_leave_falls_back_to_configured_type_cap(client, db, auth_headers):
+    """An employee with no named leave policy assigned (#emp-leave-policy
+    left blank on their Employee form -- the common case) previously fell
+    back to a hardcoded 21 for Annual Leave, completely ignoring whatever
+    HR had actually configured in HR Settings > Leave Types &
+    Entitlements. It must use that configured cap instead, and only fall
+    back to 21 if even that was never set."""
+    company_id = _company_id(client, auth_headers)
+    # _ess_login() creates a plain Employee row with no "employees"
+    # AppDataRecord blob at all, so _employee_leave_policies() finds no
+    # named policy for them -- exactly the "no policy assigned" case.
+    emp, headers = _ess_login(client, db, auth_headers, company_id, "ESSBAL-ANNUAL", "essbal.annual")
+
+    db.query(AppDataRecord).filter(
+        AppDataRecord.company_id == company_id, AppDataRecord.collection == "hrLeavePolicy",
+        AppDataRecord.record_key == "leave-policy",
+    ).delete()
+    db.add(AppDataRecord(
+        company_id=company_id, collection="hrLeavePolicy", record_key="leave-policy",
+        payload=json.dumps({"leave_types": [{"type": "Annual Leave", "days": 25}]}),
+    ))
+    db.commit()
+
+    try:
+        r = client.get("/api/v1/ess/leave-balance", headers=headers)
+        assert r.status_code == 200, r.text
+        annual = r.json()["by_type"]["Annual Leave"]
+        assert annual["entitlement"] == 25
+        assert annual["remaining"] == 25
+    finally:
+        db.query(AppDataRecord).filter(
+            AppDataRecord.company_id == company_id, AppDataRecord.collection == "hrLeavePolicy",
+            AppDataRecord.record_key == "leave-policy",
+        ).delete()
+        db.commit()

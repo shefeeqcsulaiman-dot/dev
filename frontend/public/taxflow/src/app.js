@@ -18236,6 +18236,23 @@ async function loadLeavePoliciesFromServer(){
       const daysInput=row?.querySelector('input');
       if(daysInput&&p.days!=null&&p.days!=='')daysInput.value=p.days;
     });
+    // Same gap existed for Leave Types & Entitlements — this table always
+    // re-showed its hardcoded 30/90/5/60/5/30 defaults too, even though
+    // those saved values are exactly what /leave/balance and /ess/leave-
+    // balance actually compute Leave Balance from — an admin had no way to
+    // see (or confirm) what was really configured.
+    (rec.leave_types||[]).forEach(t=>{
+      if(!t.type)return;
+      const row=document.querySelector(`#leave-types-tbody tr[data-leave-type="${CSS.escape(t.type)}"]`);
+      if(!row)return;
+      const cells=[...row.querySelectorAll('input,select')];
+      if(cells[0]&&t.days!=null&&t.days!=='')cells[0].value=t.days;
+      if(cells[1]&&t.paid)cells[1].value=t.paid;
+      if(cells[2]&&t.basis)cells[2].value=t.basis;
+      if(cells[3]&&t.carry_forward)cells[3].value=t.carry_forward;
+      if(cells[4]&&t.max_carry!=null&&t.max_carry!=='')cells[4].value=t.max_carry;
+      if(cells[5]&&t.encash)cells[5].value=t.encash;
+    });
     const setSelVal=(id,v)=>{const el=document.getElementById(id);if(el&&v)el.value=v;};
     setSelVal('leave-year-start',rec.year_start);
     setSelVal('leave-accrual',rec.accrual);

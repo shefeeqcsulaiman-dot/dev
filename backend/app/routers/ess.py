@@ -249,7 +249,7 @@ def ess_leave_balance(request: Request, db: Session = Depends(get_db)) -> dict:
     policies = _employee_leave_policies(db, emp.company_id)
     configs = _effective_leave_policy_configs(db, emp.company_id)
     caps = _leave_type_caps(db, emp.company_id)
-    annual_entitlement = _leave_entitlement_days(emp.employee_no, policies, configs)
+    annual_entitlement = _leave_entitlement_days(emp.employee_no, policies, configs, default_days=caps.get("Annual Leave", 21))
     annual_used = _used_days_for_type(db, emp.company_id, emp.id, "Annual Leave")
     by_type = {}
     for leave_type, cap in caps.items():

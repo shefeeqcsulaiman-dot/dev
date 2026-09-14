@@ -131,11 +131,21 @@ def _employee_leave_policies(db: Session, company_id: str) -> dict[str, str]:
     return policies
 
 
-def _leave_entitlement_days(employee_no: str, policies: dict[str, str], configs: dict[str, dict] | None = None) -> int:
+def _leave_entitlement_days(
+    employee_no: str, policies: dict[str, str], configs: dict[str, dict] | None = None, default_days: int = 21,
+) -> int:
+    """An employee with no named leave policy assigned (#emp-leave-policy
+    left blank -- the common case for anyone HR hasn't explicitly set it
+    for) previously fell back to a hardcoded 21, completely ignoring
+    whatever HR actually configured for "Annual Leave" in HR Settings >
+    Leave Types & Entitlements. `default_days` -- the caller's own
+    _leave_type_caps(...).get("Annual Leave") -- is that real configured
+    value; 21 only survives as the final fallback if even that was never
+    set."""
     name = policies.get(employee_no, "")
     if configs is not None and name in configs:
         return configs[name]["days"]
-    return _LEAVE_POLICY_DAYS.get(name, 21)
+    return _LEAVE_POLICY_DAYS.get(name, default_days)
 
 
 # Only "Annual Leave" ever had its cap enforced at approval time — Sick,
@@ -374,13 +384,17 @@ def approve_leave_request(
     # _leave_type_caps() instead, matching how the Leave Types settings
     # screen actually presents them (one cap per type, not per policy).
     if req.leave_type not in _UNCAPPED_LEAVE_TYPES:
+        type_caps = _leave_type_caps(db, principal.company_id)
         if req.leave_type == "Annual Leave":
             policies = _employee_leave_policies(db, principal.company_id)
             emp_for_policy = db.query(Employee).filter(Employee.id == req.employee_id).first()
             configs = _effective_leave_policy_configs(db, principal.company_id)
-            entitlement = _leave_entitlement_days(emp_for_policy.employee_no if emp_for_policy else "", policies, configs)
+            entitlement = _leave_entitlement_days(
+                emp_for_policy.employee_no if emp_for_policy else "", policies, configs,
+                default_days=type_caps.get("Annual Leave", 21),
+            )
         else:
-            entitlement = _leave_type_caps(db, principal.company_id).get(req.leave_type)
+            entitlement = type_caps.get(req.leave_type)
         if entitlement is not None:
             used = _used_days_for_type(db, principal.company_id, req.employee_id, req.leave_type, exclude_request_id=req.id)
             if used + req.days > entitlement:
@@ -497,7 +511,7 @@ def leave_balance(
     caps = _leave_type_caps(db, principal.company_id)
     result = []
     for e in employees:
-        annual_entitlement = _leave_entitlement_days(e.employee_no, policies, configs)
+        annual_entitlement = _leave_entitlement_days(e.employee_no, policies, configs, default_days=caps.get("Annual Leave", 21))
         annual_used = _used_days_for_type(db, principal.company_id, e.id, "Annual Leave")
         by_type = {}
         for leave_type, cap in caps.items():
