@@ -143,6 +143,7 @@ _COLLECTION_MODULE: dict[str, str] = {
     "alertRules": "notifications",
     "employees": "hrms", "employeeLoans": "hrms", "salaryAdvances": "hrms",
     "leaveRequests": "hrms", "hrLeavePolicy": "hrms", "hr_settings": "hrms",
+    "companyAnnouncements": "hrms",
     "attendanceCorrections": "hrms", "overtimeRequests": "hrms",
     "rotaShifts": "hrms", "rotaSwaps": "hrms", "rotaApprovals": "hrms", "rotaDrafts": "hrms", "rotaAssignments": "hrms",
     "jobRequisitions": "hrms", "candidates": "hrms",

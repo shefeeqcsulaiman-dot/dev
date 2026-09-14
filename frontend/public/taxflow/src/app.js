@@ -19225,6 +19225,58 @@ function refreshManagerPortalCounts(){
   set('mgr-leave-cnt',pendingLeave);set('mgr-ot-cnt',pendingOT);set('mgr-corr-cnt',pendingCorr);
 }
 
+// Company Announcements -- posted here (Manager Portal), read by every
+// employee's ESS Dashboard (GET /ess/announcements). Stored in the
+// generic "companyAnnouncements" AppDataRecord collection, same bridge
+// every other HR setting already uses -- no dedicated endpoint needed for
+// either side.
+async function postCompanyAnnouncement(){
+  const title=(document.getElementById('announce-title')?.value||'').trim();
+  const message=(document.getElementById('announce-message')?.value||'').trim();
+  const dateVal=document.getElementById('announce-date')?.value||new Date().toISOString().slice(0,10);
+  if(!title){toast('Enter a title','warn');return;}
+  try{
+    await saveServer('companyAnnouncements',{
+      id:'ANN-'+Date.now(), title, message, date:dateVal,
+      posted_at:new Date().toISOString(),
+    },{throwOnError:true});
+    toast('Announcement posted','ok');
+    document.getElementById('announce-title').value='';
+    document.getElementById('announce-message').value='';
+    document.getElementById('announce-date').value='';
+    loadCompanyAnnouncements();
+  }catch(e){toast('Could not post — cannot reach server','err');}
+}
+
+async function loadCompanyAnnouncements(){
+  const el=document.getElementById('announce-list');
+  if(!el)return;
+  el.innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px">Loading…</div>';
+  try{
+    const r=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/companyAnnouncements?limit=20`);
+    if(!r.ok)throw new Error('bad response');
+    const data=await r.json();
+    const rows=(data.records||[]).slice().sort((a,b)=>(b.posted_at||'').localeCompare(a.posted_at||''));
+    if(!rows.length){el.innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px">No announcements posted yet.</div>';return;}
+    el.innerHTML=rows.map(a=>`
+      <div class="tline-item">
+        <div class="tline-dot" style="background:var(--accent-glow);color:var(--accent)">📣</div>
+        <div style="flex:1;min-width:0">
+          <div>${escapeHtml(a.title||'Untitled')}</div>
+          <div class="card-sub">${escapeHtml(a.message||'')}${a.date?` · ${escapeHtml(a.date)}`:''}</div>
+        </div>
+        <button class="icon-btn danger" title="Delete" onclick="deleteCompanyAnnouncement('${escapeHtml(a.id)}')">${deleteIconSvg()}</button>
+      </div>`).join('');
+  }catch(e){el.innerHTML='<div style="color:var(--red);font-size:12px;text-align:center;padding:12px">Failed to load.</div>';}
+}
+
+function deleteCompanyAnnouncement(id){
+  if(!confirm('Delete this announcement?'))return;
+  deleteServer('companyAnnouncements',{id},{throwOnError:true})
+    .then(()=>{toast('Announcement deleted','ok');loadCompanyAnnouncements();})
+    .catch(()=>toast('Could not delete — cannot reach server','err'));
+}
+
 function submitOTRequest(){
   const empSel=document.getElementById('ot-employee-sel');
   const employee=(empSel?.value||document.getElementById('ot-employee')?.value||'').trim();

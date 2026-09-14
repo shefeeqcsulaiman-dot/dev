@@ -13,6 +13,7 @@ from app.database import get_db
 from app.dependencies import assert_company_active, company_allows_module
 from app.limiter import limiter
 from app.models import AppDataRecord, Company, Employee, LeaveRequest, PayrollItem, PayrollRun, Role
+from app.routers.attendance import _late_rules, _standard_hours_per_day
 from app.routers.leave import (
     _ALLOWED_TYPES,
     _effective_leave_policy_configs,
@@ -53,6 +54,13 @@ class EssEmployeeOut(BaseModel):
     designation: str
     status: str
     photo: str | None = None
+    company_name: str | None = None
+    # The Dashboard hero's "Working Hours" chip -- shift_end is derived
+    # (start time + standard hours/day), not a real per-employee shift
+    # end time (no such column/setting exists yet); good enough for a
+    # single at-a-glance chip, not something to treat as authoritative.
+    shift_start: str | None = None
+    shift_end: str | None = None
 
 
 class EssChangePasswordRequest(BaseModel):
@@ -176,6 +184,11 @@ def ess_login(request: Request, payload: EssLoginRequest, db: Session = Depends(
 @router.get("/me", response_model=EssEmployeeOut)
 def ess_me(request: Request, db: Session = Depends(get_db)) -> EssEmployeeOut:
     emp = ess_bearer(request, db)
+    company_name = db.query(Company.name).filter(Company.id == emp.company_id).scalar()
+    start_time_str, _grace_minutes = _late_rules(db, emp.company_id)
+    standard_hours = _standard_hours_per_day(db, emp.company_id)
+    start_h, start_m = (int(part) for part in start_time_str.split(":"))
+    shift_end = (datetime(2000, 1, 1, start_h, start_m) + timedelta(hours=standard_hours)).strftime("%H:%M")
     return EssEmployeeOut(
         id=emp.id,
         employee_no=emp.employee_no,
@@ -184,6 +197,9 @@ def ess_me(request: Request, db: Session = Depends(get_db)) -> EssEmployeeOut:
         designation=emp.designation,
         status=emp.status,
         photo=emp.photo,
+        company_name=company_name,
+        shift_start=start_time_str,
+        shift_end=shift_end,
     )
 
 
@@ -242,6 +258,49 @@ def ess_leave_balance(request: Request, db: Session = Depends(get_db)) -> dict:
             used = _used_days_for_type(db, emp.company_id, emp.id, leave_type)
         by_type[leave_type] = {"entitlement": entitlement, "used": used, "remaining": max(0, entitlement - used)}
     return {"by_type": by_type}
+
+
+class EssAnnouncementOut(BaseModel):
+    id: str
+    title: str
+    message: str
+    date: str | None = None
+
+
+@router.get("/announcements", response_model=list[EssAnnouncementOut])
+def ess_announcements(request: Request, db: Session = Depends(get_db)) -> list[EssAnnouncementOut]:
+    """Company-wide announcements for the Dashboard's Latest Announcements
+    card. Read-only here -- posting one is an HR Settings action (Manager
+    Portal > Post Announcement in HRMS), stored in the same
+    companyAnnouncements AppDataRecord collection via the generic
+    /app-data?action=save bridge every other HR setting already uses; an
+    ESS token has no admin permission to post through this router."""
+    emp = ess_bearer(request, db)
+    rows = (
+        db.query(AppDataRecord)
+        .filter(AppDataRecord.company_id == emp.company_id, AppDataRecord.collection == "companyAnnouncements")
+        .order_by(AppDataRecord.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    out: list[EssAnnouncementOut] = []
+    for row in rows:
+        try:
+            payload = json.loads(row.payload or "{}")
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        title = str(payload.get("title") or "").strip()
+        if not title:
+            continue
+        out.append(EssAnnouncementOut(
+            id=str(payload.get("id") or row.id),
+            title=title,
+            message=str(payload.get("message") or "").strip(),
+            date=str(payload.get("date") or "").strip() or None,
+        ))
+    return out
 
 
 @router.post("/change-password")

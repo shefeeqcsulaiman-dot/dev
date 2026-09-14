@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=b17289382e" as="script">
+<link rel="preload" href="src/app.js?v=13cd8b8b28" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
@@ -1843,7 +1843,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
     <div class="tab" onclick="stab(this,'hrext-train')">Training</div>
     <div class="tab" onclick="stab(this,'hrext-assets')">Asset Management</div>
     <div class="tab" onclick="stab(this,'hrext-ess')">ESS Portal</div>
-    <div class="tab" onclick="stab(this,'hrext-mgr')">Manager Portal</div>
+    <div class="tab" onclick="stab(this,'hrext-mgr');loadCompanyAnnouncements()">Manager Portal</div>
   </div>
 
   <!-- Performance Management -->
@@ -1999,6 +1999,17 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
           </button>
         </div>
       </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">Company Announcements</div><div class="card-sub">Posted here, shown on every employee's ESS Dashboard</div></div></div>
+      <div class="fr2 mb8">
+        <div class="fg"><label class="fl">Title</label><input class="fi" id="announce-title" placeholder="e.g. New HR Policy"></div>
+        <div class="fg"><label class="fl">Date</label><input class="fi" type="date" id="announce-date"></div>
+      </div>
+      <div class="fg"><label class="fl">Message</label><textarea class="fi" id="announce-message" rows="2" placeholder="What's the update?"></textarea></div>
+      <button class="btn btn-p btn-sm" onclick="postCompanyAnnouncement()">Post Announcement</button>
+      <div id="announce-list" style="display:flex;flex-direction:column;gap:8px;margin-top:16px"></div>
     </div>
   </div>
 </div>
@@ -2953,7 +2964,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=b17289382e" defer></script>
+<script src="src/app.js?v=13cd8b8b28" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
