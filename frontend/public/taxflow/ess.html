@@ -107,6 +107,18 @@
       body.ess-sb-open .ess-sb-scrim{display:block}
       .ess-ham-btn{display:inline-flex;align-items:center;justify-content:center}
     }
+    /* The role pill, notification bell, theme toggle, and date/user chip
+       all fit comfortably on desktop, but that's 4-5 elements competing
+       for the same topbar row -- past a point they overflow the viewport
+       and push the user's own name/avatar chip off the edge entirely
+       (confirmed: at 390px wide its bounding box ended up 155px past the
+       viewport, fully inaccessible, not just visually cramped). Drop the
+       two least essential pieces (role text, date) so the identity chip
+       stays on-screen. */
+    @media(max-width:640px){
+      #ess-role-badge,.ess-hm-date{display:none}
+      .ess-tb-right{gap:6px}
+    }
     .content{flex:1;overflow-y:auto;padding:24px 16px}
     .content-inner{max-width:1300px;margin:0 auto;width:100%}
     .dash-2col{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;align-items:start}
@@ -169,6 +181,14 @@
     .dash-card.dc-orange .dash-card-icon{color:#ea580c}
     .dash-card.dc-pink{background:#fef2f2}
     .dash-card.dc-pink .dash-card-icon{color:#dc2626}
+    /* The tinted cards keep a fixed light background in both themes (like
+       the badges/dash-card-icon colors above) -- but label/value/chevron
+       were still reading var(--text)/var(--text3), which flip to
+       near-white in dark mode and become nearly invisible against that
+       fixed light card. Pin them to fixed slate tones too. */
+    .dash-card[class*="dc-"] .dash-card-label{color:#64748b}
+    .dash-card[class*="dc-"] .dash-card-value{color:#0f172a}
+    .dash-card[class*="dc-"] .dash-card-chevron{color:#94a3b8}
     .dash-section-title{font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:22px 0 10px}
     .leave-balance-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
     .lb-item{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px}
@@ -918,7 +938,16 @@
     el.classList.add('on');
     document.getElementById('tb-' + id).classList.add('on');
     var titleEl = document.getElementById('ess-tb-title');
-    if (titleEl) titleEl.textContent = (el.textContent || '').trim();
+    if (titleEl) {
+      // el.textContent would otherwise include the Tasks nav item's
+      // ess-nav-badge count (e.g. "Tasks3") -- .textContent reads hidden
+      // elements' text too, badge display:none included. Strip it from a
+      // clone rather than the live node.
+      var clone = el.cloneNode(true);
+      var badge = clone.querySelector('.ess-nav-badge');
+      if (badge) badge.remove();
+      titleEl.textContent = (clone.textContent || '').trim();
+    }
     toggleEssSidebar(false);
   }
 
