@@ -135,3 +135,28 @@ def test_ess_rota_scoped_to_employee_and_date_window(client, db, auth_headers):
     assert r.status_code == 200, r.text
     assert [a["date"] for a in r.json()] == [in_window]
     assert r.json()[0]["code"] == "E"
+
+
+def test_ess_rota_month_param_overrides_the_default_window(client, db, auth_headers):
+    """The Rota tab's month picker -- checking a specific past/future month
+    isn't asking for "recent", so the rolling 7-days-back/30-days-forward
+    default must not apply when ?month= is given."""
+    company_id, emp_a, headers_a, _emp_b, _headers_b = _setup_two_employees(client, db, auth_headers, "ESSROTAMONTH")
+
+    db.add(AppDataRecord(company_id=company_id, collection="rotaAssignments", record_key="RAM-1",
+                          payload=json.dumps({"id": "RAM-1", "employee_id": emp_a.employee_no, "date": "2026-12-15", "code": "M", "start": "08:00", "end": "16:00"})))
+    # Outside the requested month but well within the default rolling window.
+    db.add(AppDataRecord(company_id=company_id, collection="rotaAssignments", record_key="RAM-2",
+                          payload=json.dumps({"id": "RAM-2", "employee_id": emp_a.employee_no, "date": "2026-09-20", "code": "E", "start": "16:00", "end": "00:00"})))
+    db.commit()
+
+    r = client.get("/api/v1/ess/rota?month=2026-12", headers=headers_a)
+    assert r.status_code == 200, r.text
+    assert [a["date"] for a in r.json()] == ["2026-12-15"]
+
+    r = client.get("/api/v1/ess/rota?month=2026-11", headers=headers_a)
+    assert r.status_code == 200, r.text
+    assert r.json() == []
+
+    r = client.get("/api/v1/ess/rota?month=not-a-month", headers=headers_a)
+    assert r.status_code == 400, r.text

@@ -1,7 +1,9 @@
 import json
+import re
+from calendar import monthrange
 from datetime import UTC, date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from jose import JWTError, jwt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -502,12 +504,23 @@ def ess_tasks(request: Request, db: Session = Depends(get_db)) -> list:
 
 
 @router.get("/rota")
-def ess_rota(request: Request, db: Session = Depends(get_db)) -> list:
-    """Only this employee's own rota assignments, within a recent-past-to-
-    near-future window -- an employee's full rota history could be large
-    and nobody needs to see last year's shifts on their phone. Matches the
-    30-day window most of the rest of HRMS already defaults to for
-    "recent" data.
+def ess_rota(
+    request: Request,
+    month: str | None = Query(default=None, description="YYYY-MM -- view a specific month instead of the rolling default window"),
+    db: Session = Depends(get_db),
+) -> list:
+    """Only this employee's own rota assignments. Two windows:
+
+    - Default (no `month`): a recent-past-to-near-future rolling window --
+      an employee's full rota history could be large and nobody needs to
+      see last year's shifts on their phone by default. Matches the
+      30-day window most of the rest of HRMS already defaults to for
+      "recent" data. This is what the Dashboard's Today's Schedule card
+      and the initial Rota tab load both use.
+    - `month=YYYY-MM`: the Rota tab's own month picker -- an employee
+      checking a specific past or future month isn't asking for "recent",
+      they're asking for that exact month, so the rolling window doesn't
+      apply here at all.
 
     Matched by employee_no, NOT emp.id -- confirmed against live data that
     Rota (app.js's currentRotaStaff()/employeeFromDirectoryRow()) keys
@@ -521,9 +534,19 @@ def ess_rota(request: Request, db: Session = Depends(get_db)) -> list:
     returned empty for every real employee with real rota data."""
     emp = ess_bearer(request, db)
     assignments = _employee_app_data_records(db, emp.company_id, "rotaAssignments")
-    today = date.today()
-    window_start = (today - timedelta(days=7)).isoformat()
-    window_end = (today + timedelta(days=30)).isoformat()
+    if month:
+        m = re.match(r"^(\d{4})-(\d{2})$", month)
+        if not m:
+            raise HTTPException(status_code=400, detail="month must be in YYYY-MM format")
+        year, mon = int(m.group(1)), int(m.group(2))
+        if not (1 <= mon <= 12):
+            raise HTTPException(status_code=400, detail="month must be in YYYY-MM format")
+        window_start = date(year, mon, 1).isoformat()
+        window_end = date(year, mon, monthrange(year, mon)[1]).isoformat()
+    else:
+        today = date.today()
+        window_start = (today - timedelta(days=7)).isoformat()
+        window_end = (today + timedelta(days=30)).isoformat()
     mine = [
         a for a in assignments
         if a.get("employee_id") == emp.employee_no and window_start <= (a.get("date") or "") <= window_end

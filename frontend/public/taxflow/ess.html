@@ -221,6 +221,7 @@
     .ess-modal-title{font-size:16px;font-weight:700;margin-bottom:16px;font-family:'Space Grotesk',sans-serif}
     .fr2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     select.ess-select{width:100%;padding:11px 15px;border:1.5px solid var(--field-border);border-radius:9px;font-size:14px;font-family:inherit;color:var(--field-text);background:var(--field-bg);outline:none}
+    input.ess-month-picker{width:auto;padding:8px 12px;border:1.5px solid var(--field-border);border-radius:9px;font-size:13px;font-family:inherit;color:var(--field-text);background:var(--field-bg);outline:none}
     .btn-ghost{padding:11px 18px;background:none;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;cursor:pointer;color:var(--text2)}
     .leave-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
     .leave-type{font-size:13.5px;font-weight:700;color:var(--text)}
@@ -654,7 +655,13 @@
     <!-- Rota -->
     <div class="tab-body" id="tb-rota">
       <div class="card">
-        <div class="card-title">My Upcoming Shifts (next 30 days)</div>
+        <div class="card-hd">
+          <div class="card-title" id="rota-card-title" style="margin-bottom:0">My Upcoming Shifts (next 30 days)</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="month" class="ess-month-picker" id="rota-month-picker" onchange="loadRota()">
+            <button class="btn-ghost" id="rota-reset-btn" style="padding:8px 12px;font-size:12px;display:none" onclick="document.getElementById('rota-month-picker').value='';loadRota()">Reset</button>
+          </div>
+        </div>
         <div id="rota-content" class="loading">Loading…</div>
       </div>
     </div>
@@ -1307,14 +1314,30 @@
     return fmt(mon) + ' – ' + fmt(end);
   }
   async function loadRota() {
+    var month = document.getElementById('rota-month-picker') ? document.getElementById('rota-month-picker').value : '';
+    var titleEl = document.getElementById('rota-card-title');
+    var resetBtn = document.getElementById('rota-reset-btn');
+    if (titleEl) {
+      if (month) {
+        var monthLabel = new Date(month + '-01T00:00:00').toLocaleDateString('en-US', {month: 'long', year: 'numeric'});
+        titleEl.textContent = 'My Shifts — ' + monthLabel;
+      } else {
+        titleEl.textContent = 'My Upcoming Shifts (next 30 days)';
+      }
+    }
+    if (resetBtn) resetBtn.style.display = month ? '' : 'none';
     try {
-      var r = await fetch(apiBase() + '/ess/rota', {headers: essHeaders()});
+      var url = apiBase() + '/ess/rota' + (month ? ('?month=' + encodeURIComponent(month)) : '');
+      var r = await fetch(url, {headers: essHeaders()});
       if (r.status === 401) { essLogout(); return; }
       var rows = await r.json();
-      _essData.rota = rows;
+      // Only the default (no month picked) window feeds the Dashboard's
+      // Next Shift / Today's Schedule tiles -- looking up a past/future
+      // month shouldn't make "next shift" suddenly point at October.
+      if (!month) _essData.rota = rows;
       var el = document.getElementById('rota-content');
       el.classList.remove('loading');
-      if (!rows.length) { el.innerHTML = '<div class="empty">No shifts scheduled in the next 30 days.</div>'; }
+      if (!rows.length) { el.innerHTML = '<div class="empty">' + (month ? 'No shifts scheduled that month.' : 'No shifts scheduled in the next 30 days.') + '</div>'; }
       else {
         var today = new Date(); today.setHours(0, 0, 0, 0);
         var tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
