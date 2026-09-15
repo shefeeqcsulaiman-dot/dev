@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=636b0b27c9" as="script">
+<link rel="preload" href="src/app.js?v=2f5001e696" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
@@ -2337,28 +2337,9 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <div class="fg"><label class="fl">Priority</label><select class="fi" id="task-filter-priority" onchange="renderTaskBoard()"><option value="">All Priorities</option><option>Low</option><option>Medium</option><option>High</option></select></div>
       <div class="fg"><label class="fl">Search</label><input class="fi" id="task-filter-search" placeholder="Search name…" oninput="renderTaskBoard()"></div>
     </div>
-    <div class="tabs" style="margin-top:8px">
-      <div class="tab on" id="task-view-tab-board" onclick="setTaskViewMode('board')">Board</div>
-      <div class="tab" id="task-view-tab-table" onclick="setTaskViewMode('table')">Table</div>
-    </div>
   </div>
 
-  <div class="task-board" id="task-board">
-    <div class="task-col" data-status="todo">
-      <div class="task-col-hd"><span>To Do</span><span class="task-col-count" id="task-count-todo">0</span></div>
-      <div id="task-list-todo"></div>
-    </div>
-    <div class="task-col" data-status="progress">
-      <div class="task-col-hd"><span>Progress</span><span class="task-col-count" id="task-count-progress">0</span></div>
-      <div id="task-list-progress"></div>
-    </div>
-    <div class="task-col" data-status="done">
-      <div class="task-col-hd"><span>Done</span><span class="task-col-count" id="task-count-done">0</span></div>
-      <div id="task-list-done"></div>
-    </div>
-  </div>
-
-  <div class="card" id="task-table-view" style="display:none">
+  <div class="card" id="task-table-view">
     <table class="tbl" data-delete-actions-bound="skip">
       <thead><tr><th>Employee</th><th>Department</th><th>Task Name</th><th>Priority</th><th>Due Date</th><th>Repeat</th><th>Status</th><th>Progress</th><th></th></tr></thead>
       <tbody id="task-table-tbody">
@@ -2865,6 +2846,12 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
     <div class="fr3"><div class="fg"><label class="fl">Start Time</label><input class="fi mono" id="rota-edit-start" type="time" value="09:00"></div><div class="fg"><label class="fl">End Time</label><input class="fi mono" id="rota-edit-end" type="time" value="18:00"></div><div class="fg"><label class="fl">Break Minutes</label><input class="fi mono" id="rota-edit-break" value="60"></div></div>
     <div class="fg"><label class="fl">Mark As</label><select class="fi" id="rota-edit-mark"><option>Shift</option><option>Off</option><option>Leave</option><option>OT</option><option>Holiday</option><option>Training</option></select></div>
     <div class="fg"><label class="fl">Notes</label><textarea class="fi" id="rota-edit-notes" rows="3" placeholder="Optional rota note"></textarea></div>
+    <div class="fg">
+      <label class="fl">Tasks for this Day</label>
+      <div id="rota-edit-tasks-list" style="display:flex;flex-direction:column;gap:8px"></div>
+      <div id="rota-edit-tasks-empty" style="color:var(--text3);font-size:12px;padding:4px 0">No tasks attached yet.</div>
+      <button type="button" class="btn btn-g btn-sm" style="margin-top:8px" onclick="addRotaEditTaskRow()">+ Add Task</button>
+    </div>
     <div class="modal-foot"><button class="btn btn-danger" onclick="removeRotaCellShift()">Remove Shift</button><button class="btn btn-g" onclick="closeM('m-edit-shift')">Cancel</button><button class="btn btn-p" onclick="saveRotaCellShift()">Save</button></div>
   </div>
 </div>
@@ -2964,7 +2951,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=636b0b27c9" defer></script>
+<script src="src/app.js?v=2f5001e696" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

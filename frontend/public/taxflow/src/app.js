@@ -69,6 +69,10 @@ function runPageWarmup(page){
       seedDefaultRotaShifts();
       renderRotaBoards();
       updateRotaStats();
+      // Edit Shift's task-attachment picker (openRotaCellEditor) needs
+      // _taskListCache populated -- loadTasks() otherwise only runs when
+      // the Tasks page itself has been visited this session.
+      if(!_taskListCache.length)loadTasks();
     }
   },500);
 }
@@ -19678,6 +19682,11 @@ function normalizeRotaAssignment(record={}){
     // own Break field said — Shift Setup and the rota disagreed on a shift's
     // real hours. Carried through save/normalize like every other field now.
     break_minutes:record.break_minutes!=null?Number(record.break_minutes):(record.breakMinutes!=null?Number(record.breakMinutes):(defaults.break_minutes??0)),
+    // Existing Task Management tasks attached to this employee/day, each
+    // with its own start/end time -- {task_id,title,start,end}[]. Dropped
+    // here like every other field would otherwise silently vanish on the
+    // next load/save roundtrip (see openRotaCellEditor/saveActiveRotaAssignmentFromModal).
+    tasks:Array.isArray(record.tasks)?record.tasks:[],
     status:record.status||'Draft',
     updated_at:record.updated_at||new Date().toISOString()
   };
@@ -19697,7 +19706,9 @@ function rotaCellHtml(assignment){
   const time=start&&end?`${start}-${end}`:'-';
   const className=assignment?.className||defaults.className;
   const icon=assignment?.status==='Published'?'OK':(className==='off'?'-':className==='draft'?'o':className==='overtime'?'!':'OK');
-  return `<div class="rota-cell ${escapeHtml(className)}"><strong>${escapeHtml(code)}</strong><span>${escapeHtml(time)}</span><em>${escapeHtml(icon)}</em></div>`;
+  const taskCount=Array.isArray(assignment?.tasks)?assignment.tasks.length:0;
+  const taskBadge=taskCount?`<i class="rota-task-badge" title="${taskCount} task${taskCount>1?'s':''} attached">${taskCount}</i>`:'';
+  return `<div class="rota-cell ${escapeHtml(className)}" style="position:relative"><strong>${escapeHtml(code)}</strong><span>${escapeHtml(time)}</span><em>${escapeHtml(icon)}</em>${taskBadge}</div>`;
 }
 
 function rotaHours(assignment){
@@ -19726,7 +19737,79 @@ function openRotaCellEditor(cell){
   setFieldValue(document.getElementById('rota-edit-break'),String(assignment?.break_minutes??ROTA_EDIT_DEFAULTS[type]?.break_minutes??60));
   setSelectValue(document.getElementById('rota-edit-mark'),assignment?.mark||ROTA_EDIT_DEFAULTS[type]?.mark||'Shift');
   setFieldValue(document.getElementById('rota-edit-notes'),assignment?.notes||'');
+  renderRotaEditTasks(assignment?.tasks||[]);
   showM('m-edit-shift');
+}
+
+// ── Rota Edit Shift: attached Tasks ─────────────────────────────────────
+// Lets a manager attach one or more EXISTING Task Management tasks (not
+// create new ones here) to a specific employee/day rota cell, each with
+// its own start/end time -- one person can have several tasks the same
+// day, which a single shift start/end can't express on its own.
+//
+// Rota's per-employee id (data-employee-id, from the "employees"
+// AppDataRecord bridge -- see employeeFromDirectoryRow()) is the
+// business-facing employee_no, but Task Management's assigned_to is the
+// real backend Employee.id UUID (populateTaskAssigneeSelect() sources it
+// from GET /payroll/employees) -- two different id spaces for "the same"
+// employee elsewhere in this codebase. _taskEmployeeListCache (populated
+// alongside _taskListCache by loadTasks()) is the bridge between them.
+function _rotaEditTaskOptionsHtml(selectedTaskId){
+  const employeeNo=activeRotaCell?.dataset.employeeId||'';
+  const employeeRecord=_taskEmployeeListCache.find(e=>e.employee_no===employeeNo);
+  const employeeUuid=employeeRecord?.id||'';
+  // Tasks already assigned (via Task Management) to this same employee --
+  // attaching an unrelated colleague's task to someone else's rota day
+  // would be confusing, so the picker is scoped to this employee's own list.
+  const options=employeeUuid?_taskListCache.filter(t=>t.assigned_to===employeeUuid):[];
+  const optionHtml=options.map(t=>`<option value="${escapeHtml(t.id)}"${t.id===selectedTaskId?' selected':''}>${escapeHtml(t.title)}</option>`).join('');
+  const emptyNote=!options.length?'<option value="" disabled>No tasks assigned to this employee yet</option>':'';
+  return `<option value="">— Select Task —</option>${emptyNote}${optionHtml}`;
+}
+
+function _rotaEditTaskRowHtml(task){
+  task=task||{};
+  return `<div class="rota-edit-task-row" data-task-row style="display:flex;gap:8px;align-items:center">
+    <select class="fi" style="flex:2" data-role="task-select">${_rotaEditTaskOptionsHtml(task.task_id||'')}</select>
+    <input class="fi mono" type="time" style="flex:1" data-role="task-start" value="${escapeHtml(task.start||'')}">
+    <input class="fi mono" type="time" style="flex:1" data-role="task-end" value="${escapeHtml(task.end||'')}">
+    <button type="button" class="icon-btn danger" title="Remove task" onclick="this.closest('[data-task-row]').remove();_updateRotaEditTasksEmptyState()">${deleteIconSvg()}</button>
+  </div>`;
+}
+
+function renderRotaEditTasks(tasks){
+  const list=document.getElementById('rota-edit-tasks-list');
+  if(!list)return;
+  list.innerHTML=(tasks||[]).map(_rotaEditTaskRowHtml).join('');
+  _updateRotaEditTasksEmptyState();
+}
+
+function addRotaEditTaskRow(){
+  const list=document.getElementById('rota-edit-tasks-list');
+  if(!list)return;
+  list.insertAdjacentHTML('beforeend',_rotaEditTaskRowHtml());
+  _updateRotaEditTasksEmptyState();
+}
+
+function _updateRotaEditTasksEmptyState(){
+  const list=document.getElementById('rota-edit-tasks-list');
+  const empty=document.getElementById('rota-edit-tasks-empty');
+  if(empty)empty.style.display=(list&&list.children.length)?'none':'';
+}
+
+function _collectRotaEditTasks(){
+  const rows=[...document.querySelectorAll('#rota-edit-tasks-list [data-task-row]')];
+  return rows.map(row=>{
+    const taskId=row.querySelector('[data-role="task-select"]')?.value||'';
+    if(!taskId)return null;
+    const task=_taskListCache.find(t=>t.id===taskId);
+    return {
+      task_id:taskId,
+      title:task?.title||'',
+      start:row.querySelector('[data-role="task-start"]')?.value||'',
+      end:row.querySelector('[data-role="task-end"]')?.value||''
+    };
+  }).filter(Boolean);
 }
 
 function applyRotaEditTypeDefaults(){
@@ -19816,6 +19899,7 @@ function saveActiveRotaAssignmentFromModal(forceOff=false){
     className,
     break_minutes:forceOff?0:Number(document.getElementById('rota-edit-break')?.value)||0,
     notes:forceOff?'':document.getElementById('rota-edit-notes')?.value||'',
+    tasks:forceOff?[]:_collectRotaEditTasks(),
     status:document.getElementById('rota-weekly-status')?.textContent?.trim()||'Draft',
     updated_at:new Date().toISOString()
   });
@@ -22549,12 +22633,11 @@ async function loadEmployeeAttendanceDetail(){
 // ── Task Management ─────────────────────────────────────────────────────
 // Backed by the generic AppDataRecord 'tasks' collection (same pattern as
 // employeeLoans/jobRequisitions — a small admin-managed list, not a
-// per-employee ledger needing its own dedicated table). Kanban board with
-// 3 fixed columns (To Do / In Progress / Done), plus a flat Table view;
-// click-to-move rather than drag-and-drop, admin/manager-only for now (no
+// per-employee ledger needing its own dedicated table). Flat Table view
+// only (the Kanban board view was removed by request); status is changed
+// via the Edit modal's Status field. Admin/manager-only for now (no
 // ESS-side view yet).
 let _taskListCache=[];
-let _taskViewMode='board'; // 'board' | 'table'
 const TASK_STATUSES=['todo','progress','done'];
 const TASK_STATUS_LABEL={todo:'To Do',progress:'Progress',in_progress:'Progress',done:'Done'};
 // 'in_progress' was this status's key before the column was briefly
@@ -22805,49 +22888,6 @@ async function deleteTaskDirect(id){
   toast('Task deleted','ok');
 }
 
-// Quick move from the card's ← / → buttons — no need to open the modal
-// just to shift a task one column over.
-async function moveTaskStatus(id,newStatus){
-  const idx=_taskListCache.findIndex(x=>x.id===id);
-  if(idx<0)return;
-  // A finished task is 100% by definition, same rule saveTaskModal() uses.
-  const task={..._taskListCache[idx],status:newStatus,progress:newStatus==='done'?100:(_taskListCache[idx].progress||0)};
-  _taskListCache[idx]=task;
-  renderTaskBoard();
-  await saveServer('tasks',task);
-}
-
-function _taskCardHtml(t){
-  const priorityCls=t.priority==='High'?'b-r':t.priority==='Low'?'b-g':'b-a';
-  const overdue=t.due_date&&t.status!=='done'&&t.due_date<new Date().toISOString().slice(0,10);
-  const dueHtml=t.due_date?`<span class="task-card-due${overdue?' overdue':''}">${overdue?'⚠ ':''}${escapeHtml(t.due_date)}${t.repeat&&t.repeat!=='none'?' ↻':''}</span>`:'';
-  const idx=TASK_STATUSES.indexOf(_normalizeTaskStatus(t.status));
-  const prevStatus=idx>0?TASK_STATUSES[idx-1]:null;
-  const nextStatus=idx<TASK_STATUSES.length-1?TASK_STATUSES[idx+1]:null;
-  const progress=t.status==='done'?100:(t.progress||0);
-  return `<div class="task-card" data-task-id="${escapeHtml(t.id)}">
-    <div class="task-card-title" onclick="showTaskModal('${escapeHtml(t.id)}')">${escapeHtml(t.title)}</div>
-    ${t.department?`<div class="task-card-desc" style="margin-bottom:2px">${escapeHtml(t.department)}</div>`:''}
-    ${t.description?`<div class="task-card-desc">${escapeHtml(t.description)}</div>`:''}
-    <div class="task-progress-bar" title="${progress}% complete"><div class="task-progress-fill" style="width:${progress}%"></div></div>
-    <div class="task-card-meta">
-      <div class="task-card-assignee">
-        <div class="co-av" style="width:18px;height:18px;font-size:8px;flex-shrink:0">${escapeHtml(initialsFromName(t.assigned_to_name||'?'))}</div>
-        <span>${escapeHtml(t.assigned_to_name||'Unassigned')}</span>
-      </div>
-      ${dueHtml}
-    </div>
-    <div class="task-card-actions">
-      <span class="b ${priorityCls}">${escapeHtml(t.priority||'Medium')}</span>
-      <div class="task-card-move">
-        ${prevStatus?`<button class="icon-btn" title="Move to ${escapeHtml(TASK_STATUS_LABEL[prevStatus])}" onclick="moveTaskStatus('${escapeHtml(t.id)}','${prevStatus}')">←</button>`:''}
-        ${nextStatus?`<button class="icon-btn" title="Move to ${escapeHtml(TASK_STATUS_LABEL[nextStatus])}" onclick="moveTaskStatus('${escapeHtml(t.id)}','${nextStatus}')">→</button>`:''}
-        <button class="icon-btn edit" title="Edit" onclick="showTaskModal('${escapeHtml(t.id)}')">${editIconSvg()}</button>
-      </div>
-    </div>
-  </div>`;
-}
-
 function _taskTableRowHtml(t){
   const priorityCls=t.priority==='High'?'b-r':t.priority==='Low'?'b-g':'b-a';
   const overdue=t.due_date&&t.status!=='done'&&t.due_date<new Date().toISOString().slice(0,10);
@@ -22867,16 +22907,6 @@ function _taskTableRowHtml(t){
   </tr>`;
 }
 
-function setTaskViewMode(mode){
-  _taskViewMode=mode;
-  document.getElementById('task-view-tab-board')?.classList.toggle('on',mode==='board');
-  document.getElementById('task-view-tab-table')?.classList.toggle('on',mode==='table');
-  const board=document.getElementById('task-board');
-  const table=document.getElementById('task-table-view');
-  if(board)board.style.display=mode==='board'?'':'none';
-  if(table)table.style.display=mode==='table'?'':'none';
-}
-
 function renderTaskBoard(){
   const deptFilter=document.getElementById('task-department-filter')?.value||'';
   const empFilter=document.getElementById('task-filter-employee')?.value||'';
@@ -22886,22 +22916,13 @@ function renderTaskBoard(){
     // Add Task no longer collects an assignee — a saved task with no
     // assigned_to yet is a reusable name/template only (offered in the To
     // Do assign panel and the modal's "Load From Previous Task" dropdown),
-    // not a real card on the board/table until someone's actually
-    // assigned to it.
+    // not a real row in the table until someone's actually assigned to it.
     if(!t.assigned_to)return false;
     if(deptFilter&&t.department!==deptFilter)return false;
     if(empFilter&&t.assigned_to!==empFilter)return false;
     if(priorityFilter&&t.priority!==priorityFilter)return false;
     if(search&&!(t.title||'').toLowerCase().includes(search))return false;
     return true;
-  });
-  TASK_STATUSES.forEach(status=>{
-    const list=filtered.filter(t=>_normalizeTaskStatus(t.status)===status)
-      .sort((a,b)=>(a.due_date||'9999').localeCompare(b.due_date||'9999'));
-    const countEl=document.getElementById(`task-count-${status}`);
-    if(countEl)countEl.textContent=list.length;
-    const listEl=document.getElementById(`task-list-${status}`);
-    if(listEl)listEl.innerHTML=list.length?list.map(_taskCardHtml).join(''):'<div class="task-empty-col">No tasks</div>';
   });
   const tableBody=document.getElementById('task-table-tbody');
   if(tableBody){
