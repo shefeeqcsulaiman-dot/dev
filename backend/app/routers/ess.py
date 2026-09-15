@@ -14,8 +14,8 @@ from app.config import get_settings
 from app.database import get_db
 from app.dependencies import assert_company_active, company_allows_module
 from app.limiter import limiter
-from app.models import AppDataRecord, Company, Employee, LeaveRequest, PayrollItem, PayrollRun, Role
-from app.routers.attendance import _late_rules, _standard_hours_per_day
+from app.models import AppDataRecord, AttendanceDetail, Company, Employee, LeaveRequest, PayrollItem, PayrollRun, Role
+from app.routers.attendance import _company_offset, _late_rules, _local_today, _standard_hours_per_day, _weekend_day_set
 from app.routers.leave import (
     _ALLOWED_TYPES,
     _effective_leave_policy_configs,
@@ -231,6 +231,125 @@ def ess_team(request: Request, db: Session = Depends(get_db)) -> list[EssTeamMem
         )
         for r in rows
     ]
+
+
+@router.get("/team/today")
+def ess_team_today(request: Request, db: Session = Depends(get_db)) -> list[dict]:
+    """Today's attendance status (Present/Absent/On Leave/Holiday/Weekend)
+    for every active employee in the logged-in employee's OWN department --
+    visible to every ESS user, unlike /ess/team above (which needs a
+    department-scoped role and can span several departments at once). This
+    is deliberately just "my immediate colleagues, today", the same
+    present/leave/holiday/absent classification attendance_employee_daily()
+    (attendance.py) computes for one employee's history, applied across a
+    department for just today."""
+    emp = ess_bearer(request, db)
+    offset = _company_offset(db, emp.company_id)
+    today = _local_today(offset)
+    today_iso = today.isoformat()
+
+    peers = (
+        db.query(Employee)
+        .filter(Employee.company_id == emp.company_id, Employee.department == emp.department, Employee.status == "active")
+        .order_by(Employee.full_name)
+        .all()
+    )
+    if not peers:
+        return []
+
+    weekend_days = _weekend_day_set(db, emp.company_id)
+    js_dow = (today.weekday() + 1) % 7
+    is_weekend = weekend_days is not None and js_dow in weekend_days
+
+    holiday_dates: set[str] = set()
+    for (raw,) in db.query(AppDataRecord.payload).filter(
+        AppDataRecord.company_id == emp.company_id, AppDataRecord.collection == "hrHolidays",
+    ).all():
+        try:
+            payload = json.loads(raw)
+        except (ValueError, TypeError):
+            continue
+        raw_date = str(payload.get("date") or payload.get("holiday_date") or "")
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", raw_date):
+            holiday_dates.add(raw_date)
+    is_holiday = today_iso in holiday_dates
+
+    on_leave_emp_ids = {
+        lr.employee_id
+        for lr in db.query(LeaveRequest).filter(
+            LeaveRequest.company_id == emp.company_id,
+            LeaveRequest.employee_id.in_([p.id for p in peers]),
+            LeaveRequest.status == "approved",
+            LeaveRequest.start_date <= today_iso,
+            LeaveRequest.end_date >= today_iso,
+        ).all()
+    }
+
+    peer_nos = [p.employee_no for p in peers]
+    details_by_emp_no = {
+        r.employee_id: r
+        for r in db.query(AttendanceDetail).filter(
+            AttendanceDetail.company_id == emp.company_id,
+            AttendanceDetail.work_date == today_iso,
+            AttendanceDetail.employee_id.in_(peer_nos),
+        ).all()
+    }
+
+    out = []
+    for p in peers:
+        detail_row = details_by_emp_no.get(p.employee_no)
+        has_punches = detail_row is not None and bool(json.loads(detail_row.raw_events or "[]"))
+        if is_weekend:
+            day_status = "weekend"
+        elif is_holiday:
+            day_status = "holiday"
+        elif p.id in on_leave_emp_ids:
+            day_status = "leave"
+        elif has_punches:
+            day_status = "present"
+        else:
+            day_status = "absent"
+        check_in = None
+        if detail_row and detail_row.clock_in_1:
+            check_in = (detail_row.clock_in_1 + offset).strftime("%H:%M")
+        out.append({
+            "employee_id": p.id,
+            "employee_no": p.employee_no,
+            "full_name": p.full_name,
+            "designation": p.designation,
+            "photo": p.photo,
+            "status": day_status,
+            "check_in": check_in,
+            "is_me": p.id == emp.id,
+        })
+    return out
+
+
+@router.get("/holidays")
+def ess_holidays(request: Request, db: Session = Depends(get_db)) -> list[dict]:
+    """The company Holiday Calendar (Settings > HR Settings > Holiday
+    Calendar, the same hrHolidays collection) -- read-only here, visible to
+    every ESS employee. No branch/department filtering: a holiday row's
+    `location` field is free text typed into a prompt() (see addHoliday()
+    in app.js), not a resolvable Branch/department reference, so there's
+    nothing reliable to filter on yet -- every employee sees the same full
+    list HR configured."""
+    emp = ess_bearer(request, db)
+    rows = _employee_app_data_records(db, emp.company_id, "hrHolidays")
+    out = []
+    for r in rows:
+        raw_date = str(r.get("date") or r.get("holiday_date") or "")
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", raw_date):
+            continue
+        out.append({
+            "id": r.get("id"),
+            "date": raw_date,
+            "name": r.get("name") or "Holiday",
+            "location": r.get("location") or "All branches",
+            "paid": r.get("paid") if r.get("paid") is not None else True,
+        })
+    out.sort(key=lambda h: h["date"])
+    return out
 
 
 @router.get("/leave-balance")

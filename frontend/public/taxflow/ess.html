@@ -368,7 +368,7 @@
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="3"/><path d="M2.5 14c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/></svg>
         Profile
       </div>
-      <div class="ess-nav tab" id="ess-team-tab-btn" style="display:none" onclick="essTab(this,'team');loadTeamTab()">
+      <div class="ess-nav tab" id="ess-team-tab-btn" onclick="essTab(this,'team');loadTeamTab()">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="6" r="2.2"/><circle cx="11" cy="6" r="2.2"/><path d="M1 14c0-2.5 1.8-4 4-4s4 1.5 4 4M7 14c0-2.5 1.8-4 4-4s4 1.5 4 4"/></svg>
         Team
       </div>
@@ -693,8 +693,28 @@
       </div>
     </div>
 
-    <!-- Team (role-gated: only shown for roles with hr:view_all_attendance) -->
+    <!-- Team -- the two cards below are visible to every ESS employee;
+         the "Department Team" and "Live Attendance" cards further down
+         stay role-gated (manager-only). -->
     <div class="tab-body" id="tb-team">
+      <div class="card" id="team-today-card" style="margin-bottom:16px">
+        <div class="card-title" id="team-today-title">My Team — Today</div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Employee</th><th>Designation</th><th>Status</th><th>Check-In</th></tr></thead>
+            <tbody id="team-today-body"><tr><td colspan="4" class="loading">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" id="holiday-calendar-card" style="margin-bottom:16px">
+        <div class="card-title">Holiday Calendar</div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Holiday</th><th>Applies To</th><th>Paid</th></tr></thead>
+            <tbody id="holiday-calendar-body"><tr><td colspan="4" class="loading">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
       <div class="card" id="dept-team-card" style="display:none;margin-bottom:16px">
         <div class="card-title" id="dept-team-title">Department Team</div>
         <div class="tbl-wrap">
@@ -1543,6 +1563,8 @@
     loadRota();
     loadTasks();
     loadRoleAndPermissions();
+    loadTeamToday();
+    loadHolidayCalendar();
   }
 
   // ── Role-based view — the same token also carries RBAC role/permission
@@ -1561,18 +1583,62 @@
       ESS_DEPARTMENT_SCOPE = d.department_scope || [];
       var badge = document.getElementById('ess-role-badge');
       if (badge) badge.textContent = d.role_name || 'Employee';
-      // Either grants the Team tab: company-wide GPS visibility, or a
-      // department-scoped role (Add Custom Role's "Departments" field) --
-      // loadTeamTab() below shows only the card each one actually unlocks.
-      var teamTab = document.getElementById('ess-team-tab-btn');
-      if (teamTab && (ESS_PERMISSIONS.includes('hr:view_all_attendance') || ESS_DEPARTMENT_SCOPE.length)) teamTab.style.display = '';
-    } catch(e) { /* role badge/Team tab just stay hidden on failure */ }
+      // The Team tab itself is visible to everyone (My Team Today +
+      // Holiday Calendar); a company-wide GPS permission or a
+      // department-scoped role additionally unlocks the manager-only
+      // cards further down -- loadTeamTab() below shows only those.
+    } catch(e) { /* role badge just stays default on failure */ }
   }
 
   function loadTeamTab() {
+    loadTeamToday();
+    loadHolidayCalendar();
     if (ESS_DEPARTMENT_SCOPE.length) loadDeptTeamView(); else document.getElementById('dept-team-card').style.display = 'none';
     if (ESS_PERMISSIONS.includes('hr:view_all_attendance')) { document.getElementById('gps-team-card').style.display = ''; loadTeamView(); }
     else document.getElementById('gps-team-card').style.display = 'none';
+  }
+
+  var TEAM_STATUS_META = {
+    present: {label: 'Present', color: '#10b981', bg: 'rgba(16,185,129,.12)'},
+    absent: {label: 'Absent', color: '#ef4444', bg: 'rgba(239,68,68,.12)'},
+    leave: {label: 'On Leave', color: '#f59e0b', bg: 'rgba(245,158,11,.12)'},
+    holiday: {label: 'Holiday', color: '#8b5cf6', bg: 'rgba(139,92,246,.12)'},
+    weekend: {label: 'Weekend', color: '#64748b', bg: 'rgba(100,116,139,.12)'}
+  };
+
+  async function loadTeamToday() {
+    var body = document.getElementById('team-today-body');
+    if (!body) return;
+    try {
+      var r = await fetch(apiBase() + '/ess/team/today', {headers: essHeaders()});
+      if (r.status === 401) { essLogout(); return; }
+      var rows = await r.json();
+      if (!rows.length) { body.innerHTML = '<tr><td colspan="4" class="empty">No teammates found in your department.</td></tr>'; return; }
+      body.innerHTML = rows.map(function(e) {
+        var meta = TEAM_STATUS_META[e.status] || TEAM_STATUS_META.absent;
+        var name = escHtml(e.full_name) + (e.is_me ? ' <span style="color:var(--text3)">(You)</span>' : '');
+        var pill = '<span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;background:' + meta.bg + ';color:' + meta.color + '">' + meta.label + '</span>';
+        return '<tr><td>' + name + '</td><td>' + escHtml(e.designation || '') + '</td><td>' + pill + '</td><td>' + (e.check_in || '—') + '</td></tr>';
+      }).join('');
+    } catch(e) { body.innerHTML = '<tr><td colspan="4" class="empty">Failed to load.</td></tr>'; }
+  }
+
+  async function loadHolidayCalendar() {
+    var body = document.getElementById('holiday-calendar-body');
+    if (!body) return;
+    try {
+      var r = await fetch(apiBase() + '/ess/holidays', {headers: essHeaders()});
+      if (r.status === 401) { essLogout(); return; }
+      var rows = await r.json();
+      if (!rows.length) { body.innerHTML = '<tr><td colspan="4" class="empty">No holidays configured yet.</td></tr>'; return; }
+      var todayStr = new Date().toISOString().slice(0, 10);
+      body.innerHTML = rows.map(function(h) {
+        var isPast = h.date < todayStr;
+        var dateLabel = new Date(h.date + 'T00:00:00').toLocaleDateString('en-US', {day: '2-digit', month: 'short', year: 'numeric'});
+        var paid = (h.paid === false || h.paid === 'No') ? '<span style="color:var(--text3)">No</span>' : '<span class="dir-in">Yes</span>';
+        return '<tr' + (isPast ? ' style="opacity:.5"' : '') + '><td>' + dateLabel + '</td><td>' + escHtml(h.name) + '</td><td>' + escHtml(h.location) + '</td><td>' + paid + '</td></tr>';
+      }).join('');
+    } catch(e) { body.innerHTML = '<tr><td colspan="4" class="empty">Failed to load.</td></tr>'; }
   }
 
   async function loadDeptTeamView() {
