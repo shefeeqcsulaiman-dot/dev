@@ -19828,8 +19828,8 @@ function openRotaCellEditor(cell){
 // person can have several tasks the same day, which a single shift
 // start/end can't express on its own. Picking a task not already assigned
 // to this employee assigns it to them on save (see
-// _ensureRotaTaskAssignment()) -- assign-and-schedule in one step, rather
-// than requiring a separate trip to Task Management first.
+// _ensureTaskAssignedToEmployee()) -- assign-and-schedule in one step,
+// rather than requiring a separate trip to Task Management first.
 function _rotaEditTaskOptionsHtml(selectedTaskId){
   const options=[..._uniqueTaskTemplates()];
   // The row being (re)opened may reference one specific employee's own
@@ -19900,7 +19900,7 @@ async function _collectRotaEditTasks(){
       results.push({task_id:taskId,title:task?.title||'',color:task?.color||TASK_COLORS[0],start,end});
       continue;
     }
-    const assigned=await _ensureRotaTaskAssignment(taskId,employeeUuid,employeeName);
+    const assigned=await _ensureTaskAssignedToEmployee(taskId,employeeUuid,employeeName);
     if(!assigned)continue;
     results.push({task_id:assigned.id,title:assigned.title,color:assigned.color||TASK_COLORS[0],start,end});
   }
@@ -20170,7 +20170,16 @@ function renderMonthlyRotaBoard(){
       `<th>${name}<div class="rota-month-hd-date">${escapeHtml(dates[i].slice(8,10))}/${escapeHtml(dates[i].slice(5,7))}</div></th>`
     ).join('');
     const rows=staffRows.map(staff=>{
-      const cells=ROTA_WEEK_DAYS.map((day,i)=>`<td>${rotaCellHtml(assignmentFor(staff,dates[i],day))}</td>`).join('');
+      // Clickable now, same as Weekly Rota's own cells (openRotaCellEditor
+      // reads these exact dataset attributes off whatever element it's
+      // given) -- previously a plain <td>, so the colored task-count dots
+      // rotaCellHtml() already draws here were visible only as a bare
+      // hover tooltip, with no way to open the day and see task names,
+      // times, or edit anything from the Monthly view at all.
+      const cells=ROTA_WEEK_DAYS.map((day,i)=>{
+        const assignment=assignmentFor(staff,dates[i],day);
+        return `<td><button class="rota-day-cell rota-month-day-cell" type="button" onclick="openRotaCellEditor(this)" data-assignment="${escapeHtml(JSON.stringify(assignment))}" data-employee-id="${escapeHtml(staff.id)}" data-employee-name="${escapeHtml(staff.name)}" data-role="${escapeHtml(staff.role)}" data-department="${escapeHtml(staff.department)}" data-location="${escapeHtml(staff.location)}" data-date="${escapeHtml(dates[i])}" data-day="${escapeHtml(day)}">${rotaCellHtml(assignment)}</button></td>`;
+      }).join('');
       return `<tr><td class="rota-month-staff-cell"><strong>${escapeHtml(staff.name)}</strong><span>${escapeHtml(staff.department)} · ${escapeHtml(staff.role)}</span></td>${cells}</tr>`;
     }).join('');
     return `<div class="rota-month-week-block">
@@ -22871,18 +22880,19 @@ function _uniqueTaskTemplates(){
   return opts;
 }
 
-// "+ Assign Task" button/modal: select an employee, select a saved task
-// name, Assign — this is the ONLY way a task gets its first assignee,
-// since Add Task no longer collects one (see showTaskModal()). Replaced
-// an earlier per-employee-row panel that lived inside the To Do column
-// itself — that ate into the width To Do was widened to make room for
-// actual task cards, not an employee picker.
+// "+ Assign Task" button/modal: pick one or more employees, pick a saved
+// task name, Assign — this is the main way a previously-unassigned SAVED
+// task (a reusable template) gets handed to someone (Add Task also
+// collects an assignee directly now, but this modal is still how you
+// assign an existing template later, and now to several people at once
+// in one action rather than repeating the whole flow per person).
 function showAssignTaskModal(){
-  const empSel=document.getElementById('assign-task-employee');
+  const grid=document.getElementById('assign-task-employee-grid');
   const taskSel=document.getElementById('assign-task-template');
-  if(empSel){
-    empSel.innerHTML='<option value="">— Select Employee —</option>'+
-      _taskEmployeeListCache.map(e=>`<option value="${escapeHtml(e.id)}" data-name="${escapeHtml(e.full_name)}">${escapeHtml(e.full_name)}</option>`).join('');
+  if(grid){
+    grid.innerHTML=_taskEmployeeListCache.length
+      ?_taskEmployeeListCache.map(e=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="assign-task-employee-cb" value="${escapeHtml(e.id)}" data-name="${escapeHtml(e.full_name)}"> ${escapeHtml(e.full_name)}</label>`).join('')
+      :'<div style="color:var(--text3);font-size:12px;grid-column:1/-1">No employees found.</div>';
   }
   const templates=_uniqueTaskTemplates();
   if(taskSel){
@@ -22894,53 +22904,41 @@ function showAssignTaskModal(){
 }
 
 async function confirmAssignTask(){
-  const empSel=document.getElementById('assign-task-employee');
+  const checked=[...document.querySelectorAll('#assign-task-employee-grid .assign-task-employee-cb:checked')];
   const taskSel=document.getElementById('assign-task-template');
-  const employeeId=empSel?.value;
-  const employeeName=empSel?.selectedOptions?.[0]?.dataset.name||'';
   const templateId=taskSel?.value;
-  if(!employeeId){toast('Select an employee','warn');return;}
+  if(!checked.length){toast('Select at least one employee','warn');return;}
   if(!templateId){toast('Select a task','warn');return;}
   const source=_taskListCache.find(x=>x.id===templateId);
   if(!source)return;
-  const task={
-    id:`TASK-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
-    title:source.title,
-    department:source.department||'',
-    description:source.description||'',
-    assigned_to:employeeId,
-    assigned_to_name:employeeName,
-    color:source.color||TASK_COLORS[0],
-    priority:source.priority||'Medium',
-    due_date:'',
-    status:'todo',
-    progress:0,
-    repeat:source.repeat||'none',
-    next_spawned:false,
-    created_at:new Date().toISOString(),
-  };
-  await saveServer('tasks',task);
-  _taskListCache.push(task);
+  const assignedNames=[];
+  for(const cb of checked){
+    const employeeId=cb.value;
+    const employeeName=cb.dataset.name||'';
+    const task=await _ensureTaskAssignedToEmployee(templateId,employeeId,employeeName);
+    if(task)assignedNames.push(employeeName);
+  }
   hideM('m-assign-task');
   // Same reasoning as saveTaskModal() -- a stale "Assigned To: <someone
-  // else>" filter would hide this brand-new assignment from the table
-  // immediately after creating it.
+  // else>" filter would hide these brand-new assignments from the table
+  // immediately after creating them (only meaningful for a single pick;
+  // left alone for multiple since no one filter value could match all).
   const empFilter=document.getElementById('task-filter-employee');
-  if(empFilter&&empFilter.value&&empFilter.value!==employeeId)empFilter.value='';
+  if(checked.length===1&&empFilter&&empFilter.value&&empFilter.value!==checked[0].value)empFilter.value='';
   renderTaskBoard();
-  toast(`"${task.title}" assigned to ${employeeName}`,'ok');
+  toast(`"${source.title}" assigned to ${assignedNames.length} employee${assignedNames.length===1?'':'s'}: ${assignedNames.join(', ')}`,'ok');
 }
 
-// Rota's "+ Add Task" picker (see _rotaEditTaskOptionsHtml) lists every
-// saved task (assigned or not, same source as "+ Assign Task"'s own
-// dropdown) so a manager can assign-and-schedule in one step, instead of
-// having to visit Task Management first just to create the assignment.
-// Picking a template that isn't already assigned to this employee clones
-// it into a real assignment here, mirroring confirmAssignTask() -- but
-// first checks for an existing same-title assignment to this employee
-// and reuses it, so re-opening/re-saving the same rota day repeatedly
-// doesn't spawn a fresh duplicate task instance every time.
-async function _ensureRotaTaskAssignment(templateId,employeeId,employeeName){
+// Shared by confirmAssignTask() (Task Management's "+ Assign Task",
+// possibly several employees at once) and Rota's "+ Add Task" picker (see
+// _rotaEditTaskOptionsHtml, which lists every saved task -- assigned or
+// not -- so a manager can assign-and-schedule in one step instead of
+// visiting Task Management first). Picking a template not already
+// assigned to this employee clones it into a real assignment; if one
+// already exists (same title, same employee) that's reused instead, so
+// repeating the same assignment (e.g. re-saving the same rota day) never
+// spawns a duplicate task instance.
+async function _ensureTaskAssignedToEmployee(templateId,employeeId,employeeName){
   const source=_taskListCache.find(x=>x.id===templateId);
   if(!source)return null;
   if(source.assigned_to===employeeId)return source;

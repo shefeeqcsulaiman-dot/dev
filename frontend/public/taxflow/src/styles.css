@@ -1269,6 +1269,11 @@ body:not(.theme-light) .mb3-vat-side{background:linear-gradient(180deg,rgba(139,
 .rota-month-staff-cell span{display:block;font-size:10px;color:var(--text3);}
 .rota-month-table tbody tr:nth-child(even) .rota-month-staff-cell{background:var(--accent-glow);}
 .rota-month-table .rota-cell{min-width:0;width:100%;border-radius:6px;padding:4px 5px;cursor:default;}
+/* Monthly cells are real buttons now (openRotaCellEditor), same as
+   Weekly's -- reset all button chrome so the <td>'s own border/padding
+   and rotaCellHtml()'s inner styling are all that show. */
+.rota-month-day-cell{all:unset;display:block;width:100%;cursor:pointer;}
+.rota-month-day-cell .rota-cell{cursor:pointer;}
 .rota-coverage-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
 .rota-coverage-card{border:1px solid var(--border);border-radius:8px;background:var(--bg3);padding:12px;display:grid;gap:8px;}
 .rota-coverage-card strong{font-size:13px;}
