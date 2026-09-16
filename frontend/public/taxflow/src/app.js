@@ -22985,11 +22985,13 @@ function showTaskModal(id){
   document.getElementById('task-progress-value').textContent=progressVal;
   const delBtn=document.getElementById('task-delete-btn');
   if(delBtn)delBtn.style.display=t?'':'none';
-  // Assign To only shows when editing an already-assigned task — a new
-  // task no longer collects an assignee here at all; that happens from
-  // the To Do column's per-employee assign panel instead.
+  // Assign To shows on both Add and Edit now — a brand-new task can be
+  // assigned right away here instead of requiring a separate trip to
+  // "+ Assign Task" afterwards. That modal still exists for the other
+  // case it's actually needed: assigning a previously-unassigned SAVED
+  // task (a reusable template) to someone later.
   const assigneeRow=document.getElementById('task-assignee-row');
-  if(assigneeRow)assigneeRow.style.display=t?'':'none';
+  if(assigneeRow)assigneeRow.style.display='';
   showM('m-task');
   setTimeout(()=>document.getElementById('task-title').focus(),120);
 }

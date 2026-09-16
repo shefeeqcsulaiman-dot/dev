@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=1afad8bc19" as="script">
+<link rel="preload" href="src/app.js?v=79c86a965d" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
@@ -2389,9 +2389,6 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
     <input type="hidden" id="task-edit-id">
     <div class="fg"><label class="fl">Task Name <span style="color:var(--red)">*</span></label><input class="fi" id="task-title" placeholder="e.g. Prepare Q3 payroll summary"></div>
     <div class="fg"><label class="fl">Department</label><select class="fi" id="task-department"><option value="">— Select Department —</option></select></div>
-    <!-- Assign To only shows when editing an already-assigned task (see
-         showTaskModal()) — a brand-new task no longer collects an assignee
-         here at all; that's the "+ Assign Task" button/modal's job. -->
     <div class="fg" id="task-assignee-row" style="display:none"><label class="fl">Assign To</label><select class="fi" id="task-assignee"><option value="">— Unassigned —</option></select></div>
     <div class="fg"><label class="fl">Task Details</label><textarea class="fi" id="task-description" rows="3" placeholder="Details, context, or instructions…"></textarea></div>
     <div class="fg">
@@ -2988,7 +2985,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=1afad8bc19" defer></script>
+<script src="src/app.js?v=79c86a965d" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
