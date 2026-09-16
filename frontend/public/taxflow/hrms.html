@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=e467ed65a4" as="script">
+<link rel="preload" href="src/app.js?v=0a202f5a61" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
@@ -878,7 +878,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
   <div class="tab-body on" id="hr-emp">
     <div class="card mb16">
       <div class="card-hd"><div class="card-title">Employee Directory</div><div class="flx" style="gap:6px"><button class="btn btn-g btn-sm" onclick="exportNearestTable(this,'employees.csv')">⬇ CSV</button><button class="btn btn-p" onclick="openEmpModal()">+ Add Employee</button></div></div>
-      <table class="tbl" data-delete-actions-bound="skip">
+      <table class="tbl" id="employee-directory-table" data-delete-actions-bound="skip">
         <thead><tr><th>ID</th><th>Name</th><th>Nick Name</th><th>Department</th><th>Designation</th><th>Supervisor</th><th>Shift Hours</th><th>Salary (AED)</th><th>Status</th><th></th></tr></thead>
         <tbody id="employee-tbody">
         </tbody>
@@ -2951,7 +2951,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=e467ed65a4" defer></script>
+<script src="src/app.js?v=0a202f5a61" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
@@ -3255,6 +3255,13 @@ async function applyHrmsPermissionNav(){
 
     window.HRMS_IS_ADMIN=!!who.is_admin;
     window.HRMS_PERMISSIONS=who.permissions||[];
+    // Field-level add-on to employees:view -- gates salary figures in the
+    // Employee Directory/Profile/Edit modal specifically (not a module
+    // toggle, so it's read separately from HRMS_ALLOWED_MODULES below).
+    // Real enforcement is server-side (app_data.py's _redact_employee_salary);
+    // this flag only drives presentation.
+    window.HRMS_CAN_VIEW_SALARY=window.HRMS_IS_ADMIN||window.HRMS_PERMISSIONS.includes('employees:view_salary');
+    applyHrmsSalaryVisibility();
     if(who.is_admin)return; // real TaxFlow admins/superadmins get the full sidebar
 
     var allowed=new Set(window.HRMS_PERMISSIONS.filter(function(p){return p.endsWith(':view');}).map(function(p){return p.split(':')[0];}));

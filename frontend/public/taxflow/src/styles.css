@@ -1199,6 +1199,14 @@ body:not(.theme-light) .mb3-vat-side{background:linear-gradient(180deg,rgba(139,
 .rota-cell span{display:block;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);margin-top:2px;}
 .rota-cell em{font-style:normal;font-size:11px;color:var(--text3);}
 .rota-task-badge{position:absolute;top:4px;right:5px;font-style:normal;font-size:9px;font-weight:700;line-height:1;background:var(--accent);color:#fff;border-radius:99px;min-width:14px;height:14px;display:flex;align-items:center;justify-content:center;padding:0 3px;}
+
+/* A role without employees:view_salary never gets real figures back from
+   the server (see app_data.py's _redact_employee_salary()) -- this just
+   also drops the Salary column from the Employee Directory table
+   entirely, rather than showing a column of dashes. Toggled by
+   applyHrmsSalaryVisibility() in app.js. */
+#employee-directory-table.hide-salary-col th:nth-child(8),
+#employee-directory-table.hide-salary-col td:nth-child(8){display:none;}
 .rota-cell.approved{border-color:var(--green-border);background:var(--green-bg);}
 .rota-cell.draft,.rota-cell.off{background:rgba(255,255,255,0.04);}
 .rota-cell.conflict{border-color:var(--red-border);background:var(--red-bg);}

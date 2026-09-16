@@ -73,7 +73,11 @@ _PERMISSION_CATALOG: dict[str, list[str]] = {
     # misleading checkbox with nothing behind it. Performance/Training/Assets
     # share one "performance" key since they're one destination page
     # (go('hrms-ext')) in the sidebar today.
-    "employees": ["view", "edit", "delete"],
+    # "view_salary" is a field-level add-on to "view", not a separate
+    # module-view gate — a role can browse the Employee Directory
+    # (employees:view) without seeing basic_salary/allowances unless this
+    # is also granted. See app_data.py's _redact_employee_salary().
+    "employees": ["view", "edit", "delete", "view_salary"],
     "rota": ["view", "edit", "delete"],
     "leave": ["view", "edit", "delete"],
     "overtime": ["view", "edit", "delete"],

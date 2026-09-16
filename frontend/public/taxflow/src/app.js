@@ -953,6 +953,23 @@ function _employeeSortKey(status,id){
   return [String(status||'Active').trim()==='Inactive'?1:0,_employeeIdSortValue(id)];
 }
 
+// A role without employees:view_salary -- called once from
+// applyHrmsPermissionNav() (hrms.html) once window.HRMS_CAN_VIEW_SALARY
+// is known. Toggles the Employee Directory's Salary column (CSS, see
+// styles.css .hide-salary-col) and hides the Add/Edit Employee modal's
+// salary/allowance inputs so they can't even be typed into -- the actual
+// enforcement is server-side (app_data.py's _redact_employee_salary and
+// the write-side guard in sync_domain_model()), this is presentation only.
+function applyHrmsSalaryVisibility(){
+  const hide=window.HRMS_CAN_VIEW_SALARY===false;
+  const table=document.getElementById('employee-directory-table');
+  if(table)table.classList.toggle('hide-salary-col',hide);
+  const salaryFg=document.getElementById('emp-salary')?.closest('.fg');
+  if(salaryFg)salaryFg.style.display=hide?'none':'';
+  const allowanceRow=document.getElementById('emp-housing-allowance')?.closest('.fr3');
+  if(allowanceRow)allowanceRow.style.display=hide?'none':'';
+}
+
 function renderEmployeeRecord(employee){
   const tbody=document.getElementById('employee-tbody');
   if(!tbody)return;
@@ -973,7 +990,7 @@ function renderEmployeeRecord(employee){
     <td>${escapeHtml(employee.designation)}</td>
     <td>${escapeHtml(employee.supervisor)}</td>
     <td>${(()=>{const h=Number(employee.shift_hours||0);if(h>0){const t=(employee.shift_hours_type||'weekly');const label=t.charAt(0).toUpperCase()+t.slice(1)+' · '+h+'h';return `<span class="b b-b">${escapeHtml(label)}</span>`;}return employee.shift?`<span class="b b-b">${escapeHtml(employee.shift)}</span>`:'<span style="color:var(--text3)">—</span>';})()}</td>
-    <td class="mono">${Number(employee.salary||0).toLocaleString('en-AE',{minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+    <td class="mono">${window.HRMS_CAN_VIEW_SALARY===false?'—':Number(employee.salary||0).toLocaleString('en-AE',{minimumFractionDigits:0,maximumFractionDigits:0})}</td>
     <td><span class="b ${employee.status==='Inactive'?'b-gray':'b-g'}">${escapeHtml(employee.status||'Active')}</span></td>
     <td data-action-col="1"><div class="row-actions"><button class="btn btn-g btn-sm" onclick="openEmployeeProfile(this)">View</button> <button class="icon-btn edit" type="button" title="Edit" onclick="editEmployeeFromRow(this)">${editIconSvg()}</button> <button class="btn btn-g btn-sm" onclick="toggleEmployeeStatusFromRow(this)">${employee.status==='Inactive'?'Activate':'Deactivate'}</button></div></td>`;
   // Employee Directory is kept sorted by Employee No. ascending (numeric-
@@ -1116,7 +1133,7 @@ function openEmployeeProfile(btn){
       <div class="g4 mb16">
         <div class="stat"><div class="stat-lbl">Department</div><div class="stat-val" style="font-size:18px;color:var(--accent)">${escapeHtml(employee.department||'-')}</div></div>
         <div class="stat"><div class="stat-lbl">Shift Hours</div><div class="stat-val" style="font-size:18px;color:var(--green)">${(()=>{const h=Number(employee.shift_hours||0);if(h>0){const t=(employee.shift_hours_type||'weekly');return escapeHtml(t.charAt(0).toUpperCase()+t.slice(1)+' · '+h+'h');}return escapeHtml(employee.shift||'—');})()}</div></div>
-        <div class="stat"><div class="stat-lbl">Total Salary</div><div class="stat-val" style="font-size:18px;color:var(--purple)">${'AED'} ${Number(employee.salary||0).toLocaleString('en-AE')}</div></div>
+        <div class="stat"><div class="stat-lbl">Total Salary</div><div class="stat-val" style="font-size:18px;color:var(--purple)">${window.HRMS_CAN_VIEW_SALARY===false?'—':'AED '+Number(employee.salary||0).toLocaleString('en-AE')}</div></div>
         <div class="stat"><div class="stat-lbl">Supervisor</div><div class="stat-val" style="font-size:18px;color:var(--amber)">${escapeHtml(employee.supervisor||'-')}</div></div>
       </div>
       <div class="g2 mb16">

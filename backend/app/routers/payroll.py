@@ -203,7 +203,16 @@ def list_employees(
     resolved_branch_id = branch_id if principal.can_cross_branch("hrms") else resolve_active_branch(principal, branch_id)
     if resolved_branch_id:
         query = query.filter((Employee.branch_id == resolved_branch_id) | (Employee.branch_id.is_(None)))
-    return query.order_by(Employee.employee_no).all()
+    employees = query.order_by(Employee.employee_no).all()
+    # In-memory only (no db.commit() in this handler) -- a role with
+    # employees:view but not employees:view_salary sees every employee-
+    # picker dropdown this feeds (Leave assignee, GPS assign, Task
+    # assignee) without their salary. None of those dropdowns read
+    # basic_salary today, so this is a no-op for existing UI.
+    if not principal.has("employees:view_salary"):
+        for emp in employees:
+            emp.basic_salary = Decimal("0")
+    return employees
 
 
 @router.get("/runs", response_model=list[PayrollRunOut])

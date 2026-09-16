@@ -184,6 +184,23 @@ def assert_collection_module_enabled(db: Session, principal: Principal, company:
             raise HTTPException(status_code=403, detail=f"The '{module}' module is not enabled for your branch")
 
 
+_SALARY_FIELDS = ("salary", "housing_allowance", "transport_allowance", "other_allowance")
+
+
+def _redact_employee_salary(record: dict[str, Any], principal: Principal) -> dict[str, Any]:
+    """A role with employees:view (browse the Employee Directory) but not
+    the field-level employees:view_salary add-on gets every "employees"
+    collection record back with its salary figures nulled out, not just
+    hidden client-side -- see docs comment on the permission catalog entry
+    in hr_access.py. A User (is_admin) or a role with the permission is a
+    no-op via principal.has()'s is_admin short-circuit."""
+    if not principal.has("employees:view_salary"):
+        for key in _SALARY_FIELDS:
+            if key in record:
+                record[key] = None
+    return record
+
+
 def _record_period_date(record: dict[str, Any]) -> _dt.datetime | None:
     period = record.get("period")
     if period and re.match(r"^\d{4}-\d{2}", str(period)):
@@ -428,6 +445,17 @@ def list_collection_records(
     company = resolve_principal_company(principal, db)
     assert_collection_module_enabled(db, principal, company, collection)
     if collection == "employees":
+        # This generic endpoint previously had no RBAC check at all for the
+        # "employees" collection -- only the module-enabled check above --
+        # so an Employee principal could read the full roster (salary
+        # included) by calling this directly, bypassing the RBAC filtering
+        # bootstrap()'s _allowed_bootstrap_collections() already applies.
+        # User/Branch principals are unaffected: is_admin bypasses .has(),
+        # and Branch principals can never reach here at all ("hrms" is
+        # outside BRANCH_ELIGIBLE_MODULES, so assert_collection_module_enabled
+        # already 403s them above).
+        if not principal.has("employees:view"):
+            raise HTTPException(status_code=403, detail="Not permitted")
         _backfill_employee_branch_ids(db, principal.company_id)
     base_filters = [
         AppDataRecord.company_id == principal.company_id,
@@ -460,10 +488,13 @@ def list_collection_records(
         .limit(limit)
         .all()
     )
+    records = [serialize(row) for row in rows]
+    if collection == "employees":
+        records = [_redact_employee_salary(r, principal) for r in records]
     return {
         "ok": True,
         "collection": collection,
-        "records": [serialize(row) for row in rows],
+        "records": records,
         "limit": limit,
         "offset": offset,
         "total": total,
@@ -644,6 +675,14 @@ def bootstrap(
     # needed on bootstrap (the client stores them locally and only needs metadata).
     for doc in grouped.get("purchaseDocuments", []):
         doc.pop("base64", None)
+
+    # A role without employees:view_salary never receives salary figures
+    # at all -- this is the Employee Directory's real data source
+    # (hydrateFromServer() in app.js), so this is the one place that
+    # matters most; see also list_collection_records()'s equivalent guard
+    # for the direct GET /app-data/records/employees path.
+    for emp_record in grouped.get("employees", []):
+        _redact_employee_salary(emp_record, principal)
 
     truncated = [c for c, total in collection_totals.items() if _BOOTSTRAP_COLLECTION_CAPS.get(c) and total > _BOOTSTRAP_COLLECTION_CAPS[c]]
 
@@ -1652,12 +1691,20 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
             emp.full_name = full_name
             emp.department = str(record.get("department") or emp.department or "Operations").strip()
             emp.designation = str(record.get("designation") or record.get("position") or emp.designation or "Staff").strip()
-            salary = decimal_value(record.get("salary") or record.get("basic_salary") or 0)
-            if salary > 0:
-                emp.basic_salary = salary
-            emp.housing_allowance = decimal_value(record.get("housing_allowance") or 0)
-            emp.transport_allowance = decimal_value(record.get("transport_allowance") or 0)
-            emp.other_allowance = decimal_value(record.get("other_allowance") or 0)
+            # A role denied employees:view_salary must not be able to
+            # change salary/allowances either -- otherwise hiding these
+            # fields client-side (openEmpEdit/saveEmployee in app.js)
+            # would still submit whatever the hidden inputs were last
+            # pre-filled with (0, since the read side now nulls them out
+            # for this same role), silently wiping a real stored value on
+            # every unrelated save (e.g. editing just the department).
+            if principal.has("employees:view_salary"):
+                salary = decimal_value(record.get("salary") or record.get("basic_salary") or 0)
+                if salary > 0:
+                    emp.basic_salary = salary
+                emp.housing_allowance = decimal_value(record.get("housing_allowance") or 0)
+                emp.transport_allowance = decimal_value(record.get("transport_allowance") or 0)
+                emp.other_allowance = decimal_value(record.get("other_allowance") or 0)
             iban = str(record.get("iban") or "").strip()
             if iban:
                 emp.iban = iban
