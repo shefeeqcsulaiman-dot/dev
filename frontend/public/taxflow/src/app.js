@@ -19678,18 +19678,38 @@ function _currentRotaWeekStart(){
 // nothing ever pointed them at today's actual date, so every fresh visit
 // silently opened whatever week that hardcoded date fell in instead of the
 // current one. Only overwrites while still holding that exact stale
-// literal, so a date the user has already changed (to anything else,
-// including a deliberately different past/future week) is never clobbered
-// by a later re-warmup of this same page.
+// literal, so a date the user has already changed within THIS page load is
+// never clobbered by a later re-warmup of the same page.
+//
+// That "within this page load" caveat used to mean a browser refresh threw
+// the choice away every time: attach a task (or edit a shift) on a week/
+// month other than the current one, save it, refresh the page, and the
+// picker snapped straight back to today's week -- the save was never lost,
+// but it looked exactly like it had been, because nothing was visible in
+// the week/month now on screen. _saveRotaViewDate()/localStorage close that
+// gap by remembering the last-viewed date across reloads, same as any
+// other "last screen state" persistence in this app.
+const _ROTA_VIEW_STORAGE_KEY='taxflow_rota_view_dates';
+
+function _saveRotaViewDate(key,value){
+  try{
+    const saved=JSON.parse(localStorage.getItem(_ROTA_VIEW_STORAGE_KEY)||'{}');
+    saved[key]=value;
+    localStorage.setItem(_ROTA_VIEW_STORAGE_KEY,JSON.stringify(saved));
+  }catch(e){/* private/blocked storage -- falls back to today's week/month, same as before this fix */}
+}
+
 function _fixStaleRotaDateDefaults(){
   const weekEl=document.getElementById('rota-week-start');
   const deptWeekEl=document.getElementById('rota-dept-week-start');
   const monthEl=document.getElementById('rota-month-value');
   const currentWeek=_currentRotaWeekStart();
   const currentMonth=currentWeek.slice(0,7);
-  if(weekEl&&weekEl.value==='2026-05-04')weekEl.value=currentWeek;
-  if(deptWeekEl&&deptWeekEl.value==='2026-05-04')deptWeekEl.value=currentWeek;
-  if(monthEl&&monthEl.value==='2026-05')monthEl.value=currentMonth;
+  let saved={};
+  try{saved=JSON.parse(localStorage.getItem(_ROTA_VIEW_STORAGE_KEY)||'{}');}catch(e){/* ignore */}
+  if(weekEl&&weekEl.value==='2026-05-04')weekEl.value=saved.week||currentWeek;
+  if(deptWeekEl&&deptWeekEl.value==='2026-05-04')deptWeekEl.value=saved.deptWeek||currentWeek;
+  if(monthEl&&monthEl.value==='2026-05')monthEl.value=saved.month||currentMonth;
 }
 
 // Deliberately does NOT go through toISOString() — that converts to UTC,

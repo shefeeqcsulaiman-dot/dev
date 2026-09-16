@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=be0277812f" as="script">
+<link rel="preload" href="src/app.js?v=0ab3434e89" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
@@ -2088,7 +2088,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       </div>
       <div class="fr4">
         <div class="fg"><label class="fl">Department</label><select class="fi" id="rota-week-department" onchange="renderRotaBoards()"><option value="">All Departments</option></select></div>
-        <div class="fg"><label class="fl">Week Start</label><input class="fi mono" id="rota-week-start" type="date" value="2026-05-04" onchange="renderRotaBoards()"></div>
+        <div class="fg"><label class="fl">Week Start</label><input class="fi mono" id="rota-week-start" type="date" value="2026-05-04" onchange="_saveRotaViewDate('week',this.value);renderRotaBoards()"></div>
         <div class="fg"><label class="fl">Location</label><select class="fi" id="rota-week-location" onchange="renderRotaBoards()"><option value="">All Locations</option></select></div>
         <div class="fg"><label class="fl">Search</label><input class="fi" id="rota-staff-search" placeholder="Employee name" oninput="renderRotaBoards()"></div>
       </div>
@@ -2144,7 +2144,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
     <div class="card mb16">
       <div class="card-hd"><div><div class="card-title">Monthly Rota</div><div class="card-sub">Monthly overview built from saved weekly rota records</div></div><span class="b b-gray" id="rota-monthly-status">Draft</span></div>
       <div class="fr3">
-        <div class="fg"><label class="fl">Month</label><input class="fi mono" id="rota-month-value" type="month" value="2026-05" onchange="renderRotaBoards()"></div>
+        <div class="fg"><label class="fl">Month</label><input class="fi mono" id="rota-month-value" type="month" value="2026-05" onchange="_saveRotaViewDate('month',this.value);renderRotaBoards()"></div>
         <div class="fg"><label class="fl">Department</label><select class="fi" id="rota-month-department" onchange="renderRotaBoards()"><option value="">All Departments</option></select></div>
         <div class="fg"><label class="fl">Employee</label><input class="fi" id="rota-month-search" placeholder="Search employee" oninput="renderRotaBoards()"></div>
       </div>
@@ -2182,7 +2182,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       </div>
       <div class="fr3">
         <div class="fg"><label class="fl">Department</label><select class="fi" id="rota-dept-department" onchange="renderRotaBoards()"><option value="">All Departments</option></select></div>
-        <div class="fg"><label class="fl">Week Start</label><input class="fi mono" id="rota-dept-week-start" type="date" value="2026-05-04" onchange="syncRotaWeekFromDept()"></div>
+        <div class="fg"><label class="fl">Week Start</label><input class="fi mono" id="rota-dept-week-start" type="date" value="2026-05-04" onchange="_saveRotaViewDate('deptWeek',this.value);syncRotaWeekFromDept()"></div>
         <div class="fg"><label class="fl">Supervisor</label><input class="fi" id="rota-dept-supervisor" value="HR Manager"></div>
       </div>
       <div class="flx" style="gap:8px;flex-wrap:wrap">
@@ -2989,7 +2989,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=be0277812f" defer></script>
+<script src="src/app.js?v=0ab3434e89" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
