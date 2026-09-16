@@ -213,6 +213,32 @@
       if(hrResp.ok&&hrData.access_token){
         localStorage.setItem('taxflow_token',hrData.access_token);
         localStorage.setItem('taxflow_principal_kind','employee');
+        // The base "Employee" role (and any custom role left with only its
+        // own dashboard/check-in permissions) has nothing to actually do in
+        // hrms.html -- applyHrmsPermissionNav() hides every sidebar item
+        // except "Dashboard", and that Dashboard's own KPI/attendance/leave
+        // calls all 403 for the same reason, so it lands looking like a
+        // broken, near-empty page. ESS is what this role is actually built
+        // for (own attendance/leave/payslips/team), so route there instead
+        // of "successfully" logging someone into a page with nothing on it.
+        var hasRealHrmsAccess=true;
+        try{
+          var hrMeResp=await fetch(apiBase()+'/hr/me',{headers:{'Authorization':'Bearer '+hrData.access_token}});
+          var hrMe=await hrMeResp.json();
+          if(hrMeResp.ok&&!hrMe.is_admin){
+            var allowedModules={};
+            (hrMe.permissions||[]).forEach(function(p){
+              if(p.indexOf(':view')===p.length-5)allowedModules[p.split(':')[0]]=true;
+            });
+            delete allowedModules.dashboard;
+            hasRealHrmsAccess=Object.keys(allowedModules).length>0;
+          }
+        }catch(e){/* /hr/me unreachable -- fail open to the existing /hrms behavior */}
+        if(!hasRealHrmsAccess){
+          localStorage.setItem('ess_token',hrData.access_token);
+          preloadAndRedirect('/ess',hrData.access_token);
+          return;
+        }
         preloadAndRedirect('/hrms',hrData.access_token);
         return;
       }
