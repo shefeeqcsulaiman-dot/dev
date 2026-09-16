@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=bbb644029d" as="script">
+<link rel="preload" href="src/app.js?v=4e21184b5e" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
@@ -2425,6 +2425,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
     <div class="modal-sub">Pick who it's for (one or more) and which saved task to give them</div>
     <div class="fg">
       <label class="fl">Employees <span style="color:var(--red)">*</span></label>
+      <input class="fi" id="assign-task-employee-search" placeholder="Search employees…" oninput="filterAssignTaskEmployees()" style="margin-bottom:8px">
       <div id="assign-task-employee-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-height:180px;overflow-y:auto;padding:2px;border:1px solid var(--border2);border-radius:8px">Loading employees…</div>
     </div>
     <div class="fg"><label class="fl">Task <span style="color:var(--red)">*</span></label><select class="fi" id="assign-task-template"><option value="">— Select Task —</option></select></div>
@@ -2989,7 +2990,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=bbb644029d" defer></script>
+<script src="src/app.js?v=4e21184b5e" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

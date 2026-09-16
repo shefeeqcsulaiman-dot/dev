@@ -20023,26 +20023,50 @@ async function saveActiveRotaAssignmentFromModal(forceOff=false){
     status:document.getElementById('rota-weekly-status')?.textContent?.trim()||'Draft',
     updated_at:new Date().toISOString()
   });
+  // The cell's own dataset/innerHTML and rotaAssignmentsById used to be
+  // updated BEFORE (and regardless of) the server save even being
+  // attempted, and saveServer() swallows failures silently by default (a
+  // 401 from an expired session, a network blip, a 500) -- so a failed
+  // save still looked identical to a successful one for the rest of this
+  // browser session: the cell showed the new shift/tasks, the modal
+  // closed, a "Shift saved to database" toast fired. Only a later reload
+  // (re-fetching from the server, which never received the write)
+  // revealed nothing had actually been saved -- indistinguishable from
+  // data loss even though the save itself never silently corrupted
+  // anything. Now the local state only changes after a confirmed write.
+  try{
+    await saveServer('rotaAssignments',assignment,{throwOnError:true});
+  }catch(err){
+    console.warn('Rota assignment save failed:',err);
+    return {...assignment,_saveFailed:true};
+  }
   activeRotaCell.dataset.assignment=JSON.stringify(assignment);
   activeRotaCell.innerHTML=rotaCellHtml(assignment);
   rotaAssignmentsById.set(assignment.id,assignment);
-  saveServer('rotaAssignments',assignment);
   renderRotaBoards();
   return assignment;
 }
 
 async function saveRotaCellShift(){
   const assignment=await saveActiveRotaAssignmentFromModal(false);
-  closeM('m-edit-shift');
   if(!assignment)return;
+  if(assignment._saveFailed){
+    toast('Could not save this shift — check your connection (or that you\'re still signed in) and try again','err');
+    return;
+  }
+  closeM('m-edit-shift');
   toast('Shift saved to database','ok');
   audit('Updated rota cell',`${assignment.employee_name} ${assignment.date}`,'Saved');
 }
 
 async function removeRotaCellShift(){
   const assignment=await saveActiveRotaAssignmentFromModal(true);
-  closeM('m-edit-shift');
   if(!assignment)return;
+  if(assignment._saveFailed){
+    toast('Could not remove this shift — check your connection (or that you\'re still signed in) and try again','err');
+    return;
+  }
+  closeM('m-edit-shift');
   toast('Shift removed','warn');
   audit('Removed rota cell',`${assignment.employee_name} ${assignment.date}`,'Deleted');
 }
@@ -22948,9 +22972,11 @@ function _uniqueTaskTemplates(){
 function showAssignTaskModal(){
   const grid=document.getElementById('assign-task-employee-grid');
   const taskSel=document.getElementById('assign-task-template');
+  const searchEl=document.getElementById('assign-task-employee-search');
+  if(searchEl)searchEl.value='';
   if(grid){
     grid.innerHTML=_taskEmployeeListCache.length
-      ?_taskEmployeeListCache.map(e=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="assign-task-employee-cb" value="${escapeHtml(e.id)}" data-name="${escapeHtml(e.full_name)}"> ${escapeHtml(e.full_name)}</label>`).join('')
+      ?_taskEmployeeListCache.map(e=>`<label data-emp-label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="assign-task-employee-cb" value="${escapeHtml(e.id)}" data-name="${escapeHtml(e.full_name)}"> ${escapeHtml(e.full_name)}</label>`).join('')
       :'<div style="color:var(--text3);font-size:12px;grid-column:1/-1">No employees found.</div>';
   }
   const templates=_uniqueTaskTemplates();
@@ -22960,6 +22986,18 @@ function showAssignTaskModal(){
       :'<option value="">No saved tasks yet — click + Add Task first</option>';
   }
   showM('m-assign-task');
+}
+
+// Filters the Assign Task employee checkbox grid as you type -- purely a
+// display:none toggle on each <label>, so a checked box stays checked
+// (and still counts in confirmAssignTask()) even while its label is
+// hidden by a search that no longer matches it.
+function filterAssignTaskEmployees(){
+  const query=(document.getElementById('assign-task-employee-search')?.value||'').trim().toLowerCase();
+  document.querySelectorAll('#assign-task-employee-grid [data-emp-label]').forEach(label=>{
+    const name=(label.querySelector('input')?.dataset.name||label.textContent||'').toLowerCase();
+    label.style.display=!query||name.includes(query)?'':'none';
+  });
 }
 
 async function confirmAssignTask(){
