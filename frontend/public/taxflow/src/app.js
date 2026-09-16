@@ -19822,29 +19822,30 @@ function openRotaCellEditor(cell){
 }
 
 // ── Rota Edit Shift: attached Tasks ─────────────────────────────────────
-// Lets a manager attach one or more EXISTING Task Management tasks (not
-// create new ones here) to a specific employee/day rota cell, each with
-// its own start/end time -- one person can have several tasks the same
-// day, which a single shift start/end can't express on its own.
-//
-// Rota's per-employee id (data-employee-id, from the "employees"
-// AppDataRecord bridge -- see employeeFromDirectoryRow()) is the
-// business-facing employee_no, but Task Management's assigned_to is the
-// real backend Employee.id UUID (populateTaskAssigneeSelect() sources it
-// from GET /payroll/employees) -- two different id spaces for "the same"
-// employee elsewhere in this codebase. _taskEmployeeListCache (populated
-// alongside _taskListCache by loadTasks()) is the bridge between them.
+// Lets a manager pick from every saved Task Management task (assigned or
+// not -- same source _uniqueTaskTemplates() gives "+ Assign Task") and
+// attach it to this employee/day, each with its own start/end time -- one
+// person can have several tasks the same day, which a single shift
+// start/end can't express on its own. Picking a task not already assigned
+// to this employee assigns it to them on save (see
+// _ensureRotaTaskAssignment()) -- assign-and-schedule in one step, rather
+// than requiring a separate trip to Task Management first.
 function _rotaEditTaskOptionsHtml(selectedTaskId){
-  const employeeNo=activeRotaCell?.dataset.employeeId||'';
-  const employeeRecord=_taskEmployeeListCache.find(e=>e.employee_no===employeeNo);
-  const employeeUuid=employeeRecord?.id||'';
-  // Tasks already assigned (via Task Management) to this same employee --
-  // attaching an unrelated colleague's task to someone else's rota day
-  // would be confusing, so the picker is scoped to this employee's own list.
-  const options=employeeUuid?_taskListCache.filter(t=>t.assigned_to===employeeUuid):[];
-  const optionHtml=options.map(t=>`<option value="${escapeHtml(t.id)}" data-color="${escapeHtml(t.color||TASK_COLORS[0])}"${t.id===selectedTaskId?' selected':''}>${escapeHtml(t.title)}</option>`).join('');
-  const emptyNote=!options.length?'<option value="" disabled>No tasks assigned to this employee yet</option>':'';
-  return `<option value="">— Select Task —</option>${emptyNote}${optionHtml}`;
+  const options=[..._uniqueTaskTemplates()];
+  // The row being (re)opened may reference one specific employee's own
+  // assigned instance of a task whose title's "most recent" instance
+  // (what _uniqueTaskTemplates() picks) belongs to someone else -- make
+  // sure that specific instance is still present and selected, not
+  // silently swapped for a different employee's copy of the same task.
+  if(selectedTaskId&&!options.some(t=>t.id===selectedTaskId)){
+    const selectedTask=_taskListCache.find(t=>t.id===selectedTaskId);
+    if(selectedTask)options.unshift(selectedTask);
+  }
+  if(!options.length){
+    return '<option value="">— Select Task —</option><option value="" disabled>No saved tasks yet — click + Add Task first</option>';
+  }
+  const optionHtml=options.map(t=>`<option value="${escapeHtml(t.id)}" data-color="${escapeHtml(t.color||TASK_COLORS[0])}"${t.id===selectedTaskId?' selected':''}>${escapeHtml(t.title)}${t.assigned_to_name?` (${escapeHtml(t.assigned_to_name)})`:''}</option>`).join('');
+  return `<option value="">— Select Task —</option>${optionHtml}`;
 }
 
 function _rotaEditTaskRowHtml(task){
@@ -19879,20 +19880,31 @@ function _updateRotaEditTasksEmptyState(){
   if(empty)empty.style.display=(list&&list.children.length)?'none':'';
 }
 
-function _collectRotaEditTasks(){
+async function _collectRotaEditTasks(){
+  const employeeNo=activeRotaCell?.dataset.employeeId||'';
+  const employeeRecord=_taskEmployeeListCache.find(e=>e.employee_no===employeeNo);
+  const employeeUuid=employeeRecord?.id||'';
+  const employeeName=activeRotaCell?.dataset.employeeName||employeeRecord?.full_name||'';
   const rows=[...document.querySelectorAll('#rota-edit-tasks-list [data-task-row]')];
-  return rows.map(row=>{
+  const results=[];
+  for(const row of rows){
     const taskId=row.querySelector('[data-role="task-select"]')?.value||'';
-    if(!taskId)return null;
-    const task=_taskListCache.find(t=>t.id===taskId);
-    return {
-      task_id:taskId,
-      title:task?.title||'',
-      color:task?.color||TASK_COLORS[0],
-      start:row.querySelector('[data-role="task-start"]')?.value||'',
-      end:row.querySelector('[data-role="task-end"]')?.value||''
-    };
-  }).filter(Boolean);
+    if(!taskId)continue;
+    const start=row.querySelector('[data-role="task-start"]')?.value||'';
+    const end=row.querySelector('[data-role="task-end"]')?.value||'';
+    if(!employeeUuid){
+      // Employee couldn't be resolved to a real backend id (shouldn't
+      // normally happen) -- reference the task as-picked rather than
+      // silently dropping the row.
+      const task=_taskListCache.find(t=>t.id===taskId);
+      results.push({task_id:taskId,title:task?.title||'',color:task?.color||TASK_COLORS[0],start,end});
+      continue;
+    }
+    const assigned=await _ensureRotaTaskAssignment(taskId,employeeUuid,employeeName);
+    if(!assigned)continue;
+    results.push({task_id:assigned.id,title:assigned.title,color:assigned.color||TASK_COLORS[0],start,end});
+  }
+  return results;
 }
 
 function applyRotaEditTypeDefaults(){
@@ -19948,7 +19960,7 @@ function legacyRemoveRotaCellShift(){
   audit('Removed rota cell','Weekly rota','Deleted');
 }
 
-function saveActiveRotaAssignmentFromModal(forceOff=false){
+async function saveActiveRotaAssignmentFromModal(forceOff=false){
   if(!activeRotaCell){
     toast('Select a rota cell first','warn');
     return null;
@@ -19982,7 +19994,7 @@ function saveActiveRotaAssignmentFromModal(forceOff=false){
     className,
     break_minutes:forceOff?0:Number(document.getElementById('rota-edit-break')?.value)||0,
     notes:forceOff?'':document.getElementById('rota-edit-notes')?.value||'',
-    tasks:forceOff?[]:_collectRotaEditTasks(),
+    tasks:forceOff?[]:await _collectRotaEditTasks(),
     status:document.getElementById('rota-weekly-status')?.textContent?.trim()||'Draft',
     updated_at:new Date().toISOString()
   });
@@ -19994,16 +20006,16 @@ function saveActiveRotaAssignmentFromModal(forceOff=false){
   return assignment;
 }
 
-function saveRotaCellShift(){
-  const assignment=saveActiveRotaAssignmentFromModal(false);
+async function saveRotaCellShift(){
+  const assignment=await saveActiveRotaAssignmentFromModal(false);
   closeM('m-edit-shift');
   if(!assignment)return;
   toast('Shift saved to database','ok');
   audit('Updated rota cell',`${assignment.employee_name} ${assignment.date}`,'Saved');
 }
 
-function removeRotaCellShift(){
-  const assignment=saveActiveRotaAssignmentFromModal(true);
+async function removeRotaCellShift(){
+  const assignment=await saveActiveRotaAssignmentFromModal(true);
   closeM('m-edit-shift');
   if(!assignment)return;
   toast('Shift removed','warn');
@@ -22912,6 +22924,42 @@ async function confirmAssignTask(){
   hideM('m-assign-task');
   renderTaskBoard();
   toast(`"${task.title}" assigned to ${employeeName}`,'ok');
+}
+
+// Rota's "+ Add Task" picker (see _rotaEditTaskOptionsHtml) lists every
+// saved task (assigned or not, same source as "+ Assign Task"'s own
+// dropdown) so a manager can assign-and-schedule in one step, instead of
+// having to visit Task Management first just to create the assignment.
+// Picking a template that isn't already assigned to this employee clones
+// it into a real assignment here, mirroring confirmAssignTask() -- but
+// first checks for an existing same-title assignment to this employee
+// and reuses it, so re-opening/re-saving the same rota day repeatedly
+// doesn't spawn a fresh duplicate task instance every time.
+async function _ensureRotaTaskAssignment(templateId,employeeId,employeeName){
+  const source=_taskListCache.find(x=>x.id===templateId);
+  if(!source)return null;
+  if(source.assigned_to===employeeId)return source;
+  const existing=_taskListCache.find(t=>t.assigned_to===employeeId&&t.title===source.title);
+  if(existing)return existing;
+  const task={
+    id:`TASK-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+    title:source.title,
+    department:source.department||'',
+    description:source.description||'',
+    assigned_to:employeeId,
+    assigned_to_name:employeeName,
+    color:source.color||TASK_COLORS[0],
+    priority:source.priority||'Medium',
+    due_date:'',
+    status:'todo',
+    progress:0,
+    repeat:source.repeat||'none',
+    next_spawned:false,
+    created_at:new Date().toISOString(),
+  };
+  await saveServer('tasks',task);
+  _taskListCache.push(task);
+  return task;
 }
 
 function showTaskModal(id){
