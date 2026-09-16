@@ -18227,10 +18227,16 @@ function saveLeavePolicies(){
     const name=tr.querySelector('strong')?.textContent?.trim()||'';
     return{
       name,
-      // Matches the #emp-leave-policy <option value>, when this row is one
-      // of the built-in policies — lets leaveEntitlementDays() apply an
-      // admin's edited day-count instead of staying hardcoded forever.
-      value:tr.dataset.policyValue||null,
+      // Matches the #emp-leave-policy <option value>. Built-in rows carry
+      // their own short value (e.g. "UAE 30 Calendar") distinct from the
+      // longer display name; a custom policy added via addLeavePolicy()
+      // has no such attribute, so its own name IS its value -- falling
+      // back to null here (as this used to) meant a custom policy was
+      // silently skipped by both _applyLeavePolicyDaysToMap() and the
+      // backend's _effective_leave_policy_configs() (leave.py), which both
+      // ignore any entry with an empty value: a custom policy could be
+      // named and saved but never actually applied to anyone.
+      value:tr.dataset.policyValue||name,
       days:cells[0]?.value||'',
       basis:cells[1]?.value||'Calendar',
       encash:cells[2]?.value||'No',
@@ -18273,8 +18279,22 @@ async function loadLeavePoliciesFromServer(){
     (rec.leave_policies||[]).forEach(p=>{
       if(!p.value)return;
       const row=document.querySelector(`#leave-policies-tbody tr[data-policy-value="${CSS.escape(p.value)}"]`);
-      const daysInput=row?.querySelector('input');
-      if(daysInput&&p.days!=null&&p.days!=='')daysInput.value=p.days;
+      if(row){
+        const daysInput=row.querySelector('input');
+        if(daysInput&&p.days!=null&&p.days!=='')daysInput.value=p.days;
+        return;
+      }
+      // A custom policy (added via addLeavePolicy(), not one of the
+      // built-in hardcoded rows) has no matching row in the static HTML
+      // at all -- append one, or it silently disappears from this table
+      // (and from the Add Employee "Leave Policy" dropdown, which is
+      // sourced from this same table) on every reload.
+      const tbody=document.getElementById('leave-policies-tbody');
+      if(!tbody||!p.name)return;
+      const tr=document.createElement('tr');
+      tr.dataset.policyValue=p.value;
+      tr.innerHTML=_leavePolicyRowHtml(p.name,p.days,p.basis,p.encash,p.carry_forward);
+      tbody.appendChild(tr);
     });
     // Same gap existed for Leave Types & Entitlements — this table always
     // re-showed its hardcoded 30/90/5/60/5/30 defaults too, even though
@@ -18301,20 +18321,32 @@ async function loadLeavePoliciesFromServer(){
   }catch(e){console.warn('Failed to load leave policy settings:',e);}
 }
 
+// Shared by addLeavePolicy() and loadLeavePoliciesFromServer() (which
+// appends a row for any saved custom policy the static HTML doesn't
+// already have a row for -- previously a custom policy vanished from
+// this table on every reload, since the load function only ever patched
+// EXISTING rows' day counts and never re-created rows for ones it didn't
+// find).
+function _leavePolicyRowHtml(name,days,basis,encash,carryForward){
+  const sel=(opts,current)=>opts.map(o=>`<option${o===current?' selected':''}>${o}</option>`).join('');
+  return `
+    <td><strong>${escapeHtml(name)}</strong></td>
+    <td><input class="fi mono" style="width:80px;padding:3px 6px" value="${escapeHtml(String(days??21))}"></td>
+    <td><select class="fi" style="padding:3px 4px;font-size:12px">${sel(['Calendar','Working'],basis||'Calendar')}</select></td>
+    <td><span style="font-size:12px">All Staff</span></td>
+    <td><select class="fi" style="padding:3px 4px;font-size:12px">${sel(['Yes','No'],encash||'No')}</select></td>
+    <td><select class="fi" style="padding:3px 4px;font-size:12px">${sel(['Yes','No'],carryForward||'No')}</select></td>
+    <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>`;
+}
+
 function addLeavePolicy(){
   const name=prompt('Policy Name (e.g. "Part-Time Pro-Rata"):');
   if(!name?.trim())return;
   const tbody=document.getElementById('leave-policies-tbody');
   if(!tbody)return;
   const tr=document.createElement('tr');
-  tr.innerHTML=`
-    <td><strong>${escapeHtml(name.trim())}</strong></td>
-    <td><input class="fi mono" style="width:80px;padding:3px 6px" value="21"></td>
-    <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
-    <td><span style="font-size:12px">All Staff</span></td>
-    <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
-    <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
-    <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>`;
+  tr.dataset.policyValue=name.trim();
+  tr.innerHTML=_leavePolicyRowHtml(name.trim());
   tbody.appendChild(tr);
   toast(`Policy "${name.trim()}" added`,'ok');
 }
@@ -18369,7 +18401,32 @@ function _populateEmpSelects(){
         :'<option disabled>No branches — add in HR Settings</option>');
     if(cur)branchSel.value=cur;
   }
+  const leaveSel=document.getElementById('emp-leave-policy');
+  if(leaveSel){
+    const cur=leaveSel.value;
+    const options=_getLeavePolicyOptions();
+    leaveSel.innerHTML='<option value="">— Select Leave Policy —</option>'+
+      (options.length
+        ?options.map(o=>`<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')
+        :'<option disabled>No leave policies — add in HR Settings &gt; Leave Policy</option>');
+    if(cur)leaveSel.value=cur;
+  }
   if(document.getElementById('emp-role'))filterEmpRoles();
+}
+
+// Reads the live HR Settings > Leave Policy table (#leave-policies-tbody,
+// kept in sync with the server by loadLeavePoliciesFromServer()) instead
+// of the emp-leave-policy select's own hardcoded <option>s -- the Add/Edit
+// Employee form previously offered a fixed set of 8 built-in policies
+// regardless of what an admin actually configured (or renamed/added) in
+// HR Settings, so a custom policy could be created there but never
+// assigned to anyone.
+function _getLeavePolicyOptions(){
+  return [...document.querySelectorAll('#leave-policies-tbody tr')].map(tr=>{
+    const label=tr.querySelector('strong')?.textContent?.trim()||'';
+    if(!label)return null;
+    return{value:tr.dataset.policyValue||label,label};
+  }).filter(Boolean);
 }
 
 function openEmpModal(){

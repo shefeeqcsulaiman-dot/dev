@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=0a202f5a61" as="script">
+<link rel="preload" href="src/app.js?v=3726e8f68f" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
@@ -1570,6 +1570,38 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
             </tr>
+            <!-- These three were previously #emp-leave-policy <option>s with
+                 no row here at all -- selectable when adding an employee,
+                 but with no way to see, edit, or persist them from this
+                 table. Restored here now that the dropdown is sourced from
+                 this table instead of its own separate hardcoded list. -->
+            <tr data-policy-value="Internal 29 Working">
+              <td><strong>Internal — 29 Working Days</strong><div class="card-sub" style="font-size:10px">Internal company policy, working days only</div></td>
+              <td><input class="fi mono" style="width:80px;padding:3px 6px" value="29"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Calendar</option><option selected>Working</option></select></td>
+              <td><span style="font-size:12px">Operations</span></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
+            </tr>
+            <tr data-policy-value="Part-Time">
+              <td><strong>Part-Time Pro-Rata</strong><div class="card-sub" style="font-size:10px">Pro-rated by contracted hours</div></td>
+              <td><input class="fi mono" style="width:80px;padding:3px 6px" value="21"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
+              <td><span style="font-size:12px">Part-Time Staff</span></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
+            </tr>
+            <tr data-policy-value="Custom">
+              <td><strong>Custom (per contract)</strong><div class="card-sub" style="font-size:10px">Individually negotiated terms</div></td>
+              <td><input class="fi mono" style="width:80px;padding:3px 6px" value="21"></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
+              <td><span style="font-size:12px">Case-by-case</span></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -2633,7 +2665,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
     <div class="fr3"><div class="fg"><label class="fl">Employee ID</label><input class="fi mono" id="emp-id" placeholder="EMP-005"></div><div class="fg"><label class="fl">Employment Type</label><select class="fi" id="emp-contract"><option>Full-Time</option><option>Part-Time</option><option>Contract</option><option>Probation</option><option>Intern / Trainee</option><option>Daily Wage</option><option>Hourly</option><option>Weekly</option><option>Short-Term</option><option>Freelance / Consultant</option><option>Seasonal</option><option>Project-Based</option></select></div><div class="fg"><label class="fl">Join Date</label><input class="fi" id="emp-join-date" type="date"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Department <span style="color:var(--red)">*</span></label><select class="fi" id="emp-department" required onchange="filterEmpRoles()"><option value="">— Select Department —</option></select></div><div class="fg"><label class="fl">Designation</label><input class="fi" id="emp-designation" placeholder="e.g. Sales Executive"></div><div class="fg"><label class="fl">Branch <span style="color:var(--red)">*</span></label><select class="fi" id="emp-branch" required onchange="filterEmpRoles()"><option value="">— Select Branch —</option></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Role <span style="color:var(--red)">*</span></label><select class="fi" id="emp-role"><option value="">— Select Branch &amp; Department first —</option></select></div><div class="fg" style="align-self:flex-end"><div style="font-size:11px;color:var(--text3);padding-bottom:6px">Role options update automatically when Branch and Department are selected.</div></div><div class="fg"><label class="fl">Supervisor</label><input class="fi" id="emp-supervisor" placeholder="e.g. Ahmed Al Mansouri"></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Basic Salary (AED)</label><input class="fi mono" id="emp-salary"></div><div class="fg"><label class="fl">OT Policy</label><select class="fi" id="emp-ot-rate"><option value="system-default">— System Default (from HR Settings) —</option><option value="fixed">Fixed Rate</option><option value="monthly">Monthly-Based Rate</option><option value="other">Other / Custom</option></select></div><div class="fg"><label class="fl">Leave Policy</label><select class="fi" id="emp-leave-policy"><optgroup label="UAE Policy (Calendar Days)"><option value="UAE 30 Calendar">UAE Policy — 30 Calendar Days</option><option value="UAE Standard">UAE Standard — 21 Calendar Days</option></optgroup><optgroup label="Internal Policy (Working Days)"><option value="Internal 22 Working">Internal — 22 Working Days</option><option value="Internal 29 Working">Internal — 29 Working Days</option><option value="Executive 30 Working">Executive — 30 Working Days</option></optgroup><optgroup label="Other"><option value="Contractor">Contractor — 14 Calendar Days</option><option value="Part-Time">Part-Time Pro-Rata</option><option value="Custom">Custom (per contract)</option></optgroup></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Basic Salary (AED)</label><input class="fi mono" id="emp-salary"></div><div class="fg"><label class="fl">OT Policy</label><select class="fi" id="emp-ot-rate"><option value="system-default">— System Default (from HR Settings) —</option><option value="fixed">Fixed Rate</option><option value="monthly">Monthly-Based Rate</option><option value="other">Other / Custom</option></select></div><div class="fg"><label class="fl">Leave Policy</label><select class="fi" id="emp-leave-policy"><option value="">— Select Leave Policy —</option></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Housing Allowance (AED)</label><input class="fi mono" id="emp-housing-allowance" type="number" min="0" step="0.01" value="0"></div><div class="fg"><label class="fl">Transport Allowance (AED)</label><input class="fi mono" id="emp-transport-allowance" type="number" min="0" step="0.01" value="0"></div><div class="fg"><label class="fl">Other Allowance (AED)</label><input class="fi mono" id="emp-other-allowance" type="number" min="0" step="0.01" value="0"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Shift Hours</label><select class="fi" id="emp-shift-hours-type"><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div><div class="fg"><label class="fl">Hours</label><input class="fi mono" id="emp-shift-hours" type="number" min="0" placeholder="e.g. 40"></div><div class="fg"><label class="fl">Work Location</label><select class="fi" id="emp-location"><option value="">— Select Location —</option></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Work Permit No.</label><input class="fi mono" id="emp-work-permit"></div><div class="fg"><label class="fl">Visa Expiry</label><input class="fi" id="emp-visa-expiry" type="date"></div><div class="fg"><label class="fl">Cost Center</label><input class="fi" id="emp-cost-center" placeholder="e.g. CC-01-OPS"></div></div>
@@ -2951,7 +2983,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=0a202f5a61" defer></script>
+<script src="src/app.js?v=3726e8f68f" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
