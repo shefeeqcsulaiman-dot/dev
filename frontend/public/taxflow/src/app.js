@@ -22913,11 +22913,12 @@ function renderTaskBoard(){
   const priorityFilter=document.getElementById('task-filter-priority')?.value||'';
   const search=(document.getElementById('task-filter-search')?.value||'').trim().toLowerCase();
   const filtered=_taskListCache.filter(t=>{
-    // Add Task no longer collects an assignee — a saved task with no
-    // assigned_to yet is a reusable name/template only (offered in the To
-    // Do assign panel and the modal's "Load From Previous Task" dropdown),
-    // not a real row in the table until someone's actually assigned to it.
-    if(!t.assigned_to)return false;
+    // A saved task with no assigned_to yet used to be hidden from this
+    // table entirely (a "template only" state, reusable from the "+
+    // Assign Task" modal and "Load From Previous Task") -- but that made
+    // a just-added task look like it silently vanished. It now lists
+    // here too (shown as "Unassigned" in _taskTableRowHtml) so nothing
+    // saved from + Add Task disappears from view.
     if(deptFilter&&t.department!==deptFilter)return false;
     if(empFilter&&t.assigned_to!==empFilter)return false;
     if(priorityFilter&&t.priority!==priorityFilter)return false;
