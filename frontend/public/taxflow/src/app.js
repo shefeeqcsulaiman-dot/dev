@@ -19780,8 +19780,14 @@ function rotaCellHtml(assignment){
   const time=start&&end?`${start}-${end}`:'-';
   const className=assignment?.className||defaults.className;
   const icon=assignment?.status==='Published'?'OK':(className==='off'?'-':className==='draft'?'o':className==='overtime'?'!':'OK');
-  const taskCount=Array.isArray(assignment?.tasks)?assignment.tasks.length:0;
-  const taskBadge=taskCount?`<i class="rota-task-badge" title="${taskCount} task${taskCount>1?'s':''} attached">${taskCount}</i>`:'';
+  const tasks=Array.isArray(assignment?.tasks)?assignment.tasks:[];
+  const taskCount=tasks.length;
+  // Up to 3 colored dots (one per attached task's own color, see Task
+  // Management's Task Color picker) rather than a plain count -- lets a
+  // manager tell at a glance which KIND of tasks are on a day without
+  // opening it, not just how many.
+  const dots=tasks.slice(0,3).map(t=>`<span class="rota-task-dot" style="background:${escapeHtml(t.color||TASK_COLORS[0])}"></span>`).join('');
+  const taskBadge=taskCount?`<i class="rota-task-badge" title="${taskCount} task${taskCount>1?'s':''} attached: ${escapeHtml(tasks.map(t=>t.title).filter(Boolean).join(', '))}">${dots}</i>`:'';
   return `<div class="rota-cell ${escapeHtml(className)}" style="position:relative"><strong>${escapeHtml(code)}</strong><span>${escapeHtml(time)}</span><em>${escapeHtml(icon)}</em>${taskBadge}</div>`;
 }
 
@@ -19836,15 +19842,17 @@ function _rotaEditTaskOptionsHtml(selectedTaskId){
   // attaching an unrelated colleague's task to someone else's rota day
   // would be confusing, so the picker is scoped to this employee's own list.
   const options=employeeUuid?_taskListCache.filter(t=>t.assigned_to===employeeUuid):[];
-  const optionHtml=options.map(t=>`<option value="${escapeHtml(t.id)}"${t.id===selectedTaskId?' selected':''}>${escapeHtml(t.title)}</option>`).join('');
+  const optionHtml=options.map(t=>`<option value="${escapeHtml(t.id)}" data-color="${escapeHtml(t.color||TASK_COLORS[0])}"${t.id===selectedTaskId?' selected':''}>${escapeHtml(t.title)}</option>`).join('');
   const emptyNote=!options.length?'<option value="" disabled>No tasks assigned to this employee yet</option>':'';
   return `<option value="">— Select Task —</option>${emptyNote}${optionHtml}`;
 }
 
 function _rotaEditTaskRowHtml(task){
   task=task||{};
+  const color=task.task_id?(task.color||TASK_COLORS[0]):'transparent';
   return `<div class="rota-edit-task-row" data-task-row style="display:flex;gap:8px;align-items:center">
-    <select class="fi" style="flex:2" data-role="task-select">${_rotaEditTaskOptionsHtml(task.task_id||'')}</select>
+    <span data-role="task-color-dot" style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${escapeHtml(color)}"></span>
+    <select class="fi" style="flex:2" data-role="task-select" onchange="this.previousElementSibling.style.background=this.selectedOptions[0]?.dataset.color||'transparent'">${_rotaEditTaskOptionsHtml(task.task_id||'')}</select>
     <input class="fi mono" type="time" style="flex:1" data-role="task-start" value="${escapeHtml(task.start||'')}">
     <input class="fi mono" type="time" style="flex:1" data-role="task-end" value="${escapeHtml(task.end||'')}">
     <button type="button" class="icon-btn danger" title="Remove task" onclick="this.closest('[data-task-row]').remove();_updateRotaEditTasksEmptyState()">${deleteIconSvg()}</button>
@@ -19880,6 +19888,7 @@ function _collectRotaEditTasks(){
     return {
       task_id:taskId,
       title:task?.title||'',
+      color:task?.color||TASK_COLORS[0],
       start:row.querySelector('[data-role="task-start"]')?.value||'',
       end:row.querySelector('[data-role="task-end"]')?.value||''
     };
@@ -22704,6 +22713,26 @@ async function loadEmployeeAttendanceDetail(){
   }
 }
 
+// Fixed palette (not a free color picker) so task colors stay visually
+// distinct and consistent everywhere a task shows up in miniature (the
+// Rota cell badge, the Edit Shift modal's attached-tasks list) — a raw
+// <input type="color"> would let two tasks land on near-identical shades
+// that are indistinguishable at dot size.
+const TASK_COLORS=['#3b82f6','#8b5cf6','#f59e0b','#10b981','#ef4444','#06b6d4','#ec4899','#f97316'];
+
+function renderTaskColorPicker(selected){
+  const wrap=document.getElementById('task-color-picker');
+  if(!wrap)return;
+  const current=selected||TASK_COLORS[0];
+  document.getElementById('task-color').value=current;
+  wrap.innerHTML=TASK_COLORS.map(c=>`<button type="button" title="${escapeHtml(c)}" onclick="selectTaskColor('${escapeHtml(c)}')" style="width:26px;height:26px;border-radius:50%;background:${escapeHtml(c)};cursor:pointer;border:2px solid ${c===current?'var(--text)':'transparent'};box-shadow:0 0 0 1px var(--border);padding:0"></button>`).join('');
+}
+
+function selectTaskColor(color){
+  document.getElementById('task-color').value=color;
+  renderTaskColorPicker(color);
+}
+
 // ── Task Management ─────────────────────────────────────────────────────
 // Backed by the generic AppDataRecord 'tasks' collection (same pattern as
 // employeeLoans/jobRequisitions — a small admin-managed list, not a
@@ -22869,6 +22898,7 @@ async function confirmAssignTask(){
     description:source.description||'',
     assigned_to:employeeId,
     assigned_to_name:employeeName,
+    color:source.color||TASK_COLORS[0],
     priority:source.priority||'Medium',
     due_date:'',
     status:'todo',
@@ -22896,6 +22926,7 @@ function showTaskModal(id){
   document.getElementById('task-due-date').value=t?.due_date||'';
   document.getElementById('task-status').value=t?_normalizeTaskStatus(t.status):'todo';
   document.getElementById('task-repeat').value=t?.repeat||'none';
+  renderTaskColorPicker(t?.color);
   const progressVal=t?.status==='done'?100:(t?.progress||0);
   document.getElementById('task-progress').value=progressVal;
   document.getElementById('task-progress-value').textContent=progressVal;
@@ -22924,6 +22955,7 @@ async function saveTaskModal(){
     description:(document.getElementById('task-description')?.value||'').trim(),
     assigned_to:assigneeSel?.value||'',
     assigned_to_name:assigneeSel?.value?(assigneeOpt?.dataset.name||''):'',
+    color:document.getElementById('task-color')?.value||TASK_COLORS[0],
     priority:document.getElementById('task-priority')?.value||'Medium',
     due_date:document.getElementById('task-due-date')?.value||'',
     status:document.getElementById('task-status')?.value||'todo',
@@ -22971,7 +23003,7 @@ function _taskTableRowHtml(t){
   return `<tr>
     <td style="font-weight:600">${escapeHtml(t.assigned_to_name||'Unassigned')}</td>
     <td style="color:var(--text3);font-size:12px">${escapeHtml(t.department||'—')}</td>
-    <td>${escapeHtml(t.title)}</td>
+    <td><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${escapeHtml(t.color||TASK_COLORS[0])};margin-right:7px;vertical-align:middle"></span>${escapeHtml(t.title)}</td>
     <td><span class="b ${priorityCls}">${escapeHtml(t.priority||'Medium')}</span></td>
     <td class="mono"${overdue?' style="color:var(--red)"':''}>${escapeHtml(t.due_date||'—')}</td>
     <td>${escapeHtml(TASK_REPEAT_LABEL[t.repeat||'none']||'—')}</td>

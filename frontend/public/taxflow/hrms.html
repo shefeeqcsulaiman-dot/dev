@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=3726e8f68f" as="script">
+<link rel="preload" href="src/app.js?v=41675cd61c" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
@@ -2394,6 +2394,11 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
          here at all; that's the "+ Assign Task" button/modal's job. -->
     <div class="fg" id="task-assignee-row" style="display:none"><label class="fl">Assign To</label><select class="fi" id="task-assignee"><option value="">— Unassigned —</option></select></div>
     <div class="fg"><label class="fl">Task Details</label><textarea class="fi" id="task-description" rows="3" placeholder="Details, context, or instructions…"></textarea></div>
+    <div class="fg">
+      <label class="fl">Task Color</label>
+      <input type="hidden" id="task-color" value="#3b82f6">
+      <div id="task-color-picker" style="display:flex;gap:8px;flex-wrap:wrap;padding:4px 0"></div>
+    </div>
     <div class="fr2">
       <div class="fg"><label class="fl">Priority</label><select class="fi" id="task-priority"><option>Low</option><option selected>Medium</option><option>High</option></select></div>
       <div class="fg"><label class="fl">Status</label><select class="fi" id="task-status"><option value="todo">To Do</option><option value="progress">Progress</option><option value="done">Done</option></select></div>
@@ -2983,7 +2988,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=3726e8f68f" defer></script>
+<script src="src/app.js?v=41675cd61c" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
