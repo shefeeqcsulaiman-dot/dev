@@ -22922,6 +22922,11 @@ async function confirmAssignTask(){
   await saveServer('tasks',task);
   _taskListCache.push(task);
   hideM('m-assign-task');
+  // Same reasoning as saveTaskModal() -- a stale "Assigned To: <someone
+  // else>" filter would hide this brand-new assignment from the table
+  // immediately after creating it.
+  const empFilter=document.getElementById('task-filter-employee');
+  if(empFilter&&empFilter.value&&empFilter.value!==employeeId)empFilter.value='';
   renderTaskBoard();
   toast(`"${task.title}" assigned to ${employeeName}`,'ok');
 }
@@ -23021,6 +23026,22 @@ async function saveTaskModal(){
   const idx=_taskListCache.findIndex(x=>x.id===id);
   if(idx>=0)_taskListCache[idx]=task;else _taskListCache.push(task);
   hideM('m-task');
+  if(!existing){
+    // A brand-new task is unassigned/undated by default -- if the table
+    // was left filtered from an earlier look-up (e.g. "Assigned To: <someone>"
+    // still selected), the task saves correctly but never appears in the
+    // filtered view, with nothing on screen to click Edit on -- looking
+    // exactly like the save silently failed. Clearing the filters
+    // guarantees whatever was just added is immediately visible.
+    const deptFilter=document.getElementById('task-department-filter');
+    const empFilter=document.getElementById('task-filter-employee');
+    const priorityFilter=document.getElementById('task-filter-priority');
+    const searchFilter=document.getElementById('task-filter-search');
+    if(deptFilter)deptFilter.value='';
+    if(empFilter)empFilter.value='';
+    if(priorityFilter)priorityFilter.value='';
+    if(searchFilter)searchFilter.value='';
+  }
   renderTaskBoard();
   toast(`Task ${existing?'updated':'added'}`,'ok');
 }
