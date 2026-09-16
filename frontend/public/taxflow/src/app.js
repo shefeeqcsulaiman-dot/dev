@@ -19802,13 +19802,18 @@ function rotaCellHtml(assignment){
   const icon=assignment?.status==='Published'?'OK':(className==='off'?'-':className==='draft'?'o':className==='overtime'?'!':'OK');
   const tasks=Array.isArray(assignment?.tasks)?assignment.tasks:[];
   const taskCount=tasks.length;
-  // Up to 3 colored dots (one per attached task's own color, see Task
-  // Management's Task Color picker) rather than a plain count -- lets a
-  // manager tell at a glance which KIND of tasks are on a day without
-  // opening it, not just how many.
+  // A visible extra line in the cell's normal flow, not a tiny corner
+  // accent -- a plain colored dot tucked in the corner (the original
+  // version of this) was too easy to miss entirely, especially at
+  // Monthly Rota's smaller cell size, and read as a generic notification
+  // marker rather than "there's a task here". Up to 3 colored dots (one
+  // per attached task's own color, see Task Management's Task Color
+  // picker) plus the count, so a manager can tell at a glance which KIND
+  // of tasks are on a day without opening it, not just how many -- full
+  // names are still in the hover tooltip.
   const dots=tasks.slice(0,3).map(t=>`<span class="rota-task-dot" style="background:${escapeHtml(t.color||TASK_COLORS[0])}"></span>`).join('');
-  const taskBadge=taskCount?`<i class="rota-task-badge" title="${taskCount} task${taskCount>1?'s':''} attached: ${escapeHtml(tasks.map(t=>t.title).filter(Boolean).join(', '))}">${dots}</i>`:'';
-  return `<div class="rota-cell ${escapeHtml(className)}" style="position:relative"><strong>${escapeHtml(code)}</strong><span>${escapeHtml(time)}</span><em>${escapeHtml(icon)}</em>${taskBadge}</div>`;
+  const taskRow=taskCount?`<i class="rota-task-badge" title="${taskCount} task${taskCount>1?'s':''} attached: ${escapeHtml(tasks.map(t=>t.title).filter(Boolean).join(', '))}">${dots}<b>${taskCount} task${taskCount>1?'s':''}</b></i>`:'';
+  return `<div class="rota-cell ${escapeHtml(className)}"><strong>${escapeHtml(code)}</strong><span>${escapeHtml(time)}</span><em>${escapeHtml(icon)}</em>${taskRow}</div>`;
 }
 
 function rotaHours(assignment){

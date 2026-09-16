@@ -1198,8 +1198,12 @@ body:not(.theme-light) .mb3-vat-side{background:linear-gradient(180deg,rgba(139,
 .rota-cell strong{display:block;font-size:12px;color:var(--text);}
 .rota-cell span{display:block;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);margin-top:2px;}
 .rota-cell em{font-style:normal;font-size:11px;color:var(--text3);}
-.rota-task-badge{position:absolute;top:4px;right:5px;display:flex;align-items:center;gap:2px;}
-.rota-task-dot{width:7px;height:7px;border-radius:50%;display:inline-block;box-shadow:0 0 0 1px rgba(0,0,0,.15);}
+/* An in-flow row (not an absolutely-positioned corner accent, which was
+   easy to miss entirely, especially at Monthly Rota's smaller cell size)
+   -- shows only when the cell has at least one task attached. */
+.rota-task-badge{display:flex;align-items:center;gap:4px;margin-top:3px;padding-top:3px;border-top:1px dashed var(--border2);}
+.rota-task-badge b{font-style:normal;font-weight:600;font-size:9.5px;color:var(--text2);white-space:nowrap;}
+.rota-task-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0;box-shadow:0 0 0 1px rgba(0,0,0,.15);}
 
 /* A role without employees:view_salary never gets real figures back from
    the server (see app_data.py's _redact_employee_salary()) -- this just
