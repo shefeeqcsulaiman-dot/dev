@@ -20844,9 +20844,10 @@ function _rotaExportData(){
     const cells=dates.map((date,i)=>{
       const a=rotaAssignmentsById.get(rotaAssignmentId(s.id,date));
       const isHoliday=!!dayHolidays[i]||String(a?.code||'').toUpperCase()==='PH';
-      if(!a||!a.code||a.code==='OFF')return{code:isHoliday?'PH':'OFF',time:'-',hours:0,isHoliday};
+      const tasks=Array.isArray(a?.tasks)?a.tasks:[];
+      if(!a||!a.code||a.code==='OFF')return{code:isHoliday?'PH':'OFF',time:'-',hours:0,isHoliday,tasks};
       const time=(a.start&&a.end)?`${a.start}-${a.end}`:'-';
-      return{code:a.code||'—',time,hours:rotaHours(a),isHoliday};
+      return{code:a.code||'—',time,hours:rotaHours(a),isHoliday,tasks};
     });
     const total=cells.reduce((s,c)=>s+c.hours,0);
     return{name:s.name,department:s.department,role:s.role,cells,total};
@@ -20876,7 +20877,8 @@ function downloadRotaPdf(){
       const{bg:cbg,fg:cfg}=_shiftColor(c.code,c.isHoliday);
       const isBlank=c.code==='OFF'&&!c.isHoliday;
       const label=c.isHoliday&&c.code==='OFF'?'PH':c.code;
-      return `<td style="padding:5px 3px;text-align:center;background:${bg}"><div style="background:${cbg};color:${cfg};border-radius:5px;padding:3px 4px;font-size:9.5px;font-weight:700;line-height:1.4">${isBlank?'<span style="opacity:.4">—</span>':`${escapeHtml(label)}<br><span style="font-weight:400;font-size:8.5px">${escapeHtml(c.time)}</span>`}</div></td>`;
+      const tasksHtml=(c.tasks&&c.tasks.length)?`<div style="margin-top:3px;padding-top:3px;border-top:1px dashed ${cfg}55;text-align:left">${c.tasks.map(t=>`<div style="font-size:7.5px;font-weight:600;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${escapeHtml(t.color||'#2563eb')};margin-right:3px"></span>${escapeHtml(t.title||'Task')}${t.start&&t.end?` <span style="font-weight:400;opacity:.75">${t.start}-${t.end}</span>`:''}</div>`).join('')}</div>`:'';
+      return `<td style="padding:5px 3px;text-align:center;background:${bg}"><div style="background:${cbg};color:${cfg};border-radius:5px;padding:3px 4px;font-size:9.5px;font-weight:700;line-height:1.4">${isBlank?'<span style="opacity:.4">—</span>':`${escapeHtml(label)}<br><span style="font-weight:400;font-size:8.5px">${escapeHtml(c.time)}</span>`}${tasksHtml}</div></td>`;
     }).join('');
     return `<tr>
       <td style="padding:6px 8px;background:${bg};font-size:10px;font-weight:600;white-space:nowrap">${escapeHtml(r.name)}</td>
@@ -20927,6 +20929,7 @@ function downloadRotaPdf(){
       ${[['#dcfce7','#14532d','Working Day'],['#f3f4f6','#6b7280','Day Off'],['#fee2e2','#b91c1c','Public Holiday'],['#fef3c7','#92400e','Leave']].map(([bg,fg,label])=>`<div style="display:flex;align-items:center;gap:6px;font-size:9.5px;color:#1e293b"><span style="width:16px;height:16px;border-radius:3px;background:${bg};border:1px solid ${fg}"></span> ${label}</div>`).join('')}
     </div>
     <div style="font-size:8.5px;color:#64748b">Shift Codes — M: Morning &middot; E: Evening &middot; N: Night &middot; OT: Overtime &middot; L: Leave &middot; OFF: Day Off &middot; PH: Public Holiday</div>
+    <div style="font-size:8.5px;color:#64748b;margin-top:2px">Colored dots under a shift are that day's assigned tasks (from Weekly/Monthly Rota task assignment), with their scheduled time.</div>
     ${dayHolidays.some(Boolean)?`<div style="font-size:8.5px;color:#b91c1c;margin-top:4px"><strong>Public Holidays this week:</strong> ${dates.map((d,i)=>dayHolidays[i]?`${d.slice(5)} – ${escapeHtml(dayHolidays[i])}`:null).filter(Boolean).join(', ')}</div>`:''}
   </div>
   <script>window.onload=function(){window.print();}<\/script>
@@ -20942,9 +20945,13 @@ function downloadRotaExcel(){
   const companyName=document.getElementById('sb-company-name')?.textContent||'TaxFlow HRMS';
   const BOM='﻿';
   const headers=['Employee','Department','Role',...ROTA_WEEK_DAYS.map((d,i)=>`${d} ${dates[i]}${dayHolidays[i]?` [Public Holiday: ${dayHolidays[i]}]`:''}`),'Total Hours'];
+  const taskSuffix=c=>{
+    if(!c.tasks||!c.tasks.length)return'';
+    return ` [Tasks: ${c.tasks.map(t=>`${t.title||'Task'}${t.start&&t.end?` ${t.start}-${t.end}`:''}`).join('; ')}]`;
+  };
   const cellText=c=>{
-    if(c.isHoliday)return c.code==='OFF'?'PUBLIC HOLIDAY':`${c.code} ${c.time} (Public Holiday)`;
-    return c.code==='OFF'?'OFF':`${c.code} ${c.time}`;
+    if(c.isHoliday)return(c.code==='OFF'?'PUBLIC HOLIDAY':`${c.code} ${c.time} (Public Holiday)`)+taskSuffix(c);
+    return(c.code==='OFF'?'OFF':`${c.code} ${c.time}`)+taskSuffix(c);
   };
   const dataRows=rows.map(r=>[
     r.name, r.department, r.role,
@@ -20965,6 +20972,7 @@ function downloadRotaExcel(){
     'OFF = Day Off',
     'PUBLIC HOLIDAY = Company holiday (see Holiday Calendar)',
     'L = Leave',
+    '[Tasks: ...] = tasks assigned to that shift via Weekly/Monthly Rota, with their scheduled time',
   ].join('\r\n');
   const blob=new Blob([BOM+csv],{type:'text/csv;charset=utf-8'});
   const url=URL.createObjectURL(blob);
