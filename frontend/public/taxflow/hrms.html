@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=9483059d6a" as="script">
+<link rel="preload" href="src/app.js?v=c0278248b2" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
@@ -2129,13 +2129,26 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
         <div class="divider"></div>
         <div class="flx" style="gap:8px;flex-wrap:wrap"><button class="btn btn-g btn-sm" onclick="autoGenerateRota()">Bulk Assign</button><button class="btn btn-g btn-sm" onclick="toast('Employee notifications queued','ok')">Notify Employees</button></div>
       </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-title">Weekly Summary</div></div>
-        <table class="tbl" data-delete-actions-bound="skip">
-          <tbody id="rota-weekly-summary-tbody"></tbody>
-        </table>
-        <div class="divider"></div>
-        <div class="rota-code-row" id="rota-code-row"></div>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <!-- Click an employee's name in Staff Schedule (selectRotaStaffForTasks())
+             to see their tasks for the week here, day by day with each
+             task's time -- previously the only way to see a task's time
+             was opening the Edit Shift modal for one specific day at a
+             time; this gives the whole week for one person in one place. -->
+        <div class="card" id="rota-emp-tasks-card">
+          <div class="card-hd"><div class="card-title" style="margin-bottom:0">Employee Tasks</div></div>
+          <div id="rota-emp-tasks-body">
+            <div class="rota-emp-tasks-empty">Click an employee's name in Staff Schedule to see their tasks for the week.</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><div class="card-title">Weekly Summary</div></div>
+          <table class="tbl" data-delete-actions-bound="skip">
+            <tbody id="rota-weekly-summary-tbody"></tbody>
+          </table>
+          <div class="divider"></div>
+          <div class="rota-code-row" id="rota-code-row"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -3020,7 +3033,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=9483059d6a" defer></script>
+<script src="src/app.js?v=c0278248b2" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

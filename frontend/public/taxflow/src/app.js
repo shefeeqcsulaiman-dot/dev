@@ -20154,6 +20154,45 @@ function _rotaTruncationNoticeHtml(){
   return `<div class="empty-card" style="color:var(--amber);margin-bottom:8px">Showing the first ${ROTA_STAFF_DISPLAY_CAP} of ${total} employees — use the Department filter to narrow this down.</div>`;
 }
 
+// Set by clicking an employee's name in Staff Schedule (see
+// selectRotaStaffForTasks()) -- drives the "Employee Tasks" side panel
+// that replaced Weekly Summary's old top slot (Weekly Summary itself
+// just moved down one card, unchanged otherwise).
+let selectedRotaStaffId=null;
+
+function selectRotaStaffForTasks(staffId){
+  selectedRotaStaffId=(selectedRotaStaffId===staffId)?null:staffId; // click again to deselect
+  renderWeeklyRotaBoard();
+  renderRotaEmployeeTasksPanel();
+}
+
+function renderRotaEmployeeTasksPanel(){
+  const body=document.getElementById('rota-emp-tasks-body');
+  const titleEl=document.querySelector('#rota-emp-tasks-card .card-title');
+  if(!body)return;
+  const staff=filteredRotaStaff('week').find(s=>s.id===selectedRotaStaffId);
+  if(!staff){
+    if(titleEl)titleEl.textContent='Employee Tasks';
+    body.innerHTML='<div class="rota-emp-tasks-empty">Click an employee\'s name in Staff Schedule to see their tasks for the week.</div>';
+    return;
+  }
+  if(titleEl)titleEl.textContent=`${staff.name} — This Week`;
+  const start=weekStartValue();
+  const dayBlocks=ROTA_WEEK_DAYS.map((day,index)=>{
+    const date=weekDateFromStart(start,index);
+    const assignment=assignmentFor(staff,date,day);
+    const tasks=Array.isArray(assignment.tasks)?assignment.tasks:[];
+    if(!tasks.length)return '';
+    const dateLabel=`${day} ${date.slice(8,10)}/${date.slice(5,7)}`;
+    const taskRows=tasks.map(t=>{
+      const time=t.start&&t.end?`${t.start}–${t.end}`:(t.start||t.end||'');
+      return `<div class="rota-emp-task-row"><span class="rota-emp-task-dot" style="background:${escapeHtml(t.color||TASK_COLORS[0])}"></span><span class="rota-emp-task-title">${escapeHtml(t.title||'Untitled task')}</span><span class="rota-emp-task-time">${escapeHtml(time)}</span></div>`;
+    }).join('');
+    return `<div class="rota-emp-tasks-day">${escapeHtml(dateLabel)}</div>${taskRows}`;
+  }).filter(Boolean).join('');
+  body.innerHTML=dayBlocks||`<div class="rota-emp-tasks-empty">No tasks scheduled this week for ${escapeHtml(staff.name)}.</div>`;
+}
+
 function renderWeeklyRotaBoard(){
   const board=document.getElementById('rota-weekly-board');
   if(!board)return;
@@ -20171,7 +20210,8 @@ function renderWeeklyRotaBoard(){
       return `<button class="rota-day-cell" type="button" onclick="openRotaCellEditor(this)" data-assignment="${escapeHtml(JSON.stringify(assignment))}" data-employee-id="${escapeHtml(staff.id)}" data-employee-name="${escapeHtml(staff.name)}" data-role="${escapeHtml(staff.role)}" data-department="${escapeHtml(staff.department)}" data-location="${escapeHtml(staff.location)}" data-date="${escapeHtml(date)}" data-day="${escapeHtml(day)}"><small>${escapeHtml(day)} ${escapeHtml(date.slice(8))}</small>${rotaCellHtml(assignment)}</button>`;
     }).join('');
     const total=ROTA_WEEK_DAYS.reduce((sum,day,index)=>sum+rotaHours(assignmentFor(staff,weekDateFromStart(start,index),day)),0);
-    return `<div class="rota-staff-row"><div class="rota-staff-meta"><strong>${escapeHtml(staff.name)}</strong><span>${escapeHtml(staff.role)} · ${escapeHtml(staff.department)}</span><em>${total.toFixed(1)} hrs</em></div><div class="rota-day-grid">${cells}</div></div>`;
+    const rowSelected=staff.id===selectedRotaStaffId?' rota-staff-row-selected':'';
+    return `<div class="rota-staff-row${rowSelected}"><div class="rota-staff-meta" onclick="selectRotaStaffForTasks('${escapeHtml(staff.id)}')" title="Click to see this employee's tasks for the week"><strong>${escapeHtml(staff.name)}</strong><span>${escapeHtml(staff.role)} · ${escapeHtml(staff.department)}</span><em>${total.toFixed(1)} hrs</em></div><div class="rota-day-grid">${cells}</div></div>`;
   }).join('');
 }
 
@@ -20350,6 +20390,7 @@ function renderRotaCodes(){
 
 function renderRotaBoards(){
   renderWeeklyRotaBoard();
+  renderRotaEmployeeTasksPanel();
   renderMonthlyRotaBoard();
   renderMonthlyStaffOverview();
   renderDepartmentRota();
