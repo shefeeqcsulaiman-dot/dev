@@ -18339,28 +18339,59 @@ function _leavePolicyRowHtml(name,days,basis,encash,carryForward){
     <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>`;
 }
 
+// Generic single-field "+ Add X" modal (#m-quick-add in hrms.html) --
+// replaces the native prompt() every one-field "add a named item" flow in
+// this app used to reach for (Leave Policy, Job Grade, and previously
+// Holiday before it grew into its own multi-field modal). A native
+// prompt() is an unstyled OS popup that ignores dark mode and blocks the
+// main thread; this reuses the same showM()/hideM() modal system as
+// every other "+ Add" button already does.
+function _openQuickAddModal(opts){
+  const titleEl=document.getElementById('quick-add-title');
+  const labelEl=document.getElementById('quick-add-label');
+  const inputEl=document.getElementById('quick-add-input');
+  const btnEl=document.getElementById('quick-add-confirm-btn');
+  if(titleEl)titleEl.textContent=opts.title||'Add Item';
+  if(labelEl)labelEl.textContent=opts.label||'Name';
+  if(inputEl){inputEl.value='';inputEl.placeholder=opts.placeholder||'';}
+  if(btnEl)btnEl.onclick=function(){
+    const value=(inputEl?.value||'').trim();
+    if(!value){toast((opts.label||'This field')+' is required','warn');return;}
+    hideM('m-quick-add');
+    opts.onConfirm(value);
+  };
+  showM('m-quick-add');
+  setTimeout(()=>inputEl?.focus(),120);
+}
+
 function addLeavePolicy(){
-  const name=prompt('Policy Name (e.g. "Part-Time Pro-Rata"):');
-  if(!name?.trim())return;
-  const tbody=document.getElementById('leave-policies-tbody');
-  if(!tbody)return;
-  const tr=document.createElement('tr');
-  tr.dataset.policyValue=name.trim();
-  tr.innerHTML=_leavePolicyRowHtml(name.trim());
-  tbody.appendChild(tr);
-  toast(`Policy "${name.trim()}" added`,'ok');
+  _openQuickAddModal({
+    title:'Add Leave Policy', label:'Policy Name', placeholder:'e.g. "Part-Time Pro-Rata"',
+    onConfirm:function(name){
+      const tbody=document.getElementById('leave-policies-tbody');
+      if(!tbody)return;
+      const tr=document.createElement('tr');
+      tr.dataset.policyValue=name;
+      tr.innerHTML=_leavePolicyRowHtml(name);
+      tbody.appendChild(tr);
+      toast(`Policy "${name}" added`,'ok');
+    }
+  });
 }
 
 function addHrJobGrade(){
-  const name=prompt('New Job Grade (e.g. Grade E — Intern):');
-  if(!name?.trim())return;
-  const wrap=document.getElementById('job-grade-tags-wrap');
-  if(!wrap)return;
-  const span=document.createElement('span');
-  span.className='dept-tag';
-  span.innerHTML=`${escapeHtml(name.trim())}<button onclick="removeHrJobGrade(this)" title="Remove">×</button>`;
-  wrap.appendChild(span);
-  toast(`Job grade "${name.trim()}" added`,'ok');
+  _openQuickAddModal({
+    title:'Add Job Grade', label:'Job Grade', placeholder:'e.g. Grade E — Intern',
+    onConfirm:function(name){
+      const wrap=document.getElementById('job-grade-tags-wrap');
+      if(!wrap)return;
+      const span=document.createElement('span');
+      span.className='dept-tag';
+      span.innerHTML=`${escapeHtml(name)}<button onclick="removeHrJobGrade(this)" title="Remove">×</button>`;
+      wrap.appendChild(span);
+      toast(`Job grade "${name}" added`,'ok');
+    }
+  });
 }
 function removeHrJobGrade(btn){
   const tag=btn.closest('.dept-tag');
@@ -20685,20 +20716,38 @@ function _renderHolidayRow(rec){
   if(!tbody.children.length)emptyTableMessage(tbody,'No holidays added yet.');
 }
 
+// Was a chain of 4 native browser dialogs (3 prompt()s + 1 confirm()) in
+// a row -- unstyled OS popups that break out of the app's own look
+// entirely (ignore dark mode, block the main thread, no way to go back a
+// step without cancelling the whole thing). Now a single in-app modal,
+// the same pattern every other "+ Add X" button in this app already uses.
 function addHoliday(){
-  const isoDate=prompt('Holiday date (YYYY-MM-DD):',new Date().toISOString().slice(0,10));
-  if(!isoDate)return;
+  const dateEl=document.getElementById('holiday-date');
+  const nameEl=document.getElementById('holiday-name');
+  const locEl=document.getElementById('holiday-location');
+  const paidEl=document.getElementById('holiday-paid');
+  if(dateEl)dateEl.value=new Date().toISOString().slice(0,10);
+  if(nameEl)nameEl.value='';
+  if(locEl)locEl.value='All branches';
+  if(paidEl)paidEl.value='yes';
+  showM('m-add-holiday');
+  setTimeout(()=>nameEl?.focus(),120);
+}
+
+function confirmAddHoliday(){
+  const isoDate=document.getElementById('holiday-date')?.value||'';
+  const name=(document.getElementById('holiday-name')?.value||'').trim();
+  const location=(document.getElementById('holiday-location')?.value||'').trim()||'All branches';
+  const paid=document.getElementById('holiday-paid')?.value==='yes';
   const parsed=new Date(isoDate+'T00:00:00');
-  if(isNaN(parsed.getTime())){toast('Enter a valid date (YYYY-MM-DD)','warn');return;}
-  const name=prompt('Holiday name (e.g. "Eid Al Fitr"):');
-  if(!name?.trim())return;
-  const location=prompt('Applies to (default: All branches):','All branches')||'All branches';
-  const paid=confirm('Is this a paid holiday? OK = Yes, Cancel = No');
+  if(!isoDate||isNaN(parsed.getTime())){toast('Enter a valid date','warn');return;}
+  if(!name){toast('Holiday name is required','warn');return;}
   const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const display=`${String(parsed.getDate()).padStart(2,'0')} ${months[parsed.getMonth()]}`;
-  const rec={id:'holiday-'+Date.now(),date:isoDate,display_date:display,name:name.trim(),location:location.trim(),paid,status:'Active'};
+  const rec={id:'holiday-'+Date.now(),date:isoDate,display_date:display,name,location,paid,status:'Active'};
   _renderHolidayRow(rec);
   saveServer('hrHolidays',rec);
+  hideM('m-add-holiday');
   toast('Holiday added','ok');
 }
 
