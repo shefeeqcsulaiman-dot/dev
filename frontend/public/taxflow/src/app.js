@@ -25669,7 +25669,15 @@ function _applyModuleFilter(data){
   const invCols=['salesInvoices','quotations','salesCategories','salesUnits','customers','creditControl','invoices_db','invoice_lines_db'];
   const purCols=['purchaseRecords','purchaseDocuments','bills','vendors','payments','receipts'];
   const jnlCols=['accounts','ledger','journalDrafts','bankAccounts','bankTransactions','vatReturns','corporateTax','fixedAssets','accrualsPrepayments','costCenters','budgets','cashFlowForecasts','consolidation','relatedPartyTransactions','accounts_db','general_ledger_db','source_transactions_db'];
-  const hrCols=['employees','rotaShifts','rotaAssignments','rotaSwaps','rotaApprovals','rotaDrafts','employees_db','payroll_runs_db','payroll_items_db'];
+  // Previously missed most of HRMS: leave requests and attendance history
+  // are real Tier 1 tables (leave_requests_db/attendance_details_db, added
+  // to export_all_data()/export_db_dump() alongside this) that a "Payroll &
+  // HR: Employee records and payroll data" backup should obviously include,
+  // and tasks/overtime/loans/salary-advances/corrections/recruitment/
+  // hr_settings were never assigned to ANY category at all — meaning they
+  // silently downloaded regardless of whether "Payroll & HR" was checked or
+  // not, the opposite of what an unchecked toggle promises.
+  const hrCols=['employees','rotaShifts','rotaAssignments','rotaSwaps','rotaApprovals','rotaDrafts','tasks','overtimeRequests','employeeLoans','salaryAdvances','attendanceCorrections','jobRequisitions','candidates','payrollAdjustments','hr_settings','employees_db','payroll_runs_db','payroll_items_db','leave_requests_db','attendance_details_db'];
   const filtered={};
   Object.keys(data).forEach(k=>{
     if(k==='audit'&&!include.audit)return;
@@ -25723,6 +25731,16 @@ async function downloadExcelBackup(){
       ['Employees (HR)',       ['employees_db']],
       ['Payroll Runs',         ['payroll_runs_db']],
       ['Payroll Items',        ['payroll_items_db']],
+      ['Leave Requests',       ['leave_requests_db']],
+      ['Attendance',           ['attendance_details_db']],
+      // Legacy Tier 2 HR collections (never had their own sheet before —
+      // they were in the export payload but just silently dropped here).
+      ['Tasks',                ['tasks']],
+      ['Overtime Requests',    ['overtimeRequests']],
+      ['Employee Loans',       ['employeeLoans']],
+      ['Salary Advances',      ['salaryAdvances']],
+      ['Attendance Corrections',['attendanceCorrections']],
+      ['Rota',                 ['rotaAssignments']],
     ];
 
     sheetMap.forEach(([sheetName,keys])=>{

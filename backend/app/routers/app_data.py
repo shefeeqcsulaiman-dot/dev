@@ -41,6 +41,7 @@ from app.routers.inventory import consume_valuation_layers
 from app.models import (
     Account,
     AppDataRecord,
+    AttendanceDetail,
     AuditLog,
     AuditLogDetail,
     Branch,
@@ -52,6 +53,7 @@ from app.models import (
     InvoiceLine,
     JournalEntry,
     JournalLine,
+    LeaveRequest,
     Payment,
     PostingJob,
     PayrollItem,
@@ -893,6 +895,29 @@ def export_all_data(
         if payroll_run_ids else []
     )
 
+    # "Payroll & HR" promised "employee records and payroll data" but never
+    # queried either of these two real Tier 1 tables -- leave_requests
+    # (leave.py's own real table, no longer part of the AppDataRecord
+    # bridge at all -- see loadLeaveRequests()) and attendance_details
+    # (attendance_store.py, superseded the old AttendancePunch table) are
+    # both core HR records a company would expect "full company data" to
+    # include, on par with payroll runs and the employee master list above.
+    leave_cols = ["id", "employee_id", "leave_type", "start_date", "end_date", "days", "reason", "status", "approved_by", "approved_by_employee_id", "approved_at"]
+    leave_requests_db = [
+        _export_row_to_dict(lr, leave_cols)
+        for lr in db.query(LeaveRequest).filter(LeaveRequest.company_id == company_id).order_by(LeaveRequest.start_date.asc()).all()
+    ]
+    attendance_cols = [
+        "id", "employee_id", "employee_name", "work_date",
+        "clock_in_1", "clock_out_1", "work_seconds_1", "clock_in_2", "clock_out_2", "work_seconds_2",
+        "clock_in_3", "clock_out_3", "work_seconds_3", "clock_in_4", "clock_out_4", "work_seconds_4",
+        "clock_in_5", "clock_out_5", "work_seconds_5", "total_seconds", "ot_seconds", "under_seconds", "session_count",
+    ]
+    attendance_details_db = [
+        _export_row_to_dict(a, attendance_cols)
+        for a in db.query(AttendanceDetail).filter(AttendanceDetail.company_id == company_id).order_by(AttendanceDetail.work_date.asc()).all()
+    ]
+
     audit_rows = (
         db.query(AuditLog)
         .filter(AuditLog.company_id == current_user.company_id)
@@ -945,6 +970,8 @@ def export_all_data(
             "employees_db": employees_db,
             "payroll_runs_db": payroll_runs_db,
             "payroll_items_db": payroll_items_db,
+            "leave_requests_db": leave_requests_db,
+            "attendance_details_db": attendance_details_db,
         },
     }
 
@@ -1078,6 +1105,15 @@ def export_db_dump(
         db.query(PayrollItem).filter(PayrollItem.run_id.in_(pr_ids)).all()
         if pr_ids else []
     )
+    # Same gap as export_all_data() above (JSON/Excel path) -- these two
+    # real Tier 1 tables were never queried here either, so a "full backup"
+    # SQL dump silently had no leave or attendance history in it at all.
+    rows_leave = (
+        db.query(LeaveRequest).filter(LeaveRequest.company_id == company_id).order_by(LeaveRequest.start_date.asc()).all()
+    )
+    rows_att = (
+        db.query(AttendanceDetail).filter(AttendanceDetail.company_id == company_id).order_by(AttendanceDetail.work_date.asc()).all()
+    )
 
     # ── helpers (operate on plain Python values — no DB access) ──────
     def _esc(val: Any) -> str:
@@ -1183,10 +1219,30 @@ def export_db_dump(
             lines.append(_insert("payroll_items", cols, r))
         lines.append("\n")
 
+    if rows_leave:
+        cols = ["id", "company_id", "employee_id", "leave_type", "start_date", "end_date", "days",
+                "reason", "status", "approved_by", "approved_by_employee_id", "approved_at", "created_at", "updated_at"]
+        lines.append(f"-- leave_requests ({len(rows_leave)} rows)\n")
+        for r in rows_leave:
+            lines.append(_insert("leave_requests", cols, r))
+        lines.append("\n")
+
+    if rows_att:
+        cols = ["id", "company_id", "employee_id", "employee_name", "work_date",
+                "clock_in_1", "clock_out_1", "work_seconds_1", "clock_in_2", "clock_out_2", "work_seconds_2",
+                "clock_in_3", "clock_out_3", "work_seconds_3", "clock_in_4", "clock_out_4", "work_seconds_4",
+                "clock_in_5", "clock_out_5", "work_seconds_5", "total_seconds", "ot_seconds", "under_seconds",
+                "session_count", "raw_events", "created_at", "updated_at"]
+        lines.append(f"-- attendance_details ({len(rows_att)} rows)\n")
+        for r in rows_att:
+            lines.append(_insert("attendance_details", cols, r))
+        lines.append("\n")
+
     lines.append("COMMIT;\n")
     lines.append(
         f"\n-- {len(rows_adr)} data records · {len(rows_inv)} invoices · {len(rows_acc)} accounts · "
-        f"{len(rows_gl)} ledger entries · {len(rows_pr)} payroll runs · {len(rows_audit)} audit entries\n"
+        f"{len(rows_gl)} ledger entries · {len(rows_pr)} payroll runs · {len(rows_leave)} leave requests · "
+        f"{len(rows_att)} attendance days · {len(rows_audit)} audit entries\n"
     )
 
     sql_text = "".join(lines)
