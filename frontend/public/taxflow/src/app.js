@@ -973,15 +973,31 @@ function applyHrmsSalaryVisibility(){
 function renderEmployeeRecord(employee){
   const tbody=document.getElementById('employee-tbody');
   if(!tbody)return;
-  const rows=[...tbody.querySelectorAll('tr')];
-  const existing=rows.find(row=>{
-    const data=row.dataset.employee?JSON.parse(row.dataset.employee):null;
-    const id=row.querySelector('td:first-child')?.textContent.trim();
-    return data?.id===employee.id||id===employee.id;
-  });
+  const [sortRank,sortId]=_employeeSortKey(employee.status,employee.id);
+  // Dedup + sorted-insertion-point used to be TWO separate JS scans over
+  // every row, each calling JSON.parse(row.dataset.employee) per row to
+  // read the id/status back out -- an O(n) scan with real parsing cost,
+  // done TWICE, once per employee during bootstrap hydration (so O(n^2)
+  // total: ~90,000 JSON.parse calls for a 300-employee company, one of the
+  // causes of HRMS's multi-second load freeze, see the isHydratingFromServer
+  // fix above this function). One querySelectorAll + one pass now finds
+  // both the row to remove and the insertion point together, comparing
+  // plain attributes (set below) instead of parsing JSON per row.
+  const employeeIdStr=String(employee.id);
+  let existing=null,nextSibling=null;
+  for(const r of tbody.querySelectorAll('tr')){
+    if(r.dataset.employeeId===employeeIdStr){existing=r;continue;}
+    if(nextSibling||r.dataset.emptyState)continue;
+    const rRank=Number(r.dataset.sortRank??1);
+    const rId=Number(r.dataset.sortId??Infinity);
+    if(rRank>sortRank||(rRank===sortRank&&rId>sortId))nextSibling=r;
+  }
   if(existing)existing.remove();
   const row=document.createElement('tr');
   row.dataset.employee=JSON.stringify(employee);
+  row.dataset.employeeId=employeeIdStr;
+  row.dataset.sortRank=sortRank;
+  row.dataset.sortId=sortId;
   row.innerHTML=`
     <td class="mono">${escapeHtml(employee.id)}</td>
     <td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px${employee.photo?';padding:0;overflow:hidden':''}">${employee.photo?`<img src="${employee.photo}" style="width:100%;height:100%;object-fit:cover">`:escapeHtml(initialsFromName(employee.name))}</div><div>${escapeHtml(employee.name)}<div class="card-sub">${escapeHtml(employee.contract||'Full-time')} · ${escapeHtml(employee.location||'Dubai HQ')}</div></div></div></td>
@@ -1001,13 +1017,7 @@ function renderEmployeeRecord(employee){
   // interleaved by number with active staff — toggling an employee to
   // Inactive re-inserts their row here too, so Deactivate immediately moves
   // them down instead of leaving them in their old numeric position.
-  const newKey=_employeeSortKey(employee.status,employee.id);
-  const nextSibling=rows.filter(r=>r!==existing).find(r=>{
-    const rdata=r.dataset.employee?JSON.parse(r.dataset.employee):null;
-    const rid=rdata?.id??r.querySelector('td:first-child')?.textContent.trim();
-    const rkey=_employeeSortKey(rdata?.status,rid);
-    return rkey[0]>newKey[0]||(rkey[0]===newKey[0]&&rkey[1]>newKey[1]);
-  });
+  // nextSibling was already found above, in the same pass as the dedup check.
   if(nextSibling)tbody.insertBefore(row,nextSibling);
   else tbody.appendChild(row);
   const table=tbody.closest('table');
@@ -20469,7 +20479,12 @@ function renderRotaShiftRecord(shift){
   removeEmptyState(tbody);
   if(existing||options.prepend===false)tbody.appendChild(row);
   else tbody.prepend(row);
-  updateRotaStats();
+  // Same isHydratingFromServer guard as renderEmployeeRecord()/
+  // renderRotaAssignmentRecord() above -- lower-impact here since Shift
+  // Setup tables are typically small, but this runs once per shift during
+  // bootstrap hydration too, and the hydration loop already refreshes stats
+  // once after it finishes (see the renderRecordList(...,'rota shift') call site).
+  if(!isHydratingFromServer)updateRotaStats();
 }
 
 // "View" was a dead button (toast only) — Shift Setup previously had no
