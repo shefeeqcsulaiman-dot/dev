@@ -11,7 +11,7 @@ HRMS has two different persistence tiers, and knowing which tier a feature is on
 ```text
 Tier 1 — Real ORM tables (backend/app/models.py)
   Employee, PayrollRun, PayrollItem, WpsBatch,
-  BiometricDevice, AttendancePunch, LeaveRequest,
+  BiometricDevice, AttendanceDetail, LeaveRequest,
   Role, Permission, RolePermission,
   Branch, EmployeeBranchAccess,
   CompanyLocation, EmployeeLocation, AttendanceSession, EmployeeLocationLog
@@ -38,8 +38,11 @@ Tier 2 — JSON bridge collections (app_data_records via saveServer())
 HRMS
 |-- Core HR
 |   |-- Employee Master           [Tier 1: Employee]
-|   |-- Attendance                [Tier 1: AttendancePunch, BiometricDevice —
-|   |                                       device/CSV/manual punches]
+|   |-- Attendance                [Tier 1: AttendanceDetail, BiometricDevice — one row
+|   |                                       per company/employee/calendar day, every
+|   |                                       individual scan (device/CSV/manual/BioTime)
+|   |                                       kept in a raw_events JSON column on top of
+|   |                                       the aggregated clock-in/out columns; see §7]
 |   |-- GPS Attendance            [Tier 1: AttendanceSession, EmployeeLocationLog —
 |   |                                       employee-initiated check-in/out, separate
 |   |                                       from device punches, see §7]
@@ -48,8 +51,14 @@ HRMS
 |   |-- Corrections               [Tier 2, via attendance UI]
 |   |-- Loans & Advances          [Tier 2: employeeLoans, salaryAdvances]
 |   |-- Expiry Alerts             [derived — reads Employee document fields, no own table]
-|   |-- Task Management           [Tier 2: tasks — Kanban board, admin/manager-only,
-|   |                                       no ESS-facing view yet]
+|   |-- Task Management           [Tier 2: tasks — flat table (the earlier Kanban
+|   |                                       board was replaced), an assignee, a fixed
+|   |                                       8-color picker, and a "+ Assign Task" flow
+|   |                                       that can assign one saved task to several
+|   |                                       employees at once; ESS-facing (GET
+|   |                                       /ess/tasks) and Rota-integrated — attaching
+|   |                                       a task to a Weekly Rota day can assign it to
+|   |                                       that employee in the same action, see §7]
 |   |-- HR Settings               [Tier 2: hr_settings — OT rules, weekend policy,
 |   |                                       leave policy, dept/branch/role config]
 |   `-- Biometric Devices         [Tier 1: BiometricDevice]
@@ -117,13 +126,36 @@ frontend/public/taxflow/hrms.html
 |                             Corrections, Loans & Advances, Expiry Alerts,
 |                             HR Settings (incl. Departments & Branches, Roles &
 |                             Permissions, OT Rules, Weekend Policy), Biometric
-|-- page-rota          Tabs: Weekly Schedule, Monthly Staff Overview (real
-|                             Mon-Sun week-grid, ISO week numbers), Department Rota
+|-- page-rota          Tabs: Weekly Rota, Monthly Rota, Department Rota, Swap
+|                             Requests, Rota Approval. Weekly Rota's Staff Schedule
+|                             cell is clickable (opens Edit Shift: shift type/times/
+|                             break/notes plus a "Tasks for this Day" list, each task
+|                             carrying its own time range and inheriting Task
+|                             Management's color) — Monthly Rota's day cells are the
+|                             same clickable button/rotaCellHtml(), so a task attached
+|                             on Weekly shows there too. Clicking an employee's name
+|                             (not a day cell) opens "Employee Tasks", a day-by-day
+|                             list of that employee's tasks for the week with times,
+|                             which sits where "Weekly Summary" used to and pushed
+|                             that card down one slot. Monthly Rota's side card is
+|                             "Monthly Staff Overview" — active-employee roster with
+|                             real scheduled hours, not the assignment-history count
+|                             it used to derive from rotaAssignmentsById (that
+|                             leaked Inactive employees' old rows into the total).
+|                             Week Start/Month pickers persist the last-viewed
+|                             period to localStorage — previously reset to today's
+|                             week/month on every page reload.
 |-- page-hrms-reports   Reports & Analytics: Attendance Report (sortable
-|                             Present/Absent columns, CSV export) — first report,
-|                             more can be added as further tabs the same way
-|-- page-tasks          Task Management: Kanban board (To Do/In Progress/Done),
-|                             assign a task to an employee, filters, CSV-free for now
+|                             Present/Absent columns, CSV export), Late Coming
+|                             Report (per-employee late-arrival summary against the
+|                             configured start time + grace period) — more can be
+|                             added as further tabs the same way
+|-- page-tasks          Task Management: flat table (the earlier Kanban board was
+|                             removed), "+ Add Task" collects an assignee and a
+|                             color directly, "+ Assign Task" can assign one saved
+|                             task to several employees at once (checkbox grid with
+|                             a search box), a task with no assignee still lists
+|                             (shown as "Unassigned") rather than disappearing
 |-- page-recruitment   Tabs: Job Requisitions, Candidates, Interviews,
 |                             Offer Letters, Onboarding
 |-- page-hrms-ext      Tabs: Performance, Training, Asset Management,
@@ -131,18 +163,31 @@ frontend/public/taxflow/hrms.html
 |-- page-hrms-ai       AI Workbench: CV parsing, attrition, compliance, chatbot
 `-- page-hrms-org      Org chart view (derived, read-only)
 
-frontend/public/taxflow/src/app.js  (shared with main app, ~24,000 lines)
+frontend/public/taxflow/src/app.js  (shared with main app, ~26,000 lines)
 |-- HRMS-specific functions live in this single file, not a separate module.
 |-- saveServer(collection, record) -> POST /api/v1/app-data (Tier 2 write path)
 |-- Key functions: updateOtMultiplier(), previewEmpPhoto(), refreshExpiryAlerts(),
 |   calcLoanEmi(), saveLoan(), saveLoanAdvance(), saveJobRequisition(),
 |   saveCandidate(), filterCandidates(), refreshRecruitmentStats(),
-|   refreshManagerPortalCounts(), renderMonthlyRotaBoard() (week-grid Kanban-
-|   style rota), loadHrAttendanceReport(), renderTaskBoard()/saveTaskModal()
+|   refreshManagerPortalCounts(), renderMonthlyRotaBoard(), renderMonthlyStaffOverview(),
+|   loadHrAttendanceReport(), loadHrLateReport(), renderTaskBoard()/saveTaskModal(),
+|   confirmAssignTask() (multi-employee), _ensureTaskAssignedToEmployee() (shared
+|   by Assign Task and Rota's task picker — clones a saved task into a real
+|   assignment, reusing one already assigned to the same employee instead of
+|   duplicating it), renderRotaEmployeeTasksPanel(), _openQuickAddModal() (generic
+|   single-field modal — addLeavePolicy()/addHrJobGrade() use it; addHoliday() now
+|   opens its own multi-field modal — all three used to be native prompt()/
+|   confirm() chains, up to 4 in a row for Add Holiday)
 |-- currentRotaStaff()/_getAttendanceEmployees() both filter Inactive employees
-|   out of their respective lists — this is the one "Inactive shouldn't appear"
-|   rule enforced client-side; the equivalent server-side rule lives in
-|   GET /payroll/employees (used by the Leave/GPS/Task assignee pickers).
+|   out of their respective lists — this "Inactive shouldn't appear in a live
+|   roster" rule recurs across the codebase and has been found missing in a new
+|   spot more than once (GET /payroll/employees, GET /ess/team, and Monthly
+|   Rota's old "Monthly Summary" panel — which counted straight off
+|   rotaAssignmentsById, a map that deliberately keeps a former employee's past
+|   assignment rows — all needed the same fix separately). Anything new that
+|   lists "who's on my team/roster/rota" should filter Employee.status/
+|   staff.status explicitly rather than assuming an existing helper already
+|   covers it.
 ```
 
 There is no per-module frontend file split for HRMS yet — everything lives in `app.js` alongside the rest of TaxFlow. `docs/architecture.md` Phase 1 already calls for splitting `app.js` by module; HRMS should get its own `hrms.js` bundle when that happens.
@@ -152,20 +197,37 @@ There is no per-module frontend file split for HRMS yet — everything lives in 
 ```text
 backend/app/routers/
 |-- attendance.py   /api/v1/attendance/*   — devices, punch import, trend, summary,
-|                                             monthly-report, bridge-script/report-script
-|-- payroll.py      /api/v1/payroll/*      — employees (active-only), runs, generate,
-|                                             wps-batch
+|                                             monthly-report, late-report, employee-daily,
+|                                             bridge-script/report-script. Writes go
+|                                             through attendance_store.py (below), not
+|                                             its own insert logic.
+|-- payroll.py      /api/v1/payroll/*      — employees (active-only; basic_salary
+|                                             zeroed for a caller without
+|                                             employees:view_salary — see §9.4),
+|                                             runs, generate, wps-batch
 |-- leave.py        /api/v1/leave/*        — requests, approve/reject/delete, balance
-|-- hr_access.py    /api/v1/hr/*           — HR login/RBAC (roles, permissions),
-|                                             company locations, GPS check-in/out/
-|                                             location pings, live-locations, role-
-|                                             scoped dashboard, employee portal-access
-|                                             and branch-access admin
+|-- hr_access.py    /api/v1/hr/*           — HR login/RBAC (roles, permissions,
+|                                             department_scope), company locations,
+|                                             GPS check-in/out/location pings,
+|                                             live-locations, role-scoped dashboard,
+|                                             employee portal-access and branch-access
+|                                             admin
 |-- branches.py     /api/v1/branches/*     — branch CRUD, branch's own login
 |-- ess.py          /api/v1/ess/*          — employee self-service (JWT-scoped to
-|                                             employee, not user)
+|                                             employee, not user); see §7's expanded
+|                                             ESS Portal section for the newer
+|                                             team/holiday-calendar endpoints
 `-- hr_ai.py         /api/v1/ai/hr/*        — CV parse, anomaly/attrition/compliance/
                                               leave/JD/chatbot
+
+backend/app/attendance_store.py
+`-- The single write path for every attendance event source (device/CSV/manual
+    punch via attendance.py, BioTime pulls via biotime_sync.py, approved
+    corrections via app_data.py) — one concurrency-safe upsert
+    (upsert_attendance_event()) instead of three independent insert/dedupe
+    implementations. A leaf module (only app.models/app.timezone_utils + stdlib)
+    so attendance.py and biotime_sync.py can both import it without a cycle. See
+    §7's rewritten Attendance data flow.
 
 backend/app/worker.py (Celery beat)
 `-- hr.auto_checkout_stale_sessions — closes AttendanceSession rows whose last
@@ -181,7 +243,10 @@ backend/app/models.py
 |-- PayrollItem           payroll_items table        (Tier 1)
 |-- WpsBatch              wps_batches table          (Tier 1)
 |-- BiometricDevice       biometric_devices          (Tier 1)
-|-- AttendancePunch       attendance_punches         (Tier 1, indexed by company_id+punch_date)
+|-- AttendanceDetail      attendance_details         (Tier 1, one row per company+employee+
+|                                                       work_date, unique constraint on that
+|                                                       triple; superseded the old one-row-
+|                                                       per-scan AttendancePunch table)
 |-- LeaveRequest          leave_requests             (Tier 1, indexed by company_id+employee_id)
 |-- Role / Permission / RolePermission                (Tier 1 — RBAC)
 |-- Branch / EmployeeBranchAccess                     (Tier 1 — Branch Management)
@@ -223,11 +288,18 @@ biometric_devices
   id, company_id, name, device_type, ip_address, port, location,
   api_key_hash, status, last_sync
 
-attendance_punches
-  id, company_id, employee_id, employee_name, punch_time, punch_date,
-  direction, device_id, device_name, source
-  (device/CSV/manual punches — the raw event log; see AttendanceSession
-  below for the separate GPS check-in/out path)
+attendance_details
+  id, company_id, employee_id (string employee_no, not a FK), employee_name,
+  work_date (YYYY-MM-DD string)
+  clock_in_1..5, clock_out_1..5, work_seconds_1..5  (up to 5 in/out pairs a day)
+  total_seconds, ot_seconds, under_seconds, session_count
+  raw_events (JSON list of every individual scan: id, punch_time (UTC ISO),
+  direction, device_id, device_name, source, employee_name — the audit trail
+  the aggregate columns above are computed from)
+  (one row per company+employee+day, written exclusively through
+  attendance_store.upsert_attendance_event(); device/CSV/manual punches and
+  BioTime pulls all funnel through it — see §7. AttendanceSession below
+  remains the separate GPS check-in/out path, not merged into this table)
 
 leave_requests
   id, company_id, employee_id, leave_type, start_date, end_date, days,
@@ -271,8 +343,8 @@ employee_locations
 attendance_sessions
   id, company_id, employee_id, location_id, branch_id, check_in, check_out,
   check_in_lat/lng, check_out_lat/lng, auto_checkout, status
-  (paired GPS check-in/out session; attendance_punches remains the separate
-  raw event log for device/CSV punches — the two are not merged)
+  (paired GPS check-in/out session; attendance_details remains the separate
+  device/CSV/BioTime punch record — the two are not merged)
 
 employee_location_logs
   id, company_id, employee_id, session_id, latitude, longitude, accuracy,
@@ -371,16 +443,22 @@ Every table above follows the tenant-isolation rule from `docs/architecture.md` 
 ### Attendance → Payroll (Tier 1)
 
 ```text
-Biometric Device / Manual Punch / CSV Import
+Biometric Device / Manual Punch / CSV Import / BioTime pull / approved
+correction (app_data.py)
         |
         v
-POST /api/v1/attendance/punch(-{device_key})  or  /import-csv
+attendance_store.upsert_attendance_event(company_id, employee_id, punch_time,
+    direction, ...) -- the single write path every source above calls into;
+    re-pairs that one day's raw_events and rewrites the aggregate
+    clock_in/out_N + work_seconds_N + total/ot/under_seconds columns
         |
         v
-attendance_punches (company_id, employee_id, punch_date indexed)
+attendance_details (one row per company+employee+work_date, unique
+    constraint on that triple -- see §5)
         |
         v
-GET /attendance/summary, /trend, /today, /monthly-report
+GET /attendance/summary, /trend, /today, /monthly-report, /late-report,
+    /employee-daily, /import-rows
         |
         v
 Payroll generation reads attendance for OT/absence
@@ -391,6 +469,16 @@ POST /api/v1/payroll/generate -> payroll_runs + payroll_items
         v
 POST /payroll/runs/{id}/wps-batch -> wps_batches (SIF content)
 ```
+
+`attendance_store.py` is a deliberate leaf module (only `app.models` +
+`app.timezone_utils` + stdlib) so both `attendance.py` and
+`biometric_sync`/`biotime_sync.py` can import `upsert_attendance_event()`
+without a circular import, and so every write — regardless of source —
+goes through the same re-pairing/aggregation logic instead of three
+divergent implementations. This replaced the older `AttendancePunch`
+one-row-per-scan table, which required every reader to re-derive
+sessions/hours itself; `attendance_details` now carries the aggregate
+columns pre-computed, with `raw_events` kept only as the audit trail.
 
 `/attendance/monthly-report` (new) computes present/absent/leave days per
 employee for a selected month — present/absent/leave are all counted in
@@ -470,16 +558,48 @@ password itself if password_hash was never set -- see §9.1)
 POST /api/v1/ess/login -> JWT scoped to employee_id (not a user account)
         |
         v
-GET /ess/me, /ess/attendance, /ess/payslips, /ess/leave, /ess/tasks, /ess/rota
-POST /ess/leave (submit a new request)
+GET /ess/me, /ess/attendance, /ess/payslips, /ess/leave, /ess/leave-balance,
+    /ess/tasks, /ess/rota, /ess/announcements, /ess/team, /ess/team/today,
+    /ess/team/leave, /ess/holidays
+POST /ess/leave (submit a new request), /ess/change-password
         |
         v
 Employee-only views, each independently filtered by emp.id/emp.company_id
 from the token -- never a client-supplied id:
-  - attendance_punches, payroll_items (Tier 1, own SQL columns)
+  - attendance_details, payroll_items (Tier 1, own SQL columns)
   - leave_requests (Tier 1, own employee_id column)
   - tasks, rotaAssignments (Tier 2 AppDataRecord -- see below)
 ```
+
+**Team / Holiday Calendar endpoints (added this session)** — `GET
+/ess/team` returns the caller's department peers (name, designation,
+`Employee.status == "active"` only — see §3's note on this recurring
+bug class), scoped the same way `/hr/roles`'s department-scoped custom
+roles are (`_role_department_scope()`-style: the employee's own
+`department` column, no cross-department leak). `GET /ess/team/today`
+layers today's attendance status onto that same roster (used by both
+the ESS Team tab and the Dashboard's "My Team Today" preview card —
+`loadTeamToday()` in `ess.html` populates both from one fetch). `GET
+/ess/team/leave?month=YYYY-MM` returns approved leave for that same
+department roster within a given month (any pending/rejected request is
+excluded), which `ess.html`'s `renderHolidayCalendarGrid()` overlays
+onto a real Mon-Sun month grid alongside `GET /ess/holidays`. None of
+these three endpoints require a Principal/RBAC permission — an ESS
+token has the same "reach" as `/ess/me` itself, just narrowed to the
+caller's own department server-side, matching the existing `/ess/leave`
+precedent below.
+
+**Login routing (fixed this session, `dbdf432`)** — `login.html`'s
+`signIn()` used to always redirect a successful `/hr/login` to
+`hrms.html`, which for a bare "Employee" role (no module `:view`
+permissions at all) rendered a broken, near-empty page. It now fetches
+`/hr/me` right after login, computes the caller's allowed modules from
+`:view`-suffixed permission keys (excluding `dashboard`), and if that
+set is empty, stores the token as `ess_token` instead and redirects to
+`/ess` — i.e. a role with no HRMS module access lands on the ESS portal
+it can actually use. Wrapped in try/catch that fails open to the old
+`hrms.html` redirect if `/hr/me` is unreachable, so a transient network
+error can't strand a legitimate HR user on a login screen.
 
 Leave requests ARE submittable from ESS (2026-09-02) — `POST /ess/leave`
 mirrors `POST /leave/requests`'s validation (allowed types, no
@@ -635,6 +755,9 @@ GET    /api/v1/attendance/trend          (optional ?period=YYYY-MM, else ?days=N
 GET    /api/v1/attendance/monthly-report
 GET    /api/v1/attendance/employee-daily (?employee_id=&period=YYYY-MM -- proper
                                            session pairing, see §7 above)
+GET    /api/v1/attendance/late-report    (per-employee late-arrival counts/minutes
+                                           for a period, see §3's HR Reports tab)
+POST   /api/v1/attendance/import-rows
 GET    /api/v1/attendance/punches
 DELETE /api/v1/attendance/punches/{id}
 GET    /api/v1/attendance/summary
@@ -645,7 +768,8 @@ POST   /api/v1/attendance/devices/{id}/biotime/sync
 GET    /api/v1/attendance/bridge-script
 GET    /api/v1/attendance/report-script
 
-GET    /api/v1/payroll/employees      (active-only)
+GET    /api/v1/payroll/employees      (active-only; basic_salary zeroed for a caller
+                                        without employees:view_salary, see §9.4)
 GET    /api/v1/payroll/runs
 POST   /api/v1/payroll/generate
 POST   /api/v1/payroll/runs/{run_id}/wps-batch
@@ -686,8 +810,14 @@ POST   /api/v1/ess/change-password
 GET    /api/v1/ess/attendance
 GET    /api/v1/ess/payslips
 GET/POST /api/v1/ess/leave    (own history / submit a new request)
+GET    /api/v1/ess/leave-balance
+GET    /api/v1/ess/announcements
 GET    /api/v1/ess/tasks      (own assigned tasks only)
 GET    /api/v1/ess/rota       (own upcoming shifts only, -7d/+30d window)
+GET    /api/v1/ess/team       (own-department peers, active only)
+GET    /api/v1/ess/team/today (own-department peers + today's attendance status)
+GET    /api/v1/ess/team/leave (?month=YYYY-MM -- own-department approved leave)
+GET    /api/v1/ess/holidays
 
 POST   /api/v1/ai/hr/cv-parse
 POST   /api/v1/ai/hr/payroll-anomaly
@@ -764,6 +894,12 @@ Fix direction (not yet implemented): split role/permission administration onto i
 Both `ess.py` (`/ess/login`) and `hr_access.py` (`/hr/login`) fall back to treating the employee's own `employee_no` as their password whenever `Employee.password_hash` is `None` — i.e. before an admin has ever set a real password via `PUT /hr/admin/employees/{id}/portal-access`. Employee numbers are small, often-sequential values (seen in this deployment's own live data: `"10"`, `"22"`, `"52"`, ...) that also appear on payslips, ID badges, and the Employee Directory table itself — not a secret, and easily enumerable by anyone who can see one real employee's number and guess nearby ones. Any employee whose portal access was created but whose password was never explicitly changed is reachable with a guessable credential for as long as that remains true.
 
 This is a deliberate onboarding convenience (an admin can create portal access without immediately setting a password, and the employee can log in on day one), but it currently has no companion safeguard — no forced password change on first login, no expiry on the fallback, no distinguishable "must change password" state surfaced anywhere in the UI.
+
+### 9.4 `employees:view_salary` — field-level salary redaction (SHIPPED this session)
+
+A new permission key (`employees:view_salary`, alongside the existing `employees:view/edit/delete`) now gates salary/allowance visibility independently of general employee-record access — a role can see the Employee Directory without seeing pay figures. `Administrator`'s wildcard grant picks it up automatically (`_ensure_default_roles()`'s idempotent self-heal); every other default role (`HR Manager`, `Manager`, `Payroll Officer`, `Employee`) does not have it by default and must be granted it explicitly. Redaction is applied at three read paths (`GET /payroll/employees` zeroes `basic_salary` in-memory; `app_data.py`'s `bootstrap()` and `list_collection_records()` null out `salary`/`housing_allowance`/`transport_allowance`/`other_allowance` on the `employees` collection) and one write path (`sync_domain_model()`'s employees/staff branch drops those same fields from an incoming record when the caller lacks the permission, so a denied role can't write salary even via a hidden form field). Out of scope: Payroll module screens keep their own pre-existing `payroll:view_payroll` gate; bank/IBAN/WPS fields are untouched.
+
+Implementing this closed two previously-unrelated, pre-existing gaps found along the way: `list_collection_records()` had **no** `employees:view` check at all for the `employees` collection (any Employee principal could call it directly regardless of role, bypassing the Directory UI's own filtering — Branch principals were already structurally blocked since "hrms" isn't in `BRANCH_ELIGIBLE_MODULES`); and the same handler's write-side employee/staff sync had no permission gate on the salary fields specifically, so they could be silently overwritten (including zeroed) by any caller who could reach the sync endpoint at all, independent of whether they were allowed to view salary. Both fixes are covered by `backend/tests/test_employees_salary_permission.py` (8 tests) alongside the redaction tests themselves. The broader finding that this same sync path has **no** `employees:edit` check at all is separate and still open — flagged here, not fixed by this change.
 
 ### General principles (still aspirational until the Tier 2 migration closes §9.1)
 
