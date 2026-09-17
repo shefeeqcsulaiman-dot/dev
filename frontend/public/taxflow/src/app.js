@@ -1019,7 +1019,19 @@ function renderEmployeeRecord(employee){
   }
   row.style.display='';
   row.hidden=false;
-  refreshEnhancedTable(table);
+  // refreshEnhancedTable() re-scans EVERY row in the table (search filter +
+  // pagination + the "DB records: N" counter) on every call -- fine for one
+  // ad-hoc edit, but this function also runs once per employee during
+  // bootstrap hydration (hydrateFromServer()'s renderRecordList loop), so
+  // an unconditional call here made populating the Employee Directory
+  // O(n^2) in the employee count: a 300-employee company was doing ~45,000
+  // row touches just to build this one table, before even considering the
+  // same problem in renderPayrollEmployeeRecord() below and the two O(n)
+  // dedup/sort-position scans earlier in this function. Same fix already
+  // applied to Item Master's renderProductRecord() for the same reason --
+  // skip it mid-hydration, and hydrateFromServer() calls it once at the
+  // end instead (see the renderRecordList(...,'employee') call site).
+  if(!isHydratingFromServer)refreshEnhancedTable(table);
 }
 
 function editEmployeeFromRow(btn){
@@ -1211,7 +1223,10 @@ function renderPayrollEmployeeRecord(employee){
   }
   row.style.display='';
   row.hidden=false;
-  refreshEnhancedTable(table);
+  // See the matching comment in renderEmployeeRecord() -- this runs once
+  // per employee during bootstrap hydration too, so an unconditional
+  // full-table refresh here was the same O(n^2) cost on a second table.
+  if(!isHydratingFromServer)refreshEnhancedTable(table);
   renderPayrollRunRow(employee);
 }
 
@@ -8722,6 +8737,13 @@ function hydrateFromServer(){
           renderEmployeeRecord(record);
           renderPayrollEmployeeRecord(record);
         },'employee');
+        // The per-row refresh skipped above (isHydratingFromServer guard)
+        // still needs to run once, now that every row is actually in the DOM,
+        // so the Employee Directory/Payroll Employees tables' search,
+        // pagination, and "DB records: N" counter reflect the full set
+        // instead of staying on whatever was last computed (empty, pre-load).
+        refreshEnhancedTable(document.getElementById('employee-tbody')?.closest('table'));
+        refreshEnhancedTable(document.getElementById('payroll-employee-tbody')?.closest('table'));
         // bankAccounts feeds Payroll's SIF/bank-transfer IBAN lookups, so it's
         // kept for HRMS too; payments/expenses/bills/vendors below are
         // Purchase/Accounting-only and never rendered on hrms.html.
@@ -19820,7 +19842,19 @@ function normalizeRotaAssignment(record={}){
 function renderRotaAssignmentRecord(record){
   const assignment=normalizeRotaAssignment(record);
   rotaAssignmentsById.set(assignment.id,assignment);
-  renderRotaBoards();
+  // renderRotaBoards() rebuilds every Rota view at once (Weekly/Monthly
+  // boards, Monthly Staff Overview, Department Rota, the summary panel,
+  // status badges...), each iterating the whole staff list. This function
+  // runs once per rotaAssignments row during bootstrap hydration (up to
+  // the 500-row cap -- see _BOOTSTRAP_COLLECTION_CAPS), so an unconditional
+  // call here meant a company anywhere near that cap re-rendered every
+  // Rota board up to 500 times in a row on every single HRMS page load --
+  // the single largest contributor to a slow HRMS load found while
+  // profiling this. The hydration loop that calls this already does its
+  // own single renderRotaBoards() once every row is loaded (see the
+  // renderRecordList(...,'rota assignment') call site) -- this was
+  // redundant with that on every one of the up-to-500 rows in between.
+  if(!isHydratingFromServer)renderRotaBoards();
 }
 
 function rotaCellHtml(assignment){
