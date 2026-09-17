@@ -20397,6 +20397,7 @@ function renderRotaBoards(){
   renderRotaSummary();
   renderRotaCodes();
   updateRotaStats();
+  updateRotaStatusBadges();
   populateRotaRepeatEmployeeSelect();
 }
 
@@ -20639,9 +20640,25 @@ function renderRotaApprovalRecord(approval){
   updateRotaStats();
 }
 
+// Text-only color class for the Draft/Pending/Published pill -- previously
+// only the text ever changed (setText()); the span's class stayed whatever
+// the static HTML shipped with ("b b-gray"), so a Published rota's badge
+// still rendered in muted gray forever, never turning green.
+function _rotaStatusBadgeClass(statusText){
+  if(statusText==='Published')return'b-g';
+  if(statusText==='Pending Supervisor Review')return'b-a';
+  return'b-gray';
+}
+function _setRotaStatusBadge(elId,statusText){
+  const el=document.getElementById(elId);
+  if(!el)return;
+  el.textContent=statusText;
+  el.className=`b ${_rotaStatusBadgeClass(statusText)}`;
+}
+
 function saveRotaDraft(status='Draft'){
-  setText('rota-weekly-status',status);
-  setText('rota-monthly-status',status);
+  _setRotaStatusBadge('rota-weekly-status',status);
+  _setRotaStatusBadge('rota-monthly-status',status);
   const record={
     id:'ROTA-'+Date.now(),
     department:document.getElementById('rota-week-department')?.value||'All Departments',
@@ -20651,11 +20668,34 @@ function saveRotaDraft(status='Draft'){
     assignment_count:rotaAssignmentsById.size
   };
   saveServer('rotaDrafts',record);
-  const approval={...record,id:'APP-'+Date.now(),status:status==='Draft'?'Draft':'Pending Supervisor Review'};
+  // This used to hardcode every non-Draft status to "Pending Supervisor
+  // Review" here, so publishRota()'s call (status="Published") created an
+  // approval-history row that said "Pending Supervisor Review" for a rota
+  // that had just been published -- record already carries the real status.
+  const approval={...record,id:'APP-'+Date.now()};
   renderRotaApprovalRecord(approval);
   saveServer('rotaApprovals',approval);
   toast(`${status} rota saved to database`,'ok');
   audit('Saved rota draft','Rota Planning',status);
+}
+
+// The Draft/Pending/Published pill above the Staff Schedule/Monthly Schedule
+// boards used to be pure in-session state -- only ever set by clicking Save
+// Draft/Submit Approval/Publish Rota in THIS tab, with no way to recover it
+// on reload. publishRota() really does persist status:'Published' onto every
+// assignment it publishes, so a reload silently showing "Draft" again looked
+// exactly like the publish had been lost, when the real data was fine.
+// Re-derive the badge from what's actually saved on every render instead.
+function _deriveRotaStatusForAssignments(assignments){
+  if(assignments.some(a=>a.status==='Published'))return'Published';
+  if(assignments.some(a=>a.status==='Pending Supervisor Review'))return'Pending Supervisor Review';
+  return'Draft';
+}
+function updateRotaStatusBadges(){
+  _setRotaStatusBadge('rota-weekly-status',_deriveRotaStatusForAssignments(selectedWeekAssignments('week')));
+  const monthValue=document.getElementById('rota-month-value')?.value||'';
+  const monthAssignments=monthValue?[...rotaAssignmentsById.values()].filter(a=>(a.date||'').startsWith(monthValue)):[];
+  _setRotaStatusBadge('rota-monthly-status',_deriveRotaStatusForAssignments(monthAssignments));
 }
 
 function updateRotaStats(){
@@ -20672,13 +20712,22 @@ function updateRotaStats(){
 }
 
 function publishRota(){
-  [...rotaAssignmentsById.values()].forEach(item=>{
+  // Used to loop over EVERY assignment ever loaded into rotaAssignmentsById
+  // (up to 500 rows from bootstrap, easily spanning many weeks/months and
+  // every department -- see the rotaAssignments cap comment in
+  // app_data.py), regardless of which week was on screen. Publishing this
+  // week silently flipped next month's still-Draft rows (e.g. from Copy
+  // Previous or the 1-year Repeat feature) to Published too. Scope it to
+  // the week actually being viewed (respecting the current Department/
+  // Location/Search filters), like every other Weekly Rota action already does.
+  const weekAssignments=selectedWeekAssignments('week');
+  weekAssignments.forEach(item=>{
     item.status='Published';
     saveServer('rotaAssignments',item);
   });
   saveRotaDraft('Published');
   renderRotaBoards();
-  toast('Rota published. Employees notified and attendance timing updated','ok');
+  toast(`Rota published for ${weekAssignments.length} shift(s) this week. Employees notified and attendance timing updated`,'ok');
   audit('Rota published','Rota Planning','Published');
 }
 
