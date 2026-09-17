@@ -8,7 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    :root{--accent:#1d4ed8;--accent2:#3b82f6;--bg:#f1f5f9;--bg2:#f8fafc;--bg3:#f4f7fb;--surface:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--text3:#94a3b8;--red:#ef4444;--green:#10b981;--field-bg:#f9fafb;--field-border:#d1d5db;--field-text:#111827;--scrollbar:#94a3b8;--danger-bg:#fef2f2;--danger-border:#fecaca;--success-bg:#f0fdf4;--success-border:#bbf7d0;}
+    :root{--accent:#1d4ed8;--accent2:#3b82f6;--bg:#f1f5f9;--bg2:#f8fafc;--bg3:#f4f7fb;--surface:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--text3:#94a3b8;--red:#ef4444;--green:#10b981;--field-bg:#f9fafb;--field-border:#d1d5db;--field-text:#111827;--scrollbar:#94a3b8;--danger-bg:#fef2f2;--danger-border:#fecaca;--success-bg:#f0fdf4;--success-border:#bbf7d0;--hcal-holiday-bg:rgba(245,158,11,.18);--hcal-holiday-text:#b45309;--hcal-leave-bg:rgba(139,92,246,.18);--hcal-leave-text:#6d28d9;}
     /* Dark mode: system preference by default (unless the user explicitly
        picked "light" via the topbar toggle -- see essApplyTheme()), or an
        explicit "dark" pick winning over system preference either way. Only
@@ -21,6 +21,7 @@
         --text:#e5e9f0;--text2:#9aa5b8;--text3:#64748b;
         --field-bg:#0d1420;--field-border:#2a3646;--field-text:#e5e9f0;--scrollbar:#475569;
         --danger-bg:#2a1418;--danger-border:#4a2129;--success-bg:#0f2318;--success-border:#1c3d2a;
+        --hcal-holiday-bg:rgba(245,158,11,.22);--hcal-holiday-text:#fbbf24;--hcal-leave-bg:rgba(139,92,246,.25);--hcal-leave-text:#c4b5fd;
       }
     }
     :root[data-theme="dark"]{
@@ -28,6 +29,7 @@
       --text:#e5e9f0;--text2:#9aa5b8;--text3:#64748b;
       --field-bg:#0d1420;--field-border:#2a3646;--field-text:#e5e9f0;--scrollbar:#475569;
       --danger-bg:#2a1418;--danger-border:#4a2129;--success-bg:#0f2318;--success-border:#1c3d2a;
+      --hcal-holiday-bg:rgba(245,158,11,.22);--hcal-holiday-text:#fbbf24;--hcal-leave-bg:rgba(139,92,246,.25);--hcal-leave-text:#c4b5fd;
     }
     body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background-color .15s,color .15s;}
     *{scrollbar-width:thin;scrollbar-color:var(--scrollbar) transparent;}
@@ -273,6 +275,28 @@
     .dir-out{color:var(--red);font-weight:600}
     .empty{text-align:center;padding:32px;color:var(--text3);font-size:13px}
     .loading{text-align:center;padding:24px;color:var(--text3);font-size:13px}
+
+    /* ── Team Holiday Calendar (month grid) ── */
+    .hcal-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--text2);margin-bottom:10px}
+    .hcal-legend span{display:inline-flex;align-items:center;gap:5px}
+    .hcal-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+    .hcal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+    .hcal-weekday{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);text-align:center;padding-bottom:4px}
+    .hcal-cell{min-height:64px;border:1px solid var(--border);border-radius:8px;padding:4px 5px;background:var(--surface);overflow:hidden}
+    .hcal-cell.hcal-empty{border-color:transparent;background:transparent}
+    .hcal-cell.hcal-today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+    .hcal-cell.hcal-is-holiday{background:rgba(245,158,11,.08)}
+    .hcal-daynum{font-size:11px;font-weight:700;color:var(--text2);margin-bottom:2px}
+    .hcal-chip{font-size:9.5px;font-weight:600;border-radius:4px;padding:1px 4px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .hcal-chip-holiday{background:var(--hcal-holiday-bg);color:var(--hcal-holiday-text)}
+    .hcal-chip-leave{background:var(--hcal-leave-bg);color:var(--hcal-leave-text)}
+    .hcal-more{font-size:9px;color:var(--text3)}
+    @media (max-width:640px){
+      .hcal-cell{min-height:48px;padding:3px 3px}
+      .hcal-daynum{font-size:10px}
+      .hcal-chip{font-size:8.5px}
+      .hcal-weekday{font-size:9px}
+    }
 
     /* ── PAYSLIP CARD ── */
     .payslip-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
@@ -722,13 +746,19 @@
         </div>
       </div>
       <div class="card" id="holiday-calendar-card" style="margin-bottom:16px">
-        <div class="card-title">Holiday Calendar</div>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr><th>Date</th><th>Holiday</th><th>Applies To</th><th>Paid</th></tr></thead>
-            <tbody id="holiday-calendar-body"><tr><td colspan="4" class="loading">Loading…</td></tr></tbody>
-          </table>
+        <div class="card-hd" style="margin-bottom:8px">
+          <div class="card-title" style="margin-bottom:0">Team Holiday Calendar</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button type="button" class="btn-ghost" style="padding:4px 10px" onclick="shiftHolidayCalendarMonth(-1)">‹</button>
+            <span id="holiday-cal-month-label" style="font-size:12.5px;font-weight:700;min-width:108px;text-align:center">—</span>
+            <button type="button" class="btn-ghost" style="padding:4px 10px" onclick="shiftHolidayCalendarMonth(1)">›</button>
+          </div>
         </div>
+        <div class="hcal-legend">
+          <span><i class="hcal-dot" style="background:#f59e0b"></i>Company holiday</span>
+          <span><i class="hcal-dot" style="background:#8b5cf6"></i>Teammate on leave</span>
+        </div>
+        <div class="hcal-grid" id="holiday-cal-grid"><div class="loading">Loading…</div></div>
       </div>
       <div class="card" id="dept-team-card" style="display:none;margin-bottom:16px">
         <div class="card-title" id="dept-team-title">Department Team</div>
@@ -1654,39 +1684,107 @@
     }
   }
 
+  var _essHolidaysCache = null;
+  var _holidayCalMonth = null; // 'YYYY-MM', the month the grid is currently showing
+  var _holidayCalLeaveCache = {}; // month -> team leave rows, so paging back and forth doesn't re-fetch
+
   async function loadHolidayCalendar() {
-    var body = document.getElementById('holiday-calendar-body');
+    var grid = document.getElementById('holiday-cal-grid');
     var nextHolidayEl = document.getElementById('dash-next-holiday');
-    if (!body && !nextHolidayEl) return;
+    if (!grid && !nextHolidayEl) return;
     try {
       var r = await fetch(apiBase() + '/ess/holidays', {headers: essHeaders()});
       if (r.status === 401) { essLogout(); return; }
-      var rows = await r.json();
+      _essHolidaysCache = await r.json();
       var todayStr = new Date().toISOString().slice(0, 10);
-      if (body) {
-        body.innerHTML = rows.length ? rows.map(function(h) {
-          var isPast = h.date < todayStr;
-          var dateLabel = new Date(h.date + 'T00:00:00').toLocaleDateString('en-US', {day: '2-digit', month: 'short', year: 'numeric'});
-          var paid = (h.paid === false || h.paid === 'No') ? '<span style="color:var(--text3)">No</span>' : '<span class="dir-in">Yes</span>';
-          return '<tr' + (isPast ? ' style="opacity:.5"' : '') + '><td>' + dateLabel + '</td><td>' + escHtml(h.name) + '</td><td>' + escHtml(h.location) + '</td><td>' + paid + '</td></tr>';
-        }).join('') : '<tr><td colspan="4" class="empty">No holidays configured yet.</td></tr>';
-      }
       // Nearest upcoming holiday, shown as a one-line teaser on the
       // Dashboard tab -- rows are already sorted by date ascending (see
       // GET /ess/holidays), so the first one >= today is the next one.
       if (nextHolidayEl) {
-        var upcoming = rows.filter(function(h) { return h.date >= todayStr; })[0];
+        var upcoming = _essHolidaysCache.filter(function(h) { return h.date >= todayStr; })[0];
         if (upcoming) {
           var upLabel = new Date(upcoming.date + 'T00:00:00').toLocaleDateString('en-US', {day: '2-digit', month: 'short'});
           nextHolidayEl.textContent = 'Next holiday: ' + upcoming.name + ' — ' + upLabel;
         } else {
-          nextHolidayEl.textContent = rows.length ? 'No upcoming holidays' : 'No holidays configured yet';
+          nextHolidayEl.textContent = _essHolidaysCache.length ? 'No upcoming holidays' : 'No holidays configured yet';
         }
       }
+      if (grid) await renderHolidayCalendarGrid();
     } catch(e) {
-      if (body) body.innerHTML = '<tr><td colspan="4" class="empty">Failed to load.</td></tr>';
+      if (grid) grid.innerHTML = '<div class="empty" style="padding:12px 0">Failed to load.</div>';
       if (nextHolidayEl) nextHolidayEl.textContent = 'Failed to load';
     }
+  }
+
+  function shiftHolidayCalendarMonth(delta) {
+    var d = new Date((_holidayCalMonth || new Date().toISOString().slice(0, 7)) + '-01T00:00:00');
+    d.setMonth(d.getMonth() + delta);
+    _holidayCalMonth = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    renderHolidayCalendarGrid();
+  }
+
+  // Real month-grid calendar view (not a table) -- overlays company
+  // holidays (GET /ess/holidays, cached, not month-scoped) with this
+  // employee's own department peers' approved leave for the month being
+  // viewed (GET /ess/team/leave?month=, fetched per-month and cached) so
+  // "already taken" team leave shows directly on the day it falls on,
+  // not just company-wide public holidays.
+  async function renderHolidayCalendarGrid() {
+    var grid = document.getElementById('holiday-cal-grid');
+    if (!grid) return;
+    if (!_holidayCalMonth) _holidayCalMonth = new Date().toISOString().slice(0, 7);
+    var labelEl = document.getElementById('holiday-cal-month-label');
+    if (labelEl) labelEl.textContent = new Date(_holidayCalMonth + '-01T00:00:00').toLocaleDateString('en-US', {month: 'long', year: 'numeric'});
+
+    var leaveRows = _holidayCalLeaveCache[_holidayCalMonth];
+    if (!leaveRows) {
+      try {
+        var r = await fetch(apiBase() + '/ess/team/leave?month=' + encodeURIComponent(_holidayCalMonth), {headers: essHeaders()});
+        if (r.status === 401) { essLogout(); return; }
+        leaveRows = r.ok ? await r.json() : [];
+      } catch(e) { leaveRows = []; }
+      _holidayCalLeaveCache[_holidayCalMonth] = leaveRows;
+    }
+
+    var holidaysByDate = {};
+    (_essHolidaysCache || []).forEach(function(h) { holidaysByDate[h.date] = h; });
+    var leaveByDate = {};
+    leaveRows.forEach(function(lr) {
+      var d = new Date(lr.start_date + 'T00:00:00');
+      var end = new Date(lr.end_date + 'T00:00:00');
+      var guard = 0;
+      while (d <= end && guard < 366) {
+        var key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        (leaveByDate[key] = leaveByDate[key] || []).push(lr);
+        d.setDate(d.getDate() + 1);
+        guard++;
+      }
+    });
+
+    var parts = _holidayCalMonth.split('-');
+    var y = Number(parts[0]), m = Number(parts[1]);
+    var firstDow = (new Date(y, m - 1, 1).getDay() + 6) % 7; // Monday-first
+    var daysInMonth = new Date(y, m, 0).getDate();
+    var todayStr = new Date().toISOString().slice(0, 10);
+
+    var weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    var html = weekdayLabels.map(function(w) { return '<div class="hcal-weekday">' + w + '</div>'; }).join('');
+    for (var i = 0; i < firstDow; i++) html += '<div class="hcal-cell hcal-empty"></div>';
+    for (var day = 1; day <= daysInMonth; day++) {
+      var dateStr = _holidayCalMonth + '-' + String(day).padStart(2, '0');
+      var holiday = holidaysByDate[dateStr];
+      var onLeave = leaveByDate[dateStr] || [];
+      var cls = 'hcal-cell' + (dateStr === todayStr ? ' hcal-today' : '') + (holiday ? ' hcal-is-holiday' : '');
+      var inner = '<div class="hcal-daynum">' + day + '</div>';
+      if (holiday) inner += '<div class="hcal-chip hcal-chip-holiday" title="' + escHtml(holiday.name) + '">' + escHtml(holiday.name) + '</div>';
+      onLeave.slice(0, 2).forEach(function(lr) {
+        var first = (lr.employee_name || '').split(' ')[0];
+        inner += '<div class="hcal-chip hcal-chip-leave" title="' + escHtml(lr.employee_name) + ' — ' + escHtml(lr.leave_type) + '">' + escHtml(first) + (lr.is_me ? ' (You)' : '') + '</div>';
+      });
+      if (onLeave.length > 2) inner += '<div class="hcal-more">+' + (onLeave.length - 2) + ' more</div>';
+      html += '<div class="' + cls + '">' + inner + '</div>';
+    }
+    grid.innerHTML = html;
   }
 
   async function loadDeptTeamView() {

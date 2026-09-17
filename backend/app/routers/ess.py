@@ -361,6 +361,62 @@ def ess_holidays(request: Request, db: Session = Depends(get_db)) -> list[dict]:
     return out
 
 
+@router.get("/team/leave")
+def ess_team_leave(
+    request: Request,
+    month: str = Query(..., description="YYYY-MM -- the month to check for approved leave"),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    """Approved leave for this employee's own department peers within the
+    given month -- for the Holiday Calendar's calendar-view overlay (shows
+    who's already booked off, alongside company holidays). Same "own
+    department, everyone, no role-scope required" reach as
+    /ess/team/today, not the narrower role-scoped /ess/team -- every
+    employee should be able to see when their immediate colleagues are
+    out, the same way they can already see who's present today."""
+    emp = ess_bearer(request, db)
+    m = re.match(r"^(\d{4})-(\d{2})$", month)
+    if not m:
+        raise HTTPException(status_code=400, detail="month must be in YYYY-MM format")
+    year, mon = int(m.group(1)), int(m.group(2))
+    if not (1 <= mon <= 12):
+        raise HTTPException(status_code=400, detail="month must be in YYYY-MM format")
+    month_start = date(year, mon, 1).isoformat()
+    month_end = date(year, mon, monthrange(year, mon)[1]).isoformat()
+
+    peers = (
+        db.query(Employee)
+        .filter(Employee.company_id == emp.company_id, Employee.department == emp.department, Employee.status == "active")
+        .all()
+    )
+    peer_by_id = {p.id: p for p in peers}
+    if not peer_by_id:
+        return []
+
+    rows = (
+        db.query(LeaveRequest)
+        .filter(
+            LeaveRequest.company_id == emp.company_id,
+            LeaveRequest.employee_id.in_(list(peer_by_id.keys())),
+            LeaveRequest.status == "approved",
+            LeaveRequest.start_date <= month_end,
+            LeaveRequest.end_date >= month_start,
+        )
+        .all()
+    )
+    return [
+        {
+            "employee_id": r.employee_id,
+            "employee_name": peer_by_id[r.employee_id].full_name,
+            "leave_type": r.leave_type,
+            "start_date": r.start_date,
+            "end_date": r.end_date,
+            "is_me": r.employee_id == emp.id,
+        }
+        for r in rows
+    ]
+
+
 @router.get("/leave-balance")
 def ess_leave_balance(request: Request, db: Session = Depends(get_db)) -> dict:
     """This employee's own leave balance for the Dashboard's Leave Balance
