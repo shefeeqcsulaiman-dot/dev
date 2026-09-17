@@ -594,11 +594,26 @@
           </div>
         </div>
 
-        <div class="card" id="dash-announcements-card">
+        <div class="card" id="dash-announcements-card" style="margin-bottom:18px">
           <div class="card-hd">
             <div class="card-title" style="margin-bottom:0;display:flex;align-items:center;gap:6px">📣 Latest Announcements</div>
           </div>
           <div id="dash-announcements"><div class="loading">Loading…</div></div>
+        </div>
+
+        <!-- My Team Today + next Holiday -- same data as the Team tab's
+             "My Team Today"/"Holiday Calendar" cards (GET /ess/team/today,
+             GET /ess/holidays), surfaced here too so it's visible without
+             an extra click, not just buried in a nav tab. -->
+        <div class="card" id="dash-team-card">
+          <div class="card-hd">
+            <div class="card-title" style="margin-bottom:0;display:flex;align-items:center;gap:6px">👥 My Team Today</div>
+            <a style="font-size:12px;color:var(--accent);cursor:pointer;font-weight:600" onclick="document.getElementById('ess-team-tab-btn').click()">View All →</a>
+          </div>
+          <div id="dash-team-today"><div class="loading">Loading…</div></div>
+          <div id="dash-next-holiday-wrap" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px">
+            <span>📅</span><span id="dash-next-holiday">Loading…</span>
+          </div>
         </div>
       </div><!-- /dash-side-col -->
       </div><!-- /dash-2col -->
@@ -1608,37 +1623,70 @@
 
   async function loadTeamToday() {
     var body = document.getElementById('team-today-body');
-    if (!body) return;
+    var dashBody = document.getElementById('dash-team-today');
+    if (!body && !dashBody) return;
     try {
       var r = await fetch(apiBase() + '/ess/team/today', {headers: essHeaders()});
       if (r.status === 401) { essLogout(); return; }
       var rows = await r.json();
-      if (!rows.length) { body.innerHTML = '<tr><td colspan="4" class="empty">No teammates found in your department.</td></tr>'; return; }
-      body.innerHTML = rows.map(function(e) {
-        var meta = TEAM_STATUS_META[e.status] || TEAM_STATUS_META.absent;
-        var name = escHtml(e.full_name) + (e.is_me ? ' <span style="color:var(--text3)">(You)</span>' : '');
-        var pill = '<span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;background:' + meta.bg + ';color:' + meta.color + '">' + meta.label + '</span>';
-        return '<tr><td>' + name + '</td><td>' + escHtml(e.designation || '') + '</td><td>' + pill + '</td><td>' + (e.check_in || '—') + '</td></tr>';
-      }).join('');
-    } catch(e) { body.innerHTML = '<tr><td colspan="4" class="empty">Failed to load.</td></tr>'; }
+      if (body) {
+        body.innerHTML = rows.length ? rows.map(function(e) {
+          var meta = TEAM_STATUS_META[e.status] || TEAM_STATUS_META.absent;
+          var name = escHtml(e.full_name) + (e.is_me ? ' <span style="color:var(--text3)">(You)</span>' : '');
+          var pill = '<span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;background:' + meta.bg + ';color:' + meta.color + '">' + meta.label + '</span>';
+          return '<tr><td>' + name + '</td><td>' + escHtml(e.designation || '') + '</td><td>' + pill + '</td><td>' + (e.check_in || '—') + '</td></tr>';
+        }).join('') : '<tr><td colspan="4" class="empty">No teammates found in your department.</td></tr>';
+      }
+      // Compact preview on the Dashboard tab -- same data, top 5, name +
+      // position + status only (no check-in column, not enough width in
+      // the side column card) -- "View All" links to the full Team tab.
+      if (dashBody) {
+        dashBody.innerHTML = rows.length ? rows.slice(0, 5).map(function(e) {
+          var meta = TEAM_STATUS_META[e.status] || TEAM_STATUS_META.absent;
+          var name = escHtml(e.full_name) + (e.is_me ? ' <span style="color:var(--text3)">(You)</span>' : '');
+          var pill = '<span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:10.5px;font-weight:600;white-space:nowrap;background:' + meta.bg + ';color:' + meta.color + '">' + meta.label + '</span>';
+          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)"><div style="min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + name + '</div><div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(e.designation || '') + '</div></div>' + pill + '</div>';
+        }).join('') : '<div class="empty" style="padding:6px 0">No teammates found in your department.</div>';
+      }
+    } catch(e) {
+      if (body) body.innerHTML = '<tr><td colspan="4" class="empty">Failed to load.</td></tr>';
+      if (dashBody) dashBody.innerHTML = '<div class="empty">Failed to load.</div>';
+    }
   }
 
   async function loadHolidayCalendar() {
     var body = document.getElementById('holiday-calendar-body');
-    if (!body) return;
+    var nextHolidayEl = document.getElementById('dash-next-holiday');
+    if (!body && !nextHolidayEl) return;
     try {
       var r = await fetch(apiBase() + '/ess/holidays', {headers: essHeaders()});
       if (r.status === 401) { essLogout(); return; }
       var rows = await r.json();
-      if (!rows.length) { body.innerHTML = '<tr><td colspan="4" class="empty">No holidays configured yet.</td></tr>'; return; }
       var todayStr = new Date().toISOString().slice(0, 10);
-      body.innerHTML = rows.map(function(h) {
-        var isPast = h.date < todayStr;
-        var dateLabel = new Date(h.date + 'T00:00:00').toLocaleDateString('en-US', {day: '2-digit', month: 'short', year: 'numeric'});
-        var paid = (h.paid === false || h.paid === 'No') ? '<span style="color:var(--text3)">No</span>' : '<span class="dir-in">Yes</span>';
-        return '<tr' + (isPast ? ' style="opacity:.5"' : '') + '><td>' + dateLabel + '</td><td>' + escHtml(h.name) + '</td><td>' + escHtml(h.location) + '</td><td>' + paid + '</td></tr>';
-      }).join('');
-    } catch(e) { body.innerHTML = '<tr><td colspan="4" class="empty">Failed to load.</td></tr>'; }
+      if (body) {
+        body.innerHTML = rows.length ? rows.map(function(h) {
+          var isPast = h.date < todayStr;
+          var dateLabel = new Date(h.date + 'T00:00:00').toLocaleDateString('en-US', {day: '2-digit', month: 'short', year: 'numeric'});
+          var paid = (h.paid === false || h.paid === 'No') ? '<span style="color:var(--text3)">No</span>' : '<span class="dir-in">Yes</span>';
+          return '<tr' + (isPast ? ' style="opacity:.5"' : '') + '><td>' + dateLabel + '</td><td>' + escHtml(h.name) + '</td><td>' + escHtml(h.location) + '</td><td>' + paid + '</td></tr>';
+        }).join('') : '<tr><td colspan="4" class="empty">No holidays configured yet.</td></tr>';
+      }
+      // Nearest upcoming holiday, shown as a one-line teaser on the
+      // Dashboard tab -- rows are already sorted by date ascending (see
+      // GET /ess/holidays), so the first one >= today is the next one.
+      if (nextHolidayEl) {
+        var upcoming = rows.filter(function(h) { return h.date >= todayStr; })[0];
+        if (upcoming) {
+          var upLabel = new Date(upcoming.date + 'T00:00:00').toLocaleDateString('en-US', {day: '2-digit', month: 'short'});
+          nextHolidayEl.textContent = 'Next holiday: ' + upcoming.name + ' — ' + upLabel;
+        } else {
+          nextHolidayEl.textContent = rows.length ? 'No upcoming holidays' : 'No holidays configured yet';
+        }
+      }
+    } catch(e) {
+      if (body) body.innerHTML = '<tr><td colspan="4" class="empty">Failed to load.</td></tr>';
+      if (nextHolidayEl) nextHolidayEl.textContent = 'Failed to load';
+    }
   }
 
   async function loadDeptTeamView() {

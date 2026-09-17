@@ -88,6 +88,30 @@ def test_ess_team_returns_employees_in_scoped_departments(client, auth_headers, 
     assert ops_emp.full_name not in names
 
 
+def test_ess_team_excludes_inactive_employees(client, auth_headers, db):
+    """GET /ess/team previously returned every employee in a scoped
+    department regardless of status -- a former employee's row is kept
+    around for history (payroll, past attendance) but has no business
+    appearing in a live "who's on my team" roster, same as the equivalent
+    fix already applied to Rota's staff list and Monthly Staff Overview."""
+    company_id = _company_id(client, auth_headers)
+    active_emp = _seed_employee(db, company_id, "DEPT-ACTIVE-1", "Still Here", department="Warehouse")
+    inactive_emp = _seed_employee(db, company_id, "DEPT-INACTIVE-1", "Long Gone", department="Warehouse")
+    inactive_emp.status = "inactive"
+    db.commit()
+    manager = _seed_employee(db, company_id, "DEPT-MGR-2", "Warehouse Manager", department="Management")
+
+    role = _create_role(client, auth_headers, "Warehouse Team Lead 2", ["Warehouse"])
+    _grant_portal_access(client, auth_headers, manager.id, "dept.team.manager2", role["id"])
+    headers = _login(client, "dept.team.manager2")
+
+    r = client.get("/api/v1/ess/team", headers=headers)
+    assert r.status_code == 200, r.text
+    names = {row["full_name"] for row in r.json()}
+    assert active_emp.full_name in names
+    assert inactive_emp.full_name not in names
+
+
 def test_ess_team_403_when_role_has_no_department_scope(client, auth_headers, db):
     company_id = _company_id(client, auth_headers)
     emp = _seed_employee(db, company_id, "DEPT-NOSCOPE-1", "No Scope Employee")

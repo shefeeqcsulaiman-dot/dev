@@ -218,9 +218,18 @@ def ess_team(request: Request, db: Session = Depends(get_db)) -> list[EssTeamMem
     departments = _role_department_scope(role)
     if not departments:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Your role is not scoped to any department")
+    # Active only -- same "Inactive leaking through" bug class already
+    # fixed for Rota (currentRotaStaff()) and Monthly Staff Overview: a
+    # former employee has no business appearing in a live "who's on my
+    # team" roster, even though the SQL row itself is deliberately kept
+    # around for history elsewhere (payroll, past attendance/rota).
     rows = (
         db.query(Employee)
-        .filter(Employee.company_id == emp.company_id, Employee.department.in_(departments))
+        .filter(
+            Employee.company_id == emp.company_id,
+            Employee.department.in_(departments),
+            Employee.status == "active",
+        )
         .order_by(Employee.full_name)
         .all()
     )
