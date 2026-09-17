@@ -737,3 +737,58 @@ def ess_rota(
     ]
     mine.sort(key=lambda a: a.get("date") or "")
     return mine
+
+
+@router.get("/team/rota")
+def ess_team_rota(
+    request: Request,
+    week: str = Query(..., description="YYYY-MM-DD -- the Monday starting the week to view"),
+    db: Session = Depends(get_db),
+) -> dict:
+    """This employee's own department's rota for one Mon-Sun week -- the
+    Rota tab's "Department Rota" view. Same "own department, everyone, no
+    role-scope required" reach as /ess/team/today and /ess/team/leave, so
+    a colleague's shift schedule is exactly as visible as their attendance
+    and leave already are (not the narrower role-scoped /ess/team).
+
+    Returns the peer roster and the week's raw assignments separately
+    (rather than nesting one inside the other) so the frontend can build a
+    Mon-Sun grid the same way HRMS's own Department Rota does, keyed by
+    (employee_no, date) -- matching rotaAssignments' own id convention
+    (see ess_rota()'s docstring on why employee_no, not emp.id, is the key
+    every rotaAssignments row actually uses)."""
+    emp = ess_bearer(request, db)
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", week):
+        raise HTTPException(status_code=400, detail="week must be in YYYY-MM-DD format")
+    try:
+        week_start = date.fromisoformat(week)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="week must be a valid date")
+    week_start_iso = week_start.isoformat()
+    week_end_iso = (week_start + timedelta(days=6)).isoformat()
+
+    peers = (
+        db.query(Employee)
+        .filter(Employee.company_id == emp.company_id, Employee.department == emp.department, Employee.status == "active")
+        .order_by(Employee.full_name)
+        .all()
+    )
+    if not peers:
+        return {"employees": [], "assignments": []}
+
+    peer_nos = {p.employee_no for p in peers}
+    assignments = _employee_app_data_records(db, emp.company_id, "rotaAssignments")
+    rows = [
+        a for a in assignments
+        if a.get("employee_id") in peer_nos and week_start_iso <= (a.get("date") or "") <= week_end_iso
+    ]
+    return {
+        "employees": [
+            {
+                "employee_no": p.employee_no, "full_name": p.full_name,
+                "designation": p.designation, "is_me": p.id == emp.id,
+            }
+            for p in peers
+        ],
+        "assignments": rows,
+    }

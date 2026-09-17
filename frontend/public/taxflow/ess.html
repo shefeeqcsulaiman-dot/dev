@@ -250,6 +250,30 @@
     .rota-type-ot .rota-date-chip{background:#fef3c7;color:#92400e}
     .rota-type-training .rota-date-chip{background:#ccfbf1;color:#0f766e}
     .rota-type-off .rota-shift-title,.rota-type-off .rota-shift-sub{color:var(--text3)}
+    /* Tasks attached to one day's shift (Weekly/Monthly Rota's task picker
+       in HRMS) -- the ESS Rota list used to show only the shift's time and
+       silently drop this, even though /ess/rota already returns it. */
+    .rota-shift-tasks{margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);display:flex;flex-direction:column;gap:3px}
+    .rota-shift-task-item{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text2)}
+    .rota-shift-task-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+    .rota-shift-task-time{color:var(--text3)}
+    .ess-view-toggle{display:flex;gap:8px;margin-bottom:14px}
+    .ess-view-toggle-btn{padding:9px 16px;border-radius:9px;border:1px solid var(--border);background:none;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;color:var(--text2)}
+    .ess-view-toggle-btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+    .dept-rota-table-wrap{overflow-x:auto}
+    .dept-rota-table{width:100%;border-collapse:collapse;min-width:640px}
+    .dept-rota-table th{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);text-align:center;padding:6px 4px;font-weight:700}
+    .dept-rota-table th:first-child{text-align:left}
+    .dept-rota-table td{padding:6px 4px;vertical-align:top;border-top:1px solid var(--border)}
+    .dept-rota-table td:first-child{white-space:nowrap;font-weight:600;font-size:13px}
+    .dept-rota-employee-sub{font-size:11px;color:var(--text3);font-weight:400}
+    .dept-rota-cell{min-width:74px;text-align:center;border-radius:8px;padding:5px 4px;font-size:11px}
+    .dept-rota-cell.is-off{color:var(--text3)}
+    .dept-rota-cell .code{font-weight:700;font-size:12px}
+    .dept-rota-cell .time{color:var(--text3);font-size:10px}
+    .dept-rota-cell .task-count{margin-top:3px;font-size:9.5px;color:var(--accent);font-weight:600}
+    .dept-rota-row.is-me td:first-child{color:var(--accent)}
+    .dept-rota-table th.is-today{color:var(--accent)}
     .task-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:8px}
 
     /* ── CARDS ── */
@@ -693,15 +717,35 @@
 
     <!-- Rota -->
     <div class="tab-body" id="tb-rota">
-      <div class="card">
-        <div class="card-hd">
-          <div class="card-title" id="rota-card-title" style="margin-bottom:0">My Upcoming Shifts (next 30 days)</div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <input type="month" class="ess-month-picker" id="rota-month-picker" onchange="loadRota()">
-            <button class="btn-ghost" id="rota-reset-btn" style="padding:8px 12px;font-size:12px;display:none" onclick="document.getElementById('rota-month-picker').value='';loadRota()">Reset</button>
+      <div class="ess-view-toggle">
+        <button type="button" class="ess-view-toggle-btn on" id="rota-view-mine-btn" onclick="showRotaView('mine')">My Rota</button>
+        <button type="button" class="ess-view-toggle-btn" id="rota-view-dept-btn" onclick="showRotaView('dept')">Department Rota</button>
+      </div>
+
+      <div id="rota-view-mine">
+        <div class="card">
+          <div class="card-hd">
+            <div class="card-title" id="rota-card-title" style="margin-bottom:0">My Upcoming Shifts (next 30 days)</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="month" class="ess-month-picker" id="rota-month-picker" onchange="loadRota()">
+              <button class="btn-ghost" id="rota-reset-btn" style="padding:8px 12px;font-size:12px;display:none" onclick="document.getElementById('rota-month-picker').value='';loadRota()">Reset</button>
+            </div>
           </div>
+          <div id="rota-content" class="loading">Loading…</div>
         </div>
-        <div id="rota-content" class="loading">Loading…</div>
+      </div>
+
+      <div id="rota-view-dept" style="display:none">
+        <div class="card">
+          <div class="card-hd">
+            <div><div class="card-title" style="margin-bottom:0">Department Rota</div><div class="dept-rota-employee-sub" id="dept-rota-sub" style="margin-top:2px">This week</div></div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button type="button" class="btn-ghost" style="padding:8px 12px;font-size:12px" onclick="shiftDeptRotaWeek(-1)">‹ Prev</button>
+              <button type="button" class="btn-ghost" style="padding:8px 12px;font-size:12px" onclick="shiftDeptRotaWeek(1)">Next ›</button>
+            </div>
+          </div>
+          <div id="dept-rota-content" class="loading">Loading…</div>
+        </div>
       </div>
     </div>
 
@@ -1426,11 +1470,22 @@
           var subText = timeRange || meta.fallback;
           var titleText = (a.type || a.code || 'Shift') +
             (isToday ? '<span class="rota-today-pill">Today</span>' : (isTomorrow ? '<span class="rota-today-pill">Tomorrow</span>' : ''));
+          // The task picker in HRMS's Weekly/Monthly Rota can attach one or
+          // more tasks to a specific day's shift (its own title/color/time,
+          // separate from the standalone "My Tasks" tab) -- /ess/rota
+          // already returns them per assignment, this just stopped
+          // silently dropping them on the floor.
+          var shiftTasks = Array.isArray(a.tasks) ? a.tasks : [];
+          var tasksHtml = shiftTasks.length ? ('<div class="rota-shift-tasks">' + shiftTasks.map(function(t) {
+            var taskTime = (t.start && t.end) ? (' <span class="rota-shift-task-time">' + _essEsc(t.start) + '–' + _essEsc(t.end) + '</span>') : '';
+            return '<div class="rota-shift-task-item"><span class="rota-shift-task-dot" style="background:' + _essEsc(t.color || '#2563eb') + '"></span>' + _essEsc(t.title || 'Task') + taskTime + '</div>';
+          }).join('') + '</div>') : '';
           html += '<div class="rota-row ' + meta.cls + (isToday ? ' is-today' : '') + '">' +
             '<div class="rota-date-chip"><div class="dow">' + dowShort + '</div><div class="d">' + dayNum + '</div></div>' +
             '<div style="flex:1;min-width:0">' +
               '<div class="rota-shift-title" style="font-weight:600;font-size:13.5px;color:var(--text)">' + titleText + '</div>' +
-              '<div class="rota-shift-sub" style="font-size:12px;color:var(--text3)">' + subText + (a.location ? (' · ' + a.location) : '') + '</div>' +
+              '<div class="rota-shift-sub" style="font-size:12px;color:var(--text3)">' + subText + (a.location ? (' · ' + _essEsc(a.location)) : '') + '</div>' +
+              tasksHtml +
             '</div>' +
           '</div>';
         });
@@ -1438,6 +1493,108 @@
       }
       updateDashboard();
     } catch(e) { var roEl = document.getElementById('rota-content'); roEl.classList.remove('loading'); roEl.innerHTML = '<div class="empty">Failed to load.</div>'; }
+  }
+
+  function _essEsc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // YYYY-MM-DD in the VIEWER's local calendar day -- Date#toISOString()
+  // converts to UTC first, which silently shifts to the wrong date for
+  // any timezone ahead of UTC (e.g. UAE, UTC+4: local midnight Monday is
+  // still Sunday evening in UTC) once the hour is zeroed out by _mondayOf().
+  function _isoDateLocal(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  var _deptRotaWeekStart = null; // Date, Monday of the week currently shown
+
+  function showRotaView(view) {
+    var mineBtn = document.getElementById('rota-view-mine-btn');
+    var deptBtn = document.getElementById('rota-view-dept-btn');
+    var mineView = document.getElementById('rota-view-mine');
+    var deptView = document.getElementById('rota-view-dept');
+    var isDept = view === 'dept';
+    if (mineBtn) mineBtn.classList.toggle('on', !isDept);
+    if (deptBtn) deptBtn.classList.toggle('on', isDept);
+    if (mineView) mineView.style.display = isDept ? 'none' : '';
+    if (deptView) deptView.style.display = isDept ? '' : 'none';
+    if (isDept) {
+      if (!_deptRotaWeekStart) _deptRotaWeekStart = _mondayOf(new Date());
+      loadDeptRota();
+    }
+  }
+
+  function shiftDeptRotaWeek(deltaWeeks) {
+    if (!_deptRotaWeekStart) _deptRotaWeekStart = _mondayOf(new Date());
+    _deptRotaWeekStart = new Date(_deptRotaWeekStart);
+    _deptRotaWeekStart.setDate(_deptRotaWeekStart.getDate() + deltaWeeks * 7);
+    loadDeptRota();
+  }
+
+  var ROTA_WEEK_DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  // Department Rota -- everyone in the viewer's own department, one Mon-Sun
+  // week at a time, mirroring what HRMS admins already see in Rota &
+  // Shift's own "Department Rota" tab. Previously ESS only ever showed an
+  // employee their OWN shifts with no way to see who else is on with them.
+  async function loadDeptRota() {
+    var el = document.getElementById('dept-rota-content');
+    var subEl = document.getElementById('dept-rota-sub');
+    if (!_deptRotaWeekStart) _deptRotaWeekStart = _mondayOf(new Date());
+    var weekStartStr = _isoDateLocal(_deptRotaWeekStart);
+    var weekEnd = new Date(_deptRotaWeekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    if (subEl) {
+      subEl.textContent = _deptRotaWeekStart.toLocaleDateString('en-GB', {day: '2-digit', month: 'short'}) +
+        ' – ' + weekEnd.toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: 'numeric'});
+    }
+    el.classList.add('loading');
+    el.innerHTML = 'Loading…';
+    try {
+      var r = await fetch(apiBase() + '/ess/team/rota?week=' + encodeURIComponent(weekStartStr), {headers: essHeaders()});
+      if (r.status === 401) { essLogout(); return; }
+      if (r.status === 403) { el.classList.remove('loading'); el.innerHTML = '<div class="empty">Your role is not scoped to any department.</div>'; return; }
+      var data = await r.json();
+      el.classList.remove('loading');
+      var employees = data.employees || [];
+      if (!employees.length) { el.innerHTML = '<div class="empty">No one else in your department yet.</div>'; return; }
+      var byEmpDate = {};
+      (data.assignments || []).forEach(function(a) {
+        byEmpDate[a.employee_id + '|' + a.date] = a;
+      });
+      var todayStr = _isoDateLocal(new Date());
+      var dayDates = [];
+      for (var i = 0; i < 7; i++) {
+        var dd = new Date(_deptRotaWeekStart);
+        dd.setDate(dd.getDate() + i);
+        dayDates.push(dd);
+      }
+      var headHtml = '<th>Employee</th>' + dayDates.map(function(dd, i) {
+        var iso = _isoDateLocal(dd);
+        return '<th class="' + (iso === todayStr ? 'is-today' : '') + '">' + ROTA_WEEK_DAY_LABELS[i] + '<br>' + dd.getDate() + '</th>';
+      }).join('');
+      var bodyHtml = employees.map(function(emp) {
+        var cells = dayDates.map(function(dd) {
+          var iso = _isoDateLocal(dd);
+          var a = byEmpDate[emp.employee_no + '|' + iso];
+          if (!a || !a.code || a.code === 'OFF') return '<td><div class="dept-rota-cell is-off">–</div></td>';
+          var timeRange = (a.start && a.end) ? (a.start + '–' + a.end) : '';
+          var taskCount = Array.isArray(a.tasks) ? a.tasks.length : 0;
+          return '<td><div class="dept-rota-cell"><div class="code">' + _essEsc(a.code) + '</div>' +
+            (timeRange ? '<div class="time">' + _essEsc(timeRange) + '</div>' : '') +
+            (taskCount ? '<div class="task-count">' + taskCount + ' task' + (taskCount === 1 ? '' : 's') + '</div>' : '') +
+            '</div></td>';
+        }).join('');
+        return '<tr class="dept-rota-row' + (emp.is_me ? ' is-me' : '') + '">' +
+          '<td>' + _essEsc(emp.full_name) + (emp.is_me ? ' (You)' : '') + '<div class="dept-rota-employee-sub">' + _essEsc(emp.designation || '') + '</div></td>' +
+          cells + '</tr>';
+      }).join('');
+      el.innerHTML = '<div class="dept-rota-table-wrap"><table class="dept-rota-table"><thead><tr>' + headHtml + '</tr></thead><tbody>' + bodyHtml + '</tbody></table></div>';
+    } catch (e) {
+      el.classList.remove('loading');
+      el.innerHTML = '<div class="empty">Failed to load.</div>';
+    }
   }
 
   // ── Tasks ──────────────────────────────────────────────────────────────
