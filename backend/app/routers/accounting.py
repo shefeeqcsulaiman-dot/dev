@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 import urllib.request
@@ -295,7 +296,15 @@ def _call_ledger_ai(prompt: str, existing_codes: list[str]) -> dict:
         raw = re.sub(r"\s*```$", "", raw)
         return json.loads(raw)
     except Exception as exc:
-        return {"error": f"AI generation failed: {exc}"}
+        # Was returning str(exc) straight to the client -- fine for the
+        # common case (an OpenAI HTTP/network error message), but this is a
+        # bare `except Exception`, so it also catches things like a
+        # malformed-response KeyError/JSONDecodeError, which could echo back
+        # more of the raw exception (potentially internal detail) than
+        # intended. Log the real exception server-side, return a generic
+        # message to the client either way.
+        logging.getLogger(__name__).warning("AI ledger generation failed: %s", exc)
+        return {"error": "AI generation failed. Please try again or use the manual entry form."}
 
 
 def _rule_based_ledger_generator(prompt: str, existing_codes: list[str]) -> dict:

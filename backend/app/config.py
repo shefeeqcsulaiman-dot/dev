@@ -9,7 +9,17 @@ _INSECURE_DEFAULTS = {"change-me-in-production", "admin123", "super123", "secret
 
 class Settings(BaseSettings):
     app_name: str = "TaxFlow"
-    app_env: str = "development"
+    # Defaults to "production", not "development" -- app_env's only use
+    # anywhere in the codebase is assert_production_secrets() below, whose
+    # entire job is refusing to start with insecure default secrets/CORS.
+    # Defaulting to "development" meant that check silently no-oped if
+    # APP_ENV was ever missing on a real deployment (a misconfigured env var,
+    # a new platform instance) -- exactly the case it exists to catch. Both
+    # local dev configs (.env/.env.local) already set APP_ENV=local
+    # explicitly, and production sets APP_ENV=production explicitly, so this
+    # only changes behavior for the "env var missing entirely" case -- from
+    # fail-open (skip the check) to fail-safe (assume production, enforce it).
+    app_env: str = "production"
     secret_key: str = "change-me-in-production"
     access_token_expire_minutes: int = 120
     database_url: str = "sqlite:///./taxflow.db"
