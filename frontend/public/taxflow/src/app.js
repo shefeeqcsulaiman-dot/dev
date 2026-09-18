@@ -22404,8 +22404,45 @@ function _fmtTrendDate(iso){
 function _updateDashboardAttTrend(dates,counts){
   const wrap=document.querySelector('.hrms-line-chart-wrap');
   if(!wrap)return;
-  const chart=_renderAttendanceBarChart(dates,counts,{width:400,height:100,fullSize:true});
-  wrap.innerHTML=chart.svg;
+  // A line/area chart, not the bar chart the Attendance page's own bigger
+  // trend chart uses — this compact Dashboard card's own header icon is a
+  // trend-line illustration ("Attendance Trend"), so the actual chart
+  // rendered underneath should match that, not bars.
+  const chart=_renderAttendanceLineChart(dates,counts,{width:400,height:100,fullSize:true});
+  wrap.innerHTML=`<div style="width:100%;height:100%;display:flex;flex-direction:column"><div style="flex:1;min-height:0">${chart.svg}</div><div style="font-size:10.5px;color:var(--text3);text-align:center;padding-top:4px">${escapeHtml(chart.subText)}</div></div>`;
+}
+
+function _renderAttendanceLineChart(dates,counts,{width:W,height:H,fullSize=false}={}){
+  const PAD=6;
+  const n=dates.length;
+  const max=Math.max(1,...counts);
+  const firstActiveIdx=counts.findIndex(c=>c>0);
+  const trackedCounts=firstActiveIdx>=0?counts.slice(firstActiveIdx):counts;
+  const avg=trackedCounts.length?Math.round(trackedCounts.reduce((a,b)=>a+b,0)/trackedCounts.length):0;
+  const todayIso=new Date().toISOString().slice(0,10);
+  const stepX=n>1?(W-PAD*2)/(n-1):0;
+  const points=counts.map((c,i)=>[PAD+i*stepX,H-PAD-(c/max)*(H-PAD*2)]);
+  const linePath=points.map(([x,y],i)=>`${i===0?'M':'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const lastX=points.length?points[points.length-1][0].toFixed(1):PAD;
+  const firstX=points.length?points[0][0].toFixed(1):PAD;
+  const areaPath=points.length?`${linePath} L${lastX},${(H-PAD).toFixed(1)} L${firstX},${(H-PAD).toFixed(1)} Z`:'';
+  const gradId='attTrendAreaGrad'+Math.random().toString(36).slice(2,8);
+  const todayIdx=dates.indexOf(todayIso);
+  const dots=points.map(([x,y],i)=>{
+    const isToday=i===todayIdx;
+    const r=isToday?3:1.6;
+    const style=isToday?`fill:var(--accent)" stroke="var(--surface,#fff)" stroke-width="1.5`:'fill:var(--accent)" opacity="0.55';
+    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" style="${style}"><title>${dates[i]}: ${counts[i]} present${isToday?' (today)':''}</title></circle>`;
+  }).join('');
+  const defs=`<defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" style="stop-color:var(--accent)" stop-opacity="0.3"/><stop offset="100%" style="stop-color:var(--accent)" stop-opacity="0"/></linearGradient></defs>`;
+  const svgAttrs=fullSize
+    ?`viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:100%"`
+    :`viewBox="0 0 ${W} ${H}" width="100%" style="overflow:visible"`;
+  const svg=`<svg ${svgAttrs}>${defs}<path d="${areaPath}" style="fill:url(#${gradId})"/><path d="${linePath}" style="fill:none;stroke:var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}</svg>`;
+  const subText=firstActiveIdx>0
+    ?`Avg ${avg} employees/day since tracking began (${_fmtTrendDate(dates[firstActiveIdx])})`
+    :`Avg ${avg} employees/day over last ${n} days`;
+  return {svg,subText,avg,firstActiveIdx};
 }
 
 // ── CSV Import ────────────────────────────────────────────────────────────────
