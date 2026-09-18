@@ -8828,6 +8828,17 @@ function hydrateFromServer(){
           :null;
         if(otCfg){
           _applyOtRulesConfig(otCfg);
+        }else{
+          // No OT Rules ever saved for this company yet -- seed the same
+          // sensible UAE-labour-law default that used to be hardcoded HTML
+          // in #ot-rules-tbody. That static row was being wiped by
+          // clearStaticDemoData()'s generic "empty every table.tbl on load"
+          // sweep before this bootstrap callback ever ran, so it silently
+          // vanished on the very first page load, not just after a Save.
+          // Rendering it here (once, only when nothing's been saved at all)
+          // uses the real _renderNamedOtRuleRow() path, so it round-trips
+          // correctly through Save/Delete like any other named rule.
+          _renderNamedOtRuleRow({name:'UAE Standard OT',rateType:'monthly',hoursType:'hours',multNormal:'1.25',multWeekend:'1.50',multHoliday:'1.50'});
         }
         const weekendCfg=Array.isArray(_deferred2.hr_settings)
           ?_deferred2.hr_settings.find(x=>x.id==='weekend-policy-config')
@@ -18083,13 +18094,23 @@ function saveHrRules(){
 function _renderNamedOtRuleRow(rule){
   const tbody=document.getElementById('ot-rules-tbody');
   if(!tbody)return;
+  removeEmptyState(tbody);
   const {name,rateType,hoursType,multNormal:mn,multWeekend:mw,multHoliday:mh}=rule;
   const rateLabel=rateType==='fixed'?'<span class="b b-g">Fixed</span>':rateType==='monthly'?'<span class="b b-b">Monthly-Based</span>':'<span class="b" style="background:var(--bg3)">Other</span>';
   const hoursLabel=hoursType==='hours'?'<span class="b" style="background:var(--bg3)">Based on Hours</span>':hoursType==='days'?'<span class="b b-a">Based on Days</span>':'<span class="b" style="background:var(--bg3)">Other</span>';
   const tr=document.createElement('tr');
   tr.dataset.rule=JSON.stringify(rule);
-  tr.innerHTML=`<td>${escapeHtml(name)}</td><td>${rateLabel}</td><td>${hoursLabel}</td><td>${escapeHtml(String(mn))}</td><td>${escapeHtml(String(mw))}</td><td>${escapeHtml(String(mh))}</td><td>All Employees</td><td><button class="btn btn-g btn-sm" onclick="this.closest('tr').remove();_syncOtPolicySelects();saveOtRules()">Delete</button></td>`;
+  tr.innerHTML=`<td>${escapeHtml(name)}</td><td>${rateLabel}</td><td>${hoursLabel}</td><td>${escapeHtml(String(mn))}</td><td>${escapeHtml(String(mw))}</td><td>${escapeHtml(String(mh))}</td><td>All Employees</td><td><button class="btn btn-g btn-sm" onclick="_deleteNamedOtRule(this)">Delete</button></td>`;
   tbody.appendChild(tr);
+}
+function _deleteNamedOtRule(btn){
+  const tbody=btn.closest('tbody');
+  btn.closest('tr').remove();
+  _syncOtPolicySelects();
+  saveOtRules();
+  if(tbody&&!tbody.querySelector('tr:not([data-empty-state])')){
+    emptyTableMessage(tbody,'No named OT rules yet. Click + Add Rule to create one.');
+  }
 }
 function _syncOtPolicySelects(rateType){
   // Update emp-ot-rate select to reflect named rules from tbody
@@ -19245,6 +19266,35 @@ function renderLoanRecord(rec){
   tr.dataset.record=JSON.stringify(rec);
   tr.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td>${escapeHtml(rec.type)}</td><td class="mono">AED ${amount.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td class="mono">AED ${Number(rec.emi||0).toFixed(2)}</td><td class="mono">AED ${balance.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td><span class="b ${statusCls}">${escapeHtml(rec.status||'Pending')}</span></td><td>${actions}</td>`;
   tbody.prepend(tr);
+  _refreshPayrollLoansCard();
+}
+
+// The Payroll page's own "Loans, Advances & Recurring Deductions" card used
+// to be static demo markup with a fake "+ New Advance" toast — it never
+// showed any of this real data even though the feature (Employee
+// Loans/Salary Advances tabs above) was already fully working. Mirrors
+// only Approved records (Rejected/Pending don't affect payroll yet) by
+// reading the two source tables' own dataset.record, so there's a single
+// source of truth and this card can't drift from what HR actually approved.
+function _refreshPayrollLoansCard(){
+  const target=document.getElementById('pay-loans-tbody');
+  if(!target)return;
+  const rows=[];
+  document.querySelectorAll('#loans-tbody tr[data-record-id]').forEach(tr=>{
+    let rec={};try{rec=JSON.parse(tr.dataset.record||'{}');}catch{}
+    if(rec.status!=='Approved')return;
+    const balance=Number(rec.balance??rec.amount)||0;
+    if(balance<=0)return;
+    rows.push({employee:rec.employee,type:rec.type||'Loan',original:Number(rec.amount)||0,monthly:Number(rec.emi)||0,balance,start:rec.deduct_from||rec.date||'—',status:rec.status});
+  });
+  document.querySelectorAll('#advances-tbody tr[data-record-id]').forEach(tr=>{
+    let rec={};try{rec=JSON.parse(tr.dataset.record||'{}');}catch{}
+    if(rec.status!=='Approved')return;
+    const amount=Number(rec.amount)||0;
+    rows.push({employee:rec.employee,type:'Salary Advance',original:amount,monthly:amount,balance:amount,start:rec.month||'—',status:rec.status});
+  });
+  if(!rows.length){emptyTableMessage(target,'No approved loans or advances yet.');return;}
+  target.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.employee)}</td><td>${escapeHtml(r.type)}</td><td class="mono">AED ${r.original.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td class="mono">AED ${r.monthly.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td class="mono">AED ${r.balance.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td>${escapeHtml(r.start)}</td><td><span class="b b-g">${escapeHtml(r.status)}</span></td></tr>`).join('');
 }
 
 // Previously saved only {id,status} — save_app_record() does a full payload
@@ -19265,6 +19315,7 @@ function approveLoan(btn){
   if(id)saveServer('employeeLoans',{...payload,id});
   toast('Loan approved ✓','ok');
   audit('Loan approved',row.children[0]?.textContent||'','Approved');
+  _refreshPayrollLoansCard();
 }
 
 function rejectLoan(btn){
@@ -19279,6 +19330,7 @@ function rejectLoan(btn){
   if(id)saveServer('employeeLoans',{...payload,id});
   toast('Loan rejected','warn');
   audit('Loan rejected',row.children[0]?.textContent||'','Rejected');
+  _refreshPayrollLoansCard();
 }
 
 function saveLoanAdvance(){
@@ -19313,6 +19365,7 @@ function renderLoanAdvanceRecord(rec){
   tr.dataset.record=JSON.stringify(rec);
   tr.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td class="mono">${escapeHtml(rec.month)}</td><td class="mono">AED ${Number(rec.amount||0).toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td>${requestedStr}</td><td><span class="b ${statusCls}">${escapeHtml(rec.status||'Pending')}</span></td><td>${actions}</td>`;
   tbody.prepend(tr);
+  _refreshPayrollLoansCard();
 }
 
 // See approveLoan()'s comment — same full-payload-overwrite bug, same fix.
@@ -19328,6 +19381,7 @@ function approveLoanAdvance(btn){
   if(id)saveServer('salaryAdvances',{...payload,id});
   toast('Advance approved ✓','ok');
   audit('Salary advance approved',row.children[0]?.textContent||'','Approved');
+  _refreshPayrollLoansCard();
 }
 
 // Previously a fake `toast('Extra staff requested','warn')` with no effect

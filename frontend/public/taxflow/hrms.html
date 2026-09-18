@@ -1389,7 +1389,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Rule Name</th><th>Rate Type</th><th>Hours Type</th><th>Normal ×</th><th>Weekend ×</th><th>Holiday ×</th><th>Applies To</th><th></th></tr></thead>
         <tbody id="ot-rules-tbody">
-          <tr><td>UAE Standard OT</td><td><span class="b b-b">Monthly-Based</span></td><td><span class="b" style="background:var(--bg3)">Based on Hours</span></td><td>1.25</td><td>1.50</td><td>1.50</td><td>All Employees</td><td><button class="btn btn-g btn-sm" onclick="toast('Edit OT rule','info')">Edit</button></td></tr>
+          <tr data-empty-state><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No named OT rules yet. Click <strong>+ Add Rule</strong> to create one.</td></tr>
         </tbody>
       </table>
     </div>
@@ -2605,11 +2605,11 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       </div>
     </div>
     <div class="card">
-      <div class="card-hd"><div><div class="card-title">Loans, Advances & Recurring Deductions</div><div class="card-sub">Amounts can feed directly into the monthly payroll run</div></div><button class="btn btn-p btn-sm" onclick="toast('New advance request opened','info')">+ New Advance</button></div>
+      <div class="card-hd"><div><div class="card-title">Loans, Advances & Recurring Deductions</div><div class="card-sub">Approved loans and salary advances that feed into the monthly payroll run</div></div><button class="btn btn-g btn-sm" onclick="go('staff');setTimeout(()=>stab(document.querySelector('#page-staff .tab:nth-child(6)'),'hr-loans'),50)">Manage in Loans & Advances →</button></div>
       <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Employee</th><th>Type</th><th>Original Amount</th><th>Monthly Deduction</th><th>Balance</th><th>Start</th><th>Status</th></tr></thead>
-        <tbody>
-          <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No records yet.</td></tr>
+        <tbody id="pay-loans-tbody">
+          <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No approved loans or advances yet.</td></tr>
         </tbody>
       </table>
     </div>
