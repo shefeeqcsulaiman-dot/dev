@@ -1,9 +1,13 @@
+import datetime as _dt
+import io
 import json
+import zipfile
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
@@ -13,6 +17,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.dependencies import Principal, get_current_principal, get_current_user
 from app.limiter import limiter
+from app.routers.app_data import build_company_sql_dump
 # Re-exported here under the same name for every pre-existing call site in
 # this file — moved to app/module_catalog.py (Branch Login Phase 1) so core
 # auth code (auth_principal.py, dependencies.py) and branches.py can import
@@ -226,6 +231,61 @@ def list_companies(db: Session = Depends(get_db), _: User = Depends(_require_sup
             }
         )
     return result
+
+
+@router.get("/companies/{company_id}/db-dump")
+@limiter.limit("10/minute")
+def superadmin_company_db_dump(
+    request: Request,
+    company_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_superadmin),
+) -> Response:
+    """Same restorable SQL backup a company owner can download for
+    themselves (GET /app-data/db-dump), but reachable by Superadmin for
+    ANY company without needing to log in as / impersonate them."""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(404, "Company not found")
+    sql_text, fname = build_company_sql_dump(db, company_id, f"Superadmin ({current_user.full_name})")
+    return Response(
+        content=sql_text.encode("utf-8"),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@router.get("/companies/backup-all")
+@limiter.limit("3/minute")
+def superadmin_backup_all_companies(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_superadmin),
+) -> Response:
+    """One .zip containing every company's own restorable SQL backup file
+    (same format/content as the per-company endpoint above), so Superadmin
+    can pull a full-platform backup in one action. Zipped per-company
+    rather than concatenated into one script -- keeps each tenant's data
+    separable for a real single-company restore, and a bad/huge company
+    dump can't corrupt the file boundaries of the others."""
+    companies = (
+        db.query(Company)
+        .filter(or_(Company.trn.is_(None), Company.trn != "SUPERADMIN-INTERNAL"))
+        .order_by(Company.name.asc())
+        .all()
+    )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for company in companies:
+            sql_text, fname = build_company_sql_dump(db, company.id, f"Superadmin ({current_user.full_name})")
+            safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in (company.name or company.id)).strip() or company.id
+            zf.writestr(f"{safe_name}/{fname}", sql_text)
+    date_str = _dt.datetime.utcnow().strftime("%Y%m%d")
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="taxflow-all-companies-backup-{date_str}.zip"'},
+    )
 
 
 @router.post("/companies/{company_id}/set-expiry")

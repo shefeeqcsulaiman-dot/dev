@@ -322,6 +322,7 @@
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-g btn-sm" onclick="exportCompaniesCSV()">Export CSV</button>
+        <button class="btn btn-g btn-sm" onclick="downloadAllCompaniesBackup(this)" title="Download a .zip with every company's own restorable SQL backup">⬇ Download All Backups</button>
         <button class="btn btn-p btn-sm" onclick="openCreateCompany()">+ New Company</button>
       </div>
     </div>
@@ -1045,6 +1046,7 @@
                 <button class="menu-item" onclick="closeAllMenus();quickExtend('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}',365)">+1 Year</button>
                 <button class="menu-item" onclick="closeAllMenus();openAddUser('${escHtml(c.id)}','${escHtml(c.name)}')">Add User</button>
                 <button class="menu-item" onclick="closeAllMenus();openModules('${escHtml(c.id)}','${escHtml(c.name)}',${escHtml(JSON.stringify(c.modules_enabled||[]))})">Module Permissions</button>
+                <button class="menu-item" onclick="closeAllMenus();downloadCompanyBackup('${escHtml(c.id)}','${escHtml(c.name)}')">⬇ Download Backup</button>
                 <div class="menu-sep"></div>
                 <button class="menu-item danger" onclick="closeAllMenus();deleteCompany('${escHtml(c.id)}','${escHtml(c.name)}')">Delete Company</button>
               </div>
@@ -2242,6 +2244,42 @@
   }
 
   // ── Export companies CSV ──────────────────────────────────────
+  // ── Download Backup (company-wise + all companies) ────────────────
+  // Reuses the exact same restorable .sql format as a company owner's own
+  // Download Backup (Settings > Data > Download Backup), just reachable
+  // here without needing to log in as / impersonate that company.
+  function _downloadBlobResponse(res, fallbackName){
+    return res.blob().then(blob=>{
+      const cd=res.headers.get('Content-Disposition')||'';
+      const m=cd.match(/filename="([^"]+)"/);
+      const filename=m?m[1]:fallbackName;
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;a.download=filename;a.style.display='none';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    });
+  }
+  async function downloadCompanyBackup(id, name){
+    try{
+      const res=await apiFetch('/superadmin/companies/'+id+'/db-dump');
+      if(!res.ok){ const d=await res.json().catch(()=>({})); alert(d.detail||'Backup download failed.'); return; }
+      await _downloadBlobResponse(res, 'taxflow-db-'+id.slice(0,8)+'.sql');
+    }catch(err){ alert(err.message); }
+  }
+  async function downloadAllCompaniesBackup(btn){
+    const label=btn?btn.textContent:'';
+    if(btn){ btn.disabled=true; btn.textContent='Preparing…'; }
+    try{
+      const res=await apiFetch('/superadmin/companies/backup-all');
+      if(!res.ok){ const d=await res.json().catch(()=>({})); alert(d.detail||'Backup download failed.'); return; }
+      await _downloadBlobResponse(res, 'taxflow-all-companies-backup.zip');
+    }catch(err){ alert(err.message); }
+    finally{ if(btn){ btn.disabled=false; btn.textContent=label; } }
+  }
+
   function exportCompaniesCSV(){
     const now=new Date();
     const header=['Name','TRN','Country','Employees','Users','Status','Expires','Created'];

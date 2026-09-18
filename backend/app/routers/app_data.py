@@ -22,7 +22,7 @@ import datetime as _dt
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -1028,16 +1028,15 @@ def export_user_data(
     }
 
 
-@router.get("/db-dump")
-@limiter.limit("5/minute")
-def export_db_dump(
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> StreamingResponse:
-    """Return a self-contained SQL file for the current company — restorable locally."""
+def build_company_sql_dump(db: Session, company_id: str, exported_by: str) -> tuple[str, str]:
+    """Build the self-contained, restorable SQL backup for one company.
 
-    company_id = current_user.company_id
+    Shared by the company owner's own Download Backup (export_db_dump()
+    below) and Superadmin's per-company / bulk-all-companies backup
+    endpoints (routers/superadmin.py) — one source of truth for what a
+    "full backup" actually contains, so a table added to one can't be
+    forgotten in the other.
+    """
     now_str = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
     date_str = _dt.datetime.utcnow().strftime("%Y%m%d")
 
@@ -1159,7 +1158,7 @@ def export_db_dump(
     lines: list[str] = [
         f"-- TaxFlow Database Backup\n",
         f"-- Company ID : {company_id}\n",
-        f"-- Exported by: {current_user.full_name}\n",
+        f"-- Exported by: {exported_by}\n",
         f"-- Exported at: {now_str}\n",
         f"-- Restore    : psql -d <your_db> -f this_file.sql\n\n",
         f"BEGIN;\n\n",
@@ -1267,8 +1266,19 @@ def export_db_dump(
 
     sql_text = "".join(lines)
     fname = f"taxflow-db-{company_id[:8]}-{date_str}.sql"
-    from fastapi.responses import Response as _Resp
-    return _Resp(
+    return sql_text, fname
+
+
+@router.get("/db-dump")
+@limiter.limit("5/minute")
+def export_db_dump(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    """Return a self-contained SQL file for the current company — restorable locally."""
+    sql_text, fname = build_company_sql_dump(db, current_user.company_id, current_user.full_name)
+    return Response(
         content=sql_text.encode("utf-8"),
         media_type="text/plain; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{fname}"'},
