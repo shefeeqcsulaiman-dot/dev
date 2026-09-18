@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=0c0e00f92b" as="script">
+<link rel="preload" href="src/app.js?v=8e24600248" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <style>
@@ -2170,19 +2170,12 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       </div>
     </div>
 
-    <div class="g2 mb16" style="grid-template-columns:2fr 1fr">
+    <div class="mb16">
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Monthly Schedule</div><div class="card-sub">Shows saved assignments for the selected month</div></div></div>
         <div class="rota-month-grid" id="rota-monthly-board"></div>
         <div class="divider"></div>
         <div class="flx" style="gap:8px;flex-wrap:wrap"><button class="btn btn-g btn-sm" onclick="autoGenerateMonthlyRota()">Bulk Assign</button><button class="btn btn-g btn-sm" onclick="toast('Employees notified','ok')">Notify Employees</button></div>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div><div class="card-title">Monthly Staff Overview</div><div class="card-sub">Active staff only</div></div></div>
-        <table class="tbl" data-delete-actions-bound="skip">
-          <thead><tr><th>Employee</th><th>Department</th><th>Hours</th><th>Status</th></tr></thead>
-          <tbody id="rota-monthly-staff-tbody"></tbody>
-        </table>
       </div>
     </div>
   </div>
@@ -3033,7 +3026,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=0c0e00f92b" defer></script>
+<script src="src/app.js?v=8e24600248" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

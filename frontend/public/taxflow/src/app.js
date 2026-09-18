@@ -20278,45 +20278,6 @@ function renderRotaSummary(){
   if(weeklyBody)weeklyBody.innerHTML=`<tr><td>Total Staff</td><td class="mono">${staffCount}</td></tr><tr><td>Scheduled Hours</td><td class="mono">${scheduled.toFixed(1)}</td></tr><tr><td>Overtime Cells</td><td class="mono" style="color:var(--purple)">${ot}</td></tr><tr><td>Leave Days</td><td class="mono" style="color:var(--amber)">${leave}</td></tr><tr><td>Off Days</td><td class="mono">${off}</td></tr>`;
 }
 
-// All dates (YYYY-MM-DD) in a "YYYY-MM" month, in order.
-function _datesInMonth(month){
-  const [y,m]=(month||'').split('-').map(Number);
-  if(!y||!m)return [];
-  const last=new Date(y,m,0).getDate();
-  const days=[];
-  for(let d=1;d<=last;d++)days.push(`${month}-${String(d).padStart(2,'0')}`);
-  return days;
-}
-
-// Replaces the old "Monthly Summary" stats card, which counted distinct
-// employee_ids straight out of rotaAssignmentsById -- a global map that
-// keeps every rota record ever loaded, including an Inactive employee's
-// own past assignments (deliberately never deleted from the backend, see
-// currentRotaStaff()'s comment). That made "Total Staff" include people
-// no longer with the company, with nothing on screen to explain why the
-// number didn't match the calendar's visible rows. This instead lists
-// filteredRotaStaff('month') directly -- the exact same active-only,
-// department/search-filtered roster the calendar itself is built from --
-// so the two can never disagree.
-function renderMonthlyStaffOverview(){
-  const tbody=document.getElementById('rota-monthly-staff-tbody');
-  if(!tbody)return;
-  const month=document.getElementById('rota-month-value')?.value||weekStartValue().slice(0,7);
-  const staffRows=filteredRotaStaff('month');
-  if(!staffRows.length){
-    tbody.innerHTML='<tr data-empty-state="1"><td colspan="4" style="color:var(--text3);text-align:center">No staff found.</td></tr>';
-    return;
-  }
-  const dates=_datesInMonth(month);
-  tbody.innerHTML=staffRows.map(staff=>{
-    const hours=dates.reduce((sum,date)=>{
-      const day=ROTA_WEEK_DAYS[(new Date(`${date}T00:00:00`).getDay()+6)%7];
-      return sum+rotaHours(assignmentFor(staff,date,day));
-    },0);
-    return `<tr><td>${escapeHtml(staff.name)}</td><td>${escapeHtml(staff.department)}</td><td class="mono">${hours.toFixed(1)}</td><td>${rotaBadge(hours?'Scheduled':'Open')}</td></tr>`;
-  }).join('');
-}
-
 // Monday on/before the given date, as YYYY-MM-DD. See weekDateFromStart()'s
 // comment for why this reads local date components back out instead of
 // going through toISOString().
@@ -20436,7 +20397,6 @@ function renderRotaBoards(){
   renderWeeklyRotaBoard();
   renderRotaEmployeeTasksPanel();
   renderMonthlyRotaBoard();
-  renderMonthlyStaffOverview();
   renderDepartmentRota();
   renderRotaSummary();
   renderRotaCodes();
