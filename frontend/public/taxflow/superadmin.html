@@ -448,11 +448,30 @@
       </div>
       <button class="btn btn-g btn-sm" onclick="loadTrialRequests()">Refresh</button>
     </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+      <input class="fi" id="sa-trial-search" placeholder="Search name, company, or email…" oninput="renderTrialRequestRows()" style="max-width:260px">
+      <div id="sa-trial-status-filter" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    </div>
     <div id="sa-trials-wrap">
       <div class="loading-state">Loading…</div>
     </div>
   </div>
   </div><!-- /page-trials -->
+
+  <!-- Reusable delete-confirmation modal (Trial Requests) — replaces the
+       native confirm() every other admin action here already moved away
+       from; keeping the same _saConfirm() shape lets this cover any future
+       destructive superadmin action without another native prompt. -->
+  <div class="overlay" id="m-sa-confirm" onclick="if(event.target===this)closeModal('m-sa-confirm')">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-title" id="sa-confirm-title">Are you sure?</div>
+      <div class="modal-sub" id="sa-confirm-body"></div>
+      <div class="modal-foot">
+        <button class="btn btn-g" onclick="closeModal('m-sa-confirm')">Cancel</button>
+        <button class="btn btn-r" id="sa-confirm-btn">Confirm</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Trial Request Details Modal -->
   <div class="overlay" id="m-trial-view" onclick="if(event.target===this)closeModal('m-trial-view')">
@@ -1204,6 +1223,15 @@
       const res = await apiFetch('/superadmin/companies',{method:'POST',body:JSON.stringify({name,email,password,full_name:fullName,trn,expires_at:expiry,modules,country:countryDef.name,currency:countryDef.currency,vat_rate:countryDef.vat})});
       const data = await res.json();
       if(!res.ok){ errEl.textContent=data.detail||'Failed to create company.'; errEl.style.display='block'; return; }
+      // If this creation started from convertTrialToCompany(), close the
+      // loop by marking that lead converted -- without this, "Convert"
+      // just prefilled a form and the trial silently stayed "New" forever.
+      const fromTrialId=document.getElementById('m-create').dataset.fromTrialId;
+      if(fromTrialId){
+        delete document.getElementById('m-create').dataset.fromTrialId;
+        try{await apiFetch('/superadmin/trial-requests/'+fromTrialId,{method:'PATCH',body:JSON.stringify({status:'converted'})});}catch(e){/* company is created either way; status update is best-effort */}
+        if(document.getElementById('page-trials')?.classList.contains('on'))loadTrialRequests();
+      }
       closeModal('m-create');
       loadDashboard();
     }catch(err){
@@ -1587,6 +1615,22 @@
   const TRIAL_STATUS_LABELS={new:'New',contacted:'Contacted',converted:'Converted',closed:'Closed'};
   const TRIAL_STATUS_COLORS={new:'#2563eb',contacted:'#d97706',converted:'#16a34a',closed:'#6b7280'};
   let _trialRequestsById={};
+  let _trialRequestsOrder=[];
+  let _trialStatusFilter='';
+  let _trialSort={key:'created_at',dir:'desc'};
+
+  // Minimal reusable confirm modal — was a native confirm()/alert() pair
+  // here, the one spot left in this file still using them (every other
+  // destructive superadmin action already moved off native popups).
+  function _saConfirm(title,body,onConfirm){
+    document.getElementById('sa-confirm-title').textContent=title;
+    document.getElementById('sa-confirm-body').textContent=body;
+    const btn=document.getElementById('sa-confirm-btn');
+    const fresh=btn.cloneNode(true); // drop any previous call's listener
+    btn.parentNode.replaceChild(fresh,btn);
+    fresh.onclick=()=>{closeModal('m-sa-confirm');onConfirm();};
+    openModal('m-sa-confirm');
+  }
 
   async function loadTrialRequests(){
     const wrap=document.getElementById('sa-trials-wrap');
@@ -1596,6 +1640,7 @@
       const rows=await res.json();
       _trialRequestsById={};
       rows.forEach(r=>{_trialRequestsById[r.id]=r;});
+      _trialRequestsOrder=rows.map(r=>r.id);
       const badge=document.getElementById('sa-trial-badge');
       const newCount=rows.filter(r=>r.status==='new').length;
       if(newCount){badge.textContent=newCount+' new';badge.style.display='inline';}
@@ -1604,36 +1649,104 @@
       if(sbBadgeTrials){sbBadgeTrials.textContent=newCount;sbBadgeTrials.style.display=newCount?'inline':'none';}
       const trialStat=document.getElementById('sa-stat-trials');
       if(trialStat)trialStat.textContent=rows.length+(newCount?' ('+newCount+' new)':'');
-      if(!rows.length){wrap.innerHTML='<div class="loading-state" style="color:var(--muted)">No trial requests yet.</div>';return;}
-      let html=`<table class="sa-table"><thead><tr>
-        <th>Date</th><th>Name</th><th>Company</th><th>Email</th><th>Phone</th><th>Employees</th><th>Interest</th><th>Status</th><th></th>
-      </tr></thead><tbody>`;
-      rows.forEach(r=>{
-        const d=r.created_at?r.created_at.slice(0,10):'—';
-        const sc=TRIAL_STATUS_COLORS[r.status]||'#6b7280';
-        const sl=TRIAL_STATUS_LABELS[r.status]||r.status;
-        html+=`<tr>
-          <td style="font-size:11.5px;color:var(--muted)">${d}</td>
-          <td><strong>${escHtml(r.full_name||'—')}</strong></td>
-          <td>${escHtml(r.company_name||'—')}</td>
-          <td><a href="mailto:${escHtml(r.email)}" style="color:#4f8ef0">${escHtml(r.email)}</a></td>
-          <td>${escHtml(r.phone||'—')}</td>
-          <td>${escHtml(r.employee_count||'—')}</td>
-          <td>${escHtml(r.interest||'—')}</td>
-          <td>
-            <select onchange="updateTrialStatus('${r.id}',this.value)" style="padding:3px 6px;border:1.5px solid ${sc};border-radius:6px;font-size:11.5px;color:${sc};background:transparent;font-weight:600;cursor:pointer;outline:none">
-              ${Object.keys(TRIAL_STATUS_LABELS).map(k=>`<option value="${k}"${k===r.status?' selected':''}>${TRIAL_STATUS_LABELS[k]}</option>`).join('')}
-            </select>
-          </td>
-          <td style="white-space:nowrap">
-            <button class="btn btn-g btn-sm" onclick="viewTrialRequest('${r.id}')" title="View full details">View</button>
-            <button class="btn btn-r btn-sm" onclick="deleteTrialRequest('${r.id}')" title="Delete this trial request">Delete</button>
-          </td>
-        </tr>`;
-      });
-      html+='</tbody></table>';
-      wrap.innerHTML=html;
+      _renderTrialStatusFilter(rows);
+      renderTrialRequestRows();
     }catch(e){wrap.innerHTML='<div class="loading-state" style="color:var(--red)">Failed to load trial requests.</div>';}
+  }
+
+  function _renderTrialStatusFilter(rows){
+    const el=document.getElementById('sa-trial-status-filter');
+    if(!el)return;
+    const counts={};
+    rows.forEach(r=>{counts[r.status]=(counts[r.status]||0)+1;});
+    const pill=(key,label,count)=>{
+      const active=_trialStatusFilter===key;
+      const color=key?(TRIAL_STATUS_COLORS[key]||'#6b7280'):'var(--muted)';
+      return `<button type="button" onclick="_setTrialStatusFilter('${key}')" style="padding:4px 10px;border-radius:20px;font-size:11.5px;font-weight:600;cursor:pointer;border:1.5px solid ${color};background:${active?color:'transparent'};color:${active?'#fff':color}">${label}${count!==undefined?' ('+count+')':''}</button>`;
+    };
+    el.innerHTML=pill('','All',rows.length)+Object.keys(TRIAL_STATUS_LABELS).map(k=>pill(k,TRIAL_STATUS_LABELS[k],counts[k]||0)).join('');
+  }
+
+  function _setTrialStatusFilter(status){
+    _trialStatusFilter=status;
+    _renderTrialStatusFilter(_trialRequestsOrder.map(id=>_trialRequestsById[id]));
+    renderTrialRequestRows();
+  }
+
+  function sortTrialRequests(key){
+    _trialSort=_trialSort.key===key?{key,dir:_trialSort.dir==='asc'?'desc':'asc'}:{key,dir:'asc'};
+    renderTrialRequestRows();
+  }
+
+  function renderTrialRequestRows(){
+    const wrap=document.getElementById('sa-trials-wrap');
+    let rows=_trialRequestsOrder.map(id=>_trialRequestsById[id]);
+    if(_trialStatusFilter)rows=rows.filter(r=>r.status===_trialStatusFilter);
+    const q=(document.getElementById('sa-trial-search')?.value||'').trim().toLowerCase();
+    if(q)rows=rows.filter(r=>[r.full_name,r.company_name,r.email].some(v=>(v||'').toLowerCase().includes(q)));
+    const{key,dir}=_trialSort;
+    const mul=dir==='asc'?1:-1;
+    rows=[...rows].sort((a,b)=>{
+      const av=(a[key]||''),bv=(b[key]||'');
+      return av<bv?-1*mul:av>bv?1*mul:0;
+    });
+    if(!_trialRequestsOrder.length){wrap.innerHTML='<div class="loading-state" style="color:var(--muted)">No trial requests yet.</div>';return;}
+    if(!rows.length){wrap.innerHTML='<div class="loading-state" style="color:var(--muted)">No trial requests match this search/filter.</div>';return;}
+    const arrow=k=>_trialSort.key===k?`<span class="sort-arrow">${_trialSort.dir==='asc'?'▲':'▼'}</span>`:'';
+    let html=`<table class="tbl"><thead><tr>
+      <th class="sortable${_trialSort.key==='created_at'?' active':''}" onclick="sortTrialRequests('created_at')">Date${arrow('created_at')}</th>
+      <th class="sortable${_trialSort.key==='full_name'?' active':''}" onclick="sortTrialRequests('full_name')">Name${arrow('full_name')}</th>
+      <th class="sortable${_trialSort.key==='company_name'?' active':''}" onclick="sortTrialRequests('company_name')">Company${arrow('company_name')}</th>
+      <th>Email</th><th>Phone</th><th>Employees</th><th>Interest</th><th>Status</th><th></th>
+    </tr></thead><tbody>`;
+    rows.forEach(r=>{
+      const d=r.created_at?r.created_at.slice(0,10):'—';
+      const sc=TRIAL_STATUS_COLORS[r.status]||'#6b7280';
+      const initials=(r.full_name||r.company_name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+      html+=`<tr>
+        <td style="font-size:11.5px;color:var(--muted)">${d}</td>
+        <td><div style="display:flex;align-items:center;gap:8px"><div style="width:26px;height:26px;border-radius:50%;background:var(--primary-soft);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;flex-shrink:0">${escHtml(initials)}</div><strong>${escHtml(r.full_name||'—')}</strong></div></td>
+        <td>${escHtml(r.company_name||'—')}</td>
+        <td><a href="mailto:${escHtml(r.email)}" style="color:#4f8ef0">${escHtml(r.email)}</a></td>
+        <td>${escHtml(r.phone||'—')}</td>
+        <td>${escHtml(r.employee_count||'—')}</td>
+        <td>${escHtml(r.interest||'—')}</td>
+        <td>
+          <select onchange="updateTrialStatus('${r.id}',this.value)" style="padding:3px 6px;border:1.5px solid ${sc};border-radius:6px;font-size:11.5px;color:${sc};background:transparent;font-weight:600;cursor:pointer;outline:none">
+            ${Object.keys(TRIAL_STATUS_LABELS).map(k=>`<option value="${k}"${k===r.status?' selected':''}>${TRIAL_STATUS_LABELS[k]}</option>`).join('')}
+          </select>
+        </td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-g btn-sm" onclick="viewTrialRequest('${r.id}')" title="View full details">View</button>
+          ${r.status!=='converted'?`<button class="btn btn-p btn-sm" onclick="convertTrialToCompany('${r.id}')" title="Create a company from this lead">Convert</button>`:''}
+          <button class="btn btn-r btn-sm" onclick="deleteTrialRequest('${r.id}')" title="Delete this trial request">Delete</button>
+        </td>
+      </tr>`;
+    });
+    html+='</tbody></table>';
+    wrap.innerHTML=html;
+  }
+
+  // Pre-fills the existing "New Company" modal from a trial request's own
+  // details instead of a superadmin retyping them, and remembers which
+  // trial this create came from so a successful save can mark it
+  // "converted" automatically rather than needing a second manual step.
+  function convertTrialToCompany(id){
+    const r=_trialRequestsById[id];
+    if(!r)return;
+    openCreateCompany();
+    document.getElementById('c-name').value=r.company_name||'';
+    document.getElementById('c-email').value=r.email||'';
+    document.getElementById('c-fullname').value=r.full_name||'';
+    document.getElementById('c-password').value=_generateTempPassword();
+    document.getElementById('m-create').dataset.fromTrialId=id;
+  }
+
+  function _generateTempPassword(){
+    const chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+    const bytes=new Uint32Array(14);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes,b=>chars[b%chars.length]).join('');
   }
 
   function viewTrialRequest(id){
@@ -1655,20 +1768,29 @@
     openModal('m-trial-view');
   }
 
-  async function deleteTrialRequest(id){
+  function deleteTrialRequest(id){
     const r=_trialRequestsById[id];
-    if(!confirm(`Delete the trial request from ${r?.company_name||r?.email||'this lead'}? This cannot be undone.`))return;
-    try{
-      await apiFetch('/superadmin/trial-requests/'+id,{method:'DELETE'});
-      loadTrialRequests();
-    }catch(e){alert('Failed to delete trial request.');}
+    _saConfirm(
+      'Delete this trial request?',
+      `The trial request from ${r?.company_name||r?.email||'this lead'} will be permanently removed. This cannot be undone.`,
+      async()=>{
+        try{
+          await apiFetch('/superadmin/trial-requests/'+id,{method:'DELETE'});
+          loadTrialRequests();
+        }catch(e){
+          document.getElementById('sa-trials-wrap').insertAdjacentHTML('afterbegin','<div style="color:var(--red);font-size:12.5px;margin-bottom:8px">Failed to delete trial request.</div>');
+        }
+      }
+    );
   }
 
   async function updateTrialStatus(id,status){
     try{
       await apiFetch('/superadmin/trial-requests/'+id,{method:'PATCH',body:JSON.stringify({status})});
       loadTrialRequests();
-    }catch(e){alert('Failed to update status.');}
+    }catch(e){
+      document.getElementById('sa-trials-wrap').insertAdjacentHTML('afterbegin','<div style="color:var(--red);font-size:12.5px;margin-bottom:8px">Failed to update status.</div>');
+    }
   }
 
   // ── Client error report ───────────────────────────────────────
