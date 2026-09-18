@@ -144,7 +144,24 @@ frontend/public/taxflow/hrms.html
 |                             leaked Inactive employees' old rows into the total).
 |                             Week Start/Month pickers persist the last-viewed
 |                             period to localStorage — previously reset to today's
-|                             week/month on every page reload.
+|                             week/month on every page reload. The Staff Schedule's
+|                             Excel/PDF export (downloadRotaExcel()/downloadRotaPdf())
+|                             now includes each shift's attached tasks (title, color,
+|                             time) — it used to export only the shift code and time,
+|                             silently dropping task info onto the floor for anyone
+|                             reading the download away from the screen. The Draft/
+|                             Pending/Published status pill above Staff Schedule and
+|                             Monthly Schedule is now derived from the real saved
+|                             assignment/approval data on every render
+|                             (updateRotaStatusBadges()) instead of being pure
+|                             in-session state — it used to always show "Draft" again
+|                             after a reload even when the week really was published.
+|                             publishRota() is now scoped to the currently-filtered
+|                             week (via selectedWeekAssignments()) rather than every
+|                             rotaAssignments row ever loaded into the browser (up to
+|                             500, spanning many weeks/departments) — publishing this
+|                             week used to silently flip next month's still-Draft
+|                             rows to Published too.
 |-- page-hrms-reports   Reports & Analytics: Attendance Report (sortable
 |                             Present/Absent columns, CSV export), Late Coming
 |                             Report (per-employee late-arrival summary against the
@@ -177,7 +194,9 @@ frontend/public/taxflow/src/app.js  (shared with main app, ~26,000 lines)
 |   duplicating it), renderRotaEmployeeTasksPanel(), _openQuickAddModal() (generic
 |   single-field modal — addLeavePolicy()/addHrJobGrade() use it; addHoliday() now
 |   opens its own multi-field modal — all three used to be native prompt()/
-|   confirm() chains, up to 4 in a row for Add Holiday)
+|   confirm() chains, up to 4 in a row for Add Holiday), updateRotaStatusBadges()/
+|   _deriveRotaStatusForAssignments() (Rota's Draft/Pending/Published pill, derived
+|   from real data on every render rather than trusted from the last click)
 |-- currentRotaStaff()/_getAttendanceEmployees() both filter Inactive employees
 |   out of their respective lists — this "Inactive shouldn't appear in a live
 |   roster" rule recurs across the codebase and has been found missing in a new
@@ -188,6 +207,20 @@ frontend/public/taxflow/src/app.js  (shared with main app, ~26,000 lines)
 |   lists "who's on my team/roster/rota" should filter Employee.status/
 |   staff.status explicitly rather than assuming an existing helper already
 |   covers it.
+|-- A second recurring bug class, found while profiling a 20+ second HRMS load
+|   freeze on a 300-employee test company: a per-record render function called
+|   once per row inside hydrateFromServer()'s bootstrap loop (renderRecordList())
+|   must NOT also trigger its own full table/board re-render on every call —
+|   renderEmployeeRecord(), renderPayrollEmployeeRecord(), and
+|   renderRotaAssignmentRecord() all did this unconditionally (refreshEnhancedTable()
+|   or renderRotaBoards() per row), making hydration O(n^2) in the row count.
+|   The fix is the isHydratingFromServer guard already used elsewhere in this
+|   file for the same problem (Item Master's renderProductRecord()) — skip the
+|   expensive call while isHydratingFromServer is true, and call it exactly
+|   once after the hydration loop finishes instead. Any new render*Record()
+|   function wired into a renderRecordList(...) hydration loop needs this same
+|   guard from the start, not as an afterthought once a customer's data grows
+|   large enough to expose it.
 ```
 
 There is no per-module frontend file split for HRMS yet — everything lives in `app.js` alongside the rest of TaxFlow. `docs/architecture.md` Phase 1 already calls for splitting `app.js` by module; HRMS should get its own `hrms.js` bundle when that happens.
@@ -305,6 +338,11 @@ leave_requests
   id, company_id, employee_id, leave_type, start_date, end_date, days,
   reason, status, approved_by (User), approved_by_employee_id (Employee),
   approved_at
+  (both this table and attendance_details above are now included in the
+  company-wide Download Backup — GET /app-data/export and /app-data/db-dump,
+  app_data.py — as leave_requests_db/attendance_details_db; neither was
+  queried by either export path before this session, so "full company
+  data" backups silently had no leave or attendance history in them at all)
 
 roles
   id, company_id, role_name, description, is_system_role
@@ -560,7 +598,7 @@ POST /api/v1/ess/login -> JWT scoped to employee_id (not a user account)
         v
 GET /ess/me, /ess/attendance, /ess/payslips, /ess/leave, /ess/leave-balance,
     /ess/tasks, /ess/rota, /ess/announcements, /ess/team, /ess/team/today,
-    /ess/team/leave, /ess/holidays
+    /ess/team/leave, /ess/team/rota, /ess/holidays
 POST /ess/leave (submit a new request), /ess/change-password
         |
         v
@@ -588,6 +626,21 @@ these three endpoints require a Principal/RBAC permission — an ESS
 token has the same "reach" as `/ess/me` itself, just narrowed to the
 caller's own department server-side, matching the existing `/ess/leave`
 precedent below.
+
+**Department Rota + per-shift tasks (added this session)** — the Rota
+tab previously only ever showed an employee their own shifts, with no
+way to see who else in the department is working, and it silently
+dropped the tasks a manager attaches to a shift via HRMS's Weekly/
+Monthly Rota task picker even though `GET /ess/rota` already returned
+them. `GET /ess/team/rota?week=YYYY-MM-DD` returns the caller's own
+department's roster and that Mon-Sun week's `rotaAssignments` rows
+separately (not nested), so `ess.html` can render a grid the same way
+HRMS's own Department Rota does, keyed by `(employee_no, date)` —
+matching `rotaAssignments`' own id convention (see `ess_rota()`'s
+docstring below on why `employee_no`, not `emp.id`). Same "own
+department, everyone, no role-scope required" reach as `/ess/team/today`
+and `/ess/team/leave`. The "My Rota" list itself now also renders each
+shift's attached tasks (title, color, time) instead of only the shift.
 
 **Login routing (fixed this session, `dbdf432`)** — `login.html`'s
 `signIn()` used to always redirect a successful `/hr/login` to
@@ -817,6 +870,8 @@ GET    /api/v1/ess/rota       (own upcoming shifts only, -7d/+30d window)
 GET    /api/v1/ess/team       (own-department peers, active only)
 GET    /api/v1/ess/team/today (own-department peers + today's attendance status)
 GET    /api/v1/ess/team/leave (?month=YYYY-MM -- own-department approved leave)
+GET    /api/v1/ess/team/rota  (?week=YYYY-MM-DD -- own-department roster + that
+                                week's rotaAssignments, for the Department Rota view)
 GET    /api/v1/ess/holidays
 
 POST   /api/v1/ai/hr/cv-parse
