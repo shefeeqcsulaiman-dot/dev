@@ -1123,19 +1123,19 @@
       var topNameEl = document.getElementById('ess-top-name');
       if (topNameEl) topNameEl.textContent = emp.full_name;
       var avatarHtml = emp.photo
-        ? '<img src="' + emp.photo + '" style="width:100%;height:100%;object-fit:cover">'
-        : initial;
+        ? '<img src="' + escHtml(emp.photo) + '" style="width:100%;height:100%;object-fit:cover">'
+        : escHtml(initial);
       var topAvEl = document.getElementById('ess-top-av');
       if (topAvEl) {
         topAvEl.innerHTML = avatarHtml;
         topAvEl.style.overflow = emp.photo ? 'hidden' : '';
       }
       document.getElementById('profile-fields').innerHTML =
-        kv('Employee ID', emp.employee_no) +
-        kv('Full Name', emp.full_name) +
-        kv('Department', emp.department) +
-        kv('Designation', emp.designation) +
-        kv('Status', '<span class="badge' + (emp.status !== 'active' ? ' inactive' : '') + '">' + emp.status + '</span>');
+        kv('Employee ID', escHtml(emp.employee_no)) +
+        kv('Full Name', escHtml(emp.full_name)) +
+        kv('Department', escHtml(emp.department)) +
+        kv('Designation', escHtml(emp.designation)) +
+        kv('Status', '<span class="badge' + (emp.status !== 'active' ? ' inactive' : '') + '">' + escHtml(emp.status) + '</span>');
       var avEl = document.getElementById('dash-avatar');
       if (avEl) {
         avEl.innerHTML = avatarHtml;
@@ -1477,14 +1477,14 @@
           // silently dropping them on the floor.
           var shiftTasks = Array.isArray(a.tasks) ? a.tasks : [];
           var tasksHtml = shiftTasks.length ? ('<div class="rota-shift-tasks">' + shiftTasks.map(function(t) {
-            var taskTime = (t.start && t.end) ? (' <span class="rota-shift-task-time">' + _essEsc(t.start) + '–' + _essEsc(t.end) + '</span>') : '';
-            return '<div class="rota-shift-task-item"><span class="rota-shift-task-dot" style="background:' + _essEsc(t.color || '#2563eb') + '"></span>' + _essEsc(t.title || 'Task') + taskTime + '</div>';
+            var taskTime = (t.start && t.end) ? (' <span class="rota-shift-task-time">' + escHtml(t.start) + '–' + escHtml(t.end) + '</span>') : '';
+            return '<div class="rota-shift-task-item"><span class="rota-shift-task-dot" style="background:' + escHtml(t.color || '#2563eb') + '"></span>' + escHtml(t.title || 'Task') + taskTime + '</div>';
           }).join('') + '</div>') : '';
           html += '<div class="rota-row ' + meta.cls + (isToday ? ' is-today' : '') + '">' +
             '<div class="rota-date-chip"><div class="dow">' + dowShort + '</div><div class="d">' + dayNum + '</div></div>' +
             '<div style="flex:1;min-width:0">' +
               '<div class="rota-shift-title" style="font-weight:600;font-size:13.5px;color:var(--text)">' + titleText + '</div>' +
-              '<div class="rota-shift-sub" style="font-size:12px;color:var(--text3)">' + subText + (a.location ? (' · ' + _essEsc(a.location)) : '') + '</div>' +
+              '<div class="rota-shift-sub" style="font-size:12px;color:var(--text3)">' + subText + (a.location ? (' · ' + escHtml(a.location)) : '') + '</div>' +
               tasksHtml +
             '</div>' +
           '</div>';
@@ -1493,10 +1493,6 @@
       }
       updateDashboard();
     } catch(e) { var roEl = document.getElementById('rota-content'); roEl.classList.remove('loading'); roEl.innerHTML = '<div class="empty">Failed to load.</div>'; }
-  }
-
-  function _essEsc(s) {
-    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   // YYYY-MM-DD in the VIEWER's local calendar day -- Date#toISOString()
@@ -1581,13 +1577,13 @@
           if (!a || !a.code || a.code === 'OFF') return '<td><div class="dept-rota-cell is-off">–</div></td>';
           var timeRange = (a.start && a.end) ? (a.start + '–' + a.end) : '';
           var taskCount = Array.isArray(a.tasks) ? a.tasks.length : 0;
-          return '<td><div class="dept-rota-cell"><div class="code">' + _essEsc(a.code) + '</div>' +
-            (timeRange ? '<div class="time">' + _essEsc(timeRange) + '</div>' : '') +
+          return '<td><div class="dept-rota-cell"><div class="code">' + escHtml(a.code) + '</div>' +
+            (timeRange ? '<div class="time">' + escHtml(timeRange) + '</div>' : '') +
             (taskCount ? '<div class="task-count">' + taskCount + ' task' + (taskCount === 1 ? '' : 's') + '</div>' : '') +
             '</div></td>';
         }).join('');
         return '<tr class="dept-rota-row' + (emp.is_me ? ' is-me' : '') + '">' +
-          '<td>' + _essEsc(emp.full_name) + (emp.is_me ? ' (You)' : '') + '<div class="dept-rota-employee-sub">' + _essEsc(emp.designation || '') + '</div></td>' +
+          '<td>' + escHtml(emp.full_name) + (emp.is_me ? ' (You)' : '') + '<div class="dept-rota-employee-sub">' + escHtml(emp.designation || '') + '</div></td>' +
           cells + '</tr>';
       }).join('');
       el.innerHTML = '<div class="dept-rota-table-wrap"><table class="dept-rota-table"><thead><tr>' + headHtml + '</tr></thead><tbody>' + bodyHtml + '</tbody></table></div>';
@@ -1616,17 +1612,17 @@
       else {
         el.innerHTML = rows.map(function(t) {
           var st = _taskStatusLabel(t.status);
-          var priClass = 'pri-' + (t.priority || 'Medium').toLowerCase();
+          var priClass = 'pri-' + (t.priority || 'Medium').toLowerCase().replace(/[^a-z]/g, '');
           return '<div class="task-row">' +
             '<div>' +
-              '<div style="font-weight:600;font-size:13.5px;color:var(--text)">' + (t.title || 'Untitled task') + '</div>' +
-              (t.description ? '<div style="font-size:12px;color:var(--text2);margin-top:4px">' + t.description + '</div>' : '') +
+              '<div style="font-weight:600;font-size:13.5px;color:var(--text)">' + escHtml(t.title || 'Untitled task') + '</div>' +
+              (t.description ? '<div style="font-size:12px;color:var(--text2);margin-top:4px">' + escHtml(t.description) + '</div>' : '') +
               '<div style="font-size:11.5px;color:var(--text3);margin-top:6px">' +
-                (t.due_date ? ('Due ' + t.due_date + ' · ') : '') +
-                '<span class="' + priClass + '">' + (t.priority || 'Medium') + ' priority</span>' +
+                (t.due_date ? ('Due ' + escHtml(t.due_date) + ' · ') : '') +
+                '<span class="' + priClass + '">' + escHtml(t.priority || 'Medium') + ' priority</span>' +
               '</div>' +
             '</div>' +
-            '<span class="st-badge st-' + st.cls + '">' + st.text + '</span>' +
+            '<span class="st-badge st-' + st.cls + '">' + escHtml(st.text) + '</span>' +
           '</div>';
         }).join('');
       }
@@ -1956,8 +1952,8 @@
       var rows = await r.json();
       if (!rows.length) { body.innerHTML = '<tr><td colspan="4" class="empty">No employees found in this department.</td></tr>'; return; }
       body.innerHTML = rows.map(function(e) {
-        var st = e.status !== 'active' ? '<span class="badge inactive">' + e.status + '</span>' : '<span class="badge">Active</span>';
-        return '<tr><td>' + e.full_name + '</td><td>' + e.department + '</td><td>' + e.designation + '</td><td>' + st + '</td></tr>';
+        var st = e.status !== 'active' ? '<span class="badge inactive">' + escHtml(e.status) + '</span>' : '<span class="badge">Active</span>';
+        return '<tr><td>' + escHtml(e.full_name) + '</td><td>' + escHtml(e.department) + '</td><td>' + escHtml(e.designation) + '</td><td>' + st + '</td></tr>';
       }).join('');
     } catch(e) { body.innerHTML = '<tr><td colspan="4" class="empty">Failed to load.</td></tr>'; }
   }
@@ -1972,7 +1968,7 @@
       if (!rows.length) { body.innerHTML = '<tr><td colspan="4" class="empty">No one is currently checked in.</td></tr>'; return; }
       body.innerHTML = rows.map(function(p) {
         var geo = p.inside_geofence ? '<span class="dir-in">Inside</span>' : '<span class="dir-out">Outside</span>';
-        return '<tr><td>' + p.employee_name + '</td><td>' + p.check_in.substring(0,16).replace('T',' ') + '</td><td>' + geo + '</td><td>' + p.last_ping.substring(0,16).replace('T',' ') + '</td></tr>';
+        return '<tr><td>' + escHtml(p.employee_name) + '</td><td>' + escHtml(p.check_in.substring(0,16).replace('T',' ')) + '</td><td>' + geo + '</td><td>' + escHtml(p.last_ping.substring(0,16).replace('T',' ')) + '</td></tr>';
       }).join('');
     } catch(e) { body.innerHTML = '<tr><td colspan="4" class="empty">Failed to load.</td></tr>'; }
   }

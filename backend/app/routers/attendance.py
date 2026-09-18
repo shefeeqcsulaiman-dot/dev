@@ -254,11 +254,23 @@ def add_device(
         serial = (body.serial_number or "").strip()
         if not serial:
             raise HTTPException(400, "Device serial number is required for ZKTeco ADMS Classic")
+        # The old check only looked at CURRENTLY ACTIVE devices, so once a
+        # device was deleted/deactivated its serial number became free for
+        # ANY company to claim -- including one that never owned the
+        # physical hardware. Since /iclock/cdata (below) has no credential
+        # beyond this serial (ADMS Classic firmware has no field to send a
+        # bearer key), that let a second company "steal" a first company's
+        # future device traffic just by re-registering its old serial after
+        # it happened to go inactive. A serial already claimed by a
+        # DIFFERENT company is now blocked permanently, regardless of that
+        # device's status; the original company can still delete/re-add or
+        # reactivate its own serial exactly as before.
         existing = db.query(BiometricDevice).filter(
             BiometricDevice.serial_number == serial,
-            BiometricDevice.status == "active",
         ).first()
-        if existing:
+        if existing and existing.company_id != current_user.company_id:
+            raise HTTPException(409, "This device serial number is already registered to another company")
+        if existing and existing.status == "active":
             raise HTTPException(409, "A device with this serial number is already registered")
         device = BiometricDevice(
             company_id=current_user.company_id,
@@ -498,7 +510,17 @@ def sync_biotime_device_now(
 
 
 def _optional_user(request: Request, db: Session = Depends(get_db)) -> User | None:
-    """FastAPI dependency: extract user from Bearer token without raising if missing."""
+    """FastAPI dependency: extract user from Bearer token without raising if missing.
+
+    Unlike get_current_user() (dependencies.py), a valid-but-disabled
+    account used to fall straight through here instead of being rejected --
+    every other endpoint in the app blocks a deactivated User via
+    get_current_user()'s is_active check, but this manual-punch path (used
+    by /attendance/punch's authenticated-user branch) let a company admin's
+    "deactivate this user" action be silently bypassed for punching
+    attendance specifically. Returning None here (same as "no valid
+    token") falls through to the device-key branch instead of granting
+    disabled-user access."""
     from app.security import user_id_from_token
     auth = request.headers.get("authorization", "")
     if not auth.startswith("Bearer "):
@@ -507,7 +529,10 @@ def _optional_user(request: Request, db: Session = Depends(get_db)) -> User | No
     uid = user_id_from_token(token)
     if not uid:
         return None
-    return db.query(User).filter(User.id == uid).first()
+    user = db.query(User).filter(User.id == uid).first()
+    if user and not getattr(user, "is_active", True):
+        return None
+    return user
 
 
 # ── Punch recording ───────────────────────────────────────────────────────────

@@ -1119,7 +1119,27 @@ def export_db_dump(
     def _esc(val: Any) -> str:
         if val is None:
             return "NULL"
-        return "'" + str(val).replace("'", "''") + "'"
+        # Doubling the quote alone only closes the literal safely when the
+        # target Postgres has standard_conforming_strings=on (the default
+        # since PG 9.1, but not universal — some legacy/managed setups still
+        # run with it off). With it off, a value containing a trailing
+        # backslash (fully attacker-controlled free text on plenty of the
+        # columns dumped below: invoice notes, ledger narration, leave
+        # reason, employee name...) turns '\' into an escaped literal quote
+        # rather than a closing one, so the string never actually closes and
+        # swallows whatever comes next in the INSERT as string content.
+        # Blindly doubling every backslash isn't the fix either — under the
+        # (default) standard_conforming_strings=on, backslash has no special
+        # meaning in a plain '...' literal, so that would corrupt any value
+        # that legitimately contains one. The setting-independent fix (the
+        # same one pg_dump itself uses) is Postgres's E'...' escape-string
+        # syntax, which always treats backslash as an escape character
+        # regardless of standard_conforming_strings — only reach for it when
+        # the value actually contains a backslash.
+        s = str(val)
+        escaped = s.replace("\\", "\\\\").replace("'", "''")
+        prefix = "E" if "\\" in s else ""
+        return prefix + "'" + escaped + "'"
 
     def _v(obj: Any, col: str) -> str:
         v = getattr(obj, col, None)
