@@ -308,6 +308,14 @@ def create_app() -> FastAPI:
     def ess_portal() -> FileResponse:
         return FileResponse(str(static_dir / "taxflow" / "ess.html"))  # Employee Self-Service
 
+    @app.get("/handbook", include_in_schema=False)
+    def user_handbook() -> FileResponse:
+        # Previously an external claude.ai artifact link (Quick Actions'
+        # "Handbook" button, index.html/hrms.html) — served locally now so
+        # it works without a separate claude.ai session/login and stays in
+        # the app's own domain like every other standalone page here.
+        return FileResponse(str(static_dir / "taxflow" / "handbook.html"))
+
     @app.get("/config.js", include_in_schema=False)
     def config_js() -> Response:
         api_base = os.environ.get("API_BASE_URL", "")
