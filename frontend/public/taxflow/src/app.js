@@ -1245,6 +1245,13 @@ function renderPayrollRunRow(employee){
   if(!tbody)return;
   const existing=[...tbody.querySelectorAll('tr:not([data-empty-state])')].find(r=>r.dataset.employeeId===employee.id);
   if(existing)existing.remove();
+  // Inactive employees keep their payroll history but shouldn't appear in
+  // a NEW run — the comment above toggleEmployeeStatusFromRow() already
+  // promised this, but this function never actually checked status.
+  if(employee.status==='Inactive'){
+    if(!tbody.querySelector('tr:not([data-empty-state])'))emptyTableMessage(tbody,'No active employees to run payroll for.');
+    return;
+  }
   const salary=Number(employee.salary||0);
   // Previously always hardcoded to 0.00 with no source anywhere — real
   // allowances are now captured on the employee record (see the Employee

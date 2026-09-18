@@ -306,8 +306,9 @@
     .hcal-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
     .hcal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
     .hcal-weekday{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);text-align:center;padding-bottom:4px}
-    .hcal-cell{min-height:64px;border:1px solid var(--border);border-radius:8px;padding:4px 5px;background:var(--surface);overflow:hidden}
-    .hcal-cell.hcal-empty{border-color:transparent;background:transparent}
+    .hcal-cell{min-height:64px;border:1px solid var(--border);border-radius:8px;padding:4px 5px;background:var(--surface);overflow:hidden;cursor:pointer;transition:border-color .12s,box-shadow .12s}
+    .hcal-cell.hcal-empty{border-color:transparent;background:transparent;cursor:default}
+    .hcal-cell:not(.hcal-empty):hover{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
     .hcal-cell.hcal-today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
     .hcal-cell.hcal-is-holiday{background:rgba(245,158,11,.08)}
     .hcal-daynum{font-size:11px;font-weight:700;color:var(--text2);margin-bottom:2px}
@@ -1348,11 +1349,11 @@
     if (wrap && !wrap.contains(e.target)) essToggleNotifPanel(false);
   });
 
-  function essOpenLeaveModal() {
+  function essOpenLeaveModal(prefillDate) {
     document.getElementById('leave-form-err').style.display = 'none';
     document.getElementById('leave-type').value = 'Annual Leave';
-    document.getElementById('leave-start').value = '';
-    document.getElementById('leave-end').value = '';
+    document.getElementById('leave-start').value = prefillDate || '';
+    document.getElementById('leave-end').value = prefillDate || '';
     document.getElementById('leave-reason').value = '';
     document.getElementById('leave-modal-overlay').classList.add('on');
   }
@@ -1935,7 +1936,7 @@
         inner += '<div class="hcal-chip hcal-chip-leave" title="' + escHtml(lr.employee_name) + ' — ' + escHtml(lr.leave_type) + '">' + escHtml(first) + (lr.is_me ? ' (You)' : '') + '</div>';
       });
       if (onLeave.length > 2) inner += '<div class="hcal-more">+' + (onLeave.length - 2) + ' more</div>';
-      html += '<div class="' + cls + '">' + inner + '</div>';
+      html += '<div class="' + cls + '" title="Click to request leave for ' + dateStr + '" onclick="essOpenLeaveModal(\'' + dateStr + '\')">' + inner + '</div>';
     }
     grid.innerHTML = html;
   }
