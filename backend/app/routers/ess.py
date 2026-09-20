@@ -1,7 +1,9 @@
 import json
 import re
+import secrets
 from calendar import monthrange
 from datetime import UTC, date, datetime, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from jose import JWTError, jwt
@@ -14,7 +16,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.dependencies import assert_company_active, company_allows_module
 from app.limiter import limiter
-from app.models import AppDataRecord, AttendanceDetail, Company, Employee, LeaveRequest, PayrollItem, PayrollRun, Role
+from app.models import AppDataRecord, AttendanceDetail, AuditLog, Company, Employee, LeaveRequest, PayrollItem, PayrollRun, Role
 from app.routers.attendance import _company_offset, _late_rules, _local_today, _standard_hours_per_day, _weekend_day_set
 from app.routers.leave import (
     _ALLOWED_TYPES,
@@ -57,6 +59,10 @@ class EssEmployeeOut(BaseModel):
     status: str
     photo: str | None = None
     company_name: str | None = None
+    # ISO currency code of the employee's company (Company.currency) -- the
+    # payslip / net-pay figures were formatted with a hardcoded "AED" prefix
+    # regardless of which country/currency the company actually runs in.
+    currency: str | None = None
     # The Dashboard hero's "Working Hours" chip -- shift_end is derived
     # (start time + standard hours/day), not a real per-employee shift
     # end time (no such column/setting exists yet); good enough for a
@@ -186,7 +192,7 @@ def ess_login(request: Request, payload: EssLoginRequest, db: Session = Depends(
 @router.get("/me", response_model=EssEmployeeOut)
 def ess_me(request: Request, db: Session = Depends(get_db)) -> EssEmployeeOut:
     emp = ess_bearer(request, db)
-    company_name = db.query(Company.name).filter(Company.id == emp.company_id).scalar()
+    company_name, currency = db.query(Company.name, Company.currency).filter(Company.id == emp.company_id).one()
     start_time_str, _grace_minutes = _late_rules(db, emp.company_id)
     standard_hours = _standard_hours_per_day(db, emp.company_id)
     start_h, start_m = (int(part) for part in start_time_str.split(":"))
@@ -200,6 +206,7 @@ def ess_me(request: Request, db: Session = Depends(get_db)) -> EssEmployeeOut:
         status=emp.status,
         photo=emp.photo,
         company_name=company_name,
+        currency=currency,
         shift_start=start_time_str,
         shift_end=shift_end,
     )
@@ -792,3 +799,456 @@ def ess_team_rota(
         ],
         "assignments": rows,
     }
+
+
+# ── Self-service requests, task updates, profile & documents ─────────────────
+#
+# Everything below reuses the SAME AppDataRecord collections the HRMS screens
+# already read and approve (overtimeRequests, employeeLoans, salaryAdvances,
+# attendanceCorrections) with the SAME record shape the HRMS "new request"
+# modals write (see submitOTRequest()/saveLoan()/saveLoanAdvance()/
+# saveCorrectionRequest() in app.js), so a request filed here shows up in the
+# HR approval lists untouched and the existing approval side effects (an
+# approved correction inserts real punches, approved OT feeds payroll) apply
+# without any new HR-side code. The employee identity always comes from the
+# ESS token -- never from the request body.
+
+_REQUEST_COLLECTIONS = {
+    "overtime": ("overtimeRequests", "OT"),
+    "loan": ("employeeLoans", "LN"),
+    "advance": ("salaryAdvances", "ADV"),
+    "correction": ("attendanceCorrections", "CORR"),
+}
+_MAX_PENDING_PER_KIND = 10
+_HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+def _now_iso() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def _ess_audit(db: Session, emp: Employee, action: str, detail: dict) -> None:
+    db.add(AuditLog(
+        company_id=emp.company_id, employee_id=emp.id, module="ESS",
+        action=action[:80], detail=json.dumps(detail, ensure_ascii=False, default=str)[:1000],
+    ))
+
+
+def _is_mine(rec: dict, emp: Employee) -> bool:
+    """employee_id (= employee_no) is authoritative; older HRMS rows written
+    before that field existed only carry the display name."""
+    rid = str(rec.get("employee_id") or "").strip()
+    if rid:
+        return rid == emp.employee_no
+    return str(rec.get("employee") or "").strip() == emp.full_name
+
+
+def _own_request_records(db: Session, emp: Employee, collection: str) -> list[dict]:
+    return [r for r in _employee_app_data_records(db, emp.company_id, collection) if _is_mine(r, emp)]
+
+
+def _create_request_record(db: Session, emp: Employee, kind: str, fields: dict) -> dict:
+    collection, prefix = _REQUEST_COLLECTIONS[kind]
+    pending = [r for r in _own_request_records(db, emp, collection) if str(r.get("status") or "").lower() == "pending"]
+    if len(pending) >= _MAX_PENDING_PER_KIND:
+        raise HTTPException(
+            status_code=409,
+            detail=f"You already have {len(pending)} pending {kind} requests -- wait for HR to review them first",
+        )
+    record = {
+        "id": f"{prefix}-{int(datetime.now(UTC).timestamp() * 1000)}-{secrets.token_hex(2)}",
+        "employee": emp.full_name,
+        "employee_id": emp.employee_no,
+        "department": emp.department,
+        **fields,
+        "status": "Pending",
+        "submitted": _now_iso(),
+        "source": "ess",
+    }
+    db.add(AppDataRecord(
+        company_id=emp.company_id, branch_id=emp.branch_id, collection=collection,
+        record_key=record["id"], payload=json.dumps(record, ensure_ascii=False, default=str),
+    ))
+    _ess_audit(db, emp, f"{kind}_requested", {"id": record["id"]})
+    db.commit()
+    return record
+
+
+def _local_today_for(db: Session, emp: Employee) -> date:
+    return _local_today(_company_offset(db, emp.company_id))
+
+
+# ── quick wins: cancel a pending leave request / update own task status ──────
+
+@router.post("/leave/{leave_id}/cancel")
+def ess_cancel_leave(leave_id: str, request: Request, db: Session = Depends(get_db)) -> dict:
+    """An employee can withdraw their OWN leave request while it is still
+    pending. Approved/rejected requests are HR's decision and can't be
+    withdrawn from here. Kept as a "cancelled" status (not a delete) so the
+    history -- and HR's audit trail -- survives."""
+    emp = ess_bearer(request, db)
+    req = (
+        db.query(LeaveRequest)
+        .filter(LeaveRequest.id == leave_id, LeaveRequest.company_id == emp.company_id, LeaveRequest.employee_id == emp.id)
+        .first()
+    )
+    if not req:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+    if req.status != "pending":
+        raise HTTPException(status_code=409, detail=f"Only a pending request can be cancelled (this one is already {req.status})")
+    req.status = "cancelled"
+    _ess_audit(db, emp, "leave_cancelled", {"id": req.id, "start": req.start_date, "end": req.end_date})
+    db.commit()
+    return _leave_out(req)
+
+
+class EssTaskStatusIn(BaseModel):
+    status: Literal["todo", "progress", "done"]
+
+
+@router.patch("/tasks/{task_id}")
+def ess_update_task(task_id: str, payload: EssTaskStatusIn, request: Request, db: Session = Depends(get_db)) -> dict:
+    """Lets an employee move a task assigned to THEM between To Do / In
+    Progress / Done. Only the status field changes -- title, assignee, due
+    date and the rest stay HR/manager-controlled."""
+    emp = ess_bearer(request, db)
+    row = (
+        db.query(AppDataRecord)
+        .filter(AppDataRecord.company_id == emp.company_id, AppDataRecord.collection == "tasks", AppDataRecord.record_key == task_id)
+        .first()
+    )
+    data: dict = {}
+    if row:
+        try:
+            data = json.loads(row.payload)
+        except (TypeError, ValueError):
+            data = {}
+    if not row or not isinstance(data, dict) or data.get("assigned_to") != emp.id:
+        raise HTTPException(status_code=404, detail="Task not found")
+    data["status"] = payload.status
+    row.payload = json.dumps(data, ensure_ascii=False, default=str)
+    _ess_audit(db, emp, "task_status_changed", {"id": task_id, "status": payload.status})
+    db.commit()
+    return data
+
+
+# ── attendance correction ────────────────────────────────────────────────────
+
+class EssCorrectionIn(BaseModel):
+    date: date
+    checkin: str | None = None
+    checkout: str | None = None
+    reason: str
+
+
+@router.post("/attendance-corrections", status_code=201)
+def ess_create_correction(payload: EssCorrectionIn, request: Request, db: Session = Depends(get_db)) -> dict:
+    """Request a fix for a missing/wrong punch. Goes to the same HRMS
+    Attendance Corrections approval list; approving it there is what writes
+    the real attendance events."""
+    emp = ess_bearer(request, db)
+    today = _local_today_for(db, emp)
+    if payload.date > today:
+        raise HTTPException(status_code=400, detail="You can't request a correction for a future date")
+    if payload.date < today - timedelta(days=60):
+        raise HTTPException(status_code=400, detail="Corrections can only be requested for the last 60 days -- contact HR for older dates")
+    checkin = (payload.checkin or "").strip()
+    checkout = (payload.checkout or "").strip()
+    if not checkin and not checkout:
+        raise HTTPException(status_code=400, detail="Enter the check-in time, the check-out time, or both")
+    for label, value in (("check-in", checkin), ("check-out", checkout)):
+        if value and not _HHMM.match(value):
+            raise HTTPException(status_code=400, detail=f"The {label} time must be in HH:MM format")
+    if checkin and checkout and checkout <= checkin:
+        raise HTTPException(status_code=400, detail="Check-out must be after check-in")
+    reason = payload.reason.strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="Please give a short reason")
+    date_iso = payload.date.isoformat()
+    for r in _own_request_records(db, emp, "attendanceCorrections"):
+        if str(r.get("status") or "").lower() == "pending" and str(r.get("date") or "") == date_iso:
+            raise HTTPException(status_code=409, detail=f"You already have a pending correction for {date_iso}")
+    return _create_request_record(db, emp, "correction", {
+        "date": date_iso, "checkin": checkin, "checkout": checkout, "reason": reason[:500],
+    })
+
+
+# ── overtime / loan / salary advance ─────────────────────────────────────────
+
+class EssOvertimeIn(BaseModel):
+    date: date
+    login: str | None = None
+    logout: str | None = None
+    ot_hours: float | None = None
+    ot_type: Literal["normal", "ramadan", "weekend", "holiday"] = "normal"
+    reason: str | None = None
+
+
+def _ot_multiplier(db: Session, company_id: str, ot_type: str) -> str:
+    """The rate the company configured under HR Settings > OT Rules -- looked
+    up server-side so the employee can never pick their own multiplier."""
+    row = (
+        db.query(AppDataRecord.payload)
+        .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == "hr_settings", AppDataRecord.record_key == "ot-rules-config")
+        .first()
+    )
+    cfg: dict = {}
+    if row:
+        try:
+            parsed = json.loads(row[0])
+            cfg = parsed if isinstance(parsed, dict) else {}
+        except (TypeError, ValueError):
+            cfg = {}
+
+    def rate(key: str, default: float) -> float:
+        try:
+            v = float(cfg.get(key))
+            return v if v > 0 else default
+        except (TypeError, ValueError):
+            return default
+
+    normal = rate("multNormal", 1.25)
+    weekend = rate("multWeekend", 1.5)
+    chosen = {
+        "normal": normal,
+        "weekend": weekend,
+        "holiday": rate("multHoliday", weekend),
+        "ramadan": rate("multRamadan", normal),
+    }[ot_type]
+    return f"{chosen:g}×"
+
+
+@router.post("/overtime", status_code=201)
+def ess_create_overtime(payload: EssOvertimeIn, request: Request, db: Session = Depends(get_db)) -> dict:
+    emp = ess_bearer(request, db)
+    today = _local_today_for(db, emp)
+    if payload.date > today:
+        raise HTTPException(status_code=400, detail="Overtime can only be requested for today or a past date")
+    if payload.date < today - timedelta(days=31):
+        raise HTTPException(status_code=400, detail="Overtime must be requested within 31 days -- contact HR for older dates")
+    login = (payload.login or "").strip()
+    logout = (payload.logout or "").strip()
+    for label, value in (("start", login), ("end", logout)):
+        if value and not _HHMM.match(value):
+            raise HTTPException(status_code=400, detail=f"The {label} time must be in HH:MM format")
+    hours = payload.ot_hours
+    if login and logout:
+        start_m = int(login[:2]) * 60 + int(login[3:])
+        end_m = int(logout[:2]) * 60 + int(logout[3:])
+        if end_m <= start_m:
+            end_m += 24 * 60      # shift crossing midnight
+        hours = round((end_m - start_m) / 60, 2)
+    if hours is None or not (0 < hours <= 12):
+        raise HTTPException(status_code=400, detail="Overtime must be between more than 0 and 12 hours")
+    return _create_request_record(db, emp, "overtime", {
+        "date": payload.date.isoformat(), "shift": "", "login": login, "logout": logout,
+        "ot_hours": str(hours), "ot_type": payload.ot_type,
+        "multiplier": _ot_multiplier(db, emp.company_id, payload.ot_type),
+        "reason": (payload.reason or "").strip()[:500],
+    })
+
+
+_LOAN_TYPES = ("Personal Loan", "Emergency Loan", "Medical Loan", "Home Furnishing Loan", "Education Loan", "Vehicle Loan")
+
+
+class EssLoanIn(BaseModel):
+    type: str = "Personal Loan"
+    amount: float
+    months: int
+    reason: str | None = None
+
+
+@router.post("/loans", status_code=201)
+def ess_create_loan(payload: EssLoanIn, request: Request, db: Session = Depends(get_db)) -> dict:
+    emp = ess_bearer(request, db)
+    if payload.type not in _LOAN_TYPES:
+        raise HTTPException(status_code=400, detail="Unrecognized loan type")
+    if not (0 < payload.amount <= 1_000_000):
+        raise HTTPException(status_code=400, detail="Enter a loan amount greater than 0")
+    if not (1 <= payload.months <= 60):
+        raise HTTPException(status_code=400, detail="Repayment period must be between 1 and 60 months")
+    amount = round(payload.amount, 2)
+    return _create_request_record(db, emp, "loan", {
+        "type": payload.type, "amount": amount, "emi": round(amount / payload.months, 2),
+        "months": payload.months, "balance": amount, "deduct_from": "",
+        "reason": (payload.reason or "").strip()[:500], "date": _local_today_for(db, emp).isoformat(),
+    })
+
+
+class EssAdvanceIn(BaseModel):
+    amount: float
+    month: str | None = None      # YYYY-MM the advance should be recovered from
+    reason: str | None = None
+
+
+@router.post("/advances", status_code=201)
+def ess_create_advance(payload: EssAdvanceIn, request: Request, db: Session = Depends(get_db)) -> dict:
+    emp = ess_bearer(request, db)
+    if not (0 < payload.amount <= 1_000_000):
+        raise HTTPException(status_code=400, detail="Enter an advance amount greater than 0")
+    month = (payload.month or "").strip() or _local_today_for(db, emp).strftime("%Y-%m")
+    if not re.match(r"^\d{4}-(0[1-9]|1[0-2])$", month):
+        raise HTTPException(status_code=400, detail="month must be in YYYY-MM format")
+    return _create_request_record(db, emp, "advance", {
+        "amount": round(payload.amount, 2), "month": month,
+        "reason": (payload.reason or "").strip()[:500], "requested": _now_iso(),
+    })
+
+
+@router.get("/requests")
+def ess_requests(request: Request, db: Session = Depends(get_db)) -> list[dict]:
+    """Every request this employee has filed -- leave (its own table) plus
+    overtime, loans, salary advances and attendance corrections (HRMS's
+    AppDataRecord collections) -- newest first, in one normalized shape for
+    the Requests page, the dashboard list and the notification bell."""
+    emp = ess_bearer(request, db)
+    out: list[dict] = []
+    for r in (
+        db.query(LeaveRequest)
+        .filter(LeaveRequest.company_id == emp.company_id, LeaveRequest.employee_id == emp.id)
+        .order_by(LeaveRequest.created_at.desc())
+        .limit(50)
+        .all()
+    ):
+        out.append({
+            "kind": "leave", "id": r.id, "status": (r.status or "pending").lower(),
+            "submitted": r.created_at.isoformat() if r.created_at else None,
+            "leave_type": r.leave_type, "start_date": r.start_date, "end_date": r.end_date, "days": r.days,
+            "reason": r.reason, "can_cancel": r.status == "pending",
+        })
+    for kind, (collection, _prefix) in _REQUEST_COLLECTIONS.items():
+        for r in _own_request_records(db, emp, collection):
+            item = {
+                "kind": kind, "id": r.get("id"), "status": str(r.get("status") or "pending").lower(),
+                "submitted": r.get("submitted") or r.get("requested") or r.get("date"), "reason": r.get("reason"),
+            }
+            if kind == "overtime":
+                item.update(date=r.get("date"), ot_hours=r.get("ot_hours"), ot_type=r.get("ot_type"), multiplier=r.get("multiplier"))
+            elif kind == "loan":
+                item.update(loan_type=r.get("type"), amount=r.get("amount"), months=r.get("months"), emi=r.get("emi"))
+            elif kind == "advance":
+                item.update(amount=r.get("amount"), month=r.get("month"))
+            else:
+                item.update(date=r.get("date"), checkin=r.get("checkin"), checkout=r.get("checkout"))
+            out.append(item)
+    out.sort(key=lambda x: str(x.get("submitted") or ""), reverse=True)
+    return out[:100]
+
+
+# ── profile details & document expiry ────────────────────────────────────────
+#
+# Contact details and document expiries live in the rich "employees"
+# AppDataRecord (the HRMS Add/Edit Employee form), not on the SQL Employee row.
+
+_EDITABLE_PROFILE_FIELDS = {
+    "mobile": 30, "address": 300, "emergency_contact": 120, "emergency_mobile": 30,
+}
+_DOCUMENT_FIELDS = (
+    ("Visa / Work Permit", ("visa_expiry", "visaExpiry")),
+    ("Passport", ("passport_expiry", "passportExpiry")),
+    ("Emirates ID", ("eid_expiry", "eidExpiry")),
+    ("Labor Card", ("labor_card_expiry", "laborCardExpiry")),
+    ("Insurance", ("insurance_expiry", "insuranceExpiry")),
+    ("Driving License", ("driving_expiry", "drivingExpiry")),
+)
+
+
+def _employee_profile_row(db: Session, emp: Employee) -> AppDataRecord | None:
+    row = (
+        db.query(AppDataRecord)
+        .filter(AppDataRecord.company_id == emp.company_id, AppDataRecord.collection == "employees", AppDataRecord.record_key == emp.employee_no)
+        .first()
+    )
+    return row
+
+
+def _profile_payload(row: AppDataRecord | None) -> dict:
+    if not row:
+        return {}
+    try:
+        data = json.loads(row.payload)
+    except (TypeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+@router.get("/profile-details")
+def ess_profile_details(request: Request, db: Session = Depends(get_db)) -> dict:
+    emp = ess_bearer(request, db)
+    row = _employee_profile_row(db, emp)
+    data = _profile_payload(row)
+    return {
+        "has_record": row is not None,
+        "email": data.get("email") or "",
+        **{field: data.get(field) or "" for field in _EDITABLE_PROFILE_FIELDS},
+    }
+
+
+class EssProfileDetailsIn(BaseModel):
+    mobile: str | None = None
+    address: str | None = None
+    emergency_contact: str | None = None
+    emergency_mobile: str | None = None
+
+
+@router.put("/profile-details")
+def ess_update_profile_details(payload: EssProfileDetailsIn, request: Request, db: Session = Depends(get_db)) -> dict:
+    """Self-service edit of contact details only (phone, address, emergency
+    contact). Name, department, salary, IBAN, documents and everything else
+    on the employee record stay HR-controlled -- and every change is written
+    to the audit log with the old and new values."""
+    emp = ess_bearer(request, db)
+    row = _employee_profile_row(db, emp)
+    if not row:
+        raise HTTPException(status_code=409, detail="Your HR profile record isn't set up yet -- please ask HR to complete it")
+    data = _profile_payload(row)
+    changes: dict[str, dict] = {}
+    for field, max_len in _EDITABLE_PROFILE_FIELDS.items():
+        new = getattr(payload, field)
+        if new is None:
+            continue
+        new = new.strip()
+        if len(new) > max_len:
+            raise HTTPException(status_code=400, detail=f"{field.replace('_', ' ').capitalize()} is too long (max {max_len} characters)")
+        if field.endswith("mobile") and new and not re.match(r"^[0-9+()\-\s]{5,30}$", new):
+            raise HTTPException(status_code=400, detail="Phone numbers can only contain digits, spaces, + ( ) and -")
+        old = str(data.get(field) or "")
+        if new != old:
+            changes[field] = {"old": old, "new": new}
+            data[field] = new
+    if changes:
+        row.payload = json.dumps(data, ensure_ascii=False, default=str)
+        _ess_audit(db, emp, "profile_contact_updated", {"changes": changes})
+        db.commit()
+    return {"ok": True, "changed": sorted(changes)}
+
+
+@router.get("/documents")
+def ess_documents(request: Request, db: Session = Depends(get_db)) -> list[dict]:
+    """The employee's own visa / passport / ID / insurance expiry dates, with
+    the same thresholds HRMS's Expiry Alerts uses: <=30 days critical, <=90
+    days due soon, blank = missing."""
+    emp = ess_bearer(request, db)
+    data = _profile_payload(_employee_profile_row(db, emp))
+    today = _local_today_for(db, emp)
+    out = []
+    for label, keys in _DOCUMENT_FIELDS:
+        raw = next((str(data.get(k)) for k in keys if data.get(k)), "")
+        days = None
+        if raw:
+            try:
+                days = (date.fromisoformat(raw[:10]) - today).days
+            except ValueError:
+                raw = ""
+        if days is None:
+            state = "missing"
+        elif days < 0:
+            state = "expired"
+        elif days <= 30:
+            state = "critical"
+        elif days <= 90:
+            state = "soon"
+        else:
+            state = "valid"
+        out.append({"label": label, "expiry": raw[:10] if raw else None, "days_left": days, "state": state})
+    return out
