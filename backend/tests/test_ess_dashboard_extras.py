@@ -1,7 +1,7 @@
 """GET /ess/me's new Dashboard-hero fields (company_name, shift_start/end)
 and GET /ess/announcements -- both added alongside the ESS Dashboard
 redesign (hero info chips + Latest Announcements card)."""
-from app.models import Employee
+from app.models import Company, Employee
 
 
 def _company_id(client, headers):
@@ -34,6 +34,17 @@ def test_ess_me_reports_company_name(client, db, auth_headers):
     r = client.get("/api/v1/ess/me", headers=headers)
     assert r.status_code == 200, r.text
     assert r.json()["company_name"] == company_name
+
+
+def test_ess_me_reports_company_currency(client, db, auth_headers):
+    company_id = _company_id(client, auth_headers)
+    _emp, headers = _ess_login(client, db, auth_headers, company_id, "ESSHERO-3", "esshero.cur")
+
+    r = client.get("/api/v1/ess/me", headers=headers)
+    assert r.status_code == 200, r.text
+    expected = db.query(Company.currency).filter(Company.id == company_id).scalar()
+    assert r.json()["currency"] == expected
+    assert r.json()["currency"]  # never blank -- the payslip UI prefixes amounts with it
 
 
 def test_ess_me_reports_shift_end_derived_from_start_plus_standard_hours(client, db, auth_headers):
