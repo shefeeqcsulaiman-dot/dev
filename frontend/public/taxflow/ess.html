@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Employee Self-Service — ETaxFlow</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    :root{--accent:#1d4ed8;--accent2:#3b82f6;--bg:#f1f5f9;--bg2:#f8fafc;--bg3:#f4f7fb;--surface:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--text3:#94a3b8;--red:#ef4444;--green:#10b981;--field-bg:#f9fafb;--field-border:#d1d5db;--field-text:#111827;--scrollbar:#94a3b8;--danger-bg:#fef2f2;--danger-border:#fecaca;--success-bg:#f0fdf4;--success-border:#bbf7d0;--hcal-holiday-bg:rgba(245,158,11,.18);--hcal-holiday-text:#b45309;--hcal-leave-bg:rgba(139,92,246,.18);--hcal-leave-text:#6d28d9;}
+    :root{--accent:#1d4ed8;--accent-text:#1d4ed8;--accent2:#3b82f6;--bg:#f1f5f9;--bg2:#f8fafc;--bg3:#f4f7fb;--surface:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--text3:#64748b;--red:#ef4444;--green:#10b981;--field-bg:#f9fafb;--field-border:#d1d5db;--field-text:#111827;--field-label:#374151;--field-focus-bg:#fff;--scrollbar:#94a3b8;--danger-bg:#fef2f2;--danger-border:#fecaca;--success-bg:#f0fdf4;--success-border:#bbf7d0;--hcal-holiday-bg:rgba(245,158,11,.18);--hcal-holiday-text:#b45309;--hcal-leave-bg:rgba(139,92,246,.18);--hcal-leave-text:#6d28d9;}
     /* Dark mode: system preference by default (unless the user explicitly
        picked "light" via the topbar toggle -- see essApplyTheme()), or an
        explicit "dark" pick winning over system preference either way. Only
@@ -18,16 +19,16 @@
     @media (prefers-color-scheme: dark){
       :root:not([data-theme="light"]){
         --bg:#0a0f1c;--bg2:#111827;--bg3:#161f33;--surface:#111827;--border:#243040;
-        --text:#e5e9f0;--text2:#9aa5b8;--text3:#64748b;
-        --field-bg:#0d1420;--field-border:#2a3646;--field-text:#e5e9f0;--scrollbar:#475569;
+        --text:#e5e9f0;--text2:#9aa5b8;--text3:#8391a7;--accent-text:#93c5fd;
+        --field-bg:#0d1420;--field-border:#2a3646;--field-text:#e5e9f0;--field-label:#9aa5b8;--field-focus-bg:#111827;--scrollbar:#475569;
         --danger-bg:#2a1418;--danger-border:#4a2129;--success-bg:#0f2318;--success-border:#1c3d2a;
         --hcal-holiday-bg:rgba(245,158,11,.22);--hcal-holiday-text:#fbbf24;--hcal-leave-bg:rgba(139,92,246,.25);--hcal-leave-text:#c4b5fd;
       }
     }
     :root[data-theme="dark"]{
       --bg:#0a0f1c;--bg2:#111827;--bg3:#161f33;--surface:#111827;--border:#243040;
-      --text:#e5e9f0;--text2:#9aa5b8;--text3:#64748b;
-      --field-bg:#0d1420;--field-border:#2a3646;--field-text:#e5e9f0;--scrollbar:#475569;
+      --text:#e5e9f0;--text2:#9aa5b8;--text3:#8391a7;--accent-text:#93c5fd;
+      --field-bg:#0d1420;--field-border:#2a3646;--field-text:#e5e9f0;--field-label:#9aa5b8;--field-focus-bg:#111827;--scrollbar:#475569;
       --danger-bg:#2a1418;--danger-border:#4a2129;--success-bg:#0f2318;--success-border:#1c3d2a;
       --hcal-holiday-bg:rgba(245,158,11,.22);--hcal-holiday-text:#fbbf24;--hcal-leave-bg:rgba(139,92,246,.25);--hcal-leave-text:#c4b5fd;
     }
@@ -44,15 +45,15 @@
        above) -- re-pins the alert-box tokens to their light values too, so
        #login-err doesn't inherit dark mode's tinted colors onto this
        always-white card. */
-    .login-card{--danger-bg:#fef2f2;--danger-border:#fecaca;--success-bg:#f0fdf4;--success-border:#bbf7d0;background:#fff;border-radius:20px;padding:44px 40px 36px;width:100%;max-width:420px;margin:20px;box-shadow:0 40px 120px rgba(0,0,0,.45)}
+    .login-card{--accent-text:#1d4ed8;--danger-bg:#fef2f2;--danger-border:#fecaca;--success-bg:#f0fdf4;--success-border:#bbf7d0;--field-bg:#f9fafb;--field-border:#d1d5db;--field-text:#111827;--field-label:#374151;--field-focus-bg:#fff;background:#fff;border-radius:20px;padding:44px 40px 36px;width:100%;max-width:420px;margin:20px;box-shadow:0 40px 120px rgba(0,0,0,.45)}
     .brand{text-align:center;margin-bottom:32px}
     .brand-logo{width:120px;height:auto;margin-bottom:10px}
-    .brand-title{font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:700;color:var(--accent);margin-bottom:4px}
+    .brand-title{font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:700;color:var(--accent-text);margin-bottom:4px}
     .brand-sub{font-size:13px;color:var(--text3)}
     .field{margin-bottom:16px}
-    .field label{display:block;font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:#374151;margin-bottom:7px}
-    .field input{width:100%;padding:11px 15px;border:1.5px solid #d1d5db;border-radius:9px;font-size:14px;font-family:inherit;color:#111827;background:#f9fafb;outline:none;transition:border-color .15s,box-shadow .15s}
-    .field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(29,78,216,.12);background:#fff}
+    .field label{display:block;font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--field-label);margin-bottom:7px}
+    .field input{width:100%;padding:11px 15px;border:1.5px solid var(--field-border);border-radius:9px;font-size:14px;font-family:inherit;color:var(--field-text);background:var(--field-bg);outline:none;transition:border-color .15s,box-shadow .15s}
+    .field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(29,78,216,.12);background:var(--field-focus-bg)}
     .field.last{margin-bottom:24px}
     .err-box{display:none;background:var(--danger-bg);border:1px solid var(--danger-border);border-radius:9px;padding:11px 14px;font-size:13px;color:var(--red);margin-bottom:20px}
     .success-box{background:var(--success-bg);border:1px solid var(--success-border);border-radius:9px;padding:11px 14px;font-size:13px;color:var(--green);margin-bottom:20px}
@@ -69,12 +70,13 @@
     .ess-sb-logo{padding:18px 18px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
     .ess-sb-logo-icon{width:34px;height:34px;border-radius:9px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
     .ess-sb-brand{font-family:'Space Grotesk',sans-serif;font-size:16.5px;font-weight:700;color:var(--text);letter-spacing:-.3px}
-    .ess-sb-brand span{color:var(--accent)}
+    .ess-sb-brand span{color:var(--accent-text)}
     .ess-sb-tagline{font-size:10px;color:var(--text3);letter-spacing:.4px;margin-top:1px}
     .ess-sb-section{padding:14px 10px 6px;flex:1}
     .ess-nav{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;cursor:pointer;color:var(--text2);font-size:13px;font-weight:500;transition:all .15s;margin-bottom:2px}
     .ess-nav:hover{background:var(--surface);color:var(--text)}
-    .ess-nav.on{background:rgba(29,78,216,.08);color:var(--accent);box-shadow:-3px 0 0 var(--accent) inset;font-weight:600}
+    .ess-nav.on{background:rgba(29,78,216,.08);color:var(--accent-text);box-shadow:3px 0 0 var(--accent) inset;font-weight:600}
+    .ess-nav:focus-visible,.dash-card:focus-visible,.dash-qa-btn:focus-visible,.hcal-cell:focus-visible{outline:2px solid var(--accent-text);outline-offset:2px}
     .ess-nav svg{width:16px;height:16px;flex-shrink:0;opacity:.75}
     .ess-nav.on svg{opacity:1}
     .ess-nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:700;line-height:1;padding:3px 6px;border-radius:99px;flex-shrink:0}
@@ -84,7 +86,7 @@
     .ess-main{flex:1;display:flex;flex-direction:column;height:100vh;overflow:hidden;min-width:0}
     .ess-topbar{display:flex;align-items:center;gap:14px;padding:0 22px;height:60px;min-height:60px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
     .ess-theme-toggle{background:var(--bg3);border:1px solid var(--border);border-radius:7px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:var(--text2);flex-shrink:0}
-    .ess-theme-toggle:hover{color:var(--accent);border-color:var(--accent)}
+    .ess-theme-toggle:hover{color:var(--accent-text);border-color:var(--accent)}
     .ess-notif-wrap{position:relative}
     .ess-notif-dot{position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--red);border:1.5px solid var(--surface)}
     .ess-notif-panel{display:none;position:absolute;top:calc(100% + 8px);right:0;width:280px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 18px 44px rgba(15,23,42,.18);padding:14px;z-index:120}
@@ -129,7 +131,7 @@
     @media(max-width:960px){.dash-2col{grid-template-columns:1fr}}
     .dash-qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .dash-qa-btn{display:flex;align-items:center;gap:8px;padding:11px 12px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);transition:border-color .15s,color .15s}
-    .dash-qa-btn:hover{border-color:var(--accent);color:var(--accent)}
+    .dash-qa-btn:hover{border-color:var(--accent);color:var(--accent-text)}
     .dash-qa-btn svg{flex-shrink:0;opacity:.8}
     .dash-sched-row,.dash-announce-row{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
     .dash-sched-row:last-child,.dash-announce-row:last-child{border-bottom:none}
@@ -138,11 +140,12 @@
     .dash-sched-title{font-size:12.5px;font-weight:600;color:var(--text);margin-top:1px}
     .dash-announce-msg{font-size:11.5px;color:var(--text3);margin-top:2px;line-height:1.4}
 
-    /* ── TABS ── */
-    .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:24px;overflow-x:auto;scrollbar-width:none}
-    .tabs::-webkit-scrollbar{display:none}
-    .tab{padding:10px 16px;font-size:13px;font-weight:500;color:var(--text3);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:inherit;transition:color .15s,border-color .15s;white-space:nowrap;flex-shrink:0}
-    .tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+    /* ── TAB PANES ── (".tab" itself is just a JS hook on the sidebar's
+       .ess-nav items -- essTab() and the dashboard's quick links select on
+       it. It deliberately carries no styles of its own: the old top-strip
+       .tab rules used to sit here and, being later in the file, silently
+       overrode .ess-nav's color/padding and added a stray bottom border to
+       the active item.) */
     .tab-body{display:none}
     .tab-body.on{display:block}
 
@@ -271,9 +274,9 @@
     .dept-rota-cell.is-off{color:var(--text3)}
     .dept-rota-cell .code{font-weight:700;font-size:12px}
     .dept-rota-cell .time{color:var(--text3);font-size:10px}
-    .dept-rota-cell .task-count{margin-top:3px;font-size:9.5px;color:var(--accent);font-weight:600}
-    .dept-rota-row.is-me td:first-child{color:var(--accent)}
-    .dept-rota-table th.is-today{color:var(--accent)}
+    .dept-rota-cell .task-count{margin-top:3px;font-size:9.5px;color:var(--accent-text);font-weight:600}
+    .dept-rota-row.is-me td:first-child{color:var(--accent-text)}
+    .dept-rota-table th.is-today{color:var(--accent-text)}
     .task-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:8px}
 
     /* ── CARDS ── */
@@ -300,7 +303,14 @@
     .empty{text-align:center;padding:32px;color:var(--text3);font-size:13px}
     .loading{text-align:center;padding:24px;color:var(--text3);font-size:13px}
 
-    /* ── Team Holiday Calendar (month grid) ── */
+    /* Leave tab: requests list beside the holiday/team-leave calendar so the
+       calendar isn't pushed below the fold by a growing request history. */
+    .leave-2col{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:16px;align-items:start}
+    .leave-2col>.card{margin-bottom:0}
+    #leave-content{max-height:520px;overflow-y:auto;padding-right:2px}
+    @media(max-width:1100px){.leave-2col{grid-template-columns:1fr}#leave-content{max-height:none}}
+
+    /* ── Holiday & Team Leave Calendar (month grid) ── */
     .hcal-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--text2);margin-bottom:10px}
     .hcal-legend span{display:inline-flex;align-items:center;gap:5px}
     .hcal-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
@@ -312,24 +322,98 @@
     .hcal-cell.hcal-today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
     .hcal-cell.hcal-is-holiday{background:rgba(245,158,11,.08)}
     .hcal-daynum{font-size:11px;font-weight:700;color:var(--text2);margin-bottom:2px}
-    .hcal-chip{font-size:9.5px;font-weight:600;border-radius:4px;padding:1px 4px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .hcal-chip{font-size:10.5px;font-weight:600;border-radius:4px;padding:1px 4px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .hcal-chip-holiday{background:var(--hcal-holiday-bg);color:var(--hcal-holiday-text)}
     .hcal-chip-leave{background:var(--hcal-leave-bg);color:var(--hcal-leave-text)}
-    .hcal-more{font-size:9px;color:var(--text3)}
+    .hcal-more{font-size:10px;color:var(--text3)}
     @media (max-width:640px){
       .hcal-cell{min-height:48px;padding:3px 3px}
       .hcal-daynum{font-size:10px}
-      .hcal-chip{font-size:8.5px}
-      .hcal-weekday{font-size:9px}
+      .hcal-chip{font-size:9.5px}
+      .hcal-weekday{font-size:10px}
     }
 
     /* ── PAYSLIP CARD ── */
-    .payslip-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
-    .payslip-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px}
-    .payslip-period{font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px}
-    .payslip-row{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0}
-    .payslip-row.net{border-top:1px solid var(--border);margin-top:6px;padding-top:6px;font-weight:700;font-size:13px}
-    .payslip-status{font-size:10.5px;font-weight:600;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+    .payslip-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
+    .payslip-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;display:flex;flex-direction:column}
+    .ps-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+    .payslip-period{font-size:13.5px;font-weight:700;color:var(--text)}
+    .ps-net{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+    .ps-net-label{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)}
+    .ps-net-val{font-family:'Space Grotesk',sans-serif;font-size:21px;font-weight:700;color:var(--text);margin-top:2px}
+    .payslip-row{display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;color:var(--text2)}
+    .payslip-row span:last-child{color:var(--text);font-variant-numeric:tabular-nums}
+    .payslip-row.neg span:last-child{color:var(--red)}
+    .ps-print{margin-top:12px;padding:8px 12px;font-size:12px;font-weight:600;align-self:flex-start}
+    .ps-print:hover{border-color:var(--accent);color:var(--accent-text)}
+
+    /* ── SELF-SERVICE REQUESTS ── */
+    .st-cancelled{background:#f1f5f9;color:#64748b}
+    .req-row{display:flex;align-items:flex-start;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px}
+    .req-row.is-new{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+    .req-ico{width:38px;height:38px;border-radius:11px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text2);flex-shrink:0}
+    .req-ico svg{width:18px;height:18px}
+    .req-main{flex:1;min-width:0}
+    .req-title{font-size:13.5px;font-weight:700;color:var(--text)}
+    .req-sub{font-size:12px;color:var(--text3);margin-top:2px}
+    .req-reason{font-size:12px;color:var(--text2);margin-top:5px;overflow-wrap:anywhere}
+    .req-side{text-align:right;flex-shrink:0}
+    .req-when{font-size:11px;color:var(--text3);margin-top:5px}
+    .req-new-btns{display:flex;gap:8px;flex-wrap:wrap}
+    .req-new-btns .btn-ghost{padding:7px 13px;font-size:12.5px;font-weight:600}
+    .req-new-btns .btn-ghost:hover{border-color:var(--accent);color:var(--accent-text)}
+    .link-btn{background:none;border:none;color:var(--accent-text);font:inherit;font-size:12px;font-weight:600;cursor:pointer;padding:0;margin-top:6px}
+    .link-btn.danger{color:var(--red)}
+    .link-btn:hover{text-decoration:underline}
+    .mini-btn{padding:5px 11px;font-size:11.5px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:inherit;font-weight:600}
+    .mini-btn:hover{border-color:var(--accent);color:var(--accent-text)}
+    .mini-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+    .mini-btn:disabled{opacity:.55;cursor:not-allowed}
+    .task-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+    .leave-preview{display:none;margin:-4px 0 14px;padding:10px 12px;border-radius:9px;background:var(--bg3);border:1px solid var(--border);font-size:12.5px;color:var(--text2);line-height:1.5}
+    .leave-preview.warn{background:var(--hcal-holiday-bg);border-color:transparent;color:var(--hcal-holiday-text)}
+    .hint{font-size:11.5px;color:var(--text3);margin-top:5px;line-height:1.4}
+    .att-pill.pend{background:var(--bg3);color:var(--text2);border:1px solid var(--border)}
+    .doc-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+    .doc-row:last-of-type{border-bottom:none}
+    .doc-name{font-size:13px;font-weight:600;color:var(--text)}
+    .doc-date{font-size:11.5px;color:var(--text3);margin-top:1px}
+    .doc-pill{display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;white-space:nowrap}
+    .doc-pill.valid{background:rgba(16,185,129,.14);color:var(--green)}
+    .doc-pill.soon{background:var(--hcal-holiday-bg);color:var(--hcal-holiday-text)}
+    .doc-pill.critical,.doc-pill.expired{background:rgba(239,68,68,.14);color:var(--red)}
+    .doc-pill.missing{background:var(--bg3);color:var(--text3)}
+    .doc-alert{border-color:rgba(239,68,68,.35);background:var(--danger-bg)}
+    .ess-toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,16px);background:#0f172a;color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;font-weight:500;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:300;max-width:calc(100vw - 32px);box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .ess-toast.on{opacity:1;transform:translate(-50%,0)}
+    .ess-toast.err{background:#b91c1c}
+
+    /* ── EMPTY STATES ── */
+    .empty-state{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:34px 16px}
+    .es-ico{width:48px;height:48px;border-radius:14px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text3);margin-bottom:6px}
+    .es-ico svg{width:22px;height:22px}
+    .es-title{font-size:14px;font-weight:600;color:var(--text2)}
+    .es-sub{font-size:12.5px;color:var(--text3);max-width:340px;line-height:1.5}
+
+    /* ── ATTENDANCE ── */
+    .att-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+    .att-stat{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px}
+    .att-stat-label{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)}
+    .att-stat-val{font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:700;color:var(--text);margin-top:4px}
+    .att-stat-sub{font-size:11.5px;color:var(--text3);margin-top:2px}
+    .att-pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600}
+    .att-pill.live{background:rgba(16,185,129,.16);color:var(--green)}
+    .att-pill.miss{background:var(--hcal-holiday-bg);color:var(--hcal-holiday-text)}
+
+    /* ── PROFILE ── */
+    .profile-2col{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px;align-items:start}
+    .profile-col{display:flex;flex-direction:column;gap:16px;min-width:0}
+    .profile-col>.card{margin-bottom:0}
+    @media(max-width:960px){.profile-2col{grid-template-columns:1fr}}
+    .profile-hero{display:flex;align-items:center;gap:14px;padding-bottom:16px;margin-bottom:16px;border-bottom:1px solid var(--border)}
+    .profile-avatar{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,#4f8ef7,#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;flex-shrink:0;overflow:hidden}
+    .profile-hero-name{font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:700;color:var(--text)}
+    .profile-hero-sub{font-size:12.5px;color:var(--text2);margin-top:2px}
   </style>
   <script>
     // Runs before body paints, so a saved/system dark preference applies
@@ -392,9 +476,14 @@
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2.5 1.5"/></svg>
         Attendance
       </div>
-      <div class="ess-nav tab" onclick="essTab(this,'leave')">
+      <div class="ess-nav tab" onclick="essTab(this,'leave');loadHolidayCalendar()">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8c0-2.8 2.2-5 5-5s5 2.2 5 5v4H3V8z"/><path d="M1 12h14M6 3.5C6 2 7 1 8 1s2 1 2 2.5"/></svg>
         Leave
+      </div>
+      <div class="ess-nav tab" onclick="essTab(this,'requests');essMarkRequestsSeen()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h8v12H4z"/><path d="M6 5h4M6 8h4M6 11h2"/></svg>
+        Requests
+        <span class="ess-nav-badge" id="ess-nav-requests-badge" style="display:none">0</span>
       </div>
       <div class="ess-nav tab" onclick="essTab(this,'rota')">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1.5v3M11 1.5v3M2 6h12"/></svg>
@@ -436,7 +525,7 @@
 
   <div class="ess-main">
     <div class="ess-topbar">
-      <button class="ess-ham-btn" onclick="toggleEssSidebar()">&#9776;</button>
+      <button class="ess-ham-btn" aria-label="Open menu" onclick="toggleEssSidebar()">&#9776;</button>
       <div class="ess-tb-title" id="ess-tb-title">Dashboard</div>
       <div class="ess-tb-right">
         <span class="badge" id="ess-role-badge">Employee</span>
@@ -577,7 +666,7 @@
             <div class="card-title" style="margin-bottom:2px">Leave Balance</div>
             <div style="font-size:11.5px;color:var(--text3)">Your available leave days</div>
           </div>
-          <a style="font-size:12px;color:var(--accent);cursor:pointer;font-weight:600" onclick="document.querySelector('.tab[onclick*=leave]').click()">View All →</a>
+          <a style="font-size:12px;color:var(--accent-text);cursor:pointer;font-weight:600" onclick="document.querySelector('.tab[onclick*=leave]').click()">View All →</a>
         </div>
         <div id="dash-leave-balance" class="leave-balance-grid">
           <div class="loading">Loading…</div>
@@ -603,12 +692,18 @@
       </div><!-- /dash-main-col -->
 
       <div class="dash-side-col">
+        <div class="card doc-alert" id="dash-doc-alert-card" style="display:none;margin-bottom:18px;cursor:pointer" onclick="essGoTab('profile')"></div>
+
         <div class="card" id="dash-quick-actions-card" style="margin-bottom:18px">
           <div class="card-title" style="display:flex;align-items:center;gap:6px">⚡ Quick Actions</div>
           <div class="dash-qa-grid">
             <div class="dash-qa-btn" onclick="essOpenLeaveModal()">
               <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1.5v3M11 1.5v3M2 6h12"/></svg>
               <span>Apply for Leave</span>
+            </div>
+            <div class="dash-qa-btn" onclick="essOpenRequestModal('overtime')">
+              <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2.5 1.5"/></svg>
+              <span>Request Overtime</span>
             </div>
             <div class="dash-qa-btn" onclick="document.querySelector('.tab[onclick*=payslips]').click()">
               <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6h12M5 10h3M10 10h1"/></svg>
@@ -624,11 +719,15 @@
             </div>
             <div class="dash-qa-btn" onclick="document.querySelector('.tab[onclick*=profile]').click()">
               <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="3"/><path d="M2.5 14c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/></svg>
-              <span>Update Profile</span>
+              <span>My Profile</span>
             </div>
-            <div class="dash-qa-btn" onclick="document.querySelector('.tab[onclick*=gps]').click()">
-              <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 14s5-4.5 5-8a5 5 0 00-10 0c0 3.5 5 8 5 8z"/><circle cx="8" cy="6" r="1.8"/></svg>
-              <span>GPS Check-in</span>
+            <div class="dash-qa-btn" onclick="document.querySelector('.tab[onclick*=tasks]').click()">
+              <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 8l2 2 4-4"/></svg>
+              <span>My Tasks</span>
+            </div>
+            <div class="dash-qa-btn" onclick="essOpenRequestModal('advance')">
+              <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6h12M5 10h3M10 10h1"/></svg>
+              <span>Salary Advance</span>
             </div>
           </div>
         </div>
@@ -639,7 +738,7 @@
           </div>
           <div id="dash-today-schedule"><div class="loading">Loading…</div></div>
           <div style="text-align:right;margin-top:10px">
-            <a style="font-size:12px;color:var(--accent);cursor:pointer;font-weight:600" onclick="document.querySelector('.tab[onclick*=rota]').click()">View Full Calendar →</a>
+            <a style="font-size:12px;color:var(--accent-text);cursor:pointer;font-weight:600" onclick="document.querySelector('.tab[onclick*=rota]').click()">View Full Calendar →</a>
           </div>
         </div>
 
@@ -651,16 +750,17 @@
         </div>
 
         <!-- My Team Today + next Holiday -- same data as the Team tab's
-             "My Team Today"/"Holiday Calendar" cards (GET /ess/team/today,
-             GET /ess/holidays), surfaced here too so it's visible without
-             an extra click, not just buried in a nav tab. -->
+             "My Team Today" card and the Leave tab's holiday calendar
+             (GET /ess/team/today, GET /ess/holidays), surfaced here too so
+             it's visible without an extra click. "View All" opens the Team
+             tab; the next-holiday line opens the Leave tab's calendar. -->
         <div class="card" id="dash-team-card">
           <div class="card-hd">
             <div class="card-title" style="margin-bottom:0;display:flex;align-items:center;gap:6px">👥 My Team Today</div>
-            <a style="font-size:12px;color:var(--accent);cursor:pointer;font-weight:600" onclick="document.getElementById('ess-team-tab-btn').click()">View All →</a>
+            <a style="font-size:12px;color:var(--accent-text);cursor:pointer;font-weight:600" onclick="document.getElementById('ess-team-tab-btn').click()">View All →</a>
           </div>
           <div id="dash-team-today"><div class="loading">Loading…</div></div>
-          <div id="dash-next-holiday-wrap" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px">
+          <div id="dash-next-holiday-wrap" title="Open the holiday calendar" onclick="document.querySelector('.tab[onclick*=leave]').click()" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
             <span>📅</span><span id="dash-next-holiday">Loading…</span>
           </div>
         </div>
@@ -670,11 +770,24 @@
 
     <!-- Profile -->
     <div class="tab-body" id="tb-profile">
+      <div class="profile-2col">
+      <div class="profile-col">
       <div class="card" id="profile-card">
+        <div class="profile-hero" id="profile-hero"></div>
         <div class="card-title">My Information</div>
         <div class="profile-row" id="profile-fields">
           <div class="loading">Loading…</div>
         </div>
+      </div>
+      <div class="card" id="contact-card">
+        <div class="card-title">Contact Details</div>
+        <div id="contact-content" class="loading">Loading…</div>
+      </div>
+      </div><!-- /profile-col -->
+      <div class="profile-col">
+      <div class="card" id="docs-card">
+        <div class="card-title">My Documents</div>
+        <div id="docs-content" class="loading">Loading…</div>
       </div>
       <div class="card">
         <div class="card-title">Change Password</div>
@@ -690,16 +803,22 @@
         </div>
         <button id="pw-btn" class="btn-login" style="width:auto;padding:10px 20px" onclick="essChangePassword()">Update Password</button>
       </div>
+      </div><!-- /profile-col -->
+      </div><!-- /profile-2col -->
     </div>
 
     <!-- Attendance -->
     <div class="tab-body" id="tb-attendance">
+      <div class="att-summary" id="att-summary"></div>
       <div class="card">
-        <div class="card-title">Attendance Records (last 90)</div>
+        <div class="card-hd" style="margin-bottom:14px;align-items:center">
+          <div class="card-title" style="margin-bottom:0">Daily Attendance</div>
+          <button class="btn-ghost" style="padding:7px 14px;font-size:12.5px" onclick="essOpenRequestModal('correction')">Request correction</button>
+        </div>
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th>Date</th><th>Time</th><th>Direction</th><th>Source</th></tr></thead>
-            <tbody id="att-body"><tr><td colspan="4" class="loading">Loading…</td></tr></tbody>
+            <thead><tr><th>Date</th><th>First In</th><th>Last Out</th><th>Hours</th><th>Punches</th><th>Source</th></tr></thead>
+            <tbody id="att-body"><tr><td colspan="6" class="loading">Loading…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -707,12 +826,50 @@
 
     <!-- Leave -->
     <div class="tab-body" id="tb-leave">
+      <div class="leave-2col">
       <div class="card">
         <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
           <span>My Leave Requests</span>
           <button class="btn-login" style="width:auto;padding:8px 16px;font-size:12.5px" onclick="essOpenLeaveModal()">+ Request Leave</button>
         </div>
         <div id="leave-content" class="loading">Loading…</div>
+      </div>
+      <div class="card" id="holiday-calendar-card">
+        <div class="card-hd" style="margin-bottom:8px">
+          <div class="card-title" style="margin-bottom:0">Holiday &amp; Team Leave Calendar</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button type="button" class="btn-ghost" style="padding:4px 10px" onclick="shiftHolidayCalendarMonth(-1)">‹</button>
+            <span id="holiday-cal-month-label" style="font-size:12.5px;font-weight:700;min-width:108px;text-align:center">—</span>
+            <button type="button" class="btn-ghost" style="padding:4px 10px" onclick="shiftHolidayCalendarMonth(1)">›</button>
+          </div>
+        </div>
+        <div class="hcal-legend">
+          <span><i class="hcal-dot" style="background:#f59e0b"></i>Company holiday</span>
+          <span><i class="hcal-dot" style="background:#8b5cf6"></i>Teammate on leave</span>
+        </div>
+        <div class="hcal-grid" id="holiday-cal-grid"><div class="loading">Loading…</div></div>
+      </div>
+      </div><!-- /leave-2col -->
+    </div>
+
+    <!-- Requests -->
+    <div class="tab-body" id="tb-requests">
+      <div class="card">
+        <div class="card-hd" style="align-items:center;flex-wrap:wrap">
+          <div>
+            <div class="card-title" style="margin-bottom:2px">My Requests</div>
+            <div style="font-size:11.5px;color:var(--text3)">Everything you've sent to HR, and where it stands</div>
+          </div>
+          <div class="req-new-btns">
+            <button class="btn-ghost" onclick="essOpenLeaveModal()">+ Leave</button>
+            <button class="btn-ghost" onclick="essOpenRequestModal('overtime')">+ Overtime</button>
+            <button class="btn-ghost" onclick="essOpenRequestModal('advance')">+ Salary advance</button>
+            <button class="btn-ghost" onclick="essOpenRequestModal('loan')">+ Loan</button>
+            <button class="btn-ghost" onclick="essOpenRequestModal('correction')">+ Attendance fix</button>
+          </div>
+        </div>
+        <div class="ess-view-toggle" id="req-filter" style="flex-wrap:wrap"></div>
+        <div id="requests-content" class="loading">Loading…</div>
       </div>
     </div>
 
@@ -777,9 +934,10 @@
       </div>
     </div>
 
-    <!-- Team -- the two cards below are visible to every ESS employee;
+    <!-- Team -- "My Team Today" below is visible to every ESS employee;
          the "Department Team" and "Live Attendance" cards further down
-         stay role-gated (manager-only). -->
+         stay role-gated (manager-only). Team Holiday Calendar used to be
+         here too; it now lives under the Leave tab instead. -->
     <div class="tab-body" id="tb-team">
       <div class="card" id="team-today-card" style="margin-bottom:16px">
         <div class="card-title" id="team-today-title">My Team — Today</div>
@@ -789,21 +947,6 @@
             <tbody id="team-today-body"><tr><td colspan="4" class="loading">Loading…</td></tr></tbody>
           </table>
         </div>
-      </div>
-      <div class="card" id="holiday-calendar-card" style="margin-bottom:16px">
-        <div class="card-hd" style="margin-bottom:8px">
-          <div class="card-title" style="margin-bottom:0">Team Holiday Calendar</div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <button type="button" class="btn-ghost" style="padding:4px 10px" onclick="shiftHolidayCalendarMonth(-1)">‹</button>
-            <span id="holiday-cal-month-label" style="font-size:12.5px;font-weight:700;min-width:108px;text-align:center">—</span>
-            <button type="button" class="btn-ghost" style="padding:4px 10px" onclick="shiftHolidayCalendarMonth(1)">›</button>
-          </div>
-        </div>
-        <div class="hcal-legend">
-          <span><i class="hcal-dot" style="background:#f59e0b"></i>Company holiday</span>
-          <span><i class="hcal-dot" style="background:#8b5cf6"></i>Teammate on leave</span>
-        </div>
-        <div class="hcal-grid" id="holiday-cal-grid"><div class="loading">Loading…</div></div>
       </div>
       <div class="card" id="dept-team-card" style="display:none;margin-bottom:16px">
         <div class="card-title" id="dept-team-title">Department Team</div>
@@ -835,7 +978,7 @@
     <div id="leave-form-err" class="err-box"></div>
     <div class="field">
       <label for="leave-type">Leave Type</label>
-      <select id="leave-type" class="ess-select">
+      <select id="leave-type" class="ess-select" onchange="essUpdateLeavePreview()">
         <option>Annual Leave</option>
         <option>Sick Leave</option>
         <option>Casual Leave</option>
@@ -849,9 +992,10 @@
       </select>
     </div>
     <div class="fr2">
-      <div class="field"><label for="leave-start">Start Date</label><input id="leave-start" type="date"></div>
-      <div class="field"><label for="leave-end">End Date</label><input id="leave-end" type="date"></div>
+      <div class="field"><label for="leave-start">Start Date</label><input id="leave-start" type="date" oninput="essUpdateLeavePreview()"></div>
+      <div class="field"><label for="leave-end">End Date</label><input id="leave-end" type="date" oninput="essUpdateLeavePreview()"></div>
     </div>
+    <div id="leave-preview" class="leave-preview" aria-live="polite"></div>
     <div class="field last">
       <label for="leave-reason">Reason (optional)</label>
       <input id="leave-reason" type="text" placeholder="Brief reason for HR">
@@ -862,6 +1006,20 @@
     </div>
   </div>
 </div>
+
+<!-- Generic request modal (overtime / loan / advance / attendance correction) -->
+<div class="ess-overlay" id="req-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="req-modal-title" onclick="if(event.target===this)essCloseRequestModal()">
+  <div class="ess-modal">
+    <div class="ess-modal-title" id="req-modal-title">Request</div>
+    <div id="req-form-err" class="err-box"></div>
+    <div id="req-form-body"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
+      <button class="btn-ghost" onclick="essCloseRequestModal()">Cancel</button>
+      <button id="req-submit-btn" class="btn-login" style="width:auto;padding:11px 22px" onclick="essSubmitRequest()">Submit Request</button>
+    </div>
+  </div>
+</div>
+<div class="ess-toast" id="ess-toast" role="status" aria-live="polite"></div>
 
 <script src="/config.js"></script>
 <script>
@@ -1073,7 +1231,9 @@
   function essTab(el, id) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
     document.querySelectorAll('.tab-body').forEach(t => t.classList.remove('on'));
+    document.querySelectorAll('.ess-nav').forEach(t => t.removeAttribute('aria-current'));
     el.classList.add('on');
+    el.setAttribute('aria-current', 'page');
     document.getElementById('tb-' + id).classList.add('on');
     var titleEl = document.getElementById('ess-tb-title');
     if (titleEl) {
@@ -1088,6 +1248,25 @@
     }
     toggleEssSidebar(false);
   }
+
+  // The nav items, dashboard tiles/quick actions and calendar days are
+  // clickable <div>s -- give them button semantics so they're reachable by
+  // Tab and operable with Enter/Space (re-run after the calendar re-renders).
+  var ESS_CLICKABLE = '.ess-nav,.dash-card,.dash-qa-btn,.hcal-cell:not(.hcal-empty)';
+  function essMakeKeyboardOperable(root) {
+    (root || document).querySelectorAll(ESS_CLICKABLE).forEach(function(el) {
+      if (el.hasAttribute('tabindex')) return;
+      el.setAttribute('tabindex', '0');
+      el.setAttribute('role', 'button');
+    });
+  }
+  document.addEventListener('keydown', function(e) {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches(ESS_CLICKABLE)) {
+      e.preventDefault();
+      e.target.click();
+    }
+  });
+  essMakeKeyboardOperable();
 
   function toggleEssSidebar(force) {
     var open = force !== undefined ? force : !document.body.classList.contains('ess-sb-open');
@@ -1114,12 +1293,35 @@
   essApplyTheme(document.documentElement.getAttribute('data-theme') || 'light');
 
   var _essData = { attendance: [], leave: [], rota: [], tasks: [], payslips: [] };
+  var _essMe = null;            // last /ess/me payload (profile, print header)
+  var _essCurrency = 'AED';     // replaced by the company's real currency once /ess/me loads
+  function essMoney(n) { return _essCurrency + ' ' + fmt(n); }
+
+  // Consistent "nothing here yet" block: icon + title + one line of guidance.
+  var ES_ICONS = {
+    calendar: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    check: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/>',
+    wallet: '<rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M16 15h2"/>'
+  };
+  function emptyState(icon, title, sub) {
+    return '<div class="empty-state"><div class="es-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
+      (ES_ICONS[icon] || ES_ICONS.check) + '</svg></div><div class="es-title">' + escHtml(title) + '</div>' +
+      (sub ? '<div class="es-sub">' + escHtml(sub) + '</div>' : '') + '</div>';
+  }
 
   async function loadProfile() {
     try {
       var r = await fetch(apiBase() + '/ess/me', {headers: essHeaders()});
       if (r.status === 401) { essLogout(); return; }
       var emp = await r.json();
+      _essMe = emp;
+      essProcessRequestUpdates();
+      if (emp.currency && emp.currency !== _essCurrency) {
+        _essCurrency = emp.currency;
+        renderPayslips();       // payslips may have loaded first, formatted with the default
+        updateDashboard();
+      }
       var initial = (emp.full_name || '?').trim().charAt(0).toUpperCase();
       var topNameEl = document.getElementById('ess-top-name');
       if (topNameEl) topNameEl.textContent = emp.full_name;
@@ -1136,7 +1338,14 @@
         kv('Full Name', escHtml(emp.full_name)) +
         kv('Department', escHtml(emp.department)) +
         kv('Designation', escHtml(emp.designation)) +
+        kv('Company', escHtml(emp.company_name || '—')) +
+        kv('Working Hours', (emp.shift_start && emp.shift_end) ? escHtml(_fmt12h(emp.shift_start) + ' – ' + _fmt12h(emp.shift_end)) : '—') +
         kv('Status', '<span class="badge' + (emp.status !== 'active' ? ' inactive' : '') + '">' + escHtml(emp.status) + '</span>');
+      var heroEl = document.getElementById('profile-hero');
+      if (heroEl) heroEl.innerHTML =
+        '<div class="profile-avatar">' + avatarHtml + '</div>' +
+        '<div><div class="profile-hero-name">' + escHtml(emp.full_name) + '</div>' +
+        '<div class="profile-hero-sub">' + escHtml(emp.designation || '') + (emp.designation && emp.department ? ' · ' : '') + escHtml(emp.department || '') + '</div></div>';
       var avEl = document.getElementById('dash-avatar');
       if (avEl) {
         avEl.innerHTML = avatarHtml;
@@ -1176,47 +1385,131 @@
     return '<div class="kv"><div class="kv-label">' + label + '</div><div class="kv-value">' + value + '</div></div>';
   }
 
+  // Raw punches -> one row per day (first IN, last OUT, worked hours).
+  function _punchMins(t) { t = String(t || ''); return parseInt(t.substr(11, 2), 10) * 60 + parseInt(t.substr(14, 2), 10); }
+  function _fmtDur(m) { return Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm'; }
+  function _fmtClock(m) { return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(Math.round(m % 60)).padStart(2, '0'); }
+  function essGroupAttendance(rows) {
+    var byDate = {};
+    rows.forEach(function(p) { (byDate[p.punch_date] = byDate[p.punch_date] || []).push(p); });
+    return Object.keys(byDate).sort().reverse().map(function(d) {
+      var ps = byDate[d].slice().sort(function(a, b) { return String(a.punch_time).localeCompare(String(b.punch_time)); });
+      var ins = ps.filter(function(p) { return p.direction === 'in'; });
+      var outs = ps.filter(function(p) { return p.direction !== 'in'; });
+      var first = ins.length ? ins[0] : ps[0];
+      var last = outs.length ? outs[outs.length - 1] : null;
+      if (last && String(last.punch_time) <= String(first.punch_time)) last = null;
+      var sources = ps.map(function(p) { return p.source; }).filter(function(v, i, a) { return v && a.indexOf(v) === i; });
+      return {date: d, first: first, last: last, mins: last ? _punchMins(last.punch_time) - _punchMins(first.punch_time) : null, count: ps.length, source: sources.join(', ') || '—'};
+    });
+  }
+
+  function renderAttendance() {
+    var rows = _essData.attendance || [];
+    var body = document.getElementById('att-body');
+    var sumEl = document.getElementById('att-summary');
+    var days = essGroupAttendance(rows);
+    var todayStr = _todayISO();
+    var month = todayStr.slice(0, 7);
+    var monthDays = days.filter(function(d) { return d.date.indexOf(month) === 0; });
+    var withHours = monthDays.filter(function(d) { return d.mins != null; });
+    var avgIn = monthDays.length ? Math.round(monthDays.reduce(function(a, d) { return a + _punchMins(d.first.punch_time); }, 0) / monthDays.length) : null;
+    var avgHrs = withHours.length ? Math.round(withHours.reduce(function(a, d) { return a + d.mins; }, 0) / withHours.length) : null;
+    var lastPunch = rows[0];   // API returns newest first
+    if (sumEl) {
+      var stat = function(label, val, sub) { return '<div class="att-stat"><div class="att-stat-label">' + label + '</div><div class="att-stat-val">' + val + '</div><div class="att-stat-sub">' + sub + '</div></div>'; };
+      sumEl.innerHTML =
+        stat('Days Present', monthDays.length, 'This month') +
+        stat('Avg. Check-in', avgIn == null ? '—' : _fmtClock(avgIn), 'This month') +
+        stat('Avg. Hours / Day', avgHrs == null ? '—' : _fmtDur(avgHrs), withHours.length ? 'Over ' + withHours.length + ' day' + (withHours.length === 1 ? '' : 's') + ' with a check-out' : 'No completed days yet') +
+        stat('Last Punch', lastPunch ? String(lastPunch.punch_time).substring(11, 16) + ' ' + (lastPunch.direction === 'in' ? 'IN' : 'OUT') : '—', lastPunch ? fmtShortDate(lastPunch.punch_date) : 'No punches yet');
+    }
+    if (!body) return;
+    if (!days.length) { body.innerHTML = '<tr><td colspan="6">' + emptyState('clock', 'No attendance records yet', 'Your check-ins from the biometric device or GPS will show up here, one row per day.') + '</td></tr>'; return; }
+    body.innerHTML = days.map(function(d) {
+      var out;
+      if (d.last) out = String(d.last.punch_time).substring(11, 16);
+      else if (d.date === todayStr) out = '<span class="att-pill live">On shift</span>';
+      else {
+        var fixPending = (_essRequests || []).some(function(q) { return q.kind === 'correction' && q.status === 'pending' && q.date === d.date; });
+        out = fixPending ? '<span class="att-pill pend">Correction pending</span>'
+          : '<span class="att-pill miss">No check-out</span> <button class="link-btn" style="margin:0 0 0 6px" data-date="' + escHtml(d.date) + '" data-in="' + escHtml(String(d.first.punch_time).substring(11, 16)) + '" onclick="essOpenRequestModal(\'correction\',{date:this.dataset.date,checkin:this.dataset.in})">Request fix</button>';
+      }
+      return '<tr><td>' + fmtShortDate(d.date) + '</td><td><span class="dir-in">' + String(d.first.punch_time).substring(11, 16) + '</span></td><td>' + out +
+        '</td><td>' + (d.mins != null ? _fmtDur(d.mins) : '—') + '</td><td>' + d.count + '</td><td>' + escHtml(d.source) + '</td></tr>';
+    }).join('');
+  }
+
   async function loadAttendance() {
     try {
       var r = await fetch(apiBase() + '/ess/attendance', {headers: essHeaders()});
       if (r.status === 401) { essLogout(); return; }
-      var rows = await r.json();
-      _essData.attendance = rows;
-      var body = document.getElementById('att-body');
-      if (!rows.length) { body.innerHTML = '<tr><td colspan="4" class="empty">No attendance records found.</td></tr>'; }
-      else {
-        body.innerHTML = rows.map(function(p) {
-          var dir = p.direction === 'in'
-            ? '<span class="dir-in">↑ IN</span>'
-            : '<span class="dir-out">↓ OUT</span>';
-          var t = p.punch_time ? p.punch_time.substring(11,16) : '—';
-          return '<tr><td>' + p.punch_date + '</td><td>' + t + '</td><td>' + dir + '</td><td>' + p.source + '</td></tr>';
-        }).join('');
-      }
+      _essData.attendance = await r.json();
+      renderAttendance();
       updateDashboard();
-    } catch(e) { document.getElementById('att-body').innerHTML = '<tr><td colspan="4" class="empty">Failed to load.</td></tr>'; }
+    } catch(e) { document.getElementById('att-body').innerHTML = '<tr><td colspan="6" class="empty">Failed to load.</td></tr>'; }
+  }
+
+  function _psPeriodLabel(period) {
+    if (/^\d{4}-\d{2}$/.test(period || '')) return new Date(period + '-01T00:00:00').toLocaleDateString('en-US', {month: 'long', year: 'numeric'});
+    return period || '—';
+  }
+  function _psStatusClass(status) {
+    var s = String(status || '').toLowerCase();
+    if (['paid', 'approved', 'finalized', 'finalised', 'completed', 'posted'].indexOf(s) > -1) return 'approved';
+    if (s === 'draft' || s === 'pending') return 'pending';
+    return 'todo';
+  }
+
+  function renderPayslips() {
+    var items = _essData.payslips || [];
+    var el = document.getElementById('payslip-content');
+    if (!el) return;
+    el.classList.remove('loading');
+    if (!items.length) { el.innerHTML = emptyState('wallet', 'No payslips yet', 'Your payslips appear here once payroll has been run for you.'); return; }
+    el.innerHTML = '<div class="payslip-grid">' + items.map(function(p, i) {
+      var row = function(label, val, cls) { return '<div class="payslip-row' + (cls ? ' ' + cls : '') + '"><span>' + label + '</span><span>' + (cls === 'neg' && Number(val) ? '− ' : '') + essMoney(val) + '</span></div>'; };
+      return '<div class="payslip-card">' +
+        '<div class="ps-head"><div class="payslip-period">' + escHtml(_psPeriodLabel(p.period)) + '</div><span class="st-badge st-' + _psStatusClass(p.run_status) + '">' + escHtml(p.run_status || '') + '</span></div>' +
+        '<div class="ps-net"><div class="ps-net-label">Net pay</div><div class="ps-net-val">' + essMoney(p.net_pay) + '</div></div>' +
+        row('Basic', p.basic) + row('Allowances', p.allowances) + row('Overtime', p.overtime) + row('Deductions', p.deductions, 'neg') +
+        '<button class="btn-ghost ps-print" onclick="essPrintPayslip(' + i + ')">Print / Save PDF</button>' +
+        '</div>';
+    }).join('') + '</div>';
+  }
+
+  // Opens a clean, printable single-payslip page (browser "Save as PDF" works
+  // from its print dialog) -- no server-side PDF endpoint needed.
+  function essPrintPayslip(i) {
+    var p = (_essData.payslips || [])[i];
+    if (!p) return;
+    var me = _essMe || {};
+    var w = window.open('', '_blank', 'width=760,height=900');
+    if (!w) { alert('Please allow pop-ups for this site to print your payslip.'); return; }
+    var line = function(label, val, bold) { return '<tr' + (bold ? ' class="b"' : '') + '><td>' + label + '</td><td class="n">' + essMoney(val) + '</td></tr>'; };
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Payslip ' + escHtml(_psPeriodLabel(p.period)) + '</title>' +
+      '<style>body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;margin:40px}h1{font-size:20px;margin:0}h2{font-size:13px;color:#475569;font-weight:400;margin:4px 0 24px}' +
+      '.meta{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font-size:13px;margin-bottom:24px}.meta b{color:#64748b;font-weight:600;font-size:11px;text-transform:uppercase;display:block}' +
+      'table{width:100%;border-collapse:collapse;font-size:14px}td{padding:9px 4px;border-bottom:1px solid #e2e8f0}td.n{text-align:right}tr.b td{font-weight:700;font-size:16px;border-top:2px solid #0f172a;border-bottom:none}' +
+      '.foot{margin-top:32px;font-size:11px;color:#94a3b8}</style></head><body>' +
+      '<h1>' + escHtml(me.company_name || 'Payslip') + '</h1><h2>Payslip — ' + escHtml(_psPeriodLabel(p.period)) + ' (' + escHtml(p.run_status || '') + ')</h2>' +
+      '<div class="meta"><div><b>Employee</b>' + escHtml(me.full_name || '') + '</div><div><b>Employee ID</b>' + escHtml(me.employee_no || '') + '</div>' +
+      '<div><b>Department</b>' + escHtml(me.department || '') + '</div><div><b>Designation</b>' + escHtml(me.designation || '') + '</div></div>' +
+      '<table>' + line('Basic', p.basic) + line('Allowances', p.allowances) + line('Overtime', p.overtime) +
+      '<tr><td>Deductions</td><td class="n">− ' + essMoney(p.deductions) + '</td></tr>' + line('Net Pay', p.net_pay, true) + '</table>' +
+      '<div class="foot">Generated from the Employee Self-Service portal on ' + escHtml(new Date().toLocaleDateString('en-US', {day: 'numeric', month: 'long', year: 'numeric'})) + '.</div>' +
+      '</body></html>');
+    w.document.close();
+    w.focus();
+    setTimeout(function() { w.print(); }, 250);
   }
 
   async function loadPayslips() {
     try {
       var r = await fetch(apiBase() + '/ess/payslips', {headers: essHeaders()});
       if (r.status === 401) { essLogout(); return; }
-      var items = await r.json();
-      _essData.payslips = items;
-      var el = document.getElementById('payslip-content');
-      el.classList.remove('loading');
-      if (!items.length) { el.innerHTML = '<div class="empty">No payslips found.</div>'; }
-      else {
-        el.innerHTML = '<div class="payslip-grid">' + items.map(function(p) {
-          return '<div class="payslip-card">' +
-            '<div class="payslip-status">' + p.run_status + '</div>' +
-            '<div class="payslip-period">' + p.period + '</div>' +
-            row('Basic', p.basic) + row('Allowances', p.allowances) +
-            row('Overtime', p.overtime) + row('Deductions', p.deductions) +
-            '<div class="payslip-row net"><span>Net Pay</span><span>AED ' + fmt(p.net_pay) + '</span></div>' +
-            '</div>';
-        }).join('') + '</div>';
-      }
+      _essData.payslips = await r.json();
+      renderPayslips();
       updateDashboard();
     } catch(e) { var pEl = document.getElementById('payslip-content'); pEl.classList.remove('loading'); pEl.innerHTML = '<div class="empty">Failed to load.</div>'; }
   }
@@ -1230,17 +1523,18 @@
       _essData.leave = rows;
       var el = document.getElementById('leave-content');
       el.classList.remove('loading');
-      if (!rows.length) { el.innerHTML = '<div class="empty">No leave requests yet.</div>'; }
+      if (!rows.length) { el.innerHTML = emptyState('calendar', 'No leave requests yet', 'Use “Request Leave” or click a day on the calendar — your requests and their status show up here.'); }
       else {
         el.innerHTML = rows.map(function(l) {
           var st = (l.status || 'pending').toLowerCase();
           return '<div class="leave-card">' +
-            '<div>' +
-              '<div class="leave-type">' + l.leave_type + '</div>' +
-              '<div class="leave-dates">' + l.start_date + ' → ' + l.end_date + ' (' + l.days + ' day' + (l.days === 1 ? '' : 's') + ')</div>' +
-              (l.reason ? '<div class="leave-reason">' + l.reason + '</div>' : '') +
+            '<div style="min-width:0">' +
+              '<div class="leave-type">' + escHtml(l.leave_type) + '</div>' +
+              '<div class="leave-dates">' + escHtml(l.start_date) + ' → ' + escHtml(l.end_date) + ' (' + escHtml(l.days) + ' day' + (l.days === 1 ? '' : 's') + ')</div>' +
+              (l.reason ? '<div class="leave-reason">' + escHtml(l.reason) + '</div>' : '') +
+              (st === 'pending' ? '<button class="link-btn danger" data-id="' + escHtml(l.id) + '" onclick="essCancelLeave(this.dataset.id)">Cancel request</button>' : '') +
             '</div>' +
-            '<span class="st-badge st-' + st + '">' + (l.status || 'pending') + '</span>' +
+            '<span class="st-badge st-' + escHtml(st) + '">' + escHtml(l.status || 'pending') + '</span>' +
           '</div>';
         }).join('');
       }
@@ -1265,6 +1559,8 @@
       if (r.status === 401) { essLogout(); return; }
       if (!r.ok) throw new Error('bad response');
       var data = await r.json();
+      _essLeaveBal = data.by_type || {};
+      essUpdateLeavePreview();
       var types = Object.keys(data.by_type || {});
       if (!types.length) { el.innerHTML = '<div class="empty">No leave types configured yet.</div>'; return; }
       el.innerHTML = types.map(function(type) {
@@ -1315,6 +1611,12 @@
   // recent announcements, not a fabricated count.
   function refreshNotifications() {
     var items = [];
+    essUnseenDecisions().forEach(function(q) {
+      items.push({title: 'Your ' + (REQ_KIND[q.kind] || {label: 'request'}).label.toLowerCase() + ' request was ' + q.status, sub: _reqTitle(q), tab: 'requests'});
+    });
+    (_essDocs || []).filter(function(d) { return d.state === 'expired' || d.state === 'critical'; }).forEach(function(d) {
+      items.push({title: d.label + (d.state === 'expired' ? ' has expired' : ' expires in ' + d.days_left + ' day' + (d.days_left === 1 ? '' : 's')), sub: 'Contact HR to renew it', tab: 'profile'});
+    });
     var pendingLeave = (_essData.leave || []).filter(function(l) { return l.status === 'pending'; });
     if (pendingLeave.length) items.push({title: pendingLeave.length + ' pending leave request' + (pendingLeave.length === 1 ? '' : 's'), sub: 'Awaiting approval', tab: 'leave'});
     var openTasks = (_essData.tasks || []).filter(function(t) { return t.status !== 'done'; });
@@ -1355,6 +1657,7 @@
     document.getElementById('leave-start').value = prefillDate || '';
     document.getElementById('leave-end').value = prefillDate || '';
     document.getElementById('leave-reason').value = '';
+    essUpdateLeavePreview();
     document.getElementById('leave-modal-overlay').classList.add('on');
   }
   function essCloseLeaveModal() {
@@ -1377,7 +1680,7 @@
       });
       if (r.status === 401) { essLogout(); return; }
       var d = await r.json();
-      if (r.ok) { essCloseLeaveModal(); loadLeave(); }
+      if (r.ok) { essCloseLeaveModal(); essToast('Leave request sent to HR'); loadLeave(); essRefreshRequests(); loadLeaveBalance(); }
       else { err.textContent = d.detail || 'Could not submit leave request.'; err.style.display = 'block'; }
     } catch(e) {
       err.textContent = 'Cannot reach server. Please try again.'; err.style.display = 'block';
@@ -1447,7 +1750,7 @@
       if (!month) _essData.rota = rows;
       var el = document.getElementById('rota-content');
       el.classList.remove('loading');
-      if (!rows.length) { el.innerHTML = '<div class="empty">' + (month ? 'No shifts scheduled that month.' : 'No shifts scheduled in the next 30 days.') + '</div>'; }
+      if (!rows.length) { el.innerHTML = emptyState('calendar', month ? 'No shifts scheduled that month' : 'No shifts in the next 30 days', 'Published shifts from your manager will show up here.'); }
       else {
         var today = new Date(); today.setHours(0, 0, 0, 0);
         var tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
@@ -1601,6 +1904,30 @@
     return {cls: labels[s] ? s : 'todo', text: labels[s] || s};
   }
 
+  function _taskActions(t) {
+    if (!t.id) return '';
+    var cur = t.status === 'in_progress' ? 'progress' : (t.status || 'todo');
+    var b = function(label, to, primary) {
+      return '<button class="mini-btn' + (primary ? ' primary' : '') + '" data-id="' + escHtml(t.id) + '" onclick="essSetTaskStatus(this.dataset.id,\'' + to + '\',this)">' + label + '</button>';
+    };
+    var inner = cur === 'done' ? b('Reopen', 'todo')
+      : cur === 'progress' ? b('Mark done', 'done', true) + b('Back to To Do', 'todo')
+      : b('Start', 'progress') + b('Mark done', 'done', true);
+    return '<div class="task-actions">' + inner + '</div>';
+  }
+
+  async function essSetTaskStatus(id, status, btn) {
+    if (btn) btn.disabled = true;
+    try {
+      await essApi('PATCH', '/ess/tasks/' + encodeURIComponent(id), {status: status});
+      essToast(status === 'done' ? 'Task marked as done' : 'Task updated');
+      await loadTasks();
+    } catch (e) {
+      essToast(e.message, 'err');
+      if (btn) btn.disabled = false;
+    }
+  }
+
   async function loadTasks() {
     try {
       var r = await fetch(apiBase() + '/ess/tasks', {headers: essHeaders()});
@@ -1609,19 +1936,20 @@
       _essData.tasks = rows;
       var el = document.getElementById('tasks-content');
       el.classList.remove('loading');
-      if (!rows.length) { el.innerHTML = '<div class="empty">No tasks assigned to you.</div>'; }
+      if (!rows.length) { el.innerHTML = emptyState('check', 'No tasks assigned to you', 'Tasks your manager assigns will appear here.'); }
       else {
         el.innerHTML = rows.map(function(t) {
           var st = _taskStatusLabel(t.status);
           var priClass = 'pri-' + (t.priority || 'Medium').toLowerCase().replace(/[^a-z]/g, '');
           return '<div class="task-row">' +
-            '<div>' +
+            '<div style="min-width:0">' +
               '<div style="font-weight:600;font-size:13.5px;color:var(--text)">' + escHtml(t.title || 'Untitled task') + '</div>' +
               (t.description ? '<div style="font-size:12px;color:var(--text2);margin-top:4px">' + escHtml(t.description) + '</div>' : '') +
               '<div style="font-size:11.5px;color:var(--text3);margin-top:6px">' +
                 (t.due_date ? ('Due ' + escHtml(t.due_date) + ' · ') : '') +
                 '<span class="' + priClass + '">' + escHtml(t.priority || 'Medium') + ' priority</span>' +
               '</div>' +
+              _taskActions(t) +
             '</div>' +
             '<span class="st-badge st-' + st.cls + '">' + escHtml(st.text) + '</span>' +
           '</div>';
@@ -1645,7 +1973,7 @@
   }
 
   function updateDashboard() {
-    var todayStr = new Date().toISOString().slice(0, 10);
+    var todayStr = _todayISO();
     var todaysPunches = _essData.attendance.filter(function(p) { return p.punch_date === todayStr; });
     var attEl = document.getElementById('dash-att-status');
     if (attEl) {
@@ -1673,23 +2001,13 @@
       }
     }
     var reqEl = document.getElementById('dash-requests-list');
-    if (reqEl) {
-      var recent = _essData.leave.slice(0, 3);
-      if (!recent.length) {
+    if (reqEl && _essRequestsLoaded) {
+      if (!_essRequests.length) {
         reqEl.innerHTML = '<div class="empty" style="padding:16px 0">No requests yet.</div>';
       } else {
-        reqEl.innerHTML = recent.map(function(l) {
-          var st = (l.status || 'pending').toLowerCase();
-          return '<div class="leave-card" style="cursor:pointer" onclick="document.querySelector(\'.tab[onclick*=leave]\').click()">' +
-            '<div>' +
-              '<div class="leave-type">' + l.leave_type + '</div>' +
-              '<div class="leave-dates">' + l.start_date + ' → ' + l.end_date + '</div>' +
-            '</div>' +
-            '<span class="st-badge st-' + st + '">' + (l.status || 'pending') + '</span>' +
-          '</div>';
-        }).join('');
-        if (_essData.leave.length > 3) {
-          reqEl.innerHTML += '<div style="text-align:center;margin-top:4px"><a style="font-size:12.5px;color:var(--accent);cursor:pointer" onclick="document.querySelector(\'.tab[onclick*=leave]\').click()">View all →</a></div>';
+        reqEl.innerHTML = _essRequests.slice(0, 4).map(function(q) { return _reqRowHtml(q, true); }).join('');
+        if (_essRequests.length > 4) {
+          reqEl.innerHTML += '<div style="text-align:center;margin-top:4px"><a style="font-size:12.5px;color:var(--accent-text);cursor:pointer" onclick="essGoTab(\'requests\')">View all ' + _essRequests.length + ' →</a></div>';
         }
       }
     }
@@ -1711,7 +2029,7 @@
     var paySlipEl = document.getElementById('dash-last-payslip');
     if (paySlipEl) {
       var latest = _essData.payslips[0];
-      paySlipEl.textContent = latest ? ('AED ' + fmt(latest.net_pay)) : '—';
+      paySlipEl.textContent = latest ? essMoney(latest.net_pay) : '—';
     }
     var schedEl = document.getElementById('dash-today-schedule');
     if (schedEl) {
@@ -1734,9 +2052,6 @@
     refreshNotifications();
   }
 
-  function row(label, val) {
-    return '<div class="payslip-row"><span>' + label + '</span><span>AED ' + fmt(val) + '</span></div>';
-  }
   function fmt(n) {
     // row('Deductions', '- ' + p.deductions) used to pre-concatenate a text
     // prefix before the number, so Number() on that string ("- 50" — note
@@ -1746,6 +2061,410 @@
     // covers a genuinely missing/non-numeric value defensively.
     var v = Number(n);
     return (isNaN(v) ? 0 : v).toLocaleString('en-AE', {minimumFractionDigits:2,maximumFractionDigits:2});
+  }
+
+  // ══ Self-service requests, profile details, documents ═══════════════════════
+  function _todayISO() {
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function _addDaysISO(iso, n) {
+    var d = new Date(iso + 'T00:00:00');
+    d.setDate(d.getDate() + n);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function _dateOrDash(iso) { return iso ? fmtShortDate(iso) : '—'; }
+  function essGoTab(name) {
+    var tabEl = document.querySelector('.tab[onclick*=' + name + ']');
+    if (tabEl) tabEl.click();
+  }
+
+  var _essToastTimer = null;
+  function essToast(msg, kind) {
+    var el = document.getElementById('ess-toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.className = 'ess-toast on' + (kind === 'err' ? ' err' : '');
+    clearTimeout(_essToastTimer);
+    _essToastTimer = setTimeout(function() { el.className = 'ess-toast'; }, 3500);
+  }
+
+  // One place for the write calls: 401 -> sign out, errors -> Error(message).
+  async function essApi(method, path, body) {
+    var r = await fetch(apiBase() + path, {method: method, headers: essHeaders(), body: body === undefined ? undefined : JSON.stringify(body)});
+    if (r.status === 401) { essLogout(); throw new Error('Your session expired — please sign in again'); }
+    var data = null;
+    try { data = await r.json(); } catch (e) {}
+    if (!r.ok) {
+      var d = data && data.detail;
+      throw new Error(typeof d === 'string' ? d : (Array.isArray(d) && d[0] && d[0].msg) || 'Something went wrong — please try again');
+    }
+    return data;
+  }
+
+  // ── Requests list ──
+  var _essRequests = [];
+  var _essRequestsLoaded = false;
+  var _essReqFilter = 'all';
+  var _essNewIds = {};
+  var REQ_KIND = {
+    leave: {label: 'Leave', icon: 'calendar'}, overtime: {label: 'Overtime', icon: 'clock'},
+    loan: {label: 'Loan', icon: 'wallet'}, advance: {label: 'Salary advance', icon: 'wallet'},
+    correction: {label: 'Attendance correction', icon: 'edit'}
+  };
+  ES_ICONS.edit = '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>';
+  function essIconSvg(name) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + (ES_ICONS[name] || ES_ICONS.check) + '</svg>';
+  }
+  var OT_TYPE_LABEL = {normal: 'Normal', ramadan: 'Ramadan', weekend: 'Weekend', holiday: 'Public holiday'};
+
+  function _reqStatusClass(st) { return {pending: 'pending', approved: 'approved', rejected: 'rejected', cancelled: 'cancelled'}[st] || 'todo'; }
+  function _reqTitle(q) {
+    if (q.kind === 'leave') return q.leave_type || 'Leave';
+    if (q.kind === 'overtime') return 'Overtime · ' + q.ot_hours + ' h';
+    if (q.kind === 'loan') return (q.loan_type || 'Loan') + ' · ' + essMoney(q.amount);
+    if (q.kind === 'advance') return 'Salary advance · ' + essMoney(q.amount);
+    return 'Attendance correction';
+  }
+  function _reqSub(q) {
+    if (q.kind === 'leave') return q.start_date + ' → ' + q.end_date + ' (' + q.days + ' day' + (q.days === 1 ? '' : 's') + ')';
+    if (q.kind === 'overtime') return _dateOrDash(q.date) + ' · ' + (OT_TYPE_LABEL[q.ot_type] || 'Normal') + (q.multiplier ? ' · ' + q.multiplier : '');
+    if (q.kind === 'loan') return q.months + ' month' + (Number(q.months) === 1 ? '' : 's') + ' · EMI ' + essMoney(q.emi);
+    if (q.kind === 'advance') return 'Recover from ' + _psPeriodLabel(q.month);
+    return _dateOrDash(q.date) + ' · in ' + (q.checkin || '—') + ' · out ' + (q.checkout || '—');
+  }
+  function _reqRowHtml(q, compact) {
+    var k = REQ_KIND[q.kind] || REQ_KIND.leave;
+    var when = q.submitted ? 'Sent ' + fmtShortDate(String(q.submitted).slice(0, 10)) : '';
+    var cancel = (q.kind === 'leave' && q.can_cancel && !compact)
+      ? '<button class="link-btn danger" data-id="' + escHtml(q.id) + '" onclick="essCancelLeave(this.dataset.id)">Cancel request</button>' : '';
+    return '<div class="req-row' + (!compact && _essNewIds[q.id] ? ' is-new' : '') + '"' + (compact ? ' style="cursor:pointer" onclick="essGoTab(\'requests\')"' : '') + '>' +
+      '<div class="req-ico">' + essIconSvg(k.icon) + '</div>' +
+      '<div class="req-main"><div class="req-title">' + escHtml(_reqTitle(q)) + '</div><div class="req-sub">' + escHtml(_reqSub(q)) + '</div>' +
+        (q.reason ? '<div class="req-reason">' + escHtml(q.reason) + '</div>' : '') + cancel + '</div>' +
+      '<div class="req-side"><span class="st-badge st-' + _reqStatusClass(q.status) + '">' + escHtml(q.status) + '</span><div class="req-when">' + escHtml(when) + '</div></div>' +
+    '</div>';
+  }
+
+  function essSetReqFilter(kind) { _essReqFilter = kind; renderRequests(); }
+  function renderRequests() {
+    var el = document.getElementById('requests-content');
+    if (!el) return;
+    el.classList.remove('loading');
+    var f = document.getElementById('req-filter');
+    var counts = {all: _essRequests.length};
+    _essRequests.forEach(function(q) { counts[q.kind] = (counts[q.kind] || 0) + 1; });
+    if (f) {
+      f.style.display = _essRequests.length ? '' : 'none';
+      f.innerHTML = ['all', 'leave', 'overtime', 'loan', 'advance', 'correction'].filter(function(k) { return k === 'all' || counts[k]; }).map(function(k) {
+        return '<button type="button" class="ess-view-toggle-btn' + (_essReqFilter === k ? ' on' : '') + '" onclick="essSetReqFilter(\'' + k + '\')">' +
+          (k === 'all' ? 'All' : REQ_KIND[k].label) + ' (' + counts[k] + ')</button>';
+      }).join('');
+    }
+    if (!_essRequests.length) { el.innerHTML = emptyState('check', 'No requests yet', 'Use the buttons above to send leave, overtime, a salary advance, a loan or an attendance fix to HR.'); return; }
+    var shown = _essRequests.filter(function(q) { return _essReqFilter === 'all' || q.kind === _essReqFilter; });
+    el.innerHTML = shown.length ? shown.map(function(q) { return _reqRowHtml(q, false); }).join('') : emptyState('check', 'Nothing in this category', '');
+  }
+
+  async function essRefreshRequests() {
+    try {
+      _essRequests = await essApi('GET', '/ess/requests');
+      _essRequestsLoaded = true;
+    } catch (e) {
+      var el = document.getElementById('requests-content');
+      if (!_essRequestsLoaded && el) { el.classList.remove('loading'); el.innerHTML = '<div class="empty">Failed to load.</div>'; }
+      return;
+    }
+    renderRequests();
+    renderAttendance();
+    updateDashboard();
+    essProcessRequestUpdates();
+  }
+
+  async function essCancelLeave(id) {
+    if (!confirm('Cancel this leave request?')) return;
+    try {
+      await essApi('POST', '/ess/leave/' + encodeURIComponent(id) + '/cancel');
+      essToast('Leave request cancelled');
+      loadLeave();
+      essRefreshRequests();
+      loadLeaveBalance();
+    } catch (e) { essToast(e.message, 'err'); }
+  }
+
+  // ── "Your request was approved/rejected" notifications: remember which
+  // decisions this browser has already shown (per employee), so a decision
+  // announces itself once. The first visit on a browser only baselines.
+  function _seenKey() { return _essMe ? 'ess_seen_' + _essMe.id : null; }
+  function _readSeen() {
+    var k = _seenKey();
+    if (!k) return null;
+    try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; }
+  }
+  function _writeSeen(map) {
+    var k = _seenKey();
+    if (!k) return;
+    try { localStorage.setItem(k, JSON.stringify(map)); } catch (e) {}
+  }
+  function _decidedMap() {
+    var m = {};
+    _essRequests.forEach(function(q) { if (q.status !== 'pending') m[q.id] = q.status; });
+    return m;
+  }
+  function essUnseenDecisions() {
+    if (!_essRequestsLoaded || !_essMe) return [];
+    var seen = _readSeen();
+    if (seen === null) { _writeSeen(_decidedMap()); return []; }
+    return _essRequests.filter(function(q) { return q.status !== 'pending' && q.status !== 'cancelled' && seen[q.id] !== q.status; });
+  }
+  function essMarkRequestsSeen() {
+    if (!_essRequestsLoaded || !_essMe) return;
+    _essNewIds = {};
+    essUnseenDecisions().forEach(function(q) { _essNewIds[q.id] = true; });
+    _writeSeen(_decidedMap());
+    renderRequests();
+    essProcessRequestUpdates();
+  }
+  function essProcessRequestUpdates() {
+    var n = essUnseenDecisions().length;
+    var b = document.getElementById('ess-nav-requests-badge');
+    if (b) { b.textContent = n; b.style.display = n ? '' : 'none'; }
+    refreshNotifications();
+  }
+
+  // ── Request forms (one modal, four bodies) ──
+  var _essReqKind = null;
+  var _RQ_REASON = function(label, required) {
+    return '<div class="field last"><label for="rq-reason">' + label + (required ? '' : ' (optional)') + '</label><input id="rq-reason" type="text" maxlength="500" placeholder="' + (required ? 'What happened?' : 'Brief note for HR') + '"></div>';
+  };
+  function _rqVal(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
+  function essOtHours() {
+    var a = _rqVal('rq-login'), b = _rqVal('rq-logout'), h = document.getElementById('rq-hours');
+    if (!a || !b || !h) return;
+    var m = function(t) { return parseInt(t.substr(0, 2), 10) * 60 + parseInt(t.substr(3, 2), 10); };
+    var diff = m(b) - m(a);
+    if (diff <= 0) diff += 24 * 60;
+    h.value = (Math.round(diff / 60 * 100) / 100).toString();
+  }
+  function essLoanEmi() {
+    var amt = parseFloat(_rqVal('rq-amount')), mo = parseInt(_rqVal('rq-months'), 10);
+    var el = document.getElementById('rq-emi');
+    if (!el) return;
+    if (amt > 0 && mo > 0) { el.style.display = 'block'; el.innerHTML = 'Monthly repayment ≈ <b>' + essMoney(amt / mo) + '</b> for ' + mo + ' month' + (mo === 1 ? '' : 's') + ' — HR sets the final terms when approving.'; }
+    else el.style.display = 'none';
+  }
+  var REQ_FORMS = {
+    overtime: {
+      title: 'Request Overtime', path: '/ess/overtime', ok: 'Overtime request sent to HR',
+      html: function(p) {
+        var today = _todayISO();
+        return '<div class="fr2"><div class="field"><label for="rq-date">Date</label><input id="rq-date" type="date" min="' + _addDaysISO(today, -31) + '" max="' + today + '" value="' + (p.date || today) + '"></div>' +
+          '<div class="field"><label for="rq-ottype">Type</label><select id="rq-ottype" class="ess-select"><option value="normal">Normal</option><option value="ramadan">Ramadan</option><option value="weekend">Weekend</option><option value="holiday">Public holiday</option></select></div></div>' +
+          '<div class="fr2"><div class="field"><label for="rq-login">From</label><input id="rq-login" type="time" oninput="essOtHours()"></div>' +
+          '<div class="field"><label for="rq-logout">To</label><input id="rq-logout" type="time" oninput="essOtHours()"></div></div>' +
+          '<div class="field"><label for="rq-hours">Hours</label><input id="rq-hours" type="number" step="0.25" min="0.25" max="12" placeholder="e.g. 2.5"><div class="hint">Filled in from the times above, or type the hours directly. The pay rate follows your company’s OT rules.</div></div>' +
+          _RQ_REASON('Reason', false);
+      },
+      collect: function() {
+        var login = _rqVal('rq-login'), logout = _rqVal('rq-logout'), hours = parseFloat(_rqVal('rq-hours'));
+        if (!_rqVal('rq-date')) throw new Error('Choose the date you worked overtime');
+        if (!(login && logout) && !(hours > 0)) throw new Error('Enter the start and end times, or the number of hours');
+        return {date: _rqVal('rq-date'), login: login || null, logout: logout || null, ot_hours: hours > 0 ? hours : null, ot_type: _rqVal('rq-ottype'), reason: _rqVal('rq-reason') || null};
+      }
+    },
+    advance: {
+      title: 'Request Salary Advance', path: '/ess/advances', ok: 'Salary advance request sent to HR',
+      html: function() {
+        return '<div class="fr2"><div class="field"><label for="rq-amount">Amount (' + escHtml(_essCurrency) + ')</label><input id="rq-amount" type="number" min="1" step="0.01" placeholder="0.00"></div>' +
+          '<div class="field"><label for="rq-month">Recover from</label><input id="rq-month" type="month" value="' + _todayISO().slice(0, 7) + '"></div></div>' + _RQ_REASON('Reason', false);
+      },
+      collect: function() {
+        var amt = parseFloat(_rqVal('rq-amount'));
+        if (!(amt > 0)) throw new Error('Enter the advance amount');
+        return {amount: amt, month: _rqVal('rq-month') || null, reason: _rqVal('rq-reason') || null};
+      }
+    },
+    loan: {
+      title: 'Request a Loan', path: '/ess/loans', ok: 'Loan request sent to HR',
+      html: function() {
+        var types = ['Personal Loan', 'Emergency Loan', 'Medical Loan', 'Home Furnishing Loan', 'Education Loan', 'Vehicle Loan'];
+        return '<div class="field"><label for="rq-loantype">Loan type</label><select id="rq-loantype" class="ess-select">' + types.map(function(t) { return '<option>' + t + '</option>'; }).join('') + '</select></div>' +
+          '<div class="fr2"><div class="field"><label for="rq-amount">Amount (' + escHtml(_essCurrency) + ')</label><input id="rq-amount" type="number" min="1" step="0.01" placeholder="0.00" oninput="essLoanEmi()"></div>' +
+          '<div class="field"><label for="rq-months">Repay over (months)</label><input id="rq-months" type="number" min="1" max="60" value="6" oninput="essLoanEmi()"></div></div>' +
+          '<div id="rq-emi" class="leave-preview"></div>' + _RQ_REASON('Reason', false);
+      },
+      collect: function() {
+        var amt = parseFloat(_rqVal('rq-amount')), mo = parseInt(_rqVal('rq-months'), 10);
+        if (!(amt > 0)) throw new Error('Enter the loan amount');
+        if (!(mo >= 1 && mo <= 60)) throw new Error('Repayment period must be between 1 and 60 months');
+        return {type: _rqVal('rq-loantype'), amount: amt, months: mo, reason: _rqVal('rq-reason') || null};
+      }
+    },
+    correction: {
+      title: 'Request an Attendance Correction', path: '/ess/attendance-corrections', ok: 'Correction request sent to HR',
+      html: function(p) {
+        var today = _todayISO();
+        return '<div class="field"><label for="rq-date">Date</label><input id="rq-date" type="date" min="' + _addDaysISO(today, -60) + '" max="' + today + '" value="' + (p.date || '') + '"></div>' +
+          '<div class="fr2"><div class="field"><label for="rq-checkin">Check-in</label><input id="rq-checkin" type="time" value="' + (p.checkin || '') + '"></div>' +
+          '<div class="field"><label for="rq-checkout">Check-out</label><input id="rq-checkout" type="time"></div></div>' +
+          '<div class="hint" style="margin:-6px 0 14px">Enter the times that should have been recorded. Once HR approves, they are added to your attendance.</div>' +
+          _RQ_REASON('Reason', true);
+      },
+      collect: function() {
+        if (!_rqVal('rq-date')) throw new Error('Choose the date to correct');
+        if (!_rqVal('rq-checkin') && !_rqVal('rq-checkout')) throw new Error('Enter the check-in time, the check-out time, or both');
+        if (!_rqVal('rq-reason')) throw new Error('Please give a short reason');
+        return {date: _rqVal('rq-date'), checkin: _rqVal('rq-checkin') || null, checkout: _rqVal('rq-checkout') || null, reason: _rqVal('rq-reason')};
+      }
+    }
+  };
+
+  function essOpenRequestModal(kind, prefill) {
+    var f = REQ_FORMS[kind];
+    if (!f) return;
+    _essReqKind = kind;
+    document.getElementById('req-modal-title').textContent = f.title;
+    document.getElementById('req-form-body').innerHTML = f.html(prefill || {});
+    document.getElementById('req-form-err').style.display = 'none';
+    var btn = document.getElementById('req-submit-btn');
+    btn.disabled = false; btn.textContent = 'Submit Request';
+    document.getElementById('req-modal-overlay').classList.add('on');
+    var first = document.querySelector('#req-form-body input:not([value]), #req-form-body input, #req-form-body select');
+    if (first) first.focus();
+  }
+  function essCloseRequestModal() {
+    var o = document.getElementById('req-modal-overlay');
+    if (o) o.classList.remove('on');
+  }
+  async function essSubmitRequest() {
+    var f = REQ_FORMS[_essReqKind];
+    if (!f) return;
+    var err = document.getElementById('req-form-err'), btn = document.getElementById('req-submit-btn');
+    err.style.display = 'none';
+    var body;
+    try { body = f.collect(); } catch (e) { err.textContent = e.message; err.style.display = 'block'; return; }
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      await essApi('POST', f.path, body);
+      essCloseRequestModal();
+      essToast(f.ok);
+      await essRefreshRequests();
+    } catch (e) {
+      err.textContent = e.message; err.style.display = 'block';
+    }
+    btn.disabled = false; btn.textContent = 'Submit Request';
+  }
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') { essCloseLeaveModal(); essCloseRequestModal(); }
+  });
+
+  // ── Leave form: live day count, balance and overlap check ──
+  var _essLeaveBal = {};
+  function essUpdateLeavePreview() {
+    var el = document.getElementById('leave-preview');
+    if (!el) return;
+    var type = _rqVal('leave-type'), s = _rqVal('leave-start'), e = _rqVal('leave-end');
+    if (!s || !e) { el.style.display = 'none'; return; }
+    var days = Math.round((new Date(e + 'T00:00:00') - new Date(s + 'T00:00:00')) / 86400000) + 1;
+    var html, warn = false;
+    if (days < 1) { html = 'The end date is before the start date.'; warn = true; }
+    else {
+      html = '<b>' + days + ' day' + (days === 1 ? '' : 's') + '</b>';
+      var b = _essLeaveBal[type];
+      if (b) {
+        html += ' · ' + escHtml(type) + ' balance: <b>' + b.remaining + '</b> of ' + b.entitlement + ' days left';
+        if (days > b.remaining) { html += '<br>That is more than your remaining balance — HR may decline it or treat the extra days as unpaid.'; warn = true; }
+      }
+      var clash = (_essData.leave || []).filter(function(l) { return (l.status === 'pending' || l.status === 'approved') && l.start_date <= e && l.end_date >= s; })[0];
+      if (clash) { html += '<br>This overlaps your ' + escHtml(clash.status) + ' leave (' + escHtml(clash.start_date) + ' → ' + escHtml(clash.end_date) + ').'; warn = true; }
+    }
+    el.className = 'leave-preview' + (warn ? ' warn' : '');
+    el.innerHTML = html;
+    el.style.display = 'block';
+  }
+
+  // ── Contact details (self-edit) ──
+  var _essContact = null;
+  var _essContactEditing = false;
+  async function loadProfileDetails() {
+    try { _essContact = await essApi('GET', '/ess/profile-details'); } catch (e) { _essContact = null; }
+    renderContactCard();
+  }
+  function essEditContact(on) { _essContactEditing = on; renderContactCard(); }
+  function renderContactCard() {
+    var el = document.getElementById('contact-content');
+    if (!el) return;
+    el.classList.remove('loading');
+    var c = _essContact;
+    if (!c) { el.innerHTML = '<div class="empty">Failed to load.</div>'; return; }
+    if (!c.has_record) { el.innerHTML = '<div class="hint" style="margin:0">Your HR profile hasn’t been completed yet — ask HR to finish it, then you can add your contact details here.</div>'; return; }
+    if (!_essContactEditing) {
+      el.innerHTML = '<div class="profile-row">' +
+        kv('Mobile', escHtml(c.mobile || '—')) + kv('Email', escHtml(c.email || '—')) +
+        kv('Address', escHtml(c.address || '—')) + kv('Emergency contact', escHtml(c.emergency_contact || '—')) +
+        kv('Emergency mobile', escHtml(c.emergency_mobile || '—')) + '</div>' +
+        '<div style="margin-top:16px"><button class="btn-ghost" onclick="essEditContact(true)">Edit contact details</button></div>';
+      return;
+    }
+    var fld = function(id, label, val, ph, type) { return '<div class="field"><label for="' + id + '">' + label + '</label><input id="' + id + '" type="' + (type || 'text') + '" value="' + escHtml(val || '') + '" placeholder="' + ph + '"></div>'; };
+    el.innerHTML = '<div id="contact-err" class="err-box"></div>' +
+      '<div class="fr2">' + fld('ct-mobile', 'Mobile', c.mobile, '+971 50 000 0000', 'tel') + fld('ct-emg-mobile', 'Emergency mobile', c.emergency_mobile, '+971 50 000 0000', 'tel') + '</div>' +
+      fld('ct-emg', 'Emergency contact name', c.emergency_contact, 'Who should we call?') +
+      fld('ct-address', 'Address', c.address, 'Home address') +
+      '<div class="hint" style="margin:-6px 0 14px">Name, department, salary, bank details and documents can only be changed by HR.</div>' +
+      '<div style="display:flex;gap:10px"><button id="ct-save" class="btn-login" style="width:auto;padding:10px 20px" onclick="essSaveContact()">Save changes</button><button class="btn-ghost" onclick="essEditContact(false)">Cancel</button></div>';
+  }
+  async function essSaveContact() {
+    var err = document.getElementById('contact-err'), btn = document.getElementById('ct-save');
+    err.style.display = 'none';
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      await essApi('PUT', '/ess/profile-details', {mobile: _rqVal('ct-mobile'), emergency_mobile: _rqVal('ct-emg-mobile'), emergency_contact: _rqVal('ct-emg'), address: _rqVal('ct-address')});
+      _essContactEditing = false;
+      essToast('Contact details updated');
+      await loadProfileDetails();
+    } catch (e) {
+      err.textContent = e.message; err.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Save changes';
+    }
+  }
+
+  // ── Documents (visa / passport / ID expiry) ──
+  var _essDocs = [];
+  function _docPill(d) {
+    var n = d.days_left == null ? 0 : Math.abs(d.days_left);
+    if (d.state === 'expired') return '<span class="doc-pill expired">Expired ' + n + ' day' + (n === 1 ? '' : 's') + ' ago</span>';
+    if (d.state === 'valid') return '<span class="doc-pill valid">Valid</span>';
+    return '<span class="doc-pill ' + d.state + '">' + n + ' day' + (n === 1 ? '' : 's') + ' left</span>';
+  }
+  async function loadDocuments() {
+    try { _essDocs = await essApi('GET', '/ess/documents'); } catch (e) { _essDocs = null; }
+    renderDocuments();
+    if (_essDocs) { renderDocAlert(); refreshNotifications(); }
+  }
+  function renderDocuments() {
+    var el = document.getElementById('docs-content');
+    if (!el) return;
+    el.classList.remove('loading');
+    if (!_essDocs) { el.innerHTML = '<div class="empty">Failed to load.</div>'; return; }
+    var have = _essDocs.filter(function(d) { return d.state !== 'missing'; });
+    var missing = _essDocs.filter(function(d) { return d.state === 'missing'; });
+    if (!have.length) { el.innerHTML = emptyState('check', 'No documents on file', 'Your visa, passport and ID expiry dates appear here once HR adds them.'); return; }
+    el.innerHTML = have.map(function(d) {
+      return '<div class="doc-row"><div><div class="doc-name">' + escHtml(d.label) + '</div><div class="doc-date">Expires ' + escHtml(new Date(d.expiry + 'T00:00:00').toLocaleDateString('en-US', {day: 'numeric', month: 'short', year: 'numeric'})) + '</div></div>' + _docPill(d) + '</div>';
+    }).join('') +
+      (missing.length ? '<div class="hint">Not on file: ' + escHtml(missing.map(function(d) { return d.label; }).join(', ')) + '</div>' : '') +
+      '<div class="hint">To update a document, please contact HR.</div>';
+  }
+  function renderDocAlert() {
+    var el = document.getElementById('dash-doc-alert-card');
+    if (!el) return;
+    var urgent = (_essDocs || []).filter(function(d) { return d.state === 'expired' || d.state === 'critical'; });
+    if (!urgent.length) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    el.innerHTML = '<div class="card-title" style="margin-bottom:8px;color:var(--red)">⚠ Document attention needed</div>' +
+      urgent.map(function(d) { return '<div class="doc-row" style="padding:6px 0"><div class="doc-name">' + escHtml(d.label) + '</div>' + _docPill(d) + '</div>'; }).join('') +
+      '<div class="hint">Contact HR to renew. Tap for details.</div>';
   }
 
   function showApp() {
@@ -1764,6 +2483,9 @@
     loadRoleAndPermissions();
     loadTeamToday();
     loadHolidayCalendar();
+    essRefreshRequests();
+    loadProfileDetails();
+    loadDocuments();
   }
 
   // ── Role-based view — the same token also carries RBAC role/permission
@@ -1782,16 +2504,17 @@
       ESS_DEPARTMENT_SCOPE = d.department_scope || [];
       var badge = document.getElementById('ess-role-badge');
       if (badge) badge.textContent = d.role_name || 'Employee';
-      // The Team tab itself is visible to everyone (My Team Today +
-      // Holiday Calendar); a company-wide GPS permission or a
-      // department-scoped role additionally unlocks the manager-only
-      // cards further down -- loadTeamTab() below shows only those.
+      // The Team tab's "My Team Today" card is visible to everyone; a
+      // company-wide GPS permission or a department-scoped role
+      // additionally unlocks the manager-only cards further down --
+      // loadTeamTab() below shows only those. Team Holiday Calendar lives
+      // under the Leave tab instead (loadHolidayCalendar(), wired to the
+      // Leave nav button) since it's about leave, not team status.
     } catch(e) { /* role badge just stays default on failure */ }
   }
 
   function loadTeamTab() {
     loadTeamToday();
-    loadHolidayCalendar();
     if (ESS_DEPARTMENT_SCOPE.length) loadDeptTeamView(); else document.getElementById('dept-team-card').style.display = 'none';
     if (ESS_PERMISSIONS.includes('hr:view_all_attendance')) { document.getElementById('gps-team-card').style.display = ''; loadTeamView(); }
     else document.getElementById('gps-team-card').style.display = 'none';
@@ -1850,7 +2573,7 @@
       var r = await fetch(apiBase() + '/ess/holidays', {headers: essHeaders()});
       if (r.status === 401) { essLogout(); return; }
       _essHolidaysCache = await r.json();
-      var todayStr = new Date().toISOString().slice(0, 10);
+      var todayStr = _todayISO();
       // Nearest upcoming holiday, shown as a one-line teaser on the
       // Dashboard tab -- rows are already sorted by date ascending (see
       // GET /ess/holidays), so the first one >= today is the next one.
@@ -1871,7 +2594,7 @@
   }
 
   function shiftHolidayCalendarMonth(delta) {
-    var d = new Date((_holidayCalMonth || new Date().toISOString().slice(0, 7)) + '-01T00:00:00');
+    var d = new Date((_holidayCalMonth || _todayISO().slice(0, 7)) + '-01T00:00:00');
     d.setMonth(d.getMonth() + delta);
     _holidayCalMonth = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
     renderHolidayCalendarGrid();
@@ -1886,7 +2609,7 @@
   async function renderHolidayCalendarGrid() {
     var grid = document.getElementById('holiday-cal-grid');
     if (!grid) return;
-    if (!_holidayCalMonth) _holidayCalMonth = new Date().toISOString().slice(0, 7);
+    if (!_holidayCalMonth) _holidayCalMonth = _todayISO().slice(0, 7);
     var labelEl = document.getElementById('holiday-cal-month-label');
     if (labelEl) labelEl.textContent = new Date(_holidayCalMonth + '-01T00:00:00').toLocaleDateString('en-US', {month: 'long', year: 'numeric'});
 
@@ -1919,7 +2642,7 @@
     var y = Number(parts[0]), m = Number(parts[1]);
     var firstDow = (new Date(y, m - 1, 1).getDay() + 6) % 7; // Monday-first
     var daysInMonth = new Date(y, m, 0).getDate();
-    var todayStr = new Date().toISOString().slice(0, 10);
+    var todayStr = _todayISO();
 
     var weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     var html = weekdayLabels.map(function(w) { return '<div class="hcal-weekday">' + w + '</div>'; }).join('');
@@ -1939,6 +2662,7 @@
       html += '<div class="' + cls + '" title="Click to request leave for ' + dateStr + '" onclick="essOpenLeaveModal(\'' + dateStr + '\')">' + inner + '</div>';
     }
     grid.innerHTML = html;
+    essMakeKeyboardOperable(grid);
   }
 
   async function loadDeptTeamView() {
