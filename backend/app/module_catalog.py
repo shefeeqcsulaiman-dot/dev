@@ -13,10 +13,15 @@ existing call site that imports it from there.
 # server-side block would risk locking a company out of its own account
 # management if something upstream went wrong. Every other key here has a
 # matching require_module("<key>") somewhere in the routers.
+#
+# "backup" = the company owner's own Download Backup (SQL dump, and the
+# Excel/JSON exports in Settings > Backup & Audit). Super admin can switch it
+# off per company or for every company at once. It never affects the super
+# admin's own per-company / all-companies backup downloads.
 ALL_MODULES = [
     "sales", "quotations", "pos", "purchase", "inventory", "expense",
     "bank", "accounting", "corporate", "reports", "hrms", "ess",
-    "notifications", "expert", "exception", "ai", "settings",
+    "notifications", "expert", "exception", "ai", "backup", "settings",
 ]
 
 # Branch Login Phase 1: the subset of ALL_MODULES a Branch entity's own

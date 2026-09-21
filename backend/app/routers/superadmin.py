@@ -80,6 +80,14 @@ class ModulesIn(BaseModel):
     modules: list[str]
 
 
+class BulkModuleIn(BaseModel):
+    """Turn ONE module on/off for many companies at once (Module Permissions >
+    "All companies"). company_ids omitted/null = every company."""
+    module: str
+    enabled: bool
+    company_ids: list[str] | None = None
+
+
 class CreateCompanyIn(BaseModel):
     name: str
     email: str
@@ -553,6 +561,45 @@ def set_company_modules(
     _write_audit_blob(db, company_id, superadmin.email, "set_company_modules", ", ".join(valid), "Done")
     db.commit()
     return {"ok": True, "modules": valid}
+
+
+@router.put("/modules/bulk")
+def set_module_for_companies(
+    body: BulkModuleIn,
+    db: Session = Depends(get_db),
+    superadmin: User = Depends(_require_superadmin),
+):
+    """Enable/disable a single module across all companies (or a chosen subset),
+    leaving every other module of each company exactly as it was. A company with
+    no explicit list (NULL/empty = unrestricted) is treated as having every
+    module on, so switching one module off gives it an explicit list of the rest."""
+    if body.module not in ALL_MODULES:
+        raise HTTPException(status_code=400, detail=f"Unknown module '{body.module}'")
+    query = db.query(Company)
+    if body.company_ids is not None:
+        query = query.filter(Company.id.in_(body.company_ids))
+    changed = unchanged = 0
+    for company in query.all():
+        try:
+            current = json.loads(company.modules_enabled) if company.modules_enabled else list(ALL_MODULES)
+        except Exception:
+            current = list(ALL_MODULES)
+        if not isinstance(current, list):
+            current = list(ALL_MODULES)
+        has = body.module in current
+        if body.enabled == has:
+            unchanged += 1
+            continue
+        updated = current + [body.module] if body.enabled else [m for m in current if m != body.module]
+        # keep the catalog order so the stored list stays tidy
+        company.modules_enabled = json.dumps([m for m in ALL_MODULES if m in updated])
+        _write_audit_blob(
+            db, company.id, superadmin.email, "set_company_module",
+            f"{body.module}={'on' if body.enabled else 'off'} (bulk)", "Done",
+        )
+        changed += 1
+    db.commit()
+    return {"ok": True, "module": body.module, "enabled": body.enabled, "changed": changed, "unchanged": unchanged}
 
 
 @router.delete("/companies/{company_id}")

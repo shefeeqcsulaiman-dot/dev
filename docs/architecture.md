@@ -2864,3 +2864,12 @@ A third, unrelated contributor: two separate `DOMContentLoaded` handlers had acc
 | `refreshHrmsKpis()` calls per HRMS page load | up to 5 | 2 |
 
 Verified via a Playwright probe (`page.evaluate` timing a direct `fetch('/api/v1/app-data?scope=hrms')` call from within the loaded page) rather than trusting local reasoning alone — the actual bottleneck (`rotaAssignments`, not Sales/Purchase data as first assumed) only became clear after measuring the scoped response's own collection-by-collection byte breakdown.
+
+## 31. "backup" module + Super Admin redesign (2026-09-21)
+
+**`backup` module.** `ALL_MODULES` (`app/module_catalog.py`) gained `"backup"` — the company owner's own Download Backup. It is enforced server-side on `GET /app-data/db-dump` (`require_module("backup")`) and hides the Download Backup card in Settings > Backup & Audit (`data-module-gate="backup"`, same mechanism as AI/Exception Center). It is *not* in `BRANCH_ELIGIBLE_MODULES`. Super admin's own per-company / all-companies backup downloads never look at it. Toggle it per company in Superadmin > Module Permissions (listed as "DB Backup"), or for every company at once with `PUT /superadmin/modules/bulk` (`{module, enabled, company_ids?}`, other modules of each company untouched, audited per company; UI: "Module for all companies").
+
+**Deploy backfill.** Existing companies already had explicit `modules_enabled` lists without `backup`, which would now read as "switched off". `ensure_schema_updates()` adds `backup` once to every explicit list, guarded by a row in the new `schema_flags` table so a later deliberate switch-off is never undone at restart (`ON CONFLICT DO NOTHING` — safe with several instances starting together). NULL/empty lists (= everything on) need nothing.
+
+**Super Admin UI** now uses the main dashboard's design tokens (light default, dark toggle remembered in `localStorage.sa_theme`), a full-height sidebar with the logo, a topbar with the page title/theme toggle, tinted KPI cards, and an off-canvas sidebar under 860px. Also fixed while testing: modals opened from the company drawer (Edit User, confirms) sat *behind* it (`.overlay` z-index 200 < drawer 210/211 → now 230); the open drawer kept the stale user list after Disable/Edit/Remove; Client Errors / Trial Requests were only read at page load. `openResetPassword()` and `openSetExpiry()` (and their modals) have no caller — dead code; password reset is done via Edit User, expiry via Edit Company or "+7 Days / +1 Year".
+

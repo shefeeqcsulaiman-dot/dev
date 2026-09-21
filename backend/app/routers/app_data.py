@@ -35,7 +35,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.auth_principal import resolve_active_branch
 from app.department_scope import SCOPED_COLLECTIONS, assert_record_writable, build_index, filter_records, record_in_scope
-from app.dependencies import Principal, branch_allows_module, company_allows_module, get_current_principal, get_current_user
+from app.dependencies import Principal, branch_allows_module, company_allows_module, get_current_principal, get_current_user, require_module
 from app.limiter import limiter
 from app.module_integration import sync_bill_accounting, sync_purchase_accounting, sync_sales_invoice_accounting
 from app.routers.inventory import consume_valuation_layers
@@ -1305,8 +1305,11 @@ def export_db_dump(
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _backup_module: Principal = Depends(require_module("backup")),
 ) -> Response:
-    """Return a self-contained SQL file for the current company — restorable locally."""
+    """Return a self-contained SQL file for the current company — restorable locally.
+
+    Gated by the company's "backup" module (Superadmin > Module Permissions)."""
     sql_text, fname = build_company_sql_dump(db, current_user.company_id, current_user.full_name)
     return Response(
         content=sql_text.encode("utf-8"),

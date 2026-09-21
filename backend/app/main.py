@@ -838,6 +838,35 @@ def ensure_schema_updates() -> None:
             """))
             connection.execute(text("CREATE INDEX IF NOT EXISTS idx_trial_requests_status ON trial_requests (status)"))
 
+        # "backup" module (Superadmin > Module Permissions) introduced after most
+        # companies already had an explicit modules_enabled list. Those lists don't
+        # contain "backup", which would now read as "switched off" and take away a
+        # Download Backup they always had. Add it ONCE to every existing explicit
+        # list; the marker keeps this from re-adding it after a super admin later
+        # turns it off on purpose. NULL/empty lists (= everything on) need nothing.
+        if "companies" in table_names:
+            connection.execute(text(
+                "CREATE TABLE IF NOT EXISTS schema_flags (name VARCHAR(80) PRIMARY KEY)"
+            ))
+            done = connection.execute(text(
+                "SELECT 1 FROM schema_flags WHERE name = 'backup_module_backfill'"
+            )).first()
+            if not done:
+                rows = connection.execute(text(
+                    "SELECT id, modules_enabled FROM companies WHERE modules_enabled IS NOT NULL AND modules_enabled <> ''"
+                )).fetchall()
+                for company_id, raw in rows:
+                    try:
+                        mods = json.loads(raw)
+                    except (TypeError, ValueError):
+                        continue
+                    if isinstance(mods, list) and mods and "backup" not in mods:
+                        connection.execute(
+                            text("UPDATE companies SET modules_enabled = :m WHERE id = :i"),
+                            {"m": json.dumps(mods + ["backup"]), "i": company_id},
+                        )
+                connection.execute(text("INSERT INTO schema_flags (name) VALUES ('backup_module_backfill') ON CONFLICT (name) DO NOTHING"))
+
 
 def seed_initial_data() -> None:
     db: Session = SessionLocal()

@@ -3663,8 +3663,8 @@
   </div>
 
   <div class="tab-body" id="set-backup">
-    <!-- Download Backup -->
-    <div class="card mb16">
+    <!-- Download Backup (hidden when Superadmin turns the "backup" module off for this company) -->
+    <div class="card mb16" data-module-gate="backup">
       <div class="card-hd"><div><div class="card-title">Download Backup</div><div class="card-sub">Export all company data — choose format below</div></div></div>
 
       <!-- Module toggles -->
