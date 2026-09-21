@@ -25,16 +25,23 @@ function shortHash(filePath) {
 
 const jsVersion = shortHash(path.join(taxflowDir, "src", "app.js"));
 const cssVersion = shortHash(path.join(taxflowDir, "src", "styles.css"));
+// ESS keeps its own stylesheet/script (moved out of ess.html so they can be cached)
+const essJsVersion = shortHash(path.join(taxflowDir, "src", "ess.js"));
+const essCssVersion = shortHash(path.join(taxflowDir, "src", "ess.css"));
 
-const htmlFiles = ["index.html", "hrms.html"].map((name) => path.join(taxflowDir, name));
+const htmlFiles = ["index.html", "hrms.html", "ess.html"].map((name) => path.join(taxflowDir, name));
 
 for (const htmlPath of htmlFiles) {
   let html = readFileSync(htmlPath, "utf-8");
   html = html.replace(/src\/app\.js\?v=[^"']+/g, `src/app.js?v=${jsVersion}`);
   html = html.replace(/src\/styles\.css\?v=[^"']+/g, `src/styles.css?v=${cssVersion}`);
+  html = html.replace(/src\/ess\.js\?v=[^"']+/g, `src/ess.js?v=${essJsVersion}`);
+  html = html.replace(/src\/ess\.css\?v=[^"']+/g, `src/ess.css?v=${essCssVersion}`);
   writeFileSync(htmlPath, html);
   console.log(`Updated ${htmlPath}`);
 }
 
 console.log(`  app.js version:     ${jsVersion}`);
 console.log(`  styles.css version: ${cssVersion}`);
+console.log(`  ess.js version:     ${essJsVersion}`);
+console.log(`  ess.css version:    ${essCssVersion}`);

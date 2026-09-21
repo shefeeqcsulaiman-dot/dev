@@ -35,6 +35,7 @@ COPY frontend/public ./frontend/public
 COPY --from=frontend-build /build/public/taxflow/src/app.min.js ./frontend/public/taxflow/src/app.min.js
 COPY --from=frontend-build /build/public/taxflow/index.html ./frontend/public/taxflow/index.html
 COPY --from=frontend-build /build/public/taxflow/hrms.html ./frontend/public/taxflow/hrms.html
+COPY --from=frontend-build /build/public/taxflow/ess.html ./frontend/public/taxflow/ess.html
 
 EXPOSE 8000
 # WORKERS defaults to 2 — set to 4 on Render standard/pro plans (2+ vCPU)

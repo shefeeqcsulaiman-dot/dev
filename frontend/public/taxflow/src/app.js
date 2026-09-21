@@ -17295,11 +17295,22 @@ async function populateLeaveEmployeeSelect(){
   }catch(e){sel.innerHTML='<option value="">Failed to load employees</option>';}
 }
 
+// The leave list is also fetched by the Leave Balance and Attendance loaders via
+// authenticatedFetch() (which shares a short-lived GET cache). This loader used a
+// plain fetch(), so every HRMS load downloaded the whole list twice. When the URL is
+// identical (no active-branch filter to add) go through the same cache; otherwise
+// behave exactly as before.
+function _fetchLeaveRequestsList(){
+  const url=`${apiBaseUrl()}/leave/requests`;
+  if(_withActiveBranchParam(url)===url)return authenticatedFetch(url);
+  return fetch(url,{headers:backendHeaders()});
+}
+
 async function loadLeaveRequests(){
   const tbody=document.getElementById('leave-tbody');
   if(tbody)tbody.innerHTML='<tr><td colspan="7" class="loading" style="text-align:center;color:var(--text3);padding:20px">Loading…</td></tr>';
   try{
-    const r=await fetch(`${apiBaseUrl()}/leave/requests`,{headers:backendHeaders()});
+    const r=await _fetchLeaveRequestsList();
     _leaveRequestsCache=r.ok?await r.json():[];
     renderLeaveTable();
     scheduleIdleTask(updateLeaveBalance,100);
@@ -17335,6 +17346,7 @@ function renderLeaveTable(){
 
 async function approveLeave(id){
   try{
+    _getResponseCache.clear();   // a write: never let the next leave-list read replay pre-write data
     const r=await fetch(`${apiBaseUrl()}/leave/requests/${id}/approve`,{method:'POST',headers:backendHeaders()});
     if(r.ok){
       toast('Leave approved ✓','ok');
@@ -17346,6 +17358,7 @@ async function approveLeave(id){
 
 async function rejectLeave(id){
   try{
+    _getResponseCache.clear();
     const r=await fetch(`${apiBaseUrl()}/leave/requests/${id}/reject`,{method:'POST',headers:backendHeaders()});
     if(r.ok){
       toast('Leave rejected','warn');
@@ -17364,6 +17377,7 @@ async function saveLeaveRequest(){
   if(!employeeId||!from||!to){toast('Employee, From and To dates are required','warn');return;}
   if(to<from){toast('To date cannot be before From date','warn');return;}
   try{
+    _getResponseCache.clear();
     const r=await fetch(`${apiBaseUrl()}/leave/requests`,{method:'POST',headers:backendHeaders(),body:JSON.stringify({
       employee_id:employeeId,leave_type:leaveType,start_date:from,end_date:to,reason:reason||null,
     })});

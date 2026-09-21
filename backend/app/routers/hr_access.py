@@ -174,10 +174,34 @@ def _company_allowed_catalog_keys(catalog: dict[str, Permission], company_module
     }
 
 
+def _role_permission_keys_bulk(db: Session, roles: list[Role]) -> dict[str, set[str]]:
+    """{role_id: {"module:name", ...}} for many roles in ONE query -- the list
+    endpoints used to call _role_permission_keys() once per role."""
+    out: dict[str, set[str]] = {r.id: set() for r in roles}
+    if not roles:
+        return out
+    rows = (
+        db.query(RolePermission.role_id, Permission.module, Permission.permission_name)
+        .join(Permission, Permission.id == RolePermission.permission_id)
+        .filter(RolePermission.role_id.in_(list(out)))
+        .all()
+    )
+    for role_id, module, name in rows:
+        out[role_id].add(f"{module}:{name}")
+    return out
+
+
 def _ensure_default_roles(db: Session, company_id: str) -> dict[str, Role]:
     """Idempotently seeds the default role set for a company on first use."""
     catalog = _ensure_permission_catalog(db)
     roles = {r.role_name: r for r in db.query(Role).filter(Role.company_id == company_id).all()}
+    # every existing role's granted permission ids in ONE query (was one query per default role)
+    links_by_role: dict[str, set[str]] = {}
+    if roles:
+        for role_id, permission_id in db.query(RolePermission.role_id, RolePermission.permission_id).filter(
+            RolePermission.role_id.in_([r.id for r in roles.values()])
+        ).all():
+            links_by_role.setdefault(role_id, set()).add(permission_id)
     changed = False
     for role_name, perm_keys in _DEFAULT_ROLES.items():
         role = roles.get(role_name)
@@ -187,9 +211,7 @@ def _ensure_default_roles(db: Session, company_id: str) -> dict[str, Role]:
             db.flush()
             roles[role_name] = role
             changed = True
-        existing_links = {
-            rp.permission_id for rp in db.query(RolePermission).filter(RolePermission.role_id == role.id).all()
-        }
+        existing_links = links_by_role.setdefault(role.id, set())
         # "*" (Administrator) picks up every ordinary permission key, but
         # NEVER the cross-branch opt-ins (Branch Security Layer Phase 2) —
         # those are a privilege escalation (company-wide visibility for a
@@ -504,10 +526,11 @@ def _normalize_department_scope(names: list[str]) -> str | None:
 def list_roles(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> list[RoleOut]:
     _ensure_default_roles(db, emp.company_id)
     roles = db.query(Role).filter(Role.company_id == emp.company_id).order_by(Role.role_name).all()
+    perms_by_role = _role_permission_keys_bulk(db, roles)
     return [
         RoleOut(
             id=r.id, role_name=r.role_name, description=r.description, is_system_role=r.is_system_role,
-            permissions=sorted(_role_permission_keys(db, r)),
+            permissions=sorted(perms_by_role[r.id]),
             department_scope=_role_department_scope(r),
         )
         for r in roles
@@ -593,10 +616,11 @@ def admin_list_roles(
 ) -> list[RoleOut]:
     _ensure_default_roles(db, principal.company_id)
     roles = db.query(Role).filter(Role.company_id == principal.company_id).order_by(Role.role_name).all()
+    perms_by_role = _role_permission_keys_bulk(db, roles)
     return [
         RoleOut(
             id=r.id, role_name=r.role_name, description=r.description, is_system_role=r.is_system_role,
-            permissions=sorted(_role_permission_keys(db, r)),
+            permissions=sorted(perms_by_role[r.id]),
             department_scope=_role_department_scope(r),
         )
         for r in roles

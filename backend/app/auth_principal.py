@@ -74,6 +74,25 @@ def _employee_id_from_token(token: str) -> str | None:
     return None
 
 
+_LAST_ACTIVITY_REFRESH_SECONDS = 60
+
+
+def _touch_last_activity(db: Session, emp: Employee) -> None:
+    """Record that this employee was just active. This used to UPDATE + COMMIT on
+    EVERY authenticated request (and the commit also forced the row to be re-read);
+    now at most once a minute, which is all that "last active" can usefully mean."""
+    now = datetime.now(UTC)
+    prev = emp.last_activity
+    if prev is not None:
+        if prev.tzinfo is None:
+            prev = prev.replace(tzinfo=UTC)
+        if (now - prev).total_seconds() < _LAST_ACTIVITY_REFRESH_SECONDS:
+            return
+    emp.last_activity = now
+    db.add(emp)
+    db.commit()
+
+
 def get_current_employee(request: Request, db: Session = Depends(get_db)) -> Employee:
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
@@ -88,9 +107,7 @@ def get_current_employee(request: Request, db: Session = Depends(get_db)) -> Emp
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
     expires_at = db.query(Company.subscription_expires_at).filter(Company.id == emp.company_id).scalar()
     assert_company_active(expires_at)
-    emp.last_activity = datetime.now(UTC)
-    db.add(emp)
-    db.commit()
+    _touch_last_activity(db, emp)
     return emp
 
 
@@ -259,9 +276,7 @@ def _principal_from_employee_token(token: str, db: Session) -> Principal | None:
     # employee-path fallback.
     expires_at = db.query(Company.subscription_expires_at).filter(Company.id == emp.company_id).scalar()
     assert_company_active(expires_at)
-    emp.last_activity = datetime.now(UTC)
-    db.add(emp)
-    db.commit()
+    _touch_last_activity(db, emp)
     role = db.get(Role, emp.role_id) if emp.role_id else None
     accessible_branch_ids = {row[0] for row in db.query(EmployeeBranchAccess.branch_id).filter(EmployeeBranchAccess.employee_id == emp.id).all()}
     if emp.branch_id:

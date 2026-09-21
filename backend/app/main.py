@@ -164,6 +164,13 @@ def create_app() -> FastAPI:
                 # Cache-busted via ?v=... query string, so it's safe to cache "forever" —
                 # any future edit ships under a new query string and misses this cache entirely.
                 response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            elif ext in ("woff2", "woff") and not path.startswith("/api/"):
+                # Self-hosted fonts: a given file name never changes content, cache "forever".
+                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            elif ext in ("png", "jpg", "jpeg", "gif", "svg", "ico", "webp") and not path.startswith("/api/"):
+                # Static site images (logo etc.). Not versioned, so a day (not a year); never
+                # applied to /api/ paths, which can return per-user images.
+                response.headers["Cache-Control"] = "public, max-age=86400"
             elif ext == "html" or path in ("", "/"):
                 # Never cache HTML itself — it's the only thing that references the current
                 # ?v=... asset URLs above, so it must always be revalidated on load.
