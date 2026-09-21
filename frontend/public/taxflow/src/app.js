@@ -18186,7 +18186,7 @@ function _renderHrUsersTable(){
     else statusBadge=e.is_active?'<span class="b b-g">Active</span>':'<span class="b b-r">Disabled</span>';
     const deptScope=e.department_scope||[];
     const roleCell=e.role_name
-      ?`<span class="b b-p" style="font-size:11px">${escapeHtml(e.role_name)}</span>`+(deptScope.length?`<div style="margin-top:3px;color:var(--accent);font-size:10px" title="Sees this department's roster in ESS once portal access is active">Team: ${deptScope.map(escapeHtml).join(', ')}</div>`:'')
+      ?`<span class="b b-p" style="font-size:11px">${escapeHtml(e.role_name)}</span>`+(deptScope.length?`<div style="margin-top:3px;color:var(--accent);font-size:10px" title="Sees this department's roster in ESS once portal access is active">Team: ${_deptScopeLabel(deptScope).map(escapeHtml).join(', ')}</div>`:'')
       :'<span style="color:var(--text3);font-size:12px">—</span>';
     return `<tr>
       <td style="font-size:12px">${escapeHtml(e.full_name)}</td>
@@ -18216,7 +18216,7 @@ function openAddHrUserModal(employeeId){
 
   const roleSel=document.getElementById('hr-user-role');
   if(roleSel){
-    roleSel.innerHTML='<option value="">— Select Role —</option>'+_hrRolesCache.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.role_name)}${r.department_scope&&r.department_scope.length?` (Team: ${r.department_scope.map(escapeHtml).join(', ')})`:''}</option>`).join('');
+    roleSel.innerHTML='<option value="">— Select Role —</option>'+_hrRolesCache.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.role_name)}${r.department_scope&&r.department_scope.length?` (Team: ${_deptScopeLabel(r.department_scope).map(escapeHtml).join(', ')})`:''}</option>`).join('');
     roleSel.value=emp.role_id||'';
   }
   document.getElementById('hr-user-username').value=emp.username||'';
@@ -18462,6 +18462,10 @@ function removeHrJobGrade(btn){
   tag?.remove();
 }
 // Read current department names from data store
+// A role's department list can contain "@own" = "only the login's own department".
+function _deptScopeLabel(list){
+  return (list||[]).map(d=>d==='@own'?'own department':d);
+}
 function _getDeptNames(){
   const all=(typeof _deptList!=='undefined'&&_deptList.length)
     ?_deptList.map(d=>d.name)
@@ -18794,7 +18798,7 @@ function renderRoleTable(){
       :`<button class="icon-btn edit" title="Edit role" onclick="showRoleModal('${escapeHtml(r.id)}')">${editIconSvg()}</button> <button class="icon-btn danger" title="Delete role" onclick="deleteRole('${escapeHtml(r.id)}')">${deleteIconSvg()}</button>`;
     const deptScope=r.department_scope||[];
     const deptNote=deptScope.length
-      ?`<div style="margin-top:4px;color:var(--accent);font-size:10.5px">Team: ${deptScope.map(escapeHtml).join(', ')}</div>`
+      ?`<div style="margin-top:4px;color:var(--accent);font-size:10.5px">Team: ${_deptScopeLabel(deptScope).map(escapeHtml).join(', ')}</div>`
       :'';
     return `<tr>
       <td style="font-weight:600">${escapeHtml(r.role_name)}</td>
@@ -18876,6 +18880,8 @@ function showRoleModal(id){
   if(deptGrid){
     const depts=_getDeptNames();
     const checkedDepts=new Set(role?.department_scope||[]);
+    const ownCb=document.getElementById('role-dept-own');
+    if(ownCb)ownCb.checked=checkedDepts.has('@own');
     deptGrid.innerHTML=depts.length
       ?depts.map(d=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-dept-cb" value="${escapeHtml(d)}" ${checkedDepts.has(d)?'checked':''}> ${escapeHtml(d)}</label>`).join('')
       :'<div style="color:var(--text3);font-size:12px">No departments — add one in HR Settings first.</div>';
@@ -18920,6 +18926,7 @@ async function saveRoleModal(){
   const description=(document.getElementById('role-description')?.value||'').trim()||null;
   const permissionKeys=[...document.querySelectorAll('#m-role .role-perm-cb:checked')].map(cb=>cb.value);
   const departmentScope=[...document.querySelectorAll('#m-role .role-dept-cb:checked')].map(cb=>cb.value);
+  if(document.getElementById('role-dept-own')?.checked)departmentScope.push('@own'); // marker: only the login's own department
   if(!roleName){toast('Enter a role name','warn');return;}
   const body={role_name:roleName,description,permission_keys:permissionKeys,department_scope:departmentScope};
   try{

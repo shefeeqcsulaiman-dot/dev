@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 import app.timezone_utils as timezone_utils
-from app.auth_principal import _role_department_scope
+from app.auth_principal import resolve_department_scope
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import assert_company_active, company_allows_module
@@ -222,7 +222,7 @@ def ess_team(request: Request, db: Session = Depends(get_db)) -> list[EssTeamMem
     role left unscoped on purpose) means no team visibility here."""
     emp = ess_bearer(request, db)
     role = db.get(Role, emp.role_id) if emp.role_id else None
-    departments = _role_department_scope(role)
+    departments = resolve_department_scope(role, emp)
     if not departments:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Your role is not scoped to any department")
     # Active only -- same "Inactive leaking through" bug class already

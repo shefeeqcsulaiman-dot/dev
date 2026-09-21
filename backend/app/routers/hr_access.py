@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.auth_principal import (
     Principal,
     _role_department_scope,
+    resolve_department_scope,
     _role_permission_keys,
     get_current_employee,
     require_permission,
@@ -400,7 +401,7 @@ def hr_me(db: Session = Depends(get_db), emp: Employee = Depends(get_current_emp
         role_name=role.role_name if role else None,
         permissions=perms,
         work_location_id=emp.work_location_id,
-        department_scope=_role_department_scope(role),
+        department_scope=resolve_department_scope(role, emp),
     )
 
 

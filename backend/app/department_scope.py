@@ -28,7 +28,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Query, Session
 
-from app.auth_principal import Principal, _role_department_scope
+from app.auth_principal import Principal, resolve_department_scope
 from app.models import Employee, Role
 
 # Collections whose rows belong to a specific employee (resolved via the refs
@@ -263,7 +263,7 @@ def employee_scope(db: Session, emp: Employee) -> frozenset[str]:
     if not emp.role_id:
         return frozenset()
     role = db.get(Role, emp.role_id)
-    return frozenset(dept_key(d) for d in _role_department_scope(role))
+    return frozenset(dept_key(d) for d in resolve_department_scope(role, emp))
 
 
 def scope_employee_query_by_names(query: Query, scope: frozenset[str]) -> Query:

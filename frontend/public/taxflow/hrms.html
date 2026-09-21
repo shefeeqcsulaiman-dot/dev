@@ -3551,6 +3551,10 @@ document.addEventListener('DOMContentLoaded',function(){
     </div>
     <div class="fg">
       <label class="fl">Departments</label>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer;margin:2px 0 8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)">
+        <input type="checkbox" id="role-dept-own" style="margin-top:2px">
+        <span><b>Only the employee's own department</b><br><span style="font-size:11.5px;color:var(--text3)">Whoever holds this role sees just the department they belong to (from their employee record) &mdash; no need to tick names below. You can still tick extra departments too.</span></span>
+      </label>
       <div style="font-size:11.5px;color:var(--text3);margin:-2px 0 8px">Optional. Tick departments to limit this role to them: its holders will only see, and only be able to change, the <b>Employees, Tasks, Leave, Attendance, Rota, Overtime, Loans &amp; Advances and Payroll</b> of the departments checked here (and get that Team roster in ESS). Leave all unticked for company-wide access.</div>
       <div id="role-dept-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-height:150px;overflow-y:auto;padding:2px">Loading departments…</div>
     </div>

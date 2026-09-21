@@ -370,3 +370,87 @@ def test_shifts_are_department_wise_multi_department_and_protected(client, db, a
     assert _save(client, unscoped, "rotaShifts", _shift("SH-U-ALL", [])).status_code == 200
     assert _save(client, unscoped, "rotaShifts", _shift("SH-U-AB", [DEPT_A, DEPT_B])).status_code == 200
 
+
+# ── Role option: "Only the employee's own department" ("@own") ──
+
+def _role(client, admin_headers, name, departments, permission_keys=PERMS):
+    r = client.post("/api/v1/hr/admin/roles", headers=admin_headers, json={
+        "role_name": name, "description": "t", "permission_keys": permission_keys, "department_scope": departments})
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+def _login_holder(client, db, admin_headers, company_id, tag, role_id, dept):
+    emp = Employee(company_id=company_id, employee_no=f"SCP-OWN-{tag}", full_name=f"Holder {tag}", department=dept, status="active")
+    db.add(emp)
+    db.commit()
+    db.refresh(emp)
+    r = client.put(f"/api/v1/hr/admin/employees/{emp.id}/portal-access", headers=admin_headers,
+                   json={"username": f"own.{tag}", "password": "scope12345", "role_id": role_id, "is_active": True})
+    assert r.status_code == 200, r.text
+    login = client.post("/api/v1/ess/login", json={"username": f"own.{tag}", "password": "scope12345"})
+    assert login.status_code == 200, login.text
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+
+def test_own_department_role_limits_each_holder_to_their_own_department(client, db, auth_headers):
+    cid = _company_id(client, auth_headers)
+    a, b, _run = _world(client, db, auth_headers, "O1")
+    role = _role(client, auth_headers, "Own Dept Role O1", ["@own"])
+    assert role["department_scope"] == ["@own"]                      # the raw marker is what the role editor round-trips
+    in_a = _login_holder(client, db, auth_headers, cid, "o1a", role["id"], DEPT_A)
+    in_b = _login_holder(client, db, auth_headers, cid, "o1b", role["id"], DEPT_B)
+
+    # the SAME role: the DEPT_A holder sees only DEPT_A, the DEPT_B holder only DEPT_B
+    for headers, mine, other, mine_task, other_task in ((in_a, a, b, "T-A-O1", "T-B-O1"), (in_b, b, a, "T-B-O1", "T-A-O1")):
+        emps = _ids(client.get("/api/v1/app-data/records/employees", headers=headers, params={"limit": 500}).json()["records"])
+        assert mine.employee_no in emps and other.employee_no not in emps
+        tasks = _ids(client.get("/api/v1/app-data/records/tasks", headers=headers, params={"limit": 500}).json()["records"])
+        assert mine_task in tasks and other_task not in tasks
+        assert mine.id in {r["employee_id"] for r in client.get("/api/v1/leave/requests", headers=headers).json()}
+        assert other.id not in {r["employee_id"] for r in client.get("/api/v1/leave/requests", headers=headers).json()}
+        assert other.employee_no not in client.get("/api/v1/attendance/today", headers=headers).json()["employee_ids"]
+        assert _save(client, headers, "overtimeRequests", {"id": f"OT-X-{mine.employee_no}", "employee": other.full_name, "employee_id": other.employee_no}).status_code == 403
+        assert _save(client, headers, "overtimeRequests", {"id": f"OT-Y-{mine.employee_no}", "employee": mine.full_name, "employee_id": mine.employee_no}).status_code == 200
+    # /auth/whoami reports the RESOLVED department (drives the "Viewing: ..." label), not the marker
+    assert client.get("/api/v1/auth/whoami", headers=in_a).json()["department_scope"] == [DEPT_A]
+    assert client.get("/api/v1/auth/whoami", headers=in_b).json()["department_scope"] == [DEPT_B]
+    assert client.get("/api/v1/hr/me", headers=in_b).json()["department_scope"] == [DEPT_B]
+
+
+def test_own_department_shifts_and_extra_departments_and_blank_department(client, db, auth_headers):
+    cid = _company_id(client, auth_headers)
+    a, b, _run = _world(client, db, auth_headers, "O2")
+    for rec in (_shift("OS-ALL"), _shift("OS-A", [DEPT_A]), _shift("OS-B", [DEPT_B])):
+        assert _save(client, auth_headers, "rotaShifts", rec).status_code == 200
+    own = _role(client, auth_headers, "Own Dept Role O2", ["@own"])
+    holder = _login_holder(client, db, auth_headers, cid, "o2", own["id"], DEPT_A)
+    shifts = _ids(client.get("/api/v1/app-data/records/rotaShifts", headers=holder, params={"limit": 500}).json()["records"])
+    assert {"OS-ALL", "OS-A"} <= shifts and "OS-B" not in shifts
+    assert _save(client, holder, "rotaShifts", _shift("OS-NEW", [DEPT_A])).status_code == 200
+    assert _save(client, holder, "rotaShifts", _shift("OS-NEW2", [DEPT_B])).status_code == 403
+
+    # "own department" PLUS an extra named department
+    both = _role(client, auth_headers, "Own Plus B O2", ["@own", DEPT_B])
+    two = _login_holder(client, db, auth_headers, cid, "o2b", both["id"], DEPT_A)
+    emps = _ids(client.get("/api/v1/app-data/records/employees", headers=two, params={"limit": 500}).json()["records"])
+    assert a.employee_no in emps and b.employee_no in emps
+    assert sorted(client.get("/api/v1/auth/whoami", headers=two).json()["department_scope"]) == sorted([DEPT_A, DEPT_B])
+
+    # a holder with NO department must see nothing -- never fall back to company-wide
+    blank = _login_holder(client, db, auth_headers, cid, "o2c", own["id"], "")
+    assert client.get("/api/v1/app-data/records/employees", headers=blank, params={"limit": 500}).json()["records"] == []
+    assert client.get("/api/v1/leave/requests", headers=blank).json() == []
+    assert client.get("/api/v1/attendance/today", headers=blank).json()["employee_ids"] == []
+
+
+def test_own_department_marker_does_not_break_the_ess_team_roster(client, db, auth_headers):
+    cid = _company_id(client, auth_headers)
+    a, b, _run = _world(client, db, auth_headers, "O3")
+    role = _role(client, auth_headers, "Own Dept Role O3", ["@own"])
+    holder = _login_holder(client, db, auth_headers, cid, "o3", role["id"], DEPT_B)
+    team = client.get("/api/v1/ess/team", headers=holder)
+    assert team.status_code == 200, team.text
+    names = {t["employee_no"] for t in team.json()}
+    assert b.employee_no in names and a.employee_no not in names       # DEPT_B holder -> the DEPT_B roster
+
