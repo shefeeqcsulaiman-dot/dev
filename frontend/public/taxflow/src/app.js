@@ -489,6 +489,8 @@ function populateRotaEditTypeSelect(restoreVal){
     const shiftName=shift?.name||shift?.shift_name||(row.children[0]?.textContent||'').trim();
     if(!shiftName)return;
     if((shift?.status||'Active').toLowerCase()==='inactive')return;
+    // department-wise shifts: an employee's rota cell only offers shifts for their own department
+    if(activeRotaCell&&shift&&!shiftAppliesToDepartment(shift,activeRotaCell.dataset.department))return;
     const start=shift?.start||shift?.start_time||'';
     const end=shift?.end||shift?.end_time||'';
     const opt=document.createElement('option');
@@ -20536,6 +20538,46 @@ function seedDefaultRotaShifts(){
   updateRotaStats();
 }
 
+// ── Shift departments ───────────────────────────────────────────────────
+// A shift can belong to one or several departments (record.departments).
+// Empty = every department (all shifts created before this existed).
+function shiftDepartmentList(shift){
+  let raw=shift?.departments;
+  if(raw==null||raw==='')raw=shift?.department;
+  if(typeof raw==='string')raw=raw.split(',');
+  if(!Array.isArray(raw))return [];
+  return raw.map(d=>String(d).trim()).filter(d=>d&&!/^all( departments)?$/i.test(d));
+}
+function shiftAppliesToDepartment(shift,department){
+  const depts=shiftDepartmentList(shift).map(d=>d.toLowerCase());
+  if(!depts.length)return true;
+  return depts.includes(String(department||'').trim().toLowerCase());
+}
+function renderShiftDeptGrid(selected){
+  const grid=document.getElementById('shift-dept-grid');
+  if(!grid)return;
+  const chosen=new Set((selected||[]).map(d=>String(d).trim().toLowerCase()));
+  const names=[..._getDeptNames()];
+  // keep a shift's existing department visible even if it's no longer in the department list
+  (selected||[]).forEach(d=>{if(d&&!names.some(n=>n.toLowerCase()===String(d).toLowerCase()))names.push(String(d));});
+  grid.innerHTML=names.length
+    ?names.map(d=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="shift-dept-cb" value="${escapeHtml(d)}" ${chosen.has(d.toLowerCase())?'checked':''}> ${escapeHtml(d)}</label>`).join('')
+    :'<div style="color:var(--text3);font-size:12px">No departments yet — add them in HR Settings to limit a shift to departments.</div>';
+}
+function selectedShiftDepartments(){
+  return [...document.querySelectorAll('#m-shift .shift-dept-cb:checked')].map(cb=>cb.value);
+}
+// "+ Add Shift": reset to add-mode and pre-tick a department-limited login's own departments.
+function openShiftModal(){
+  const titleEl=document.querySelector('#m-shift .modal-title');
+  const btnEl=document.querySelector('#m-shift .btn-p');
+  if(titleEl)titleEl.textContent='Add Shift';
+  if(btnEl)btnEl.textContent='Save Shift';
+  const scope=window.HRMS_DEPT_SCOPE;
+  renderShiftDeptGrid(Array.isArray(scope)&&scope.length?scope:[]);
+  showM('m-shift');
+}
+
 function renderRotaShiftRecord(shift){
   const options=arguments[1]||{};
   const tbody=document.getElementById('rota-shift-tbody');
@@ -20555,7 +20597,7 @@ function renderRotaShiftRecord(shift){
   const row=document.createElement('tr');
   row.dataset.serverRecord='rotaShifts';
   row.dataset.shift=JSON.stringify(shift);
-  row.innerHTML=`<td>${escapeHtml(shift.name||shift.shift_name||code)}</td><td class="mono">${escapeHtml(code)}</td><td class="mono">${escapeHtml(start||'-')}</td><td class="mono">${escapeHtml(end||'-')}</td><td>${escapeHtml(String(breakMinutes||0))}m</td><td>${escapeHtml(shift.hours||shiftHours(start,end,breakMinutes))}</td><td>${escapeHtml(shift.grace||shift.grace_period||'-')}</td><td>${escapeHtml(shift.ot_after||shift.overtime_after||'-')}</td><td>${rotaBadge(shift.status||'Active')}</td><td><div class="flx"><button class="btn btn-g btn-sm" onclick="editShift(this)">Edit</button><button class="btn btn-danger btn-sm" onclick="deleteShift(this)">Delete</button></div></td>`;
+  row.innerHTML=`<td>${escapeHtml(shift.name||shift.shift_name||code)}</td><td class="mono">${escapeHtml(code)}</td><td class="mono">${escapeHtml(start||'-')}</td><td class="mono">${escapeHtml(end||'-')}</td><td>${escapeHtml(String(breakMinutes||0))}m</td><td>${escapeHtml(shift.hours||shiftHours(start,end,breakMinutes))}</td><td>${escapeHtml(shift.grace||shift.grace_period||'-')}</td><td>${escapeHtml(shift.ot_after||shift.overtime_after||'-')}</td><td>${escapeHtml(shiftDepartmentList(shift).join(', ')||'All departments')}</td><td>${rotaBadge(shift.status||'Active')}</td><td><div class="flx"><button class="btn btn-g btn-sm" onclick="editShift(this)">Edit</button><button class="btn btn-danger btn-sm" onclick="deleteShift(this)">Delete</button></div></td>`;
   removeEmptyState(tbody);
   if(existing||options.prepend===false)tbody.appendChild(row);
   else tbody.prepend(row);
@@ -20582,6 +20624,7 @@ function editShift(btn){
   setFieldValue(document.getElementById('shift-grace'),shift.grace||shift.grace_period||'');
   setFieldValue(document.getElementById('shift-ot-after'),shift.ot_after||shift.overtime_after||'');
   setSelectValue(document.getElementById('shift-status'),shift.status||'Active');
+  renderShiftDeptGrid(shiftDepartmentList(shift));
   const titleEl=document.querySelector('#m-shift .modal-title');
   const btnEl=document.querySelector('#m-shift .btn-p');
   if(titleEl)titleEl.textContent='Edit Shift';
@@ -20616,6 +20659,7 @@ function buildShiftRecordFromForm(){
     hours:shiftHours(start,end,breakMinutes),
     grace:document.getElementById('shift-grace')?.value||'',
     ot_after:document.getElementById('shift-ot-after')?.value||'',
+    departments:selectedShiftDepartments(),
     status:document.getElementById('shift-status')?.value||'Active'
   };
 }
@@ -20624,6 +20668,10 @@ async function saveShift(){
   const record=buildShiftRecordFromForm();
   if(!record.name||!record.code){
     toast('Shift name and code are required','warn');
+    return;
+  }
+  if(Array.isArray(window.HRMS_DEPT_SCOPE)&&window.HRMS_DEPT_SCOPE.length&&!record.departments.length){
+    toast('Pick at least one of your departments for this shift','warn');
     return;
   }
   renderRotaShiftRecord(record);

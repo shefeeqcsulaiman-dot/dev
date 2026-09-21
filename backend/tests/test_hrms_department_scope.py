@@ -12,7 +12,8 @@ import json
 from datetime import UTC, date, datetime
 
 from app.models import (
-    AppDataRecord, AttendanceDetail, Employee, LeaveRequest, PayrollItem, PayrollRun, Role,
+    AppDataRecord, AttendanceDetail, AttendanceSession, CompanyLocation, Employee, EmployeeLocation, LeaveRequest,
+    PayrollItem, PayrollRun, Role,
 )
 
 DEPT_A, DEPT_B = "ScopeDeptA", "ScopeDeptB"
@@ -273,3 +274,99 @@ def test_role_with_task_permission_receives_tasks_from_the_hrms_bootstrap(client
     assert "T-A-M1" in _ids(got.get("tasks", []))
     lacking = client.get("/api/v1/app-data", headers=without, params={"scope": "hrms"}).json()["data"]
     assert not lacking.get("tasks")
+
+
+# ── GPS / locations / HR dashboard / reports summary (found by an all-endpoints crawl) ──
+
+def test_gps_locations_hr_dashboard_and_report_audit_trail_are_scoped(client, db, auth_headers):
+    from datetime import timedelta
+    cid = _company_id(client, auth_headers)
+    a, b, _run = _world(client, db, auth_headers, "G1")
+    gps_perms = PERMS + ["hr:view_all_attendance", "hr:manage_locations", "hr:manage_employees", "reports:view"]
+    headers = _login_as(client, db, auth_headers, cid, "g1", [DEPT_A], gps_perms)
+
+    loc = CompanyLocation(company_id=cid, location_name="HQ G1", latitude=25.2, longitude=55.27)
+    db.add(loc)
+    db.flush()
+    now = datetime.now(UTC)
+    for emp in (a, b):
+        db.add(EmployeeLocation(employee_id=emp.id, location_id=loc.id, is_primary=True))
+        db.add(AttendanceSession(company_id=cid, employee_id=emp.id, location_id=loc.id, check_in=now - timedelta(hours=1),
+                                 check_in_lat=25.2, check_in_lng=55.27, status="open"))
+    db.commit()
+
+    # live GPS positions: only the scoped department's people
+    live = client.get("/api/v1/hr/live-locations", headers=headers).json()
+    assert a.id in {x["employee_id"] for x in live} and b.id not in {x["employee_id"] for x in live}
+    # which employee is assigned to which work location
+    links = client.get("/api/v1/hr/employee-locations", headers=headers).json()
+    assert a.id in {x["employee_id"] for x in links} and b.id not in {x["employee_id"] for x in links}
+    # cannot assign / unassign another department's employee
+    assert client.post("/api/v1/hr/employee-locations", headers=headers, json={"employee_id": b.id, "location_id": loc.id, "is_primary": False}).status_code == 404
+    b_link = db.query(EmployeeLocation).filter(EmployeeLocation.employee_id == b.id).first()
+    assert client.delete(f"/api/v1/hr/employee-locations/{b_link.id}", headers=headers).status_code == 404
+    assert db.query(EmployeeLocation).filter(EmployeeLocation.id == b_link.id).count() == 1
+    # an employee login with NO departments ticked still sees everyone (/hr/* endpoints are employee-only)
+    unscoped = _login_as(client, db, auth_headers, cid, "g1u", [], gps_perms)
+    everyone = client.get("/api/v1/hr/live-locations", headers=unscoped).json()
+    assert {a.id, b.id} <= {x["employee_id"] for x in everyone}
+    assert {a.id, b.id} <= {x["employee_id"] for x in client.get("/api/v1/hr/employee-locations", headers=unscoped).json()}
+
+    # the reports summary's audit trail holds raw records of other departments' employees
+    assert _save(client, auth_headers, "employees", {"id": "SCP-AUDIT-B", "name": "AuditMarkerB", "department": DEPT_B}).status_code == 200
+    summary = client.get("/api/v1/reports/summary", headers=headers)
+    assert summary.status_code == 200
+    assert "AuditMarkerB" not in summary.text and summary.json()["control"]["audit"] == []
+    assert "AuditMarkerB" in client.get("/api/v1/reports/summary", headers=auth_headers).text   # admin (and the shared cache) untouched
+
+
+# ── Shift Setup: department-wise shifts (a shift can list several departments) ──
+
+def _shift(code, departments=None, **extra):
+    rec = {"id": code, "code": code, "name": f"Shift {code}", "start": "09:00", "end": "17:00", "break_minutes": 30, **extra}
+    if departments is not None:
+        rec["departments"] = departments
+    return rec
+
+
+def test_shifts_are_department_wise_multi_department_and_protected(client, db, auth_headers):
+    cid = _company_id(client, auth_headers)
+    for rec in (_shift("SH-ALL"), _shift("SH-A", [DEPT_A]), _shift("SH-B", [DEPT_B]), _shift("SH-AB", [DEPT_A, DEPT_B]), _shift("SH-CSV", f"{DEPT_A}, {DEPT_B}")):
+        assert _save(client, auth_headers, "rotaShifts", rec).status_code == 200
+    headers = _login_as(client, db, auth_headers, cid, "s1", [DEPT_A])
+
+    # a department-limited login sees: all-department shifts + any shift that lists its department (alone or shared)
+    boot = client.get("/api/v1/app-data", headers=headers, params={"scope": "hrms"}).json()["data"]
+    seen = _ids(boot["rotaShifts"])
+    assert {"SH-ALL", "SH-A", "SH-AB", "SH-CSV"} <= seen and "SH-B" not in seen
+    listed = _ids(client.get("/api/v1/app-data/records/rotaShifts", headers=headers, params={"limit": 500}).json()["records"])
+    assert {"SH-ALL", "SH-A", "SH-AB"} <= listed and "SH-B" not in listed
+
+    # can create a shift only for its own department(s)
+    assert _save(client, headers, "rotaShifts", _shift("SH-NEW-A", [DEPT_A])).status_code == 200
+    assert _save(client, headers, "rotaShifts", _shift("SH-NEW-B", [DEPT_B])).status_code == 403          # someone else's department
+    assert _save(client, headers, "rotaShifts", _shift("SH-NEW-AB", [DEPT_A, DEPT_B])).status_code == 403  # shares with another department
+    assert _save(client, headers, "rotaShifts", _shift("SH-NEW-ALL", [])).status_code == 403              # would apply to every department
+    assert _save(client, headers, "rotaShifts", _shift("SH-NEW-NONE")).status_code == 403
+    # can edit / delete its OWN department's shift, but not a shared or all-department one, nor another department's
+    assert _save(client, headers, "rotaShifts", _shift("SH-A", [DEPT_A], start="08:00")).status_code == 200
+    assert _save(client, headers, "rotaShifts", _shift("SH-AB", [DEPT_A], start="08:00")).status_code == 403   # cannot take over a shared shift
+    assert _save(client, headers, "rotaShifts", _shift("SH-ALL", [DEPT_A])).status_code == 403
+    assert _save(client, headers, "rotaShifts", _shift("SH-B", [DEPT_A])).status_code == 403
+    assert _delete(client, headers, "rotaShifts", {"id": "SH-AB", "code": "SH-AB"}).status_code == 403
+    assert _delete(client, headers, "rotaShifts", {"id": "SH-B", "code": "SH-B"}).status_code == 403
+    assert _delete(client, headers, "rotaShifts", {"id": "SH-NEW-A", "code": "SH-NEW-A"}).status_code == 200
+    r = client.post("/api/v1/app-data", headers=headers, params={"action": "bulk-save"},
+                    json={"collection": "rotaShifts", "records": [_shift("SH-BULK-A", [DEPT_A]), _shift("SH-BULK-B", [DEPT_B])]})
+    assert r.status_code == 403
+    stored = json.loads(db.query(AppDataRecord).filter(AppDataRecord.collection == "rotaShifts", AppDataRecord.record_key == "SH-AB").one().payload)
+    assert stored["departments"] == [DEPT_A, DEPT_B] and stored["start"] == "09:00"                        # untouched
+
+    # unrestricted logins (no departments ticked) and the admin: everything, unchanged
+    unscoped = _login_as(client, db, auth_headers, cid, "s1u", [])
+    for h in (unscoped, auth_headers):
+        all_ids = _ids(client.get("/api/v1/app-data/records/rotaShifts", headers=h, params={"limit": 500}).json()["records"])
+        assert {"SH-ALL", "SH-A", "SH-B", "SH-AB", "SH-CSV"} <= all_ids
+    assert _save(client, unscoped, "rotaShifts", _shift("SH-U-ALL", [])).status_code == 200
+    assert _save(client, unscoped, "rotaShifts", _shift("SH-U-AB", [DEPT_A, DEPT_B])).status_code == 200
+

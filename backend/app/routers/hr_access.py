@@ -28,7 +28,10 @@ from app.auth_principal import (
 )
 from app.config import get_settings
 from app.database import get_db
-from app.department_scope import assert_employee_in_scope, scope_employee_query
+from app.department_scope import (
+    assert_employee_in_names_scope, assert_employee_in_scope, employee_scope, scope_employee_query,
+    scope_employee_query_by_names, scoped_employee_id_select,
+)
 from app.dependencies import assert_company_active, company_allows_module, require_module
 from app.module_catalog import ALL_MODULES
 from app.limiter import limiter
@@ -221,6 +224,16 @@ def _distance_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> floa
 
 
 def _scope_attendance_to_branch(query, emp: Employee, db: Session, requested_branch_id: str | None = None):
+    """Branch scoping (below) plus department scoping: a login whose role has
+    departments ticked only sees open sessions of employees in those departments."""
+    query = _scope_attendance_to_branch_only(query, emp, db, requested_branch_id)
+    scope = employee_scope(db, emp)
+    if scope:
+        query = query.filter(AttendanceSession.employee_id.in_(scoped_employee_id_select(emp.company_id, scope)))
+    return query
+
+
+def _scope_attendance_to_branch_only(query, emp: Employee, db: Session, requested_branch_id: str | None = None):
     """Branch Management, Phase 2: a branch-assigned employee viewing
     team/company-wide attendance (dashboard counts, live locations) only
     sees sessions belonging to their own branch — plus branch-less legacy
@@ -402,7 +415,9 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
     if role_name in ("Administrator", "HR Manager"):
         return {
             "role": role_name,
-            "total_employees": db.query(Employee).filter(Employee.company_id == company_id).count(),
+            "total_employees": scope_employee_query_by_names(
+                db.query(Employee).filter(Employee.company_id == company_id), employee_scope(db, emp),
+            ).count(),
             "active_sessions_now": _scope_attendance_to_branch(
                 db.query(AttendanceSession).filter(
                     AttendanceSession.company_id == company_id, AttendanceSession.status == "open"
@@ -420,11 +435,20 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
             .order_by(PayrollRun.period.desc())
             .first()
         )
+        net_total = float(latest.net_total) if latest else 0
+        scope = employee_scope(db, emp)
+        if latest and scope:
+            # department-scoped: only the in-scope payslip lines, not the company total
+            from app.models import PayrollItem
+            in_scope = scoped_employee_id_select(company_id, scope)
+            net_total = float(sum(
+                (i.net_pay for i in db.query(PayrollItem).filter(PayrollItem.run_id == latest.id, PayrollItem.employee_id.in_(in_scope)).all()), 0,
+            ))
         return {
             "role": role_name,
             "latest_run_period": latest.period if latest else None,
             "latest_run_status": latest.status if latest else None,
-            "latest_run_net_total": float(latest.net_total) if latest else 0,
+            "latest_run_net_total": net_total,
         }
     if role_name == "Manager":
         return {
@@ -976,8 +1000,8 @@ def list_employee_locations(
         .join(CompanyLocation, CompanyLocation.id == EmployeeLocation.location_id)
         .filter(Employee.company_id == emp.company_id)
         .order_by(EmployeeLocation.is_primary.desc())
-        .all()
     )
+    rows = scope_employee_query_by_names(rows, employee_scope(db, emp)).all()  # department-scoped role: only its departments
     return [
         EmployeeLocationOut(
             id=link.id, employee_id=e.id, employee_name=e.full_name, location_id=loc.id,
@@ -1001,6 +1025,7 @@ def unassign_employee_location(
     )
     if link:
         target = db.get(Employee, link.employee_id)
+        assert_employee_in_names_scope(employee_scope(db, emp), target)
         db.delete(link)
         db.flush()
         # If the deleted link was the primary, and no other assignment remains
@@ -1027,6 +1052,7 @@ def assign_employee_location(
     loc = db.query(CompanyLocation).filter(CompanyLocation.id == payload.location_id, CompanyLocation.company_id == emp.company_id).first()
     if not target or not loc:
         raise HTTPException(status_code=404, detail="Employee or location not found")
+    assert_employee_in_names_scope(employee_scope(db, emp), target)
     if payload.is_primary:
         db.query(EmployeeLocation).filter(EmployeeLocation.employee_id == target.id).update({"is_primary": False})
     link = EmployeeLocation(employee_id=target.id, location_id=loc.id, is_primary=payload.is_primary)

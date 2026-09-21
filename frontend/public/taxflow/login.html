@@ -221,7 +221,13 @@
         // broken, near-empty page. ESS is what this role is actually built
         // for (own attendance/leave/payslips/team), so route there instead
         // of "successfully" logging someone into a page with nothing on it.
-        var hasRealHrmsAccess=true;
+        // Route by what the role actually has: any HRMS module -> /hrms; only
+        // main-dashboard modules (sales, purchases...) -> the main dashboard;
+        // nothing else (base "Employee" role) -> ESS. hrms.html enforces the
+        // same rule if someone opens /hrms directly.
+        var HR_MODULES=['employees','leave','attendance','rota','overtime','loans','recruitment','payroll','hr_settings','hr_workflow','performance','reports','ai_insights'];
+        var MAIN_MODULES=['sales','quotations','pos','purchase','inventory','expense','bank','accounting','corporate','notifications','expert'];
+        var target='/hrms';
         try{
           var hrMeResp=await fetch(apiBase()+'/hr/me',{headers:{'Authorization':'Bearer '+hrData.access_token}});
           var hrMe=await hrMeResp.json();
@@ -230,16 +236,13 @@
             (hrMe.permissions||[]).forEach(function(p){
               if(p.indexOf(':view')===p.length-5)allowedModules[p.split(':')[0]]=true;
             });
-            delete allowedModules.dashboard;
-            hasRealHrmsAccess=Object.keys(allowedModules).length>0;
+            if(HR_MODULES.some(function(m){return allowedModules[m];}))target='/hrms';
+            else if(MAIN_MODULES.some(function(m){return allowedModules[m];}))target='/';
+            else target='/ess';
           }
-        }catch(e){/* /hr/me unreachable -- fail open to the existing /hrms behavior */}
-        if(!hasRealHrmsAccess){
-          localStorage.setItem('ess_token',hrData.access_token);
-          preloadAndRedirect('/ess',hrData.access_token);
-          return;
-        }
-        preloadAndRedirect('/hrms',hrData.access_token);
+        }catch(e){/* /hr/me unreachable -- fail open to /hrms, whose own gate re-checks */}
+        if(target==='/ess')localStorage.setItem('ess_token',hrData.access_token);
+        preloadAndRedirect(target,hrData.access_token);
         return;
       }
       // A 403 from /hr/login (vs 401) means a real employee account was

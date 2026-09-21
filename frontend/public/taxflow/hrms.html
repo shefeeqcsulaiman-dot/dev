@@ -181,6 +181,16 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 </style>
 </head>
 <body class="theme-light">
+<script>
+/* HRMS access gate, part 1: hide the whole page for a non-admin session until
+   applyHrmsPermissionNav() has confirmed the role has an HRMS module. Admins
+   (taxflow_principal_kind === 'user') are never gated. */
+(function(){try{
+  var k=localStorage.getItem('taxflow_principal_kind');
+  if(localStorage.getItem('taxflow_token')&&k&&k!=='user'){document.documentElement.setAttribute('data-hrms-gate','pending');setTimeout(function(){document.documentElement.removeAttribute('data-hrms-gate');},6000);}
+}catch(e){}})();
+</script>
+<style>html[data-hrms-gate="pending"] body{visibility:hidden}</style>
 <noscript>This application requires JavaScript to run.</noscript>
 <div class="scrim" id="nav-scrim" aria-hidden="true" onclick="closeSidebar()"></div>
 <nav class="sb" id="sidebar" aria-label="HRMS Navigation">
@@ -2093,11 +2103,11 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <div class="stat"><div class="stat-lbl">Pending Swaps</div><div class="stat-val" style="color:var(--amber)">2</div><div class="stat-delta">need approval</div></div>
     </div>
     <div class="card mb16">
-      <div class="card-hd"><div><div class="card-title">Shift Setup</div><div class="card-sub">Define shift timing, break, grace period, and overtime threshold</div></div><button class="btn btn-p btn-sm" onclick="showM('m-shift')">+ Add Shift</button></div>
+      <div class="card-hd"><div><div class="card-title">Shift Setup</div><div class="card-sub">Define shift timing, break, grace period, and overtime threshold</div></div><button class="btn btn-p btn-sm" onclick="openShiftModal()">+ Add Shift</button></div>
       <table class="tbl" data-delete-actions-bound="skip">
-        <thead><tr><th>Shift Name</th><th>Code</th><th>Start</th><th>End</th><th>Break</th><th>Hours</th><th>Grace</th><th>OT After</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Shift Name</th><th>Code</th><th>Start</th><th>End</th><th>Break</th><th>Hours</th><th>Grace</th><th>OT After</th><th>Departments</th><th>Status</th><th></th></tr></thead>
         <tbody id="rota-shift-tbody">
-          <tr data-empty-state="1"><td colspan="10" style="color:var(--text3);text-align:center">No shifts in database yet.</td></tr>
+          <tr data-empty-state="1"><td colspan="11" style="color:var(--text3);text-align:center">No shifts in database yet.</td></tr>
         </tbody>
       </table>
     </div>
@@ -2881,6 +2891,10 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
     <div class="fr2"><div class="fg"><label class="fl">Shift Name</label><input class="fi" id="shift-name" placeholder="Morning Shift"></div><div class="fg"><label class="fl">Shift Code</label><input class="fi mono" id="shift-code" placeholder="MOR"></div></div>
     <div class="fr2"><div class="fg"><label class="fl">Start Time</label><input class="fi mono" id="shift-start" type="time" value="09:00"></div><div class="fg"><label class="fl">End Time</label><input class="fi mono" id="shift-end" type="time" value="18:00"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Break Minutes</label><input class="fi mono" id="shift-break" value="60"></div><div class="fg"><label class="fl">Grace Period</label><input class="fi mono" id="shift-grace" value="10 minutes"></div><div class="fg"><label class="fl">Overtime After</label><input class="fi mono" id="shift-ot-after" value="8 hours"></div></div>
+    <div class="fg"><label class="fl">Departments</label>
+      <div style="font-size:11.5px;color:var(--text3);margin:-2px 0 8px">Tick every department this shift is for. Leave all unticked to make it available to <b>all departments</b>. A department-limited login only sees the shifts of its own departments.</div>
+      <div id="shift-dept-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-height:150px;overflow-y:auto;padding:2px"></div>
+    </div>
     <div class="fg"><label class="fl">Status</label><select class="fi" id="shift-status"><option>Active</option><option>Inactive</option></select></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-shift')">Cancel</button><button class="btn btn-p" onclick="saveShift()">Save Shift</button></div>
   </div>
@@ -3338,7 +3352,7 @@ async function applyHrmsPermissionNav(){
     if(!token)return;
     const base=(typeof apiBaseUrl==='function'?apiBaseUrl():'/api/v1');
     const resp=await fetch(base+'/auth/whoami',{headers:{Authorization:'Bearer '+token}});
-    if(!resp||!resp.ok)return;
+    if(!resp||!resp.ok){document.documentElement.removeAttribute('data-hrms-gate');return;}
     const who=await resp.json();
     if(typeof applyBranchSwitcherFromWhoami==='function')applyBranchSwitcherFromWhoami(who);
 
@@ -3375,10 +3389,29 @@ async function applyHrmsPermissionNav(){
     // this flag only drives presentation.
     window.HRMS_CAN_VIEW_SALARY=window.HRMS_IS_ADMIN||window.HRMS_PERMISSIONS.includes('employees:view_salary');
     applyHrmsSalaryVisibility();
-    if(who.is_admin)return; // real TaxFlow admins/superadmins get the full sidebar
+    if(who.is_admin){document.documentElement.removeAttribute('data-hrms-gate');return;} // real TaxFlow admins/superadmins get the full sidebar
 
     var allowed=new Set(window.HRMS_PERMISSIONS.filter(function(p){return p.endsWith(':view');}).map(function(p){return p.split(':')[0];}));
     window.HRMS_ALLOWED_MODULES=allowed;
+
+    // HRMS access gate, part 2. A sub-user whose role has NO HRMS module (the
+    // base "Employee" role, or any role with only dashboard/check-in rights)
+    // must not be in HRMS at all -- login.html routes them to ESS, but the
+    // token stays in localStorage, so typing /hrms (or a bookmark) used to
+    // open a near-empty HRMS. Send them where their role belongs instead.
+    var HR_MODULES=['employees','leave','attendance','rota','overtime','loans','recruitment','payroll','hr_settings','hr_workflow','performance','reports','ai_insights'];
+    var MAIN_MODULES=['sales','quotations','pos','purchase','inventory','expense','bank','accounting','corporate','notifications','expert'];
+    var hasHrms=HR_MODULES.some(function(m){return allowed.has(m);});
+    if(!hasHrms){
+      if(who.kind==='employee'&&!MAIN_MODULES.some(function(m){return allowed.has(m);})){
+        localStorage.setItem('ess_token',token);   // same "emp:" token /ess accepts
+        window.location.replace('/ess');
+      }else{
+        window.location.replace('/');
+      }
+      return;
+    }
+    document.documentElement.removeAttribute('data-hrms-gate');
 
     // Sub-users (Employee principals) get the "Main Dashboard" link only if
     // their role grants at least one main-dashboard module permission
@@ -3405,6 +3438,9 @@ async function applyHrmsPermissionNav(){
     });
   }catch(e){
     console.warn('[HrmsPermissionNav]',e);
+    // Fail open on a network/parse error (as before) -- every data endpoint is
+    // permission-checked server-side anyway -- but never leave the page blank.
+    document.documentElement.removeAttribute('data-hrms-gate');
   }
 }
 
