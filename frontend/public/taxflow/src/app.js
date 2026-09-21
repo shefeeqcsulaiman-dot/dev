@@ -3067,6 +3067,7 @@ const ALL_MODULE_DEFS=[
   {key:'expert',label:'Expert Review'},
   {key:'exception',label:'Exception Center'},
   {key:'ai',label:'AI Features'},
+  {key:'backup',label:'DB Backup'},
   {key:'settings',label:'Company & Settings'},
 ];
 
