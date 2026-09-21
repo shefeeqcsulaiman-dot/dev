@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.auth_principal import resolve_active_branch
+from app.department_scope import assert_employee_in_scope, scope_employee_query
 from app.database import get_db
 from app.dependencies import Principal, require_module, require_principal_permission
 from app.models import AppDataRecord, Employee, LeaveRequest
@@ -238,6 +239,7 @@ def list_leave_requests(
     resolved_branch_id = branch_id if principal.can_cross_branch("hrms") else resolve_active_branch(principal, branch_id)
     if resolved_branch_id:
         query = query.filter((Employee.branch_id == resolved_branch_id) | (Employee.branch_id.is_(None)))
+    query = scope_employee_query(query, principal)  # department-scoped role: only its departments
     rows = query.order_by(LeaveRequest.created_at.desc()).all()
     return [_out(r, e) for r, e in rows]
 
@@ -247,7 +249,10 @@ def _assert_employee_branch_access(principal: Principal, employee: Employee) -> 
     endpoints (create/approve/reject/delete), which act on one specific
     employee_id rather than a list — a branch-scoped principal must not be
     able to touch a leave request for an employee outside their own
-    branch(es) just because they know its id."""
+    branch(es) just because they know its id. Also the single choke point
+    for department scoping (a department-scoped role can only act on its
+    own departments' employees)."""
+    assert_employee_in_scope(principal, employee)
     if principal.can_cross_branch("hrms"):
         return
     accessible = principal.accessible_branch_ids
@@ -331,6 +336,8 @@ def _get_request(db: Session, request_id: str, principal: Principal) -> LeaveReq
     emp = db.query(Employee).filter(Employee.id == req.employee_id).first()
     if emp:
         _assert_employee_branch_access(principal, emp)
+    else:
+        assert_employee_in_scope(principal, None)  # orphaned request: hidden from a department-scoped login
     return req
 
 
@@ -505,7 +512,7 @@ def leave_balance(
     resolved_branch_id = branch_id if principal.can_cross_branch("hrms") else resolve_active_branch(principal, branch_id)
     if resolved_branch_id:
         employee_query = employee_query.filter((Employee.branch_id == resolved_branch_id) | (Employee.branch_id.is_(None)))
-    employees = employee_query.all()
+    employees = scope_employee_query(employee_query, principal).all()
     policies = _employee_leave_policies(db, principal.company_id)
     configs = _effective_leave_policy_configs(db, principal.company_id)
     caps = _leave_type_caps(db, principal.company_id)

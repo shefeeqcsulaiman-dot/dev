@@ -28,6 +28,7 @@ from app.auth_principal import (
 )
 from app.config import get_settings
 from app.database import get_db
+from app.department_scope import assert_employee_in_scope, scope_employee_query
 from app.dependencies import assert_company_active, company_allows_module, require_module
 from app.module_catalog import ALL_MODULES
 from app.limiter import limiter
@@ -693,8 +694,8 @@ def admin_list_employee_portal_access(
             or_(Employee.status == "active", Employee.username.isnot(None)),
         )
         .order_by(Employee.employee_no)
-        .all()
     )
+    employees = scope_employee_query(employees, principal).all()  # department-scoped role: only its departments
     role_ids = {e.role_id for e in employees if e.role_id}
     roles_by_id = {r.id: r for r in db.query(Role).filter(Role.id.in_(role_ids)).all()} if role_ids else {}
     return [
@@ -726,6 +727,7 @@ def set_employee_portal_access(
     target = db.query(Employee).filter(Employee.id == employee_id, Employee.company_id == principal.company_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="Employee not found")
+    assert_employee_in_scope(principal, target)  # department-scoped role: only its departments
 
     if payload.username is not None:
         username = payload.username.strip()
@@ -772,6 +774,7 @@ def revoke_employee_portal_access(
     target = db.query(Employee).filter(Employee.id == employee_id, Employee.company_id == principal.company_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="Employee not found")
+    assert_employee_in_scope(principal, target)  # department-scoped role: only its departments
     # Clears login credentials rather than deleting the Employee record —
     # this screen manages *portal access*, the HR employee record itself
     # (attendance, payroll history, etc.) is untouched.
@@ -803,6 +806,7 @@ def get_employee_branch_access(
     target = db.query(Employee).filter(Employee.id == employee_id, Employee.company_id == principal.company_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="Employee not found")
+    assert_employee_in_scope(principal, target)  # department-scoped role: only its departments
     out = []
     if target.branch_id:
         branch = db.query(Branch).filter(Branch.id == target.branch_id).first()
@@ -835,6 +839,7 @@ def set_employee_branch_access(
     target = db.query(Employee).filter(Employee.id == employee_id, Employee.company_id == principal.company_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="Employee not found")
+    assert_employee_in_scope(principal, target)  # department-scoped role: only its departments
 
     requested_ids = {b.strip() for b in payload.branch_ids if b and b.strip()}
     requested_ids.discard(target.branch_id or "")

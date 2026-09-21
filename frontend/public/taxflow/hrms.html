@@ -305,6 +305,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
         <div class="hm-badge" id="hrms-msg-badge" style="background:#f59e0b;display:none">0</div>
       </div>
 
+      <div class="hm-date" id="hrms-dept-chip" style="display:none;color:var(--accent);font-weight:600" title="Your role is limited to these departments"></div>
       <div class="hm-user">
         <div class="hm-avatar" id="hrms-top-av">A</div>
         <div>
@@ -3357,6 +3358,16 @@ async function applyHrmsPermissionNav(){
 
     window.HRMS_IS_ADMIN=!!who.is_admin;
     window.HRMS_PERMISSIONS=who.permissions||[];
+    // Department-scoped role: show which departments this session is limited
+    // to (the server already filters every list and write to them).
+    window.HRMS_DEPT_SCOPE=Array.isArray(who.department_scope)?who.department_scope:[];
+    var deptChip=document.getElementById('hrms-dept-chip');
+    if(deptChip){
+      if(window.HRMS_DEPT_SCOPE.length){
+        deptChip.textContent='Viewing: '+window.HRMS_DEPT_SCOPE.join(', ');
+        deptChip.style.display='';
+      }else{deptChip.style.display='none';}
+    }
     // Field-level add-on to employees:view -- gates salary figures in the
     // Employee Directory/Profile/Edit modal specifically (not a module
     // toggle, so it's read separately from HRMS_ALLOWED_MODULES below).
@@ -3504,7 +3515,7 @@ document.addEventListener('DOMContentLoaded',function(){
     </div>
     <div class="fg">
       <label class="fl">Departments</label>
-      <div style="font-size:11.5px;color:var(--text3);margin:-2px 0 8px">Optional. Pick one or more departments to give this role's holder a Team roster in ESS, once they're granted Portal Access — showing every employee in the departments checked here.</div>
+      <div style="font-size:11.5px;color:var(--text3);margin:-2px 0 8px">Optional. Tick departments to limit this role to them: its holders will only see, and only be able to change, the <b>Employees, Tasks, Leave, Attendance, Rota, Overtime, Loans &amp; Advances and Payroll</b> of the departments checked here (and get that Team roster in ESS). Leave all unticked for company-wide access.</div>
       <div id="role-dept-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-height:150px;overflow-y:auto;padding:2px">Loading departments…</div>
     </div>
     <div style="margin-top:14px">

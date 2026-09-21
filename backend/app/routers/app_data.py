@@ -34,6 +34,7 @@ from app.accounting_posting import ensure_credit_note_tax_line
 from app.config import get_settings
 from app.database import get_db
 from app.auth_principal import resolve_active_branch
+from app.department_scope import SCOPED_COLLECTIONS, assert_record_writable, build_index, filter_records, record_in_scope
 from app.dependencies import Principal, branch_allows_module, company_allows_module, get_current_principal, get_current_user
 from app.limiter import limiter
 from app.module_integration import sync_bill_accounting, sync_purchase_accounting, sync_sales_invoice_accounting
@@ -481,6 +482,24 @@ def list_collection_records(
         # Phase 7 branch switcher. Opt-in, so it applies to any collection,
         # not just the _BRANCH_FILTERED_COLLECTIONS allowlist above.
         base_filters.append(AppDataRecord.branch_id == branch_id)
+    if principal.is_dept_scoped and collection in SCOPED_COLLECTIONS:
+        # A department-scoped login can only be paginated AFTER filtering, so
+        # fetch the whole collection (per-company sizes are small) and slice.
+        all_rows = (
+            db.query(AppDataRecord)
+            .filter(*base_filters)
+            .order_by(AppDataRecord.created_at.desc(), AppDataRecord.id.desc())
+            .all()
+        )
+        visible = filter_records(db, principal, collection, [serialize(row) for row in all_rows])
+        total = len(visible)
+        records = visible[offset:offset + limit]
+        if collection == "employees":
+            records = [_redact_employee_salary(r, principal) for r in records]
+        return {
+            "ok": True, "collection": collection, "records": records, "limit": limit, "offset": offset,
+            "total": total, "has_more": offset + len(records) < total,
+        }
     total = db.query(func.count(AppDataRecord.id)).filter(*base_filters).scalar() or 0
     rows = (
         db.query(AppDataRecord)
@@ -518,6 +537,9 @@ _COLLECTIONS_BY_MODULE: dict[str, list[str]] = {
     "loans": ["employeeLoans", "salaryAdvances"],
     "recruitment": ["jobRequisitions", "candidates"],
     "payroll": ["payrollRuns", "payrollAdjustments"],
+    # Task Management (sidebar data-module="hr_workflow"). Was missing, so a
+    # role granted hr_workflow:view never received tasks from bootstrap.
+    "hr_workflow": ["tasks"],
     # Main-dashboard modules — products/customers/vendors are shared
     # reference data needed by more than one module, so they're duplicated
     # across every module list that plausibly needs them; the union below
@@ -563,7 +585,7 @@ def _allowed_bootstrap_collections(principal: Principal) -> set[str] | None:
 # own permissions already allow.
 _HRMS_SCOPE_MODULES = [
     "employees", "leave", "attendance", "rota", "overtime", "loans",
-    "recruitment", "payroll", "bank", "notifications",
+    "recruitment", "payroll", "hr_workflow", "bank", "notifications",
 ]
 
 
@@ -685,6 +707,14 @@ def bootstrap(
     # for the direct GET /app-data/records/employees path.
     for emp_record in grouped.get("employees", []):
         _redact_employee_salary(emp_record, principal)
+
+    # Department-scoped login (Role.department_scope): only their departments'
+    # employees, tasks, leave, rota, overtime, loans... -- see department_scope.py.
+    if principal.is_dept_scoped:
+        dept_index = build_index(db, principal.company_id)
+        for coll in list(grouped):
+            if coll in SCOPED_COLLECTIONS:
+                grouped[coll] = [r for r in grouped[coll] if record_in_scope(principal, dept_index, coll, r)]
 
     truncated = [c for c, total in collection_totals.items() if _BOOTSTRAP_COLLECTION_CAPS.get(c) and total > _BOOTSTRAP_COLLECTION_CAPS[c]]
 
@@ -1316,6 +1346,7 @@ async def app_data_action(
         if not isinstance(record, dict):
             record = {"value": record}
         assert_collection_period_open(db, principal, collection, record)
+        _assert_department_writable(db, principal, collection, record)
         saved = save_app_record(db, principal, collection, record)
         sync_domain_model(db, principal, collection, serialize(saved))
         db.commit()
@@ -1344,12 +1375,14 @@ async def app_data_action(
         saved_count = 0
         updated_count = 0
         created_count = 0
+        dept_index = build_index(db, principal.company_id) if principal.is_dept_scoped and collection in SCOPED_COLLECTIONS else None
         for record in normalized_records:
             assert_collection_period_open(db, principal, collection, record)
             key = record_key(collection, record)
             payload_json = json.dumps(record, ensure_ascii=False, default=str)
             existing = existing_by_key.get(key) if key else None
             _assert_branch_writable(principal, collection, existing)
+            assert_record_writable(db, principal, collection, record, _stored_payload(existing), dept_index)
             if existing:
                 existing.payload = payload_json
                 saved = existing
@@ -1399,6 +1432,7 @@ async def app_data_action(
             )
             if existing:
                 _assert_branch_writable(principal, collection, existing)
+                assert_record_writable(db, principal, collection, None, _stored_payload(existing))
                 # Check the period lock against the STORED record's own date,
                 # not whatever the client's delete request happens to include
                 # — otherwise omitting the date field would bypass the lock.
@@ -1434,8 +1468,10 @@ async def app_data_action(
                 )
                 .all()
             )
+            dept_index = build_index(db, principal.company_id) if principal.is_dept_scoped and collection in SCOPED_COLLECTIONS else None
             for row in existing_rows:
                 _assert_branch_writable(principal, collection, row)
+                assert_record_writable(db, principal, collection, None, _stored_payload(row), dept_index)
                 try:
                     stored_record = json.loads(row.payload or "{}")
                 except (TypeError, json.JSONDecodeError):
@@ -1566,6 +1602,36 @@ async def app_data_action(
         return {"ok": True, "invoices": invoices}
 
     return {"ok": True, "action": action}
+
+
+def _stored_payload(row: AppDataRecord | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    try:
+        data = json.loads(row.payload or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _assert_department_writable(db: Session, principal: Principal, collection: str, record: dict[str, Any]) -> None:
+    """save action: department scope must allow BOTH the incoming record and
+    whatever is already stored under the same key."""
+    if not principal.is_dept_scoped or collection not in SCOPED_COLLECTIONS:
+        return
+    key = record_key(collection, record)
+    existing = None
+    if key:
+        existing = (
+            db.query(AppDataRecord)
+            .filter(
+                AppDataRecord.company_id == principal.company_id,
+                AppDataRecord.collection == collection,
+                AppDataRecord.record_key == key,
+            )
+            .first()
+        )
+    assert_record_writable(db, principal, collection, record, _stored_payload(existing))
 
 
 def _assert_branch_writable(principal: Principal, collection: str, existing: AppDataRecord | None) -> None:

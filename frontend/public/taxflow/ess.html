@@ -752,16 +752,14 @@
       <div class="dash-2col">
       <div class="dash-main-col">
         <div class="ess-row2">
-          <!-- Today's attendance (green banner) -->
-          <div class="card ess-bn" id="dash-today-card" style="margin-bottom:0">
+          <!-- My Team Attendance (green banner): who in the employee's own department is in / on leave / absent today -->
+          <div class="card ess-bn" id="dash-team-att-card" style="margin-bottom:0">
             <div class="ess-bn-hd">
-              <div><div class="ess-bn-kick">Workforce</div><div class="ess-bn-title">Today's Attendance</div></div>
-              <svg viewBox="0 0 110 90" width="96" height="78" xmlns="http://www.w3.org/2000/svg"><ellipse cx="55" cy="84" rx="32" ry="5" fill="#059669" opacity=".12"/><circle cx="55" cy="40" r="28" fill="none" stroke="#059669" stroke-width="3" opacity=".3"/><circle cx="55" cy="40" r="22" fill="#10b981" opacity=".15"/><circle cx="55" cy="40" r="22" fill="none" stroke="#10b981" stroke-width="2.5" opacity=".5"/><path d="M55 22v18l10 10" stroke="#065f46" stroke-width="3" stroke-linecap="round"/><circle cx="55" cy="40" r="3" fill="#065f46"/><polyline points="18,72 28,58 38,64 52,50 65,56 80,42 95,48" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity=".7"/><circle cx="28" cy="58" r="3" fill="#10b981" opacity=".8"/><circle cx="52" cy="50" r="3" fill="#10b981" opacity=".8"/><circle cx="80" cy="42" r="3" fill="#10b981" opacity=".8"/></svg>
+              <div><div class="ess-bn-kick">My Department</div><div class="ess-bn-title">My Team Attendance</div></div>
+              <svg viewBox="0 0 110 90" width="96" height="78" xmlns="http://www.w3.org/2000/svg"><ellipse cx="55" cy="84" rx="34" ry="5" fill="#059669" opacity=".12"/><circle cx="55" cy="34" r="12" fill="#10b981" opacity=".9"/><path d="M33 72c0-13 10-21 22-21s22 8 22 21z" fill="#10b981" opacity=".9"/><circle cx="30" cy="42" r="9" fill="#34d399" opacity=".85"/><path d="M13 74c0-10 7-16 17-16 4 0 7 1 10 3-4 3-6 7-7 13z" fill="#34d399" opacity=".85"/><circle cx="80" cy="42" r="9" fill="#6ee7b7" opacity=".9"/><path d="M97 74c0-10-7-16-17-16-4 0-7 1-10 3 4 3 6 7 7 13z" fill="#6ee7b7" opacity=".9"/><circle cx="92" cy="20" r="9" fill="#065f46"/><path d="M87.5 20l3 3 5-6" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
             <div class="ess-bn-body">
-              <div id="dash-today-detail" style="font-size:13px;color:var(--text2);line-height:1.6">—</div>
-              <div class="att-today-actions"><button class="btn-ghost" style="padding:7px 14px;font-size:12.5px" onclick="essGoTab('gps')">GPS Check-In</button><button class="btn-ghost" style="padding:7px 14px;font-size:12.5px" onclick="essGoTab('attendance')">View attendance</button></div>
-              <div class="att-mini" id="dash-att-mini"></div>
+              <div id="dash-team-att"><div class="loading" style="padding:10px">Loading…</div></div>
             </div>
           </div>
           <!-- Latest payslip (orange banner) -->
@@ -839,14 +837,10 @@
           <div id="dash-announcements"><div class="loading">Loading…</div></div>
         </div>
 
-        <!-- My Team Today + next holiday (GET /ess/team/today, GET /ess/holidays); "View All" opens the Team tab, the next-holiday line opens the Leave tab's calendar. -->
-        <div class="card" id="dash-team-card" style="padding:16px">
-          <div class="card-hd" style="align-items:center;margin-bottom:10px">
-            <div class="card-title" style="margin-bottom:0">My Team Today</div>
-            <a style="font-size:12px;color:var(--accent-text);cursor:pointer;font-weight:600" onclick="document.getElementById('ess-team-tab-btn').click()">View all →</a>
-          </div>
-          <div id="dash-team-today"><div class="loading">Loading…</div></div>
-          <div id="dash-next-holiday-wrap" title="Open the holiday calendar" onclick="essGoTab('leave')" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
+        <!-- Next holiday (GET /ess/holidays); opens the Leave tab's calendar. The "My Team Today" list now lives in the My Team Attendance banner. -->
+        <div class="card" id="dash-holiday-card" style="padding:16px">
+          <div class="card-title" style="margin-bottom:10px">Next Holiday</div>
+          <div id="dash-next-holiday-wrap" title="Open the holiday calendar" onclick="essGoTab('leave')" style="font-size:13px;color:var(--text2);display:flex;align-items:center;gap:8px;cursor:pointer">
             <span>📅</span><span id="dash-next-holiday">Loading…</span>
           </div>
         </div>
@@ -1619,11 +1613,6 @@
         stat('Avg. Hours / Day', avgHrs == null ? '—' : _fmtDur(avgHrs), withHours.length ? 'Over ' + withHours.length + ' day' + (withHours.length === 1 ? '' : 's') + ' with a check-out' : 'No completed days yet') +
         stat('Last Punch', lastPunch ? String(lastPunch.punch_time).substring(11, 16) + ' ' + (lastPunch.direction === 'in' ? 'IN' : 'OUT') : '—', lastPunch ? fmtShortDate(lastPunch.punch_date) : 'No punches yet');
     }
-    var mini = document.getElementById('dash-att-mini');
-    if (mini) mini.innerHTML =
-      '<div><b>' + monthDays.length + '</b><span>Days present</span></div>' +
-      '<div><b>' + (avgIn == null ? '—' : _fmtClock(avgIn)) + '</b><span>Avg check-in</span></div>' +
-      '<div><b>' + (avgHrs == null ? '—' : _fmtDur(avgHrs)) + '</b><span>Avg hours</span></div>';
     renderAttToday(days, todayStr);
     renderAttCalendar(days);
     if (!body) return;
@@ -2291,26 +2280,6 @@
       if (!todaysPunches.length) attEl.textContent = 'Not clocked in';
       else attEl.textContent = todaysPunches[0].direction === 'in' ? 'Checked In' : 'Checked Out';
     }
-    var todayDetailEl = document.getElementById('dash-today-detail');
-    if (todayDetailEl) {
-      if (!todaysPunches.length) {
-        todayDetailEl.innerHTML = '<span style="color:var(--text3)">No punches recorded yet today.</span>';
-      } else {
-        // _essData.attendance is already sorted newest-first by the API.
-        var latest = todaysPunches[0];
-        var firstIn = todaysPunches.slice().reverse().filter(function(p) { return p.direction === 'in'; })[0];
-        var dot = latest.direction === 'in' ? '🟢' : '🔴';
-        var statusText = latest.direction === 'in' ? 'Checked In' : 'Checked Out';
-        var t = latest.punch_time ? latest.punch_time.substring(11, 16) : '—';
-        var firstInTime = firstIn ? firstIn.punch_time.substring(11, 16) : t;
-        todayDetailEl.innerHTML =
-          dot + ' <strong>' + statusText + '</strong> at ' + t +
-          (firstIn && firstIn !== latest ? ' <span style="color:var(--text3)">· first check-in ' + firstInTime + '</span>' : '') +
-          '<div style="font-size:11.5px;color:var(--text3);margin-top:6px">' +
-            todaysPunches.length + ' punch' + (todaysPunches.length === 1 ? '' : 'es') + ' today · via ' + (latest.source || 'device') +
-          '</div>';
-      }
-    }
     var reqEl = document.getElementById('dash-requests-list');
     if (reqEl && _essRequestsLoaded) {
       if (!_essRequests.length) {
@@ -2844,9 +2813,41 @@
     weekend: {label: 'Weekend', color: '#64748b', bg: 'rgba(100,116,139,.12)'}
   };
 
+  // Dashboard banner: the caller's own department today -- counts, a presence bar, and who's in.
+  function renderDashTeamAtt(rows) {
+    var el = document.getElementById('dash-team-att');
+    if (!el) return;
+    if (!rows.length) { el.innerHTML = '<div class="empty" style="padding:6px 0">No teammates found in your department.</div>'; return; }
+    var cnt = function(st) { return rows.filter(function(e) { return e.status === st; }).length; };
+    var present = cnt('present'), leave = cnt('leave'), absent = cnt('absent');
+    var expected = present + leave + absent;
+    var offDay = rows.every(function(e) { return e.status === 'weekend' || e.status === 'holiday'; });
+    var pct = expected ? Math.round(present / expected * 100) : 0;
+    var caption = offDay ? (rows[0].status === 'holiday' ? 'Public holiday — no attendance expected' : 'Weekend — no attendance expected')
+      : present + ' of ' + expected + ' in today (' + pct + '%)';
+    var rank = {present: 0, leave: 1, absent: 2};
+    var sorted = rows.slice().sort(function(a, b) { return (rank[a.status] == null ? 3 : rank[a.status]) - (rank[b.status] == null ? 3 : rank[b.status]); });
+    var list = sorted.slice(0, 5).map(function(e) {
+      var meta = TEAM_STATUS_META[e.status] || TEAM_STATUS_META.absent;
+      var name = escHtml(e.full_name) + (e.is_me ? ' <span style="color:var(--text3)">(You)</span>' : '');
+      var sub = escHtml(e.designation || '') + (e.status === 'present' && e.check_in ? ' · in ' + escHtml(e.check_in) : '');
+      return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)"><div style="min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + name + '</div><div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + sub + '</div></div>' +
+        '<span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:10.5px;font-weight:600;white-space:nowrap;background:' + meta.bg + ';color:' + meta.color + '">' + meta.label + '</span></div>';
+    }).join('');
+    el.innerHTML =
+      '<div class="att-mini" style="margin-top:0;padding-top:0;border-top:none">' +
+        '<div><b style="color:var(--green)">' + present + '</b><span>Present</span></div>' +
+        '<div><b style="color:var(--amber)">' + leave + '</b><span>On leave</span></div>' +
+        '<div><b style="color:var(--red)">' + absent + '</b><span>Absent</span></div></div>' +
+      '<div class="lb-bar" style="margin:10px 0 4px"><div class="lb-bar-fill" style="width:' + pct + '%;background:var(--green)"></div></div>' +
+      '<div class="hint" style="margin:0 0 6px">' + caption + '</div>' + list +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><span class="hint" style="margin:0">' + (rows.length > 5 ? '+' + (rows.length - 5) + ' more' : rows.length + ' in your team') + '</span>' +
+      '<a style="font-size:12px;color:var(--accent-text);cursor:pointer;font-weight:600" onclick="essGoTab(\'team\')">View team →</a></div>';
+  }
+
   async function loadTeamToday() {
     var body = document.getElementById('team-today-body');
-    var dashBody = document.getElementById('dash-team-today');
+    var dashBody = document.getElementById('dash-team-att');
     if (!body && !dashBody) return;
     try {
       var r = await fetch(apiBase() + '/ess/team/today', {headers: essHeaders()});
@@ -2866,17 +2867,7 @@
           return '<tr><td>' + name + '</td><td>' + escHtml(e.designation || '') + '</td><td>' + pill + '</td><td>' + (e.check_in || '—') + '</td></tr>';
         }).join('') : '<tr><td colspan="4" class="empty">No teammates found in your department.</td></tr>';
       }
-      // Compact preview on the Dashboard tab -- same data, top 5, name +
-      // position + status only (no check-in column, not enough width in
-      // the side column card) -- "View All" links to the full Team tab.
-      if (dashBody) {
-        dashBody.innerHTML = rows.length ? rows.slice(0, 5).map(function(e) {
-          var meta = TEAM_STATUS_META[e.status] || TEAM_STATUS_META.absent;
-          var name = escHtml(e.full_name) + (e.is_me ? ' <span style="color:var(--text3)">(You)</span>' : '');
-          var pill = '<span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:10.5px;font-weight:600;white-space:nowrap;background:' + meta.bg + ';color:' + meta.color + '">' + meta.label + '</span>';
-          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)"><div style="min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + name + '</div><div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(e.designation || '') + '</div></div>' + pill + '</div>';
-        }).join('') : '<div class="empty" style="padding:6px 0">No teammates found in your department.</div>';
-      }
+      renderDashTeamAtt(rows);
     } catch(e) {
       if (body) body.innerHTML = '<tr><td colspan="4" class="empty">Failed to load.</td></tr>';
       if (dashBody) dashBody.innerHTML = '<div class="empty">Failed to load.</div>';

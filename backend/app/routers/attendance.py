@@ -34,6 +34,7 @@ from app import attendance_store, biotime_client, biotime_sync, crypto
 from app.attendance_store import _pair_day_punches
 from app.database import get_db
 from app.auth_principal import resolve_active_branch
+from app.department_scope import assert_employee_in_scope, scope_employee_query, scoped_employee_no_select, scoped_employee_nos
 from app.dependencies import Principal, get_current_user, require_module, require_principal_permission
 from app.limiter import limiter
 from app.models import AppDataRecord, AttendanceDetail, BiometricDevice, Company, Employee, LeaveRequest, User
@@ -1272,6 +1273,9 @@ def _branch_scope_details(query, principal: Principal, branch_id: str | None):
     FK), so scoping joins through Employee.branch_id instead of a direct
     column filter — hr_access.py's own _scope_attendance_to_branch() already
     does the equivalent for AttendanceSession, which does have branch_id."""
+    if principal.is_dept_scoped:
+        # Department-scoped role: only punches of employees in its departments.
+        query = query.filter(AttendanceDetail.employee_id.in_(scoped_employee_no_select(principal)))
     resolved_branch_id = branch_id if principal.can_cross_branch("attendance") else resolve_active_branch(principal, branch_id)
     if not resolved_branch_id:
         return query
@@ -1583,7 +1587,7 @@ def attendance_monthly_report(
     emp_query = db.query(Employee).filter(Employee.company_id == principal.company_id, Employee.status == "active")
     if resolved_branch_id:
         emp_query = emp_query.filter((Employee.branch_id == resolved_branch_id) | (Employee.branch_id.is_(None)))
-    employees = emp_query.all()
+    employees = scope_employee_query(emp_query, principal).all()
     if not employees:
         return {"period": period, "working_days": len(working_days), "standard_hours_per_day": standard_hours, "employees": []}
 
@@ -1719,7 +1723,7 @@ def attendance_late_report(
     emp_query = db.query(Employee).filter(Employee.company_id == principal.company_id, Employee.status == "active")
     if resolved_branch_id:
         emp_query = emp_query.filter((Employee.branch_id == resolved_branch_id) | (Employee.branch_id.is_(None)))
-    employees = emp_query.all()
+    employees = scope_employee_query(emp_query, principal).all()
     if not employees:
         return {"period": period, "standard_start_time": start_time_str, "grace_minutes": grace_minutes, "employees": []}
 
@@ -1803,6 +1807,7 @@ def attendance_employee_daily(
     ).first()
     if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
+    assert_employee_in_scope(principal, emp)
 
     offset = _company_offset(db, principal.company_id)
     today = _local_today(offset)
@@ -2016,6 +2021,15 @@ def delete_punch(
     previously there was no way to clean up a bad row at all (a mis-scanned
     device punch, an unmatched employee_id typo, a diagnostic test punch)
     short of a superadmin wiping the entire company's attendance history."""
+    if principal.is_dept_scoped:
+        owners = {
+            r[0] for r in db.query(AttendanceDetail.employee_id).filter(
+                AttendanceDetail.company_id == principal.company_id,
+                AttendanceDetail.raw_events.like(f'%"{punch_id}"%'),
+            ).all()
+        }
+        if not owners or not owners.issubset(scoped_employee_nos(db, principal) or set()):
+            raise HTTPException(status_code=404, detail="Punch record not found")
     if not attendance_store.delete_event(db, principal.company_id, punch_id):
         raise HTTPException(status_code=404, detail="Punch record not found")
 
