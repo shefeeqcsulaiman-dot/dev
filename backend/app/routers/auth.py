@@ -5,7 +5,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.auth_principal import _role_department_scope
+from app.auth_principal import resolve_department_scope
 from app.company_defaults import seed_company_defaults
 from app.database import get_db
 from app.dependencies import Principal, assert_company_active, get_current_principal, get_current_user
@@ -190,7 +190,7 @@ def whoami(request: Request, db: Session = Depends(get_db), principal: Principal
         permissions=sorted(principal.permissions),
         role_name=principal.role_name,
         department_scope=(
-            _role_department_scope(db.get(Role, principal.employee.role_id))
+            resolve_department_scope(db.get(Role, principal.employee.role_id), principal.employee)
             if principal.is_dept_scoped and principal.employee and principal.employee.role_id else []
         ),
         branch_id=principal.branch_id,

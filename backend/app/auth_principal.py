@@ -106,6 +106,28 @@ def _role_permission_keys(db: Session, role: Role | None) -> set[str]:
     return {f"{p.module}:{p.permission_name}" for p in rows}
 
 
+# A role's department list may contain this marker instead of (or as well as)
+# department names: "only the login's OWN department" (whatever department the
+# employee holding the role belongs to). Stored inside the existing
+# Role.department_scope JSON list, so it needs no schema change.
+OWN_DEPARTMENT = "@own"
+NO_DEPARTMENT = "(no department)"   # resolves "@own" for an employee with a blank department: matches nothing (fail closed)
+
+
+def resolve_department_scope(role: Role | None, employee: Employee | None) -> list[str]:
+    """The role's department list with "@own" replaced by this employee's own
+    department name. Use this wherever the effective scope of ONE login is
+    needed; the raw list (with the marker) is only for editing the role."""
+    out: list[str] = []
+    for d in _role_department_scope(role):
+        if d == OWN_DEPARTMENT:
+            own = (employee.department or "").strip() if employee else ""
+            d = own or NO_DEPARTMENT
+        if d.lower() not in {x.lower() for x in out}:
+            out.append(d)
+    return out
+
+
 def _role_department_scope(role: Role | None) -> list[str]:
     """Departments a role's holder can see the roster of, once granted ESS
     Portal Access -- see GET /ess/team. Empty for a role with no department
@@ -249,7 +271,7 @@ def _principal_from_employee_token(token: str, db: Session) -> Principal | None:
         is_admin=False, permissions=frozenset(_role_permission_keys(db, role)),
         employee=emp, role_name=role.role_name if role else None,
         branch_id=emp.branch_id, accessible_branch_ids=frozenset(accessible_branch_ids),
-        department_scope=frozenset(d.lower() for d in _role_department_scope(role)),
+        department_scope=frozenset(d.lower() for d in resolve_department_scope(role, emp)),
     )
 
 
