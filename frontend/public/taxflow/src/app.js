@@ -18461,9 +18461,18 @@ function removeHrJobGrade(btn){
 }
 // Read current department names from data store
 function _getDeptNames(){
-  if(typeof _deptList!=='undefined'&&_deptList.length)return _deptList.map(d=>d.name);
-  return [...document.querySelectorAll('#dept-tags-wrap .dept-tag')]
-    .map(t=>t.childNodes[0]?.textContent?.trim()).filter(Boolean);
+  const all=(typeof _deptList!=='undefined'&&_deptList.length)
+    ?_deptList.map(d=>d.name)
+    :[...document.querySelectorAll('#dept-tags-wrap .dept-tag')].map(t=>t.childNodes[0]?.textContent?.trim()).filter(Boolean);
+  // A department-scoped HRMS login (its role has departments ticked) is only
+  // offered those departments -- Add Employee, Add Task, the role modal...
+  // The server enforces the same limit; this just keeps the dropdowns honest.
+  const scope=window.HRMS_DEPT_SCOPE;
+  if(!Array.isArray(scope)||!scope.length)return all;
+  // A non-admin login is never sent the company's department list (it lives
+  // in hr_settings), so a scoped login's own departments ARE the list.
+  const seen=new Set();
+  return scope.map(d=>String(d).trim()).filter(d=>d&&!seen.has(d.toLowerCase())&&seen.add(d.toLowerCase()));
 }
 function _getBranchNames(){
   if(typeof _branchList!=='undefined'&&_branchList.length)return _branchList.map(b=>b.name);
@@ -18807,6 +18816,46 @@ function deleteRole(id){
     .catch(()=>toast('Cannot reach server','err'));
 }
 
+// Human names for the permission groups (the API sends raw keys such as
+// "hr_workflow"). Order = the HRMS sidebar, then the main-dashboard modules.
+const ROLE_MODULE_INFO={
+  dashboard:{label:'Dashboards',section:'HRMS'},
+  employees:{label:'Employees',section:'HRMS'},
+  attendance:{label:'Attendance',section:'HRMS'},
+  rota:{label:'Rota & Shift',section:'HRMS'},
+  leave:{label:'Leave',section:'HRMS'},
+  payroll:{label:'Payroll',section:'HRMS'},
+  overtime:{label:'Overtime',section:'HRMS'},
+  loans:{label:'Loans & Advances',section:'HRMS'},
+  recruitment:{label:'Recruitment (ATS)',section:'HRMS'},
+  performance:{label:'Performance, Training & Assets',section:'HRMS'},
+  hr_workflow:{label:'Task Management',section:'HRMS'},
+  reports:{label:'Reports & Analytics',section:'HRMS'},
+  ai_insights:{label:'AI Insights',section:'HRMS'},
+  hr_settings:{label:'HR Settings',section:'HRMS'},
+  hr:{label:'HR Administration (roles, locations, GPS)',section:'HRMS'},
+  sales:{label:'Sales & Invoices',section:'Main Dashboard'},
+  quotations:{label:'Quotations',section:'Main Dashboard'},
+  pos:{label:'Point of Sale',section:'Main Dashboard'},
+  purchase:{label:'Purchases',section:'Main Dashboard'},
+  inventory:{label:'Inventory',section:'Main Dashboard'},
+  expense:{label:'Expenses',section:'Main Dashboard'},
+  bank:{label:'Bank & Payments',section:'Main Dashboard'},
+  accounting:{label:'Accounting',section:'Main Dashboard'},
+  corporate:{label:'Corporate Accounting',section:'Main Dashboard'},
+  notifications:{label:'Notifications',section:'Main Dashboard'},
+  expert:{label:'Expert Review',section:'Main Dashboard'}
+};
+const ROLE_PERM_LABELS={
+  view:'View',edit:'Edit',delete:'Delete',view_salary:'View salary figures',view_all_branches:'See all branches',
+  manage_roles:'Manage roles',manage_locations:'Manage locations',manage_employees:'Manage employees',
+  view_all_attendance:"View everyone's attendance",check_in_out:'Check in / out',view_own_attendance:'View own attendance',
+  run_payroll:'Run payroll',view_payroll:'View payroll',admin:'Admin dashboard',hr:'HR dashboard',payroll:'Payroll dashboard',
+  manager:'Manager dashboard',employee:'Employee dashboard'
+};
+function _roleModuleTitle(mod){return ROLE_MODULE_INFO[mod]?.label||mod.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());}
+function _rolePermTitle(name){return ROLE_PERM_LABELS[name]||name.replace(/_/g,' ').replace(/^\w/,c=>c.toUpperCase());}
+
 function showRoleModal(id){
   const isEdit=!!id;
   const role=id?_hrRolesCache.find(r=>r.id===id):null;
@@ -18838,13 +18887,23 @@ function showRoleModal(id){
       const byModule={};
       _hrPermissionsCatalogCache.forEach(p=>{(byModule[p.module]=byModule[p.module]||[]).push(p);});
       const checked=new Set(role?.permissions||[]);
-      grid.innerHTML=Object.keys(byModule).sort().map(mod=>`
+      const order=Object.keys(ROLE_MODULE_INFO);
+      const rank=m=>{const i=order.indexOf(m);return i<0?order.length:i;};
+      const mods=Object.keys(byModule).sort((a,b)=>rank(a)-rank(b)||a.localeCompare(b));
+      let lastSection='';
+      grid.innerHTML=mods.map(mod=>{
+        const section=ROLE_MODULE_INFO[mod]?.section||'Other';
+        const sectionHead=section!==lastSection
+          ?`<div style="font-size:12px;font-weight:800;color:var(--accent);margin:${lastSection?'14px':'2px'} 0 2px;padding-bottom:4px;border-bottom:1px solid var(--border)">${escapeHtml(section)}</div>`:'';
+        lastSection=section;
+        return `${sectionHead}
         <div>
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);margin-bottom:6px">${escapeHtml(mod)}</div>
+          <div style="font-size:11.5px;font-weight:700;letter-spacing:.2px;color:var(--text2);margin-bottom:6px">${escapeHtml(_roleModuleTitle(mod))}</div>
           <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
-            ${byModule[mod].map(p=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm-cb" value="${escapeHtml(p.key)}" ${checked.has(p.key)?'checked':''}> ${escapeHtml(p.permission_name.replace(/_/g,' '))}</label>`).join('')}
+            ${byModule[mod].map(p=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="role-perm-cb" value="${escapeHtml(p.key)}" ${checked.has(p.key)?'checked':''}> ${escapeHtml(_rolePermTitle(p.permission_name))}</label>`).join('')}
           </div>
-        </div>`).join('');
+        </div>`;
+      }).join('');
     }
   }
   const delBtn=document.getElementById('role-delete-btn');

@@ -166,6 +166,16 @@ class Principal:
     # rows. Empty for a User (admin, unrestricted by construction) and for
     # an Employee with no branch_id and no extra grants.
     accessible_branch_ids: frozenset[str] = field(default_factory=frozenset)
+    # Department scoping (lower-cased, trimmed names) taken from the Employee's
+    # Role.department_scope. Empty = "not scoped": company-wide, exactly as
+    # before this existed (and always the case for a User/admin or Branch
+    # principal). Non-empty = every HRMS list/write is limited to employees in
+    # these departments -- see app/department_scope.py.
+    department_scope: frozenset[str] = field(default_factory=frozenset)
+
+    @property
+    def is_dept_scoped(self) -> bool:
+        return bool(self.department_scope) and not self.is_admin
 
     def has(self, *keys: str) -> bool:
         return self.is_admin or bool(self.permissions.intersection(keys))
@@ -239,6 +249,7 @@ def _principal_from_employee_token(token: str, db: Session) -> Principal | None:
         is_admin=False, permissions=frozenset(_role_permission_keys(db, role)),
         employee=emp, role_name=role.role_name if role else None,
         branch_id=emp.branch_id, accessible_branch_ids=frozenset(accessible_branch_ids),
+        department_scope=frozenset(d.lower() for d in _role_department_scope(role)),
     )
 
 

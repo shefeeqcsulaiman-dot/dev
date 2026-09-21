@@ -5,6 +5,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from app.auth_principal import _role_department_scope
 from app.company_defaults import seed_company_defaults
 from app.database import get_db
 from app.dependencies import Principal, assert_company_active, get_current_principal, get_current_user
@@ -12,7 +13,7 @@ from app.limiter import limiter
 from app.module_catalog import ALL_MODULES
 from pydantic import BaseModel
 
-from app.models import Branch, Company, TrialRequest, User
+from app.models import Branch, Company, Role, TrialRequest, User
 from app.schemas import LoginRequest, RegisterRequest, Token, UserOut
 from app.security import authenticate_user, create_access_token, hash_password, impersonator_id_from_token
 
@@ -123,6 +124,11 @@ class WhoAmIOut(BaseModel):
     is_admin: bool
     permissions: list[str] = []
     role_name: str | None = None
+    # Departments the login's role is limited to (Role.department_scope), in
+    # their saved spelling. Empty = not department-scoped (company-wide). The
+    # server already filters every HRMS list/write to these departments; the
+    # frontend only uses this to label the session and narrow dropdowns.
+    department_scope: list[str] = []
     branch_id: str | None = None
     # Branch Security Layer Phase 3 — populated only when this identity has
     # MORE than one accessible branch (the common single-branch/no-branch
@@ -183,6 +189,10 @@ def whoami(request: Request, db: Session = Depends(get_db), principal: Principal
         is_admin=principal.is_admin,
         permissions=sorted(principal.permissions),
         role_name=principal.role_name,
+        department_scope=(
+            _role_department_scope(db.get(Role, principal.employee.role_id))
+            if principal.is_dept_scoped and principal.employee and principal.employee.role_id else []
+        ),
         branch_id=principal.branch_id,
         accessible_branches=accessible_branches,
         branch_name=branch_name,

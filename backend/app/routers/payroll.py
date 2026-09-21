@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth_principal import resolve_active_branch
 from app.database import get_db
+from app.department_scope import scope_employee_query
 from app.dependencies import Principal, get_current_user, require_module, require_principal_permission
 from app.models import AppDataRecord, Employee, PayrollItem, PayrollRun, User, WpsBatch
 from app.schemas import EmployeeOut, PayrollGenerate, PayrollRunOut, WpsBatchOut
@@ -203,7 +204,7 @@ def list_employees(
     resolved_branch_id = branch_id if principal.can_cross_branch("hrms") else resolve_active_branch(principal, branch_id)
     if resolved_branch_id:
         query = query.filter((Employee.branch_id == resolved_branch_id) | (Employee.branch_id.is_(None)))
-    employees = query.order_by(Employee.employee_no).all()
+    employees = scope_employee_query(query, principal).order_by(Employee.employee_no).all()  # department-scoped role: only its departments
     # In-memory only (no db.commit() in this handler) -- a role with
     # employees:view but not employees:view_salary sees every employee-
     # picker dropdown this feeds (Leave assignee, GPS assign, Task
@@ -220,7 +221,7 @@ def list_runs(
     branch_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("payroll:view")),
-) -> list[PayrollRun]:
+) -> list[PayrollRun] | list[PayrollRunOut]:
     query = (
         db.query(PayrollRun)
         .options(joinedload(PayrollRun.items))
@@ -232,7 +233,26 @@ def list_runs(
     resolved_branch_id = branch_id if principal.can_cross_branch("hrms") else resolve_active_branch(principal, branch_id)
     if resolved_branch_id:
         query = query.filter((PayrollRun.branch_id == resolved_branch_id) | (PayrollRun.branch_id.is_(None)))
-    return query.order_by(PayrollRun.created_at.desc()).all()
+    runs = query.order_by(PayrollRun.created_at.desc()).all()
+    if not principal.is_dept_scoped:
+        return runs
+    # Department-scoped role: keep only its own departments' payslip lines and
+    # show totals for just those lines. Built as response copies -- the ORM
+    # rows are never mutated, so nothing here can be flushed back to the DB.
+    in_scope_ids = {
+        r[0] for r in scope_employee_query(
+            db.query(Employee.id).filter(Employee.company_id == principal.company_id), principal,
+        ).all()
+    }
+    scoped: list[PayrollRunOut] = []
+    for run in runs:
+        out = PayrollRunOut.model_validate(run)
+        out.items = [i for i in out.items if i.employee_id in in_scope_ids]
+        out.gross_total = sum((i.basic + i.allowances + i.overtime for i in out.items), Decimal("0.00"))
+        out.deductions_total = sum((i.deductions for i in out.items), Decimal("0.00"))
+        out.net_total = sum((i.net_pay for i in out.items), Decimal("0.00"))
+        scoped.append(out)
+    return scoped
 
 
 @router.post("/generate", response_model=PayrollRunOut, status_code=201)
