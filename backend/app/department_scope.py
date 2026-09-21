@@ -28,8 +28,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Query, Session
 
-from app.auth_principal import Principal
-from app.models import Employee
+from app.auth_principal import Principal, _role_department_scope
+from app.models import Employee, Role
 
 # Collections whose rows belong to a specific employee (resolved via the refs
 # in _EMPLOYEE_REF_FIELDS / _EMPLOYEE_NAME_FIELDS below).
@@ -43,9 +43,14 @@ DEPARTMENT_KEYED_COLLECTIONS = frozenset({"rotaDrafts", "rotaApprovals"})
 # not writable by, a department-scoped login.
 COMPANY_WIDE_BLOCKED_COLLECTIONS = frozenset({"payrollRuns"})
 
+# Shift definitions (Rota > Shift Setup) carry a list of departments they apply
+# to; an empty list means "every department" (all shifts created before this
+# existed). See _shift_departments().
+SHIFT_COLLECTIONS = frozenset({"rotaShifts"})
+
 SCOPED_COLLECTIONS = frozenset(
     EMPLOYEE_KEYED_COLLECTIONS | DEPARTMENT_KEYED_COLLECTIONS | COMPANY_WIDE_BLOCKED_COLLECTIONS
-    | {"employees", "tasks", "rotaSwaps"}
+    | SHIFT_COLLECTIONS | {"employees", "tasks", "rotaSwaps"}
 )
 
 _EMPLOYEE_REF_FIELDS = ("employee_id", "emp_id", "employee_no")
@@ -55,6 +60,23 @@ _ALL_DEPARTMENTS = {"", "all departments", "all"}
 
 def dept_key(value: Any) -> str:
     return str(value or "").strip().lower()
+
+
+def _shift_departments(record: dict[str, Any]) -> set[str]:
+    """Departments a shift applies to (lower-cased). Accepts a list or a
+    comma-separated string, and the older single `department` field. Empty
+    set = the shift applies to every department."""
+    raw = record.get("departments")
+    if raw is None or raw == "":
+        raw = record.get("department")
+    if isinstance(raw, str):
+        raw = raw.split(",")
+    if not isinstance(raw, (list, tuple, set)):
+        return set()
+    names = {dept_key(d) for d in raw}
+    names.discard("")
+    names -= _ALL_DEPARTMENTS
+    return names
 
 
 class EmployeeDeptIndex:
@@ -123,6 +145,10 @@ def record_in_scope(principal: Principal, index: EmployeeDeptIndex, collection: 
     if collection in DEPARTMENT_KEYED_COLLECTIONS:
         dept = dept_key(record.get("department"))
         return dept in _ALL_DEPARTMENTS or dept in scope
+    if collection in SHIFT_COLLECTIONS:
+        # visible when it applies to every department, or to at least one of mine
+        depts = _shift_departments(record)
+        return not depts or bool(depts & scope)
     if collection == "rotaSwaps":
         return (
             _ref_in_scope(principal, index, [record.get("employee_a_id")], [record.get("employee_a")])
@@ -161,6 +187,27 @@ def assert_record_writable(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Company-wide payroll records can't be changed by a department-scoped login",
         )
+    if collection in SHIFT_COLLECTIONS:
+        # A shift is shared by every department it lists, so a scoped login may
+        # only create / edit / delete shifts that belong ONLY to its own
+        # departments -- never an all-departments shift or one shared with a
+        # department it doesn't have.
+        scope = principal.department_scope
+        if incoming is not None:
+            depts = _shift_departments(incoming)
+            if not depts or not depts <= scope:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="A shift must be limited to your own departments -- pick at least one, and only departments you manage",
+                )
+        if stored is not None:
+            depts = _shift_departments(stored)
+            if not depts or not depts <= scope:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This shift applies to other departments too, so only an administrator can change it",
+                )
+        return
     idx = index or build_index(db, principal.company_id)
     for rec in (incoming, stored):
         if rec is not None and not record_in_scope(principal, idx, collection, rec):
@@ -207,3 +254,33 @@ def scoped_employee_no_select(principal: Principal):
         Employee.company_id == principal.company_id,
         func.lower(func.trim(Employee.department)).in_(list(principal.department_scope)),
     )
+
+
+# ── for code paths that hold an Employee (require_permission), not a Principal ──
+
+def employee_scope(db: Session, emp: Employee) -> frozenset[str]:
+    """The department scope of an Employee login, from its role (empty = not scoped)."""
+    if not emp.role_id:
+        return frozenset()
+    role = db.get(Role, emp.role_id)
+    return frozenset(dept_key(d) for d in _role_department_scope(role))
+
+
+def scope_employee_query_by_names(query: Query, scope: frozenset[str]) -> Query:
+    """Like scope_employee_query() but from a plain scope set."""
+    if not scope:
+        return query
+    return query.filter(func.lower(func.trim(Employee.department)).in_(list(scope)))
+
+
+def scoped_employee_id_select(company_id: str, scope: frozenset[str]):
+    """`SELECT Employee.id` of the in-scope employees, for `.in_()` on tables that store Employee.id."""
+    return select(Employee.id).where(
+        Employee.company_id == company_id,
+        func.lower(func.trim(Employee.department)).in_(list(scope)),
+    )
+
+
+def assert_employee_in_names_scope(scope: frozenset[str], employee: Employee | None) -> None:
+    if scope and (employee is None or dept_key(employee.department) not in scope):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")

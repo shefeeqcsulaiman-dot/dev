@@ -877,7 +877,14 @@ def report_summary(
         return result
 
     cache_key = f"summary:{company_id}:{resolved_branch_id or 'all'}"
-    return _cached_or_build(cache_key, 120, _build)
+    result = _cached_or_build(cache_key, 120, _build)
+    if principal.is_dept_scoped:
+        # The summary's audit trail stores the raw record of every action
+        # company-wide (other departments' employees, salaries, ...), so a
+        # department-scoped login doesn't get it. Copies only -- `result` is
+        # the shared cached object and must never be mutated.
+        result = {**result, "control": {**(result.get("control") or {}), "audit": []}}
+    return result
 
 
 def _is_recognized_revenue_status(status: object) -> bool:
