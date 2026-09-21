@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth_principal import resolve_active_branch
@@ -486,6 +487,25 @@ def _used_days_for_type(db: Session, company_id: str, employee_id: str, leave_ty
     return sum(r.days for r in query.all())
 
 
+def _used_days_by_employee_and_type(db: Session, company_id: str, employee_id: str | None = None) -> dict[tuple[str, str], int]:
+    """Approved leave days used this calendar year, grouped by (employee_id,
+    leave_type) in ONE query -- exactly the same filter and year rule as
+    _used_days_for_type() (attributed to the year the request STARTS in), which
+    is what the balance screens used to call once per employee per leave type
+    (1,200+ queries for a 200-employee company). Pass employee_id to limit it
+    to one employee."""
+    year = datetime.now(timezone.utc).year
+    query = db.query(LeaveRequest.employee_id, LeaveRequest.leave_type, func.sum(LeaveRequest.days)).filter(
+        LeaveRequest.company_id == company_id,
+        LeaveRequest.status == "approved",
+        LeaveRequest.start_date >= f"{year}-01-01",
+        LeaveRequest.start_date < f"{year + 1}-01-01",
+    )
+    if employee_id:
+        query = query.filter(LeaveRequest.employee_id == employee_id)
+    return {(emp_id, leave_type): int(total or 0) for emp_id, leave_type, total in query.group_by(LeaveRequest.employee_id, LeaveRequest.leave_type).all()}
+
+
 def _annual_used_days(db: Session, company_id: str, employee_id: str, exclude_request_id: str | None = None) -> int:
     return _used_days_for_type(db, company_id, employee_id, "Annual Leave", exclude_request_id)
 
@@ -517,12 +537,13 @@ def leave_balance(
     configs = _effective_leave_policy_configs(db, principal.company_id)
     caps = _leave_type_caps(db, principal.company_id)
     result = []
+    used_map = _used_days_by_employee_and_type(db, principal.company_id)   # one grouped query, not employees x leave types
     for e in employees:
         annual_entitlement = _leave_entitlement_days(e.employee_no, policies, configs, default_days=caps.get("Annual Leave", 21))
-        annual_used = _used_days_for_type(db, principal.company_id, e.id, "Annual Leave")
+        annual_used = used_map.get((e.id, "Annual Leave"), 0)
         by_type = {}
         for leave_type, cap in caps.items():
-            used = annual_used if leave_type == "Annual Leave" else _used_days_for_type(db, principal.company_id, e.id, leave_type)
+            used = annual_used if leave_type == "Annual Leave" else used_map.get((e.id, leave_type), 0)
             by_type[leave_type] = {"entitlement": cap, "used": used, "remaining": max(0, cap - used)}
         result.append({
             "employee_id": e.id, "employee_name": e.full_name,

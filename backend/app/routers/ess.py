@@ -24,7 +24,7 @@ from app.routers.leave import (
     _employee_leave_policies,
     _leave_entitlement_days,
     _leave_type_caps,
-    _used_days_for_type,
+    _used_days_by_employee_and_type,
 )
 from app.security import pwd_context
 
@@ -441,14 +441,15 @@ def ess_leave_balance(request: Request, db: Session = Depends(get_db)) -> dict:
     configs = _effective_leave_policy_configs(db, emp.company_id)
     caps = _leave_type_caps(db, emp.company_id)
     annual_entitlement = _leave_entitlement_days(emp.employee_no, policies, configs, default_days=caps.get("Annual Leave", 21))
-    annual_used = _used_days_for_type(db, emp.company_id, emp.id, "Annual Leave")
+    used_map = _used_days_by_employee_and_type(db, emp.company_id, emp.id)   # one grouped query
+    annual_used = used_map.get((emp.id, "Annual Leave"), 0)
     by_type = {}
     for leave_type, cap in caps.items():
         if leave_type == "Annual Leave":
             entitlement, used = annual_entitlement, annual_used
         else:
             entitlement = cap
-            used = _used_days_for_type(db, emp.company_id, emp.id, leave_type)
+            used = used_map.get((emp.id, leave_type), 0)
         by_type[leave_type] = {"entitlement": entitlement, "used": used, "remaining": max(0, entitlement - used)}
     return {"by_type": by_type}
 
