@@ -61,6 +61,11 @@ class SetExpiryIn(BaseModel):
     expires_at: str | None = None
 
 
+class ExtendRenewalsIn(BaseModel):
+    company_ids: list[str] = Field(min_length=1)
+    days: int = Field(ge=1, le=3650)
+
+
 class ResetPasswordIn(BaseModel):
     user_id: str
     password: str = Field(min_length=6)
@@ -116,6 +121,110 @@ class UpdateUserIn(BaseModel):
     role: str | None = None
 
 
+def _company_last_login(users: list[User], now_utc: datetime) -> tuple[datetime | None, int | None]:
+    """Most recent recorded login among a company's own users (super admin excluded)
+    and how many whole days ago that was. (None, None) = no login on record yet."""
+    stamps = [u.last_login for u in users if u.role != "superadmin" and getattr(u, "last_login", None)]
+    if not stamps:
+        return None, None
+    latest = max(s if s.tzinfo else s.replace(tzinfo=timezone.utc) for s in stamps)
+    return latest, max(0, (now_utc - latest).days)
+
+
+def _days_left(expires_at: str | None, today: _dt.date) -> int | None:
+    if not expires_at:
+        return None
+    try:
+        return (_dt.date.fromisoformat(expires_at[:10]) - today).days
+    except ValueError:
+        return None
+
+
+@router.get("/renewals")
+def list_renewals(
+    days: int = 30,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    """Companies whose subscription is already expired or expires within `days`,
+    soonest first, plus headline counts for the Renewals page / Overview card."""
+    days = max(1, min(days, 365))
+    today = datetime.now(timezone.utc).date()
+    companies = (
+        db.query(Company)
+        .filter(or_(Company.trn.is_(None), Company.trn != "SUPERADMIN-INTERNAL"))
+        .all()
+    )
+    ids = [c.id for c in companies]
+    users_by_company: dict[str, list[User]] = {}
+    if ids:
+        for u in db.query(User).filter(User.company_id.in_(ids)).all():
+            users_by_company.setdefault(u.company_id, []).append(u)
+    rows = []
+    no_expiry = 0
+    for c in companies:
+        left = _days_left(c.subscription_expires_at, today)
+        if left is None:
+            no_expiry += 1
+            continue
+        if left > days:
+            continue
+        users = users_by_company.get(c.id, [])
+        admin = next((u for u in users if u.role == "admin"), None)
+        last_login_at, inactive_days = _company_last_login(users, datetime.now(timezone.utc))
+        rows.append({
+            "id": c.id,
+            "name": c.name,
+            "phone": c.phone,
+            "admin_email": admin.email if admin else None,
+            "subscription_expires_at": c.subscription_expires_at,
+            "days_left": left,
+            "status": "expired" if left < 0 else "expiring",
+            "last_login_at": last_login_at.isoformat() if last_login_at else None,
+            "inactive_days": inactive_days,
+            "user_count": len([u for u in users if u.role != "superadmin"]),
+        })
+    rows.sort(key=lambda r: r["days_left"])
+    return {
+        "days": days,
+        "counts": {
+            "expired": sum(1 for r in rows if r["status"] == "expired"),
+            "within_7": sum(1 for r in rows if 0 <= r["days_left"] <= 7),
+            "within_window": len(rows),
+            "no_expiry": no_expiry,
+        },
+        "companies": rows,
+    }
+
+
+@router.post("/renewals/extend")
+def extend_renewals(
+    body: ExtendRenewalsIn,
+    db: Session = Depends(get_db),
+    superadmin: User = Depends(_require_superadmin),
+):
+    """Add `days` to each company's subscription: from its current expiry when that is
+    still in the future, otherwise from today (same rule the per-row "+7 Days / +1 Year"
+    menu uses). Audited per company."""
+    today = datetime.now(timezone.utc).date()
+    results = []
+    for company in db.query(Company).filter(
+        Company.id.in_(body.company_ids),
+        or_(Company.trn.is_(None), Company.trn != "SUPERADMIN-INTERNAL"),
+    ).all():
+        left = _days_left(company.subscription_expires_at, today)
+        base = today + timedelta(days=left) if left is not None and left > 0 else today
+        new_expiry = (base + timedelta(days=body.days)).isoformat()
+        company.subscription_expires_at = new_expiry
+        _write_audit_blob(db, company.id, superadmin.email, "extend_expiry",
+                          f"Expiry extended by {body.days} days to {new_expiry} (renewals)", "Done")
+        results.append({"id": company.id, "name": company.name, "subscription_expires_at": new_expiry})
+    if not results:
+        raise HTTPException(status_code=404, detail="No matching companies")
+    db.commit()
+    return {"ok": True, "extended": len(results), "results": results}
+
+
 @router.get("/companies")
 def list_companies(db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
     companies = (
@@ -164,8 +273,10 @@ def list_companies(db: Session = Depends(get_db), _: User = Depends(_require_sup
                 bucket.append(e)
 
     result = []
+    now_utc = datetime.now(timezone.utc)
     for company in companies:
         users = users_by_company.get(company.id, [])
+        last_login_at, inactive_days = _company_last_login(users, now_utc)
         employee_count = active_employee_counts.get(company.id, 0)
         branches = branches_by_company.get(company.id, [])
         branch_names = {b.id: b.name for b in branches}
@@ -199,6 +310,8 @@ def list_companies(db: Session = Depends(get_db), _: User = Depends(_require_sup
                 "fta_username": company.fta_username,
                 "created_at": company.created_at.isoformat() if company.created_at else None,
                 "subscription_expires_at": company.subscription_expires_at,
+                "last_login_at": last_login_at.isoformat() if last_login_at else None,
+                "inactive_days": inactive_days,
                 "employee_count": employee_count,
                 "sub_user_count": len(sub_users),
                 "modules_enabled": mods,
