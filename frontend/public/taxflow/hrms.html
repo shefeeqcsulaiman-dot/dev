@@ -915,7 +915,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 
   <div class="tab-body on" id="hr-emp">
     <div class="card mb16">
-      <div class="card-hd"><div class="card-title">Employee Directory</div><div class="flx" style="gap:6px"><button class="btn btn-g btn-sm" onclick="exportNearestTable(this,'employees.csv')">⬇ CSV</button><button class="btn btn-p" onclick="openEmpModal()">+ Add Employee</button></div></div>
+      <div class="card-hd"><div class="card-title">Employee Directory</div><div class="flx" style="gap:14px;align-items:center"><label class="flx" style="gap:6px;align-items:center;font-size:12.5px;color:var(--text2);cursor:pointer;white-space:nowrap"><input type="checkbox" id="emp-show-inactive" onchange="applyEmployeeInactiveFilter()"> Show Inactive</label><div class="flx" style="gap:6px"><button class="btn btn-g btn-sm" onclick="exportNearestTable(this,'employees.csv')">⬇ CSV</button><button class="btn btn-p" onclick="openEmpModal()">+ Add Employee</button></div></div></div>
       <table class="tbl" id="employee-directory-table" data-delete-actions-bound="skip">
         <thead><tr><th>ID</th><th>Name</th><th>Nick Name</th><th>Department</th><th>Designation</th><th>Supervisor</th><th>Shift Hours</th><th>Salary (AED)</th><th>Status</th><th></th></tr></thead>
         <tbody id="employee-tbody">
