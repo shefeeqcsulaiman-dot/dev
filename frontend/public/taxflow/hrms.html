@@ -2126,7 +2126,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       </div>
       <div class="fr4">
         <div class="fg"><label class="fl">Department</label><select class="fi" id="rota-week-department" onchange="renderRotaBoards()"><option value="">All Departments</option></select></div>
-        <div class="fg"><label class="fl">Week Start</label><input class="fi mono" id="rota-week-start" type="date" value="2026-05-04" onchange="_saveRotaViewDate('week',this.value);renderRotaBoards()"></div>
+        <div class="fg"><label class="fl">Week Start</label><input class="fi mono" id="rota-week-start" type="date" value="2026-05-04" onchange="_saveRotaViewDate('week',this.value);_syncMonthPickerToWeek(this.value);renderRotaBoards()"></div>
         <div class="fg"><label class="fl">Location</label><select class="fi" id="rota-week-location" onchange="renderRotaBoards()"><option value="">All Locations</option></select></div>
         <div class="fg"><label class="fl">Search</label><input class="fi" id="rota-staff-search" placeholder="Employee name" oninput="renderRotaBoards()"></div>
       </div>
@@ -2199,13 +2199,12 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
         <div class="fg"><label class="fl">Department</label><select class="fi" id="rota-month-department" onchange="renderRotaBoards()"><option value="">All Departments</option></select></div>
         <div class="fg"><label class="fl">Employee</label><input class="fi" id="rota-month-search" placeholder="Search employee" oninput="renderRotaBoards()"></div>
       </div>
-      <div class="flx" style="gap:8px;flex-wrap:wrap">
-        <button class="btn btn-g btn-sm" onclick="copyPreviousMonthRota()">Copy Previous Month</button>
-        <button class="btn btn-g btn-sm" onclick="autoGenerateMonthlyRota()">Auto Fill Month</button>
-        <button class="btn btn-g btn-sm" onclick="saveRotaDraft()">Save Status</button>
-        <button class="btn btn-warn btn-sm" onclick="submitRotaApproval()">Submit Approval</button>
-        <button class="btn btn-p btn-sm" onclick="publishRota()">Publish</button>
-      </div>
+      <!-- Copy Previous Month / Auto Fill Month / Save Status / Submit Approval /
+           Publish removed by request (2026-09-22) -- Monthly Rota is a read view built
+           from Weekly Rota's own saved records; those actions stay on Weekly/Department
+           Rota, where a schedule is actually created and published. The status badge
+           above still updates on its own (updateRotaStatusBadges() in app.js derives it
+           from that month's own saved assignment records, same as before this change). -->
     </div>
 
     <div class="mb16">
@@ -2434,7 +2433,11 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
     <input type="hidden" id="task-edit-id">
     <div class="fg"><label class="fl">Task Name <span style="color:var(--red)">*</span></label><input class="fi" id="task-title" placeholder="e.g. Prepare Q3 payroll summary"></div>
     <div class="fg"><label class="fl">Department</label><select class="fi" id="task-department"><option value="">— Select Department —</option></select></div>
-    <div class="fg" id="task-assignee-row" style="display:none"><label class="fl">Assign To</label><select class="fi" id="task-assignee"><option value="">— Unassigned —</option></select></div>
+    <!-- "Assign To" removed from this modal by request (2026-09-22) -- assigning now
+         happens only via the page's "+ Assign Task" panel / Assigned To filter, or the
+         Rota cell editor. showTaskModal()/saveTaskModal() in app.js keep an existing
+         task's assigned_to/assigned_to_name untouched on save; a brand-new task still
+         saves unassigned, exactly as before this field existed. -->
     <div class="fg"><label class="fl">Task Details</label><textarea class="fi" id="task-description" rows="3" placeholder="Details, context, or instructions…"></textarea></div>
     <div class="fg">
       <label class="fl">Task Color</label>
