@@ -19906,6 +19906,22 @@ function _saveRotaViewDate(key,value){
   }catch(e){/* private/blocked storage -- falls back to today's week/month, same as before this fix */}
 }
 
+// Weekly Rota's own Month picker (#rota-month-value) doesn't move on its own when you
+// change which week you're looking at or editing -- so setting a shift for a week in
+// October while Monthly Rota was last left on September made it look like the weekly
+// save "didn't show up" on Monthly, when really Monthly was just still showing a
+// different month. Called wherever the weekly/department view moves to a new date or a
+// shift actually gets written (week/dept-week picker, cell save, auto-fill, copy
+// previous, repeat) so Monthly always lands on the period that was just touched.
+function _syncMonthPickerToWeek(dateStr){
+  const monthEl=document.getElementById('rota-month-value');
+  if(!monthEl||!dateStr)return;
+  const month=dateStr.slice(0,7);
+  if(monthEl.value===month)return;
+  monthEl.value=month;
+  _saveRotaViewDate('month',month);
+}
+
 function _fixStaleRotaDateDefaults(){
   const weekEl=document.getElementById('rota-week-start');
   const deptWeekEl=document.getElementById('rota-dept-week-start');
@@ -20262,6 +20278,7 @@ async function saveActiveRotaAssignmentFromModal(forceOff=false){
   activeRotaCell.dataset.assignment=JSON.stringify(assignment);
   activeRotaCell.innerHTML=rotaCellHtml(assignment);
   rotaAssignmentsById.set(assignment.id,assignment);
+  _syncMonthPickerToWeek(assignment.date);
   renderRotaBoards();
   return assignment;
 }
@@ -20293,6 +20310,7 @@ async function removeRotaCellShift(){
 function syncRotaWeekFromDept(){
   const deptWeek=document.getElementById('rota-dept-week-start')?.value;
   if(deptWeek)setFieldValue(document.getElementById('rota-week-start'),deptWeek);
+  _syncMonthPickerToWeek(deptWeek);
   renderRotaBoards();
 }
 
@@ -20444,6 +20462,23 @@ function _isoWeekNumber(dateStr){
 
 const ROTA_MONTH_DAY_NAMES=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
+// The full Mon-Sun week range Monthly Rota needs for `month` ("YYYY-MM"): every week that
+// touches the month, spilling a day or two into the adjacent month at each end (same as a
+// real weekly-numbered rota sheet) rather than clipping mid-week. Shared by
+// renderMonthlyRotaBoard() (which weeks to draw) and _ensureRotaRangeLoaded() (what date
+// range to fetch) so the two can never disagree about what "this month" covers.
+function _monthRotaWeekStarts(month){
+  const [y,m]=(month||'').split('-').map(Number);
+  if(!y||!m)return null;
+  const monthStart=`${month}-01`;
+  const monthEnd=`${month}-${String(new Date(y,m,0).getDate()).padStart(2,'0')}`;
+  const weekStarts=[];
+  for(let cursor=_mondayOnOrBefore(monthStart);cursor<=monthEnd;cursor=weekDateFromStart(cursor,7)){
+    weekStarts.push(cursor);
+  }
+  return {monthStart,monthEnd,weekStarts};
+}
+
 function renderMonthlyRotaBoard(){
   const board=document.getElementById('rota-monthly-board');
   if(!board)return;
@@ -20454,17 +20489,9 @@ function renderMonthlyRotaBoard(){
     board.innerHTML=notice+'<div class="empty-card">No staff found for this month.</div>';
     return;
   }
-  const [y,m]=month.split('-').map(Number);
-  if(!y||!m){board.innerHTML=notice+'<div class="empty-card">Select a month.</div>';return;}
-  const monthStart=`${month}-01`;
-  const monthEnd=`${month}-${String(new Date(y,m,0).getDate()).padStart(2,'0')}`;
-  // Every Mon-Sun week that touches the selected month, in full — the first
-  // and last week can spill a day or two into the adjacent month (same as a
-  // real weekly-numbered rota sheet), rather than clipping mid-week.
-  const weekStarts=[];
-  for(let cursor=_mondayOnOrBefore(monthStart);cursor<=monthEnd;cursor=weekDateFromStart(cursor,7)){
-    weekStarts.push(cursor);
-  }
+  const range=_monthRotaWeekStarts(month);
+  if(!range){board.innerHTML=notice+'<div class="empty-card">Select a month.</div>';return;}
+  const {weekStarts}=range;
   const blocks=weekStarts.map(weekStart=>{
     const dates=ROTA_WEEK_DAYS.map((_,i)=>weekDateFromStart(weekStart,i));
     const weekNo=_isoWeekNumber(dates[3]); // Thursday-anchored per ISO 8601
@@ -20537,6 +20564,49 @@ function renderRotaCodes(){
   row.innerHTML=['M Morning','E Evening','N Night','OFF Off','L Leave','OT Overtime'].map(text=>`<span class="chip">${escapeHtml(text)}</span>`).join('');
 }
 
+// Bootstrap only ever hands the client the newest _BOOTSTRAP_COLLECTION_CAPS
+// 500 rotaAssignments rows company-wide (app_data.py) — comfortably enough
+// for one week, not for a whole month once a company has been running rotas
+// for a while, so Monthly Rota (and an older/future Weekly/Department week)
+// could show empty OFF cells for a week that genuinely has shifts saved on
+// the server, with nothing on screen to explain why. GET .../rotaAssignments/
+// range fills exactly the date window currently on screen, independent of
+// that cap. Ranges already fetched are remembered for the rest of this page
+// load so switching between Weekly/Monthly/Department repeatedly (the normal
+// way of using this page) doesn't refetch the same days over and over.
+const _rotaLoadedRanges=new Set();
+
+async function _ensureRotaRangeLoaded(fromDate,toDate){
+  if(!fromDate||!toDate||fromDate>toDate)return;
+  const key=`${fromDate}..${toDate}`;
+  if(_rotaLoadedRanges.has(key))return;
+  _rotaLoadedRanges.add(key);
+  try{
+    const r=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/rotaAssignments/range?from=${fromDate}&to=${toDate}`);
+    if(!r.ok){_rotaLoadedRanges.delete(key);return;}
+    const data=await r.json();
+    const rows=Array.isArray(data.records)?data.records:[];
+    if(!rows.length)return;
+    rows.forEach(rec=>rotaAssignmentsById.set(rec.id,normalizeRotaAssignment(rec)));
+    renderRotaBoards();
+  }catch(e){
+    _rotaLoadedRanges.delete(key); // network hiccup -- worth trying again later, not a permanent miss
+  }
+}
+
+// Fetches whatever date window Weekly/Department/Monthly Rota currently have on screen
+// (fire-and-forget: the boards below render immediately from whatever's already cached,
+// then re-render themselves once/if the fetch above fills in anything new).
+function _loadVisibleRotaRanges(){
+  const weekStart=document.getElementById('rota-week-start')?.value;
+  if(weekStart)_ensureRotaRangeLoaded(weekStart,weekDateFromStart(weekStart,6));
+  const deptWeekStart=document.getElementById('rota-dept-week-start')?.value;
+  if(deptWeekStart&&deptWeekStart!==weekStart)_ensureRotaRangeLoaded(deptWeekStart,weekDateFromStart(deptWeekStart,6));
+  const month=document.getElementById('rota-month-value')?.value;
+  const range=month?_monthRotaWeekStarts(month):null;
+  if(range)_ensureRotaRangeLoaded(range.weekStarts[0],weekDateFromStart(range.weekStarts[range.weekStarts.length-1],6));
+}
+
 function renderRotaBoards(){
   renderWeeklyRotaBoard();
   renderRotaEmployeeTasksPanel();
@@ -20547,6 +20617,7 @@ function renderRotaBoards(){
   updateRotaStats();
   updateRotaStatusBadges();
   populateRotaRepeatEmployeeSelect();
+  _loadVisibleRotaRanges();
 }
 
 const DEFAULT_ROTA_SHIFTS=[];
@@ -21248,6 +21319,7 @@ function copyPreviousRota(){
       }
     });
   });
+  _syncMonthPickerToWeek(start);
   renderRotaBoards();
   toast('Previous week copied. Leave, inactive employee, and hour-limit checks completed.','ok');
   audit('Previous rota copied','Rota Planning','Draft');
@@ -21287,6 +21359,7 @@ function autoGenerateRota(){
       saveServer('rotaAssignments',assignment);
     });
   });
+  _syncMonthPickerToWeek(start);
   renderRotaBoards();
   toast('Rota auto-generated from availability, leave, coverage, and rest-day rules.','ok');
   audit('Rota auto-generated','Rota Planning','Draft');
@@ -23302,10 +23375,11 @@ async function _processRepeatingTasks(){
   }
 }
 
-// Shared across the modal's Assign To (edit mode only), the page's
-// Assigned To filter, and the To Do column's per-employee assign panel —
-// one fetch, three consumers, always active-only (see GET /payroll/
-// employees' own fix).
+// Shared across the page's Assigned To filter and the To Do column's
+// per-employee assign panel -- one fetch, two consumers, always
+// active-only (see GET /payroll/employees' own fix). The Add/Edit Task
+// modal no longer has its own assignee select (removed 2026-09-22); this
+// still runs harmlessly since modalSel below is simply never found.
 let _taskEmployeeListCache=[];
 
 async function populateTaskAssigneeSelect(){
@@ -23452,7 +23526,6 @@ function showTaskModal(id){
   document.getElementById('task-title').value=t?.title||'';
   document.getElementById('task-department').value=t?.department||'';
   document.getElementById('task-description').value=t?.description||'';
-  document.getElementById('task-assignee').value=t?.assigned_to||'';
   document.getElementById('task-priority').value=t?.priority||'Medium';
   document.getElementById('task-due-date').value=t?.due_date||'';
   document.getElementById('task-status').value=t?_normalizeTaskStatus(t.status):'todo';
@@ -23463,13 +23536,6 @@ function showTaskModal(id){
   document.getElementById('task-progress-value').textContent=progressVal;
   const delBtn=document.getElementById('task-delete-btn');
   if(delBtn)delBtn.style.display=t?'':'none';
-  // Assign To shows on both Add and Edit now — a brand-new task can be
-  // assigned right away here instead of requiring a separate trip to
-  // "+ Assign Task" afterwards. That modal still exists for the other
-  // case it's actually needed: assigning a previously-unassigned SAVED
-  // task (a reusable template) to someone later.
-  const assigneeRow=document.getElementById('task-assignee-row');
-  if(assigneeRow)assigneeRow.style.display='';
   showM('m-task');
   setTimeout(()=>document.getElementById('task-title').focus(),120);
 }
@@ -23478,16 +23544,19 @@ async function saveTaskModal(){
   const title=(document.getElementById('task-title')?.value||'').trim();
   if(!title){toast('Task name is required','warn');return;}
   const id=document.getElementById('task-edit-id')?.value||`TASK-${Date.now()}`;
-  const assigneeSel=document.getElementById('task-assignee');
-  const assigneeOpt=assigneeSel?.selectedOptions?.[0];
   const existing=_taskListCache.find(x=>x.id===id);
   const task={
     id,
     title,
     department:document.getElementById('task-department')?.value||'',
     description:(document.getElementById('task-description')?.value||'').trim(),
-    assigned_to:assigneeSel?.value||'',
-    assigned_to_name:assigneeSel?.value?(assigneeOpt?.dataset.name||''):'',
+    // "Assign To" was removed from this modal (2026-09-22) -- assigning is done from
+    // the page's "+ Assign Task" panel / Assigned To filter, or the Rota cell editor.
+    // A save here must never touch whatever assignment those already set: an edit
+    // keeps it exactly as it was, and a brand-new task stays unassigned like before
+    // this field ever existed.
+    assigned_to:existing?.assigned_to||'',
+    assigned_to_name:existing?.assigned_to_name||'',
     color:document.getElementById('task-color')?.value||TASK_COLORS[0],
     priority:document.getElementById('task-priority')?.value||'Medium',
     due_date:document.getElementById('task-due-date')?.value||'',

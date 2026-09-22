@@ -523,6 +523,48 @@ def list_collection_records(
     }
 
 
+@router.get("/records/rotaAssignments/range")
+def list_rota_assignments_in_range(
+    date_from: str = Query(alias="from"),
+    date_to: str = Query(alias="to"),
+    branch_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> dict[str, object]:
+    """Every rotaAssignments row whose date falls in [from, to], regardless of the
+    _BOOTSTRAP_COLLECTION_CAPS["rotaAssignments"] = 500 cap bootstrap()/list_collection_records
+    apply (newest-created-first, so an older or future week's shifts can silently fall
+    outside it once a company has more than 500 saved). Monthly/Weekly/Department Rota
+    call this for whatever range they're actually displaying instead of relying on
+    the capped bootstrap blob alone -- same department/branch scoping as every other
+    read of this collection, just no row limit on the date window itself (a rota grid
+    is bounded by staff count x 7, not by how long the company has been using rotas)."""
+    if date_from > date_to:
+        raise HTTPException(status_code=400, detail="'from' must not be after 'to'")
+    company = resolve_principal_company(principal, db)
+    assert_collection_module_enabled(db, principal, company, "rotaAssignments")
+    base_filters = [
+        AppDataRecord.company_id == principal.company_id,
+        AppDataRecord.collection == "rotaAssignments",
+    ]
+    collection_module = _COLLECTION_MODULE.get("rotaAssignments")
+    cross_branch = bool(collection_module and principal.can_cross_branch(collection_module))
+    if principal.branch_id and "rotaAssignments" in _BRANCH_FILTERED_COLLECTIONS and not cross_branch:
+        active_branch = resolve_active_branch(principal, branch_id)
+        base_filters.append(
+            (AppDataRecord.branch_id == active_branch) | (AppDataRecord.branch_id.is_(None))
+        )
+    elif branch_id:
+        base_filters.append(AppDataRecord.branch_id == branch_id)
+    rows = db.query(AppDataRecord).filter(*base_filters).all()
+    records = [
+        r for r in (serialize(row) for row in rows)
+        if date_from <= str(r.get("date") or "") <= date_to
+    ]
+    records = filter_records(db, principal, "rotaAssignments", records)
+    return {"ok": True, "collection": "rotaAssignments", "from": date_from, "to": date_to, "records": records}
+
+
 # Maps each sidebar module (HR and, since the "Main Dashboard Access" phase,
 # main-app modules too) to the app-data collection(s) it reads. Used to scope
 # the bootstrap blob for an Employee principal to only what their role can
