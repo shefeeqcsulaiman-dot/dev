@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth_principal import (
+    OWN_DEPARTMENT,
     Principal,
     _role_department_scope,
     resolve_department_scope,
@@ -206,7 +207,19 @@ def _ensure_default_roles(db: Session, company_id: str) -> dict[str, Role]:
     for role_name, perm_keys in _DEFAULT_ROLES.items():
         role = roles.get(role_name)
         if not role:
-            role = Role(company_id=company_id, role_name=role_name, is_system_role=True)
+            # The built-in "Manager" role reads as a department/team-level manager
+            # (its own dashboard widget is scoped to "team", see the "Manager"
+            # branch of get_hr_dashboard() below) -- default it to the employee's
+            # own department (the existing "@own" marker, same as the manual
+            # "Only the employee's own department" role option) so a brand-new
+            # company's managers see their own team by default, not every
+            # department company-wide. The other presets stay company-wide on
+            # purpose: Administrator and HR Manager are meant to see and manage
+            # everything; Payroll Officer runs payroll for the whole company;
+            # Employee is self-service only (its own separate restriction, not
+            # department scoping).
+            department_scope = json.dumps([OWN_DEPARTMENT]) if role_name == "Manager" else None
+            role = Role(company_id=company_id, role_name=role_name, is_system_role=True, department_scope=department_scope)
             db.add(role)
             db.flush()
             roles[role_name] = role
