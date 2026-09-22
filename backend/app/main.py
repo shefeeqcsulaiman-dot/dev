@@ -869,6 +869,34 @@ def ensure_schema_updates() -> None:
                         )
                 connection.execute(text("INSERT INTO schema_flags (name) VALUES ('backup_module_backfill') ON CONFLICT (name) DO NOTHING"))
 
+        # The built-in "Manager" role (_ensure_default_roles, hr_access.py) was never
+        # department-scoped until now -- every company's existing "Manager" role has
+        # department_scope NULL, so its holders see every department's employees,
+        # leave, attendance, rota etc. company-wide. Scope every existing one to "@own"
+        # (the marker meaning "whatever department the login's own employee record is
+        # in" -- same as the manual "Only the employee's own department" role option),
+        # ONCE. Only touches rows this function itself created (is_system_role = true,
+        # role_name = 'Manager', still at its untouched NULL default) -- a company that
+        # renamed/repurposed that role, or deliberately opened it back up to every
+        # department after this ran once, is never overwritten again. A custom role
+        # some company separately named "Manager" (is_system_role = false) is untouched.
+        if "companies" in table_names and "roles" in table_names:
+            connection.execute(text(
+                "CREATE TABLE IF NOT EXISTS schema_flags (name VARCHAR(80) PRIMARY KEY)"
+            ))
+            done = connection.execute(text(
+                "SELECT 1 FROM schema_flags WHERE name = 'manager_role_own_department_backfill'"
+            )).first()
+            if not done:
+                connection.execute(text(
+                    "UPDATE roles SET department_scope = :own "
+                    "WHERE role_name = 'Manager' AND is_system_role = true "
+                    "AND (department_scope IS NULL OR department_scope = '')"
+                ), {"own": json.dumps(["@own"])})
+                connection.execute(text(
+                    "INSERT INTO schema_flags (name) VALUES ('manager_role_own_department_backfill') ON CONFLICT (name) DO NOTHING"
+                ))
+
 
 def seed_initial_data() -> None:
     db: Session = SessionLocal()
