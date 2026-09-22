@@ -972,6 +972,23 @@ function applyHrmsSalaryVisibility(){
   if(allowanceRow)allowanceRow.style.display=hide?'none':'';
 }
 
+// Employee Directory hides Inactive employees by default -- someone who's left
+// has no business cluttering the list of current staff (department-scoped
+// managers especially: a department with one inactive person sitting among a
+// handful of active ones reads as if the team is bigger than it is). The
+// "Show Inactive" checkbox opts back in for reactivating someone, without
+// losing them from the record entirely (still exportable via CSV, still
+// reachable by search once shown). Routed through setTableExternalFilter()
+// like Candidates' stage filter, so it survives typing in the search box and
+// Prev/Next — a plain row.style.display toggle would be undone by either.
+function applyEmployeeInactiveFilter(){
+  const table=document.getElementById('employee-directory-table');
+  if(!table)return;
+  enhanceTable(table); // idempotent -- ensures tableEnhanceState exists before the filter is set
+  const showInactive=!!document.getElementById('emp-show-inactive')?.checked;
+  setTableExternalFilter(table,showInactive?null:(tr=>tr.dataset.status!=='Inactive'));
+}
+
 function renderEmployeeRecord(employee){
   const tbody=document.getElementById('employee-tbody');
   if(!tbody)return;
@@ -998,6 +1015,10 @@ function renderEmployeeRecord(employee){
   const row=document.createElement('tr');
   row.dataset.employee=JSON.stringify(employee);
   row.dataset.employeeId=employeeIdStr;
+  // Plain attribute (not another JSON.parse(row.dataset.employee)) so the
+  // "Show Inactive" filter (applyEmployeeInactiveFilter()) can test every
+  // row cheaply — same reasoning as employeeId/sortRank/sortId above.
+  row.dataset.status=employee.status||'Active';
   row.dataset.sortRank=sortRank;
   row.dataset.sortId=sortId;
   row.innerHTML=`
@@ -8762,7 +8783,11 @@ function hydrateFromServer(){
         // so the Employee Directory/Payroll Employees tables' search,
         // pagination, and "DB records: N" counter reflect the full set
         // instead of staying on whatever was last computed (empty, pre-load).
-        refreshEnhancedTable(document.getElementById('employee-tbody')?.closest('table'));
+        // applyEmployeeInactiveFilter() both enhances the table (if this is
+        // the first time) and applies the Show Inactive default, which
+        // includes its own refreshEnhancedTable() call -- a separate one
+        // here would just be immediately overwritten.
+        applyEmployeeInactiveFilter();
         refreshEnhancedTable(document.getElementById('payroll-employee-tbody')?.closest('table'));
         // bankAccounts feeds Payroll's SIF/bank-transfer IBAN lookups, so it's
         // kept for HRMS too; payments/expenses/bills/vendors below are
