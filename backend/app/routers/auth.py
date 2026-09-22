@@ -50,6 +50,13 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     # they're blocked rather than assume they mistyped their password.
     expires_at = db.query(Company.subscription_expires_at).filter(Company.id == user.company_id).scalar()
     assert_company_active(expires_at)
+    # Feeds Super Admin's Renewals / inactive-company views. Best effort: a failed
+    # write here must never stop someone signing in.
+    try:
+        user.last_login = datetime.now(timezone.utc)
+        db.commit()
+    except Exception:
+        db.rollback()
     return Token(access_token=create_access_token(user.id))
 
 

@@ -75,6 +75,10 @@ class User(Base, TimestampMixin):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(40), default="admin")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Set on every successful password login (routers/auth.py). NULL = never recorded
+    # (accounts that last signed in before this column existed) -- Super Admin's
+    # "inactive companies" view only counts a company once a real login is on record.
+    last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     company: Mapped[Company] = relationship(back_populates="users")
 

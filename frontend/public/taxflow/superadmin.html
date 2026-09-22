@@ -249,6 +249,11 @@
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>
       Overview
     </div>
+    <div class="sb-item" data-page="renewals" onclick="saGo('renewals',this)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3.5H10"/></svg>
+      Renewals
+      <span class="sb-badge" id="sb-badge-renewals" style="display:none"></span>
+    </div>
     <div class="sb-item" data-page="companies" onclick="saGo('companies',this)">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="8" height="12" rx="1"/><path d="M10 6h4v8h-4M4.5 5h1M4.5 8h1M4.5 11h1"/></svg>
       Companies
@@ -363,6 +368,50 @@
   </div>
   </div><!-- /page-overview -->
 
+  <div class="page-section" id="page-renewals">
+  <div class="page-head-row">
+    <div>
+      <div class="page-title">Renewals</div>
+      <div class="page-sub">Subscriptions already expired or expiring soon, and companies that have gone quiet</div>
+    </div>
+    <button class="btn btn-g btn-sm" onclick="loadRenewals()">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3.5H10"/></svg>
+      Refresh
+    </button>
+  </div>
+
+  <div class="stats mb16" id="sa-renewals-stats">
+    <div class="stat-card"><div class="stat-label">Expired</div><div class="stat-val" id="sa-ren-stat-expired" style="color:var(--red)">—</div></div>
+    <div class="stat-card"><div class="stat-label">Within 7 Days</div><div class="stat-val" id="sa-ren-stat-7" style="color:var(--amber)">—</div></div>
+    <div class="stat-card"><div class="stat-label">Within Window</div><div class="stat-val" id="sa-ren-stat-window">—</div></div>
+    <div class="stat-card"><div class="stat-label">No Expiry Set</div><div class="stat-val" id="sa-ren-stat-none">—</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div class="card-title">Due for renewal</div>
+        <select id="sa-ren-days" onchange="loadRenewals()" style="padding:5px 8px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;background:var(--surface);color:var(--text)">
+          <option value="7">Next 7 days</option>
+          <option value="30" selected>Next 30 days</option>
+          <option value="90">Next 90 days</option>
+          <option value="365">Next 365 days</option>
+        </select>
+        <input type="text" id="sa-ren-search" placeholder="Search by name or admin email…" oninput="renderRenewalRows()" style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;background:var(--surface);color:var(--text);outline:none;width:240px">
+      </div>
+    </div>
+    <div id="sa-renewals-bulkbar" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;background:var(--primary-soft);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:12px">
+      <span id="sa-ren-selected-count" style="font-size:12.5px;font-weight:600"></span>
+      <input type="number" id="sa-ren-bulk-days" value="30" min="1" max="3650" style="width:70px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12.5px;background:var(--surface);color:var(--text)">
+      <button class="btn btn-p btn-sm" onclick="applyRenewalsBulkExtend()">Extend selected by N days</button>
+      <button class="btn btn-g btn-sm" onclick="clearRenewalsSelection()">Clear selection</button>
+    </div>
+    <div id="sa-renewals-wrap">
+      <div class="loading-state"><span class="spinner"></span> Loading…</div>
+    </div>
+  </div>
+  </div><!-- /page-renewals -->
+
   <div class="page-section" id="page-companies">
   <div class="page-title">Companies</div>
   <div class="page-sub">Manage all tenant companies, users and subscriptions</div>
@@ -378,6 +427,7 @@
           <option value="active">Active</option>
           <option value="expiring">Expiring in 7 days</option>
           <option value="expired">Expired</option>
+          <option value="inactive">Inactive 30+ days</option>
         </select>
       </div>
       <div style="display:flex;gap:8px">
@@ -897,9 +947,10 @@
     // re-read on open so the list (and its sidebar badge) isn't stale after a long session
     errors: ()=>loadClientErrors(),
     trials: ()=>loadTrialRequests(),
+    renewals: ()=>loadRenewals(),
     health: ()=>{loadSystemHealth();loadJobHealth();loadImpersonationSessions();startLiveLoadPolling();},
   };
-  const SA_PAGE_TITLES={overview:'Overview',companies:'Companies',analytics:'Usage Analytics',health:'System Health',errors:'Client Errors',audit:'Audit Log',trials:'Trial Requests'};
+  const SA_PAGE_TITLES={overview:'Overview',renewals:'Renewals',companies:'Companies',analytics:'Usage Analytics',health:'System Health',errors:'Client Errors',audit:'Audit Log',trials:'Trial Requests'};
 
   function saApplyTheme(mode){
     const dark=mode==='dark';
@@ -1058,6 +1109,27 @@
       });
     }
 
+    // Churn risk — active subscription, but nobody at the company has logged in for a
+    // month. A company that's about to expire is already covered by the "expires within
+    // 7 days" insight above; this catches the opposite failure mode: still paying (or on
+    // an open-ended subscription), but quietly not using the product.
+    const churnRisk = data.filter(c=>{
+      const exp = c.subscription_expires_at ? new Date(c.subscription_expires_at) : null;
+      const stillActive = !exp || exp >= now;
+      return stillActive && (c.inactive_days??0) >= 30;
+    });
+    if(churnRisk.length){
+      insights.push({
+        type:'amber',
+        icon:'📉',
+        title: churnRisk.length+' active '+(churnRisk.length===1?'company hasn’t':'companies haven’t')+' logged in for 30+ days',
+        body: churnRisk.slice(0,3).map(c=>`<strong>${escHtml(c.name)}</strong> — ${c.inactive_days}d`).join(', ')+(churnRisk.length>3?' and '+(churnRisk.length-3)+' more':''),
+        action:'A quiet account is a renewal risk even while the subscription is still active — worth a check-in.',
+        buttonLabel:'Open Renewals',
+        buttonFn:'goToRenewalsFromInsight',
+      });
+    }
+
     // All good
     if(!insights.length){
       insights.push({
@@ -1141,7 +1213,7 @@
           <div style="font-weight:600">${escHtml(c.name)}</div>
           <div class="mono" style="font-size:var(--fs-xs);color:var(--muted)">${escHtml(c.trn||'No TRN')} · ${escHtml(c.country||'')}</div>
         </td>
-        <td class="mono" style="font-size:var(--fs-sm);color:var(--muted)">${c.employee_count||0} emp · ${(c.branches||[]).length} br · ${nonSaUsers.length} usr</td>
+        <td class="mono" style="font-size:var(--fs-sm);color:var(--muted)">${c.employee_count||0} emp · ${(c.branches||[]).length} br · ${nonSaUsers.length} usr<div style="margin-top:2px">${_lastLoginChip(c)}</div></td>
         <td>${expBadge}</td>
         <td style="font-size:var(--fs-xs);color:var(--muted)">${c.created_at ? c.created_at.slice(0,10) : '—'}</td>
         <td>
@@ -2064,6 +2136,7 @@
         if(status==='active')return !exp||exp>=now;
         if(status==='expiring')return exp&&exp>now&&exp<=in7;
         if(status==='expired')return exp&&exp<now;
+        if(status==='inactive')return (c.inactive_days??0)>=30;
         return true;
       });
     }
@@ -2322,7 +2395,11 @@
     finally{ btn.disabled=false; btn.textContent='Save New Password'; }
   }
 
-  // ── Bulk-extend companies expiring within 7 days ────────────────
+  // ── Bulk-extend companies expiring within 7 days (Overview insight button) ──
+  // Was N sequential per-company set-expiry calls from the client; now one
+  // server-side call (POST /superadmin/renewals/extend, same endpoint the
+  // Renewals page's own bulk bar uses) — one round trip, one place computing
+  // "extend from current expiry, or from today if already lapsed".
   async function bulkExtendExpiring(){
     const now=new Date(); const in7=new Date(); in7.setDate(now.getDate()+7);
     const targets=companies.filter(c=>{
@@ -2331,15 +2408,134 @@
     });
     if(!targets.length){ alert('Nothing to extend — refresh the Overview to recheck.'); return; }
     if(!confirm(`Extend ${targets.length} ${targets.length===1?'company':'companies'} by 30 days each?`)) return;
-    const results=await Promise.allSettled(targets.map(c=>{
-      const base=new Date(c.subscription_expires_at);
-      base.setDate(base.getDate()+30);
-      const newExpiry=base.toISOString().slice(0,10);
-      return apiFetch(`/superadmin/companies/${c.id}/set-expiry`,{method:'POST',body:JSON.stringify({expires_at:newExpiry})});
-    }));
-    const failed=results.filter(r=>r.status==='rejected'||(r.value&&!r.value.ok)).length;
-    alert(failed ? `Extended ${targets.length-failed} of ${targets.length} — ${failed} failed.` : `Extended ${targets.length} companies by 30 days.`);
+    try{
+      const res=await apiFetch('/superadmin/renewals/extend',{method:'POST',body:JSON.stringify({company_ids:targets.map(c=>c.id),days:30})});
+      const data=await res.json();
+      if(!res.ok){ alert(data.detail||'Extend failed.'); return; }
+      alert(`Extended ${data.extended} of ${targets.length} companies by 30 days.`);
+    }catch(err){ alert(err.message); }
     loadDashboard();
+  }
+
+  function goToRenewalsFromInsight(){
+    saGo('renewals', document.querySelector('.sb-item[data-page="renewals"]'));
+  }
+
+  // ── Last login / inactive-company indicator (Companies list + Renewals) ──
+  function _lastLoginChip(c){
+    if(!c.last_login_at)return '<span style="color:var(--dim)">No login recorded</span>';
+    const days=c.inactive_days??0;
+    if(days===0)return '<span style="color:var(--green)">Active today</span>';
+    if(days<30)return `<span style="color:var(--muted)">Last login ${days}d ago</span>`;
+    return `<span style="color:var(--amber);font-weight:600">Inactive ${days}d</span>`;
+  }
+
+  // ── Renewals ─────────────────────────────────────────────────────
+  let _renewalsData=null;
+  let _renewalsSelected=new Set();
+
+  async function loadRenewals(){
+    const wrap=document.getElementById('sa-renewals-wrap');
+    const days=document.getElementById('sa-ren-days')?.value||30;
+    wrap.innerHTML='<div class="loading-state"><span class="spinner"></span> Loading…</div>';
+    try{
+      const res=await apiFetch(`/superadmin/renewals?days=${days}`);
+      const data=await res.json();
+      if(!res.ok){ wrap.innerHTML=`<div class="loading-state" style="color:var(--red)">${escHtml(data.detail||'Failed to load.')}</div>`; return; }
+      _renewalsData=data;
+      _renewalsSelected=new Set();
+      document.getElementById('sa-ren-stat-expired').textContent=data.counts.expired;
+      document.getElementById('sa-ren-stat-7').textContent=data.counts.within_7;
+      document.getElementById('sa-ren-stat-window').textContent=data.counts.within_window;
+      document.getElementById('sa-ren-stat-none').textContent=data.counts.no_expiry;
+      const badge=document.getElementById('sb-badge-renewals');
+      if(badge){
+        const due=data.counts.expired+data.counts.within_7;
+        badge.textContent=due; badge.style.display=due?'inline':'none';
+      }
+      renderRenewalRows();
+    }catch(err){
+      wrap.innerHTML=`<div class="loading-state" style="color:var(--red)">${escHtml(err.message)}</div>`;
+    }
+  }
+
+  function renderRenewalRows(){
+    const wrap=document.getElementById('sa-renewals-wrap');
+    if(!_renewalsData)return;
+    const q=(document.getElementById('sa-ren-search')?.value||'').toLowerCase();
+    const rows=_renewalsData.companies.filter(c=>!q||(c.name||'').toLowerCase().includes(q)||(c.admin_email||'').toLowerCase().includes(q));
+    if(!rows.length){ wrap.innerHTML='<div class="loading-state">Nothing due for renewal in this window.</div>'; updateRenewalsBulkBar(); return; }
+    const trs=rows.map(c=>{
+      const checked=_renewalsSelected.has(c.id)?'checked':'';
+      const statusBadge=c.status==='expired'
+        ? `<span class="b b-r"><span class="b-dot"></span>Expired ${Math.abs(c.days_left)}d ago</span>`
+        : `<span class="b b-a"><span class="b-dot"></span>${c.days_left}d left</span>`;
+      const lastLogin=!c.last_login_at?'<span style="color:var(--dim)">No login recorded</span>'
+        :(c.inactive_days>=30?`<span style="color:var(--amber);font-weight:600">Inactive ${c.inactive_days}d</span>`:`<span style="color:var(--muted)">${c.inactive_days}d ago</span>`);
+      return `<tr>
+        <td><input type="checkbox" ${checked} onchange="toggleRenewalSelection('${escHtml(c.id)}',this.checked)"></td>
+        <td>
+          <div style="font-weight:600">${escHtml(c.name)}</div>
+          <div class="mono" style="font-size:var(--fs-xs);color:var(--muted)">${escHtml(c.admin_email||'No admin user')}</div>
+        </td>
+        <td>${statusBadge}<div style="font-size:var(--fs-xs);color:var(--muted);margin-top:2px">${escHtml(c.subscription_expires_at||'—')}</div></td>
+        <td style="font-size:var(--fs-sm)">${lastLogin}</td>
+        <td class="mono" style="font-size:var(--fs-sm);color:var(--muted)">${c.user_count} usr</td>
+        <td>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-g btn-sm" onclick="quickExtend('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}',30)">+30 Days</button>
+            <button class="btn btn-g btn-sm" onclick="openCompanyDrawer('${escHtml(c.id)}')">Details</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+    wrap.innerHTML=`
+      <div style="overflow-x:auto">
+        <table class="tbl">
+          <thead><tr>
+            <th><input type="checkbox" onchange="toggleAllRenewalSelection(this.checked)" title="Select all"></th>
+            <th>Company</th><th>Subscription</th><th>Last Login</th><th>Users</th><th>Actions</th>
+          </tr></thead>
+          <tbody>${trs}</tbody>
+        </table>
+      </div>`;
+    updateRenewalsBulkBar();
+  }
+
+  function toggleRenewalSelection(id,checked){
+    if(checked)_renewalsSelected.add(id); else _renewalsSelected.delete(id);
+    updateRenewalsBulkBar();
+  }
+  function toggleAllRenewalSelection(checked){
+    const q=(document.getElementById('sa-ren-search')?.value||'').toLowerCase();
+    const rows=(_renewalsData?.companies||[]).filter(c=>!q||(c.name||'').toLowerCase().includes(q)||(c.admin_email||'').toLowerCase().includes(q));
+    _renewalsSelected=new Set(checked?rows.map(c=>c.id):[]);
+    renderRenewalRows();
+  }
+  function clearRenewalsSelection(){ _renewalsSelected=new Set(); renderRenewalRows(); }
+  function updateRenewalsBulkBar(){
+    const bar=document.getElementById('sa-renewals-bulkbar');
+    const count=_renewalsSelected.size;
+    if(!bar)return;
+    bar.style.display=count?'flex':'none';
+    const label=document.getElementById('sa-ren-selected-count');
+    if(label)label.textContent=`${count} selected`;
+  }
+
+  async function applyRenewalsBulkExtend(){
+    const days=parseInt(document.getElementById('sa-ren-bulk-days')?.value)||0;
+    const ids=[..._renewalsSelected];
+    if(!ids.length){ alert('Select at least one company first.'); return; }
+    if(days<1){ alert('Enter how many days to extend by.'); return; }
+    if(!confirm(`Extend ${ids.length} ${ids.length===1?'company':'companies'} by ${days} days?`)) return;
+    try{
+      const res=await apiFetch('/superadmin/renewals/extend',{method:'POST',body:JSON.stringify({company_ids:ids,days})});
+      const data=await res.json();
+      if(!res.ok){ alert(data.detail||'Extend failed.'); return; }
+      alert(`Extended ${data.extended} compan${data.extended===1?'y':'ies'} by ${days} days.`);
+      loadRenewals();
+      loadDashboard();
+    }catch(err){ alert(err.message); }
   }
 
   // ── Quick-extend subscription ─────────────────────────────────
