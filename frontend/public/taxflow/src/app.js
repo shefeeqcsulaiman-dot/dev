@@ -20087,6 +20087,13 @@ function rotaHours(assignment){
 
 function openRotaCellEditor(cell){
   activeRotaCell=cell;
+  // Warms _taskEmployeeListCache (employee_no -> SQL id) for
+  // _rotaEditTaskOptionsHtml()'s department filter below -- normally only
+  // populated by visiting Task Management first. Fire-and-forget: the task
+  // list already renders from whatever's cached (department match alone
+  // still applies), this just fills in the "already assigned to this exact
+  // employee" carve-out once it resolves, same as opening the editor again.
+  if(!_taskEmployeeListCache.length)populateTaskAssigneeSelect();
   const assignment=cell.dataset.assignment?normalizeRotaAssignment(JSON.parse(cell.dataset.assignment)):null;
   const day=cell.dataset.day||assignment?.day||'Shift';
   const employee=cell.dataset.employeeName||assignment?.employee_name||'Employee';
@@ -20116,7 +20123,27 @@ function openRotaCellEditor(cell){
 // _ensureTaskAssignedToEmployee()) -- assign-and-schedule in one step,
 // rather than requiring a separate trip to Task Management first.
 function _rotaEditTaskOptionsHtml(selectedTaskId){
-  const options=[..._uniqueTaskTemplates()];
+  // Scoped to the shift's own employee/department -- a Reception shift has no
+  // business offering "Surgery"/"Lab" tasks from a completely different
+  // department just because they happen to exist somewhere in the company.
+  // A task with no department set (general/unassigned template) still shows
+  // everywhere, same convention as an unassigned task staying visible to a
+  // department-scoped login elsewhere (department_scope.py's own rule for
+  // "tasks"). Matches the department shown on the cell being edited, not the
+  // logged-in viewer's own department, so an unscoped admin scheduling one
+  // employee still only sees tasks relevant to THAT employee's team.
+  const cellDept=(activeRotaCell?.dataset.department||'').trim().toLowerCase();
+  // tasks' assigned_to is the employee's SQL id (see populateTaskAssigneeSelect()),
+  // but the rota cell only carries the employee_no (staff.id, see currentRotaStaff())
+  // -- resolve through the same employee cache _collectRotaEditTasks() already uses,
+  // so a task already assigned to this exact employee stays offered even when its own
+  // department field doesn't happen to match (e.g. set before a re-org).
+  const cellEmployeeNo=activeRotaCell?.dataset.employeeId||'';
+  const cellEmployeeUuid=_taskEmployeeListCache.find(e=>e.employee_no===cellEmployeeNo)?.id||'';
+  const options=_uniqueTaskTemplates().filter(t=>{
+    const taskDept=(t.department||'').trim().toLowerCase();
+    return !taskDept||!cellDept||taskDept===cellDept||(cellEmployeeUuid&&t.assigned_to===cellEmployeeUuid);
+  });
   // The row being (re)opened may reference one specific employee's own
   // assigned instance of a task whose title's "most recent" instance
   // (what _uniqueTaskTemplates() picks) belongs to someone else -- make
