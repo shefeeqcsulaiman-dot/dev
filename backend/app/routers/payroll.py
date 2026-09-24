@@ -84,7 +84,7 @@ def _name_key(value: object) -> str:
     return str(value or "").strip().lower()
 
 
-def _employee_loan_deductions(db: Session, company_id: str, employee_no: str, employee_name: str, period: str) -> Decimal:
+def _employee_loan_deductions(loan_rows: list[AppDataRecord], employee_no: str, employee_name: str, period: str) -> Decimal:
     """Active-loan EMI due for this employee this period. The loan's stored
     balance is decremented and its status flipped to "Closed" once the
     final (true-up) installment is deducted — applied immediately to the
@@ -93,10 +93,17 @@ def _employee_loan_deductions(db: Session, company_id: str, employee_no: str, em
     employee_no on it), the second one sees the already-reduced balance
     from the first instead of independently draining the same loan twice.
     Falls back to matching by name only when a row has no employee_id at
-    all (records saved before this field existed)."""
+    all (records saved before this field existed).
+
+    loan_rows is the company's full "employeeLoans" collection, fetched once
+    by the caller before the per-employee loop — was previously re-queried
+    fresh from the DB on every single call (3x per employee, every payroll
+    run); the mutations below still apply to the same in-session ORM rows
+    either way, so passing the pre-fetched list changes nothing about the
+    result, only how many times the DB is hit to get it."""
     key = _name_key(employee_name)
     total = Decimal("0.00")
-    for row in _app_records(db, company_id, "employeeLoans"):
+    for row in loan_rows:
         data = _payload(row)
         row_employee_id = str(data.get("employee_id") or "").strip()
         if row_employee_id:
@@ -125,14 +132,17 @@ def _employee_loan_deductions(db: Session, company_id: str, employee_no: str, em
     return total
 
 
-def _salary_advance_deductions(db: Session, company_id: str, employee_no: str, employee_name: str, period: str) -> Decimal:
+def _salary_advance_deductions(advance_rows: list[AppDataRecord], employee_no: str, employee_name: str, period: str) -> Decimal:
     """A salary advance is repaid in full, in the single payroll period it
     was requested against - not spread out - then marked Repaid so it's
     never deducted again (and, like loans, never double-deducted across two
-    same-named employees since the write happens immediately)."""
+    same-named employees since the write happens immediately).
+
+    advance_rows is the company's full "salaryAdvances" collection,
+    pre-fetched once by the caller — see _employee_loan_deductions."""
     key = _name_key(employee_name)
     total = Decimal("0.00")
-    for row in _app_records(db, company_id, "salaryAdvances"):
+    for row in advance_rows:
         data = _payload(row)
         row_employee_id = str(data.get("employee_id") or "").strip()
         if row_employee_id:
@@ -153,17 +163,20 @@ def _salary_advance_deductions(db: Session, company_id: str, employee_no: str, e
     return total
 
 
-def _overtime_pay(db: Session, company_id: str, employee_no: str, employee_name: str, period: str, basic_salary: Decimal, ot_hours_per_month: Decimal) -> Decimal:
+def _overtime_pay(overtime_rows: list[AppDataRecord], employee_no: str, employee_name: str, period: str, basic_salary: Decimal, ot_hours_per_month: Decimal) -> Decimal:
     """Sum of approved overtime for this employee in this period, at the
     multiplier the requester's own OT-type selection resolved to when they
     submitted it (see updateOtMultiplier() in app.js) - not recomputed here,
     just applied to an hourly rate derived from basic salary. Same
     employee_id-first matching as the deduction helpers, so two employees
-    sharing a full name don't each get credited the other's OT hours."""
+    sharing a full name don't each get credited the other's OT hours.
+
+    overtime_rows is the company's full "overtimeRequests" collection,
+    pre-fetched once by the caller — see _employee_loan_deductions."""
     key = _name_key(employee_name)
     hourly_rate = money(basic_salary) / ot_hours_per_month
     total = Decimal("0.00")
-    for row in _app_records(db, company_id, "overtimeRequests"):
+    for row in overtime_rows:
         data = _payload(row)
         row_employee_id = str(data.get("employee_id") or "").strip()
         if row_employee_id:
@@ -286,15 +299,22 @@ def generate_payroll(
         raise HTTPException(status_code=422, detail="No active employees found")
 
     ot_hours_per_month = _ot_hours_per_month(db, current_user.company_id)
+    # Fetched once here rather than inside each per-employee helper call —
+    # each collection previously got re-queried fresh from the DB for every
+    # employee (3x N round trips for N employees, all returning the exact
+    # same rows), see the helpers' own docstrings.
+    overtime_rows = _app_records(db, current_user.company_id, "overtimeRequests")
+    loan_rows = _app_records(db, current_user.company_id, "employeeLoans")
+    advance_rows = _app_records(db, current_user.company_id, "salaryAdvances")
     run = PayrollRun(company_id=current_user.company_id, branch_id=payload.branch_id, period=payload.period, status="draft")
     gross_total = Decimal("0.00")
     deductions_total = Decimal("0.00")
     net_total = Decimal("0.00")
     for employee in employees:
         allowances = money(employee.housing_allowance) + money(employee.transport_allowance) + money(employee.other_allowance)
-        overtime = _overtime_pay(db, current_user.company_id, employee.employee_no, employee.full_name, payload.period, employee.basic_salary, ot_hours_per_month)
-        loan_deduction = _employee_loan_deductions(db, current_user.company_id, employee.employee_no, employee.full_name, payload.period)
-        advance_deduction = _salary_advance_deductions(db, current_user.company_id, employee.employee_no, employee.full_name, payload.period)
+        overtime = _overtime_pay(overtime_rows, employee.employee_no, employee.full_name, payload.period, employee.basic_salary, ot_hours_per_month)
+        loan_deduction = _employee_loan_deductions(loan_rows, employee.employee_no, employee.full_name, payload.period)
+        advance_deduction = _salary_advance_deductions(advance_rows, employee.employee_no, employee.full_name, payload.period)
         deductions = loan_deduction + advance_deduction
         net = employee.basic_salary + allowances + overtime - deductions
         gross_total += employee.basic_salary + allowances + overtime

@@ -57,6 +57,110 @@ function scheduleTableRefresh(table,delay=120){
   tableRefreshTimers.set(table,timer);
 }
 
+// Rarely-opened admin-config modals (Add Department/Branch/Bank Account,
+// New Invoice Layout) are injected into the DOM on first open instead of
+// shipping as always-present markup in index.html/hrms.html — every one of
+// these modals used to be parsed and laid out on every page load regardless
+// of whether the user ever opens it. Each open function calls
+// _ensureLazyModal(id) before doing anything else; identical markup to what
+// used to be static HTML, so nothing about the modal itself changes once
+// it's open.
+const _LAZY_MODALS={
+  'm-dept':`<div class="overlay" id="m-dept" onclick="closeOvBg(event,'m-dept')">
+  <div class="modal">
+    <div class="modal-title" id="dept-modal-title">Add Department</div>
+    <div class="modal-sub">Department details used in employee profiles and reporting</div>
+    <input type="hidden" id="dept-edit-id">
+    <div class="fr2">
+      <div class="fg"><label class="fl">Department Name <span style="color:var(--red)">*</span></label><input class="fi" id="dept-name" placeholder="e.g. Finance"></div>
+      <div class="fg"><label class="fl">Short Code</label><input class="fi" id="dept-code" placeholder="e.g. FIN" maxlength="6" style="text-transform:uppercase"></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Department Head / Manager</label><input class="fi" id="dept-head" placeholder="e.g. Ahmed Al Mansouri"></div>
+      <div class="fg"><label class="fl">Status</label><select class="fi" id="dept-status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
+    </div>
+    <div class="fg"><label class="fl">Description</label><input class="fi" id="dept-desc" placeholder="Brief description of this department's function"></div>
+    <div class="modal-actions">
+      <button id="dept-delete-btn" class="btn btn-sm" style="display:none;background:var(--red-bg);color:var(--red);border-color:var(--red);margin-right:auto" onclick="deleteDeptFromModal()">Delete</button>
+      <button class="btn btn-ghost" onclick="hideM('m-dept')">Cancel</button>
+      <button class="btn btn-p" onclick="saveDeptModal()">Save Department</button>
+    </div>
+  </div>
+</div>`,
+  'm-branch':`<div class="overlay" id="m-branch" onclick="closeOvBg(event,'m-branch')">
+  <div class="modal">
+    <div class="modal-title" id="branch-modal-title">Add Branch</div>
+    <div class="modal-sub">Register a branch or office location for your company</div>
+    <input type="hidden" id="branch-edit-id">
+    <div class="fr2">
+      <div class="fg"><label class="fl">Branch Name <span style="color:var(--red)">*</span></label><input class="fi" id="branch-name" placeholder="e.g. Dubai HQ"></div>
+      <div class="fg"><label class="fl">Short Code</label><input class="fi" id="branch-code" placeholder="e.g. DXB" maxlength="6" style="text-transform:uppercase"></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">City / Emirate</label><input class="fi" id="branch-city" placeholder="e.g. Dubai"></div>
+      <div class="fg"><label class="fl">Status</label><select class="fi" id="branch-status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Country</label><select class="fi" id="branch-country" onchange="onBranchCountryChange()"></select></div>
+      <div class="fg"><label class="fl">Currency</label><input class="fi" id="branch-currency" readonly style="background:var(--surface2);color:var(--text3)"></div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:-8px;margin-bottom:10px">Reference only — this branch's invoices and VAT still use the company's own currency/VAT rate in Settings.</div>
+
+    <div style="margin:14px 0 10px">
+      <label class="fl">Module Access</label>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Which modules this branch's own login can use — leave all checked for unrestricted access</div>
+      <div id="branch-mod-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 10px"></div>
+    </div>
+
+    <div class="fr2">
+      <div class="fg"><label class="fl">Branch Login Username</label><input class="fi" id="branch-username" placeholder="e.g. dubai-branch" autocomplete="username"></div>
+      <div class="fg"><label class="fl">Branch Login Password</label><input class="fi mono" id="branch-password" type="password" placeholder="Set login password" autocomplete="new-password"></div>
+    </div>
+    <div id="branch-pw-hint" style="font-size:11px;color:var(--text3);margin-top:-8px;margin-bottom:10px"></div>
+
+    <div class="modal-actions">
+      <button id="branch-delete-btn" class="btn btn-sm" style="display:none;background:var(--red-bg);color:var(--red);border-color:var(--red);margin-right:auto" onclick="deleteBranchFromModal()">Delete</button>
+      <button id="branch-cancel-btn" class="btn btn-ghost" onclick="hideM('m-branch')">Cancel</button>
+      <button id="branch-save-btn" class="btn btn-p" onclick="saveBranchModal()">Save Branch</button>
+    </div>
+  </div>
+</div>`,
+  'm-bank':`<div class="overlay" id="m-bank" onclick="closeOvBg(event,'m-bank')">
+  <div class="modal"><div class="modal-title">Add Bank Account</div><div class="modal-sub">Register a new bank account for reconciliation</div>
+    <div class="fg"><label class="fl">Bank Name</label><select class="fi" id="bank-name"><option>Emirates NBD</option><option>ADCB</option><option>FAB</option><option>Mashreq</option><option>ADIB</option><option>DIB</option><option>RAK Bank</option><option>HSBC UAE</option></select></div>
+    <div class="fg"><label class="fl">Account Holder Name</label><input class="fi" id="bank-holder"></div>
+    <div class="fg"><label class="fl">IBAN</label><input class="fi mono" id="bank-iban" placeholder="AE..."></div>
+    <div class="fr2"><div class="fg"><label class="fl">Account Type</label><select class="fi" id="bank-type"><option>Current</option><option>Savings</option></select></div><div class="fg"><label class="fl">Currency</label><select class="fi" id="bank-currency"><option>AED</option><option>USD</option><option>EUR</option><option>GBP</option></select></div></div>
+    <div class="fg"><label class="fl">Opening Balance</label><input class="fi mono" id="bank-balance" placeholder="0.00" inputmode="decimal"></div>
+    <div class="fr2"><div class="fg"><label class="fl">Swift Code</label><input class="fi mono" id="bank-swift" placeholder="ENBD AEADxxx"></div><div class="fg"><label class="fl">Branch</label><input class="fi" id="bank-branch" placeholder="Branch name"></div></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-bank')">Cancel</button><button class="btn btn-p" onclick="saveBankAccount()">Save Account</button></div>
+  </div>
+</div>`,
+  'm-new-layout':`<div class="overlay" id="m-new-layout" onclick="closeOvBg(event,'m-new-layout')">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-title">New Invoice Layout</div>
+    <div class="modal-sub">Create a named layout — customise fonts, colours and fields after saving</div>
+    <div class="fg" style="margin-top:14px"><label class="fl">Layout Name</label><input class="fi" id="new-layout-name" placeholder="e.g. Export Invoice, Arabic Layout…" maxlength="60" onkeydown="if(event.key==='Enter')confirmAddInvoiceLayout()"></div>
+    <div class="fg"><label class="fl">Start From</label>
+      <select class="fi" id="new-layout-base">
+        <option value="default">Default settings (blank)</option>
+        <option value="current">Current active layout (duplicate)</option>
+      </select>
+    </div>
+    <div class="fr2" style="margin-top:16px">
+      <button class="btn btn-g" onclick="hideM('m-new-layout')">Cancel</button>
+      <button class="btn btn-p" onclick="confirmAddInvoiceLayout()">Create Layout</button>
+    </div>
+  </div>
+</div>`,
+};
+
+function _ensureLazyModal(id){
+  if(!document.getElementById(id)&&_LAZY_MODALS[id]){
+    document.body.insertAdjacentHTML('beforeend',_LAZY_MODALS[id]);
+  }
+}
+
 function runPageWarmup(page){
   const pageId='page-'+page;
   scheduleIdleTask(()=>{
@@ -619,14 +723,21 @@ function appConfirm({title='Confirm Action',message='Please confirm this action.
       event.stopPropagation();
       done(false);
     };
-    overlay.onclick=event=>{
-      if(event.target===overlay)done(false);
-    };
+    // Outside-click no longer dismisses this (or any) modal — see closeOvBg()
+    // — Cancel/OK are the only ways out now.
+    overlay.onclick=null;
     setTimeout(()=>cancel.focus(),30);
   });
 }
 
-function closeOvBg(e,id){if(e.target.id===id)closeM(id);}
+// Clicking the overlay background used to close the modal (like clicking
+// outside a dialog) — by request, disabled everywhere: an accidental click
+// just outside a form's fields while filling it in silently discarded
+// everything typed, with no confirmation. Every modal's Cancel/× button
+// still closes it explicitly; only the outside-click shortcut is gone. Kept
+// as a real function (not deleted) since every overlay's onclick="closeOvBg(...)"
+// attribute still calls it.
+function closeOvBg(){}
 function saveM(id,msg){closeM(id);toast(msg,'ok');audit(msg.replace(/[?.]/g,'').trim(),id,'Saved');}
 
 function initialsFromName(name){
@@ -972,15 +1083,15 @@ function applyHrmsSalaryVisibility(){
   if(allowanceRow)allowanceRow.style.display=hide?'none':'';
 }
 
-// Employee Directory hides Inactive employees by default -- someone who's left
-// has no business cluttering the list of current staff (department-scoped
-// managers especially: a department with one inactive person sitting among a
-// handful of active ones reads as if the team is bigger than it is). The
-// "Show Inactive" checkbox opts back in for reactivating someone, without
-// losing them from the record entirely (still exportable via CSV, still
-// reachable by search once shown). Routed through setTableExternalFilter()
-// like Candidates' stage filter, so it survives typing in the search box and
-// Prev/Next — a plain row.style.display toggle would be undone by either.
+// Employee Directory shows Inactive employees by default, sorted below every
+// Active one (see _employeeSortKey) rather than interleaved by number or
+// hidden — someone who's left still needs to be findable (reactivating them,
+// checking their history) without an extra click, they just shouldn't read
+// as part of the current team at a glance. The "Show Inactive" checkbox
+// (checked by default) lets it be unchecked to hide them instead. Routed
+// through setTableExternalFilter() like Candidates' stage filter, so it
+// survives typing in the search box and Prev/Next — a plain row.style.display
+// toggle would be undone by either.
 function applyEmployeeInactiveFilter(){
   const table=document.getElementById('employee-directory-table');
   if(!table)return;
@@ -6697,12 +6808,7 @@ function markPaymentDocumentPaid(payment){
   refreshSalesInvoiceKpis();
 }
 
-function renderSupplierPaymentCard(payment){
-  const container=document.getElementById('payment-out-cards');
-  if(!container)return;
-  if(container.querySelector(`[data-pay-ref="${CSS.escape(payment.ref)}"]`))return;
-  const empty=document.getElementById('payment-out-empty');
-  if(empty)empty.style.display='none';
+function _supplierPaymentCardEl(payment){
   const allocations=(Array.isArray(payment?.allocations)&&payment.allocations.length)
     ?payment.allocations
     :[{doc_ref:payment?.document_ref||payment?.bill_no||'—',amount:Number(payment?.amount||0)}];
@@ -6748,7 +6854,81 @@ function renderSupplierPaymentCard(payment){
       <span class="pay-card-note">${escapeHtml(payment.notes||payment.memo||'')}</span>
       <button class="pay-card-del" style="margin-left:auto" onclick="toast('Delete not yet implemented','info')">Delete</button>
     </div>`;
-  container.appendChild(card);
+  return card;
+}
+
+// The hidden #payment-out-tbody (see index.html) is the source of truth for
+// every supplier payment (each row carries the full record in
+// dataset.payment, set by renderPaymentRecord) — reading from it here lets
+// search/sort rebuild the visible card list at any time without keeping a
+// second copy of the data in JS.
+function _supplierPaymentsFromTable(){
+  const tbody=document.getElementById('payment-out-tbody');
+  if(!tbody)return[];
+  return [...tbody.querySelectorAll('tr[data-payment]')].map(tr=>{
+    try{return JSON.parse(tr.dataset.payment);}catch{return null;}
+  }).filter(Boolean);
+}
+
+let _payOutSearchTimer=null;
+function onSupplierPaymentSearchInput(){
+  clearTimeout(_payOutSearchTimer);
+  _payOutSearchTimer=setTimeout(renderPaymentOutCards,150);
+}
+
+const _SUPPLIER_PAYMENT_SORTERS={
+  'date-desc':(a,b)=>_dateSortValue(b.date)-_dateSortValue(a.date),
+  'date-asc':(a,b)=>_dateSortValue(a.date)-_dateSortValue(b.date),
+  'amount-desc':(a,b)=>Number(b.amount||0)-Number(a.amount||0),
+  'amount-asc':(a,b)=>Number(a.amount||0)-Number(b.amount||0),
+  'vendor-asc':(a,b)=>String(a.contact||'').localeCompare(String(b.contact||'')),
+};
+
+function _dateSortValue(dateStr){
+  const t=Date.parse(dateStr||'');
+  return Number.isNaN(t)?0:t;
+}
+
+// Rebuilds the visible Supplier Payments Made card list from the hidden
+// table (search + sort), instead of the old always-append-in-receive-order
+// behaviour — called on every search keystroke (debounced), sort change,
+// and new payment (also debounced, via renderSupplierPaymentCard below).
+function renderPaymentOutCards(){
+  const container=document.getElementById('payment-out-cards');
+  const empty=document.getElementById('payment-out-empty');
+  if(!container)return;
+  const query=(document.getElementById('payment-out-search')?.value||'').trim().toLowerCase();
+  const sortKey=document.getElementById('payment-out-sort')?.value||'date-desc';
+  let payments=_supplierPaymentsFromTable();
+  if(query){
+    payments=payments.filter(p=>{
+      const haystack=[p.ref,p.contact,p.method,p.notes,p.memo,p.document_ref,p.bill_no]
+        .map(v=>String(v||'').toLowerCase()).join(' ');
+      return haystack.includes(query);
+    });
+  }
+  payments.sort(_SUPPLIER_PAYMENT_SORTERS[sortKey]||_SUPPLIER_PAYMENT_SORTERS['date-desc']);
+  container.querySelectorAll('.pay-card').forEach(el=>el.remove());
+  if(!payments.length){
+    if(empty){
+      empty.style.display='';
+      empty.textContent=query?'No supplier payments match your search.':'No supplier payments in database yet.';
+    }
+    return;
+  }
+  if(empty)empty.style.display='none';
+  const frag=document.createDocumentFragment();
+  payments.forEach(p=>frag.appendChild(_supplierPaymentCardEl(p)));
+  container.appendChild(frag);
+}
+
+let _payOutRefreshTimer=null;
+function renderSupplierPaymentCard(){
+  // The hidden table row (dataset.payment) is already written by
+  // renderPaymentRecord() before this is called — just (debounced) rebuild
+  // the visible cards from it, same reasoning as scheduleTableRefresh().
+  clearTimeout(_payOutRefreshTimer);
+  _payOutRefreshTimer=setTimeout(renderPaymentOutCards,isHydratingFromServer?350:0);
 }
 
 function renderPaymentRecord(payment){
@@ -7527,7 +7707,6 @@ function openPurchaseInvoiceImage(btn){
     overlay=document.createElement('div');
     overlay.className='overlay';
     overlay.id='m-invoice-image';
-    overlay.onclick=e=>{if(e.target===overlay)overlay.classList.remove('on');};
     overlay.innerHTML=`
       <div class="modal" style="max-width:900px;width:95vw;padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:90vh">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)">
@@ -8039,7 +8218,7 @@ function coaNodeEl(acc,byId,children,depth){
   row.className=`coa-row${isPosting?' coa-posting-row':''}${status==='inactive'?' coa-inactive':''}`;
   row.innerHTML=`
     <span class="coa-indent" style="width:${indent}px"></span>
-    ${hasKids?`<button class="coa-toggle open" onclick="toggleCoaNode(this)">▼</button>`:'<span class="coa-toggle-spacer"></span>'}
+    ${hasKids?`<button class="coa-toggle open">▼</button>`:'<span class="coa-toggle-spacer"></span>'}
     ${coaNodeTypePill(nodeType,level)}
     <span class="coa-code mono">${escapeHtml(acc.code)}</span>
     <span class="coa-name${!isPosting?' group-name':''}">${escapeHtml(acc.name)}</span>
@@ -8066,12 +8245,6 @@ function coaNodeEl(acc,byId,children,depth){
     wrap.appendChild(row);
   }
   return wrap;
-}
-
-function toggleCoaNode(btn){
-  btn.classList.toggle('open');
-  const childWrap=btn.closest('.coa-node')?.querySelector(':scope > .coa-children');
-  if(childWrap)childWrap.classList.toggle('open');
 }
 
 function autoNormalBalance(){
@@ -10215,6 +10388,7 @@ function selectInvoiceLayout(id,{scroll=true}={}){
 }
 
 function addInvoiceLayout(){
+  _ensureLazyModal('m-new-layout');
   document.getElementById('new-layout-name').value='';
   document.getElementById('new-layout-base').value='default';
   showM('m-new-layout');
@@ -18658,6 +18832,7 @@ function renderDeptTable(){
 }
 
 function showDeptModal(id){
+  _ensureLazyModal('m-dept');
   const titleEl=document.getElementById('dept-modal-title');
   const d=id?_deptList.find(x=>x.id===id):null;
   if(titleEl)titleEl.textContent=d?'Edit Department':'Add Department';
@@ -19136,6 +19311,7 @@ function getCheckedBranchModules(){
 // mode; deleteBranch()/deleteBranchFromModal() are kept for the seeded
 // scripts/history that reference them but are unreachable from this UI.
 function showBranchModal(id,viewOnly){
+  _ensureLazyModal('m-branch');
   const titleEl=document.getElementById('branch-modal-title');
   const b=id?_branchList.find(x=>x.id===id):null;
   if(titleEl)titleEl.textContent=viewOnly?'View Branch':(b?'Edit Branch':'Add Branch');
@@ -20238,40 +20414,6 @@ function applyRotaEditTypeDefaults(){
   setSelectValue(document.getElementById('rota-edit-mark'),defaults.mark);
 }
 
-function legacySaveRotaCellShift(){
-  if(!activeRotaCell){
-    toast('Select a rota cell first','warn');
-    return;
-  }
-  const type=document.getElementById('rota-edit-type')?.value||'Morning';
-  const defaults=ROTA_EDIT_DEFAULTS[type]||ROTA_EDIT_DEFAULTS.Morning;
-  const start=document.getElementById('rota-edit-start')?.value||'';
-  const end=document.getElementById('rota-edit-end')?.value||'';
-  const mark=document.getElementById('rota-edit-mark')?.value||defaults.mark;
-  const className=mark==='Off'?'off':mark==='Leave'?'draft':mark==='OT'?'overtime':defaults.className;
-  const code=mark==='Off'?'OFF':mark==='Leave'?'L':mark==='OT'?'OT':defaults.code;
-  const time=(start&&end)?`${start}-${end}`:'-';
-  const icon=className==='overtime'||className==='conflict'?'!':className==='off'?'•':className==='draft'?'○':'✓';
-  activeRotaCell.innerHTML=`<div class="rota-cell ${className}"><strong>${escapeHtml(code)}</strong><span>${escapeHtml(time)}</span><em>${escapeHtml(icon)}</em></div>`;
-  activeRotaCell.dataset.rotaNote=document.getElementById('rota-edit-notes')?.value||'';
-  closeM('m-edit-shift');
-  updateRotaStats();
-  toast('Shift updated','ok');
-  audit('Updated rota cell',`${code} ${time}`,'Saved');
-}
-
-function legacyRemoveRotaCellShift(){
-  if(!activeRotaCell){
-    closeM('m-edit-shift');
-    return;
-  }
-  activeRotaCell.innerHTML='<div class="rota-cell off"><strong>OFF</strong><span>-</span><em>•</em></div>';
-  closeM('m-edit-shift');
-  updateRotaStats();
-  toast('Shift removed','warn');
-  audit('Removed rota cell','Weekly rota','Deleted');
-}
-
 async function saveActiveRotaAssignmentFromModal(forceOff=false){
   if(!activeRotaCell){
     toast('Select a rota cell first','warn');
@@ -20657,6 +20799,12 @@ function _loadVisibleRotaRanges(){
   const month=document.getElementById('rota-month-value')?.value;
   const range=month?_monthRotaWeekStarts(month):null;
   if(range)_ensureRotaRangeLoaded(range.weekStarts[0],weekDateFromStart(range.weekStarts[range.weekStarts.length-1],6));
+}
+
+let _rotaSearchTimer=null;
+function debouncedRenderRotaBoards(){
+  clearTimeout(_rotaSearchTimer);
+  _rotaSearchTimer=setTimeout(renderRotaBoards,200);
 }
 
 function renderRotaBoards(){
@@ -24748,7 +24896,7 @@ function enhanceTable(table){
   state.input.addEventListener('input',()=>{
     state.query=state.input.value.trim().toLowerCase();
     state.page=1;
-    refreshEnhancedTable(table);
+    scheduleTableRefresh(table);
   });
   state.size.addEventListener('change',()=>{
     state.pageSize=state.size.value==='all'?'all':Number(state.size.value);

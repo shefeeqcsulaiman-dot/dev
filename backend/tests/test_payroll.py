@@ -101,6 +101,44 @@ def test_generate_payroll_deducts_approved_loan_and_reduces_stored_balance(clien
     assert stored["status"] == "Approved"
 
 
+def test_generate_payroll_name_matched_loan_not_double_drained_across_employees(client, db, auth_headers):
+    # Two employees sharing a full name, matched by name only (no
+    # employee_id on the loan record) — the second employee processed in
+    # generate_payroll()'s per-employee loop must see the balance already
+    # reduced by the first, not independently drain the same loan twice.
+    # This is the exact risk of hoisting _app_records() out of the loop
+    # (see payroll.py's generate_payroll): the mutation must still apply to
+    # the SAME in-session AppDataRecord row across both employees' calls.
+    r = client.get("/api/v1/auth/me", headers=auth_headers)
+    company_id = r.json()["company"]["id"]
+    emp_a = _seed_active_employee(db, company_id, basic_salary=5000, employee_no="PR-DUP-A", full_name="Shared Name Person")
+    emp_b = _seed_active_employee(db, company_id, basic_salary=5000, employee_no="PR-DUP-B", full_name="Shared Name Person")
+    _seed_app_record(db, company_id, "employeeLoans", "LOAN-DUP", {
+        "id": "LOAN-DUP", "employee": "Shared Name Person",
+        "status": "Approved", "balance": "600.00", "emi": "500.00",
+    })
+
+    r = client.post("/api/v1/payroll/generate", json={"period": "2025-11"}, headers=auth_headers)
+    assert r.status_code == 201, r.text
+    items_by_emp = {i["employee_id"]: i for i in r.json()["items"]}
+    first_deduction = items_by_emp[emp_a.id]["deductions"]
+    second_deduction = items_by_emp[emp_b.id]["deductions"]
+    # Total deducted across both employees must equal the loan balance
+    # (600.00), never 2x — whichever employee is processed first takes the
+    # true-up 500.00, the other takes only the 100.00 remainder.
+    assert {first_deduction, second_deduction} == {"500.00", "100.00"}
+
+    row = (
+        db.query(AppDataRecord)
+        .filter_by(company_id=company_id, collection="employeeLoans", record_key="LOAN-DUP")
+        .order_by(AppDataRecord.created_at.desc())
+        .first()
+    )
+    stored = json.loads(row.payload)
+    assert stored["balance"] == "0.00"
+    assert stored["status"] == "Closed"
+
+
 def test_generate_payroll_uses_configured_ot_hours_per_month(client, db, auth_headers):
     # Previously hardcoded to a 240-hour month regardless of what HR
     # Settings > OT Rules actually advertised on screen (22 work days x 10

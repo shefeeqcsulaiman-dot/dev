@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.auth_principal import resolve_active_branch
 from app.database import get_db
 from app.dependencies import Principal, get_current_principal, get_current_user, require_module
+from app.routers.reports import _cached_or_build
 from app.models import AppDataRecord, InventoryValuationLayer, ItemUnit, ItemUnitConversion, StockAdjustmentApproval, StockMovement, StockProductMapping, User, Warehouse
 from app.schemas import (
     InventoryValuationLayerOut,
@@ -164,21 +165,39 @@ def list_stock_levels(
     principal: Principal = Depends(get_current_principal),
 ) -> list[dict[str, object]]:
     if not inventory_backfill_disabled(db, principal.company_id):
+        # Always runs uncached — it's the one part of this endpoint that
+        # writes (new StockMovement/valuation rows for orphaned legacy
+        # purchases), and is already cheap when there's nothing new to
+        # backfill (see its own docstring/comment). Only the read/aggregate
+        # portion below is cached.
         backfill_purchase_stock_movements(db, principal)
-    movement_join_condition = (StockMovement.mapping_id == StockProductMapping.id) & (StockMovement.company_id == principal.company_id)
-    if principal.can_cross_branch("inventory"):
-        if branch_id:
-            movement_join_condition = movement_join_condition & (StockMovement.branch_id == branch_id)
+    can_cross_branch = principal.can_cross_branch("inventory")
+    resolved_branch_id = branch_id if can_cross_branch else resolve_active_branch(principal, branch_id)
+    # Same "hit on every page load" shape as reports.dashboard — cache key
+    # includes the cross-branch mode as well as the resolved branch: a
+    # cross-branch viewer's exact-branch-match join and a branch-scoped
+    # viewer's (branch-match OR NULL-branch) join are different queries
+    # that can return different totals for the same company+branch_id, so
+    # they must never share a cache entry.
+    mode = "cross" if can_cross_branch else "scoped"
+    cache_key = f"stock_levels:{principal.company_id}:{mode}:{resolved_branch_id or 'all'}"
+    return _cached_or_build(cache_key, 60, lambda: _build_stock_levels(db, principal.company_id, resolved_branch_id, can_cross_branch))
+
+
+def _build_stock_levels(db: Session, company_id: str, resolved_branch_id: str | None, can_cross_branch: bool) -> list[dict[str, object]]:
+    movement_join_condition = (StockMovement.mapping_id == StockProductMapping.id) & (StockMovement.company_id == company_id)
+    if can_cross_branch:
+        if resolved_branch_id:
+            movement_join_condition = movement_join_condition & (StockMovement.branch_id == resolved_branch_id)
     else:
         # A branch-scoped viewer sees stock quantities from their own
         # branch's movements only (plus branch-less legacy movements) —
         # each branch's physical stock is a separate count, not a shared
         # pool. Unassigned employees/the company admin still see the
         # full company-wide total, unchanged from before this phase.
-        active_branch = resolve_active_branch(principal, branch_id)
-        if active_branch:
+        if resolved_branch_id:
             movement_join_condition = movement_join_condition & (
-                (StockMovement.branch_id == active_branch) | (StockMovement.branch_id.is_(None))
+                (StockMovement.branch_id == resolved_branch_id) | (StockMovement.branch_id.is_(None))
             )
     rows = (
         db.query(
@@ -186,7 +205,7 @@ def list_stock_levels(
             func.coalesce(func.sum(StockMovement.quantity), 0).label("current_stock"),
         )
         .outerjoin(StockMovement, movement_join_condition)
-        .filter(StockProductMapping.company_id == principal.company_id)
+        .filter(StockProductMapping.company_id == company_id)
         .group_by(StockProductMapping.id)
         .order_by(StockProductMapping.sku)
         .all()
@@ -450,29 +469,39 @@ def backfill_purchase_stock_movements(db: Session, principal: Principal) -> None
 
 def _update_mapping_weighted_avg_cost(db: Session, company_id: str, mapping_ids: set[int]) -> None:
     """Update each mapping's cost to the weighted average of all its purchase movements."""
-    for mapping_id in mapping_ids:
-        movements = (
-            db.query(StockMovement)
-            .filter(
-                StockMovement.company_id == company_id,
-                StockMovement.mapping_id == mapping_id,
-                StockMovement.movement_type == "purchase",
-                StockMovement.quantity > 0,
-            )
-            .all()
+    if not mapping_ids:
+        return
+    # Two batched queries instead of two per mapping_id — same movements/
+    # mappings, same weighted-average math per mapping, just fetched once
+    # for the whole set instead of once per mapping_id in the loop.
+    movements_by_mapping: dict[int, list[StockMovement]] = {}
+    for movement in (
+        db.query(StockMovement)
+        .filter(
+            StockMovement.company_id == company_id,
+            StockMovement.mapping_id.in_(mapping_ids),
+            StockMovement.movement_type == "purchase",
+            StockMovement.quantity > 0,
         )
-        if not movements:
-            continue
+        .all()
+    ):
+        movements_by_mapping.setdefault(movement.mapping_id, []).append(movement)
+    if not movements_by_mapping:
+        return
+    mappings_by_id = {
+        mapping.id: mapping
+        for mapping in db.query(StockProductMapping).filter(
+            StockProductMapping.id.in_(movements_by_mapping.keys()),
+            StockProductMapping.company_id == company_id,
+        ).all()
+    }
+    for mapping_id, movements in movements_by_mapping.items():
         total_qty = sum(float(m.quantity) for m in movements)
         total_value = sum(float(m.quantity) * float(m.unit_cost) for m in movements)
         if total_qty > 0:
-            avg_cost = Decimal(str(round(total_value / total_qty, 6)))
-            mapping = db.query(StockProductMapping).filter(
-                StockProductMapping.id == mapping_id,
-                StockProductMapping.company_id == company_id,
-            ).first()
+            mapping = mappings_by_id.get(mapping_id)
             if mapping:
-                mapping.cost = avg_cost
+                mapping.cost = Decimal(str(round(total_value / total_qty, 6)))
 
 
 def stock_mapping_for_purchase_line(

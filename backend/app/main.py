@@ -25,7 +25,7 @@ static_dir: pathlib.Path = (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from brotli_asgi import BrotliMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -82,6 +82,9 @@ def _resolve_app_js() -> tuple[bytes, bool]:
     return content, is_min
 
 
+_bg_tasks: set = set()
+
+
 async def _invalidate_cache_bg(auth_header: str) -> None:
     import asyncio
     try:
@@ -135,7 +138,9 @@ def create_app() -> FastAPI:
         if request.method in ("POST", "PUT", "PATCH", "DELETE") and "/api/v1/" in request.url.path:
             import asyncio
             auth_header = request.headers.get("authorization", "")
-            asyncio.create_task(_invalidate_cache_bg(auth_header))
+            task = asyncio.create_task(_invalidate_cache_bg(auth_header))
+            _bg_tasks.add(task)
+            task.add_done_callback(_bg_tasks.discard)
         return response
 
     @app.middleware("http")
@@ -525,6 +530,7 @@ def ensure_schema_updates() -> None:
                         {"photo": photo, "cid": company_id, "eno": emp_no},
                     )
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_employees_branch_id ON employees (branch_id)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_employees_company_status ON employees (company_id, status)"))
             # Portal usernames are unique platform-wide (not just per-company) so
             # /ess and /hr/login can look an employee up by username alone, with
             # no ?c=<company_id> link required. Partial index (WHERE username IS
@@ -673,6 +679,10 @@ def ensure_schema_updates() -> None:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_invoices_branch_id ON invoices (branch_id)"))
         if "tax_lines" in table_names:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_tax_lines_company_direction ON tax_lines (company_id, direction)"))
+        if "payments" in table_names:
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_payments_company_created ON payments (company_id, created_at)"))
+        if "receipts" in table_names:
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_receipts_company_created ON receipts (company_id, created_at)"))
         if "general_ledger_entries" in table_names:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_gl_entries_company_account_date ON general_ledger_entries (company_id, account_id, entry_date)"))
         if "invoice_lines" in table_names:
@@ -735,6 +745,7 @@ def ensure_schema_updates() -> None:
             if "branch_id" not in existing_columns:
                 connection.execute(text("ALTER TABLE payroll_runs ADD COLUMN branch_id VARCHAR(36)"))
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_payroll_runs_branch_id ON payroll_runs (branch_id)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_payroll_runs_company_period ON payroll_runs (company_id, period)"))
         if "accounts" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("accounts")}
             required_columns = {

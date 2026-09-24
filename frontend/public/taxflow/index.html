@@ -4,12 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TaxFlow UAE — Business Management Platform</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
 <link rel="preload" href="src/app.js?v=bcbc27adc4" as="script">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Fonts (Syne, DM Sans, DM Mono) are self-hosted via @font-face in styles.css — see fonts/ directory. -->
 <link rel="stylesheet" href="src/styles.css?v=408c838b5d">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
 </head>
@@ -1647,7 +1645,7 @@
       <div class="stat"><div class="stat-lbl">Recorded Outflow</div><div class="stat-val" style="color:var(--red)">AED 0.00</div></div>
     </div>
     <div class="card mb16">
-      <div class="card-hd"><div class="card-title">Registered Bank Accounts</div><button class="btn btn-p" onclick="showM('m-bank')">+ Add Account</button></div>
+      <div class="card-hd"><div class="card-title">Registered Bank Accounts</div><button class="btn btn-p" onclick="_ensureLazyModal('m-bank');showM('m-bank')">+ Add Account</button></div>
       <table class="tbl">
         <thead><tr><th>Bank</th><th>Account Name</th><th>IBAN</th><th>Currency</th><th>Type</th><th>Balance</th><th>Status</th><th></th></tr></thead>
         <tbody id="bank-account-tbody">
@@ -2683,11 +2681,23 @@
   <div class="tab-body" id="pay-out">
     <div class="card">
       <div class="card-hd"><div class="card-title">Supplier Payments Made</div><button class="btn btn-p btn-sm" onclick="openPaymentModal('Supplier Payment')">+ Pay Vendor</button></div>
+      <div class="flx" style="gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <input class="fi tbl-search" id="payment-out-search" placeholder="Search ref, vendor, method…" style="max-width:260px" oninput="onSupplierPaymentSearchInput()">
+        <select class="fi tbl-size" id="payment-out-sort" style="max-width:190px" onchange="renderPaymentOutCards()">
+          <option value="date-desc">Newest first</option>
+          <option value="date-asc">Oldest first</option>
+          <option value="amount-desc">Amount: high to low</option>
+          <option value="amount-asc">Amount: low to high</option>
+          <option value="vendor-asc">Vendor: A–Z</option>
+        </select>
+      </div>
       <div class="pay-card-list" id="payment-out-cards">
         <div class="pay-card-empty" id="payment-out-empty">No supplier payments in database yet.</div>
       </div>
     </div>
-    <!-- hidden table keeps dedup/auto-number logic intact -->
+    <!-- hidden table keeps dedup/auto-number logic intact and doubles as the
+         card list's data source (see renderPaymentOutCards()) so search/sort
+         can rebuild the visible cards from it at any time. -->
     <table style="display:none"><tbody id="payment-out-tbody"></tbody></table>
   </div>
 </div>
@@ -5023,35 +5033,8 @@ period_locks ─&lt; audit_logs
   </div>
 </div>
 
-<div class="overlay" id="m-bank" onclick="closeOvBg(event,'m-bank')">
-  <div class="modal"><div class="modal-title">Add Bank Account</div><div class="modal-sub">Register a new bank account for reconciliation</div>
-    <div class="fg"><label class="fl">Bank Name</label><select class="fi" id="bank-name"><option>Emirates NBD</option><option>ADCB</option><option>FAB</option><option>Mashreq</option><option>ADIB</option><option>DIB</option><option>RAK Bank</option><option>HSBC UAE</option></select></div>
-    <div class="fg"><label class="fl">Account Holder Name</label><input class="fi" id="bank-holder"></div>
-    <div class="fg"><label class="fl">IBAN</label><input class="fi mono" id="bank-iban" placeholder="AE..."></div>
-    <div class="fr2"><div class="fg"><label class="fl">Account Type</label><select class="fi" id="bank-type"><option>Current</option><option>Savings</option></select></div><div class="fg"><label class="fl">Currency</label><select class="fi" id="bank-currency"><option>AED</option><option>USD</option><option>EUR</option><option>GBP</option></select></div></div>
-    <div class="fg"><label class="fl">Opening Balance</label><input class="fi mono" id="bank-balance" placeholder="0.00" inputmode="decimal"></div>
-    <div class="fr2"><div class="fg"><label class="fl">Swift Code</label><input class="fi mono" id="bank-swift" placeholder="ENBD AEADxxx"></div><div class="fg"><label class="fl">Branch</label><input class="fi" id="bank-branch" placeholder="Branch name"></div></div>
-    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-bank')">Cancel</button><button class="btn btn-p" onclick="saveBankAccount()">Save Account</button></div>
-  </div>
-</div>
-
-<div class="overlay" id="m-new-layout" onclick="closeOvBg(event,'m-new-layout')">
-  <div class="modal" style="max-width:420px">
-    <div class="modal-title">New Invoice Layout</div>
-    <div class="modal-sub">Create a named layout — customise fonts, colours and fields after saving</div>
-    <div class="fg" style="margin-top:14px"><label class="fl">Layout Name</label><input class="fi" id="new-layout-name" placeholder="e.g. Export Invoice, Arabic Layout…" maxlength="60" onkeydown="if(event.key==='Enter')confirmAddInvoiceLayout()"></div>
-    <div class="fg"><label class="fl">Start From</label>
-      <select class="fi" id="new-layout-base">
-        <option value="default">Default settings (blank)</option>
-        <option value="current">Current active layout (duplicate)</option>
-      </select>
-    </div>
-    <div class="fr2" style="margin-top:16px">
-      <button class="btn btn-g" onclick="hideM('m-new-layout')">Cancel</button>
-      <button class="btn btn-p" onclick="confirmAddInvoiceLayout()">Create Layout</button>
-    </div>
-  </div>
-</div>
+<!-- Add Bank Account / New Invoice Layout modals are injected on first open —
+     see _LAZY_MODALS in src/app.js (m-bank, m-new-layout). -->
 
 <div class="overlay" id="m-emp" onclick="closeOvBg(event,'m-emp')">
   <div class="modal modal-lg"><div class="modal-title">Add Employee</div><div class="modal-sub">Complete the employee profile, employment terms and document details</div>
@@ -5540,68 +5523,8 @@ period_locks ─&lt; audit_logs
   </div>
 </div>
 
-<!-- ═══════════════════ DEPARTMENT MODAL ═══════════════════ -->
-<div class="overlay" id="m-dept" onclick="closeOvBg(event,'m-dept')">
-  <div class="modal">
-    <div class="modal-title" id="dept-modal-title">Add Department</div>
-    <div class="modal-sub">Department details used in employee profiles and reporting</div>
-    <input type="hidden" id="dept-edit-id">
-    <div class="fr2">
-      <div class="fg"><label class="fl">Department Name <span style="color:var(--red)">*</span></label><input class="fi" id="dept-name" placeholder="e.g. Finance"></div>
-      <div class="fg"><label class="fl">Short Code</label><input class="fi" id="dept-code" placeholder="e.g. FIN" maxlength="6" style="text-transform:uppercase"></div>
-    </div>
-    <div class="fr2">
-      <div class="fg"><label class="fl">Department Head / Manager</label><input class="fi" id="dept-head" placeholder="e.g. Ahmed Al Mansouri"></div>
-      <div class="fg"><label class="fl">Status</label><select class="fi" id="dept-status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
-    </div>
-    <div class="fg"><label class="fl">Description</label><input class="fi" id="dept-desc" placeholder="Brief description of this department's function"></div>
-    <div class="modal-actions">
-      <button id="dept-delete-btn" class="btn btn-sm" style="display:none;background:var(--red-bg);color:var(--red);border-color:var(--red);margin-right:auto" onclick="deleteDeptFromModal()">Delete</button>
-      <button class="btn btn-ghost" onclick="hideM('m-dept')">Cancel</button>
-      <button class="btn btn-p" onclick="saveDeptModal()">Save Department</button>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════ BRANCH MODAL ═══════════════════ -->
-<div class="overlay" id="m-branch" onclick="closeOvBg(event,'m-branch')">
-  <div class="modal">
-    <div class="modal-title" id="branch-modal-title">Add Branch</div>
-    <div class="modal-sub">Register a branch or office location for your company</div>
-    <input type="hidden" id="branch-edit-id">
-    <div class="fr2">
-      <div class="fg"><label class="fl">Branch Name <span style="color:var(--red)">*</span></label><input class="fi" id="branch-name" placeholder="e.g. Dubai HQ"></div>
-      <div class="fg"><label class="fl">Short Code</label><input class="fi" id="branch-code" placeholder="e.g. DXB" maxlength="6" style="text-transform:uppercase"></div>
-    </div>
-    <div class="fr2">
-      <div class="fg"><label class="fl">City / Emirate</label><input class="fi" id="branch-city" placeholder="e.g. Dubai"></div>
-      <div class="fg"><label class="fl">Status</label><select class="fi" id="branch-status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
-    </div>
-    <div class="fr2">
-      <div class="fg"><label class="fl">Country</label><select class="fi" id="branch-country" onchange="onBranchCountryChange()"></select></div>
-      <div class="fg"><label class="fl">Currency</label><input class="fi" id="branch-currency" readonly style="background:var(--surface2);color:var(--text3)"></div>
-    </div>
-    <div style="font-size:11px;color:var(--text3);margin-top:-8px;margin-bottom:10px">Reference only — this branch's invoices and VAT still use the company's own currency/VAT rate in Settings.</div>
-
-    <div style="margin:14px 0 10px">
-      <label class="fl">Module Access</label>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Which modules this branch's own login can use — leave all checked for unrestricted access</div>
-      <div id="branch-mod-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 10px"></div>
-    </div>
-
-    <div class="fr2">
-      <div class="fg"><label class="fl">Branch Login Username</label><input class="fi" id="branch-username" placeholder="e.g. dubai-branch" autocomplete="username"></div>
-      <div class="fg"><label class="fl">Branch Login Password</label><input class="fi mono" id="branch-password" type="password" placeholder="Set login password" autocomplete="new-password"></div>
-    </div>
-    <div id="branch-pw-hint" style="font-size:11px;color:var(--text3);margin-top:-8px;margin-bottom:10px"></div>
-
-    <div class="modal-actions">
-      <button id="branch-delete-btn" class="btn btn-sm" style="display:none;background:var(--red-bg);color:var(--red);border-color:var(--red);margin-right:auto" onclick="deleteBranchFromModal()">Delete</button>
-      <button id="branch-cancel-btn" class="btn btn-ghost" onclick="hideM('m-branch')">Cancel</button>
-      <button id="branch-save-btn" class="btn btn-p" onclick="saveBranchModal()">Save Branch</button>
-    </div>
-  </div>
-</div>
+<!-- Add Department / Add Branch modals are injected on first open — see
+     _LAZY_MODALS in src/app.js (m-dept, m-branch). -->
 
 <script src="config.js"></script>
 <script src="src/app.js?v=bcbc27adc4" defer></script>

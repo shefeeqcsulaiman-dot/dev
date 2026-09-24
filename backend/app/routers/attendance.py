@@ -18,12 +18,12 @@ import pathlib
 import re
 import secrets
 from calendar import monthrange
-from datetime import UTC, date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from urllib.parse import parse_qsl
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -31,7 +31,6 @@ from sqlalchemy.orm import Session
 import app.cache as cache
 import app.timezone_utils as timezone_utils
 from app import attendance_store, biotime_client, biotime_sync, crypto
-from app.attendance_store import _pair_day_punches
 from app.database import get_db
 from app.auth_principal import resolve_active_branch
 from app.department_scope import assert_employee_in_scope, scope_employee_query, scoped_employee_no_select, scoped_employee_nos
