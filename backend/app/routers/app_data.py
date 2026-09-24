@@ -22,7 +22,7 @@ import datetime as _dt
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
