@@ -4,11 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TaxFlow UAE — Business Management Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=bcbc27adc4" as="script">
-<!-- Fonts (Syne, DM Sans, DM Mono) are self-hosted via @font-face in styles.css — see fonts/ directory. -->
-<link rel="stylesheet" href="src/styles.css?v=408c838b5d">
+<link rel="preload" href="src/styles.css?v=5686e15d0f" as="style">
+<link rel="preload" href="src/app.js?v=0d123b28fb" as="script">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="src/styles.css?v=5686e15d0f">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
 </head>
 <body class="theme-light">
@@ -631,6 +633,69 @@
 
       </div>
 
+      <!-- ROW 5: Workforce Snapshot (same design as hrms.html's own KPI row -- see renderWorkforceSnapshot() in app.js, data comes from /reports/dashboard's hr_snapshot field, no extra fetch) -->
+      <div class="main-kpi-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px">
+        <div class="main-kpi-card">
+          <div class="main-kpi-icon" style="background:#eff6ff">
+            <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.6"><circle cx="8" cy="7" r="3.5"/><path d="M2 18c0-3.5 2.7-5.5 6-5.5s6 2 6 5.5"/><circle cx="17" cy="7" r="2.5"/><path d="M20 17.5c0-2.5-1.5-4-3-4.5"/></svg>
+          </div>
+          <div>
+            <div class="main-kpi-lbl">Total Employees</div>
+            <div class="main-kpi-val" id="main-kpi-emp">—</div>
+            <div class="main-kpi-trend"><span>active headcount</span></div>
+          </div>
+        </div>
+        <div class="main-kpi-card">
+          <div class="main-kpi-icon" style="background:#f0fdf4">
+            <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.6"><circle cx="11" cy="11" r="8" stroke-width="1.4"/><path d="M7 11l3 3 5-5"/></svg>
+          </div>
+          <div>
+            <div class="main-kpi-lbl">Present Today</div>
+            <div class="main-kpi-val" id="main-kpi-present" style="color:#16a34a">—</div>
+            <div class="main-kpi-trend" id="main-kpi-present-trend"><span>— of total</span></div>
+          </div>
+        </div>
+        <div class="main-kpi-card">
+          <div class="main-kpi-icon" style="background:#faf5ff">
+            <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#7c3aed" stroke-width="1.6"><path d="M11 2l2 3h4l-3 2.5 1.5 4-4.5-2.5L6.5 11.5 8 7.5 5 5h4z"/><path d="M4 18c1-2 3-3 7-3s6 1 7 3"/></svg>
+          </div>
+          <div>
+            <div class="main-kpi-lbl">On Leave</div>
+            <div class="main-kpi-val" id="main-kpi-leave" style="color:#7c3aed">—</div>
+            <div class="main-kpi-trend"><span>approved leaves</span></div>
+          </div>
+        </div>
+        <div class="main-kpi-card">
+          <div class="main-kpi-icon" style="background:#fff7ed">
+            <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#ea580c" stroke-width="1.6"><rect x="3" y="5" width="16" height="12" rx="2"/><path d="M3 9h16M7 13h3M14 13h1"/></svg>
+          </div>
+          <div>
+            <div class="main-kpi-lbl">Net Payroll (this month)</div>
+            <div class="main-kpi-val" id="main-kpi-payroll" style="color:#ea580c">—</div>
+            <div class="main-kpi-trend"><span>runs this year</span></div>
+          </div>
+        </div>
+        <div class="main-kpi-card">
+          <div class="main-kpi-icon" style="background:#eff6ff">
+            <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.6"><rect x="3" y="7" width="16" height="11" rx="2"/><path d="M8 7V5a3 3 0 016 0v2"/><path d="M11 12v3M9.5 13.5h3"/></svg>
+          </div>
+          <div>
+            <div class="main-kpi-lbl">Open Positions</div>
+            <div class="main-kpi-val" id="main-kpi-recs" style="color:#2563eb">—</div>
+            <div class="main-kpi-trend"><span>active requisitions</span></div>
+          </div>
+        </div>
+        <div class="main-kpi-card">
+          <div class="main-kpi-icon" style="background:#fef2f2">
+            <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#dc2626" stroke-width="1.6"><rect x="4" y="3" width="14" height="16" rx="2"/><path d="M8 7h6M8 10.5h6M8 14h4"/><circle cx="16" cy="16" r="4" fill="#fef2f2" stroke="#dc2626"/><path d="M16 14.5v2M16 17.5v.5"/></svg>
+          </div>
+          <div>
+            <div class="main-kpi-lbl">Pending Approvals</div>
+            <div class="main-kpi-val" id="main-kpi-pending" style="color:#dc2626">—</div>
+            <a class="main-kpi-action" onclick="go('hrms')">View all</a>
+          </div>
+        </div>
+      </div>
 
     </div><!-- end .mb3-main -->
 
@@ -919,7 +984,7 @@
         </div>
         <div class="fr2">
           <div class="fg"><label class="fl">Standard VAT Rate</label><input class="fi" value="5%" readonly style="color:var(--accent);font-weight:600"></div>
-          <div class="fg"><label class="fl">Annual Taxable Turnover (AED)</label><input class="fi mono" value="2,400,000"></div>
+          <div class="fg"><label class="fl" data-currency-label>Annual Taxable Turnover (AED)</label><input class="fi mono" value="2,400,000"></div>
         </div>
         <div class="fg"><label class="fl">FTA Account Username</label><input class="fi" id="co-fta-user" placeholder="username@eservices.tax.gov.ae"></div>
       </div>
@@ -939,12 +1004,12 @@
 <!-- ═══════════════════ SALES & INVOICES ═══════════════════ -->
 <div class="page" id="page-sales">
   <div class="tabs">
-    <div class="tab on" onclick="stab(this,'s-upload')">Upload Invoices</div>
-    <div class="tab" onclick="stab(this,'s-extract')">AI Extraction</div>
-    <div class="tab" onclick="stab(this,'s-validate')">Validation</div>
-    <div class="tab" onclick="stab(this,'s-invoices')">Invoices</div>
-    <div class="tab" onclick="openSalesAddChoice()">Add Sales</div>
-    <div class="tab" onclick="stab(this,'s-customers')">Customers</div>
+    <div class="tab on" onclick="stab(this,'s-upload')" data-i18n="tab_upload_invoices">Upload Invoices</div>
+    <div class="tab" onclick="stab(this,'s-extract')" data-i18n="tab_ai_extraction">AI Extraction</div>
+    <div class="tab" onclick="stab(this,'s-validate')" data-i18n="tab_validation">Validation</div>
+    <div class="tab" onclick="stab(this,'s-invoices')" data-i18n="tab_invoices">Invoices</div>
+    <div class="tab" onclick="openSalesAddChoice()" data-i18n="tab_add_sales">Add Sales</div>
+    <div class="tab" onclick="stab(this,'s-customers')" data-i18n="tab_customers">Customers</div>
   </div>
 
   <!-- Upload Sales Invoices -->
@@ -1118,7 +1183,7 @@
             <div class="fg" style="margin:0">
               <label class="fl">Customer Name</label>
               <div class="field-action-row">
-                <input class="fi" id="inv-cust" list="invoice-customer-options" placeholder="Select or type customer" dir="auto" required onfocus="refreshInvoiceCustomerOptions()" oninput="applyInvoiceCustomerSelection();updateSalesInvPreview()" onchange="applyInvoiceCustomerSelection();updateSalesInvPreview()">
+                <input class="fi" id="inv-cust" data-ac="invoice-customer" placeholder="Select or type customer" dir="auto" required autocomplete="off" oninput="applyInvoiceCustomerSelection();updateSalesInvPreview()" onchange="applyInvoiceCustomerSelection();updateSalesInvPreview()">
                 <button class="btn btn-g btn-sm" type="button" onclick="openAddCustomerFromInvoice()">+ Add</button>
               </div>
               <datalist id="invoice-customer-options"></datalist>
@@ -1147,7 +1212,7 @@
             <div></div>
           </div>
           <div id="inv-lines">
-            <div class="inv-item sales-inv-line"><input class="fi inv-product" list="invoice-product-options" placeholder="Description or product" dir="auto" style="font-size:12.5px" onfocus="refreshInvoiceProductSuggestions()" onchange="applyInvoiceProductSuggestion(this)"><input class="fi inv-unit" value="PCS" dir="auto" readonly style="font-size:12.5px;background:var(--bg)"><input class="fi inv-qty" type="number" min="0.01" step="0.01" value="1" style="font-size:12.5px" oninput="calcLine(this)"><input class="fi inv-price" type="number" min="0" step="0.01" value="0.00" style="font-size:12.5px" oninput="calcLine(this)"><input class="fi mono inv-amount" value="0.00" readonly style="background:var(--bg)"><button class="btn btn-g" style="padding:4px 8px" onclick="remLine(this)">&#x2715;</button></div>
+            <div class="inv-item sales-inv-line"><input class="fi inv-product" data-ac="invoice-product" placeholder="Description or product" dir="auto" autocomplete="off" style="font-size:12.5px" onchange="applyInvoiceProductSuggestion(this)"><input class="fi inv-unit" value="PCS" dir="auto" readonly style="font-size:12.5px;background:var(--bg)"><input class="fi inv-qty" type="number" min="0.01" step="0.01" value="1" style="font-size:12.5px" oninput="calcLine(this)"><input class="fi inv-price" type="number" min="0" step="0.01" value="0.00" style="font-size:12.5px" oninput="calcLine(this)"><input class="fi mono inv-amount" value="0.00" readonly style="background:var(--bg)"><button class="btn btn-g" style="padding:4px 8px" onclick="remLine(this)">&#x2715;</button></div>
           </div>
           <div class="sinv-totals-wrap">
             <div class="sinv-totals-box">
@@ -1163,7 +1228,7 @@
           <div class="sinv-section-title">Payment &amp; Notes</div>
           <div class="fr3 mb8">
             <div class="fg" style="margin:0"><label class="fl">Payment Terms</label><select class="fi"><option>Net 30</option><option>Net 15</option><option>Net 60</option><option>Due on Receipt</option></select></div>
-            <div class="fg" style="margin:0"><label class="fl">Currency</label><select class="fi"><option>AED</option><option>USD</option><option>EUR</option></select></div>
+            <div class="fg" style="margin:0"><label class="fl">Currency</label><select class="fi" id="inv-currency" disabled title="Invoices are issued in the company currency"><option data-currency-label>AED</option></select></div>
             <div></div>
           </div>
           <div class="fg" style="margin:0"><label class="fl">Notes / Terms &amp; Conditions</label><textarea class="fi" rows="3" placeholder="Payment instructions, bank details, terms and conditions..."></textarea></div>
@@ -1179,6 +1244,7 @@
             <button class="btn btn-g btn-sm" onclick="saveDraftInvoice()">Save Draft</button>
             <button class="btn btn-g btn-sm" onclick="openDraftInvoicePreview()">Preview</button>
             <button class="btn btn-g btn-sm" onclick="openDraftInvoiceShare()">Share</button>
+            <button class="btn btn-g btn-sm" type="button" title="Reverse and repost the ledger entry with this invoice's current amounts (only works after it's already posted)" onclick="updateLedgerForSource('sales',document.getElementById('inv-no')?.value?.trim())">Update Ledger</button>
             <button class="btn btn-p btn-sm" id="sales-save-send-btn" onclick="saveAndSendDraftInvoice()">Save &amp; Send</button>
           </div>
           <div class="sinv-preview-content">
@@ -1251,7 +1317,7 @@
         <div class="card-hd"><div class="card-title">Quotation Details</div></div>
         <div class="fr2">
           <div class="fg"><label class="fl">Quotation No.</label><input class="fi mono" id="quote-no"></div>
-          <div class="fg"><label class="fl">Customer</label><div class="field-action-row"><input class="fi" id="quote-customer" list="quote-customer-options" placeholder="Select or type customer" dir="auto" onfocus="refreshQuotationCustomerOptions()" onchange="applyQuotationCustomerSelection()"><button class="btn btn-g btn-sm" type="button" onclick="openAddCustomerFromQuotation()">+ Add</button></div><datalist id="quote-customer-options"></datalist></div>
+          <div class="fg"><label class="fl">Customer</label><div class="field-action-row"><input class="fi" id="quote-customer" data-ac="quote-customer" placeholder="Select or type customer" dir="auto" autocomplete="off" onchange="applyQuotationCustomerSelection()"><button class="btn btn-g btn-sm" type="button" onclick="openAddCustomerFromQuotation()">+ Add</button></div></div>
           <div class="fg"><label class="fl">Date</label><input class="fi" id="quote-date" type="date"></div>
           <div class="fg"><label class="fl">Valid Until</label><input class="fi" id="quote-valid" type="date"></div>
         </div>
@@ -1283,14 +1349,14 @@
 <!-- ═══════════════════ PURCHASES ═══════════════════ -->
 <div class="page" id="page-purchase">
   <div class="tabs">
-    <div class="tab on" onclick="stab(this,'p-upload')">Upload Documents</div>
-    <div class="tab" onclick="stab(this,'p-extract')">AI Extraction</div>
-    <div class="tab" onclick="openPurchaseAddChoice()">Add Purchase</div>
-    <div class="tab" onclick="stab(this,'p-records')">Purchase Records</div>
-    <div class="tab" onclick="stab(this,'p-lpo')">Local Purchase Orders</div>
-    <div class="tab" onclick="stab(this,'p-fpo')">Foreign Purchase Orders</div>
-    <div class="tab" onclick="stab(this,'p-vendors')">Vendors</div>
-    <div class="tab" onclick="stab(this,'p-master')">Purchase Settings</div>
+    <div class="tab on" onclick="stab(this,'p-upload')" data-i18n="tab_upload_documents">Upload Documents</div>
+    <div class="tab" onclick="stab(this,'p-extract')" data-i18n="tab_ai_extraction">AI Extraction</div>
+    <div class="tab" onclick="openPurchaseAddChoice()" data-i18n="tab_add_purchase">Add Purchase</div>
+    <div class="tab" onclick="stab(this,'p-records')" data-i18n="tab_purchase_records">Purchase Records</div>
+    <div class="tab" onclick="stab(this,'p-lpo')" data-i18n="tab_lpo">Local Purchase Orders</div>
+    <div class="tab" onclick="stab(this,'p-fpo')" data-i18n="tab_fpo">Foreign Purchase Orders</div>
+    <div class="tab" onclick="stab(this,'p-vendors')" data-i18n="tab_vendors">Vendors</div>
+    <div class="tab" onclick="stab(this,'p-master')" data-i18n="tab_purchase_settings">Purchase Settings</div>
   </div>
 
   <div class="tab-body on" id="p-upload">
@@ -1634,20 +1700,20 @@
 <!-- ═══════════════════ BANK ═══════════════════ -->
 <div class="page" id="page-bank">
   <div class="tabs">
-    <div class="tab on" onclick="stab(this,'bk-accounts')">Bank Accounts</div>
-    <div class="tab" onclick="stab(this,'bk-transactions')">Transactions</div>
-    <div class="tab" onclick="stab(this,'bk-reconcile')">Reconciliation</div>
+    <div class="tab on" onclick="stab(this,'bk-accounts')" data-i18n="tab_bank_accounts">Bank Accounts</div>
+    <div class="tab" onclick="stab(this,'bk-transactions')" data-i18n="tab_transactions">Transactions</div>
+    <div class="tab" onclick="stab(this,'bk-reconcile')" data-i18n="tab_reconciliation">Reconciliation</div>
   </div>
   <div class="tab-body on" id="bk-accounts">
     <div class="g3 mb16">
-      <div class="stat"><div class="stat-lbl">Total Balance</div><div class="stat-val" style="color:var(--green)">AED 0.00</div></div>
-      <div class="stat"><div class="stat-lbl">Recorded Inflow</div><div class="stat-val" style="color:var(--accent)">AED 0.00</div></div>
-      <div class="stat"><div class="stat-lbl">Recorded Outflow</div><div class="stat-val" style="color:var(--red)">AED 0.00</div></div>
+      <div class="stat"><div class="stat-lbl" data-i18n="bk_total_balance">Total Balance</div><div class="stat-val" style="color:var(--green)">AED 0.00</div></div>
+      <div class="stat"><div class="stat-lbl" data-i18n="bk_recorded_inflow">Recorded Inflow</div><div class="stat-val" style="color:var(--accent)">AED 0.00</div></div>
+      <div class="stat"><div class="stat-lbl" data-i18n="bk_recorded_outflow">Recorded Outflow</div><div class="stat-val" style="color:var(--red)">AED 0.00</div></div>
     </div>
     <div class="card mb16">
-      <div class="card-hd"><div class="card-title">Registered Bank Accounts</div><button class="btn btn-p" onclick="_ensureLazyModal('m-bank');showM('m-bank')">+ Add Account</button></div>
+      <div class="card-hd"><div class="card-title" data-i18n="bk_registered_accounts">Registered Bank Accounts</div><button class="btn btn-p" onclick="showM('m-bank')" data-i18n="bk_add_account">+ Add Account</button></div>
       <table class="tbl">
-        <thead><tr><th>Bank</th><th>Account Name</th><th>IBAN</th><th>Currency</th><th>Type</th><th>Balance</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th data-i18n="th_bank">Bank</th><th data-i18n="th_account_name">Account Name</th><th data-i18n="th_iban">IBAN</th><th data-i18n="th_currency">Currency</th><th data-i18n="th_type">Type</th><th data-i18n="th_balance">Balance</th><th data-i18n="th_status">Status</th><th></th></tr></thead>
         <tbody id="bank-account-tbody">
           <tr data-empty-state="1"><td colspan="8" style="color:var(--text3);text-align:center">No bank accounts in database yet.</td></tr>
         </tbody>
@@ -1732,7 +1798,7 @@
 
   <div class="tab-body on" id="pay-run">
     <div class="g4 mb16">
-      <div class="stat"><div class="stat-lbl">Gross Payroll</div><div class="stat-val" id="pay-stat-gross" style="color:var(--accent)">AED 0</div><div class="stat-delta">June 2024</div></div>
+      <div class="stat"><div class="stat-lbl">Gross Payroll</div><div class="stat-val" id="pay-stat-gross" style="color:var(--accent)">AED 0</div><div class="stat-delta" id="pay-stat-period">—</div></div>
       <div class="stat"><div class="stat-lbl">Deductions</div><div class="stat-val" id="pay-stat-ded" style="color:var(--amber)">AED 0</div><div class="stat-delta">loans · absence · penalties</div></div>
       <div class="stat"><div class="stat-lbl">Net Pay</div><div class="stat-val" id="pay-stat-net" style="color:var(--green)">AED 0</div><div class="stat-delta">ready for WPS</div></div>
       <div class="stat"><div class="stat-lbl">Exceptions</div><div class="stat-val" id="pay-stat-exc" style="color:var(--red)">0</div><div class="stat-delta">need review</div></div>
@@ -1740,7 +1806,7 @@
 
     <div class="card mb16">
       <div class="card-hd">
-        <div><div class="card-title">Payroll Run — June 2024</div><div class="card-sub">Attendance, leave, overtime, advances, and WPS validation</div></div>
+        <div><div class="card-title">Payroll Run</div><div class="card-sub">Attendance, leave, overtime, advances, and WPS validation</div></div>
         <div class="flx">
           <select class="fi" style="width:140px" id="pay-period" onchange="toast('Payroll period changed','info')"><option>June 2024</option><option>May 2024</option><option>April 2024</option></select>
           <button class="btn btn-g btn-sm" onclick="recalcPayroll()">Recalculate</button>
@@ -1843,8 +1909,8 @@
           <div class="fg"><label class="fl">Routing Bank</label><select class="fi"><option>ADCB</option><option>Emirates NBD</option><option>FAB</option></select></div>
         </div>
         <div class="fr2">
-          <div class="fg"><label class="fl">File Sequence</label><input class="fi mono" value="SIF-2024-06-001"></div>
-          <div class="fg"><label class="fl">Salary Month</label><input class="fi" value="June 2024"></div>
+          <div class="fg"><label class="fl">File Sequence</label><input class="fi mono" value="" placeholder="e.g. SIF-YYYY-MM-001"></div>
+          <div class="fg"><label class="fl">Salary Month</label><input class="fi" value="" placeholder="e.g. September 2026"></div>
         </div>
         <div class="divider"></div>
         <div class="flx" style="flex-wrap:wrap"><button class="btn btn-g" onclick="validateWPS()">Validate WPS</button><button class="btn btn-p" onclick="generateSIF()">Generate SIF</button><button class="btn btn-g" onclick="toast('SIF download prepared','ok')">Download</button></div>
@@ -1897,7 +1963,7 @@
       <table class="tbl" data-keep-static="1">
         <thead><tr><th>Step</th><th>Owner</th><th>Status</th><th>Completed</th><th>Notes</th></tr></thead>
         <tbody>
-          <tr><td>Prepared</td><td>Payroll Officer</td><td><span class="b b-g">Done</span></td><td>28 Jun 17:20</td><td>Attendance and adjustments imported</td></tr>
+          <tr><td>Prepared</td><td>Payroll Officer</td><td><span class="b b-a" id="pay-prep-status">Pending</span></td><td id="pay-prep-time">—</td><td>Attendance and adjustments imported</td></tr>
           <tr><td>Finance Review</td><td>Finance Manager</td><td><span class="b b-a" id="pay-fin-status">Pending</span></td><td>—</td><td>Review WPS exception before approval</td></tr>
           <tr><td>Management Approval</td><td>General Manager</td><td><span class="b b-gray" id="pay-mgmt-status">Waiting</span></td><td>—</td><td>Required before SIF release</td></tr>
           <tr><td>Bank Upload</td><td>Treasury</td><td><span class="b b-gray">Waiting</span></td><td>—</td><td>Upload SIF after approval</td></tr>
@@ -1921,9 +1987,9 @@
       </div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Controls</div></div>
-        <div class="fg"><label class="fl">Journal Reference</label><input class="fi mono" value="PAY-JE-2024-06"></div>
+        <div class="fg"><label class="fl">Journal Reference</label><input class="fi mono" value="" placeholder="e.g. PAY-JE-YYYY-MM"></div>
         <div class="fg"><label class="fl">Cost Center Split</label><select class="fi"><option>By Department</option><option>Single Payroll Cost Center</option><option>By Employee</option></select></div>
-        <div class="fg"><label class="fl">Posting Date</label><input class="fi" type="date" value="2024-06-30"></div>
+        <div class="fg"><label class="fl">Posting Date</label><input class="fi" type="date" value=""></div>
         <button class="btn btn-g" onclick="toast('Payroll accrual reversal scheduled','ok')">Schedule Reversal</button>
       </div>
     </div>
@@ -1936,6 +2002,7 @@
     <div class="tab on" onclick="stab(this,'inv-stock')">Stock Dashboard</div>
     <div class="tab" onclick="stab(this,'inv-items')">Item Master</div>
     <div class="tab" onclick="stab(this,'inv-mapping')">Stock Mapping</div>
+    <div class="tab" onclick="stab(this,'inv-adjust');loadStockAdjustments()">Adjustments</div>
   </div>
 
   <div class="tab-body on" id="inv-stock">
@@ -1968,6 +2035,15 @@
     </div>
   </div>
 
+
+  <div class="tab-body" id="inv-adjust">
+    <div class="card" style="margin-bottom:12px"><label style="display:flex;gap:8px;align-items:center;padding:12px 16px;cursor:pointer"><input type="checkbox" id="inv-block-negative" onchange="saveNegativeStockSetting(this.checked)"> <span><b>Block sales when stock is insufficient</b> <span style="color:var(--text3)">— invoices and POS sales that would take tracked stock below zero are rejected</span></span></label></div>
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">Stock Adjustments</div><div class="card-sub">Cycle-count corrections and write-offs — stock only moves once an adjustment is approved</div></div><button class="btn btn-p btn-sm" type="button" onclick="newStockAdjustment()">+ New Adjustment</button></div>
+      <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Item code</th><th style="text-align:right">Quantity change</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody id="inv-adjust-tbody"><tr><td colspan="5" style="color:var(--text3);text-align:center">Loading…</td></tr></tbody></table></div>
+    </div>
+  </div>
 
   <div class="tab-body" id="inv-mapping">
     <div class="g2 mb16">
@@ -2106,7 +2182,7 @@
         </div>
         <div class="fg">
           <label class="fl">Vendor / Supplier</label>
-          <input class="fi" id="expense-vendor" placeholder="Search or type vendor name..." list="expense-vendor-list" autocomplete="off">
+          <input class="fi" id="expense-vendor" placeholder="Search or type vendor name..." data-ac="expense-vendor" autocomplete="off">
           <datalist id="expense-vendor-list"></datalist>
         </div>
         <div class="fg"><label class="fl">Description</label><input class="fi" id="expense-description" placeholder="What was this expense for?"></div>
@@ -2122,9 +2198,9 @@
     </div>
     <div class="card mb16">
       <div class="fr3">
-        <div class="fg"><label class="fl">Amount (AED)</label><input class="fi mono" id="expense-amount" placeholder="0.00" oninput="calcExpenseTotal()"></div>
-        <div class="fg"><label class="fl">VAT Amount (AED)</label><input class="fi mono" id="expense-vat" placeholder="0.00" oninput="calcExpenseTotal()"></div>
-        <div class="fg"><label class="fl">Total Amount (AED)</label><input class="fi mono" id="expense-total" placeholder="0.00" readonly style="background:var(--bg)"></div>
+        <div class="fg"><label class="fl" data-currency-label>Amount (AED)</label><input class="fi mono" id="expense-amount" placeholder="0.00" oninput="calcExpenseTotal()"></div>
+        <div class="fg"><label class="fl" data-currency-label>VAT Amount (AED)</label><input class="fi mono" id="expense-vat" placeholder="0.00" oninput="calcExpenseTotal()"></div>
+        <div class="fg"><label class="fl" data-currency-label>Total Amount (AED)</label><input class="fi mono" id="expense-total" placeholder="0.00" readonly style="background:var(--bg)"></div>
       </div>
     </div>
     <div class="flx-b">
@@ -2324,11 +2400,7 @@
       </div>
       <table class="tbl" data-default-page-size="all">
         <thead><tr><th>Date</th><th>Ref No.</th><th>Description</th><th data-currency-label>Debit (AED)</th><th data-currency-label>Credit (AED)</th><th data-currency-label>Balance (AED)</th></tr></thead>
-        <tbody id="ledger-tbody">
-          <tr data-account="Accounts Receivable"><td>20 Jun</td><td class="mono">INV-0848</td><td>Dubai Steel Co. — Invoice</td><td class="mono">44,100</td><td>—</td><td class="mono">44,100</td></tr>
-          <tr data-account="Cash & Cash Equivalents"><td>18 Jun</td><td class="mono">JE-0012</td><td>Payment received</td><td>—</td><td class="mono">44,100</td><td class="mono">0</td></tr>
-          <tr data-account="Operating Expenses"><td>15 Jun</td><td class="mono">JE-0010</td><td>Rent payment</td><td>—</td><td class="mono">15,000</td><td class="mono">-15,000</td></tr>
-        </tbody>
+        <tbody id="ledger-tbody"><tr data-empty-state="1" class="tbl-empty-row"><td colspan="6"><div class="tbl-empty-inner">No ledger entries in database yet.</div></td></tr></tbody>
       </table>
     </div>
   </div>
@@ -2339,10 +2411,7 @@
         <div class="card-hd"><div><div class="card-title">Receipts</div><div class="card-sub">Customer, cash, bank, online, card, Tabby, and payment link receipts</div></div><button class="btn btn-p btn-sm" onclick="openPaymentModal('Customer Receipt')">+ Receipt</button></div>
         <table class="tbl">
           <thead><tr><th>Date</th><th>Type</th><th>Party</th><th>Account</th><th>Amount</th><th>Status</th></tr></thead>
-          <tbody>
-            <tr><td>22 Jun</td><td>Bank Receipt</td><td>Dubai Steel Co.</td><td>Emirates NBD</td><td class="mono">44,100</td><td><span class="b b-g">Posted</span></td></tr>
-            <tr><td>12 Jun</td><td>Card</td><td>Al Baraka Trading</td><td>PayTabs</td><td class="mono">7,560</td><td><span class="b b-g">Reconciled</span></td></tr>
-          </tbody>
+          <tbody><tr data-empty-state="1" class="tbl-empty-row"><td colspan="6"><div class="tbl-empty-inner">No receipts in database yet.</div></td></tr></tbody>
         </table>
       </div>
       <div class="card">
@@ -2418,7 +2487,7 @@
           <div class="fg"><label class="fl">Credit Account</label><input class="fi mono" id="rec-je-credit" placeholder="Accounts Payable (2000)"></div>
         </div>
         <div class="fr3">
-          <div class="fg"><label class="fl">Amount (AED)</label><input class="fi mono" id="rec-je-amount" placeholder="0.00"></div>
+          <div class="fg"><label class="fl" data-currency-label>Amount (AED)</label><input class="fi mono" id="rec-je-amount" placeholder="0.00"></div>
           <div class="fg"><label class="fl">Frequency</label><select class="fi" id="rec-je-freq"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="weekly">Weekly</option></select></div>
           <div class="fg"><label class="fl">Next Post Date</label><input class="fi" id="rec-je-next" type="date"></div>
         </div>
@@ -2454,11 +2523,8 @@
   <div class="tab-body" id="acc-assets">
     <div class="g2 mb16">
       <div class="card">
-        <div class="card-hd"><div><div class="card-title">Fixed Asset Register</div><div class="card-sub">Purchase, location, custodian, depreciation, disposal</div></div><button class="btn btn-p btn-sm" onclick="addCorporateAsset()">+ Asset</button></div>
-        <table class="tbl"><thead><tr><th>Asset</th><th>Category</th><th>Cost</th><th>Accum. Dep.</th><th>Book Value</th><th>Custodian</th></tr></thead><tbody id="corp-assets-tbody">
-          <tr><td>Delivery Van</td><td>Vehicle</td><td class="mono">95,000</td><td class="mono">18,000</td><td class="mono">77,000</td><td>Operations</td></tr>
-          <tr><td>Warehouse Racking</td><td>Equipment</td><td class="mono">42,000</td><td class="mono">6,500</td><td class="mono">35,500</td><td>Warehouse</td></tr>
-        </tbody></table>
+        <div class="card-hd"><div><div class="card-title">Fixed Asset Register</div><div class="card-sub">Purchase, location, custodian, depreciation, disposal</div></div><button class="btn btn-p btn-sm" onclick="addCorporateAsset()">+ Asset</button><button class="btn btn-g btn-sm" style="margin-left:6px" onclick="postAssetDepreciation()">Post Depreciation</button></div>
+        <table class="tbl"><thead><tr><th>Asset</th><th>Category</th><th>Cost</th><th>Accum. Dep.</th><th>Book Value</th><th>Custodian</th></tr></thead><tbody id="corp-assets-tbody"><tr data-empty-state="1" class="tbl-empty-row"><td colspan="6"><div class="tbl-empty-inner">No fixed assets in database yet.</div></td></tr></tbody></table>
       </div>
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Depreciation Posting</div><div class="card-sub">Monthly depreciation journal</div></div></div>
@@ -2471,11 +2537,8 @@
   <div class="tab-body" id="acc-accruals">
     <div class="g2">
       <div class="card">
-        <div class="card-hd"><div><div class="card-title">Accruals & Prepayments</div><div class="card-sub">Accrued expenses, income, prepaid expenses, deferred income</div></div><button class="btn btn-p btn-sm" onclick="addCorporateAccrual()">+ Schedule</button></div>
-        <table class="tbl"><thead><tr><th>Type</th><th>Reference</th><th>Total</th><th>Monthly</th><th>Auto Reverse</th></tr></thead><tbody id="corp-accruals-tbody">
-          <tr><td>Prepaid Expense</td><td>Annual Rent</td><td class="mono">240,000</td><td class="mono">20,000</td><td><span class="b b-g">Yes</span></td></tr>
-          <tr><td>Accrued Expense</td><td>Utilities</td><td class="mono">8,400</td><td class="mono">8,400</td><td><span class="b b-a">Next month</span></td></tr>
-        </tbody></table>
+        <div class="card-hd"><div><div class="card-title">Accruals & Prepayments</div><div class="card-sub">Accrued expenses, income, prepaid expenses, deferred income</div></div><button class="btn btn-p btn-sm" onclick="addCorporateAccrual()">+ Schedule</button><button class="btn btn-g btn-sm" style="margin-left:6px" onclick="postAccrualRelease()">Post Release</button></div>
+        <table class="tbl"><thead><tr><th>Type</th><th>Reference</th><th>Total</th><th>Monthly</th><th>Auto Reverse</th></tr></thead><tbody id="corp-accruals-tbody"><tr data-empty-state="1" class="tbl-empty-row"><td colspan="5"><div class="tbl-empty-inner">No accruals or prepayments in database yet.</div></td></tr></tbody></table>
       </div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Recognition Example</div></div>
@@ -2488,10 +2551,7 @@
   <div class="tab-body" id="acc-cost-centers">
     <div class="card">
       <div class="card-hd"><div><div class="card-title">Cost Centers / Departments</div><div class="card-sub">Journal lines carry Account + Cost Center + Branch + Project</div></div><button class="btn btn-p btn-sm" onclick="addCorporateCostCenter()">+ Cost Center</button></div>
-      <table class="tbl"><thead><tr><th>Code</th><th>Name</th><th>Department</th><th>Branch</th><th>Project</th><th>Status</th></tr></thead><tbody id="corp-cost-centers-tbody">
-        <tr><td class="mono">CC-OPS</td><td>Operations</td><td>Operations</td><td>Dubai HQ</td><td>Warehouse Expansion</td><td><span class="b b-g">Active</span></td></tr>
-        <tr><td class="mono">CC-SALES</td><td>Sales Team</td><td>Sales</td><td>Abu Dhabi</td><td>Corporate Accounts</td><td><span class="b b-g">Active</span></td></tr>
-      </tbody></table>
+      <table class="tbl"><thead><tr><th>Code</th><th>Name</th><th>Department</th><th>Branch</th><th>Project</th><th>Status</th></tr></thead><tbody id="corp-cost-centers-tbody"><tr data-empty-state="1" class="tbl-empty-row"><td colspan="6"><div class="tbl-empty-inner">No cost centers in database yet.</div></td></tr></tbody></table>
     </div>
   </div>
 
@@ -2499,10 +2559,7 @@
     <div class="g2">
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Budget vs Actual</div><div class="card-sub">Annual, monthly, department budget, variance</div></div><button class="btn btn-p btn-sm" onclick="addCorporateBudget()">+ Budget</button></div>
-        <table class="tbl"><thead><tr><th>Department</th><th>Budget</th><th>Actual</th><th>Variance</th><th>Approval</th></tr></thead><tbody id="corp-budget-tbody">
-          <tr><td>Operations</td><td class="mono">600,000</td><td class="mono">548,000</td><td><span class="b b-g">52,000 under</span></td><td><span class="b b-g">Approved</span></td></tr>
-          <tr><td>Sales</td><td class="mono">420,000</td><td class="mono">456,000</td><td><span class="b b-a">36,000 over</span></td><td><span class="b b-a">Review</span></td></tr>
-        </tbody></table>
+        <table class="tbl"><thead><tr><th>Department</th><th>Budget</th><th>Actual</th><th>Variance</th><th>Approval</th></tr></thead><tbody id="corp-budget-tbody"><tr data-empty-state="1" class="tbl-empty-row"><td colspan="5"><div class="tbl-empty-inner">No budgets in database yet.</div></td></tr></tbody></table>
       </div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Variance Analysis</div></div>
@@ -2513,20 +2570,17 @@
 
   <div class="tab-body" id="acc-cashflow">
     <div class="g3 mb16">
-      <div class="stat"><div class="stat-lbl">Expected Receipts</div><div class="stat-val" style="color:var(--green)">AED 310K</div></div>
-      <div class="stat"><div class="stat-lbl">Expected Payments</div><div class="stat-val" style="color:var(--red)">AED 246K</div></div>
-      <div class="stat"><div class="stat-lbl">Net Cash Flow</div><div class="stat-val" style="color:var(--accent)">AED 64K</div></div>
+      <div class="stat"><div class="stat-lbl">Expected Receipts</div><div class="stat-val" style="color:var(--green)" id="cf-receipts">—</div></div>
+      <div class="stat"><div class="stat-lbl">Expected Payments</div><div class="stat-val" style="color:var(--red)" id="cf-payments">—</div></div>
+      <div class="stat"><div class="stat-lbl">Net Cash Flow</div><div class="stat-val" style="color:var(--accent)" id="cf-net">—</div></div>
     </div>
-    <div class="card"><div class="card-hd"><div><div class="card-title">Cash Flow Management</div><div class="card-sub">Direct, indirect, forecast, receipts, payments</div></div><button class="btn btn-p btn-sm" onclick="addCorporateCashFlow()">+ Forecast</button></div><table class="tbl"><thead><tr><th>Date</th><th>Receipts</th><th>Payments</th><th>Net</th><th>Method</th></tr></thead><tbody id="corp-cashflow-tbody"><tr><td>Week 1</td><td class="mono">92,000</td><td class="mono">64,000</td><td class="mono">28,000</td><td>Direct</td></tr><tr><td>Week 2</td><td class="mono">118,000</td><td class="mono">96,000</td><td class="mono">22,000</td><td>Direct</td></tr></tbody></table></div>
+    <div class="card"><div class="card-hd"><div><div class="card-title">Cash Flow Management</div><div class="card-sub">Direct, indirect, forecast, receipts, payments</div></div><button class="btn btn-p btn-sm" onclick="addCorporateCashFlow()">+ Forecast</button></div><table class="tbl"><thead><tr><th>Date</th><th>Receipts</th><th>Payments</th><th>Net</th><th>Method</th></tr></thead><tbody id="corp-cashflow-tbody"><tr data-empty-state="1" class="tbl-empty-row"><td colspan="5"><div class="tbl-empty-inner">No cash flow forecasts in database yet.</div></td></tr></tbody></table></div>
   </div>
 
   <div class="tab-body" id="acc-credit">
     <div class="card">
       <div class="card-hd"><div><div class="card-title">Credit Control</div><div class="card-sub">Credit limit, hold, aging alerts, collections, bad debt</div></div></div>
-      <table class="tbl"><thead><tr><th>Customer</th><th>Limit</th><th>Outstanding</th><th>Status</th><th>Promise</th><th>Provision</th></tr></thead><tbody id="corp-credit-tbody">
-        <tr><td>Dubai Steel Co.</td><td class="mono">100,000</td><td class="mono">84,000</td><td><span class="b b-a">Watch</span></td><td>15 Jul</td><td class="mono">0</td></tr>
-        <tr><td>Emirates Supplies</td><td class="mono">50,000</td><td class="mono">62,000</td><td><span class="b b-r">Credit Hold</span></td><td>Missing</td><td class="mono">6,200</td></tr>
-      </tbody></table>
+      <table class="tbl"><thead><tr><th>Customer</th><th>Limit</th><th>Outstanding</th><th>Status</th><th>Promise</th><th>Provision</th></tr></thead><tbody id="corp-credit-tbody"><tr data-empty-state="1" class="tbl-empty-row"><td colspan="6"><div class="tbl-empty-inner">No credit control records in database yet.</div></td></tr></tbody></table>
       <div class="divider"></div>
       <div class="divider"></div>
       <button class="btn btn-p btn-sm" onclick="addCorporateCreditControl()">+ Credit Review</button>
@@ -2536,19 +2590,15 @@
 
   <div class="tab-body" id="acc-consolidation">
     <div class="g2">
-      <div class="card"><div class="card-hd"><div><div class="card-title">Intercompany / Related Party</div><div class="card-sub">Receivables, payables, loans, recharges, transfer pricing notes</div></div><button class="btn btn-p btn-sm" onclick="addCorporateRelatedParty()">+ Party</button></div><table class="tbl"><thead><tr><th>Company</th><th>Type</th><th>Amount</th><th>Elimination</th></tr></thead><tbody id="corp-related-party-tbody"><tr><td>TaxFlow Trading LLC</td><td>Receivable</td><td class="mono">120,000</td><td><span class="b b-a">Pending</span></td></tr><tr><td>TaxFlow Services LLC</td><td>Recharge</td><td class="mono">48,000</td><td><span class="b b-g">Matched</span></td></tr></tbody></table></div>
-      <div class="card"><div class="card-hd"><div><div class="card-title">Group Consolidation</div><div class="card-sub">Currency translation, intercompany elimination, group P&L and balance sheet</div></div><button class="btn btn-p btn-sm" onclick="addCorporateConsolidation()">+ Entity</button></div><table class="tbl"><thead><tr><th>Subsidiary</th><th>Currency</th><th>Translated</th><th>Status</th></tr></thead><tbody id="corp-consolidation-tbody"><tr><td>Dubai Branch</td><td>AED</td><td class="mono">1,420,000</td><td><span class="b b-g">Ready</span></td></tr><tr><td>Oman Branch</td><td>OMR</td><td class="mono">384,000</td><td><span class="b b-a">FX Review</span></td></tr></tbody></table></div>
+      <div class="card"><div class="card-hd"><div><div class="card-title">Intercompany / Related Party</div><div class="card-sub">Receivables, payables, loans, recharges, transfer pricing notes</div></div><button class="btn btn-p btn-sm" onclick="addCorporateRelatedParty()">+ Party</button></div><table class="tbl"><thead><tr><th>Company</th><th>Type</th><th>Amount</th><th>Elimination</th></tr></thead><tbody id="corp-related-party-tbody"><tr data-empty-state="1" class="tbl-empty-row"><td colspan="4"><div class="tbl-empty-inner">No intercompany records in database yet.</div></td></tr></tbody></table></div>
+      <div class="card"><div class="card-hd"><div><div class="card-title">Group Consolidation</div><div class="card-sub">Currency translation, intercompany elimination, group P&L and balance sheet</div></div><button class="btn btn-p btn-sm" onclick="addCorporateConsolidation()">+ Entity</button></div><table class="tbl"><thead><tr><th>Subsidiary</th><th>Currency</th><th>Translated</th><th>Status</th></tr></thead><tbody id="corp-consolidation-tbody"><tr data-empty-state="1" class="tbl-empty-row"><td colspan="4"><div class="tbl-empty-inner">No consolidation entities in database yet.</div></td></tr></tbody></table></div>
     </div>
   </div>
 
   <div class="tab-body" id="acc-approval">
     <div class="card">
       <div class="card-hd"><div><div class="card-title">Approval Matrix by Amount</div><div class="card-sub">Journal, payment, purchase, expense approvals by amount and department</div></div><button class="btn btn-p btn-sm" onclick="addCorporateApprovalRule()">+ Rule</button></div>
-      <table class="tbl"><thead><tr><th>Module</th><th>Amount Range</th><th>Department</th><th>Approver</th><th>Status</th></tr></thead><tbody id="corp-approval-tbody">
-        <tr><td>Expense</td><td class="mono">&lt; 1,000</td><td>All</td><td>Supervisor</td><td><span class="b b-g">Active</span></td></tr>
-        <tr><td>Expense</td><td class="mono">1,000 - 10,000</td><td>All</td><td>Manager</td><td><span class="b b-g">Active</span></td></tr>
-        <tr><td>Expense</td><td class="mono">10,000+</td><td>All</td><td>Director</td><td><span class="b b-g">Active</span></td></tr>
-      </tbody></table>
+      <table class="tbl"><thead><tr><th>Module</th><th>Amount Range</th><th>Department</th><th>Approver</th><th>Status</th></tr></thead><tbody id="corp-approval-tbody"><tr data-empty-state="1" class="tbl-empty-row"><td colspan="5"><div class="tbl-empty-inner">No approval rules in database yet.</div></td></tr></tbody></table>
     </div>
   </div>
 
@@ -2583,21 +2633,12 @@
     </div>
     <div class="g2">
       <div class="card">
-        <div class="card-hd"><div><div class="card-title">Corporate Tax Calculation</div><div class="card-sub">Accounting profit to taxable income</div></div><button class="btn btn-g btn-sm" onclick="toast('Corporate tax report exported','ok')">Export</button></div>
-        <table class="tbl"><thead><tr><th>Step</th><th>Amount</th><th>Status</th></tr></thead><tbody id="corp-tax-tbody">
-          <tr><td>Accounting Profit</td><td class="mono">1,240,000</td><td><span class="b b-g">Ready</span></td></tr>
-          <tr><td>Add: Non-deductible Expenses</td><td class="mono">96,000</td><td><span class="b b-a">Review</span></td></tr>
-          <tr><td>Less: Tax Loss Carry Forward</td><td class="mono">(14,000)</td><td><span class="b b-g">Applied</span></td></tr>
-          <tr><td>Taxable Income</td><td class="mono">1,322,000</td><td><span class="b b-b">Calculated</span></td></tr>
-          <tr><td>Corporate Tax Due</td><td class="mono">84,645</td><td><span class="b b-a">Draft</span></td></tr>
-        </tbody></table>
+        <div class="card-hd"><div><div class="card-title">Corporate Tax Calculation</div><div class="card-sub">Accounting profit to taxable income</div></div><button class="btn btn-g btn-sm" onclick="exportTableToCSV(document.getElementById('corp-tax-tbody').closest('table'),'corporate-tax-calculation.csv')">Export</button></div>
+        <table class="tbl"><thead><tr><th>Step</th><th>Amount</th><th>Status</th></tr></thead><tbody id="corp-tax-tbody"><tr data-empty-state="1" class="tbl-empty-row"><td colspan="3"><div class="tbl-empty-inner">No corporate tax records in database yet.</div></td></tr></tbody></table>
       </div>
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Related Party Transactions</div><div class="card-sub">Transfer pricing notes and review markers</div></div></div>
-        <table class="tbl"><thead><tr><th>Party</th><th>Type</th><th>Amount</th><th>Review</th></tr></thead><tbody id="corp-tax-related-tbody">
-          <tr><td>Group Logistics LLC</td><td>Recharge</td><td class="mono">145,000</td><td><span class="b b-a">TP note</span></td></tr>
-          <tr><td>Director Loan</td><td>Loan</td><td class="mono">80,000</td><td><span class="b b-g">Documented</span></td></tr>
-        </tbody></table>
+        <table class="tbl"><thead><tr><th>Party</th><th>Type</th><th>Amount</th><th>Review</th></tr></thead><tbody id="corp-tax-related-tbody"><tr data-empty-state="1" class="tbl-empty-row"><td colspan="4"><div class="tbl-empty-inner">No related party transactions in database yet.</div></td></tr></tbody></table>
       </div>
     </div>
   </div>
@@ -2671,33 +2712,18 @@
       <div class="card-hd"><div class="card-title">Customer Payments Received</div><button class="btn btn-p btn-sm" onclick="openPaymentModal('Customer Receipt')">+ Record Payment</button></div>
       <table class="tbl">
         <thead><tr><th>Receipt No.</th><th>Customer</th><th>Invoice</th><th>Method</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
-        <tbody id="payment-in-tbody">
-          <tr><td class="mono">RCT-2024-0112</td><td>Dubai Steel Co.</td><td class="mono">INV-2024-0848</td><td>Bank Transfer</td><td>22 Jun</td><td class="mono">44,100</td><td><span class="b b-g">Allocated</span></td></tr>
-          <tr><td class="mono">RCT-2024-0111</td><td>Al Baraka Trading</td><td class="mono">INV-2024-0845</td><td>Card</td><td>12 Jun</td><td class="mono">7,560</td><td><span class="b b-g">Settled</span></td></tr>
-        </tbody>
+        <tbody id="payment-in-tbody"><tr data-empty-state="1" class="tbl-empty-row"><td colspan="7"><div class="tbl-empty-inner">No receipts in database yet.</div></td></tr></tbody>
       </table>
     </div>
   </div>
   <div class="tab-body" id="pay-out">
     <div class="card">
-      <div class="card-hd"><div class="card-title">Supplier Payments Made</div><button class="btn btn-p btn-sm" onclick="openPaymentModal('Supplier Payment')">+ Pay Vendor</button></div>
-      <div class="flx" style="gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
-        <input class="fi tbl-search" id="payment-out-search" placeholder="Search ref, vendor, method…" style="max-width:260px" oninput="onSupplierPaymentSearchInput()">
-        <select class="fi tbl-size" id="payment-out-sort" style="max-width:190px" onchange="renderPaymentOutCards()">
-          <option value="date-desc">Newest first</option>
-          <option value="date-asc">Oldest first</option>
-          <option value="amount-desc">Amount: high to low</option>
-          <option value="amount-asc">Amount: low to high</option>
-          <option value="vendor-asc">Vendor: A–Z</option>
-        </select>
-      </div>
+      <div class="card-hd"><div class="card-title">Supplier Payments Made</div><div class="flx" style="gap:8px;align-items:center;flex-wrap:wrap"><select class="fi" id="pay-out-search" style="width:170px;height:32px;font-size:12.5px;padding:6px 10px" onchange="applySupplierPaymentCardView()"><option value="">All Suppliers</option></select><select class="fi" id="pay-out-sort" style="width:152px;height:32px;font-size:12.5px;padding:6px 10px" onchange="applySupplierPaymentCardView()"><option value="date-desc">Newest first</option><option value="date-asc">Oldest first</option><option value="amount-desc">Amount: High-Low</option><option value="amount-asc">Amount: Low-High</option></select><button class="btn btn-p btn-sm" onclick="openPaymentModal('Supplier Payment')">+ Pay Vendor</button></div></div>
       <div class="pay-card-list" id="payment-out-cards">
         <div class="pay-card-empty" id="payment-out-empty">No supplier payments in database yet.</div>
       </div>
     </div>
-    <!-- hidden table keeps dedup/auto-number logic intact and doubles as the
-         card list's data source (see renderPaymentOutCards()) so search/sort
-         can rebuild the visible cards from it at any time. -->
+    <!-- hidden table keeps dedup/auto-number logic intact -->
     <table style="display:none"><tbody id="payment-out-tbody"></tbody></table>
   </div>
 </div>
@@ -2747,7 +2773,7 @@
   </div>
   <div class="tab-body on" id="notif-inbox">
     <div class="card">
-      <div class="card-hd"><div class="card-title">Notification Center</div><button class="btn btn-g btn-sm" onclick="toast('All notifications marked as read','ok')">Mark All Read</button></div>
+      <div class="card-hd"><div class="card-title">Notification Center</div><button class="btn btn-g btn-sm" disabled title="Not available yet">Mark All Read</button></div>
       <table class="tbl"><thead><tr><th>Time</th><th>Channel</th><th>Message</th><th>Related Record</th><th>Status</th></tr></thead><tbody><tr><td>Today 10:12</td><td>Email</td><td>Invoice reminder sent to Emirates Supplies</td><td class="mono">INV-2024-0846</td><td><span class="b b-g">Delivered</span></td></tr><tr><td>Today 09:30</td><td>In-app</td><td>VAT return due in 26 days</td><td>VAT June 2024</td><td><span class="b b-b">Unread</span></td></tr><tr><td>Yesterday</td><td>WhatsApp</td><td>Payment reminder queued</td><td class="mono">INV-2024-0848</td><td><span class="b b-a">Pending</span></td></tr></tbody></table>
     </div>
   </div>
@@ -2858,40 +2884,39 @@
   <div class="rep-layout">
     <nav class="rep-sidebar" id="rep-sidebar">
       <div class="rep-nav-group">
-        <div class="rep-nav-label">Dashboard</div>
-        <div class="rep-nav-item on" id="repnav-kpi"        onclick="showReport('rep-kpi')">KPI Dashboard</div>
-        <div class="rep-nav-item"     id="repnav-health"    onclick="showReport('rep-health')">AI Financial Health</div>
-        <div class="rep-nav-item"     id="repnav-cfo"       onclick="showReport('rep-cfo')">CFO Recommendations</div>
+        <div class="rep-nav-label" data-i18n="repgrp_dashboard">Dashboard</div>
+        <div class="rep-nav-item on" id="repnav-kpi"        onclick="showReport('rep-kpi')" data-i18n="repnav_kpi">KPI Dashboard</div>
+        <div class="rep-nav-item"     id="repnav-health"    onclick="showReport('rep-health')" data-i18n="repnav_health">AI Financial Health</div>
+        <div class="rep-nav-item"     id="repnav-cfo"       onclick="showReport('rep-cfo')" data-i18n="repnav_cfo">CFO Recommendations</div>
       </div>
       <div class="rep-nav-group">
-        <div class="rep-nav-label">Accounting Reports</div>
-        <div class="rep-nav-item" id="repnav-pl"    onclick="showReport('rep-pl')">Profit &amp; Loss</div>
-        <div class="rep-nav-item" id="repnav-bs"    onclick="showReport('rep-bs')">Balance Sheet</div>
-        <div class="rep-nav-item" id="repnav-cf"    onclick="showReport('rep-cf')">Cash Flow</div>
-        <div class="rep-nav-item" id="repnav-tb"    onclick="showReport('rep-tb')">Trial Balance</div>
-        <div class="rep-nav-item" id="repnav-gl"    onclick="showReport('rep-gl')">General Ledger</div>
-        <div class="rep-nav-item" id="repnav-cl"    onclick="showReport('rep-cl')">Customer Ledger</div>
-        <div class="rep-nav-item" id="repnav-sl"    onclick="showReport('rep-sl')">Supplier Ledger</div>
-        <div class="rep-nav-item" id="repnav-ar"    onclick="showReport('rep-ar')">AR Aging</div>
-        <div class="rep-nav-item" id="repnav-ap"    onclick="showReport('rep-ap')">AP Aging</div>
-        <div class="rep-nav-item" id="repnav-vat"   onclick="showReport('rep-vat')">VAT Reports</div>
-        <div class="rep-nav-item" id="repnav-inv"   onclick="showReport('rep-inv')">Inventory Reports</div>
-        <div class="rep-nav-item" id="repnav-bank"  onclick="showReport('rep-bank')">Bank Reconciliation</div>
-        <div class="rep-nav-item" id="repnav-assets" onclick="showReport('rep-assets')">Fixed Assets</div>
+        <div class="rep-nav-label" data-i18n="repgrp_accounting">Accounting Reports</div>
+        <div class="rep-nav-item" id="repnav-pl"    onclick="showReport('rep-pl')" data-i18n="repnav_pl">Profit &amp; Loss</div>
+        <div class="rep-nav-item" id="repnav-bs"    onclick="showReport('rep-bs')" data-i18n="repnav_bs">Balance Sheet</div>
+        <div class="rep-nav-item" id="repnav-cf"    onclick="showReport('rep-cf')" data-i18n="repnav_cf">Cash Flow</div>
+        <div class="rep-nav-item" id="repnav-tb"    onclick="showReport('rep-tb')" data-i18n="repnav_tb">Trial Balance</div>
+        <div class="rep-nav-item" id="repnav-gl"    onclick="showReport('rep-gl')" data-i18n="repnav_gl">General Ledger</div>
+        <div class="rep-nav-item" id="repnav-cl"    onclick="showReport('rep-cl')" data-i18n="repnav_cl">Customer Ledger</div>
+        <div class="rep-nav-item" id="repnav-sl"    onclick="showReport('rep-sl')" data-i18n="repnav_sl">Supplier Ledger</div>
+        <div class="rep-nav-item" id="repnav-ar"    onclick="showReport('rep-ar')" data-i18n="repnav_ar">AR Aging</div>
+        <div class="rep-nav-item" id="repnav-ap"    onclick="showReport('rep-ap')" data-i18n="repnav_ap">AP Aging</div>
+        <div class="rep-nav-item" id="repnav-vat"   onclick="showReport('rep-vat')" data-i18n="repnav_vat">VAT Reports</div>
+        <div class="rep-nav-item" id="repnav-inv"   onclick="showReport('rep-inv')" data-i18n="repnav_inv">Inventory Reports</div>
+        <div class="rep-nav-item" id="repnav-bank"  onclick="showReport('rep-bank')" data-i18n="repnav_bank">Bank Reconciliation</div>
+        <div class="rep-nav-item" id="repnav-assets" onclick="showReport('rep-assets')" data-i18n="repnav_assets">Fixed Assets</div>
       </div>
       <div class="rep-nav-group">
-        <div class="rep-nav-label">Business Intelligence</div>
-        <div class="rep-nav-item" id="repnav-rev"    onclick="showReport('rep-rev')">Revenue Intelligence</div>
-        <div class="rep-nav-item" id="repnav-profit" onclick="showReport('rep-profit')">Profitability Analytics</div>
-        <div class="rep-nav-item" id="repnav-wc"     onclick="showReport('rep-wc')">Working Capital</div>
-        <div class="rep-nav-item" id="repnav-growth" onclick="showReport('rep-growth')">Growth Trends</div>
+        <div class="rep-nav-label" data-i18n="repgrp_bi">Business Intelligence</div>
+        <div class="rep-nav-item" id="repnav-rev"    onclick="showReport('rep-rev')" data-i18n="repnav_rev">Revenue Intelligence</div>
+        <div class="rep-nav-item" id="repnav-profit" onclick="showReport('rep-profit')" data-i18n="repnav_profit">Profitability Analytics</div>
+        <div class="rep-nav-item" id="repnav-wc"     onclick="showReport('rep-wc')" data-i18n="repnav_wc">Working Capital</div>
+        <div class="rep-nav-item" id="repnav-growth" onclick="showReport('rep-growth')" data-i18n="repnav_growth">Growth Trends</div>
       </div>
       <div class="rep-nav-group">
-        <div class="rep-nav-label">UAE Compliance</div>
-        <div class="rep-nav-item" id="repnav-vat201"    onclick="showReport('rep-vat201')">VAT 201</div>
-        <div class="rep-nav-item" id="repnav-corp"      onclick="showReport('rep-corp')">Corporate Tax</div>
-        <div class="rep-nav-item" id="repnav-einv"      onclick="showReport('rep-einv')">E-Invoicing Readiness</div>
-        <div class="rep-nav-item" id="repnav-bilingual" onclick="showReport('rep-bilingual')">Arabic / English</div>
+        <div class="rep-nav-label" data-i18n="repgrp_compliance">UAE Compliance</div>
+        <div class="rep-nav-item" id="repnav-vat201"    onclick="showReport('rep-vat201')" data-i18n="repnav_vat201">VAT 201</div>
+        <div class="rep-nav-item" id="repnav-corp"      onclick="showReport('rep-corp')" data-i18n="repnav_corp">Corporate Tax</div>
+        <div class="rep-nav-item" id="repnav-einv"      onclick="showReport('rep-einv')" data-i18n="repnav_einv">E-Invoicing Readiness</div>
       </div>
     </nav>
 
@@ -3008,14 +3033,14 @@
       <!-- CUSTOMER LEDGER -->
       <div class="rep-panel" id="rep-cl">
         <div class="rep-panel-head"><h2 class="rep-title">Customer Ledger</h2></div>
-        <div class="card"><table class="tbl"><thead><tr><th>Customer</th><th style="text-align:right">Transactions</th><th style="text-align:right">Total (AED)</th></tr></thead>
+        <div class="card"><table class="tbl"><thead><tr><th>Customer</th><th style="text-align:right">Transactions</th><th style="text-align:right" data-currency-label>Total (AED)</th></tr></thead>
         <tbody id="rep-cl-body"><tr><td colspan="3" style="color:var(--text3);text-align:center">Loading…</td></tr></tbody></table></div>
       </div>
 
       <!-- SUPPLIER LEDGER -->
       <div class="rep-panel" id="rep-sl">
         <div class="rep-panel-head"><h2 class="rep-title">Supplier Ledger</h2></div>
-        <div class="card"><table class="tbl"><thead><tr><th>Supplier</th><th style="text-align:right">Transactions</th><th style="text-align:right">Total (AED)</th></tr></thead>
+        <div class="card"><table class="tbl"><thead><tr><th>Supplier</th><th style="text-align:right">Transactions</th><th style="text-align:right" data-currency-label>Total (AED)</th></tr></thead>
         <tbody id="rep-sl-body"><tr><td colspan="3" style="color:var(--text3);text-align:center">Loading…</td></tr></tbody></table></div>
       </div>
 
@@ -3084,7 +3109,7 @@
         <div class="rep-panel-head"><h2 class="rep-title">Revenue Intelligence</h2></div>
         <div class="g2 mb16">
           <div class="card"><div class="card-title mb8">Revenue by Customer (Top 10)</div>
-            <table class="tbl"><thead><tr><th>Customer</th><th style="text-align:right">Revenue (AED)</th></tr></thead>
+            <table class="tbl"><thead><tr><th>Customer</th><th style="text-align:right" data-currency-label>Revenue (AED)</th></tr></thead>
             <tbody id="rev-by-customer"><tr><td colspan="2" style="color:var(--text3);text-align:center">Loading…</td></tr></tbody></table></div>
           <div class="card"><div class="card-title mb8">Monthly Revenue Trend</div>
             <div class="axis-chart"><div class="axis-y" id="rev-chart-y"><span>—</span><span>—</span><span>—</span><span>—</span><span>0</span></div><div class="axis-body" id="rev-chart-body"><div style="font-size:12px;color:var(--text3)">Loading…</div></div></div></div>
@@ -3100,15 +3125,34 @@
       <!-- PROFITABILITY ANALYTICS -->
       <div class="rep-panel" id="rep-profit">
         <div class="rep-panel-head"><h2 class="rep-title">Profitability Analytics</h2></div>
+        <div class="card mb16" id="prf-summary-card" style="display:none">
+          <div class="card-title mb8">Management Summary</div>
+          <div id="prf-summary-text" style="font-size:13px;line-height:1.6;color:var(--text2)">—</div>
+        </div>
         <div class="g4 mb16">
           <div class="stat"><div class="stat-lbl">Gross Profit</div><div class="stat-val" id="prf-gp" style="color:var(--green)">—</div></div>
           <div class="stat"><div class="stat-lbl">Net Profit</div><div class="stat-val" id="prf-np" style="color:var(--accent)">—</div></div>
-          <div class="stat"><div class="stat-lbl">EBITDA Est.</div><div class="stat-val" id="prf-ebitda" style="color:var(--purple)">—</div></div>
+          <div class="stat"><div class="stat-lbl">EBITDA</div><div class="stat-val" id="prf-ebitda" style="color:var(--purple)">—</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px" id="prf-ebitda-note"></div></div>
           <div class="stat"><div class="stat-lbl">Gross Margin %</div><div class="stat-val" id="prf-gm" style="color:var(--blue)">—</div></div>
         </div>
-        <div class="card"><div class="card-title mb8">P&amp;L Breakdown</div>
-          <table class="tbl"><thead><tr><th>Line</th><th style="text-align:right">Amount (AED)</th><th style="text-align:right">%</th></tr></thead>
+        <div class="g4 mb16">
+          <div class="stat"><div class="stat-lbl">EBITDA Margin %</div><div class="stat-val" id="prf-ebitda-margin" style="color:var(--purple)">—</div></div>
+        </div>
+        <div class="card mb16"><div class="card-title mb8">P&amp;L Breakdown</div>
+          <table class="tbl"><thead><tr><th>Line</th><th style="text-align:right" data-currency-label>Amount (AED)</th><th style="text-align:right">%</th></tr></thead>
           <tbody id="prf-table"><tr><td colspan="3" style="color:var(--text3);text-align:center">Loading…</td></tr></tbody></table></div>
+        <div class="card mb16"><div class="card-title mb8">Cost Centre Profitability</div>
+          <div style="font-size:11.5px;color:var(--text3);margin-bottom:8px">From General Ledger activity tagged with a cost centre (Accounting &gt; Vouchers). Untagged activity is grouped under "Unassigned".</div>
+          <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Cost Centre</th><th style="text-align:right">Revenue</th><th style="text-align:right">% of Revenue</th><th style="text-align:right">Expense</th><th style="text-align:right">% of Expense</th><th style="text-align:right">Profit</th><th style="text-align:right">Margin %</th></tr></thead>
+          <tbody id="prf-cc-table"><tr><td colspan="7" style="color:var(--text3);text-align:center">Loading…</td></tr></tbody></table></div></div>
+        <div class="g2 mb16">
+          <div class="card"><div class="card-title mb8">Payroll Cost by Department</div>
+            <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Department</th><th style="text-align:right">Headcount</th><th style="text-align:right">Payroll Cost</th><th style="text-align:right">Cost / Employee</th><th style="text-align:right">% of Total</th></tr></thead>
+            <tbody id="prf-dept-table"><tr><td colspan="5" style="color:var(--text3);text-align:center">Loading…</td></tr></tbody></table></div></div>
+          <div class="card"><div class="card-title mb8">Business Unit Profitability</div>
+            <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Branch</th><th style="text-align:right">Revenue</th><th style="text-align:right">Expense</th><th style="text-align:right">Profit</th><th style="text-align:right">Margin %</th></tr></thead>
+            <tbody id="prf-bu-table"><tr><td colspan="5" style="color:var(--text3);text-align:center">Loading…</td></tr></tbody></table></div></div>
+        </div>
       </div>
 
       <!-- WORKING CAPITAL -->
@@ -3170,14 +3214,14 @@
         <div class="rep-panel-head"><h2 class="rep-title">Corporate Tax Computation</h2><div class="flx" style="gap:6px"><button class="btn btn-sm" style="background:var(--accent);color:#fff" onclick="calcCorporateTax()">Calculate CT</button><button class="btn btn-g btn-sm" onclick="exportActiveReportExcel()">⬇ Excel</button><button class="btn btn-p btn-sm" onclick="exportActiveReportPdf()">⬇ PDF</button></div></div>
         <div class="card mb16"><div class="g4">
           <div class="fg"><label class="fl">Tax Period</label><input class="fi mono" id="ct-period" placeholder="e.g. 2026"></div>
-          <div class="fg"><label class="fl">Accounting Net Profit (AED)</label><input class="fi mono" id="ct-net-profit" type="number" placeholder="From P&L" oninput="calcCorporateTax()"></div>
-          <div class="fg"><label class="fl">Non-Deductible Expenses (AED)</label><input class="fi mono" id="ct-non-ded" type="number" placeholder="0" oninput="calcCorporateTax()"></div>
-          <div class="fg"><label class="fl">Exempt / Adjustments (AED)</label><input class="fi mono" id="ct-exempt" type="number" placeholder="0" oninput="calcCorporateTax()"></div>
+          <div class="fg"><label class="fl" data-currency-label>Accounting Net Profit (AED)</label><input class="fi mono" id="ct-net-profit" type="number" placeholder="From P&L" oninput="calcCorporateTax()"></div>
+          <div class="fg"><label class="fl" data-currency-label>Non-Deductible Expenses (AED)</label><input class="fi mono" id="ct-non-ded" type="number" placeholder="0" oninput="calcCorporateTax()"></div>
+          <div class="fg"><label class="fl" data-currency-label>Exempt / Adjustments (AED)</label><input class="fi mono" id="ct-exempt" type="number" placeholder="0" oninput="calcCorporateTax()"></div>
         </div>
         <div class="g3 mt12" id="ct-result-row" style="display:none">
           <div class="stat"><div class="stat-lbl">Taxable Income</div><div class="stat-val mono" id="ct-taxable-income">—</div></div>
           <div class="stat"><div class="stat-lbl">CT @ 9%</div><div class="stat-val mono" style="color:var(--red)" id="ct-liability">—</div></div>
-          <div class="stat"><div class="stat-lbl">Small Business Relief</div><div class="stat-val mono" style="color:var(--green)" id="ct-sbr-note">—</div></div>
+          <div class="stat"><div class="stat-lbl">0% Tax Bracket</div><div class="stat-val mono" style="color:var(--green)" id="ct-sbr-note">—</div></div>
         </div>
         <div class="mt12" id="ct-save-row" style="display:none">
           <button class="btn btn-success btn-sm" onclick="saveCorporateTaxReturn()">Save Return for this Period</button>
@@ -3218,20 +3262,6 @@
             <tr><td>Arabic Support</td><td><span class="b b-g">Ready</span></td><td>Bilingual invoice output</td></tr>
           </tbody>
         </table></div>
-      </div>
-
-      <!-- ARABIC / ENGLISH -->
-      <div class="rep-panel" id="rep-bilingual">
-        <div class="rep-panel-head"><h2 class="rep-title">Arabic / English Financial Reporting</h2></div>
-        <div class="card">
-          <div class="card-hd"><div><div class="card-title">Bilingual Report Output</div><div class="card-sub">Generate P&amp;L, Balance Sheet, and VAT reports in Arabic and English</div></div>
-            <div class="flx" style="gap:8px">
-              <button class="btn btn-g btn-sm" onclick="document.getElementById('rep-lang-select').value='en';syncReportsFromDatabase()">English</button>
-              <button class="btn btn-p btn-sm" onclick="document.getElementById('rep-lang-select').value='ar';syncReportsFromDatabase()">عربي</button>
-            </div>
-          </div>
-          <div style="font-size:12.5px;color:var(--text3);padding:16px 0">Select a report from the sidebar and use the language toggle to switch between English and Arabic PDF export.</div>
-        </div>
       </div>
 
     </div><!-- /rep-content -->
@@ -3326,7 +3356,7 @@
             </select></div>
             <div class="fg"><label class="fl">Standard VAT Rate (%)</label><input class="fi" type="number" step="0.01" min="0" max="100" id="set-company-vat-rate" placeholder="5.00" style="color:var(--accent);font-weight:600"></div>
           </div>
-          <div class="fg"><label class="fl">Annual Taxable Turnover (AED)</label><input class="fi mono" value="2,400,000"></div>
+          <div class="fg"><label class="fl" data-currency-label>Annual Taxable Turnover (AED)</label><input class="fi mono" value="2,400,000"></div>
         </div>
       </div>
     </div>
@@ -3378,7 +3408,7 @@
       </table>
     </div>
     <div class="card">
-      <div class="card-hd"><div class="card-title">Role Templates</div><button class="btn btn-g btn-sm" onclick="toast('Role template duplicated','ok')">Duplicate</button></div>
+      <div class="card-hd"><div class="card-title">Role Templates</div><button class="btn btn-g btn-sm" disabled title="Not available yet — custom roles are managed in HRMS &gt; Settings &gt; Roles">Duplicate</button></div>
       <table class="tbl">
         <thead><tr><th>Role</th><th>Users</th><th>Access</th><th>Status</th></tr></thead>
         <tbody>
@@ -3452,7 +3482,7 @@
           <option value="overdue_invoice">Overdue Invoice Count Above</option>
           <option value="expense_above">Monthly Expense Above</option>
         </select></div>
-        <div class="fg"><label class="fl">Threshold (AED / count)</label><input class="fi mono" id="alert-rule-threshold" type="number" placeholder="e.g. 10000"></div>
+        <div class="fg"><label class="fl" data-currency-label>Threshold (AED / count)</label><input class="fi mono" id="alert-rule-threshold" type="number" placeholder="e.g. 10000"></div>
       </div>
       <table class="tbl">
         <thead><tr><th>Name</th><th>Metric</th><th>Threshold</th><th>Status</th><th></th></tr></thead>
@@ -4647,7 +4677,7 @@ period_locks ─&lt; audit_logs
     <div class="fr3"><div class="fg"><label class="fl">Reorder Level</label><input class="fi mono" id="prod-reorder" placeholder="50"></div><div class="fg"><label class="fl">Minimum Stock</label><input class="fi mono" id="prod-min" placeholder="25"></div><div class="fg"><label class="fl">Maximum Stock</label><input class="fi mono" id="prod-max" placeholder="500"></div></div>
     <div class="fg"><label class="fl">Preferred Supplier</label><select class="fi" id="prod-supplier"><option value="">Select Supplier</option></select></div>
     <div class="section-hd">Invoice Pricing</div>
-    <div class="fr3"><div class="fg"><label class="fl">Unit Selling Price (AED)</label><input class="fi mono" id="prod-price" placeholder="0.00"></div><div class="fg"><label class="fl">VAT Treatment</label><select class="fi" id="prod-vat"><option>Standard 5%</option><option>Zero-rated 0%</option><option>Exempt</option></select></div><div class="fg"><label class="fl">Status</label><select class="fi" id="prod-status"><option>Active</option><option>Inactive</option><option>Draft</option></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl" data-currency-label>Unit Selling Price (AED)</label><input class="fi mono" id="prod-price" placeholder="0.00"></div><div class="fg"><label class="fl">VAT Treatment</label><select class="fi" id="prod-vat"><option>Standard 5%</option><option>Zero-rated 0%</option><option>Exempt</option></select></div><div class="fg"><label class="fl">Status</label><select class="fi" id="prod-status"><option>Active</option><option>Inactive</option><option>Draft</option></select></div></div>
     <div class="fg"><label class="fl">Description</label><textarea class="fi" id="prod-desc" rows="2" placeholder="Optional description for invoice..."></textarea></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-product')">Cancel</button><button class="btn btn-p" onclick="saveProd()">Add Product</button></div>
   </div>
@@ -4700,6 +4730,7 @@ period_locks ─&lt; audit_logs
     <div class="fg" style="margin-top:10px"><label class="fl">Notes</label><input class="fi" id="bill-desc" placeholder="Optional notes or reference"></div>
     <div class="modal-foot">
       <button class="btn btn-g" onclick="closeM('m-bill')">Cancel</button>
+      <button class="btn btn-g" type="button" title="Reverse and repost the ledger entry with this bill's current amounts (only works after it's already posted)" onclick="updateLedgerForSource('purchase_bill',document.getElementById('bill-no')?.value?.trim())">Update Ledger</button>
       <button class="btn btn-p" onclick="saveBill()">Save Bill</button>
     </div>
   </div>
@@ -4774,7 +4805,7 @@ period_locks ─&lt; audit_logs
         <!-- Payment amount -->
         <div class="pmt-field-col">
           <label class="pmt-lbl">Payment</label>
-          <input class="pmt-amount-big" id="payment-amount" placeholder="0.00" inputmode="decimal" oninput="updatePmtBalance()">
+          <input class="pmt-amount-big" id="payment-amount" placeholder="0.00" inputmode="decimal" oninput="distributePaymentAmountAcrossAllocations()">
         </div>
 
         <!-- Calculate all owing -->
@@ -5033,8 +5064,35 @@ period_locks ─&lt; audit_logs
   </div>
 </div>
 
-<!-- Add Bank Account / New Invoice Layout modals are injected on first open —
-     see _LAZY_MODALS in src/app.js (m-bank, m-new-layout). -->
+<div class="overlay" id="m-bank" onclick="closeOvBg(event,'m-bank')">
+  <div class="modal"><div class="modal-title">Add Bank Account</div><div class="modal-sub">Register a new bank account for reconciliation</div>
+    <div class="fg"><label class="fl">Bank Name</label><select class="fi" id="bank-name"><option>Emirates NBD</option><option>ADCB</option><option>FAB</option><option>Mashreq</option><option>ADIB</option><option>DIB</option><option>RAK Bank</option><option>HSBC UAE</option></select></div>
+    <div class="fg"><label class="fl">Account Holder Name</label><input class="fi" id="bank-holder"></div>
+    <div class="fg"><label class="fl">IBAN</label><input class="fi mono" id="bank-iban" placeholder="AE..."></div>
+    <div class="fr2"><div class="fg"><label class="fl">Account Type</label><select class="fi" id="bank-type"><option>Current</option><option>Savings</option></select></div><div class="fg"><label class="fl">Currency</label><select class="fi" id="bank-currency"><option>AED</option><option>USD</option><option>EUR</option><option>GBP</option></select></div></div>
+    <div class="fg"><label class="fl">Opening Balance</label><input class="fi mono" id="bank-balance" placeholder="0.00" inputmode="decimal"></div>
+    <div class="fr2"><div class="fg"><label class="fl">Swift Code</label><input class="fi mono" id="bank-swift" placeholder="ENBD AEADxxx"></div><div class="fg"><label class="fl">Branch</label><input class="fi" id="bank-branch" placeholder="Branch name"></div></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-bank')">Cancel</button><button class="btn btn-p" onclick="saveBankAccount()">Save Account</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-new-layout" onclick="closeOvBg(event,'m-new-layout')">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-title">New Invoice Layout</div>
+    <div class="modal-sub">Create a named layout — customise fonts, colours and fields after saving</div>
+    <div class="fg" style="margin-top:14px"><label class="fl">Layout Name</label><input class="fi" id="new-layout-name" placeholder="e.g. Export Invoice, Arabic Layout…" maxlength="60" onkeydown="if(event.key==='Enter')confirmAddInvoiceLayout()"></div>
+    <div class="fg"><label class="fl">Start From</label>
+      <select class="fi" id="new-layout-base">
+        <option value="default">Default settings (blank)</option>
+        <option value="current">Current active layout (duplicate)</option>
+      </select>
+    </div>
+    <div class="fr2" style="margin-top:16px">
+      <button class="btn btn-g" onclick="hideM('m-new-layout')">Cancel</button>
+      <button class="btn btn-p" onclick="confirmAddInvoiceLayout()">Create Layout</button>
+    </div>
+  </div>
+</div>
 
 <div class="overlay" id="m-emp" onclick="closeOvBg(event,'m-emp')">
   <div class="modal modal-lg"><div class="modal-title">Add Employee</div><div class="modal-sub">Complete the employee profile, employment terms and document details</div>
@@ -5058,8 +5116,8 @@ period_locks ─&lt; audit_logs
     <div class="section-hd">Employment Details</div>
     <div class="fr3"><div class="fg"><label class="fl">Employee ID</label><input class="fi mono" id="emp-id" placeholder="EMP-005"></div><div class="fg"><label class="fl">Employment Type</label><select class="fi" id="emp-contract"><option>Full-Time</option><option>Part-Time</option><option>Contract</option><option>Probation</option><option>Intern / Trainee</option><option>Daily Wage</option><option>Hourly</option><option>Weekly</option><option>Short-Term</option><option>Freelance / Consultant</option><option>Seasonal</option><option>Project-Based</option></select></div><div class="fg"><label class="fl">Join Date</label><input class="fi" id="emp-join-date" type="date"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Department <span style="color:var(--red)">*</span></label><select class="fi" id="emp-department" required><option value="">— Select Department —</option><option>Management</option><option>Finance</option><option>Operations</option><option>Sales</option><option>HR</option><option>IT</option><option>Marketing</option><option>Procurement</option><option>Logistics</option></select></div><div class="fg"><label class="fl">Designation</label><input class="fi" id="emp-designation" placeholder="e.g. Sales Executive"></div><div class="fg"><label class="fl">Branch <span style="color:var(--red)">*</span></label><select class="fi" id="emp-branch" required><option value="">— Select Branch —</option><option>Dubai HQ</option><option>Abu Dhabi</option><option>Sharjah</option><option>Ajman</option><option>Ras Al Khaimah</option><option>Fujairah</option></select></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Basic Salary (AED)</label><input class="fi mono" id="emp-salary" type="number" min="0" step="0.01" required></div><div class="fg"><label class="fl">OT Policy</label><select class="fi" id="emp-ot-rate"><option value="system-default">— System Default (from HR Settings) —</option><option value="fixed">Fixed Rate</option><option value="monthly">Monthly-Based Rate</option><option value="other">Other / Custom</option></select></div><div class="fg"><label class="fl">Leave Policy</label><select class="fi" id="emp-leave-policy"><optgroup label="UAE Policy (Calendar Days)"><option value="UAE 30 Calendar">UAE Policy — 30 Calendar Days</option><option value="UAE Standard">UAE Standard — 21 Calendar Days</option></optgroup><optgroup label="Internal Policy (Working Days)"><option value="Internal 22 Working">Internal — 22 Working Days</option><option value="Internal 29 Working">Internal — 29 Working Days</option><option value="Executive 30 Working">Executive — 30 Working Days</option></optgroup><optgroup label="Other"><option value="Contractor">Contractor — 14 Calendar Days</option><option value="Part-Time">Part-Time Pro-Rata</option><option value="Custom">Custom (per contract)</option></optgroup></select></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Housing Allowance (AED)</label><input class="fi mono" id="emp-housing-allowance" type="number" min="0" step="0.01" value="0"></div><div class="fg"><label class="fl">Transport Allowance (AED)</label><input class="fi mono" id="emp-transport-allowance" type="number" min="0" step="0.01" value="0"></div><div class="fg"><label class="fl">Other Allowance (AED)</label><input class="fi mono" id="emp-other-allowance" type="number" min="0" step="0.01" value="0"></div></div>
+    <div class="fr3"><div class="fg"><label class="fl" data-currency-label>Basic Salary (AED)</label><input class="fi mono" id="emp-salary" type="number" min="0" step="0.01" required></div><div class="fg"><label class="fl">OT Policy</label><select class="fi" id="emp-ot-rate"><option value="system-default">— System Default (from HR Settings) —</option><option value="fixed">Fixed Rate</option><option value="monthly">Monthly-Based Rate</option><option value="other">Other / Custom</option></select></div><div class="fg"><label class="fl">Leave Policy</label><select class="fi" id="emp-leave-policy"><optgroup label="UAE Policy (Calendar Days)"><option value="UAE 30 Calendar">UAE Policy — 30 Calendar Days</option><option value="UAE Standard">UAE Standard — 21 Calendar Days</option></optgroup><optgroup label="Internal Policy (Working Days)"><option value="Internal 22 Working">Internal — 22 Working Days</option><option value="Internal 29 Working">Internal — 29 Working Days</option><option value="Executive 30 Working">Executive — 30 Working Days</option></optgroup><optgroup label="Other"><option value="Contractor">Contractor — 14 Calendar Days</option><option value="Part-Time">Part-Time Pro-Rata</option><option value="Custom">Custom (per contract)</option></optgroup></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl" data-currency-label>Housing Allowance (AED)</label><input class="fi mono" id="emp-housing-allowance" type="number" min="0" step="0.01" value="0"></div><div class="fg"><label class="fl" data-currency-label>Transport Allowance (AED)</label><input class="fi mono" id="emp-transport-allowance" type="number" min="0" step="0.01" value="0"></div><div class="fg"><label class="fl" data-currency-label>Other Allowance (AED)</label><input class="fi mono" id="emp-other-allowance" type="number" min="0" step="0.01" value="0"></div></div>
     <div class="fr2"><div class="fg"><label class="fl">Default Shift</label><select class="fi" id="emp-shift"><option>09:00-18:00</option><option>08:00-17:00</option><option>10:00-19:00</option><option>Night 22:00-06:00</option><option>Split Shift</option></select></div><div class="fg"><label class="fl">Work Location</label><select class="fi" id="emp-location"><option>Dubai HQ</option><option>Abu Dhabi Warehouse</option><option>Sharjah Sales Office</option><option>Remote</option><option>Field / Site</option></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Work Permit No.</label><input class="fi mono" id="emp-work-permit"></div><div class="fg"><label class="fl">Visa Expiry</label><input class="fi" id="emp-visa-expiry" type="date"></div><div class="fg"><label class="fl">Cost Center</label><input class="fi" id="emp-cost-center" placeholder="e.g. CC-01-OPS"></div></div>
     <div class="fr2"><div class="fg"><label class="fl">Emergency Contact Name</label><input class="fi" id="emp-emergency" placeholder="Full name"></div><div class="fg"><label class="fl">Emergency Contact Mobile</label><input class="fi mono" id="emp-emergency-mobile" placeholder="+971..."></div></div>
@@ -5132,7 +5190,7 @@ period_locks ─&lt; audit_logs
 <div class="overlay" id="m-loan" onclick="closeOvBg(event,'m-loan')">
   <div class="modal"><div class="modal-title">New Loan Request</div><div class="modal-sub">Employee loan with EMI and auto payroll deduction</div>
     <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="loan-employee"><option value="">— Select Employee —</option></select></div><div class="fg"><label class="fl">Loan Type</label><select class="fi" id="loan-type"><option>Personal Loan</option><option>Emergency Loan</option><option>Medical Loan</option><option>Home Furnishing Loan</option><option>Education Loan</option><option>Vehicle Loan</option></select></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Loan Amount (AED)</label><input class="fi mono" id="loan-amount" placeholder="5000.00" oninput="calcLoanEmi()"></div><div class="fg"><label class="fl">Repayment (Months)</label><input class="fi mono" id="loan-months" value="6" oninput="calcLoanEmi()"></div><div class="fg"><label class="fl">Monthly EMI (AED)</label><input class="fi mono" id="loan-emi" readonly style="color:var(--accent);font-weight:600"></div></div>
+    <div class="fr3"><div class="fg"><label class="fl" data-currency-label>Loan Amount (AED)</label><input class="fi mono" id="loan-amount" placeholder="5000.00" oninput="calcLoanEmi()"></div><div class="fg"><label class="fl">Repayment (Months)</label><input class="fi mono" id="loan-months" value="6" oninput="calcLoanEmi()"></div><div class="fg"><label class="fl" data-currency-label>Monthly EMI (AED)</label><input class="fi mono" id="loan-emi" readonly style="color:var(--accent);font-weight:600"></div></div>
     <div class="fg"><label class="fl">Purpose / Reason</label><textarea class="fi" id="loan-reason" rows="3" placeholder="Describe the purpose of this loan request"></textarea></div>
     <div class="fr2"><div class="fg"><label class="fl">Requested Date</label><input class="fi" id="loan-date" type="date"></div><div class="fg"><label class="fl">First Deduction Month</label><input class="fi" id="loan-deduct-from" type="month"></div></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-loan')">Cancel</button><button class="btn btn-p" onclick="saveLoan()">Submit Loan Request</button></div>
@@ -5142,7 +5200,7 @@ period_locks ─&lt; audit_logs
 <div class="overlay" id="m-loan-advance" onclick="closeOvBg(event,'m-loan-advance')">
   <div class="modal"><div class="modal-title">Salary Advance Request</div><div class="modal-sub">One-time advance deducted from next salary run</div>
     <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="advance-employee"><option value="">— Select Employee —</option></select></div><div class="fg"><label class="fl">Advance Month</label><input class="fi" id="advance-month" type="month"></div></div>
-    <div class="fg"><label class="fl">Advance Amount (AED)</label><input class="fi mono" id="advance-amount" placeholder="Max 50% of basic salary"></div>
+    <div class="fg"><label class="fl" data-currency-label>Advance Amount (AED)</label><input class="fi mono" id="advance-amount" placeholder="Max 50% of basic salary"></div>
     <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="advance-reason" rows="3" placeholder="Brief reason for salary advance request"></textarea></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-loan-advance')">Cancel</button><button class="btn btn-p" onclick="saveLoanAdvance()">Submit Advance</button></div>
   </div>
@@ -5152,7 +5210,7 @@ period_locks ─&lt; audit_logs
   <div class="modal modal-lg"><div class="modal-title">Add Candidate</div><div class="modal-sub">Register applicant for a job opening</div>
     <div class="fr3"><div class="fg"><label class="fl">Full Name</label><input class="fi" id="cand-name"></div><div class="fg"><label class="fl">Mobile</label><input class="fi mono" id="cand-mobile" placeholder="+971..."></div><div class="fg"><label class="fl">Email</label><input class="fi" id="cand-email" type="email"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Applied Position</label><input class="fi" id="cand-position" placeholder="Job title"></div><div class="fg"><label class="fl">Nationality</label><select class="fi" id="cand-nationality"><option>UAE</option><option>India</option><option>Pakistan</option><option>Philippines</option><option>Other</option></select></div><div class="fg"><label class="fl">Experience (Years)</label><input class="fi mono" id="cand-exp" placeholder="3"></div></div>
-    <div class="fr2"><div class="fg"><label class="fl">Expected Salary (AED)</label><input class="fi mono" id="cand-salary" placeholder="5000"></div><div class="fg"><label class="fl">Visa Status</label><select class="fi" id="cand-visa"><option>Visit Visa</option><option>Employment Visa</option><option>Residence Visa</option><option>Freelance Permit</option><option>Requires Sponsorship</option></select></div></div>
+    <div class="fr2"><div class="fg"><label class="fl" data-currency-label>Expected Salary (AED)</label><input class="fi mono" id="cand-salary" placeholder="5000"></div><div class="fg"><label class="fl">Visa Status</label><select class="fi" id="cand-visa"><option>Visit Visa</option><option>Employment Visa</option><option>Residence Visa</option><option>Freelance Permit</option><option>Requires Sponsorship</option></select></div></div>
     <div class="fr2"><div class="fg"><label class="fl">Source</label><select class="fi" id="cand-source"><option>LinkedIn</option><option>Bayt.com</option><option>Indeed</option><option>GulfTalent</option><option>Walk-in</option><option>Referral</option><option>Agency</option></select></div><div class="fg"><label class="fl">Stage</label><select class="fi" id="cand-stage"><option>Applied</option><option>Screening</option><option>Interview Scheduled</option><option>Offer Sent</option><option>Hired</option><option>Rejected</option></select></div></div>
     <div class="fg"><label class="fl">CV / Resume</label><input class="fi" id="cand-cv" type="file" accept=".pdf,.doc,.docx"></div>
     <div class="fg"><label class="fl">Notes</label><textarea class="fi" id="cand-notes" rows="3" placeholder="Recruiter notes, interview feedback..."></textarea></div>
@@ -5195,7 +5253,7 @@ period_locks ─&lt; audit_logs
     <div class="fg"><label class="fl">Review Topic</label><select class="fi"><option>VAT Return Review</option><option>FTA Audit Support</option><option>Penalty Dispute</option><option>Corporate Tax Advice</option><option>General Tax Query</option></select></div>
     <div class="fg"><label class="fl">Description</label><textarea class="fi" rows="4" placeholder="Describe what you need the expert to review..."></textarea></div>
     <div class="fg"><label class="fl">Attach Documents (optional)</label><div class="drop-zone" style="padding:18px" onclick="toast('Choose files to attach...','info')"><div style="font-size:12.5px;color:var(--text2)">Drop files or click to attach</div></div></div>
-    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-newreview')">Cancel</button><button class="btn btn-p" onclick="saveM('m-newreview','Review request sent to expert ✓')">Send Request</button></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-newreview')">Cancel</button><button class="btn btn-p" onclick="toast('Expert Review is not available yet — no request was sent','info')">Send Request</button></div>
   </div>
 </div>
 
@@ -5215,7 +5273,7 @@ period_locks ─&lt; audit_logs
       <div style="text-align:center;background:var(--bg3);border-radius:10px;padding:12px"><div class="mono" style="color:var(--amber);font-size:18px">48h</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Response time</div></div>
     </div>
     <div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:16px">Specializes in UAE VAT filings, FTA audit representation, and penalty disputes. Previously worked at Big 4 firm. Fluent in Arabic and English. Registered Tax Agent (TAAN 20009871).</div>
-    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-expert1')">Close</button><button class="btn btn-p" onclick="closeM('m-expert1');showM('m-newreview');toast('Expert pre-selected','info')">Request Review →</button></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-expert1')">Close</button><button class="btn btn-p" onclick="closeM('m-expert1');toast('Expert Review is not available yet','info')">Request Review →</button></div>
   </div>
 </div>
 
@@ -5349,7 +5407,7 @@ period_locks ─&lt; audit_logs
     <div class="modal-sub" id="ob-acc-name" style="font-weight:600;color:var(--text1)"></div>
     <div class="fr2" style="margin-top:16px">
       <div class="fg" style="flex:2">
-        <label class="fl">Amount (AED)</label>
+        <label class="fl" data-currency-label>Amount (AED)</label>
         <input class="fi mono" id="ob-amount" placeholder="0.00" value="0.00" inputmode="decimal">
       </div>
       <div class="fg">
@@ -5419,15 +5477,15 @@ period_locks ─&lt; audit_logs
 
     <div class="fr3">
       <div class="fg">
-        <label class="fl">Subtotal (AED)</label>
+        <label class="fl" data-currency-label>Subtotal (AED)</label>
         <input class="fi mono" id="ei-subtotal" oninput="editCalc()">
       </div>
       <div class="fg">
-        <label class="fl">VAT Amount (AED)</label>
+        <label class="fl" data-currency-label>VAT Amount (AED)</label>
         <input class="fi mono" id="ei-vat" oninput="editCalc()">
       </div>
       <div class="fg">
-        <label class="fl">Total (AED)</label>
+        <label class="fl" data-currency-label>Total (AED)</label>
         <input class="fi mono" id="ei-total" readonly style="background:var(--bg)">
       </div>
     </div>
@@ -5523,10 +5581,73 @@ period_locks ─&lt; audit_logs
   </div>
 </div>
 
-<!-- Add Department / Add Branch modals are injected on first open — see
-     _LAZY_MODALS in src/app.js (m-dept, m-branch). -->
+<!-- ═══════════════════ DEPARTMENT MODAL ═══════════════════ -->
+<div class="overlay" id="m-dept" onclick="closeOvBg(event,'m-dept')">
+  <div class="modal">
+    <div class="modal-title" id="dept-modal-title">Add Department</div>
+    <div class="modal-sub">Department details used in employee profiles and reporting</div>
+    <input type="hidden" id="dept-edit-id">
+    <div class="fr2">
+      <div class="fg"><label class="fl">Department Name <span style="color:var(--red)">*</span></label><input class="fi" id="dept-name" placeholder="e.g. Finance"></div>
+      <div class="fg"><label class="fl">Short Code</label><input class="fi" id="dept-code" placeholder="e.g. FIN" maxlength="6" style="text-transform:uppercase"></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Department Head / Manager</label><input class="fi" id="dept-head" placeholder="e.g. Ahmed Al Mansouri"></div>
+      <div class="fg"><label class="fl">Status</label><select class="fi" id="dept-status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
+    </div>
+    <div class="fg"><label class="fl">Description</label><input class="fi" id="dept-desc" placeholder="Brief description of this department's function"></div>
+    <div class="modal-actions">
+      <button id="dept-delete-btn" class="btn btn-sm" style="display:none;background:var(--red-bg);color:var(--red);border-color:var(--red);margin-right:auto" onclick="deleteDeptFromModal()">Delete</button>
+      <button class="btn btn-ghost" onclick="hideM('m-dept')">Cancel</button>
+      <button class="btn btn-p" onclick="saveDeptModal()">Save Department</button>
+    </div>
+  </div>
+</div>
 
-<script src="config.js"></script>
-<script src="src/app.js?v=bcbc27adc4" defer></script>
+<!-- ═══════════════════ BRANCH MODAL ═══════════════════ -->
+<div class="overlay" id="m-branch" onclick="closeOvBg(event,'m-branch')">
+  <div class="modal">
+    <div class="modal-title" id="branch-modal-title">Add Branch</div>
+    <div class="modal-sub">Register a branch or office location for your company</div>
+    <input type="hidden" id="branch-edit-id">
+    <div class="fr2">
+      <div class="fg"><label class="fl">Branch Name <span style="color:var(--red)">*</span></label><input class="fi" id="branch-name" placeholder="e.g. Dubai HQ"></div>
+      <div class="fg"><label class="fl">Short Code</label><input class="fi" id="branch-code" placeholder="e.g. DXB" maxlength="6" style="text-transform:uppercase"></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">City / Emirate</label><input class="fi" id="branch-city" placeholder="e.g. Dubai"></div>
+      <div class="fg"><label class="fl">Status</label><select class="fi" id="branch-status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Country</label><select class="fi" id="branch-country" onchange="onBranchCountryChange()"></select></div>
+      <div class="fg"><label class="fl">Currency</label><input class="fi" id="branch-currency" readonly style="background:var(--surface2);color:var(--text3)"></div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:-8px;margin-bottom:10px">Reference only — this branch's invoices and VAT still use the company's own currency/VAT rate in Settings.</div>
+
+    <div style="margin:14px 0 10px">
+      <label class="fl">Module Access</label>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Which modules this branch's own login can use — leave all checked for unrestricted access</div>
+      <div id="branch-mod-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 10px"></div>
+    </div>
+
+    <div class="fr2">
+      <div class="fg"><label class="fl">Branch Login Username</label><input class="fi" id="branch-username" placeholder="e.g. dubai-branch" autocomplete="username"></div>
+      <div class="fg"><label class="fl">Branch Login Password</label><input class="fi mono" id="branch-password" type="password" placeholder="Set login password" autocomplete="new-password"></div>
+    </div>
+    <div id="branch-pw-hint" style="font-size:11px;color:var(--text3);margin-top:-8px;margin-bottom:10px"></div>
+
+    <div class="modal-actions">
+      <button id="branch-delete-btn" class="btn btn-sm" style="display:none;background:var(--red-bg);color:var(--red);border-color:var(--red);margin-right:auto" onclick="deleteBranchFromModal()">Delete</button>
+      <button id="branch-cancel-btn" class="btn btn-ghost" onclick="hideM('m-branch')">Cancel</button>
+      <button id="branch-save-btn" class="btn btn-p" onclick="saveBranchModal()">Save Branch</button>
+    </div>
+  </div>
+</div>
+
+<!-- defer, not blocking: nothing between this tag and app.js reads
+     window.TAXFLOW_API_BASE_URL synchronously, and defer preserves source
+     order relative to app.js's own defer, so config.js still runs first. -->
+<script src="config.js" defer></script>
+<script src="src/app.js?v=0d123b28fb" defer></script>
 </body>
 </html>

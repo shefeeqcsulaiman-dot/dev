@@ -2434,6 +2434,12 @@ GET      /api/v1/payroll/employees
 GET      /api/v1/payroll/runs
 POST     /api/v1/payroll/generate
 POST     /api/v1/payroll/runs/{run_id}/wps-batch
+POST     /api/v1/payroll/runs/{run_id}/approve   (drains loan/advance balances; audited)
+DELETE   /api/v1/payroll/runs/{run_id}           (draft runs only)
+GET      /api/v1/payroll/runs/{run_id}/sif       (CBUAE EHR/SCR/ETR from stored items)
+GET      /api/v1/attendance/overtime-eligibility (?date_from&date_to; days worked past standard, cool-off aware)
+GET      /api/v1/ess/overtime-eligibility        (caller only, last 31 days)
+POST     /api/v1/companies/current/users         (company admin adds a login)
 GET      /api/v1/reports/dashboard
 GET      /api/v1/reports/trial-balance
 GET      /api/v1/reports/summary
@@ -2462,6 +2468,8 @@ GET      /api/v1/corporate-accounting/credit-control
 GET      /api/v1/corporate-accounting/month-end
 GET      /api/v1/corporate-accounting/consolidation
 GET      /api/v1/corporate-accounting/approval-matrix
+POST     /api/v1/corporate-accounting/fixed-assets/{id}/depreciate
+POST     /api/v1/corporate-accounting/accruals-prepayments/{id}/release
 GET/POST /api/v1/item-units
 GET/POST /api/v1/item-unit-conversions
 GET      /api/v1/inventory/stock-levels
@@ -2545,6 +2553,8 @@ arrives (was: always force-logout; now: only for a genuinely expired/
 invalid token, not a merely under-permissioned one).
 
 ## 25. Testing Architecture
+
+Current state (2026-09-25): 470+ backend tests (`backend/tests/`); the full suite runs in ~9 minutes on SQLite and has one known weekday-dependent failure (`test_team_today_shows_present_absent_and_leave_within_the_same_department`). Live QA is done with Playwright-driven Chromium tracks (see `testing/TEST_RUN_2026-09-25.md`). Tests that assert exact counts share one company via the `auth_headers` fixture and can be polluted by other files — use `_register(client, suffix)` (tests/test_registration.py) for an isolated company, and clean up global tables (e.g. `products`) you write to.
 
 TaxFlow testing must prove business correctness across UI, API, accounting, VAT, inventory, security, audit, tenant isolation, posting, exception handling, and database integrity.
 
@@ -2873,3 +2883,30 @@ Verified via a Playwright probe (`page.evaluate` timing a direct `fetch('/api/v1
 
 **Super Admin UI** now uses the main dashboard's design tokens (light default, dark toggle remembered in `localStorage.sa_theme`), a full-height sidebar with the logo, a topbar with the page title/theme toggle, tinted KPI cards, and an off-canvas sidebar under 860px. Also fixed while testing: modals opened from the company drawer (Edit User, confirms) sat *behind* it (`.overlay` z-index 200 < drawer 210/211 → now 230); the open drawer kept the stale user list after Disable/Edit/Remove; Client Errors / Trial Requests were only read at page load. `openResetPassword()` and `openSetExpiry()` (and their modals) have no caller — dead code; password reset is done via Edit User, expiry via Edit Company or "+7 Days / +1 Year".
 
+
+## 32. Live QA audit fixes (2026-09-22 → 09-25)
+
+A six-track Playwright audit (Sales/Purchases/Inventory, POS/Bank/Accounting, Corporate/Reports/Tax, HRMS+Biometric, ESS/Settings/Exceptions, Super Admin) produced ~45 findings; all but Related Party records (no backing table) are fixed (commits `327286b`, `9b1b3df`). Design consequences worth knowing:
+
+**Access control (`app_data.py`).** `assert_collection_read_permission()` / `assert_collection_write_permission()` block roleless employees; `users` and `invoiceLayout` are admin-only (`_ADMIN_ONLY_COLLECTIONS`); HR collections need the matching module `:view`. `_guard_employee_write()` keeps stored values for sensitive employee fields (salary, IBAN…) unless the caller has `employees:edit`, and only `employees:edit` can create employees. Employee sync validates IBAN and rejects negative salary.
+
+**Posting pipeline.**
+- POS paid sales save a `payments` receipt `RCT-<invoice_no>` (`_record_pos_receipt`); credit sales don't.
+- Sales invoices create `StockMovement` rows (`SALE-<no>`, types `sales_invoice`/`sales_return`) and consume valuation layers; POS-source invoices are skipped (POS has its own `sync_pos_stock`). Deleting the invoice deletes them.
+- **Negative-stock gate:** `inventorySettings` record `key="config"`, `allow_negative_stock=false` (Inventory > Adjustments checkbox) makes both stock syncs raise 409 on insufficient tracked stock. Default is permissive.
+- `lockedPeriods` saves upsert `PeriodLock`, so UI period locks are enforced server-side.
+- Fixed-asset depreciation and accrual/prepayment release post balanced journals: `POST /corporate-accounting/fixed-assets/{id}/depreciate` (Dr 6100 / Cr 1510, capped at cost) and `POST /corporate-accounting/accruals-prepayments/{id}/release` (Dr 6200 / Cr 1300 or 2400, capped at total). Prepayment "remaining" = total − released.
+
+**Reports.** Balance sheet includes a "Current period earnings" equity row (so it balances); P&L revenue/purchases are ex-VAT and include manual voucher expenses (excluding `PAY-JE` payroll entries); cash flow reads ledger cash; corporate-tax profit is recomputed from live net profit; summary text swaps "AED" for the company currency.
+
+**Payroll.** Generation is read-only for loan/advance balances; **approval** (`POST /payroll/runs/{id}/approve`) drains them and audits. Future periods rejected; draft runs deletable; Bonus/Overtime/Deduction/Advance adjustments (with `employee_id` + `period_ym`) feed the run; `GET /payroll/runs/{id}/sif` builds the CBUAE EHR/SCR/ETR file from stored items. ESS payslips show only approved/paid runs.
+
+**Companies / Super Admin.** Duplicate TRN → 409; `POST /companies/current/users` (admin only); superadmin create-company email is `EmailStr`; `/audit-logs` merges platform `AuditLog` rows; DB diagnostics reports `supported:false` on non-Postgres. SQL backup (`build_company_sql_dump`) now also dumps branches, journal entries/lines, stock mappings/movements and period locks via model reflection (users deliberately excluded — password hashes).
+
+**Frontend.** Hardcoded "AED" labels use `data-currency-label` (regex updater) or `currentCurrency()`; purchase-form totals show the company currency; `moduleApi` formats 422 array details; fake success toasts removed (Mark All Read, Role Duplicate, integration test, rota, job board); Inventory > Adjustments tab.
+
+**Known unrelated flakes:** `test_team_today_shows_present_absent_and_leave_within_the_same_department` (weekday-dependent) and `test_attendance_trend_period`.
+
+**Documentation surfaces.** `STORYBOARD.md` (feature-by-feature functionality), `docs/storyboard.md` (screen layouts), `frontend/public/taxflow/handbook.html` (user handbook served at `/handbook`; screens `M.*` main app, `H.*` HRMS, `E.*` ESS; HRMS sidebar has a Handbook entry opening `/handbook#part-hrms`), `docs/hrms-architecture.md` §11 (OT cool-off/eligibility). Update all of them when a user-visible screen changes.
+
+**Frontend build.** After editing `app.js`/`ess.js`, run `cd frontend && npm run build:min && npm run inject-versions` — HTML pages load the `.min.js` bundles with version query strings.

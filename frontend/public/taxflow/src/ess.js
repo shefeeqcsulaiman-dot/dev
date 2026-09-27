@@ -610,7 +610,7 @@
     if (!p) return;
     var me = _essMe || {};
     var w = window.open('', '_blank', 'width=760,height=900');
-    if (!w) { alert('Please allow pop-ups for this site to print your payslip.'); return; }
+    if (!w) { essToast('Please allow pop-ups for this site to print your payslip.', 'err'); return; }
     var line = function(label, val, bold) { return '<tr' + (bold ? ' class="b"' : '') + '><td>' + label + '</td><td class="n">' + essMoney(val) + '</td></tr>'; };
     w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Payslip ' + escHtml(_psPeriodLabel(p.period)) + '</title>' +
       '<style>body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;margin:40px}h1{font-size:20px;margin:0}h2{font-size:13px;color:#475569;font-weight:400;margin:4px 0 24px}' +
@@ -724,7 +724,7 @@
         if (!rows.length) el.innerHTML = '<div class="empty" style="padding:12px 0">No announcements yet.</div>';
         else el.innerHTML = rows.slice(0, 5).map(function(a) {
           return '<div class="dash-announce-row">' +
-            '<div class="dash-sched-icon">📣</div>' +
+            '<div class="dash-sched-icon"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 6v4h2l6 3V3L4 6H2z"/><path d="M11 5.5a3 3 0 010 5"/></svg></div>' +
             '<div style="flex:1;min-width:0">' +
               '<div class="dash-sched-title">' + escHtml(a.title) + '</div>' +
               (a.message ? '<div class="dash-announce-msg">' + escHtml(a.message) + '</div>' : '') +
@@ -1184,7 +1184,7 @@
         schedEl.innerHTML = todaysShifts.map(function(a) {
           var timeRange = (a.start || '') + (a.end ? (' – ' + a.end) : '');
           return '<div class="dash-sched-row">' +
-            '<div class="dash-sched-icon">🗓️</div>' +
+            '<div class="dash-sched-icon"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1.5v3M11 1.5v3M2 6h12"/></svg></div>' +
             '<div style="flex:1;min-width:0">' +
               '<div class="dash-sched-time">' + escHtml(timeRange || '—') + '</div>' +
               '<div class="dash-sched-title">' + escHtml(a.type || a.code || 'Shift') + (a.location ? (' · ' + escHtml(a.location)) : '') + '</div>' +
@@ -1231,6 +1231,50 @@
     el.className = 'ess-toast on' + (kind === 'err' ? ' err' : '');
     clearTimeout(_essToastTimer);
     _essToastTimer = setTimeout(function() { el.className = 'ess-toast'; }, 3500);
+  }
+
+  // Promise-based styled confirm, mirroring app.js's own appConfirm() (main
+  // app / hrms.html) -- ess.js is a fully separate script/bundle (no shared
+  // code with app.js), so this is its own small equivalent built from the
+  // same .ess-overlay/.ess-modal classes every other ESS modal already uses,
+  // rather than falling back to a native confirm() the rest of the app has
+  // moved away from.
+  function essConfirm(opts) {
+    opts = opts || {};
+    var overlay = document.getElementById('ess-confirm-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'ess-overlay';
+      overlay.id = 'ess-confirm-overlay';
+      overlay.innerHTML =
+        '<div class="ess-modal" style="max-width:360px">' +
+          '<div class="ess-modal-title" id="ess-confirm-title">Confirm</div>' +
+          '<div id="ess-confirm-message" style="font-size:13.5px;color:var(--text2);margin-bottom:20px"></div>' +
+          '<div style="display:flex;gap:10px;justify-content:flex-end">' +
+            '<button class="btn-ghost" id="ess-confirm-cancel" type="button">Cancel</button>' +
+            '<button class="btn-login" id="ess-confirm-ok" type="button" style="width:auto;padding:9px 18px">OK</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+    }
+    document.getElementById('ess-confirm-title').textContent = opts.title || 'Confirm';
+    document.getElementById('ess-confirm-message').textContent = opts.message || '';
+    var ok = document.getElementById('ess-confirm-ok');
+    ok.textContent = opts.okText || 'OK';
+    var cancel = document.getElementById('ess-confirm-cancel');
+    overlay.classList.add('on');
+    return new Promise(function(resolve) {
+      function done(value) {
+        overlay.classList.remove('on');
+        ok.onclick = null;
+        cancel.onclick = null;
+        overlay.onclick = null;
+        resolve(value);
+      }
+      ok.onclick = function() { done(true); };
+      cancel.onclick = function() { done(false); };
+      overlay.onclick = function(e) { if (e.target === overlay) done(false); };
+    });
   }
 
   // One place for the write calls: 401 -> sign out, errors -> Error(message).
@@ -1323,10 +1367,34 @@
     renderAttendance();
     updateDashboard();
     essProcessRequestUpdates();
+    essLoadOtEligibility();
+  }
+
+  var _essOtElig = [];
+  async function essLoadOtEligibility() {
+    var el = document.getElementById('ot-elig-content');
+    if (!el) return;
+    try {
+      var data = await essApi('GET', '/ess/overtime-eligibility');
+      _essOtElig = data.rows || [];
+      var note = document.getElementById('ot-elig-note');
+      if (note) note.textContent = data.cooloff_minutes ? 'The first ' + data.cooloff_minutes + ' min past your standard day are not counted as overtime' : 'Days you worked past your standard day (last 31 days)';
+    } catch (e) { el.innerHTML = '<div class="empty">Failed to load.</div>'; return; }
+    if (!_essOtElig.length) { el.innerHTML = emptyState('clock', 'No overtime detected', 'Days you work past your standard hours will appear here.'); return; }
+    el.innerHTML = '<div style="overflow-x:auto"><table class="tbl" style="width:100%;font-size:12.5px"><thead><tr><th>Date</th><th>In</th><th>Out</th><th>Worked</th><th>Extra</th><th>Eligible OT</th><th>Status</th><th></th></tr></thead><tbody>' +
+      _essOtElig.map(function(r, i) {
+        var cls = !r.eligible ? 'rejected' : (r.eligibility.indexOf('Requested') === 0 ? 'approved' : 'pending');
+        var act = r.eligible && !r.request_id ? '<button class="btn-ghost" style="padding:5px 10px;font-size:11.5px" onclick="essRequestOtFromRow(' + i + ')">Request</button>' : '';
+        return '<tr><td>' + escHtml(r.date) + (r.day_type === 'weekend' ? ' <span class="st-badge st-pending">Weekend</span>' : '') + '</td><td>' + escHtml(r.clock_in || '—') + '</td><td>' + escHtml(r.clock_out || '—') + '</td><td>' + escHtml(r.worked) + '</td><td>' + escHtml(r.extra) + '</td><td>' + escHtml(r.eligible_ot) + '</td><td><span class="st-badge st-' + cls + '">' + escHtml(r.eligibility) + '</span></td><td>' + act + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  function essRequestOtFromRow(i) {
+    var r = _essOtElig[i];
+    if (r) essOpenRequestModal('overtime', {date: r.date, hours: r.eligible_hours, type: r.day_type === 'weekend' ? 'weekend' : 'normal'});
   }
 
   async function essCancelLeave(id) {
-    if (!confirm('Cancel this leave request?')) return;
+    if (!(await essConfirm({title: 'Cancel Leave Request', message: 'Cancel this leave request?', okText: 'Cancel Request'}))) return;
     try {
       await essApi('POST', '/ess/leave/' + encodeURIComponent(id) + '/cancel');
       essToast('Leave request cancelled');
@@ -1403,10 +1471,10 @@
       html: function(p) {
         var today = _todayISO();
         return '<div class="fr2"><div class="field"><label for="rq-date">Date</label><input id="rq-date" type="date" min="' + _addDaysISO(today, -31) + '" max="' + today + '" value="' + (p.date || today) + '"></div>' +
-          '<div class="field"><label for="rq-ottype">Type</label><select id="rq-ottype" class="ess-select"><option value="normal">Normal</option><option value="ramadan">Ramadan</option><option value="weekend">Weekend</option><option value="holiday">Public holiday</option></select></div></div>' +
+          '<div class="field"><label for="rq-ottype">Type</label><select id="rq-ottype" class="ess-select"><option value="normal">Normal</option><option value="ramadan">Ramadan</option><option value="weekend"' + (p.type === 'weekend' ? ' selected' : '') + '>Weekend</option><option value="holiday">Public holiday</option></select></div></div>' +
           '<div class="fr2"><div class="field"><label for="rq-login">From</label><input id="rq-login" type="time" oninput="essOtHours()"></div>' +
           '<div class="field"><label for="rq-logout">To</label><input id="rq-logout" type="time" oninput="essOtHours()"></div></div>' +
-          '<div class="field"><label for="rq-hours">Hours</label><input id="rq-hours" type="number" step="0.25" min="0.25" max="12" placeholder="e.g. 2.5"><div class="hint">Filled in from the times above, or type the hours directly. The pay rate follows your company’s OT rules.</div></div>' +
+          '<div class="field"><label for="rq-hours">Hours</label><input id="rq-hours" type="number" step="0.25" min="0.25" max="12" placeholder="e.g. 2.5" value="' + (p.hours || '') + '"><div class="hint">Filled in from the times above, or type the hours directly. The pay rate follows your company’s OT rules.</div></div>' +
           _RQ_REASON('Reason', false);
       },
       collect: function() {

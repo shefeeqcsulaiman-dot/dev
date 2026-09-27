@@ -57,110 +57,6 @@ function scheduleTableRefresh(table,delay=120){
   tableRefreshTimers.set(table,timer);
 }
 
-// Rarely-opened admin-config modals (Add Department/Branch/Bank Account,
-// New Invoice Layout) are injected into the DOM on first open instead of
-// shipping as always-present markup in index.html/hrms.html — every one of
-// these modals used to be parsed and laid out on every page load regardless
-// of whether the user ever opens it. Each open function calls
-// _ensureLazyModal(id) before doing anything else; identical markup to what
-// used to be static HTML, so nothing about the modal itself changes once
-// it's open.
-const _LAZY_MODALS={
-  'm-dept':`<div class="overlay" id="m-dept" onclick="closeOvBg(event,'m-dept')">
-  <div class="modal">
-    <div class="modal-title" id="dept-modal-title">Add Department</div>
-    <div class="modal-sub">Department details used in employee profiles and reporting</div>
-    <input type="hidden" id="dept-edit-id">
-    <div class="fr2">
-      <div class="fg"><label class="fl">Department Name <span style="color:var(--red)">*</span></label><input class="fi" id="dept-name" placeholder="e.g. Finance"></div>
-      <div class="fg"><label class="fl">Short Code</label><input class="fi" id="dept-code" placeholder="e.g. FIN" maxlength="6" style="text-transform:uppercase"></div>
-    </div>
-    <div class="fr2">
-      <div class="fg"><label class="fl">Department Head / Manager</label><input class="fi" id="dept-head" placeholder="e.g. Ahmed Al Mansouri"></div>
-      <div class="fg"><label class="fl">Status</label><select class="fi" id="dept-status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
-    </div>
-    <div class="fg"><label class="fl">Description</label><input class="fi" id="dept-desc" placeholder="Brief description of this department's function"></div>
-    <div class="modal-actions">
-      <button id="dept-delete-btn" class="btn btn-sm" style="display:none;background:var(--red-bg);color:var(--red);border-color:var(--red);margin-right:auto" onclick="deleteDeptFromModal()">Delete</button>
-      <button class="btn btn-ghost" onclick="hideM('m-dept')">Cancel</button>
-      <button class="btn btn-p" onclick="saveDeptModal()">Save Department</button>
-    </div>
-  </div>
-</div>`,
-  'm-branch':`<div class="overlay" id="m-branch" onclick="closeOvBg(event,'m-branch')">
-  <div class="modal">
-    <div class="modal-title" id="branch-modal-title">Add Branch</div>
-    <div class="modal-sub">Register a branch or office location for your company</div>
-    <input type="hidden" id="branch-edit-id">
-    <div class="fr2">
-      <div class="fg"><label class="fl">Branch Name <span style="color:var(--red)">*</span></label><input class="fi" id="branch-name" placeholder="e.g. Dubai HQ"></div>
-      <div class="fg"><label class="fl">Short Code</label><input class="fi" id="branch-code" placeholder="e.g. DXB" maxlength="6" style="text-transform:uppercase"></div>
-    </div>
-    <div class="fr2">
-      <div class="fg"><label class="fl">City / Emirate</label><input class="fi" id="branch-city" placeholder="e.g. Dubai"></div>
-      <div class="fg"><label class="fl">Status</label><select class="fi" id="branch-status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
-    </div>
-    <div class="fr2">
-      <div class="fg"><label class="fl">Country</label><select class="fi" id="branch-country" onchange="onBranchCountryChange()"></select></div>
-      <div class="fg"><label class="fl">Currency</label><input class="fi" id="branch-currency" readonly style="background:var(--surface2);color:var(--text3)"></div>
-    </div>
-    <div style="font-size:11px;color:var(--text3);margin-top:-8px;margin-bottom:10px">Reference only — this branch's invoices and VAT still use the company's own currency/VAT rate in Settings.</div>
-
-    <div style="margin:14px 0 10px">
-      <label class="fl">Module Access</label>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Which modules this branch's own login can use — leave all checked for unrestricted access</div>
-      <div id="branch-mod-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 10px"></div>
-    </div>
-
-    <div class="fr2">
-      <div class="fg"><label class="fl">Branch Login Username</label><input class="fi" id="branch-username" placeholder="e.g. dubai-branch" autocomplete="username"></div>
-      <div class="fg"><label class="fl">Branch Login Password</label><input class="fi mono" id="branch-password" type="password" placeholder="Set login password" autocomplete="new-password"></div>
-    </div>
-    <div id="branch-pw-hint" style="font-size:11px;color:var(--text3);margin-top:-8px;margin-bottom:10px"></div>
-
-    <div class="modal-actions">
-      <button id="branch-delete-btn" class="btn btn-sm" style="display:none;background:var(--red-bg);color:var(--red);border-color:var(--red);margin-right:auto" onclick="deleteBranchFromModal()">Delete</button>
-      <button id="branch-cancel-btn" class="btn btn-ghost" onclick="hideM('m-branch')">Cancel</button>
-      <button id="branch-save-btn" class="btn btn-p" onclick="saveBranchModal()">Save Branch</button>
-    </div>
-  </div>
-</div>`,
-  'm-bank':`<div class="overlay" id="m-bank" onclick="closeOvBg(event,'m-bank')">
-  <div class="modal"><div class="modal-title">Add Bank Account</div><div class="modal-sub">Register a new bank account for reconciliation</div>
-    <div class="fg"><label class="fl">Bank Name</label><select class="fi" id="bank-name"><option>Emirates NBD</option><option>ADCB</option><option>FAB</option><option>Mashreq</option><option>ADIB</option><option>DIB</option><option>RAK Bank</option><option>HSBC UAE</option></select></div>
-    <div class="fg"><label class="fl">Account Holder Name</label><input class="fi" id="bank-holder"></div>
-    <div class="fg"><label class="fl">IBAN</label><input class="fi mono" id="bank-iban" placeholder="AE..."></div>
-    <div class="fr2"><div class="fg"><label class="fl">Account Type</label><select class="fi" id="bank-type"><option>Current</option><option>Savings</option></select></div><div class="fg"><label class="fl">Currency</label><select class="fi" id="bank-currency"><option>AED</option><option>USD</option><option>EUR</option><option>GBP</option></select></div></div>
-    <div class="fg"><label class="fl">Opening Balance</label><input class="fi mono" id="bank-balance" placeholder="0.00" inputmode="decimal"></div>
-    <div class="fr2"><div class="fg"><label class="fl">Swift Code</label><input class="fi mono" id="bank-swift" placeholder="ENBD AEADxxx"></div><div class="fg"><label class="fl">Branch</label><input class="fi" id="bank-branch" placeholder="Branch name"></div></div>
-    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-bank')">Cancel</button><button class="btn btn-p" onclick="saveBankAccount()">Save Account</button></div>
-  </div>
-</div>`,
-  'm-new-layout':`<div class="overlay" id="m-new-layout" onclick="closeOvBg(event,'m-new-layout')">
-  <div class="modal" style="max-width:420px">
-    <div class="modal-title">New Invoice Layout</div>
-    <div class="modal-sub">Create a named layout — customise fonts, colours and fields after saving</div>
-    <div class="fg" style="margin-top:14px"><label class="fl">Layout Name</label><input class="fi" id="new-layout-name" placeholder="e.g. Export Invoice, Arabic Layout…" maxlength="60" onkeydown="if(event.key==='Enter')confirmAddInvoiceLayout()"></div>
-    <div class="fg"><label class="fl">Start From</label>
-      <select class="fi" id="new-layout-base">
-        <option value="default">Default settings (blank)</option>
-        <option value="current">Current active layout (duplicate)</option>
-      </select>
-    </div>
-    <div class="fr2" style="margin-top:16px">
-      <button class="btn btn-g" onclick="hideM('m-new-layout')">Cancel</button>
-      <button class="btn btn-p" onclick="confirmAddInvoiceLayout()">Create Layout</button>
-    </div>
-  </div>
-</div>`,
-};
-
-function _ensureLazyModal(id){
-  if(!document.getElementById(id)&&_LAZY_MODALS[id]){
-    document.body.insertAdjacentHTML('beforeend',_LAZY_MODALS[id]);
-  }
-}
-
 function runPageWarmup(page){
   const pageId='page-'+page;
   scheduleIdleTask(()=>{
@@ -390,6 +286,7 @@ function stab(el,target){
   if(pg)pg.querySelectorAll('.tab-body').forEach(b=>b.classList.remove('on'));
   const t=document.getElementById(target);
   if(t)t.classList.add('on');
+  if(target==='hr-ot')loadOtEligibility();
   if(target==='inv-mapping')loadStockMappingsFromServer();
   if(target==='inv-stock')ensurePurchaseRecordsLoadedForStock();
   if(target==='inv-movement')loadStockMovements();
@@ -723,21 +620,21 @@ function appConfirm({title='Confirm Action',message='Please confirm this action.
       event.stopPropagation();
       done(false);
     };
-    // Outside-click no longer dismisses this (or any) modal — see closeOvBg()
-    // — Cancel/OK are the only ways out now.
-    overlay.onclick=null;
+    overlay.onclick=event=>{
+      if(event.target===overlay)done(false);
+    };
     setTimeout(()=>cancel.focus(),30);
   });
 }
 
-// Clicking the overlay background used to close the modal (like clicking
-// outside a dialog) — by request, disabled everywhere: an accidental click
-// just outside a form's fields while filling it in silently discarded
-// everything typed, with no confirmation. Every modal's Cancel/× button
-// still closes it explicitly; only the outside-click shortcut is gone. Kept
-// as a real function (not deleted) since every overlay's onclick="closeOvBg(...)"
-// attribute still calls it.
-function closeOvBg(){}
+// Used to close the modal on a click landing directly on the dark backdrop
+// (e.target.id===id, i.e. outside the .modal panel itself) -- disabled by
+// request: a stray click outside a form like New Receipt/Payment silently
+// discarded whatever had been typed, with no confirmation. Every modal still
+// has its own X (ensureModalCloseButton) and Cancel/Close button, so this is
+// now a deliberate no-op rather than removing the ~59 closeOvBg(event,'id')
+// call sites across index.html/hrms.html/app.js that still wire it up.
+function closeOvBg(e,id){}
 function saveM(id,msg){closeM(id);toast(msg,'ok');audit(msg.replace(/[?.]/g,'').trim(),id,'Saved');}
 
 function initialsFromName(name){
@@ -793,7 +690,7 @@ function resetUserForm(){
   applyUserRolePermissions();
 }
 
-function saveUser(){
+async function saveUser(){
   const name=document.getElementById('user-name')?.value.trim()||'';
   const email=document.getElementById('user-email')?.value.trim()||'';
   const role=document.getElementById('user-role')?.value||'Viewer';
@@ -807,6 +704,16 @@ function saveUser(){
     toast('Select at least one permission','warn');
     return;
   }
+  let password=document.getElementById('user-temp-password')?.value||'';
+  const generated=!password;
+  if(generated)password=Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,6).toUpperCase()+'7';
+  const apiRole={Accountant:'accountant',Viewer:'viewer'}[role]||'user';
+  try{
+    await moduleApi('/companies/current/users',{method:'POST',body:{email,full_name:name,password,role:apiRole}});
+  }catch(err){
+    toast(`User not created: ${err.message}`,'err');
+    return;
+  }
   const user={
     id:`USER-${Date.now()}`,
     name,
@@ -814,14 +721,14 @@ function saveUser(){
     role,
     status,
     permissions,
-    temporary_password_set:Boolean(document.getElementById('user-temp-password')?.value),
+    temporary_password_set:true,
     created_at:new Date().toISOString()
   };
   renderUserRecord(user);
   saveServer('users',user);
   closeM('m-user');
   resetUserForm();
-  toast('User created with permissions','ok');
+  toast(generated?`User created — temporary password: ${password} (share it securely)`:'User created','ok');
   audit('Created user',email,'Saved');
 }
 
@@ -964,8 +871,8 @@ function saveEmployee(){
     transport_allowance:parseAmount(employeeFormValue('emp-transport-allowance','0'))||0,
     other_allowance:parseAmount(employeeFormValue('emp-other-allowance','0'))||0,
     contract:employeeFormValue('emp-contract','Full-Time'),
-    location:employeeFormValue('emp-location','Dubai HQ'),
-    branch:employeeFormValue('emp-branch','Dubai HQ'),
+    location:employeeFormValue('emp-location',''),
+    branch:employeeFormValue('emp-branch',''),
     // Real Branch row id, looked up by name from the live _branchList (not
     // stored as the <select>'s value — that select is shared with the
     // free-text #emp-location/#req-location fields via _syncBranchSelects,
@@ -1083,14 +990,14 @@ function applyHrmsSalaryVisibility(){
   if(allowanceRow)allowanceRow.style.display=hide?'none':'';
 }
 
-// Employee Directory shows Inactive employees by default, sorted below every
-// Active one (see _employeeSortKey) rather than interleaved by number or
-// hidden — someone who's left still needs to be findable (reactivating them,
-// checking their history) without an extra click, they just shouldn't read
-// as part of the current team at a glance. The "Show Inactive" checkbox
-// (checked by default) lets it be unchecked to hide them instead. Routed
+// Employee Directory shows Inactive employees by default, sunk to the bottom
+// of the list (see _employeeSortKey) rather than interleaved with Active
+// staff -- someone who's left should still be visible/reachable (Activate,
+// CSV export, search) without hunting for a checkbox. The "Show Inactive"
+// checkbox (checked by default) can be unchecked to hide them entirely, e.g.
+// department-scoped managers wanting a "who's actually here" view. Routed
 // through setTableExternalFilter() like Candidates' stage filter, so it
-// survives typing in the search box and Prev/Next — a plain row.style.display
+// survives typing in the search box and Prev/Next -- a plain row.style.display
 // toggle would be undone by either.
 function applyEmployeeInactiveFilter(){
   const table=document.getElementById('employee-directory-table');
@@ -1134,7 +1041,7 @@ function renderEmployeeRecord(employee){
   row.dataset.sortId=sortId;
   row.innerHTML=`
     <td class="mono">${escapeHtml(employee.id)}</td>
-    <td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px${employee.photo?';padding:0;overflow:hidden':''}">${employee.photo?`<img src="${employee.photo}" style="width:100%;height:100%;object-fit:cover">`:escapeHtml(initialsFromName(employee.name))}</div><div>${escapeHtml(employee.name)}<div class="card-sub">${escapeHtml(employee.contract||'Full-time')} · ${escapeHtml(employee.location||'Dubai HQ')}</div></div></div></td>
+    <td><div class="flx"><div class="co-av" style="width:26px;height:26px;font-size:10px${employee.photo?';padding:0;overflow:hidden':''}">${employee.photo?`<img src="${employee.photo}" style="width:100%;height:100%;object-fit:cover">`:escapeHtml(initialsFromName(employee.name))}</div><div>${escapeHtml(employee.name)}<div class="card-sub">${escapeHtml(employee.contract||'Full-time')} · ${escapeHtml(employee.location||'—')}</div></div></div></td>
     <td>${employee.nickname?escapeHtml(employee.nickname):'<span style="color:var(--text3)">—</span>'}</td>
     <td>${escapeHtml(employee.department)}</td>
     <td>${escapeHtml(employee.designation)}</td>
@@ -1222,7 +1129,7 @@ function employeeFromDirectoryRow(row){
     id:cells[0]?.textContent.trim()||'',
     name:fallbackName||'Employee',
     contract:parts[0]||'Full-time',
-    location:parts[1]||'Dubai HQ',
+    location:parts[1]||'',
     nickname:cells[2]?.textContent.trim()||'',
     department:cells[3]?.textContent.trim()||'-',
     designation:cells[4]?.textContent.trim()||'-',
@@ -1296,7 +1203,7 @@ function openEmployeeProfile(btn){
         <div class="invoice-panel">
           <div class="invoice-kicker">Employment Details</div>
           <div class="invoice-meta-row"><span>Contract</span><strong>${escapeHtml(employee.contract||'Full-time')}</strong></div>
-          <div class="invoice-meta-row"><span>Location</span><strong>${escapeHtml(employee.location||'Dubai HQ')}</strong></div>
+          <div class="invoice-meta-row"><span>Location</span><strong>${escapeHtml(employee.location||'—')}</strong></div>
           <div class="invoice-meta-row"><span>Join Date</span><strong>${escapeHtml(employee.join_date||'-')}</strong></div>
           <div class="invoice-meta-row"><span>Overtime Rate</span><strong>${escapeHtml(employee.overtime_rate||'-')}</strong></div>
         </div>
@@ -1453,10 +1360,19 @@ function mapLineToStock(productName,sku){
 // own). Reverses the stale journal and posts a fresh one from the current
 // amounts; never touches the original posted entry in place.
 async function updateLedgerForPurchase(reference){
+  return updateLedgerForSource('purchase',reference);
+}
+
+// Same shortcut, generalized to any posted source module (sales invoices,
+// vendor bills) — previously only Purchases had a way to re-sync the
+// ledger/VAT after an edit; Sales Invoices and Bills had no equivalent, so
+// an edited amount on an already-posted invoice/bill silently never
+// reached the GL/TaxLine.
+async function updateLedgerForSource(module,reference){
   const ref=(reference||'').trim();
-  if(!ref){toast('Save this purchase first, then update the ledger','warn');return;}
+  if(!ref){toast('Save this record first, then update the ledger','warn');return;}
   try{
-    await moduleApi('/source-transactions/repost-by-reference',{method:'POST',body:{module:'purchase',reference:ref}});
+    await moduleApi('/source-transactions/repost-by-reference',{method:'POST',body:{module,reference:ref}});
     toast('Ledger updated with the current amounts','ok');
   }catch(err){
     toast(err.message||'Failed to update ledger','err');
@@ -2484,7 +2400,7 @@ function populateAssignLocationSelect(){
   const sel=document.getElementById('hr-assign-location');
   if(!sel)return;
   const prev=sel.value;
-  sel.innerHTML='<option value="">Select location…</option>'+HR_LOCATIONS_CACHE.map(l=>`<option value="${l.id}">${l.location_name}</option>`).join('');
+  sel.innerHTML='<option value="">Select location…</option>'+HR_LOCATIONS_CACHE.map(l=>`<option value="${escapeHtml(l.id)}">${escapeHtml(l.location_name)}</option>`).join('');
   if(prev)sel.value=prev;
 }
 
@@ -2496,7 +2412,7 @@ async function populateAssignEmployeeSelect(){
     if(!r.ok)return;
     const employees=await r.json();
     const prev=sel.value;
-    sel.innerHTML='<option value="">Select employee…</option>'+employees.map(e=>`<option value="${e.id}">${e.full_name} (${e.employee_no})</option>`).join('');
+    sel.innerHTML='<option value="">Select employee…</option>'+employees.map(e=>`<option value="${escapeHtml(e.id)}">${escapeHtml(e.full_name)} (${escapeHtml(e.employee_no)})</option>`).join('');
     if(prev)sel.value=prev;
   }catch(e){/* dropdown just stays empty on failure */}
 }
@@ -2530,7 +2446,7 @@ async function assignEmployeeToLocation(){
 }
 
 async function unassignEmployeeLocation(linkId){
-  if(!confirm('Remove this employee\'s location assignment?'))return;
+  if(!(await appConfirm({title:'Remove Assignment',message:"Remove this employee's location assignment?",okText:'Remove'})))return;
   try{
     await fetch(`${apiBaseUrl()}/hr/employee-locations/${linkId}`,{method:'DELETE',headers:hrAccessHeaders()});
     loadEmployeeLocationAssignments();
@@ -2557,7 +2473,7 @@ async function addCompanyLocation(){
 }
 
 async function deleteCompanyLocation(id){
-  if(!confirm('Delete this company location?'))return;
+  if(!(await appConfirm({title:'Delete Location',message:'Delete this company location?',okText:'Delete'})))return;
   try{
     await fetch(`${apiBaseUrl()}/hr/company-locations/${id}`,{method:'DELETE',headers:hrAccessHeaders()});
     loadCompanyLocations();
@@ -2677,10 +2593,15 @@ function renderImpersonationBanner(impersonatedBy,company,viewingAsName){
   const existing=document.getElementById('impersonation-banner');
   if(!impersonatedBy){existing?.remove();document.body?.style.removeProperty('padding-top');return;}
   if(existing)return; // already shown
+  // Only a real platform Super Admin (superadmin.html) gets that label --
+  // this same banner now also covers a company's own User impersonating one
+  // of their own branches (renderBranchTable()'s Impersonate button, via
+  // branches.py's impersonate_branch()), who is not a super admin at all.
+  const asLabel=impersonatedBy.role==='superadmin'?' as Super Admin':'';
   const bar=document.createElement('div');
   bar.id='impersonation-banner';
   bar.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#7c3aed;color:#fff;font-family:inherit;font-size:13px;padding:8px 16px;display:flex;align-items:center;justify-content:center;gap:14px;box-shadow:0 2px 8px rgba(0,0,0,.2)';
-  bar.innerHTML=`<span>⚠ Viewing as <strong>${escapeHtml(viewingAsName||'')}</strong> at <strong>${escapeHtml(company?.name||'')}</strong> as Super Admin</span><button id="impersonation-exit-btn" style="background:#fff;color:#7c3aed;border:none;border-radius:6px;padding:4px 12px;font-weight:700;cursor:pointer;font-size:12px">Exit Impersonation</button>`;
+  bar.innerHTML=`<span>⚠ Viewing as <strong>${escapeHtml(viewingAsName||'')}</strong> at <strong>${escapeHtml(company?.name||'')}</strong>${asLabel}</span><button id="impersonation-exit-btn" style="background:#fff;color:#7c3aed;border:none;border-radius:6px;padding:4px 12px;font-weight:700;cursor:pointer;font-size:12px">Exit Impersonation</button>`;
   document.body.prepend(bar);
   document.body.style.paddingTop=(bar.offsetHeight||36)+'px';
   document.getElementById('impersonation-exit-btn').onclick=exitImpersonation;
@@ -2701,7 +2622,39 @@ async function exitImpersonation(){
   // treated as a Branch Login.
   localStorage.removeItem('taxflow_principal_kind');
   localStorage.removeItem('taxflow_active_branch_id');
-  window.location.replace('/superadmin');
+  // Where to land after exiting: superadmin.html's doImpersonate() stores
+  // '/superadmin' here, impersonateBranch() (Main Dashboard's own
+  // Impersonate button, renderBranchTable()) stores '/' -- default to
+  // '/superadmin' only for backward compatibility with an already-active
+  // session from before this key existed.
+  const returnTo=localStorage.getItem('taxflow_impersonation_return')||'/superadmin';
+  localStorage.removeItem('taxflow_impersonation_return');
+  window.location.replace(returnTo);
+}
+
+// Real "log in as this branch" impersonation (branches.py's
+// impersonate_branch()) -- distinct from viewDashboardAsBranch()'s
+// lightweight client-only dashboard filter (same table's "View as" button):
+// this swaps the session's actual token for a genuine branch-scoped one, so
+// every page/module reflects exactly what that branch's own login would see
+// (module restrictions included), not just the Dashboard's branch-performance
+// card. Mirrors superadmin.html's doImpersonate(...,'branch') almost exactly,
+// down to reusing the same taxflow_superadmin_token/taxflow_principal_kind
+// keys so the shared exitImpersonation() flow (Exit Impersonation banner
+// button) works unmodified for either origin.
+async function impersonateBranch(branchId,branchName){
+  if(!branchId)return;
+  if(!(await appConfirm({title:'Log In As Branch',message:`Log in as branch "${branchName}"? You'll land on the main dashboard scoped to this branch's own data and modules, exactly as it would see it. This is recorded in the audit log.`,okText:'Log In',tone:'primary'})))return;
+  try{
+    const res=await authenticatedFetch(`${apiBaseUrl()}/branches/${encodeURIComponent(branchId)}/impersonate`,{method:'POST'});
+    const data=await res.json();
+    if(!res.ok){toast(data.detail||'Impersonation failed','err');return;}
+    localStorage.setItem('taxflow_superadmin_token',localStorage.getItem('taxflow_token'));
+    localStorage.setItem('taxflow_token',data.access_token);
+    localStorage.setItem('taxflow_principal_kind','branch');
+    localStorage.setItem('taxflow_impersonation_return','/');
+    window.location.replace('/');
+  }catch(e){toast(e.message||'Impersonation failed','err');}
 }
 
 async function ensureBackendSession(){
@@ -3125,6 +3078,7 @@ function applyCompanyToUi(company){
   // opened, untouched invoice form.
   if(document.getElementById('subtotal'))calcLine();
   if(document.getElementById('pay-period'))populatePayrollPeriods();
+  populateStaticPeriodSelects();
   // Company registration page fields
   set('co-name',company.name);
   set('co-trade-name',company.trade_name);
@@ -3641,12 +3595,20 @@ async function syncBranchPerformanceFromDatabase(){
 
 // "View as branch" is an admin-only lightweight filter (no new token, no
 // audit log — see viewDashboardAsBranch()/exitBranchDashboardView() below),
-// distinct from Super Admin's real impersonation (superadmin.html). Gated
-// on principal_kind being absent (=admin per the same convention initApp()
-// uses) so a Branch Login viewing its own single row here never sees a
-// button offering to switch into a branch it has no cross-branch access to.
+// distinct from Super Admin's real impersonation (superadmin.html) and from
+// impersonateBranch()'s own real branch login (branches.py). Gated so a
+// Branch/Employee session viewing its own single row here never sees a
+// button offering to switch into data it has no cross-branch access to.
+// The comment this replaced claimed principal_kind is "absent" for a normal
+// admin session -- false: login.html's real admin path explicitly sets
+// taxflow_principal_kind='user' on every login (line ~194), so the old
+// `!localStorage.getItem(...)` check was false for every genuine admin
+// session, silently hiding "View as" (and, once added, "Impersonate") for
+// every real user. Matches the convention used everywhere else in this file
+// (e.g. initApp() itself, line ~26940): only 'employee'/'branch' are
+// excluded, not just non-empty.
 function _isAdminPrincipal(){
-  try{return !localStorage.getItem('taxflow_principal_kind');}catch{return true;}
+  try{return !['employee','branch'].includes(localStorage.getItem('taxflow_principal_kind'));}catch{return true;}
 }
 
 // Keeps the Dashboard page header honest about which branch's data is on
@@ -3700,10 +3662,19 @@ function renderBranchPerformance(data){
     // the attribute) — a branch name containing a quote/apostrophe inlined
     // straight into onclick="" corrupts the HTML (same bug class as the POS
     // JSON.stringify()-in-onclick issue fixed earlier).
-    const viewBtn=(canViewAs&&!isUnassigned&&!isActive)?`<button class="btn btn-g btn-sm" style="padding:2px 8px;font-size:10.5px;margin-left:8px" data-branch-id="${escapeHtml(row.branch_id)}" onclick="viewDashboardAsBranch(this.dataset.branchId)" title="View the main dashboard scoped to this branch's own data">View as</button>`:'';
+    // Real login-as-branch (branches.py's impersonate_branch()), same button
+    // as Settings > Departments & Branches (renderBranchTable()) -- added
+    // here too since this card, not that settings table, is where an admin
+    // actually looks for it first (the Dashboard's own Branch Performance
+    // widget). "View as" (the lightweight client-only filter) used to sit
+    // next to this -- removed by request, Impersonate is the only branch
+    // switch offered here now. Unlike that old button this isn't blocked on
+    // !isActive -- logging into a branch you're already "viewing as" (via
+    // the Reports module's own still-separate branch filter) is still valid.
+    const impersonateBtn=(canViewAs&&!isUnassigned)?`<button class="btn btn-g btn-sm" style="padding:2px 8px;font-size:10.5px;margin-left:8px;color:var(--purple)" data-branch-id="${escapeHtml(row.branch_id)}" data-branch-name="${escapeHtml(name)}" onclick="impersonateBranch(this.dataset.branchId,this.dataset.branchName)" title="Log in as this branch's own dashboard session">Impersonate</button>`:'';
     return `<div style="border:1px solid var(--border);border-radius:10px;padding:9px 11px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <span style="font-size:12.5px;font-weight:700;color:var(--text1);display:flex;align-items:center">${escapeHtml(name)}${viewBtn}</span>
+        <span style="font-size:12.5px;font-weight:700;color:var(--text1);display:flex;align-items:center">${escapeHtml(name)}${impersonateBtn}</span>
         <span class="mono" style="font-size:13px;font-weight:700;color:${profitColor}">${formatAed(profit)}</span>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;font-size:10.5px;color:var(--text3)">
@@ -3770,6 +3741,29 @@ function renderFullDashboardFromDatabase(data){
   renderStaffToday(data.staff_today||{present:kpis.staff_present||0,total:kpis.staff_total||0,leave:0,absent:0,source:'Employees database'});
   renderCfoRecommendations(data);
   renderDashBankRecon();
+  renderWorkforceSnapshot(data.hr_snapshot);
+}
+
+// Main Dashboard's "Workforce Snapshot" row -- same 6 figures/design as
+// hrms.html's own KPI row (refreshHrmsKpis()), but that function reads from
+// HR tables (#employee-tbody etc.) that only exist on hrms.html's own DOM.
+// Here the numbers ride along in /reports/dashboard's own response
+// (hr_snapshot, reports.py's _hr_dashboard_snapshot()) -- no extra fetch.
+function renderWorkforceSnapshot(snap){
+  if(!snap)return;
+  const set=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
+  const empCount=Number(snap.employee_count||0);
+  const presentToday=Number(snap.present_today||0);
+  set('main-kpi-emp',empCount||'0');
+  set('main-kpi-present',presentToday||'0');
+  const trendEl=document.getElementById('main-kpi-present-trend');
+  if(trendEl)trendEl.innerHTML=`<span>${empCount>0?Math.round(presentToday/empCount*100):0}% of total</span>`;
+  set('main-kpi-leave',Number(snap.on_leave_today||0)||'0');
+  set('main-kpi-recs',Number(snap.open_positions||0)||'0');
+  set('main-kpi-pending',Number(snap.pending_approvals||0)||'0');
+  const payrollNet=parseAmount(snap.net_payroll_this_month||0);
+  const fmtCompactAed=n=>n>=1000?'AED '+(n/1000).toFixed(1)+'K':'AED '+n.toFixed(0);
+  set('main-kpi-payroll',payrollNet>0?fmtCompactAed(payrollNet):'—');
 }
 
 function _refreshPurchaseDashboardCard(){
@@ -4208,8 +4202,18 @@ function renderCfoRecommendations(data){
     recs.push({color:'#8b5cf6',bg:'rgba(139,92,246,.1)',icon:'★',title:'Review bank reconciliation',desc:'Ensure all statements are matched monthly'});
   }
 
+  // Standing management-reporting suggestion, not conditional on a
+  // financial-health threshold like the rules above -- cost-centre/
+  // department/business-unit/EBITDA/gross-margin analysis is ongoing
+  // practice, not a one-time alert. Pushed last so it only displaces a
+  // lower-priority item (still within the top-4 slice below) when several
+  // real issues are already firing. Links straight to the Profitability
+  // Analytics report (reports.py's _profitability_analysis()) where this is
+  // actually built.
+  recs.push({color:'#0ea5e9',bg:'rgba(14,165,233,.1)',icon:'▤',title:'Prepare profitability analysis for management',desc:'Cost-centre, department, business-unit, EBITDA, and gross-margin breakdown',action:"go('reports');setTimeout(()=>showReport('rep-profit'),50)"});
+
   target.innerHTML=recs.slice(0,4).map((r,i,a)=>`
-    <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0${i<a.length-1?';border-bottom:1px solid var(--border)':''}">
+    <div${r.action?` onclick="${escapeHtml(r.action)}" style="cursor:pointer"`:''} style="display:flex;gap:10px;align-items:flex-start;padding:8px 0${i<a.length-1?';border-bottom:1px solid var(--border)':''}">
       <div style="width:26px;height:26px;border-radius:8px;background:${r.bg};color:${r.color};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;font-weight:800">${r.icon}</div>
       <div style="min-width:0;flex:1">
         <div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.3">${escapeHtml(r.title)}</div>
@@ -4334,7 +4338,7 @@ function renderReportsFromDatabase(data){
     ()=>renderInventoryReport(),
     ()=>renderAssetReports(d.assets||{}),
     ()=>renderRevenueIntelligence(d.revenue_intelligence||{},d.dashboard||{}),
-    ()=>renderProfitabilityAnalytics(d.profit_loss||{}),
+    ()=>renderProfitabilityAnalytics(d.profit_loss||{},d.profitability_analysis||{}),
     ()=>renderWorkingCapital(d.working_capital||{}),
     ()=>renderGrowthTrends(d.dashboard||{},d.revenue_intelligence||{}),
     ()=>renderVat201(d.vat||{}),
@@ -4358,7 +4362,7 @@ function renderKpiDashboard(report,wc,rev){
   setText('kpi-qr',wc.quick_ratio||'—');
   setText('kpi-growth',(rev.growth_pct||'0.00')+'%');
   const ar=latestReportSummary?.aging||[];
-  const arTotal=ar.reduce((s,r)=>s+Number(r.total||0),0);
+  const arTotal=ar.reduce((s,r)=>s+Number(r.d1_30||0)+Number(r.d31_60||0)+Number(r.d61_90||0)+Number(r.over90||0),0);
   setText('kpi-ar',formatAed(arTotal));
   const monthly=report.monthly||[];
   const chartBody=document.getElementById('kpi-chart-body');
@@ -4573,17 +4577,87 @@ function renderRevenueIntelligence(rev,dashboard){
   setText('rev-cust-count',String(cust.length));
 }
 
-function renderProfitabilityAnalytics(pl){
+function renderProfitabilityAnalytics(pl,pa){
+  pa=pa||{};
   const rev=Number(pl.total_revenue||pl.revenue||0);
   const gp=Number(pl.gross_profit||0);
   const np=Number(pl.net_profit||0);
   const gm=rev?(gp/rev*100).toFixed(1):0;
   setText('prf-gp',formatAed(gp));
   setText('prf-np',formatAed(np));
-  setText('prf-ebitda',formatAed(np));
+  // Real EBITDA (reports.py's _ebitda_breakdown()) -- Net Profit + Tax +
+  // Interest + D&A add-backs, not net profit relabeled. See that function's
+  // own comment for why Interest/D&A default to AED 0 rather than a guess
+  // when a company has no account named for them.
+  const ebitda=pa.ebitda||{};
+  setText('prf-ebitda',formatAed(ebitda.ebitda??np));
+  const ebitdaNote=document.getElementById('prf-ebitda-note');
+  if(ebitdaNote){
+    ebitdaNote.textContent=ebitda.addbacks_are_estimates===false
+      ?`Net Profit ${formatAed(ebitda.net_profit)} + Tax ${formatAed(ebitda.tax_addback)} + Interest ${formatAed(ebitda.interest_addback)} + D&A ${formatAed(ebitda.depreciation_amortization_addback)}`
+      :'No Tax/Interest/Depreciation accounts found yet — equals Net Profit until named accounts exist';
+  }
   setText('prf-gm',gm+'%');
+  // EBITDA margin (EBITDA / Revenue) -- the standard companion metric to
+  // gross margin that was missing entirely; reports.py's
+  // _profitability_analysis() now computes it alongside the EBITDA figure.
+  setText('prf-ebitda-margin',(ebitda.margin_pct!=null?ebitda.margin_pct:gm)+'%');
+  const summaryCard=document.getElementById('prf-summary-card');
+  const summaryText=document.getElementById('prf-summary-text');
+  if(summaryCard&&summaryText){
+    if(pa.summary_text){summaryText.textContent=pa.summary_text;summaryCard.style.display='';}
+    else summaryCard.style.display='none';
+  }
   const body=document.getElementById('prf-table');
   if(body)body.innerHTML=`<tr><td>Revenue</td><td class="mono" style="text-align:right">${reportAmount(pl.revenue)}</td><td class="mono" style="text-align:right">100%</td></tr><tr><td>Cost of Goods Sold</td><td class="mono" style="text-align:right">${reportAmount(pl.cogs)}</td><td class="mono" style="text-align:right">${rev?((Number(pl.cogs||0)/rev*100).toFixed(1)+'%'):'—'}</td></tr><tr style="background:var(--surface2)"><td style="font-weight:600">Gross Profit</td><td class="mono" style="text-align:right;font-weight:600;color:var(--green)">${reportAmount(pl.gross_profit)}</td><td class="mono" style="text-align:right;font-weight:600">${gm}%</td></tr><tr><td>Operating Expenses</td><td class="mono" style="text-align:right">${reportAmount(pl.total_expenses)}</td><td class="mono" style="text-align:right">${rev?((Number(pl.total_expenses||0)/rev*100).toFixed(1)+'%'):'—'}</td></tr><tr style="background:var(--surface2)"><td style="font-weight:600">Net Profit</td><td class="mono" style="text-align:right;font-weight:600;color:var(--accent)">${reportAmount(pl.net_profit)}</td><td class="mono" style="text-align:right;font-weight:600">${rev?((np/rev*100).toFixed(1)+'%'):'—'}</td></tr>`;
+  renderCostCenterProfitability(pa.cost_centers||[]);
+  renderDepartmentPayrollCost(pa.departments||[]);
+  renderBusinessUnitProfitability(pa.business_units||[]);
+}
+
+// Real GL-based P&L per cost centre (reports.py's _cost_center_breakdown()).
+// "Unassigned" dominating the table is expected, not a bug, for any company
+// that hasn't tagged Accounting > Vouchers with a cost centre -- see that
+// function's own comment for why auto-posted Sales/Purchase/Receipt/Payment
+// entries never carry one. Revenue/expense share-of-total columns show
+// whether a high-margin centre is the bulk of the business or a small side
+// operation -- margin_pct alone doesn't convey that.
+function renderCostCenterProfitability(rows){
+  const body=document.getElementById('prf-cc-table');
+  if(!body)return;
+  if(!rows.length){body.innerHTML='<tr><td colspan="7" style="color:var(--text3);text-align:center">No general ledger activity yet.</td></tr>';return;}
+  body.innerHTML=rows.map(r=>{
+    const profit=Number(r.profit||0);
+    return `<tr><td>${escapeHtml(r.cost_center)}</td><td class="mono" style="text-align:right">${formatAed(r.revenue)}</td><td class="mono" style="text-align:right;color:var(--text3)">${r.revenue_pct_of_total??'—'}%</td><td class="mono" style="text-align:right">${formatAed(r.expense)}</td><td class="mono" style="text-align:right;color:var(--text3)">${r.expense_pct_of_total??'—'}%</td><td class="mono" style="text-align:right;font-weight:600;color:${profit>=0?'var(--green)':'var(--red)'}">${formatAed(r.profit)}</td><td class="mono" style="text-align:right">${r.margin_pct}%</td></tr>`;
+  }).join('');
+}
+
+// Payroll cost by department (reports.py's _department_payroll_breakdown())
+// -- deliberately labeled "payroll cost", not "profit"/"P&L": no Invoice/
+// Bill/Expense record carries a department, so revenue-by-department isn't
+// real data this system has, only headcount cost is. Headcount and cost-
+// per-employee use active Employee.department counts, separate from (and
+// not limited to) whoever's actually appeared in a payroll run so far.
+function renderDepartmentPayrollCost(rows){
+  const body=document.getElementById('prf-dept-table');
+  if(!body)return;
+  if(!rows.length){body.innerHTML='<tr><td colspan="5" style="color:var(--text3);text-align:center">No payroll runs yet.</td></tr>';return;}
+  body.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.department)}</td><td class="mono" style="text-align:right">${r.headcount??'—'}</td><td class="mono" style="text-align:right">${formatAed(r.payroll_cost)}</td><td class="mono" style="text-align:right;color:var(--text3)">${r.cost_per_employee!=null?formatAed(r.cost_per_employee):'—'}</td><td class="mono" style="text-align:right">${r.pct_of_total_payroll}%</td></tr>`).join('');
+}
+
+// Business Unit = Branch here (reports.py's _profitability_analysis() reuses
+// _build_branch_performance()'s existing real revenue/purchases/gross-
+// profit/margin per branch -- "business unit" isn't a separate concept
+// anywhere else in this app). Expense (purchases) was already computed by
+// _build_branch_performance() but never surfaced here.
+function renderBusinessUnitProfitability(rows){
+  const body=document.getElementById('prf-bu-table');
+  if(!body)return;
+  if(!rows.length){body.innerHTML='<tr><td colspan="5" style="color:var(--text3);text-align:center">No branches set up yet.</td></tr>';return;}
+  body.innerHTML=rows.map(r=>{
+    const profit=Number(r.profit||0);
+    return `<tr><td>${escapeHtml(r.name)}</td><td class="mono" style="text-align:right">${formatAed(r.revenue)}</td><td class="mono" style="text-align:right">${formatAed(r.purchases)}</td><td class="mono" style="text-align:right;font-weight:600;color:${profit>=0?'var(--green)':'var(--red)'}">${formatAed(r.profit)}</td><td class="mono" style="text-align:right">${r.margin_pct}%</td></tr>`;
+  }).join('');
 }
 
 function renderWorkingCapital(wc){
@@ -4943,7 +5017,7 @@ async function moduleApi(path,options={}){
   });
   if(!response.ok){
     let detail=`Request failed (${response.status})`;
-    try{const j=await response.json();detail=j.detail||j.message||detail;}catch{}
+    try{const j=await response.json();detail=j.detail||j.message||detail;if(Array.isArray(detail))detail=detail.map(e=>String(e.msg||'').replace(/^Value error, /,'')||JSON.stringify(e)).join('; ');}catch{}
     throw new Error(detail);
   }
   if(response.status===204)return null;
@@ -6124,11 +6198,11 @@ function renderServiceTypeRecord(serviceType){
   tbody.prepend(row);
 }
 
-function deleteServiceType(btn){
+async function deleteServiceType(btn){
   const row=btn.closest('tr');
   const name=row?.children[0]?.textContent.trim();
   if(!row||!name)return;
-  if(!confirm(`Remove service type "${name}"?`))return;
+  if(!(await appConfirm({title:'Remove Service Type',message:`Remove service type "${name}"?`,okText:'Remove'})))return;
   row.remove();
   deleteServer('serviceTypes',{name});
 }
@@ -6487,20 +6561,10 @@ function loadAllocationTable(docs){
 }
 
 function toggleAllAllocation(checked){
-  document.querySelectorAll('#pmt-alloc-tbody .pmt-alloc-chk').forEach(chk=>{
-    chk.checked=checked;
-    const inp=chk.closest('tr')?.querySelector('.pmt-alloc-inp');
-    if(inp){
-      if(!checked){
-        inp.value='0.00';
-      } else {
-        inp.value=parseFloat(inp.dataset.docAmount||'0').toFixed(2);
-      }
-    }
-  });
+  document.querySelectorAll('#pmt-alloc-tbody .pmt-alloc-chk').forEach(chk=>{chk.checked=checked;});
   const btn=document.getElementById('pmt-alloc-toggle-btn');
   if(btn)btn.textContent=checked?'−':'+';
-  updatePmtBalance();
+  distributePaymentAmountAcrossAllocations();
 }
 
 function toggleAllAllocationBtn(btn){
@@ -6510,14 +6574,57 @@ function toggleAllAllocationBtn(btn){
 }
 
 function onAllocChkChange(chk){
-  const inp=chk.closest('tr')?.querySelector('.pmt-alloc-inp');
-  if(!inp)return;
-  if(!chk.checked){
-    inp.value='0.00';
-  } else {
-    const original=parseFloat(inp.dataset.docAmount||'0');
-    inp.value=original.toFixed(2);
+  distributePaymentAmountAcrossAllocations();
+}
+
+// Water-filling equal split: divides `payment` across `caps` (each selected
+// invoice's own remaining balance) as evenly as possible, processing
+// smallest balance first so a small invoice is never handed more than it
+// actually owes -- any amount it can't absorb spills over to be split
+// equally among the rest instead of being lost.
+function splitAmountEqually(payment,caps){
+  const order=caps.map((cap,i)=>({cap,i})).sort((a,b)=>a.cap-b.cap);
+  const result=new Array(caps.length).fill(0);
+  let remaining=payment;
+  for(let k=0;k<order.length;k++){
+    const share=remaining/(order.length-k);
+    if(order[k].cap<=share+0.005){
+      result[order[k].i]=order[k].cap;
+      remaining-=order[k].cap;
+    }else{
+      for(let j=k;j<order.length;j++)result[order[j].i]=remaining/(order.length-k);
+      break;
+    }
   }
+  return result;
+}
+
+// Triggered whenever the total payment amount is typed in, or which
+// invoices are selected changes. A partial payment (less than the total
+// owing across the checked invoices) gets split equally between them
+// automatically, rather than leaving the user to divide it up by hand row
+// by row; a full payment still just pays every selected invoice in full,
+// same as "Calculate all owing" already does. Manually editing a single
+// row's own amount afterward is untouched by this and still works as a
+// fine-tune on top of the auto-split.
+function distributePaymentAmountAcrossAllocations(){
+  const payment=parseAmount(document.getElementById('payment-amount')?.value||'0');
+  const allRows=[...document.querySelectorAll('#pmt-alloc-tbody tr')];
+  const checkedRows=allRows.filter(row=>row.querySelector('.pmt-alloc-chk')?.checked);
+  allRows.forEach(row=>{
+    if(!row.querySelector('.pmt-alloc-chk')?.checked){
+      const inp=row.querySelector('.pmt-alloc-inp');
+      if(inp)inp.value='0.00';
+    }
+  });
+  if(!checkedRows.length){updatePmtBalance();return;}
+  const caps=checkedRows.map(row=>parseFloat(row.querySelector('.pmt-alloc-inp')?.dataset.docAmount||'0'));
+  const totalOwing=caps.reduce((a,b)=>a+b,0);
+  const amounts=(payment<=0||payment>=totalOwing-0.005)?caps:splitAmountEqually(payment,caps);
+  checkedRows.forEach((row,idx)=>{
+    const inp=row.querySelector('.pmt-alloc-inp');
+    if(inp)inp.value=amounts[idx].toFixed(2);
+  });
   updatePmtBalance();
 }
 
@@ -6587,6 +6694,24 @@ function remainingBalance(ref,total){
   return Math.max(0,total-(info.paid||0));
 }
 
+// FIFO allocation order — the oldest outstanding document should be first
+// in the allocation table (and so gets paid off first), matching standard
+// accounting practice for applying a receipt/payment against a client/
+// vendor's open balance. Dates throughout this app are stored/rendered as
+// ISO "YYYY-MM-DD", so a plain ascending string sort already sorts them
+// chronologically; a missing/unparseable date sorts last rather than
+// jumping the queue ahead of dated documents.
+function _sortPaymentDocsFifo(docs){
+  return docs.slice().sort((a,b)=>{
+    const da=String(a.date||'').trim();
+    const db=String(b.date||'').trim();
+    if(!da&&!db)return 0;
+    if(!da)return 1;
+    if(!db)return -1;
+    return da<db?-1:da>db?1:0;
+  });
+}
+
 function collectPaymentDocuments(type=document.getElementById('payment-type')?.value){
   const paidRefs=paidPaymentDocumentRefs(type);
   if(isSupplierPaymentType(type)){
@@ -6623,14 +6748,14 @@ function collectPaymentDocuments(type=document.getElementById('payment-type')?.v
     }).filter(item=>item&&item.ref&&item.contact&&isPendingDocumentStatus(item.status)&&!paidRefs.has(item.ref.toLowerCase())&&item.amount>0.01);
 
     const seen=new Set();
-    return [...bills,...purchases].filter(d=>{
+    return _sortPaymentDocsFifo([...bills,...purchases].filter(d=>{
       const k=d.ref.toLowerCase();
       if(seen.has(k))return false;
       seen.add(k);
       return true;
-    });
+    }));
   }
-  return [...document.querySelectorAll('#sales-invoice-tbody tr:not([data-empty-state])')].map(row=>{
+  return _sortPaymentDocsFifo([...document.querySelectorAll('#sales-invoice-tbody tr:not([data-empty-state])')].map(row=>{
     let data={};
     try{data=JSON.parse(row.dataset.salesInvoice||'{}');}catch(_err){}
     if(isSalesReturn(data))return null;
@@ -6646,7 +6771,7 @@ function collectPaymentDocuments(type=document.getElementById('payment-type')?.v
       status:data.status||row.children[8]?.textContent.trim()||'',
       source:'Invoice'
     };
-  }).filter(item=>item&&item.ref&&isPendingDocumentStatus(item.status)&&!paidRefs.has(item.ref.toLowerCase())&&item.amount>0.01);
+  }).filter(item=>item&&item.ref&&isPendingDocumentStatus(item.status)&&!paidRefs.has(item.ref.toLowerCase())&&item.amount>0.01));
 }
 
 function nextPaymentReference(type=document.getElementById('payment-type')?.value){
@@ -6808,7 +6933,99 @@ function markPaymentDocumentPaid(payment){
   refreshSalesInvoiceKpis();
 }
 
-function _supplierPaymentCardEl(payment){
+// Inverse of markPaymentDocumentPaid() -- called when a payment is deleted,
+// so the bill/invoice it was allocated against goes back to whatever paid
+// state it's actually in now (Unpaid/Partial/Paid), not stuck showing
+// "Paid" for money that's no longer recorded as received.
+function reverseMarkPaymentDocumentPaid(payment){
+  const isSupplier=payment?.type==='Supplier Payment';
+  const tbody=document.getElementById(isSupplier?'bill-tbody':'sales-invoice-tbody');
+  const statusColIdx=isSupplier?7:8;
+  const totalColIdx=6;
+  const fmt=n=>Number(n).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  const allocations=(Array.isArray(payment?.allocations)&&payment.allocations.length)
+    ?payment.allocations
+    :[{doc_ref:payment?.document_ref||payment?.bill_no||payment?.invoice_no||'',amount:Number(payment?.amount||0)}];
+
+  allocations.forEach(alloc=>{
+    const ref=String(alloc.doc_ref||'').trim().toLowerCase();
+    if(!ref||ref==='-')return;
+    const allocAmt=Number(alloc.amount||0);
+    if(!allocAmt)return;
+
+    const row=[...(tbody?.querySelectorAll('tr:not([data-empty-state])')||[])]
+      .find(r=>(r.children[0]?.textContent||'').trim().toLowerCase()===ref);
+    if(!row)return;
+
+    const invoiceTotal=parseAmount(row.children[totalColIdx]?.textContent||'0');
+    const existing=_invoicePaidMap.get(ref)||{paid:0,total:invoiceTotal,isSupplier};
+    const newPaid=Math.max(0,existing.paid-allocAmt);
+    _invoicePaidMap.set(ref,{...existing,paid:newPaid,total:invoiceTotal});
+
+    const statusCell=row.children[statusColIdx];
+    if(!statusCell)return;
+    const remaining=invoiceTotal-newPaid;
+
+    if(newPaid<=0.01){
+      statusCell.innerHTML='<span class="b b-a">Awaiting Payment</span>';
+      if(row.dataset.salesInvoice){
+        try{const d=JSON.parse(row.dataset.salesInvoice);d.status='Awaiting Payment';d.balance_due=invoiceTotal;d.amount_paid=0;row.dataset.salesInvoice=JSON.stringify(d);}catch{}
+      }
+    }else if(remaining<=0.01){
+      statusCell.innerHTML='<span class="b b-g">Paid</span>';
+      if(row.dataset.salesInvoice){
+        try{const d=JSON.parse(row.dataset.salesInvoice);d.status='Paid';d.balance_due=0;d.amount_paid=invoiceTotal;row.dataset.salesInvoice=JSON.stringify(d);}catch{}
+      }
+    }else{
+      statusCell.innerHTML=`<span class="b b-a" title="Remaining: AED ${fmt(remaining)}">Partial</span>`;
+      if(row.dataset.salesInvoice){
+        try{const d=JSON.parse(row.dataset.salesInvoice);d.status='Partial';d.balance_due=remaining;d.amount_paid=newPaid;row.dataset.salesInvoice=JSON.stringify(d);}catch{}
+      }
+    }
+  });
+  refreshSalesInvoiceKpis();
+}
+
+async function deleteSupplierPayment(ref){
+  const payment=financePaymentsByRef.get(ref);
+  if(!payment)return;
+  const amt=Number(payment.amount||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const confirmed=await appConfirm({
+    title:'Delete Payment',
+    message:`Delete payment ${payment.ref} to ${payment.contact||'this supplier'} (AED ${amt})? This reverses the accounting entry and marks the bill it was applied to as outstanding again.`,
+    okText:'Delete'
+  });
+  if(!confirmed)return;
+  const card=document.querySelector(`#payment-out-cards [data-pay-ref="${CSS.escape(ref)}"]`);
+  const delBtn=card?.querySelector('.pay-card-del');
+  if(delBtn){delBtn.disabled=true;delBtn.textContent='Deleting…';}
+  try{
+    await deleteServer('payments',{ref},{throwOnError:true});
+  }catch(err){
+    toast('Could not delete payment — please try again','err');
+    if(delBtn){delBtn.disabled=false;delBtn.textContent='Delete';}
+    return;
+  }
+  reverseMarkPaymentDocumentPaid(payment);
+  financePaymentsByRef.delete(ref);
+  card?.remove();
+  if(!document.querySelector('#payment-out-cards .pay-card')){
+    const empty=document.getElementById('payment-out-empty');
+    if(empty)empty.style.display='';
+  }
+  applySupplierPaymentCardView();
+  updateFinanceFromDatabaseRecords();
+  audit('Payment deleted','Bank & Payments',`${payment.ref} — AED ${amt} to ${payment.contact||'supplier'}`);
+  toast('Payment deleted','ok');
+}
+
+function renderSupplierPaymentCard(payment){
+  const container=document.getElementById('payment-out-cards');
+  if(!container)return;
+  if(container.querySelector(`[data-pay-ref="${CSS.escape(payment.ref)}"]`))return;
+  const empty=document.getElementById('payment-out-empty');
+  if(empty)empty.style.display='none';
   const allocations=(Array.isArray(payment?.allocations)&&payment.allocations.length)
     ?payment.allocations
     :[{doc_ref:payment?.document_ref||payment?.bill_no||'—',amount:Number(payment?.amount||0)}];
@@ -6852,83 +7069,82 @@ function _supplierPaymentCardEl(payment){
     </div>
     <div class="pay-card-foot">
       <span class="pay-card-note">${escapeHtml(payment.notes||payment.memo||'')}</span>
-      <button class="pay-card-del" style="margin-left:auto" onclick="toast('Delete not yet implemented','info')">Delete</button>
+      <button class="pay-card-del" style="margin-left:auto" onclick="deleteSupplierPayment(${jsonAttr(payment.ref)})">Delete</button>
     </div>`;
-  return card;
+  container.appendChild(card);
 }
 
-// The hidden #payment-out-tbody (see index.html) is the source of truth for
-// every supplier payment (each row carries the full record in
-// dataset.payment, set by renderPaymentRecord) — reading from it here lets
-// search/sort rebuild the visible card list at any time without keeping a
-// second copy of the data in JS.
-function _supplierPaymentsFromTable(){
-  const tbody=document.getElementById('payment-out-tbody');
-  if(!tbody)return[];
-  return [...tbody.querySelectorAll('tr[data-payment]')].map(tr=>{
-    try{return JSON.parse(tr.dataset.payment);}catch{return null;}
-  }).filter(Boolean);
+// Supplier Payments Made is a hand-rolled card list (renderSupplierPaymentCard
+// above), not a table.tbl -- so it never picked up the search/pagination that
+// enhanceTable() gives every other list in the app for free. Cards were also
+// just appendChild'd in whatever order payments arrived (oldest first), unlike
+// every prepend-based table elsewhere. This reorders + filters the existing
+// .pay-card elements in place (metadata read back from financePaymentsByRef
+// by ref, same map renderPaymentRecord already populates) rather than
+// re-rendering, so expanded/collapsed card state isn't disturbed.
+//
+// The supplier picker (#pay-out-search) is a <select>, not a text box --
+// per request, so a user picks from the actual list of suppliers that have
+// been paid rather than having to spell one out. Repopulated on every call
+// (cheap: at most a few dozen suppliers) so a brand-new supplier's first
+// payment appears in the list immediately, while preserving whatever was
+// already selected if it's still a valid option.
+function _populateSupplierPaymentPicker(cards){
+  const select=document.getElementById('pay-out-search');
+  if(!select)return;
+  const current=select.value;
+  const suppliers=[...new Set(cards.map(card=>String((financePaymentsByRef.get(card.dataset.payRef||'')||{}).contact||'').trim()).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b));
+  select.innerHTML='<option value="">All Suppliers</option>'+
+    suppliers.map(name=>`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+  if(suppliers.includes(current))select.value=current;
 }
 
-let _payOutSearchTimer=null;
-function onSupplierPaymentSearchInput(){
-  clearTimeout(_payOutSearchTimer);
-  _payOutSearchTimer=setTimeout(renderPaymentOutCards,150);
-}
-
-const _SUPPLIER_PAYMENT_SORTERS={
-  'date-desc':(a,b)=>_dateSortValue(b.date)-_dateSortValue(a.date),
-  'date-asc':(a,b)=>_dateSortValue(a.date)-_dateSortValue(b.date),
-  'amount-desc':(a,b)=>Number(b.amount||0)-Number(a.amount||0),
-  'amount-asc':(a,b)=>Number(a.amount||0)-Number(b.amount||0),
-  'vendor-asc':(a,b)=>String(a.contact||'').localeCompare(String(b.contact||'')),
-};
-
-function _dateSortValue(dateStr){
-  const t=Date.parse(dateStr||'');
-  return Number.isNaN(t)?0:t;
-}
-
-// Rebuilds the visible Supplier Payments Made card list from the hidden
-// table (search + sort), instead of the old always-append-in-receive-order
-// behaviour — called on every search keystroke (debounced), sort change,
-// and new payment (also debounced, via renderSupplierPaymentCard below).
-function renderPaymentOutCards(){
+function applySupplierPaymentCardView(){
   const container=document.getElementById('payment-out-cards');
-  const empty=document.getElementById('payment-out-empty');
   if(!container)return;
-  const query=(document.getElementById('payment-out-search')?.value||'').trim().toLowerCase();
-  const sortKey=document.getElementById('payment-out-sort')?.value||'date-desc';
-  let payments=_supplierPaymentsFromTable();
-  if(query){
-    payments=payments.filter(p=>{
-      const haystack=[p.ref,p.contact,p.method,p.notes,p.memo,p.document_ref,p.bill_no]
-        .map(v=>String(v||'').toLowerCase()).join(' ');
-      return haystack.includes(query);
-    });
-  }
-  payments.sort(_SUPPLIER_PAYMENT_SORTERS[sortKey]||_SUPPLIER_PAYMENT_SORTERS['date-desc']);
-  container.querySelectorAll('.pay-card').forEach(el=>el.remove());
-  if(!payments.length){
-    if(empty){
-      empty.style.display='';
-      empty.textContent=query?'No supplier payments match your search.':'No supplier payments in database yet.';
-    }
+  const cards=[...container.querySelectorAll('.pay-card')];
+  const noMatchId='payment-out-no-match';
+  if(!cards.length){
+    document.getElementById(noMatchId)?.remove();
     return;
   }
-  if(empty)empty.style.display='none';
-  const frag=document.createDocumentFragment();
-  payments.forEach(p=>frag.appendChild(_supplierPaymentCardEl(p)));
-  container.appendChild(frag);
-}
+  _populateSupplierPaymentPicker(cards);
+  const selectedSupplier=document.getElementById('pay-out-search')?.value||'';
+  const sortMode=document.getElementById('pay-out-sort')?.value||'date-desc';
 
-let _payOutRefreshTimer=null;
-function renderSupplierPaymentCard(){
-  // The hidden table row (dataset.payment) is already written by
-  // renderPaymentRecord() before this is called — just (debounced) rebuild
-  // the visible cards from it, same reasoning as scheduleTableRefresh().
-  clearTimeout(_payOutRefreshTimer);
-  _payOutRefreshTimer=setTimeout(renderPaymentOutCards,isHydratingFromServer?350:0);
+  const withMeta=cards.map(card=>{
+    const payment=financePaymentsByRef.get(card.dataset.payRef||'')||{};
+    return {card,date:String(payment.date||''),amount:Number(payment.amount||0),supplier:String(payment.contact||'').trim()};
+  });
+  withMeta.sort((a,b)=>{
+    if(sortMode==='amount-desc')return b.amount-a.amount;
+    if(sortMode==='amount-asc')return a.amount-b.amount;
+    if(sortMode==='date-asc')return a.date.localeCompare(b.date);
+    return b.date.localeCompare(a.date); // date-desc, also the default
+  });
+
+  let visible=0;
+  withMeta.forEach(({card,supplier})=>{
+    container.appendChild(card); // reorders in place -- already-in-DOM nodes just move
+    const match=!selectedSupplier||supplier===selectedSupplier;
+    card.style.display=match?'':'none';
+    if(match)visible++;
+  });
+
+  let noMatch=document.getElementById(noMatchId);
+  if(selectedSupplier&&!visible){
+    if(!noMatch){
+      noMatch=document.createElement('div');
+      noMatch.id=noMatchId;
+      noMatch.className='pay-card-empty';
+      container.appendChild(noMatch);
+    }
+    noMatch.textContent=`No payments for "${selectedSupplier}".`;
+    noMatch.style.display='';
+  }else{
+    noMatch?.remove();
+  }
 }
 
 function renderPaymentRecord(payment){
@@ -7019,6 +7235,7 @@ function updateFinanceFromDatabaseRecords(){
   renderBankTransactions(payments,openingBalance);
   updateBankReconciliation(openingBalance,bookBalance,payments.length);
   renderDashBankRecon();
+  applySupplierPaymentCardView();
 }
 
 function updateBankAccountSummary(){
@@ -7209,7 +7426,7 @@ async function addStatementLine(){
   if(!date)return;
   const desc=prompt('Description:','');
   if(!desc)return;
-  const amtStr=prompt('Amount (AED) — negative for a debit/outflow:','');
+  const amtStr=prompt(`Amount (${currentCurrency()}) — negative for a debit/outflow:`,'');
   const amount=parseFloat(amtStr)||0;
   if(!amount)return;
   try{
@@ -7707,6 +7924,7 @@ function openPurchaseInvoiceImage(btn){
     overlay=document.createElement('div');
     overlay.className='overlay';
     overlay.id='m-invoice-image';
+    overlay.onclick=e=>{if(e.target===overlay)overlay.classList.remove('on');};
     overlay.innerHTML=`
       <div class="modal" style="max-width:900px;width:95vw;padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:90vh">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)">
@@ -8018,85 +8236,6 @@ function showRecentPurchaseRecords(){
   });
 }
 
-function addFourPurchaseRecords(){
-  const today=new Date().toISOString().split('T')[0];
-  const stamp=Date.now().toString().slice(-6);
-  const records=[
-    {
-      ref:`PUR-ADD-${stamp}-1`,
-      supplier:'Office Mart',
-      date:today,
-      location:'Dubai HQ',
-      items:2,
-      net_amount:1480,
-      tax_amount:74,
-      shipping:35,
-      total:1589,
-      paid:1589,
-      due:0,
-      source:'Manual',
-      status:'Paid',
-      lines:[{sku:'PAPER-A4',product:'A4 Paper Box',unit:'BOX',quantity:8,unit_cost:185,line_total:1480}]
-    },
-    {
-      ref:`PUR-ADD-${stamp}-2`,
-      supplier:'Global Tech',
-      date:today,
-      location:'Main Warehouse',
-      items:1,
-      net_amount:3200,
-      tax_amount:160,
-      shipping:0,
-      total:3360,
-      paid:1600,
-      due:1760,
-      source:'Manual',
-      status:'Pending Payment',
-      lines:[{sku:'MON-24',product:'24 Inch Monitor',unit:'PCS',quantity:4,unit_cost:800,line_total:3200}]
-    },
-    {
-      ref:`PUR-ADD-${stamp}-3`,
-      supplier:'Fast Ship Corp',
-      date:today,
-      location:'Dubai HQ',
-      items:1,
-      net_amount:650,
-      tax_amount:32.5,
-      shipping:90,
-      total:772.5,
-      paid:0,
-      due:772.5,
-      source:'Manual',
-      status:'Pending Payment',
-      lines:[{sku:'SHIP-STD',product:'Inbound Freight',unit:'JOB',quantity:1,unit_cost:650,line_total:650}]
-    },
-    {
-      ref:`PUR-ADD-${stamp}-4`,
-      supplier:'Industrial Solutions',
-      date:today,
-      location:'Main Warehouse',
-      items:3,
-      net_amount:2190,
-      tax_amount:109.5,
-      shipping:45,
-      total:2344.5,
-      paid:2344.5,
-      due:0,
-      source:'Manual',
-      status:'Paid',
-      lines:[{sku:'SAFETY-KIT',product:'Safety Kit',unit:'PCS',quantity:6,unit_cost:365,line_total:2190}]
-    }
-  ];
-  records.forEach(record=>{
-    purchaseRecordCache.set(record.ref,record);
-    saveServer('purchaseRecords',record);
-  });
-  purchaseRecordsTotal+=records.length;
-  purchaseRecordsOffset+=records.length;
-  renderPurchaseRecordWindow();
-  syncStockLevelsFromProducts();
-  toast('4 purchase records added','ok');
-}
 
 function accountTypeLabel(value){
   const normalized=String(value||'Asset').trim().toLowerCase();
@@ -8218,7 +8357,7 @@ function coaNodeEl(acc,byId,children,depth){
   row.className=`coa-row${isPosting?' coa-posting-row':''}${status==='inactive'?' coa-inactive':''}`;
   row.innerHTML=`
     <span class="coa-indent" style="width:${indent}px"></span>
-    ${hasKids?`<button class="coa-toggle open">▼</button>`:'<span class="coa-toggle-spacer"></span>'}
+    ${hasKids?`<button class="coa-toggle open" onclick="toggleCoaNode(this)">▼</button>`:'<span class="coa-toggle-spacer"></span>'}
     ${coaNodeTypePill(nodeType,level)}
     <span class="coa-code mono">${escapeHtml(acc.code)}</span>
     <span class="coa-name${!isPosting?' group-name':''}">${escapeHtml(acc.name)}</span>
@@ -8245,6 +8384,12 @@ function coaNodeEl(acc,byId,children,depth){
     wrap.appendChild(row);
   }
   return wrap;
+}
+
+function toggleCoaNode(btn){
+  btn.classList.toggle('open');
+  const childWrap=btn.closest('.coa-node')?.querySelector(':scope > .coa-children');
+  if(childWrap)childWrap.classList.toggle('open');
 }
 
 function autoNormalBalance(){
@@ -8335,7 +8480,7 @@ function aiTreeNodeEl(node,depth){
     <select class="ai-tree-type fi" data-field="type" style="width:110px">
       ${allTypes.map(t=>`<option${node.type===t?' selected':''}>${t}</option>`).join('')}
     </select>
-    ${!isGroup?`<input class="ai-tree-opening fi mono" data-field="opening_balance" value="${escapeHtml(String(openingVal))}" style="width:82px" placeholder="0.00" title="Opening Balance (AED)">`:
+    ${!isGroup?`<input class="ai-tree-opening fi mono" data-field="opening_balance" value="${escapeHtml(String(openingVal))}" style="width:82px" placeholder="0.00" title="Opening Balance (${currentCurrency()})">`:
     '<span style="width:82px;display:inline-block"></span>'}
     <span class="ai-tree-badge ${isGroup?'ai-tree-group-badge':'ai-tree-ledger-badge'}">${isGroup?'Group':'Sub Ledger'}</span>
     ${hasIssues?`<span class="ai-tree-warn" title="${escapeHtml(node.issues.join('; '))}">⚠</span>`:''}
@@ -8908,8 +9053,15 @@ function hydrateFromServer(){
   // collections() in app_data.py) — this branch then skips the matching
   // render work client-side too, instead of looping over arrays the
   // server has already emptied out.
+  // scope='main' is the mirror-image fix for index.html: it has no DOM at
+  // all for Leave Management/Rota/Overtime/Loans & Advances/Recruitment/
+  // Task Management (confirmed via grep — the sole exceptions it DOES still
+  // need, employees/payroll/bank/notifications, stay included; see
+  // _main_scope_excluded_collections()'s own comment in app_data.py for why
+  // this is an exclusion list rather than mirroring scope=hrms's inclusion
+  // set exactly).
   const _bootstrapPromise=Promise.resolve(_takeBootstrapPreloadCache())
-    .then(cached=>cached||apiRequest('bootstrap',{}, {method:'GET',query:window.HRMS_STANDALONE?{scope:'hrms'}:undefined}));
+    .then(cached=>cached||apiRequest('bootstrap',{}, {method:'GET',query:{scope:window.HRMS_STANDALONE?'hrms':'main'}}));
   return _bootstrapPromise.then(async ({data})=>{
     if(!data)return;
     isHydratingFromServer=true;
@@ -9053,8 +9205,16 @@ function hydrateFromServer(){
           // doesn't require a manual page reload to take effect.
           renderAttendanceCalendar();
         }
-        await loadLeavePoliciesFromServer();
-        await loadHolidaysFromServer();
+        // Both target #leave-policies-tbody/#holidays-tbody, which only exist
+        // on hrms.html -- index.html has neither (confirmed: zero matches),
+        // so these were two pure-waste round trips on every single main-app
+        // page load. Matches the !window.HRMS_STANDALONE gating already used
+        // for the Purchase/Accounting-only rendering earlier in this same
+        // idle block.
+        if(window.HRMS_STANDALONE){
+          await loadLeavePoliciesFromServer();
+          await loadHolidaysFromServer();
+        }
       }finally{isHydratingFromServer=false;}
       updateLeaveBalance();
       filterLedger();
@@ -9188,6 +9348,122 @@ function escapeHtml(value){
 function jsonAttr(value){
   return JSON.stringify(value).replace(/"/g,'&quot;');
 }
+
+// ── Custom autocomplete dropdown ─────────────────────────────────────────
+// Replaces native <datalist> on the 5 fields that used it (invoice customer/
+// product, quotation customer, purchase product, expense vendor). A native
+// datalist's suggestion popup is rendered entirely by the browser/OS, not
+// this page -- so it can't be styled with the app's own tokens at all. On a
+// system with a dark OS/browser theme it renders as a solid black box with
+// no relation to the app's own light/dark mode, floating incongruously over
+// an otherwise correctly-themed page. This is a real, page-styled
+// replacement: same "type to filter, click or arrow-key to pick" behavior,
+// but drawn with the app's own --surface/--border/--text tokens.
+//
+// Deliberately reuses each field's *existing* onchange="apply...()" handler
+// completely unchanged -- selecting a suggestion just sets input.value and
+// dispatches a real 'change' event, so every downstream side effect (fill
+// unit/price, fill TRN/address, etc.) keeps working exactly as it did with
+// the native datalist, with zero changes to that logic.
+const _AC_SOURCES={
+  'invoice-customer':()=>invoiceCustomerRecords().map(c=>({value:c.name,label:[c.trn,c.emirate,c.contact].filter(Boolean).join(' - ')})),
+  'quote-customer':()=>invoiceCustomerRecords().map(c=>({value:c.name,label:[c.trn,c.emirate,c.contact].filter(Boolean).join(' - ')})),
+  'invoice-product':()=>{
+    const items=invoiceProductRecords();
+    const nameCounts=new Map();
+    items.forEach(item=>{
+      const n=(item.mapped?(item.displayName||item.name):item.name)||'';
+      nameCounts.set(n,(nameCounts.get(n)||0)+1);
+    });
+    return items.map(item=>{
+      const baseName=item.mapped?(item.displayName||item.name):item.name;
+      const displayVal=nameCounts.get(baseName)>1&&item.code?`${baseName} · ${item.code}`:baseName;
+      const priceHint=Number(item.price||0)>0?formatAed(item.price):'';
+      const src=item.mapped?'Mapped':'Purchase';
+      return {value:displayVal,label:[item.unit,priceHint,src].filter(Boolean).join(' · ')};
+    });
+  },
+  'purchase-product':()=>purchaseProductRecords().map(item=>({value:item.name,label:[item.code,item.unit,item.supplier].filter(Boolean).join(' - ')})),
+  // Reuses loadExpenseVendors()'s existing fetch-and-cache: it already
+  // populates this (now visually unused) datalist's <option> values from
+  // GET /vendors, so reading them back out avoids a second, duplicate fetch.
+  'expense-vendor':()=>[...(document.getElementById('expense-vendor-list')?.options||[])].map(o=>({value:o.value,label:''})),
+};
+
+let _acDropdown=null,_acItems=[],_acActiveIndex=-1,_acInput=null;
+
+function _acEnsureDropdown(){
+  if(_acDropdown)return _acDropdown;
+  _acDropdown=document.createElement('div');
+  _acDropdown.className='ac-dropdown';
+  document.body.appendChild(_acDropdown);
+  _acDropdown.addEventListener('mousedown',e=>{
+    // mousedown, not click -- fires before the input's blur/focusout would close the dropdown
+    const row=e.target.closest('.ac-row');
+    if(!row)return;
+    e.preventDefault();
+    _acSelect(Number(row.dataset.idx));
+  });
+  return _acDropdown;
+}
+
+function _acSelect(idx){
+  const item=_acItems[idx];
+  if(!item||!_acInput)return;
+  _acInput.value=item.value;
+  const input=_acInput;
+  _acClose();
+  input.dispatchEvent(new Event('change',{bubbles:true}));
+}
+
+function _acRender(items,filterText){
+  const dd=_acEnsureDropdown();
+  const q=(filterText||'').trim().toLowerCase();
+  _acItems=(q?items.filter(it=>it.value.toLowerCase().includes(q)||it.label.toLowerCase().includes(q)):items).slice(0,50);
+  _acActiveIndex=-1;
+  if(!_acItems.length){_acClose();return;}
+  dd.innerHTML=_acItems.map((it,i)=>`<div class="ac-row" data-idx="${i}"><div class="ac-row-val">${escapeHtml(it.value)}</div>${it.label?`<div class="ac-row-lbl">${escapeHtml(it.label)}</div>`:''}</div>`).join('');
+  const rect=_acInput.getBoundingClientRect();
+  dd.style.left=`${rect.left+window.scrollX}px`;
+  dd.style.top=`${rect.bottom+window.scrollY+4}px`;
+  dd.style.width=`${rect.width}px`;
+  dd.style.display='block';
+}
+
+function _acClose(){
+  if(_acDropdown)_acDropdown.style.display='none';
+  _acInput=null;_acItems=[];_acActiveIndex=-1;
+}
+
+function _acHighlight(delta){
+  if(!_acItems.length)return;
+  _acActiveIndex=(_acActiveIndex+delta+_acItems.length)%_acItems.length;
+  [..._acDropdown.querySelectorAll('.ac-row')].forEach((row,i)=>row.classList.toggle('on',i===_acActiveIndex));
+  _acDropdown.querySelector('.ac-row.on')?.scrollIntoView({block:'nearest'});
+}
+
+document.addEventListener('focusin',e=>{
+  const key=e.target?.dataset?.ac;
+  if(!key||!_AC_SOURCES[key])return;
+  _acInput=e.target;
+  _acRender(_AC_SOURCES[key](),e.target.value);
+});
+document.addEventListener('input',e=>{
+  const key=e.target?.dataset?.ac;
+  if(!key||!_AC_SOURCES[key]||e.target!==_acInput)return;
+  _acRender(_AC_SOURCES[key](),e.target.value);
+});
+document.addEventListener('keydown',e=>{
+  if(!_acInput||e.target!==_acInput||!_acDropdown||_acDropdown.style.display==='none')return;
+  if(e.key==='ArrowDown'){e.preventDefault();_acHighlight(1);}
+  else if(e.key==='ArrowUp'){e.preventDefault();_acHighlight(-1);}
+  else if(e.key==='Enter'){if(_acActiveIndex>=0){e.preventDefault();_acSelect(_acActiveIndex);}}
+  else if(e.key==='Escape'){_acClose();}
+});
+document.addEventListener('focusout',e=>{
+  const el=e.target;
+  setTimeout(()=>{if(_acInput===el&&document.activeElement!==el)_acClose();},0);
+});
 
 function buildFallbackExtraction(entry){
   return [];
@@ -9420,7 +9696,7 @@ function readAndAddSalesFile(file){
       type:file.type,
       base64:e.target.result,
       importType:document.getElementById('sales-import-type')?.value||'Sales Tax Invoices',
-      period:document.getElementById('sales-import-period')?.value||'June 2024',
+      period:document.getElementById('sales-import-period')?.value||'',
       status:'Queued'
     };
     salesUploadedFiles.push(entry);
@@ -10388,7 +10664,6 @@ function selectInvoiceLayout(id,{scroll=true}={}){
 }
 
 function addInvoiceLayout(){
-  _ensureLazyModal('m-new-layout');
   document.getElementById('new-layout-name').value='';
   document.getElementById('new-layout-base').value='default';
   showM('m-new-layout');
@@ -10429,11 +10704,11 @@ function duplicateInvoiceLayout(id){
   toast(`"${copy.name}" created`,'ok');
 }
 
-function deleteInvoiceLayout(id){
+async function deleteInvoiceLayout(id){
   const l=_invoiceLayouts.find(x=>x.id===id);
   if(!l||l.isDefault||l.template==='Statement (Pay Online)'){toast('Cannot delete the default layout','err');return;}
   if(_invoiceLayouts.length<=1){toast('Cannot delete the last layout','err');return;}
-  if(!confirm(`Delete layout "${l.name}"?`))return;
+  if(!(await appConfirm({title:'Delete Layout',message:`Delete layout "${l.name}"?`,okText:'Delete'})))return;
   _invoiceLayouts=_invoiceLayouts.filter(x=>x.id!==id);
   if(_activeLayoutId===id)_activeLayoutId=(_invoiceLayouts.find(x=>x.isDefault)||_invoiceLayouts[0])?.id;
   _ilSave();
@@ -11505,9 +11780,17 @@ function renderSalesInvoicePreview(inv){
       labels,heading,invoiceRefs,bankRows
     });
     renderInvoiceQrCode(qrValue);
+    // Every qrType except the two structural TLV/pipe-delimited formats
+    // (zatca_qr, uae_vat_qr) falls back to publicInvoiceUrl(), which embeds
+    // the full company bank details (IBAN, SWIFT, account) + customer TRN
+    // directly in the QR — permanently, since that URL isn't a server-issued
+    // token and can't be revoked or expired. Swapping to the short-link
+    // code (already fetched for the "digital link" anchors above) once it
+    // resolves means the QR that actually ends up on the printed/PDF/emailed
+    // invoice carries a revocable, expiring reference instead.
     createShortInvoiceUrl(inv).then(shortUrl=>{
       document.querySelectorAll('[data-digital-link]').forEach(a=>{a.href=shortUrl;});
-      if(qrType==='invoice_url')renderInvoiceQrCode(shortUrl);
+      if(qrType!=='zatca_qr'&&qrType!=='uae_vat_qr')renderInvoiceQrCode(shortUrl);
     });
     return;
   }
@@ -11583,10 +11866,11 @@ function renderSalesInvoicePreview(inv){
       </div>`:''}
     </div>`;
   renderInvoiceQrCode(qrValue);
-  // Async: swap long URL to short URL in QR links
+  // Async: swap long URL (which embeds full bank details -- see the
+  // Statement-template branch above for why) to the short, revocable link.
   createShortInvoiceUrl(inv).then(shortUrl=>{
     document.querySelectorAll('[data-digital-link]').forEach(a=>{a.href=shortUrl;});
-    if(qrType==='invoice_url')renderInvoiceQrCode(shortUrl);
+    if(qrType!=='zatca_qr'&&qrType!=='uae_vat_qr')renderInvoiceQrCode(shortUrl);
   });
 }
 
@@ -12117,7 +12401,7 @@ function readAndAddFile(file){
     return;
   }
   const cat=document.getElementById('pur-cat')?.value||'Purchase Invoices';
-  const period=document.getElementById('pur-period')?.value||'June 2024';
+  const period=document.getElementById('pur-period')?.value||'';
   const entry={name:file.name,size:file.size,type:file.type,base64:'',category:cat,period,status:'Reading',id:'F'+Date.now()+Math.random().toString(36).slice(2,6)};
   uploadedFiles.push(entry);
   renderFileList();
@@ -14678,7 +14962,7 @@ function addManualPurchaseLine(){
   if(!tbody)return;
   refreshPurchaseProductSuggestions();
   const row=document.createElement('tr');
-  row.innerHTML=`<td><input class="fi mp-product" list="purchase-product-options" placeholder="Product name" onfocus="refreshPurchaseProductSuggestions()" onchange="applyPurchaseProductSuggestion(this)"></td><td><input class="fi mono mp-qty" value="1" oninput="calcManualPurchase()"></td><td><select class="fi mp-unit">${unitOptionsHtml('PCS')}</select></td><td><input class="fi mono mp-cost" value="0.00" oninput="calcManualPurchase()"></td><td><input class="fi mono mp-discount-pct" value="0" oninput="calcManualPurchase()"></td><td class="mono mp-before-tax">0.00</td><td class="mono mp-line-total">0.00</td><td><button class="icon-btn danger" type="button" onclick="removeManualPurchaseLine(this)" title="Remove line">${deleteIconSvg()}</button></td>`;
+  row.innerHTML=`<td><input class="fi mp-product" data-ac="purchase-product" placeholder="Product name" autocomplete="off" onchange="applyPurchaseProductSuggestion(this)"></td><td><input class="fi mono mp-qty" value="1" oninput="calcManualPurchase()"></td><td><select class="fi mp-unit">${unitOptionsHtml('PCS')}</select></td><td><input class="fi mono mp-cost" value="0.00" oninput="calcManualPurchase()"></td><td><input class="fi mono mp-discount-pct" value="0" oninput="calcManualPurchase()"></td><td class="mono mp-before-tax">0.00</td><td class="mono mp-line-total">0.00</td><td><button class="icon-btn danger" type="button" onclick="removeManualPurchaseLine(this)" title="Remove line">${deleteIconSvg()}</button></td>`;
   tbody.appendChild(row);
   calcManualPurchase();
 }
@@ -15026,10 +15310,10 @@ function calcManualPurchase(){
   const paid=parseAmount(document.getElementById('mp-pay-amount')?.value);
   const due=Math.max(0,total-paid);
   setText('mp-total-items',Number(itemCount||0).toLocaleString('en-AE',{maximumFractionDigits:4}));
-  setText('mp-net-total',net.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}));
+  setText('mp-net-total',`${currentCurrency()} ${net.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}`);
   setText('mp-discount-total',discount.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}));
-  setText('mp-tax-total',tax.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}));
-  setText('mp-purchase-total',total.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}));
+  setText('mp-tax-total',`${currentCurrency()} ${tax.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}`);
+  setText('mp-purchase-total',`${currentCurrency()} ${total.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}`);
   setText('mp-grand-total',total.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}));
   setText('mp-payment-due',due.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}));
   return {items:itemCount,net,discount,tax,shipping,extraExpenses,total,paid,due};
@@ -15718,7 +16002,7 @@ async function convertPOToPurchase(btn){
   if(docType!=='Local Purchase Order'&&docType!=='Foreign Purchase Order'){
     toast('Not a purchase order','warn');return;
   }
-  if(!confirm(`Convert ${purchase.ref} to a Purchase Invoice?\nThe original order will remain in its list.`))return;
+  if(!(await appConfirm({title:'Convert to Purchase Invoice',messageHtml:`Convert ${escapeHtml(purchase.ref)} to a Purchase Invoice?<br>The original order will remain in its list.`,okText:'Convert',tone:'primary'})))return;
   // Create a new PUR- record — original LPO/FPO stays unchanged in its list
   const newRef=`PUR-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
   const newRecord={...purchase,
@@ -15752,7 +16036,7 @@ function addLine(){
   lineCount++;
   const d=document.createElement('div');d.className='inv-item';
   d.classList.add('sales-inv-line');
-  d.innerHTML=`<div class="inv-product-wrap"><input class="fi inv-product" list="invoice-product-options" placeholder="Product / Description" style="font-size:12.5px" onfocus="refreshInvoiceProductSuggestions()" onchange="applyInvoiceProductSuggestion(this)"></div><input class="fi inv-unit" value="PCS" readonly style="font-size:12.5px;background:var(--bg)"><input class="fi inv-qty" type="number" min="0.01" step="0.01" value="1" style="font-size:12.5px" oninput="calcLine(this)"><div class="inv-price-wrap"><input class="fi inv-price" type="number" min="0" step="0.01" value="0.00" style="font-size:12.5px" oninput="calcLine(this);this.closest('.inv-item').dataset.priceLocked='manual'"><span class="inv-price-src" style="display:none;font-size:10px;color:var(--accent);white-space:nowrap" title=""></span></div><input class="fi mono inv-amount" value="0.00" readonly style="background:var(--bg)"><button class="btn btn-g" style="padding:4px 8px" onclick="remLine(this)">×</button>`;
+  d.innerHTML=`<div class="inv-product-wrap"><input class="fi inv-product" data-ac="invoice-product" placeholder="Product / Description" autocomplete="off" style="font-size:12.5px" onchange="applyInvoiceProductSuggestion(this)"></div><input class="fi inv-unit" value="PCS" readonly style="font-size:12.5px;background:var(--bg)"><input class="fi inv-qty" type="number" min="0.01" step="0.01" value="1" style="font-size:12.5px" oninput="calcLine(this)"><div class="inv-price-wrap"><input class="fi inv-price" type="number" min="0" step="0.01" value="0.00" style="font-size:12.5px" oninput="calcLine(this);this.closest('.inv-item').dataset.priceLocked='manual'"><span class="inv-price-src" style="display:none;font-size:10px;color:var(--accent);white-space:nowrap" title=""></span></div><input class="fi mono inv-amount" value="0.00" readonly style="background:var(--bg)"><button class="btn btn-g" style="padding:4px 8px" onclick="remLine(this)">×</button>`;
   document.getElementById('inv-lines').appendChild(d);
   refreshInvoiceProductSuggestions();
   calcLine(null);
@@ -16423,7 +16707,7 @@ function renderJournalEntry(entry){
 }
 
 async function reverseJournal(journalId){
-  if(!confirm('Create a reversal entry for this journal? This cannot be undone.'))return;
+  if(!(await appConfirm({title:'Reverse Journal Entry',message:'Create a reversal entry for this journal? This cannot be undone.',okText:'Reverse'})))return;
   try{
     const r=await moduleApi('/journal/'+journalId+'/reverse',{method:'POST'});
     toast('Reversal entry '+(r.entry_number||'')+ ' created','ok');
@@ -16769,8 +17053,8 @@ function updateCorporateTaxStats(records=[]){
     latest.taxable_income||0,
     latest.tax_due||0
   ];
-  document.querySelectorAll('#corp-tax .stat-val').forEach((el,index)=>{
-    el.textContent='AED '+corporateAmount(values[index]);
+  document.querySelectorAll('#corp-tax-tab .stat-val').forEach((el,index)=>{
+    el.textContent=currentCurrency()+' '+corporateAmount(values[index]);
   });
 }
 
@@ -16820,6 +17104,11 @@ function renderCorporateBudgets(records=[]){
 }
 
 function renderCorporateCashFlow(records=[]){
+  const sum=k=>records.reduce((t,r)=>t+Number(r[k]||0),0);
+  const receipts=sum('expected_receipts'),payments=sum('expected_payments');
+  [['cf-receipts',receipts],['cf-payments',payments],['cf-net',receipts-payments]].forEach(([id,v])=>{
+    const el=document.getElementById(id);if(el)el.textContent=currentCurrency()+' '+corporateAmount(v);
+  });
   replaceTableBody('corp-cashflow-tbody',records,record=>{
     const receipts=Number(record.expected_receipts||record.receipts||0);
     const payments=Number(record.expected_payments||record.payments||0);
@@ -16845,17 +17134,38 @@ function renderCorporateApprovals(records=[]){
   `,'No approval matrix records in database yet.');
 }
 
-function loadCorporateAccountingFromDb(data={}){
-  renderCorporateTax(data.corporateTax||[]);
+async function loadCorporateAccountingFromDb(data={}){
+  // Corporate Tax and the 8 sub-modules mapped in _CORPORATE_ENDPOINTS now
+  // read from their real typed tables (corporate_accounting.py) instead of
+  // the generic bootstrap `data` blob -- see saveCorporateRecord()'s
+  // comment for why the old data.X reads here always showed "No records in
+  // database yet" no matter what a user added. relatedPartyTransactions has
+  // no real backing table yet, so it stays on the old (still-empty) path.
   renderCorporateRelatedParty(data.relatedPartyTransactions||[]);
-  renderCorporateAssets(data.fixedAssets||[]);
-  renderCorporateAccruals(data.accrualsPrepayments||[]);
-  renderCorporateCostCenters(data.costCenters||[]);
-  renderCorporateBudgets(data.budgets||[]);
-  renderCorporateCashFlow(data.cashFlowForecasts||[]);
-  renderCorporateCredit(data.creditControl||[]);
-  renderCorporateConsolidation(data.consolidation||[]);
-  renderCorporateApprovals(data.approvalMatrix||[]);
+  const fetchOrEmpty=async(path)=>{
+    try{ return await moduleApi(path); }
+    catch(err){ console.warn('Corporate Accounting fetch failed:',path,err); return []; }
+  };
+  const [tax,assets,accruals,costCenters,budgets,cashFlow,credit,consolidation,approvals]=await Promise.all([
+    fetchOrEmpty('/corporate-accounting/corporate-tax'),
+    fetchOrEmpty(_CORPORATE_ENDPOINTS.fixedAssets),
+    fetchOrEmpty(_CORPORATE_ENDPOINTS.accrualsPrepayments),
+    fetchOrEmpty(_CORPORATE_ENDPOINTS.costCenters),
+    fetchOrEmpty(_CORPORATE_ENDPOINTS.budgets),
+    fetchOrEmpty(_CORPORATE_ENDPOINTS.cashFlowForecasts),
+    fetchOrEmpty(_CORPORATE_ENDPOINTS.creditControl),
+    fetchOrEmpty(_CORPORATE_ENDPOINTS.consolidation),
+    fetchOrEmpty(_CORPORATE_ENDPOINTS.approvalMatrix),
+  ]);
+  renderCorporateTax(tax||[]);
+  renderCorporateAssets(assets||[]);
+  renderCorporateAccruals(accruals||[]);
+  renderCorporateCostCenters(costCenters||[]);
+  renderCorporateBudgets(budgets||[]);
+  renderCorporateCashFlow(cashFlow||[]);
+  renderCorporateCredit(credit||[]);
+  renderCorporateConsolidation(consolidation||[]);
+  renderCorporateApprovals(approvals||[]);
 }
 
 function askCorporateFields(title,fields){
@@ -16868,15 +17178,42 @@ function askCorporateFields(title,fields){
   return record;
 }
 
+// Maps each Corporate Accounting collection to its real typed-table write
+// endpoint (corporate_accounting.py). These used to all go through the
+// generic saveServer()->AppDataRecord blob path below, which writes to a
+// collection the GET side (loadCorporateAccountingFromDb, further down)
+// never reads from at all -- every "Add Asset/Accrual/Cost Center/..."
+// button silently saved data nothing else in the app (including this same
+// page's own reload, and every report built from these tables) could ever
+// see again. "relatedPartyTransactions" has no backing table yet (no model
+// exists for it) so it's deliberately left on the old generic path --
+// still broken, but not newly broken by this fix.
+const _CORPORATE_ENDPOINTS={
+  fixedAssets:'/corporate-accounting/fixed-assets',
+  accrualsPrepayments:'/corporate-accounting/accruals-prepayments',
+  costCenters:'/corporate-accounting/cost-centers',
+  budgets:'/corporate-accounting/budgets',
+  cashFlowForecasts:'/corporate-accounting/cash-flow',
+  creditControl:'/corporate-accounting/credit-control',
+  consolidation:'/corporate-accounting/consolidation',
+  approvalMatrix:'/corporate-accounting/approval-matrix',
+};
+
 function saveCorporateRecord(collection,record,renderFn,message){
   if(!record)return;
-  saveServer(collection,record,{throwOnError:true}).then(()=>{
-    renderFn([record]);
+  const endpoint=_CORPORATE_ENDPOINTS[collection];
+  const save=endpoint
+    ? moduleApi(endpoint,{method:'POST',body:record})
+    : saveServer(collection,record,{throwOnError:true});
+  save.then(async(saved)=>{
+    let rows=[saved||record];
+    if(endpoint){try{rows=await moduleApi(endpoint);}catch(_e){}}
+    renderFn(rows);
     toast(message,'ok');
     audit(message,collection,'Saved');
   }).catch(err=>{
     console.warn('Corporate record save failed:',err);
-    toast('Corporate record could not be saved to database','err');
+    toast(err.message||'Corporate record could not be saved to database','err');
   });
 }
 
@@ -16908,7 +17245,7 @@ function addCorporateCostCenter(){
     {key:'code',label:'Code',defaultValue:'CC-'+Date.now().toString().slice(-4)},
     {key:'name',label:'Name'},
     {key:'department',label:'Department',defaultValue:'Finance'},
-    {key:'branch',label:'Branch',defaultValue:'Dubai HQ'},
+    {key:'branch',label:'Branch',defaultValue:''},
     {key:'project',label:'Project',defaultValue:'General'},
     {key:'status',label:'Status',defaultValue:'Active'}
   ]);
@@ -17039,7 +17376,7 @@ function refreshOrgPage(){
   // Branch breakdown — use _getBranchNames() as source of truth
   const branchTags=typeof _getBranchNames==='function'?_getBranchNames():[...document.querySelectorAll('#branch-tags-wrap .dept-tag')].map(t=>t.childNodes[0]?.textContent?.trim()).filter(Boolean);
   const branchMap={};
-  emps.forEach(e=>{const b=e.branch||e.location||'Dubai HQ';branchMap[b]=(branchMap[b]||0)+1;});
+  emps.forEach(e=>{const b=e.branch||e.location||'Unassigned';branchMap[b]=(branchMap[b]||0)+1;});
   // Also include defined branches with 0 headcount
   branchTags.forEach(b=>{if(!(b in branchMap))branchMap[b]=0;});
   const branches=Object.keys(branchMap).sort((a,b)=>branchMap[b]-branchMap[a]);
@@ -17524,6 +17861,7 @@ function renderLeaveTable(){
   if(!tbody)return;
   if(!_leaveRequestsCache.length){
     tbody.innerHTML='<tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">No leave requests yet.</td></tr>';
+    renderLeaveCalendar();
     return;
   }
   tbody.innerHTML=_leaveRequestsCache.map(rec=>{
@@ -17542,6 +17880,7 @@ function renderLeaveTable(){
       <td>${actions}</td>
     </tr>`;
   }).join('');
+  renderLeaveCalendar();
 }
 
 async function approveLeave(id){
@@ -17605,6 +17944,36 @@ function leaveCalNav(dir){
   renderLeaveCalendar();
 }
 
+// Month-grid leave calendar (same visual pattern as the ESS portal's own
+// Holiday & Team Leave Calendar -- weekday header row, Monday-first day
+// cells, each cell showing a small colored chip per employee on leave that
+// day with a "+N more" overflow past 2). HRMS's version is company-wide
+// (every employee, not just one person's department peers), so a day can
+// carry more chips -- the overflow line matters more here than it does in
+// ESS. Data source is unchanged from the previous Gantt-style table: the
+// #leave-tbody rows already on the page, no new API call.
+const _hrmsLeaveTypeToken={
+  'Annual':['var(--purple-bg)','var(--purple)'],'Sick':['var(--teal-bg)','var(--teal)'],
+  'Casual':['var(--green-bg)','var(--green)'],'Emergency':['var(--red-bg)','var(--red)'],
+  'Maternity':['var(--pink-bg)','var(--pink)'],'Paternity':['var(--accent-glow)','var(--accent)'],
+  'Unpaid':['var(--surface3)','var(--text3)'],'Lieu Days':['var(--amber-bg)','var(--amber)'],
+  'Hajj':['var(--teal-bg)','var(--teal)'],'Work From Home':['var(--accent-glow)','var(--accent)'],
+};
+function _hrmsLeaveTypeColors(type){
+  return _hrmsLeaveTypeToken[String(type||'').replace(' Leave','').trim()]||['var(--purple-bg)','var(--purple)'];
+}
+
+// Clicking a day on the Leave Calendar opens the same Apply Leave modal as
+// "+ Apply Leave", pre-filled to that date -- matching ESS's own Holiday &
+// Team Leave Calendar, where clicking a day opens essOpenLeaveModal(date).
+function openLeaveModalForDate(dateStr){
+  showM('m-leave');
+  const from=document.getElementById('leave-from');
+  const to=document.getElementById('leave-to');
+  if(from)from.value=dateStr;
+  if(to)to.value=dateStr;
+}
+
 function renderLeaveCalendar(){
   const cal=document.getElementById('leave-calendar');
   const label=document.getElementById('leave-cal-label');
@@ -17613,13 +17982,11 @@ function renderLeaveCalendar(){
   const monthName=new Date(year,month,1).toLocaleString('en-AE',{month:'long',year:'numeric'});
   if(label)label.textContent=monthName;
   const daysInMonth=new Date(year,month+1,0).getDate();
-  const firstDow=new Date(year,month,1).getDay(); // 0=Sun
+  const firstDow=(new Date(year,month,1).getDay()+6)%7; // Monday-first, matches ESS's own calendar
 
-  // Collect leave records for this month
+  // Collect leave records for this month: date -> [{name,type}]
   const leaveRows=[...document.querySelectorAll('#leave-tbody tr')];
-  const typeColour={Annual:'rgba(108,92,231,.25)',Sick:'rgba(0,206,201,.25)',Emergency:'rgba(253,203,110,.35)',Unpaid:'rgba(150,150,150,.2)',Hajj:'rgba(99,205,218,.25)'};
-  // Build per-employee leave map: empName -> Set of date strings 'YYYY-MM-DD'
-  const empLeave={}; // empName -> {date:'TYPE'}
+  const leaveByDate={};
   leaveRows.forEach(row=>{
     const cells=[...row.cells];
     if(cells.length<4)return;
@@ -17628,55 +17995,54 @@ function renderLeaveCalendar(){
     const from=cells[2]?.textContent.trim();
     const to=cells[3]?.textContent.trim();
     const status=(cells[5]?.textContent.trim()||'').toLowerCase();
-    if(status==='rejected')return;
-    if(!emp||!from||!to)return;
-    if(!empLeave[emp])empLeave[emp]={};
+    if(status==='rejected'||!emp||!from||!to)return;
     const d=new Date(from);
     const end=new Date(to);
-    while(d<=end){
-      const key=d.toISOString().split('T')[0];
-      if(d.getFullYear()===year&&d.getMonth()===month)empLeave[emp][key]=type;
+    let guard=0;
+    while(d<=end&&guard<366){
+      if(d.getFullYear()===year&&d.getMonth()===month){
+        const key=`${year}-${String(month+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        (leaveByDate[key]=leaveByDate[key]||[]).push({name:emp,type});
+      }
       d.setDate(d.getDate()+1);
+      guard++;
     }
   });
-  const employees=Object.keys(empLeave);
-  if(!employees.length){
-    cal.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">No leave records for this month.</div>';
+
+  const today=new Date();
+  const todayKey=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const weekendDays=_companyWeekendDaySet();
+  const weekdayLabels=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+  let html='<div class="hcal-grid">';
+  html+=weekdayLabels.map(w=>`<div class="hcal-weekday">${w}</div>`).join('');
+  for(let i=0;i<firstDow;i++)html+='<div class="hcal-cell hcal-empty"></div>';
+  const typesPresent=new Set();
+  for(let day=1;day<=daysInMonth;day++){
+    const key=`${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const onLeave=leaveByDate[key]||[];
+    const isWeekend=weekendDays?weekendDays.has(new Date(year,month,day).getDay()):false;
+    const cls='hcal-cell'+(key===todayKey?' hcal-today':'')+(isWeekend?' hcal-weekend':'');
+    let inner=`<div class="hcal-daynum">${day}</div>`;
+    onLeave.slice(0,2).forEach(lr=>{
+      typesPresent.add(lr.type);
+      const [bg,fg]=_hrmsLeaveTypeColors(lr.type);
+      const first=String(lr.name||'').split(' ')[0];
+      inner+=`<div class="hcal-chip" style="background:${bg};color:${fg}" title="${escapeHtml(lr.name)} — ${escapeHtml(lr.type)}">${escapeHtml(first)}</div>`;
+    });
+    if(onLeave.length>2)inner+=`<div class="hcal-more">+${onLeave.length-2} more</div>`;
+    html+=`<div class="${cls}" title="Click to apply for leave on ${key}" onclick="openLeaveModalForDate('${key}')">${inner}</div>`;
+  }
+  html+='</div>';
+
+  if(!typesPresent.size){
+    cal.innerHTML=html+'<div style="padding:16px 2px 0;color:var(--text3);font-size:12px">No leave records for this month.</div>';
     return;
   }
-
-  // Day headers
-  const days=Array.from({length:daysInMonth},(_,i)=>i+1);
-  const today=new Date();
-  // Same shared weekend definition as the Attendance Calendar (see
-  // _companyWeekendDaySet()) -- was independently hardcoded to Sat/Sun here
-  // too, so the two calendars could disagree about which days are the
-  // weekend for a company that's actually configured for Fri/Sat.
-  const weekendDays=_companyWeekendDaySet();
-  let html='<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:11px"><thead><tr>';
-  html+='<th style="padding:6px 8px;background:var(--surface2);min-width:120px;text-align:left;border-bottom:1px solid var(--border)">Employee</th>';
-  days.forEach(d=>{
-    const isToday=year===today.getFullYear()&&month===today.getMonth()&&d===today.getDate();
-    const dow=new Date(year,month,d).toLocaleString('en-AE',{weekday:'short'}).slice(0,2);
-    const isWeekend=weekendDays?weekendDays.has(new Date(year,month,d).getDay()):false;
-    html+=`<th style="padding:4px 2px;text-align:center;min-width:28px;background:${isToday?'rgba(108,92,231,.15)':isWeekend?'var(--hover)':'var(--surface2)'};border-bottom:1px solid var(--border);color:${isWeekend?'var(--muted)':'var(--text)'}"><div>${d}</div><div style="font-size:9px;color:var(--muted)">${dow}</div></th>`;
-  });
-  html+='</tr></thead><tbody>';
-  employees.forEach(emp=>{
-    html+=`<tr><td style="padding:6px 8px;font-weight:500;border-bottom:1px solid var(--border);white-space:nowrap">${escapeHtml(emp)}</td>`;
-    days.forEach(d=>{
-      const key=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-      const type=empLeave[emp][key];
-      const isWeekend=weekendDays?weekendDays.has(new Date(year,month,d).getDay()):false;
-      const bg=type?(typeColour[type.replace(' Leave','')]||'rgba(108,92,231,.2)'):(isWeekend?'var(--hover)':'');
-      html+=`<td style="padding:2px;text-align:center;border-bottom:1px solid var(--border);background:${bg}" title="${type||''}">${type?'●':''}</td>`;
-    });
-    html+='</tr>';
-  });
-  // Legend
-  html+='</tbody></table></div><div style="display:flex;gap:12px;padding:10px 8px;font-size:11px;flex-wrap:wrap">';
-  Object.entries(typeColour).forEach(([t,c])=>{
-    html+=`<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:${c};display:inline-block"></span>${t}</span>`;
+  html+='<div class="hcal-legend">';
+  [...typesPresent].sort().forEach(t=>{
+    const [,fg]=_hrmsLeaveTypeColors(t);
+    html+=`<span><span class="hcal-dot" style="background:${fg}"></span>${escapeHtml(t)}</span>`;
   });
   html+='</div>';
   cal.innerHTML=html;
@@ -18235,7 +18601,7 @@ function saveOtRules(){
   const namedRules=[...document.querySelectorAll('#ot-rules-tbody tr')].map(tr=>{
     try{return JSON.parse(tr.dataset.rule||'');}catch{return null;}
   }).filter(Boolean);
-  const rule={id:'ot-rules-config',rateType,hoursType,fixedRate:document.getElementById('ot-fixed-rate')?.value,workDays:document.getElementById('ot-work-days')?.value,workHours:document.getElementById('ot-work-hours')?.value,multNormal:document.getElementById('ot-mult-normal')?.value,multWeekend:document.getElementById('ot-mult-weekend')?.value,multHoliday:document.getElementById('ot-mult-holiday')?.value,multRamadan:document.getElementById('ot-mult-ramadan')?.value,namedRules};
+  const rule={id:'ot-rules-config',rateType,hoursType,fixedRate:document.getElementById('ot-fixed-rate')?.value,workDays:document.getElementById('ot-work-days')?.value,workHours:document.getElementById('ot-work-hours')?.value,otCooloffMinutes:Math.max(0,Number(document.getElementById('ot-cooloff-minutes')?.value)||0),multNormal:document.getElementById('ot-mult-normal')?.value,multWeekend:document.getElementById('ot-mult-weekend')?.value,multHoliday:document.getElementById('ot-mult-holiday')?.value,multRamadan:document.getElementById('ot-mult-ramadan')?.value,namedRules};
   saveServer('hr_settings',rule);
   // Refresh OT policy selects
   _syncOtPolicySelects(rateType);
@@ -18259,6 +18625,7 @@ function _applyOtRulesConfig(rule){
   setVal('ot-fixed-rate',rule.fixedRate);
   setVal('ot-work-days',rule.workDays);
   setVal('ot-work-hours',rule.workHours);
+  setVal('ot-cooloff-minutes',rule.otCooloffMinutes);
   setVal('ot-mult-normal',rule.multNormal);
   setVal('ot-mult-weekend',rule.multWeekend);
   setVal('ot-mult-holiday',rule.multHoliday);
@@ -18476,7 +18843,7 @@ async function saveHrUser(){
 
 async function deleteHrUser(employeeId){
   const emp=_hrEmployeesCache.find(e=>e.id===employeeId);
-  if(!confirm(`Revoke Employee Self-Service access for ${emp?emp.full_name:'this employee'}? They will no longer be able to sign in with their username/password.`))return;
+  if(!(await appConfirm({title:'Revoke Portal Access',message:`Revoke Employee Self-Service access for ${emp?emp.full_name:'this employee'}? They will no longer be able to sign in with their username/password.`,okText:'Revoke'})))return;
   try{
     const r=await fetch(`${apiBaseUrl()}/hr/admin/employees/${employeeId}/portal-access`,{method:'DELETE',headers:backendHeaders()});
     if(r.ok){toast('Portal access revoked','ok');loadHrUsersAndRoles();}
@@ -18669,10 +19036,10 @@ function addHrJobGrade(){
     }
   });
 }
-function removeHrJobGrade(btn){
+async function removeHrJobGrade(btn){
   const tag=btn.closest('.dept-tag');
   const name=tag?.childNodes[0]?.textContent?.trim()||'';
-  if(!confirm(`Remove grade "${name}"?`))return;
+  if(!(await appConfirm({title:'Remove Job Grade',message:`Remove grade "${name}"?`,okText:'Remove'})))return;
   tag?.remove();
 }
 // Read current department names from data store
@@ -18832,7 +19199,6 @@ function renderDeptTable(){
 }
 
 function showDeptModal(id){
-  _ensureLazyModal('m-dept');
   const titleEl=document.getElementById('dept-modal-title');
   const d=id?_deptList.find(x=>x.id===id):null;
   if(titleEl)titleEl.textContent=d?'Edit Department':'Add Department';
@@ -18875,10 +19241,10 @@ function saveDeptModal(){
   toast(`Department "${name}" ${id?'updated':'added'}`,'ok');
 }
 
-function deleteDept(id){
+async function deleteDept(id){
   const d=_deptList.find(x=>x.id===id);
   if(!d)return;
-  if(!confirm(`Remove department "${d.name}"?`))return;
+  if(!(await appConfirm({title:'Remove Department',message:`Remove department "${d.name}"?`,okText:'Remove'})))return;
   _deptList=_deptList.filter(x=>x.id!==id);
   renderDeptTable();
   _syncDeptBranchSelectsFromList();
@@ -19025,10 +19391,10 @@ function renderRoleTable(){
   }).join('');
 }
 
-function deleteRole(id){
+async function deleteRole(id){
   const role=_hrRolesCache.find(r=>r.id===id);
   if(!role)return;
-  if(!confirm(`Delete role "${role.role_name}"? Any employees still assigned this role must be reassigned first.`))return;
+  if(!(await appConfirm({title:'Delete Role',message:`Delete role "${role.role_name}"? Any employees still assigned this role must be reassigned first.`,okText:'Delete'})))return;
   fetch(`${apiBaseUrl()}/hr/admin/roles/${id}`,{method:'DELETE',headers:backendHeaders()})
     .then(async r=>{
       if(r.ok){toast(`Role "${role.role_name}" deleted`,'ok');loadRolesAndPermissionsTab();}
@@ -19193,14 +19559,16 @@ function renderBranchTable(){
   const row=b=>{
     const statusCls=b.status==='Active'?'b-g':'b-gray';
     const cityLabel=[b.city,b.country].filter(Boolean).join(', ')||'—';
-    // "View as" mirrors the Branch Performance card's own toggle (same
-    // viewDashboardAsBranch()) — this was the only place in the app to
-    // reach it before was that dashboard card, which itself only ever
-    // listed a branch once it had at least one transaction (see the
-    // _build_branch_performance() fix). Restricted to Active branches:
-    // an inactive branch isn't meant to be browsed day-to-day.
-    const viewAsBtn=(canViewAs&&b.status==='Active'&&b.id!==window.ACTIVE_BRANCH_ID)
-      ?`<button class="btn btn-g btn-sm" style="padding:2px 8px;font-size:10.5px" title="View the main dashboard scoped to this branch's own data" onclick="viewDashboardAsBranch('${escapeHtml(b.id)}');go('dashboard')">View as</button>`
+    // Real login-as-branch (branches.py's impersonate_branch()). "View as"
+    // (the lightweight client-only dashboard filter, viewDashboardAsBranch())
+    // used to sit next to this -- removed by request, this is the only
+    // branch switch offered here now. Restricted to Active branches: an
+    // inactive branch isn't meant to be browsed day-to-day. data-branch-id +
+    // a delegated lookup, not the name inlined into onclick="" -- a branch
+    // name containing a quote/apostrophe there corrupts the HTML (same bug
+    // class fixed elsewhere for POS/rota).
+    const impersonateBtn=(canViewAs&&b.status==='Active')
+      ?`<button class="btn btn-g btn-sm" style="padding:2px 8px;font-size:10.5px;color:var(--purple)" title="Log in as this branch's own dashboard session" data-branch-id="${escapeHtml(b.id)}" data-branch-name="${escapeHtml(b.name)}" onclick="impersonateBranch(this.dataset.branchId,this.dataset.branchName)">Impersonate</button>`
       :'';
     return `<tr>
       <td class="mono" style="font-size:11px">${escapeHtml(b.code||'—')}</td>
@@ -19208,7 +19576,7 @@ function renderBranchTable(){
       <td style="color:var(--text3);font-size:12px">${escapeHtml(cityLabel)}</td>
       <td><span class="b ${statusCls}">${escapeHtml(b.status)}</span></td>
       <td style="white-space:nowrap;display:flex;gap:4px;align-items:center">
-        ${viewAsBtn}
+        ${impersonateBtn}
         <button class="icon-btn" title="View branch" onclick="showBranchModal('${escapeHtml(b.id)}',true)">${viewIconSvg()}</button>
         <button class="icon-btn edit" title="Edit branch" onclick="showBranchModal('${escapeHtml(b.id)}')">${editIconSvg()}</button>
       </td>
@@ -19311,7 +19679,6 @@ function getCheckedBranchModules(){
 // mode; deleteBranch()/deleteBranchFromModal() are kept for the seeded
 // scripts/history that reference them but are unreachable from this UI.
 function showBranchModal(id,viewOnly){
-  _ensureLazyModal('m-branch');
   const titleEl=document.getElementById('branch-modal-title');
   const b=id?_branchList.find(x=>x.id===id):null;
   if(titleEl)titleEl.textContent=viewOnly?'View Branch':(b?'Edit Branch':'Add Branch');
@@ -19389,7 +19756,7 @@ async function saveBranchModal(){
 async function deleteBranch(id){
   const b=_branchList.find(x=>x.id===id);
   if(!b)return;
-  if(!confirm(`Remove branch "${b.name}"?`))return;
+  if(!(await appConfirm({title:'Remove Branch',message:`Remove branch "${b.name}"?`,okText:'Remove'})))return;
   try{
     const response=await authenticatedFetch(`${apiBaseUrl()}/branches/${id}`,{method:'DELETE'});
     if(!response.ok)throw new Error('Delete failed ('+response.status+')');
@@ -19688,12 +20055,15 @@ function saveJobRequisition(){
   const dept=document.getElementById('req-dept')?.value||'';
   const positions=document.getElementById('req-positions')?.value||'1';
   const empType=document.getElementById('req-emp-type')?.value||'Full-Time';
-  const location=document.getElementById('req-location')?.value||'Dubai HQ';
+  const location=document.getElementById('req-location')?.value||'';
   const date=document.getElementById('req-date')?.value||'';
   const salFrom=document.getElementById('req-sal-from')?.value||'';
   const salTo=document.getElementById('req-sal-to')?.value||'';
   if(!title){toast('Job title is required','warn');return;}
   if((salFrom&&isNaN(Number(salFrom)))||(salTo&&isNaN(Number(salTo)))){toast('Salary range must be numeric','err');return;}
+  if(!Number.isInteger(Number(positions))||Number(positions)<1){toast('Positions must be a whole number of at least 1','err');return;}
+  if((salFrom&&Number(salFrom)<0)||(salTo&&Number(salTo)<0)){toast('Salary cannot be negative','err');return;}
+  if(salFrom&&salTo&&Number(salFrom)>Number(salTo)){toast('Salary range minimum cannot exceed the maximum','err');return;}
   const record={id:`REQ-${Date.now()}`,title,department:dept,positions,employmentType:empType,location,date,salaryFrom:salFrom,salaryTo:salTo,status:'Pending Approval'};
   renderJobRequisitionRecord(record);
   saveServer('jobRequisitions',record);
@@ -19714,8 +20084,8 @@ function renderJobRequisitionRecord(rec){
   const salFrom=rec.salaryFrom,salTo=rec.salaryTo;
   const salRange=salFrom&&salTo?`${AED_SYMBOL} ${Number(salFrom).toLocaleString()}–${Number(salTo).toLocaleString()}`:(salFrom?`${AED_SYMBOL} ${Number(salFrom).toLocaleString()}+`:'—');
   const actions=isPending
-    ?`<div class="flx"><button class="btn btn-success btn-sm" onclick="approveJobRequisition(this)">Approve</button><button class="btn btn-g btn-sm" onclick="toast('Posting to job boards','info')">Post</button></div>`
-    :`<button class="btn btn-g btn-sm" onclick="toast('Posting to job boards','info')">Post</button>`;
+    ?`<div class="flx"><button class="btn btn-success btn-sm" onclick="approveJobRequisition(this)">Approve</button><button class="btn btn-g btn-sm" disabled title="Job-board posting is not available yet">Post</button></div>`
+    :`<button class="btn btn-g btn-sm" disabled title="Job-board posting is not available yet">Post</button>`;
   const tr=document.createElement('tr');
   tr.dataset.recordId=rec.id;
   tr.innerHTML=`<td>${escapeHtml(rec.title)}</td><td>${escapeHtml(rec.department||'')}</td><td><span class="b b-b">${escapeHtml(rec.employmentType||'Full-Time')}</span></td><td>${escapeHtml(rec.location||'')}</td><td class="mono">${escapeHtml(String(rec.positions||1))}</td><td class="mono">${salRange}</td><td>${escapeHtml(rec.date)||'—'}</td><td><span class="b ${statusCls}">${escapeHtml(rec.status||'Pending Approval')}</span></td><td>${actions}</td>`;
@@ -19842,8 +20212,8 @@ async function loadCompanyAnnouncements(){
   }catch(e){el.innerHTML='<div style="color:var(--red);font-size:12px;text-align:center;padding:12px">Failed to load.</div>';}
 }
 
-function deleteCompanyAnnouncement(id){
-  if(!confirm('Delete this announcement?'))return;
+async function deleteCompanyAnnouncement(id){
+  if(!(await appConfirm({title:'Delete Announcement',message:'Delete this announcement?',okText:'Delete'})))return;
   deleteServer('companyAnnouncements',{id},{throwOnError:true})
     .then(()=>{toast('Announcement deleted','ok');loadCompanyAnnouncements();})
     .catch(()=>toast('Could not delete — cannot reach server','err'));
@@ -19930,7 +20300,7 @@ function rejectOT(btn){
   const reason=prompt('Rejection reason is required')||'Reason not provided';
   const row=btn.closest('tr');
   row.querySelector('td:nth-child(6)').innerHTML='<span class="b b-r">Rejected</span>';
-  row.querySelector('td:last-child').innerHTML='<button class="btn btn-g btn-sm" onclick="toast(\'Rejection reason: '+escapeHtml(reason).replace(/'/g,'&#39;')+'\',\'warn\')">Reason</button>';
+  row.querySelector('td:last-child').innerHTML=`<button class="btn btn-g btn-sm" onclick="toast(${jsonAttr('Rejection reason: '+reason)},'warn')">Reason</button>`;
   toast('Overtime rejected','warn');
   let payload={};try{payload=JSON.parse(row.dataset.record||'{}');}catch{}
   payload={...payload,status:'Rejected',rejection_reason:reason};
@@ -20162,7 +20532,7 @@ const ROTA_STAFF_DISPLAY_CAP=300;
 function currentRotaStaff(){
   const rows=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')].map(row=>{
     const emp=employeeFromDirectoryRow(row);
-    return {id:emp.id||'',name:emp.name||'',department:emp.department||'Management',role:emp.designation||'Employee',location:emp.location||'Dubai HQ',status:emp.status||'Active'};
+    return {id:emp.id||'',name:emp.name||'',department:emp.department||'Management',role:emp.designation||'Employee',location:emp.location||'',status:emp.status||'Active'};
   // An Inactive employee's OWN past rota assignments are left untouched in
   // the backend — this only stops them appearing as a schedulable row going
   // forward, same as _getAttendanceEmployees() already does for Today's
@@ -20186,7 +20556,7 @@ function normalizeRotaAssignment(record={}){
     employee_name:record.employee_name||record.employee||record.name||'Employee',
     role:record.role||record.designation||'Employee',
     department:record.department||'Management',
-    location:record.location||'Dubai HQ',
+    location:record.location||'',
     date,
     day:record.day||'',
     type,
@@ -20412,6 +20782,40 @@ function applyRotaEditTypeDefaults(){
   setFieldValue(document.getElementById('rota-edit-start'),defaults.start);
   setFieldValue(document.getElementById('rota-edit-end'),defaults.end);
   setSelectValue(document.getElementById('rota-edit-mark'),defaults.mark);
+}
+
+function legacySaveRotaCellShift(){
+  if(!activeRotaCell){
+    toast('Select a rota cell first','warn');
+    return;
+  }
+  const type=document.getElementById('rota-edit-type')?.value||'Morning';
+  const defaults=ROTA_EDIT_DEFAULTS[type]||ROTA_EDIT_DEFAULTS.Morning;
+  const start=document.getElementById('rota-edit-start')?.value||'';
+  const end=document.getElementById('rota-edit-end')?.value||'';
+  const mark=document.getElementById('rota-edit-mark')?.value||defaults.mark;
+  const className=mark==='Off'?'off':mark==='Leave'?'draft':mark==='OT'?'overtime':defaults.className;
+  const code=mark==='Off'?'OFF':mark==='Leave'?'L':mark==='OT'?'OT':defaults.code;
+  const time=(start&&end)?`${start}-${end}`:'-';
+  const icon=className==='overtime'||className==='conflict'?'!':className==='off'?'•':className==='draft'?'○':'✓';
+  activeRotaCell.innerHTML=`<div class="rota-cell ${className}"><strong>${escapeHtml(code)}</strong><span>${escapeHtml(time)}</span><em>${escapeHtml(icon)}</em></div>`;
+  activeRotaCell.dataset.rotaNote=document.getElementById('rota-edit-notes')?.value||'';
+  closeM('m-edit-shift');
+  updateRotaStats();
+  toast('Shift updated','ok');
+  audit('Updated rota cell',`${code} ${time}`,'Saved');
+}
+
+function legacyRemoveRotaCellShift(){
+  if(!activeRotaCell){
+    closeM('m-edit-shift');
+    return;
+  }
+  activeRotaCell.innerHTML='<div class="rota-cell off"><strong>OFF</strong><span>-</span><em>•</em></div>';
+  closeM('m-edit-shift');
+  updateRotaStats();
+  toast('Shift removed','warn');
+  audit('Removed rota cell','Weekly rota','Deleted');
 }
 
 async function saveActiveRotaAssignmentFromModal(forceOff=false){
@@ -20801,12 +21205,6 @@ function _loadVisibleRotaRanges(){
   if(range)_ensureRotaRangeLoaded(range.weekStarts[0],weekDateFromStart(range.weekStarts[range.weekStarts.length-1],6));
 }
 
-let _rotaSearchTimer=null;
-function debouncedRenderRotaBoards(){
-  clearTimeout(_rotaSearchTimer);
-  _rotaSearchTimer=setTimeout(renderRotaBoards,200);
-}
-
 function renderRotaBoards(){
   renderWeeklyRotaBoard();
   renderRotaEmployeeTasksPanel();
@@ -20925,10 +21323,10 @@ function editShift(btn){
   showM('m-shift');
 }
 
-function deleteShift(btn){
+async function deleteShift(btn){
   const row=btn.closest('tr');
   let shift={};try{shift=JSON.parse(row.dataset.shift||'{}');}catch{}
-  if(!confirm(`Delete shift "${shift.name||shift.code||'this shift'}"?`))return;
+  if(!(await appConfirm({title:'Delete Shift',message:`Delete shift "${shift.name||shift.code||'this shift'}"?`,okText:'Delete'})))return;
   row.remove();
   updateRotaStats();
   if(shift.code)deleteServer('rotaShifts',shift);
@@ -21197,7 +21595,7 @@ function publishRota(){
   });
   saveRotaDraft('Published');
   renderRotaBoards();
-  toast(`Rota published for ${weekAssignments.length} shift(s) this week. Employees notified and attendance timing updated`,'ok');
+  toast(`Rota published for ${weekAssignments.length} shift(s) this week`,'ok');
   audit('Rota published','Rota Planning','Published');
 }
 
@@ -21855,6 +22253,20 @@ const PAYROLL_MONTH_NAMES=['January','February','March','April','May','June','Ju
 // hardcoded options — "June/May/April 2024" — with no way to select or
 // even label a current-dated run at all. Builds the current month plus the
 // previous 5 as real, selectable options instead.
+// Period dropdowns that shipped with a fixed "June 2024" option list: rebuild
+// them as the last 12 real months so nothing points at a stale period.
+function populateStaticPeriodSelects(){
+  const now=new Date();
+  const periods=[];
+  for(let i=0;i<12;i++){const d=new Date(now.getFullYear(),now.getMonth()-i,1);periods.push(`${PAYROLL_MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`);}
+  document.querySelectorAll('select').forEach(sel=>{
+    if(sel.id==='pay-period'||sel.dataset.periodFilled)return;
+    if(!/^June 2024$/.test((sel.options[0]?.textContent||'').trim()))return;
+    sel.dataset.periodFilled='1';
+    sel.innerHTML=periods.map(p=>`<option>${p}</option>`).join('');
+  });
+}
+
 function populatePayrollPeriods(){
   const sel=document.getElementById('pay-period');
   if(!sel)return;
@@ -21892,6 +22304,7 @@ function onPayrollPeriodChange(){
     setVal('pay-je-ref-display',`PAY-JE-${year}${mm}`);
     const lastDay=new Date(year,monthIdx+1,0).getDate();
     setVal('pay-posting-date',`${year}-${mm}-${String(lastDay).padStart(2,'0')}`);
+    setVal('pay-date',`${year}-${mm}-${String(lastDay).padStart(2,'0')}`);
   }
 }
 
@@ -21913,6 +22326,7 @@ function recalcPayroll(){
     if(netCell)netCell.textContent=money(net);
   });
 
+  populatePayrollAdjustmentEmployees();
   const grossEl=document.getElementById('pay-stat-gross');
   const dedEl=document.getElementById('pay-stat-ded');
   const netEl=document.getElementById('pay-stat-net');
@@ -21958,10 +22372,47 @@ function payrollPeriodToYearMonth(label){
   return `${match[2]}-${String(monthIndex+1).padStart(2,'0')}`;
 }
 
+async function _payrollRunForPeriod(yearMonth){
+  const runs=await moduleApi('/payroll/runs');
+  return (runs||[]).find(r=>r.period===yearMonth&&!r.branch_id)||(runs||[]).find(r=>r.period===yearMonth)||null;
+}
+
 async function approvePayroll(){
   const blocked=getPayrollRows().some(row=>row.dataset.wps!=='ok');
   if(blocked){
     toast('Resolve WPS exceptions before final approval','warn');
+  }
+  const period=document.getElementById('pay-period')?.value||'';
+  const preparedBy=document.getElementById('pay-prepared-by')?.value.trim()||'';
+  const payDate=document.getElementById('pay-date')?.value||'';
+  const yearMonth=payrollPeriodToYearMonth(period);
+  if(!yearMonth){
+    toast(`Payroll NOT approved — could not read the payroll period ("${period}")`,'err');
+    return;
+  }
+  // The server is the source of truth: generate the run (or reuse the existing
+  // draft), then approve it there. Approval is what drains loan/advance
+  // balances and what makes payslips visible to employees.
+  try{
+    try{
+      await moduleApi('/payroll/generate',{method:'POST',body:{period:yearMonth}});
+    }catch(err){
+      if(!/already exists/i.test(err.message||''))throw err;
+    }
+    let run=await _payrollRunForPeriod(yearMonth);
+    if(!run)throw new Error('Payroll run not found after generation');
+    const gridCount=getPayrollRows().filter(r=>r.dataset.employeeId).length;
+    if(run.status==='draft'&&gridCount&&run.items.length!==gridCount){
+      // Draft was generated before roster/adjustment changes — it has no side effects, so rebuild it.
+      await moduleApi(`/payroll/runs/${run.id}`,{method:'DELETE'});
+      await moduleApi('/payroll/generate',{method:'POST',body:{period:yearMonth}});
+      run=await _payrollRunForPeriod(yearMonth);
+    }
+    if(run.status==='draft')run=await moduleApi(`/payroll/runs/${run.id}/approve`,{method:'POST'});
+  }catch(err){
+    toast(`Payroll NOT approved — ${err.message}. Fix the issue and try again.`,'err');
+    audit('Payroll approval failed',period,err.message);
+    return;
   }
   document.querySelectorAll('#payroll-tbody .pay-status').forEach(status=>{
     if(status.textContent!=='Review'){
@@ -21969,51 +22420,45 @@ async function approvePayroll(){
       status.textContent='Approved';
     }
   });
+  const prep=document.getElementById('pay-prep-status'),prepTime=document.getElementById('pay-prep-time');
+  if(prep){prep.className='b b-g';prep.textContent='Done';}
+  if(prepTime)prepTime.textContent=new Date().toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
   const fin=document.getElementById('pay-fin-status');
   const mgmt=document.getElementById('pay-mgmt-status');
   if(fin){fin.className=blocked?'b b-a':'b b-g';fin.textContent=blocked?'Review':'Approved';}
   if(mgmt){mgmt.className=blocked?'b b-a':'b b-g';mgmt.textContent=blocked?'Conditional':'Approved';}
-  const period=document.getElementById('pay-period')?.value||'';
-  const preparedBy=document.getElementById('pay-prepared-by')?.value.trim()||'';
-  const payDate=document.getElementById('pay-date')?.value||'';
   saveServer('payrollRuns',{id:`PAY-${Date.now()}`,period,prepared_by:preparedBy,payment_date:payDate,status:blocked?'Conditional':'Approved',approved_at:new Date().toISOString()});
-  // This UI's own gross/net/deductions numbers (basic + this screen's
-  // Quick Adjustments) previously never reached the real PayrollRun/
-  // PayrollItem tables at all — only this generic payrollRuns JSON blob,
-  // which nothing else reads. ESS's Payslips tab and the P&L's payroll
-  // expense line both query only the real tables, so approving payroll
-  // here produced no payslips and didn't reduce reported net profit.
-  // POST /payroll/generate uses its own, simpler calculation (basic
-  // salary only, no allowances/OT/deductions yet — see its own comment) —
-  // deliberately not attempting to reconcile the two calculations here,
-  // just making sure the real tables get populated so ESS/P&L have
-  // something. A 409 means a run already exists for this period, which is
-  // fine (idempotent from this button's perspective, not an error).
-  const yearMonth=payrollPeriodToYearMonth(period);
-  if(yearMonth){
-    try{
-      await moduleApi('/payroll/generate',{method:'POST',body:{period:yearMonth}});
-    }catch(err){
-      if(!/already exists/i.test(err.message||'')){
-        toast(`Payroll approved on screen, but syncing to payslips/reports failed: ${err.message}`,'warn');
-      }
-    }
-  }
   toast(blocked?'Payroll conditionally approved with WPS hold':'Payroll approved ✓',blocked?'warn':'ok');
   audit('Approved payroll',period,blocked?'Conditional':'Approved');
 }
 
+function populatePayrollAdjustmentEmployees(){
+  const sel=document.getElementById('pay-adj-emp');
+  if(!sel)return;
+  const rows=getPayrollRows().filter(r=>r.dataset.employeeId);
+  const key=rows.map(r=>r.dataset.employeeId).join('|');
+  if(sel.dataset.filled===key)return;
+  sel.dataset.filled=key;
+  sel.innerHTML='<option value="">— Select Employee —</option>'+rows.map(r=>{
+    const name=getPayrollRowInfo(r).name;
+    return `<option value="${escapeHtml(r.dataset.employeeId)}">${escapeHtml(name)}</option>`;
+  }).join('');
+}
+
 function addPayrollAdjustment(){
-  const employee=document.getElementById('pay-adj-emp')?.value.trim()||'';
+  const sel=document.getElementById('pay-adj-emp');
+  const employeeId=sel?.value||'';
+  const employee=employeeId?(sel.selectedOptions[0]?.textContent||'').trim():'';
   const type=document.getElementById('pay-adj-type')?.value.trim()||'';
   const amount=document.getElementById('pay-adj-amount')?.value.trim()||'';
   const reason=document.getElementById('pay-adj-reason')?.value.trim()||'';
-  if(!employee||!amount){toast('Employee and amount are required','warn');return;}
-  const record={id:`ADJ-${Date.now()}`,employee,type,amount:Number(amount)||0,reason,period:document.getElementById('pay-period')?.value||'',created:new Date().toISOString()};
+  if(!employeeId||!(Number(amount)>0)){toast('Select an employee and enter an amount above 0','warn');return;}
+  const period=document.getElementById('pay-period')?.value||'';
+  const record={id:`ADJ-${Date.now()}`,employee,employee_id:employeeId,type,amount:Number(amount)||0,reason,period,period_ym:payrollPeriodToYearMonth(period)||'',created:new Date().toISOString()};
   saveServer('payrollAdjustments',record);
   document.getElementById('pay-adj-amount').value='';
   document.getElementById('pay-adj-reason').value='';
-  toast('Payroll adjustment added ✓','ok');
+  toast('Adjustment saved — it is included when the payroll run is generated','ok');
   audit('Payroll adjustment',`${employee} ${type} ${amount}`,'Saved');
 }
 
@@ -22638,7 +23083,7 @@ async function testBiometricDevice(id,btn){
 }
 
 async function deleteBiometricDevice(id,btn){
-  if(!confirm('Remove this device?'))return;
+  if(!(await appConfirm({title:'Remove Device',message:'Remove this device?',okText:'Remove'})))return;
   try{
     await moduleApi(`/attendance/devices/${encodeURIComponent(id)}`,{method:'DELETE'});
     btn.closest('tr').remove();
@@ -22752,21 +23197,8 @@ async function loadAttendanceTrend(){
       if(sub)sub.textContent='No data';
       return;
     }
-    const chart=_renderAttendanceBarChart(dates,counts,{width:400,height:80,showLabels:true,showAvgLine:true});
-    // Legend — the muted/tracked color split, the weekend shading, and the
-    // avg line previously had no key explaining what any of them meant.
-    // "Before tracking began" only applies (and is only shown) when the
-    // chart actually contains a muted stretch.
-    const legendItems=[
-      ['var(--accent)','Present'],
-      ...(chart.firstActiveIdx>0?[['var(--text3)','Before tracking began',0.4]]:[]),
-    ];
-    const swatches=legendItems.map(([color,label,op])=>
-      `<span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:${color};opacity:${op??1};display:inline-block"></span>${label}</span>`
-    ).join('');
-    const avgKey=chart.avg>0?`<span style="display:flex;align-items:center;gap:5px"><span style="width:12px;border-top:1.5px dashed var(--amber);display:inline-block"></span>Average</span>`:'';
-    const legend=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;padding:0 4px;font-size:10.5px;color:var(--text3)">${swatches}${avgKey}<span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:var(--text3);opacity:.14;display:inline-block"></span>Weekend</span></div>`;
-    container.innerHTML=chart.svg+legend;
+    const chart=_renderAttendanceTrendChart(dates,counts);
+    container.innerHTML=chart.html;
     if(sub)sub.textContent=chart.subText;
     // Also update dashboard Attendance Trend card
     _updateDashboardAttTrend(dates,counts);
@@ -23805,7 +24237,7 @@ async function deleteTaskFromModal(){
 async function deleteTaskDirect(id){
   const t=_taskListCache.find(x=>x.id===id);
   if(!t)return;
-  if(!confirm(`Delete task "${t.title||'this task'}"?`))return;
+  if(!(await appConfirm({title:'Delete Task',message:`Delete task "${t.title||'this task'}"?`,okText:'Delete'})))return;
   await deleteServer('tasks',{id});
   _taskListCache=_taskListCache.filter(x=>x.id!==id);
   renderTaskBoard();
@@ -23929,43 +24361,32 @@ function _sifEmployeeRecord(row){
   };
 }
 
-function generateSIF(){
+async function generateSIF(){
   const valid=validateWPS();
-  const molId=(document.getElementById('wps-mol-id')?.value||'MOL-0000000').trim();
+  const molId=(document.getElementById('wps-mol-id')?.value||'').trim();
+  if(!molId){toast('Enter the employer MOL ID before generating the SIF','warn');return;}
   const fileSeq=(document.getElementById('wps-file-seq')?.value||'SIF-001').trim();
-  const salaryMonth=(document.getElementById('wps-salary-month')?.value||'').trim();
-  const payDate=document.getElementById('pay-date')?.value||new Date().toISOString().split('T')[0];
-  const period=document.getElementById('pay-period')?.value||salaryMonth;
-  const daysWorked=_sifDaysInPeriod(period);
-  const rows=getPayrollRows().filter(r=>r.dataset.wps==='ok');
-  if(!rows.length){toast('No validated employees — run payroll first','warn');return;}
-
-  // Build SIF (UAE CBUAE Wage Protection System format)
-  const today=new Date().toISOString().split('T')[0].replace(/-/g,'');
-  const transferDate=payDate.replace(/-/g,'');
-  const lines=[];
-  // EHR — Employer Header Record
-  lines.push(`EHR|${molId}|${today}|${period}|${fileSeq}|${rows.length}|${rows.reduce((s,r)=>s+getPayrollRowInfo(r).net,0).toFixed(2)}`);
-  // SCR — Salary Credit Records
-  rows.forEach(row=>{
-    const info=getPayrollRowInfo(row);
-    const {empId,iban,bank}=_sifEmployeeRecord(row);
-    lines.push(`SCR|${empId}|${bank}|${transferDate}|${empId}|${info.name}|${daysWorked}|${info.basic.toFixed(2)}|${(info.allow+info.ot).toFixed(2)}|${info.ded.toFixed(2)}|${info.net.toFixed(2)}|IBAN|${iban}`);
-  });
-  // ETR — Employer Trailer Record
-  const totNet=rows.reduce((s,r)=>s+getPayrollRowInfo(r).net,0);
-  const totBasic=rows.reduce((s,r)=>s+getPayrollRowInfo(r).basic,0);
-  lines.push(`ETR|${rows.length}|${totBasic.toFixed(2)}|0.00|0.00|${totNet.toFixed(2)}`);
-
-  const blob=new Blob([lines.join('\n')],{type:'text/plain'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download=`${fileSeq}.sif`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  saveServer('payrollRuns',{id:`SIF-${Date.now()}`,period,type:'SIF',file_seq:fileSeq,mol_id:molId,records:rows.length,total_net:totNet,generated_at:new Date().toISOString()});
+  const payDate=document.getElementById('pay-date')?.value||'';
+  const period=document.getElementById('pay-period')?.value||'';
+  const yearMonth=payrollPeriodToYearMonth(period);
+  if(!yearMonth){toast('Select a valid payroll period first','warn');return;}
+  // The bank file comes from the stored payroll run, never from editable grid cells.
+  let run=null;
+  try{run=await _payrollRunForPeriod(yearMonth);}catch(err){toast(err.message||'Could not load payroll runs','err');return;}
+  if(!run||run.status!=='approved'){toast('Approve payroll for this period first — the SIF is generated from the approved run','warn');return;}
+  try{
+    const qs=new URLSearchParams({mol_id:molId,file_seq:fileSeq,pay_date:payDate});
+    const response=await authenticatedFetch(`${apiBaseUrl()}/payroll/runs/${run.id}/sif?${qs}`,{method:'GET'});
+    if(!response.ok){let d='';try{d=(await response.json()).detail||'';}catch{}throw new Error(d||`Request failed (${response.status})`);}
+    const blob=await response.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=`${fileSeq}.sif`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }catch(err){toast(`SIF download failed: ${err.message}`,'err');return;}
   audit('Generated WPS SIF file',fileSeq,'Downloaded');
-  toast(valid?'SIF file downloaded ✓':'SIF draft downloaded (some employees excluded)','ok');
+  toast(valid?'SIF file downloaded ✓':'SIF downloaded (employees without an IBAN are excluded)','ok');
 }
 
 function getPayrollRowInfo(row){
@@ -23981,6 +24402,9 @@ function getPayrollRowInfo(row){
 function renderPayslipPreview(info){
   const body=document.getElementById('payslip-body');
   if(!body)return;
+  const pc=document.getElementById('payslip-company'),pp=document.getElementById('payslip-period');
+  if(pc)pc.textContent=(typeof currentCompany!=='undefined'&&currentCompany?.name)||'Payslip';
+  if(pp)pp.textContent=`${document.getElementById('pay-period')?.value||''} Payslip`.trim();
   body.innerHTML=`
     <div class="flx-b"><span>Employee</span><strong style="color:var(--text)">${escapeHtml(info.name)}</strong></div>
     <div class="flx-b"><span>Total Salary</span><span class="mono">${money(info.basic)}</span></div>
@@ -24109,12 +24533,12 @@ function renderPeriodLockPanel(){
   if(!wrap)return;
   const now=new Date();
   const months=Array.from({length:12},(_,i)=>{
-    const d=new Date(now.getFullYear(),now.getMonth()-6+i,1);
-    return d.toISOString().slice(0,7);
+    const idx=now.getFullYear()*12+now.getMonth()-6+i;
+    return `${Math.floor(idx/12)}-${String(idx%12+1).padStart(2,'0')}`;
   });
   wrap.innerHTML=months.map(m=>{
     const locked=_lockedPeriods.has(m);
-    const label=new Date(m+'-01').toLocaleString('en-AE',{month:'short',year:'numeric'});
+    const label=new Date(m+'-15T12:00:00Z').toLocaleString('en-AE',{month:'short',year:'numeric',timeZone:'UTC'});
     return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
       <span>${label} <span class="b ${locked?'b-r':'b-g'}" style="margin-left:8px">${locked?'Locked':'Open'}</span></span>
       <button class="btn ${locked?'btn-g':'btn-r'} btn-sm" onclick="togglePeriodLock('${m}')">${locked?'Unlock':'Lock'}</button>
@@ -24228,7 +24652,7 @@ function exportVat201Pdf(){
   <div style="text-align:center;margin-bottom:8px"><strong>FEDERAL TAX AUTHORITY</strong><br>United Arab Emirates<br><em>VAT Return Form 201</em></div>
   <table><tr><td><strong>Taxpayer Name</strong></td><td>${company.name||'—'}</td><td><strong>TRN</strong></td><td class="mono">${company.trn||'—'}</td></tr>
   <tr><td><strong>Tax Period</strong></td><td>${new Date().toLocaleString('en-AE',{month:'long',year:'numeric'})}</td><td><strong>Filing Date</strong></td><td>${new Date().toLocaleDateString('en-AE')}</td></tr></table>
-  <table><thead><tr><th>Box</th><th>Description</th><th class="mono">Amount (AED)</th><th class="mono">VAT Amount (AED)</th></tr></thead><tbody>
+  <table><thead><tr><th>Box</th><th>Description</th><th class="mono">Amount (${currentCurrency()})</th><th class="mono">VAT Amount (${currentCurrency()})</th></tr></thead><tbody>
   <tr class="section"><td colspan="4">PART A — OUTPUT TAX</td></tr>
   <tr><td>1</td><td>Standard rated supplies (5%)</td><td class="mono">${ra(out.standard_rated)}</td><td class="mono">${ra(out.output_vat)}</td></tr>
   <tr><td>2</td><td>Zero-rated supplies</td><td class="mono">0.00</td><td class="mono">0.00</td></tr>
@@ -24272,7 +24696,11 @@ function calcCorporateTax(){
   let note='';
   if(taxableIncome<=threshold){
     taxLiability=0;
-    note='Small Business Relief applies (≤ AED 375,000)';
+    // Not Small Business Relief — that's a separate, elective relief
+    // (revenue <= AED 3,000,000, must be actively elected). This is the
+    // standard 0% CT bracket every company gets automatically on the
+    // first AED 375,000 of taxable income.
+    note='0% tax bracket applies (taxable income ≤ AED 375,000)';
   }else{
     taxLiability=(taxableIncome-threshold)*rate;
     note=`9% on AED ${(taxableIncome-threshold).toLocaleString('en-AE')} above threshold`;
@@ -24810,13 +25238,19 @@ function removeDuplicateTablePagers(scope=document){
 }
 
 function tableControlsTemplate(){
+  // data-i18n(-ph) here is the single highest-leverage translation fix in
+  // the app -- every enhanced table across every page (hundreds of them)
+  // shares this one template, so translating it once retroactively covers
+  // all of them instead of needing a per-page fix. See applyAppLang()'s own
+  // data-i18n-ph handling (translates .placeholder, not .textContent, since
+  // an <input> has no text node for the generic data-i18n loop to set).
   return `
     <div class="tbl-search-wrap">
-      <input class="fi tbl-search" placeholder="Search table">
+      <input class="fi tbl-search" placeholder="Search table" data-i18n-ph="tbl_search">
       <span class="b b-gray tbl-info">0 records</span>
     </div>
     <div class="tbl-pager">
-      <label class="tbl-size-label">Rows to display
+      <label class="tbl-size-label"><span data-i18n="tbl_rows_to_display">Rows to display</span>
         <select class="fi tbl-size" aria-label="Rows to display">
           <option value="5">5 rows</option>
           <option value="10" selected>10 rows</option>
@@ -24826,9 +25260,9 @@ function tableControlsTemplate(){
           <option value="all">All rows</option>
         </select>
       </label>
-      <button class="btn btn-g btn-sm tbl-prev" type="button">Prev</button>
-      <button class="btn btn-g btn-sm tbl-next" type="button">Next</button>
-      <button class="btn btn-g btn-sm tbl-export" type="button">Export CSV</button>
+      <button class="btn btn-g btn-sm tbl-prev" type="button" data-i18n="tbl_prev">Prev</button>
+      <button class="btn btn-g btn-sm tbl-next" type="button" data-i18n="tbl_next">Next</button>
+      <button class="btn btn-g btn-sm tbl-export" type="button" data-i18n="tbl_export">Export CSV</button>
     </div>
   `;
 }
@@ -24864,6 +25298,12 @@ function enhanceTable(table){
   const controls=document.createElement('div');
   controls.className='tbl-tools';
   controls.innerHTML=tableControlsTemplate();
+  // Tables enhance lazily (first time their page is actually visited), so a
+  // table enhanced while already in Arabic mode would otherwise bake in the
+  // template's default English text until the next language toggle re-runs
+  // the data-i18n loop. Re-applying here (cheap -- enhancement isn't a hot
+  // per-frame path) keeps it correct from the moment it's inserted.
+  if(_appLang==='ar')applyAppLang(_appLang);
   const scroll=document.createElement('div');
   scroll.className='tbl-scroll';
 
@@ -24896,7 +25336,7 @@ function enhanceTable(table){
   state.input.addEventListener('input',()=>{
     state.query=state.input.value.trim().toLowerCase();
     state.page=1;
-    scheduleTableRefresh(table);
+    refreshEnhancedTable(table);
   });
   state.size.addEventListener('change',()=>{
     state.pageSize=state.size.value==='all'?'all':Number(state.size.value);
@@ -25981,8 +26421,7 @@ function saveSettings(message='Settings saved'){
 }
 
 function testIntegration(name){
-  toast('Testing '+name+' integration...','info');
-  setTimeout(()=>toast(name+' integration connected ?','ok'),900);
+  toast(name+' test is not available yet — no delivery channel is configured','warn');
 }
 
 function rotateApiKey(){
@@ -26774,7 +27213,24 @@ const _LANG={
     dash_uae_federal:'UAE Federal',dash_vat_position:'VAT Position',
     dash_quick_actions:'Quick Actions',dash_top_customers:'Top Customers',
     qa_invoice:'Invoice',qa_purchase:'Purchase',qa_quote:'Quote',
-    qa_ledger:'Ledger',qa_reports:'Reports',qa_alerts:'Alerts'
+    qa_ledger:'Ledger',qa_reports:'Reports',qa_alerts:'Alerts',
+    tbl_search:'Search table',tbl_rows_to_display:'Rows to display',tbl_prev:'Prev',tbl_next:'Next',tbl_export:'Export CSV',
+    repgrp_dashboard:'Dashboard',repgrp_accounting:'Accounting Reports',repgrp_bi:'Business Intelligence',repgrp_compliance:'UAE Compliance',
+    repnav_kpi:'KPI Dashboard',repnav_health:'AI Financial Health',repnav_cfo:'CFO Recommendations',
+    repnav_pl:'Profit & Loss',repnav_bs:'Balance Sheet',repnav_cf:'Cash Flow',repnav_tb:'Trial Balance',
+    repnav_gl:'General Ledger',repnav_cl:'Customer Ledger',repnav_sl:'Supplier Ledger',
+    repnav_ar:'AR Aging',repnav_ap:'AP Aging',repnav_vat:'VAT Reports',repnav_inv:'Inventory Reports',
+    repnav_bank:'Bank Reconciliation',repnav_assets:'Fixed Assets',
+    repnav_rev:'Revenue Intelligence',repnav_profit:'Profitability Analytics',repnav_wc:'Working Capital',repnav_growth:'Growth Trends',
+    repnav_vat201:'VAT 201',repnav_corp:'Corporate Tax',repnav_einv:'E-Invoicing Readiness',
+    tab_upload_invoices:'Upload Invoices',tab_ai_extraction:'AI Extraction',tab_validation:'Validation',tab_invoices:'Invoices',
+    tab_add_sales:'Add Sales',tab_customers:'Customers',tab_upload_documents:'Upload Documents',
+    tab_add_purchase:'Add Purchase',tab_purchase_records:'Purchase Records',tab_lpo:'Local Purchase Orders',
+    tab_fpo:'Foreign Purchase Orders',tab_vendors:'Vendors',tab_purchase_settings:'Purchase Settings',
+    tab_bank_accounts:'Bank Accounts',tab_transactions:'Transactions',tab_reconciliation:'Reconciliation',
+    bk_total_balance:'Total Balance',bk_recorded_inflow:'Recorded Inflow',bk_recorded_outflow:'Recorded Outflow',
+    bk_registered_accounts:'Registered Bank Accounts',bk_add_account:'+ Add Account',
+    th_bank:'Bank',th_account_name:'Account Name',th_iban:'IBAN',th_currency:'Currency',th_type:'Type',th_balance:'Balance',th_status:'Status'
   },
   ar:{
     greeting_am:'صباح الخير',greeting_pm:'مساء الخير',greeting_eve:'مساء الخير',
@@ -26796,7 +27252,24 @@ const _LANG={
     dash_uae_federal:'الإمارات الاتحادية',dash_vat_position:'وضع ضريبة القيمة المضافة',
     dash_quick_actions:'الإجراءات السريعة',dash_top_customers:'أهم العملاء',
     qa_invoice:'فاتورة',qa_purchase:'مشتريات',qa_quote:'عرض سعر',
-    qa_ledger:'دفتر الأستاذ',qa_reports:'التقارير',qa_alerts:'التنبيهات'
+    qa_ledger:'دفتر الأستاذ',qa_reports:'التقارير',qa_alerts:'التنبيهات',
+    tbl_search:'بحث في الجدول',tbl_rows_to_display:'عدد الصفوف المعروضة',tbl_prev:'السابق',tbl_next:'التالي',tbl_export:'تصدير CSV',
+    repgrp_dashboard:'لوحة التحكم',repgrp_accounting:'التقارير المحاسبية',repgrp_bi:'ذكاء الأعمال',repgrp_compliance:'الامتثال الإماراتي',
+    repnav_kpi:'لوحة مؤشرات الأداء',repnav_health:'الصحة المالية بالذكاء الاصطناعي',repnav_cfo:'توصيات المدير المالي',
+    repnav_pl:'الأرباح والخسائر',repnav_bs:'الميزانية العمومية',repnav_cf:'التدفق النقدي',repnav_tb:'ميزان المراجعة',
+    repnav_gl:'دفتر الأستاذ العام',repnav_cl:'دفتر أستاذ العملاء',repnav_sl:'دفتر أستاذ الموردين',
+    repnav_ar:'أعمار الذمم المدينة',repnav_ap:'أعمار الذمم الدائنة',repnav_vat:'تقارير ضريبة القيمة المضافة',repnav_inv:'تقارير المخزون',
+    repnav_bank:'تسوية البنك',repnav_assets:'الأصول الثابتة',
+    repnav_rev:'ذكاء الإيرادات',repnav_profit:'تحليلات الربحية',repnav_wc:'رأس المال العامل',repnav_growth:'اتجاهات النمو',
+    repnav_vat201:'إقرار ضريبة القيمة المضافة 201',repnav_corp:'ضريبة الشركات',repnav_einv:'جاهزية الفوترة الإلكترونية',
+    tab_upload_invoices:'رفع الفواتير',tab_ai_extraction:'الاستخراج بالذكاء الاصطناعي',tab_validation:'التحقق',tab_invoices:'الفواتير',
+    tab_add_sales:'إضافة مبيعات',tab_customers:'العملاء',tab_upload_documents:'رفع المستندات',
+    tab_add_purchase:'إضافة مشتريات',tab_purchase_records:'سجلات المشتريات',tab_lpo:'أوامر الشراء المحلية',
+    tab_fpo:'أوامر الشراء الخارجية',tab_vendors:'الموردون',tab_purchase_settings:'إعدادات المشتريات',
+    tab_bank_accounts:'الحسابات البنكية',tab_transactions:'المعاملات',tab_reconciliation:'التسوية',
+    bk_total_balance:'إجمالي الرصيد',bk_recorded_inflow:'التدفق الداخل المسجل',bk_recorded_outflow:'التدفق الخارج المسجل',
+    bk_registered_accounts:'الحسابات البنكية المسجلة',bk_add_account:'+ إضافة حساب',
+    th_bank:'البنك',th_account_name:'اسم الحساب',th_iban:'رقم الآيبان',th_currency:'العملة',th_type:'النوع',th_balance:'الرصيد',th_status:'الحالة'
   }
 };
 
@@ -26825,6 +27298,13 @@ function applyAppLang(lang){
   document.querySelectorAll('[data-i18n]').forEach(el=>{
     const key=el.dataset.i18n;
     if(t[key]!==undefined)el.textContent=t[key];
+  });
+  // Same, for an <input>'s placeholder -- data-i18n above sets .textContent,
+  // which an <input> has none of. Every enhanced table's search box uses
+  // this (tableControlsTemplate()), so this one loop covers all of them.
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{
+    const key=el.dataset.i18nPh;
+    if(t[key]!==undefined)el.placeholder=t[key];
   });
   // Refresh active page title / subtitle
   const activePage=(document.querySelector('.page.on')?.id||'').replace(/^page-/,'')||'dashboard';
@@ -26916,7 +27396,14 @@ function initApp(){
   if(!['employee','branch'].includes(localStorage.getItem('taxflow_principal_kind'))){
     syncCompanyFromDatabase();
     renderBusinessLocationRows();
-    loadUsersIntoTable();
+    // loadUsersIntoTable() used to run unconditionally here too, duplicating
+    // a GET /app-data/users request and a full #user-tbody re-render that
+    // hydrateFromServer()'s own bootstrap (data.users, below) already does
+    // on every load. Left as a lazy on-demand fetch instead -- see the
+    // `if(target==='set-users')loadUsersIntoTable();` tab-open handler,
+    // which already re-fetches fresh data every time Settings > Users &
+    // Roles is actually opened, so nothing here loses freshness by removing
+    // the redundant unconditional call.
   }
   enhancePageTables('page-dashboard');
   syncDashboardFromDatabase().catch(err=>console.warn('Dashboard sync failed during init:',err));
@@ -26965,4 +27452,193 @@ if(!localStorage.getItem('taxflow_token')){
     applyMainDashboardPermissionNav().catch(()=>{});
   }
   initApp();
+}
+
+
+// ── Inventory stock adjustments (inventory.py adjustment-approvals) ──
+async function saveNegativeStockSetting(block){
+  try{
+    const r=await authenticatedFetch(`${apiBaseUrl()}/app-data?action=save`,{method:'POST',body:JSON.stringify({collection:'inventorySettings',record:{key:'config',allow_negative_stock:!block}})});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||'Could not save setting');
+    toast(block?'Sales are now blocked when stock is insufficient':'Negative stock is allowed again','ok');
+  }catch(err){toast(err.message,'err');const c=document.getElementById('inv-block-negative');if(c)c.checked=!block;}
+}
+
+async function loadStockAdjustments(){
+  const body=document.getElementById('inv-adjust-tbody');
+  if(!body)return;
+  try{
+    const r=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/inventorySettings?limit=5`);
+    if(r.ok){const j=await r.json();const rows=Array.isArray(j)?j:(j.records||j.items||[]);const cfg=rows.map(x=>x.payload||x).find(x=>x.key==='config');const c=document.getElementById('inv-block-negative');if(c)c.checked=!!cfg&&cfg.allow_negative_stock===false;}
+  }catch(_e){}
+  try{
+    const rows=await moduleApi('/inventory/adjustment-approvals');
+    if(!rows.length){body.innerHTML='<tr><td colspan="5" style="color:var(--text3);text-align:center">No stock adjustments yet.</td></tr>';return;}
+    body.innerHTML=rows.map(r=>{
+      const pending=r.status==='pending';
+      const actions=pending
+        ?`<button class="btn btn-p btn-sm" onclick="decideStockAdjustment('${escapeHtml(r.id)}','approve')">Approve</button> <button class="btn btn-g btn-sm" onclick="decideStockAdjustment('${escapeHtml(r.id)}','reject')">Reject</button>`
+        :'—';
+      return `<tr><td class="mono">${escapeHtml(r.item_code)}</td><td class="mono" style="text-align:right">${Number(r.quantity_delta)>0?'+':''}${Number(r.quantity_delta)}</td><td>${escapeHtml(r.reason)}</td><td>${escapeHtml(r.status)}</td><td>${actions}</td></tr>`;
+    }).join('');
+  }catch(err){
+    body.innerHTML=`<tr><td colspan="5" style="color:var(--red);text-align:center">${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+async function newStockAdjustment(){
+  const code=(window.prompt('Item code (SKU) to adjust:')||'').trim();
+  if(!code)return;
+  const qty=Number(window.prompt('Quantity change (use a negative number to remove stock):'));
+  if(!qty||!Number.isFinite(qty)){toast('Enter a non-zero quantity change','warn');return;}
+  const reason=(window.prompt('Reason (e.g. cycle count, damaged):')||'').trim();
+  if(!reason){toast('A reason is required','warn');return;}
+  try{
+    await moduleApi('/inventory/adjustment-approvals',{method:'POST',body:{item_code:code,quantity_delta:qty,reason}});
+    toast('Adjustment submitted for approval','ok');
+    loadStockAdjustments();
+  }catch(err){toast(err.message,'err');}
+}
+
+async function decideStockAdjustment(id,action){
+  try{
+    await moduleApi(`/inventory/adjustment-approvals/${encodeURIComponent(id)}/${action}`,{method:'POST'});
+    toast(action==='approve'?'Adjustment approved — stock updated':'Adjustment rejected','ok');
+    loadStockAdjustments();
+    if(typeof refreshStockLevels==='function')try{refreshStockLevels();}catch(_e){}
+  }catch(err){toast(err.message,'err');}
+}
+
+
+async function postAssetDepreciation(){
+  const code=(window.prompt('Asset code to depreciate:')||'').trim();
+  if(!code)return;
+  try{
+    const assets=await moduleApi(_CORPORATE_ENDPOINTS.fixedAssets);
+    const asset=assets.find(a=>String(a.asset_code).toLowerCase()===code.toLowerCase());
+    if(!asset){toast('No asset with that code','warn');return;}
+    const amount=Number(window.prompt(`Depreciation amount (${currentCurrency()}) for ${asset.asset_name}:`));
+    if(!(amount>0)){toast('Enter an amount above 0','warn');return;}
+    await moduleApi(`${_CORPORATE_ENDPOINTS.fixedAssets}/${asset.id}/depreciate`,{method:'POST',body:{amount}});
+    toast('Depreciation posted to the ledger','ok');
+    renderCorporateAssets(await moduleApi(_CORPORATE_ENDPOINTS.fixedAssets));
+  }catch(err){toast(err.message,'err');}
+}
+
+async function postAccrualRelease(){
+  const ref=(window.prompt('Accrual / prepayment reference to release:')||'').trim();
+  if(!ref)return;
+  try{
+    const rows=await moduleApi(_CORPORATE_ENDPOINTS.accrualsPrepayments);
+    const rec=rows.find(r=>String(r.reference).toLowerCase()===ref.toLowerCase());
+    if(!rec){toast('No record with that reference','warn');return;}
+    const entered=window.prompt(`Amount to release (blank = monthly ${rec.monthly_amount}):`,'');
+    const body=entered&&Number(entered)>0?{amount:Number(entered)}:{};
+    const res=await moduleApi(`${_CORPORATE_ENDPOINTS.accrualsPrepayments}/${rec.id}/release`,{method:'POST',body});
+    toast(`Posted. Released ${res.released} of ${res.total}`,'ok');
+  }catch(err){toast(err.message,'err');}
+}
+
+
+let _otEligibilityRows=[];
+async function loadOtEligibility(){
+  const body=document.getElementById('ot-elig-tbody');
+  if(!body)return;
+  const from=document.getElementById('ot-elig-from')?.value,to=document.getElementById('ot-elig-to')?.value;
+  const qs=new URLSearchParams();if(from)qs.set('date_from',from);if(to)qs.set('date_to',to);
+  body.innerHTML='<tr><td colspan="9" style="color:var(--text3);text-align:center">Loading…</td></tr>';
+  try{
+    const data=await moduleApi(`/attendance/overtime-eligibility?${qs}`);
+    _otEligibilityRows=data.rows||[];
+    const f=document.getElementById('ot-elig-from'),t=document.getElementById('ot-elig-to');
+    if(f&&!f.value)f.value=data.from;if(t&&!t.value)t.value=data.to;
+    const note=document.getElementById('ot-elig-note');
+    if(note)note.textContent=data.cooloff_minutes?`Cool-off: first ${data.cooloff_minutes} min past the standard day don't count`:'No cool-off configured';
+    if(!_otEligibilityRows.length){body.innerHTML='<tr><td colspan="9" style="color:var(--text3);text-align:center">No employee worked past the standard day in this range.</td></tr>';return;}
+    body.innerHTML=_otEligibilityRows.map((r,i)=>{
+      const cls=!r.eligible?'b-r':r.eligibility.startsWith('Requested')?'b-g':'b-a';
+      const act=r.eligible&&!r.request_id?`<button class="btn btn-p btn-sm" onclick="requestOtFromAttendance(${i})">Request OT</button>`:'';
+      return `<tr><td>${escapeHtml(r.employee)}<div class="card-sub">${escapeHtml(r.employee_no)}${r.department?' · '+escapeHtml(r.department):''}</div></td><td>${escapeHtml(r.date)}${r.day_type==='weekend'?' <span class="b b-a">Weekend</span>':''}</td><td class="mono">${escapeHtml(r.clock_in||'—')}</td><td class="mono">${escapeHtml(r.clock_out||'—')}</td><td class="mono">${escapeHtml(r.worked)}</td><td class="mono">${escapeHtml(r.extra)}</td><td class="mono">${escapeHtml(r.eligible_ot)}</td><td><span class="b ${cls}">${escapeHtml(r.eligibility)}</span></td><td>${act}</td></tr>`;
+    }).join('');
+  }catch(err){body.innerHTML=`<tr><td colspan="9" style="color:var(--red);text-align:center">${escapeHtml(err.message||'Could not load')}</td></tr>`;}
+}
+
+function requestOtFromAttendance(i){
+  const r=_otEligibilityRows[i];
+  if(!r)return;
+  const record={id:`OT-${Date.now()}`,employee:r.employee,employee_id:r.employee_id,department:r.department||'',date:r.date,shift:`${r.standard} h`,login:r.clock_in||'',logout:r.clock_out||'',ot_hours:String(r.eligible_hours),ot_type:r.day_type==='weekend'?'weekend':'normal',multiplier:'1.25×',reason:'Auto-detected from attendance',status:'Pending',submitted:new Date().toISOString()};
+  renderOTRecord(record);
+  saveServer('overtimeRequests',record);
+  toast('Overtime request created for approval ✓','ok');
+  loadOtEligibility();
+}
+
+// Interactive smooth area chart for the Attendance tab: y-axis gridlines,
+// weekend bands, average line, today marker, hover tooltip + KPI chips.
+function _renderAttendanceTrendChart(dates,counts){
+  const W=720,H=220,L=34,R=12,T=14,B=26;
+  const n=dates.length;
+  const firstActiveIdx=Math.max(0,counts.findIndex(c=>c>0));
+  const tracked=counts.slice(firstActiveIdx);
+  const avg=tracked.length?Math.round(tracked.reduce((a,b)=>a+b,0)/tracked.length):0;
+  const peak=Math.max(...counts);
+  const peakIdx=counts.indexOf(peak);
+  const step=Math.max(1,Math.ceil(peak/4));
+  const top=step*Math.ceil(Math.max(1,peak)/step);
+  const x=i=>L+(n>1?i*(W-L-R)/(n-1):0);
+  const y=v=>T+(1-v/top)*(H-T-B);
+  const pts=counts.map((c,i)=>[x(i),y(c)]);
+  // Catmull-Rom -> cubic bezier for a smooth line
+  let d=`M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for(let i=0;i<pts.length-1;i++){
+    const p0=pts[i-1]||pts[i],p1=pts[i],p2=pts[i+1],p3=pts[i+2]||p2;
+    const c1=[p1[0]+(p2[0]-p0[0])/6,p1[1]+(p2[1]-p0[1])/6],c2=[p2[0]-(p3[0]-p1[0])/6,p2[1]-(p3[1]-p1[1])/6];
+    d+=` C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  const area=`${d} L${x(n-1).toFixed(1)},${(H-B)} L${x(0).toFixed(1)},${(H-B)} Z`;
+  const gid='attTr'+Math.random().toString(36).slice(2,8);
+  const grid=[];
+  for(let v=0;v<=top;v+=step)grid.push(`<line x1="${L}" x2="${W-R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" style="stroke:var(--border)" stroke-width="1" ${v?'stroke-dasharray="3,4"':''}/><text x="${L-6}" y="${(y(v)+3).toFixed(1)}" text-anchor="end" font-size="9.5" style="fill:var(--text3)">${v}</text>`);
+  const bandW=(W-L-R)/Math.max(1,n-1);
+  const weekends=dates.map((iso,i)=>{const dow=new Date(iso+'T00:00:00').getDay();return dow===5||dow===6?`<rect x="${(x(i)-bandW/2).toFixed(1)}" y="${T}" width="${bandW.toFixed(1)}" height="${H-T-B}" style="fill:var(--text3)" fill-opacity="0.07"/>`:'';}).join('');
+  const todayIso=new Date().toISOString().slice(0,10);
+  const todayIdx=dates.indexOf(todayIso);
+  const avgLine=avg>0?`<line x1="${L}" x2="${W-R}" y1="${y(avg).toFixed(1)}" y2="${y(avg).toFixed(1)}" style="stroke:var(--amber)" stroke-width="1.2" stroke-dasharray="5,4"/>`:'';
+  const xl=[0,Math.floor((n-1)/3),Math.floor(2*(n-1)/3),n-1].map(i=>`<text x="${x(i).toFixed(1)}" y="${H-8}" text-anchor="middle" font-size="9.5" style="fill:var(--text3)">${_fmtTrendDate(dates[i])}</text>`).join('');
+  const todayMark=todayIdx>=0?`<line x1="${x(todayIdx).toFixed(1)}" x2="${x(todayIdx).toFixed(1)}" y1="${T}" y2="${H-B}" style="stroke:var(--accent)" stroke-width="1" stroke-dasharray="2,3"/><circle cx="${pts[todayIdx][0].toFixed(1)}" cy="${pts[todayIdx][1].toFixed(1)}" r="4.5" style="fill:var(--accent);stroke:var(--card,#fff)" stroke-width="2"/>`:'';
+  const peakDot=peak>0?`<circle cx="${pts[peakIdx][0].toFixed(1)}" cy="${pts[peakIdx][1].toFixed(1)}" r="3.5" style="fill:var(--green);stroke:var(--card,#fff)" stroke-width="2"/>`:'';
+  const id='attTrWrap'+gid;
+  const data=JSON.stringify(dates.map((dt,i)=>[dt,counts[i]])).replace(/"/g,'&quot;');
+  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible"><defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" style="stop-color:var(--accent);stop-opacity:.35"/><stop offset="100%" style="stop-color:var(--accent);stop-opacity:0"/></linearGradient></defs>${weekends}${grid.join('')}${avgLine}<path d="${area}" fill="url(#${gid})"/><path d="${d}" fill="none" style="stroke:var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>${todayMark}${peakDot}${xl}<line class="att-tr-cursor" y1="${T}" y2="${H-B}" style="stroke:var(--text3);display:none" stroke-width="1"/><circle class="att-tr-dot" r="4.5" style="fill:var(--accent);stroke:var(--card,#fff);display:none" stroke-width="2"/></svg>`;
+  const chip=(label,val,color)=>`<div style="flex:1;min-width:110px;padding:8px 12px;border:1px solid var(--border);border-radius:10px"><div style="font-size:10.5px;color:var(--text3)">${label}</div><div style="font-size:17px;font-weight:700;color:${color}">${val}</div></div>`;
+  const todayCount=todayIdx>=0?counts[todayIdx]:counts[n-1];
+  const html=`<div id="${id}" data-points="${data}" data-w="${W}" data-h="${H}" data-l="${L}" data-r="${R}" data-t="${T}" data-b="${B}" data-top="${top}" style="position:relative" onmousemove="attTrendHover(event,this)" onmouseleave="attTrendLeave(this)">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">${chip('Today',todayCount,'var(--accent)')}${chip('Average',avg,'var(--amber)')}${chip('Peak ('+_fmtTrendDate(dates[peakIdx])+')',peak,'var(--green)')}</div>
+    ${svg}<div class="att-tr-tip" style="display:none;position:absolute;pointer-events:none;background:var(--text,#111);color:var(--bg,#fff);font-size:11px;padding:5px 9px;border-radius:7px;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.2)"></div></div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:10.5px;color:var(--text3)"><span><span style="display:inline-block;width:12px;border-top:2.4px solid var(--accent);vertical-align:middle"></span> Employees present</span><span><span style="display:inline-block;width:12px;border-top:1.5px dashed var(--amber);vertical-align:middle"></span> Average</span><span><span style="display:inline-block;width:9px;height:9px;background:var(--text3);opacity:.15;vertical-align:middle"></span> Weekend</span></div>`;
+  const subText=firstActiveIdx>0?`Avg ${avg} employees/day since tracking began (${_fmtTrendDate(dates[firstActiveIdx])})`:`Avg ${avg} employees/day over last ${n} days`;
+  return {html,subText,avg,peak};
+}
+
+function attTrendHover(ev,wrap){
+  let pts;try{pts=JSON.parse(wrap.dataset.points);}catch{return;}
+  const svg=wrap.querySelector('svg');const r=svg.getBoundingClientRect();
+  const W=+wrap.dataset.w,H=+wrap.dataset.h,L=+wrap.dataset.l,R=+wrap.dataset.r,T=+wrap.dataset.t,B=+wrap.dataset.b,top=+wrap.dataset.top;
+  const vx=(ev.clientX-r.left)*W/r.width;
+  const n=pts.length;
+  const i=Math.max(0,Math.min(n-1,Math.round((vx-L)/((W-L-R)/Math.max(1,n-1)))));
+  const px=L+i*(W-L-R)/Math.max(1,n-1),py=T+(1-pts[i][1]/top)*(H-T-B);
+  const cur=wrap.querySelector('.att-tr-cursor'),dot=wrap.querySelector('.att-tr-dot'),tip=wrap.querySelector('.att-tr-tip');
+  cur.setAttribute('x1',px);cur.setAttribute('x2',px);cur.style.display='';
+  dot.setAttribute('cx',px);dot.setAttribute('cy',py);dot.style.display='';
+  const d=new Date(pts[i][0]+'T00:00:00');
+  tip.textContent=`${d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} · ${pts[i][1]} present`;
+  tip.style.display='';
+  const wr=wrap.getBoundingClientRect();
+  const left=(px/W)*r.width+(r.left-wr.left);
+  tip.style.left=Math.min(Math.max(0,left-tip.offsetWidth/2),wr.width-tip.offsetWidth)+'px';
+  tip.style.top=((py/H)*r.height+(r.top-wr.top)-tip.offsetHeight-10)+'px';
+}
+function attTrendLeave(wrap){
+  ['.att-tr-cursor','.att-tr-dot','.att-tr-tip'].forEach(q=>{const e=wrap.querySelector(q);if(e)e.style.display='none';});
 }

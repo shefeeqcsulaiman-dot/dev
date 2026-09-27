@@ -140,7 +140,12 @@ services:
         scope: RUN_TIME
         value: nyc3
 
-      # ── OpenAI (optional) ─────────────────────────────────────────────
+      # ── AI extraction (Anthropic Claude, OpenAI fallback) ──────────────
+      - key: ANTHROPIC_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DO_DASHBOARD
+
       - key: OPENAI_API_KEY
         scope: RUN_TIME
         type: SECRET
@@ -205,7 +210,37 @@ services:
         scope: RUN_TIME
         value: "30"
 
+      - key: ANTHROPIC_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DO_DASHBOARD
+
       - key: OPENAI_API_KEY
         scope: RUN_TIME
         type: SECRET
         value: REPLACE_IN_DO_DASHBOARD
+
+      # backup.nightly_all_companies runs in this worker's beat scheduler
+      # and needs these to reach Spaces -- without them it silently falls
+      # back to the container's local disk, wiped on every redeploy.
+      - key: S3_ENDPOINT_URL
+        scope: RUN_TIME
+        value: ""
+
+      - key: S3_BUCKET
+        scope: RUN_TIME
+        value: etaxflow-documents
+
+      - key: S3_ACCESS_KEY_ID
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DO_DASHBOARD
+
+      - key: S3_SECRET_ACCESS_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DO_DASHBOARD
+
+      - key: AWS_REGION
+        scope: RUN_TIME
+        value: nyc3

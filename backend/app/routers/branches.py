@@ -10,10 +10,11 @@ from app.auth_principal import assert_company_active
 from app.config import get_settings
 from app.dependencies import Principal, company_allows_module, get_current_principal, get_current_user, get_db
 from app.limiter import limiter
-from app.models import Branch, Company, CompanyLocation, Employee, User
+from app.models import AppDataRecord, Branch, Company, CompanyLocation, Employee, ImpersonationSession, User
+from app.models import uuid as new_uuid
 from app.module_catalog import BRANCH_ELIGIBLE_MODULES
 from app.schemas import BranchCreate, BranchOut, BranchUpdate
-from app.security import pwd_context
+from app.security import create_access_token, impersonation_revocation_info, pwd_context
 
 router = APIRouter(prefix="/branches", tags=["branches"])
 settings = get_settings()
@@ -271,3 +272,60 @@ def branch_login(request: Request, payload: BranchLoginRequest, db: Session = De
     db.commit()
 
     return BranchToken(access_token=_create_branch_token(branch.id))
+
+
+@router.post("/{branch_id}/impersonate", response_model=BranchToken)
+@limiter.limit("20/minute")
+def impersonate_branch(
+    request: Request,
+    branch_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BranchToken:
+    """Lets a company's own User (Main Dashboard) drop straight into a
+    branch's own dashboard view -- the same branch-scoped token
+    branch_login() issues -- without needing that branch's separate
+    username/password. Mirrors superadmin.py's impersonate_company(body.
+    branch_id) mechanism (create_access_token(..., impersonated_by=...),
+    revocable through the same /superadmin/end-impersonation flow, which
+    only checks for an "imp" claim and isn't superadmin-gated itself) rather
+    than duplicating a parallel token/session scheme. Reuses
+    ImpersonationSession for tracking despite its "superadmin_id" column
+    name -- structurally it's just "impersonator user id", and reusing it
+    means a real superadmin can still see and force-end this session from
+    the same /superadmin/impersonation-sessions tooling."""
+    branch = (
+        db.query(Branch)
+        .filter(Branch.id == branch_id, Branch.company_id == current_user.company_id)
+        .first()
+    )
+    if not branch:
+        raise HTTPException(status_code=404, detail="Branch not found")
+    if branch.status != "Active":
+        raise HTTPException(status_code=403, detail="This branch is disabled")
+
+    token = create_access_token(_BRANCH_PREFIX + branch.id, impersonated_by=current_user.id)
+    revocation = impersonation_revocation_info(token)
+    if revocation:
+        jti, _ttl = revocation
+        db.add(ImpersonationSession(
+            superadmin_id=current_user.id,
+            target_branch_id=branch.id,
+            company_id=current_user.company_id,
+            token_jti=jti,
+        ))
+    db.add(AppDataRecord(
+        id=new_uuid(),
+        company_id=current_user.company_id,
+        collection="audit",
+        record_key=None,
+        payload=json.dumps({
+            "time": datetime.now(UTC).strftime("%d/%m/%Y, %H:%M"),
+            "user": f"{current_user.full_name} ({current_user.email})",
+            "action": "Impersonation started",
+            "record": f"as branch {branch.name}",
+            "result": "Started",
+        }),
+    ))
+    db.commit()
+    return BranchToken(access_token=token)

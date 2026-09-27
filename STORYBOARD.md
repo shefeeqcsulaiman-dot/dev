@@ -163,9 +163,11 @@ Also in Sidebar → Sales section
 - Auto-logged on every purchase / sale
 - Manual adjustment (requires reason and non-zero delta → goes to Approval queue)
 
-### 5.4 Adjustment Approvals
-- Pending queue of stock adjustment requests
-- Approve / reject with notes
+### 5.4 Adjustment Approvals (Inventory > Adjustments tab)
+- Pending queue of stock adjustment requests; **+ New Adjustment** (item code, quantity change, reason)
+- Approve / reject — stock only moves once approved
+- **Block sales when stock is insufficient** checkbox: when on, sales invoices and POS sales that would take tracked stock below zero are rejected (409 "Insufficient stock"). Off by default.
+- Sales invoices now deduct tracked stock automatically (reference `SALE-<no>`); cancelling/deleting returns it. POS keeps its own deduction.
 
 ### 5.5 Valuation
 - FIFO layered cost calculation
@@ -270,6 +272,12 @@ Also in Sidebar → Sales section
 
 Upserts by period (no duplicate returns per period).
 
+### 9.1a Fixed Assets, Accruals & Prepayments — GL posting
+- **Post Depreciation** (Fixed Assets): enter the asset code and amount → books Dr Depreciation Expense (6100) / Cr Accumulated Depreciation (1510) and rolls the asset's accumulated depreciation forward; blocked if it would exceed cost
+- **Post Release** (Accruals & Prepayments): books one period's release — prepayment: Prepaid (1300) → Expense (6200); accrual: Expense → Accrued liability (2400); capped at the record total; prepayment "remaining" = total − released
+- Validation on all corporate records: required codes/names, no negatives, accumulated depreciation ≤ cost, unique asset code (409), approval min ≤ max; budget variance and cash-flow net are derived server-side
+- Corporate-tax profit is recomputed from live GL revenue − expense; Cash Flow tab shows receipts / payments / net from the ledger
+
 ### 9.2 Bills & Payables
 - Supplier bill register
 - Match bills to purchase invoices
@@ -324,11 +332,13 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 **Employment types (12):** Full-Time, Part-Time, Contract, Probation, Intern/Trainee, Daily Wage, Hourly, Weekly, Short-Term, Freelance/Consultant, Seasonal, Project-Based
 
 ### 11.3 Payroll
-- **Generate Payroll:** Select period (YYYY-MM), one run per period enforced (409 if duplicate)
-- Auto-calculates: basic + allowances (15%) + overtime − deductions
+- **Generate Payroll:** Select period (YYYY-MM), one run per period enforced (409 if duplicate); future periods rejected (422)
+- Auto-calculates: basic + allowances + overtime + bonuses − deductions/loan/advance instalments (generation is read-only — it never changes loan/advance balances)
+- **Approve:** finalises the run and only then drains loan/advance balances; audited. **Delete** is allowed for Draft runs only
 - **Payroll Run list:** status badges (Draft / Approved / Paid)
-- **Quick Adjustments:** per-employee bonus/deduction/advance/OT, requires amount > 0 and reason
-- **WPS Batch:** generates SIF file; blocked if any IBAN missing
+- **Quick Adjustments:** per-employee Bonus / Overtime (add) or Deduction / Advance (subtract) for the run period; requires amount > 0 and reason
+- **WPS / SIF:** downloads the CBUAE SIF (EDR/SCR/ETR) built from the approved run; blocked if MOL id or any IBAN is missing
+- ESS payslips appear only once a run is approved/paid
 
 ### 11.4 Leave Management
 **10 leave types:** Annual Leave, Sick Leave, Emergency Leave, Maternity Leave, Paternity Leave, Hajj Leave, Unpaid Leave, Compensatory Leave, Study Leave, Public Holiday
@@ -340,6 +350,7 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 ### 11.5 Attendance
 - Punch In / Punch Out records
 - Daily attendance summary
+- **30-Day Attendance Trend:** interactive smooth area chart — Today / Average / Peak boxes, gridlines, weekend shading, average line, hover tooltip per day
 - **Biometric Integration** (HR Settings tab): connect physical devices, each handled per its actual connection type —
   - **TCP/IP pull** (ZKTeco F/K/iClock/SpeedFace/ProFace/G/UA/IN/MB Series, Anviz): device syncs via `zk_bridge.py` running on an office PC on the same network, polling every 30s; the bridge persists its last-synced punch to disk so a restart doesn't resend the whole device log
   - **HTTP push** (ZKTeco ADMS, Suprema, Hikvision): device posts directly to `POST /api/v1/punch` with an `X-Device-Key` header — no bridge script needed
@@ -353,6 +364,8 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 - OT types: Normal · Ramadan · Weekend · Public Holiday
 - Multipliers per UAE Labour Law: 1.25× / 1.5× / 2×
 - OT hours entry with start/end time
+- **Overtime Eligibility list** (top of the Overtime tab): every day an employee worked past the standard day, with clock in, clock out, worked, extra, eligible OT and status — *Eligible – not yet requested* / *Requested – Pending/Approved/Rejected* / *Not eligible (within cool-off)*. Date-range filter (default last 14 days, max 92); **Request OT** creates a Pending request pre-filled from attendance. Department-scoped roles see only their scope.
+- **OT cool-off** (HR Settings > Overtime Rules): the first N minutes worked after the standard day are not counted as overtime (default 0 = off). Applies to the daily and monthly attendance reports and the eligibility list.
 
 ### 11.7 Weekly Rota
 - Drag-and-drop shift planner grid (days × employees)
@@ -368,7 +381,7 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 ### 11.9 HR Settings
 - Departments: add/edit/delete
 - Branches / Locations
-- OT rules configuration
+- OT rules configuration (rate type, hours basis, multipliers, **cool-off minutes**)
 - Attendance rules (allow multiple breaks, shift tolerance)
 - Holiday Calendar: company public holidays (date, name, location, paid/status) — feeds the Weekly Rota's automatic Public Holiday detection
 - Biometric Integration: see §11.5
@@ -387,6 +400,8 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 | Payslips | Last 24 months: period, basic, allowances, OT, deductions, net pay |
 | Leave | Apply for leave, view status of applications |
 | Overtime | Submit OT request, view approved OT |
+| Requests → Overtime Eligibility | Own days worked past the standard day (last 31 days): clock in/out, worked, extra, eligible OT, status; **Request** opens the overtime form pre-filled |
+| Leave request checks | Start date more than 30 days in the past, or more days than the remaining balance (unpaid excepted), is rejected |
 | Documents | Download payslips as PDF |
 
 ---
@@ -457,6 +472,9 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 - Base currency (AED default)
 - Secondary currency support
 
+### 14.6a Users & Roles
+- **Add User** (company admin only) creates a real login (email, name, password ≥ 8, role Accountant / Viewer / User); duplicate email → 409; non-admins get 403
+
 ### 14.7 Audit Trail
 - Full log of every user action (create / update / delete)
 - Timestamp, user, module, action description
@@ -502,6 +520,8 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 | Create company | Name, TRN, email, admin full name, password, expiry date, module selection |
 | Module selection | Grid of toggles per company — only enabled modules appear in that company's sidebar |
 | Extend subscription | Quick buttons: +7d · +1yr |
+| Backup | Per-company and all-companies SQL backup download (now includes branches, journals, stock, period locks); nightly automatic backup to Spaces |
+| DB Diagnostics | System Health panel (Postgres only; shows "not supported" on SQLite) |
 | Delete company | Two-password authorization required (both must match before delete fires); cascades all FK-linked data |
 
 ### 16.2 Company List
@@ -544,6 +564,12 @@ Login ──► Dashboard
 | Backend | No duplicate tax code per company |
 | Backend | Stock adjustment delta must be non-zero, reason non-blank |
 | Backend | Invoice numbers are unique per company |
+| Backend | Duplicate company TRN → 409; duplicate asset code → 409 |
+| Backend | Roleless employees are blocked from company data; `users` and `invoiceLayout` are admin-only |
+| Backend | Salary/IBAN edits need `employees:edit`; negative salary and malformed IBAN rejected |
+| Backend | Payroll cannot be generated for a future period; approved runs cannot be deleted |
+| Backend | Depreciation cannot exceed asset cost; releases cannot exceed the accrual/prepayment total |
+| Backend | Overtime counts only past the configured cool-off |
 | Backend | Duplicate emails return 409 (no user enumeration) |
 | Backend | Rate limiting: login 10/min, register 5/hour |
 | Frontend | Invoice: No., date, and customer are required |

@@ -25,7 +25,7 @@ static_dir: pathlib.Path = (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from brotli_asgi import BrotliMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -42,17 +42,21 @@ from app.security import hash_password
 
 settings = get_settings()
 
-# Cache for _resolve_app_js(), keyed by (app.js mtime, app.min.js mtime) so we
-# only re-read/re-hash these files when either one actually changes on disk.
-_app_js_cache: dict[str, Any] = {}
+# Cache for _resolve_minified_js(), keyed per source filename by
+# (src mtime, min mtime) so we only re-read/re-hash each pair of files when
+# either one actually changes on disk.
+_minified_js_cache: dict[str, dict[str, Any]] = {}
 
 
-def _resolve_app_js() -> tuple[bytes, bool]:
-    """Returns (content, is_minified). Serves app.min.js only when its embedded
-    //SOURCE_SHA256:<hash> header matches the current app.js — see
-    frontend/scripts/build-min.mjs for how that file is generated."""
-    src_path = static_dir / "taxflow" / "src" / "app.js"
-    min_path = static_dir / "taxflow" / "src" / "app.min.js"
+def _resolve_minified_js(name: str) -> tuple[bytes, bool]:
+    """Returns (content, is_minified) for static/taxflow/src/<name>.js.
+    Serves <name>.min.js only when its embedded //SOURCE_SHA256:<hash>
+    header matches the current <name>.js — see frontend/scripts/
+    build-min.mjs for how these files are generated. Shared by app.js and
+    ess.js (see _resolve_app_js()/_resolve_ess_js() below); correctness
+    always wins over the size/speed win, never the other way around."""
+    src_path = static_dir / "taxflow" / "src" / f"{name}.js"
+    min_path = static_dir / "taxflow" / "src" / f"{name}.min.js"
     try:
         src_mtime = src_path.stat().st_mtime
         min_mtime = min_path.stat().st_mtime if min_path.exists() else None
@@ -60,8 +64,9 @@ def _resolve_app_js() -> tuple[bytes, bool]:
         return b"", False
 
     cache_key = (src_mtime, min_mtime)
-    if _app_js_cache.get("key") == cache_key:
-        return _app_js_cache["content"], _app_js_cache["is_min"]
+    cache_entry = _minified_js_cache.get(name)
+    if cache_entry is not None and cache_entry.get("key") == cache_key:
+        return cache_entry["content"], cache_entry["is_min"]
 
     src_bytes = src_path.read_bytes()
     content, is_min = src_bytes, False
@@ -78,11 +83,16 @@ def _resolve_app_js() -> tuple[bytes, bool]:
         except (OSError, ValueError):
             pass
 
-    _app_js_cache.update(key=cache_key, content=content, is_min=is_min)
+    _minified_js_cache[name] = {"key": cache_key, "content": content, "is_min": is_min}
     return content, is_min
 
 
-_bg_tasks: set = set()
+def _resolve_app_js() -> tuple[bytes, bool]:
+    return _resolve_minified_js("app")
+
+
+def _resolve_ess_js() -> tuple[bytes, bool]:
+    return _resolve_minified_js("ess")
 
 
 async def _invalidate_cache_bg(auth_header: str) -> None:
@@ -133,14 +143,26 @@ def create_app() -> FastAPI:
     )
 
     @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        # DO App Platform terminates TLS upstream and forwards plain HTTP to
+        # the app, so request.url.scheme is unreliable -- X-Forwarded-Proto
+        # is what actually reflects what the browser used. Only send HSTS
+        # when the browser reached us over HTTPS, so a plain-http local/
+        # scratch server (no proxy in front) never gets it either.
+        if request.headers.get("x-forwarded-proto", request.url.scheme) == "https":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+    @app.middleware("http")
     async def cache_invalidation(request: Request, call_next):
         response = await call_next(request)
         if request.method in ("POST", "PUT", "PATCH", "DELETE") and "/api/v1/" in request.url.path:
             import asyncio
             auth_header = request.headers.get("authorization", "")
-            task = asyncio.create_task(_invalidate_cache_bg(auth_header))
-            _bg_tasks.add(task)
-            task.add_done_callback(_bg_tasks.discard)
+            asyncio.create_task(_invalidate_cache_bg(auth_header))
         return response
 
     @app.middleware("http")
@@ -352,6 +374,19 @@ def create_app() -> FastAPI:
             response.headers["X-Served-Variant"] = "minified"
         return response
 
+    # Same minified-with-hash-fallback serving as app.js above, extended to
+    # ess.js (the ESS portal's own dedicated bundle) -- these explicit routes
+    # take priority over the generic StaticFiles mount below, which is what
+    # served ess.js/ess.css unminified before this existed.
+    @app.get("/src/ess.js", include_in_schema=False)
+    @app.get("/taxflow/src/ess.js", include_in_schema=False)
+    def ess_js() -> Response:
+        content, is_min = _resolve_ess_js()
+        response = Response(content=content, media_type="text/javascript")
+        if is_min:
+            response.headers["X-Served-Variant"] = "minified"
+        return response
+
     # Legacy /taxflow/* redirects for backward compatibility
     @app.get("/taxflow", include_in_schema=False)
     def taxflow_root_redirect():
@@ -530,7 +565,6 @@ def ensure_schema_updates() -> None:
                         {"photo": photo, "cid": company_id, "eno": emp_no},
                     )
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_employees_branch_id ON employees (branch_id)"))
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_employees_company_status ON employees (company_id, status)"))
             # Portal usernames are unique platform-wide (not just per-company) so
             # /ess and /hr/login can look an employee up by username alone, with
             # no ?c=<company_id> link required. Partial index (WHERE username IS
@@ -679,10 +713,6 @@ def ensure_schema_updates() -> None:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_invoices_branch_id ON invoices (branch_id)"))
         if "tax_lines" in table_names:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_tax_lines_company_direction ON tax_lines (company_id, direction)"))
-        if "payments" in table_names:
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_payments_company_created ON payments (company_id, created_at)"))
-        if "receipts" in table_names:
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_receipts_company_created ON receipts (company_id, created_at)"))
         if "general_ledger_entries" in table_names:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_gl_entries_company_account_date ON general_ledger_entries (company_id, account_id, entry_date)"))
         if "invoice_lines" in table_names:
@@ -745,7 +775,35 @@ def ensure_schema_updates() -> None:
             if "branch_id" not in existing_columns:
                 connection.execute(text("ALTER TABLE payroll_runs ADD COLUMN branch_id VARCHAR(36)"))
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_payroll_runs_branch_id ON payroll_runs (branch_id)"))
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_payroll_runs_company_period ON payroll_runs (company_id, period)"))
+            # generate_payroll() (payroll.py) only guarded against a
+            # duplicate run with a check-then-insert SELECT — two
+            # near-simultaneous POST /payroll/generate calls for the same
+            # period/branch could both pass the check before either
+            # committed, each independently decrementing loan balances and
+            # marking advances "Repaid" a second time. Two unique indexes,
+            # same idempotent-every-startup pattern as
+            # uq_attendance_sessions_open_per_employee above: one for a
+            # specific branch's run, one (partial, branch_id IS NULL) for a
+            # company-wide run. Wrapped in try/except rather than
+            # de-duplicating first — unlike attendance sessions, merging or
+            # deleting an existing duplicate PAYROLL run could destroy real,
+            # already-paid payslip data or double-undo a loan/advance
+            # balance; a DB that already has duplicates keeps them and just
+            # doesn't get the new protection until someone resolves it by hand.
+            try:
+                connection.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_payroll_runs_company_period_branch "
+                    "ON payroll_runs (company_id, period, branch_id) WHERE branch_id IS NOT NULL"
+                ))
+                connection.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_payroll_runs_company_period_companywide "
+                    "ON payroll_runs (company_id, period) WHERE branch_id IS NULL"
+                ))
+            except Exception as payroll_idx_exc:
+                logging.getLogger("taxflow").error(
+                    "Could not create payroll_runs duplicate-run unique indexes (existing duplicate rows?): %s",
+                    payroll_idx_exc,
+                )
         if "accounts" in table_names:
             existing_columns = {column["name"] for column in inspector.get_columns("accounts")}
             required_columns = {

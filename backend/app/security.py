@@ -37,6 +37,22 @@ def verify_password(password: str, password_hash: str) -> bool:
     return pwd_context.verify(password, password_hash)
 
 
+def verify_employee_password(password: str, stored_hash: str | None, employee_no: str) -> bool:
+    """Employee/ESS login check. An employee with no password_hash set yet
+    logs in with their employee_no as the default password -- but comparing
+    that case with a plain string == while the "real password" case runs a
+    slow bcrypt verify() creates a timing side-channel: a fast rejection
+    reveals the account still uses its default password (employee_nos are
+    often sequential/predictable), letting an attacker enumerate targets and
+    then log straight in. Hashing the default password fresh on every call
+    keeps both branches the same shape (one bcrypt hash + one bcrypt verify)
+    so the timing is equivalent either way.
+    """
+    if stored_hash:
+        return pwd_context.verify(password, stored_hash)
+    return pwd_context.verify(password, pwd_context.hash(employee_no))
+
+
 def create_access_token(subject: str, impersonated_by: str | None = None) -> str:
     expires = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_minutes)
     payload: dict = {"sub": subject, "exp": expires}

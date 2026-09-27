@@ -90,3 +90,23 @@ def test_monthly_report_scoped_to_own_company(client, db, auth_headers, second_t
     r = client.get("/api/v1/attendance/monthly-report?period=2026-08", headers=second_tenant_headers)
     assert r.status_code == 200, r.text
     assert all(e["employee_no"] != "ATT-RPT-ISO" for e in r.json()["employees"])
+
+
+def test_overtime_eligibility_lists_clock_times_cooloff_and_request_status(client, db, auth_headers):
+    company_id = _company_id(client, auth_headers)
+    e1 = _seed_employee(db, company_id, "OTE-001", "Ote Long Day")
+    _seed_employee(db, company_id, "OTE-002", "Ote Short Extra")
+    _seed_app_record(db, company_id, "hr_settings", "ot-rules-config", {"id": "ot-rules-config", "workHours": "8", "otCooloffMinutes": 30})
+    # 08:00-17:00 = 1h extra (eligible); 08:00-16:20 = 20 min extra (inside cool-off)
+    for no, out_h, out_m in (("OTE-001", 17, 0), ("OTE-002", 16, 20)):
+        _seed_punch(db, company_id, no, "2026-08-26", 8)
+        _seed_punch(db, company_id, no, "2026-08-26", out_h, out_m, direction="out")
+    q = {"date_from": "2026-08-26", "date_to": "2026-08-26"}
+    rows = {r["employee_no"]: r for r in client.get("/api/v1/attendance/overtime-eligibility", params=q, headers=auth_headers).json()["rows"]}
+    assert rows["OTE-001"]["eligible"] and rows["OTE-001"]["eligible_ot"] == "0:30"
+    assert rows["OTE-001"]["clock_in"] and rows["OTE-001"]["clock_out"]
+    assert rows["OTE-001"]["eligibility"].startswith("Eligible")
+    assert not rows["OTE-002"]["eligible"] and "cool-off" in rows["OTE-002"]["eligibility"]
+    _seed_app_record(db, company_id, "overtimeRequests", "OT-1", {"id": "OT-1", "employee": "Ote Long Day", "employee_id": e1.id, "date": "2026-08-26", "status": "Approved"})
+    rows = {r["employee_no"]: r for r in client.get("/api/v1/attendance/overtime-eligibility", params=q, headers=auth_headers).json()["rows"]}
+    assert rows["OTE-001"]["eligibility"] == "Requested - Approved"

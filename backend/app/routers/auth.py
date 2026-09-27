@@ -113,7 +113,7 @@ def me(
         if impersonator_id:
             impersonator = db.query(User).filter(User.id == impersonator_id).first()
             if impersonator:
-                current_user.impersonated_by = {"id": impersonator.id, "email": impersonator.email}
+                current_user.impersonated_by = {"id": impersonator.id, "email": impersonator.email, "role": impersonator.role}
     return current_user
 
 
@@ -171,7 +171,7 @@ def whoami(request: Request, db: Session = Depends(get_db), principal: Principal
         if impersonator_id:
             impersonator = db.query(User).filter(User.id == impersonator_id).first()
             if impersonator:
-                impersonated_by = {"id": impersonator.id, "email": impersonator.email}
+                impersonated_by = {"id": impersonator.id, "email": impersonator.email, "role": impersonator.role}
     accessible_branches: list[AccessibleBranchOut] = []
     if len(principal.accessible_branch_ids) > 1:
         rows = db.query(Branch.id, Branch.name).filter(Branch.id.in_(principal.accessible_branch_ids)).all()

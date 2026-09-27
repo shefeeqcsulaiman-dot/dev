@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from time import sleep
 
 from celery import Celery
+from celery.schedules import crontab
 
 from app.config import get_settings
 from app.database import SessionLocal
@@ -31,9 +32,16 @@ celery_app.conf.beat_schedule = {
         "task": "hr.sync_biotime_devices",
         "schedule": 300.0,
     },
+    # 02:00 UTC ~= 06:00 Gulf time, before business hours.
+    "backup-nightly-all-companies": {
+        "task": "backup.nightly_all_companies",
+        "schedule": crontab(hour=2, minute=0),
+    },
 }
 
 _STALE_PING_MINUTES = 10  # grace (5min) + one missed ~2min ping cycle + margin
+_BACKUP_RETENTION_DAYS = 30
+_BACKUP_KEY_PREFIX = "platform-backups/"
 
 
 @celery_app.task(name="hr.auto_checkout_stale_sessions")
@@ -93,6 +101,43 @@ def sync_biotime_devices() -> int:
                 db.rollback()
                 logger.warning("BioTime sync failed for device %s (company %s): %s", device.id, device.company_id, exc)
         return total_synced
+    finally:
+        db.close()
+
+
+@celery_app.task(name="backup.nightly_all_companies")
+def nightly_all_companies_backup() -> str:
+    """Nightly offsite copy of every company's SQL backup to S3/Spaces,
+    on top of the managed Postgres provider's own snapshots. Logs an
+    AuditLog against the SUPERADMIN-INTERNAL sentinel company either way."""
+    from app import storage
+    from app.models import AuditLog, Company
+    from app.routers.app_data import build_all_companies_backup_zip
+
+    db = SessionLocal()
+    try:
+        sa_company = db.query(Company).filter(Company.trn == "SUPERADMIN-INTERNAL").first()
+        date_str = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        key = f"{_BACKUP_KEY_PREFIX}taxflow-all-companies-backup-{date_str}.zip"
+        try:
+            zip_bytes = build_all_companies_backup_zip(db, "Automated nightly backup")
+            storage.upload_backup_bytes(key, zip_bytes)
+            deleted = storage.delete_old_backups(_BACKUP_KEY_PREFIX, _BACKUP_RETENTION_DAYS)
+            detail = f"Uploaded {key} ({len(zip_bytes)} bytes); pruned {len(deleted)} backup(s) older than {_BACKUP_RETENTION_DAYS} days"
+            logger.info("Nightly all-companies backup succeeded: %s", detail)
+            action = "nightly_backup_completed"
+        except Exception as exc:
+            detail = f"Nightly all-companies backup FAILED: {exc}"
+            logger.error(detail)
+            action = "nightly_backup_failed"
+            if sa_company:
+                db.add(AuditLog(company_id=sa_company.id, module="platform", action=action, detail=detail))
+                db.commit()
+            raise
+        if sa_company:
+            db.add(AuditLog(company_id=sa_company.id, module="platform", action=action, detail=detail))
+            db.commit()
+        return key
     finally:
         db.close()
 

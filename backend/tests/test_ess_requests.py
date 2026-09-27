@@ -273,7 +273,7 @@ def _save_employee_record(client, headers, employee_no, name, **extra):
 def test_employee_can_edit_only_contact_fields_and_change_is_audited(client, db, auth_headers):
     cid = _company_id(client, auth_headers)
     emp, h = _ess_login(client, db, auth_headers, cid, "ESSREQ-P1", "essreq.p1")
-    _save_employee_record(client, auth_headers, "ESSREQ-P1", emp.full_name, mobile="0500000000", salary=9999, iban="AE000")
+    _save_employee_record(client, auth_headers, "ESSREQ-P1", emp.full_name, mobile="0500000000", salary=9999, iban="AE070331234567890123456")
 
     assert client.get("/api/v1/ess/profile-details", headers=h).json()["mobile"] == "0500000000"
     r = client.put("/api/v1/ess/profile-details", headers=h, json={"mobile": "+971 50 111 2222", "emergency_contact": "Mum", "emergency_mobile": "0501234567", "address": "Dubai"})
@@ -283,14 +283,14 @@ def test_employee_can_edit_only_contact_fields_and_change_is_audited(client, db,
     got = client.get("/api/v1/ess/profile-details", headers=h).json()
     assert got["mobile"] == "+971 50 111 2222" and got["emergency_contact"] == "Mum" and got["address"] == "Dubai"
     stored = next(x for x in _records(db, cid, "employees") if x["id"] == "ESSREQ-P1")
-    assert stored["iban"] == "AE000" and stored["salary"] == 9999          # untouched
+    assert stored["iban"] == "AE070331234567890123456" and stored["salary"] == 9999          # untouched
     log = db.query(AuditLog).filter(AuditLog.employee_id == emp.id, AuditLog.action == "profile_contact_updated").one()
     assert "0500000000" in log.detail and "+971 50 111 2222" in log.detail
 
     # a body that tries to smuggle other fields is ignored; junk phone numbers are rejected
     client.put("/api/v1/ess/profile-details", headers=h, json={"salary": 1, "iban": "X", "name": "Hacker"})
     stored = next(x for x in _records(db, cid, "employees") if x["id"] == "ESSREQ-P1")
-    assert stored["iban"] == "AE000" and stored["salary"] == 9999 and stored["name"] == emp.full_name
+    assert stored["iban"] == "AE070331234567890123456" and stored["salary"] == 9999 and stored["name"] == emp.full_name
     assert client.put("/api/v1/ess/profile-details", headers=h, json={"mobile": "call me maybe"}).status_code == 400
     assert client.put("/api/v1/ess/profile-details", headers=h, json={"address": "x" * 301}).status_code == 400
 
@@ -320,3 +320,26 @@ def test_documents_states_match_hrms_expiry_thresholds(client, db, auth_headers)
     assert docs["Emirates ID"]["state"] == "soon"
     assert docs["Insurance"]["state"] == "valid"
     assert docs["Labor Card"]["state"] == "missing" and docs["Labor Card"]["expiry"] is None
+
+
+def test_ess_overtime_eligibility_is_own_and_flips_after_request(client, db, auth_headers):
+    from datetime import datetime, timezone
+    from app import attendance_store
+    cid = _company_id(client, auth_headers)
+    emp, h = _ess_login(client, db, auth_headers, cid, "ESSREQ-OT9", "essreq.ot9")
+    other = Employee(company_id=cid, employee_no="ESSREQ-OT9B", full_name="Other", basic_salary=1, status="active")
+    db.add(other)
+    db.commit()
+    day = date.today() - timedelta(days=2)
+    for no in ("ESSREQ-OT9", "ESSREQ-OT9B"):
+        for hour, direction in ((6, "in"), (16, "out")):
+            attendance_store.upsert_attendance_event(
+                db, company_id=cid, employee_id=no, direction=direction, source="device",
+                punch_time=datetime(day.year, day.month, day.day, hour, 0, tzinfo=timezone.utc))
+    rows = client.get("/api/v1/ess/overtime-eligibility", headers=h).json()["rows"]
+    assert [r["employee_no"] for r in rows] == ["ESSREQ-OT9"]
+    assert rows[0]["eligible"] and rows[0]["clock_in"] and rows[0]["clock_out"]
+    r = client.post("/api/v1/ess/overtime", headers=h, json={"date": day.isoformat(), "ot_hours": 2})
+    assert r.status_code == 201, r.text
+    rows = client.get("/api/v1/ess/overtime-eligibility", headers=h).json()["rows"]
+    assert rows[0]["eligibility"] == "Requested - Pending"

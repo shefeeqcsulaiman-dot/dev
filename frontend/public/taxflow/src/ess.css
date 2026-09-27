@@ -191,7 +191,7 @@
 }
 
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    :root{--accent:#2563eb;--accent-text:#1d4ed8;--accent2:#3b82f6;--bg:#f2f4f8;--bg2:#f8fafc;--bg3:#e9eef6;--surface:#fff;--border:#e2e7ef;--text:#0c1630;--text2:#3a4d6e;--sb-bg:#f1f4f8;--sb-border:#dde2eb;--sb-lbl:#9ca3af;--sb-text:#374151;--sb-hover:rgba(0,0,0,.05);--pink:#cc4d91;--amber:#c77800;--text3:#64748b;--red:#ef4444;--green:#10b981;--field-bg:#f9fafb;--field-border:#d1d5db;--field-text:#111827;--field-label:#374151;--field-focus-bg:#fff;--scrollbar:#94a3b8;--danger-bg:#fef2f2;--danger-border:#fecaca;--success-bg:#f0fdf4;--success-border:#bbf7d0;--hcal-holiday-bg:rgba(245,158,11,.18);--hcal-holiday-text:#b45309;--hcal-leave-bg:rgba(139,92,246,.18);--hcal-leave-text:#6d28d9;}
+    :root{--accent:#2563eb;--accent-text:#1d4ed8;--accent2:#3b82f6;--accent-bg:rgba(37,99,235,.12);--bg:#f2f4f8;--bg2:#f8fafc;--bg3:#e9eef6;--surface:#fff;--border:#e2e7ef;--text:#0c1630;--text2:#3a4d6e;--sb-bg:#f1f4f8;--sb-border:#dde2eb;--sb-lbl:#9ca3af;--sb-text:#374151;--sb-hover:rgba(0,0,0,.05);--pink:#cc4d91;--amber:#c77800;--amber-bg:rgba(199,120,0,.12);--text3:#64748b;--red:#ef4444;--red-bg:rgba(239,68,68,.12);--green:#10b981;--green-bg:rgba(16,185,129,.12);--purple:#7c3aed;--purple-bg:rgba(124,58,237,.12);--teal:#0d9488;--teal-bg:rgba(13,148,136,.12);--field-bg:#f9fafb;--field-border:#d1d5db;--field-text:#111827;--field-label:#374151;--field-focus-bg:#fff;--scrollbar:#94a3b8;--danger-bg:#fef2f2;--danger-border:#fecaca;--success-bg:#f0fdf4;--success-border:#bbf7d0;--hcal-holiday-bg:rgba(245,158,11,.18);--hcal-holiday-text:#b45309;--hcal-leave-bg:rgba(139,92,246,.18);--hcal-leave-text:#6d28d9;}
     /* Dark mode: system preference by default (unless the user explicitly
        picked "light" via the topbar toggle -- see essApplyTheme()), or an
        explicit "dark" pick winning over system preference either way. Only
@@ -200,16 +200,18 @@
        look, not page content that should follow the viewer's theme). */
     @media (prefers-color-scheme: dark){
       :root:not([data-theme="light"]){
-        --bg:#0d1117;--bg2:#161b27;--bg3:#1c2333;--surface:#1e2840;--border:rgba(100,145,222,.16);--sb-bg:#0f1724;--sb-border:rgba(255,255,255,.07);--sb-lbl:rgba(255,255,255,.3);--sb-text:rgba(255,255,255,.65);--sb-hover:rgba(255,255,255,.07);--pink:#f472b6;--amber:#fbbf24;
-        --text:#e4e8f0;--text2:#9aa5b8;--text3:#8391a7;--accent-text:#93c5fd;
+        --bg:#0d1117;--bg2:#161b27;--bg3:#1c2333;--surface:#1e2840;--border:rgba(100,145,222,.16);--sb-bg:#0f1724;--sb-border:rgba(255,255,255,.07);--sb-lbl:rgba(255,255,255,.3);--sb-text:rgba(255,255,255,.65);--sb-hover:rgba(255,255,255,.07);--pink:#f472b6;--amber:#fbbf24;--amber-bg:rgba(251,191,36,.16);
+        --text:#e4e8f0;--text2:#9aa5b8;--text3:#8391a7;--accent-text:#93c5fd;--accent-bg:rgba(37,99,235,.2);
+        --red-bg:rgba(239,68,68,.18);--green-bg:rgba(16,185,129,.18);--purple:#a78bfa;--purple-bg:rgba(167,139,250,.18);--teal:#2dd4bf;--teal-bg:rgba(45,212,191,.18);
         --field-bg:#161b27;--field-border:#34405e;--field-text:#e5e9f0;--field-label:#9aa5b8;--field-focus-bg:#1a2236;--scrollbar:#475569;
         --danger-bg:#2a1418;--danger-border:#4a2129;--success-bg:#0f2318;--success-border:#1c3d2a;
         --hcal-holiday-bg:rgba(245,158,11,.22);--hcal-holiday-text:#fbbf24;--hcal-leave-bg:rgba(139,92,246,.25);--hcal-leave-text:#c4b5fd;
       }
     }
     :root[data-theme="dark"]{
-      --bg:#0d1117;--bg2:#161b27;--bg3:#1c2333;--surface:#1e2840;--border:rgba(100,145,222,.16);--sb-bg:#0f1724;--sb-border:rgba(255,255,255,.07);--sb-lbl:rgba(255,255,255,.3);--sb-text:rgba(255,255,255,.65);--sb-hover:rgba(255,255,255,.07);--pink:#f472b6;--amber:#fbbf24;
-      --text:#e4e8f0;--text2:#9aa5b8;--text3:#8391a7;--accent-text:#93c5fd;
+      --bg:#0d1117;--bg2:#161b27;--bg3:#1c2333;--surface:#1e2840;--border:rgba(100,145,222,.16);--sb-bg:#0f1724;--sb-border:rgba(255,255,255,.07);--sb-lbl:rgba(255,255,255,.3);--sb-text:rgba(255,255,255,.65);--sb-hover:rgba(255,255,255,.07);--pink:#f472b6;--amber:#fbbf24;--amber-bg:rgba(251,191,36,.16);
+      --text:#e4e8f0;--text2:#9aa5b8;--text3:#8391a7;--accent-text:#93c5fd;--accent-bg:rgba(37,99,235,.2);
+      --red-bg:rgba(239,68,68,.18);--green-bg:rgba(16,185,129,.18);--purple:#a78bfa;--purple-bg:rgba(167,139,250,.18);--teal:#2dd4bf;--teal-bg:rgba(45,212,191,.18);
       --field-bg:#161b27;--field-border:#34405e;--field-text:#e5e9f0;--field-label:#9aa5b8;--field-focus-bg:#1a2236;--scrollbar:#475569;
       --danger-bg:#2a1418;--danger-border:#4a2129;--success-bg:#0f2318;--success-border:#1c3d2a;
       --hcal-holiday-bg:rgba(245,158,11,.22);--hcal-holiday-text:#fbbf24;--hcal-leave-bg:rgba(139,92,246,.25);--hcal-leave-text:#c4b5fd;
@@ -342,14 +344,14 @@
 
     /* ── STATUS BADGES (leave / task) ── */
     .st-badge{display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600}
-    .st-pending{background:#fef3c7;color:#92400e}
-    .st-approved{background:#dcfce7;color:#166534}
-    .st-rejected{background:#fee2e2;color:#991b1b}
-    .st-todo{background:#e0e7ff;color:#3730a3}
-    .st-progress{background:#fef3c7;color:#92400e}
-    .st-done{background:#dcfce7;color:#166534}
+    .st-pending{background:var(--amber-bg);color:var(--amber)}
+    .st-approved{background:var(--green-bg);color:var(--green)}
+    .st-rejected{background:var(--red-bg);color:var(--red)}
+    .st-todo{background:var(--purple-bg);color:var(--purple)}
+    .st-progress{background:var(--amber-bg);color:var(--amber)}
+    .st-done{background:var(--green-bg);color:var(--green)}
     .pri-high{color:var(--red);font-weight:600}
-    .pri-medium{color:#d97706;font-weight:600}
+    .pri-medium{color:var(--amber);font-weight:600}
     .pri-low{color:var(--green);font-weight:600}
 
     /* ── MODAL (Request Leave) ── */
@@ -380,11 +382,11 @@
        status badges elsewhere in ESS, reused here so an Off day, approved
        Leave, a Public Holiday, and a real working Shift read as visibly
        different things instead of identical blue rows with different text. */
-    .rota-type-off .rota-date-chip{background:#f1f5f9;color:var(--text3)}
-    .rota-type-leave .rota-date-chip{background:#e0e7ff;color:#3730a3}
-    .rota-type-holiday .rota-date-chip{background:#dcfce7;color:#166534}
-    .rota-type-ot .rota-date-chip{background:#fef3c7;color:#92400e}
-    .rota-type-training .rota-date-chip{background:#ccfbf1;color:#0f766e}
+    .rota-type-off .rota-date-chip{background:var(--bg3);color:var(--text3)}
+    .rota-type-leave .rota-date-chip{background:var(--purple-bg);color:var(--purple)}
+    .rota-type-holiday .rota-date-chip{background:var(--green-bg);color:var(--green)}
+    .rota-type-ot .rota-date-chip{background:var(--amber-bg);color:var(--amber)}
+    .rota-type-training .rota-date-chip{background:var(--teal-bg);color:var(--teal)}
     .rota-type-off .rota-shift-title,.rota-type-off .rota-shift-sub{color:var(--text3)}
     /* Tasks attached to one day's shift (Weekly/Monthly Rota's task picker
        in HRMS) -- the ESS Rota list used to show only the shift's time and
@@ -414,7 +416,6 @@
 
     /* ── CARDS ── */
     .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px}
-    .card-title{font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px}
     .card-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:14px}
     .profile-row{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
     @media(max-width:500px){.profile-row{grid-template-columns:1fr}}
@@ -481,7 +482,7 @@
     .ps-print:hover{border-color:var(--accent);color:var(--accent-text)}
 
     /* ── SELF-SERVICE REQUESTS ── */
-    .st-cancelled{background:#f1f5f9;color:#64748b}
+    .st-cancelled{background:var(--bg3);color:var(--text3)}
     .req-row{display:flex;align-items:flex-start;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px}
     .req-row.is-new{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
     .req-ico{width:38px;height:38px;border-radius:11px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text2);flex-shrink:0}
@@ -512,9 +513,9 @@
     .doc-name{font-size:13px;font-weight:600;color:var(--text)}
     .doc-date{font-size:11.5px;color:var(--text3);margin-top:1px}
     .doc-pill{display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;white-space:nowrap}
-    .doc-pill.valid{background:rgba(16,185,129,.14);color:var(--green)}
-    .doc-pill.soon{background:var(--hcal-holiday-bg);color:var(--hcal-holiday-text)}
-    .doc-pill.critical,.doc-pill.expired{background:rgba(239,68,68,.14);color:var(--red)}
+    .doc-pill.valid{background:var(--green-bg);color:var(--green)}
+    .doc-pill.soon{background:var(--amber-bg);color:var(--amber)}
+    .doc-pill.critical,.doc-pill.expired{background:var(--red-bg);color:var(--red)}
     .doc-pill.missing{background:var(--bg3);color:var(--text3)}
     .doc-alert{border-color:rgba(239,68,68,.35);background:var(--danger-bg)}
     .ess-toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,16px);background:#0f172a;color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;font-weight:500;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:300;max-width:calc(100vw - 32px);box-shadow:0 10px 30px rgba(0,0,0,.25)}
@@ -535,8 +536,8 @@
     .att-stat-val{font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--text);margin-top:4px}
     .att-stat-sub{font-size:11.5px;color:var(--text3);margin-top:2px}
     .att-pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600}
-    .att-pill.live{background:rgba(16,185,129,.16);color:var(--green)}
-    .att-pill.miss{background:var(--hcal-holiday-bg);color:var(--hcal-holiday-text)}
+    .att-pill.live{background:var(--green-bg);color:var(--green)}
+    .att-pill.miss{background:var(--amber-bg);color:var(--amber)}
 
     /* ── PROFILE ── */
     .profile-2col{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px;align-items:start}
@@ -611,7 +612,7 @@
     .ess-page-sub{font-size:12.5px;color:var(--text3);margin-top:3px}
     /* cards */
     .card{border-radius:12px;padding:18px}
-    .card-title,.dash-section-title{font-family:'Syne',sans-serif;font-size:13.5px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--text)}
+    .card-title,.dash-section-title{font-family:'Syne',sans-serif;font-size:13.5px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--text);margin-bottom:14px}
     .dash-section-title{margin:6px 0 10px}
     .rota-week-label{font-family:'Syne',sans-serif;text-transform:none;letter-spacing:0;font-size:12.5px}
     .tbl-wrap{border-radius:10px}
@@ -715,10 +716,10 @@
     .acal-cell small{font-size:9.5px;font-weight:500;opacity:.85}
     .acal-cell.empty{visibility:hidden}
     .acal-cell.today{box-shadow:0 0 0 1.5px var(--accent) inset}
-    .acal-present,.acal-lg.acal-present{background:rgba(16,185,129,.16);color:#047857}
-    .acal-incomplete,.acal-lg.acal-incomplete{background:var(--hcal-holiday-bg);color:var(--hcal-holiday-text)}
+    .acal-present,.acal-lg.acal-present{background:var(--green-bg);color:var(--green)}
+    .acal-incomplete,.acal-lg.acal-incomplete{background:var(--amber-bg);color:var(--amber)}
     .acal-leave,.acal-lg.acal-leave{background:var(--hcal-leave-bg);color:var(--hcal-leave-text)}
-    .acal-holiday,.acal-lg.acal-holiday{background:rgba(59,130,246,.16);color:#1d4ed8}
+    .acal-holiday,.acal-lg.acal-holiday{background:var(--accent-bg);color:var(--accent)}
     :root[data-theme="dark"] .acal-present{color:#6ee7b7}
     :root[data-theme="dark"] .acal-holiday{color:#93c5fd}
     .att-today-status{font-family:'Syne',sans-serif;font-size:22px;font-weight:700;color:var(--text);margin:4px 0 2px}

@@ -1000,3 +1000,15 @@ Items 1–6 from the original roadmap here are done — RBAC, GPS check-in/out, 
 ```
 
 This priority order follows the same principle as the main architecture doc: fix live security exposure and persist data correctly before layering more UI on top of it.
+
+## 11. Overtime cool-off, eligibility list, ESS (2026-09-25)
+
+**Cool-off.** `hr_settings` / `ot-rules-config` gained `otCooloffMinutes` (HRMS > HR Settings > Overtime, default 0). Counted OT for a day = `max(0, worked − standard − cooloff)` (`_ot_after_cooloff`, `attendance.py`). It applies to the daily report and monthly staff overview, which recompute OT from `total_seconds`; the `ot_seconds` column written at punch time by `attendance_store` still uses the old rule and is not read by these reports.
+
+**Eligibility list.** `overtime_eligibility_rows()` (`attendance.py`) lists days with worked > standard, per employee: first clock-in / last clock-out (company local time), worked, extra, eligible OT, and a status — `Eligible - not yet requested`, `Requested - <status>`, or `Not eligible (within cool-off)`. Requests are matched to `overtimeRequests` records by `(employee_id | employee_no | name, date[:10])` — HRMS stores `Employee.id`, ESS stores `employee_no`.
+- HRMS: `GET /attendance/overtime-eligibility?date_from&date_to` (`attendance:view`, department-scoped, ≤92 days, default last 14). UI: card above Overtime Requests with a "Request OT" button that creates a Pending record.
+- ESS: `GET /ess/overtime-eligibility` (caller only, last 31 days). UI: card at the top of the Requests tab; "Request" opens the overtime form prefilled with date, eligible hours and type.
+
+**ESS leave requests** now reject a start date >30 days in the past and days beyond the remaining balance (unpaid leave exempt). The "Contact HR" mailto (no recipient) was removed.
+
+**Attendance tab chart.** "30-Day Attendance Trend" is `_renderAttendanceTrendChart()` (`app.js`): SVG smooth area chart, gridlines, weekend bands, average/peak/today markers, hover tooltip (`attTrendHover`). The Dashboard card still uses `_renderAttendanceLineChart`.

@@ -18,12 +18,12 @@ import pathlib
 import re
 import secrets
 from calendar import monthrange
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import parse_qsl
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 import app.cache as cache
 import app.timezone_utils as timezone_utils
 from app import attendance_store, biotime_client, biotime_sync, crypto
+from app.attendance_store import _pair_day_punches
 from app.database import get_db
 from app.auth_principal import resolve_active_branch
 from app.department_scope import assert_employee_in_scope, scope_employee_query, scoped_employee_no_select, scoped_employee_nos
@@ -1496,6 +1497,26 @@ def _standard_hours_per_day(db: Session, company_id: str) -> float:
     return 8.0
 
 
+def _ot_cooloff_seconds(db: Session, company_id: str) -> int:
+    """HR Rules > Overtime "cool-off": the first N minutes worked past the
+    standard day are not overtime (default 0 = off)."""
+    row = db.query(AppDataRecord.payload).filter(
+        AppDataRecord.company_id == company_id,
+        AppDataRecord.collection == "hr_settings",
+        AppDataRecord.record_key == "ot-rules-config",
+    ).first()
+    if row:
+        try:
+            return max(0, int(float(json.loads(row[0]).get("otCooloffMinutes") or 0) * 60))
+        except (ValueError, TypeError, AttributeError):
+            pass
+    return 0
+
+
+def _ot_after_cooloff(total_seconds: int, standard_seconds: int, cooloff_seconds: int) -> int:
+    return max(0, total_seconds - standard_seconds - cooloff_seconds)
+
+
 def _late_rules(db: Session, company_id: str) -> tuple[str, int]:
     """(standard_start_time "HH:MM", grace_minutes) for the Late Coming
     Report -- a separate hr_settings record from ot-rules-config (OT is
@@ -1532,6 +1553,108 @@ def _format_duration_hm(seconds: int | float | None) -> str:
     total_minutes = round(max(0, seconds or 0) / 60)
     hours, minutes = divmod(int(total_minutes), 60)
     return f"{hours}:{minutes:02d}"
+
+
+def overtime_eligibility_rows(db: Session, company_id: str, employees: list[Employee], start: date, end: date) -> list[dict[str, Any]]:
+    """Shared by HRMS (all scoped employees) and ESS (just the caller)."""
+    offset = _company_offset(db, company_id)
+    standard_seconds = int(_standard_hours_per_day(db, company_id) * 3600)
+    cooloff = _ot_cooloff_seconds(db, company_id)
+    weekend_days = _weekend_day_set(db, company_id)
+    by_no = {e.employee_no: e for e in employees}
+    if not by_no:
+        return []
+
+    details = db.query(AttendanceDetail).filter(
+        AttendanceDetail.company_id == company_id,
+        AttendanceDetail.employee_id.in_(list(by_no)),
+        AttendanceDetail.work_date >= start.isoformat(),
+        AttendanceDetail.work_date <= end.isoformat(),
+        AttendanceDetail.clock_in_1.isnot(None),
+    ).order_by(AttendanceDetail.work_date.desc()).all()
+
+    requests: dict[tuple[str, str], dict] = {}
+    for (raw,) in db.query(AppDataRecord.payload).filter(
+        AppDataRecord.company_id == company_id, AppDataRecord.collection == "overtimeRequests"
+    ).all():
+        try:
+            rec = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(rec, dict):
+            continue
+        day = str(rec.get("date") or "")[:10]
+        # HRMS stores Employee.id, ESS stores employee_no; older rows only a name.
+        for who in (rec.get("employee_id"), str(rec.get("employee") or "").strip().lower()):
+            if who:
+                requests[(str(who), day)] = rec
+
+    rows = []
+    for d in details:
+        excess = d.total_seconds - standard_seconds
+        if excess <= 0:
+            continue
+        emp = by_no[d.employee_id]
+        sessions = [(getattr(d, f"clock_in_{n}"), getattr(d, f"clock_out_{n}")) for n in range(1, 6)]
+        first_in = next((i for i, _ in sessions if i), None)
+        last_out = next((o for _, o in reversed(sessions) if o), None)
+        eligible_seconds = _ot_after_cooloff(d.total_seconds, standard_seconds, cooloff)
+        req = requests.get((emp.id, d.work_date)) or requests.get((emp.employee_no, d.work_date)) or requests.get((emp.full_name.strip().lower(), d.work_date))
+        if eligible_seconds <= 0:
+            eligibility = "Not eligible (within cool-off)"
+        elif req:
+            eligibility = f"Requested - {req.get('status') or 'Pending'}"
+        else:
+            eligibility = "Eligible - not yet requested"
+        dow = (date.fromisoformat(d.work_date).weekday() + 1) % 7
+        rows.append({
+            "employee_id": emp.id,
+            "employee_no": emp.employee_no,
+            "employee": emp.full_name,
+            "department": emp.department,
+            "date": d.work_date,
+            "day_type": "weekend" if weekend_days is not None and dow in weekend_days else "working",
+            "clock_in": (first_in + offset).strftime("%H:%M") if first_in else None,
+            "clock_out": (last_out + offset).strftime("%H:%M") if last_out else None,
+            "worked": _format_duration_hm(d.total_seconds),
+            "standard": _format_duration_hm(standard_seconds),
+            "extra": _format_duration_hm(excess),
+            "eligible_ot": _format_duration_hm(eligible_seconds),
+            "eligible_hours": round(eligible_seconds / 3600, 2),
+            "eligible": eligible_seconds > 0,
+            "eligibility": eligibility,
+            "request_id": req.get("id") if req else None,
+        })
+    return rows
+
+
+@gated_router.get("/overtime-eligibility")
+def attendance_overtime_eligibility(
+    date_from: str | None = Query(default=None, description="YYYY-MM-DD, defaults to 14 days ago"),
+    date_to: str | None = Query(default=None, description="YYYY-MM-DD, defaults to today"),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("attendance:view")),
+) -> dict[str, Any]:
+    """Days where an employee worked past the standard day, with clock in/out
+    and whether the overtime is eligible (past the HR Rules cool-off) and
+    whether a request has already been filed for it."""
+    offset = _company_offset(db, principal.company_id)
+    today = _local_today(offset)
+    try:
+        end = date.fromisoformat(date_to) if date_to else today
+        start = date.fromisoformat(date_from) if date_from else end - timedelta(days=14)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
+    if start > end or (end - start).days > 92:
+        raise HTTPException(status_code=400, detail="Choose a range of at most 92 days")
+    employees = scope_employee_query(
+        db.query(Employee).filter(Employee.company_id == principal.company_id, Employee.status == "active"), principal
+    ).all()
+    return {
+        "from": start.isoformat(), "to": end.isoformat(),
+        "cooloff_minutes": _ot_cooloff_seconds(db, principal.company_id) // 60,
+        "rows": overtime_eligibility_rows(db, principal.company_id, employees, start, end),
+    }
 
 
 @gated_router.get("/monthly-report")
@@ -1572,6 +1695,7 @@ def attendance_monthly_report(
 
     weekend_days = _weekend_day_set(db, principal.company_id)
     standard_hours = _standard_hours_per_day(db, principal.company_id)
+    ot_cooloff = _ot_cooloff_seconds(db, principal.company_id)
 
     working_days: list[date] = []
     d = start
@@ -1648,7 +1772,7 @@ def attendance_monthly_report(
         # was short), not (total_hours - working_days * standard_hours).
         standard_seconds = int(standard_hours * 3600)
         total_seconds_month = sum(row.total_seconds for row in days.values())
-        ot_seconds_month = sum(max(0, row.total_seconds - standard_seconds) for row in days.values())
+        ot_seconds_month = sum(_ot_after_cooloff(row.total_seconds, standard_seconds, ot_cooloff) for row in days.values())
         leave_days = leave_days_by_emp.get(emp.id, 0)
         absent_days = max(0, len(working_days) - present_days - leave_days)
         result.append({
@@ -1825,6 +1949,7 @@ def attendance_employee_daily(
     last_day = date(year, month, monthrange(year, month)[1])
     weekend_days = _weekend_day_set(db, principal.company_id)
     standard_hours = _standard_hours_per_day(db, principal.company_id)
+    ot_cooloff = _ot_cooloff_seconds(db, principal.company_id)
     standard_seconds_day = int(standard_hours * 3600)
 
     # Reads each day's already-paired clock_in/out_N + total_seconds
@@ -1943,7 +2068,7 @@ def attendance_employee_daily(
             # "H:MM", not decimal hours -- see _format_duration_hm's
             # docstring: "8.95" looks like it could already be a time.
             "total_hours": _format_duration_hm(total_seconds_day),
-            "ot_hours": _format_duration_hm(max(0, total_seconds_day - standard_seconds_day)) if has_punches else "0:00",
+            "ot_hours": _format_duration_hm(_ot_after_cooloff(total_seconds_day, standard_seconds_day, ot_cooloff)) if has_punches else "0:00",
             "under_hours": _format_duration_hm(max(0, standard_seconds_day - total_seconds_day)) if has_punches and not (is_weekend or is_leave or is_holiday) else "0:00",
             "absent": "Yes" if is_absent else "",
             "sick": "Yes" if is_sick else "",

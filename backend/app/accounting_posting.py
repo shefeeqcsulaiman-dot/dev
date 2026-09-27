@@ -219,6 +219,22 @@ def build_journal(db: Session, transaction: SourceTransaction) -> JournalEntry:
         if vat:
             lines.append(line(accounts["2210"], "Input VAT", debit=vat))
         lines.append(line(accounts["2100"], "Supplier payable", credit=total))
+    elif transaction.module in {"receipt", "payment"}:
+        # Customer receipt: Dr Cash & Bank, Cr Accounts Receivable (clears AR).
+        # Supplier payment: Dr Accounts Payable, Cr Cash & Bank (clears AP).
+        # No VAT line -- invoice/bill posting already recognized VAT; a
+        # receipt/payment only moves cash against a control account.
+        is_supplier = transaction.module == "payment"
+        require_accounts(accounts, ["1000", "2100" if is_supplier else "1100"])
+        cash_bank = accounts["1000"]
+        control = accounts["2100"] if is_supplier else accounts["1100"]
+        description = f"{'Payment to' if is_supplier else 'Receipt from'} {transaction.party_name or transaction.reference}"
+        if is_supplier:
+            lines.append(line(control, description, debit=total))
+            lines.append(line(cash_bank, description, credit=total))
+        else:
+            lines.append(line(cash_bank, description, debit=total))
+            lines.append(line(control, description, credit=total))
     else:
         raise PostingError(f"Unsupported source module for posting: {transaction.module}")
 

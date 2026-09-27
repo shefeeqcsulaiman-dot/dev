@@ -1,4 +1,5 @@
 import os
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import boto3
@@ -58,3 +59,37 @@ def upload_fileobj(company_id: str, filename: str, content_type: str, fileobj) -
         ExtraArgs={"ContentType": content_type},
     )
     return key
+
+
+def upload_backup_bytes(key: str, data: bytes, content_type: str = "application/zip") -> str:
+    """Platform-level upload with an arbitrary key -- not under companies/{id}/..."""
+    ensure_bucket()
+    if use_local_storage():
+        path = LOCAL_STORAGE_ROOT / key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        return str(path)
+    s3_client().put_object(Bucket=settings.s3_bucket, Key=key, Body=data, ContentType=content_type)
+    return key
+
+
+def delete_old_backups(prefix: str, keep_days: int) -> list[str]:
+    """Deletes objects under `prefix` older than keep_days. Returns what was deleted."""
+    cutoff = datetime.now(UTC) - timedelta(days=keep_days)
+    deleted: list[str] = []
+    if use_local_storage():
+        root = LOCAL_STORAGE_ROOT / prefix
+        if root.exists():
+            for f in root.iterdir():
+                if f.is_file() and datetime.fromtimestamp(f.stat().st_mtime, tz=UTC) < cutoff:
+                    f.unlink()
+                    deleted.append(str(f))
+        return deleted
+    client = s3_client()
+    paginator = client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=settings.s3_bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            if obj["LastModified"] < cutoff:
+                client.delete_object(Bucket=settings.s3_bucket, Key=obj["Key"])
+                deleted.append(obj["Key"])
+    return deleted
