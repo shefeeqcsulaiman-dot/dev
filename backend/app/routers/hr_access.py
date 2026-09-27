@@ -7,6 +7,7 @@ subject prefix and secret key, so an /hr/login token also works against
 """
 
 import json
+import app.timezone_utils as timezone_utils
 import math
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -438,6 +439,37 @@ def hr_me(db: Session = Depends(get_db), emp: Employee = Depends(get_current_emp
 
 # ── role-based dashboard ────────────────────────────────────────────────────
 
+def _own_session_status(db: Session, emp: Employee) -> dict:
+    """The caller's own GPS check-in state. Included for every role, since the
+    ESS check-in button needs it for managers and HR staff too; today_sessions
+    are ISO UTC timestamps so the phone can show them in local time."""
+    country = db.query(Company.country).filter(Company.id == emp.company_id).scalar()
+    offset = timezone_utils.company_utc_offset(country)
+    now = datetime.now(UTC)
+    local_midnight = datetime.combine((now + offset).date(), datetime.min.time(), tzinfo=UTC) - offset
+
+    def aware(d: datetime | None) -> datetime | None:
+        return d.replace(tzinfo=UTC) if d is not None and d.tzinfo is None else d
+
+    recent = (
+        db.query(AttendanceSession)
+        .filter(AttendanceSession.employee_id == emp.id)
+        .filter(or_(AttendanceSession.status == "open", AttendanceSession.check_in >= now - timedelta(days=2)))
+        .order_by(AttendanceSession.check_in)
+        .all()
+    )
+    open_session = next((r for r in recent if r.status == "open"), None)
+    return {
+        "checked_in": bool(open_session),
+        "check_in_time": str(open_session.check_in) if open_session else None,
+        "check_in_at": aware(open_session.check_in).isoformat() if open_session else None,
+        "today_sessions": [
+            {"check_in": aware(r.check_in).isoformat(), "check_out": aware(r.check_out).isoformat() if r.check_out else None}
+            for r in recent if aware(r.check_in) >= local_midnight
+        ],
+    }
+
+
 @gated_router.get("/dashboard")
 def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> dict:
     role = db.get(Role, emp.role_id) if emp.role_id else None
@@ -447,6 +479,7 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
     if role_name in ("Administrator", "HR Manager"):
         return {
             "role": role_name,
+            **_own_session_status(db, emp),
             "total_employees": scope_employee_query_by_names(
                 db.query(Employee).filter(Employee.company_id == company_id), employee_scope(db, emp),
             ).count(),
@@ -478,6 +511,7 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
             ))
         return {
             "role": role_name,
+            **_own_session_status(db, emp),
             "latest_run_period": latest.period if latest else None,
             "latest_run_status": latest.status if latest else None,
             "latest_run_net_total": net_total,
@@ -485,6 +519,7 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
     if role_name == "Manager":
         return {
             "role": role_name,
+            **_own_session_status(db, emp),
             "team_active_sessions": _scope_attendance_to_branch(
                 db.query(AttendanceSession).filter(
                     AttendanceSession.company_id == company_id, AttendanceSession.status == "open"
@@ -494,16 +529,7 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
         }
 
     # Employee dashboard — own status only
-    open_session = (
-        db.query(AttendanceSession)
-        .filter(AttendanceSession.employee_id == emp.id, AttendanceSession.status == "open")
-        .first()
-    )
-    return {
-        "role": role_name,
-        "checked_in": bool(open_session),
-        "check_in_time": str(open_session.check_in) if open_session else None,
-    }
+    return {"role": role_name, **_own_session_status(db, emp)}
 
 
 # ── roles & permissions ─────────────────────────────────────────────────────

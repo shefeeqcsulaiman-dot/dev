@@ -2,11 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <!-- Installable as a phone app (Add to Home Screen) -->
+  <link rel="manifest" href="/ess-manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="TaxFlow ESS">
+  <link rel="apple-touch-icon" href="/ess-icon-192.png">
   <title>Employee Self-Service — ETaxFlow</title>
   <link rel="preload" href="/fonts/dmsans-rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu0-K4.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/syne-8vIH7w4qzmVxm2BL9A.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="src/ess.css?v=a0cd7bc006">
+  <link rel="stylesheet" href="src/ess.css?v=27290db2ff">
   <script>
     // Runs before body paints, so a saved/system dark preference applies
     // immediately instead of flashing light-then-dark once the main
@@ -119,6 +127,14 @@
     </div>
   </nav>
 
+  <!-- Mobile bottom tab bar (phones only) -->
+  <nav class="m-only m-tabbar" aria-label="Main">
+    <button type="button" data-tab="dashboard" onclick="essGoTab('dashboard')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span>Home</span></button>
+    <button type="button" data-tab="attendance" onclick="essGoTab('attendance')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 11v2a8 8 0 0 1-1 4"/><path d="M8 11a4 4 0 0 1 8 0v1a12 12 0 0 1-.6 3.8"/><path d="M5 12a7 7 0 0 1 14-1"/><path d="M8.5 16a9 9 0 0 0 .5-3"/></svg><span>Attend</span></button>
+    <button type="button" class="m-tab-mic" id="m-tab-mic" onclick="essVoice()" aria-label="Voice assistant"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4"/></svg></button>
+    <button type="button" data-tab="requests" onclick="essGoTab('requests');essMarkRequestsSeen()"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg><span>Requests</span></button>
+    <button type="button" data-tab="profile" onclick="essGoTab('profile')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span>Me</span></button>
+  </nav>
   <div class="ess-main">
     <div class="ess-topbar">
       <button class="ess-ham-btn" aria-label="Toggle menu" onclick="toggleEssSidebar()">&#9776;</button>
@@ -168,6 +184,30 @@
 
     <!-- Dashboard -->
     <div class="tab-body on" id="tb-dashboard">
+      <!-- Mobile app home (phones only, see ess.css "Mobile app") -->
+      <section class="m-only m-home" aria-label="Today">
+        <div class="m-hello">
+          <div class="m-avatar" id="m-avatar">—</div>
+          <div class="m-hello-text"><div class="m-muted" id="m-greet">Hello</div><div class="m-name" id="m-name">—</div></div>
+          <button type="button" class="m-icon-btn" onclick="essGoTab('requests')" aria-label="Requests and updates"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.5 21a1.5 1.5 0 0 0 3 0"/></svg><span class="m-dot" id="m-dot" hidden></span></button>
+        </div>
+        <div class="m-shift">
+          <div class="m-shift-kick" id="m-shift-kick">Today</div>
+          <div class="m-shift-time" id="m-shift-time">—</div>
+          <div class="m-shift-row"><span id="m-shift-state">Checking your status…</span><button type="button" class="m-shift-btn" id="m-shift-btn" onclick="essMobileCheck()">Check in</button></div>
+        </div>
+        <div class="m-shortcuts">
+          <button type="button" onclick="essOpenLeaveModal()"><span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"/><path d="M12 20V9"/><path d="M5 9a7 7 0 0 1 14 0z"/></svg></span>Leave</button>
+          <button type="button" onclick="essOpenRequestModal('overtime')"><span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="12" r="8"/><path d="M11 8v4l2 2"/><path d="M19 16v6M16 19h6"/></svg></span>Overtime</button>
+          <button type="button" onclick="essGoTab('payslips')"><span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg></span>Payslip</button>
+          <button type="button" onclick="essGoTab('rota')"><span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span>Rota</button>
+        </div>
+        <div class="m-stats">
+          <button type="button" class="m-stat" onclick="essGoTab('leave')"><span class="m-muted">Annual leave</span><b id="m-annual">—</b></button>
+          <button type="button" class="m-stat" onclick="essGoTab('requests')"><span class="m-muted">Pending requests</span><b id="m-pending">—</b></button>
+        </div>
+        <button type="button" class="m-card m-announce" id="m-announce" hidden onclick="essGoTab('dashboard')"><span class="m-muted">Announcement</span><span id="m-announce-text"></span></button>
+      </section>
       <!-- Greeting header (main-dashboard style) -->
       <div class="ess-greet">
         <div class="ess-greet-main">
@@ -323,6 +363,19 @@
 
     <!-- Profile -->
     <div class="tab-body" id="tb-profile">
+      <!-- Mobile "Me" menu (phones only) -->
+      <section class="m-only m-me" aria-label="Me">
+        <div class="m-me-head"><div class="m-avatar" id="m-me-avatar">—</div><div><div class="m-name" id="m-me-name">—</div><div class="m-muted" id="m-me-role">—</div></div></div>
+        <div class="m-list">
+          <button type="button" onclick="essGoTab('payslips')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M16 13h2"/><path d="M3 10h18"/></svg><span>Payslips</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+          <button type="button" onclick="essGoTab('rota')"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg><span>Rota and shifts</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+          <button type="button" onclick="essGoTab('leave')"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"/><path d="M12 20V9"/><path d="M5 9a7 7 0 0 1 14 0z"/></svg><span>Leave and holidays</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+          <button type="button" onclick="essGoTab('tasks')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg><span>My tasks</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+          <button type="button" onclick="essGoTab('team');loadTeamTab()"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14a6 6 0 0 1 3 6"/></svg><span>My team</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+          <button type="button" id="m-install" hidden onclick="essInstallApp()"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg><span id="m-install-label">Install the app</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+          <button type="button" class="m-danger" onclick="essLogout()"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4h4v16h-4"/><path d="M10 8l-4 4 4 4"/><path d="M6 12h10"/></svg><span>Sign out</span></button>
+        </div>
+      </section>
       <div class="profile-2col">
       <div class="profile-col">
       <div class="card" id="profile-card">
@@ -362,6 +415,22 @@
 
     <!-- Attendance -->
     <div class="tab-body" id="tb-attendance">
+      <!-- Mobile check-in (phones only) -->
+      <section class="m-only m-att" aria-label="Check in">
+        <div class="m-card m-att-card">
+          <div class="m-muted" id="m-att-date">—</div>
+          <div class="m-att-clock" id="m-att-clock">--:--</div>
+          <button type="button" class="m-att-btn" id="m-att-btn" onclick="essMobileCheck()"><svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 11v2a8 8 0 0 1-1 4"/><path d="M8 11a4 4 0 0 1 8 0v1a12 12 0 0 1-.6 3.8"/><path d="M5 12a7 7 0 0 1 14-1"/><path d="M8.5 16a9 9 0 0 0 .5-3"/></svg><span id="m-att-btn-label">Check in</span></button>
+          <div class="m-att-note" id="m-att-note"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6 7-12a7 7 0 0 0-14 0c0 6 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg><span>Your location is checked when you tap</span></div>
+        </div>
+        <div class="m-att-tiles">
+          <div class="m-card"><span class="m-muted">In</span><b id="m-att-in">--:--</b></div>
+          <div class="m-card"><span class="m-muted">Out</span><b id="m-att-out">--:--</b></div>
+          <div class="m-card"><span class="m-muted">Hours</span><b id="m-att-hours">0h</b></div>
+        </div>
+        <div class="m-section">Last 7 days</div>
+        <div class="m-week" id="m-week"></div>
+      </section>
       <div class="att-summary" id="att-summary"></div>
       <div class="att-2col">
         <div class="card">
@@ -617,6 +686,6 @@
      order between them, so config.js still runs before ess.js. -->
 <script src="/config.js" defer></script>
 <script src="src/voice.js?v=aa56e95978" defer></script>
-<script src="src/ess.js?v=d26447a367" defer></script>
+<script src="src/ess.js?v=c4f5c9201a" defer></script>
 </body>
 </html>

@@ -2954,3 +2954,11 @@ Voice is a thin input/output layer over the existing AI Assistant; it never writ
 - Frontend: `applyVoiceSettings()` (app.js, main + HRMS) sets `body.voice-off` (CSS hides `#vc-mic-btn`, `.vf-btn`, `#ai-voice-controls`) and `VoiceInput.setCompanyLang()`; POS and ESS hide their mic the same way. Settings tab `#set-voice` (`loadVoiceSettingsForm()` / `saveVoiceSettingsForm()`).
 - Privacy: audio is forwarded to the STT provider and discarded; transcripts go to the LLM only to resolve the command/draft; voice drafts are not audit-logged (the user's own Save is), confirmed voice navigation/questions are logged locally with a 60-character excerpt.
 
+## 34. ESS phone app layout (2026-09-27)
+
+- Pure presentation layer over the existing ESS page, active at `max-width: 760px` only (`ess.css` "Mobile app layer"): `.m-only` sections in `ess.html` (`.m-home` in `#tb-dashboard`, `.m-att` in `#tb-attendance`, `.m-me` in `#tb-profile`, `.m-tabbar`), sidebar/top bar hidden, modals become bottom sheets.
+- `ess.js` "Mobile app layer": `essLoadMobile()` (called from `showApp()`) fills the phone views from `/ess/me`, `/ess/leave-balance`, `/ess/requests`, `/ess/announcements`, `/ess/rota`, `/ess/attendance` and `/hr/dashboard`; `essSyncTabbar()` is called from `essTab()` so every navigation path keeps the tab bar in sync; `essMobileCheck()` wraps the existing `gpsCheckIn()` / `gpsCheckOut()` (check-out confirms first). Leave-type chips drive the real `#leave-type` select.
+- `/hr/dashboard` now includes the caller's own `checked_in`, `check_in_time`, `check_in_at` (ISO UTC) and `today_sessions` for **every** role (`_own_session_status()` in `hr_access.py`) — previously Administrator / HR Manager / Manager dashboards omitted them, so their GPS check-in page always showed "Not checked in". Tests: `test_ess_mobile_status.py`.
+- The ESS start-up block (`showApp()` for a remembered session) now sits at the very end of `ess.js` so everything it calls is defined first.
+- PWA: `ess-manifest.json` (start `/ess`, standalone, theme `#2563eb`), `ess-icon-192/512.png`, iOS `apple-mobile-web-app-*` meta; the Me menu offers `beforeinstallprompt` on Android/Chrome and Share-sheet instructions on iOS. No service worker (not required for install on current Chrome; avoids stale-cache issues).
+
