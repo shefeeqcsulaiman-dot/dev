@@ -519,6 +519,12 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 - **ESS** (mic in the portal's top bar, or Ctrl+Space): "Apply annual leave next Monday to Wednesday", "Request 2 hours overtime yesterday from 6 to 8 pm", "Salary advance of 1500 for rent", "Loan of 10,000 over 12 months", "I forgot to punch out yesterday" open the usual request form already filled in — the employee checks it and taps Submit
 - ESS questions: "What's my leave balance?", "When is my next shift?" are answered from the employee's own data; "Open payslips" etc. jump to that page
 
+### 15.1d POS voice order
+**Entry:** mic button next to the POS product search (or Ctrl+Space); push-to-talk only.
+- Say the items: "Add two Pepsi and half a kilo of tomatoes"
+- A panel lists what was recognised with editable quantities; items not in your product list are shown greyed out and can't be added
+- Nothing reaches the cart until the cashier taps **Add to cart**; prices always come from the product record, never from speech; the usual low-stock warning still shows
+
 ### 15.2 AI Invoice Extraction
 - Upload supplier invoice images (JPG/PNG/PDF)
 - Background OCR + LLM extraction: invoice no, supplier name, TRN, date, line items, totals, VAT
