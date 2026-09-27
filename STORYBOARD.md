@@ -497,6 +497,15 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 - Powered by LLM with company context
 - **Voice:** mic button beside Send (push-to-talk; click again to stop), EN / عربي language picker and a speaker toggle for spoken answers. The transcript is sent like a typed question and the answer is read aloud; questions asked in Arabic are answered in Arabic. Uses the browser's own speech recognition (Chrome, Edge, Safari); other browsers record up to ~60 s and transcribe on the server (`POST /ai/transcribe`, needs `OPENAI_API_KEY`). Voice never saves or posts anything.
 
+### 15.1a Voice commands
+**Entry:** mic button in the topbar (main app and HRMS) or **Ctrl+Space**; Esc closes.
+- Say where to go: "Open payroll", "Trial balance", "Show me the customers", "Leave requests", "افتح المخزون"
+- Open a blank form: "New expense", "Create a new quotation", "Add employee" (only the "+ New …" buttons — never Run Payroll, Publish Rota, Save)
+- Search: "Search for Al Noor in sales" types the term into that page's search box
+- Questions ("What should I check before VAT filing?") go to the AI Assistant (main app)
+- Unclear commands show "Did you mean…" buttons; nothing is opened until you pick one
+- Only screens you can already see in your sidebar are reachable by voice
+
 ### 15.2 AI Invoice Extraction
 - Upload supplier invoice images (JPG/PNG/PDF)
 - Background OCR + LLM extraction: invoice no, supplier name, TRN, date, line items, totals, VAT

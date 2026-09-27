@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=b5d4f8c830" as="style">
-<link rel="preload" href="src/app.js?v=cfc4b075a3" as="script">
+<link rel="preload" href="src/styles.css?v=3cd490539f" as="style">
+<link rel="preload" href="src/app.js?v=3e1768be48" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=b5d4f8c830">
+<link rel="stylesheet" href="src/styles.css?v=3cd490539f">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
 </head>
 <body class="theme-light">
@@ -163,6 +163,7 @@
         <select class="fi" style="padding:5px 8px;font-size:12px;width:auto" onchange="switchActiveBranch(this.value)"></select>
       </div>
       <button class="btn btn-g" id="theme-menu-toggle" onclick="toggleNightMode(document.body.classList.contains('theme-light'))">☾ Dark Mode</button>
+      <button type="button" class="btn btn-g vc-mic" id="vc-mic-btn" data-module-gate="ai" onclick="toggleVoiceCommand()" title="Voice command (Ctrl+Space)" aria-label="Voice command" aria-pressed="false"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4"/></svg></button>
       <button class="btn btn-g" data-module-gate="ai" onclick="go('ai')">AI Assistant</button>
       <button class="btn btn-g" onclick="logout()">Logout</button>
       <button class="btn btn-p hidden" id="topaction" onclick="go('sales')"></button>
@@ -5653,7 +5654,7 @@ period_locks ─&lt; audit_logs
      window.TAXFLOW_API_BASE_URL synchronously, and defer preserves source
      order relative to app.js's own defer, so config.js still runs first. -->
 <script src="config.js" defer></script>
-<script src="src/voice.js?v=15f96a032f" defer></script>
-<script src="src/app.js?v=cfc4b075a3" defer></script>
+<script src="src/voice.js?v=283726f4a4" defer></script>
+<script src="src/app.js?v=3e1768be48" defer></script>
 </body>
 </html>

@@ -3179,6 +3179,8 @@ function applyModulePermissionNav(modulesEnabled){
   // page and would no-op harmlessly anyway (no .sb/[data-module] elements
   // exist in hrms.html's DOM).
   window.COMPANY_ALLOWED_MODULES=Array.isArray(modulesEnabled)?new Set(modulesEnabled):null;
+  // hrms.html's topbar mic has no data-module-gate pass (early return below).
+  if(window.HRMS_STANDALONE)document.getElementById('vc-mic-btn')?.classList.toggle('hidden',!_vcAllowed());
   if(window.HRMS_STANDALONE)return;
   if(!Array.isArray(modulesEnabled)){
     document.querySelectorAll('.sb .nav[data-module]').forEach(n=>n.classList.remove('hidden'));
@@ -25181,6 +25183,226 @@ function syncAIVoiceControls(){
   }
 }
 document.addEventListener('DOMContentLoaded',syncAIVoiceControls);
+
+// ── Voice commands (Phase 2) ─────────────────────────────────────────────
+// Topbar mic / Ctrl+Space. The catalog is built from what this user can see
+// right now (visible sidebar items, their pages' tabs, "+ New ..." actions),
+// so voice can only reach what a click could. Nothing is ever saved.
+let _vcCatalog=new Map();
+let _vcHideTimer=null;
+
+function _vcShown(el,stopAt){
+  for(let n=el;n&&n!==document.body&&n!==stopAt;n=n.parentElement){
+    if(n.hidden||n.classList.contains('hidden'))return false;
+    if(getComputedStyle(n).display==='none')return false;
+  }
+  return true;
+}
+
+function _vcText(el){
+  return String(el?.textContent||'').replace(/\s+/g,' ').trim();
+}
+
+function buildVoiceCatalog(){
+  const catalog=new Map();
+  let n=0;
+  const add=(kind,label,alt,run)=>{
+    if(!label)return;
+    const id=kind[0]+(++n);
+    catalog.set(id,{id,kind,label:label.slice(0,160),alt:alt&&alt!==label?alt.slice(0,160):null,run});
+  };
+  const pageNavs=new Map();
+  document.querySelectorAll('.sb .nav[onclick]').forEach(nav=>{
+    const onclick=nav.getAttribute('onclick')||'';
+    // New-window items (POS, HRMS) would be popup-blocked outside a real click.
+    if(/window\.open|location/.test(onclick)||!_vcShown(nav))return;
+    const label=_vcText(nav);
+    const page=(onclick.match(/^\s*go\('([\w-]+)'\)\s*;?\s*$/)||[])[1];
+    if(page)pageNavs.set(page,{nav,label});
+    add('page',label,page?META[page]?.t:null,()=>nav.click());
+  });
+  pageNavs.forEach(({nav,label},page)=>{
+    const pageEl=document.getElementById('page-'+page);
+    if(pageEl){
+      // Page tabs, plus the Reports page's own left-hand report list.
+      pageEl.querySelectorAll('.tabs .tab[onclick*="stab("],.rep-nav-item[onclick]').forEach(tab=>{
+        if(!_vcShown(tab,pageEl))return;
+        const tabLabel=_vcText(tab);
+        if(tabLabel)add('tab',`${label} › ${tabLabel}`,null,()=>{nav.click();setTimeout(()=>tab.click(),80);});
+      });
+    }
+    const m=META[page];
+    // Only "+ ..." top actions: they open a blank form. Others (Run Payroll,
+    // Publish Rota, Save All) act immediately and are never voice-triggered.
+    if(m&&typeof m.ao==='function'&&/^\+/.test(m.a||'')){
+      // A bare "+ New" gets the page name so it can be matched by voice.
+      add('action',/^\+\s*\w+$/.test(m.a)?`${m.a} ${m.t||label}`:m.a,m.t||label,()=>{nav.click();setTimeout(()=>m.ao(),80);});
+    }
+  });
+  _vcCatalog=catalog;
+  return [...catalog.values()].map(({id,kind,label,alt})=>({id,kind,label,alt}));
+}
+
+function _vcPop(){
+  let pop=document.getElementById('vc-pop');
+  if(pop)return pop;
+  pop=document.createElement('div');
+  pop.id='vc-pop';
+  pop.className='vc-pop';
+  pop.setAttribute('role','status');
+  pop.setAttribute('aria-live','polite');
+  pop.hidden=true;
+  pop.innerHTML=`
+    <div class="vc-pop-head">
+      <span class="vc-pop-status" id="vc-pop-status"></span>
+      <select class="vc-pop-lang" id="vc-pop-lang" aria-label="Voice language" onchange="VoiceInput.setLang(this.value);syncAIVoiceControls()"><option value="en-US">EN</option><option value="ar-AE">عربي</option></select>
+      <button type="button" class="vc-pop-close" onclick="closeVoiceCommand()" aria-label="Close">×</button>
+    </div>
+    <div class="vc-pop-heard" id="vc-pop-heard"></div>
+    <div class="vc-pop-chips" id="vc-pop-chips"></div>
+    <div class="vc-pop-hint">Try “Open payroll”, “New invoice”, “Search Al Noor in sales”. Ctrl+Space to talk.</div>`;
+  document.body.appendChild(pop);
+  return pop;
+}
+
+function _vcShow(status,{heard,chips,autoHide}={}){
+  const pop=_vcPop();
+  clearTimeout(_vcHideTimer);
+  pop.hidden=false;
+  document.getElementById('vc-pop-status').textContent=status;
+  const lang=document.getElementById('vc-pop-lang');
+  if(lang&&window.VoiceInput)lang.value=VoiceInput.getLang();
+  const heardEl=document.getElementById('vc-pop-heard');
+  heardEl.textContent=heard?`“${heard}”`:'';
+  heardEl.hidden=!heard;
+  const chipsEl=document.getElementById('vc-pop-chips');
+  chipsEl.innerHTML='';
+  (chips||[]).forEach(chip=>{
+    const b=document.createElement('button');
+    b.type='button';
+    b.className='btn btn-g btn-sm';
+    b.textContent=chip.label;
+    b.onclick=chip.onClick;
+    chipsEl.appendChild(b);
+  });
+  chipsEl.hidden=!(chips&&chips.length);
+  if(autoHide)_vcHideTimer=setTimeout(closeVoiceCommand,autoHide);
+}
+
+function closeVoiceCommand(){
+  clearTimeout(_vcHideTimer);
+  if(window.VoiceInput&&VoiceInput.isActive())VoiceInput.cancel();
+  const pop=document.getElementById('vc-pop');
+  if(pop)pop.hidden=true;
+  _vcMicState('idle');
+}
+
+function _vcMicState(state){
+  const btn=document.getElementById('vc-mic-btn');
+  if(!btn)return;
+  btn.classList.toggle('listening',state==='listening');
+  btn.classList.toggle('processing',state==='processing');
+  btn.setAttribute('aria-pressed',state==='listening'?'true':'false');
+}
+
+function _vcAllowed(){
+  return !window.COMPANY_ALLOWED_MODULES||window.COMPANY_ALLOWED_MODULES.has('ai');
+}
+
+function toggleVoiceCommand(){
+  if(!window.VoiceInput||!VoiceInput.supported()){toast('Voice input is not supported in this browser','warn');return;}
+  if(!_vcAllowed()){toast("The AI module isn't enabled for your company",'warn');return;}
+  if(VoiceInput.isActive()){VoiceInput.stop();return;}
+  if(window.VoiceOutput)VoiceOutput.stop();
+  const lang=VoiceInput.getLang();
+  VoiceInput.start({
+    lang,
+    transcribe:_aiTranscribe,
+    onState:state=>{
+      _vcMicState(state);
+      if(state==='listening')_vcShow('Listening… click the mic or press Ctrl+Space when done');
+      else if(state==='processing')_vcShow('Transcribing…');
+    },
+    onText:text=>runVoiceCommand(text,lang),
+    onError:msg=>_vcShow(msg,{autoHide:5000})
+  });
+}
+
+function _vcRun(entry,query){
+  if(!entry)return;
+  entry.run();
+  if(query)setTimeout(()=>_vcFillSearch(query),260);
+}
+
+function _vcFillSearch(query){
+  const page=document.querySelector('.page.on');
+  const inputs=[...(page||document).querySelectorAll('input[type="search"],input[placeholder]')]
+    .filter(i=>(i.type==='search'||/search|filter|find|بحث/i.test(i.placeholder||''))&&i.offsetParent!==null);
+  const input=inputs[0];
+  if(!input){toast(`No search box on this page for “${query}”`,'warn');return;}
+  input.focus();
+  input.value=query;
+  ['input','keyup','change'].forEach(type=>input.dispatchEvent(new Event(type,{bubbles:true})));
+}
+
+function _vcAnswer(question,lang,alternatives){
+  const aiNav=document.querySelector('[data-module-gate="ai"][onclick*="go(\'ai\')"]');
+  if(window.HRMS_STANDALONE||!document.getElementById('page-ai')||(aiNav&&!_vcShown(aiNav))){
+    const chips=_vcChips(alternatives||[],null);
+    _vcShow(chips.length?'That sounds like a question — these pages may help:':'That sounds like a question — ask it in the AI Assistant (main app).',{heard:question,chips,autoHide:chips.length?0:6000});
+    return;
+  }
+  closeVoiceCommand();
+  go('ai');
+  setTimeout(()=>{
+    const input=document.getElementById('system-ai-question');
+    if(input)input.value=question;
+    _aiVoiceLang=lang;
+    askSystemAI();
+  },80);
+}
+
+function _vcChips(ids,query){
+  return ids.map(id=>_vcCatalog.get(id)).filter(Boolean).map(entry=>({
+    label:entry.label,
+    onClick:()=>{closeVoiceCommand();_vcRun(entry,query);}
+  }));
+}
+
+async function runVoiceCommand(text,lang){
+  const transcript=String(text||'').trim();
+  if(!transcript)return;
+  const targets=buildVoiceCatalog();
+  _vcShow('Working out where to go…',{heard:transcript});
+  let res;
+  try{
+    res=await moduleApi('/ai/voice-intent',{method:'POST',body:{transcript,lang:lang==='ar-AE'?'ar':'en',targets}});
+  }catch(err){
+    _vcShow(`Voice command failed: ${err.message||err}`,{heard:transcript,autoHide:6000});
+    return;
+  }
+  const entry=res.target?_vcCatalog.get(res.target):null;
+  if(res.intent==='answer'&&res.query){_vcAnswer(res.query,lang,res.alternatives);return;}
+  if(entry&&['navigate','open_form','search'].includes(res.intent)&&res.confidence>=60){
+    const verb=res.intent==='open_form'?'Opening form':res.intent==='search'?`Searching “${res.query}” in`:'Opening';
+    _vcShow(`${verb} ${entry.label}`,{heard:transcript,autoHide:2500});
+    _vcRun(entry,res.intent==='search'?res.query:null);
+    audit('Voice command',transcript.slice(0,60),entry.label.slice(0,60));
+    return;
+  }
+  const ids=[...(entry?[entry.id]:[]),...(res.alternatives||[])].filter((id,i,a)=>a.indexOf(id)===i).slice(0,4);
+  const query=res.intent==='search'?res.query:null;
+  _vcShow(ids.length?'Did you mean…':'Sorry, I couldn’t match that to a page.',{heard:transcript,chips:_vcChips(ids,query)});
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey&&!e.altKey&&!e.metaKey&&!e.shiftKey&&e.code==='Space'&&document.getElementById('vc-mic-btn')){
+    e.preventDefault();
+    toggleVoiceCommand();
+  }else if(e.key==='Escape'&&document.getElementById('vc-pop')?.hidden===false){
+    closeVoiceCommand();
+  }
+});
 
 async function askSystemAI(prompt){
   const input=document.getElementById('system-ai-question');

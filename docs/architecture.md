@@ -2920,4 +2920,11 @@ Voice is a thin input/output layer over the existing AI Assistant; it never writ
 - **`POST /ai/transcribe`** (`routers/ai.py`, under `require_module("ai")`, 15/min): multipart `file` + optional `lang`; 422 empty, 413 over 5 MB; forwards to OpenAI (`OPENAI_TRANSCRIBE_MODEL`, default `gpt-4o-mini-transcribe`) via `ai_client.transcribe_audio()`; 503 when no key or the provider fails. Audio is never stored.
 - **`AIAssistRequest.answer_lang`** (`"en"`/`"ar"`) appends an "answer in Arabic" instruction to the `/ai/assist` prompt.
 - Tests: `backend/tests/test_voice.py` (STT/LLM mocked).
-- Not yet: voice commands/navigation, voice data entry, HRMS/ESS/POS voice, per-company voice settings and daily transcription cap (Phases 2–5 of the voice plan).
+- Not yet: voice data entry, ESS/POS voice, per-company voice settings and daily transcription cap (Phases 3–5 of the voice plan).
+
+### 33.1 Voice commands (Phase 2)
+
+- **Catalog, client side** (`buildVoiceCatalog()` in `app.js`): visible `.sb .nav` items (pages; `window.open` items skipped), the `.tabs .tab` / `.rep-nav-item` entries of pages reachable from a visible nav, and each such page's `META[page]` top action **only when its label starts with "+"** (blank create form). Ids are per-request (`p1`, `t7`, `a3`) mapped to closures that click the real element, so every existing guard (`_hrmsNavAllowed`, `_moduleNavAllowed`, `goHrmsTab`) still runs.
+- **`POST /ai/voice-intent`** (`routers/ai.py` → `app/voice_intent.py`, principal auth so HRMS employee logins work, `require_module("ai")`, 30/min): `{transcript, lang, targets[≤400]}` → `{intent: navigate|open_form|search|answer|unknown, target, query, confidence, alternatives, source}`. A rule matcher (verb stripping + difflib/token overlap) answers alone at ≥90; otherwise `call_llm` (`OPENAI_VOICE_MODEL` / `ANTHROPIC_VOICE_MODEL`). `sanitize()` drops any LLM reply whose target isn't in the list, whose kind doesn't fit the intent, or that picks search/answer without search words / a question — then the rule result is used. Reads no company data.
+- **Dispatcher** (`runVoiceCommand()`): confidence ≥60 → run target (search fills the first visible search/filter input on the page); `answer` → AI Assistant with the question (HRMS: message + page chips); otherwise "Did you mean…" chips. Confirmed commands are written to the local audit trail. Topbar `#vc-mic-btn` (index: `data-module-gate="ai"`; hrms: hidden in `applyModulePermissionNav`), Ctrl+Space / Esc.
+- `/ai/transcribe` now also uses principal auth (HRMS server-STT fallback).

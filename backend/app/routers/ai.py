@@ -6,12 +6,14 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.ai_client import call_llm, transcribe_audio
+from app.auth_principal import Principal, get_current_principal
 from app.database import get_db
 from app.dependencies import get_current_user, require_module
 from app.limiter import limiter
 from app.routers.app_data import get_company_vat_rate
 from app.models import Account, AppDataRecord, AuditLog, ExceptionEvent, Invoice, SourceTransaction, TaxLine, User
-from app.schemas import AIAssistRequest, AIExceptionExplainRequest, AIResponse, AITransactionValidationRequest
+from app.schemas import AIAssistRequest, AIExceptionExplainRequest, AIResponse, AITransactionValidationRequest, VoiceIntentRequest, VoiceIntentResponse
+from app.voice_intent import resolve_intent
 
 ASSISTANT_SYSTEM_PROMPT = (
     "You are TaxFlow AI, a safe review-layer assistant embedded in a UAE tax and accounting SaaS app. "
@@ -195,7 +197,7 @@ def transcribe(
     request: Request,
     file: UploadFile = File(...),
     lang: str | None = Form(None),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(get_current_principal),
 ) -> dict[str, str]:
     """Server fallback for voice input when the browser has no built-in speech
     recognition. Audio is forwarded to the STT provider and never stored."""
@@ -211,6 +213,20 @@ def transcribe(
     if "error" in result:
         raise HTTPException(status_code=503, detail=result["error"])
     return {"text": result["text"], "lang": lang_code or ""}
+
+
+@router.post("/voice-intent", response_model=VoiceIntentResponse)
+@limiter.limit("30/minute")
+def voice_intent(request: Request, payload: VoiceIntentRequest, principal: Principal = Depends(get_current_principal)) -> VoiceIntentResponse:
+    """Maps a spoken command onto one of the targets the client can already
+    see (pages, tabs, blank create-forms). Reads no company data and writes nothing."""
+    seen: set[str] = set()
+    targets = []
+    for t in payload.targets:
+        if t.id not in seen:
+            seen.add(t.id)
+            targets.append(t.model_dump())
+    return VoiceIntentResponse(**resolve_intent(payload.transcript, targets, payload.lang))
 
 
 @router.post("/validate-transaction", response_model=AIResponse)

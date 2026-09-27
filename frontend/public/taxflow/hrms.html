@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=b5d4f8c830" as="style">
-<link rel="preload" href="src/app.js?v=cfc4b075a3" as="script">
+<link rel="preload" href="src/styles.css?v=3cd490539f" as="style">
+<link rel="preload" href="src/app.js?v=3e1768be48" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=b5d4f8c830">
+<link rel="stylesheet" href="src/styles.css?v=3cd490539f">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -319,6 +319,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <input type="text" placeholder="Search employees, modules, reports..." id="hrms-global-search">
     </div>
     <div class="tb-right-hrms">
+      <button type="button" class="hm-icon-btn vc-mic" id="vc-mic-btn" onclick="toggleVoiceCommand()" title="Voice command (Ctrl+Space)" aria-label="Voice command" aria-pressed="false"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4"/></svg></button>
       <div class="hm-icon-btn" title="Notifications" onclick="goHrmsTab(7,'hr-expiry');scheduleIdleTask(refreshExpiryAlerts,100)">
         <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5a5 5 0 00-5 5v3L1.5 11.5h13L13 9.5v-3a5 5 0 00-5-5z"/><path d="M6.5 13.5a1.5 1.5 0 003 0"/></svg>
         <div class="hm-badge" id="hrms-notif-badge" style="display:none">0</div>
@@ -3090,7 +3091,8 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=cfc4b075a3" defer></script>
+<script src="src/voice.js?v=283726f4a4" defer></script>
+<script src="src/app.js?v=3e1768be48" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

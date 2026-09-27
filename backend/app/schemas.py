@@ -1025,6 +1025,28 @@ class AIAssistRequest(BaseModel):
     answer_lang: Literal["en", "ar"] | None = None
 
 
+class VoiceTarget(BaseModel):
+    id: str = Field(min_length=1, max_length=40)
+    kind: Literal["page", "tab", "action"]
+    label: str = Field(min_length=1, max_length=160)
+    alt: str | None = Field(default=None, max_length=160)
+
+
+class VoiceIntentRequest(BaseModel):
+    transcript: str = Field(min_length=1, max_length=500)
+    lang: Literal["en", "ar"] | None = None
+    targets: list[VoiceTarget] = Field(min_length=1, max_length=400)
+
+
+class VoiceIntentResponse(BaseModel):
+    intent: Literal["navigate", "open_form", "search", "answer", "unknown"]
+    target: str | None = None
+    query: str | None = None
+    confidence: int = 0
+    alternatives: list[str] = []
+    source: Literal["rules", "llm"] = "rules"
+
+
 class AITransactionValidationRequest(BaseModel):
     source: SourceTransactionCreate
     supplier_trn: str | None = None
