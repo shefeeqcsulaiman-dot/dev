@@ -2007,8 +2007,23 @@
     if (!r.ok) throw new Error((data && data.detail) || 'Transcription failed');
     return data.text;
   }
-  function essVoice() {
+  // Company voice switch / default language (Settings > AI & Voice).
+  var _essVoiceSettings = null;
+  async function essApplyVoiceSettings() {
+    try {
+      _essVoiceSettings = await essApi('GET', '/ess/voice-settings');
+    } catch (e) { return null; }
+    var btn = document.getElementById('ess-mic-btn');
+    if (btn) btn.hidden = !_essVoiceSettings.enabled;
+    if (window.VoiceInput) VoiceInput.setCompanyLang(_essVoiceSettings.default_lang);
+    return _essVoiceSettings;
+  }
+  if (localStorage.getItem(ESS_TOKEN_KEY)) setTimeout(essApplyVoiceSettings, 1200);
+  async function essVoice() {
     if (!window.VoiceInput || !VoiceInput.supported()) { essToast('Voice input is not supported in this browser', 'err'); return; }
+    // First use after signing in: settings weren't loaded at page start.
+    if (!_essVoiceSettings && !(await essApplyVoiceSettings())) return;
+    if (!_essVoiceSettings.enabled) { essToast('Voice is turned off for your company', 'err'); return; }
     if (VoiceInput.isActive()) { VoiceInput.stop(); return; }
     if (window.VoiceOutput) VoiceOutput.stop();
     var lang = VoiceInput.getLang();

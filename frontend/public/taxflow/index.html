@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=6e62d5a7ac" as="style">
-<link rel="preload" href="src/app.js?v=f78d55c042" as="script">
+<link rel="preload" href="src/styles.css?v=0d15e03b73" as="style">
+<link rel="preload" href="src/app.js?v=4584084c08" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=6e62d5a7ac">
+<link rel="stylesheet" href="src/styles.css?v=0d15e03b73">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
 </head>
 <body class="theme-light">
@@ -3285,6 +3285,7 @@
     <div class="tab" onclick="stab(this,'set-docs')">Invoice</div>
     <div class="tab" onclick="stab(this,'set-quotation-docs')">Quotation</div>
     <div class="tab" onclick="stab(this,'set-pos')">POS</div>
+    <div class="tab" data-module-gate="ai" onclick="stab(this,'set-voice');loadVoiceSettingsForm()">AI &amp; Voice</div>
     <div class="tab" onclick="stab(this,'set-backup')">Backup & Audit</div>
     <div class="tab" data-module-gate="exception" onclick="stab(this,'set-exception');loadExceptionCenter()">Exception Center</div>
   </div>
@@ -3705,6 +3706,19 @@
           <tr data-empty-state="1"><td colspan="3" style="color:var(--text3);text-align:center">Loading service types…</td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+
+  <div class="tab-body" id="set-voice">
+    <div class="card mb16">
+      <div class="card-hd"><div><div class="card-title">Voice</div><div class="card-sub">Mic in the AI Assistant, voice commands, Dictate on forms, HRMS, Employee portal and POS. Voice only fills or opens things — people still press Save / Submit.</div></div></div>
+      <div class="toggle-row"><div><div>Enable voice</div><div class="toggle-copy">Turn off to hide every mic and Dictate button for all users.</div></div><input type="checkbox" id="vs-enabled"></div>
+      <div class="toggle-row"><div><div>Allow server transcription</div><div class="toggle-copy">For browsers without built-in speech recognition (e.g. Firefox). Audio is sent to the AI provider and never stored. Off = Chrome, Edge and Safari only.</div></div><input type="checkbox" id="vs-cloud"></div>
+      <div class="fr2" style="margin-top:12px">
+        <div class="fg"><label class="fl" for="vs-lang">Default voice language</label><select class="fi" id="vs-lang"><option value="">Each browser's language</option><option value="en-US">English</option><option value="ar-AE">Arabic — عربي</option></select></div>
+        <div class="fg"><label class="fl" for="vs-cap">Server transcriptions per day</label><input class="fi mono" id="vs-cap" type="number" min="0" max="10000" step="1"></div>
+      </div>
+      <div class="flx-b" style="margin-top:8px"><span class="card-sub" id="vs-usage"></span><button class="btn btn-p" onclick="saveVoiceSettingsForm()">Save voice settings</button></div>
     </div>
   </div>
 
@@ -5656,7 +5670,7 @@ period_locks ─&lt; audit_logs
      window.TAXFLOW_API_BASE_URL synchronously, and defer preserves source
      order relative to app.js's own defer, so config.js still runs first. -->
 <script src="config.js" defer></script>
-<script src="src/voice.js?v=283726f4a4" defer></script>
-<script src="src/app.js?v=f78d55c042" defer></script>
+<script src="src/voice.js?v=aa56e95978" defer></script>
+<script src="src/app.js?v=4584084c08" defer></script>
 </body>
 </html>

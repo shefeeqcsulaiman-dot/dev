@@ -11,10 +11,11 @@ from app.auth_principal import Principal, get_current_principal
 from app.database import get_db
 from app.dependencies import get_current_user, require_module
 from app.limiter import limiter
-from app.routers.app_data import get_company_vat_rate
+from app.routers.app_data import get_company_vat_rate, log_action
 from app.models import Account, AppDataRecord, AuditLog, ExceptionEvent, Invoice, SourceTransaction, TaxLine, User
-from app.schemas import AIAssistRequest, AIExceptionExplainRequest, AIResponse, AITransactionValidationRequest, VoiceDraftRequest, VoiceDraftResponse, VoiceIntentRequest, VoiceIntentResponse
+from app.schemas import AIAssistRequest, AIExceptionExplainRequest, AIResponse, AITransactionValidationRequest, VoiceDraftRequest, VoiceDraftResponse, VoiceIntentRequest, VoiceSettings, VoiceIntentResponse
 from app.voice_draft import build_draft
+from app.voice_settings import get_voice_settings, require_voice_enabled, reserve_transcription, save_voice_settings, transcriptions_today
 from app.voice_intent import resolve_intent
 
 ASSISTANT_SYSTEM_PROMPT = (
@@ -200,6 +201,7 @@ def transcribe(
     file: UploadFile = File(...),
     lang: str | None = Form(None),
     principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
 ) -> dict[str, str]:
     """Server fallback for voice input when the browser has no built-in speech
     recognition. Audio is forwarded to the STT provider and never stored."""
@@ -211,17 +213,34 @@ def transcribe(
     lang_code = (lang or "").split("-")[0].lower() or None
     if lang_code not in (None, "en", "ar"):
         lang_code = None
+    reserve_transcription(db, principal.company_id)
     result = transcribe_audio(audio, file.filename or "audio.webm", file.content_type or "audio/webm", lang_code)
     if "error" in result:
         raise HTTPException(status_code=503, detail=result["error"])
     return {"text": result["text"], "lang": lang_code or ""}
 
 
+@router.get("/voice-settings")
+def read_voice_settings(principal: Principal = Depends(get_current_principal), db: Session = Depends(get_db)) -> dict:
+    return {**get_voice_settings(db, principal.company_id), "transcriptions_today": transcriptions_today(db, principal.company_id)}
+
+
+@router.put("/voice-settings")
+def update_voice_settings(payload: VoiceSettings, principal: Principal = Depends(get_current_principal), db: Session = Depends(get_db)) -> dict:
+    if not principal.is_admin:
+        raise HTTPException(status_code=403, detail="Only an admin can change voice settings")
+    saved = save_voice_settings(db, principal.company_id, payload.model_dump())
+    log_action(db, principal, "settings", "voice_settings_saved", saved)
+    db.commit()
+    return {**saved, "transcriptions_today": transcriptions_today(db, principal.company_id)}
+
+
 @router.post("/voice-intent", response_model=VoiceIntentResponse)
 @limiter.limit("30/minute")
-def voice_intent(request: Request, payload: VoiceIntentRequest, principal: Principal = Depends(get_current_principal)) -> VoiceIntentResponse:
+def voice_intent(request: Request, payload: VoiceIntentRequest, principal: Principal = Depends(get_current_principal), db: Session = Depends(get_db)) -> VoiceIntentResponse:
     """Maps a spoken command onto one of the targets the client can already
     see (pages, tabs, blank create-forms). Reads no company data and writes nothing."""
+    require_voice_enabled(db, principal.company_id)
     seen: set[str] = set()
     targets = []
     for t in payload.targets:
@@ -233,9 +252,10 @@ def voice_intent(request: Request, payload: VoiceIntentRequest, principal: Princ
 
 @router.post("/voice-draft", response_model=VoiceDraftResponse)
 @limiter.limit("15/minute")
-def voice_draft(request: Request, payload: VoiceDraftRequest, principal: Principal = Depends(get_current_principal)) -> VoiceDraftResponse:
+def voice_draft(request: Request, payload: VoiceDraftRequest, principal: Principal = Depends(get_current_principal), db: Session = Depends(get_db)) -> VoiceDraftResponse:
     """Dictation -> field values for one existing form. Returns a draft only;
     the page fills its form and the user saves it through the normal path."""
+    require_voice_enabled(db, principal.company_id)
     today = payload.today or datetime.date.today()
     result = build_draft(payload.form, payload.transcript, payload.choices, today, payload.lang)
     if "error" in result:

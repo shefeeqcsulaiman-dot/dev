@@ -25184,6 +25184,51 @@ function syncAIVoiceControls(){
 }
 document.addEventListener('DOMContentLoaded',syncAIVoiceControls);
 
+// Settings > AI & Voice. Applied on every page load: voice off hides every
+// mic / Dictate button (body.voice-off) and the company language becomes the
+// default until a user picks their own.
+async function applyVoiceSettings(){
+  if(!localStorage.getItem('taxflow_token'))return;
+  try{
+    const s=await moduleApi('/ai/voice-settings');
+    document.body.classList.toggle('voice-off',!s.enabled);
+    if(window.VoiceInput)VoiceInput.setCompanyLang(s.default_lang);
+    syncAIVoiceControls();
+  }catch(err){
+    // 403 = the AI module is off for this company.
+    if(/not enabled|403/.test(String(err.message||err)))document.body.classList.add('voice-off');
+  }
+}
+document.addEventListener('DOMContentLoaded',()=>setTimeout(applyVoiceSettings,1200));
+
+async function loadVoiceSettingsForm(){
+  try{
+    const s=await moduleApi('/ai/voice-settings');
+    document.getElementById('vs-enabled').checked=!!s.enabled;
+    document.getElementById('vs-lang').value=s.default_lang||'';
+    document.getElementById('vs-cloud').checked=!!s.cloud_transcription;
+    document.getElementById('vs-cap').value=s.daily_transcriptions;
+    document.getElementById('vs-usage').textContent=`${s.transcriptions_today} of ${s.daily_transcriptions} server transcriptions used today`;
+  }catch(err){
+    document.getElementById('vs-usage').textContent=`Could not load voice settings: ${err.message||err}`;
+  }
+}
+
+async function saveVoiceSettingsForm(){
+  const body={
+    enabled:document.getElementById('vs-enabled').checked,
+    default_lang:document.getElementById('vs-lang').value,
+    cloud_transcription:document.getElementById('vs-cloud').checked,
+    daily_transcriptions:Math.max(0,Math.min(10000,parseInt(document.getElementById('vs-cap').value,10)||0))
+  };
+  try{
+    await moduleApi('/ai/voice-settings',{method:'PUT',body});
+    toast('Voice settings saved','ok');
+    await loadVoiceSettingsForm();
+    applyVoiceSettings();
+  }catch(err){toast(err.message||'Could not save voice settings','err');}
+}
+
 // ── Voice commands (Phase 2) ─────────────────────────────────────────────
 // Topbar mic / Ctrl+Space. The catalog is built from what this user can see
 // right now (visible sidebar items, their pages' tabs, "+ New ..." actions),

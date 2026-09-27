@@ -2946,3 +2946,11 @@ Voice is a thin input/output layer over the existing AI Assistant; it never writ
 
 - `/ai/voice-draft` form `pos_cart` (lines only; spoken prices are discarded server-side). `pos.html` loads `src/voice.js` (now versioned by `inject-versions` too) and sends `_products` names as the product choices.
 - `posVoiceParse()` shows a confirm panel (`#pos-voice-modal`); `posVoiceConfirm()` adds each checked line through `addToCart()` — with `window._posRendered` pointed at the full product list for that call so a filtered grid can't shift the index — then `setQty(id, before + qty)`. Unmatched products can't be added.
+
+### 33.5 Voice settings & cost guard
+
+- `app/voice_settings.py`: per-company settings in `AppDataRecord` (`collection="voiceSettings"`, `record_key="company"`) — `enabled`, `default_lang` (`""|en-US|ar-AE`), `cloud_transcription`, `daily_transcriptions` (default 200) — and a per-day counter (`collection="voiceUsage"`, `record_key=<ISO date>`). No migration.
+- `GET/PUT /ai/voice-settings` (PUT admin-only, audit-logged `voice_settings_saved`); `GET /ess/voice-settings` for the portal. `require_voice_enabled()` guards `/ai/voice-intent`, `/ai/voice-draft`, `/ess/voice-intent`; `reserve_transcription()` guards both transcribe endpoints (403 when voice or server STT is off, 429 over the daily cap) and counts the request before calling the provider.
+- Frontend: `applyVoiceSettings()` (app.js, main + HRMS) sets `body.voice-off` (CSS hides `#vc-mic-btn`, `.vf-btn`, `#ai-voice-controls`) and `VoiceInput.setCompanyLang()`; POS and ESS hide their mic the same way. Settings tab `#set-voice` (`loadVoiceSettingsForm()` / `saveVoiceSettingsForm()`).
+- Privacy: audio is forwarded to the STT provider and discarded; transcripts go to the LLM only to resolve the command/draft; voice drafts are not audit-logged (the user's own Save is), confirmed voice navigation/questions are logged locally with a 60-character excerpt.
+
