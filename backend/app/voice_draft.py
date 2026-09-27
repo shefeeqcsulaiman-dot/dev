@@ -21,9 +21,11 @@ FORMS: dict[str, dict[str, str]] = {
     "sales_invoice": {"customer": "name", "date": "date", "due_date": "date", "po": "text", "reference": "text"},
     "customer": {"name": "text", "trn": "trn", "emirate": "choice", "address": "text", "email": "email", "phone": "phone"},
     "vendor": {"name": "text", "trn": "trn", "category": "choice", "email": "email", "phone": "phone", "address": "text"},
+    # POS: item lines only; the cashier confirms them before they reach the cart.
+    "pos_cart": {},
 }
 # Forms with item lines, and the choice list their product names match against.
-LINE_FORMS = {"purchase": "product", "sales_invoice": "product"}
+LINE_FORMS = {"purchase": "product", "sales_invoice": "product", "pos_cart": "product"}
 MAX_LINES = 30
 MAX_MONEY = Decimal("1000000000")
 
@@ -33,6 +35,7 @@ FORM_HINTS = {
     "sales_invoice": "A customer sales invoice. lines = items sold with quantity and unit price.",
     "customer": "A new customer record.",
     "vendor": "A new vendor / supplier record.",
+    "pos_cart": "Items a cashier is ringing up. lines = product and quantity (\"two\" = 2, \"half a kilo\" = 0.5); no prices.",
 }
 
 SYSTEM_PROMPT = (
@@ -139,7 +142,8 @@ def sanitize_draft(form: str, raw: Any, choices: dict[str, list[str]]) -> dict[s
             if qty is not None and Decimal(qty) > 0:
                 item["quantity"] = qty
             price = _money(line.get("price"))
-            if price is not None:
+            # POS prices always come from the product record, never from speech.
+            if price is not None and form != "pos_cart":
                 item["price"] = price
             item["matched"] = "yes" if item["product"] != spoken or spoken in products else "no"
             lines.append(item)

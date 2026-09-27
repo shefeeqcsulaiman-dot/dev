@@ -1049,7 +1049,7 @@ class VoiceIntentResponse(BaseModel):
 
 
 class VoiceDraftRequest(BaseModel):
-    form: Literal["expense", "purchase", "sales_invoice", "customer", "vendor"]
+    form: Literal["expense", "purchase", "sales_invoice", "customer", "vendor", "pos_cart"]
     transcript: str = Field(min_length=1, max_length=1000)
     lang: Literal["en", "ar"] | None = None
     # Options the form already offers (categories, suppliers, products...), for name matching.

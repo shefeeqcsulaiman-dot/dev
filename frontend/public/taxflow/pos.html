@@ -326,6 +326,28 @@ button{cursor:pointer;border:none;background:none;}
 .psearch input{flex:1;background:transparent;border:none;font-size:13px;color:var(--t1);}
 .psearch input::placeholder{color:var(--t3);}
 .psearch input:focus{outline:none;}
+.pright-add.listening{background:var(--red2);border-color:var(--red2);color:#fff;animation:pos-mic-pulse 1.2s ease-in-out infinite}
+.pright-add.processing{opacity:.6;cursor:progress}
+@keyframes pos-mic-pulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.45)}50%{box-shadow:0 0 0 8px rgba(220,38,38,0)}}
+.pos-voice{position:fixed;top:72px;right:16px;z-index:9000;width:min(420px,calc(100vw - 32px));max-height:calc(100vh - 96px);overflow:auto;background:var(--sf);color:var(--t1);border:1px solid var(--bd);border-radius:14px;box-shadow:var(--shadow-lg);padding:14px;font-family:var(--fn);font-size:13px}
+.pos-voice[hidden]{display:none}
+.pos-voice-head{display:flex;align-items:center;gap:8px}
+.pos-voice-head strong{flex:1}
+.pos-voice-head select{font:inherit;font-size:12px;padding:2px 4px;border:1px solid var(--bd);border-radius:6px;background:transparent;color:inherit}
+.pos-voice-head button{border:none;background:none;color:var(--t2);font-size:20px;line-height:1;cursor:pointer}
+.pos-voice-heard{margin-top:6px;color:var(--t2);font-style:italic;overflow-wrap:anywhere}
+.pos-voice-list{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.pos-voice-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:4px 8px;padding:8px;border:1px solid var(--bd);border-radius:10px;background:var(--sf2)}
+.pos-voice-row.missing{opacity:.6}
+.pos-voice-name{font-weight:600;overflow-wrap:anywhere}
+.pos-voice-name em{font-weight:400;color:var(--red2)}
+.pos-voice-qty{width:72px;padding:4px 6px;border:1px solid var(--bd2);border-radius:6px;background:var(--sf);color:var(--t1);font:inherit;text-align:right}
+.pos-voice-unit{grid-column:2 / 4;font-size:11px;color:var(--t3)}
+.pos-voice-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.pos-voice-btn{padding:8px 14px;border-radius:8px;border:1px solid var(--bd);background:var(--sf2);color:var(--t1);font:inherit;font-weight:600;cursor:pointer}
+.pos-voice-btn.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+.pos-voice-btn:disabled{opacity:.5;cursor:not-allowed}
+@media (prefers-reduced-motion:reduce){.pright-add.listening{animation:none}}
 .pright-add{
   width:36px;height:36px;border-radius:10px;border:1.5px solid var(--bd);
   background:var(--sf2);display:flex;align-items:center;justify-content:center;
@@ -801,6 +823,7 @@ button{cursor:pointer;border:none;background:none;}
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5l3 3"/></svg>
           <input id="pos-search2" placeholder="Search by name or code…" oninput="syncSearch(this.value)">
         </div>
+        <button type="button" class="pright-add" id="pos-mic-btn" title="Voice order (Ctrl+Space)" aria-label="Voice order" aria-pressed="false" onclick="posVoice()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4"/></svg></button>
         <button class="pright-add" title="Add new product" onclick="openAddProduct()">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 2v12M2 8h12"/></svg>
         </button>
@@ -1114,6 +1137,7 @@ button{cursor:pointer;border:none;background:none;}
 <!-- Toast -->
 <div class="ptost" id="ptost"></div>
 
+<script src="src/voice.js?v=283726f4a4"></script>
 <script>
 'use strict';
 
@@ -2611,6 +2635,131 @@ document.addEventListener('click', e => {
   if(panel && panel.style.display !== 'none' && !panel.contains(e.target) && e.target !== btn && !btn.contains(e.target)){
     panel.style.display = 'none';
     btn.classList.remove('calc-on');
+  }
+});
+// ── Voice cart (voice Phase 5) ─────────────────────────────────────────
+// Push-to-talk only. The spoken order is matched to products and shown for
+// the cashier to confirm; confirmed lines go through addToCart() as usual.
+let _posVoiceLines=[];
+function _posMicState(state){
+  const b=document.getElementById('pos-mic-btn');
+  if(!b)return;
+  b.classList.toggle('listening',state==='listening');
+  b.classList.toggle('processing',state==='processing');
+  b.setAttribute('aria-pressed',state==='listening'?'true':'false');
+}
+async function _posTranscribe(blob,lang){
+  const form=new FormData();
+  form.append('file',blob,'voice.'+((blob.type.split('/')[1]||'webm').split(';')[0]));
+  form.append('lang',lang);
+  const res=await fetch(APIBASE+'/ai/transcribe',{method:'POST',headers:{'Authorization':'Bearer '+TOKEN()},body:form});
+  let data=null;try{data=await res.json();}catch{}
+  if(!res.ok)throw new Error(data?.detail||`Transcription failed (${res.status})`);
+  return data.text;
+}
+function posVoice(){
+  if(!window.VoiceInput||!VoiceInput.supported()){toast('Voice input is not supported in this browser','err');return;}
+  if(VoiceInput.isActive()){VoiceInput.stop();return;}
+  const lang=VoiceInput.getLang();
+  VoiceInput.start({
+    lang,
+    transcribe:_posTranscribe,
+    onState:state=>{
+      _posMicState(state);
+      if(state==='listening')_posVoiceOpen('Listening… say the items, then tap the mic again','',[]);
+      else if(state==='processing')_posVoiceOpen('Transcribing…','',[]);
+    },
+    onText:text=>posVoiceParse(text,lang),
+    onError:msg=>{_posMicState('idle');_posVoiceOpen(msg,'',[]);}
+  });
+}
+async function posVoiceParse(text,lang){
+  const transcript=String(text||'').trim();
+  if(!transcript)return;
+  _posVoiceOpen('Reading the order…',transcript,[]);
+  const names=[...new Set(_products.map(p=>p.name).filter(Boolean))].slice(0,1000);
+  let res;
+  try{
+    res=await api('/ai/voice-draft',{method:'POST',body:{form:'pos_cart',transcript,lang:lang==='ar-AE'?'ar':'en',choices:{product:names},today:new Date().toLocaleDateString('en-CA')}});
+  }catch(e){
+    // AI module switched off for this company: hide the mic instead of failing each time.
+    if(/not enabled/i.test(e.message)){const b=document.getElementById('pos-mic-btn');if(b)b.hidden=true;}
+    _posVoiceOpen(e.message,transcript,[]);
+    return;
+  }
+  _posVoiceLines=(res.lines||[]).map(l=>{
+    const p=l.matched==='yes'?_products.find(x=>x.name===l.product):null;
+    return {p,name:l.product,qty:Number(l.quantity)||1,on:!!p};
+  });
+  const found=_posVoiceLines.filter(l=>l.p).length;
+  _posVoiceOpen(found?'Add these to the cart?':'No products recognised — try again or add them by hand',transcript,_posVoiceLines);
+}
+function _posVoiceOpen(status,heard,lines){
+  let m=document.getElementById('pos-voice-modal');
+  if(!m){
+    m=document.createElement('div');
+    m.id='pos-voice-modal';
+    m.className='pos-voice';
+    m.setAttribute('role','dialog');
+    m.setAttribute('aria-label','Voice order');
+    document.body.appendChild(m);
+  }
+  const rows=lines.map((l,i)=>{
+    const price=l.p?Number(l.p.selling_price||l.p.price||l.p.unit_price||l.p.sales_price||0):0;
+    return `<label class="pos-voice-row${l.p?'':' missing'}">
+      <input type="checkbox" ${l.on?'checked':''} ${l.p?'':'disabled'} onchange="_posVoiceLines[${i}].on=this.checked;_posVoiceSync()">
+      <span class="pos-voice-name">${esc(l.p?l.p.name:l.name)}${l.p?'':' <em>— not found</em>'}</span>
+      ${l.p?`<input class="pos-voice-qty" type="number" min="0.01" step="any" value="${l.qty}" aria-label="Quantity" onchange="_posVoiceLines[${i}].qty=Math.max(0,parseFloat(this.value)||0)">
+      <span class="pos-voice-unit">${esc(l.p.unit||'PCS')} · ${esc(POS_CURRENCY)} ${price.toFixed(2)}</span>`:''}
+    </label>`;
+  }).join('');
+  m.innerHTML=`<div class="pos-voice-head"><strong>${esc(status)}</strong>
+      <select aria-label="Voice language" onchange="VoiceInput.setLang(this.value)"><option value="en-US">EN</option><option value="ar-AE">عربي</option></select>
+      <button type="button" onclick="posVoiceClose()" aria-label="Close">×</button></div>
+    ${heard?`<div class="pos-voice-heard">“${esc(heard)}”</div>`:''}
+    ${rows?`<div class="pos-voice-list">${rows}</div>`:''}
+    <div class="pos-voice-foot">
+      <button type="button" class="pos-voice-btn" onclick="posVoiceClose()">Cancel</button>
+      ${lines.some(l=>l.p)?'<button type="button" class="pos-voice-btn primary" id="pos-voice-add" onclick="posVoiceConfirm()">Add to cart</button>':''}
+    </div>`;
+  m.querySelector('select').value=VoiceInput.getLang();
+  m.hidden=false;
+  _posVoiceSync();
+}
+function _posVoiceSync(){
+  const b=document.getElementById('pos-voice-add');
+  if(b)b.disabled=!_posVoiceLines.some(l=>l.on&&l.p&&l.qty>0);
+}
+function posVoiceClose(){
+  if(window.VoiceInput&&VoiceInput.isActive())VoiceInput.cancel();
+  const m=document.getElementById('pos-voice-modal');
+  if(m)m.hidden=true;
+  _posVoiceLines=[];
+  _posMicState('idle');
+}
+function _posVoiceAdd(p,qty){
+  const idx=_products.indexOf(p);
+  const id=String(p.id||p.code||p.name||idx);
+  const before=_cart.find(i=>i.id===id)?.qty||0;
+  // addToCart() indexes into the rendered grid; point it at the full list
+  // for this call so a filtered grid can't shift the index.
+  const saved=window._posRendered;
+  window._posRendered=_products;
+  try{addToCart(idx);}finally{window._posRendered=saved;}
+  if(_cart.find(i=>i.id===id))setQty(id,before+qty);
+}
+function posVoiceConfirm(){
+  const chosen=_posVoiceLines.filter(l=>l.on&&l.p&&l.qty>0);
+  chosen.forEach(l=>_posVoiceAdd(l.p,l.qty));
+  posVoiceClose();
+  if(chosen.length)toast(`Added ${chosen.length} item${chosen.length===1?'':'s'} from voice`,'ok');
+}
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey&&!e.altKey&&!e.metaKey&&!e.shiftKey&&e.code==='Space'&&document.getElementById('pos-mic-btn')&&!document.getElementById('pos-mic-btn').hidden){
+    e.preventDefault();
+    posVoice();
+  }else if(e.key==='Escape'&&document.getElementById('pos-voice-modal')&&!document.getElementById('pos-voice-modal').hidden){
+    posVoiceClose();
   }
 });
 </script>

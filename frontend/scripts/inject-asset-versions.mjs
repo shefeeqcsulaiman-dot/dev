@@ -31,7 +31,7 @@ const essCssVersion = shortHash(path.join(taxflowDir, "src", "ess.css"));
 // Shared push-to-talk voice layer (index.html AI Assistant)
 const voiceJsVersion = shortHash(path.join(taxflowDir, "src", "voice.js"));
 
-const htmlFiles = ["index.html", "hrms.html", "ess.html"].map((name) => path.join(taxflowDir, name));
+const htmlFiles = ["index.html", "hrms.html", "ess.html", "pos.html"].map((name) => path.join(taxflowDir, name));
 
 for (const htmlPath of htmlFiles) {
   let html = readFileSync(htmlPath, "utf-8");

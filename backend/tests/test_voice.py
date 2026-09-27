@@ -366,3 +366,17 @@ def test_voice_intent_quick_questions_route_to_query_targets(client, auth_header
     # A model reply of "query" must name a query target.
     monkeypatch.setattr(vi, "call_llm", lambda *a, **k: {"intent": "query", "target": "p3", "confidence": 90})
     assert _intent(client, auth_headers, "hmm payroll-ish", targets=targets).json()["source"] == "rules"
+
+
+# ── Phase 5: POS voice cart ──────────────────────────────────────────────
+def test_voice_draft_pos_cart_matches_products_and_ignores_prices(client, auth_headers, monkeypatch):
+    llm = {"fields": {"customer": "x"}, "lines": [
+        {"product": "pepsi", "quantity": "two"}, {"product": "Pepsi", "quantity": 2, "price": 0.01},
+        {"product": "tomatoes", "quantity": 0.5}, {"product": "unicorn steak", "quantity": 1}]}
+    choices = {"product": ["Pepsi 330ml Can", "Tomatoes (KG)", "Bread"]}
+    body = _draft(client, auth_headers, "pos_cart", "add two pepsi and half a kilo of tomatoes", choices, llm, monkeypatch).json()
+    assert body["fields"] == {}
+    assert [(l["product"], l["quantity"], l["matched"]) for l in body["lines"]] == [
+        ("Pepsi 330ml Can", None, "yes"), ("Pepsi 330ml Can", "2.00", "yes"),
+        ("Tomatoes (KG)", "0.50", "yes"), ("unicorn steak", "1.00", "no")]
+    assert all(l["price"] is None for l in body["lines"])
