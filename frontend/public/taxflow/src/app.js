@@ -25203,6 +25203,46 @@ function _vcText(el){
   return String(el?.textContent||'').replace(/\s+/g,' ').trim();
 }
 
+// HRMS quick answers (voice Phase 4). Each opens its screen and answers from
+// the same permission-checked endpoints that screen uses; offered only when
+// that screen's sidebar entry is visible to this user.
+function _vcNames(list,max=8){
+  const names=list.slice(0,max);
+  return names.join(', ')+(list.length>max?` and ${list.length-max} more`:'');
+}
+
+const _VC_HR_QUERIES=[
+  {nav:'hr-att',label:'Who is absent today',alt:'absent not checked in attendance today',open:()=>goHrmsTab(2,'hr-att'),answer:async()=>{
+    const today=new Date().toLocaleDateString('en-CA');
+    // Leave data needs leave:view; without it, leave just isn't subtracted.
+    const [att,leaves]=await Promise.all([moduleApi('/attendance/today'),moduleApi('/leave/requests').catch(()=>[])]);
+    const present=Array.isArray(att?.employees)?att.employees:[];
+    const presentKeys=new Set(present.flatMap(e=>[String(e.employee_id||'').toLowerCase(),String(e.employee_name||'').toLowerCase()]));
+    const onLeave=new Set((leaves||[]).filter(l=>l.status==='approved'&&l.start_date<=today&&today<=l.end_date).map(l=>String(l.employee_name||'').toLowerCase()));
+    const emps=_getAttendanceEmployees();
+    if(!emps.length)return `${present.length} employee${present.length===1?'':'s'} checked in today.`;
+    const missing=emps.filter(e=>!presentKeys.has(String(e.id||'').toLowerCase())&&!presentKeys.has(String(e.name||'').toLowerCase())&&!onLeave.has(String(e.name||'').toLowerCase()));
+    const leaveNote=onLeave.size?` ${onLeave.size} on approved leave.`:'';
+    if(!missing.length)return `Everyone has checked in today.${leaveNote}`;
+    return `${missing.length} not checked in yet today: ${_vcNames(missing.map(e=>e.name))}.${leaveNote}`;
+  }},
+  {nav:'hr-leave',label:'Pending leave requests',alt:'leave waiting for approval',open:()=>goHrmsTab(4,'hr-leave'),answer:async()=>{
+    const rows=(await moduleApi('/leave/requests')||[]).filter(l=>String(l.status).toLowerCase()==='pending');
+    if(!rows.length)return 'There are no pending leave requests.';
+    return `${rows.length} pending leave request${rows.length===1?'':'s'}: ${_vcNames(rows.map(l=>`${l.employee_name} (${l.leave_type}, ${l.days} day${l.days===1?'':'s'})`),5)}.`;
+  }},
+  {nav:'hr-ot',label:'Who is eligible for overtime this week',alt:'overtime eligible this week',open:()=>goHrmsTab(3,'hr-ot'),answer:async()=>{
+    const now=new Date();
+    const monday=new Date(now);monday.setDate(now.getDate()-((now.getDay()+6)%7));
+    const qs=new URLSearchParams({date_from:monday.toLocaleDateString('en-CA'),date_to:now.toLocaleDateString('en-CA')});
+    const data=await moduleApi(`/attendance/overtime-eligibility?${qs}`);
+    const open=(data?.rows||[]).filter(r=>r.eligible&&!r.request_id);
+    if(!open.length)return 'Nobody has un-requested overtime this week.';
+    const people=[...new Set(open.map(r=>r.employee))];
+    return `${people.length} employee${people.length===1?'':'s'} worked eligible overtime this week without a request yet: ${_vcNames(people)}.`;
+  }}
+];
+
 function buildVoiceCatalog(){
   const catalog=new Map();
   let n=0;
@@ -25239,6 +25279,12 @@ function buildVoiceCatalog(){
       add('action',/^\+\s*\w+$/.test(m.a)?`${m.a} ${m.t||label}`:m.a,m.t||label,()=>{nav.click();setTimeout(()=>m.ao(),80);});
     }
   });
+  if(window.HRMS_STANDALONE){
+    _VC_HR_QUERIES.forEach(q=>{
+      const nav=document.querySelector(`.sb .nav[data-staff-nav="${q.nav}"]`);
+      if(nav&&_vcShown(nav))add('query',q.label,q.alt,async()=>{q.open();return q.answer();});
+    });
+  }
   _vcCatalog=catalog;
   return [...catalog.values()].map(({id,kind,label,alt})=>({id,kind,label,alt}));
 }
@@ -25367,10 +25413,22 @@ function _vcAnswer(question,lang,alternatives){
   },80);
 }
 
+async function _vcRunQuery(entry,transcript){
+  _vcShow('Checking…',{heard:transcript});
+  try{
+    const answer=await entry.run();
+    _vcShow(answer,{heard:transcript});
+    if(window.VoiceOutput)VoiceOutput.speak(answer);
+  }catch(err){
+    _vcShow(`Couldn't get that: ${err.message||err}`,{heard:transcript,autoHide:6000});
+  }
+  audit('Voice question',(transcript||entry.label).slice(0,60),entry.label.slice(0,60));
+}
+
 function _vcChips(ids,query){
   return ids.map(id=>_vcCatalog.get(id)).filter(Boolean).map(entry=>({
     label:entry.label,
-    onClick:()=>{closeVoiceCommand();_vcRun(entry,query);}
+    onClick:()=>{if(entry.kind==='query'){_vcRunQuery(entry,'');return;}closeVoiceCommand();_vcRun(entry,query);}
   }));
 }
 
@@ -25551,6 +25609,7 @@ async function runVoiceCommand(text,lang){
     return;
   }
   const entry=res.target?_vcCatalog.get(res.target):null;
+  if(entry&&res.intent==='query'&&res.confidence>=60){_vcRunQuery(entry,transcript);return;}
   if(res.intent==='answer'&&res.query){_vcAnswer(res.query,lang,res.alternatives);return;}
   if(entry&&['navigate','open_form','search'].includes(res.intent)&&res.confidence>=60){
     const verb=res.intent==='open_form'?'Opening form':res.intent==='search'?`Searching “${res.query}” in`:'Opening';

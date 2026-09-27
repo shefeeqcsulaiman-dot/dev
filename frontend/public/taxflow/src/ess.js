@@ -1948,3 +1948,161 @@
     essCompanyId();
     if (localStorage.getItem(ESS_TOKEN_KEY)) showApp();
   })();
+
+  // ── Voice (Phase 4) ──
+  // Topbar mic / Ctrl+Space. Pages open directly; requests open their usual
+  // form pre-filled for the employee to check and submit; balance / next-shift
+  // questions are answered from the employee's own data. Nothing is submitted.
+  var _essVoiceTimer = null;
+  function _essVoicePop() {
+    var pop = document.getElementById('ess-voice-pop');
+    if (pop) return pop;
+    pop = document.createElement('div');
+    pop.id = 'ess-voice-pop';
+    pop.className = 'ess-voice-pop';
+    pop.setAttribute('role', 'status');
+    pop.setAttribute('aria-live', 'polite');
+    pop.hidden = true;
+    pop.innerHTML = '<div class="ess-voice-head"><span id="ess-voice-status"></span>' +
+      '<select id="ess-voice-lang" aria-label="Voice language" onchange="VoiceInput.setLang(this.value)"><option value="en-US">EN</option><option value="ar-AE">عربي</option></select>' +
+      '<button type="button" onclick="essVoiceClose()" aria-label="Close">×</button></div>' +
+      '<div class="ess-voice-heard" id="ess-voice-heard"></div>' +
+      '<div class="ess-voice-hint">Try “Apply annual leave next Monday to Wednesday”, “Request 2 hours overtime yesterday”, “What’s my leave balance?”, “When is my next shift?”</div>';
+    document.body.appendChild(pop);
+    return pop;
+  }
+  function _essVoiceShow(status, heard, autoHide) {
+    var pop = _essVoicePop();
+    clearTimeout(_essVoiceTimer);
+    pop.hidden = false;
+    document.getElementById('ess-voice-status').textContent = status;
+    document.getElementById('ess-voice-lang').value = VoiceInput.getLang();
+    var h = document.getElementById('ess-voice-heard');
+    h.textContent = heard ? '“' + heard + '”' : '';
+    h.hidden = !heard;
+    if (autoHide) _essVoiceTimer = setTimeout(essVoiceClose, autoHide);
+  }
+  function essVoiceClose() {
+    clearTimeout(_essVoiceTimer);
+    if (window.VoiceInput && VoiceInput.isActive()) VoiceInput.cancel();
+    var pop = document.getElementById('ess-voice-pop');
+    if (pop) pop.hidden = true;
+    _essMicState('idle');
+  }
+  function _essMicState(state) {
+    var btn = document.getElementById('ess-mic-btn');
+    if (!btn) return;
+    btn.classList.toggle('listening', state === 'listening');
+    btn.classList.toggle('processing', state === 'processing');
+    btn.setAttribute('aria-pressed', state === 'listening' ? 'true' : 'false');
+  }
+  async function _essTranscribe(blob, lang) {
+    var form = new FormData();
+    form.append('file', blob, 'voice.' + ((blob.type.split('/')[1] || 'webm').split(';')[0]));
+    form.append('lang', lang);
+    var t = localStorage.getItem(ESS_TOKEN_KEY);
+    var r = await fetch(apiBase() + '/ess/voice-transcribe', {method: 'POST', headers: t ? {Authorization: 'Bearer ' + t} : {}, body: form});
+    var data = null;
+    try { data = await r.json(); } catch (e) {}
+    if (!r.ok) throw new Error((data && data.detail) || 'Transcription failed');
+    return data.text;
+  }
+  function essVoice() {
+    if (!window.VoiceInput || !VoiceInput.supported()) { essToast('Voice input is not supported in this browser', 'err'); return; }
+    if (VoiceInput.isActive()) { VoiceInput.stop(); return; }
+    if (window.VoiceOutput) VoiceOutput.stop();
+    var lang = VoiceInput.getLang();
+    VoiceInput.start({
+      lang: lang,
+      transcribe: _essTranscribe,
+      onState: function(s) {
+        _essMicState(s);
+        if (s === 'listening') _essVoiceShow('Listening… tap the mic again when done');
+        else if (s === 'processing') _essVoiceShow('Transcribing…');
+      },
+      onText: function(text) { essRunVoice(text, lang); },
+      onError: function(msg) { _essVoiceShow(msg, null, 5000); }
+    });
+  }
+  function _essVoiceSet(id, value) {
+    var el = document.getElementById(id);
+    if (!el || value == null || value === '') return;
+    if (el.tagName === 'SELECT') {
+      var opt = Array.prototype.find.call(el.options, function(o) { return o.value === value || o.textContent.trim() === value; });
+      if (!opt) return;
+      el.value = opt.value;
+    } else {
+      el.value = value;
+    }
+    el.dispatchEvent(new Event('input', {bubbles: true}));
+    el.dispatchEvent(new Event('change', {bubbles: true}));
+    el.classList.add('vf-filled');
+  }
+  var _ESS_VOICE_FORMS = {
+    request_overtime: function(f) {
+      essOpenRequestModal('overtime', {date: f.date, hours: f.hours, type: f.ot_type});
+      _essVoiceSet('rq-login', f.login); _essVoiceSet('rq-logout', f.logout);
+      if (f.hours) _essVoiceSet('rq-hours', f.hours);
+      _essVoiceSet('rq-ottype', f.ot_type); _essVoiceSet('rq-reason', f.reason);
+    },
+    request_correction: function(f) {
+      essOpenRequestModal('correction', {date: f.date, checkin: f.checkin});
+      _essVoiceSet('rq-checkout', f.checkout); _essVoiceSet('rq-reason', f.reason);
+    },
+    request_advance: function(f) {
+      essOpenRequestModal('advance', {});
+      _essVoiceSet('rq-amount', f.amount); _essVoiceSet('rq-reason', f.reason);
+    },
+    request_loan: function(f) {
+      essOpenRequestModal('loan', {});
+      _essVoiceSet('rq-loantype', f.loan_type); _essVoiceSet('rq-amount', f.amount);
+      _essVoiceSet('rq-months', f.months); _essVoiceSet('rq-reason', f.reason);
+      if (typeof essLoanEmi === 'function') essLoanEmi();
+    },
+    apply_leave: function(f) {
+      essOpenLeaveModal(f.start_date || '');
+      _essVoiceSet('leave-type', f.leave_type); _essVoiceSet('leave-end', f.end_date || f.start_date);
+      _essVoiceSet('leave-reason', f.reason);
+      essUpdateLeavePreview();
+    }
+  };
+  async function essRunVoice(text, lang) {
+    var transcript = String(text || '').trim();
+    if (!transcript) return;
+    _essVoiceShow('Working it out…', transcript);
+    var r;
+    try {
+      r = await essApi('POST', '/ess/voice-intent', {transcript: transcript, lang: lang === 'ar-AE' ? 'ar' : 'en'});
+    } catch (e) {
+      // Company has the AI module off: hide the mic rather than fail every time.
+      if (/isn.t enabled/.test(e.message)) { var mb = document.getElementById('ess-mic-btn'); if (mb) mb.hidden = true; }
+      _essVoiceShow(e.message, transcript, 6000);
+      return;
+    }
+    if (r.answer) {
+      _essVoiceShow(r.answer, transcript);
+      if (window.VoiceOutput) VoiceOutput.speak(r.answer);
+      return;
+    }
+    if (r.intent === 'navigate' && r.page) {
+      essGoTab(r.page);
+      _essVoiceShow('Opening ' + r.page, transcript, 2500);
+      return;
+    }
+    var fill = _ESS_VOICE_FORMS[r.intent];
+    if (fill) {
+      fill(r.fields || {});
+      var n = Object.keys(r.fields || {}).length;
+      _essVoiceShow((n ? 'Filled ' + n + ' detail' + (n === 1 ? '' : 's') + ' — ' : '') + 'check the form and tap Submit', transcript, 6000);
+      return;
+    }
+    _essVoiceShow('Sorry, I didn’t catch a request in that.', transcript);
+  }
+  document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && e.code === 'Space' && document.getElementById('ess-mic-btn') && localStorage.getItem(ESS_TOKEN_KEY)) {
+      e.preventDefault();
+      essVoice();
+    } else if (e.key === 'Escape' && document.getElementById('ess-voice-pop') && !document.getElementById('ess-voice-pop').hidden) {
+      essVoiceClose();
+    }
+  });

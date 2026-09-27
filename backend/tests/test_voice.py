@@ -260,3 +260,109 @@ def test_voice_draft_prompt_only_carries_strict_choice_lists(client, auth_header
     _draft(client, auth_headers, "purchase", "5 mystery glitter", choices)
     assert "Gulf Steel LLC" in prompts[-1]
     assert "Safety Helmet" not in prompts[-1]
+
+
+# ── Phase 4: ESS voice ───────────────────────────────────────────────────
+from datetime import date, timedelta  # noqa: E402
+
+from app import ess_voice as ev  # noqa: E402
+from app.models import AppDataRecord  # noqa: E402
+from tests.test_ess_requests import _company_id, _ess_login  # noqa: E402
+
+
+def _ess_voice(client, headers, text, lang="en"):
+    return client.post("/api/v1/ess/voice-intent", headers=headers, json={"transcript": text, "lang": lang})
+
+
+def test_ess_voice_leave_prefill_is_sanitised_and_writes_nothing(client, db, auth_headers, monkeypatch):
+    cid = _company_id(client, auth_headers)
+    emp, h = _ess_login(client, db, auth_headers, cid, "VOICE-E1", "voice.e1")
+    today = date.today()
+    start, end = today + timedelta(days=3), today + timedelta(days=5)
+    monkeypatch.setattr(ev, "call_llm", lambda *a, **k: {"intent": "apply_leave", "fields": {
+        "leave_type": "annual", "start_date": start.isoformat(), "end_date": end.isoformat(),
+        "reason": "Family visit", "employee_id": "someone-else"}})
+    r = _ess_voice(client, h, "apply annual leave next monday to wednesday for a family visit")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["intent"] == "apply_leave" and body["source"] == "llm"
+    assert body["fields"] == {"leave_type": "Annual Leave", "start_date": start.isoformat(),
+                              "end_date": end.isoformat(), "reason": "Family visit"}
+    assert client.get("/api/v1/ess/leave", headers=h).json() == []  # draft only
+
+
+def test_ess_voice_overtime_rejects_out_of_range_values(client, db, auth_headers, monkeypatch):
+    cid = _company_id(client, auth_headers)
+    _, h = _ess_login(client, db, auth_headers, cid, "VOICE-E2", "voice.e2")
+    future = (date.today() + timedelta(days=2)).isoformat()
+    monkeypatch.setattr(ev, "call_llm", lambda *a, **k: {"intent": "request_overtime", "fields": {
+        "date": future, "hours": 40, "login": "25:00", "logout": "19:30", "ot_type": "weekend"}})
+    body = _ess_voice(client, h, "request overtime").json()
+    assert body["fields"] == {"logout": "19:30", "ot_type": "weekend"}
+
+
+def test_ess_voice_balance_and_shift_answer_from_own_data(client, db, auth_headers, monkeypatch):
+    calls = []
+    monkeypatch.setattr(ev, "call_llm", lambda *a, **k: calls.append(a) or {"error": "unused"})
+    cid = _company_id(client, auth_headers)
+    emp, h = _ess_login(client, db, auth_headers, cid, "VOICE-E3", "voice.e3")
+    other, _ = _ess_login(client, db, auth_headers, cid, "VOICE-E4", "voice.e4")
+    soon = (date.today() + timedelta(days=2)).isoformat()
+    sooner = (date.today() + timedelta(days=1)).isoformat()
+    db.add(AppDataRecord(company_id=cid, collection="rotaAssignments", record_key="v-e3",
+                         payload=json.dumps({"employee_id": "VOICE-E3", "date": soon, "type": "Morning", "start": "09:00", "end": "17:00"})))
+    db.add(AppDataRecord(company_id=cid, collection="rotaAssignments", record_key="v-e4",
+                         payload=json.dumps({"employee_id": "VOICE-E4", "date": sooner, "type": "Night", "start": "22:00", "end": "06:00"})))
+    db.commit()
+    import app.cache as cache
+    monkeypatch.setattr(cache, "get_json", lambda *a, **k: None, raising=False)
+
+    shift = _ess_voice(client, h, "When is my next shift?").json()
+    assert shift["intent"] == "next_shift"
+    assert "09:00" in shift["answer"] and "Night" not in shift["answer"]  # never another employee's rota
+
+    bal = _ess_voice(client, h, "What's my annual leave balance?").json()
+    assert bal["intent"] == "leave_balance"
+    assert bal["answer"].startswith("You have") and "Annual Leave" in bal["answer"]
+    assert calls == []  # answered by rules, no LLM call
+
+
+def test_ess_voice_needs_ess_token_and_ai_module(client, db, auth_headers):
+    assert _ess_voice(client, auth_headers, "open payslips").status_code == 401  # main-app token isn't an ESS token
+    cid = _company_id(client, auth_headers)
+    _, h = _ess_login(client, db, auth_headers, cid, "VOICE-E5", "voice.e5")
+    assert _ess_voice(client, h, "open payslips").json() == {
+        "intent": "navigate", "page": "payslips", "fields": {}, "source": "rules", "answer": None}
+    company = db.get(Company, cid)
+    saved = company.modules_enabled
+    company.modules_enabled = json.dumps(["hrms", "ess"])
+    db.commit()
+    try:
+        assert _ess_voice(client, h, "open payslips").status_code == 403
+    finally:
+        company.modules_enabled = saved
+        db.commit()
+
+
+def test_ess_voice_rules_cover_common_phrases():
+    today = date(2026, 9, 27)
+    assert ev.rule_match("open my payslips")["page"] == "payslips"
+    assert ev.rule_match("كم رصيد إجازاتي")["intent"] == "leave_balance"
+    assert ev.rule_match("I forgot to punch out yesterday")["intent"] == "request_correction"
+    assert ev.sanitize({"intent": "navigate", "page": "superadmin"}, today) is None
+    assert ev.sanitize({"intent": "delete_everything"}, today) is None
+
+
+def test_voice_intent_quick_questions_route_to_query_targets(client, auth_headers, monkeypatch):
+    _no_llm(monkeypatch)
+    targets = TARGETS + [
+        {"id": "q1", "kind": "query", "label": "Who is absent today"},
+        {"id": "q2", "kind": "query", "label": "Pending leave requests"},
+    ]
+    body = _intent(client, auth_headers, "Who is absent today?", targets=targets).json()
+    assert (body["intent"], body["target"]) == ("query", "q1")
+    body = _intent(client, auth_headers, "show pending leave requests", targets=targets).json()
+    assert (body["intent"], body["target"]) == ("query", "q2")
+    # A model reply of "query" must name a query target.
+    monkeypatch.setattr(vi, "call_llm", lambda *a, **k: {"intent": "query", "target": "p3", "confidence": 90})
+    assert _intent(client, auth_headers, "hmm payroll-ish", targets=targets).json()["source"] == "rules"

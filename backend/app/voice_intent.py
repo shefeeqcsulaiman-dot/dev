@@ -12,10 +12,10 @@ from typing import Any
 
 from app.ai_client import call_llm
 
-INTENTS = ("navigate", "open_form", "search", "answer", "unknown")
+INTENTS = ("navigate", "open_form", "search", "answer", "query", "unknown")
 # Rule matches at or above this skip the LLM call entirely.
 RULES_CONFIDENT = 90
-KIND_FOR_INTENT = {"navigate": {"page", "tab"}, "open_form": {"action"}, "search": {"page", "tab"}}
+KIND_FOR_INTENT = {"navigate": {"page", "tab"}, "open_form": {"action"}, "search": {"page", "tab"}, "query": {"query"}}
 
 _FILLER = (
     r"\b(please|can you|could you|i want to|i'd like to|i would like to|let me|for me|the|a|an|my|to|page|screen|section|tab|module)\b"
@@ -34,7 +34,8 @@ VOICE_INTENT_SYSTEM_PROMPT = (
     '- "navigate": open a page or tab (target kind "page" or "tab").\n'
     '- "open_form": open a blank create form (target kind "action"), for "new/add/create/record ..." requests.\n'
     '- "search": open a page/tab and type a search term into its search box; put the term in "query".\n'
-    '- "answer": the user is asking a question rather than asking to go somewhere; put the question in "query".\n'
+    '- "query": the user asks one of the listed quick questions (target kind "query").\n'
+    '- "answer": the user is asking some other question rather than asking to go somewhere; put the question in "query".\n'
     '- "unknown": nothing fits.\n'
     "A short phrase that names a screen (e.g. \"leave requests\", \"overtime eligibility\") is navigate, not search or answer; "
     "use search only when the user says search/find/look up, and answer only for real questions. "
@@ -118,6 +119,8 @@ def rule_match(transcript: str, targets: list[dict[str, Any]]) -> dict[str, Any]
             return _result("answer", None, raw, 70, alternatives)
         return _result("unknown", None, None, scored[0][0] if scored else 0, [t["id"] for s, t in scored[:3] if s >= 35])
     best_score, best = scored[0]
+    if best["kind"] == "query":
+        return _result("query", best["id"], None, best_score, alternatives)
     if _QUESTION_RE.search(raw) and best_score < 80:
         return _result("answer", None, raw, 65, [best["id"]] + alternatives[:2])
     intent = "open_form" if best["kind"] == "action" else "navigate"
@@ -159,7 +162,7 @@ def sanitize(result: Any, targets: list[dict[str, Any]], transcript: str = "") -
         return None
     if intent == "answer" and not _QUESTION_RE.search(transcript.strip()):
         return None
-    if intent in ("navigate", "open_form"):
+    if intent in ("navigate", "open_form", "query"):
         query = None
     try:
         confidence = int(result.get("confidence", 70))
@@ -172,7 +175,7 @@ def sanitize(result: Any, targets: list[dict[str, Any]], transcript: str = "") -
 
 def resolve_intent(transcript: str, targets: list[dict[str, Any]], lang: str | None = None) -> dict[str, Any]:
     rules = rule_match(transcript, targets)
-    if rules["confidence"] >= RULES_CONFIDENT and rules["intent"] in ("navigate", "open_form"):
+    if rules["confidence"] >= RULES_CONFIDENT and rules["intent"] in ("navigate", "open_form", "query"):
         return {**rules, "source": "rules"}
     catalog = "\n".join(
         f'{t["id"]} | {t["kind"]} | {t["label"]}' + (f' ({t["alt"]})' if t.get("alt") else "") for t in targets

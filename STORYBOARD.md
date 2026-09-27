@@ -514,6 +514,11 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 - Item lines are added for purchases and invoices
 - **Nothing is saved** — you review and press the form's normal Save / Submit button
 
+### 15.1c Voice in HRMS & ESS
+- **HRMS quick answers** (topbar mic): "Who is absent today?", "Pending leave requests", "Who is eligible for overtime this week?" open that screen and answer aloud from the same data it shows (only offered if you can see that screen)
+- **ESS** (mic in the portal's top bar, or Ctrl+Space): "Apply annual leave next Monday to Wednesday", "Request 2 hours overtime yesterday from 6 to 8 pm", "Salary advance of 1500 for rent", "Loan of 10,000 over 12 months", "I forgot to punch out yesterday" open the usual request form already filled in — the employee checks it and taps Submit
+- ESS questions: "What's my leave balance?", "When is my next shift?" are answered from the employee's own data; "Open payslips" etc. jump to that page
+
 ### 15.2 AI Invoice Extraction
 - Upload supplier invoice images (JPG/PNG/PDF)
 - Background OCR + LLM extraction: invoice no, supplier name, TRN, date, line items, totals, VAT

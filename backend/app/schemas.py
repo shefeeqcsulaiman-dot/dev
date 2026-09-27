@@ -1028,7 +1028,7 @@ class AIAssistRequest(BaseModel):
 
 class VoiceTarget(BaseModel):
     id: str = Field(min_length=1, max_length=40)
-    kind: Literal["page", "tab", "action"]
+    kind: Literal["page", "tab", "action", "query"]
     label: str = Field(min_length=1, max_length=160)
     alt: str | None = Field(default=None, max_length=160)
 
@@ -1040,7 +1040,7 @@ class VoiceIntentRequest(BaseModel):
 
 
 class VoiceIntentResponse(BaseModel):
-    intent: Literal["navigate", "open_form", "search", "answer", "unknown"]
+    intent: Literal["navigate", "open_form", "search", "answer", "query", "unknown"]
     target: str | None = None
     query: str | None = None
     confidence: int = 0
