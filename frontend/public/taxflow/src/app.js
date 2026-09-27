@@ -2512,7 +2512,11 @@ function localApiUrlFor(url){
 // no token in storage AT ALL, which covers a brand-new visitor who never
 // logged in on this browser, or someone who cleared storage — telling
 // them their SESSION "expired" is wrong; there was never one to expire.
+let _loginRedirectPending=false;
 function showLoginOverlay(expired=true){
+  // Several requests can fail together; show one message and redirect once.
+  if(_loginRedirectPending)return;
+  _loginRedirectPending=true;
   try{toast(expired?'Session expired — please sign in again':'Please sign in to continue','warn');}catch{}
   setTimeout(()=>window.location.replace('/login'),1200);
 }
@@ -2865,7 +2869,19 @@ async function _authenticatedFetchUncached(url,options={}){
       try{detail=(await response.clone().json())?.detail||'';}catch{}
       if(detail==='User no longer exists')return response;
     }
-    localStorage.removeItem('taxflow_token');
+    // One 401 isn't proof the session is gone: a single server instance can
+    // reject a token the others accept, and clearing the token here used to
+    // make every later request fail too ("Session expired" x4 right after
+    // login). A 401 is decided before the request is handled, so retrying
+    // is safe; only a token that keeps failing is treated as expired.
+    const sentAuth=requestOptions.headers.Authorization||'';
+    for(let attempt=1;attempt<=2&&response.status===401&&sentAuth;attempt++){
+      await new Promise(resolve=>setTimeout(resolve,250*attempt));
+      response=await fetchWithBackendFallback(url,{...options,headers:{...backendHeaders(),...(options.headers||{})}});
+    }
+    if(response.status!==401)return response;
+    // Another request may already have signed in again; don't wipe that token.
+    if(!sentAuth||backendHeaders().Authorization===sentAuth)localStorage.removeItem('taxflow_token');
     const relogged=await loginLocalBackend();
     if(relogged){
       response=await fetchWithBackendFallback(url,{...options,headers:{...backendHeaders(),...(options.headers||{})}});
