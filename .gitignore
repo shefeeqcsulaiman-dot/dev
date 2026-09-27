@@ -38,3 +38,5 @@ build/
 Thumbs.db
 .idea/
 .vscode/
+*.db-shm
+*.db-wal

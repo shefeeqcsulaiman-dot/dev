@@ -105,3 +105,35 @@ def call_llm(
         # "0 compliance issues found" — false negative on a real check. The
         # most common cause is max_tokens cutting the JSON off mid-object.
         return {"error": "AI response was not valid JSON (it may have been truncated) — try again or reduce the amount of data being analyzed.", "raw": raw}
+
+
+def transcribe_audio(audio: bytes, filename: str, content_type: str, lang: str | None = None) -> dict[str, Any]:
+    """Speech-to-text via OpenAI's transcription API. Returns {"text": ...}
+    or {"error": ...}; audio is only forwarded, never stored."""
+    openai_key = _openai_key()
+    if not openai_key:
+        return {"error": "Server transcription needs OPENAI_API_KEY; use a browser with built-in speech recognition (Chrome, Edge, Safari)."}
+    boundary = "----taxflowvoice" + os.urandom(8).hex()
+    fields = {"model": os.environ.get("OPENAI_TRANSCRIBE_MODEL", "gpt-4o-mini-transcribe")}
+    if lang:
+        fields["language"] = lang
+    body = b""
+    for name, value in fields.items():
+        body += f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode()
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", filename or "audio.webm")
+    body += f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{safe_name}"\r\nContent-Type: {content_type}\r\n\r\n'.encode()
+    body += audio + f"\r\n--{boundary}--\r\n".encode()
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/audio/transcriptions",
+        data=body,
+        headers={"Authorization": f"Bearer {openai_key}", "Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            result = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        return {"error": f"Transcription failed ({exc.code}): {exc.reason}"}
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        return {"error": f"Transcription failed: {exc}"}
+    return {"text": str(result.get("text", "")).strip()}

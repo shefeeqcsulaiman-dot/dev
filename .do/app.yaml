@@ -66,11 +66,11 @@ services:
 
       - key: CORS_ORIGINS
         scope: RUN_TIME
-        value: https://app.etaxflow.com,http://localhost:5173,http://127.0.0.1:5173
+        value: https://dev.etaxflow.com,http://localhost:5173,http://127.0.0.1:5173
 
       - key: API_BASE_URL
         scope: RUN_TIME
-        value: https://app.etaxflow.com/api/v1
+        value: https://dev.etaxflow.com/api/v1
 
       # ── Workers & pool ────────────────────────────────────────────────
       # Cluster-wide DB connection budget: this pool (10+15=25/instance) x
