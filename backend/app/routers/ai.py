@@ -1,11 +1,11 @@
 import json
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.ai_client import call_llm
+from app.ai_client import call_llm, transcribe_audio
 from app.database import get_db
 from app.dependencies import get_current_user, require_module
 from app.limiter import limiter
@@ -152,6 +152,8 @@ RECENT OPEN EXCEPTIONS (most recent first):
 {json.dumps(_recent_open_exceptions(db, current_user.company_id), indent=2)}
 
 USER QUESTION: {payload.question}"""
+    if payload.answer_lang == "ar":
+        prompt += '\n\nWrite "answer" and "suggested_actions" in Arabic.'
 
     result = call_llm(
         prompt,
@@ -182,6 +184,33 @@ USER QUESTION: {payload.question}"""
         suggested_actions=actions,
         context=snapshot,
     )
+
+
+MAX_VOICE_AUDIO_BYTES = 5 * 1024 * 1024  # ~60 s of compressed speech
+
+
+@router.post("/transcribe")
+@limiter.limit("15/minute")
+def transcribe(
+    request: Request,
+    file: UploadFile = File(...),
+    lang: str | None = Form(None),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    """Server fallback for voice input when the browser has no built-in speech
+    recognition. Audio is forwarded to the STT provider and never stored."""
+    audio = file.file.read(MAX_VOICE_AUDIO_BYTES + 1)
+    if not audio:
+        raise HTTPException(status_code=422, detail="Empty audio")
+    if len(audio) > MAX_VOICE_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="Recording too long - keep voice input under about a minute")
+    lang_code = (lang or "").split("-")[0].lower() or None
+    if lang_code not in (None, "en", "ar"):
+        lang_code = None
+    result = transcribe_audio(audio, file.filename or "audio.webm", file.content_type or "audio/webm", lang_code)
+    if "error" in result:
+        raise HTTPException(status_code=503, detail=result["error"])
+    return {"text": result["text"], "lang": lang_code or ""}
 
 
 @router.post("/validate-transaction", response_model=AIResponse)

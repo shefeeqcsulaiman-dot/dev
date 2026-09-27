@@ -2,7 +2,7 @@
 
 TaxFlow is a UAE business management platform for sales, purchases, accounting, tax, eInvoicing, payroll, HR, rota planning, documents, reporting, approvals, and audit control.
 
-The system is live in production at `https://app.etaxflow.com` on DigitalOcean App Platform. The frontend is a vanilla JS single-page app served by FastAPI. The backend uses PostgreSQL with SQLAlchemy 2.0 and Redis for report caching. Local development uses SQLite. The production target is a modular, tenant-aware business system where source transactions, tax lines, accounting, audit, and reporting are controlled by backend services.
+The system is live in production at `https://dev.etaxflow.com` on DigitalOcean App Platform. The frontend is a vanilla JS single-page app served by FastAPI. The backend uses PostgreSQL with SQLAlchemy 2.0 and Redis for report caching. Local development uses SQLite. The production target is a modular, tenant-aware business system where source transactions, tax lines, accounting, audit, and reporting are controlled by backend services.
 
 ## 1. Current Structure
 
@@ -50,7 +50,7 @@ Login:    admin@taxflowapp.com / admin123
 Production:
 
 ```text
-Live URL:         https://app.etaxflow.com
+Live URL:         https://dev.etaxflow.com
 App name:         etaxflow
 Platform:         DigitalOcean App Platform (nyc3)
 Instances:        2–6 × professional-s (2 vCPU / 2 GB), autoscales at 70% CPU
@@ -170,7 +170,7 @@ FastAPI        — auth, tenant context, module APIs, app-data bridge
 
 Do not replace `frontend/index.html` with the TaxFlow HTML. The Vite shell must stay at root.
 
-### Production (https://app.etaxflow.com)
+### Production (https://dev.etaxflow.com)
 
 ```text
 Browser
@@ -2910,3 +2910,14 @@ A six-track Playwright audit (Sales/Purchases/Inventory, POS/Bank/Accounting, Co
 **Documentation surfaces.** `STORYBOARD.md` (feature-by-feature functionality), `docs/storyboard.md` (screen layouts), `frontend/public/taxflow/handbook.html` (user handbook served at `/handbook`; screens `M.*` main app, `H.*` HRMS, `E.*` ESS; HRMS sidebar has a Handbook entry opening `/handbook#part-hrms`), `docs/hrms-architecture.md` §11 (OT cool-off/eligibility). Update all of them when a user-visible screen changes.
 
 **Frontend build.** After editing `app.js`/`ess.js`, run `cd frontend && npm run build:min && npm run inject-versions` — HTML pages load the `.min.js` bundles with version query strings.
+
+## 33. Voice (Phase 1 — AI Assistant, 2026-09-27)
+
+Voice is a thin input/output layer over the existing AI Assistant; it never writes data.
+
+- **`src/voice.js`** (plain script, loaded by `index.html` before `app.js`; versioned by `inject-versions`, not minified) exposes `window.VoiceInput` / `window.VoiceOutput`. Input prefers the browser's `SpeechRecognition`; otherwise (or on a browser STT network error) it records with `MediaRecorder` (max 60 s) and calls a caller-supplied `transcribe(blob, lang)`. Output uses `speechSynthesis`. Language (`en-US`/`ar-AE`) and mute live in `localStorage` (try/catch).
+- **AI panel wiring** (`app.js`, `toggleAIVoice()` and friends above `askSystemAI()`): transcript → `#system-ai-question` → `askSystemAI()`; a spoken question sets `answer_lang: "ar"` when asked in Arabic, and its answer is spoken.
+- **`POST /ai/transcribe`** (`routers/ai.py`, under `require_module("ai")`, 15/min): multipart `file` + optional `lang`; 422 empty, 413 over 5 MB; forwards to OpenAI (`OPENAI_TRANSCRIBE_MODEL`, default `gpt-4o-mini-transcribe`) via `ai_client.transcribe_audio()`; 503 when no key or the provider fails. Audio is never stored.
+- **`AIAssistRequest.answer_lang`** (`"en"`/`"ar"`) appends an "answer in Arabic" instruction to the `/ai/assist` prompt.
+- Tests: `backend/tests/test_voice.py` (STT/LLM mocked).
+- Not yet: voice commands/navigation, voice data entry, HRMS/ESS/POS voice, per-company voice settings and daily transcription cap (Phases 2–5 of the voice plan).

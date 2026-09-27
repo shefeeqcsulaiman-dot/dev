@@ -22754,7 +22754,7 @@ function _bioDiagramPush(label){
       <text x="126" y="22" text-anchor="middle" font-size="8.5" fill="#065f46" font-weight="600">HTTPS Push</text>
       <rect x="163" y="10" width="210" height="40" rx="8" fill="#10b981" fill-opacity=".12" stroke="#10b981" stroke-width="1.5"/>
       <text x="268" y="27" text-anchor="middle" font-size="9.5" font-weight="700" fill="#065f46">TaxFlow Server</text>
-      <text x="268" y="41" text-anchor="middle" font-size="9" fill="#065f46">app.etaxflow.com</text>
+      <text x="268" y="41" text-anchor="middle" font-size="9" fill="#065f46">dev.etaxflow.com</text>
     </svg>
     <div style="text-align:center;font-size:11px;color:#166534;font-weight:600;margin-top:2px">✓ No local software needed — ${label} pushes punches directly to TaxFlow</div>
   </div>`;
@@ -22776,7 +22776,7 @@ function _bioDiagramTCP(deviceLabel){
       <text x="290" y="22" text-anchor="middle" font-size="8" fill="#065f46" font-weight="600">HTTPS</text>
       <rect x="323" y="10" width="152" height="40" rx="8" fill="#10b981" fill-opacity=".12" stroke="#10b981" stroke-width="1.5"/>
       <text x="399" y="27" text-anchor="middle" font-size="9.5" font-weight="700" fill="#065f46">TaxFlow Server</text>
-      <text x="399" y="41" text-anchor="middle" font-size="9" fill="#065f46">app.etaxflow.com</text>
+      <text x="399" y="41" text-anchor="middle" font-size="9" fill="#065f46">dev.etaxflow.com</text>
     </svg>
     <div style="text-align:center;font-size:11px;color:#1e40af;font-weight:600;margin-top:2px">Bridge script runs on an office PC on the same network as the device</div>
   </div>`;
@@ -25104,6 +25104,84 @@ function buildSystemAIResponse(question){
   return 'TaxFlow is organized into Dashboard, Sales & Invoices, Quotations, Purchases, Expenses, Bank, Accounting, Reports, Inventory, Staff, Payroll, Expert Review, Settings, and this AI Assistant. Ask about a module name or workflow such as quotation creation, invoice creation, purchase extraction, stock mapping, journal posting, VAT filing, payroll WPS, settings, or production roadmap.';
 }
 
+// Voice input for the AI Assistant (src/voice.js). Push-to-talk; the transcript
+// goes into the question box and is sent like a typed question.
+let _aiVoiceLang=null;
+
+async function _aiTranscribe(blob,lang){
+  const form=new FormData();
+  form.append('file',blob,'voice.'+((blob.type.split('/')[1]||'webm').split(';')[0]));
+  form.append('lang',lang);
+  const headers={};
+  const token=localStorage.getItem('taxflow_token');
+  if(token)headers.Authorization='Bearer '+token;
+  const res=await fetch(`${apiBaseUrl()}/ai/transcribe`,{method:'POST',headers,body:form});
+  if(!res.ok){
+    let detail=`Transcription failed (${res.status})`;
+    try{detail=(await res.json()).detail||detail;}catch{}
+    throw new Error(detail);
+  }
+  return (await res.json()).text;
+}
+
+function _aiMicState(state){
+  const btn=document.getElementById('ai-mic-btn');
+  if(!btn)return;
+  btn.classList.toggle('listening',state==='listening');
+  btn.classList.toggle('processing',state==='processing');
+  btn.setAttribute('aria-pressed',state==='listening'?'true':'false');
+  btn.title=state==='listening'?'Listening… click to stop':state==='processing'?'Transcribing…':'Speak your question';
+  if(state==='listening')setAIStatus('Listening… click the mic again when you are done.');
+  else if(state==='processing')setAIStatus('Transcribing your question…');
+}
+
+function toggleAIVoice(){
+  if(!window.VoiceInput||!VoiceInput.supported()){toast('Voice input is not supported in this browser','warn');return;}
+  if(VoiceInput.isActive()){VoiceInput.stop();return;}
+  if(window.VoiceOutput)VoiceOutput.stop();
+  const lang=VoiceInput.getLang();
+  VoiceInput.start({
+    lang,
+    transcribe:_aiTranscribe,
+    onState:_aiMicState,
+    onText:text=>{
+      const input=document.getElementById('system-ai-question');
+      if(input)input.value=text;
+      _aiVoiceLang=lang;
+      askSystemAI();
+    },
+    onError:msg=>{setAIStatus(msg);toast(msg,'warn');}
+  });
+}
+
+function setAIVoiceLang(lang){
+  if(window.VoiceInput)VoiceInput.setLang(lang);
+  syncAIVoiceControls();
+}
+
+function toggleAIVoiceMute(){
+  if(!window.VoiceOutput)return;
+  VoiceOutput.setMuted(!VoiceOutput.isMuted());
+  syncAIVoiceControls();
+}
+
+function syncAIVoiceControls(){
+  const wrap=document.getElementById('ai-voice-controls');
+  if(!wrap)return;
+  if(!window.VoiceInput||!VoiceInput.supported()){wrap.hidden=true;return;}
+  wrap.hidden=false;
+  const langSel=document.getElementById('ai-voice-lang');
+  if(langSel)langSel.value=VoiceInput.getLang();
+  const mute=document.getElementById('ai-voice-mute');
+  if(mute){
+    const muted=window.VoiceOutput?VoiceOutput.isMuted():true;
+    mute.textContent=muted?'🔇':'🔊';
+    mute.title=muted?'Spoken answers off':'Spoken answers on';
+    mute.setAttribute('aria-pressed',muted?'true':'false');
+  }
+}
+document.addEventListener('DOMContentLoaded',syncAIVoiceControls);
+
 async function askSystemAI(prompt){
   const input=document.getElementById('system-ai-question');
   const send=document.getElementById('ai-send-btn');
@@ -25119,9 +25197,14 @@ async function askSystemAI(prompt){
   if(send)send.disabled=true;
   setAIStatus('TaxFlow AI is answering...');
   try{
-    const data=await moduleApi('/ai/assist',{method:'POST',body:{question}});
+    // Spoken questions get a spoken answer, in the language they were asked in.
+    const voiceLang=_aiVoiceLang;_aiVoiceLang=null;
+    const body={question};
+    if(voiceLang==='ar-AE'||/[\u0600-\u06FF]/.test(question))body.answer_lang='ar';
+    const data=await moduleApi('/ai/assist',{method:'POST',body});
     if(pending)pending.querySelector('.ai-bubble').innerHTML=`<div class="ai-msg-meta">TaxFlow AI</div>${aiResponseSections(data)}`;
     setAIStatus(`Answered with ${data.confidence||0}% confidence. Human approval is still required for posting.`);
+    if(voiceLang&&window.VoiceOutput)VoiceOutput.speak(data.answer);
   }catch(err){
     console.warn('Backend AI assistant unavailable:',err);
     if(pending){

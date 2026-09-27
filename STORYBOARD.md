@@ -2,7 +2,7 @@
 
 **Platform:** UAE Business Management & Compliance Platform  
 **Stack:** FastAPI · SQLite (dev) / PostgreSQL (prod) · Single-page frontend  
-**Live URL:** https://app.etaxflow.com  
+**Live URL:** https://dev.etaxflow.com  
 **Default login:** admin@taxflowapp.com / admin123
 
 ---
@@ -495,6 +495,7 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 - Chat interface connected to live company data
 - Ask questions: "What is my VAT payable for June?", "Show unpaid invoices over AED 10,000"
 - Powered by LLM with company context
+- **Voice:** mic button beside Send (push-to-talk; click again to stop), EN / عربي language picker and a speaker toggle for spoken answers. The transcript is sent like a typed question and the answer is read aloud; questions asked in Arabic are answered in Arabic. Uses the browser's own speech recognition (Chrome, Edge, Safari); other browsers record up to ~60 s and transcribe on the server (`POST /ai/transcribe`, needs `OPENAI_API_KEY`). Voice never saves or posts anything.
 
 ### 15.2 AI Invoice Extraction
 - Upload supplier invoice images (JPG/PNG/PDF)

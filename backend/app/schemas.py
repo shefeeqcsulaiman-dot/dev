@@ -1021,6 +1021,8 @@ class DomainEventOut(BaseModel):
 
 class AIAssistRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
+    # "ar" asks for the answer in Arabic (e.g. a question spoken in Arabic)
+    answer_lang: Literal["en", "ar"] | None = None
 
 
 class AITransactionValidationRequest(BaseModel):
