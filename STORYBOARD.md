@@ -390,6 +390,14 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 
 ## 12. Employee Self-Service (ESS Portal)
 
+### 12.0 Phone app layout (screens up to 760px wide)
+- Sidebar and top bar are replaced by a bottom tab bar: **Home · Attend · 🎤 voice · Requests · Me**; desktop and tablet keep the existing layout
+- **Home**: greeting, today's (or next) shift card with a **Check in / Check out** button, shortcuts (Leave, Overtime, Payslip, Rota), annual leave left, pending requests, latest announcement
+- **Attend**: live clock, large round check-in button (red when checked in; check-out asks for confirmation), today's In / Out / Hours, last 7 days
+- **Request forms** open as bottom sheets; leave type is picked with chips
+- **Me**: Payslips, Rota and shifts, Leave and holidays, My tasks, My team, Install the app / Add to Home Screen, Sign out — then the usual profile, documents and password
+- **Installable**: "Add to Home Screen" opens it full-screen with its own icon (`/ess-manifest.json`)
+
 **Entry:** `/ess` — separate portal with own login  
 **Authentication:** Employee logs in with Employee No. + password (default password = employee no.)
 

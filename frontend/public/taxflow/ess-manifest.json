@@ -1,0 +1,15 @@
+{
+  "name": "TaxFlow Employee",
+  "short_name": "TaxFlow ESS",
+  "description": "Check in, request leave and overtime, and see payslips.",
+  "start_url": "/ess",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {"src": "/ess-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "/ess-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}

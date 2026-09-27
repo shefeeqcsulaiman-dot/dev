@@ -231,6 +231,7 @@
     }
     // The drawer is a phone/tablet pattern; on desktop the sidebar stays where the user left it.
     if (window.innerWidth <= 860) toggleEssSidebar(false);
+    essSyncTabbar(id);
     var c = document.querySelector('.content');
     if (c) c.scrollTop = 0;
   }
@@ -1701,6 +1702,7 @@
     essRefreshRequests();
     loadProfileDetails();
     loadDocuments();
+    essLoadMobile();
   }
 
   // ── Role-based view — the same token also carries RBAC role/permission
@@ -1942,12 +1944,6 @@
     } catch(e) { body.innerHTML = '<tr><td colspan="4" class="empty">Failed to load.</td></tr>'; }
   }
 
-  // Capture ?c=<company_id> from the link on every load (even if already
-  // logged in), and auto-login if a token already exists.
-  (function(){
-    essCompanyId();
-    if (localStorage.getItem(ESS_TOKEN_KEY)) showApp();
-  })();
 
   // ── Voice (Phase 4) ──
   // Topbar mic / Ctrl+Space. Pages open directly; requests open their usual
@@ -1990,11 +1986,13 @@
     _essMicState('idle');
   }
   function _essMicState(state) {
-    var btn = document.getElementById('ess-mic-btn');
-    if (!btn) return;
-    btn.classList.toggle('listening', state === 'listening');
-    btn.classList.toggle('processing', state === 'processing');
-    btn.setAttribute('aria-pressed', state === 'listening' ? 'true' : 'false');
+    ['ess-mic-btn', 'm-tab-mic'].forEach(function(id) {
+      var btn = document.getElementById(id);
+      if (!btn) return;
+      btn.classList.toggle('listening', state === 'listening');
+      btn.classList.toggle('processing', state === 'processing');
+      btn.setAttribute('aria-pressed', state === 'listening' ? 'true' : 'false');
+    });
   }
   async function _essTranscribe(blob, lang) {
     var form = new FormData();
@@ -2013,8 +2011,10 @@
     try {
       _essVoiceSettings = await essApi('GET', '/ess/voice-settings');
     } catch (e) { return null; }
-    var btn = document.getElementById('ess-mic-btn');
-    if (btn) btn.hidden = !_essVoiceSettings.enabled;
+    ['ess-mic-btn', 'm-tab-mic'].forEach(function(id) {
+      var btn = document.getElementById(id);
+      if (btn) btn.hidden = !_essVoiceSettings.enabled;
+    });
     if (window.VoiceInput) VoiceInput.setCompanyLang(_essVoiceSettings.default_lang);
     return _essVoiceSettings;
   }
@@ -2121,3 +2121,234 @@
       essVoiceClose();
     }
   });
+
+  // ── Mobile app layer (phones ≤ 760px) ──
+  // Home / Attend / Requests / Me tab bar, a one-tap check-in, bottom-sheet
+  // forms and "Add to Home Screen". Reuses the same endpoints and functions
+  // as the desktop views; desktop/tablet layouts are untouched.
+  var _essMq = window.matchMedia('(max-width: 760px)');
+  var _essCheck = null;
+  var _essInstallEvt = null;
+  var _M_TAB_PARENT = {dashboard: 'dashboard', attendance: 'attendance', gps: 'attendance', requests: 'requests'};
+  function essIsMobile() { return _essMq.matches; }
+  function _mSet(id, text) { var el = document.getElementById(id); if (el) el.textContent = text; }
+  function _mISO(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function _mInitials(name) { return String(name || '?').split(/\s+/).map(function(w) { return w[0] || ''; }).join('').slice(0, 2).toUpperCase(); }
+  function _mHours(mins) { if (!(mins > 0)) return '0h'; var h = Math.floor(mins / 60), m = Math.round(mins % 60); return h ? h + 'h' + (m ? ' ' + m + 'm' : '') : Math.max(1, m) + 'm'; }
+  function _mLocalHHMM(iso) { var d = new Date(iso); return isNaN(d) ? '' : d.toTimeString().slice(0, 5); }
+  function _mMinutes(t) { var p = String(t || '').split(':'); return p.length >= 2 ? (+p[0]) * 60 + (+p[1]) : null; }
+
+  function essSyncTabbar(id) {
+    var parent = _M_TAB_PARENT[id] || 'profile';
+    document.querySelectorAll('.m-tabbar [data-tab]').forEach(function(b) {
+      var on = b.getAttribute('data-tab') === parent;
+      b.classList.toggle('on', on);
+      if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+    var c = document.querySelector('.content');
+    if (c && essIsMobile()) c.scrollTop = 0;
+  }
+
+  // Per-day first-in / last-out from the raw punch list.
+  function _mDays(punches) {
+    var days = {};
+    (punches || []).forEach(function(p) {
+      var d = p.punch_date, t = String(p.punch_time || '').slice(0, 5);
+      if (!d || !t) return;
+      var day = days[d] || (days[d] = {inT: null, outT: null});
+      var dir = String(p.direction || '').toLowerCase();
+      if (dir === 'out') { if (!day.outT || t > day.outT) day.outT = t; }
+      else if (!day.inT || t < day.inT) day.inT = t;
+    });
+    return days;
+  }
+
+  async function _mLoadCheck() {
+    try { _essCheck = await essApi('GET', '/hr/dashboard'); } catch (e) { _essCheck = null; }
+    var checked = !!(_essCheck && _essCheck.checked_in);
+    var label = checked ? 'Check out' : 'Check in';
+    _mSet('m-shift-btn', label);
+    _mSet('m-att-btn-label', label);
+    var btn = document.getElementById('m-att-btn');
+    if (btn) btn.classList.toggle('out', checked);
+    var since = _essCheck && _essCheck.check_in_at ? _mLocalHHMM(_essCheck.check_in_at) : '';
+    _mSet('m-shift-state', checked ? 'Checked in' + (since ? ' at ' + since : '') : 'Not checked in yet');
+  }
+
+  async function _mLoadToday() {
+    var punches = [];
+    try { punches = await essApi('GET', '/ess/attendance'); } catch (e) {}
+    var days = _mDays(Array.isArray(punches) ? punches : (punches && punches.rows) || []);
+    var today = _mISO(new Date()), t = days[today] || (days[today] = {inT: null, outT: null});
+    ((_essCheck && _essCheck.today_sessions) || []).forEach(function(s) {
+      var i = _mLocalHHMM(s.check_in), o = s.check_out ? _mLocalHHMM(s.check_out) : null;
+      if (i && (!t.inT || i < t.inT)) t.inT = i;
+      if (o && (!t.outT || o > t.outT)) t.outT = o;
+    });
+    if (_essCheck && _essCheck.checked_in) t.outT = null;  // still on the clock
+    _mSet('m-att-in', t.inT || '--:--');
+    _mSet('m-att-out', t.outT || '--:--');
+    var endT = t.outT || (t.inT ? new Date().toTimeString().slice(0, 5) : null);
+    _mSet('m-att-hours', t.inT && endT ? _mHours(_mMinutes(endT) - _mMinutes(t.inT)) : '0h');
+    var week = document.getElementById('m-week');
+    if (week) {
+      var html = '';
+      for (var i = 6; i >= 0; i--) {
+        var d = new Date(); d.setDate(d.getDate() - i);
+        var iso = _mISO(d), day = days[iso], pill;
+        if (day && day.inT && day.outT) pill = '<span class="m-pill ok">' + _mHours(_mMinutes(day.outT) - _mMinutes(day.inT)).replace(/ \d+m$/, '') + '</span>';
+        else if (day && day.inT) pill = '<span class="m-pill in">In</span>';
+        else pill = '<span class="m-pill">–</span>';
+        html += '<div><span>' + d.toLocaleDateString('en-US', {weekday: 'narrow'}) + '</span>' + pill + '</div>';
+      }
+      week.innerHTML = html;
+    }
+  }
+
+  async function _mLoadShift() {
+    var rows = [];
+    try { rows = await essApi('GET', '/ess/rota'); } catch (e) {}
+    var today = _mISO(new Date());
+    var work = (rows || []).filter(function(r) { return !/^(off|leave|holiday)$/i.test(String(r.type || r.code || '')); });
+    var todays = work.find(function(r) { return r.date === today; });
+    var next = todays || work.find(function(r) { return (r.date || '') > today; });
+    if (!next) { _mSet('m-shift-kick', 'Today'); _mSet('m-shift-time', 'No shift scheduled'); return; }
+    var label = next.type || next.code || 'Shift';
+    var when = next.date === today ? "Today's shift" : 'Next shift · ' + new Date(next.date + 'T00:00:00').toLocaleDateString('en-US', {weekday: 'short', day: 'numeric', month: 'short'});
+    _mSet('m-shift-kick', when + ' · ' + label);
+    _mSet('m-shift-time', next.start && next.end ? next.start + ' – ' + next.end : label);
+  }
+
+  async function _mLoadSummary() {
+    try {
+      var me = await essApi('GET', '/ess/me');
+      var h = new Date().getHours();
+      _mSet('m-greet', h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening');
+      ['m-name', 'm-me-name'].forEach(function(id) { _mSet(id, me.full_name || '—'); });
+      ['m-avatar', 'm-me-avatar'].forEach(function(id) { _mSet(id, _mInitials(me.full_name)); });
+      _mSet('m-me-role', [me.designation, me.department].filter(function(x) { return x && x !== '-'; }).join(' · ') || me.employee_no || '');
+    } catch (e) {}
+    try {
+      var bal = await essApi('GET', '/ess/leave-balance');
+      var a = bal && bal.by_type && bal.by_type['Annual Leave'];
+      var el = document.getElementById('m-annual');
+      if (el && a) el.innerHTML = escHtml(a.remaining) + ' <small>of ' + escHtml(a.entitlement) + ' days</small>';
+    } catch (e) {}
+    try {
+      var reqs = await essApi('GET', '/ess/requests');
+      var pending = (reqs || []).filter(function(r) { return String(r.status || '').toLowerCase() === 'pending'; }).length;
+      _mSet('m-pending', String(pending));
+    } catch (e) {}
+    try {
+      var ann = await essApi('GET', '/ess/announcements');
+      var box = document.getElementById('m-announce');
+      if (box && ann && ann.length) { box.hidden = false; _mSet('m-announce-text', ann[0].title || ann[0].message || ''); }
+    } catch (e) {}
+    var dot = document.getElementById('ess-notif-dot'), mdot = document.getElementById('m-dot');
+    if (dot && mdot) mdot.hidden = dot.style.display === 'none';
+  }
+
+  function essLoadMobile() {
+    if (!essIsMobile() || !localStorage.getItem(ESS_TOKEN_KEY)) return;
+    var cur = document.querySelector('.tab-body.on');
+    essSyncTabbar(cur ? cur.id.replace(/^tb-/, '') : 'dashboard');
+    _mLoadSummary(); _mLoadShift();
+    _mLoadCheck().then(_mLoadToday);
+    _mTick();
+  }
+
+  function _mTick() {
+    var now = new Date();
+    _mSet('m-att-clock', now.toTimeString().slice(0, 5));
+    _mSet('m-att-date', now.toLocaleDateString('en-US', {weekday: 'long', day: 'numeric', month: 'long'}));
+  }
+  setInterval(function() { if (essIsMobile()) _mTick(); }, 20000);
+
+  async function essMobileCheck() {
+    var checked = !!(_essCheck && _essCheck.checked_in);
+    // Checking out ends the working day, so confirm it; checking in is one tap.
+    if (checked && !(await essConfirm({title: 'Check out now?', message: 'This records the end of your working day.', okText: 'Check out'}))) return;
+    var btns = [document.getElementById('m-shift-btn'), document.getElementById('m-att-btn')];
+    btns.forEach(function(b) { if (b) b.disabled = true; });
+    _mSet('m-att-btn-label', 'Locating…');
+    try {
+      if (checked) await gpsCheckOut(); else await gpsCheckIn();
+    } finally {
+      btns.forEach(function(b) { if (b) b.disabled = false; });
+    }
+    var err = document.getElementById('gps-err');
+    await _mLoadCheck();
+    _mLoadToday();
+    if (err && err.style.display === 'block') essToast(err.textContent, 'err');
+    else essToast(checked ? 'Checked out' : 'Checked in');
+  }
+
+  // Leave type as tap-to-pick chips on phones; the <select> stays the source of truth.
+  function _mBuildLeaveChips() {
+    var sel = document.getElementById('leave-type');
+    if (!sel || document.getElementById('m-leave-chips')) return;
+    var box = document.createElement('div');
+    box.id = 'm-leave-chips';
+    box.className = 'm-only m-chips';
+    box.setAttribute('role', 'radiogroup');
+    box.setAttribute('aria-label', 'Leave type');
+    Array.prototype.forEach.call(sel.options, function(o) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = o.textContent.replace(/ Leave$/, '');
+      b.setAttribute('role', 'radio');
+      b.dataset.value = o.value;
+      b.onclick = function() { sel.value = o.value; sel.dispatchEvent(new Event('change', {bubbles: true})); };
+      box.appendChild(b);
+    });
+    sel.parentNode.insertBefore(box, sel.nextSibling);
+    sel.addEventListener('change', _mSyncLeaveChips);
+  }
+  function _mSyncLeaveChips() {
+    var sel = document.getElementById('leave-type');
+    document.querySelectorAll('#m-leave-chips button').forEach(function(b) {
+      var on = sel && b.dataset.value === sel.value;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+  }
+  var _essOpenLeaveDesktop = essOpenLeaveModal;
+  essOpenLeaveModal = function(prefillDate) { _essOpenLeaveDesktop(prefillDate); _mSyncLeaveChips(); };
+
+  // Add to Home Screen: Android/desktop Chrome fire beforeinstallprompt; iOS
+  // Safari has no prompt API, so the menu item explains the Share-sheet step.
+  window.addEventListener('beforeinstallprompt', function(e) {
+    e.preventDefault();
+    _essInstallEvt = e;
+    var b = document.getElementById('m-install');
+    if (b) b.hidden = false;
+  });
+  function essInstallApp() {
+    if (_essInstallEvt) {
+      _essInstallEvt.prompt();
+      _essInstallEvt = null;
+      var b = document.getElementById('m-install');
+      if (b) b.hidden = true;
+    } else {
+      essToast('Tap the Share button, then “Add to Home Screen”');
+    }
+  }
+  (function() {
+    var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    var standalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+    if (ios && !standalone) {
+      var b = document.getElementById('m-install');
+      if (b) b.hidden = false;
+      _mSet('m-install-label', 'Add to Home Screen');
+    }
+  })();
+
+  _mBuildLeaveChips();
+  _essMq.addEventListener('change', function() { essLoadMobile(); });
+  // Capture ?c=<company_id> from the link on every load (even if already
+  // logged in), and auto-login if a token already exists. Runs last so the
+  // voice and mobile code above is defined before showApp() uses it.
+  (function(){
+    essCompanyId();
+    if (localStorage.getItem(ESS_TOKEN_KEY)) showApp();
+  })();
