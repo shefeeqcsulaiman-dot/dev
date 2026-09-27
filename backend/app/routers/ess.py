@@ -5,15 +5,17 @@ from calendar import monthrange
 from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from jose import JWTError, jwt
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 import app.cache as cache
+import app.ess_voice as ess_voice
 import app.timezone_utils as timezone_utils
 from app.auth_principal import resolve_department_scope
 from app.config import get_settings
+from app.ai_client import transcribe_audio
 from app.database import get_db
 from app.dependencies import assert_company_active, company_allows_module
 from app.limiter import limiter
@@ -1288,3 +1290,80 @@ def ess_documents(request: Request, db: Session = Depends(get_db)) -> list[dict]
             state = "valid"
         out.append({"label": label, "expiry": raw[:10] if raw else None, "days_left": days, "state": state})
     return out
+
+
+# ── Voice (Phase 4) ──────────────────────────────────────────────────────────
+# Both endpoints act only on the token's own employee and fall under the
+# company's "ai" module switch. Neither writes anything: form intents return
+# values for the portal to pre-fill, and the employee submits them.
+
+def _require_ai_module(db: Session, emp: Employee) -> None:
+    modules = db.query(Company.modules_enabled).filter(Company.id == emp.company_id).scalar()
+    if not company_allows_module(modules, "ai"):
+        raise HTTPException(status_code=403, detail="Voice isn't enabled for your company")
+
+
+class EssVoiceIn(BaseModel):
+    transcript: str = Field(min_length=1, max_length=500)
+    lang: Literal["en", "ar"] | None = None
+
+
+def _balance_answer(balance: dict, leave_type: str | None) -> str:
+    by_type = balance.get("by_type") or {}
+    if leave_type and leave_type in by_type:
+        b = by_type[leave_type]
+        return f"You have {b['remaining']} of {b['entitlement']} days of {leave_type} left ({b['used']} used)."
+    parts = [f"{name}: {b['remaining']} of {b['entitlement']} days left" for name, b in by_type.items()
+             if name == "Annual Leave" or b.get("used")]
+    return ("; ".join(parts) + ".") if parts else "No leave balance is set up for you yet."
+
+
+def _next_shift_answer(rows: list, today: date) -> str:
+    upcoming = [r for r in rows if (r.get("date") or "") >= today.isoformat()
+                and str(r.get("type") or r.get("code") or "").lower() not in ("off", "leave", "holiday")]
+    if not upcoming:
+        return "You have no upcoming shifts in your rota."
+    r = upcoming[0]
+    when = "today" if r["date"] == today.isoformat() else date.fromisoformat(r["date"]).strftime("%A %d %B")
+    times = f", {r['start']}–{r['end']}" if r.get("start") and r.get("end") else ""
+    label = r.get("type") or r.get("code") or ""
+    return f"Your next shift is {when}{times}" + (f" ({label})" if label else "") + "."
+
+
+@router.post("/voice-intent")
+@limiter.limit("20/minute")
+def ess_voice_intent(payload: EssVoiceIn, request: Request, db: Session = Depends(get_db)) -> dict:
+    emp = ess_bearer(request, db)
+    _require_ai_module(db, emp)
+    today = _local_today_for(db, emp)
+    result = ess_voice.resolve(payload.transcript, today, payload.lang)
+    answer = None
+    if result["intent"] == "leave_balance":
+        answer = _balance_answer(ess_leave_balance(request, db), result["fields"].get("leave_type"))
+    elif result["intent"] == "next_shift":
+        answer = _next_shift_answer(ess_rota(request, None, db), today)
+    return {**result, "answer": answer}
+
+
+@router.post("/voice-transcribe")
+@limiter.limit("15/minute")
+def ess_voice_transcribe(
+    request: Request,
+    file: UploadFile = File(...),
+    lang: str | None = Form(None),
+    db: Session = Depends(get_db),
+) -> dict:
+    """ESS twin of /ai/transcribe (which only accepts main-app logins)."""
+    emp = ess_bearer(request, db)
+    _require_ai_module(db, emp)
+    audio = file.file.read(5 * 1024 * 1024 + 1)
+    if not audio:
+        raise HTTPException(status_code=422, detail="Empty audio")
+    if len(audio) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Recording too long - keep voice input under about a minute")
+    lang_code = (lang or "").split("-")[0].lower()
+    lang_code = lang_code if lang_code in ("en", "ar") else None
+    result = transcribe_audio(audio, file.filename or "audio.webm", file.content_type or "audio/webm", lang_code)
+    if "error" in result:
+        raise HTTPException(status_code=503, detail=result["error"])
+    return {"text": result["text"], "lang": lang_code or ""}
