@@ -860,7 +860,7 @@ button{cursor:pointer;border:none;background:none;}
     <div id="pay-cash-panel">
       <label>Quick Amount</label>
       <div class="ov-quick" id="pay-quick"></div>
-      <label>Cash Tendered (AED)</label>
+      <label data-currency-label>Cash Tendered (AED)</label>
       <input type="number" id="pay-tender" placeholder="0.00" step="0.01" oninput="calcChange()" style="font-size:22px;font-weight:700;text-align:center">
       <div class="ov-change">
         <span>Change Due</span>
@@ -872,12 +872,12 @@ button{cursor:pointer;border:none;background:none;}
       <input type="text" id="pay-cardref" placeholder="Auth code or last 4 digits">
     </div>
     <div id="pay-multi-panel" style="display:none">
-      <label>Cash Amount (AED)</label>
+      <label data-currency-label>Cash Amount (AED)</label>
       <input type="number" id="pay-multi-cash" placeholder="0.00" step="0.01" oninput="calcMultiBalance()">
-      <label>Card Amount (AED)</label>
+      <label data-currency-label>Card Amount (AED)</label>
       <input type="number" id="pay-multi-card" placeholder="0.00" step="0.01" oninput="calcMultiBalance()">
       <div class="ov-change">
-        <span>Remaining</span>
+        <span id="pay-multi-rem-lbl">Remaining</span>
         <span id="pay-multi-rem">AED 0.00</span>
       </div>
     </div>
@@ -1056,11 +1056,11 @@ button{cursor:pointer;border:none;background:none;}
         <input type="text" id="ap-code" placeholder="e.g. LS-001">
       </div>
       <div>
-        <label>Selling Price (AED) *</label>
+        <label data-currency-label>Selling Price (AED) *</label>
         <input type="number" id="ap-price" placeholder="0.00" min="0" step="0.01">
       </div>
       <div>
-        <label>Cost Price (AED)</label>
+        <label data-currency-label>Cost Price (AED)</label>
         <input type="number" id="ap-cost" placeholder="0.00" min="0" step="0.01">
       </div>
       <div>
@@ -1186,6 +1186,7 @@ async function refreshCompanyInfo(){
     const company = await api('/companies/current');
     if(company.name) localStorage.setItem('taxflow_company_name', company.name);
     POS_CURRENCY = company.currency || 'AED';
+    document.querySelectorAll('[data-currency-label]').forEach(el=>{ el.textContent = el.textContent.replace(/AED/, POS_CURRENCY); });
     POS_TRN = company.trn || '';
     POS_COUNTRY = company.country || '';
     POS_LOGO = company.logo || '';
@@ -1310,6 +1311,12 @@ async function loadProducts(){
     _products = (data.records||[]).filter(p=>!['inactive','discontinued'].includes((p.status||'').toLowerCase()));
     buildChips();
     renderGrid();
+    // Stock levels are fetched separately (same endpoint Stock Lookup
+    // already uses) purely to power the oversell warning in addToCart() —
+    // failure here shouldn't block the product grid from loading.
+    api('/inventory/stock-levels').then(rows=>{
+      _stockLevelsCache=Array.isArray(rows)?rows:[];
+    }).catch(()=>{});
   }catch(e){
     document.getElementById('pgrid').innerHTML = '<div class="pgrid-empty">Could not load products — check connection and refresh.</div>';
     toast('Products failed to load','err');
@@ -1478,6 +1485,16 @@ function addToCart(idx){
   const price = Number(p.selling_price||p.price||p.unit_price||p.sales_price||p.cost||0);
   const vatRate = parseVat(p.vat);
   const ex = _cart.find(i=>i.id===id);
+  const nextQty = ex ? ex.qty+1 : 1;
+  // Soft warning only (no block) — many businesses deliberately sell past
+  // zero (backorders, services, pre-orders), but a cashier previously had
+  // no signal at all that a sale was about to oversell a tracked item.
+  if((p.tracking||'Yes')!=='No' && _stockLevelsCache){
+    const stockRow=_stockLevelsCache.find(r=>(p.code&&r.code===p.code)||r.name===p.name);
+    if(stockRow && nextQty>Number(stockRow.current_stock||0)){
+      toast(`Only ${Number(stockRow.current_stock||0)} ${p.unit||'PCS'} of "${p.name}" in stock`,'warn');
+    }
+  }
   if(ex){
     if(_posWeightUnits.has(p.unit)){
       const input=document.querySelector('.pcart-qty input[data-cart-id="'+CSS.escape(id)+'"]');
@@ -1499,7 +1516,13 @@ function addToCart(idx){
 function changeQty(id,delta){
   const item=_cart.find(i=>i.id===id);
   if(!item)return;
-  const nq=item.qty+delta;
+  // The +/- buttons always pass a whole-unit delta (±1). For a weight-based
+  // item (unit KG etc., qty like 0.25) that instantly deleted the line on
+  // one tap of "−" instead of nudging the quantity — step by a tenth of a
+  // unit for those instead, matching the fractional entry setQty() already
+  // supports.
+  const step=_posWeightUnits.has(item.unit)?0.1*Math.sign(delta):delta;
+  const nq=Math.round((item.qty+step)*100)/100;
   if(nq<=0)_cart=_cart.filter(i=>i.id!==id);
   else item.qty=nq;
   renderCart();
@@ -1524,9 +1547,11 @@ function setPrice(id,val){
 function removeFromCart(id){ _cart=_cart.filter(i=>i.id!==id); renderCart(); }
 function clearCart(){
   if(_cart.length&&!confirm('Clear all items?'))return;
-  _cart=[];
-  document.getElementById('pos-cust').value='Walk-In Customer';
-  renderCart();
+  // Reuse resetPosCart()'s reset (cart + customer + discount/tax/shipping/
+  // packing) — this used to only clear the cart array and customer, leaving
+  // a previous customer's discount/order-tax/shipping/packing silently
+  // applied to whoever's sale comes next.
+  resetPosCart();
 }
 
 function getAdj(){ return { disc:parseFloat(document.getElementById('s-disc')?.value)||0, tax:parseFloat(document.getElementById('s-tax')?.value)||0, ship:parseFloat(document.getElementById('s-ship')?.value)||0, pack:parseFloat(document.getElementById('s-pack')?.value)||0 }; }
@@ -1580,7 +1605,16 @@ function renderCart(){
 }
 
 function renderSummary(){
-  const {sub, vat, total, vatLabel} = cartTotals();
+  const {sub, vat, total, vatLabel, disc} = cartTotals();
+  // Flag (not block — a 100% discount can be a legitimate giveaway/promo)
+  // a discount that consumes the whole taxable base, since it previously
+  // gave zero feedback and just silently floored the sale at AED 0.00.
+  const discEl=document.getElementById('s-disc');
+  if(discEl){
+    const overDisc=sub>0&&disc>=sub;
+    discEl.style.borderColor=overDisc?'var(--red)':'';
+    discEl.title=overDisc?'Discount is greater than or equal to the subtotal — this sale will total AED 0.00':'';
+  }
   // "Items" reads as "how many products are in the cart" — was previously
   // cartTotals().items (a summed quantity, e.g. 6 for a single product line
   // with qty 6), which looked wrong for exactly that case.
@@ -1640,7 +1674,18 @@ function calcMultiBalance(){
   const mk=parseFloat(document.getElementById('pay-multi-card')?.value)||0;
   const rem=total-mc-mk;
   const el=document.getElementById('pay-multi-rem');
-  if(el){el.textContent=POS_CURRENCY+' '+(Math.max(0,rem)).toFixed(2);el.style.color=rem<=0?'var(--teal)':'var(--red)';}
+  const lbl=document.getElementById('pay-multi-rem-lbl');
+  // Split payment previously showed "Remaining: AED 0.00" for any
+  // overpayment (rem clamped at 0 for display) with no change ever
+  // calculated or handed back — the cashier had no way to know how much
+  // change was owed, unlike Cash which always computes it.
+  if(rem<-0.001){
+    if(lbl)lbl.textContent='Change Due';
+    if(el){el.textContent=POS_CURRENCY+' '+Math.abs(rem).toFixed(2);el.style.color='var(--teal)';}
+  }else{
+    if(lbl)lbl.textContent='Remaining';
+    if(el){el.textContent=POS_CURRENCY+' '+Math.max(0,rem).toFixed(2);el.style.color=rem<=0?'var(--teal)':'var(--red)';}
+  }
   const ok=document.getElementById('pay-ok');
   if(ok) ok.disabled=rem>0.001;
 }
@@ -1660,10 +1705,13 @@ async function completeSale(){
   const serviceType=document.getElementById('pos-service-type')?.value||'';
   const staff=document.getElementById('pos-staff')?.value||'';
   const tendered=_payMethod==='cash'?(parseFloat(document.getElementById('pay-tender')?.value)||total):total;
-  const change=_payMethod==='cash'?Math.max(0,tendered-total):0;
   const cardRef=(document.getElementById('pay-cardref')?.value||'').trim();
   const multiCash=_payMethod==='multi'?parseFloat(document.getElementById('pay-multi-cash')?.value)||0:0;
   const multiCard=_payMethod==='multi'?parseFloat(document.getElementById('pay-multi-card')?.value)||0:0;
+  // Split payment can overpay just like cash (calcMultiBalance() now shows
+  // "Change Due" for it) — record that change the same way cash does, so
+  // it isn't silently dropped from the saved sale/receipt.
+  const change=_payMethod==='cash'?Math.max(0,tendered-total):_payMethod==='multi'?Math.max(0,(multiCash+multiCard)-total):0;
 
   const sale={
     id:rcptNo, receipt_no:rcptNo, date, customer, service_type:serviceType, staff,
@@ -1695,6 +1743,7 @@ async function completeSale(){
       toast('Sale saved, but it may not appear in Sales & Invoices: '+e.message,'warn');
     });
     _lastSale=sale;
+    _stockLevelsCache=null; // real stock just changed server-side; next lookup/oversell-check should see it
     closePay();
     resetPosCart();
     showReceipt(sale);
@@ -1783,6 +1832,12 @@ async function saveAs(status){
     };
     await saveRec('posSales',rec);
     toast(status.charAt(0).toUpperCase()+status.slice(1)+' saved — '+rec.receipt_no,'ok');
+    // Hold Order parks the current cart for later (Resume in Recent Orders)
+    // and frees the terminal for the next customer — leaving the cart as-is
+    // let a cashier complete the same items as a brand-new sale right after
+    // holding them, leaving the just-saved draft stranded in Held Orders as
+    // a stale duplicate of a sale that already happened.
+    resetPosCart();
   }catch(e){ toast('Failed: '+e.message,'err'); }
   finally{ _savingAs=false; }
 }
@@ -1794,6 +1849,14 @@ async function creditSale(){
   if(!cust||cust==='Walk-In Customer'){
     toast('Enter customer name for credit sale','warn');
     document.getElementById('pos-cust').focus();
+    return;
+  }
+  // Credit sale means money owed — a name typed free-hand with no matching
+  // saved customer record has nothing (TRN, contact, address) to anchor the
+  // debt to for AR tracking/statements later. Warn, don't block: the
+  // business may genuinely want to record it by name only.
+  const knownNames=new Set([...document.getElementById('pos-customer-list')?.options||[]].map(o=>o.value));
+  if(!knownNames.has(cust) && !confirm('"'+cust+'" isn\'t in your saved customers. Credit sales are easier to track against a saved customer record.\n\nContinue anyway?')){
     return;
   }
   _payMethod='credit';
@@ -1877,7 +1940,7 @@ async function genPosShortLink(sale){
     const payload={
       company:{name:CONAME(),logo:'TaxFlow',trn:'',address:'',bank:'',bankName:'',accountName:'',accountNumber:'',iban:'',swiftCode:'',paymentLink:'',footer:'Thank you for your business',color:'#2563eb',taxLabel:'Tax Invoice',trnLabel:'TRN',customerTrnLabel:'Customer TRN',enableRtl:false,enableArabic:false,language:'English'},
       invoice:{
-        invoice_no:sale.receipt_no,status:'Paid',customer:sale.customer||'Walk-In Customer',customer_trn:'',customer_address:'',po_number:'',delivery_note_no:'',reference_no:sale.receipt_no,
+        invoice_no:sale.receipt_no,status:sale.payment_method==='credit'?'Pending':'Paid',customer:sale.customer||'Walk-In Customer',customer_trn:'',customer_address:'',po_number:'',delivery_note_no:'',reference_no:sale.receipt_no,
         date:sale.date,due_date:sale.date,subtotal:sale.subtotal,vat_amount:sale.vat,total:sale.total,terms:'',
         labels:{heading:'Tax Invoice',billTo:'Bill To',issueDate:'Issue Date',dueDate:'Due Date',paymentTerms:'Payment Terms',currency:'Currency',product:'Description',unit:'Unit',quantity:'Qty',unitPrice:'Unit Price',taxable:'Taxable',vat:'VAT',vatAmount:'VAT Amount',amount:'Amount',subtotal:'Subtotal',total:'Total',balanceDue:'Balance Due',purchaseOrder:'Purchase Order No.',deliveryNote:'Delivery Note No.',reference:'Reference No.',paymentDetails:'Payment Details',digitalGenerated:'Digital invoice generated by TaxFlow'},
         lines:(sale.items||[]).map(i=>({description:i.name,unit:i.unit||'PCS',qty:i.qty,price:i.price,unit_price:i.price,amount:+(Number(i.line_total||0)+Number(i.line_vat||0)).toFixed(4),tax_rate:i.vatRate||0}))
@@ -1940,7 +2003,7 @@ function showReceipt(sale){
   const payInfo=sale.payment_method==='cash'
     ?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Cash Tendered','cashTendered')}</span><span>${POS_CURRENCY} ${Number(sale.cash_tendered||0).toFixed(2)}</span></div><div class="rcpt-row"><span class="rcpt-lbl">${bl('Change','change')}</span><span>${POS_CURRENCY} ${Number(sale.change||0).toFixed(2)}</span></div>`
     :sale.payment_method==='multi'
-    ?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Cash','cash')}</span><span>${POS_CURRENCY} ${Number(sale.multi_cash||0).toFixed(2)}</span></div><div class="rcpt-row"><span class="rcpt-lbl">${bl('Card','card')}</span><span>${POS_CURRENCY} ${Number(sale.multi_card||0).toFixed(2)}</span></div>`:'';
+    ?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Cash','cash')}</span><span>${POS_CURRENCY} ${Number(sale.multi_cash||0).toFixed(2)}</span></div><div class="rcpt-row"><span class="rcpt-lbl">${bl('Card','card')}</span><span>${POS_CURRENCY} ${Number(sale.multi_card||0).toFixed(2)}</span></div>${Number(sale.change||0)>0?`<div class="rcpt-row"><span class="rcpt-lbl">${bl('Change','change')}</span><span>${POS_CURRENCY} ${Number(sale.change||0).toFixed(2)}</span></div>`:''}`:'';
 
   const rcptHeading=posSplitBilingual(POS_RECEIPT.heading,'Tax Invoice | فاتورة ضريبية');
   const rcptVatLabel=posSplitBilingual(POS_RECEIPT.vatLabel,'VAT | الرقم الضريبي');
@@ -2228,6 +2291,7 @@ async function confirmRefund(){
       toast('Refund saved, but it may not appear in Sales Returns: '+e.message,'warn');
     });
     _lastSale=refund;
+    _stockLevelsCache=null;
     closeRefund();
     closeRecent();
     showReceipt(refund);
@@ -2485,7 +2549,7 @@ async function saveNewProduct(){
   if(!name){ toast('Product name is required','err'); return; }
   if(!code){ toast('Product code / SKU is required','err'); return; }
   const price=parseFloat(document.getElementById('ap-price')?.value||'0')||0;
-  if(!price){ toast('Selling price must be greater than 0','err'); return; }
+  if(price<=0){ toast('Selling price must be greater than 0','err'); return; }
   // Field names/values match saveProd()'s payload exactly (app.js, the
   // dashboard's own Add Product modal) — both write into the same
   // AppDataRecord "products" collection, so a product added from either
@@ -2515,6 +2579,11 @@ async function saveNewProduct(){
     toast('Product added: '+name,'ok');
     btn.disabled=false; btn.textContent='Save Product';
     await loadProducts();
+    // Quick Add exists so a cashier can sell something on the spot that
+    // isn't in the catalog yet — leaving them to then find and tap the tile
+    // they just created defeats that purpose.
+    const idx=_products.findIndex(p=>p.code===code);
+    if(idx>=0)addToCart(idx);
   }catch(e){
     toast('Failed to save product: '+(e.message||e),'err');
     const btn=document.querySelector('#ov-add-prod .ov-confirm');

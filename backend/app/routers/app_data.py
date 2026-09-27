@@ -22,8 +22,8 @@ import datetime as _dt
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from fastapi.responses import Response
-from sqlalchemy import func
+from fastapi.responses import Response, StreamingResponse
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -37,9 +37,10 @@ from app.auth_principal import resolve_active_branch
 from app.department_scope import SCOPED_COLLECTIONS, assert_record_writable, build_index, filter_records, record_in_scope
 from app.dependencies import Principal, branch_allows_module, company_allows_module, get_current_principal, get_current_user, require_module
 from app.limiter import limiter
-from app.module_integration import sync_bill_accounting, sync_purchase_accounting, sync_sales_invoice_accounting
+from app.module_integration import sync_bill_accounting, sync_purchase_accounting, sync_receipt_payment_accounting, sync_sales_invoice_accounting
 from app.routers.inventory import consume_valuation_layers
 from app.models import (
+    PeriodLock,
     Account,
     AppDataRecord,
     AttendanceDetail,
@@ -82,6 +83,23 @@ _REPORT_AFFECTING_COLLECTIONS = frozenset({
     "journalDrafts", "purchaseDocuments", "purchaseRecords",
     "bankAccounts", "employees", "payrollRuns",
 })
+
+# Collections ess.py's _employee_app_data_records() short-TTL-caches (its own
+# writes already invalidate directly, e.g. _create_request_record()/
+# ess_update_task() -- this covers the OTHER write path, HR/admin editing the
+# same collections through this generic bridge, e.g. approving a request or
+# assigning a task from the HRMS side).
+_ESS_CACHED_COLLECTIONS = frozenset({
+    "tasks", "rotaAssignments", "overtimeRequests", "employeeLoans",
+    "salaryAdvances", "attendanceCorrections", "hrHolidays",
+})
+
+
+def _invalidate_write_caches(collection: str, company_id: str) -> None:
+    if collection in _REPORT_AFFECTING_COLLECTIONS:
+        cache.invalidate_company(company_id)
+    if collection in _ESS_CACHED_COLLECTIONS:
+        cache.delete(f"ess_appdata:{company_id}:{collection}")
 
 # Collections representing real financial transactions — subject to the same
 # server-side period lock as manual journal vouchers (accounting.py). Without
@@ -256,6 +274,20 @@ _BOOTSTRAP_COLLECTION_CAPS: dict[str, int] = {
     "payrollRuns": 50,
     "payrollAdjustments": 300,
     "audit": 50,
+    # Same "uncapped, same shape of risk as rotaAssignments before its own
+    # cap below" finding, just not yet measured on a live account. employees
+    # is the one that matters most: each row also carries a base64 photo
+    # (models.py's Employee.photo docstring), so it's both unbounded row
+    # count AND a heavy per-row payload, same double risk profile
+    # rotaAssignments had. rotaShifts/rotaSwaps/rotaApprovals/rotaDrafts/
+    # tasks can all realistically grow the same way (bulk shift setup, an
+    # actively-used Task Management module) with nothing else capping them.
+    "employees": 500,
+    "rotaShifts": 500,
+    "rotaSwaps": 500,
+    "rotaApprovals": 500,
+    "rotaDrafts": 500,
+    "tasks": 500,
     # rotaAssignments had no cap at all until this was added -- on one live
     # account it had grown to 2,508 rows (~950KB, JSON-encoded), dwarfing
     # every other HR collection combined and dominating hrms.html's load
@@ -339,6 +371,7 @@ def record_key(collection: str, record: dict[str, Any]) -> str | None:
         "expenses": "ref",
         "audit": "time",
         "invoiceLayout": "company",
+        "inventorySettings": "key",
         "salesCategories": "name",
         "salesUnits": "code",
         "serviceTypes": "name",
@@ -447,6 +480,7 @@ def list_collection_records(
     # why this is an explicit allowlist, not blanket filtering).
     company = resolve_principal_company(principal, db)
     assert_collection_module_enabled(db, principal, company, collection)
+    assert_collection_read_permission(principal, collection)
     if collection == "employees":
         # This generic endpoint previously had no RBAC check at all for the
         # "employees" collection -- only the module-enabled check above --
@@ -571,7 +605,7 @@ def list_rota_assignments_in_range(
 # view — a collection not listed under any module the Employee's role grants
 # `:view` on is never returned, full stop.
 _COLLECTIONS_BY_MODULE: dict[str, list[str]] = {
-    "employees": ["employees"],
+    "employees": ["employees", "staff"],  # "staff" is a legacy alias sync_domain_model() still accepts
     "leave": ["leaveRequests"],
     "attendance": ["attendanceCorrections"],
     "rota": ["rotaShifts", "rotaSwaps", "rotaApprovals", "rotaDrafts", "rotaAssignments"],
@@ -589,13 +623,14 @@ _COLLECTIONS_BY_MODULE: dict[str, list[str]] = {
     "sales": ["salesInvoices", "salesCategories", "salesUnits", "serviceTypes", "customers", "products"],
     "quotations": ["quotations", "quotationLayout"],
     "purchase": ["bills", "purchaseDocuments", "vendors", "products"],
-    "inventory": ["products"],
+    "inventory": ["products", "inventorySettings"],
     "expense": ["expenses"],
     "bank": ["bankAccounts", "payments"],
     "accounting": ["ledger", "journalDrafts", "accounts", "recurringJournals", "lockedPeriods"],
     "corporate": [
         "corporateTax", "fixedAssets", "accrualsPrepayments", "costCenters",
         "budgets", "cashFlowForecasts", "creditControl", "consolidation", "approvalMatrix",
+        "relatedPartyTransactions",
     ],
     "notifications": ["alertRules"],
 }
@@ -613,6 +648,131 @@ def _allowed_bootstrap_collections(principal: Principal) -> set[str] | None:
         if principal.has(f"{module}:view"):
             allowed.update(collections)
     return allowed
+
+
+# Only the HR-sensitive modules get a write-permission gate -- NOT
+# sales/purchase/inventory/bank/accounting/corporate/notifications, where
+# "module enabled for the company/branch" is a deliberate, already-tested
+# design (Branch Management Phase 4: test_branch_write_access.py,
+# test_branch_role_module_inheritance.py) letting any Employee/Branch login
+# write those collections without a separate per-collection view permission.
+# Narrowing to this list -- rather than mirroring _allowed_bootstrap_collections
+# for every module -- is what keeps that intentional behavior intact while
+# still closing the real gap: an Employee whose role grants none of these HR
+# permissions could otherwise write straight into payroll/loans/leave/rota/
+# employees data (e.g. another employee's own bank IBAN -- see sync_domain_model's
+# "employees"/"staff" handling, which writes straight into the payload the WPS
+# payroll export later reads verbatim). "employees" is safe to include here:
+# ESS's own self-edit-contact-details feature (PUT /ess/profile-details) never
+# goes through this endpoint at all -- it edits the same AppDataRecord directly,
+# through its own allow-listed field set (mobile/address/emergency contact
+# only, explicitly never salary/IBAN/documents) with its own audit trail.
+_HR_WRITE_PERMISSION_MODULES = frozenset({
+    "employees", "leave", "attendance", "rota", "overtime", "loans", "recruitment", "payroll", "hr_workflow",
+})
+
+
+# "employees" deliberately stays on the `:view`-gated check below, not the
+# `:edit` one -- unlike the other HR modules, its protection is field-level:
+# a `:view`-only role IS allowed to write ordinary profile fields (name,
+# department, designation...), with basic_salary/allowances silently
+# redacted server-side for anyone lacking employees:view_salary (see
+# _redact_employee_salary() and test_employees_salary_permission.py's
+# test_write_side_ignores_salary_fields_without_permission). Requiring
+# `:edit` here would block that already-correct, narrower redaction model
+# entirely rather than tightening it.
+_HR_EDIT_GATED_MODULES = _HR_WRITE_PERMISSION_MODULES - {"employees"}
+
+_ADMIN_ONLY_COLLECTIONS = frozenset({"users", "invoiceLayout"})
+_HR_SETTINGS_COLLECTIONS = frozenset({"companyAnnouncements"})
+_HR_COLLECTION_MODULE = {
+    c: m for m, cs in _COLLECTIONS_BY_MODULE.items() if m in _HR_WRITE_PERMISSION_MODULES for c in cs
+}
+_EMPLOYEE_SENSITIVE_FIELDS = (
+    "salary", "basic_salary", "housing_allowance", "transport_allowance", "other_allowance",
+    "iban", "wps_id", "status", "branch_id",
+)
+
+
+def assert_collection_read_permission(principal: Principal, collection: str) -> None:
+    """Employee logins with no role, or a role lacking the HR module's
+    `:view`, must not list HR collections (other people's loans/advances...)."""
+    if principal.is_admin:
+        return
+    if principal.kind == "employee" and not principal.permissions:
+        raise HTTPException(status_code=403, detail="Not permitted")
+    module = _HR_COLLECTION_MODULE.get(collection)
+    if module and not principal.has(f"{module}:view"):
+        raise HTTPException(status_code=403, detail="Not permitted")
+    if collection in _ADMIN_ONLY_COLLECTIONS:
+        raise HTTPException(status_code=403, detail="Not permitted")
+
+
+def _guard_employee_write(db: Session, principal: Principal, collection: str, record: dict[str, Any]) -> dict[str, Any]:
+    """Without employees:edit, salary/IBAN/status/branch always keep their
+    stored values and new employees can't be created."""
+    if collection not in ("employees", "staff") or principal.has("employees:edit"):
+        return record
+    key = record_key(collection, record)
+    existing = (
+        db.query(AppDataRecord)
+        .filter(
+            AppDataRecord.company_id == principal.company_id,
+            AppDataRecord.collection == collection,
+            AppDataRecord.record_key == key,
+        )
+        .first()
+        if key else None
+    )
+    if not existing:
+        raise HTTPException(status_code=403, detail="You don't have permission to create employees")
+    try:
+        stored = json.loads(existing.payload or "{}")
+    except (TypeError, json.JSONDecodeError):
+        stored = {}
+    out = dict(record)
+    for field_name in _EMPLOYEE_SENSITIVE_FIELDS:
+        if field_name in stored:
+            out[field_name] = stored[field_name]
+        else:
+            out.pop(field_name, None)
+    return out
+
+
+def assert_collection_write_permission(principal: Principal, collection: str) -> None:
+    """Gates writes to HR-sensitive collections (_HR_WRITE_PERMISSION_MODULES)
+    on the role's `:edit` permission for that module -- NOT `:view` -- for
+    every module except "employees" (see _HR_EDIT_GATED_MODULES above).
+    Every other module has its own `:edit` permission in the RBAC catalog
+    (hr_access.py's _PERMISSION_CATALOG) specifically so a role can be
+    granted read-only access; this used to reuse
+    _allowed_bootstrap_collections() (the `:view`-only read-side gate) for
+    writes too, so a role granted only e.g. "Loans — View" could still
+    approve/edit/delete any loan or overtime record company-wide via a
+    direct API call, despite appearing read-only in the permission UI."""
+    if principal.is_admin:
+        return
+    if principal.kind == "employee" and not principal.permissions:
+        raise HTTPException(status_code=403, detail="You don't have permission to modify this data")
+    if collection in _ADMIN_ONLY_COLLECTIONS:
+        raise HTTPException(status_code=403, detail="You don't have permission to modify this data")
+    if collection in _HR_SETTINGS_COLLECTIONS and not principal.has("hr_settings:edit"):
+        raise HTTPException(status_code=403, detail="You don't have permission to modify this data")
+    gated_collections = {
+        c for module, collections in _COLLECTIONS_BY_MODULE.items()
+        if module in _HR_WRITE_PERMISSION_MODULES for c in collections
+    }
+    if collection not in gated_collections:
+        return
+    allowed: set[str] = set()
+    for module, collections in _COLLECTIONS_BY_MODULE.items():
+        if module not in _HR_WRITE_PERMISSION_MODULES:
+            continue
+        needed = f"{module}:edit" if module in _HR_EDIT_GATED_MODULES else f"{module}:view"
+        if principal.has(needed):
+            allowed.update(collections)
+    if collection not in allowed:
+        raise HTTPException(status_code=403, detail="You don't have permission to modify this data")
 
 
 # hrms.html (window.HRMS_STANDALONE) never renders anything from the
@@ -633,6 +793,28 @@ _HRMS_SCOPE_MODULES = [
 
 def _hrms_scope_collections() -> set[str]:
     return {c for m in _HRMS_SCOPE_MODULES for c in _COLLECTIONS_BY_MODULE.get(m, [])}
+
+
+# `?scope=main` (hydrateFromServer() when NOT window.HRMS_STANDALONE, i.e.
+# index.html) is the mirror-image fix of scope=hrms above: index.html has no
+# DOM elements at all for Leave Management, Rota, Overtime, Loans &
+# Advances, Recruitment, or Task Management (grepped confirmed -- it does
+# still use employees/payroll/bank/notifications, unlike hrms.html, which is
+# why those stay OUT of this exclusion list, the opposite of _HRMS_SCOPE_MODULES
+# above). An EXCLUSION list rather than building an inclusion set the way
+# scope=hrms does deliberately, since _COLLECTIONS_BY_MODULE isn't a complete
+# catalog of every collection that can exist (e.g. invoiceLayout/
+# quotationLayout aren't module-mapped at all) -- inverting it into an
+# inclusion set would silently drop any collection not listed here, which
+# scope=hrms accepts as a tradeoff (HRMS genuinely only needs a known,
+# enumerable set) but scope=main should not.
+_MAIN_SCOPE_EXCLUDED_MODULES = [
+    "leave", "attendance", "rota", "overtime", "loans", "recruitment", "hr_workflow",
+]
+
+
+def _main_scope_excluded_collections() -> set[str]:
+    return {c for m in _MAIN_SCOPE_EXCLUDED_MODULES for c in _COLLECTIONS_BY_MODULE.get(m, [])}
 
 
 def _parse_modules_enabled(raw: str | None) -> list[str] | None:
@@ -682,6 +864,10 @@ def bootstrap(
     if scope == "hrms":
         hrms_collections = _hrms_scope_collections()
         allowed_collections = hrms_collections if allowed_collections is None else (allowed_collections & hrms_collections)
+    # See _main_scope_excluded_collections()'s own comment for why this is an
+    # exclusion set threaded alongside allowed_collections, rather than
+    # folded into it the way scope=hrms folds its inclusion set above.
+    excluded_collections = _main_scope_excluded_collections() if scope == "main" else set()
     # Collections with large record counts are fetched with DB-level LIMIT to avoid
     # loading and deserializing thousands of rows that will be discarded in Python.
     _HEAVY_COLLECTIONS = {c for c, n in _BOOTSTRAP_COLLECTION_CAPS.items() if n <= 500}
@@ -691,7 +877,7 @@ def bootstrap(
     # SQLite, where there's no real network latency per query).
     _heavy_coll_names = [
         c for c in _HEAVY_COLLECTIONS
-        if allowed_collections is None or c in allowed_collections
+        if (allowed_collections is None or c in allowed_collections) and c not in excluded_collections
     ]
     heavy_totals: dict[str, int] = dict(
         db.query(AppDataRecord.collection, func.count(AppDataRecord.id))
@@ -706,6 +892,8 @@ def bootstrap(
         if coll_cap > 500:
             continue  # low-cap collections handled in the bulk query below
         if allowed_collections is not None and coll not in allowed_collections:
+            continue
+        if coll in excluded_collections:
             continue
         rows = (
             db.query(AppDataRecord)
@@ -724,6 +912,8 @@ def bootstrap(
     )
     if allowed_collections is not None:
         bulk_query = bulk_query.filter(AppDataRecord.collection.in_(allowed_collections))
+    if excluded_collections:
+        bulk_query = bulk_query.filter(AppDataRecord.collection.notin_(excluded_collections))
     records = bulk_query.order_by(AppDataRecord.created_at.desc()).limit(cap).all()
     records.reverse()
 
@@ -1266,6 +1456,28 @@ def build_company_sql_dump(db: Session, company_id: str, exported_by: str) -> tu
             lines.append(_insert("accounts", cols, r))
         lines.append("\n")
 
+    # Tables dumped by reflection (every mapped column) so a schema change
+    # can't silently drop a column. Order respects foreign keys; the GL
+    # block below references journal_entries.
+    def _dump_model(model: Any, rows: list[Any]) -> None:
+        if not rows:
+            return
+        table = model.__tablename__
+        cols = [c.key for c in model.__mapper__.column_attrs]
+        lines.append(f"-- {table} ({len(rows)} rows)\n")
+        for r in rows:
+            lines.append(_insert(table, cols, r))
+        lines.append("\n")
+
+    _dump_model(Branch, db.query(Branch).filter(Branch.company_id == company_id).all())
+    je_rows = db.query(JournalEntry).filter(JournalEntry.company_id == company_id).all()
+    _dump_model(JournalEntry, je_rows)
+    je_ids = [j.id for j in je_rows]
+    _dump_model(JournalLine, db.query(JournalLine).filter(JournalLine.journal_id.in_(je_ids)).all() if je_ids else [])
+    _dump_model(StockProductMapping, db.query(StockProductMapping).filter(StockProductMapping.company_id == company_id).all())
+    _dump_model(StockMovement, db.query(StockMovement).filter(StockMovement.company_id == company_id).all())
+    _dump_model(PeriodLock, db.query(PeriodLock).filter(PeriodLock.company_id == company_id).all())
+
     if rows_emp:
         cols = ["id", "company_id", "employee_no", "full_name", "department", "designation", "basic_salary", "status", "created_at", "updated_at"]
         lines.append(f"-- employees ({len(rows_emp)} rows)\n")
@@ -1341,6 +1553,25 @@ def build_company_sql_dump(db: Session, company_id: str, exported_by: str) -> tu
     return sql_text, fname
 
 
+def build_all_companies_backup_zip(db: Session, exported_by: str) -> bytes:
+    """Zips every tenant company's SQL backup into one archive. Shared by
+    the on-demand /superadmin/companies/backup-all endpoint and the
+    nightly Celery task."""
+    companies = (
+        db.query(Company)
+        .filter(or_(Company.trn.is_(None), Company.trn != "SUPERADMIN-INTERNAL"))
+        .order_by(Company.name.asc())
+        .all()
+    )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for company in companies:
+            sql_text, fname = build_company_sql_dump(db, company.id, exported_by)
+            safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in (company.name or company.id)).strip() or company.id
+            zf.writestr(f"{safe_name}/{fname}", sql_text)
+    return buf.getvalue()
+
+
 @router.get("/db-dump")
 @limiter.limit("5/minute")
 def export_db_dump(
@@ -1387,25 +1618,28 @@ async def app_data_action(
     if action == "save":
         collection = str(payload.get("collection", "app_actions"))
         assert_collection_module_enabled(db, principal, company, collection)
+        assert_collection_write_permission(principal, collection)
         record = payload.get("record", {})
         if not isinstance(record, dict):
             record = {"value": record}
+        record = _guard_employee_write(db, principal, collection, record)
         assert_collection_period_open(db, principal, collection, record)
         _assert_department_writable(db, principal, collection, record)
         saved = save_app_record(db, principal, collection, record)
         sync_domain_model(db, principal, collection, serialize(saved))
         db.commit()
-        if collection in _REPORT_AFFECTING_COLLECTIONS:
-            cache.invalidate_company(principal.company_id)
+        _invalidate_write_caches(collection, principal.company_id)
         return {"ok": True, "saved": True, "id": saved.id}
 
     if action == "bulk-save":
         collection = str(payload.get("collection", "app_actions"))
         assert_collection_module_enabled(db, principal, company, collection)
+        assert_collection_write_permission(principal, collection)
         records = payload.get("records", [])
         if not isinstance(records, list):
             records = []
         normalized_records = [record if isinstance(record, dict) else {"value": record} for record in records]
+        normalized_records = [_guard_employee_write(db, principal, collection, r) for r in normalized_records]
         keys = [key for key in (record_key(collection, record) for record in normalized_records) if key]
         existing_by_key = {
             item.record_key: item
@@ -1454,12 +1688,12 @@ async def app_data_action(
             {"count": saved_count, "created": created_count, "updated": updated_count},
         )
         db.commit()
-        if collection in _REPORT_AFFECTING_COLLECTIONS:
-            cache.invalidate_company(principal.company_id)
+        _invalidate_write_caches(collection, principal.company_id)
         return {"ok": True, "saved": saved_count, "created": created_count, "updated": updated_count}
 
     if action == "delete":
         collection = str(payload.get("collection", "app_actions"))
+        assert_collection_write_permission(principal, collection)
         record = payload.get("record", {})
         if not isinstance(record, dict):
             record = {"value": record}
@@ -1491,12 +1725,12 @@ async def app_data_action(
             sync_domain_delete(db, principal, collection, record)
         log_action(db, principal, collection, "record_deleted" if deleted else "delete_not_found", record)
         db.commit()
-        if collection in _REPORT_AFFECTING_COLLECTIONS:
-            cache.invalidate_company(principal.company_id)
+        _invalidate_write_caches(collection, principal.company_id)
         return {"ok": True, "deleted": deleted, "key": key}
 
     if action == "bulk-delete":
         collection = str(payload.get("collection", "app_actions"))
+        assert_collection_write_permission(principal, collection)
         records = payload.get("records", [])
         if not isinstance(records, list):
             records = []
@@ -1591,11 +1825,11 @@ async def app_data_action(
                 sync_domain_delete(db, principal, collection, r)
         log_action(db, principal, collection, "records_bulk_deleted", {"count": deleted_count})
         db.commit()
-        if collection in _REPORT_AFFECTING_COLLECTIONS:
-            cache.invalidate_company(principal.company_id)
+        _invalidate_write_caches(collection, principal.company_id)
         return {"ok": True, "deleted": deleted_count}
 
     if action == "invoice-layout":
+        assert_collection_write_permission(principal, "invoiceLayout")
         record = dict(payload)
         saved = save_app_record(db, principal, "invoiceLayout", record)
         log_action(db, principal, "settings", "invoice_layout_saved", record)
@@ -1859,19 +2093,36 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
         reference = str(record.get("receipt_no") or record.get("id") or "POS")
         sync_pos_stock(db, principal, record, reference)
 
+    elif collection == "lockedPeriods":
+        period = str(record.get("id") or "").strip()[:7]
+        if len(period) == 7:
+            lock = (
+                db.query(PeriodLock)
+                .filter(PeriodLock.company_id == principal.company_id, PeriodLock.module == "accounting", PeriodLock.period == period)
+                .first()
+            )
+            if not lock:
+                lock = PeriodLock(company_id=principal.company_id, module="accounting", period=period)
+                db.add(lock)
+            locked = bool(record.get("locked"))
+            lock.status = "locked" if locked else "open"
+            lock.locked_by = principal_user_id(principal) if locked else None
+            lock.locked_at = _dt.datetime.now(_dt.timezone.utc) if locked else None
+
     elif collection == "payments":
         amount = decimal_value(record.get("amount"))
-        sync_source_transaction(
-            db,
-            principal,
-            module="payment",
-            reference=str(record.get("ref") or "PAYMENT"),
-            party_name=str(record.get("contact") or ""),
-            subtotal=amount,
-            vat=Decimal("0"),
-            total=amount,
-            status="posted",
-        )
+        if amount > 0:
+            reference = str(record.get("ref") or f"PAYMENT-{record.get('id') or record.get('_id') or uuid4().hex[:8]}")
+            sync_receipt_payment_accounting(
+                db,
+                company_id=principal.company_id,
+                is_supplier=str(record.get("type") or "").strip().lower() == "supplier payment",
+                reference=reference,
+                party_name=str(record.get("contact") or ""),
+                amount=amount,
+                user_id=principal_user_id(principal),
+                branch_id=str(record.get("branch_id") or "").strip() or principal.branch_id,
+            )
 
     elif collection in ("employees", "staff"):
         emp_no = str(record.get("id") or record.get("employee_no") or record.get("emp_no") or "").strip()
@@ -1896,15 +2147,27 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
             # for this same role), silently wiping a real stored value on
             # every unrelated save (e.g. editing just the department).
             if principal.has("employees:view_salary"):
-                salary = decimal_value(record.get("salary") or record.get("basic_salary") or 0)
-                if salary > 0:
-                    emp.basic_salary = salary
-                emp.housing_allowance = decimal_value(record.get("housing_allowance") or 0)
-                emp.transport_allowance = decimal_value(record.get("transport_allowance") or 0)
-                emp.other_allowance = decimal_value(record.get("other_allowance") or 0)
-            iban = str(record.get("iban") or "").strip()
-            if iban:
-                emp.iban = iban
+                if "salary" in record or "basic_salary" in record:
+                    salary = decimal_value(record.get("salary") or record.get("basic_salary") or 0)
+                    if salary < 0:
+                        raise HTTPException(status_code=422, detail="Salary cannot be negative")
+                    if salary > 0:
+                        emp.basic_salary = salary
+                for field_name, attr in (
+                    ("housing_allowance", "housing_allowance"),
+                    ("transport_allowance", "transport_allowance"),
+                    ("other_allowance", "other_allowance"),
+                ):
+                    if field_name in record:
+                        amount_value = decimal_value(record.get(field_name) or 0)
+                        if amount_value < 0:
+                            raise HTTPException(status_code=422, detail="Allowances cannot be negative")
+                        setattr(emp, attr, amount_value)
+            if "iban" in record:
+                iban = str(record.get("iban") or "").replace(" ", "").upper()
+                if iban and not re.fullmatch(r"[A-Z]{2}\d{2}[A-Z0-9]{11,30}", iban):
+                    raise HTTPException(status_code=422, detail="IBAN format is invalid")
+                emp.iban = iban or None
             photo = str(record.get("photo") or "").strip()
             if photo:
                 emp.photo = photo
@@ -2121,6 +2384,7 @@ def sync_pos_stock(db: Session, principal: Principal, record: dict[str, Any], re
     is_return = str(record.get("type") or "").lower() == "refund" or decimal_value(record.get("total")) < 0
     movement_type = "pos_return" if is_return else "pos_sale"
     sign = Decimal("1") if is_return else Decimal("-1")
+    blocked_stock = _negative_stock_blocked(db, principal.company_id)
     db.query(StockMovement).filter(
         StockMovement.company_id == principal.company_id,
         StockMovement.movement_type == movement_type,
@@ -2144,6 +2408,8 @@ def sync_pos_stock(db: Session, principal: Principal, record: dict[str, Any], re
         # just don't deduct/return quantity for it.
         if mapping.tracking in ("No", "Optional"):
             continue
+        if not is_return:
+            _assert_stock_available(db, principal.company_id, mapping, quantity, blocked_stock)
         unit_cost = decimal_value(item.get("price") or item.get("unit_cost"))
         db.add(
             StockMovement(
@@ -2268,6 +2534,30 @@ def sync_domain_delete(db: Session, principal: Principal, collection: str, recor
     elif collection == "salesInvoices":
         number = str(record.get("invoice_no") or record.get("invoice_number") or record.get("id") or "").strip()
         if number:
+            # Mirror the purchaseRecords/bills/payments branch below — a
+            # posted sales invoice has a SourceTransaction (module="sales")
+            # with real JournalEntry/GeneralLedgerEntry/TaxLine rows behind
+            # it. Deleting only the Invoice row (as this used to do) left
+            # that GL posting and Output VAT permanently in place, silently
+            # inflating Trial Balance, the Balance Sheet, and the actual
+            # FTA-filed VAT 201 with revenue/VAT for an invoice that no
+            # longer exists.
+            tx = (
+                db.query(SourceTransaction)
+                .filter(
+                    SourceTransaction.company_id == principal.company_id,
+                    SourceTransaction.module == "sales",
+                    SourceTransaction.reference == number,
+                )
+                .first()
+            )
+            if tx:
+                _delete_source_transaction_cascade(db, principal.company_id, tx.id)
+            db.query(StockMovement).filter(
+                StockMovement.company_id == principal.company_id,
+                StockMovement.movement_type.in_(("sales_invoice", "sales_return")),
+                StockMovement.reference == f"SALE-{number}",
+            ).delete(synchronize_session=False)
             invoice = (
                 db.query(Invoice)
                 .filter(Invoice.company_id == principal.company_id, Invoice.invoice_number == number)
@@ -2326,6 +2616,106 @@ def sync_domain_delete(db: Session, principal: Principal, collection: str, recor
             ).delete(synchronize_session=False)
 
 
+def _negative_stock_blocked(db: Session, company_id: str) -> bool:
+    row = (
+        db.query(AppDataRecord)
+        .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == "inventorySettings", AppDataRecord.record_key == "config")
+        .first()
+    )
+    if not row:
+        return False
+    try:
+        return json.loads(row.payload or "{}").get("allow_negative_stock") is False
+    except (TypeError, json.JSONDecodeError):
+        return False
+
+
+def _assert_stock_available(db: Session, company_id: str, mapping: StockProductMapping, quantity: Decimal, blocked: bool) -> None:
+    """Only enforced when the company has switched negative stock off
+    (Inventory > Adjustments toggle); default stays permissive."""
+    if not blocked:
+        return
+    on_hand = (
+        db.query(func.coalesce(func.sum(StockMovement.quantity), 0))
+        .filter(StockMovement.company_id == company_id, StockMovement.mapping_id == mapping.id)
+        .scalar()
+    )
+    if Decimal(str(on_hand or 0)) - quantity < 0:
+        raise HTTPException(status_code=409, detail=f"Insufficient stock for {mapping.name} ({Decimal(str(on_hand or 0)):g} on hand)")
+
+
+def sync_sales_invoice_stock(db: Session, principal: Principal, record: dict[str, Any], invoice: Invoice) -> None:
+    """Issued/paid sales invoices consume tracked stock (POS sales are handled
+    separately via posSales, so POS-sourced invoices are skipped here).
+    Delete-then-recreate by reference keeps re-saves idempotent, and moving an
+    invoice back to draft/cancelled returns the stock."""
+    if str(record.get("source") or "").lower() == "pos":
+        return
+    reference = f"SALE-{invoice.invoice_number}"
+    doc_text = f"{record.get('document_type','')} {record.get('source','')} {record.get('status','')}".lower()
+    is_return = "return" in doc_text
+    movement_type = "sales_return" if is_return else "sales_invoice"
+    db.query(StockMovement).filter(
+        StockMovement.company_id == principal.company_id,
+        StockMovement.movement_type.in_(("sales_invoice", "sales_return")),
+        StockMovement.reference == reference,
+    ).delete(synchronize_session=False)
+    if invoice.status in ("draft", "cancelled"):
+        return
+    db.flush()
+    sign = Decimal("1") if is_return else Decimal("-1")
+    blocked = _negative_stock_blocked(db, principal.company_id)
+    branch_id = str(record.get("branch_id") or "").strip() or principal.branch_id
+    for line in record.get("lines") if isinstance(record.get("lines"), list) else []:
+        if not isinstance(line, dict):
+            continue
+        quantity = abs(decimal_value(line.get("qty") or line.get("quantity")))
+        if quantity <= 0:
+            continue
+        item = {
+            "sku": line.get("product_code") or line.get("sku") or line.get("code"),
+            "product": line.get("product_name") or line.get("product") or line.get("description"),
+        }
+        mapping = purchase_line_stock_mapping(db, principal, item, record, allow_create=False)
+        if not mapping or mapping.tracking in ("No", "Optional"):
+            continue
+        if not is_return:
+            _assert_stock_available(db, principal.company_id, mapping, quantity, blocked)
+        db.add(StockMovement(
+            company_id=principal.company_id,
+            branch_id=branch_id,
+            mapping_id=mapping.id,
+            movement_type=movement_type,
+            quantity=sign * quantity,
+            unit_cost=decimal_value(line.get("unit_price") or line.get("price")),
+            reference=reference,
+        ))
+        if not is_return:
+            consume_valuation_layers(db, principal.company_id, mapping.sku, quantity)
+
+
+def _record_pos_receipt(db: Session, principal: Principal, record: dict[str, Any], invoice: Invoice) -> None:
+    """A POS sale is paid at the till: without a receipt its invoice would sit
+    in Accounts Receivable forever and the cash/card takings would never reach
+    Cash & Bank or Bank Reconciliation."""
+    if str(record.get("source") or "").lower() != "pos" or invoice.status != "paid":
+        return
+    if str(record.get("payment_method") or "cash").lower() == "credit" or invoice.total <= 0:
+        return
+    receipt = {
+        "type": "Customer Receipt",
+        "ref": f"RCT-{invoice.invoice_number}",
+        "contact": invoice.customer_name,
+        "amount": float(invoice.total),
+        "method": str(record.get("payment_method") or "cash"),
+        "date": str(record.get("date") or ""),
+        "invoice_no": invoice.invoice_number,
+        "source": "POS",
+    }
+    saved = save_app_record(db, principal, "payments", receipt)
+    sync_domain_model(db, principal, "payments", serialize(saved))
+
+
 def sync_sales_invoice(db: Session, principal: Principal, record: dict[str, Any]) -> None:
     number = str(record.get("invoice_no") or record.get("invoice_number") or "").strip()
     customer = str(record.get("customer") or record.get("customer_name") or "Customer").strip()
@@ -2382,62 +2772,17 @@ def sync_sales_invoice(db: Session, principal: Principal, record: dict[str, Any]
     from app.routers.invoices import calculate_totals
     calculate_totals(invoice)
     db.flush()
-    sync_sales_invoice_accounting(db, invoice, principal_user_id(principal))
-
-
-def sync_source_transaction(
-    db: Session,
-    principal: Principal,
-    module: str,
-    reference: str,
-    party_name: str,
-    subtotal: Decimal,
-    vat: Decimal,
-    total: Decimal,
-    status: str,
-    lines: list[dict[str, Any]] | None = None,
-    tax_type: str = "",
-) -> SourceTransaction:
-    existing = (
-        db.query(SourceTransaction)
-        .filter(
-            SourceTransaction.company_id == principal.company_id,
-            SourceTransaction.module == module,
-            SourceTransaction.reference == reference,
-        )
-        .first()
-    )
-    tx = existing or SourceTransaction(company_id=principal.company_id, branch_id=principal.branch_id, module=module, reference=reference)
-    if not existing:
-        db.add(tx)
-        db.flush()
-    tx.party_name = party_name
-    tx.subtotal = subtotal
-    tx.vat = vat
-    tx.total = total
-    tx.status = status.lower().replace(" ", "_")
-    lines = lines if isinstance(lines, list) else None
-    if lines is not None:
-        company_vat_rate = get_company_vat_rate(resolve_principal_company(principal, db))
-        vat_rate = company_vat_rate if "5%" in tax_type and "exempt" not in tax_type.lower() else Decimal("0")
-        db.query(SourceTransactionLine).filter(SourceTransactionLine.source_id == tx.id).delete(synchronize_session=False)
-        db.flush()
-        for line in lines:
-            description = str(line.get("product") or line.get("description") or "").strip()
-            if not description:
-                continue
-            amount = decimal_value(line.get("line_total"))
-            db.add(SourceTransactionLine(
-                source_id=tx.id,
-                description=str(line.get("product") or line.get("description") or "Purchase item")[:255],
-                account_code=str(line.get("account_code") or "4000"),
-                quantity=decimal_value(line.get("quantity") or line.get("qty") or 1),
-                unit_price=decimal_value(line.get("unit_cost_before_tax") or line.get("unit_cost") or line.get("cost")),
-                vat_rate=vat_rate,
-                amount=amount,
-                vat_amount=amount * (vat_rate / Decimal("100")),
-            ))
-    return tx
+    # A draft invoice isn't a committed sale yet (reports.py's
+    # _is_recognized_revenue_status() already excludes "draft" from every
+    # revenue figure) — posting it to the GL/TaxLine here anyway meant
+    # simply saving a draft-to-preview-totals immediately posted real
+    # Output VAT that a delete (see sync_domain_delete above) never used to
+    # reverse, leaving VAT permanently stuck in every report and in what
+    # gets filed with the FTA.
+    if invoice.status != "draft":
+        sync_sales_invoice_accounting(db, invoice, principal_user_id(principal))
+        _record_pos_receipt(db, principal, record, invoice)
+    sync_sales_invoice_stock(db, principal, record, invoice)
 
 
 def log_action(db: Session, principal: Principal, module: str, action: str, detail: Any) -> None:
@@ -2479,6 +2824,21 @@ def ingest_purchase_document(db: Session, principal: Principal, file: dict[str, 
 # style surprises from an archive containing archives.
 _PURCHASE_ZIP_SKIP_EXTENSIONS = {"zip"}
 
+# Each file inside a batch .zip runs through the same AI-extraction pipeline
+# as a standalone upload -- a real, billed Claude/OpenAI Vision call per
+# file -- but this whole endpoint is rate-limited as a generic 600/minute
+# save, not per AI call (that's a separate, coarser fix). Without a cap here,
+# one HTTP request (counted once against that limit) could fan out into
+# hundreds of paid API calls from a single uploaded .zip. 50 files is well
+# above a normal day's batch of purchase invoices; a bigger backlog is meant
+# to be uploaded as more than one batch. The per-entry size cap is a second,
+# independent guard against a classic zip-bomb (a tiny archive whose entry
+# decompresses to gigabytes) -- archive.read() below has no size limit of
+# its own, so this must be checked from the entry's declared size before
+# reading it into memory.
+_PURCHASE_ZIP_MAX_ENTRIES = 50
+_PURCHASE_ZIP_MAX_ENTRY_SIZE = 20 * 1024 * 1024  # 20MB — generous for a single invoice PDF/scan
+
 
 def _ingest_purchase_zip(db: Session, principal: Principal, zip_name: str, content: bytes) -> list[dict[str, Any]]:
     try:
@@ -2496,12 +2856,23 @@ def _ingest_purchase_zip(db: Session, principal: Principal, zip_name: str, conte
         return [purchase_extraction_error(zip_name, "The .zip file contained no readable files")]
 
     all_results: list[dict[str, Any]] = []
+    if len(entries) > _PURCHASE_ZIP_MAX_ENTRIES:
+        all_results.append(purchase_extraction_error(
+            zip_name,
+            f"This .zip has {len(entries)} files — batches are capped at {_PURCHASE_ZIP_MAX_ENTRIES} per upload. "
+            "Split it into smaller batches and upload each separately.",
+        ))
+        entries = entries[:_PURCHASE_ZIP_MAX_ENTRIES]
+
     for info in entries:
         entry_name = info.filename.rsplit("/", 1)[-1]
         entry_ext = entry_name.rsplit(".", 1)[-1].lower() if "." in entry_name else ""
         display_name = f"{zip_name}/{entry_name}"
         if entry_ext in _PURCHASE_ZIP_SKIP_EXTENSIONS:
             all_results.append(purchase_extraction_error(display_name, "Nested .zip files inside a batch upload aren't supported"))
+            continue
+        if info.file_size > _PURCHASE_ZIP_MAX_ENTRY_SIZE:
+            all_results.append(purchase_extraction_error(display_name, "File is too large (max 20MB per document in a batch)"))
             continue
         try:
             entry_content = archive.read(info)
@@ -2556,8 +2927,20 @@ def parse_csv_rows(content: bytes) -> list[dict[str, Any]]:
     return [normalize_purchase_row(row) for row in reader]
 
 
+
+# .xlsx is itself a zip container, so parsing one means decompressing
+# whatever's inside -- with no cap, a tiny crafted file whose entries
+# declare a huge uncompressed size is a classic zip-bomb DoS. infolist()
+# only reads the central directory (near-free, no decompression), so this
+# check runs before any entry is actually read into memory.
+_XLSX_MAX_UNCOMPRESSED_SIZE = 100 * 1024 * 1024  # 100MB — generous for any real workbook
+
+
 def parse_xlsx_rows(content: bytes) -> list[dict[str, Any]]:
     with zipfile.ZipFile(io.BytesIO(content)) as workbook:
+        total_uncompressed = sum(info.file_size for info in workbook.infolist())
+        if total_uncompressed > _XLSX_MAX_UNCOMPRESSED_SIZE:
+            raise ValueError("This file is too large or unusually compressed to process")
         shared_strings = read_xlsx_shared_strings(workbook)
         sheet_xml_list = [workbook.read(sheet_name) for sheet_name in xlsx_sheet_names(workbook)]
     rows: list[dict[str, Any]] = []
@@ -3485,6 +3868,8 @@ def _parse_sales_csv(content: bytes, name: str) -> list[dict[str, Any]]:
 def _parse_sales_xlsx(content: bytes, name: str) -> list[dict[str, Any]]:
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as workbook:
+            if sum(info.file_size for info in workbook.infolist()) > _XLSX_MAX_UNCOMPRESSED_SIZE:
+                raise ValueError("This file is too large or unusually compressed to process")
             shared_strings = read_xlsx_shared_strings(workbook)
             sheet_xmls = [workbook.read(s) for s in xlsx_sheet_names(workbook)]
         table_rows: list[list[str]] = []

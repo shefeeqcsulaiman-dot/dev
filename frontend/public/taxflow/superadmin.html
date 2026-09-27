@@ -524,6 +524,7 @@
   <div class="card" style="margin-top:18px">
     <div class="card-hd"><div class="card-title">Error Rate Trend</div></div>
     <div id="sa-health-chart-wrap"><div class="loading-state">Loading…</div></div>
+    <div id="sa-dbdiag-wrap" style="margin-top:18px"></div>
   </div>
   </div><!-- /page-health -->
 
@@ -701,7 +702,7 @@
     <input type="hidden" id="edit-co-admin-user-id">
     <input type="hidden" id="edit-co-admin-role">
     <div class="fg"><label class="fl">Company Name</label><input class="fi" id="edit-co-name" placeholder="Acme LLC"></div>
-    <div class="fg"><label class="fl">Country</label><select class="fi" id="edit-co-country"></select></div>
+    <div class="fg"><label class="fl">Country</label><select class="fi" id="edit-co-country" onchange="onEditCompanyCountryChange()"></select><div id="edit-co-country-hint" style="font-size:var(--fs-xs);color:var(--muted);margin-top:4px"></div></div>
     <div class="fr2">
       <div class="fg"><label class="fl">TRN (optional)</label><input class="fi mono" id="edit-co-trn" placeholder="100000000000003"></div>
       <div class="fg"><label class="fl">Subscription Expiry</label><input class="fi" id="edit-co-expiry" type="date"></div>
@@ -1211,7 +1212,7 @@
       return `<tr>
         <td>
           <div style="font-weight:600">${escHtml(c.name)}</div>
-          <div class="mono" style="font-size:var(--fs-xs);color:var(--muted)">${escHtml(c.trn||'No TRN')} · ${escHtml(c.country||'')}</div>
+          <div class="mono" style="font-size:var(--fs-xs);color:var(--muted)">${escHtml(c.trn||'No TRN')} · ${escHtml(c.country||'')}${c.currency?' · '+escHtml(c.currency):''}</div>
         </td>
         <td class="mono" style="font-size:var(--fs-sm);color:var(--muted)">${c.employee_count||0} emp · ${(c.branches||[]).length} br · ${nonSaUsers.length} usr<div style="margin-top:2px">${_lastLoginChip(c)}</div></td>
         <td>${expBadge}</td>
@@ -1240,7 +1241,7 @@
       </tr>`;
     }).join('');
     document.getElementById('sa-companies-wrap').innerHTML = `
-      <div style="overflow-x:auto">
+      <div style="overflow-x:auto;overflow-y:visible">
         <table class="tbl">
           <thead><tr>
             <th class="${sortThClass('name')}" onclick="setCompanySort('name')">Company ${sortArrow('name')}</th>
@@ -1333,7 +1334,7 @@
     if(!c) return;
     const nonSaUsers=(c.users||[]).filter(u=>u.role!=='superadmin');
     document.getElementById('drawer-title').textContent=c.name;
-    document.getElementById('drawer-sub').textContent=(c.trn||'No TRN')+' · '+(c.country||'—');
+    document.getElementById('drawer-sub').textContent=(c.trn||'No TRN')+' · '+(c.country||'—')+(c.currency?' · '+c.currency:'');
     document.getElementById('drawer-tabs').innerHTML=`
       <div class="drawer-tab${_drawerTab==='users'?' on':''}" onclick="switchDrawerTab('users')">Users (${nonSaUsers.length})</div>
       <div class="drawer-tab${_drawerTab==='branches'?' on':''}" onclick="switchDrawerTab('branches')">Branches (${(c.branches||[]).length})</div>
@@ -1435,8 +1436,10 @@
     const editCountrySel=document.getElementById('edit-co-country');
     if(editCountrySel){
       const current=c.country||'United Arab Emirates';
+      editCountrySel.dataset.original=current;
       const known=SA_CREATE_COUNTRIES.some(x=>x.name===current);
       editCountrySel.innerHTML=(known?SA_CREATE_COUNTRIES:[{name:current},...SA_CREATE_COUNTRIES]).map(x=>`<option value="${escHtml(x.name)}"${x.name===current?' selected':''}>${escHtml(x.name)}</option>`).join('');
+      onEditCompanyCountryChange();
     }
     document.getElementById('edit-co-trn').value=c.trn||'';
     document.getElementById('edit-co-expiry').value=c.subscription_expires_at?c.subscription_expires_at.slice(0,10):'';
@@ -1457,6 +1460,20 @@
     const mods=Array.isArray(c.modules_enabled)&&c.modules_enabled.length?c.modules_enabled:MODULE_DEFS.map(m=>m.key);
     buildModGrid('edit-co-mod-grid', mods);
     openModal('m-edit-co');
+  }
+
+  // Changing country here doesn't touch the company's own currency
+  // (backend PATCH only updates fields it's sent) unless the country is
+  // actually changed from what it opened with -- avoids silently resetting
+  // a currency the company itself customized in its own Settings on every
+  // unrelated edit (e.g. fixing a TRN typo).
+  function onEditCompanyCountryChange(){
+    const sel=document.getElementById('edit-co-country');
+    const hint=document.getElementById('edit-co-country-hint');
+    if(!sel||!hint)return;
+    const changed=sel.value!==sel.dataset.original;
+    const country=SA_CREATE_COUNTRIES.find(c=>c.name===sel.value);
+    hint.textContent=changed&&country?`Currency will be set to ${country.currency}.`:'';
   }
 
   // FastAPI validation failures (e.g. reset-password's 6-char minimum)
@@ -1486,7 +1503,13 @@
     // Settings page; the backend PATCH only touches fields it's sent
     // non-null (see update_company in superadmin.py), so omitting them here
     // never erases existing profile data.
-    const body={ name, trn:val('edit-co-trn'), country:document.getElementById('edit-co-country')?.value||null };
+    const countrySel=document.getElementById('edit-co-country');
+    const newCountry=countrySel?.value||null;
+    const body={ name, trn:val('edit-co-trn'), country:newCountry };
+    if(countrySel&&newCountry!==countrySel.dataset.original){
+      const countryDef=SA_CREATE_COUNTRIES.find(x=>x.name===newCountry);
+      if(countryDef)body.currency=countryDef.currency;
+    }
     const modules=getCheckedModules('edit-co-mod-grid');
     const adminUserId=document.getElementById('edit-co-admin-user-id').value;
     const adminRole=document.getElementById('edit-co-admin-role').value||'admin';
@@ -2284,6 +2307,28 @@
   }
 
   // ── System health ───────────────────────────────────────────────
+  async function loadDbDiagnostics(){
+    const wrap=document.getElementById('sa-dbdiag-wrap');
+    if(!wrap)return;
+    try{
+      const res=await apiFetch('/superadmin/db-diagnostics');
+      const d=await res.json();
+      if(!res.ok||d.supported===false){
+        wrap.innerHTML='<div class="loading-state" style="color:var(--muted)">'+escHtml(d.detail||'Database diagnostics unavailable')+'</div>';
+        return;
+      }
+      wrap.innerHTML=`<div class="card-title" style="margin-bottom:8px">Database</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:12px">
+          <div class="stat-card"><div class="stat-label">Size</div><div class="stat-val" style="font-size:18px">${escHtml(d.database_size)}</div></div>
+          <div class="stat-card"><div class="stat-label">Connections</div><div class="stat-val" style="font-size:18px">${d.active_connections} / ${escHtml(String(d.max_connections))}</div></div>
+          <div class="stat-card"><div class="stat-label">Running queries</div><div class="stat-val" style="font-size:18px">${d.running_queries}</div></div>
+        </div>
+        <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Table</th><th>Size</th><th>Rows (est.)</th></tr></thead><tbody>${(d.top_tables||[]).map(t=>`<tr><td class="mono">${escHtml(t.table)}</td><td>${escHtml(t.size)}</td><td>${Number(t.row_estimate||0).toLocaleString()}</td></tr>`).join('')}</tbody></table></div>`;
+    }catch(err){
+      wrap.innerHTML='<div class="loading-state" style="color:var(--muted)">Database diagnostics unavailable</div>';
+    }
+  }
+
   async function loadSystemHealth(){
     const statusWrap=document.getElementById('sa-health-status-wrap');
     const chartWrap=document.getElementById('sa-health-chart-wrap');
@@ -2303,6 +2348,7 @@
         </div>`;
       chartWrap.innerHTML=`<div class="chart-wrap">${saBarChart(data.error_trend,{color:'var(--red)'})}</div>`;
       renderLiveLoad(data);
+      loadDbDiagnostics();
     }catch(err){
       statusWrap.innerHTML='<div class="loading-state" style="color:var(--red)">Failed to load: '+escHtml(err.message)+'</div>';
     }

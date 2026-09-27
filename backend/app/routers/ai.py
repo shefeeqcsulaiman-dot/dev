@@ -10,7 +10,7 @@ from app.database import get_db
 from app.dependencies import get_current_user, require_module
 from app.limiter import limiter
 from app.routers.app_data import get_company_vat_rate
-from app.models import Account, AuditLog, ExceptionEvent, Invoice, SourceTransaction, TaxLine, User
+from app.models import Account, AppDataRecord, AuditLog, ExceptionEvent, Invoice, SourceTransaction, TaxLine, User
 from app.schemas import AIAssistRequest, AIExceptionExplainRequest, AIResponse, AITransactionValidationRequest
 
 ASSISTANT_SYSTEM_PROMPT = (

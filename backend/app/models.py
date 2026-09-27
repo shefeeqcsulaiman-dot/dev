@@ -3,7 +3,7 @@ from decimal import Decimal
 from enum import Enum
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -335,10 +335,7 @@ class GeneralLedgerEntry(Base, TimestampMixin):
 
 class Payment(Base, TimestampMixin):
     __tablename__ = "payments"
-    __table_args__ = (
-        UniqueConstraint("company_id", "payment_no", name="uq_payment_company_no"),
-        Index("ix_payments_company_created", "company_id", "created_at"),
-    )
+    __table_args__ = (UniqueConstraint("company_id", "payment_no", name="uq_payment_company_no"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
@@ -359,10 +356,7 @@ class Payment(Base, TimestampMixin):
 
 class Receipt(Base, TimestampMixin):
     __tablename__ = "receipts"
-    __table_args__ = (
-        UniqueConstraint("company_id", "receipt_no", name="uq_receipt_company_no"),
-        Index("ix_receipts_company_created", "company_id", "created_at"),
-    )
+    __table_args__ = (UniqueConstraint("company_id", "receipt_no", name="uq_receipt_company_no"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
@@ -704,7 +698,6 @@ class StockAdjustmentApproval(Base, TimestampMixin):
 
 class Employee(Base, TimestampMixin):
     __tablename__ = "employees"
-    __table_args__ = (Index("ix_employees_company_status", "company_id", "status"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
@@ -742,7 +735,6 @@ class Employee(Base, TimestampMixin):
 
 class PayrollRun(Base, TimestampMixin):
     __tablename__ = "payroll_runs"
-    __table_args__ = (Index("ix_payroll_runs_company_period", "company_id", "period"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)

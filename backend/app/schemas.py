@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class Token(BaseModel):
@@ -176,6 +176,11 @@ class BranchUpdate(BaseModel):
 class ImpersonatorOut(BaseModel):
     id: str
     email: EmailStr
+    # Lets the frontend banner say "as Super Admin" only when that's actually
+    # true -- this same impersonation flow now also covers a company User
+    # impersonating their own branch (branches.py's impersonate_branch()),
+    # where the impersonator is just a regular "admin"/other role.
+    role: str | None = None
 
 
 class CompanyBrief(BaseModel):
@@ -192,7 +197,7 @@ class CompanyBrief(BaseModel):
 
 class UserOut(BaseModel):
     id: str
-    email: EmailStr
+    email: str
     full_name: str
     role: str
     company: CompanyBrief
@@ -612,6 +617,113 @@ class CorporateTaxReturnOut(BaseModel):
     attachment: str | None
 
     model_config = {"from_attributes": True}
+
+
+# ── Corporate Accounting sub-modules ────────────────────────────────────
+# Create schemas for corporate_accounting.py's write endpoints. Previously
+# this module had GET-only endpoints reading typed tables that nothing ever
+# wrote to -- the frontend's "Add Asset/Accrual/Cost Center/..." buttons all
+# wrote into the unrelated generic AppDataRecord blob store instead, so
+# these tables (and everything reports.py builds from them) stayed
+# permanently empty. Field sets mirror what the frontend already collects
+# per type (app.js's addCorporate*() functions) 1:1.
+
+class FixedAssetIn(BaseModel):
+    asset_code: str = Field(min_length=1)
+    asset_name: str = Field(min_length=1)
+    category: str = Field(min_length=1)
+    purchase_cost: Decimal = Field(default=Decimal("0.00"), ge=0)
+    accumulated_depreciation: Decimal = Field(default=Decimal("0.00"), ge=0)
+    method: str = "Straight Line"
+    location: str | None = None
+    custodian: str | None = None
+    status: str = "active"
+
+    @model_validator(mode="after")
+    def _depreciation_within_cost(self):
+        if self.accumulated_depreciation > self.purchase_cost:
+            raise ValueError("Accumulated depreciation cannot exceed the asset cost")
+        return self
+
+
+class AccrualPrepaymentIn(BaseModel):
+    record_type: str = Field(min_length=1)
+    reference: str = Field(min_length=1)
+    description: str = ""
+    total_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
+    monthly_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
+    reversal_day: int = Field(default=1, ge=1, le=31)
+    status: str = "active"
+
+
+class CostCenterIn(BaseModel):
+    code: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    department: str | None = None
+    branch: str | None = None
+    project: str | None = None
+    location: str | None = None
+    status: str = "active"
+
+
+class BudgetIn(BaseModel):
+    fiscal_year: str = Field(min_length=1)
+    cost_center: str | None = None
+    account_code: str = ""
+    annual_budget: Decimal = Field(default=Decimal("0.00"), ge=0)
+    actual_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
+    variance_amount: Decimal = Decimal("0.00")
+    approval_status: str = "draft"
+
+    @model_validator(mode="after")
+    def _derive_variance(self):
+        self.variance_amount = self.annual_budget - self.actual_amount
+        return self
+
+
+class CashFlowForecastIn(BaseModel):
+    forecast_date: str = Field(min_length=1)
+    expected_receipts: Decimal = Field(default=Decimal("0.00"), ge=0)
+    expected_payments: Decimal = Field(default=Decimal("0.00"), ge=0)
+    net_cash_flow: Decimal = Decimal("0.00")
+    method: str = "direct"
+
+    @model_validator(mode="after")
+    def _derive_net(self):
+        self.net_cash_flow = self.expected_receipts - self.expected_payments
+        return self
+
+
+class CreditControlIn(BaseModel):
+    customer_name: str = Field(min_length=1)
+    credit_limit: Decimal = Field(default=Decimal("0.00"), ge=0)
+    outstanding_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
+    credit_status: str = "active"
+    promise_to_pay: str | None = None
+    bad_debt_provision: Decimal = Field(default=Decimal("0.00"), ge=0)
+
+
+class ConsolidationIn(BaseModel):
+    group_name: str = Field(min_length=1)
+    subsidiary_name: str = Field(min_length=1)
+    currency: str = "AED"
+    translated_amount: Decimal = Decimal("0.00")
+    elimination_amount: Decimal = Decimal("0.00")
+    status: str = "draft"
+
+
+class ApprovalMatrixIn(BaseModel):
+    module: str = Field(min_length=1)
+    min_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
+    max_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
+    approver_role: str = Field(min_length=1)
+    department: str | None = None
+
+    @model_validator(mode="after")
+    def _range_ordered(self):
+        if self.max_amount < self.min_amount:
+            raise ValueError("Maximum amount cannot be below the minimum amount")
+        return self
 
 
 class BankAccountCreate(BaseModel):

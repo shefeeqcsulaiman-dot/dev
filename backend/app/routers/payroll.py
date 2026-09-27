@@ -1,16 +1,20 @@
+import calendar
 import json
 import re
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth_principal import resolve_active_branch
 from app.database import get_db
 from app.department_scope import scope_employee_query
 from app.dependencies import Principal, get_current_user, require_module, require_principal_permission
-from app.models import AppDataRecord, Employee, PayrollItem, PayrollRun, User, WpsBatch
+from app.models import AppDataRecord, AuditLog, Employee, PayrollItem, PayrollRun, User, WpsBatch
 from app.schemas import EmployeeOut, PayrollGenerate, PayrollRunOut, WpsBatchOut
 
 
@@ -84,7 +88,7 @@ def _name_key(value: object) -> str:
     return str(value or "").strip().lower()
 
 
-def _employee_loan_deductions(loan_rows: list[AppDataRecord], employee_no: str, employee_name: str, period: str) -> Decimal:
+def _employee_loan_deductions(db: Session, company_id: str, employee_no: str, employee_name: str, period: str, apply: bool = True) -> Decimal:
     """Active-loan EMI due for this employee this period. The loan's stored
     balance is decremented and its status flipped to "Closed" once the
     final (true-up) installment is deducted — applied immediately to the
@@ -93,17 +97,10 @@ def _employee_loan_deductions(loan_rows: list[AppDataRecord], employee_no: str, 
     employee_no on it), the second one sees the already-reduced balance
     from the first instead of independently draining the same loan twice.
     Falls back to matching by name only when a row has no employee_id at
-    all (records saved before this field existed).
-
-    loan_rows is the company's full "employeeLoans" collection, fetched once
-    by the caller before the per-employee loop — was previously re-queried
-    fresh from the DB on every single call (3x per employee, every payroll
-    run); the mutations below still apply to the same in-session ORM rows
-    either way, so passing the pre-fetched list changes nothing about the
-    result, only how many times the DB is hit to get it."""
+    all (records saved before this field existed)."""
     key = _name_key(employee_name)
     total = Decimal("0.00")
-    for row in loan_rows:
+    for row in _app_records(db, company_id, "employeeLoans"):
         data = _payload(row)
         row_employee_id = str(data.get("employee_id") or "").strip()
         if row_employee_id:
@@ -125,24 +122,22 @@ def _employee_loan_deductions(loan_rows: list[AppDataRecord], employee_no: str, 
         installment = balance if balance <= emi or emi <= 0 else emi
         total += installment
         new_balance = balance - installment
-        data["balance"] = f"{new_balance:.2f}"
-        if new_balance <= 0:
-            data["status"] = "Closed"
-        _save_payload(row, data)
+        if apply:
+            data["balance"] = f"{new_balance:.2f}"
+            if new_balance <= 0:
+                data["status"] = "Closed"
+            _save_payload(row, data)
     return total
 
 
-def _salary_advance_deductions(advance_rows: list[AppDataRecord], employee_no: str, employee_name: str, period: str) -> Decimal:
+def _salary_advance_deductions(db: Session, company_id: str, employee_no: str, employee_name: str, period: str, apply: bool = True) -> Decimal:
     """A salary advance is repaid in full, in the single payroll period it
     was requested against - not spread out - then marked Repaid so it's
     never deducted again (and, like loans, never double-deducted across two
-    same-named employees since the write happens immediately).
-
-    advance_rows is the company's full "salaryAdvances" collection,
-    pre-fetched once by the caller — see _employee_loan_deductions."""
+    same-named employees since the write happens immediately)."""
     key = _name_key(employee_name)
     total = Decimal("0.00")
-    for row in advance_rows:
+    for row in _app_records(db, company_id, "salaryAdvances"):
         data = _payload(row)
         row_employee_id = str(data.get("employee_id") or "").strip()
         if row_employee_id:
@@ -158,25 +153,23 @@ def _salary_advance_deductions(advance_rows: list[AppDataRecord], employee_no: s
         if amount <= 0:
             continue
         total += amount
-        data["status"] = "Repaid"
-        _save_payload(row, data)
+        if apply:
+            data["status"] = "Repaid"
+            _save_payload(row, data)
     return total
 
 
-def _overtime_pay(overtime_rows: list[AppDataRecord], employee_no: str, employee_name: str, period: str, basic_salary: Decimal, ot_hours_per_month: Decimal) -> Decimal:
+def _overtime_pay(db: Session, company_id: str, employee_no: str, employee_name: str, period: str, basic_salary: Decimal, ot_hours_per_month: Decimal) -> Decimal:
     """Sum of approved overtime for this employee in this period, at the
     multiplier the requester's own OT-type selection resolved to when they
     submitted it (see updateOtMultiplier() in app.js) - not recomputed here,
     just applied to an hourly rate derived from basic salary. Same
     employee_id-first matching as the deduction helpers, so two employees
-    sharing a full name don't each get credited the other's OT hours.
-
-    overtime_rows is the company's full "overtimeRequests" collection,
-    pre-fetched once by the caller — see _employee_loan_deductions."""
+    sharing a full name don't each get credited the other's OT hours."""
     key = _name_key(employee_name)
     hourly_rate = money(basic_salary) / ot_hours_per_month
     total = Decimal("0.00")
-    for row in overtime_rows:
+    for row in _app_records(db, company_id, "overtimeRequests"):
         data = _payload(row)
         row_employee_id = str(data.get("employee_id") or "").strip()
         if row_employee_id:
@@ -196,6 +189,45 @@ def _overtime_pay(overtime_rows: list[AppDataRecord], employee_no: str, employee
         multiplier = Decimal(mult_match.group()) if mult_match else Decimal("1.25")
         total += (hours * hourly_rate * multiplier).quantize(Decimal("0.01"))
     return total
+
+
+_MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
+
+
+def _adjustment_period(data: dict) -> str:
+    explicit = str(data.get("period_ym") or "").strip()
+    if re.fullmatch(r"\d{4}-\d{2}", explicit):
+        return explicit
+    match = re.fullmatch(r"([A-Za-z]+)\s+(\d{4})", str(data.get("period") or "").strip())
+    if match and match.group(1).lower() in _MONTHS:
+        return f"{match.group(2)}-{_MONTHS.index(match.group(1).lower()) + 1:02d}"
+    return ""
+
+
+def _payroll_adjustments(db: Session, company_id: str, employee_no: str, employee_name: str, period: str) -> tuple[Decimal, Decimal]:
+    """(additions, deductions) from the payroll screen's Quick Adjustments:
+    Overtime/Bonus add to pay, Deduction/Advance reduce it."""
+    key = _name_key(employee_name)
+    additions = Decimal("0.00")
+    deductions = Decimal("0.00")
+    for row in _app_records(db, company_id, "payrollAdjustments"):
+        data = _payload(row)
+        if _adjustment_period(data) != period:
+            continue
+        row_employee_id = str(data.get("employee_id") or "").strip()
+        if row_employee_id:
+            if row_employee_id != employee_no:
+                continue
+        elif _name_key(data.get("employee")) != key:
+            continue
+        value = money(data.get("amount"))
+        if value <= 0:
+            continue
+        if _name_key(data.get("type")) in ("deduction", "advance"):
+            deductions += value
+        else:
+            additions += value
+    return additions, deductions
 
 
 @router.get("/employees", response_model=list[EmployeeOut])
@@ -284,6 +316,8 @@ def generate_payroll(
     # itself company-wide (covers everyone already), that matches the same
     # branch, or when the new request is itself company-wide (which would
     # re-cover every existing branch-scoped run).
+    if payload.period > datetime.now(timezone.utc).strftime("%Y-%m"):
+        raise HTTPException(status_code=422, detail="Cannot generate payroll for a future period")
     conflict_filters = [PayrollRun.company_id == current_user.company_id, PayrollRun.period == payload.period]
     if payload.branch_id:
         conflict_filters.append(or_(PayrollRun.branch_id.is_(None), PayrollRun.branch_id == payload.branch_id))
@@ -299,23 +333,19 @@ def generate_payroll(
         raise HTTPException(status_code=422, detail="No active employees found")
 
     ot_hours_per_month = _ot_hours_per_month(db, current_user.company_id)
-    # Fetched once here rather than inside each per-employee helper call —
-    # each collection previously got re-queried fresh from the DB for every
-    # employee (3x N round trips for N employees, all returning the exact
-    # same rows), see the helpers' own docstrings.
-    overtime_rows = _app_records(db, current_user.company_id, "overtimeRequests")
-    loan_rows = _app_records(db, current_user.company_id, "employeeLoans")
-    advance_rows = _app_records(db, current_user.company_id, "salaryAdvances")
     run = PayrollRun(company_id=current_user.company_id, branch_id=payload.branch_id, period=payload.period, status="draft")
     gross_total = Decimal("0.00")
     deductions_total = Decimal("0.00")
     net_total = Decimal("0.00")
     for employee in employees:
         allowances = money(employee.housing_allowance) + money(employee.transport_allowance) + money(employee.other_allowance)
-        overtime = _overtime_pay(overtime_rows, employee.employee_no, employee.full_name, payload.period, employee.basic_salary, ot_hours_per_month)
-        loan_deduction = _employee_loan_deductions(loan_rows, employee.employee_no, employee.full_name, payload.period)
-        advance_deduction = _salary_advance_deductions(advance_rows, employee.employee_no, employee.full_name, payload.period)
-        deductions = loan_deduction + advance_deduction
+        overtime = _overtime_pay(db, current_user.company_id, employee.employee_no, employee.full_name, payload.period, employee.basic_salary, ot_hours_per_month)
+        # Loan/advance balances are only drained when the run is approved.
+        loan_deduction = _employee_loan_deductions(db, current_user.company_id, employee.employee_no, employee.full_name, payload.period, apply=False)
+        advance_deduction = _salary_advance_deductions(db, current_user.company_id, employee.employee_no, employee.full_name, payload.period, apply=False)
+        adj_add, adj_ded = _payroll_adjustments(db, current_user.company_id, employee.employee_no, employee.full_name, payload.period)
+        overtime += adj_add
+        deductions = loan_deduction + advance_deduction + adj_ded
         net = employee.basic_salary + allowances + overtime - deductions
         gross_total += employee.basic_salary + allowances + overtime
         deductions_total += deductions
@@ -335,9 +365,108 @@ def generate_payroll(
     run.deductions_total = deductions_total
     run.net_total = net_total
     db.add(run)
+    try:
+        db.commit()
+    except IntegrityError:
+        # The SELECT-based conflict check above is racy — two near-
+        # simultaneous requests can both pass it before either commits. The
+        # unique indexes added in main.py's startup migration (see
+        # uq_payroll_runs_company_period_branch/_companywide) catch what the
+        # check missed; translate that into the same clean 409 rather than
+        # letting it surface as an unhandled 500, and roll back so this
+        # request's loan/advance deductions (already applied in-memory to
+        # the AppDataRecord rows above) don't get committed as a second,
+        # duplicate drain of the same balances.
+        db.rollback()
+        raise HTTPException(status_code=409, detail=f"Payroll run for {payload.period} already exists")
+    db.refresh(run)
+    return run
+
+
+def _load_run(db: Session, run_id: str, company_id: str) -> PayrollRun:
+    run = (
+        db.query(PayrollRun)
+        .options(joinedload(PayrollRun.items).joinedload(PayrollItem.employee))
+        .filter(PayrollRun.id == run_id, PayrollRun.company_id == company_id)
+        .first()
+    )
+    if not run:
+        raise HTTPException(status_code=404, detail="Payroll run not found")
+    return run
+
+
+@router.post("/runs/{run_id}/approve", response_model=PayrollRunOut)
+def approve_payroll_run(
+    run_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PayrollRun:
+    """Draft -> approved. Only now are loan/advance balances drained; the
+    run's stored deductions were computed read-only at generation."""
+    run = _load_run(db, run_id, current_user.company_id)
+    if run.status != "draft":
+        raise HTTPException(status_code=409, detail=f"Payroll run is already {run.status}")
+    for item in run.items:
+        emp = item.employee
+        _employee_loan_deductions(db, current_user.company_id, emp.employee_no, emp.full_name, run.period)
+        _salary_advance_deductions(db, current_user.company_id, emp.employee_no, emp.full_name, run.period)
+    run.status = "approved"
+    db.add(AuditLog(company_id=current_user.company_id, user_id=current_user.id, module="payroll",
+                    action="payroll_approved", record_id=run.id, detail=f"Payroll {run.period} approved"))
     db.commit()
     db.refresh(run)
     return run
+
+
+@router.delete("/runs/{run_id}", status_code=204)
+def delete_draft_payroll_run(
+    run_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    run = _load_run(db, run_id, current_user.company_id)
+    if run.status != "draft":
+        raise HTTPException(status_code=409, detail="Only a draft payroll run can be deleted")
+    db.query(WpsBatch).filter(WpsBatch.payroll_run_id == run.id).delete(synchronize_session=False)
+    db.delete(run)
+    db.commit()
+
+
+@router.get("/runs/{run_id}/sif")
+def payroll_run_sif(
+    run_id: str,
+    mol_id: str = Query(default="MOL-0000000"),
+    file_seq: str = Query(default="SIF-001"),
+    pay_date: str = Query(default=""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    """CBUAE SIF built from the stored PayrollItems, never from client input."""
+    run = _load_run(db, run_id, current_user.company_id)
+    period_digits = run.period.replace("-", "")
+    transfer = re.sub(r"\D", "", pay_date) or datetime.now(timezone.utc).strftime("%Y%m%d")
+    days = calendar.monthrange(int(run.period[:4]), int(run.period[5:7]))[1]
+    lines: list[str] = []
+    total_net = Decimal("0.00")
+    total_basic = Decimal("0.00")
+    count = 0
+    for item in run.items:
+        emp = item.employee
+        if not emp.iban:
+            continue
+        net = money(item.net_pay)
+        total_net += net
+        total_basic += money(item.basic)
+        count += 1
+        emp_id = emp.wps_id or emp.employee_no
+        lines.append(
+            f"SCR|{emp_id}|{emp.iban[4:7]}|{transfer}|{emp_id}|{emp.full_name}|{days}|{money(item.basic):.2f}|"
+            f"{(money(item.allowances) + money(item.overtime)):.2f}|{money(item.deductions):.2f}|{net:.2f}|IBAN|{emp.iban}"
+        )
+    header = f"EHR|{mol_id}|{datetime.now(timezone.utc).strftime('%Y%m%d')}|{period_digits}|{file_seq}|{count}|{total_net:.2f}"
+    trailer = f"ETR|{count}|{total_basic:.2f}|0.00|0.00|{total_net:.2f}"
+    return Response(content="\n".join([header, *lines, trailer]), media_type="text/plain",
+                    headers={"Content-Disposition": f'attachment; filename="{file_seq}.sif"'})
 
 
 @router.post("/runs/{run_id}/wps-batch", response_model=WpsBatchOut, status_code=201)
@@ -356,6 +485,8 @@ def create_wps_batch(
         raise HTTPException(status_code=404, detail="Payroll run not found")
     rows = ["EDR,EmployeeNo,Name,IBAN,NetPay"]
     has_error = False
+    excluded_total = Decimal("0.00")
+    excluded_names: list[str] = []
     for item in run.items:
         employee = item.employee
         if not employee.iban:
@@ -363,7 +494,14 @@ def create_wps_batch(
             # A SIF row with no IBAN isn't submittable to any bank — omit it
             # entirely (the batch below is still correctly marked "blocked"
             # overall) rather than embedding the literal string "MISSING" as
-            # if it were IBAN data.
+            # if it were IBAN data. That employee's net_pay stays counted in
+            # PayrollRun.net_total (the liability is still real — they still
+            # need to be paid some other way), but nothing else previously
+            # recorded that this batch's bank file doesn't actually cover
+            # them; logged below so it's at least traceable in the audit
+            # trail once the missing IBAN is later fixed.
+            excluded_total += money(item.net_pay)
+            excluded_names.append(f"{employee.full_name} ({employee.employee_no})")
             continue
         rows.append(f"EDR,{employee.employee_no},{employee.full_name},{employee.iban},{item.net_pay:.2f}")
     batch = WpsBatch(
@@ -374,6 +512,15 @@ def create_wps_batch(
         sif_content="\n".join(rows),
     )
     db.add(batch)
+    if has_error:
+        db.add(AuditLog(
+            company_id=current_user.company_id,
+            user_id=current_user.id,
+            module="payroll",
+            action="wps_batch_excluded_employees",
+            record_id=run.id,
+            detail=f"AED {excluded_total:.2f} for {len(excluded_names)} employee(s) missing IBAN, not in this WPS file: {'; '.join(excluded_names)}",
+        ))
     db.commit()
     db.refresh(batch)
     return batch

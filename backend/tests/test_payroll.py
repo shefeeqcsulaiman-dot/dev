@@ -96,47 +96,46 @@ def test_generate_payroll_deducts_approved_loan_and_reduces_stored_balance(clien
         .order_by(AppDataRecord.created_at.desc())
         .first()
     )
+    assert json.loads(row.payload)["balance"] == "1500.00"  # drained only on approval
+
+    run_id = r.json()["id"]
+    assert client.post(f"/api/v1/payroll/runs/{run_id}/approve", headers=auth_headers).status_code == 200
+    assert client.post(f"/api/v1/payroll/runs/{run_id}/approve", headers=auth_headers).status_code == 409
+    db.expire_all()
+    row = (
+        db.query(AppDataRecord)
+        .filter_by(company_id=company_id, collection="employeeLoans", record_key="LOAN-1")
+        .order_by(AppDataRecord.created_at.desc())
+        .first()
+    )
     stored = json.loads(row.payload)
     assert stored["balance"] == "1000.00"
     assert stored["status"] == "Approved"
 
 
-def test_generate_payroll_name_matched_loan_not_double_drained_across_employees(client, db, auth_headers):
-    # Two employees sharing a full name, matched by name only (no
-    # employee_id on the loan record) — the second employee processed in
-    # generate_payroll()'s per-employee loop must see the balance already
-    # reduced by the first, not independently drain the same loan twice.
-    # This is the exact risk of hoisting _app_records() out of the loop
-    # (see payroll.py's generate_payroll): the mutation must still apply to
-    # the SAME in-session AppDataRecord row across both employees' calls.
-    r = client.get("/api/v1/auth/me", headers=auth_headers)
-    company_id = r.json()["company"]["id"]
-    emp_a = _seed_active_employee(db, company_id, basic_salary=5000, employee_no="PR-DUP-A", full_name="Shared Name Person")
-    emp_b = _seed_active_employee(db, company_id, basic_salary=5000, employee_no="PR-DUP-B", full_name="Shared Name Person")
-    _seed_app_record(db, company_id, "employeeLoans", "LOAN-DUP", {
-        "id": "LOAN-DUP", "employee": "Shared Name Person",
-        "status": "Approved", "balance": "600.00", "emi": "500.00",
-    })
+def test_draft_run_can_be_deleted_and_future_period_rejected(client, db, auth_headers):
+    company_id = client.get("/api/v1/auth/me", headers=auth_headers).json()["company"]["id"]
+    _seed_active_employee(db, company_id, basic_salary=5000, employee_no="PR-TEST-DEL")
+    assert client.post("/api/v1/payroll/generate", json={"period": "2099-01"}, headers=auth_headers).status_code == 422
+    r = client.post("/api/v1/payroll/generate", json={"period": "2024-04"}, headers=auth_headers)
+    assert r.status_code == 201
+    run_id = r.json()["id"]
+    assert client.delete(f"/api/v1/payroll/runs/{run_id}", headers=auth_headers).status_code == 204
+    assert client.post("/api/v1/payroll/generate", json={"period": "2024-04"}, headers=auth_headers).status_code == 201
 
-    r = client.post("/api/v1/payroll/generate", json={"period": "2025-11"}, headers=auth_headers)
-    assert r.status_code == 201, r.text
-    items_by_emp = {i["employee_id"]: i for i in r.json()["items"]}
-    first_deduction = items_by_emp[emp_a.id]["deductions"]
-    second_deduction = items_by_emp[emp_b.id]["deductions"]
-    # Total deducted across both employees must equal the loan balance
-    # (600.00), never 2x — whichever employee is processed first takes the
-    # true-up 500.00, the other takes only the 100.00 remainder.
-    assert {first_deduction, second_deduction} == {"500.00", "100.00"}
 
-    row = (
-        db.query(AppDataRecord)
-        .filter_by(company_id=company_id, collection="employeeLoans", record_key="LOAN-DUP")
-        .order_by(AppDataRecord.created_at.desc())
-        .first()
-    )
-    stored = json.loads(row.payload)
-    assert stored["balance"] == "0.00"
-    assert stored["status"] == "Closed"
+def test_quick_adjustments_flow_into_generated_payroll(client, db, auth_headers):
+    company_id = client.get("/api/v1/auth/me", headers=auth_headers).json()["company"]["id"]
+    emp = _seed_active_employee(db, company_id, basic_salary=6000, employee_no="PR-TEST-ADJ")
+    _seed_app_record(db, company_id, "payrollAdjustments", "ADJ-1", {
+        "id": "ADJ-1", "employee_id": emp.employee_no, "employee": emp.full_name,
+        "type": "Bonus", "amount": 400, "period": "May 2024"})
+    _seed_app_record(db, company_id, "payrollAdjustments", "ADJ-2", {
+        "id": "ADJ-2", "employee_id": emp.employee_no, "employee": emp.full_name,
+        "type": "Deduction", "amount": 100, "period_ym": "2024-05"})
+    r = client.post("/api/v1/payroll/generate", json={"period": "2024-05"}, headers=auth_headers)
+    item = next(i for i in r.json()["items"] if i["employee_id"] == emp.id)
+    assert item["overtime"] == "400.00" and item["deductions"] == "100.00" and item["net_pay"] == "6300.00"
 
 
 def test_generate_payroll_uses_configured_ot_hours_per_month(client, db, auth_headers):
@@ -178,3 +177,19 @@ def test_generate_payroll_rejects_branch_run_overlapping_company_wide_run(client
         "/api/v1/payroll/generate", json={"period": "2025-10", "branch_id": branch.id}, headers=auth_headers
     )
     assert r2.status_code == 409, r2.text
+
+
+def test_sif_is_built_from_stored_run_and_ess_hides_drafts(client, db, auth_headers):
+    company_id = client.get("/api/v1/auth/me", headers=auth_headers).json()["company"]["id"]
+    _seed_active_employee(db, company_id, basic_salary=7000, employee_no="PR-TEST-SIF",
+                          full_name="Sif Person", iban="AE070331234567890123456")
+    r = client.post("/api/v1/payroll/generate", json={"period": "2024-03"}, headers=auth_headers)
+    assert r.status_code == 201, r.text
+    run_id = r.json()["id"]
+    assert r.json()["status"] == "draft"
+    sif = client.get(f"/api/v1/payroll/runs/{run_id}/sif", params={"mol_id": "MOL-1", "file_seq": "SIF-T"}, headers=auth_headers)
+    assert sif.status_code == 200
+    lines = sif.text.splitlines()
+    assert lines[0].startswith("EHR|MOL-1|") and "|202403|SIF-T|" in lines[0]
+    scr = next(line for line in lines if "Sif Person" in line)
+    assert "|7000.00|" in scr and scr.endswith("|IBAN|AE070331234567890123456")

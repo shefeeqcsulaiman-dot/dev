@@ -37,7 +37,6 @@ from app.department_scope import (
 from app.dependencies import assert_company_active, company_allows_module, require_module
 from app.module_catalog import ALL_MODULES
 from app.limiter import limiter
-from app.routers.reports import _cached_or_build
 from app.models import (
     AttendanceSession,
     Branch,
@@ -51,7 +50,7 @@ from app.models import (
     Role,
     RolePermission,
 )
-from app.security import pwd_context
+from app.security import pwd_context, verify_employee_password
 
 # /login and /logout stay on the ungated `router` (issuing/discarding a token
 # can't itself require a module check — there's no principal yet); every
@@ -375,11 +374,7 @@ def hr_login(request: Request, payload: HrLoginRequest, db: Session = Depends(ge
         pwd_context.verify(payload.password, "$2b$12$Z2HUw9SswHis7rcngsd7iOdXn/b9HafcmcwJx9D39ozeKwrSy22r.")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="We couldn't sign you in — check your username and password and try again")
 
-    stored_hash = emp.password_hash
-    if not stored_hash:
-        if payload.password != emp.employee_no:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="We couldn't sign you in — check your username and password and try again")
-    elif not pwd_context.verify(payload.password, stored_hash):
+    if not verify_employee_password(payload.password, emp.password_hash, emp.employee_no):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="We couldn't sign you in — check your username and password and try again")
 
     if not emp.is_active:
@@ -445,19 +440,6 @@ def hr_me(db: Session = Depends(get_db), emp: Employee = Depends(get_current_emp
 
 @gated_router.get("/dashboard")
 def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> dict:
-    # Same "hit on every page load" shape as reports.dashboard, so it reuses
-    # that endpoint's cache-with-staleness helper — but unlike reports.dashboard
-    # (company/branch-level, safe to share across every viewer with that
-    # branch access), this result varies per INDIVIDUAL employee (the
-    # "Employee" role branch below returns that one person's own check-in
-    # status; Manager/Payroll Officer branches are scoped to that specific
-    # employee's own department scope) — so the cache key is per-employee,
-    # not just per-company, to avoid ever serving one employee's dashboard
-    # data to another.
-    return _cached_or_build(f"hr_dashboard:{emp.company_id}:{emp.id}", 60, lambda: _build_hr_dashboard(db, emp))
-
-
-def _build_hr_dashboard(db: Session, emp: Employee) -> dict:
     role = db.get(Role, emp.role_id) if emp.role_id else None
     role_name = role.role_name if role else "Employee"
     company_id = emp.company_id
@@ -831,14 +813,6 @@ def set_employee_portal_access(
             role = db.query(Role).filter(Role.id == payload.role_id, Role.company_id == principal.company_id).first()
             if not role:
                 raise HTTPException(status_code=404, detail="Role not found")
-            if principal.is_dept_scoped:
-                # A department-scoped caller must not be able to hand a target
-                # employee a role whose own scope is wider than (or outside)
-                # the caller's — otherwise they could grant company-wide (or
-                # a different department's) visibility they don't have themselves.
-                role_scope = {d.lower() for d in resolve_department_scope(role, target)}
-                if not role_scope or not role_scope.issubset(principal.department_scope):
-                    raise HTTPException(status_code=403, detail="You can only assign roles scoped to your own department(s)")
         target.role_id = payload.role_id or None
 
     if payload.is_active is not None:

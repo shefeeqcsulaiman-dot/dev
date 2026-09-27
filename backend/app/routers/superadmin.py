@@ -1,14 +1,12 @@
 import datetime as _dt
-import io
 import json
-import zipfile
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
@@ -17,7 +15,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.dependencies import Principal, get_current_principal, get_current_user
 from app.limiter import limiter
-from app.routers.app_data import build_company_sql_dump
+from app.routers.app_data import build_all_companies_backup_zip, build_company_sql_dump
 # Re-exported here under the same name for every pre-existing call site in
 # this file — moved to app/module_catalog.py (Branch Login Phase 1) so core
 # auth code (auth_principal.py, dependencies.py) and branches.py can import
@@ -95,7 +93,7 @@ class BulkModuleIn(BaseModel):
 
 class CreateCompanyIn(BaseModel):
     name: str
-    email: str
+    email: EmailStr
     password: str
     full_name: str = ""
     trn: str | None = None
@@ -389,21 +387,10 @@ def superadmin_backup_all_companies(
     rather than concatenated into one script -- keeps each tenant's data
     separable for a real single-company restore, and a bad/huge company
     dump can't corrupt the file boundaries of the others."""
-    companies = (
-        db.query(Company)
-        .filter(or_(Company.trn.is_(None), Company.trn != "SUPERADMIN-INTERNAL"))
-        .order_by(Company.name.asc())
-        .all()
-    )
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for company in companies:
-            sql_text, fname = build_company_sql_dump(db, company.id, f"Superadmin ({current_user.full_name})")
-            safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in (company.name or company.id)).strip() or company.id
-            zf.writestr(f"{safe_name}/{fname}", sql_text)
+    zip_bytes = build_all_companies_backup_zip(db, f"Superadmin ({current_user.full_name})")
     date_str = _dt.datetime.utcnow().strftime("%Y%m%d")
     return Response(
-        content=buf.getvalue(),
+        content=zip_bytes,
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="taxflow-all-companies-backup-{date_str}.zip"'},
     )
@@ -944,6 +931,8 @@ def db_diagnostics(
     restrictions (correctly) block a direct psql/psycopg2 connection from
     outside DO's trusted sources, so this is checked through the app's own
     already-trusted DB connection instead. Nothing here writes anything."""
+    if db.get_bind().dialect.name != "postgresql":
+        return {"supported": False, "detail": f"Diagnostics need PostgreSQL (this environment runs {db.get_bind().dialect.name})"}
     db_size = db.execute(text("SELECT pg_size_pretty(pg_database_size(current_database()))")).scalar()
     max_connections = db.execute(text("SHOW max_connections")).scalar()
     active_connections = db.execute(text("SELECT count(*) FROM pg_stat_activity")).scalar()
@@ -956,6 +945,7 @@ def db_diagnostics(
         LIMIT 15
     """)).all()
     return {
+        "supported": True,
         "database_size": db_size,
         "max_connections": max_connections,
         "active_connections": active_connections,
@@ -1072,6 +1062,24 @@ def list_audit_logs(
             "user": payload.get("user") or payload.get("email") or "",
             "created_at": row.created_at.isoformat() if row.created_at else None,
         })
+
+    # Platform jobs (e.g. the nightly backup) log to the SQL AuditLog table.
+    platform_q = db.query(AuditLog).filter(AuditLog.module == "platform", AuditLog.created_at >= since)
+    if company_id:
+        platform_q = platform_q.filter(AuditLog.company_id == company_id)
+    for log in platform_q.order_by(AuditLog.created_at.desc()).limit(limit).all():
+        entries.append({
+            "id": log.id,
+            "company_id": log.company_id,
+            "company_name": "Platform",
+            "action": log.action.replace("_", " "),
+            "detail": log.detail or "",
+            "status": "Failed" if log.action.endswith("_failed") else "OK",
+            "user": "System",
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        })
+    entries.sort(key=lambda e: e["created_at"] or "", reverse=True)
+    entries = entries[:limit]
 
     return {"total": len(entries), "entries": entries}
 
@@ -1474,10 +1482,20 @@ def end_impersonation(
         session_row = db.query(ImpersonationSession).filter(ImpersonationSession.token_jti == jti).first()
         if session_row and not session_row.ended_at:
             session_row.ended_at = datetime.now(timezone.utc)
-    superadmin = db.query(User).filter(User.id == impersonator_id).first()
+    impersonator = db.query(User).filter(User.id == impersonator_id).first()
     viewed_as = f"{principal.user.full_name} ({principal.user.email})" if principal.user else principal.display_name
+    # "Super Admin" only when the impersonator actually is one -- this same
+    # flow now also ends a company User's own branches.py
+    # impersonate_branch() session (see that endpoint's docstring), where
+    # labeling a company's own admin "Super Admin" in their audit log would
+    # misrepresent who actually did it.
+    impersonator_label = (
+        f"Super Admin ({impersonator.email})" if impersonator and impersonator.role == "superadmin"
+        else f"{impersonator.full_name} ({impersonator.email})" if impersonator
+        else impersonator_id
+    )
     _write_audit_blob(
-        db, principal.company_id, f"Super Admin ({superadmin.email if superadmin else impersonator_id})",
+        db, principal.company_id, impersonator_label,
         "Impersonation ended", f"was viewing as {viewed_as}", "Ended",
     )
     db.commit()

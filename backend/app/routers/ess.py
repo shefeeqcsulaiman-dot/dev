@@ -10,6 +10,7 @@ from jose import JWTError, jwt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+import app.cache as cache
 import app.timezone_utils as timezone_utils
 from app.auth_principal import resolve_department_scope
 from app.config import get_settings
@@ -17,7 +18,7 @@ from app.database import get_db
 from app.dependencies import assert_company_active, company_allows_module
 from app.limiter import limiter
 from app.models import AppDataRecord, AttendanceDetail, AuditLog, Company, Employee, LeaveRequest, PayrollItem, PayrollRun, Role
-from app.routers.attendance import _company_offset, _late_rules, _local_today, _standard_hours_per_day, _weekend_day_set
+from app.routers.attendance import _company_offset, _ot_cooloff_seconds, overtime_eligibility_rows, _late_rules, _local_today, _standard_hours_per_day, _weekend_day_set
 from app.routers.leave import (
     _ALLOWED_TYPES,
     _effective_leave_policy_configs,
@@ -26,7 +27,7 @@ from app.routers.leave import (
     _leave_type_caps,
     _used_days_by_employee_and_type,
 )
-from app.security import pwd_context
+from app.security import pwd_context, verify_employee_password
 
 router = APIRouter(prefix="/ess", tags=["ess"])
 settings = get_settings()
@@ -83,7 +84,11 @@ class EssTeamMemberOut(BaseModel):
     department: str
     designation: str
     status: str
-    photo: str | None = None
+    # No `photo` field -- unlike /ess/me's own EssEmployeeOut (whose photo IS
+    # rendered, for the logged-in employee's own avatar), grepping ess.js
+    # confirmed no team-roster render ever reads a peer's .photo. Compressed
+    # but still tens-of-KB-each base64 images for every colleague, on every
+    # dashboard load, for a field nothing displays.
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -165,14 +170,8 @@ def ess_login(request: Request, payload: EssLoginRequest, db: Session = Depends(
         pwd_context.verify(password, "$2b$12$Z2HUw9SswHis7rcngsd7iOdXn/b9HafcmcwJx9D39ozeKwrSy22r.")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="We couldn't sign you in — check your username and password and try again")
 
-    stored_hash = emp.password_hash
-    if not stored_hash:
-        # default password = employee_no
-        if password != emp.employee_no:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="We couldn't sign you in — check your username and password and try again")
-    else:
-        if not pwd_context.verify(password, stored_hash):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="We couldn't sign you in — check your username and password and try again")
+    if not verify_employee_password(password, emp.password_hash, emp.employee_no):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="We couldn't sign you in — check your username and password and try again")
 
     if not emp.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal access has been disabled for this account")
@@ -243,7 +242,7 @@ def ess_team(request: Request, db: Session = Depends(get_db)) -> list[EssTeamMem
     return [
         EssTeamMemberOut(
             id=r.id, employee_no=r.employee_no, full_name=r.full_name, department=r.department,
-            designation=r.designation, status=r.status, photo=r.photo,
+            designation=r.designation, status=r.status,
         )
         for r in rows
     ]
@@ -333,7 +332,10 @@ def ess_team_today(request: Request, db: Session = Depends(get_db)) -> list[dict
             "employee_no": p.employee_no,
             "full_name": p.full_name,
             "designation": p.designation,
-            "photo": p.photo,
+            # No "photo" -- grepping ess.js confirmed no team-roster render
+            # ever reads a colleague's photo (same reasoning as EssTeamMemberOut
+            # above), so this was a pure per-colleague base64-blob payload cost
+            # on every single dashboard load for a field nothing displays.
             "status": day_status,
             "check_in": check_in,
             "is_me": p.id == emp.id,
@@ -505,13 +507,7 @@ def ess_change_password(
     db: Session = Depends(get_db),
 ) -> dict:
     emp = ess_bearer(request, db)
-    stored_hash = emp.password_hash
-    current_ok = (
-        pwd_context.verify(payload.current_password, stored_hash)
-        if stored_hash
-        else payload.current_password == emp.employee_no
-    )
-    if not current_ok:
+    if not verify_employee_password(payload.current_password, emp.password_hash, emp.employee_no):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Current password is incorrect")
     if len(payload.new_password) < 6:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be at least 6 characters")
@@ -569,7 +565,7 @@ def ess_payslips(request: Request, db: Session = Depends(get_db)) -> list:
     items = (
         db.query(PayrollItem, PayrollRun.period, PayrollRun.status)
         .join(PayrollRun, PayrollItem.run_id == PayrollRun.id)
-        .filter(PayrollItem.employee_id == emp.id, PayrollRun.company_id == emp.company_id)
+        .filter(PayrollItem.employee_id == emp.id, PayrollRun.company_id == emp.company_id, PayrollRun.status.in_(("approved", "paid")))
         .order_by(PayrollRun.period.desc())
         .limit(24)
         .all()
@@ -653,6 +649,11 @@ def ess_create_leave(payload: EssLeaveRequestIn, request: Request, db: Session =
             detail=f"This overlaps an existing {overlap.status} leave request ({overlap.start_date} to {overlap.end_date})",
         )
     days = (payload.end_date - payload.start_date).days + 1
+    if payload.start_date < date.today() - timedelta(days=30):
+        raise HTTPException(status_code=400, detail="Leave can't be requested for dates more than 30 days in the past — contact HR")
+    remaining = ess_leave_balance(request, db)["by_type"].get(payload.leave_type)
+    if remaining is not None and "unpaid" not in payload.leave_type.lower() and days > remaining["remaining"]:
+        raise HTTPException(status_code=400, detail=f"Only {remaining['remaining']} day(s) of {payload.leave_type} remaining; this request is {days}")
     req = LeaveRequest(
         company_id=emp.company_id, employee_id=emp.id, leave_type=payload.leave_type,
         start_date=payload.start_date.isoformat(), end_date=payload.end_date.isoformat(),
@@ -664,11 +665,23 @@ def ess_create_leave(payload: EssLeaveRequestIn, request: Request, db: Session =
 
 
 def _employee_app_data_records(db: Session, company_id: str, collection: str) -> list[dict]:
-    """Tier-2 collections (Task Management, Rota) live in the generic
-    AppDataRecord JSON bridge, not their own tables, so there's no SQL
-    column to filter "this employee's rows" by -- every row for the
-    collection has to be pulled and parsed, same approach attendance.py's
-    Holiday Calendar lookup already uses for the same kind of collection."""
+    """Tier-2 collections (Task Management, Rota, and every own-request type:
+    overtime/loans/advances/corrections) live in the generic AppDataRecord
+    JSON bridge, not their own tables, so there's no SQL column to filter
+    "this employee's rows" by -- every row for the collection has to be
+    pulled and parsed, same approach attendance.py's Holiday Calendar lookup
+    already uses for the same kind of collection. That scan is identical for
+    every employee in the company (filtering to "mine" happens after, in
+    _own_request_records()/callers), so a short cache means N employees
+    loading their dashboards around the same time share one DB round trip +
+    JSON-parse pass instead of each paying for their own -- same short-TTL
+    pattern already used for dashboard/report queries (reports.py's
+    _cached_or_build()). A no-op when Redis isn't configured (cache.py falls
+    back silently), same as every other cache.get/set call in this codebase."""
+    cache_key = f"ess_appdata:{company_id}:{collection}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
     rows = db.query(AppDataRecord.payload).filter(
         AppDataRecord.company_id == company_id, AppDataRecord.collection == collection,
     ).all()
@@ -680,6 +693,7 @@ def _employee_app_data_records(db: Session, company_id: str, collection: str) ->
             continue
         if isinstance(parsed, dict):
             out.append(parsed)
+    cache.set(cache_key, out, ttl=20)
     return out
 
 
@@ -872,6 +886,11 @@ def _create_request_record(db: Session, emp: Employee, kind: str, fields: dict) 
     ))
     _ess_audit(db, emp, f"{kind}_requested", {"id": record["id"]})
     db.commit()
+    # Bust the short-TTL scan cache _employee_app_data_records() just read
+    # from above (`pending` check) so this employee's own "My Requests" list
+    # reflects the request they just submitted immediately, not after
+    # waiting out the cache's TTL.
+    cache.delete(f"ess_appdata:{emp.company_id}:{collection}")
     return record
 
 
@@ -930,6 +949,7 @@ def ess_update_task(task_id: str, payload: EssTaskStatusIn, request: Request, db
     row.payload = json.dumps(data, ensure_ascii=False, default=str)
     _ess_audit(db, emp, "task_status_changed", {"id": task_id, "status": payload.status})
     db.commit()
+    cache.delete(f"ess_appdata:{emp.company_id}:tasks")
     return data
 
 
@@ -1017,6 +1037,21 @@ def _ot_multiplier(db: Session, company_id: str, ot_type: str) -> str:
         "ramadan": rate("multRamadan", normal),
     }[ot_type]
     return f"{chosen:g}×"
+
+
+@router.get("/overtime-eligibility")
+def ess_overtime_eligibility(request: Request, db: Session = Depends(get_db)) -> dict:
+    """The caller's own days worked past the standard day (last 31 days, the
+    same window overtime can be requested in), with clock in/out, cool-off
+    eligibility and request status."""
+    emp = ess_bearer(request, db)
+    today = _local_today_for(db, emp)
+    start = today - timedelta(days=31)
+    return {
+        "from": start.isoformat(), "to": today.isoformat(),
+        "cooloff_minutes": _ot_cooloff_seconds(db, emp.company_id) // 60,
+        "rows": overtime_eligibility_rows(db, emp.company_id, [emp], start, today),
+    }
 
 
 @router.post("/overtime", status_code=201)

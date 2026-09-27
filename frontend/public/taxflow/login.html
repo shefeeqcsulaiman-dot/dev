@@ -119,14 +119,14 @@
       if(!r.ok)return;
       var who=await r.json();
       if(who.kind==='employee'){preloadAndRedirect('/hrms',t,'hrms');return;}
-      if(who.kind==='branch'){preloadAndRedirect('/',t);return;}
+      if(who.kind==='branch'){preloadAndRedirect('/',t,'main');return;}
       // Admin: /auth/whoami doesn't carry the admin/superadmin distinction,
       // /auth/me already does — check that only for the User path.
       var meResp=await fetch(apiBase()+'/auth/me',{headers:{'Authorization':'Bearer '+t}});
       var me=await meResp.json();
       if(me&&me.role==='superadmin'){window.location.replace('/superadmin');return;}
       try{sessionStorage.setItem('taxflow_me_cache',JSON.stringify({data:me,ts:Date.now()}));}catch(e){}
-      preloadAndRedirect('/',t);
+      preloadAndRedirect('/',t,'main');
     }catch(e){ window.location.replace('/'); }
   })();
 
@@ -198,7 +198,7 @@
           if(me&&me.role==='superadmin'){window.location.replace('/superadmin');return;}
           try{sessionStorage.setItem('taxflow_me_cache',JSON.stringify({data:me,ts:Date.now()}));}catch(e){}
         }catch(e){}
-        preloadAndRedirect('/',data.access_token);
+        preloadAndRedirect('/',data.access_token,'main');
         return;
       }
       // Not a TaxFlow admin account — try as an HRMS sub-user (Employee RBAC
@@ -241,8 +241,16 @@
             else target='/ess';
           }
         }catch(e){/* /hr/me unreachable -- fail open to /hrms, whose own gate re-checks */}
-        if(target==='/ess')localStorage.setItem('ess_token',hrData.access_token);
-        preloadAndRedirect(target,hrData.access_token);
+        if(target==='/ess'){
+          // ess.html has its own dedicated endpoints (ess.py) and never reads
+          // _takeBootstrapPreloadCache()/hydrateFromServer()'s shared bootstrap
+          // blob at all -- prefetching it here would be a pure wasted request,
+          // so skip preloadAndRedirect's prefetch-then-redirect dance entirely.
+          localStorage.setItem('ess_token',hrData.access_token);
+          window.location.replace(target);
+          return;
+        }
+        preloadAndRedirect(target,hrData.access_token,target==='/hrms'?'hrms':'main');
         return;
       }
       // A 403 from /hr/login (vs 401) means a real employee account was
@@ -262,7 +270,7 @@
         if(brResp.ok&&brData.access_token){
           localStorage.setItem('taxflow_token',brData.access_token);
           localStorage.setItem('taxflow_principal_kind','branch');
-          preloadAndRedirect('/',brData.access_token);
+          preloadAndRedirect('/',brData.access_token,'main');
           return;
         }
         err.textContent=(brResp.status===403?brData.detail:null)||data.detail||"We couldn't sign you in — check your email and password and try again.";

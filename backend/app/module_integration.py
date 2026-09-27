@@ -7,9 +7,12 @@ from sqlalchemy.orm import Session
 
 from app.accounting_posting import post_source_transaction
 from app.models import (
+    Account,
     Company,
     CorporateTaxRecord,
     Invoice,
+    JournalEntry,
+    JournalLine,
     PostingJob,
     SourceTransaction,
     SourceTransactionLine,
@@ -118,6 +121,45 @@ def sync_bill_accounting(
     return tx
 
 
+def sync_receipt_payment_accounting(
+    db: Session,
+    company_id: str,
+    is_supplier: bool,
+    reference: str,
+    party_name: str,
+    amount: Decimal,
+    user_id: str | None = None,
+    branch_id: str | None = None,
+) -> SourceTransaction:
+    """Customer receipts and supplier payments move real cash/bank money but
+    were never wired into the ledger at all: app_data.py's old "payments"
+    handler called a local helper that just stamped status="posted" onto a
+    SourceTransaction with no PostingJob or JournalEntry ever created (and
+    build_journal had no branch to build one from even if it had tried).
+    Invoices/bills already recognized VAT at their own posting time, so no
+    VAT is recognized again here -- subtotal=0 makes ensure_tax_line()
+    (called unconditionally by post_source_transaction) skip creating a
+    second TaxLine that would double the VAT return. The real amount still
+    reaches the ledger via `total`, which build_journal's "receipt"/
+    "payment" branch posts directly against Cash & Bank (1000) and
+    Accounts Receivable/Payable (1100/2100)."""
+    tx = upsert_source_transaction(
+        db,
+        company_id=company_id,
+        module="payment" if is_supplier else "receipt",
+        reference=reference,
+        party_name=party_name,
+        subtotal=Decimal("0"),
+        vat=Decimal("0"),
+        total=amount,
+        lines=None,
+        default_account_code="1000",
+        branch_id=branch_id,
+    )
+    approve_and_post_source(db, tx, user_id)
+    return tx
+
+
 def upsert_source_transaction(
     db: Session,
     company_id: str,
@@ -223,7 +265,25 @@ def refresh_corporate_tax_from_posted_sources(db: Session, company_id: str, peri
         .scalar()
     )
     accounting_profit = sales - purchases
-    taxable_income = max(Decimal("0.00"), accounting_profit)
+    # Prefer the ledger (includes operating expenses and manual journals);
+    # sales-minus-purchases is only the fallback for a company with no GL yet.
+    gl_rows = (
+        db.query(Account.type, func.coalesce(func.sum(JournalLine.credit - JournalLine.debit), 0))
+        .join(JournalLine, JournalLine.account_id == Account.id)
+        .join(JournalEntry, JournalEntry.id == JournalLine.journal_id)
+        .filter(JournalEntry.company_id == company_id, JournalEntry.status == "posted",
+                Account.type.in_(["sales", "purchase", "direct expense", "indirect expense"]))
+        .group_by(Account.type)
+        .all()
+    )
+    if gl_rows:
+        accounting_profit = money(sum((Decimal(str(v or 0)) for _t, v in gl_rows), Decimal("0.00")))
+    existing_adjustments = (
+        db.query(CorporateTaxRecord.tax_adjustments)
+        .filter(CorporateTaxRecord.company_id == company_id, CorporateTaxRecord.period == period)
+        .scalar()
+    ) or Decimal("0.00")
+    taxable_income = max(Decimal("0.00"), accounting_profit + money(existing_adjustments))
     tax_due = max(Decimal("0.00"), taxable_income - Decimal("375000.00")) * Decimal("0.09")
     record = (
         db.query(CorporateTaxRecord)
@@ -234,7 +294,7 @@ def refresh_corporate_tax_from_posted_sources(db: Session, company_id: str, peri
         record = CorporateTaxRecord(company_id=company_id, period=period)
         db.add(record)
     record.accounting_profit = money(accounting_profit)
-    record.tax_adjustments = Decimal("0.00")
+    record.tax_adjustments = money(existing_adjustments)
     record.taxable_income = money(taxable_income)
     record.tax_due = money(tax_due)
     record.status = "calculated"

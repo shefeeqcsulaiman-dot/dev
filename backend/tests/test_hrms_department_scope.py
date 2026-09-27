@@ -83,7 +83,17 @@ def _world(client, db, auth_headers, tag):
             company_id=cid, employee_id=emp.employee_no, employee_name=emp.full_name, work_date=today, clock_in_1=now,
             raw_events=json.dumps([{"id": f"PUNCH-{who}-{tag}", "punch_time": now.isoformat(), "direction": "in", "source": "biometric"}]),
         ))
-    run = PayrollRun(company_id=cid, period=f"2099-{ord(tag[0]) % 12 + 1:02d}", status="draft", gross_total=8000, deductions_total=0, net_total=8000)
+    # Keyed on the full tag, not just its first character — every other
+    # piece of fixture data in this helper (employee numbers, task/OT/loan/
+    # rota ids) already assumes `tag` is unique per call, but this used
+    # `ord(tag[0]) % 12 + 1` alone, which collapses to the same "2099-MM"
+    # period for any two tags sharing a first letter (e.g. "R1"/"R2"/"RG2").
+    # auth_headers/db are reused across many test functions in the same
+    # session against one company, so two _world() calls sharing a period
+    # now hit payroll_runs' new (company_id, period) uniqueness constraint
+    # (main.py's uq_payroll_runs_company_period_companywide — see
+    # generate_payroll()'s duplicate-run bug this constraint fixes).
+    run = PayrollRun(company_id=cid, period=f"2099-{tag}"[:20], status="draft", gross_total=8000, deductions_total=0, net_total=8000)
     db.add(run)
     db.flush()
     for emp in (a, b):

@@ -4,11 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HRMS Portal — TaxFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=408c838b5d" as="style">
-<link rel="preload" href="src/app.js?v=bcbc27adc4" as="script">
-<!-- Fonts (Syne, DM Sans, DM Mono) are self-hosted via @font-face in styles.css — see fonts/ directory. -->
-<link rel="stylesheet" href="src/styles.css?v=408c838b5d">
+<link rel="preload" href="src/styles.css?v=5686e15d0f" as="style">
+<link rel="preload" href="src/app.js?v=0d123b28fb" as="script">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="src/styles.css?v=5686e15d0f">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -49,7 +51,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 /* ── Content BG ──────────────────────────────────────────── */
 .content{background:#f2f4f8!important;padding:0!important;}
 /* ── HRMS-specific styles ────────────────────────────────── */
-.hrms-topbar{display:flex;align-items:center;gap:12px;padding:0 20px;height:62px;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:10;flex-shrink:0;}
+.hrms-topbar{display:flex;align-items:center;gap:12px;padding:0 20px;height:62px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;flex-shrink:0;}
 /* Theme-token conversion (2026-09-03): this block previously hardcoded
    light-only hex colors (#fff cards, #111827 text, #e2e8f0 borders, etc.)
    with no dark-mode counterpart, even though the app's own nightMode
@@ -73,8 +75,6 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 .hm-user-role{font-size:10px;color:var(--text3);}
 .hm-date{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:6px 11px;white-space:nowrap;margin-left:4px;}
 /* ── KPI Cards ───────────────────────────────────────────── */
-.hrms-kpi-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:18px;}
-@media(max-width:1280px){.hrms-kpi-grid{grid-template-columns:repeat(3,1fr);}}
 .hrms-kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;align-items:flex-start;gap:12px;transition:box-shadow .15s,transform .15s;}
 .hrms-kpi-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.09);transform:translateY(-1px);}
 .hrms-kpi-icon{width:48px;height:48px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
@@ -85,13 +85,24 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 .hrms-kpi-trend.dn{color:var(--red);}
 .hrms-kpi-trend.nt{color:var(--text3);}
 .hrms-kpi-action{font-size:10.5px;color:var(--accent);cursor:pointer;margin-top:2px;display:block;}
+/* ── Leave Calendar (month grid, same visual pattern as ESS's own
+   Holiday & Team Leave Calendar) ────────────────────────── */
+.hcal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;min-width:560px;}
+.hcal-weekday{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);text-align:center;padding-bottom:4px;}
+.hcal-cell{min-height:72px;border:1px solid var(--border);border-radius:8px;padding:4px 5px;background:var(--surface);overflow:hidden;cursor:pointer;transition:border-color .12s,box-shadow .12s;}
+.hcal-cell.hcal-empty{border-color:transparent;background:transparent;cursor:default;}
+.hcal-cell:not(.hcal-empty):hover{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+.hcal-cell.hcal-today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+.hcal-cell.hcal-weekend{background:var(--bg3);}
+.hcal-daynum{font-size:11px;font-weight:700;color:var(--text2);margin-bottom:2px;}
+.hcal-chip{font-size:10px;font-weight:600;border-radius:4px;padding:1px 4px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.hcal-more{font-size:10px;color:var(--text3);}
+.hcal-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--text2);padding:10px 2px 0;}
+.hcal-legend span{display:inline-flex;align-items:center;gap:5px;}
+.hcal-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+@media(max-width:640px){.hcal-cell{min-height:52px;padding:3px;}.hcal-daynum{font-size:10px;}.hcal-chip{font-size:9px;}}
 /* ── Section layout ──────────────────────────────────────── */
 .hrms-dash-inner{padding:18px 20px;overflow-y:auto;height:calc(100vh - 62px);}
-.hrms-chart-grid{display:grid;grid-template-columns:2fr 1.1fr 1.1fr;gap:16px;margin-bottom:16px;}
-.hrms-mid-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px;margin-bottom:16px;}
-.hrms-bot-grid{display:grid;grid-template-columns:1fr 1.3fr 1fr 1fr;gap:16px;margin-bottom:16px;}
-.hrms-ai-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px;}
-@media(max-width:1280px){.hrms-chart-grid{grid-template-columns:1fr 1fr;}.hrms-mid-grid,.hrms-bot-grid{grid-template-columns:1fr 1fr;}.hrms-ai-grid{grid-template-columns:repeat(3,1fr);}}
 /* ── Card base ───────────────────────────────────────────── */
 .hc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;}
 .hc-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
@@ -279,6 +290,10 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.5 1.5M11.3 11.3l1.5 1.5M3.2 12.8l1.5-1.5M11.3 4.7l1.5-1.5"/></svg>
       HR Settings
     </div>
+    <div class="nav" id="nav-handbook" onclick="window.open('/handbook#part-hrms','_blank')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2H13v11H4.5A1.5 1.5 0 0 0 3 14.5v-11z"/><path d="M3 3.5v11A1.5 1.5 0 0 0 4.5 16H14V13"/></svg>
+      Handbook
+    </div>
   </div>
 
   <div class="sb-foot">
@@ -298,7 +313,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
   </div>
   <!-- New HRMS Topbar -->
   <div class="hrms-topbar">
-    <button style="background:none;border:none;color:#374151;font-size:20px;padding:4px 8px;line-height:1;cursor:pointer;border-radius:6px;transition:background .15s" onmouseover="this.style.background='#f4f7fb'" onmouseout="this.style.background='none'" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</button>
+    <button style="background:none;border:none;color:var(--text2);font-size:20px;padding:4px 8px;line-height:1;cursor:pointer;border-radius:6px;transition:background .15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</button>
     <div class="hrms-search">
       <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10l3 3"/></svg>
       <input type="text" placeholder="Search employees, modules, reports..." id="hrms-global-search">
@@ -331,7 +346,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
         <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="flex-shrink:0;opacity:.6"><path d="M4 2v12M12 2v12M4 5h8M4 11h8"/></svg>
         <select class="fi" style="padding:5px 8px;font-size:12px;width:auto" onchange="switchActiveBranch(this.value)"></select>
       </div>
-      <button onclick="hrmsSignOut()" title="Sign out" style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:none;border:1px solid #e2e8f0;border-radius:8px;font-size:12.5px;font-weight:600;color:#ef4444;cursor:pointer;transition:background .15s" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='none'">
+      <button onclick="hrmsSignOut()" title="Sign out" style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:none;border:1px solid var(--border);border-radius:8px;font-size:12.5px;font-weight:600;color:var(--red);cursor:pointer;transition:background .15s" onmouseover="this.style.background='var(--red-bg)'" onmouseout="this.style.background='none'">
         <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3"/><path d="M10 11l3-3-3-3"/><path d="M13 8H6"/></svg>
         Sign Out
       </button>
@@ -352,8 +367,8 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 <div class="hrms-kpi-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px">
   <!-- 1. Total Employees -->
   <div class="hrms-kpi-card">
-    <div class="hrms-kpi-icon" style="background:#eff6ff">
-      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.6"><circle cx="8" cy="7" r="3.5"/><path d="M2 18c0-3.5 2.7-5.5 6-5.5s6 2 6 5.5"/><circle cx="17" cy="7" r="2.5"/><path d="M20 17.5c0-2.5-1.5-4-3-4.5"/></svg>
+    <div class="hrms-kpi-icon" style="background:var(--accent-glow)">
+      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="var(--accent)" stroke-width="1.6"><circle cx="8" cy="7" r="3.5"/><path d="M2 18c0-3.5 2.7-5.5 6-5.5s6 2 6 5.5"/><circle cx="17" cy="7" r="2.5"/><path d="M20 17.5c0-2.5-1.5-4-3-4.5"/></svg>
     </div>
     <div>
       <div class="hrms-kpi-lbl">Total Employees</div>
@@ -366,12 +381,12 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
   </div>
   <!-- 2. Present Today -->
   <div class="hrms-kpi-card">
-    <div class="hrms-kpi-icon" style="background:#f0fdf4">
-      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.6"><circle cx="11" cy="11" r="8" stroke-width="1.4"/><path d="M7 11l3 3 5-5"/></svg>
+    <div class="hrms-kpi-icon" style="background:var(--green-bg)">
+      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="var(--green)" stroke-width="1.6"><circle cx="11" cy="11" r="8" stroke-width="1.4"/><path d="M7 11l3 3 5-5"/></svg>
     </div>
     <div>
       <div class="hrms-kpi-lbl">Present Today</div>
-      <div class="hrms-kpi-val" id="hrms-kpi-present" style="color:#16a34a">—</div>
+      <div class="hrms-kpi-val" id="hrms-kpi-present" style="color:var(--green)">—</div>
       <div class="hrms-kpi-trend nt" id="hrms-kpi-present-trend">
         <span>— of total</span>
       </div>
@@ -379,23 +394,23 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
   </div>
   <!-- 3. On Leave -->
   <div class="hrms-kpi-card">
-    <div class="hrms-kpi-icon" style="background:#faf5ff">
-      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#7c3aed" stroke-width="1.6"><path d="M11 2l2 3h4l-3 2.5 1.5 4-4.5-2.5L6.5 11.5 8 7.5 5 5h4z"/><path d="M4 18c1-2 3-3 7-3s6 1 7 3"/></svg>
+    <div class="hrms-kpi-icon" style="background:var(--purple-bg)">
+      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="var(--purple)" stroke-width="1.6"><path d="M11 2l2 3h4l-3 2.5 1.5 4-4.5-2.5L6.5 11.5 8 7.5 5 5h4z"/><path d="M4 18c1-2 3-3 7-3s6 1 7 3"/></svg>
     </div>
     <div>
       <div class="hrms-kpi-lbl">On Leave</div>
-      <div class="hrms-kpi-val" id="hrms-kpi-leave" style="color:#7c3aed">—</div>
+      <div class="hrms-kpi-val" id="hrms-kpi-leave" style="color:var(--purple)">—</div>
       <div class="hrms-kpi-trend nt"><span>approved leaves</span></div>
     </div>
   </div>
   <!-- 4. Net Payroll -->
   <div class="hrms-kpi-card">
-    <div class="hrms-kpi-icon" style="background:#fff7ed">
-      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#ea580c" stroke-width="1.6"><rect x="3" y="5" width="16" height="12" rx="2"/><path d="M3 9h16M7 13h3M14 13h1"/></svg>
+    <div class="hrms-kpi-icon" style="background:var(--amber-bg)">
+      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="var(--amber)" stroke-width="1.6"><rect x="3" y="5" width="16" height="12" rx="2"/><path d="M3 9h16M7 13h3M14 13h1"/></svg>
     </div>
     <div>
       <div class="hrms-kpi-lbl">Net Payroll (this month)</div>
-      <div class="hrms-kpi-val" id="hrms-kpi-payroll" style="color:#ea580c">—</div>
+      <div class="hrms-kpi-val" id="hrms-kpi-payroll" style="color:var(--amber)">—</div>
       <div class="hrms-kpi-trend nt" id="hrms-kpi-payroll-trend">
         <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3l3 4 3-4"/></svg>
         <span>runs this year</span>
@@ -404,12 +419,12 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
   </div>
   <!-- 5. Open Positions -->
   <div class="hrms-kpi-card">
-    <div class="hrms-kpi-icon" style="background:#eff6ff">
-      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.6"><rect x="3" y="7" width="16" height="11" rx="2"/><path d="M8 7V5a3 3 0 016 0v2"/><path d="M11 12v3M9.5 13.5h3"/></svg>
+    <div class="hrms-kpi-icon" style="background:var(--accent-glow)">
+      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="var(--accent)" stroke-width="1.6"><rect x="3" y="7" width="16" height="11" rx="2"/><path d="M8 7V5a3 3 0 016 0v2"/><path d="M11 12v3M9.5 13.5h3"/></svg>
     </div>
     <div>
       <div class="hrms-kpi-lbl">Open Positions</div>
-      <div class="hrms-kpi-val" id="hrms-dash-recs" style="color:#2563eb">—</div>
+      <div class="hrms-kpi-val" id="hrms-dash-recs" style="color:var(--accent)">—</div>
       <div class="hrms-kpi-trend up">
         <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 7l3-4 3 4"/></svg>
         <span>active requisitions</span>
@@ -418,12 +433,12 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
   </div>
   <!-- 6. Pending Approvals -->
   <div class="hrms-kpi-card">
-    <div class="hrms-kpi-icon" style="background:#fef2f2">
-      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#dc2626" stroke-width="1.6"><rect x="4" y="3" width="14" height="16" rx="2"/><path d="M8 7h6M8 10.5h6M8 14h4"/><circle cx="16" cy="16" r="4" fill="#fef2f2" stroke="#dc2626"/><path d="M16 14.5v2M16 17.5v.5"/></svg>
+    <div class="hrms-kpi-icon" style="background:var(--red-bg)">
+      <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="var(--red)" stroke-width="1.6"><rect x="4" y="3" width="14" height="16" rx="2"/><path d="M8 7h6M8 10.5h6M8 14h4"/><circle cx="16" cy="16" r="4" fill="var(--surface)" stroke="var(--red)"/><path d="M16 14.5v2M16 17.5v.5"/></svg>
     </div>
     <div>
       <div class="hrms-kpi-lbl">Pending Approvals</div>
-      <div class="hrms-kpi-val" id="hrms-kpi-pending" style="color:#dc2626">—</div>
+      <div class="hrms-kpi-val" id="hrms-kpi-pending" style="color:var(--red)">—</div>
       <a class="hrms-kpi-action" onclick="goHrmsTab(4,'hr-leave')">View all</a>
     </div>
   </div>
@@ -714,29 +729,29 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
     <div class="hc-hd" style="margin-bottom:12px"><div class="hc-title">Pending Approvals</div></div>
     <div class="hc-approvals">
       <div class="hc-appr-row" style="cursor:pointer" onclick="goHrmsTab(4,'hr-leave')">
-        <div class="hc-appr-icon" style="background:#eff6ff"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="#2563eb" stroke-width="1.4"><rect x="2" y="2" width="10" height="11" rx="1"/><path d="M4 5h6M4 7.5h6M4 10h3"/></svg></div>
+        <div class="hc-appr-icon" style="background:var(--accent-glow)"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="var(--accent)" stroke-width="1.4"><rect x="2" y="2" width="10" height="11" rx="1"/><path d="M4 5h6M4 7.5h6M4 10h3"/></svg></div>
         <div class="hc-appr-name">Leave Requests</div>
-        <div class="hc-appr-badge" style="background:#dbeafe;color:#1d4ed8" id="hrms-appr-leave">—</div>
+        <div class="hc-appr-badge" style="background:var(--accent-glow);color:var(--accent)" id="hrms-appr-leave">—</div>
       </div>
       <div class="hc-appr-row" style="cursor:pointer" onclick="goHrmsTab(3,'hr-ot')">
-        <div class="hc-appr-icon" style="background:#fff7ed"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="#ea580c" stroke-width="1.4"><circle cx="7" cy="7" r="5"/><path d="M7 4v3.5l2 1.5"/></svg></div>
+        <div class="hc-appr-icon" style="background:var(--amber-bg)"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="var(--amber)" stroke-width="1.4"><circle cx="7" cy="7" r="5"/><path d="M7 4v3.5l2 1.5"/></svg></div>
         <div class="hc-appr-name">OT Requests</div>
-        <div class="hc-appr-badge" style="background:#fed7aa;color:#c2410c" id="hrms-appr-ot">—</div>
+        <div class="hc-appr-badge" style="background:var(--amber-bg);color:var(--amber)" id="hrms-appr-ot">—</div>
       </div>
       <div class="hc-appr-row" style="cursor:pointer" onclick="goHrmsTab(5,'hr-corrections')">
-        <div class="hc-appr-icon" style="background:#f0fdf4"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="#16a34a" stroke-width="1.4"><path d="M2 7l3 3 7-6"/></svg></div>
+        <div class="hc-appr-icon" style="background:var(--green-bg)"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="var(--green)" stroke-width="1.4"><path d="M2 7l3 3 7-6"/></svg></div>
         <div class="hc-appr-name">Attendance Corrections</div>
-        <div class="hc-appr-badge" style="background:#dcfce7;color:#15803d" id="hrms-appr-corr">—</div>
+        <div class="hc-appr-badge" style="background:var(--green-bg);color:var(--green)" id="hrms-appr-corr">—</div>
       </div>
       <div class="hc-appr-row" style="cursor:pointer" onclick="goHrmsTab(6,'hr-loans')">
-        <div class="hc-appr-icon" style="background:#fdf4ff"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="#9333ea" stroke-width="1.4"><rect x="2" y="4" width="10" height="7" rx="1"/><path d="M2 6.5h10M5 9h3"/></svg></div>
+        <div class="hc-appr-icon" style="background:var(--purple-bg)"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="var(--purple)" stroke-width="1.4"><rect x="2" y="4" width="10" height="7" rx="1"/><path d="M2 6.5h10M5 9h3"/></svg></div>
         <div class="hc-appr-name">Loan Requests</div>
-        <div class="hc-appr-badge" style="background:#f3e8ff;color:#7e22ce" id="hrms-appr-loans">—</div>
+        <div class="hc-appr-badge" style="background:var(--purple-bg);color:var(--purple)" id="hrms-appr-loans">—</div>
       </div>
       <div class="hc-appr-row" style="cursor:pointer" onclick="goHrmsTab(6,'hr-loans')">
-        <div class="hc-appr-icon" style="background:#fff1f2"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="#e11d48" stroke-width="1.4"><rect x="2" y="3" width="10" height="9" rx="1"/><path d="M2 6h10M5 9h2M8.5 9h1.5"/></svg></div>
+        <div class="hc-appr-icon" style="background:var(--red-bg)"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="var(--red)" stroke-width="1.4"><rect x="2" y="3" width="10" height="9" rx="1"/><path d="M2 6h10M5 9h2M8.5 9h1.5"/></svg></div>
         <div class="hc-appr-name">Salary Advances</div>
-        <div class="hc-appr-badge" style="background:#ffe4e6;color:#be123c" id="hrms-appr-advances">—</div>
+        <div class="hc-appr-badge" style="background:var(--red-bg);color:var(--red)" id="hrms-appr-advances">—</div>
       </div>
     </div>
   </div>
@@ -754,27 +769,27 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
         <div class="hc-alert-cnt" id="hrms-compl-passport">—</div>
       </div>
       <div class="hc-alert-row">
-        <div class="hc-alert-dot" style="background:#f59e0b"></div>
+        <div class="hc-alert-dot" style="background:var(--amber)"></div>
         <div class="hc-alert-name">Visa Expiring (≤ 30 Days)</div>
-        <div class="hc-alert-cnt" style="color:#d97706" id="hrms-compl-visa">—</div>
+        <div class="hc-alert-cnt" style="color:var(--amber)" id="hrms-compl-visa">—</div>
       </div>
       <div class="hc-alert-row">
-        <div class="hc-alert-dot" style="background:#8b5cf6"></div>
+        <div class="hc-alert-dot" style="background:var(--purple)"></div>
         <div class="hc-alert-name">Emirates ID Expiring (≤ 30 Days)</div>
-        <div class="hc-alert-cnt" style="color:#7c3aed" id="hrms-compl-eid">—</div>
+        <div class="hc-alert-cnt" style="color:var(--purple)" id="hrms-compl-eid">—</div>
       </div>
       <div class="hc-alert-row">
-        <div class="hc-alert-dot" style="background:#ef4444"></div>
+        <div class="hc-alert-dot" style="background:var(--red)"></div>
         <div class="hc-alert-name">Contract Expiring (≤ 30 Days)</div>
         <div class="hc-alert-cnt" id="hrms-dash-expiry">—</div>
       </div>
       <div class="hc-alert-row">
-        <div class="hc-alert-dot" style="background:#06b6d4"></div>
+        <div class="hc-alert-dot" style="background:var(--teal)"></div>
         <div class="hc-alert-name">Insurance Expiring (≤ 30 Days)</div>
-        <div class="hc-alert-cnt" style="color:#0891b2" id="hrms-compl-ins">—</div>
+        <div class="hc-alert-cnt" style="color:var(--teal)" id="hrms-compl-ins">—</div>
       </div>
     </div>
-    <div style="margin-top:10px"><a style="font-size:11px;color:#3b82f6;cursor:pointer" onclick="goHrmsTab(7,'hr-expiry');scheduleIdleTask(refreshExpiryAlerts,100)">View all →</a></div>
+    <div style="margin-top:10px"><a style="font-size:11px;color:var(--accent);cursor:pointer" onclick="goHrmsTab(7,'hr-expiry');scheduleIdleTask(refreshExpiryAlerts,100)">View all →</a></div>
   </div>
 
   <!-- Leave Summary -->
@@ -887,7 +902,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
   <div class="mb3-side-card" style="padding:16px">
     <div class="hc-hd" style="margin-bottom:8px"><div class="hc-title">User Handbook</div></div>
     <div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.5">A screen-by-screen guide to the Main App, HRMS, and Employee Self-Service portal, with screenshots.</div>
-    <button class="btn btn-g btn-sm" style="width:100%" onclick="window.open('/handbook','_blank')">Open Handbook →</button>
+    <button class="btn btn-g btn-sm" style="width:100%" onclick="window.open('/handbook#part-hrms','_blank')">Open Handbook →</button>
   </div>
 
 </div><!-- /mb3-sidebar -->
@@ -913,9 +928,9 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 
   <div class="tab-body on" id="hr-emp">
     <div class="card mb16">
-      <div class="card-hd"><div class="card-title">Employee Directory</div><div class="flx" style="gap:14px;align-items:center"><label class="flx" style="gap:6px;align-items:center;font-size:12.5px;color:var(--text2);cursor:pointer;white-space:nowrap"><input type="checkbox" id="emp-show-inactive" onchange="applyEmployeeInactiveFilter()"> Show Inactive</label><div class="flx" style="gap:6px"><button class="btn btn-g btn-sm" onclick="exportNearestTable(this,'employees.csv')">⬇ CSV</button><button class="btn btn-p" onclick="openEmpModal()">+ Add Employee</button></div></div></div>
+      <div class="card-hd"><div class="card-title">Employee Directory</div><div class="flx" style="gap:14px;align-items:center"><label class="flx" style="gap:6px;align-items:center;font-size:12.5px;color:var(--text2);cursor:pointer;white-space:nowrap"><input type="checkbox" id="emp-show-inactive" checked onchange="applyEmployeeInactiveFilter()"> Show Inactive</label><div class="flx" style="gap:6px"><button class="btn btn-g btn-sm" onclick="exportNearestTable(this,'employees.csv')"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px;margin-right:2px"><path d="M8 2v8M5 7l3 3 3-3"/><path d="M2.5 10.5v2a1 1 0 001 1h9a1 1 0 001-1v-2"/></svg>CSV</button><button class="btn btn-p" onclick="openEmpModal()">+ Add Employee</button></div></div></div>
       <table class="tbl" id="employee-directory-table" data-delete-actions-bound="skip">
-        <thead><tr><th>ID</th><th>Name</th><th>Nick Name</th><th>Department</th><th>Designation</th><th>Supervisor</th><th>Shift Hours</th><th>Salary (AED)</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>ID</th><th>Name</th><th>Nick Name</th><th>Department</th><th>Designation</th><th>Supervisor</th><th>Shift Hours</th><th data-currency-label>Salary (AED)</th><th>Status</th><th></th></tr></thead>
         <tbody id="employee-tbody">
         </tbody>
       </table>
@@ -984,7 +999,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
           <div class="flx" style="gap:6px">
             <input class="fi mono" type="date" id="att-today-date" style="width:140px;padding:4px 6px;font-size:12px" onchange="refreshAttendanceToday()">
             <span id="att-time" class="mono" style="font-size:12px;color:var(--accent)">Live</span>
-            <button class="btn btn-g btn-sm" onclick="refreshAttendanceToday()">⟳ Refresh</button>
+            <button class="btn btn-g btn-sm" onclick="refreshAttendanceToday()"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px;margin-right:2px"><path d="M13.5 8a5.5 5.5 0 10-1.6 3.9"/><path d="M13.5 4.5v3.5h-3.5"/></svg>Refresh</button>
           </div>
         </div>
         <table class="tbl" data-delete-actions-bound="skip">
@@ -996,10 +1011,10 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
         <div class="divider"></div>
         <div class="flx" style="gap:8px;flex-wrap:wrap">
           <button class="btn btn-g" onclick="showM('m-att-correction')">+ Correction</button>
-          <button class="btn btn-g" onclick="document.getElementById('att-csv-input').click()">↑ Import CSV</button>
+          <button class="btn btn-g" onclick="document.getElementById('att-csv-input').click()"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px;margin-right:2px"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2.5 10.5v2a1 1 0 001 1h9a1 1 0 001-1v-2"/></svg>Import CSV</button>
           <input type="file" id="att-csv-input" accept=".csv" style="display:none" onchange="importAttendanceCsv(this)">
-          <button class="btn btn-g" onclick="openAttendanceCheck()">📋 Daily Check</button>
-          <button class="btn btn-p" onclick="refreshAttendanceToday()">⟳ Sync Now</button>
+          <button class="btn btn-g" onclick="openAttendanceCheck()"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px;margin-right:2px"><rect x="4" y="2.5" width="8" height="11" rx="1.2"/><path d="M6.2 2.5V1.8a.8.8 0 01.8-.8h2a.8.8 0 01.8.8v.7"/><path d="M6 8.5l1.5 1.5 2.5-3"/></svg>Daily Check</button>
+          <button class="btn btn-p" onclick="refreshAttendanceToday()"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px;margin-right:2px"><path d="M13.5 8a5.5 5.5 0 10-1.6 3.9"/><path d="M13.5 4.5v3.5h-3.5"/></svg>Sync Now</button>
         </div>
       </div>
     </div>
@@ -1008,7 +1023,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
     <div class="card mb16">
       <div class="card-hd">
         <div><div class="card-title">30-Day Attendance Trend</div><div class="card-sub" id="att-trend-sub">Loading…</div></div>
-        <button class="btn btn-g btn-sm" onclick="loadAttendanceTrend()">⟳ Refresh</button>
+        <button class="btn btn-g btn-sm" onclick="loadAttendanceTrend()"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px;margin-right:2px"><path d="M13.5 8a5.5 5.5 0 10-1.6 3.9"/><path d="M13.5 4.5v3.5h-3.5"/></svg>Refresh</button>
       </div>
       <div id="att-trend-chart" style="padding:8px 0">
         <div style="height:100px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12px">No data yet. Data appears once biometric punches are recorded.</div>
@@ -1054,7 +1069,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
           <div>
             <div class="flx" style="justify-content:space-between;margin-bottom:8px">
               <div class="card-title">Live Employee Locations</div>
-              <button class="btn btn-g btn-sm" onclick="loadLiveLocations()">⟳ Refresh</button>
+              <button class="btn btn-g btn-sm" onclick="loadLiveLocations()"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px;margin-right:2px"><path d="M13.5 8a5.5 5.5 0 10-1.6 3.9"/><path d="M13.5 4.5v3.5h-3.5"/></svg>Refresh</button>
             </div>
             <table class="tbl">
               <thead><tr><th>Employee</th><th>Checked In</th><th>Geofence</th><th>Last Ping</th></tr></thead>
@@ -1086,6 +1101,14 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <div class="stat"><div class="stat-lbl">Approved Hours</div><div class="stat-val" id="ot-stat-approved-hours" style="color:var(--green)">0</div><div class="stat-delta">all approved requests</div></div>
       <div class="stat"><div class="stat-lbl">Payroll Value</div><div class="stat-val" style="color:var(--accent)">—</div><div class="stat-delta">calculated at payroll run</div></div>
       <div class="stat"><div class="stat-lbl">Rejected</div><div class="stat-val" id="ot-stat-rejected" style="color:var(--red)">0</div><div class="stat-delta">needs reason</div></div>
+    </div>
+    <div class="card mb16">
+      <div class="card-hd"><div><div class="card-title">Overtime Eligibility</div><div class="card-sub" id="ot-elig-note">Employees who worked past the standard day, from attendance</div></div>
+        <div class="flx"><input class="fi" type="date" id="ot-elig-from" style="width:140px"><input class="fi" type="date" id="ot-elig-to" style="width:140px"><button class="btn btn-g btn-sm" onclick="loadOtEligibility()">Refresh</button></div></div>
+      <div style="overflow-x:auto"><table class="tbl" data-delete-actions-bound="skip">
+        <thead><tr><th>Employee</th><th>Date</th><th>Clock In</th><th>Clock Out</th><th>Worked</th><th>Extra</th><th>Eligible OT</th><th>Eligibility</th><th></th></tr></thead>
+        <tbody id="ot-elig-tbody"></tbody>
+      </table></div>
     </div>
     <div class="g2 mb16">
       <div class="card">
@@ -1163,7 +1186,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Employee Loans</div><div class="card-sub">Request, approval, EMI schedule, and auto payroll deduction</div></div><button class="btn btn-p btn-sm" onclick="showM('m-loan')">+ New Loan</button></div>
         <table class="tbl" data-delete-actions-bound="skip">
-          <thead><tr><th>Employee</th><th>Type</th><th>Amount (AED)</th><th>EMI / Month</th><th>Balance</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Employee</th><th>Type</th><th data-currency-label>Amount (AED)</th><th>EMI / Month</th><th>Balance</th><th>Status</th><th></th></tr></thead>
           <tbody id="loans-tbody">
             <tr data-empty-state><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">No loan records. Click <strong>+ New Loan</strong> to create one.</td></tr>
           </tbody>
@@ -1172,7 +1195,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Salary Advances</div><div class="card-sub">One-time advance deducted from next salary</div></div><button class="btn btn-g btn-sm" onclick="showM('m-loan-advance')">+ Request Advance</button></div>
         <table class="tbl" data-delete-actions-bound="skip">
-          <thead><tr><th>Employee</th><th>Month</th><th>Amount (AED)</th><th>Requested</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Employee</th><th>Month</th><th data-currency-label>Amount (AED)</th><th>Requested</th><th>Status</th><th></th></tr></thead>
           <tbody id="advances-tbody">
             <tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No salary advance requests yet.</td></tr>
           </tbody>
@@ -1206,7 +1229,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <div class="stat"><div class="stat-lbl">Missing Data</div><div class="stat-val" id="expiry-missing" style="color:var(--text3)">—</div><div class="stat-delta">expiry not recorded</div></div>
     </div>
     <div class="card mb16">
-      <div class="card-hd"><div><div class="card-title">Document Expiry Tracker</div><div class="card-sub">Visa · Passport · Emirates ID · Insurance · Driving License · Labor Card</div></div><button class="btn btn-g btn-sm" onclick="refreshExpiryAlerts()">⟳ Refresh</button></div>
+      <div class="card-hd"><div><div class="card-title">Document Expiry Tracker</div><div class="card-sub">Visa · Passport · Emirates ID · Insurance · Driving License · Labor Card</div></div><button class="btn btn-g btn-sm" onclick="refreshExpiryAlerts()"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px;margin-right:2px"><path d="M13.5 8a5.5 5.5 0 10-1.6 3.9"/><path d="M13.5 4.5v3.5h-3.5"/></svg>Refresh</button></div>
       <table class="tbl" data-delete-actions-bound="skip">
         <thead><tr><th>Employee</th><th>Document</th><th>Expiry Date</th><th>Days Left</th><th>Status</th><th></th></tr></thead>
         <tbody id="expiry-tbody">
@@ -1344,8 +1367,8 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
           </div>
           <div id="ot-rate-fixed-cfg" class="ot-rule-config">
             <div class="fr2">
-              <div class="fg"><label class="fl">Default OT Rate (AED/hour)</label><input class="fi mono" id="ot-fixed-rate" value="45.00" placeholder="45.00"></div>
-              <div class="fg"><label class="fl">Weekend/Holiday OT Rate (AED/hour)</label><input class="fi mono" id="ot-fixed-rate-wknd" value="67.50" placeholder="67.50"></div>
+              <div class="fg"><label class="fl" data-currency-label>Default OT Rate (AED/hour)</label><input class="fi mono" id="ot-fixed-rate" value="45.00" placeholder="45.00"></div>
+              <div class="fg"><label class="fl" data-currency-label>Weekend/Holiday OT Rate (AED/hour)</label><input class="fi mono" id="ot-fixed-rate-wknd" value="67.50" placeholder="67.50"></div>
             </div>
           </div>
           <div id="ot-rate-monthly-cfg" class="ot-rule-config" style="display:none">
@@ -1354,7 +1377,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
               <div class="fg"><label class="fl">Working Days per Month</label><input class="fi mono" id="ot-work-days" value="22" placeholder="22"></div>
               <div class="fg"><label class="fl">Working Hours per Day</label><input class="fi mono" id="ot-work-hours" value="8" placeholder="8"></div>
             </div>
-            <div class="fg"><label class="fl">Example — AED 5,000 salary</label><input class="fi mono" id="ot-monthly-example" readonly value="5000 ÷ (22 × 8) = AED 28.41/hr base × multiplier" style="background:var(--bg3);color:var(--text3)"></div>
+            <div class="fg"><label class="fl" data-currency-label>Example — AED 5,000 salary</label><input class="fi mono" id="ot-monthly-example" readonly value="5000 ÷ (22 × 8) = AED 28.41/hr base × multiplier" style="background:var(--bg3);color:var(--text3)"></div>
           </div>
           <div id="ot-rate-other-cfg" class="ot-rule-config" style="display:none">
             <div class="fg"><label class="fl">Custom Rate Formula / Notes</label><textarea class="fi" id="ot-rate-formula" rows="2" placeholder="Describe how the OT rate should be calculated..."></textarea></div>
@@ -1384,6 +1407,8 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
           </div>
         </div>
       </div>
+      <div class="section-hd" style="margin:4px 0 10px">OT Cool-off</div>
+      <div class="fg" style="max-width:320px;margin-bottom:14px"><label class="fl">Cool-off before OT starts (minutes)</label><input class="fi mono" id="ot-cooloff-minutes" type="number" min="0" value="0" placeholder="0"><div style="font-size:11px;color:var(--text3);margin-top:4px">The first N minutes worked after the standard day are not counted as overtime. 0 = off.</div></div>
       <div class="section-hd" style="margin:4px 0 10px">OT Multipliers (UAE Labour Law)</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
         <div class="fg"><label class="fl">Normal OT</label><div style="position:relative"><input class="fi mono" id="ot-mult-normal" value="1.25" placeholder="1.25"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text3)">×</span></div></div>
@@ -1700,8 +1725,8 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <div class="card-hd">
         <div><div class="card-title">Users &amp; Roles</div><div class="card-sub">Assign system roles and Employee Self-Service portal access (username/password) to employees</div></div>
         <div class="flx" style="gap:8px">
-          <button class="btn btn-g btn-sm" onclick="copyEssPortalLink()">📋 Copy ESS Portal Link</button>
-          <button class="btn btn-g btn-sm" onclick="loadHrUsersAndRoles()">⟳ Refresh</button>
+          <button class="btn btn-g btn-sm" onclick="copyEssPortalLink()"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px;margin-right:2px"><rect x="4.5" y="3.5" width="8" height="10.5" rx="1.2"/><path d="M6.5 3.5V2.3a.8.8 0 01.8-.8h1.4a.8.8 0 01.8.8v1.2"/></svg>Copy ESS Portal Link</button>
+          <button class="btn btn-g btn-sm" onclick="loadHrUsersAndRoles()"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px;margin-right:2px"><path d="M13.5 8a5.5 5.5 0 10-1.6 3.9"/><path d="M13.5 4.5v3.5h-3.5"/></svg>Refresh</button>
         </div>
       </div>
       <p style="font-size:11.5px;color:var(--text3);margin:-6px 0 14px">Portal usernames are unique platform-wide, so once granted here, an employee can sign in directly at <code>/ess</code> with their username — no company link required. The link above is only needed if they're signing in with their plain Employee ID instead.</p>
@@ -1783,8 +1808,8 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
         <div><div class="card-title">Sync Activity Log</div><div class="card-sub">Last 50 punch records from all sources</div></div>
         <div style="display:flex;gap:6px;align-items:center">
           <input type="file" id="bio-csv-input" accept=".csv" style="display:none" onchange="importAttendanceCsv(this).then(()=>setTimeout(loadBioSyncLog,800))">
-          <button class="btn btn-g btn-sm" onclick="document.getElementById('bio-csv-input').click()">↑ Import CSV</button>
-          <button class="btn btn-g btn-sm" onclick="loadBioSyncLog()">⟳ Refresh</button>
+          <button class="btn btn-g btn-sm" onclick="document.getElementById('bio-csv-input').click()"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px;margin-right:2px"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2.5 10.5v2a1 1 0 001 1h9a1 1 0 001-1v-2"/></svg>Import CSV</button>
+          <button class="btn btn-g btn-sm" onclick="loadBioSyncLog()"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px;margin-right:2px"><path d="M13.5 8a5.5 5.5 0 10-1.6 3.9"/><path d="M13.5 4.5v3.5h-3.5"/></svg>Refresh</button>
         </div>
       </div>
       <div id="bio-sync-log" style="font-family:'DM Mono',monospace;font-size:11.5px;line-height:2;max-height:320px;overflow-y:auto">
@@ -2126,7 +2151,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
         <div class="fg"><label class="fl">Department</label><select class="fi" id="rota-week-department" onchange="renderRotaBoards()"><option value="">All Departments</option></select></div>
         <div class="fg"><label class="fl">Week Start</label><input class="fi mono" id="rota-week-start" type="date" value="2026-05-04" onchange="_saveRotaViewDate('week',this.value);_syncMonthPickerToWeek(this.value);renderRotaBoards()"></div>
         <div class="fg"><label class="fl">Location</label><select class="fi" id="rota-week-location" onchange="renderRotaBoards()"><option value="">All Locations</option></select></div>
-        <div class="fg"><label class="fl">Search</label><input class="fi" id="rota-staff-search" placeholder="Employee name" oninput="debouncedRenderRotaBoards()"></div>
+        <div class="fg"><label class="fl">Search</label><input class="fi" id="rota-staff-search" placeholder="Employee name" oninput="renderRotaBoards()"></div>
       </div>
       <div class="flx" style="gap:8px;flex-wrap:wrap;align-items:center;padding-bottom:8px;border-bottom:1px solid var(--border1)">
         <button class="btn btn-g btn-sm" onclick="copyPreviousRota()">Copy Previous</button>
@@ -2195,7 +2220,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <div class="fr3">
         <div class="fg"><label class="fl">Month</label><input class="fi mono" id="rota-month-value" type="month" value="2026-05" onchange="_saveRotaViewDate('month',this.value);renderRotaBoards()"></div>
         <div class="fg"><label class="fl">Department</label><select class="fi" id="rota-month-department" onchange="renderRotaBoards()"><option value="">All Departments</option></select></div>
-        <div class="fg"><label class="fl">Employee</label><input class="fi" id="rota-month-search" placeholder="Search employee" oninput="debouncedRenderRotaBoards()"></div>
+        <div class="fg"><label class="fl">Employee</label><input class="fi" id="rota-month-search" placeholder="Search employee" oninput="renderRotaBoards()"></div>
       </div>
       <!-- Copy Previous Month / Auto Fill Month / Save Status / Submit Approval /
            Publish removed by request (2026-09-22) -- Monthly Rota is a read view built
@@ -2274,11 +2299,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
         <div class="card-hd"><div class="card-title">Rota Approval Workflow</div></div>
         <table class="tbl" data-delete-actions-bound="skip">
           <thead><tr><th>Department</th><th>Period</th><th>Supervisor</th><th>Status</th><th></th></tr></thead>
-          <tbody id="rota-approval-tbody">
-            <tr><td>Sales</td><td>03-09 May</td><td>Sara</td><td><span class="b b-a">Pending Supervisor Review</span></td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="approveRotaRow(this,'Rota approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="rejectRotaRow(this,'Rota rejected')">Reject</button></div></td></tr>
-            <tr><td>Warehouse</td><td>03-09 May</td><td>John</td><td><span class="b b-g">Approved</span></td><td><button class="btn btn-p btn-sm" onclick="publishRota()">Publish</button></td></tr>
-            <tr><td>Finance</td><td>03-09 May</td><td>Rania</td><td><span class="b b-gray">Draft</span></td><td><button class="btn btn-g btn-sm">Review</button></td></tr>
-          </tbody>
+          <tbody id="rota-approval-tbody"><tr data-empty-state="1" class="tbl-empty-row"><td colspan="5"><div class="tbl-empty-inner">No rota approvals in database yet.</div></td></tr></tbody>
         </table>
       </div>
       <div class="card">
@@ -2569,7 +2590,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <div class="card">
         <div class="card-title mb12">Run Controls</div>
         <div class="fg"><label class="fl">Prepared By</label><input class="fi" id="pay-prepared-by"></div>
-        <div class="fg"><label class="fl">Payment Date</label><input class="fi" id="pay-date" type="date" value="2024-06-30"></div>
+        <div class="fg"><label class="fl">Payment Date</label><input class="fi" id="pay-date" type="date"></div>
         <div class="flx" style="flex-wrap:wrap"><button class="btn btn-g btn-sm" onclick="toast('Payroll draft locked','ok')">Lock Draft</button><button class="btn btn-success btn-sm" onclick="approvePayroll()">Approve</button></div>
       </div>
     </div>
@@ -2632,15 +2653,15 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <div class="card">
         <div class="card-hd"><div><div class="card-title">WPS / SIF File</div><div class="card-sub">Salary Information File preparation</div></div><span class="b b-a" id="wps-status">Pending validation</span></div>
         <div class="fr2">
-          <div class="fg"><label class="fl">Employer MOL ID</label><input class="fi mono" id="wps-mol-id" value="MOL-7845129"></div>
+          <div class="fg"><label class="fl">Employer MOL ID</label><input class="fi mono" id="wps-mol-id" value="" placeholder="Employer MOL ID (required)"></div>
           <div class="fg"><label class="fl">Routing Bank</label><select class="fi"><option>ADCB</option><option>Emirates NBD</option><option>FAB</option></select></div>
         </div>
         <div class="fr2">
-          <div class="fg"><label class="fl">File Sequence</label><input class="fi mono" id="wps-file-seq" value="SIF-2024-06-001"></div>
-          <div class="fg"><label class="fl">Salary Month</label><input class="fi" id="wps-salary-month" value="June 2024"></div>
+          <div class="fg"><label class="fl">File Sequence</label><input class="fi mono" id="wps-file-seq" value="" placeholder="e.g. SIF-YYYY-MM-001"></div>
+          <div class="fg"><label class="fl">Salary Month</label><input class="fi" id="wps-salary-month" value="" placeholder="e.g. September 2026"></div>
         </div>
         <div class="divider"></div>
-        <div class="flx" style="flex-wrap:wrap"><button class="btn btn-g" onclick="validateWPS()">Validate WPS</button><button class="btn btn-p" onclick="generateSIF()">Generate SIF</button><button class="btn btn-g" onclick="toast('SIF download prepared','ok')">Download</button></div>
+        <div class="flx" style="flex-wrap:wrap"><button class="btn btn-g" onclick="validateWPS()">Validate WPS</button><button class="btn btn-p" onclick="generateSIF()">Generate SIF</button></div>
       </div>
       <div class="card">
         <div class="card-hd"><div class="card-title">WPS Validation Results</div></div>
@@ -2677,7 +2698,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <div class="card" id="payslip-preview">
         <div class="card-hd"><div><div class="card-title">Payslip Preview</div><div class="card-sub">Select an employee to preview</div></div></div>
         <div style="border:1px solid var(--border);border-radius:10px;padding:18px;background:var(--bg3)">
-          <div class="flx-b mb16"><div><div class="card-title">Acme Trading LLC</div><div class="card-sub">June 2024 Payslip</div></div><span class="b b-gray">Draft</span></div>
+          <div class="flx-b mb16"><div><div class="card-title" id="payslip-company">Payslip</div><div class="card-sub" id="payslip-period">Select a payroll period</div></div><span class="b b-gray">Draft</span></div>
           <div id="payslip-body" style="font-size:13px;line-height:1.9;color:var(--text2)">No payslip selected.</div>
         </div>
       </div>
@@ -2690,7 +2711,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       <table class="tbl" data-delete-actions-bound="skip" data-keep-static="1">
         <thead><tr><th>Step</th><th>Owner</th><th>Status</th><th>Completed</th><th>Notes</th></tr></thead>
         <tbody>
-          <tr><td>Prepared</td><td>Payroll Officer</td><td><span class="b b-g">Done</span></td><td>28 Jun 17:20</td><td>Attendance and adjustments imported</td></tr>
+          <tr><td>Prepared</td><td>Payroll Officer</td><td><span class="b b-a" id="pay-prep-status">Pending</span></td><td id="pay-prep-time">—</td><td>Attendance and adjustments imported</td></tr>
           <tr><td>Finance Review</td><td>Finance Manager</td><td><span class="b b-a" id="pay-fin-status">Pending</span></td><td>—</td><td>Review WPS exception before approval</td></tr>
           <tr><td>Management Approval</td><td>General Manager</td><td><span class="b b-gray" id="pay-mgmt-status">Waiting</span></td><td>—</td><td>Required before SIF release</td></tr>
           <tr><td>Bank Upload</td><td>Treasury</td><td><span class="b b-gray">Waiting</span></td><td>—</td><td>Upload SIF after approval</td></tr>
@@ -2747,8 +2768,8 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
     <div class="fr3"><div class="fg"><label class="fl">Employee ID</label><input class="fi mono" id="emp-id" placeholder="EMP-005"></div><div class="fg"><label class="fl">Employment Type</label><select class="fi" id="emp-contract"><option>Full-Time</option><option>Part-Time</option><option>Contract</option><option>Probation</option><option>Intern / Trainee</option><option>Daily Wage</option><option>Hourly</option><option>Weekly</option><option>Short-Term</option><option>Freelance / Consultant</option><option>Seasonal</option><option>Project-Based</option></select></div><div class="fg"><label class="fl">Join Date</label><input class="fi" id="emp-join-date" type="date"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Department <span style="color:var(--red)">*</span></label><select class="fi" id="emp-department" required onchange="filterEmpRoles()"><option value="">— Select Department —</option></select></div><div class="fg"><label class="fl">Designation</label><input class="fi" id="emp-designation" placeholder="e.g. Sales Executive"></div><div class="fg"><label class="fl">Branch <span style="color:var(--red)">*</span></label><select class="fi" id="emp-branch" required onchange="filterEmpRoles()"><option value="">— Select Branch —</option></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Role <span style="color:var(--red)">*</span></label><select class="fi" id="emp-role"><option value="">— Select Branch &amp; Department first —</option></select></div><div class="fg" style="align-self:flex-end"><div style="font-size:11px;color:var(--text3);padding-bottom:6px">Role options update automatically when Branch and Department are selected.</div></div><div class="fg"><label class="fl">Supervisor</label><input class="fi" id="emp-supervisor" placeholder="e.g. Ahmed Al Mansouri"></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Basic Salary (AED)</label><input class="fi mono" id="emp-salary"></div><div class="fg"><label class="fl">OT Policy</label><select class="fi" id="emp-ot-rate"><option value="system-default">— System Default (from HR Settings) —</option><option value="fixed">Fixed Rate</option><option value="monthly">Monthly-Based Rate</option><option value="other">Other / Custom</option></select></div><div class="fg"><label class="fl">Leave Policy</label><select class="fi" id="emp-leave-policy"><option value="">— Select Leave Policy —</option></select></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Housing Allowance (AED)</label><input class="fi mono" id="emp-housing-allowance" type="number" min="0" step="0.01" value="0"></div><div class="fg"><label class="fl">Transport Allowance (AED)</label><input class="fi mono" id="emp-transport-allowance" type="number" min="0" step="0.01" value="0"></div><div class="fg"><label class="fl">Other Allowance (AED)</label><input class="fi mono" id="emp-other-allowance" type="number" min="0" step="0.01" value="0"></div></div>
+    <div class="fr3"><div class="fg"><label class="fl" data-currency-label>Basic Salary (AED)</label><input class="fi mono" id="emp-salary"></div><div class="fg"><label class="fl">OT Policy</label><select class="fi" id="emp-ot-rate"><option value="system-default">— System Default (from HR Settings) —</option><option value="fixed">Fixed Rate</option><option value="monthly">Monthly-Based Rate</option><option value="other">Other / Custom</option></select></div><div class="fg"><label class="fl">Leave Policy</label><select class="fi" id="emp-leave-policy"><option value="">— Select Leave Policy —</option></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl" data-currency-label>Housing Allowance (AED)</label><input class="fi mono" id="emp-housing-allowance" type="number" min="0" step="0.01" value="0"></div><div class="fg"><label class="fl" data-currency-label>Transport Allowance (AED)</label><input class="fi mono" id="emp-transport-allowance" type="number" min="0" step="0.01" value="0"></div><div class="fg"><label class="fl" data-currency-label>Other Allowance (AED)</label><input class="fi mono" id="emp-other-allowance" type="number" min="0" step="0.01" value="0"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Shift Hours</label><select class="fi" id="emp-shift-hours-type"><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div><div class="fg"><label class="fl">Hours</label><input class="fi mono" id="emp-shift-hours" type="number" min="0" placeholder="e.g. 40"></div><div class="fg"><label class="fl">Work Location</label><select class="fi" id="emp-location"><option value="">— Select Location —</option></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Work Permit No.</label><input class="fi mono" id="emp-work-permit"></div><div class="fg"><label class="fl">Visa Expiry</label><input class="fi" id="emp-visa-expiry" type="date"></div><div class="fg"><label class="fl">Cost Center</label><input class="fi" id="emp-cost-center" placeholder="e.g. CC-01-OPS"></div></div>
     <div class="fr2"><div class="fg"><label class="fl">Emergency Contact Name</label><input class="fi" id="emp-emergency" placeholder="Full name"></div><div class="fg"><label class="fl">Emergency Contact Mobile</label><input class="fi mono" id="emp-emergency-mobile" placeholder="+971..."></div></div>
@@ -2904,7 +2925,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 <div class="overlay" id="m-loan" onclick="closeOvBg(event,'m-loan')">
   <div class="modal"><div class="modal-title">New Loan Request</div><div class="modal-sub">Employee loan with EMI and auto payroll deduction</div>
     <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="loan-employee"><option value="">— Select Employee —</option></select></div><div class="fg"><label class="fl">Loan Type</label><select class="fi" id="loan-type"><option>Personal Loan</option><option>Emergency Loan</option><option>Medical Loan</option><option>Home Furnishing Loan</option><option>Education Loan</option><option>Vehicle Loan</option></select></div></div>
-    <div class="fr3"><div class="fg"><label class="fl">Loan Amount (AED)</label><input class="fi mono" id="loan-amount" placeholder="5000.00" oninput="calcLoanEmi()"></div><div class="fg"><label class="fl">Repayment (Months)</label><input class="fi mono" id="loan-months" value="6" oninput="calcLoanEmi()"></div><div class="fg"><label class="fl">Monthly EMI (AED)</label><input class="fi mono" id="loan-emi" readonly style="color:var(--accent);font-weight:600"></div></div>
+    <div class="fr3"><div class="fg"><label class="fl" data-currency-label>Loan Amount (AED)</label><input class="fi mono" id="loan-amount" placeholder="5000.00" oninput="calcLoanEmi()"></div><div class="fg"><label class="fl">Repayment (Months)</label><input class="fi mono" id="loan-months" value="6" oninput="calcLoanEmi()"></div><div class="fg"><label class="fl" data-currency-label>Monthly EMI (AED)</label><input class="fi mono" id="loan-emi" readonly style="color:var(--accent);font-weight:600"></div></div>
     <div class="fg"><label class="fl">Purpose / Reason</label><textarea class="fi" id="loan-reason" rows="3" placeholder="Describe the purpose of this loan request"></textarea></div>
     <div class="fr2"><div class="fg"><label class="fl">Requested Date</label><input class="fi" id="loan-date" type="date"></div><div class="fg"><label class="fl">First Deduction Month</label><input class="fi" id="loan-deduct-from" type="month"></div></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-loan')">Cancel</button><button class="btn btn-p" onclick="saveLoan()">Submit Loan Request</button></div>
@@ -2914,7 +2935,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 <div class="overlay" id="m-loan-advance" onclick="closeOvBg(event,'m-loan-advance')">
   <div class="modal"><div class="modal-title">Salary Advance Request</div><div class="modal-sub">One-time advance deducted from next salary run</div>
     <div class="fr2"><div class="fg"><label class="fl">Employee</label><select class="fi" id="advance-employee"><option value="">— Select Employee —</option></select></div><div class="fg"><label class="fl">Advance Month</label><input class="fi" id="advance-month" type="month"></div></div>
-    <div class="fg"><label class="fl">Advance Amount (AED)</label><input class="fi mono" id="advance-amount" placeholder="Max 50% of basic salary"></div>
+    <div class="fg"><label class="fl" data-currency-label>Advance Amount (AED)</label><input class="fi mono" id="advance-amount" placeholder="Max 50% of basic salary"></div>
     <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="advance-reason" rows="3" placeholder="Brief reason for salary advance request"></textarea></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-loan-advance')">Cancel</button><button class="btn btn-p" onclick="saveLoanAdvance()">Submit Advance</button></div>
   </div>
@@ -2924,7 +2945,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
   <div class="modal modal-lg"><div class="modal-title">New Job Requisition</div><div class="modal-sub">Open a position and begin the hiring process</div>
     <div class="fr3"><div class="fg"><label class="fl">Job Title</label><input class="fi" id="req-title" placeholder="e.g. Sales Executive"></div><div class="fg"><label class="fl">Department</label><select class="fi" id="req-dept"><option value="">— Select Department —</option></select></div><div class="fg"><label class="fl">No. of Positions</label><input class="fi mono" id="req-positions" value="1"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Employment Type</label><select class="fi" id="req-emp-type"><option>Full-Time</option><option>Part-Time</option><option>Contract</option><option>Internship</option><option>Freelance</option></select></div><div class="fg"><label class="fl">Location</label><select class="fi" id="req-location"><option value="">— Select Location —</option></select></div><div class="fg"><label class="fl">Target Date</label><input class="fi" id="req-date" type="date"></div></div>
-    <div class="fr2"><div class="fg"><label class="fl">Salary Range From (AED)</label><input class="fi mono" id="req-sal-from" placeholder="3000"></div><div class="fg"><label class="fl">Salary Range To (AED)</label><input class="fi mono" id="req-sal-to" placeholder="6000"></div></div>
+    <div class="fr2"><div class="fg"><label class="fl" data-currency-label>Salary Range From (AED)</label><input class="fi mono" id="req-sal-from" placeholder="3000"></div><div class="fg"><label class="fl" data-currency-label>Salary Range To (AED)</label><input class="fi mono" id="req-sal-to" placeholder="6000"></div></div>
     <div class="fg"><label class="fl">Job Description</label><textarea class="fi" id="req-description" rows="4" placeholder="Responsibilities, requirements, and key skills"></textarea></div>
     <div class="fg"><label class="fl">Approval Required</label><select class="fi" id="req-approval"><option>HR Manager Only</option><option>Department Head + HR</option><option>MD Approval Required</option></select></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-recruitment')">Cancel</button><button class="btn btn-p" onclick="saveJobRequisition()">Create Requisition</button></div>
@@ -2935,7 +2956,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
   <div class="modal modal-lg"><div class="modal-title">Add Candidate</div><div class="modal-sub">Register applicant for a job opening</div>
     <div class="fr3"><div class="fg"><label class="fl">Full Name</label><input class="fi" id="cand-name"></div><div class="fg"><label class="fl">Mobile</label><input class="fi mono" id="cand-mobile" placeholder="+971..."></div><div class="fg"><label class="fl">Email</label><input class="fi" id="cand-email" type="email"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Applied Position</label><input class="fi" id="cand-position" placeholder="Job title"></div><div class="fg"><label class="fl">Nationality</label><select class="fi" id="cand-nationality"><option>UAE</option><option>India</option><option>Pakistan</option><option>Philippines</option><option>Other</option></select></div><div class="fg"><label class="fl">Experience (Years)</label><input class="fi mono" id="cand-exp" placeholder="3"></div></div>
-    <div class="fr2"><div class="fg"><label class="fl">Expected Salary (AED)</label><input class="fi mono" id="cand-salary" placeholder="5000"></div><div class="fg"><label class="fl">Visa Status</label><select class="fi" id="cand-visa"><option>Visit Visa</option><option>Employment Visa</option><option>Residence Visa</option><option>Freelance Permit</option><option>Requires Sponsorship</option></select></div></div>
+    <div class="fr2"><div class="fg"><label class="fl" data-currency-label>Expected Salary (AED)</label><input class="fi mono" id="cand-salary" placeholder="5000"></div><div class="fg"><label class="fl">Visa Status</label><select class="fi" id="cand-visa"><option>Visit Visa</option><option>Employment Visa</option><option>Residence Visa</option><option>Freelance Permit</option><option>Requires Sponsorship</option></select></div></div>
     <div class="fr2"><div class="fg"><label class="fl">Source</label><select class="fi" id="cand-source"><option>LinkedIn</option><option>Bayt.com</option><option>Indeed</option><option>GulfTalent</option><option>Walk-in</option><option>Referral</option><option>Agency</option></select></div><div class="fg"><label class="fl">Stage</label><select class="fi" id="cand-stage"><option>Applied</option><option>Screening</option><option>Interview Scheduled</option><option>Offer Sent</option><option>Hired</option><option>Rejected</option></select></div></div>
     <div class="fg"><label class="fl">CV / Resume</label><input class="fi" id="cand-cv" type="file" accept=".pdf,.doc,.docx"></div>
     <div class="fg"><label class="fl">Notes</label><textarea class="fi" id="cand-notes" rows="3" placeholder="Recruiter notes, interview feedback..."></textarea></div>
@@ -3069,7 +3090,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/app.js?v=bcbc27adc4" defer></script>
+<script src="src/app.js?v=0d123b28fb" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
@@ -3259,7 +3280,7 @@ function hrsTab(section){
           <div style="font-size:12px;color:var(--text3)">Structure · Departments · Branches · Headcount</div>
         </div>
       </div>
-      <button class="btn btn-g btn-sm" onclick="refreshOrgPage()">⟳ Refresh</button>
+      <button class="btn btn-g btn-sm" onclick="refreshOrgPage()"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px;margin-right:2px"><path d="M13.5 8a5.5 5.5 0 10-1.6 3.9"/><path d="M13.5 4.5v3.5h-3.5"/></svg>Refresh</button>
     </div>
 
     <!-- KPI row -->
@@ -3332,8 +3353,8 @@ function hrsTab(section){
 <!-- END ORGANIZATION PAGE -->
 
 <script>
-function hrmsSignOut(){
-  if(confirm('Sign out of HRMS?'))logout();
+async function hrmsSignOut(){
+  if(await appConfirm({title:'Sign Out',message:'Sign out of HRMS?',okText:'Sign Out'}))logout();
 }
 
 // Apply role-based sidebar visibility for HRMS. Works for either login path
@@ -3500,11 +3521,18 @@ document.addEventListener('DOMContentLoaded',function(){
         var otCount=otEl?parseInt(otEl.textContent)||0:0;
         var loanEl=document.getElementById('hrms-dash-loans');
         var loanCount=loanEl?parseInt(loanEl.textContent)||0:0;
-        if(document.getElementById('hrms-appr-leave'))document.getElementById('hrms-appr-leave').textContent=pendCount||'0';
-        if(document.getElementById('hrms-appr-ot'))document.getElementById('hrms-appr-ot').textContent=otCount||'0';
-        if(document.getElementById('hrms-appr-corr'))document.getElementById('hrms-appr-corr').textContent='0';
-        if(document.getElementById('hrms-appr-loans'))document.getElementById('hrms-appr-loans').textContent=loanCount||'0';
-        if(document.getElementById('hrms-appr-advances'))document.getElementById('hrms-appr-advances').textContent='0';
+        (async function(){
+          var pending=function(r){return /^(pending|submitted|requested|new)?$/i.test(String((r&&r.status)||'').trim());};
+          var count=async function(path,key){
+            try{var d=await moduleApi(path);var rows=Array.isArray(d)?d:(d.records||[]);return rows.filter(pending).length;}catch(e){return null;}
+          };
+          var set=function(id,v){var el=document.getElementById(id);if(el&&v!==null)el.textContent=v;};
+          set('hrms-appr-leave',await count('/leave/requests'));
+          set('hrms-appr-ot',await count('/app-data/records/overtimeRequests?limit=500'));
+          set('hrms-appr-corr',await count('/app-data/records/attendanceCorrections?limit=500'));
+          set('hrms-appr-loans',await count('/app-data/records/employeeLoans?limit=500'));
+          set('hrms-appr-advances',await count('/app-data/records/salaryAdvances?limit=500'));
+        })();
         // Notification badge
         var totalAlerts=(parseInt(otCount)||0)+(parseInt(loanCount)||0);
         var notifBadge=document.getElementById('hrms-notif-badge');

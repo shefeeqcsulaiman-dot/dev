@@ -3,9 +3,11 @@ import hashlib
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from app.dependencies import Principal, get_current_principal, get_current_user, get_db
+from app.security import hash_password
 from app.models import Company, User, uuid as _new_uuid
 from app.schemas import CompanyOut, CompanyUpdate
 
@@ -169,6 +171,43 @@ def update_company(
         company.trn = payload.trn
 
     db.add(company)
+    if payload.trn:
+        clash = db.query(Company.id).filter(Company.trn == payload.trn, Company.id != company.id).first()
+        if clash:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="This TRN is already registered to another company")
     db.commit()
     db.refresh(company)
     return _to_company_out(company)
+
+
+class NewCompanyUserIn(BaseModel):
+    email: EmailStr
+    full_name: str = ""
+    password: str = Field(min_length=6)
+    role: str = "user"
+
+
+@router.post("/current/users", status_code=201)
+def create_company_user(
+    body: NewCompanyUserIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Company admin creates a login for a colleague in their own company."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only a company admin can add users")
+    email = body.email.strip().lower()
+    if db.query(User).filter(User.email == email).first():
+        raise HTTPException(status_code=409, detail="Email already registered")
+    role = body.role if body.role in ("user", "accountant", "viewer") else "user"
+    user = User(
+        company_id=current_user.company_id,
+        email=email,
+        full_name=body.full_name.strip() or email,
+        password_hash=hash_password(body.password),
+        role=role,
+    )
+    db.add(user)
+    db.commit()
+    return {"ok": True, "user_id": user.id}

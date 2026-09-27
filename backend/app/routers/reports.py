@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from datetime import date as _date, timedelta
 from decimal import Decimal
 from typing import Any
@@ -13,14 +14,18 @@ from sqlalchemy.orm import Session
 import app.cache as cache
 from app.auth_principal import Principal, require_principal_permission, resolve_active_branch
 from app.database import get_db
+from app.dependencies import get_current_user
 from app.limiter import limiter
+from app.routers.attendance import _company_offset, _local_today
 from app.models import (
     Account,
     AccrualPrepaymentRecord,
     AppDataRecord,
+    AttendanceDetail,
     AuditLog,
     AuditLogDetail,
     Branch,
+    Company,
     BudgetRecord,
     CashFlowForecastRecord,
     ConsolidationRecord,
@@ -28,16 +33,25 @@ from app.models import (
     CostCenterRecord,
     Document,
     Employee,
+    ExceptionEvent,
     FixedAssetRecord,
     GeneralLedgerEntry,
     Invoice,
+    Job,
     JournalEntry,
     JournalLine,
+    LeaveRequest,
     MonthEndCloseRecord,
+    Payment,
+    PayrollItem,
     PayrollRun,
+    Receipt,
     SourceTransaction,
+    StockProductMapping,
     TaxCode,
     TaxLine,
+    User,
+    Warehouse,
 )
 
 
@@ -116,6 +130,94 @@ def branch_performance(request: Request, db: Session = Depends(get_db), principa
     }
 
 
+def _pending_appdata_count(db: Session, company_id: str, collection: str) -> int:
+    """Overtime requests and attendance corrections are AppDataRecord-backed
+    (no dedicated SQL table, unlike LeaveRequest), so "pending" isn't a
+    column to filter on in SQL -- has to be read out of each row's JSON
+    payload. Same "small admin-managed list" scale assumption already made
+    elsewhere for these exact collections (see loans/jobRequisitions'
+    own comment), and this dashboard build is cached 60s (_cached_or_build),
+    so one Python-side scan per cache period is cheap enough."""
+    rows = db.query(AppDataRecord.payload).filter(
+        AppDataRecord.company_id == company_id,
+        AppDataRecord.collection == collection,
+    ).all()
+    pending = 0
+    for (payload,) in rows:
+        try:
+            data = json.loads(payload) if payload else {}
+        except (TypeError, ValueError):
+            continue
+        if str(data.get("status") or "").strip().lower() == "pending":
+            pending += 1
+    return pending
+
+
+def _hr_dashboard_snapshot(db: Session, company_id: str, app_counts: dict[str, int]) -> dict[str, Any]:
+    """Workforce snapshot for the main (non-HRMS-portal) Dashboard's own
+    "Branch Performance"-style card -- same 6 figures as hrms.html's own KPI
+    row (refreshHrmsKpis()), computed server-side here since index.html never
+    loads the HR AppDataRecord tables (#employee-tbody etc.) that function
+    reads from the DOM. Deliberately real queries, not the dashboard's other
+    HR-ish fields (staff_present/staff_today above) which are long-standing
+    employee_count-as-present-count placeholders -- see this endpoint's own
+    payroll_net/staff_today fields for that pre-existing shortcut, untouched
+    here since fixing those is a separate concern."""
+    today = _local_today(_company_offset(db, company_id)).isoformat()
+    active_employee_count = int(
+        db.query(func.count(Employee.id))
+        .filter(Employee.company_id == company_id, Employee.status == "active")
+        .scalar() or 0
+    )
+    present_today = int(
+        db.query(func.count(func.distinct(AttendanceDetail.employee_id)))
+        .join(Employee, Employee.employee_no == AttendanceDetail.employee_id)
+        .filter(
+            AttendanceDetail.company_id == company_id,
+            Employee.company_id == company_id,
+            Employee.status == "active",
+            AttendanceDetail.work_date == today,
+            AttendanceDetail.clock_in_1.isnot(None),
+        )
+        .scalar() or 0
+    )
+    on_leave_today = int(
+        db.query(func.count(LeaveRequest.id))
+        .filter(
+            LeaveRequest.company_id == company_id,
+            LeaveRequest.status == "approved",
+            LeaveRequest.start_date <= today,
+            LeaveRequest.end_date >= today,
+        )
+        .scalar() or 0
+    )
+    pending_leave = int(
+        db.query(func.count(LeaveRequest.id))
+        .filter(LeaveRequest.company_id == company_id, LeaveRequest.status == "pending")
+        .scalar() or 0
+    )
+    current_month = today[:7]
+    net_payroll_this_month = money(
+        db.query(func.coalesce(func.sum(PayrollRun.net_total), 0))
+        .filter(PayrollRun.company_id == company_id, PayrollRun.period == current_month)
+        .scalar()
+    )
+    pending_ot = _pending_appdata_count(db, company_id, "overtimeRequests")
+    pending_corrections = _pending_appdata_count(db, company_id, "attendanceCorrections")
+    return {
+        "employee_count": active_employee_count,
+        "present_today": present_today,
+        "on_leave_today": on_leave_today,
+        "pending_approvals": pending_leave + pending_ot + pending_corrections,
+        "net_payroll_this_month": amount(net_payroll_this_month),
+        # jobRequisitions has no "open" vs "filled" status split in the UI
+        # either (hrms.html's own "Open Positions" tile is the same raw
+        # count, see refreshHrmsKpis()'s openRecs) -- matched here rather
+        # than inventing a stricter definition this endpoint alone enforces.
+        "open_positions": app_counts.get("jobRequisitions", 0),
+    }
+
+
 def _build_dashboard(db: Session, company_id: str, branch_id: str | None = None) -> dict[str, Any]:
     # branch_id scopes revenue/purchases/invoices — the figures a branch
     # manager actually asked to see broken out per branch. Staff/payroll
@@ -147,7 +249,16 @@ def _build_dashboard(db: Session, company_id: str, branch_id: str | None = None)
     payroll_net = money(db.query(func.coalesce(func.sum(PayrollRun.net_total), 0)).filter(PayrollRun.company_id == company_id).scalar())
     output_vat = money(db.query(func.coalesce(func.sum(TaxLine.tax_amount), 0)).filter(TaxLine.company_id == company_id, TaxLine.direction == "output").scalar())
     input_vat = money(db.query(func.coalesce(func.sum(TaxLine.tax_amount), 0)).filter(TaxLine.company_id == company_id, TaxLine.direction == "input").scalar())
-    output_vat += sum((record_amount(row, "vat_amount", "vat", "tax_amount") for row in app_sales), Decimal("0.00"))
+    # Only recognized-revenue (issued/paid) or credit-note app_sales rows —
+    # _build_summary() below already excludes drafts from this same VAT
+    # figure; this reimplementation didn't, so a draft app-data sales row's
+    # VAT was counted here but not there, and the Dashboard's "Net VAT
+    # Payable" tile could disagree with the VAT Report tab for identical
+    # underlying data.
+    output_vat += sum(
+        (record_amount(row, "vat_amount", "vat", "tax_amount") for row in app_sales if _is_recognized_revenue_status(row.get("status")) or _is_credit_note(row)),
+        Decimal("0.00"),
+    )
     input_vat += sum((record_amount(row, "tax_amount", "vat_amount", "vat") for row in app_purchases), Decimal("0.00"))
     vat_payable = output_vat - input_vat
 
@@ -194,6 +305,7 @@ def _build_dashboard(db: Session, company_id: str, branch_id: str | None = None)
     }
     status = invoice_status(db, company_id, app_sales, branch_id)
     pur_summary = _purchase_summary(db, company_id, branch_id)
+    hr_snapshot = _hr_dashboard_snapshot(db, company_id, app_counts)
     return {
         "kpis": {
             "revenue": amount(revenue),
@@ -212,6 +324,7 @@ def _build_dashboard(db: Session, company_id: str, branch_id: str | None = None)
         "top_customers": top_customers(db, company_id, app_sales, branch_id),
         "invoice_status": status,
         "purchase_summary": pur_summary,
+        "hr_snapshot": hr_snapshot,
         "staff_today": {
             "present": employee_count,
             "total": employee_count,
@@ -614,7 +727,7 @@ def _purchase_summary(db: Session, company_id: str, branch_id: str | None = None
     }
 
 
-_INVOICE_STATUS_KEY = {"paid": "paid", "issued": "pending", "pending": "pending", "overdue": "overdue", "cancelled": "overdue", "draft": "draft"}
+_INVOICE_STATUS_KEY = {"paid": "paid", "issued": "pending", "pending": "pending", "overdue": "overdue", "cancelled": "cancelled", "draft": "draft"}
 
 
 def invoice_status(db: Session, company_id: str, app_sales: list[dict[str, Any]], branch_id: str | None = None) -> dict[str, dict[str, str | int]]:
@@ -633,7 +746,11 @@ def invoice_status(db: Session, company_id: str, app_sales: list[dict[str, Any]]
         # Same NULL-stays-visible rule as _posted_journal_line_totals().
         query = query.filter((Invoice.branch_id == branch_id) | (Invoice.branch_id.is_(None)))
     rows = query.group_by(Invoice.status).all()
-    buckets: dict[str, dict[str, Any]] = {k: {"count": 0, "amount": Decimal("0.00")} for k in ("paid", "pending", "overdue", "draft")}
+    # "cancelled" used to be merged into the "overdue" bucket, which is
+    # actively misleading — a voided invoice isn't awaiting collection, it
+    # was never going to be collected. It gets its own bucket, and (like
+    # draft) is excluded from the overall total — it was never a real sale.
+    buckets: dict[str, dict[str, Any]] = {k: {"count": 0, "amount": Decimal("0.00")} for k in ("paid", "pending", "overdue", "draft", "cancelled")}
     total_count = 0
     total_amount = Decimal("0.00")
     for status, row_count, row_total, row_subtotal in rows:
@@ -643,12 +760,12 @@ def invoice_status(db: Session, company_id: str, app_sales: list[dict[str, Any]]
         if key:
             buckets[key]["count"] += row_count
             buckets[key]["amount"] += money(row_total)
-        if status_norm != "draft":
+        if status_norm not in {"draft", "cancelled"}:
             total_count += row_count
             total_amount += money(row_subtotal)
     for invoice in app_sales:
         status = normalized_ref(invoice.get("status"))
-        if status != "draft":
+        if status not in {"draft", "cancelled"}:
             total_count += 1
             total_amount += record_amount(invoice, "subtotal", "net_amount", "amount")
         key = _INVOICE_STATUS_KEY.get(status) or ("pending" if status in {"ready", "sent", "unpaid"} else None)
@@ -711,9 +828,9 @@ def _build_branch_performance(db: Session, company_id: str) -> dict[str, Any]:
             b["pending_amount"] += record_amount(row, "total", "amount", "net_amount")
 
     for row, branch_id in app_data_payloads_with_branch(db, company_id, "purchaseRecords"):
-        bucket(branch_id)["purchases"] += _purchase_row_amount(row)
+        bucket(branch_id)["purchases"] += _purchase_row_net(row)
     for row, branch_id in app_data_payloads_with_branch(db, company_id, "bills"):
-        bucket(branch_id)["purchases"] += _purchase_row_amount(row)
+        bucket(branch_id)["purchases"] += _purchase_row_net(row)
 
     # Every real Branch must appear in the response even with zero activity
     # so far — otherwise a newly created (or simply quiet) branch never
@@ -900,6 +1017,256 @@ def _is_credit_note(row: dict[str, Any]) -> bool:
     return "return" in text and record_amount(row, "total", "amount", "net_amount") < 0
 
 
+def _ebitda_breakdown(db: Session, company_id: str, net_profit: Decimal) -> dict[str, Any]:
+    """Real EBITDA add-backs, not net profit relabeled (the previous "EBITDA
+    Est." tile literally set itself to net_profit -- see
+    renderProfitabilityAnalytics() in app.js before this). Interest and
+    Depreciation/Amortization aren't tracked as their own concept anywhere in
+    this app: there's no dedicated account category for them, and fixed-asset
+    depreciation (FixedAssetRecord.accumulated_depreciation) is never posted
+    to the GL as an expense at all (accounting_posting.py has no posting path
+    for it). Inferred here instead from GL activity against any expense
+    account whose NAME contains "interest"/"depreciation"/"amortization" —
+    correct for a company that names its accounts conventionally, AED 0 add-
+    back (not a guess) for one that hasn't set such accounts up at all.
+    Corporate tax is the one add-back that's genuinely reliable: the seeded
+    chart of accounts always creates code "5100" for it (company_defaults.py)."""
+    accounts = db.query(Account).filter(Account.company_id == company_id, Account.is_active.is_(True)).all()
+
+    def _sum_debits(account_ids: list[str]) -> Decimal:
+        if not account_ids:
+            return Decimal("0.00")
+        return money(
+            db.query(func.coalesce(func.sum(GeneralLedgerEntry.debit - GeneralLedgerEntry.credit), 0))
+            .filter(GeneralLedgerEntry.company_id == company_id, GeneralLedgerEntry.account_id.in_(account_ids))
+            .scalar()
+        )
+
+    tax_ids = [a.id for a in accounts if a.code == "5100" or "corporate tax" in a.name.lower()]
+    interest_ids = [a.id for a in accounts if "interest" in a.name.lower()]
+    da_ids = [
+        a.id for a in accounts
+        if "depreciation" in a.name.lower() or "amortization" in a.name.lower() or "amortisation" in a.name.lower()
+    ]
+    tax = _sum_debits(tax_ids)
+    interest = _sum_debits(interest_ids)
+    depreciation_amortization = _sum_debits(da_ids)
+    ebitda = money(net_profit + tax + interest + depreciation_amortization)
+    return {
+        "net_profit": amount(net_profit),
+        "tax_addback": amount(tax),
+        "interest_addback": amount(interest),
+        "depreciation_amortization_addback": amount(depreciation_amortization),
+        "ebitda": amount(ebitda),
+        "addbacks_are_estimates": not (tax_ids or interest_ids or da_ids),
+    }
+
+
+# Revenue-side vs expense-side Account.type values, matching the seeded
+# chart of accounts (company_defaults.py: "sales" is the only revenue type;
+# "purchase"/"direct expense"/"indirect expense" are the three expense types).
+_REVENUE_ACCOUNT_TYPES = {"sales"}
+_EXPENSE_ACCOUNT_TYPES = {"purchase", "direct expense", "indirect expense"}
+
+
+def _cost_center_breakdown(db: Session, company_id: str, branch_id: str | None) -> list[dict[str, Any]]:
+    """Real GL-based P&L per cost centre. cost_center (GeneralLedgerEntry.
+    cost_center) is populated only when a transaction goes through
+    Accounting > Vouchers with a cost centre selected — auto-posted Sales/
+    Purchase/Receipt/Payment entries never set it (create_gl_entries_from_
+    journal() is never called with cost_center from accounting_posting.py's
+    own auto-posting paths, only from the manual voucher path in
+    routers/accounting.py). Entries with no cost centre are grouped under
+    "Unassigned" rather than dropped, so totals here still reconcile to the
+    real GL and a company that hasn't adopted cost centres yet still gets a
+    truthful (if unsegmented) answer instead of an empty report."""
+    accounts_by_id = {a.id: a for a in db.query(Account).filter(Account.company_id == company_id).all()}
+    query = db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == company_id)
+    if branch_id:
+        query = query.filter((GeneralLedgerEntry.branch_id == branch_id) | (GeneralLedgerEntry.branch_id.is_(None)))
+    buckets: dict[str, dict[str, Decimal]] = {}
+    for row in query.all():
+        account = accounts_by_id.get(row.account_id)
+        if not account or account.is_group:
+            continue
+        key = (row.cost_center or "").strip() or "Unassigned"
+        bucket = buckets.setdefault(key, {"revenue": Decimal("0.00"), "expense": Decimal("0.00")})
+        if account.type in _REVENUE_ACCOUNT_TYPES:
+            bucket["revenue"] += money(row.credit) - money(row.debit)
+        elif account.type in _EXPENSE_ACCOUNT_TYPES:
+            bucket["expense"] += money(row.debit) - money(row.credit)
+    # Company-wide totals, for each center's SHARE of total revenue/expense
+    # alongside its own margin — margin_pct alone doesn't tell a reader
+    # whether a high-margin center is a small side operation or the bulk of
+    # the business.
+    total_revenue = sum((v["revenue"] for v in buckets.values()), Decimal("0.00"))
+    total_expense = sum((v["expense"] for v in buckets.values()), Decimal("0.00"))
+    result = []
+    for key, vals in buckets.items():
+        revenue, expense = vals["revenue"], vals["expense"]
+        profit = revenue - expense
+        margin = (profit / revenue * Decimal("100")).quantize(Decimal("0.01")) if revenue else Decimal("0.00")
+        result.append({
+            "cost_center": key,
+            "revenue": amount(revenue),
+            "expense": amount(expense),
+            "profit": amount(profit),
+            "margin_pct": amount(margin),
+            "revenue_pct_of_total": amount((revenue / total_revenue * Decimal("100")).quantize(Decimal("0.01")) if total_revenue else Decimal("0.00")),
+            "expense_pct_of_total": amount((expense / total_expense * Decimal("100")).quantize(Decimal("0.01")) if total_expense else Decimal("0.00")),
+        })
+    result.sort(key=lambda r: Decimal(r["profit"]), reverse=True)
+    return result
+
+
+def _department_payroll_breakdown(db: Session, company_id: str) -> list[dict[str, Any]]:
+    """Payroll cost by department — the one real, trackable per-department
+    financial figure in this system. Employee.department exists, but no
+    Invoice/Bill/Expense record carries a department at all (grep-confirmed;
+    only Employee and a couple of HR/approval-matrix tables do), so a full
+    revenue/profit-by-department breakdown isn't computable from real data.
+    Deliberately labeled "payroll cost", never "profit" or "P&L", so this
+    doesn't imply precision the underlying data doesn't have."""
+    rows = (
+        db.query(Employee.department, func.coalesce(func.sum(PayrollItem.net_pay), 0))
+        .join(PayrollItem, PayrollItem.employee_id == Employee.id)
+        .join(PayrollRun, PayrollRun.id == PayrollItem.run_id)
+        .filter(Employee.company_id == company_id, PayrollRun.company_id == company_id)
+        .group_by(Employee.department)
+        .all()
+    )
+    priced = [(dept or "Unassigned", money(cost)) for dept, cost in rows]
+    total = sum((cost for _, cost in priced), Decimal("0.00")) or Decimal("1.00")
+    priced.sort(key=lambda r: r[1], reverse=True)
+    # Active headcount per department — separate from the payroll-cost query
+    # above (an INNER JOIN through PayrollItem, so it only ever sees
+    # employees who've actually appeared in a run) so a department with
+    # active staff who haven't been through payroll yet still gets a real
+    # headcount instead of silently missing from this breakdown.
+    headcount_rows = (
+        db.query(Employee.department, func.count(Employee.id))
+        .filter(Employee.company_id == company_id, Employee.status == "active")
+        .group_by(Employee.department)
+        .all()
+    )
+    headcount_by_dept = {(dept or "Unassigned"): int(n) for dept, n in headcount_rows}
+    return [
+        {
+            "department": dept,
+            "payroll_cost": amount(cost),
+            "pct_of_total_payroll": amount((cost / total * Decimal("100")).quantize(Decimal("0.01"))),
+            "headcount": headcount_by_dept.get(dept, 0),
+            "cost_per_employee": amount(
+                (cost / headcount_by_dept[dept]).quantize(Decimal("0.01"))
+                if headcount_by_dept.get(dept) else Decimal("0.00")
+            ),
+        }
+        for dept, cost in priced
+    ]
+
+
+def _profitability_summary_text(
+    cost_centers: list[dict[str, Any]], departments: list[dict[str, Any]],
+    business_units: list[dict[str, Any]], ebitda_margin_pct: Decimal, gross_margin_pct: Decimal,
+) -> str:
+    """Short management-readable highlights, in the same
+    generated-from-database-records style as report_ai_text() elsewhere in
+    this file. Only ever states what the underlying breakdowns already
+    computed — no separate estimate or trend of its own (there's no stored
+    per-cost-centre/department history to compute a real trend from)."""
+    parts: list[str] = []
+    real_centers = [c for c in cost_centers if c["cost_center"] != "Unassigned"]
+    if real_centers:
+        best = max(real_centers, key=lambda c: Decimal(c["profit"]))
+        parts.append(f"{best['cost_center']} is the strongest cost centre at AED {best['profit']} profit ({best['margin_pct']}% margin)")
+        worst = min(real_centers, key=lambda c: Decimal(c["profit"]))
+        if Decimal(worst["profit"]) < 0 and worst["cost_center"] != best["cost_center"]:
+            parts.append(f"{worst['cost_center']} is running at a loss (AED {worst['profit']})")
+    elif cost_centers:
+        parts.append("no General Ledger activity is tagged to a named cost centre yet — all GL activity is Unassigned")
+    real_depts = [d for d in departments if d["department"] != "Unassigned"]
+    if real_depts:
+        heaviest = max(real_depts, key=lambda d: Decimal(d["payroll_cost"]))
+        parts.append(f"{heaviest['department']} carries the largest payroll cost (AED {heaviest['payroll_cost']}, {heaviest['pct_of_total_payroll']}% of total payroll across {heaviest['headcount']} employee{'s' if heaviest['headcount']!=1 else ''})")
+    if len(business_units) > 1:
+        best_bu = max(business_units, key=lambda b: Decimal(b["profit"]))
+        worst_bu = min(business_units, key=lambda b: Decimal(b["profit"]))
+        if best_bu["name"] != worst_bu["name"]:
+            parts.append(f"{best_bu['name']} is the top-performing business unit ({best_bu['margin_pct']}% margin) versus {worst_bu['name']} ({worst_bu['margin_pct']}%)")
+    parts.append(f"EBITDA margin is {amount(ebitda_margin_pct)}% against a {amount(gross_margin_pct)}% gross margin")
+    return ". ".join(p[0].upper() + p[1:] for p in parts) + "."
+
+
+def _profitability_analysis(
+    db: Session, company_id: str, branch_id: str | None, net_profit: Decimal, gross_profit: Decimal, revenue: Decimal,
+) -> dict[str, Any]:
+    """Cost-centre / department / business-unit / EBITDA / gross-margin
+    profitability analysis for management — feeds the Profitability
+    Analytics report tab and the CFO Recommendations card. Business unit
+    reuses _build_branch_performance()'s existing real per-branch revenue/
+    purchases/gross-profit/margin computation rather than rebuilding it."""
+    branch_perf = _build_branch_performance(db, company_id)
+    business_units = list(branch_perf["branches"])
+    if branch_perf["unassigned"]:
+        business_units.append(branch_perf["unassigned"])
+    gross_margin_pct = (gross_profit / revenue * Decimal("100")).quantize(Decimal("0.01")) if revenue else Decimal("0.00")
+    ebitda = _ebitda_breakdown(db, company_id, net_profit)
+    ebitda_margin_pct = (
+        (Decimal(ebitda["ebitda"]) / revenue * Decimal("100")).quantize(Decimal("0.01")) if revenue else Decimal("0.00")
+    )
+    ebitda["margin_pct"] = amount(ebitda_margin_pct)
+    cost_centers = _cost_center_breakdown(db, company_id, branch_id)
+    departments = _department_payroll_breakdown(db, company_id)
+    return {
+        "ebitda": ebitda,
+        "gross_margin_pct": amount(gross_margin_pct),
+        "cost_centers": cost_centers,
+        "departments": departments,
+        "business_units": business_units,
+        "summary_text": _profitability_summary_text(cost_centers, departments, business_units, ebitda_margin_pct, gross_margin_pct),
+    }
+
+
+def _manual_journal_expenses(db: Session, company_id: str, branch_id: str | None = None) -> Decimal:
+    """Expense-account debits from hand-posted vouchers, which no other P&L
+    source sees. Payroll-run journals (PAY-JE-...) are excluded because
+    payroll is already counted from PayrollRun."""
+    query = (
+        db.query(func.coalesce(func.sum(JournalLine.debit - JournalLine.credit), 0))
+        .join(JournalEntry, JournalEntry.id == JournalLine.journal_id)
+        .join(Account, Account.id == JournalLine.account_id)
+        .filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.status == "posted",
+            JournalEntry.source_module == "voucher",
+            Account.type.in_(list(_EXPENSE_ACCOUNT_TYPES)),
+            ~JournalEntry.entry_number.like("%PAY-JE%"),
+        )
+    )
+    if branch_id:
+        query = query.filter((JournalEntry.branch_id == branch_id) | (JournalEntry.branch_id.is_(None)))
+    return money(query.scalar())
+
+
+def _localize_currency_text(value: Any, db: Session, company_id: str) -> Any:
+    """Narrative text is built with a literal "AED"; swap in the company's
+    currency (numbers themselves are already currency-agnostic)."""
+    currency = (db.query(Company.currency).filter(Company.id == company_id).scalar() or "AED").strip() or "AED"
+    if currency == "AED":
+        return value
+
+    def walk(node: Any) -> Any:
+        if isinstance(node, str):
+            return re.sub(r"\bAED\b", currency, node)
+        if isinstance(node, list):
+            return [walk(item) for item in node]
+        if isinstance(node, dict):
+            return {key: walk(item) for key, item in node.items()}
+        return node
+
+    return walk(value)
+
+
 def _build_summary(db: Session, company_id: str, branch_id: str | None = None) -> dict[str, Any]:
     app_sales = app_sales_invoice_records(db, company_id, branch_id)
     app_purchases = app_purchase_records(db, company_id, branch_id)
@@ -919,10 +1286,10 @@ def _build_summary(db: Session, company_id: str, branch_id: str | None = None) -
         revenue_filter.append((Invoice.branch_id == branch_id) | (Invoice.branch_id.is_(None)))
         expense_filter.append((SourceTransaction.branch_id == branch_id) | (SourceTransaction.branch_id.is_(None)))
         payroll_filter.append((PayrollRun.branch_id == branch_id) | (PayrollRun.branch_id.is_(None)))
-    revenue = money(db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(*revenue_filter).scalar())
-    revenue += sum((record_amount(row, "total", "amount", "net_amount") for row in recognized_app_sales), Decimal("0.00"))
-    # Use same SQL JSON extraction as _purchase_summary to cover all field variants
-    purchases = money(_purchase_summary(db, company_id, branch_id)["total"])
+    # Ex-VAT throughout: VAT is a pass-through liability, not revenue/cost.
+    revenue = money(db.query(func.coalesce(func.sum(Invoice.subtotal), 0)).filter(*revenue_filter).scalar())
+    revenue += sum((record_amount(row, "subtotal", "net_amount", "amount") for row in recognized_app_sales), Decimal("0.00"))
+    purchases = money(_purchase_summary(db, company_id, branch_id)["net"])
     # Gross, not net — a loan/advance deduction is a balance-sheet recovery
     # on the employee's own liability, not a reduction in what the company
     # actually spent on payroll. Summing net_total here understated payroll
@@ -930,13 +1297,14 @@ def _build_summary(db: Session, company_id: str, branch_id: str | None = None) -
     # amount. gross_total is already computed and stored by
     # generate_payroll(), just never read by anything until now.
     payroll = money(db.query(func.coalesce(func.sum(PayrollRun.gross_total), 0)).filter(*payroll_filter).scalar())
-    expenses = money(db.query(func.coalesce(func.sum(SourceTransaction.total), 0)).filter(*expense_filter).scalar())
+    expenses = money(db.query(func.coalesce(func.sum(SourceTransaction.subtotal), 0)).filter(*expense_filter).scalar())
+    expenses += _manual_journal_expenses(db, company_id, branch_id)
     # app_data "expenses" collection has no branch_id column of its own
     # (AppDataRecord.branch_id does, but expenses aren't written through the
     # branch-aware save path today) — left company-wide, same as corporate/
     # assets/budget_cash/control below.
     app_expenses = app_data_payloads(db, company_id, "expenses")
-    expenses += sum((record_amount(row, "total", "amount", "net_amount") for row in app_expenses), Decimal("0.00"))
+    expenses += sum((record_amount(row, "subtotal", "net_amount", "total", "amount") for row in app_expenses), Decimal("0.00"))
     operating_expenses = expenses + payroll
     gross_profit = revenue - purchases
     net_profit = gross_profit - operating_expenses
@@ -1036,6 +1404,7 @@ def _build_summary(db: Session, company_id: str, branch_id: str | None = None) -
                 "net_profit": amount(net_profit),
             },
         },
+        "profitability_analysis": _profitability_analysis(db, company_id, branch_id, net_profit, gross_profit, revenue),
     }
 
     # E-invoicing readiness metrics
@@ -1088,7 +1457,7 @@ def _build_summary(db: Session, company_id: str, branch_id: str | None = None) -
             "score": einv_score,
         },
     })
-    return result
+    return _localize_currency_text(result, db, company_id)
 
 
 def tax_line_breakdown_both_directions(db: Session, company_id: str) -> dict[str, dict[str, Decimal]]:
@@ -1192,6 +1561,7 @@ def balance_sheet_rows(db: Session, company_id: str, branch_id: str | None = Non
     )
     sections: dict[str, list[dict[str, str]]] = {"assets": [], "liabilities": [], "equity": []}
     totals = {"assets": Decimal("0.00"), "liabilities": Decimal("0.00"), "equity": Decimal("0.00")}
+    earnings = Decimal("0.00")
     for code, name, account_type, ob, ob_type, debit, credit in rows:
         normalized = str(account_type or "").strip().lower()
         ob_dr, ob_cr = _opening_balance_dr_cr(ob, ob_type)
@@ -1208,10 +1578,19 @@ def balance_sheet_rows(db: Session, company_id: str, branch_id: str | None = Non
         elif normalized == "equity":
             balance = credit_value - debit_value
             section = "equity"
+        elif normalized in _REVENUE_ACCOUNT_TYPES:
+            earnings += credit_value - debit_value
+            continue
+        elif normalized in _EXPENSE_ACCOUNT_TYPES:
+            earnings -= debit_value - credit_value
+            continue
         else:
             continue
         sections[section].append({"code": code, "name": name, "amount": amount(balance)})
         totals[section] += balance
+    if earnings:
+        sections["equity"].append({"code": "", "name": "Current period earnings", "amount": amount(earnings)})
+        totals["equity"] += earnings
     total_liabilities_equity = totals["liabilities"] + totals["equity"]
     return {
         **sections,
@@ -1252,9 +1631,13 @@ def _add_to_aging_bucket(buckets: dict[str, Decimal], value: Decimal, days_overd
 def receivables_aging(db: Session, company_id: str, app_sales: list[dict[str, Any]], branch_id: str | None = None) -> list[dict[str, str]]:
     result: dict[str, dict[str, Decimal]] = {}
 
-    # DB invoices — no due_date field; use created_at + 30 days as proxy
+    # DB invoices — no due_date field; use created_at + 30 days as proxy.
+    # Excludes "cancelled" (voided, never going to be collected — was
+    # inflating AR/overdue totals) and "draft" (not yet a committed sale,
+    # same recognized-revenue line the rest of this file already draws)
+    # alongside "paid", not just "paid" alone.
     query = db.query(Invoice.customer_name, Invoice.total, Invoice.created_at).filter(
-        Invoice.company_id == company_id, Invoice.status != "paid"
+        Invoice.company_id == company_id, Invoice.status.notin_(["paid", "cancelled", "draft"])
     )
     if branch_id:
         # NULL branch_id = predates Branch Management — stays visible to a
@@ -1269,7 +1652,8 @@ def receivables_aging(db: Session, company_id: str, app_sales: list[dict[str, An
 
     # App sales invoices — have real due_date
     for invoice in app_sales:
-        if is_paid_status(invoice.get("status")) or _is_credit_note(invoice):
+        status_norm = normalized_ref(invoice.get("status", ""))
+        if is_paid_status(invoice.get("status")) or _is_credit_note(invoice) or status_norm in {"cancelled", "draft"}:
             continue
         key = str(invoice.get("customer") or invoice.get("customer_name") or "Unknown").strip() or "Unknown"
         e = result.setdefault(key, {k: Decimal("0") for k in ("current", "d1_30", "d31_60", "d61_90", "over90")})
@@ -1382,10 +1766,12 @@ def corporate_report_rows(db: Session, company_id: str, net_profit: Decimal) -> 
     corporate_rows = db.query(CorporateTaxRecord).filter(CorporateTaxRecord.company_id == company_id).order_by(CorporateTaxRecord.created_at.desc()).all()
     if corporate_rows:
         latest = corporate_rows[0]
-        accounting_profit = money(latest.accounting_profit)
+        # Profit is always the live P&L figure; the stored record only
+        # contributes its adjustments and status (its own profit goes stale).
+        accounting_profit = net_profit
         tax_adjustments = money(latest.tax_adjustments)
-        taxable_income = money(latest.taxable_income)
-        tax_due = money(latest.tax_due)
+        taxable_income = max(Decimal("0.00"), accounting_profit + tax_adjustments)
+        tax_due = max(Decimal("0.00"), taxable_income - Decimal("375000.00")) * Decimal("0.09")
         status = latest.status
     else:
         accounting_profit = net_profit
@@ -1405,7 +1791,13 @@ def corporate_report_rows(db: Session, company_id: str, net_profit: Decimal) -> 
         "tax_rows": [
             {"line": "Accounting Profit", "amount": amount(accounting_profit), "status": status.title()},
             {"line": "Tax Adjustments", "amount": amount(tax_adjustments), "status": "Review" if tax_adjustments else "Ready"},
-            {"line": "Small Business Relief Threshold", "amount": "375000.00", "status": "Applied"},
+            # Not "Small Business Relief" — that's a separate, elective
+            # relief (revenue <= AED 3,000,000, must be actively elected).
+            # This is the standard 0% CT bracket every company gets
+            # automatically on the first AED 375,000 of taxable income;
+            # labeling it "Small Business Relief" could lead a filer to
+            # believe they'd made an election they hadn't.
+            {"line": "0% Tax Bracket Threshold", "amount": "375000.00", "status": "Applied"},
             {"line": "Taxable Profit", "amount": amount(taxable_income), "status": "Calculated"},
             {"line": "Corporate Tax Payable", "amount": amount(tax_due), "status": "Draft"},
         ],
@@ -1424,6 +1816,7 @@ def corporate_report_rows(db: Session, company_id: str, net_profit: Decimal) -> 
 
 
 def asset_report_rows(db: Session, company_id: str) -> dict[str, Any]:
+    from app.routers.corporate_accounting import _released_amount
     assets = db.query(FixedAssetRecord).filter(FixedAssetRecord.company_id == company_id).order_by(FixedAssetRecord.asset_code).all()
     accruals = db.query(AccrualPrepaymentRecord).filter(AccrualPrepaymentRecord.company_id == company_id).order_by(AccrualPrepaymentRecord.created_at.desc()).all()
     return {
@@ -1463,7 +1856,7 @@ def asset_report_rows(db: Session, company_id: str) -> dict[str, Any]:
                 "item": row.description,
                 "total": amount(money(row.total_amount)),
                 "monthly": amount(money(row.monthly_amount)),
-                "remaining": amount(max(Decimal("0.00"), money(row.total_amount) - money(row.monthly_amount))),
+                "remaining": amount(max(Decimal("0.00"), money(row.total_amount) - _released_amount(db, company_id, row.id))),
                 "status": row.status,
             }
             for row in accruals
@@ -1472,7 +1865,18 @@ def asset_report_rows(db: Session, company_id: str) -> dict[str, Any]:
     }
 
 
+def _operating_cash(db: Session, company_id: str, net_profit: Decimal) -> Decimal:
+    """Cash actually held per the ledger (Cash/Bank asset accounts); accrual
+    profit is only a fallback when no cash account has any activity."""
+    bs = balance_sheet_rows(db, company_id)
+    cash_rows = [r for r in bs["assets"] if any(k in r["name"].lower() for k in ("cash", "bank"))]
+    if not cash_rows:
+        return net_profit if not bs["assets"] else Decimal("0.00")
+    return sum((Decimal(r["amount"]) for r in cash_rows), Decimal("0.00"))
+
+
 def budget_cash_rows(db: Session, company_id: str, revenue: Decimal, purchases: Decimal, operating_expenses: Decimal, net_profit: Decimal) -> dict[str, Any]:
+    operating_cash = _operating_cash(db, company_id, net_profit)
     budgets = db.query(BudgetRecord).filter(BudgetRecord.company_id == company_id).order_by(BudgetRecord.fiscal_year.desc()).all()
     forecasts = db.query(CashFlowForecastRecord).filter(CashFlowForecastRecord.company_id == company_id).order_by(CashFlowForecastRecord.forecast_date).all()
     budget_rows = [
@@ -1493,7 +1897,7 @@ def budget_cash_rows(db: Session, company_id: str, revenue: Decimal, purchases: 
     return {
         "budget_rows": budget_rows,
         "cash_flow_rows": [
-            {"section": "Operating Cash Flow", "direct": amount(net_profit), "indirect": amount(net_profit), "status": "Ready"},
+            {"section": "Operating Cash Flow", "direct": amount(operating_cash), "indirect": amount(operating_cash), "status": "Ready"},
             {"section": "Investing Cash Flow", "direct": "0.00", "indirect": "0.00", "status": "No entries"},
             {"section": "Financing Cash Flow", "direct": "0.00", "indirect": "0.00", "status": "No entries"},
         ],
@@ -1518,16 +1922,24 @@ def control_report_rows(db: Session, company_id: str, revenue: Decimal, purchase
     close_rows = db.query(MonthEndCloseRecord).filter(MonthEndCloseRecord.company_id == company_id).order_by(MonthEndCloseRecord.period.desc()).all()
     audit_rows = db.query(AuditLog).filter(AuditLog.company_id == company_id).order_by(AuditLog.created_at.desc()).limit(8).all()
     audit_detail_count = db.query(func.count(AuditLogDetail.id)).filter(AuditLogDetail.company_id == company_id).scalar() or 0
-    cost_rows = [
-        {
+    # Real GL-based revenue/cost/profit per named cost centre — this used to
+    # hardcode "0.00" for every row regardless of actual data, even though
+    # _cost_center_breakdown() (used by the Profitability Analytics tab)
+    # already computes this correctly from GeneralLedgerEntry.cost_center.
+    # Matched case-insensitively since a center's free-text `name` here and
+    # the cost_center string stamped on a GL entry via Accounting > Vouchers
+    # aren't guaranteed identical casing.
+    gl_by_center = {row["cost_center"].strip().lower(): row for row in _cost_center_breakdown(db, company_id, None)}
+    cost_rows = []
+    for row in centers:
+        gl = gl_by_center.get((row.name or "").strip().lower())
+        cost_rows.append({
             "center": row.name,
-            "revenue": "0.00",
-            "cost": "0.00",
-            "profit": "0.00",
-            "margin": "0.00%",
-        }
-        for row in centers
-    ]
+            "revenue": gl["revenue"] if gl else "0.00",
+            "cost": gl["expense"] if gl else "0.00",
+            "profit": gl["profit"] if gl else "0.00",
+            "margin": f"{gl['margin_pct']}%" if gl else "0.00%",
+        })
     if not cost_rows:
         margin = (net_profit / revenue * Decimal("100")).quantize(Decimal("0.01")) if revenue else Decimal("0.00")
         cost_rows = [{"center": "Company total", "revenue": amount(revenue), "cost": amount(purchases), "profit": amount(net_profit), "margin": f"{amount(margin)}%"}]

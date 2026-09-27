@@ -45,7 +45,11 @@ def test_freshly_registered_company_can_post_a_sales_invoice(client, db):
             "subtotal": 1000,
             "vat_amount": 50,
             "total": 1050,
-            "status": "Draft",
+            # Not "Draft" — draft invoices are deliberately not posted to
+            # the ledger (see sync_sales_invoice() in app_data.py); this
+            # test is about seeded control accounts letting a REAL posting
+            # succeed, so it needs a status that actually posts.
+            "status": "Issued",
             "lines": [{"description": "Test line", "qty": 1, "unit_price": 1000, "vat_rate": 5}],
         },
     }

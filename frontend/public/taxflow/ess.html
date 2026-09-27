@@ -6,7 +6,7 @@
   <title>Employee Self-Service — ETaxFlow</title>
   <link rel="preload" href="/fonts/dmsans-rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu0-K4.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/syne-8vIH7w4qzmVxm2BL9A.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="src/ess.css?v=659ca5f930">
+  <link rel="stylesheet" href="src/ess.css?v=c5902f1ac4">
   <script>
     // Runs before body paints, so a saved/system dark preference applies
     // immediately instead of flashing light-then-dark once the main
@@ -190,28 +190,28 @@
       <!-- KPI row (3 x 2, same tile as the HRMS dashboard) -->
       <div class="ess-kpi-row">
         <div class="ess-kpi" onclick="essGoTab('attendance')">
-          <div class="ess-kpi-icon" style="background:#eff6ff"><svg viewBox="0 0 16 16" fill="none" stroke="#2563eb" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2.5 1.5"/></svg></div>
-          <div class="ess-kpi-text"><div class="ess-kpi-lbl">Today</div><div class="ess-kpi-val" id="dash-att-status" style="color:#2563eb">—</div><div class="ess-kpi-sub">Attendance status</div></div>
+          <div class="ess-kpi-icon" style="background:var(--accent-bg)"><svg viewBox="0 0 16 16" fill="none" stroke="var(--accent)" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2.5 1.5"/></svg></div>
+          <div class="ess-kpi-text"><div class="ess-kpi-lbl">Today</div><div class="ess-kpi-val" id="dash-att-status" style="color:var(--accent)">—</div><div class="ess-kpi-sub">Attendance status</div></div>
         </div>
         <div class="ess-kpi" onclick="essGoTab('leave')">
-          <div class="ess-kpi-icon" style="background:#f0fdf4"><svg viewBox="0 0 16 16" fill="none" stroke="#16a34a" stroke-width="1.4"><path d="M3 8c0-2.8 2.2-5 5-5s5 2.2 5 5v4H3V8z"/><path d="M1 12h14M6 3.5C6 2 7 1 8 1s2 1 2 2.5"/></svg></div>
-          <div class="ess-kpi-text"><div class="ess-kpi-lbl">Leave Requests</div><div class="ess-kpi-val" id="dash-leave-status" style="color:#16a34a">—</div><div class="ess-kpi-sub">Awaiting HR approval</div></div>
+          <div class="ess-kpi-icon" style="background:var(--green-bg)"><svg viewBox="0 0 16 16" fill="none" stroke="var(--green)" stroke-width="1.4"><path d="M3 8c0-2.8 2.2-5 5-5s5 2.2 5 5v4H3V8z"/><path d="M1 12h14M6 3.5C6 2 7 1 8 1s2 1 2 2.5"/></svg></div>
+          <div class="ess-kpi-text"><div class="ess-kpi-lbl">Leave Requests</div><div class="ess-kpi-val" id="dash-leave-status" style="color:var(--green)">—</div><div class="ess-kpi-sub">Awaiting HR approval</div></div>
         </div>
         <div class="ess-kpi" onclick="essGoTab('leave')">
-          <div class="ess-kpi-icon" style="background:#f0fdfa"><svg viewBox="0 0 16 16" fill="none" stroke="#0d9488" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1.5v3M11 1.5v3M2 6h12M5.5 9.5l1.7 1.7 3.3-3.4"/></svg></div>
-          <div class="ess-kpi-text"><div class="ess-kpi-lbl">Annual Leave Left</div><div class="ess-kpi-val" id="dash-annual-left" style="color:#0d9488">—</div><div class="ess-kpi-sub" id="dash-annual-sub">Your balance</div></div>
+          <div class="ess-kpi-icon" style="background:var(--teal-bg)"><svg viewBox="0 0 16 16" fill="none" stroke="var(--teal)" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1.5v3M11 1.5v3M2 6h12M5.5 9.5l1.7 1.7 3.3-3.4"/></svg></div>
+          <div class="ess-kpi-text"><div class="ess-kpi-lbl">Annual Leave Left</div><div class="ess-kpi-val" id="dash-annual-left" style="color:var(--teal)">—</div><div class="ess-kpi-sub" id="dash-annual-sub">Your balance</div></div>
         </div>
         <div class="ess-kpi" onclick="essGoTab('rota')">
-          <div class="ess-kpi-icon" style="background:#faf5ff"><svg viewBox="0 0 16 16" fill="none" stroke="#7c3aed" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1.5v3M11 1.5v3M2 6h12"/></svg></div>
-          <div class="ess-kpi-text"><div class="ess-kpi-lbl">Next Shift</div><div class="ess-kpi-val" id="dash-next-shift" style="color:#7c3aed">—</div><div class="ess-kpi-sub">From your rota</div></div>
+          <div class="ess-kpi-icon" style="background:var(--purple-bg)"><svg viewBox="0 0 16 16" fill="none" stroke="var(--purple)" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1.5v3M11 1.5v3M2 6h12"/></svg></div>
+          <div class="ess-kpi-text"><div class="ess-kpi-lbl">Next Shift</div><div class="ess-kpi-val" id="dash-next-shift" style="color:var(--purple)">—</div><div class="ess-kpi-sub">From your rota</div></div>
         </div>
         <div class="ess-kpi" onclick="essGoTab('tasks')">
-          <div class="ess-kpi-icon" style="background:#fff7ed"><svg viewBox="0 0 16 16" fill="none" stroke="#ea580c" stroke-width="1.4"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 8l2 2 4-4"/></svg></div>
-          <div class="ess-kpi-text"><div class="ess-kpi-lbl">Open Tasks</div><div class="ess-kpi-val" id="dash-tasks-count" style="color:#ea580c">—</div><div class="ess-kpi-sub">Assigned to you</div></div>
+          <div class="ess-kpi-icon" style="background:var(--amber-bg)"><svg viewBox="0 0 16 16" fill="none" stroke="var(--amber)" stroke-width="1.4"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 8l2 2 4-4"/></svg></div>
+          <div class="ess-kpi-text"><div class="ess-kpi-lbl">Open Tasks</div><div class="ess-kpi-val" id="dash-tasks-count" style="color:var(--amber)">—</div><div class="ess-kpi-sub">Assigned to you</div></div>
         </div>
         <div class="ess-kpi" onclick="essGoTab('payslips')">
-          <div class="ess-kpi-icon" style="background:#fef2f2"><svg viewBox="0 0 16 16" fill="none" stroke="#dc2626" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6h12M5 10h3M10 10h1"/></svg></div>
-          <div class="ess-kpi-text"><div class="ess-kpi-lbl">Last Payslip</div><div class="ess-kpi-val" id="dash-last-payslip" style="color:#dc2626">—</div><div class="ess-kpi-sub">Net pay</div></div>
+          <div class="ess-kpi-icon" style="background:var(--red-bg)"><svg viewBox="0 0 16 16" fill="none" stroke="var(--red)" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6h12M5 10h3M10 10h1"/></svg></div>
+          <div class="ess-kpi-text"><div class="ess-kpi-lbl">Last Payslip</div><div class="ess-kpi-val" id="dash-last-payslip" style="color:var(--red)">—</div><div class="ess-kpi-sub">Net pay</div></div>
         </div>
       </div>
 
@@ -247,12 +247,11 @@
           <div class="ess-bn-body">
             <div id="dash-leave-balance" class="leave-balance-grid"><div class="loading">Loading…</div></div>
             <div class="dash-help-banner" style="margin-top:14px;font-size:13px">
-              <span>🌱</span>
+              <span><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.5"/><path d="M6 6.2a2 2 0 013.8 1c0 1.3-2 1.3-2 3"/><circle cx="8" cy="12" r=".6" fill="currentColor" stroke="none"/></svg></span>
               <div style="flex:1;min-width:0">
                 <div style="font-weight:600;font-size:13px">Need help?</div>
                 <div style="font-size:12px;color:var(--text3)">Questions about your balance or a request? Contact your HR team.</div>
               </div>
-              <a class="btn-ghost" href="mailto:?subject=HR%20Enquiry" style="font-size:12px;padding:8px 14px">Contact HR</a>
             </div>
           </div>
         </div>
@@ -270,15 +269,15 @@
         <div class="card" id="dash-quick-actions-card" style="padding:16px">
           <div class="card-title" style="margin-bottom:12px">Quick Actions</div>
           <div class="ess-qa-grid">
-            <div class="ess-qa" style="--qa:#2563eb" onclick="essOpenLeaveModal()"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="16" height="14" rx="1"/><path d="M6 1.5v3M14 1.5v3M2 8h16"/></svg><span>Apply Leave</span></div>
-            <div class="ess-qa" style="--qa:#f59e0b" onclick="essOpenRequestModal('overtime')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2"/></svg><span>Overtime</span></div>
-            <div class="ess-qa" style="--qa:#10b981" onclick="essOpenRequestModal('advance')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="14" height="11" rx="2"/><path d="M3 8.5h14M7 12h2M12 12h1"/></svg><span>Salary Advance</span></div>
-            <div class="ess-qa" style="--qa:#8b5cf6" onclick="essGoTab('payslips')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 2h10v16l-2.5-1.5L10 18l-2.5-1.5L5 18z"/><path d="M8 7h4M8 10h4"/></svg><span>Payslips</span></div>
-            <div class="ess-qa" style="--qa:#ef4444" onclick="essGoTab('gps')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 18s6-5.2 6-9.5a6 6 0 00-12 0C4 12.8 10 18 10 18z"/><circle cx="10" cy="8.5" r="2"/></svg><span>Clock In / Out</span></div>
-            <div class="ess-qa" style="--qa:#6366f1" onclick="essGoTab('rota')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="16" height="14" rx="1"/><path d="M6 1.5v3M14 1.5v3M2 8h16"/></svg><span>Check Rota</span></div>
-            <div class="ess-qa" style="--qa:#f472b6" onclick="essOpenRequestModal('correction')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 16h3.5L16 7.5 12.5 4 4 12.5z"/></svg><span>Attendance Fix</span></div>
-            <div class="ess-qa" style="--qa:#0d9488" onclick="essGoTab('tasks')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M6.5 10l2.5 2.5 5-5"/></svg><span>My Tasks</span></div>
-            <div class="ess-qa" style="--qa:#64748b" onclick="essGoTab('profile')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="7" r="3.5"/><path d="M3 17c0-3.5 3-5.5 7-5.500s7 2 7 5.5"/></svg><span>My Profile</span></div>
+            <div class="ess-qa" style="--qa:var(--accent)" onclick="essOpenLeaveModal()"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="16" height="14" rx="1"/><path d="M6 1.5v3M14 1.5v3M2 8h16"/></svg><span>Apply Leave</span></div>
+            <div class="ess-qa" style="--qa:var(--amber)" onclick="essOpenRequestModal('overtime')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2"/></svg><span>Overtime</span></div>
+            <div class="ess-qa" style="--qa:var(--green)" onclick="essOpenRequestModal('advance')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="14" height="11" rx="2"/><path d="M3 8.5h14M7 12h2M12 12h1"/></svg><span>Salary Advance</span></div>
+            <div class="ess-qa" style="--qa:var(--purple)" onclick="essGoTab('payslips')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 2h10v16l-2.5-1.5L10 18l-2.5-1.5L5 18z"/><path d="M8 7h4M8 10h4"/></svg><span>Payslips</span></div>
+            <div class="ess-qa" style="--qa:var(--red)" onclick="essGoTab('gps')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 18s6-5.2 6-9.5a6 6 0 00-12 0C4 12.8 10 18 10 18z"/><circle cx="10" cy="8.5" r="2"/></svg><span>Clock In / Out</span></div>
+            <div class="ess-qa" style="--qa:var(--accent2)" onclick="essGoTab('rota')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="16" height="14" rx="1"/><path d="M6 1.5v3M14 1.5v3M2 8h16"/></svg><span>Check Rota</span></div>
+            <div class="ess-qa" style="--qa:var(--pink)" onclick="essOpenRequestModal('correction')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 16h3.5L16 7.5 12.5 4 4 12.5z"/></svg><span>Attendance Fix</span></div>
+            <div class="ess-qa" style="--qa:var(--teal)" onclick="essGoTab('tasks')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M6.5 10l2.5 2.5 5-5"/></svg><span>My Tasks</span></div>
+            <div class="ess-qa" style="--qa:var(--text3)" onclick="essGoTab('profile')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="7" r="3.5"/><path d="M3 17c0-3.5 3-5.5 7-5.500s7 2 7 5.5"/></svg><span>My Profile</span></div>
           </div>
         </div>
 
@@ -307,8 +306,15 @@
         <div class="card" id="dash-holiday-card" style="padding:16px">
           <div class="card-title" style="margin-bottom:10px">Next Holiday</div>
           <div id="dash-next-holiday-wrap" title="Open the holiday calendar" onclick="essGoTab('leave')" style="font-size:13px;color:var(--text2);display:flex;align-items:center;gap:8px;cursor:pointer">
-            <span>📅</span><span id="dash-next-holiday">Loading…</span>
+            <span><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1.5v3M11 1.5v3M2 6h12"/></svg></span><span id="dash-next-holiday">Loading…</span>
           </div>
+        </div>
+
+        <!-- User Handbook -- same link + copy pattern as the HRMS dashboard's own card -->
+        <div class="card" style="padding:16px">
+          <div class="card-title" style="margin-bottom:8px">User Handbook</div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.5">A screen-by-screen guide to the Main App, HRMS, and this portal, with screenshots.</div>
+          <button class="btn-ghost" style="width:100%;text-align:center" onclick="window.open('/handbook','_blank')">Open Handbook →</button>
         </div>
       </div><!-- /dash-side-col -->
       </div><!-- /dash-2col -->
@@ -427,6 +433,10 @@
 
     <!-- Requests -->
     <div class="tab-body" id="tb-requests">
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-hd"><div><div class="card-title" style="margin-bottom:2px">Overtime Eligibility</div><div style="font-size:11.5px;color:var(--text3)" id="ot-elig-note">Days you worked past your standard day (last 31 days)</div></div></div>
+        <div id="ot-elig-content" class="loading">Loading…</div>
+      </div>
       <div class="card">
         <div class="card-hd" style="align-items:center;flex-wrap:wrap">
           <div>
@@ -601,7 +611,10 @@
 </div>
 <div class="ess-toast" id="ess-toast" role="status" aria-live="polite"></div>
 
-<script src="/config.js"></script>
-<script src="src/ess.js?v=542109efb7"></script>
+<!-- Both deferred (not blocking): nothing after these two reads
+     window.TAXFLOW_API_BASE_URL synchronously, and defer preserves source
+     order between them, so config.js still runs before ess.js. -->
+<script src="/config.js" defer></script>
+<script src="src/ess.js?v=8af2366c8b" defer></script>
 </body>
 </html>
