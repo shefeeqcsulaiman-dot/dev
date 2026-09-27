@@ -1,4 +1,5 @@
 import json
+import datetime as _dt
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal
@@ -1045,6 +1046,36 @@ class VoiceIntentResponse(BaseModel):
     confidence: int = 0
     alternatives: list[str] = []
     source: Literal["rules", "llm"] = "rules"
+
+
+class VoiceDraftRequest(BaseModel):
+    form: Literal["expense", "purchase", "sales_invoice", "customer", "vendor"]
+    transcript: str = Field(min_length=1, max_length=1000)
+    lang: Literal["en", "ar"] | None = None
+    # Options the form already offers (categories, suppliers, products...), for name matching.
+    choices: dict[str, list[str]] = Field(default_factory=dict)
+    today: _dt.date | None = None
+
+    @field_validator("choices")
+    @classmethod
+    def _cap_choices(cls, value: dict[str, list[str]]) -> dict[str, list[str]]:
+        if len(value) > 10:
+            raise ValueError("too many choice lists")
+        return {str(k)[:40]: [str(o)[:160] for o in opts[:1000]] for k, opts in value.items()}
+
+
+class VoiceDraftLine(BaseModel):
+    product: str
+    quantity: str | None = None
+    price: str | None = None
+    matched: Literal["yes", "no"] = "no"
+
+
+class VoiceDraftResponse(BaseModel):
+    form: str
+    fields: dict[str, str] = {}
+    lines: list[VoiceDraftLine] = []
+    unmatched: dict[str, str] = {}
 
 
 class AITransactionValidationRequest(BaseModel):

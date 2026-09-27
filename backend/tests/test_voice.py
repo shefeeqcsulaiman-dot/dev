@@ -187,3 +187,76 @@ def test_voice_intent_llm_cannot_search_or_answer_unprompted(client, auth_header
     # A real question is still allowed through as an answer.
     body = _intent(client, auth_headers, "what is my payroll cost?", targets=targets).json()
     assert (body["intent"], body["source"]) == ("answer", "llm")
+
+
+# ── Phase 3: /ai/voice-draft ─────────────────────────────────────────────
+from app import voice_draft as vd  # noqa: E402
+
+
+def _draft(client, headers, form, transcript, choices=None, llm=None, monkeypatch=None):
+    if monkeypatch is not None:
+        monkeypatch.setattr(vd, "call_llm", lambda *a, **k: llm)
+    return client.post("/api/v1/ai/voice-draft", headers=headers, json={
+        "form": form, "transcript": transcript, "choices": choices or {}, "today": "2026-09-27"})
+
+
+def test_voice_draft_expense_sanitises_and_matches(client, auth_headers, monkeypatch):
+    llm = {"fields": {"date": "2026-09-26", "category": "transport", "vendor": "careem",
+                      "description": "Taxi to client", "amount": "85", "vat": "4.25", "bogus": "x"}}
+    choices = {"category": ["Supplies", "Transport", "Utilities"], "vendor": ["Careem Networks FZ LLC", "Emirates Taxi"]}
+    r = _draft(client, auth_headers, "expense", "taxi yesterday 85 dirhams careem", choices, llm, monkeypatch)
+    assert r.status_code == 200, r.text
+    f = r.json()["fields"]
+    assert f == {"date": "2026-09-26", "category": "Transport", "vendor": "Careem Networks FZ LLC",
+                 "description": "Taxi to client", "amount": "85.00", "vat": "4.25"}
+
+
+def test_voice_draft_drops_invalid_values(client, auth_headers, monkeypatch):
+    llm = {"fields": {"name": "Al Noor Trading", "trn": "1002-3456", "emirate": "Mars", "email": "not an email",
+                      "phone": "050 123 4567", "address": "Deira"}}
+    body = _draft(client, auth_headers, "customer", "...", {"emirate": ["Dubai", "Sharjah"]}, llm, monkeypatch).json()
+    assert body["fields"] == {"name": "Al Noor Trading", "phone": "0501234567", "address": "Deira"}
+    assert body["unmatched"] == {"emirate": "Mars"}  # strict choice not invented
+    llm = {"fields": {"date": "yesterday", "amount": "-5", "vat": "1e20"}}
+    assert _draft(client, auth_headers, "expense", "...", {}, llm, monkeypatch).json()["fields"] == {}
+
+
+def test_voice_draft_lines_match_products(client, auth_headers, monkeypatch):
+    llm = {"fields": {"supplier": "gulf steel"},
+           "lines": [{"product": "steel rods", "quantity": 10, "price": "12.5"},
+                     {"product": "Mystery Widget", "quantity": 0, "price": 3},
+                     {"product": ""}, "junk"]}
+    choices = {"supplier": ["Gulf Steel LLC", "Dubai Paints"], "product": ["Steel Rods 12mm", "Cement Bag"]}
+    body = _draft(client, auth_headers, "purchase", "...", choices, llm, monkeypatch).json()
+    assert body["fields"] == {"supplier": "Gulf Steel LLC"}
+    assert body["lines"] == [
+        {"product": "Steel Rods 12mm", "quantity": "10.00", "price": "12.50", "matched": "yes"},
+        {"product": "Mystery Widget", "quantity": None, "price": "3.00", "matched": "no"},
+    ]
+
+
+def test_voice_draft_never_writes_and_503_without_ai(client, auth_headers, monkeypatch):
+    from app.database import SessionLocal
+    from app.models import AuditLog
+    db = SessionLocal()
+    before = db.query(AuditLog).count()
+    r = _draft(client, auth_headers, "vendor", "new vendor", {}, {"error": "no key"}, monkeypatch)
+    assert r.status_code == 503
+    llm = {"fields": {"name": "Dubai Paints"}}
+    assert _draft(client, auth_headers, "vendor", "vendor dubai paints", {}, llm, monkeypatch).status_code == 200
+    assert db.query(AuditLog).count() == before
+    db.close()
+
+
+def test_voice_draft_validates_form(client, auth_headers):
+    r = client.post("/api/v1/ai/voice-draft", headers=auth_headers, json={"form": "payroll_run", "transcript": "run it"})
+    assert r.status_code == 422
+
+
+def test_voice_draft_prompt_only_carries_strict_choice_lists(client, auth_headers, monkeypatch):
+    prompts = []
+    monkeypatch.setattr(vd, "call_llm", lambda prompt, *a, **k: prompts.append(prompt) or {"fields": {}, "lines": []})
+    choices = {"supplier": ["Gulf Steel LLC"], "product": ["Safety Helmet Hard Hat"]}
+    _draft(client, auth_headers, "purchase", "5 mystery glitter", choices)
+    assert "Gulf Steel LLC" in prompts[-1]
+    assert "Safety Helmet" not in prompts[-1]

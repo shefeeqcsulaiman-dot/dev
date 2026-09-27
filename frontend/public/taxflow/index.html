@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=3cd490539f" as="style">
-<link rel="preload" href="src/app.js?v=3e1768be48" as="script">
+<link rel="preload" href="src/styles.css?v=6e62d5a7ac" as="style">
+<link rel="preload" href="src/app.js?v=f70e33fada" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=3cd490539f">
+<link rel="stylesheet" href="src/styles.css?v=6e62d5a7ac">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
 </head>
 <body class="theme-light">
@@ -1159,7 +1159,7 @@
             <div class="sinv-doc-title" id="sales-form-title">New Invoice</div>
             <div class="sinv-doc-sub" id="sales-form-sub">Fill in the details below to create a UAE-compliant tax invoice</div>
           </div>
-          <div class="sinv-doc-actions"></div>
+          <div class="sinv-doc-actions"><button type="button" class="btn btn-g btn-sm vf-btn" data-module-gate="ai" onclick="voiceFill('sales_invoice',this)" title="Fill this form by voice — you still press Save">🎤 Dictate</button></div>
         </div>
 
         <!-- Invoice details -->
@@ -1484,7 +1484,7 @@
 
   <div class="tab-body" id="p-manual">
     <div class="card mb16">
-      <div class="card-hd"><div><div class="card-title" id="mp-form-title">Add Purchase</div><div class="card-sub" id="mp-form-sub">Manual supplier purchase entry with items, discounts, tax, shipping, and payment</div></div><button class="btn btn-g btn-sm" onclick="resetManualPurchase()">Clear</button></div>
+      <div class="card-hd"><div><div class="card-title" id="mp-form-title">Add Purchase</div><div class="card-sub" id="mp-form-sub">Manual supplier purchase entry with items, discounts, tax, shipping, and payment</div></div><div class="flx" style="gap:6px"><button type="button" class="btn btn-g btn-sm vf-btn" data-module-gate="ai" onclick="voiceFill('purchase',this)" title="Fill this form by voice — you still press Save">🎤 Dictate</button><button class="btn btn-g btn-sm" onclick="resetManualPurchase()">Clear</button></div></div>
       <div class="fr3">
         <div class="fg"><label class="fl">Supplier *</label><div class="field-action-row"><select class="fi" id="mp-supplier" required onchange="applySupplierAddress()"><option value="">— Select Supplier —</option></select><button class="btn btn-g btn-sm" type="button" onclick="openSupplierPopup()">+ Add</button></div></div>
         <div class="fg"><label class="fl">Reference No.</label><input class="fi mono" id="mp-ref" placeholder="PUR-2026-0001"></div>
@@ -2174,7 +2174,7 @@
   <div class="tab-body" id="exp-create">
     <div class="g2 mb16">
       <div class="card">
-        <div class="card-hd"><div class="card-title">Expense Details</div></div>
+        <div class="card-hd"><div class="card-title">Expense Details</div><button type="button" class="btn btn-g btn-sm vf-btn" data-module-gate="ai" onclick="voiceFill('expense',this)" title="Fill this form by voice — you still press Save">🎤 Dictate</button></div>
         <div class="fr2">
           <div class="fg"><label class="fl">Date</label><input class="fi" id="expense-date" type="date"></div>
           <div class="fg"><label class="fl">Category</label>
@@ -4691,6 +4691,7 @@ period_locks ─&lt; audit_logs
 
 <div class="overlay" id="m-customer" onclick="closeOvBg(event,'m-customer')">
   <div class="modal"><div class="modal-title">Add Customer</div><div class="modal-sub">Register new customer for sales invoicing</div>
+    <div class="vf-row"><button type="button" class="btn btn-g btn-sm vf-btn" data-module-gate="ai" onclick="voiceFill('customer',this)" title="Fill this form by voice — you still press Save">🎤 Dictate</button></div>
     <div class="fg"><label class="fl">Customer Name</label><input class="fi" id="cust-name" placeholder="Company or individual name"></div>
     <div class="fr2"><div class="fg"><label class="fl">TRN (if registered)</label><input class="fi mono" id="cust-trn" placeholder="15-digit TRN" maxlength="15"></div><div class="fg"><label class="fl">Emirate</label><select class="fi" id="cust-emirate"><option>Dubai</option><option>Abu Dhabi</option><option>Sharjah</option></select></div></div>
     <div class="fg"><label class="fl">Address</label><input class="fi" id="cust-address"></div>
@@ -4744,6 +4745,7 @@ period_locks ─&lt; audit_logs
 
 <div class="overlay" id="m-vendor" onclick="closeOvBg(event,'m-vendor')">
   <div class="modal"><div class="modal-title">Add Vendor</div><div class="modal-sub">Register supplier details for bills and purchase orders</div>
+    <div class="vf-row"><button type="button" class="btn btn-g btn-sm vf-btn" data-module-gate="ai" onclick="voiceFill('vendor',this)" title="Fill this form by voice — you still press Save">🎤 Dictate</button></div>
     <div class="fg"><label class="fl">Vendor Name</label><input class="fi" id="vendor-name" placeholder="Vendor company"></div>
     <div class="fr2"><div class="fg"><label class="fl">TRN</label><input class="fi mono" id="vendor-trn" maxlength="15" placeholder="15-digit TRN"></div><div class="fg"><label class="fl">Category</label><select class="fi" id="vendor-category"><option value="">Select Category</option></select></div></div>
     <div class="fr2"><div class="fg"><label class="fl">Email</label><input class="fi" id="vendor-email" type="email"></div><div class="fg"><label class="fl">Phone</label><input class="fi" id="vendor-phone"></div></div>
@@ -5655,6 +5657,6 @@ period_locks ─&lt; audit_logs
      order relative to app.js's own defer, so config.js still runs first. -->
 <script src="config.js" defer></script>
 <script src="src/voice.js?v=283726f4a4" defer></script>
-<script src="src/app.js?v=3e1768be48" defer></script>
+<script src="src/app.js?v=f70e33fada" defer></script>
 </body>
 </html>
