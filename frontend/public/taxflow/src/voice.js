@@ -14,9 +14,11 @@
     return null;
   }
 
+  let companyLang='';
   function defaultLang(){
     const saved=store(LANG_KEY);
     if(saved==='en-US'||saved==='ar-AE')return saved;
+    if(companyLang)return companyLang;
     return String(navigator.language||'').toLowerCase().startsWith('ar')?'ar-AE':'en-US';
   }
 
@@ -28,6 +30,8 @@
     isActive:()=>!!active,
     getLang:defaultLang,
     setLang(lang){store(LANG_KEY,lang==='ar-AE'?'ar-AE':'en-US');},
+    // Settings > AI & Voice default; used until the user picks a language themselves.
+    setCompanyLang(lang){companyLang=(lang==='en-US'||lang==='ar-AE')?lang:'';},
     // opts: {lang, onText(text), onError(msg), onState('listening'|'processing'|'idle'), transcribe(blob,lang)->Promise<text>}
     start(opts={}){
       if(active){active.stop();return;}

@@ -266,7 +266,7 @@ def test_voice_draft_prompt_only_carries_strict_choice_lists(client, auth_header
 from datetime import date, timedelta  # noqa: E402
 
 from app import ess_voice as ev  # noqa: E402
-from app.models import AppDataRecord  # noqa: E402
+from app.models import AppDataRecord, AuditLog  # noqa: E402
 from tests.test_ess_requests import _company_id, _ess_login  # noqa: E402
 
 
@@ -380,3 +380,60 @@ def test_voice_draft_pos_cart_matches_products_and_ignores_prices(client, auth_h
         ("Pepsi 330ml Can", None, "yes"), ("Pepsi 330ml Can", "2.00", "yes"),
         ("Tomatoes (KG)", "0.50", "yes"), ("unicorn steak", "1.00", "no")]
     assert all(l["price"] is None for l in body["lines"])
+
+
+# ── Voice settings & transcription cap ───────────────────────────────────
+DEFAULT_VOICE = {"enabled": True, "default_lang": "", "cloud_transcription": True, "daily_transcriptions": 200}
+
+
+def _voice_settings(client, headers, **values):
+    return client.put("/api/v1/ai/voice-settings", headers=headers, json={**DEFAULT_VOICE, **values})
+
+
+def test_voice_settings_round_trip_and_admin_only(client, db, auth_headers):
+    try:
+        r = _voice_settings(client, auth_headers, default_lang="ar-AE", daily_transcriptions=50)
+        assert r.status_code == 200, r.text
+        got = client.get("/api/v1/ai/voice-settings", headers=auth_headers).json()
+        assert (got["default_lang"], got["daily_transcriptions"]) == ("ar-AE", 50)
+        assert "transcriptions_today" in got
+        assert _voice_settings(client, auth_headers, default_lang="fr-FR").status_code == 422
+        assert db.query(AuditLog).filter(AuditLog.action == "voice_settings_saved").count() >= 1
+    finally:
+        _voice_settings(client, auth_headers)
+
+
+def test_voice_off_blocks_every_voice_endpoint(client, db, auth_headers, monkeypatch):
+    monkeypatch.setattr(ai_router, "transcribe_audio", lambda *a, **k: {"text": "hi"})
+    _no_llm(monkeypatch)
+    cid = _company_id(client, auth_headers)
+    _, ess_h = _ess_login(client, db, auth_headers, cid, "VOICE-OFF1", "voice.off1")
+    try:
+        _voice_settings(client, auth_headers, enabled=False)
+        assert _upload(client, auth_headers).status_code == 403
+        assert _intent(client, auth_headers, "open payroll").status_code == 403
+        assert _draft(client, auth_headers, "vendor", "x", {}, {"fields": {}}, monkeypatch).status_code == 403
+        assert _ess_voice(client, ess_h, "open payslips").status_code == 403
+        assert client.get("/api/v1/ess/voice-settings", headers=ess_h).json()["enabled"] is False
+    finally:
+        _voice_settings(client, auth_headers)
+    assert _intent(client, auth_headers, "open payroll").status_code == 200
+
+
+def test_transcription_switch_and_daily_cap(client, auth_headers, monkeypatch):
+    monkeypatch.setattr(ai_router, "transcribe_audio", lambda *a, **k: {"text": "hello"})
+    try:
+        _voice_settings(client, auth_headers, cloud_transcription=False)
+        r = _upload(client, auth_headers)
+        assert r.status_code == 403 and "Server transcription is turned off" in r.json()["detail"]
+        # Browser-side voice still works when only server STT is off.
+        assert _intent(client, auth_headers, "open payroll").status_code == 200
+
+        used = client.get("/api/v1/ai/voice-settings", headers=auth_headers).json()["transcriptions_today"]
+        _voice_settings(client, auth_headers, daily_transcriptions=used + 2)
+        assert _upload(client, auth_headers).status_code == 200
+        assert _upload(client, auth_headers).status_code == 200
+        r = _upload(client, auth_headers)
+        assert r.status_code == 429 and "limit" in r.json()["detail"]
+    finally:
+        _voice_settings(client, auth_headers)

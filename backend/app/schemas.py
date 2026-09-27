@@ -1048,6 +1048,13 @@ class VoiceIntentResponse(BaseModel):
     source: Literal["rules", "llm"] = "rules"
 
 
+class VoiceSettings(BaseModel):
+    enabled: bool = True
+    default_lang: Literal["", "en-US", "ar-AE"] = ""
+    cloud_transcription: bool = True
+    daily_transcriptions: int = Field(default=200, ge=0, le=10000)
+
+
 class VoiceDraftRequest(BaseModel):
     form: Literal["expense", "purchase", "sales_invoice", "customer", "vendor", "pos_cart"]
     transcript: str = Field(min_length=1, max_length=1000)

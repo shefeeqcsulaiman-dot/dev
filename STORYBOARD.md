@@ -525,6 +525,13 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 - A panel lists what was recognised with editable quantities; items not in your product list are shown greyed out and can't be added
 - Nothing reaches the cart until the cashier taps **Add to cart**; prices always come from the product record, never from speech; the usual low-stock warning still shows
 
+### 15.1e Voice settings (Settings > AI & Voice)
+- **Enable voice** — off hides every mic and Dictate button (main app, HRMS, ESS, POS) and the voice endpoints refuse requests
+- **Allow server transcription** — off = browser speech recognition only (Chrome, Edge, Safari); Firefox users then can't use voice
+- **Default voice language** — English / Arabic / each browser's own; a user's own EN/عربي pick still wins
+- **Server transcriptions per day** — cost cap (default 200); today's usage is shown; browser speech recognition is free and uncapped
+- Audio is never stored; only the text is sent to the AI to work out the command or form values
+
 ### 15.2 AI Invoice Extraction
 - Upload supplier invoice images (JPG/PNG/PDF)
 - Background OCR + LLM extraction: invoice no, supplier name, TRN, date, line items, totals, VAT

@@ -1137,7 +1137,7 @@ button{cursor:pointer;border:none;background:none;}
 <!-- Toast -->
 <div class="ptost" id="ptost"></div>
 
-<script src="src/voice.js?v=283726f4a4"></script>
+<script src="src/voice.js?v=aa56e95978"></script>
 <script>
 'use strict';
 
@@ -2641,6 +2641,14 @@ document.addEventListener('click', e => {
 // Push-to-talk only. The spoken order is matched to products and shown for
 // the cashier to confirm; confirmed lines go through addToCart() as usual.
 let _posVoiceLines=[];
+// Settings > AI & Voice: hide the mic when voice (or the AI module) is off.
+setTimeout(()=>{
+  api('/ai/voice-settings').then(s=>{
+    const b=document.getElementById('pos-mic-btn');
+    if(b)b.hidden=!s.enabled;
+    if(window.VoiceInput)VoiceInput.setCompanyLang(s.default_lang);
+  }).catch(()=>{const b=document.getElementById('pos-mic-btn');if(b)b.hidden=true;});
+},1200);
 function _posMicState(state){
   const b=document.getElementById('pos-mic-btn');
   if(!b)return;

@@ -16,6 +16,7 @@ import app.timezone_utils as timezone_utils
 from app.auth_principal import resolve_department_scope
 from app.config import get_settings
 from app.ai_client import transcribe_audio
+from app.voice_settings import get_voice_settings, require_voice_enabled, reserve_transcription
 from app.database import get_db
 from app.dependencies import assert_company_active, company_allows_module
 from app.limiter import limiter
@@ -1301,6 +1302,7 @@ def _require_ai_module(db: Session, emp: Employee) -> None:
     modules = db.query(Company.modules_enabled).filter(Company.id == emp.company_id).scalar()
     if not company_allows_module(modules, "ai"):
         raise HTTPException(status_code=403, detail="Voice isn't enabled for your company")
+    require_voice_enabled(db, emp.company_id)
 
 
 class EssVoiceIn(BaseModel):
@@ -1328,6 +1330,15 @@ def _next_shift_answer(rows: list, today: date) -> str:
     times = f", {r['start']}–{r['end']}" if r.get("start") and r.get("end") else ""
     label = r.get("type") or r.get("code") or ""
     return f"Your next shift is {when}{times}" + (f" ({label})" if label else "") + "."
+
+
+@router.get("/voice-settings")
+def ess_voice_settings(request: Request, db: Session = Depends(get_db)) -> dict:
+    """What the portal needs to show or hide its mic and pick a language."""
+    emp = ess_bearer(request, db)
+    modules = db.query(Company.modules_enabled).filter(Company.id == emp.company_id).scalar()
+    settings = get_voice_settings(db, emp.company_id)
+    return {"enabled": bool(settings["enabled"]) and company_allows_module(modules, "ai"), "default_lang": settings["default_lang"]}
 
 
 @router.post("/voice-intent")
@@ -1363,6 +1374,7 @@ def ess_voice_transcribe(
         raise HTTPException(status_code=413, detail="Recording too long - keep voice input under about a minute")
     lang_code = (lang or "").split("-")[0].lower()
     lang_code = lang_code if lang_code in ("en", "ar") else None
+    reserve_transcription(db, emp.company_id)
     result = transcribe_audio(audio, file.filename or "audio.webm", file.content_type or "audio/webm", lang_code)
     if "error" in result:
         raise HTTPException(status_code=503, detail=result["error"])
