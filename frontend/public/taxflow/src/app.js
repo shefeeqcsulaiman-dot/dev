@@ -25259,13 +25259,14 @@ function _vcPop(){
       <button type="button" class="vc-pop-close" onclick="closeVoiceCommand()" aria-label="Close">×</button>
     </div>
     <div class="vc-pop-heard" id="vc-pop-heard"></div>
+    <div class="vc-pop-note" id="vc-pop-note"></div>
     <div class="vc-pop-chips" id="vc-pop-chips"></div>
-    <div class="vc-pop-hint">Try “Open payroll”, “New invoice”, “Search Al Noor in sales”. Ctrl+Space to talk.</div>`;
+    <div class="vc-pop-hint" id="vc-pop-hint"></div>`;
   document.body.appendChild(pop);
   return pop;
 }
 
-function _vcShow(status,{heard,chips,autoHide}={}){
+function _vcShow(status,{heard,chips,autoHide,note,hint}={}){
   const pop=_vcPop();
   clearTimeout(_vcHideTimer);
   pop.hidden=false;
@@ -25275,6 +25276,10 @@ function _vcShow(status,{heard,chips,autoHide}={}){
   const heardEl=document.getElementById('vc-pop-heard');
   heardEl.textContent=heard?`“${heard}”`:'';
   heardEl.hidden=!heard;
+  const noteEl=document.getElementById('vc-pop-note');
+  noteEl.textContent=note||'';
+  noteEl.hidden=!note;
+  document.getElementById('vc-pop-hint').textContent=hint||_VF_DEFAULT_HINT;
   const chipsEl=document.getElementById('vc-pop-chips');
   chipsEl.innerHTML='';
   (chips||[]).forEach(chip=>{
@@ -25367,6 +25372,170 @@ function _vcChips(ids,query){
     label:entry.label,
     onClick:()=>{closeVoiceCommand();_vcRun(entry,query);}
   }));
+}
+
+// ── Voice data entry (Phase 3) ───────────────────────────────────────────
+// "Dictate" on a form: speech -> POST /ai/voice-draft -> fields filled and
+// highlighted. Only fills the open form; the user still presses Save.
+const _VF_DEFAULT_HINT='Try “Open payroll”, “New invoice”, “Search Al Noor in sales”. Ctrl+Space to talk.';
+
+function _vfOptions(id){
+  return [...(document.getElementById(id)?.options||[])].filter(o=>o.value!=='').map(o=>o.textContent.trim()).filter(Boolean);
+}
+
+function _vfAc(key){
+  try{return (_AC_SOURCES[key]?.()||[]).map(item=>item.value).filter(Boolean).slice(0,1000);}catch(err){return [];}
+}
+
+const _VF_FORMS={
+  expense:{
+    hint:'e.g. “Taxi to the client yesterday, 85 dirhams plus 4.25 VAT, Careem, transport”',
+    choices:()=>({category:_vfOptions('expense-category'),vendor:_vfAc('expense-vendor')}),
+    fields:{date:'expense-date',category:'expense-category',vendor:'expense-vendor',description:'expense-description',amount:'expense-amount',vat:'expense-vat'},
+    after:()=>{if(typeof calcExpenseTotal==='function')calcExpenseTotal();}
+  },
+  purchase:{
+    hint:'e.g. “From Gulf Steel, 10 steel rods at 12.50 and 5 cement bags at 20, reference PO 118”',
+    choices:()=>({supplier:_vfOptions('mp-supplier'),product:_vfAc('purchase-product')}),
+    fields:{supplier:'mp-supplier',reference:'mp-ref',date:'mp-date',notes:'mp-notes'},
+    lines:lines=>_vfFillLines(lines,{
+      rows:()=>[...document.querySelectorAll('#mp-lines tr')],
+      add:()=>{addManualPurchaseLine();return document.querySelector('#mp-lines tr:last-child');},
+      product:'.mp-product',qty:'.mp-qty',price:'.mp-cost',
+      recalc:()=>calcManualPurchase()
+    })
+  },
+  sales_invoice:{
+    hint:'e.g. “Invoice Al Noor Trading, 3 laptops at 2,500 each, due in 30 days”',
+    choices:()=>({customer:_vfAc('invoice-customer'),product:_vfAc('invoice-product')}),
+    fields:{customer:'inv-cust',date:'inv-date',due_date:'inv-due',po:'inv-po',reference:'inv-ref'},
+    lines:lines=>_vfFillLines(lines,{
+      rows:()=>[...document.querySelectorAll('#inv-lines .inv-item')],
+      add:()=>addLine(),
+      product:'.inv-product',qty:'.inv-qty',price:'.inv-price',
+      priceLocked:true,
+      recalc:()=>calcLine(null)
+    })
+  },
+  customer:{
+    hint:'e.g. “Al Noor Trading, TRN 100234567800003, Sharjah, email info at alnoor dot ae”',
+    choices:()=>({emirate:_vfOptions('cust-emirate')}),
+    fields:{name:'cust-name',trn:'cust-trn',emirate:'cust-emirate',address:'cust-address',email:'cust-email',phone:'cust-phone'}
+  },
+  vendor:{
+    hint:'e.g. “Dubai Paints, TRN 100…, category materials, phone 04 123 4567”',
+    choices:()=>({category:_vfOptions('vendor-category')}),
+    fields:{name:'vendor-name',trn:'vendor-trn',category:'vendor-category',email:'vendor-email',phone:'vendor-phone',address:'vendor-address'}
+  }
+};
+
+function _vfMark(el){
+  if(!el)return;
+  el.classList.add('vf-filled');
+  // The highlight clears as soon as the user edits the field themselves.
+  const clear=e=>{if(e.isTrusted){el.classList.remove('vf-filled');el.removeEventListener('input',clear);el.removeEventListener('change',clear);}};
+  el.addEventListener('input',clear);
+  el.addEventListener('change',clear);
+}
+
+function _vfSet(el,value){
+  if(!el||value==null)return false;
+  if(el.tagName==='SELECT'){
+    const opt=[...el.options].find(o=>o.value===value||o.textContent.trim()===value);
+    if(!opt)return false;
+    el.value=opt.value;
+  }else{
+    el.value=String(value);
+    el.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+  el.dispatchEvent(new Event('change',{bubbles:true}));
+  _vfMark(el);
+  return true;
+}
+
+function _vfFillLines(lines,cfg){
+  let filled=0;
+  const unknown=[];
+  lines.forEach(line=>{
+    let row=cfg.rows().find(r=>!String(r.querySelector(cfg.product)?.value||'').trim());
+    if(!row)row=cfg.add();
+    if(!row)return;
+    _vfSet(row.querySelector(cfg.product),line.product);
+    if(line.quantity)_vfSet(row.querySelector(cfg.qty),line.quantity);
+    if(line.price!=null){
+      _vfSet(row.querySelector(cfg.price),line.price);
+      if(cfg.priceLocked)row.dataset.priceLocked='manual';
+    }
+    if(line.matched!=='yes')unknown.push(line.product);
+    filled++;
+  });
+  try{cfg.recalc();}catch(err){console.warn(err);}
+  return {filled,unknown};
+}
+
+let _vfActiveBtn=null;
+function _vfBtnState(state){
+  if(!_vfActiveBtn)return;
+  _vfActiveBtn.classList.toggle('listening',state==='listening');
+  _vfActiveBtn.classList.toggle('processing',state==='processing');
+  if(state==='idle')_vfActiveBtn=null;
+}
+
+function voiceFill(form,btn){
+  const cfg=_VF_FORMS[form];
+  if(!cfg)return;
+  if(!window.VoiceInput||!VoiceInput.supported()){toast('Voice input is not supported in this browser','warn');return;}
+  if(!_vcAllowed()){toast("The AI module isn't enabled for your company",'warn');return;}
+  if(VoiceInput.isActive()){VoiceInput.stop();return;}
+  if(window.VoiceOutput)VoiceOutput.stop();
+  _vfActiveBtn=btn||null;
+  const lang=VoiceInput.getLang();
+  VoiceInput.start({
+    lang,
+    transcribe:_aiTranscribe,
+    onState:state=>{
+      _vfBtnState(state);
+      if(state==='listening')_vcShow('Listening… describe it, then click Dictate again',{hint:cfg.hint});
+      else if(state==='processing')_vcShow('Transcribing…',{hint:cfg.hint});
+    },
+    onText:text=>applyVoiceDraft(form,text,lang),
+    onError:msg=>{_vfBtnState('idle');_vcShow(msg,{autoHide:5000});}
+  });
+}
+
+async function applyVoiceDraft(form,text,lang){
+  const cfg=_VF_FORMS[form];
+  const transcript=String(text||'').trim();
+  if(!cfg||!transcript)return;
+  _vcShow('Filling the form…',{heard:transcript,hint:cfg.hint});
+  let draft;
+  try{
+    draft=await moduleApi('/ai/voice-draft',{method:'POST',body:{
+      form,transcript,lang:lang==='ar-AE'?'ar':'en',choices:cfg.choices(),today:new Date().toLocaleDateString('en-CA')
+    }});
+  }catch(err){
+    _vcShow(`Voice entry failed: ${err.message||err}`,{heard:transcript,autoHide:7000});
+    return;
+  }
+  let filled=0;
+  const notes=[];
+  Object.entries(draft.fields||{}).forEach(([name,value])=>{
+    const el=document.getElementById(cfg.fields[name]);
+    if(_vfSet(el,value))filled++;
+    else if(el)notes.push(`${name}: “${value}” isn't one of the options`);
+  });
+  Object.entries(draft.unmatched||{}).forEach(([name,value])=>notes.push(`${name}: couldn't find “${value}” — pick it or add it first`));
+  if(cfg.lines&&(draft.lines||[]).length){
+    const res=cfg.lines(draft.lines);
+    filled+=res.filled;
+    if(res.unknown.length)notes.push(`Not in your product list: ${res.unknown.join(', ')}`);
+  }
+  if(cfg.after)try{cfg.after();}catch(err){console.warn(err);}
+  if(!filled){
+    _vcShow('Nothing to fill from that — try again with the details',{heard:transcript,note:notes.join(' · '),hint:cfg.hint});
+    return;
+  }
+  _vcShow(`Filled ${filled} field${filled===1?'':'s'} from voice — check them, then press Save`,{heard:transcript,note:notes.join(' · '),hint:'Highlighted fields came from voice. Nothing is saved until you press Save.'});
 }
 
 async function runVoiceCommand(text,lang){

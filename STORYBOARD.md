@@ -506,6 +506,14 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 - Unclear commands show "Did you mean…" buttons; nothing is opened until you pick one
 - Only screens you can already see in your sidebar are reachable by voice
 
+### 15.1b Voice data entry
+**Entry:** **🎤 Dictate** button on New Expense, Add Purchase (manual), New Invoice, Add Customer and Add Vendor.
+- Speak the details ("Taxi to the client yesterday, 85 dirhams plus 4.25 VAT, Careem, transport"); the form fills in and every voice-filled field is highlighted until you edit it
+- Relative dates ("yesterday", "30th of October") become real dates; spoken emails/TRNs/phones are cleaned up; invalid values are left blank
+- Supplier / customer / product / category names are matched against your existing lists; anything not found is left as spoken (or blank for strict dropdowns) and listed in the popup ("Not in your product list: …")
+- Item lines are added for purchases and invoices
+- **Nothing is saved** — you review and press the form's normal Save / Submit button
+
 ### 15.2 AI Invoice Extraction
 - Upload supplier invoice images (JPG/PNG/PDF)
 - Background OCR + LLM extraction: invoice no, supplier name, TRN, date, line items, totals, VAT

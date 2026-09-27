@@ -1,3 +1,4 @@
+import datetime
 import json
 from decimal import Decimal
 
@@ -12,7 +13,8 @@ from app.dependencies import get_current_user, require_module
 from app.limiter import limiter
 from app.routers.app_data import get_company_vat_rate
 from app.models import Account, AppDataRecord, AuditLog, ExceptionEvent, Invoice, SourceTransaction, TaxLine, User
-from app.schemas import AIAssistRequest, AIExceptionExplainRequest, AIResponse, AITransactionValidationRequest, VoiceIntentRequest, VoiceIntentResponse
+from app.schemas import AIAssistRequest, AIExceptionExplainRequest, AIResponse, AITransactionValidationRequest, VoiceDraftRequest, VoiceDraftResponse, VoiceIntentRequest, VoiceIntentResponse
+from app.voice_draft import build_draft
 from app.voice_intent import resolve_intent
 
 ASSISTANT_SYSTEM_PROMPT = (
@@ -227,6 +229,18 @@ def voice_intent(request: Request, payload: VoiceIntentRequest, principal: Princ
             seen.add(t.id)
             targets.append(t.model_dump())
     return VoiceIntentResponse(**resolve_intent(payload.transcript, targets, payload.lang))
+
+
+@router.post("/voice-draft", response_model=VoiceDraftResponse)
+@limiter.limit("15/minute")
+def voice_draft(request: Request, payload: VoiceDraftRequest, principal: Principal = Depends(get_current_principal)) -> VoiceDraftResponse:
+    """Dictation -> field values for one existing form. Returns a draft only;
+    the page fills its form and the user saves it through the normal path."""
+    today = payload.today or datetime.date.today()
+    result = build_draft(payload.form, payload.transcript, payload.choices, today, payload.lang)
+    if "error" in result:
+        raise HTTPException(status_code=503, detail=f"Voice data entry needs the AI service: {result['error']}")
+    return VoiceDraftResponse(**result)
 
 
 @router.post("/validate-transaction", response_model=AIResponse)
