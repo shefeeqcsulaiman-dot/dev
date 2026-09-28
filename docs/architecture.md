@@ -2968,3 +2968,8 @@ Voice is a thin input/output layer over the existing AI Assistant; it never writ
 - The system prompt restricts answers to that data (no invented numbers; say which report has it otherwise), explains negative VAT = refund and monthly vs to-date figures, and asks for formatted amounts. Works for spoken and typed questions and Arabic (`answer_lang`).
 - Without an AI key, `rule_answer()` answers common questions (profit, receivables/overdue, VAT, revenue, staff, stock, suppliers) directly from the snapshot. Tests: `test_ai_data_answers.py`.
 
+### 35.1 Daily briefing
+
+- `GET /ai/briefing?lang=en|ar` (admin user, `ai` module, 20/min) → `app/voice_briefing.build_briefing()`: `{intro, items:[{key,page,text}], text, lang, vat_due}` from the cached dashboard plus `ai_context` `receivables_summary` (past due by due date). VAT due = quarter end + 28 days (calendar quarters). No LLM.
+- Frontend: `playDailyBriefing()` (app.js) shows the items in the voice popup (`#vc-pop-body`) with page chips and speaks `text`; `#dash-btn-briefing` on the dashboard header and a `Daily briefing` voice query target (main app only). Tests: `test_daily_briefing.py`.
+

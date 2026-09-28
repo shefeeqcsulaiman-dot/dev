@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.ai_client import call_llm, transcribe_audio
 from app.ai_context import build_ai_context, rule_answer
+from app.voice_briefing import build_briefing
 from app.auth_principal import Principal, get_current_principal
 from app.database import get_db
 from app.dependencies import get_current_user, require_module
@@ -229,6 +230,25 @@ def transcribe(
     if "error" in result:
         raise HTTPException(status_code=503, detail=result["error"])
     return {"text": result["text"], "lang": lang_code or ""}
+
+
+@router.get("/briefing")
+@limiter.limit("20/minute")
+def daily_briefing(request: Request, lang: str = "en", db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict:
+    """Short spoken summary of today's position: past-due receivables, unpaid
+    purchases, VAT due date, staff today, open exceptions. Read-only."""
+    ctx = build_ai_context(db, current_user)
+    from app.routers import reports
+
+    dashboard = reports._cached_or_build(f"dashboard:{current_user.company_id}:all", 60,
+                                         lambda: reports._build_dashboard(db, current_user.company_id, None))
+    first_name = (current_user.full_name or "").split(" ")[0] or None
+    return build_briefing(
+        db, current_user.company_id, dashboard, datetime.date.today(),
+        lang="ar" if lang.lower().startswith("ar") else "en",
+        currency=(ctx.get("company") or {}).get("currency", "AED"), name=first_name,
+        receivables=ctx.get("receivables_summary"),
+    )
 
 
 @router.get("/voice-settings")
