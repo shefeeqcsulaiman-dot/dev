@@ -802,7 +802,7 @@
   .m-list button{width:100%;display:flex;align-items:center;gap:12px;padding:14px;border:none;border-bottom:1px solid var(--border);background:none;color:var(--text);font-size:15px;text-align:left;min-height:52px}
   .m-list button:last-child{border-bottom:none}
   .m-list button span{flex:1}
-  .m-list button>svg:first-child{color:var(--accent)}
+  .m-list button>svg:first-child{color:var(--accent);width:20px;height:20px;flex:0 0 20px}
   .m-list button>svg:last-child{color:var(--text3)}
   .m-list button[hidden]{display:none}
   .m-list .m-danger,.m-list .m-danger>svg:first-child{color:#dc2626}
@@ -816,6 +816,10 @@
   .ess-overlay .ess-modal{max-width:none!important;border-radius:22px 22px 0 0!important;max-height:92dvh;padding:12px 18px calc(18px + env(safe-area-inset-bottom))!important;animation:m-sheet .24s ease-out}
   .ess-overlay .ess-modal::before{content:'';display:block;width:40px;height:4px;border-radius:2px;background:var(--border);margin:0 auto 14px}
   .ess-modal input,.ess-modal select,.ess-modal textarea{font-size:16px}
+  /* Date inputs have a large built-in minimum width; let the two-column rows shrink to the sheet. */
+  .fr2{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .fr2 .field{min-width:0}
+  .ess-modal input[type=date],.ess-modal input[type=time],.ess-modal input[type=month]{min-width:0;padding-left:10px;padding-right:8px}
   #leave-type{display:none}
   .m-chips{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 4px}
   .m-chips button{border:1px solid var(--border);background:var(--bg3);color:var(--text2);border-radius:18px;padding:8px 14px;font-size:14px;min-height:40px}
