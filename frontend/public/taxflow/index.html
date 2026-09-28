@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=0d15e03b73" as="style">
-<link rel="preload" href="src/app.js?v=b74c5652de" as="script">
+<link rel="preload" href="src/styles.css?v=f3c668580c" as="style">
+<link rel="preload" href="src/app.js?v=c8d2935eea" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=0d15e03b73">
+<link rel="stylesheet" href="src/styles.css?v=f3c668580c">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
 </head>
 <body class="theme-light">
@@ -185,6 +185,9 @@
     <div class="mb3-hdr-right">
 
       <div class="dv2-live-badge"><span class="live-dot"></span><span id="dash-period-label">Live</span></div>
+      <button class="mb3-hdr-btn" id="dash-btn-briefing" data-module-gate="ai" onclick="playDailyBriefing()" title="Hear today's summary — overdue payments, VAT due date, staff and exceptions">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13" aria-hidden="true"><path d="M3 6v4h2.5L9 13V3L5.5 6H3z"/><path d="M11.5 5.5a3.5 3.5 0 0 1 0 5"/></svg><span>Briefing</span>
+      </button>
       <button class="mb3-hdr-btn" id="dash-btn-new-invoice" onclick="go('sales')">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13"><path d="M2 4h12l-1 8H3L2 4z"/></svg><span id="dash-btn-new-invoice-label">New Invoice</span>
       </button>
@@ -5671,6 +5674,6 @@ period_locks ─&lt; audit_logs
      order relative to app.js's own defer, so config.js still runs first. -->
 <script src="config.js" defer></script>
 <script src="src/voice.js?v=aa56e95978" defer></script>
-<script src="src/app.js?v=b74c5652de" defer></script>
+<script src="src/app.js?v=c8d2935eea" defer></script>
 </body>
 </html>

@@ -533,6 +533,12 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 - A panel lists what was recognised with editable quantities; items not in your product list are shown greyed out and can't be added
 - Nothing reaches the cart until the cashier taps **Add to cart**; prices always come from the product record, never from speech; the usual low-stock warning still shows
 
+### 15.1f Daily briefing
+**Entry:** **Briefing** button on the dashboard header, or say "good morning" / "brief me" to the topbar mic.
+- Reads out and lists today's position: amount past due and how many customers, purchases waiting for payment, next VAT return due date (plus VAT payable or refund expected), staff checked in today and pending approvals, open exceptions
+- Each line has a button to its page (Receivables, Purchases, VAT report, HRMS, Exceptions)
+- English or Arabic (follows the app language / voice language); hidden when voice is turned off
+
 ### 15.1e Voice settings (Settings > AI & Voice)
 - **Enable voice** — off hides every mic and Dictate button (main app, HRMS, ESS, POS) and the voice endpoints refuse requests
 - **Allow server transcription** — off = browser speech recognition only (Chrome, Edge, Safari); Firefox users then can't use voice

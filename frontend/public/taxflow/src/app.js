@@ -25340,6 +25340,9 @@ function buildVoiceCatalog(){
       add('action',/^\+\s*\w+$/.test(m.a)?`${m.a} ${m.t||label}`:m.a,m.t||label,()=>{nav.click();setTimeout(()=>m.ao(),80);});
     }
   });
+  if(!window.HRMS_STANDALONE&&document.getElementById('dash-btn-briefing')){
+    add('query','Daily briefing','good morning brief me today summary what is happening',async()=>{await playDailyBriefing();return null;});
+  }
   if(window.HRMS_STANDALONE){
     _VC_HR_QUERIES.forEach(q=>{
       const nav=document.querySelector(`.sb .nav[data-staff-nav="${q.nav}"]`);
@@ -25366,6 +25369,7 @@ function _vcPop(){
       <button type="button" class="vc-pop-close" onclick="closeVoiceCommand()" aria-label="Close">×</button>
     </div>
     <div class="vc-pop-heard" id="vc-pop-heard"></div>
+    <ul class="vc-pop-body" id="vc-pop-body"></ul>
     <div class="vc-pop-note" id="vc-pop-note"></div>
     <div class="vc-pop-chips" id="vc-pop-chips"></div>
     <div class="vc-pop-hint" id="vc-pop-hint"></div>`;
@@ -25373,7 +25377,7 @@ function _vcPop(){
   return pop;
 }
 
-function _vcShow(status,{heard,chips,autoHide,note,hint}={}){
+function _vcShow(status,{heard,chips,autoHide,note,hint,body}={}){
   const pop=_vcPop();
   clearTimeout(_vcHideTimer);
   pop.hidden=false;
@@ -25383,6 +25387,9 @@ function _vcShow(status,{heard,chips,autoHide,note,hint}={}){
   const heardEl=document.getElementById('vc-pop-heard');
   heardEl.textContent=heard?`“${heard}”`:'';
   heardEl.hidden=!heard;
+  const bodyEl=document.getElementById('vc-pop-body');
+  bodyEl.innerHTML=(body||[]).map(line=>`<li>${escapeHtml(line)}</li>`).join('');
+  bodyEl.hidden=!(body&&body.length);
   const noteEl=document.getElementById('vc-pop-note');
   noteEl.textContent=note||'';
   noteEl.hidden=!note;
@@ -25474,10 +25481,43 @@ function _vcAnswer(question,lang,alternatives){
   },80);
 }
 
+// Daily briefing: dashboard "Briefing" button or "good morning" / "brief me".
+// Reads out and lists today's position (GET /ai/briefing); each item has a
+// button to its page. Read-only.
+const _BRIEF_LABELS={
+  en:{overdue:'Receivables',purchases:'Purchases',vat:'VAT report',staff:'HRMS',exceptions:'Exceptions'},
+  ar:{overdue:'المستحقات',purchases:'المشتريات',vat:'تقرير الضريبة',staff:'الموارد البشرية',exceptions:'الاستثناءات'}
+};
+function _briefingLang(){
+  if(typeof _appLang!=='undefined'&&_appLang==='ar')return 'ar';
+  return window.VoiceInput&&VoiceInput.getLang()==='ar-AE'?'ar':'en';
+}
+function _briefGo(page){
+  closeVoiceCommand();
+  if(page==='hrms'){window.open('/hrms','_blank');return;}
+  go(page);
+}
+async function playDailyBriefing(){
+  const lang=_briefingLang();
+  _vcShow(lang==='ar'?'جارٍ تجهيز الملخص…':'Preparing your briefing…');
+  let b;
+  try{b=await moduleApi(`/ai/briefing?lang=${lang}`);}
+  catch(err){_vcShow(`Briefing unavailable: ${err.message||err}`,{autoHide:6000});return null;}
+  const labels=_BRIEF_LABELS[lang];
+  _vcShow(b.intro,{
+    body:(b.items||[]).map(i=>i.text),
+    chips:(b.items||[]).filter(i=>labels[i.key]).map(i=>({label:labels[i.key],onClick:()=>_briefGo(i.page)})),
+    hint:lang==='ar'?'اضغط على أي بند لفتح صفحته.':'Tap an item to open it. Say “good morning” any time to hear this again.'
+  });
+  if(window.VoiceOutput)VoiceOutput.speak(b.text,lang==='ar'?'ar-AE':'en-US');
+  return b;
+}
+
 async function _vcRunQuery(entry,transcript){
   _vcShow('Checking…',{heard:transcript});
   try{
     const answer=await entry.run();
+    if(answer==null)return;
     _vcShow(answer,{heard:transcript});
     if(window.VoiceOutput)VoiceOutput.speak(answer);
   }catch(err){

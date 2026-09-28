@@ -41,10 +41,12 @@ def _aed(value: Decimal, currency: str) -> str:
 
 
 def build_briefing(db: Session, company_id: str, dashboard: dict[str, Any], today: dt.date,
-                   lang: str = "en", currency: str = "AED", name: str | None = None) -> dict[str, Any]:
-    status = dashboard.get("invoice_status") or {}
-    overdue = status.get("overdue") or {}
-    overdue_n, overdue_amt = int(overdue.get("count") or 0), _dec(overdue.get("amount"))
+                   lang: str = "en", currency: str = "AED", name: str | None = None,
+                   receivables: dict[str, Any] | None = None) -> dict[str, Any]:
+    # Past due by due date (AR aging), not the invoice status field, which
+    # only counts invoices someone explicitly marked "Overdue".
+    receivables = receivables or {}
+    overdue_n, overdue_amt = int(receivables.get("customers_with_past_due") or 0), _dec(receivables.get("past_due"))
     pur = dashboard.get("purchase_summary") or {}
     unpaid_n = int(pur.get("pending_count") or 0)
     unpaid_amt = max(Decimal(0), _dec(pur.get("total")) - _dec(pur.get("paid")))
@@ -61,14 +63,15 @@ def build_briefing(db: Session, company_id: str, dashboard: dict[str, Any], toda
     if lang == "ar":
         greet = {"morning": "صباح الخير", "afternoon": "مساء الخير", "evening": "مساء الخير"}[hour_greeting]
         intro = f"{greet}{'، ' + name if name else ''}."
-        if overdue_n:
-            items.append({"key": "overdue", "page": "sales", "text": f"لديك {overdue_n} فواتير متأخرة بقيمة {_aed(overdue_amt, currency)}."})
+        if overdue_amt > 0:
+            items.append({"key": "overdue", "page": "sales", "text": f"مبالغ متأخرة بقيمة {_aed(overdue_amt, currency)} لدى {overdue_n} من العملاء."})
         if unpaid_n:
             items.append({"key": "purchases", "page": "purchase", "text": f"{unpaid_n} مشتريات بانتظار الدفع بقيمة {_aed(unpaid_amt, currency)}."})
         due_txt = f"{due.day} {AR_MONTHS[due.month - 1]}"
         items.append({"key": "vat", "page": "reports", "text": (
             f"إقرار ضريبة القيمة المضافة مستحق اليوم." if days == 0 else f"إقرار ضريبة القيمة المضافة مستحق خلال {days} يومًا في {due_txt}.")
-            + (f" الضريبة المستحقة حاليًا {_aed(vat_payable, currency)}." if vat_payable > 0 else "")})
+            + (f" الضريبة المستحقة حاليًا {_aed(vat_payable, currency)}." if vat_payable > 0 else
+               f" يُتوقع استرداد ضريبي بقيمة {_aed(-vat_payable, currency)}." if vat_payable < 0 else "")})
         if staff:
             items.append({"key": "staff", "page": "hrms", "text": f"سجّل {present} من أصل {staff} موظفًا حضورهم اليوم." + (f" {approvals} طلبات بانتظار الموافقة." if approvals else "")})
         if exceptions:
@@ -77,14 +80,15 @@ def build_briefing(db: Session, company_id: str, dashboard: dict[str, Any], toda
             items.insert(0, {"key": "clear", "page": "dashboard", "text": "لا توجد فواتير متأخرة أو مشتريات غير مدفوعة."})
     else:
         intro = f"Good {hour_greeting}{', ' + name if name else ''}."
-        if overdue_n:
-            items.append({"key": "overdue", "page": "sales", "text": f"{overdue_n} invoice{'s are' if overdue_n != 1 else ' is'} overdue, worth {_aed(overdue_amt, currency)}."})
+        if overdue_amt > 0:
+            items.append({"key": "overdue", "page": "sales", "text": f"{_aed(overdue_amt, currency)} is past due across {overdue_n} customer{'s' if overdue_n != 1 else ''}."})
         if unpaid_n:
             items.append({"key": "purchases", "page": "purchase", "text": f"{unpaid_n} purchase{'s are' if unpaid_n != 1 else ' is'} waiting for payment, {_aed(unpaid_amt, currency)} in total."})
         items.append({"key": "vat", "page": "reports", "text": (
             "Your VAT return is due today." if days == 0 else
             f"Your VAT return for the quarter ending {period_end.strftime('%d %B')} is due in {days} day{'s' if days != 1 else ''}, on {due.strftime('%d %B')}.")
-            + (f" VAT payable so far is {_aed(vat_payable, currency)}." if vat_payable > 0 else "")})
+            + (f" VAT payable so far is {_aed(vat_payable, currency)}." if vat_payable > 0 else
+               f" A VAT refund of {_aed(-vat_payable, currency)} is expected." if vat_payable < 0 else "")})
         if staff:
             items.append({"key": "staff", "page": "hrms", "text": f"{present} of {staff} staff have checked in today." + (f" {approvals} approval{'s are' if approvals != 1 else ' is'} waiting." if approvals else "")})
         if exceptions:
