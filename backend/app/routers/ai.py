@@ -7,6 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.ai_client import call_llm, transcribe_audio
+from app.ai_context import build_ai_context, rule_answer
 from app.auth_principal import Principal, get_current_principal
 from app.database import get_db
 from app.dependencies import get_current_user, require_module
@@ -20,9 +21,16 @@ from app.voice_intent import resolve_intent
 
 ASSISTANT_SYSTEM_PROMPT = (
     "You are TaxFlow AI, a safe review-layer assistant embedded in a UAE tax and accounting SaaS app. "
-    "You explain workflows, review data, and suggest next actions — you never post transactions, approve "
-    "anything, or claim an action was taken. Ground your answer in the company snapshot and open exceptions "
-    "given to you; cite real numbers from them when relevant. Keep the answer to 2-4 sentences. "
+    "You answer questions about the company's own live data, explain workflows, and suggest next actions — "
+    "you never post transactions, approve anything, or claim an action was taken. Answer from COMPANY DATA "
+    "only: quote the real figures with the currency, and you may add, compare or rank them (e.g. month over "
+    "month, top customers, margin %). If the data needed isn't in COMPANY DATA, say so plainly and name the "
+    "report or page that has it — never invent numbers. A negative vat_payable means input VAT exceeds output "
+    "VAT, so a refund/credit is due, not a payment. Only monthly_revenue_and_vat is per month; "
+    "profit_and_loss, totals_to_date and the aging figures cover all recorded transactions, so never "
+    "describe them as one month's figures. Write amounts with thousands separators and 2 decimals "
+    "(e.g. AED 12,345.60). Keep the answer to 2-5 short sentences; for a ranking, "
+    "list up to 5 items inline. "
     "Respond with valid JSON only — no markdown, no explanation outside the JSON — matching exactly this shape: "
     '{"answer": "", "confidence": 0, "suggested_actions": ["...", "...", "..."]}. '
     "\"confidence\" is 0-100, how confident you are that this answer is accurate and complete given the data "
@@ -149,12 +157,14 @@ def assist(request: Request, payload: AIAssistRequest, db: Session = Depends(get
     q = payload.question.lower()
     snapshot = company_snapshot(db, current_user.company_id)
     fallback = _rule_based_assist(q, snapshot)
+    data = build_ai_context(db, current_user)
+    # No AI key / AI failure: answer common data questions straight from the snapshot.
+    direct = rule_answer(payload.question, data)
+    if direct:
+        fallback = fallback.model_copy(update={"answer": direct, "confidence": 90})
 
-    prompt = f"""COMPANY SNAPSHOT:
-{json.dumps(snapshot, indent=2)}
-
-RECENT OPEN EXCEPTIONS (most recent first):
-{json.dumps(_recent_open_exceptions(db, current_user.company_id), indent=2)}
+    prompt = f"""COMPANY DATA (live, amounts in {data.get('company', {}).get('currency', 'AED')}; "to date" = all recorded transactions):
+{json.dumps(data, default=str, ensure_ascii=False)}
 
 USER QUESTION: {payload.question}"""
     if payload.answer_lang == "ar":
@@ -167,6 +177,7 @@ USER QUESTION: {payload.question}"""
         openai_default="gpt-4o-mini",
         anthropic_model_env="ANTHROPIC_ASSIST_MODEL",
         anthropic_default="claude-haiku-4-5-20251001",
+        max_tokens=900,
     )
 
     answer = result.get("answer") if isinstance(result, dict) else None

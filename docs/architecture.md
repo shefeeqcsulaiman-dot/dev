@@ -2962,3 +2962,9 @@ Voice is a thin input/output layer over the existing AI Assistant; it never writ
 - The ESS start-up block (`showApp()` for a remembered session) now sits at the very end of `ess.js` so everything it calls is defined first.
 - PWA: `ess-manifest.json` (start `/ess`, standalone, theme `#2563eb`), `ess-icon-192/512.png`, iOS `apple-mobile-web-app-*` meta; the Me menu offers `beforeinstallprompt` on Android/Chrome and Share-sheet instructions on iOS. No service worker (not required for install on current Chrome; avoids stale-cache issues).
 
+## 35. AI Assistant answers from live company data (2026-09-28)
+
+- `app/ai_context.py` `build_ai_context()` builds a compact JSON snapshot for `/ai/assist` from the cached report builders (`reports._build_dashboard` / `_build_summary`, 60s / 120s cache): totals to date, P&L, monthly revenue/VAT (12 months), invoices by status field, `receivables_summary` (past due by **due date**, from AR aging — the status-field "overdue" bucket only counts invoices explicitly marked overdue), AR/AP aging top 10, top customers/suppliers, working capital, health score, VAT position + next return due date (calendar quarters, `voice_briefing.next_vat_due`), staff snapshot and by department, low stock (via `inventory.list_stock_levels`), open exceptions.
+- The system prompt restricts answers to that data (no invented numbers; say which report has it otherwise), explains negative VAT = refund and monthly vs to-date figures, and asks for formatted amounts. Works for spoken and typed questions and Arabic (`answer_lang`).
+- Without an AI key, `rule_answer()` answers common questions (profit, receivables/overdue, VAT, revenue, staff, stock, suppliers) directly from the snapshot. Tests: `test_ai_data_answers.py`.
+
