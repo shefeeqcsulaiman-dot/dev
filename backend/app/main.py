@@ -37,7 +37,7 @@ from app.company_defaults import seed_accounts, seed_tax_codes, seed_voucher_typ
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.models import Company, User
-from app.routers import accounting, ai, ai_voice, app_data, attendance, audit, auth, branches, companies, corporate_accounting, documents, ess, ess_voice, events, exception_center, hr_access, hr_ai, inventory, invoice_share, invoices, jobs, leave, module_records, payroll, reports, source_transactions, superadmin, tax
+from app.routers import accounting, ai, ai_voice, app_data, attendance, audit, auth, branches, companies, corporate_accounting, documents, ess, ess_voice, events, exception_center, hr_access, hr_ai, inventory, invoice_share, invoices, jobs, leave, module_records, payroll, registers, reports, source_transactions, superadmin, tax
 from app.security import hash_password
 
 
@@ -123,6 +123,10 @@ async def _invalidate_cache_bg(auth_header: str) -> None:
 def create_app() -> FastAPI:
     from app.limiter import limiter
 
+    from app import monitoring
+    monitoring.init_sentry(settings.sentry_dsn, settings.sentry_environment, settings.sentry_traces_sample_rate)
+    monitoring.install_query_timing(engine, settings.slow_query_ms)
+
     app = FastAPI(title=settings.app_name, version="0.1.0")
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -194,6 +198,12 @@ def create_app() -> FastAPI:
         return response
 
     @app.middleware("http")
+    async def request_timing(request: Request, call_next):
+        # Per-endpoint timings, slow-request/slow-query logs, Server-Timing
+        # header -- see app/monitoring.py.
+        return await monitoring.time_request(request, call_next, settings.slow_request_ms)
+
+    @app.middleware("http")
     async def request_load_tracking(request: Request, call_next):
         # Feeds the superadmin "Live Load" panel (system-health) — scoped to
         # /api/v1/ only so static asset traffic doesn't dilute the signal of
@@ -258,13 +268,12 @@ def create_app() -> FastAPI:
             logging.getLogger("taxflow").warning("DB overload (%s) on %s %s", type(exc).__name__, request.method, request.url.path)
             return JSONResponse(status_code=503, content={"detail": "Service temporarily busy, please retry."}, headers={"Retry-After": "3"})
         logging.getLogger("taxflow").error("Unhandled error on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+        monitoring.capture_exception(exc)
         return JSONResponse(status_code=500, content={"detail": "An internal error occurred."})
 
-    @app.on_event("startup")
-    def startup() -> None:
-        import logging
-        log = logging.getLogger("taxflow")
-        settings.assert_production_secrets()
+    def _run_startup_tasks(log) -> None:
+        """Migrations, initial data and idempotent backfills; startup() runs this under
+        app.migrate.startup_lock() so concurrent workers take turns."""
         try:
             if settings.run_migrations_on_startup:
                 from app.migrate import run_migrations
@@ -291,6 +300,18 @@ def create_app() -> FastAPI:
                 backfill_user_roles_from_ui(db)
         except Exception as exc:
             log.error("User role backfill failed: %s", exc)
+
+    @app.on_event("startup")
+    def startup() -> None:
+        import logging
+        log = logging.getLogger("taxflow")
+        settings.assert_production_secrets()
+        from app.migrate import startup_lock
+        try:
+            with startup_lock():
+                _run_startup_tasks(log)  # each task logs and swallows its own failure
+        except Exception as exc:
+            log.error("Startup DB init failed (app will still serve traffic): %s", exc)
         # For SQLite: flush the WAL to the main database file on every startup so
         # the WAL never grows unbounded between sessions.
         if settings.database_url.startswith("sqlite"):
@@ -495,6 +516,7 @@ def create_app() -> FastAPI:
     app.include_router(events.router, prefix="/api/v1")
     app.include_router(module_records.router, prefix="/api/v1")
     app.include_router(app_data.router, prefix="/api/v1")
+    app.include_router(registers.router, prefix="/api/v1")
     app.include_router(superadmin.router, prefix="/api/v1")
     app.include_router(ess.router, prefix="/api/v1")
     app.include_router(ess_voice.router, prefix="/api/v1")

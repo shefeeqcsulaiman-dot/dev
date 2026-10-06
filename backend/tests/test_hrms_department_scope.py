@@ -121,7 +121,12 @@ def test_bootstrap_and_records_only_show_the_scoped_departments(client, db, auth
     assert a.employee_no in emp_ids and b.employee_no not in emp_ids
     assert {"OT-A-R1"} <= _ids(colls["overtimeRequests"]) and "OT-B-R1" not in _ids(colls["overtimeRequests"])
     assert "LN-A-R1" in _ids(colls["employeeLoans"]) and "LN-B-R1" not in _ids(colls["employeeLoans"])
-    assert "RA-A-R1" in _ids(colls["rotaAssignments"]) and "RA-B-R1" not in _ids(colls["rotaAssignments"])
+    # Rota assignments aren't in bootstrap any more (paged collection); the rota
+    # screens load them by date range, which must apply the same scoping.
+    assert "rotaAssignments" not in colls
+    rota = client.get("/api/v1/app-data/records/rotaAssignments/range", headers=headers,
+                      params={"from": "2026-09-01", "to": "2026-09-30"}).json()["records"]
+    assert "RA-A-R1" in _ids(rota) and "RA-B-R1" not in _ids(rota)
     # the Task module: now part of the hrms bootstrap for a role with hr_workflow:view
     assert "T-A-R1" in _ids(colls["tasks"]) and "T-U-R1" in _ids(colls["tasks"]) and "T-B-R1" not in _ids(colls["tasks"])
 

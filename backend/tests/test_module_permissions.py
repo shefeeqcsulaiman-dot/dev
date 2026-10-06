@@ -182,7 +182,9 @@ def test_bootstrap_heavy_collection_counts_not_cross_contaminated(client, db):
     boot = client.get("/api/v1/app-data", headers=headers)
     assert boot.status_code == 200, boot.text
     data = boot.json()["data"]
-    assert len(data["quotations"]) == 3
+    # Quotations page from GET /app-data/registers/quotations rather than the bootstrap.
+    assert "quotations" not in data
+    assert client.get("/api/v1/app-data/registers/quotations", headers=headers).json()["total"] == 3
     assert len(data["salesCategories"]) == 2
     # Well under either collection's cap (500/200) — nothing should be flagged truncated.
     assert boot.json()["truncated_collections"] == []

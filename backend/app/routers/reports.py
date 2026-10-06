@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func, text
+from sqlalchemy import event, func, text
 from sqlalchemy.exc import OperationalError as SQLAOperationalError
 from sqlalchemy.exc import TimeoutError as SQLATimeoutError
 from sqlalchemy.orm import Session
@@ -1271,15 +1271,11 @@ def _cost_of_sales(db: Session, company_id: str, branch_id: str | None, purchase
     row = db.query(Company.stock_mode, Company.inventory_accounting).filter(Company.id == company_id).first()
     if not row or row[0] == "without_stock" or (row[1] or "periodic") != "perpetual":
         return purchases_net
-    query = (
-        db.query(func.coalesce(func.sum(JournalLine.debit - JournalLine.credit), 0))
-        .join(JournalEntry, JournalEntry.id == JournalLine.journal_id)
-        .join(Account, Account.id == JournalLine.account_id)
-        .filter(JournalEntry.company_id == company_id, JournalEntry.status == "posted", Account.code == "1200")
-    )
-    if branch_id:
-        query = query.filter((JournalEntry.branch_id == branch_id) | (JournalEntry.branch_id.is_(None)))
-    return money(purchases_net - money(query.scalar()))
+    totals = posted_account_totals(db, company_id, branch_id)
+    inventory_ids = [aid for (aid,) in db.query(Account.id).filter(Account.company_id == company_id, Account.code == "1200")]
+    movement = sum((totals.get(aid, (Decimal("0"), Decimal("0")))[0] - totals.get(aid, (Decimal("0"), Decimal("0")))[1]
+                    for aid in inventory_ids), Decimal("0"))
+    return money(purchases_net - money(movement))
 
 
 def _manual_journal_expenses(db: Session, company_id: str, branch_id: str | None = None) -> Decimal:
@@ -1579,6 +1575,34 @@ def _posted_journal_line_totals(db: Session, company_id: str, branch_id: str | N
     return query.group_by(JournalLine.account_id).subquery()
 
 
+_ACCOUNT_TOTALS_KEY = "reports_posted_account_totals"
+
+
+def posted_account_totals(db: Session, company_id: str, branch_id: str | None = None) -> dict[str, tuple[Decimal, Decimal]]:
+    """{account_id: (debit, credit)} over every posted journal line, computed once per
+    session and shared by the trial balance, balance sheet and cost of sales -- one
+    summary request used to add up the same journal lines four times (the PostgreSQL
+    load test put that at over half of /reports/summary's database time). The memo is
+    dropped whenever the session flushes, commits or rolls back (see below), so a request
+    that writes and then reports never reads stale totals."""
+    memo = db.info.setdefault(_ACCOUNT_TOTALS_KEY, {})
+    key = (company_id, branch_id)
+    if key not in memo:
+        totals = _posted_journal_line_totals(db, company_id, branch_id)
+        memo[key] = {
+            account_id: (money(debit or 0), money(credit or 0))
+            for account_id, debit, credit in db.query(totals.c.account_id, totals.c.debit, totals.c.credit).all()
+        }
+    return memo[key]
+
+
+@event.listens_for(Session, "after_flush")
+@event.listens_for(Session, "after_commit")
+@event.listens_for(Session, "after_soft_rollback")
+def _forget_account_totals(session: Session, *_args) -> None:
+    session.info.pop(_ACCOUNT_TOTALS_KEY, None)
+
+
 def _opening_balance_dr_cr(opening_balance: Any, opening_balance_type: Any) -> tuple[Decimal, Decimal]:
     ob_value = money(opening_balance or 0)
     if str(opening_balance_type or "DR").upper() == "CR":
@@ -1587,16 +1611,16 @@ def _opening_balance_dr_cr(opening_balance: Any, opening_balance_type: Any) -> t
 
 
 def trial_balance_rows(db: Session, company_id: str, branch_id: str | None = None) -> list[dict[str, str]]:
-    jl_totals = _posted_journal_line_totals(db, company_id, branch_id)
+    totals = posted_account_totals(db, company_id, branch_id)
     rows = (
-        db.query(Account.code, Account.name, Account.opening_balance, Account.opening_balance_type, jl_totals.c.debit, jl_totals.c.credit)
-        .outerjoin(jl_totals, jl_totals.c.account_id == Account.id)
+        db.query(Account.id, Account.code, Account.name, Account.opening_balance, Account.opening_balance_type)
         .filter(Account.company_id == company_id)
         .order_by(Account.code)
         .all()
     )
     result = []
-    for code, name, ob, ob_type, debit, credit in rows:
+    for account_id, code, name, ob, ob_type in rows:
+        debit, credit = totals.get(account_id, (None, None))
         ob_dr, ob_cr = _opening_balance_dr_cr(ob, ob_type)
         debit_total = money(debit or 0) + ob_dr
         credit_total = money(credit or 0) + ob_cr
@@ -1607,10 +1631,9 @@ def trial_balance_rows(db: Session, company_id: str, branch_id: str | None = Non
 
 
 def balance_sheet_rows(db: Session, company_id: str, branch_id: str | None = None) -> dict[str, Any]:
-    jl_totals = _posted_journal_line_totals(db, company_id, branch_id)
+    account_totals = posted_account_totals(db, company_id, branch_id)
     rows = (
-        db.query(Account.code, Account.name, Account.type, Account.opening_balance, Account.opening_balance_type, jl_totals.c.debit, jl_totals.c.credit)
-        .outerjoin(jl_totals, jl_totals.c.account_id == Account.id)
+        db.query(Account.id, Account.code, Account.name, Account.type, Account.opening_balance, Account.opening_balance_type)
         .filter(Account.company_id == company_id)
         .order_by(Account.code)
         .all()
@@ -1618,7 +1641,8 @@ def balance_sheet_rows(db: Session, company_id: str, branch_id: str | None = Non
     sections: dict[str, list[dict[str, str]]] = {"assets": [], "liabilities": [], "equity": []}
     totals = {"assets": Decimal("0.00"), "liabilities": Decimal("0.00"), "equity": Decimal("0.00")}
     earnings = Decimal("0.00")
-    for code, name, account_type, ob, ob_type, debit, credit in rows:
+    for account_id, code, name, account_type, ob, ob_type in rows:
+        debit, credit = account_totals.get(account_id, (None, None))
         normalized = str(account_type or "").strip().lower()
         ob_dr, ob_cr = _opening_balance_dr_cr(ob, ob_type)
         debit_value = money(debit or 0) + ob_dr

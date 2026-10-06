@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=f14f81f61a" as="style">
-<link rel="preload" href="src/app.js?v=c60e7fdd7c" as="script">
+<link rel="preload" href="src/app.js?v=f72992f4fa" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=f14f81f61a">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
@@ -1133,8 +1133,15 @@
       </div>
     </div>
     <div class="card">
-      <div class="card-hd"><div class="card-title">All Invoices</div><div class="flx"><input class="fi" style="width:210px" placeholder="Search invoices..."><button class="btn btn-g" onclick="stab(document.querySelector('#page-sales .tab:nth-child(1)'),'s-upload')">Upload</button><button class="btn btn-p" onclick="openSalesAddChoice()">+ New Invoice</button></div></div>
-      <table class="tbl">
+      <div class="card-hd">
+        <div>
+          <div class="card-title">All Invoices</div>
+          <div class="card-sub" id="sales-invoice-count">Loading invoices...</div>
+        </div>
+        <div class="flx"><input class="fi" id="sales-invoice-search" type="search" style="width:210px" placeholder="Search invoices..." aria-label="Search invoices and returns" oninput="searchSalesRegister(this.value)"><button class="btn btn-g btn-sm" id="sales-invoice-prev" type="button" onclick="prevSalesRegisterPage('invoice')">&larr; Previous</button><button class="btn btn-g btn-sm" id="sales-invoice-next" type="button" onclick="nextSalesRegisterPage('invoice')">Next &rarr;</button><button class="btn btn-g" onclick="stab(document.querySelector('#page-sales .tab:nth-child(1)'),'s-upload')">Upload</button><button class="btn btn-p" onclick="openSalesAddChoice()">+ New Invoice</button></div>
+      </div>
+      <!-- Paged from the server (loadSalesRegisterPage() in app.js), so no client-side pager/search. -->
+      <table class="tbl" data-no-table-tools="1">
         <thead><tr><th>Invoice No.</th><th>Customer</th><th>Date</th><th>Due Date</th><th>Amount</th><th>VAT</th><th>Total</th><th>Source</th><th>Status</th><th></th></tr></thead>
         <tbody id="sales-invoice-tbody">
           <tr data-empty-state="1"><td colspan="10" style="color:var(--text3);text-align:center;padding:40px 0">No sales invoices yet. Create one or upload a PDF/Excel file.</td></tr>
@@ -1142,8 +1149,14 @@
       </table>
     </div>
     <div class="card mt16">
-      <div class="card-hd"><div class="card-title">Sales Returns</div><button class="btn btn-p btn-sm" onclick="startSalesTransaction('return')">+ Sales Return</button></div>
-      <table class="tbl">
+      <div class="card-hd">
+        <div>
+          <div class="card-title">Sales Returns</div>
+          <div class="card-sub" id="sales-return-count">Loading returns...</div>
+        </div>
+        <div class="flx"><button class="btn btn-g btn-sm" id="sales-return-prev" type="button" onclick="prevSalesRegisterPage('return')">&larr; Previous</button><button class="btn btn-g btn-sm" id="sales-return-next" type="button" onclick="nextSalesRegisterPage('return')">Next &rarr;</button><button class="btn btn-p btn-sm" onclick="startSalesTransaction('return')">+ Sales Return</button></div>
+      </div>
+      <table class="tbl" data-no-table-tools="1">
         <thead><tr><th>Return No.</th><th>Customer</th><th>Return Date</th><th>Reference</th><th>Amount</th><th>VAT</th><th>Total</th><th>Source</th><th>Status</th><th></th></tr></thead>
         <tbody id="sales-return-tbody">
           <tr data-empty-state="1"><td colspan="10" style="color:var(--text3);text-align:center;padding:32px 0">No sales returns in database yet.</td></tr>
@@ -1330,9 +1343,16 @@
 
   <div class="tab-body on" id="q-list">
     <div class="card">
-      <div class="card-hd"><div class="card-title">Quotations</div><button class="btn btn-p btn-sm" onclick="stab(document.querySelectorAll('#page-quotations .tab')[1],'q-create')">+ New Quotation</button></div>
-      <table class="tbl">
-        <thead><tr><th>Quotation No.</th><th>Customer</th><th>Date</th><th>Valid Until</th><th>Amount</th><th>VAT</th><th>Total</th><th>Status</th><th>Owner</th><th></th></tr></thead>
+      <div class="card-hd">
+        <div>
+          <div class="card-title">Quotations</div>
+          <div class="card-sub" id="quotations-count">Loading quotations...</div>
+        </div>
+        <div class="flx"><input class="fi" type="search" style="width:190px" placeholder="Search quotations..." aria-label="Search quotations" oninput="searchRegister('quotations',this.value)"><button class="btn btn-g btn-sm" id="quotations-prev" type="button" onclick="prevRegisterPage('quotations')">&larr; Previous</button><button class="btn btn-g btn-sm" id="quotations-next" type="button" onclick="nextRegisterPage('quotations')">Next &rarr;</button><button class="btn btn-p btn-sm" onclick="stab(document.querySelectorAll('#page-quotations .tab')[1],'q-create')">+ New Quotation</button></div>
+      </div>
+      <!-- Paged from the server (loadRegisterPage('quotations') in app.js), so no client-side pager/search. -->
+      <table class="tbl" data-no-table-tools="1">
+        <thead><tr><th>Quotation No.</th><th>Customer</th><th>Date</th><th>Valid Until</th><th>Amount</th><th>VAT</th><th>Total</th><th>Status</th><th>Owner</th><th data-action-col="1"></th></tr></thead>
         <tbody id="quotation-tbody">
           <tr data-empty-state="1"><td colspan="10" style="color:var(--text3);font-size:13px">No quotations in database yet.</td></tr>
         </tbody>
@@ -1751,15 +1771,16 @@
   </div>
   <div class="tab-body" id="bk-transactions">
     <div class="card">
-      <div class="card-hd"><div class="card-title">Recent Transactions</div>
-        <div class="flx">
+      <div class="card-hd"><div><div class="card-title">Recent Transactions</div><div class="card-sub" id="bankTx-count">Loading transactions...</div></div>
+        <div class="flx"><button class="btn btn-g btn-sm" id="bankTx-prev" type="button" onclick="prevRegisterPage('bankTx')">&larr; Previous</button><button class="btn btn-g btn-sm" id="bankTx-next" type="button" onclick="nextRegisterPage('bankTx')">Next &rarr;</button>
           <select class="fi" style="width:160px">
             <option>Emirates NBD</option><option>FAB</option>
           </select>
           <select class="fi" style="width:130px"><option>June 2024</option></select>
         </div>
       </div>
-      <table class="tbl">
+      <!-- Paged from the server with a running balance (renderBankTransactions() in app.js). -->
+      <table class="tbl" data-no-table-tools="1" data-delete-actions-bound="skip">
         <thead><tr><th>Date</th><th>Description</th><th>Debit</th><th>Credit</th><th>Balance</th><th>Category</th></tr></thead>
         <tbody id="bank-transaction-tbody">
           <tr data-empty-state="1"><td colspan="6" style="color:var(--text3);text-align:center">No bank transactions in database yet.</td></tr>
@@ -2127,9 +2148,16 @@
       <div class="stat"><div class="stat-lbl">Rejected</div><div class="stat-val" style="color:var(--red)" data-currency-label>AED 3,900</div><div class="stat-delta">2 items</div></div>
     </div>
     <div class="card">
-      <div class="card-hd"><div class="card-title">All Expenses</div><button class="btn btn-p" onclick="go('expense');setTimeout(()=>stab(document.querySelectorAll('#page-expense .tab')[1],'exp-create'),50)">+ New Expense</button></div>
-      <table class="tbl">
-        <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th><th>VAT</th><th>Total</th><th>Status</th><th></th></tr></thead>
+      <div class="card-hd">
+        <div>
+          <div class="card-title">All Expenses</div>
+          <div class="card-sub" id="expenses-count">Loading expenses...</div>
+        </div>
+        <div class="flx"><input class="fi" type="search" style="width:190px" placeholder="Search expenses..." aria-label="Search expenses" oninput="searchRegister('expenses',this.value)"><button class="btn btn-g btn-sm" id="expenses-prev" type="button" onclick="prevRegisterPage('expenses')">&larr; Previous</button><button class="btn btn-g btn-sm" id="expenses-next" type="button" onclick="nextRegisterPage('expenses')">Next &rarr;</button><button class="btn btn-p" onclick="go('expense');setTimeout(()=>stab(document.querySelectorAll('#page-expense .tab')[1],'exp-create'),50)">+ New Expense</button></div>
+      </div>
+      <!-- Paged from the server (loadRegisterPage('expenses') in app.js), so no client-side pager/search. -->
+      <table class="tbl" data-no-table-tools="1">
+        <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th><th>VAT</th><th>Total</th><th>Status</th><th data-action-col="1"></th></tr></thead>
         <tbody id="expense-tbody">
           <tr data-empty-state="1"><td colspan="8" style="color:var(--text3);text-align:center">No expenses in database yet.</td></tr>
         </tbody>
@@ -2241,8 +2269,14 @@
 
   <div class="tab-body" id="exp-approve">
     <div class="card">
-      <div class="card-hd"><div class="card-title">Pending Approvals</div></div>
-      <table class="tbl">
+      <div class="card-hd">
+        <div>
+          <div class="card-title">Pending Approvals</div>
+          <div class="card-sub" id="expenseApprovals-count">Loading pending expenses...</div>
+        </div>
+        <div class="flx"><button class="btn btn-g btn-sm" id="expenseApprovals-prev" type="button" onclick="prevRegisterPage('expenseApprovals')">&larr; Previous</button><button class="btn btn-g btn-sm" id="expenseApprovals-next" type="button" onclick="nextRegisterPage('expenseApprovals')">Next &rarr;</button></div>
+      </div>
+      <table class="tbl" data-no-table-tools="1" data-delete-actions-bound="skip">
         <thead><tr><th>Employee</th><th>Description</th><th>Amount</th><th>Date</th><th>Status</th><th></th></tr></thead>
         <tbody id="expense-approval-tbody">
           <tr data-empty-state="1"><td colspan="6" style="color:var(--text3);text-align:center">No pending expenses for approval.</td></tr>
@@ -2691,9 +2725,16 @@
       <div class="stat"><div class="stat-lbl">Missing Docs</div><div class="stat-val" style="color:var(--text3)">—</div><div class="stat-delta">Not tracked yet</div></div>
     </div>
     <div class="card">
-      <div class="card-hd"><div class="card-title">Vendor Bills</div><button class="btn btn-p btn-sm" onclick="showM('m-bill')">+ New Bill</button></div>
-      <table class="tbl">
-        <thead><tr><th>Bill No.</th><th>Vendor</th><th>Date</th><th>Due Date</th><th>Subtotal</th><th>VAT</th><th>Total</th><th>Status</th><th></th></tr></thead>
+      <div class="card-hd">
+        <div>
+          <div class="card-title">Vendor Bills</div>
+          <div class="card-sub" id="bills-count">Loading bills...</div>
+        </div>
+        <div class="flx"><input class="fi" type="search" style="width:190px" placeholder="Search bills..." aria-label="Search bills" oninput="searchRegister('bills',this.value)"><button class="btn btn-g btn-sm" id="bills-prev" type="button" onclick="prevRegisterPage('bills')">&larr; Previous</button><button class="btn btn-g btn-sm" id="bills-next" type="button" onclick="nextRegisterPage('bills')">Next &rarr;</button><button class="btn btn-p btn-sm" onclick="showM('m-bill')">+ New Bill</button></div>
+      </div>
+      <!-- Paged from the server (loadRegisterPage('bills') in app.js), so no client-side pager/search. -->
+      <table class="tbl" data-no-table-tools="1">
+        <thead><tr><th>Bill No.</th><th>Vendor</th><th>Date</th><th>Due Date</th><th>Subtotal</th><th>VAT</th><th>Total</th><th>Status</th><th data-action-col="1"></th></tr></thead>
         <tbody id="bill-tbody">
           <tr data-empty-state="1"><td colspan="9" style="color:var(--text3);text-align:center">No bills recorded yet.</td></tr>
         </tbody>
@@ -2739,8 +2780,15 @@
   </div>
   <div class="tab-body on" id="pay-in">
     <div class="card">
-      <div class="card-hd"><div class="card-title">Customer Payments Received</div><button class="btn btn-p btn-sm" onclick="openPaymentModal('Customer Receipt')">+ Record Payment</button></div>
-      <table class="tbl">
+      <div class="card-hd">
+        <div>
+          <div class="card-title">Customer Payments Received</div>
+          <div class="card-sub" id="receipts-count">Loading receipts...</div>
+        </div>
+        <div class="flx"><input class="fi" type="search" style="width:190px" placeholder="Search receipts..." aria-label="Search receipts" oninput="searchRegister('receipts',this.value)"><button class="btn btn-g btn-sm" id="receipts-prev" type="button" onclick="prevRegisterPage('receipts')">&larr; Previous</button><button class="btn btn-g btn-sm" id="receipts-next" type="button" onclick="nextRegisterPage('receipts')">Next &rarr;</button><button class="btn btn-p btn-sm" onclick="openPaymentModal('Customer Receipt')">+ Record Payment</button></div>
+      </div>
+      <!-- Paged from the server (loadRegisterPage('receipts') in app.js), so no client-side pager/search. -->
+      <table class="tbl" data-no-table-tools="1">
         <thead><tr><th>Receipt No.</th><th>Customer</th><th>Invoice</th><th>Method</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
         <tbody id="payment-in-tbody"><tr data-empty-state="1" class="tbl-empty-row"><td colspan="7"><div class="tbl-empty-inner">No receipts in database yet.</div></td></tr></tbody>
       </table>
@@ -2748,12 +2796,12 @@
   </div>
   <div class="tab-body" id="pay-out">
     <div class="card">
-      <div class="card-hd"><div class="card-title">Supplier Payments Made</div><div class="flx" style="gap:8px;align-items:center;flex-wrap:wrap"><select class="fi" id="pay-out-search" style="width:170px;height:32px;font-size:12.5px;padding:6px 10px" onchange="applySupplierPaymentCardView()"><option value="">All Suppliers</option></select><select class="fi" id="pay-out-sort" style="width:152px;height:32px;font-size:12.5px;padding:6px 10px" onchange="applySupplierPaymentCardView()"><option value="date-desc">Newest first</option><option value="date-asc">Oldest first</option><option value="amount-desc">Amount: High-Low</option><option value="amount-asc">Amount: Low-High</option></select><button class="btn btn-p btn-sm" onclick="openPaymentModal('Supplier Payment')">+ Pay Vendor</button></div></div>
+      <div class="card-hd"><div><div class="card-title">Supplier Payments Made</div><div class="card-sub" id="supplierPayments-count">Loading supplier payments...</div></div><div class="flx" style="gap:8px;align-items:center;flex-wrap:wrap"><button class="btn btn-g btn-sm" id="supplierPayments-prev" type="button" onclick="prevRegisterPage('supplierPayments')">&larr; Previous</button><button class="btn btn-g btn-sm" id="supplierPayments-next" type="button" onclick="nextRegisterPage('supplierPayments')">Next &rarr;</button><select class="fi" id="pay-out-search" style="width:170px;height:32px;font-size:12.5px;padding:6px 10px" onchange="applySupplierPaymentCardView()"><option value="">All Suppliers</option></select><select class="fi" id="pay-out-sort" style="width:152px;height:32px;font-size:12.5px;padding:6px 10px" onchange="applySupplierPaymentCardView()"><option value="date-desc">Newest first</option><option value="date-asc">Oldest first</option><option value="amount-desc">Amount: High-Low</option><option value="amount-asc">Amount: Low-High</option></select><button class="btn btn-p btn-sm" onclick="openPaymentModal('Supplier Payment')">+ Pay Vendor</button></div></div>
       <div class="pay-card-list" id="payment-out-cards">
         <div class="pay-card-empty" id="payment-out-empty">No supplier payments in database yet.</div>
       </div>
     </div>
-    <!-- hidden table keeps dedup/auto-number logic intact -->
+    <!-- Supplier payments show as cards; this hidden tbody only keeps the payments collection mapping for table helpers. -->
     <table style="display:none"><tbody id="payment-out-tbody"></tbody></table>
   </div>
 </div>
@@ -5708,6 +5756,6 @@ period_locks ─&lt; audit_logs
      order relative to app.js's own defer, so config.js still runs first. -->
 <script src="config.js" defer></script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=c60e7fdd7c" defer></script>
+<script src="src/app.js?v=f72992f4fa" defer></script>
 </body>
 </html>

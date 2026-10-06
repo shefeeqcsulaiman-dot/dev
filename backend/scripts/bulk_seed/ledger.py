@@ -122,13 +122,16 @@ def _build_one(bundle: CompanyBundle, module: str, reference: str, parties: list
 
 
 def _flush_batches(db: Session, batches: dict[type, list[dict]], batch_size: int, force: bool = False) -> None:
+    # Once any table's batch is full, write every table, in `batches` order (parents
+    # before children). Flushing only the full one sent journal_lines (several per
+    # transaction) ahead of their journal_entries, which PostgreSQL's foreign keys
+    # reject; SQLite never enforced them.
+    if not force and not any(len(rows) >= batch_size for rows in batches.values()):
+        return
     for model, rows in batches.items():
-        while len(rows) >= batch_size or (force and rows):
+        while rows:
             chunk, rows[:] = rows[:batch_size], rows[batch_size:]
-            if chunk:
-                db.execute(insert(model), chunk)
-            if not force:
-                break
+            db.execute(insert(model), chunk)
 
 
 def generate_company_transactions(

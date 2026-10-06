@@ -53,7 +53,7 @@ Environment variables (override defaults)
   BIOTIME_USERNAME       BioTime login username
   BIOTIME_PASSWORD       BioTime login password
   POLL_INTERVAL          Seconds between sync cycles (default 60)
-  API_BASE_URL           ETaxFlow API base (e.g. https://app.etaxflow.com)
+  API_BASE_URL           ETaxFlow API base (e.g. https://dev.etaxflow.com)
   DEVICE_API_KEY         API key from HRMS → Biometric Devices
   DEVICE_UTC_OFFSET_HOURS  Override if the BioTime server's clock isn't UAE
                             local time (default 4 — UAE has no DST)
@@ -83,7 +83,7 @@ except ImportError:
 #   BIOTIME_BASE_URL=http://192.168.1.50:8098
 #   BIOTIME_USERNAME=admin
 #   BIOTIME_PASSWORD=changeme
-#   API_BASE_URL=https://app.etaxflow.com
+#   API_BASE_URL=https://dev.etaxflow.com
 
 def _load_conf() -> dict[str, str]:
     conf: dict[str, str] = {}
@@ -106,7 +106,7 @@ BIOTIME_BASE_URL = _get("BIOTIME_BASE_URL", "").rstrip("/")
 BIOTIME_USERNAME = _get("BIOTIME_USERNAME", "")
 BIOTIME_PASSWORD = _get("BIOTIME_PASSWORD", "")
 POLL_INTERVAL    = int(_get("POLL_INTERVAL", "60"))
-API_BASE_URL     = _get("API_BASE_URL", "https://app.etaxflow.com").rstrip("/")
+API_BASE_URL     = _get("API_BASE_URL", "https://dev.etaxflow.com").rstrip("/")
 DEVICE_API_KEY   = _get("DEVICE_API_KEY", "")
 # BioTime reports attendance in the server's own local clock (naive
 # datetime, no tzinfo) — same situation zk_bridge.py handles for raw ZKTeco

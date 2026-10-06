@@ -1287,6 +1287,16 @@ def system_health(
     }
 
 
+@router.get("/endpoint-stats")
+def endpoint_stats(
+    hours: int = 1,
+    _: User = Depends(_require_superadmin),
+):
+    """Slowest API endpoints over the last `hours` (app/monitoring.py)."""
+    from app.monitoring import endpoint_stats as _endpoint_stats
+    return _endpoint_stats(hours=hours)
+
+
 # ── Background job / queue health ───────────────────────────────────────────
 # PostingJob is the accounting posting pipeline (queued -> processing ->
 # posted, or failed — see module_integration.py/accounting_posting.py); Job

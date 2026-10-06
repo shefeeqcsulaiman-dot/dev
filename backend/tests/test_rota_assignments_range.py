@@ -85,3 +85,21 @@ def test_requires_auth_and_validates_the_range(client, auth_headers):
     assert r.status_code == 400
     r2 = client.get("/api/v1/app-data/records/rotaAssignments/range", headers=auth_headers, params={"from": "2026-09-01"})
     assert r2.status_code == 422
+
+
+def test_employee_filter_returns_only_that_employees_shifts(client, db, auth_headers):
+    a, b, _run = _world(client, db, auth_headers, "RG5")
+    records = _range(client, auth_headers, "2026-09-01", "2026-09-30", employee_id=a.employee_no).json()["records"]
+    ids = {x["id"] for x in records}
+    assert "RA-A-RG5" in ids and "RA-B-RG5" not in ids
+    assert all(x["employee_id"] == a.employee_no for x in records)
+
+
+def test_by_ids_returns_those_rows_whatever_their_date(client, db, auth_headers, second_tenant_headers):
+    _world(client, db, auth_headers, "RG6")
+    url = "/api/v1/app-data/records/rotaAssignments/by-ids"
+    r = client.get(url, headers=auth_headers, params={"ids": "RA-A-RG6, RA-B-RG6,missing"})
+    assert r.status_code == 200, r.text
+    assert {x["id"] for x in r.json()["records"]} == {"RA-A-RG6", "RA-B-RG6"}
+    other = client.get(url, headers=second_tenant_headers, params={"ids": "RA-A-RG6"})
+    assert other.json()["records"] == []

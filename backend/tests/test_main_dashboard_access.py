@@ -170,7 +170,7 @@ def test_bootstrap_scopes_collections_to_granted_module(client, db, auth_headers
     saved = client.post(
         "/api/v1/app-data?action=save",
         headers=auth_headers,
-        json={"collection": "salesInvoices", "record": {"invoice_no": "MD-BOOT-SI-001", "customer": "Bootstrap Test Customer", "status": "issued", "subtotal": "100.00", "total": "105.00", "vat_amount": "5.00"}},
+        json={"collection": "customers", "record": {"name": "Bootstrap Test Customer"}},
     )
     assert saved.status_code == 200, saved.text
 
@@ -180,7 +180,9 @@ def test_bootstrap_scopes_collections_to_granted_module(client, db, auth_headers
     r = client.get("/api/v1/app-data", headers=headers)
     assert r.status_code == 200, r.text
     data = r.json()["data"]
-    assert "salesInvoices" in data
+    assert "customers" in data
+    # Sales invoices themselves are paged from /app-data/sales-invoices, not bootstrapped.
+    assert client.get("/api/v1/app-data/sales-invoices", headers=headers).status_code == 200
     # No purchase/accounting/HR-payroll data leaks through for a sales-only role.
     assert "bills" not in data
     assert "ledger" not in data
@@ -228,7 +230,7 @@ def test_bootstrap_hrms_scope_hides_non_hr_data_even_for_admin(client, db, auth_
     saved = client.post(
         "/api/v1/app-data?action=save",
         headers=auth_headers,
-        json={"collection": "salesInvoices", "record": {"invoice_no": "HRMS-SCOPE-SI-001", "customer": "Scope Test Customer", "status": "issued", "subtotal": "100.00", "total": "105.00", "vat_amount": "5.00"}},
+        json={"collection": "customers", "record": {"name": "Scope Test Customer"}},
     )
     assert saved.status_code == 200, saved.text
     saved = client.post(
@@ -242,14 +244,14 @@ def test_bootstrap_hrms_scope_hides_non_hr_data_even_for_admin(client, db, auth_
     assert r.status_code == 200, r.text
     data = r.json()["data"]
     assert "employees" in data
-    for collection in ("salesInvoices", "bills", "ledger", "products", "quotations", "vendors"):
+    for collection in ("customers", "bills", "ledger", "products", "quotations", "vendors"):
         assert collection not in data, f"{collection} should not be visible under scope=hrms"
 
     # The unscoped call for the SAME admin must still see everything --
     # scope=hrms narrows, it never widens or leaks into the normal path.
     r_full = client.get("/api/v1/app-data", headers=auth_headers)
     assert r_full.status_code == 200, r_full.text
-    assert "salesInvoices" in r_full.json()["data"]
+    assert "customers" in r_full.json()["data"]
 
 
 def test_bootstrap_hrms_scope_intersects_with_employee_permissions(client, db, auth_headers):
@@ -266,10 +268,11 @@ def test_bootstrap_hrms_scope_intersects_with_employee_permissions(client, db, a
     assert "salesInvoices" not in data
 
 
-def test_bootstrap_caps_rota_assignments(client, db, auth_headers):
+def test_bootstrap_leaves_rota_assignments_to_the_range_endpoint(client, db, auth_headers):
     # rotaAssignments previously had no cap at all -- on one live account it
     # had grown to 2,508 rows and dominated hrms.html's bootstrap payload
-    # almost by itself. Now capped like every sibling HR collection.
+    # almost by itself. Rota screens now load the dates they show from
+    # /records/rotaAssignments/range, so the bootstrap doesn't carry them.
     import json as _json
 
     from app.models import AppDataRecord
@@ -285,8 +288,8 @@ def test_bootstrap_caps_rota_assignments(client, db, auth_headers):
     r = client.get("/api/v1/app-data", headers=auth_headers)
     assert r.status_code == 200, r.text
     data = r.json()
-    assert len(data["data"]["rotaAssignments"]) == 500
-    assert "rotaAssignments" in data["truncated_collections"]
+    assert "rotaAssignments" not in data["data"]
+    assert "rotaAssignments" not in data["truncated_collections"]
 
 
 def test_company_module_gate_and_role_permission_gate_both_enforce(client, db):

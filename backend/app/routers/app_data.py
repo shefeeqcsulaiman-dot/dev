@@ -37,6 +37,7 @@ from app.accounting_posting import ensure_credit_note_tax_line
 from app.config import get_settings
 from app.database import get_db
 from app.auth_principal import resolve_active_branch
+from app.doc_index import parse_document_date, recompute_payment_targets
 from app.department_scope import SCOPED_COLLECTIONS, assert_record_writable, build_index, filter_records, record_in_scope
 from app.dependencies import Principal, branch_allows_module, company_allows_module, get_current_principal, get_current_user, principal_module_allowed, require_company_admin, require_module
 from app.limiter import limiter
@@ -226,37 +227,6 @@ def _redact_employee_salary(record: dict[str, Any], principal: Principal) -> dic
     return record
 
 
-_DATE_FORMATS_DAY_FIRST = (
-    "%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y", "%d-%m-%y", "%d/%m/%y", "%d.%m.%y",
-    "%Y/%m/%d", "%Y.%m.%d",
-    "%d %b %Y", "%d %B %Y", "%d-%b-%Y", "%d-%B-%Y", "%d %b, %Y", "%d %B, %Y", "%d-%b-%y",
-    "%b %d %Y", "%B %d %Y", "%b %d, %Y", "%B %d, %Y",
-)
-
-
-def parse_document_date(value: Any) -> _dt.date | None:
-    """Invoice dates as AI/CSV give them ("20-02-2023", "20/02/23", "20 Feb 2023", ISO...).
-    Day-first (UAE convention) unless only month-first is a valid date, e.g. 02/20/2023."""
-    text = re.sub(r"\s+", " ", str(value or "").strip().rstrip("."))
-    if not text:
-        return None
-    try:
-        return _dt.date.fromisoformat(text[:10])
-    except ValueError:
-        pass
-    for fmt in _DATE_FORMATS_DAY_FIRST:
-        try:
-            return _dt.datetime.strptime(text, fmt).date()
-        except ValueError:
-            continue
-    for fmt in ("%m/%d/%Y", "%m-%d-%Y"):
-        try:
-            return _dt.datetime.strptime(text, fmt).date()
-        except ValueError:
-            continue
-    return None
-
-
 def normalize_document_date(value: Any) -> Any:
     """ISO YYYY-MM-DD when the date can be read; otherwise the original value, untouched."""
     parsed = parse_document_date(value)
@@ -286,23 +256,24 @@ def assert_collection_period_open(db: Session, principal: Principal, collection:
     from app.routers.accounting import assert_period_open
     assert_period_open(db, principal.company_id, module, _record_period_date(record))
 
+# Never sent in bootstrap: their screens page them from the server.
+_PAGED_COLLECTIONS = frozenset({
+    "purchaseRecords", "salesInvoices", "bills", "payments", "quotations", "purchaseDocuments", "expenses",
+    # Rota screens load the dates they show from /records/rotaAssignments/range.
+    "rotaAssignments",
+    # Legacy app-data ledger lines: the Ledger tab shows the real journal (GET /journal, paged).
+    "ledger",
+})
+
 # Per-collection caps for bootstrap to prevent memory spikes on large accounts.
 # Sized to cover ~1 year of data for a 50-employee UAE SME without truncation:
-#   salesInvoices/payments: ~1 200/year → 1 500 cap covers a full year + buffer
-#   purchaseDocuments: base64 stripped on bootstrap so each payload is small
+#   salesInvoices: not sent at all; the register pages them from GET /app-data/sales-invoices
 #   leaveRequests/overtimeRequests: ~500-1 500/year → cap 500
 #   payrollRuns: 12/year, cap 50 keeps 4 years of history
 _BOOTSTRAP_COLLECTION_CAPS: dict[str, int] = {
     "products": 500,
     "salesCategories": 200,
     "salesUnits": 200,
-    "salesInvoices": 1500,
-    "quotations": 500,
-    "bills": 1000,
-    "payments": 1500,
-    "ledger": 2000,
-    "expenses": 500,
-    "purchaseDocuments": 500,
     "journalDrafts": 300,
     "overtimeRequests": 500,
     "leaveRequests": 500,
@@ -328,20 +299,6 @@ _BOOTSTRAP_COLLECTION_CAPS: dict[str, int] = {
     "rotaApprovals": 500,
     "rotaDrafts": 500,
     "tasks": 500,
-    # rotaAssignments had no cap at all until this was added -- on one live
-    # account it had grown to 2,508 rows (~950KB, JSON-encoded), dwarfing
-    # every other HR collection combined and dominating hrms.html's load
-    # time almost by itself. Capped to match every sibling collection
-    # above, ordered by created_at like the rest of this cap mechanism --
-    # but unlike leave/loan/OT requests (created close to the date they're
-    # about), rota assignments can be bulk-created for future weeks in one
-    # batch, so "most recently created" doesn't reliably mean "most
-    # relevant date". If a manager reports an older month's rota looking
-    # empty on this page, that's this cap, not a data-loss bug -- the fix
-    # is a dedicated GET /rota/assignments?month=YYYY-MM endpoint (mirroring
-    # how leaveRequests already moved off this bootstrap blob), not a
-    # bigger number here.
-    "rotaAssignments": 500,
 }
 
 
@@ -501,6 +458,93 @@ def serialize(record: AppDataRecord) -> dict[str, Any]:
     return data
 
 
+def _collection_read_filters(principal: Principal, collection: str, branch_id: str | None) -> list[Any]:
+    """Company + collection + branch scoping shared by every app-data list read."""
+    base_filters = [
+        AppDataRecord.company_id == principal.company_id,
+        AppDataRecord.collection == collection,
+    ]
+    collection_module = _COLLECTION_MODULE.get(collection)
+    cross_branch = bool(collection_module and principal.can_cross_branch(collection_module))
+    if principal.branch_id and collection in _BRANCH_FILTERED_COLLECTIONS and not cross_branch:
+        # Branch-scoped Employee — locked to their own accessible branch(es)
+        # (Phase 3: possibly more than one, via EmployeeBranchAccess),
+        # regardless of any ?branch_id= passed in beyond that set (an
+        # explicit param here could otherwise be used to peek at another
+        # branch's records) — unless their role grants
+        # "<module>:view_all_branches" (Branch Security Layer Phase 2).
+        active_branch = resolve_active_branch(principal, branch_id)
+        base_filters.append(
+            (AppDataRecord.branch_id == active_branch) | (AppDataRecord.branch_id.is_(None))
+        )
+    elif branch_id:
+        # Company-wide viewer (admin) explicitly asking to see one branch —
+        # Phase 7 branch switcher. Opt-in, so it applies to any collection,
+        # not just the _BRANCH_FILTERED_COLLECTIONS allowlist above.
+        base_filters.append(AppDataRecord.branch_id == branch_id)
+    return base_filters
+
+
+# Employee photos are base64 data URLs inside each "employees" record, often tens of
+# KB each, and every HRMS/main page load used to carry all of them. Lists now send a
+# URL instead (EMPLOYEE_PHOTO_PATH), served as a cacheable image by employee_photo().
+# The URL includes a hash of the photo, so it is unguessable and changes when the
+# photo does; saving a record that still carries the URL keeps the stored photo.
+EMPLOYEE_PHOTO_PATH = "/api/v1/app-data/employee-photo/"
+
+
+def _photo_version(photo: str) -> str:
+    return hashlib.sha256(photo.encode()).hexdigest()[:16]
+
+
+def serialize_for_list(row: AppDataRecord) -> dict[str, Any]:
+    """serialize(), with an employee photo replaced by its image URL."""
+    data = serialize(row)
+    photo = data.get("photo") if isinstance(data, dict) and row.collection == "employees" else None
+    if isinstance(photo, str) and photo.startswith("data:"):
+        data["photo"] = f"{EMPLOYEE_PHOTO_PATH}{row.id}?v={_photo_version(photo)}"
+    return data
+
+
+def _keep_stored_employee_photo(record: dict[str, Any], existing: AppDataRecord | None) -> None:
+    """An edit form that re-reads its photo preview sends the photo URL back; keep the
+    stored photo instead of saving the URL over it."""
+    photo = record.get("photo")
+    if not (isinstance(photo, str) and EMPLOYEE_PHOTO_PATH in photo):
+        return
+    stored = _stored_payload(existing) if existing else None
+    stored_photo = stored.get("photo") if isinstance(stored, dict) else None
+    if isinstance(stored_photo, str) and stored_photo.startswith("data:"):
+        record["photo"] = stored_photo
+    else:
+        record.pop("photo", None)
+
+
+@router.get("/employee-photo/{record_id}")
+def employee_photo(record_id: str, request: Request, v: str = Query(default="", max_length=32), db: Session = Depends(get_db)):
+    """An employee photo as an image. No login header: an <img src> can't send one.
+    The URL is a capability instead: the record id is a random UUID and v must match a
+    hash of the photo itself, and both only reach someone who could already read the
+    employee list. Immutable caching: a new photo gets a new v."""
+    row = db.query(AppDataRecord).filter(AppDataRecord.id == record_id, AppDataRecord.collection == "employees").first()
+    stored = _stored_payload(row) if row else None
+    photo = stored.get("photo") if isinstance(stored, dict) else None
+    if not (isinstance(photo, str) and photo.startswith("data:") and v and v == _photo_version(photo)):
+        raise HTTPException(status_code=404, detail="No photo")
+    match = re.match(r"^data:([\w/+.-]+);base64,(.*)$", photo, re.S)
+    if not match:
+        raise HTTPException(status_code=404, detail="No photo")
+    try:
+        raw = base64.b64decode(match.group(2))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=404, detail="No photo")
+    etag = f'"{v}"'
+    headers = {"ETag": etag, "Cache-Control": "private, max-age=31536000, immutable"}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(content=raw, media_type=match.group(1), headers=headers)
+
+
 @router.get("/records/{collection}")
 def list_collection_records(
     collection: str,
@@ -534,28 +578,7 @@ def list_collection_records(
         if not principal.has("employees:view"):
             raise HTTPException(status_code=403, detail="Not permitted")
         _backfill_employee_branch_ids(db, principal.company_id)
-    base_filters = [
-        AppDataRecord.company_id == principal.company_id,
-        AppDataRecord.collection == collection,
-    ]
-    collection_module = _COLLECTION_MODULE.get(collection)
-    cross_branch = bool(collection_module and principal.can_cross_branch(collection_module))
-    if principal.branch_id and collection in _BRANCH_FILTERED_COLLECTIONS and not cross_branch:
-        # Branch-scoped Employee — locked to their own accessible branch(es)
-        # (Phase 3: possibly more than one, via EmployeeBranchAccess),
-        # regardless of any ?branch_id= passed in beyond that set (an
-        # explicit param here could otherwise be used to peek at another
-        # branch's records) — unless their role grants
-        # "<module>:view_all_branches" (Branch Security Layer Phase 2).
-        active_branch = resolve_active_branch(principal, branch_id)
-        base_filters.append(
-            (AppDataRecord.branch_id == active_branch) | (AppDataRecord.branch_id.is_(None))
-        )
-    elif branch_id:
-        # Company-wide viewer (admin) explicitly asking to see one branch —
-        # Phase 7 branch switcher. Opt-in, so it applies to any collection,
-        # not just the _BRANCH_FILTERED_COLLECTIONS allowlist above.
-        base_filters.append(AppDataRecord.branch_id == branch_id)
+    base_filters = _collection_read_filters(principal, collection, branch_id)
     if principal.is_dept_scoped and collection in SCOPED_COLLECTIONS:
         # A department-scoped login can only be paginated AFTER filtering, so
         # fetch the whole collection (per-company sizes are small) and slice.
@@ -565,7 +588,7 @@ def list_collection_records(
             .order_by(AppDataRecord.created_at.desc(), AppDataRecord.id.desc())
             .all()
         )
-        visible = filter_records(db, principal, collection, [serialize(row) for row in all_rows])
+        visible = filter_records(db, principal, collection, [serialize_for_list(row) for row in all_rows])
         total = len(visible)
         records = visible[offset:offset + limit]
         if collection == "employees":
@@ -583,7 +606,7 @@ def list_collection_records(
         .limit(limit)
         .all()
     )
-    records = [serialize(row) for row in rows]
+    records = [serialize_for_list(row) for row in rows]
     if collection == "employees":
         records = [_redact_employee_salary(r, principal) for r in records]
     return {
@@ -597,10 +620,29 @@ def list_collection_records(
     }
 
 
+def _rota_read_filters(db: Session, principal: Principal, branch_id: str | None) -> list[Any]:
+    """Company + branch scoping for rotaAssignments reads (department scoping is applied
+    to the parsed records afterwards with filter_records())."""
+    company = resolve_principal_company(principal, db)
+    assert_collection_module_enabled(db, principal, company, "rotaAssignments")
+    base_filters = [AppDataRecord.company_id == principal.company_id, AppDataRecord.collection == "rotaAssignments"]
+    collection_module = _COLLECTION_MODULE.get("rotaAssignments")
+    cross_branch = bool(collection_module and principal.can_cross_branch(collection_module))
+    if principal.branch_id and "rotaAssignments" in _BRANCH_FILTERED_COLLECTIONS and not cross_branch:
+        active_branch = resolve_active_branch(principal, branch_id)
+        base_filters.append(
+            (AppDataRecord.branch_id == active_branch) | (AppDataRecord.branch_id.is_(None))
+        )
+    elif branch_id:
+        base_filters.append(AppDataRecord.branch_id == branch_id)
+    return base_filters
+
+
 @router.get("/records/rotaAssignments/range")
 def list_rota_assignments_in_range(
     date_from: str = Query(alias="from"),
     date_to: str = Query(alias="to"),
+    employee_id: str | None = Query(default=None, max_length=80),
     branch_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
@@ -612,28 +654,41 @@ def list_rota_assignments_in_range(
     call this for whatever range they're actually displaying instead of relying on
     the capped bootstrap blob alone -- same department/branch scoping as every other
     read of this collection, just no row limit on the date window itself (a rota grid
-    is bounded by staff count x 7, not by how long the company has been using rotas)."""
+    is bounded by staff count x 7, not by how long the company has been using rotas).
+    Rota assignments are not in the bootstrap at all any more, so this is how every rota
+    screen gets them. employee_id: only that employee's shifts (e.g. upcoming shifts for
+    a swap request)."""
     if date_from > date_to:
         raise HTTPException(status_code=400, detail="'from' must not be after 'to'")
-    company = resolve_principal_company(principal, db)
-    assert_collection_module_enabled(db, principal, company, "rotaAssignments")
-    base_filters = [AppDataRecord.company_id == principal.company_id, *rota_in_range(date_from, date_to)]
-    collection_module = _COLLECTION_MODULE.get("rotaAssignments")
-    cross_branch = bool(collection_module and principal.can_cross_branch(collection_module))
-    if principal.branch_id and "rotaAssignments" in _BRANCH_FILTERED_COLLECTIONS and not cross_branch:
-        active_branch = resolve_active_branch(principal, branch_id)
-        base_filters.append(
-            (AppDataRecord.branch_id == active_branch) | (AppDataRecord.branch_id.is_(None))
-        )
-    elif branch_id:
-        base_filters.append(AppDataRecord.branch_id == branch_id)
+    base_filters = [*_rota_read_filters(db, principal, branch_id), *rota_in_range(date_from, date_to)]
+    if employee_id:
+        base_filters.append(AppDataRecord.payload.contains(json.dumps(employee_id)))
     rows = db.query(AppDataRecord).filter(*base_filters).order_by(AppDataRecord.created_at, AppDataRecord.id).all()
     records = [
         r for r in (serialize(row) for row in rows)
-        if date_from <= str(r.get("date") or "") <= date_to
+        if date_from <= str(r.get("date") or "") <= date_to and (not employee_id or r.get("employee_id") == employee_id)
     ]
     records = filter_records(db, principal, "rotaAssignments", records)
     return {"ok": True, "collection": "rotaAssignments", "from": date_from, "to": date_to, "records": records}
+
+
+@router.get("/records/rotaAssignments/by-ids")
+def list_rota_assignments_by_ids(
+    ids: str = Query(min_length=1, max_length=8000),
+    branch_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> dict[str, object]:
+    """Specific rotaAssignments rows by id (comma-separated, up to 200), e.g. the two
+    shifts a swap request refers to, whatever week they fall in."""
+    wanted = [i.strip() for i in ids.split(",") if i.strip()][:200]
+    rows = (
+        db.query(AppDataRecord)
+        .filter(*_rota_read_filters(db, principal, branch_id), AppDataRecord.record_key.in_(wanted))
+        .all()
+    ) if wanted else []
+    records = filter_records(db, principal, "rotaAssignments", [serialize(row) for row in rows])
+    return {"ok": True, "collection": "rotaAssignments", "records": records}
 
 
 # Maps each sidebar module (HR and, since the "Main Dashboard Access" phase,
@@ -1003,12 +1058,14 @@ def bootstrap(
             .all()
         )
         rows.reverse()
-        heavy_results[coll] = [serialize(r) for r in rows]
+        heavy_results[coll] = [serialize_for_list(r) for r in rows]
 
     # Bulk query for all remaining (non-heavy) collections
     bulk_query = db.query(AppDataRecord).filter(
         AppDataRecord.company_id == principal.company_id,
-        AppDataRecord.collection.notin_(_HEAVY_COLLECTIONS | {"purchaseRecords"}),
+        # These page from the server instead: purchaseRecords via /records/purchaseRecords,
+        # the rest via /sales-invoices and /registers/<collection> (routers/registers.py).
+        AppDataRecord.collection.notin_(_HEAVY_COLLECTIONS | _PAGED_COLLECTIONS),
     )
     if allowed_collections is not None:
         bulk_query = bulk_query.filter(AppDataRecord.collection.in_(allowed_collections))
@@ -1026,11 +1083,6 @@ def bootstrap(
         bucket = grouped.setdefault(coll, [])
         if coll_cap is None or len(bucket) < coll_cap:
             bucket.append(serialize(item))
-
-    # Strip base64 blobs from purchaseDocuments — they can be several MB each and are not
-    # needed on bootstrap (the client stores them locally and only needs metadata).
-    for doc in grouped.get("purchaseDocuments", []):
-        doc.pop("base64", None)
 
     # A role without employees:view_salary never receives salary figures
     # at all -- this is the Employee Directory's real data source
@@ -1787,8 +1839,10 @@ async def app_data_action(
         for record in normalized_records:
             assert_collection_period_open(db, principal, collection, record)
             key = record_key(collection, record)
-            payload_json = json.dumps(record, ensure_ascii=False, default=str)
             existing = existing_by_key.get(key) if key else None
+            if collection == "employees":
+                _keep_stored_employee_photo(record, existing)
+            payload_json = json.dumps(record, ensure_ascii=False, default=str)
             _assert_branch_writable(principal, collection, existing)
             assert_record_writable(db, principal, collection, record, _stored_payload(existing), dept_index)
             if existing:
@@ -1866,6 +1920,8 @@ async def app_data_action(
         records = [r if isinstance(r, dict) else {"value": r} for r in records]
         keys = [k for k in (record_key(collection, r) for r in records) if k]
         deleted_count = 0
+        # A bulk DELETE skips the ORM hooks that keep invoices' amount_paid current.
+        deleted_payments: list[Any] = []
         if keys:
             existing_rows = (
                 db.query(AppDataRecord)
@@ -1885,6 +1941,8 @@ async def app_data_action(
                 except (TypeError, json.JSONDecodeError):
                     stored_record = {}
                 assert_collection_period_open(db, principal, collection, stored_record if isinstance(stored_record, dict) else {})
+                if collection == "payments":
+                    deleted_payments.append(stored_record)
             deleted_count = (
                 db.query(AppDataRecord)
                 .filter(
@@ -1896,6 +1954,8 @@ async def app_data_action(
             )
         if collection == "tasks" and deleted_count:
             _unlink_deleted_tasks(db, principal.company_id, keys)
+        if deleted_payments:
+            recompute_payment_targets(db, principal.company_id, deleted_payments)
         # Bulk domain cleanup for purchaseRecords
         if collection == "purchaseRecords" and records:
             refs = [
@@ -2171,6 +2231,8 @@ def save_app_record(db: Session, principal: Principal, collection: str, record: 
             .first()
         )
     _assert_branch_writable(principal, collection, existing)
+    if collection == "employees":
+        _keep_stored_employee_photo(record, existing)
     payload = json.dumps(record, ensure_ascii=False, default=str)
     if existing:
         existing.payload = payload
