@@ -44,6 +44,16 @@ class Settings(BaseSettings):
     # workers on PostgreSQL (advisory lock). Set false when a pre-deploy job
     # runs `python -m app.migrate` instead.
     run_migrations_on_startup: bool = True
+    # Direct (non-pooled) PostgreSQL URL for migrations. Required when
+    # DATABASE_URL goes through PgBouncer in transaction mode (app/migrate.py).
+    database_direct_url: str | None = None
+    # Monitoring (app/monitoring.py). Sentry is off unless SENTRY_DSN is set.
+    sentry_dsn: str | None = None
+    sentry_environment: str = "production"
+    sentry_traces_sample_rate: float = 0.05
+    # Log a warning for any API request / SQL query at least this slow (0 = off).
+    slow_request_ms: int = 1000
+    slow_query_ms: int = 500
     # Bootstrap data cap per company (max records returned on login)
     bootstrap_record_cap: int = 10000
 

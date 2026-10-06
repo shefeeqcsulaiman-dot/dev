@@ -23,6 +23,36 @@ def _get_client_ip(request: Request) -> str:
     return get_remote_address(request)
 
 
+def _token_subject(token: str) -> str | None:
+    """The user/employee id of a validly signed access token, else None (quietly: a bad
+    token is the auth layer's to reject and log, not the rate limiter's)."""
+    try:
+        from jose import jwt
+
+        from app.config import get_settings
+        from app.security import ALGORITHM
+
+        sub = jwt.decode(token, get_settings().secret_key, algorithms=[ALGORITHM]).get("sub")
+        return str(sub) if sub else None
+    except Exception:  # JWTError, bad settings... -> fall back to the IP
+        return None
+
+
+def rate_limit_key(request: Request) -> str:
+    """Signed-in requests are limited per login, not per IP: a whole office (or a
+    company's staff on one mobile network) shares one public IP, and the PostgreSQL
+    load test showed that IP hitting 429s long before the server was busy. Requests
+    without a valid token (sign-in, sign-up, public pages) stay keyed by IP, so
+    password guessing is still throttled. The signature is checked, so a client can't
+    mint fresh buckets with made-up subjects."""
+    auth = request.headers.get("Authorization", "")
+    if auth[:7].lower() == "bearer ":
+        sub = _token_subject(auth[7:].strip())
+        if sub:
+            return f"user:{sub}"
+    return _get_client_ip(request)
+
+
 def _storage_uri() -> str:
     try:
         from app.config import get_settings
@@ -37,7 +67,7 @@ def _storage_uri() -> str:
 # Disable rate limiting during automated tests so login fixtures never hit 429
 _enabled = os.environ.get("TESTING", "").lower() not in ("1", "true", "yes")
 limiter = Limiter(
-    key_func=_get_client_ip,
+    key_func=rate_limit_key,
     storage_uri=_storage_uri(),
     enabled=_enabled,
     default_limits=["300/minute"],

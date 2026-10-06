@@ -166,15 +166,15 @@ def test_payment_amount_validation_zero_rejected(client, auth_headers):
     assert r.status_code == 200
 
 
-def test_bootstrap_includes_payments(client, auth_headers):
+def test_saved_payment_is_listed_by_the_payments_register(client, auth_headers):
+    # Payments page from GET /app-data/registers/payments; the bootstrap no longer carries them.
     ref = "RCT-BOOT-001"
     _save_payment(client, auth_headers, {**FULL_PAYMENT, "ref": ref})
 
-    r = client.get("/api/v1/app-data", headers=auth_headers)
+    r = client.get("/api/v1/app-data/registers/payments", headers=auth_headers, params={"q": ref})
     assert r.status_code == 200
-    data = r.json()["data"]
-    payment_refs = [p.get("ref") for p in data.get("payments", [])]
-    assert ref in payment_refs
+    assert ref in [p.get("ref") for p in r.json()["records"]]
+    assert "payments" not in client.get("/api/v1/app-data", headers=auth_headers).json()["data"]
 
 
 def test_db_dump_returns_sql(client, auth_headers):

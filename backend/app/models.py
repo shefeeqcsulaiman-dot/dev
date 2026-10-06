@@ -321,6 +321,8 @@ class GeneralLedgerEntry(Base, TimestampMixin):
         # (accounting_posting.py) — filtered on exactly this triple, with
         # only single-column indexes to work with before.
         Index("ix_gl_entries_company_account_date", "company_id", "account_id", "entry_date"),
+        # Reversing/deleting a posting removes its GL rows by journal entry.
+        Index("ix_gl_entries_journal_entry_id", "journal_entry_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
@@ -391,6 +393,8 @@ class SourceTransaction(Base, TimestampMixin):
         # filters used throughout the reports/posting flow.
         Index("ix_source_tx_company_module", "company_id", "module"),
         Index("ix_source_tx_company_status", "company_id", "status"),
+        # upsert_source_transaction() finds the posting for a saved document by reference.
+        Index("ix_source_tx_company_module_ref", "company_id", "module", "reference"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
@@ -412,6 +416,11 @@ class SourceTransaction(Base, TimestampMixin):
 
 class SourceTransactionLine(Base):
     __tablename__ = "source_transaction_lines"
+    __table_args__ = (
+        # Every re-save of an invoice/purchase replaces its lines by source_id; without
+        # this the PostgreSQL load test showed a 1M-row scan (~700 ms) per save.
+        Index("ix_source_tx_lines_source_id", "source_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     source_id: Mapped[str] = mapped_column(ForeignKey("source_transactions.id"), nullable=False)
@@ -428,6 +437,7 @@ class SourceTransactionLine(Base):
 
 class PostingJob(Base, TimestampMixin):
     __tablename__ = "posting_jobs"
+    __table_args__ = (Index("ix_posting_jobs_source_id", "source_id"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
@@ -793,6 +803,8 @@ class AppDataRecord(Base, TimestampMixin):
         # Covers the save/delete lookup: WHERE company_id=? AND collection=? AND record_key=?
         Index("ix_app_data_company_collection_key", "company_id", "collection", "record_key"),
         Index("ix_app_data_company_collection_date", "company_id", "collection", "record_date"),
+        Index("ix_app_data_company_collection_status", "company_id", "collection", "doc_status"),
+        Index("ix_app_data_company_collection_party", "company_id", "collection", "party"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
@@ -803,6 +815,15 @@ class AppDataRecord(Base, TimestampMixin):
     payload: Mapped[str] = mapped_column(Text, nullable=False)
     # Payload's "date" (YYYY-MM-DD) for DATED_COLLECTIONS, so date-window reads can filter in SQL.
     record_date: Mapped[str | None] = mapped_column(String(10))
+    # Summary columns for INDEXED_DOC_COLLECTIONS (app/doc_index.py), so paged lists, search
+    # and totals run in SQL instead of parsing every payload. Stamped on every write;
+    # amount_paid is kept current from the payments collection instead.
+    party: Mapped[str | None] = mapped_column(String(160))
+    doc_status: Mapped[str | None] = mapped_column(String(40))
+    doc_kind: Mapped[str | None] = mapped_column(String(20))
+    salesperson: Mapped[str | None] = mapped_column(String(120))
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    amount_paid: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
 
 
 DATED_COLLECTIONS = frozenset({"rotaAssignments"})
@@ -822,6 +843,11 @@ def payload_record_date(payload: str | None) -> str | None:
 def _stamp_record_date(_mapper, _connection, target: AppDataRecord) -> None:
     if target.collection in DATED_COLLECTIONS:
         target.record_date = payload_record_date(target.payload)
+    else:
+        from app.doc_index import INDEXED_DOC_COLLECTIONS, stamp_doc_columns
+
+        if target.collection in INDEXED_DOC_COLLECTIONS:
+            stamp_doc_columns(target)
 
 
 class AuditLog(Base, TimestampMixin):
@@ -1366,3 +1392,7 @@ class TrialRequest(Base, TimestampMixin):
     notes: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(30), default="new")
 
+
+
+# Registers the session hooks that keep AppDataRecord.amount_paid current (needs AppDataRecord above).
+import app.doc_index  # noqa: E402,F401

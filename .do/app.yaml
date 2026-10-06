@@ -42,6 +42,16 @@ services:
         # postgresql+psycopg2://doadmin:<PASSWORD>@db-pgsql-nyc3-67475-do-user-38425833-0.e.db.ondigitalocean.com:25060/defaultdb?sslmode=require
         value: REPLACE_IN_DO_DASHBOARD
 
+      # PgBouncer (recommended, docs/scaling-plan-10k.md): in the DO dashboard
+      # create a Connection Pool on the database (Databases -> cluster ->
+      # Connection Pools; mode "Transaction", size ~ the plan's connection
+      # limit minus a few for admin). Then:
+      #   DATABASE_URL        -> the POOL's URI (port 25061, database = pool name)
+      #   DATABASE_DIRECT_URL -> the direct URI above (port 25060), used only
+      #                          by migrations (app/migrate.py)
+      # Add DATABASE_DIRECT_URL as a SECRET env here at the same time. Don't
+      # add it with a placeholder value: migrations would try to connect to it.
+
       # ── Redis ─────────────────────────────────────────────────────────
       - key: REDIS_URL
         scope: RUN_AND_BUILD_TIME
@@ -66,20 +76,23 @@ services:
 
       - key: CORS_ORIGINS
         scope: RUN_TIME
-        value: https://app.etaxflow.com,http://localhost:5173,http://127.0.0.1:5173
+        value: https://dev.etaxflow.com,http://localhost:5173,http://127.0.0.1:5173
 
       - key: API_BASE_URL
         scope: RUN_TIME
-        value: https://app.etaxflow.com/api/v1
+        value: https://dev.etaxflow.com/api/v1
 
       # ── Workers & pool ────────────────────────────────────────────────
-      # Cluster-wide DB connection budget: this pool (10+15=25/instance) x
-      # instance_count (3) = 75 from the web tier, plus the worker's own
-      # small reserved slice below (20) = 95 total. Verify this against the
-      # managed Postgres plan's actual max_connections (DO dashboard ->
-      # Databases -> cluster -> Settings) before raising further — a pool
-      # budget that exceeds the DB's own ceiling is what caused the
-      # intermittent 500s this was tuned to fix, not too-small a pool.
+      # Cluster-wide DB connection budget. The pool below is PER UVICORN
+      # WORKER (each worker process creates its own engine), not per
+      # instance: (10+15) x WORKERS (3) x instances (3, up to 6 when
+      # autoscaled) = up to 225-450 connections from the web tier, plus the
+      # Celery worker's own (20). That is well above a ~95-connection plan,
+      # which is what the 503 "Service temporarily busy" path in main.py
+      # absorbs. Fix: put PgBouncer in front (see DATABASE_URL above) --
+      # pooler client connections are cheap, so these numbers can stay.
+      # Without PgBouncer, keep (DB_POOL_SIZE + DB_MAX_OVERFLOW) x WORKERS x
+      # max instances + 20 under the plan's max_connections.
       # 3 workers per 2 GB / 2 vCPU instance: each worker is a full copy of the app
       # (~150-250 MB) with its own DB pool, so 6 left little memory for heavy requests.
       - key: WORKERS

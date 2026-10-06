@@ -56,3 +56,17 @@ def test_baseline_is_the_root_revision():
 
     script = ScriptDirectory.from_config(alembic_config())
     assert script.get_base() == BASELINE_REVISION
+
+
+def test_direct_url_is_used_for_migrations_when_set(tmp_path, monkeypatch):
+    # Behind PgBouncer, migrations must bypass the pooler (DATABASE_DIRECT_URL).
+    from app.config import get_settings
+
+    direct = tmp_path / "direct.db"
+    monkeypatch.setattr(get_settings(), "database_direct_url", f"sqlite:///{direct}")
+    run_migrations()
+    eng = create_engine(f"sqlite:///{direct}")
+    try:
+        assert _revision(eng) == head_revision()
+    finally:
+        eng.dispose()

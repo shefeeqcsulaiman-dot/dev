@@ -38,7 +38,9 @@ def run_migrations_online() -> None:
         with context.begin_transaction():
             context.run_migrations()
         return
-    with engine.connect() as connection:
+    from app.migrate import migration_engine
+
+    with migration_engine().connect() as connection:
         _configure(connection)
         with context.begin_transaction():
             context.run_migrations()

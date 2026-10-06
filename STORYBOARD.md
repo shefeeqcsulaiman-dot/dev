@@ -2,7 +2,7 @@
 
 **Platform:** UAE Business Management & Compliance Platform  
 **Stack:** FastAPI · SQLite (dev) / PostgreSQL (prod) · Single-page frontend  
-**Live URL:** https://app.etaxflow.com  
+**Live URL:** https://dev.etaxflow.com  
 **Default login:** admin@taxflowapp.com / admin123
 
 ---

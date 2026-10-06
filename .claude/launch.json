@@ -73,6 +73,14 @@
         "3"
       ],
       "port": 8041
+    },
+    {
+      "name": "dev-etaxflow-preview",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "C:/Users/SHEFI/AppData/Local/Temp/claude/E--dev-etaxflow/d102b43b-33a6-4d3d-b69f-cb9f9c4aa74c/scratchpad/preview_server.py"
+      ],
+      "port": 8051
     }
   ]
 }

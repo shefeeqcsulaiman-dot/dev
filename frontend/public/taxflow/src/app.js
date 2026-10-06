@@ -262,7 +262,7 @@ function go(page){
   if(page==='hrms-reports')loadHrAttendanceReport();
   if(page==='tasks')loadTasks();
   if(page==='exception')loadExceptionCenter();
-  if(page==='expense')loadExpenseVendors();
+  if(page==='expense'){loadExpenseVendors();ensureExpensesLoaded();}
   if(page==='recruitment')scheduleIdleTask(refreshRecruitmentStats,100);
   if(page==='hrms-ext')scheduleIdleTask(refreshManagerPortalCounts,100);
   if(page==='inventory'){
@@ -270,6 +270,11 @@ function go(page){
     setTimeout(()=>ensureInventoryBulkSelection(),80);
   }
   if(page==='pos')loadPosPage();
+  if(page==='sales')ensureSalesRegisterLoaded();
+  if(page==='bills')ensureBillsLoaded();
+  if(page==='quotations')loadRegisterPage('quotations');
+  if(page==='purchase')ensurePurchaseDocumentsLoaded();
+  if(page==='bank')loadPaymentTotals();
   if(page==='accounting'){loadAccountingFromDb();renderPeriodLockPanel();}
   runPageWarmup(page);
   updateBackButton();
@@ -292,6 +297,11 @@ function stab(el,target){
   if(target==='inv-movement')loadStockMovements();
   if(String(target||'').startsWith('inv-'))setTimeout(()=>ensureInventoryBulkSelection(),80);
   if(target==='p-records')goToPurchaseRecordsPage(1);
+  if(target==='s-invoices')ensureSalesRegisterLoaded();
+  if(target==='pay-in')loadRegisterPage('receipts');
+  if(target==='q-list')loadRegisterPage('quotations');
+  if(target==='pay-out')ensureSupplierPaymentsLoaded();
+  if(target==='bk-transactions')loadRegisterPage('bankTx');
   // loadLeaveRequests() was previously only wired into the Leave
   // Management tab's own inline onclick (hrms.html) -- every OTHER real
   // path that lands here (the sidebar's "Leave" nav item, the Dashboard's
@@ -1776,12 +1786,9 @@ async function deleteInventoryProductAndMapping({productRow=null,mappingRow=null
     toast('This stock row is generated from purchases. Use Clear Table to remove generated stock history.','warn');
     return false;
   }
-  if(productName&&tableHasText('#sales-invoice-tbody',productName)){
-    toast(`Cannot delete ${productName}: linked sales invoices exist`,'warn');
-    return false;
-  }
-  if(productName&&tableHasText('#sales-return-tbody',productName)){
-    toast(`Cannot delete ${productName}: linked sales returns exist`,'warn');
+  // Asked of the server: the register only has one page of invoices on screen.
+  if(productName&&await salesInvoicesMention({product:productName})){
+    toast(`Cannot delete ${productName}: linked sales invoices or returns exist`,'warn');
     return false;
   }
   if(!skipConfirm){
@@ -2325,6 +2332,15 @@ function backendHeaders(){
   return headers;
 }
 
+// Employee photos arrive as a server path ("/api/v1/app-data/employee-photo/...",
+// see serialize_for_list() in app_data.py) instead of an inline base64 image;
+// point it at the API host, which may not be this page's origin.
+function withApiPhotoUrl(record){
+  const photo=record?.photo;
+  if(typeof photo!=='string'||!photo.startsWith('/api/v1/'))return record;
+  return {...record,photo:apiBaseUrl()+photo.slice('/api/v1'.length)};
+}
+
 function apiBaseUrl(){
   if(window.TAXFLOW_API_BASE_URL)return window.TAXFLOW_API_BASE_URL;
   const currentHost=window.location.hostname||'127.0.0.1';
@@ -2734,7 +2750,7 @@ async function fetchWithBackendFallback(url,options={}){
 // a new endpoint server-side means adding its path here too.
 window.ACTIVE_BRANCH_ID=window.ACTIVE_BRANCH_ID||(()=>{try{return localStorage.getItem('taxflow_active_branch_id')||null;}catch{return null;}})();
 window.ACCESSIBLE_BRANCHES=window.ACCESSIBLE_BRANCHES||[];
-const _BRANCH_AWARE_PATH_RE=/\/(invoices|inventory\/stock-levels|inventory\/stock-movements|reports\/trial-balance|reports\/dashboard|reports\/summary|hr\/live-locations|journal|general-ledger|app-data\/records\/(purchaseRecords|posSales|salesInvoices))(\?|$)/;
+const _BRANCH_AWARE_PATH_RE=/\/(invoices|inventory\/stock-levels|inventory\/stock-movements|reports\/trial-balance|reports\/dashboard|reports\/summary|hr\/live-locations|journal|general-ledger|app-data\/records\/(purchaseRecords|posSales|salesInvoices)|app-data\/sales-invoices(\/summary|\/open|\/by-number)?)(\?|$)/;
 function _withActiveBranchParam(url){
   if(!window.ACTIVE_BRANCH_ID)return url;
   if(typeof url!=='string'||!_BRANCH_AWARE_PATH_RE.test(url))return url;
@@ -3580,7 +3596,7 @@ async function syncDashboardFromDatabase(){
   }
   if(!window.__taxflowFreshDashboardLoaded)renderCachedDashboardSnapshot();
   try{
-    const response=await _fetchReportWithRetry(`${apiBaseUrl()}/reports/dashboard`);
+    const [response]=await Promise.all([_fetchReportWithRetry(`${apiBaseUrl()}/reports/dashboard`),loadExpenseTotals()]);
     if(!response.ok)throw new Error('Dashboard API returned '+response.status);
     const data=await response.json();
     window.__taxflowFreshDashboardLoaded=true;
@@ -3796,7 +3812,7 @@ function renderWorkforceSnapshot(snap){
 }
 
 function _refreshPurchaseDashboardCard(){
-  // Called after bootstrap fills _hydratedBills — updates only the purchase card elements
+  // Called after the deferred bootstrap phase — updates only the purchase card elements
   const lp=_computeLocalPurchaseStats();
   if(!lp.count)return;
   const setEl=(id,v)=>{const el=document.getElementById(id);if(el&&(el.textContent==='AED 0.00'||el.textContent===formatAed(0))||el?.textContent==='0 Bills')el.textContent=v;};
@@ -3843,10 +3859,8 @@ function renderDashboardHero(data,kpis={},counts={}){
 
   const vatPayable=parseAmount(kpis.vat_payable||data.vat_payable||0);
   const closingStock=purchaseStockItems().reduce((sum,item)=>sum+Math.max(0,Number(item.available||0))*Number(item.purchase_rate||0),0);
-  const directExpenses=[...document.querySelectorAll('#expense-tbody tr:not([data-empty-state])')].reduce((sum,row)=>{
-    const cat=(row.children[2]?.textContent||'').trim().toLowerCase();
-    return cat.includes('direct')?sum+parseAmount(row.children[5]?.textContent||'0'):sum;
-  },0);
+  // Loaded alongside /reports/dashboard (syncDashboardFromDatabase()).
+  const directExpenses=_expenseTotals.direct;
   const openingStock=0;
   // Server's cost of sales (perpetual: purchases less stock still on hand); else estimate locally.
   const serverCost=purSum.cost_of_sales!=null?parseAmount(purSum.cost_of_sales):null;
@@ -5192,7 +5206,7 @@ function renderAuditLog(entries=[]){
   [...template.children].reverse().forEach(row=>tbody.prepend(row));
 }
 
-function persistSalesInvoice(inv){
+function persistSalesInvoice(inv,options={}){
   // Stamped once, here — not in buildDraftInvoice(), which rebuilds on
   // every form edit for the live preview and would re-stamp on every
   // keystroke. Only set if missing, so re-saving/editing an invoice that
@@ -5201,7 +5215,11 @@ function persistSalesInvoice(inv){
   // required timestamp field — previously invoices carried no time
   // component at all, only a date.
   if(!inv.created_at)inv.created_at=new Date().toISOString();
-  saveServer('salesInvoices',inv);
+  // createOnly for a new number: the server refuses one already used by any
+  // saved invoice, including ones not on the register's current page.
+  return saveServer('salesInvoices',inv,{throwOnError:true,createOnly:!!options.createOnly})
+    .then(()=>'saved')
+    .catch(err=>err?.status===409?'duplicate':'failed');
 }
 
 function restoreSalesInvoices(){
@@ -5362,7 +5380,6 @@ function clearDemoCardsAndCounters(){
 const financePaymentsByRef=new Map();
 const financeBankAccountsByKey=new Map();
 // ref.toLowerCase() → {paid, total, isSupplier}
-const _invoicePaidMap=new Map();
 
 function resetDraftEntryDefaults(){
   setFieldValue(document.getElementById('inv-no'),'');
@@ -5432,10 +5449,9 @@ function quotationStatusClass(status){
   return 'b-gray';
 }
 
-function renderQuotationRecord(quote){
-  const tbody=document.getElementById('quotation-tbody');
+function buildQuotationRow(quote){
   const quoteNo=quote?.quote_no||quote?.quotation_no||quote?.ref;
-  if(!tbody||!quoteNo||hasFirstCellValue(tbody,quoteNo))return;
+  if(!quoteNo)return null;
   const row=document.createElement('tr');
   const record={
     quote_no:quoteNo,
@@ -5454,9 +5470,7 @@ function renderQuotationRecord(quote){
   row.dataset.quotation=JSON.stringify(record);
   row.dataset.rowActionsAdded='1';
   row.innerHTML=`<td class="mono">${escapeHtml(record.quote_no)}</td><td>${escapeHtml(record.customer)}</td><td>${escapeHtml(record.date)}</td><td>${escapeHtml(record.valid_until)}</td><td class="mono">${Number(String(record.subtotal).replace(/,/g,'')||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(String(record.vat_amount).replace(/,/g,'')||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(String(record.total).replace(/,/g,'')||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b ${quotationStatusClass(record.status)}">${escapeHtml(record.status)}</span></td><td>${escapeHtml(record.owner)}</td><td data-action-col="1">${quotationActionsHtml()}</td>`;
-  removeEmptyState(tbody);
-  tbody.prepend(row);
-  refreshEnhancedTable(tbody.closest('table'));
+  return row;
 }
 
 function hasFirstCellValue(tbody,value){
@@ -5714,27 +5728,18 @@ async function loadStockLevelsFromServer(){
 
 let _allStockMovements=[];
 
-function _collectSalesMovements(){
-  const movements=[];
-  document.querySelectorAll('#sales-invoice-tbody tr:not([data-empty-state])').forEach(row=>{
-    let inv={};
-    try{inv=JSON.parse(row.dataset.salesInvoice||'{}');}catch{}
-    if(!inv.date||isSalesReturn(inv))return;
-    // POS-sourced sales invoices already have a real pos_sale StockMovement
-    // row from the backend (sync_pos_stock(), app_data.py) — synthesizing
-    // another movement from the invoice line here double-counted every POS
-    // sale in the Stock Movements table and its Monthly History dialog.
-    if(String(inv.source||'').toLowerCase().startsWith('pos'))return;
-    const lines=Array.isArray(inv.lines)?inv.lines:[];
-    lines.forEach(line=>{
-      const name=(line.description||line.product||'').trim();
-      if(!name)return;
-      const qty=Number(line.qty||line.quantity||0);
-      if(!qty)return;
-      movements.push({item_name:name,movement_type:'sale',quantity:-qty,date:inv.date,reference:inv.invoice_no||'',unit:line.unit||'PCS'});
-    });
-  });
-  return movements;
+// 'sale' movements synthesised from sales invoice lines, built on the server
+// from every invoice (the register only holds one page). POS sales are left
+// out there: they already have a real pos_sale StockMovement row.
+async function _collectSalesMovements(){
+  if(window.HRMS_STANDALONE)return [];
+  try{
+    const data=await salesApi('/stock-movements');
+    return Array.isArray(data.movements)?data.movements:[];
+  }catch(err){
+    console.warn('Sales stock movements could not load:',err);
+    return [];
+  }
 }
 
 async function loadStockMovements(){
@@ -5743,7 +5748,7 @@ async function loadStockMovements(){
   try{
     const data=await moduleApi('/inventory/stock-movements');
     const purchaseMvt=Array.isArray(data)?data:[];
-    const salesMvt=_collectSalesMovements();
+    const salesMvt=await _collectSalesMovements();
     _allStockMovements=[...purchaseMvt,...salesMvt]
       .sort((a,b)=>new Date(a.date||a.movement_date||0)-new Date(b.date||b.movement_date||0));
     _populateMovementFilters();
@@ -5829,7 +5834,7 @@ async function openStockMovementHistory(el){
     try{
       const data=await moduleApi('/inventory/stock-movements');
       const purchaseMvt=Array.isArray(data)?data:[];
-      const salesMvt=_collectSalesMovements();
+      const salesMvt=await _collectSalesMovements();
       _allStockMovements=[...purchaseMvt,...salesMvt]
         .sort((a,b)=>new Date(a.date||a.movement_date||0)-new Date(b.date||b.movement_date||0));
     }catch(e){console.warn('Movements load failed:',e);}
@@ -5945,7 +5950,7 @@ function openStockDayHistory(itemName,unit,monthKey,monthLabel,allMovements){
   showM('m-stock-day-history');
 }
 
-function openMovementSource(type,ref){
+async function openMovementSource(type,ref){
   if(!ref||ref==='-'){toast('No source reference for this movement','warn');return;}
   const isPurchase=type.includes('purchase')||type.includes('bill')||type.includes('vendor');
   const isSale=!isPurchase&&(type.includes('sale')||type.includes('invoice'));
@@ -5964,11 +5969,8 @@ function openMovementSource(type,ref){
     return;
   }
   if(isSale){
-    const row=[...document.querySelectorAll('#sales-invoice-tbody tr:not([data-empty-state])')].find(r=>{
-      try{return (JSON.parse(r.dataset.salesInvoice||'{}').invoice_no||'').toLowerCase()===ref.toLowerCase();}catch{return false;}
-    });
-    if(!row){toast(`Sales invoice ${ref} not found — open Sales page first`,'warn');return;}
-    const inv=invoiceFromSalesRow(row);
+    const inv=await fetchSalesInvoiceByNumber(ref);
+    if(!inv){toast(`Sales invoice ${ref} not found`,'warn');return;}
     renderSalesInvoicePreview(inv);
     showM('m-sales-view');
     return;
@@ -6256,31 +6258,12 @@ async function deleteServiceType(btn){
   deleteServer('serviceTypes',{name});
 }
 
-// Populated during bootstrap hydration — used as reliable source for purchase dashboard stats
-const _hydratedBills=[];
-
+// Local fallback for the dashboard purchase card when /reports/dashboard has no
+// purchase_summary. Bills are no longer held in the browser (they page from the
+// server, and the server's purchase_summary already counts them), so this only
+// covers the purchase records loaded so far.
 function _computeLocalPurchaseStats(){
   let total=0,net=0,paid=0,paidCount=0,pendingCount=0,count=0;
-  const billSrc=_hydratedBills.length?_hydratedBills:null;
-  if(billSrc){
-    billSrc.forEach(bill=>{
-      const rowTotal=parseAmount(bill.total||bill.grand_total||(Number(bill.subtotal||0)+Number(bill.vat||0))||_sumLines(bill.lines));
-      const rowNet=parseAmount(bill.net_amount||bill.subtotal||0)||(rowTotal-parseAmount(bill.vat_amount||bill.vat||bill.tax||0));
-      const status=(bill.status||'').trim().toLowerCase();
-      total+=rowTotal;net+=rowNet;count++;
-      if(['paid','complete','completed','posted','settled','received'].includes(status)){paid+=rowNet;paidCount++;}
-      else pendingCount++;
-    });
-  }else{
-    document.querySelectorAll('#bill-tbody tr[data-server-record]').forEach(row=>{
-      const cells=row.querySelectorAll('td');
-      const rowTotal=parseAmount(cells[6]?.textContent||cells[4]?.textContent||0);
-      const status=(cells[7]?.querySelector('.b')?.textContent||cells[7]?.textContent||'').trim().toLowerCase();
-      total+=rowTotal;net+=rowTotal;count++;
-      if(['paid','complete','completed','posted','settled','received'].includes(status)){paid+=rowTotal;paidCount++;}
-      else pendingCount++;
-    });
-  }
   if(purchaseRecordCache.size>0){
     purchaseRecordCache.forEach(rec=>{
       const rowTotal=parseAmount(rec.total||rec.grand_total||(Number(rec.subtotal||0)+Number(rec.vat||rec.tax||0))||_sumLines(rec.lines||rec.items));
@@ -6296,48 +6279,202 @@ function _sumLines(lines){
   return lines.reduce((s,l)=>s+parseAmount(l.line_total||l.total||l.net||l.amount||((Number(l.qty||l.quantity||1))*(Number(l.unit_price||l.price||0)))),0);
 }
 
-function _refreshBillPageStats(){
-  const bills=_hydratedBills.length?_hydratedBills:[...document.querySelectorAll('#bill-tbody tr[data-server-record]')].map(row=>{
-    const c=row.querySelectorAll('td');
-    return {total:parseAmount(c[6]?.textContent||0),due:'',status:c[7]?.querySelector('.b')?.textContent||''};
-  });
-  const paidStatuses=['paid','complete','completed','posted','settled','received'];
-  const now=new Date();now.setHours(0,0,0,0);
-  const weekOut=new Date(now.getTime()+7*24*60*60*1000);
-  let openTotal=0,openCount=0,dueTotal=0,dueCount=0;
-  bills.forEach(bill=>{
-    const status=String(bill.status||'').trim().toLowerCase();
-    if(paidStatuses.includes(status))return;
-    const total=parseAmount(bill.total||0);
-    openTotal+=total;openCount++;
-    const dueDate=bill.due?new Date(bill.due):null;
-    if(dueDate&&!isNaN(dueDate)&&dueDate>=now&&dueDate<=weekOut){dueTotal+=total;dueCount++;}
-  });
-  const setStat=(id,val,sub)=>{const el=document.getElementById(id);if(el)el.textContent=val;const subEl=document.getElementById(id+'-sub');if(subEl&&sub)subEl.textContent=sub;};
-  setStat('bill-stat-open',formatAed(openTotal),`${openCount} unpaid bill${openCount===1?'':'s'}`);
-  setStat('bill-stat-due',formatAed(dueTotal),`${dueCount} vendor payment${dueCount===1?'':'s'}`);
+// ── Server-paged registers (bills, receipts, quotations) ─────────────────────
+// Each table shows REGISTER_PAGE_SIZE rows from GET /app-data/registers/<collection>,
+// searched on the server, with Previous/Next controls whose ids start with the
+// register name (<name>-count, <name>-prev, <name>-next). These collections are no
+// longer in the bootstrap blob.
+const REGISTER_PAGE_SIZE=50;
+const _registers={};
+
+function defineRegister(name,cfg){
+  _registers[name]={page:1,total:0,q:'',loading:false,seq:0,loaded:false,label:'records',kind:null,sort:'newest',...cfg};
 }
 
-function renderBillRecord(bill){
-  const tbody=document.getElementById('bill-tbody');
-  if(!tbody||!bill?.bill_no||hasFirstCellValue(tbody,bill.bill_no))return;
+async function registersApi(path,params={}){
+  const query=new URLSearchParams(Object.entries(params).filter(([,v])=>v!==''&&v!=null)).toString();
+  const response=await authenticatedFetch(`${apiBaseUrl()}/app-data${path}${query?`?${query}`:''}`);
+  if(!response.ok){
+    const err=new Error(`Register API returned ${response.status}`);
+    err.status=response.status;
+    throw err;
+  }
+  return response.json();
+}
+
+async function loadRegisterPage(name,page){
+  const state=_registers[name];
+  if(!state||window.HRMS_STANDALONE)return;
+  page=Math.max(1,page||state.page);
+  const seq=++state.seq;
+  state.loading=true;
+  updateRegisterControls(name);
+  try{
+    const data=await registersApi(`/registers/${state.collection}`,{
+      kind:state.kind,q:state.q,sort:state.sort,limit:REGISTER_PAGE_SIZE,offset:(page-1)*REGISTER_PAGE_SIZE,
+      ...(state.params?state.params():{})
+    });
+    if(seq!==state.seq)return; // a newer search/page request superseded this one
+    const records=Array.isArray(data.records)?data.records:[];
+    state.total=Number(data.total||0);
+    state.page=page;
+    state.loaded=true;
+    state.render(records,data);
+    // A page past the end (rows deleted elsewhere) steps back to the last real page.
+    if(!records.length&&page>1&&state.total>0)return loadRegisterPage(name,Math.ceil(state.total/REGISTER_PAGE_SIZE));
+  }catch(err){
+    if(seq!==state.seq)return;
+    console.warn(`${name} page load failed:`,err);
+    toast(`${state.label[0].toUpperCase()+state.label.slice(1)} could not load. Check backend connection.`,'warn');
+  }finally{
+    if(seq===state.seq){
+      state.loading=false;
+      updateRegisterControls(name);
+    }
+  }
+}
+
+function updateRegisterControls(name){
+  const state=_registers[name];
+  const count=document.getElementById(`${name}-count`);
+  const prevBtn=document.getElementById(`${name}-prev`);
+  const nextBtn=document.getElementById(`${name}-next`);
+  const totalPages=Math.max(1,Math.ceil(state.total/REGISTER_PAGE_SIZE));
+  if(count){
+    count.textContent=state.loading&&!state.loaded
+      ? `Loading ${state.label}...`
+      : state.total
+      ? `Page ${state.page.toLocaleString('en-AE')} of ${totalPages.toLocaleString('en-AE')} — ${state.total.toLocaleString('en-AE')} ${state.q?'matching ':''}${state.label}`
+      : state.q?`No ${state.label} match your search`:`No ${state.label} yet`;
+  }
+  if(prevBtn)prevBtn.disabled=state.loading||state.page<=1;
+  if(nextBtn)nextBtn.disabled=state.loading||state.page>=totalPages;
+}
+
+function nextRegisterPage(name){
+  const state=_registers[name];
+  if(state&&state.page<Math.ceil(state.total/REGISTER_PAGE_SIZE))loadRegisterPage(name,state.page+1);
+}
+
+function prevRegisterPage(name){
+  const state=_registers[name];
+  if(state&&state.page>1)loadRegisterPage(name,state.page-1);
+}
+
+const _registerSearchTimers={};
+function searchRegister(name,value){
+  clearTimeout(_registerSearchTimers[name]);
+  _registerSearchTimers[name]=setTimeout(()=>{
+    const state=_registers[name];
+    const q=String(value||'').trim();
+    if(!state||(state.q===q&&state.loaded))return;
+    state.q=q;
+    loadRegisterPage(name,1);
+  },300);
+}
+
+// Re-reads a register's current page (and whatever else it refreshes) after a write.
+const _registerRefreshTimers={};
+function refreshRegister(name){
+  clearTimeout(_registerRefreshTimers[name]);
+  _registerRefreshTimers[name]=setTimeout(()=>{
+    const state=_registers[name];
+    if(!state||window.HRMS_STANDALONE)return;
+    loadRegisterPage(name);
+    state.afterRefresh?.();
+  },250);
+}
+
+// Fills a tbody with rows built by buildRow(record), or an empty-state message.
+function fillRegisterTbody(tbody,records,buildRow,emptyMessage,{rowActions=true}={}){
+  if(!tbody)return;
+  const fragment=document.createDocumentFragment();
+  records.forEach(record=>{
+    try{
+      const row=buildRow(record);
+      if(row)fragment.appendChild(row);
+    }catch(err){console.warn('Could not render record:',err,record);}
+  });
+  tbody.innerHTML='';
+  if(fragment.childNodes.length)tbody.appendChild(fragment);
+  else emptyTableMessage(tbody,emptyMessage);
+  // These tables skip enhanceTable()'s observer, so give each new page its row actions here.
+  if(rowActions)addTableDeleteActions(tbody.closest('table'));
+}
+
+// Quotations page from the server (no longer in the bootstrap blob).
+defineRegister('quotations',{
+  collection:'quotations',
+  label:'quotations',
+  render(records){
+    fillRegisterTbody(document.getElementById('quotation-tbody'),records,buildQuotationRow,this.q?`No quotations match "${this.q}".`:'No quotations in database yet.');
+  }
+});
+
+// Saves a quotation, then re-reads the list so it shows the server's copy.
+function saveQuotationRecord(record){
+  return saveServer('quotations',record).then(result=>{refreshRegister('quotations');return result;});
+}
+
+// Bills page cards, from GET /registers/bills/summary (every bill, net of payments).
+let _billStatsSeq=0;
+async function _refreshBillPageStats(){
+  if(window.HRMS_STANDALONE||!document.getElementById('bill-stat-open'))return;
+  const seq=++_billStatsSeq;
+  let s;
+  try{s=await registersApi('/registers/bills/summary');}catch(err){console.warn('Bill totals could not load:',err);return;}
+  if(seq!==_billStatsSeq)return;
+  const setStat=(id,val,sub)=>{const el=document.getElementById(id);if(el)el.textContent=val;const subEl=document.getElementById(id+'-sub');if(subEl&&sub)subEl.textContent=sub;};
+  const openCount=Number(s.open_count||0),dueCount=Number(s.due_week_count||0);
+  setStat('bill-stat-open',formatAed(s.open_total||0),`${openCount} unpaid bill${openCount===1?'':'s'}`);
+  setStat('bill-stat-due',formatAed(s.due_week_total||0),`${dueCount} vendor payment${dueCount===1?'':'s'}`);
+}
+
+function buildBillRow(bill){
+  if(!bill?.bill_no)return null;
+  const status=bill.status||'Awaiting Payment';
+  const sl=String(status).toLowerCase();
+  const statusClass=sl==='paid'?'b-g':'b-a';
+  const remaining=sl==='partial'&&bill.balance_due!=null?` title="Remaining: ${escapeHtml(currentCurrency())} ${Number(bill.balance_due).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}"`:'';
   const row=document.createElement('tr');
   row.dataset.serverRecord='bills';
-  row.innerHTML=`<td class="mono">${escapeHtml(bill.bill_no)}</td><td>${escapeHtml(bill.vendor)}</td><td>${escapeHtml(bill.date)}</td><td>${escapeHtml(bill.due)}</td><td class="mono">${Number(bill.subtotal||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(bill.vat||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(bill.total||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b b-a">${escapeHtml(bill.status||'Awaiting Payment')}</span></td><td><button class="btn btn-g btn-sm" onclick="openRowDetail(this,'Bill / Vendor Detail','Bill detail')">View</button></td>`;
-  removeEmptyState(tbody);
-  tbody.prepend(row);
+  row.dataset.bill=JSON.stringify(bill);
+  row.innerHTML=`<td class="mono">${escapeHtml(bill.bill_no)}</td><td>${escapeHtml(bill.vendor)}</td><td>${escapeHtml(bill.date)}</td><td>${escapeHtml(bill.due)}</td><td class="mono">${Number(bill.subtotal||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(bill.vat||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${Number(bill.total||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b ${statusClass}"${remaining}>${escapeHtml(status)}</span></td><td><button class="btn btn-g btn-sm" onclick="openRowDetail(this,'Bill / Vendor Detail','Bill detail')">View</button></td>`;
+  return row;
+}
+
+defineRegister('bills',{
+  collection:'bills',
+  label:'bills',
+  render(records){
+    fillRegisterTbody(document.getElementById('bill-tbody'),records,buildBillRow,this.q?`No bills match "${this.q}".`:'No vendor bills in database yet.');
+  },
+  afterRefresh(){
+    _refreshBillPageStats();
+    loadVendorBillBalances();
+  }
+});
+
+function ensureBillsLoaded(){
+  loadRegisterPage('bills');
   _refreshBillPageStats();
+}
+
+// Still owed per vendor on open bills (lower-cased name), for the Vendor Directory.
+let _vendorBillBalances=new Map();
+async function loadVendorBillBalances(){
+  if(window.HRMS_STANDALONE)return;
+  try{
+    const data=await registersApi('/registers/bills/vendor-balances');
+    _vendorBillBalances=new Map(Object.entries(data.balances||{}));
+  }catch(err){
+    console.warn('Vendor balances could not load:',err);
+  }
 }
 
 function _vendorOpenBalance(vendorName){
   const name=String(vendorName||'').trim().toLowerCase();
-  if(!name)return 0;
-  const paidStatuses=['paid','complete','completed','posted','settled','received'];
-  return _hydratedBills.reduce((sum,bill)=>{
-    if(String(bill.vendor||'').trim().toLowerCase()!==name)return sum;
-    if(paidStatuses.includes(String(bill.status||'').trim().toLowerCase()))return sum;
-    return sum+parseAmount(bill.total||0);
-  },0);
+  return name?Number(_vendorBillBalances.get(name)||0):0;
 }
 
 function renderVendorRecord(vendor){
@@ -6494,7 +6631,7 @@ function openPaymentModal(type='Customer Receipt'){
   if(timeEl)timeEl.value=now.toTimeString().slice(0,5);
   // Auto-fill reference
   const refEl=document.getElementById('payment-ref');
-  if(refEl)refEl.value=nextPaymentReference(type);
+  if(refEl)fillNextPaymentReference(type);
 
   // Build method buttons from bank accounts, default to Cash
   populatePaymentMethods('Cash');
@@ -6511,10 +6648,31 @@ function openPaymentModal(type='Customer Receipt'){
 
   showM('m-payment');
   setTimeout(()=>syncPaymentFormOptions(),0);
-  // Ensure purchase records are loaded so vendor invoices appear in allocation table
-  if(isSupplierPaymentType(type)&&!purchaseRecordsLoaded){
-    fetchPurchaseRecordsPage().then(()=>syncPaymentFormOptions());
+  loadOpenPaymentDocs(type).then(()=>syncPaymentFormOptions());
+}
+
+// Documents with money still to collect (customer: sales invoices) or pay
+// (supplier: bills and purchase records), from GET /payables/open. The registers
+// only hold one page, so payments can't read open documents off the tables any
+// more. amount is already net of payments allocated so far.
+const _openPaymentDocs={customer:[],supplier:[]};
+const _openPaymentDocsPromise={};
+function loadOpenPaymentDocs(type){
+  const side=isSupplierPaymentType(type)?'supplier':'customer';
+  if(window.HRMS_STANDALONE)return Promise.resolve([]);
+  if(!_openPaymentDocsPromise[side]){
+    _openPaymentDocsPromise[side]=registersApi('/payables/open',{side}).then(data=>{
+      _openPaymentDocs[side]=Array.isArray(data.documents)?data.documents:[];
+      return _openPaymentDocs[side];
+    }).catch(err=>{
+      console.warn('Open documents could not load:',err);
+      return _openPaymentDocs[side];
+    }).finally(()=>{
+      // Reuse one in-flight request; the next modal open fetches fresh figures.
+      setTimeout(()=>{_openPaymentDocsPromise[side]=null;},0);
+    });
   }
+  return _openPaymentDocsPromise[side];
 }
 
 function selectPaymentMethod(btn){
@@ -6696,144 +6854,42 @@ function updatePmtBalance(){
 }
 
 function collectPaymentContacts(type=document.getElementById('payment-type')?.value){
-  const selector=isSupplierPaymentType(type)?'#vendor-tbody tr:not([data-empty-state])':'#customer-tbody tr:not([data-empty-state])';
+  const supplier=isSupplierPaymentType(type);
+  const selector=supplier?'#vendor-tbody tr:not([data-empty-state])':'#customer-tbody tr:not([data-empty-state])';
   const fromTable=[...document.querySelectorAll(selector)]
     .map(row=>row.children[0]?.textContent.trim())
     .filter(Boolean);
-  if(isSupplierPaymentType(type)){
-    const fromPurchases=[...purchaseRecordCache.values()]
-      .map(p=>String(p.supplier||'').trim())
-      .filter(Boolean);
-    const fromBills=[...document.querySelectorAll('#bill-tbody tr:not([data-empty-state])')]
-      .map(row=>row.children[1]?.textContent.trim())
-      .filter(Boolean);
-    return [...new Set([...fromTable,...fromPurchases,...fromBills])];
-  }
-  // For customer receipts: also pull names from the sales invoice table
-  const fromInvoices=[...document.querySelectorAll('#sales-invoice-tbody tr:not([data-empty-state])')].map(row=>{
-    try{return JSON.parse(row.dataset.salesInvoice||'{}').customer||'';}catch{return '';}
-  }).filter(Boolean);
-  return [...new Set([...fromTable,...fromInvoices])];
-}
-
-function paidPaymentDocumentRefs(type=document.getElementById('payment-type')?.value){
-  const supplier=isSupplierPaymentType(type);
-  const refs=new Set();
-  // Only exclude invoices/bills whose status is exactly "Paid" — Partial ones stay in the list
-  const statusColIdx=supplier?7:8;
-  const selector=supplier?'#bill-tbody tr:not([data-empty-state])':'#sales-invoice-tbody tr:not([data-empty-state])';
-  document.querySelectorAll(selector).forEach(row=>{
-    const status=(row.children[statusColIdx]?.textContent||'').trim().toLowerCase();
-    if(status==='paid'){
-      refs.add((row.children[0]?.textContent||'').trim().toLowerCase());
-    }
-  });
-  return refs;
-}
-
-function isPendingDocumentStatus(status){
-  const text=String(status||'').trim().toLowerCase();
-  if(!text)return true;
-  return !/(paid|posted|settled|allocated|closed|reconciled|complete)/.test(text);
-}
-
-function remainingBalance(ref,total){
-  const info=_invoicePaidMap.get(String(ref||'').trim().toLowerCase());
-  if(!info)return total;
-  return Math.max(0,total-(info.paid||0));
-}
-
-// FIFO allocation order — the oldest outstanding document should be first
-// in the allocation table (and so gets paid off first), matching standard
-// accounting practice for applying a receipt/payment against a client/
-// vendor's open balance. Dates throughout this app are stored/rendered as
-// ISO "YYYY-MM-DD", so a plain ascending string sort already sorts them
-// chronologically; a missing/unparseable date sorts last rather than
-// jumping the queue ahead of dated documents.
-function _sortPaymentDocsFifo(docs){
-  return docs.slice().sort((a,b)=>{
-    const da=String(a.date||'').trim();
-    const db=String(b.date||'').trim();
-    if(!da&&!db)return 0;
-    if(!da)return 1;
-    if(!db)return -1;
-    return da<db?-1:da>db?1:0;
-  });
+  // Plus everyone with an open document (loaded by loadOpenPaymentDocs()).
+  const fromDocs=_openPaymentDocs[supplier?'supplier':'customer'].map(doc=>doc.contact).filter(Boolean);
+  return [...new Set([...fromTable,...fromDocs])];
 }
 
 function collectPaymentDocuments(type=document.getElementById('payment-type')?.value){
-  const paidRefs=paidPaymentDocumentRefs(type);
-  if(isSupplierPaymentType(type)){
-    const bills=[...document.querySelectorAll('#bill-tbody tr:not([data-empty-state])')].map(row=>{
-      const ref=row.children[0]?.textContent.trim()||'';
-      const total=parseAmount(row.children[6]?.textContent||'0');
-      const remaining=remainingBalance(ref,total);
-      return {
-        ref,
-        contact:row.children[1]?.textContent.trim()||'',
-        date:row.children[2]?.textContent.trim()||'',
-        amount:remaining,
-        original_amount:total,
-        status:row.children[7]?.textContent.trim()||'',
-        source:'Bill'
-      };
-    }).filter(item=>item.ref&&isPendingDocumentStatus(item.status)&&!paidRefs.has(item.ref.toLowerCase())&&item.amount>0.01);
-
-    const purchases=[...document.querySelectorAll('#purchase-record-tbody tr:not([data-empty-state])')].map(row=>{
-      const rec=purchaseRecordFromRow(row);
-      if(!rec||!rec.ref)return null;
-      // +1 vs. the pre-reorder indices — Actions is now column 0 in this table.
-      const total=rec.total||parseAmount(row.children[10]?.textContent||'0');
-      const remaining=remainingBalance(rec.ref,total);
-      return {
-        ref:rec.ref,
-        contact:rec.supplier||rec.vendor||row.children[3]?.textContent.trim()||'',
-        date:rec.date||row.children[4]?.textContent.trim()||'',
-        amount:remaining,
-        original_amount:total,
-        status:rec.status||'Pending',
-        source:'Purchase Invoice'
-      };
-    }).filter(item=>item&&item.ref&&item.contact&&isPendingDocumentStatus(item.status)&&!paidRefs.has(item.ref.toLowerCase())&&item.amount>0.01);
-
-    const seen=new Set();
-    return _sortPaymentDocsFifo([...bills,...purchases].filter(d=>{
-      const k=d.ref.toLowerCase();
-      if(seen.has(k))return false;
-      seen.add(k);
-      return true;
-    }));
-  }
-  return _sortPaymentDocsFifo([...document.querySelectorAll('#sales-invoice-tbody tr:not([data-empty-state])')].map(row=>{
-    let data={};
-    try{data=JSON.parse(row.dataset.salesInvoice||'{}');}catch(_err){}
-    if(isSalesReturn(data))return null;
-    const total=parseAmount(data.total??row.children[6]?.textContent??'0');
-    const ref=data.invoice_no||row.children[0]?.textContent.trim()||'';
-    const remaining=remainingBalance(ref,total);
-    return {
-      ref,
-      contact:data.customer||row.children[1]?.textContent.trim()||'',
-      date:data.date||row.children[2]?.textContent.trim()||'',
-      amount:remaining,
-      original_amount:total,
-      status:data.status||row.children[8]?.textContent.trim()||'',
-      source:'Invoice'
-    };
-  }).filter(item=>item&&item.ref&&isPendingDocumentStatus(item.status)&&!paidRefs.has(item.ref.toLowerCase())&&item.amount>0.01));
+  // Loaded by loadOpenPaymentDocs() when the payment modal opens; already oldest-first.
+  const side=isSupplierPaymentType(type)?'supplier':'customer';
+  return _openPaymentDocs[side].filter(item=>item.ref&&item.amount>0.01).map(item=>({...item}));
 }
 
-function nextPaymentReference(type=document.getElementById('payment-type')?.value){
-  const supplier=isSupplierPaymentType(type);
-  const prefix=supplier?'PAY':'RCT';
-  const year=new Date().getFullYear();
-  const rows=[...document.querySelectorAll(supplier?'#payment-out-tbody tr:not([data-empty-state])':'#payment-in-tbody tr:not([data-empty-state])')];
-  const max=rows.reduce((highest,row)=>{
-    const ref=row.children[0]?.textContent.trim()||'';
-    const match=ref.match(/(\d+)$/);
-    return match?Math.max(highest,Number(match[1])):highest;
-  },0);
-  return `${prefix}-${year}-${String(max+1).padStart(4,'0')}`;
+// Next RCT-/PAY- number, from the highest one saved (GET /registers/payments/next-ref);
+// the payments register only has one page on screen, so it can't be read off a table.
+async function nextPaymentReference(type=document.getElementById('payment-type')?.value){
+  const kind=isSupplierPaymentType(type)?'supplier':'customer';
+  try{
+    return (await registersApi('/registers/payments/next-ref',{kind})).ref;
+  }catch(err){
+    console.warn('Next payment number could not load:',err);
+    const prefix=kind==='supplier'?'PAY':'RCT';
+    return `${prefix}-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+  }
+}
+
+// Fills the payment number field unless the user has typed one meanwhile.
+async function fillNextPaymentReference(type){
+  const field=document.getElementById('payment-ref');
+  if(!field)return;
+  field.value='';
+  const ref=await nextPaymentReference(type);
+  if(!field.value.trim()&&document.getElementById('payment-type')?.value===type)setFieldValue(field,ref);
 }
 
 function syncPaymentFormOptions(){
@@ -6882,11 +6938,9 @@ function switchPmtType(type,btn){
   if(refLabel)refLabel.textContent=supplier?'Payment No.':'Receipt No.';
   const contactLabel=document.getElementById('payment-contact-label');
   if(contactLabel)contactLabel.textContent=supplier?'Vendor':'Client';
-  setFieldValue(document.getElementById('payment-ref'),nextPaymentReference(type));
+  fillNextPaymentReference(type);
   syncPaymentFormOptions();
-  if(supplier&&!purchaseRecordsLoaded){
-    fetchPurchaseRecordsPage().then(()=>syncPaymentFormOptions());
-  }
+  loadOpenPaymentDocs(type).then(()=>syncPaymentFormOptions());
   // Reset allocation table
   const tbody=document.getElementById('pmt-alloc-tbody');
   if(tbody)tbody.innerHTML='<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:12px">Select a client to see outstanding invoices.</td></tr>';
@@ -6936,104 +6990,20 @@ function applyPaymentDocumentSelection(){
   syncPaymentFormOptions();
 }
 
-function markPaymentDocumentPaid(payment){
-  const isSupplier=payment?.type==='Supplier Payment';
-  const tbody=document.getElementById(isSupplier?'bill-tbody':'sales-invoice-tbody');
-  const statusColIdx=isSupplier?7:8;
-  const totalColIdx=6;
-  const fmt=n=>Number(n).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+// Payments don't patch invoice/bill rows: the server keeps each document's paid
+// amount (app/doc_index.py) and the registers show it. A payment's save/delete
+// refreshes the affected registers once the server has it.
 
-  // Build allocations: use payment.allocations if present, else single-doc fallback
-  const allocations=(Array.isArray(payment?.allocations)&&payment.allocations.length)
-    ?payment.allocations
-    :[{doc_ref:payment?.document_ref||payment?.bill_no||payment?.invoice_no||'',amount:Number(payment?.amount||0)}];
-
-  allocations.forEach(alloc=>{
-    const ref=String(alloc.doc_ref||'').trim().toLowerCase();
-    if(!ref||ref==='-')return;
-    const allocAmt=Number(alloc.amount||0);
-    if(!allocAmt)return;
-
-    const row=[...(tbody?.querySelectorAll('tr:not([data-empty-state])')||[])]
-      .find(r=>(r.children[0]?.textContent||'').trim().toLowerCase()===ref);
-    if(!row)return;
-
-    const invoiceTotal=parseAmount(row.children[totalColIdx]?.textContent||'0');
-    const existing=_invoicePaidMap.get(ref)||{paid:0,total:invoiceTotal,isSupplier};
-    const newPaid=existing.paid+allocAmt;
-    _invoicePaidMap.set(ref,{...existing,paid:newPaid,total:invoiceTotal});
-
-    const statusCell=row.children[statusColIdx];
-    if(!statusCell)return;
-    const remaining=invoiceTotal-newPaid;
-
-    if(remaining<=0.01){
-      statusCell.innerHTML='<span class="b b-g">Paid</span>';
-      if(row.dataset.salesInvoice){
-        try{const d=JSON.parse(row.dataset.salesInvoice);d.status='Paid';d.balance_due=0;d.amount_paid=invoiceTotal;row.dataset.salesInvoice=JSON.stringify(d);}catch{}
-      }
-    }else{
-      statusCell.innerHTML=`<span class="b b-a" title="Remaining: ${escapeHtml(currentCurrency())} ${fmt(remaining)}">Partial</span>`;
-      if(row.dataset.salesInvoice){
-        try{const d=JSON.parse(row.dataset.salesInvoice);d.status='Partial';d.balance_due=remaining;d.amount_paid=newPaid;row.dataset.salesInvoice=JSON.stringify(d);}catch{}
-      }
-    }
-  });
-  refreshSalesInvoiceKpis();
-}
-
-// Inverse of markPaymentDocumentPaid() -- called when a payment is deleted,
-// so the bill/invoice it was allocated against goes back to whatever paid
-// state it's actually in now (Unpaid/Partial/Paid), not stuck showing
-// "Paid" for money that's no longer recorded as received.
-function reverseMarkPaymentDocumentPaid(payment){
-  const isSupplier=payment?.type==='Supplier Payment';
-  const tbody=document.getElementById(isSupplier?'bill-tbody':'sales-invoice-tbody');
-  const statusColIdx=isSupplier?7:8;
-  const totalColIdx=6;
-  const fmt=n=>Number(n).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
-
-  const allocations=(Array.isArray(payment?.allocations)&&payment.allocations.length)
-    ?payment.allocations
-    :[{doc_ref:payment?.document_ref||payment?.bill_no||payment?.invoice_no||'',amount:Number(payment?.amount||0)}];
-
-  allocations.forEach(alloc=>{
-    const ref=String(alloc.doc_ref||'').trim().toLowerCase();
-    if(!ref||ref==='-')return;
-    const allocAmt=Number(alloc.amount||0);
-    if(!allocAmt)return;
-
-    const row=[...(tbody?.querySelectorAll('tr:not([data-empty-state])')||[])]
-      .find(r=>(r.children[0]?.textContent||'').trim().toLowerCase()===ref);
-    if(!row)return;
-
-    const invoiceTotal=parseAmount(row.children[totalColIdx]?.textContent||'0');
-    const existing=_invoicePaidMap.get(ref)||{paid:0,total:invoiceTotal,isSupplier};
-    const newPaid=Math.max(0,existing.paid-allocAmt);
-    _invoicePaidMap.set(ref,{...existing,paid:newPaid,total:invoiceTotal});
-
-    const statusCell=row.children[statusColIdx];
-    if(!statusCell)return;
-    const remaining=invoiceTotal-newPaid;
-
-    if(newPaid<=0.01){
-      statusCell.innerHTML='<span class="b b-a">Awaiting Payment</span>';
-      if(row.dataset.salesInvoice){
-        try{const d=JSON.parse(row.dataset.salesInvoice);d.status='Awaiting Payment';d.balance_due=invoiceTotal;d.amount_paid=0;row.dataset.salesInvoice=JSON.stringify(d);}catch{}
-      }
-    }else if(remaining<=0.01){
-      statusCell.innerHTML='<span class="b b-g">Paid</span>';
-      if(row.dataset.salesInvoice){
-        try{const d=JSON.parse(row.dataset.salesInvoice);d.status='Paid';d.balance_due=0;d.amount_paid=invoiceTotal;row.dataset.salesInvoice=JSON.stringify(d);}catch{}
-      }
-    }else{
-      statusCell.innerHTML=`<span class="b b-a" title="Remaining: ${escapeHtml(currentCurrency())} ${fmt(remaining)}">Partial</span>`;
-      if(row.dataset.salesInvoice){
-        try{const d=JSON.parse(row.dataset.salesInvoice);d.status='Partial';d.balance_due=remaining;d.amount_paid=newPaid;row.dataset.salesInvoice=JSON.stringify(d);}catch{}
-      }
-    }
-  });
-  refreshSalesInvoiceKpis();
+function refreshAfterPayment(payment){
+  if(payment?.type==='Supplier Payment'){
+    refreshRegister('bills');
+    refreshRegister('supplierPayments');
+  }else{
+    refreshSalesRegister();
+    refreshRegister('receipts');
+  }
+  refreshRegister('bankTx');
+  loadPaymentTotals();
 }
 
 async function deleteSupplierPayment(ref){
@@ -7056,25 +7026,15 @@ async function deleteSupplierPayment(ref){
     if(delBtn){delBtn.disabled=false;delBtn.textContent='Delete';}
     return;
   }
-  reverseMarkPaymentDocumentPaid(payment);
   financePaymentsByRef.delete(ref);
   card?.remove();
-  if(!document.querySelector('#payment-out-cards .pay-card')){
-    const empty=document.getElementById('payment-out-empty');
-    if(empty)empty.style.display='';
-  }
-  applySupplierPaymentCardView();
-  updateFinanceFromDatabaseRecords();
+  refreshAfterPayment(payment);
   audit('Payment deleted','Bank & Payments',`${payment.ref} — ${currentCurrency()} ${amt} to ${payment.contact||'supplier'}`);
   toast('Payment deleted','ok');
 }
 
-function renderSupplierPaymentCard(payment){
-  const container=document.getElementById('payment-out-cards');
+function renderSupplierPaymentCard(payment,container=document.getElementById('payment-out-cards')){
   if(!container)return;
-  if(container.querySelector(`[data-pay-ref="${CSS.escape(payment.ref)}"]`))return;
-  const empty=document.getElementById('payment-out-empty');
-  if(empty)empty.style.display='none';
   const allocations=(Array.isArray(payment?.allocations)&&payment.allocations.length)
     ?payment.allocations
     :[{doc_ref:payment?.document_ref||payment?.bill_no||'—',amount:Number(payment?.amount||0)}];
@@ -7123,109 +7083,105 @@ function renderSupplierPaymentCard(payment){
   container.appendChild(card);
 }
 
-// Supplier Payments Made is a hand-rolled card list (renderSupplierPaymentCard
-// above), not a table.tbl -- so it never picked up the search/pagination that
-// enhanceTable() gives every other list in the app for free. Cards were also
-// just appendChild'd in whatever order payments arrived (oldest first), unlike
-// every prepend-based table elsewhere. This reorders + filters the existing
-// .pay-card elements in place (metadata read back from financePaymentsByRef
-// by ref, same map renderPaymentRecord already populates) rather than
-// re-rendering, so expanded/collapsed card state isn't disturbed.
-//
-// The supplier picker (#pay-out-search) is a <select>, not a text box --
-// per request, so a user picks from the actual list of suppliers that have
-// been paid rather than having to spell one out. Repopulated on every call
-// (cheap: at most a few dozen suppliers) so a brand-new supplier's first
-// payment appears in the list immediately, while preserving whatever was
-// already selected if it's still a valid option.
-function _populateSupplierPaymentPicker(cards){
-  const select=document.getElementById('pay-out-search');
-  if(!select)return;
-  const current=select.value;
-  const suppliers=[...new Set(cards.map(card=>String((financePaymentsByRef.get(card.dataset.payRef||'')||{}).contact||'').trim()).filter(Boolean))]
-    .sort((a,b)=>a.localeCompare(b));
-  select.innerHTML='<option value="">All Suppliers</option>'+
-    suppliers.map(name=>`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
-  if(suppliers.includes(current))select.value=current;
-}
-
-function applySupplierPaymentCardView(){
-  const container=document.getElementById('payment-out-cards');
-  if(!container)return;
-  const cards=[...container.querySelectorAll('.pay-card')];
-  const noMatchId='payment-out-no-match';
-  if(!cards.length){
-    document.getElementById(noMatchId)?.remove();
-    return;
-  }
-  _populateSupplierPaymentPicker(cards);
-  const selectedSupplier=document.getElementById('pay-out-search')?.value||'';
-  const sortMode=document.getElementById('pay-out-sort')?.value||'date-desc';
-
-  const withMeta=cards.map(card=>{
-    const payment=financePaymentsByRef.get(card.dataset.payRef||'')||{};
-    return {card,date:String(payment.date||''),amount:Number(payment.amount||0),supplier:String(payment.contact||'').trim()};
-  });
-  withMeta.sort((a,b)=>{
-    if(sortMode==='amount-desc')return b.amount-a.amount;
-    if(sortMode==='amount-asc')return a.amount-b.amount;
-    if(sortMode==='date-asc')return a.date.localeCompare(b.date);
-    return b.date.localeCompare(a.date); // date-desc, also the default
-  });
-
-  let visible=0;
-  withMeta.forEach(({card,supplier})=>{
-    container.appendChild(card); // reorders in place -- already-in-DOM nodes just move
-    const match=!selectedSupplier||supplier===selectedSupplier;
-    card.style.display=match?'':'none';
-    if(match)visible++;
-  });
-
-  let noMatch=document.getElementById(noMatchId);
-  if(selectedSupplier&&!visible){
-    if(!noMatch){
-      noMatch=document.createElement('div');
-      noMatch.id=noMatchId;
-      noMatch.className='pay-card-empty';
-      container.appendChild(noMatch);
-    }
-    noMatch.textContent=`No payments for "${selectedSupplier}".`;
-    noMatch.style.display='';
-  }else{
-    noMatch?.remove();
-  }
-}
-
-function renderPaymentRecord(payment){
-  // Rebuild _invoicePaidMap from stored allocations (for page-reload persistence)
-  const isSupplier=payment?.type==='Supplier Payment';
-  const allocations=(Array.isArray(payment?.allocations)&&payment.allocations.length)
-    ?payment.allocations
-    :[{doc_ref:payment?.document_ref||payment?.invoice_no||payment?.bill_no||'',amount:Number(payment?.amount||0)}];
-  allocations.forEach(alloc=>{
-    const ref=String(alloc.doc_ref||'').trim().toLowerCase();
-    if(!ref||ref==='-')return;
-    const allocAmt=Number(alloc.amount||0);
-    if(!allocAmt)return;
-    const existing=_invoicePaidMap.get(ref)||{paid:0,total:0,isSupplier};
-    _invoicePaidMap.set(ref,{...existing,paid:existing.paid+allocAmt});
-  });
-
-  const tbody=document.getElementById(isSupplier?'payment-out-tbody':'payment-in-tbody');
-  if(payment?.ref)financePaymentsByRef.set(String(payment.ref),payment);
-  if(!tbody||!payment?.ref||hasFirstCellValue(tbody,payment.ref)){
-    updateFinanceFromDatabaseRecords();
-    return;
-  }
+function buildReceiptRow(payment){
+  if(!payment?.ref)return null;
   const documentRef=payment.document_ref||payment.invoice_no||payment.bill_no||'-';
   const row=document.createElement('tr');
   row.dataset.serverRecord='payments';
   row.dataset.payment=JSON.stringify(payment);
   row.innerHTML=`<td class="mono">${escapeHtml(payment.ref)}</td><td>${escapeHtml(payment.contact)}</td><td class="mono">${escapeHtml(documentRef)}</td><td>${escapeHtml(payment.method||'Bank Transfer')}</td><td>${escapeHtml(payment.date)}</td><td class="mono">${Number(payment.amount||0).toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b b-g">Posted</span></td>`;
-  removeEmptyState(tbody);
-  tbody.prepend(row);
-  if(isSupplier)renderSupplierPaymentCard(payment);
-  markPaymentDocumentPaid(payment);
+  return row;
+}
+
+// Payments page from the server (they are no longer in the bootstrap blob):
+// receipts as a table, supplier payments as cards, and every payment in the
+// Bank Transactions table with a running balance. financePaymentsByRef holds the
+// payments currently on screen, for the card Delete button.
+defineRegister('receipts',{
+  collection:'payments',
+  kind:'customer',
+  label:'receipts',
+  render(records){
+    records.forEach(p=>{if(p?.ref)financePaymentsByRef.set(String(p.ref),p);});
+    fillRegisterTbody(document.getElementById('payment-in-tbody'),records,buildReceiptRow,this.q?`No receipts match "${this.q}".`:'No receipts in database yet.');
+  }
+});
+
+defineRegister('supplierPayments',{
+  collection:'payments',
+  kind:'supplier',
+  label:'supplier payments',
+  params(){
+    return {party:document.getElementById('pay-out-search')?.value||''};
+  },
+  render(records){
+    const container=document.getElementById('payment-out-cards');
+    if(!container)return;
+    container.querySelectorAll('.pay-card,#payment-out-no-match').forEach(el=>el.remove());
+    const empty=document.getElementById('payment-out-empty');
+    records.forEach(p=>{
+      if(!p?.ref)return;
+      financePaymentsByRef.set(String(p.ref),p);
+      renderSupplierPaymentCard(p,container);
+    });
+    if(empty){
+      const filtered=document.getElementById('pay-out-search')?.value;
+      empty.textContent=filtered?`No payments for "${filtered}".`:'No supplier payments in database yet.';
+      empty.style.display=records.length?'none':'';
+    }
+  }
+});
+
+// Supplier picker (all suppliers ever paid) + sort, applied on the server.
+async function populateSupplierPaymentPicker(){
+  const select=document.getElementById('pay-out-search');
+  if(!select)return;
+  let parties=[];
+  try{parties=(await registersApi('/registers/payments/parties',{kind:'supplier'})).parties||[];}catch(err){console.warn('Supplier list could not load:',err);return;}
+  const current=select.value;
+  select.innerHTML='<option value="">All Suppliers</option>'+parties.map(name=>`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+  if(parties.includes(current))select.value=current;
+}
+
+function applySupplierPaymentCardView(){
+  const state=_registers.supplierPayments;
+  state.sort=document.getElementById('pay-out-sort')?.value||'date-desc';
+  loadRegisterPage('supplierPayments',1);
+}
+
+function ensureSupplierPaymentsLoaded(){
+  _registers.supplierPayments.sort=document.getElementById('pay-out-sort')?.value||'date-desc';
+  populateSupplierPaymentPicker();
+  loadRegisterPage('supplierPayments');
+}
+
+defineRegister('bankTx',{
+  collection:'payments',
+  label:'transactions',
+  sort:'date-desc',
+  params(){return {running:'true'};},
+  render(records,data){
+    this.lastRecords=records;
+    this.runningBefore=Number(data?.running_before||0);
+    renderBankTransactions();
+  }
+});
+
+// Receipt/payment totals over every saved payment (GET /registers/payments/summary),
+// for the Bank cards, reconciliation and the dashboard.
+let _paymentTotals={count:0,inflow:0,outflow:0};
+let _paymentTotalsSeq=0;
+async function loadPaymentTotals(){
+  if(window.HRMS_STANDALONE)return;
+  const seq=++_paymentTotalsSeq;
+  try{
+    const data=await registersApi('/registers/payments/summary');
+    if(seq!==_paymentTotalsSeq)return;
+    _paymentTotals={count:Number(data.count||0),inflow:Number(data.inflow||0),outflow:Number(data.outflow||0)};
+  }catch(err){
+    console.warn('Payment totals could not load:',err);
+    return;
+  }
   updateFinanceFromDatabaseRecords();
 }
 
@@ -7258,33 +7214,25 @@ function renderBankAccountRecord(account){
   updateFinanceFromDatabaseRecords();
 }
 
-function currentFinancePayments(){
-  return [...financePaymentsByRef.values()];
-}
-
 function currentFinanceBankAccounts(){
   return [...financeBankAccountsByKey.values()];
 }
 
+function financeOpeningBalance(){
+  return currentFinanceBankAccounts().reduce((sum,account)=>sum+Number(account.balance??account.opening_balance??0),0);
+}
+
 function updateFinanceFromDatabaseRecords(){
-  const payments=currentFinancePayments();
-  const bankAccounts=currentFinanceBankAccounts();
-  const openingBalance=bankAccounts.reduce((sum,account)=>sum+Number(account.balance??account.opening_balance??0),0);
-  const inflow=payments
-    .filter(payment=>String(payment.type||'Customer Receipt').toLowerCase()!=='supplier payment')
-    .reduce((sum,payment)=>sum+Number(payment.amount||0),0);
-  const outflow=payments
-    .filter(payment=>String(payment.type||'').toLowerCase()==='supplier payment')
-    .reduce((sum,payment)=>sum+Number(payment.amount||0),0);
+  const openingBalance=financeOpeningBalance();
+  const {inflow,outflow,count}=_paymentTotals;
   const bookBalance=openingBalance+inflow-outflow;
   const stats=[...document.querySelectorAll('#bk-accounts .stat-val')];
   if(stats[0])stats[0].textContent=formatAed(bookBalance);
   if(stats[1])stats[1].textContent=formatAed(inflow);
   if(stats[2])stats[2].textContent=formatAed(outflow);
-  renderBankTransactions(payments,openingBalance);
-  updateBankReconciliation(openingBalance,bookBalance,payments.length);
+  renderBankTransactions();
+  updateBankReconciliation(openingBalance,bookBalance,count);
   renderDashBankRecon();
-  applySupplierPaymentCardView();
 }
 
 function updateBankAccountSummary(){
@@ -7292,11 +7240,10 @@ function updateBankAccountSummary(){
 }
 
 function renderDashBankRecon(){
-  const payments=currentFinancePayments();
   const bankAccounts=currentFinanceBankAccounts();
-  const openingBalance=bankAccounts.reduce((s,a)=>s+Number(a.balance??a.opening_balance??0),0);
-  const inflow=payments.filter(p=>String(p.type||'Customer Receipt').toLowerCase()!=='supplier payment').reduce((s,p)=>s+Number(p.amount||0),0);
-  const outflow=payments.filter(p=>String(p.type||'').toLowerCase()==='supplier payment').reduce((s,p)=>s+Number(p.amount||0),0);
+  const openingBalance=financeOpeningBalance();
+  const {inflow,outflow}=_paymentTotals;
+  const hasPayments=_paymentTotals.count>0;
   const bookBalance=openingBalance+inflow-outflow;
   const net=inflow-outflow;
   const balanced=bankAccounts.length===0||Math.abs(openingBalance-bookBalance)<=0.01;
@@ -7313,12 +7260,12 @@ function renderDashBankRecon(){
   if(netEl)netEl.style.color=net<0?'var(--red)':net>0?'var(--green)':'var(--text)';
   const unmatched=Math.abs(openingBalance-bookBalance);
   const unmatchedEl=document.getElementById('dash-bankm-unmatched');
-  if(unmatchedEl)unmatchedEl.textContent=!payments.length&&!bankAccounts.length?'د.إ —':formatAed(unmatched);
+  if(unmatchedEl)unmatchedEl.textContent=!hasPayments&&!bankAccounts.length?'د.إ —':formatAed(unmatched);
   const statusLabels=['dash-bank-recon-status','dash-bankm-status'];
   statusLabels.forEach(sid=>{
     const badge=document.getElementById(sid);
     if(!badge)return;
-    if(!payments.length&&!bankAccounts.length){badge.textContent='No data';badge.className='b b-b';}
+    if(!hasPayments&&!bankAccounts.length){badge.textContent='No data';badge.className='b b-b';}
     else if(balanced){badge.textContent='Balanced';badge.className='b b-g';}
     else{badge.textContent='Unmatched';badge.className='b b-r';}
   });
@@ -7326,16 +7273,19 @@ function renderDashBankRecon(){
   bars.forEach(([bid,i,o])=>{const bar=document.getElementById(bid);if(bar){const total=Math.max(1,i+o);bar.style.width=Math.min(100,Math.round(i/total*100))+'%';}});
 }
 
-function renderBankTransactions(payments=currentFinancePayments(),openingBalance=0){
+// One page of the 'bankTx' register (newest first). The running balance carries on
+// from the rows before this page (running_before from the server).
+function renderBankTransactions(){
   const tbody=document.getElementById('bank-transaction-tbody');
-  if(!tbody)return;
+  const state=_registers.bankTx;
+  if(!tbody||!state?.loaded)return;
+  const payments=state.lastRecords||[];
   if(!payments.length){
     emptyTableMessage(tbody,'No bank transactions in database yet.');
     return;
   }
-  const sorted=[...payments].sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.ref||'').localeCompare(String(a.ref||'')));
-  let running=openingBalance;
-  const rows=sorted.map(payment=>{
+  let running=financeOpeningBalance()+(state.runningBefore||0);
+  const rows=payments.map(payment=>{
     const isOut=String(payment.type||'').toLowerCase()==='supplier payment';
     const amount=Number(payment.amount||0);
     running+=isOut?-amount:amount;
@@ -7344,7 +7294,6 @@ function renderBankTransactions(payments=currentFinancePayments(),openingBalance
     return `<tr><td>${escapeHtml(payment.date||'-')}</td><td>${escapeHtml(payment.contact||'Finance transaction')} - ${escapeHtml(payment.ref||'')}</td><td class="mono" style="${isOut?'color:var(--red)':''}">${isOut?formatFinanceAmount(amount):'-'}</td><td class="mono" style="${isOut?'':'color:var(--green)'}">${isOut?'-':formatFinanceAmount(amount)}</td><td class="mono">${formatFinanceAmount(running)}</td><td><span class="b ${badge}">${escapeHtml(category)}</span></td></tr>`;
   });
   tbody.innerHTML=rows.join('');
-  refreshEnhancedTable(tbody.closest('table'));
 }
 
 function updateBankReconciliation(statementBalance,bookBalance,transactionCount){
@@ -7765,8 +7714,7 @@ function expAiSaveOne(btn){
       source:'AI Upload',
       supplier
     };
-    renderExpenseRecord(record);
-    saveServer('expenses',record);
+    saveExpenseRecord(record);
     card.remove();
     toast('Expense saved from receipt','ok');
   }catch(e){toast('Save failed: '+e.message,'warn');}
@@ -7795,10 +7743,9 @@ function calcExpenseTotal(){
   if(total)total.value=(amount+vat).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 
-function renderExpenseRecord(expense){
-  const tbody=document.getElementById('expense-tbody');
+function buildExpenseRow(expense){
   const ref=expense?.ref||expense?.id;
-  if(!tbody||!ref||hasFirstCellValue(tbody,ref))return;
+  if(!ref)return null;
   const amount=Number(expense.amount||0);
   const vat=Number(expense.vat_amount||expense.vat||0);
   const total=Number(expense.total||amount+vat);
@@ -7809,26 +7756,51 @@ function renderExpenseRecord(expense){
   row.dataset.expense=JSON.stringify(expense);
   row.dataset.expenseRef=ref;
   row.innerHTML=`<td>${escapeHtml(expense.date||'-')}</td><td>${escapeHtml(expense.description||ref)}</td><td><span class="b b-gray">${escapeHtml(expense.category||'Expense')}</span></td><td class="mono">${amount.toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${vat.toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td class="mono">${total.toLocaleString('en-AE',{maximumFractionDigits:2})}</td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td><button class="btn btn-g btn-sm" onclick="openRowDetail(this,'Expense Detail','Expense')">View</button></td>`;
-  removeEmptyState(tbody);
-  tbody.prepend(row);
-  renderExpenseApprovalRecord(expense);
+  return row;
+}
+
+function buildExpenseApprovalRow(expense){
+  const ref=expense?.ref||expense?.id;
+  if(!ref)return null;
+  const row=document.createElement('tr');
+  row.dataset.expenseRef=ref;
+  row.dataset.expense=JSON.stringify(expense);
+  row.innerHTML=`<td>${escapeHtml(expense.employee||'Current User')}</td><td>${escapeHtml(expense.description||ref)}</td><td class="mono">${formatAed(expense.total||0)}</td><td>${escapeHtml(expense.date||'-')}</td><td><span class="b b-a">Pending</span></td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="setExpenseApprovalStatus('${escapeHtml(ref)}','Approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="setExpenseApprovalStatus('${escapeHtml(ref)}','Rejected')">Reject</button></div></td>`;
+  return row;
+}
+
+// Expenses page from the server (no longer in the bootstrap blob): the list,
+// the pending-approval list, and the cards from /registers/expenses/summary.
+defineRegister('expenses',{
+  collection:'expenses',
+  label:'expenses',
+  render(records){
+    fillRegisterTbody(document.getElementById('expense-tbody'),records,buildExpenseRow,this.q?`No expenses match "${this.q}".`:'No expenses in database yet.');
+  },
+  afterRefresh(){
+    updateExpenseStats();
+    refreshRegister('expenseApprovals');
+  }
+});
+
+defineRegister('expenseApprovals',{
+  collection:'expenses',
+  label:'pending expenses',
+  params(){return {status:'pending'};},
+  render(records){
+    fillRegisterTbody(document.getElementById('expense-approval-tbody'),records,buildExpenseApprovalRow,'No pending expenses for approval.',{rowActions:false});
+  }
+});
+
+function ensureExpensesLoaded(){
+  loadRegisterPage('expenses');
+  loadRegisterPage('expenseApprovals');
   updateExpenseStats();
 }
 
-function renderExpenseApprovalRecord(expense){
-  const tbody=document.getElementById('expense-approval-tbody');
-  const ref=expense?.ref||expense?.id;
-  if(!tbody||!ref)return;
-  tbody.querySelector(`tr[data-expense-ref="${CSS.escape(ref)}"]`)?.remove();
-  if(String(expense.status||'').toLowerCase()!=='pending'){
-    if(!tbody.querySelector('tr:not([data-empty-state])'))emptyTableMessage(tbody,'No pending expenses for approval.');
-    return;
-  }
-  const row=document.createElement('tr');
-  row.dataset.expenseRef=ref;
-  row.innerHTML=`<td>${escapeHtml(expense.employee||'Current User')}</td><td>${escapeHtml(expense.description||ref)}</td><td class="mono">${formatAed(expense.total||0)}</td><td>${escapeHtml(expense.date||'-')}</td><td><span class="b b-a">Pending</span></td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="setExpenseApprovalStatus('${escapeHtml(ref)}','Approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="setExpenseApprovalStatus('${escapeHtml(ref)}','Rejected')">Reject</button></div></td>`;
-  removeEmptyState(tbody);
-  tbody.prepend(row);
+// Saves an expense, then re-reads the lists and cards so they show the server's copy.
+function saveExpenseRecord(record){
+  return saveServer('expenses',record).then(result=>{refreshRegister('expenses');return result;});
 }
 
 function expenseRecordFromListRow(row){
@@ -7841,7 +7813,12 @@ function expenseRecordFromListRow(row){
 function setExpenseApprovalStatus(ref,status){
   const listRow=[...document.querySelectorAll('#expense-tbody tr:not([data-empty-state])')]
     .find(row=>row.dataset.expenseRef===ref);
-  const record={...(expenseRecordFromListRow(listRow)||{}),ref,status};
+  const approvalRow=document.querySelector(`#expense-approval-tbody tr[data-expense-ref="${CSS.escape(ref)}"]`);
+  // The approval row carries the whole saved expense, so approving one that isn't on
+  // the list's current page doesn't save a bare {ref,status} over it.
+  const saved=expenseRecordFromListRow(listRow)||expenseRecordFromListRow(approvalRow);
+  if(!saved){toast('Expense not found — refresh and try again','warn');return;}
+  const record={...saved,ref,status};
   if(listRow){
     const badge=listRow.children[6]?.querySelector('.b');
     if(badge){
@@ -7853,23 +7830,31 @@ function setExpenseApprovalStatus(ref,status){
   document.querySelector(`#expense-approval-tbody tr[data-expense-ref="${CSS.escape(ref)}"]`)?.remove();
   const approvalBody=document.getElementById('expense-approval-tbody');
   if(approvalBody&&!approvalBody.querySelector('tr:not([data-empty-state])'))emptyTableMessage(approvalBody,'No pending expenses for approval.');
-  updateExpenseStats();
-  saveServer('expenses',record);
+  saveExpenseRecord(record);
   toast(status==='Approved'?'Expense approved':'Expense rejected',status==='Approved'?'ok':'warn');
   audit(`${status} expense`,ref,status);
 }
 
-function updateExpenseStats(){
-  const rows=[...document.querySelectorAll('#expense-tbody tr:not([data-empty-state])')];
-  const total=rows.reduce((sum,row)=>sum+parseAmount(row.children[5]?.textContent),0);
-  const pending=rows.filter(row=>/pending/i.test(row.children[6]?.textContent||'')).reduce((sum,row)=>sum+parseAmount(row.children[5]?.textContent),0);
-  const approved=rows.filter(row=>/approved/i.test(row.children[6]?.textContent||'')).reduce((sum,row)=>sum+parseAmount(row.children[5]?.textContent),0);
-  const rejected=rows.filter(row=>/rejected/i.test(row.children[6]?.textContent||'')).reduce((sum,row)=>sum+parseAmount(row.children[5]?.textContent),0);
+// Expenses page cards (every expense), and the dashboard direct-expense figure.
+let _expenseTotals={total:0,pending:0,approved:0,rejected:0,direct:0};
+async function loadExpenseTotals(){
+  if(window.HRMS_STANDALONE)return _expenseTotals;
+  try{
+    const data=await registersApi('/registers/expenses/summary');
+    _expenseTotals={total:Number(data.total||0),pending:Number(data.pending||0),approved:Number(data.approved||0),rejected:Number(data.rejected||0),direct:Number(data.direct||0)};
+  }catch(err){
+    console.warn('Expense totals could not load:',err);
+  }
+  return _expenseTotals;
+}
+
+async function updateExpenseStats(){
+  const t=await loadExpenseTotals();
   const stats=[...document.querySelectorAll('#exp-list .stat-val')];
-  if(stats[0])stats[0].textContent=formatAed(total);
-  if(stats[1])stats[1].textContent=formatAed(pending);
-  if(stats[2])stats[2].textContent=formatAed(approved);
-  if(stats[3])stats[3].textContent=formatAed(rejected);
+  if(stats[0])stats[0].textContent=formatAed(t.total);
+  if(stats[1])stats[1].textContent=formatAed(t.pending);
+  if(stats[2])stats[2].textContent=formatAed(t.approved);
+  if(stats[3])stats[3].textContent=formatAed(t.rejected);
 }
 
 function buildExpenseRecord(status='Pending'){
@@ -7913,8 +7898,7 @@ function saveExpense(status='Pending'){
     toast(`Period ${(record.date||'').slice(0,7)} is locked — unlock before saving`,'warn');
     return;
   }
-  renderExpenseRecord(record);
-  saveServer('expenses',record);
+  saveExpenseRecord(record);
   clearExpenseForm();
   stab(document.querySelector('#page-expense .tab:nth-child(4)'),'exp-list');
   toast(status==='Draft'?'Expense draft saved':'Expense submitted for approval','ok');
@@ -9138,13 +9122,12 @@ function hydrateFromServer(){
         renderStats.customers=await renderRecordList(data.customers,renderCustomerRecord,'customer');
         renderStats.users=await renderRecordList(data.users,renderUserRecord,'user');
         await _yield();
-        renderStats.salesInvoices=await renderRecordList(data.salesInvoices,inv=>addSalesInvoiceRow(inv,{persist:false}),'sales invoice');
-        await _yield();
-        renderStats.quotations=await renderRecordList(data.quotations,renderQuotationRecord,'quotation');
+        // Sales invoices are paged from the server by the register itself (loadSalesRegisterPage()).
+        // Quotations page from the server by their own register (loadRegisterPage('quotations')).
         await _yield();
         renderStats.accounts=await renderRecordList(data.accounts,renderAccountRecord,'account');
         renderStats.purchaseRecords={rendered:0,failed:0,total:0,lazy:true};
-        loadPurchaseDocumentsFromServer(data.purchaseDocuments||[],[]);
+        // Purchase documents load when the Purchases page opens (ensurePurchaseDocumentsLoaded()).
       }
     }finally{
       isHydratingFromServer=false;
@@ -9155,6 +9138,7 @@ function hydrateFromServer(){
       isHydratingFromServer=true;
       try{
         renderStats.employees=await renderRecordList(_deferred2.employees,record=>{
+          record=withApiPhotoUrl(record);
           renderEmployeeRecord(record);
           renderPayrollEmployeeRecord(record);
         },'employee');
@@ -9175,17 +9159,17 @@ function hydrateFromServer(){
         renderStats.bankAccounts=await renderRecordList(_deferred2.bankAccounts,renderBankAccountRecord,'bank account');
         if(!window.HRMS_STANDALONE){
           await _yield();
-          renderStats.payments=await renderRecordList(_deferred2.payments,renderPaymentRecord,'payment');
-          renderStats.expenses=await renderRecordList(_deferred2.expenses,renderExpenseRecord,'expense');
+          // Payments page from the server (receipts/supplierPayments/bankTx registers).
+          // Expenses page from the server (expenses/expenseApprovals registers).
           await _yield();
-          if(Array.isArray(_deferred2.bills)){_hydratedBills.length=0;_hydratedBills.push(..._deferred2.bills);}
-          renderStats.bills=await renderRecordList(_deferred2.bills,renderBillRecord,'bill');
+          await loadVendorBillBalances();
+          // Bills page from the server by their own register (loadRegisterPage('bills')).
           renderStats.vendors=await renderRecordList(_deferred2.vendors,renderVendorRecord,'vendor');
           _refreshPurchaseDashboardCard();
         }
       }finally{isHydratingFromServer=false;}
       if(!window.HRMS_STANDALONE){
-        updateFinanceFromDatabaseRecords();
+        loadPaymentTotals();
         updateAccountSelectors();
       }
     },600);
@@ -9197,7 +9181,8 @@ function hydrateFromServer(){
         renderStats.rotaSwaps=await renderRecordList(_deferred2.rotaSwaps,renderRotaSwapRecord,'rota swap');
         await _yield();
         renderStats.rotaApprovals=await renderRecordList(_deferred2.rotaApprovals,renderRotaApprovalRecord,'rota approval');
-        renderStats.rotaAssignments=await renderRecordList(_deferred2.rotaAssignments,renderRotaAssignmentRecord,'rota assignment');
+        // Rota assignments aren't in the bootstrap: renderRotaBoards() loads the dates on
+        // screen from /records/rotaAssignments/range (_loadVisibleRotaRanges()).
         renderRotaBoards();
         await _yield();
         renderStats.overtimeRequests=await renderRecordList(_deferred2.overtimeRequests,renderOTRecord,'overtime request');
@@ -9211,7 +9196,8 @@ function hydrateFromServer(){
         renderStats.candidates=await renderRecordList(_deferred2.candidates,renderCandidateRecord,'candidate');
         refreshRecruitmentStats();
         await _yield();
-        renderStats.ledger=await renderRecordList(_deferred2.ledger,line=>postLedgerLine(line,{persist:false}),'ledger');
+        // The Ledger tab shows the paged journal (goToJournalPage()); legacy app-data
+        // ledger lines are no longer sent in the bootstrap.
         // Note: hrUsers (the old client-only mock "Users & Roles" store) is
         // obsolete — that screen is now backed by the real Employee table via
         // /hr/admin/employees, loaded on demand by loadHrUsersAndRoles()
@@ -9282,21 +9268,16 @@ function hydrateFromServer(){
     const totalLoaded=[
       productRows,
       data.customers,
-      data.salesInvoices,
-      data.quotations,
-      data.bills,
       data.vendors,
-      data.payments,
       data.rotaShifts,
       data.rotaSwaps,
       data.rotaApprovals,
-      data.rotaAssignments,
       []
     ].reduce((sum,rows)=>sum+(Array.isArray(rows)?rows.length:0),0);
     window.__taxflowLastDbLoad={at:new Date().toISOString(),totalLoaded,renderStats};
     console.info(`TaxFlow DB tables loaded: ${totalLoaded} records`);
     if(totalLoaded>0)toast(`Database tables loaded: ${totalLoaded} records`,'ok');
-    refreshSalesInvoiceKpis();
+    if(document.getElementById('page-sales')?.classList.contains('on'))ensureSalesRegisterLoaded();
     // Restore full multi-layout array from server (cross-device sync)
     const packArr=data['invoice-layouts-pack'];
     const packRecord=Array.isArray(packArr)?packArr[0]:packArr;
@@ -10009,7 +9990,7 @@ async function storeExtractedSalesInvoices(options={}){
     _salesStoreRunning=false;
   }
   if(stored>0){
-
+    refreshSalesRegister();
     const tab=document.querySelector('#page-sales .tab:nth-child(4)');
     if(tab&&!options.auto&&!failed)stab(tab,'s-invoices');
     audit('Stored imported sales invoices',stored+' invoice(s)','Saved');
@@ -10269,15 +10250,17 @@ function openReceiptForInvoice(inv){
         }
         contactSel.value=opt.value;
       }
-      // Pre-fill amount, reference note, comments
-      setFieldValue(document.getElementById('payment-amount'),Number(inv.total||0).toFixed(2));
+      // Pre-fill amount, reference note, comments — what is left to collect
+      // (balance_due comes from the server once part of it is received).
+      const due=Number(inv.balance_due??inv.total??0);
+      setFieldValue(document.getElementById('payment-amount'),due.toFixed(2));
       setFieldValue(document.getElementById('payment-detail'),`Payment for ${inv.invoice_no||'Invoice'}`);
       setFieldValue(document.getElementById('payment-comments'),`Receipt for Invoice ${inv.invoice_no||''} — ${inv.customer||''}`);
       // Pre-fill allocation row for this specific invoice
       loadAllocationTable([{
         ref:inv.invoice_no||'',
         date:inv.date||'',
-        amount:Number(inv.total||0),
+        amount:due,
         contact:inv.customer||'',
         source:'Sales Invoice'
       }]);
@@ -10308,19 +10291,7 @@ function salesRegisterRows(){
   return [...document.querySelectorAll('#sales-invoice-tbody tr:not([data-empty-state]),#sales-return-tbody tr:not([data-empty-state])')];
 }
 
-function addSalesInvoiceRow(inv,options={persist:true}){
-  const tbody=salesRegisterTbody(inv);
-  if(!tbody||!inv.invoice_no)return false;
-  // editingInvoiceNo (set by saveDraftInvoice() from _editingSalesInvoiceNo)
-  // identifies this as an update to an invoice already in the register, not
-  // a brand-new one — the exists-check below must not block that case, and
-  // if the number itself changed while editing, the old record needs to be
-  // removed rather than left behind as an orphaned duplicate.
-  const editingRef=options.editingInvoiceNo||null;
-  const isEditingSameNumber=editingRef&&invoiceKey(editingRef)===invoiceKey(inv.invoice_no);
-  const isRenaming=editingRef&&invoiceKey(editingRef)!==invoiceKey(inv.invoice_no);
-  const exists=salesInvoiceDbKeys.has(invoiceKey(inv.invoice_no))||salesRegisterRows().some(row=>row.children[0]?.textContent===inv.invoice_no);
-  if(exists&&!isEditingSameNumber)return false;
+function buildSalesInvoiceRow(inv){
   // normalise vat/vat_amount across different save formats
   if(inv.vat_amount==null&&inv.vat!=null)inv={...inv,vat_amount:inv.vat};
   if(inv.vat==null&&inv.vat_amount!=null)inv={...inv,vat:inv.vat_amount};
@@ -10340,7 +10311,28 @@ function addSalesInvoiceRow(inv,options={persist:true}){
   const row=document.createElement('tr');
   row.dataset.salesInvoice=JSON.stringify({...inv,source,status,document_type:returnDoc?'Sales Return':(inv.document_type||'Sales Invoice')});
   row.dataset.rowActionsAdded='1';
-  row.innerHTML=`<td class="mono">${escapeHtml(inv.invoice_no)}</td><td>${escapeHtml(inv.customer)}</td><td>${escapeHtml(inv.date)}</td><td>${escapeHtml(inv.due_date||'30 days')}</td><td class="mono">${fmt(inv.subtotal)}</td><td class="mono">${fmt(inv.vat_amount)}</td><td class="mono">${fmt(inv.total)}</td><td><span class="b ${sourceClass}">${escapeHtml(source)}</span></td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td data-action-col="1">${salesInvoiceActionsHtml()}</td>`;
+  const remaining=sl==='partial'&&inv.balance_due!=null?` title="Remaining: ${escapeHtml(currentCurrency())} ${fmt(inv.balance_due)}"`:'';
+  row.innerHTML=`<td class="mono">${escapeHtml(inv.invoice_no)}</td><td>${escapeHtml(inv.customer)}</td><td>${escapeHtml(inv.date)}</td><td>${escapeHtml(inv.due_date||'30 days')}</td><td class="mono">${fmt(inv.subtotal)}</td><td class="mono">${fmt(inv.vat_amount)}</td><td class="mono">${fmt(inv.total)}</td><td><span class="b ${sourceClass}">${escapeHtml(source)}</span></td><td><span class="b ${statusClass}"${remaining}>${escapeHtml(status)}</span></td><td data-action-col="1">${salesInvoiceActionsHtml()}</td>`;
+  return {row,source,status};
+}
+
+function addSalesInvoiceRow(inv,options={persist:true}){
+  const tbody=salesRegisterTbody(inv);
+  if(!tbody||!inv.invoice_no)return false;
+  // editingInvoiceNo (set by saveDraftInvoice() from _editingSalesInvoiceNo)
+  // identifies this as an update to an invoice already in the register, not
+  // a brand-new one — the exists-check below must not block that case, and
+  // if the number itself changed while editing, the old record needs to be
+  // removed rather than left behind as an orphaned duplicate.
+  const editingRef=options.editingInvoiceNo||null;
+  const isEditingSameNumber=editingRef&&invoiceKey(editingRef)===invoiceKey(inv.invoice_no);
+  const isRenaming=editingRef&&invoiceKey(editingRef)!==invoiceKey(inv.invoice_no);
+  // Only the current page is on screen, so this catches the numbers we have
+  // seen; a new number is also saved createOnly below, so the server refuses
+  // one already used on any other page.
+  const exists=salesInvoiceDbKeys.has(invoiceKey(inv.invoice_no))||salesRegisterRows().some(row=>row.children[0]?.textContent===inv.invoice_no);
+  if(exists&&!isEditingSameNumber)return false;
+  const {row,source,status}=buildSalesInvoiceRow(inv);
   removeEmptyState(tbody);
   if(isEditingSameNumber){
     // Replace the existing row in place rather than prepending a second one.
@@ -10370,28 +10362,183 @@ function addSalesInvoiceRow(inv,options={persist:true}){
   // unless a caller explicitly opts out with {persist:false} (hydration
   // from the server, and the Quotation->Invoice path which saves via its
   // own separate saveServer() call right after).
-  if(options.persist!==false)persistSalesInvoice({...inv,source,status});
-  if(!isHydratingFromServer)refreshSalesInvoiceKpis();
+  if(options.persist!==false){
+    persistSalesInvoice({...inv,source,status},{createOnly:!isEditingSameNumber}).then(result=>{
+      if(result==='duplicate'){
+        row.remove();
+        salesInvoiceDbKeys.delete(invoiceKey(inv.invoice_no));
+        toast(`${inv.invoice_no} is already used by another invoice — not saved`,'warn');
+      }else if(result==='failed'){
+        toast(`${inv.invoice_no} could not be saved to the database — please try again`,'err');
+      }
+      refreshSalesRegister();
+    });
+  }
   return true;
 }
 
-function refreshSalesInvoiceKpis(){
-  let total=0,collected=0,pending=0,overdue=0;
-  document.querySelectorAll('#sales-invoice-tbody tr:not([data-empty-state])').forEach(row=>{
-    let inv={};
-    try{inv=JSON.parse(row.dataset.salesInvoice||'{}');}catch(_){}
-    const amount=parseAmount(inv.total||inv.subtotal||0);
-    const sl=(inv.status||'').toLowerCase();
-    total+=amount;
-    if(sl==='paid')collected+=amount;
-    else if(sl.includes('overdue'))overdue+=amount;
-    else pending+=amount;
-  });
+// ── Sales register: one server page at a time ───────────────────────────────
+// Invoices are no longer in the bootstrap blob. Each table (invoices, returns)
+// shows SALES_PAGE_SIZE rows from GET /app-data/sales-invoices, searched on the
+// server; the KPI cards come from /sales-invoices/summary.
+const SALES_PAGE_SIZE=50;
+const _salesReg={
+  invoice:{page:1,total:0,q:'',loading:false,seq:0,loaded:false},
+  return:{page:1,total:0,q:'',loading:false,seq:0,loaded:false}
+};
+
+function _salesRegTbody(kind){
+  return document.getElementById(kind==='return'?'sales-return-tbody':'sales-invoice-tbody');
+}
+
+async function salesApi(path,params={}){
+  const query=new URLSearchParams(Object.entries(params).filter(([,v])=>v!==''&&v!=null)).toString();
+  const response=await authenticatedFetch(`${apiBaseUrl()}/app-data/sales-invoices${path}${query?`?${query}`:''}`);
+  if(!response.ok){
+    const err=new Error(`Sales invoices API returned ${response.status}`);
+    err.status=response.status;
+    throw err;
+  }
+  return response.json();
+}
+
+async function loadSalesRegisterPage(kind='invoice',page=_salesReg[kind].page){
+  const state=_salesReg[kind];
+  const seq=++state.seq;
+  state.loading=true;
+  updateSalesRegisterControls(kind);
+  try{
+    const data=await salesApi('',{kind,q:state.q,limit:SALES_PAGE_SIZE,offset:(Math.max(1,page)-1)*SALES_PAGE_SIZE});
+    if(seq!==state.seq)return; // a newer search/page request superseded this one
+    const records=Array.isArray(data.records)?data.records:[];
+    state.total=Number(data.total||0);
+    state.page=Math.max(1,page);
+    state.loaded=true;
+    const tbody=_salesRegTbody(kind);
+    if(!tbody)return;
+    const fragment=document.createDocumentFragment();
+    records.forEach(inv=>{
+      try{
+        if(!inv?.invoice_no)return;
+        fragment.appendChild(buildSalesInvoiceRow(inv).row);
+        registerSalesInvoiceKey(inv.invoice_no);
+      }catch(err){console.warn('Could not render sales invoice:',err,inv);}
+    });
+    tbody.innerHTML='';
+    if(fragment.childNodes.length)tbody.appendChild(fragment);
+    else emptyTableMessage(tbody,state.q?`No ${kind==='return'?'sales returns':'invoices'} match "${state.q}".`:(kind==='return'?'No sales returns in database yet.':'No sales invoices in database yet.'));
+    // A page past the end (rows deleted elsewhere) steps back to the last real page.
+    if(!records.length&&state.page>1&&state.total>0)return loadSalesRegisterPage(kind,Math.ceil(state.total/SALES_PAGE_SIZE));
+  }catch(err){
+    if(seq!==state.seq)return;
+    console.warn('Sales register page load failed:',err);
+    toast('Sales invoices could not load. Check backend connection.','warn');
+  }finally{
+    if(seq===state.seq){
+      state.loading=false;
+      updateSalesRegisterControls(kind);
+    }
+  }
+}
+
+function updateSalesRegisterControls(kind){
+  const state=_salesReg[kind];
+  const count=document.getElementById(`sales-${kind}-count`);
+  const prevBtn=document.getElementById(`sales-${kind}-prev`);
+  const nextBtn=document.getElementById(`sales-${kind}-next`);
+  const totalPages=Math.max(1,Math.ceil(state.total/SALES_PAGE_SIZE));
+  const label=kind==='return'?'returns':'invoices';
+  if(count){
+    count.textContent=state.loading&&!state.loaded
+      ? `Loading ${label}...`
+      : state.total
+      ? `Page ${state.page.toLocaleString('en-AE')} of ${totalPages.toLocaleString('en-AE')} — ${state.total.toLocaleString('en-AE')} ${state.q?'matching ':''}${label}`
+      : state.q?`No ${label} match your search`:`No ${label} yet`;
+  }
+  if(prevBtn)prevBtn.disabled=state.loading||state.page<=1;
+  if(nextBtn)nextBtn.disabled=state.loading||state.page>=totalPages;
+}
+
+function nextSalesRegisterPage(kind='invoice'){
+  const state=_salesReg[kind];
+  if(state.page<Math.ceil(state.total/SALES_PAGE_SIZE))loadSalesRegisterPage(kind,state.page+1);
+}
+
+function prevSalesRegisterPage(kind='invoice'){
+  const state=_salesReg[kind];
+  if(state.page>1)loadSalesRegisterPage(kind,state.page-1);
+}
+
+let _salesSearchTimer=null;
+function searchSalesRegister(value){
+  clearTimeout(_salesSearchTimer);
+  _salesSearchTimer=setTimeout(()=>{
+    const q=String(value||'').trim();
+    ['invoice','return'].forEach(kind=>{
+      if(_salesReg[kind].q===q&&_salesReg[kind].loaded)return;
+      _salesReg[kind].q=q;
+      loadSalesRegisterPage(kind,1);
+    });
+  },300);
+}
+
+// Re-reads the visible pages and the KPI cards (after a save, delete or receipt).
+let _salesRefreshTimer=null;
+function refreshSalesRegister(){
+  clearTimeout(_salesRefreshTimer);
+  _salesRefreshTimer=setTimeout(()=>{
+    if(window.HRMS_STANDALONE)return;
+    loadSalesRegisterPage('invoice');
+    loadSalesRegisterPage('return');
+    refreshSalesInvoiceKpis();
+  },250);
+}
+
+function ensureSalesRegisterLoaded(){
+  if(window.HRMS_STANDALONE)return;
+  loadSalesRegisterPage('invoice');
+  loadSalesRegisterPage('return');
+  refreshSalesInvoiceKpis();
+}
+
+let _salesKpiSeq=0;
+async function refreshSalesInvoiceKpis(){
+  if(window.HRMS_STANDALONE||!document.getElementById('sinv-kpi-total'))return;
+  const seq=++_salesKpiSeq;
+  let s;
+  try{
+    s=await salesApi('/summary');
+  }catch(err){
+    console.warn('Sales KPIs could not load:',err);
+    return;
+  }
+  if(seq!==_salesKpiSeq)return;
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
-  set('sinv-kpi-total',formatAed(total));
-  set('sinv-kpi-collected',formatAed(collected));
-  set('sinv-kpi-pending',formatAed(pending));
-  set('sinv-kpi-overdue',formatAed(overdue));
+  set('sinv-kpi-total',formatAed(s.total||0));
+  set('sinv-kpi-collected',formatAed(s.collected||0));
+  set('sinv-kpi-pending',formatAed(s.pending||0));
+  set('sinv-kpi-overdue',formatAed(s.overdue||0));
+}
+
+// Fetches one saved invoice by number (it may not be on the visible page).
+async function fetchSalesInvoiceByNumber(no){
+  try{
+    return (await salesApi('/by-number',{no})).record||null;
+  }catch(err){
+    if(err.status!==404)console.warn('Sales invoice lookup failed:',err);
+    return null;
+  }
+}
+
+// True when any saved invoice or return is for `customer` or has a `product` line.
+async function salesInvoicesMention({product,customer}){
+  try{
+    const data=await salesApi('',{kind:'all',limit:1,product,customer});
+    return Number(data.total||0)>0;
+  }catch(err){
+    console.warn('Sales invoice check failed:',err);
+    return false;
+  }
 }
 
 function parseAmount(value){
@@ -12434,20 +12581,16 @@ function renderSalespersonOptions(selected){
   sel.innerHTML='<option value="">— Select sales person —</option>'+names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
   sel.value=current||'';
 }
-// Invoice count and sales total per sales person, from the invoices loaded in the register.
-function _salesPersonStats(){
-  const stats=new Map();
-  salesRegisterRows().forEach(row=>{
-    let inv={};
-    try{inv=JSON.parse(row.dataset.salesInvoice||'{}');}catch{return;}
-    const key=String(inv.salesperson||'').trim().toLowerCase();
-    if(!key)return;
-    const st=stats.get(key)||{count:0,total:0};
-    st.count++;
-    st.total+=parseAmount(inv.total||inv.subtotal||0);
-    stats.set(key,st);
-  });
-  return stats;
+// Invoice count and sales total per sales person (lower-cased name), over every
+// saved invoice and return. null when the server couldn't be asked.
+async function _salesPersonStats(){
+  try{
+    const data=await salesApi('/salespeople');
+    return new Map(Object.entries(data.stats||{}));
+  }catch(err){
+    console.warn('Sales person totals could not load:',err);
+    return null;
+  }
 }
 async function renderSalesPeopleList(refresh=false){
   if(refresh){await refreshSalesPeopleFromServer();return;}
@@ -12457,7 +12600,7 @@ async function renderSalesPeopleList(refresh=false){
     tbody.innerHTML='<tr data-empty-state="1"><td colspan="7" style="color:var(--text3);text-align:center">No sales people yet. Click + Add Sales Person.</td></tr>';
     return;
   }
-  const stats=_salesPersonStats();
+  const stats=await _salesPersonStats()||new Map();
   tbody.innerHTML=salesPeopleAll.map(p=>{
     const st=stats.get(String(p.name).trim().toLowerCase())||{count:0,total:0};
     const active=p.status!=='Inactive';
@@ -12531,7 +12674,7 @@ async function saveSalesperson(){
   if(!original&&!_salespersonFromList)renderSalespersonOptions(record.name);
   closeM('m-salesperson');
   if(original){
-    const renamedWithInvoices=original.name!==name&&(_salesPersonStats().get(original.name.trim().toLowerCase())?.count||0)>0;
+    const renamedWithInvoices=original.name!==name&&((await _salesPersonStats())?.get(original.name.trim().toLowerCase())?.count||0)>0;
     toast(renamedWithInvoices?`Sales person updated — existing invoices still show "${original.name}"`:'Sales person updated',renamedWithInvoices?'info':'ok');
     audit('Edited sales person',name,'Saved');
   }else{
@@ -12542,7 +12685,12 @@ async function saveSalesperson(){
 async function deleteSalesperson(id){
   const p=salesPeopleAll.find(x=>x.id===id);
   if(!p)return;
-  if((_salesPersonStats().get(p.name.trim().toLowerCase())?.count||0)>0){
+  const stats=await _salesPersonStats();
+  if(!stats){
+    toast('Could not check invoices for this sales person — please try again','warn');
+    return;
+  }
+  if((stats.get(p.name.trim().toLowerCase())?.count||0)>0){
     toast(`${p.name} is on existing invoices — set them to Inactive instead`,'warn');
     return;
   }
@@ -12836,6 +12984,41 @@ function updateFileCount(){
   if(badge) badge.textContent=uploadedFiles.length+' files';
 }
 
+// Uploaded purchase documents (file list, extraction status) from GET
+// /app-data/purchase-documents, newest first and without the file itself. They used
+// to come with every page open; now the Purchases page asks once per session for up
+// to the newest PURCHASE_DOCUMENTS_MAX, the same window the bootstrap cap gave.
+const PURCHASE_DOCUMENTS_MAX=500;
+let _purchaseDocumentsLoad=null;
+function ensurePurchaseDocumentsLoaded(){
+  if(window.HRMS_STANDALONE)return Promise.resolve();
+  if(!_purchaseDocumentsLoad){
+    _purchaseDocumentsLoad=(async()=>{
+      for(let offset=0;offset<PURCHASE_DOCUMENTS_MAX;offset+=100){
+        const data=await registersApi('/purchase-documents',{limit:100,offset});
+        const records=Array.isArray(data.records)?data.records:[];
+        loadPurchaseDocumentsFromServer(records,[]);
+        if(!data.has_more)break;
+      }
+    })().catch(err=>{
+      console.warn('Purchase documents could not load:',err);
+      _purchaseDocumentsLoad=null; // try again next time the page opens
+    });
+  }
+  return _purchaseDocumentsLoad;
+}
+
+// One saved document with its file (base64), or null.
+async function fetchPurchaseDocument(id){
+  if(!id)return null;
+  try{
+    return (await registersApi(`/purchase-documents/${encodeURIComponent(id)}`)).record||null;
+  }catch(err){
+    if(err.status!==404)console.warn('Purchase document could not load:',err);
+    return null;
+  }
+}
+
 function loadPurchaseDocumentsFromServer(records,purchaseRecords=[]){
   (records||[]).forEach(record=>{
     const file=normalizePurchaseDocumentRecord(record);
@@ -12932,8 +13115,13 @@ function persistPurchaseDocumentRecord(file){
   saveServer('purchaseDocuments',purchaseDocumentRecordFromFile(file));
 }
 
-function downloadUploadedPurchaseFile(id){
+async function downloadUploadedPurchaseFile(id){
   const file=uploadedFiles.find(item=>String(item.id)===String(id));
+  if(file&&!file.base64){
+    // Listed from the server without the file itself; fetch it now.
+    const saved=await fetchPurchaseDocument(file.id);
+    if(saved?.base64)file.base64=saved.base64;
+  }
   if(!file||!file.base64){
     toast('Original file is not available for download','warn');
     return;
@@ -13574,30 +13762,18 @@ function purchaseAiRowHtml(inv,line,index,validation,filename){
     </div>`;
 }
 
-// Lazily-fetched, cached for the lifetime of one "Save All" run — a page
-// reload between extracting and saving empties uploadedFiles (nothing
-// re-hydrates it from the server on load), so the rescue below used to
-// silently save the purchase record with NO source_image at all whenever
-// that happened. Falls back to the server's own copy (already persisted by
-// persistPurchaseDocumentRecord() at upload time) instead of giving up.
-let _purchaseDocumentsServerCache=null;
+// Cached for the lifetime of one "Save All" run — the uploaded file list holds
+// documents without their file (see ensurePurchaseDocumentsLoaded()), so the rescue
+// below falls back to the server's own copy (already persisted by
+// persistPurchaseDocumentRecord() at upload time) instead of saving the purchase
+// record with no source_image. Fetches just the one document it needs.
+const _purchaseDocumentsServerCache=new Map();
 
 async function _fetchPurchaseDocumentFromServer(entryId){
   if(!entryId)return null;
-  if(!_purchaseDocumentsServerCache){
-    _purchaseDocumentsServerCache=new Map();
-    try{
-      const res=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/purchaseDocuments?limit=500`);
-      if(res.ok){
-        const data=await res.json();
-        const rows=Array.isArray(data)?data:(data.records||[]);
-        rows.forEach(r=>{if(r&&r.id)_purchaseDocumentsServerCache.set(String(r.id),r);});
-      }
-    }catch(err){
-      console.warn('Could not fetch purchaseDocuments from server for source-image fallback:',err);
-    }
-  }
-  return _purchaseDocumentsServerCache.get(String(entryId))||null;
+  const key=String(entryId);
+  if(!_purchaseDocumentsServerCache.has(key))_purchaseDocumentsServerCache.set(key,await fetchPurchaseDocument(key));
+  return _purchaseDocumentsServerCache.get(key);
 }
 
 async function purchaseRecordFromExtractedInvoice(inv){
@@ -21074,15 +21250,10 @@ function renderRotaAssignmentRecord(record){
   // renderRotaBoards() rebuilds every Rota view at once (Weekly/Monthly
   // boards, Monthly Staff Overview, Department Rota, the summary panel,
   // status badges...), each iterating the whole staff list. This function
-  // runs once per rotaAssignments row during bootstrap hydration (up to
-  // the 500-row cap -- see _BOOTSTRAP_COLLECTION_CAPS), so an unconditional
-  // call here meant a company anywhere near that cap re-rendered every
-  // Rota board up to 500 times in a row on every single HRMS page load --
-  // the single largest contributor to a slow HRMS load found while
-  // profiling this. The hydration loop that calls this already does its
-  // own single renderRotaBoards() once every row is loaded (see the
-  // renderRecordList(...,'rota assignment') call site) -- this was
-  // redundant with that on every one of the up-to-500 rows in between.
+  // used to run once per rotaAssignments row during bootstrap hydration, so
+  // an unconditional call here re-rendered every Rota board hundreds of times
+  // on every HRMS page load. Assignments now arrive in bulk from the range
+  // endpoint (_ensureRotaRangeLoaded()), which renders once per batch.
   if(!isHydratingFromServer)renderRotaBoards();
 }
 
@@ -21674,33 +21845,46 @@ function renderRotaCodes(){
   row.innerHTML=['M Morning','E Evening','N Night','OFF Off','L Leave','OT Overtime'].map(text=>`<span class="chip">${escapeHtml(text)}</span>`).join('');
 }
 
-// Bootstrap only ever hands the client the newest _BOOTSTRAP_COLLECTION_CAPS
-// 500 rotaAssignments rows company-wide (app_data.py) — comfortably enough
-// for one week, not for a whole month once a company has been running rotas
-// for a while, so Monthly Rota (and an older/future Weekly/Department week)
-// could show empty OFF cells for a week that genuinely has shifts saved on
-// the server, with nothing on screen to explain why. GET .../rotaAssignments/
-// range fills exactly the date window currently on screen, independent of
-// that cap. Ranges already fetched are remembered for the rest of this page
-// load so switching between Weekly/Monthly/Department repeatedly (the normal
-// way of using this page) doesn't refetch the same days over and over.
+// Rota assignments are not in the bootstrap (it used to carry the newest 500,
+// which left older/future weeks looking empty). GET .../rotaAssignments/range
+// fills exactly the date window a screen needs. Ranges already fetched are
+// remembered for the rest of this page load so switching between Weekly/
+// Monthly/Department repeatedly (the normal way of using this page) doesn't
+// refetch the same days over and over. employeeId narrows a range to one
+// employee (upcoming shifts for a swap request).
 const _rotaLoadedRanges=new Set();
 
-async function _ensureRotaRangeLoaded(fromDate,toDate){
+async function _ensureRotaRangeLoaded(fromDate,toDate,{employeeId='',render=true}={}){
   if(!fromDate||!toDate||fromDate>toDate)return;
-  const key=`${fromDate}..${toDate}`;
+  const key=`${fromDate}..${toDate}|${employeeId}`;
   if(_rotaLoadedRanges.has(key))return;
   _rotaLoadedRanges.add(key);
   try{
-    const r=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/rotaAssignments/range?from=${fromDate}&to=${toDate}`);
+    const params=new URLSearchParams({from:fromDate,to:toDate});
+    if(employeeId)params.set('employee_id',employeeId);
+    const r=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/rotaAssignments/range?${params}`);
     if(!r.ok){_rotaLoadedRanges.delete(key);return;}
     const data=await r.json();
     const rows=Array.isArray(data.records)?data.records:[];
     if(!rows.length)return;
     rows.forEach(rec=>rotaAssignmentsById.set(rec.id,normalizeRotaAssignment(rec)));
-    renderRotaBoards();
+    if(render)renderRotaBoards();
   }catch(e){
     _rotaLoadedRanges.delete(key); // network hiccup -- worth trying again later, not a permanent miss
+  }
+}
+
+// Specific assignments by id (e.g. the two shifts a swap refers to), whatever week.
+async function _ensureRotaAssignmentsLoaded(ids){
+  const missing=[...new Set((ids||[]).filter(id=>id&&!rotaAssignmentsById.has(id)))];
+  if(!missing.length)return;
+  try{
+    const r=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/rotaAssignments/by-ids?ids=${encodeURIComponent(missing.join(','))}`);
+    if(!r.ok)return;
+    const data=await r.json();
+    (Array.isArray(data.records)?data.records:[]).forEach(rec=>rotaAssignmentsById.set(rec.id,normalizeRotaAssignment(rec)));
+  }catch(e){
+    console.warn('Rota assignments could not load:',e);
   }
 }
 
@@ -21954,16 +22138,45 @@ function renderRotaSwapRecord(swap){
   const row=document.createElement('tr');
   row.dataset.serverRecord='rotaSwaps';
   row.dataset.swap=JSON.stringify(swap);
-  const shiftLabel=assignmentId=>{
-    const a=assignmentId?rotaAssignmentsById.get(assignmentId):null;
-    return a?`${a.date} — ${a.type||a.code||'Shift'}`:(assignmentId?'(shift not found)':'-');
-  };
-  const aLabel=swap.assignment_a_id?shiftLabel(swap.assignment_a_id):(swap.my_shift||'-');
-  const bLabel=swap.assignment_b_id?shiftLabel(swap.assignment_b_id):(swap.swap_with||'-');
+  const [aLabel,bLabel]=_rotaSwapShiftLabels(swap);
   row.innerHTML=`<td>${escapeHtml(swap.employee_a||swap.requester||'-')}</td><td>${escapeHtml(aLabel)}</td><td>${escapeHtml(swap.employee_b||'-')}</td><td>${escapeHtml(bLabel)}</td><td>${rotaBadge(swap.status||'Peer Pending')}</td><td><div class="flx"><button class="btn btn-success btn-sm" onclick="approveRotaRow(this,'Swap approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="rejectRotaRow(this,'Swap rejected')">Reject</button></div></td>`;
   removeEmptyState(tbody);
   tbody.prepend(row);
   updateRotaStats();
+  _queueRotaSwapShiftLookup([swap.assignment_a_id,swap.assignment_b_id]);
+}
+
+function _rotaSwapShiftLabels(swap){
+  const shiftLabel=assignmentId=>{
+    const a=assignmentId?rotaAssignmentsById.get(assignmentId):null;
+    return a?`${a.date} — ${a.type||a.code||'Shift'}`:(assignmentId?'(shift not found)':'-');
+  };
+  return [
+    swap.assignment_a_id?shiftLabel(swap.assignment_a_id):(swap.my_shift||'-'),
+    swap.assignment_b_id?shiftLabel(swap.assignment_b_id):(swap.swap_with||'-')
+  ];
+}
+
+// Swap rows can refer to shifts in weeks not loaded yet: fetch those (batched)
+// and relabel the rows once they arrive.
+const _rotaSwapLookupIds=new Set();
+let _rotaSwapLookupTimer=null;
+function _queueRotaSwapShiftLookup(ids){
+  ids.filter(id=>id&&!rotaAssignmentsById.has(id)).forEach(id=>_rotaSwapLookupIds.add(id));
+  if(!_rotaSwapLookupIds.size)return;
+  clearTimeout(_rotaSwapLookupTimer);
+  _rotaSwapLookupTimer=setTimeout(async()=>{
+    const ids=[..._rotaSwapLookupIds];
+    _rotaSwapLookupIds.clear();
+    await _ensureRotaAssignmentsLoaded(ids);
+    document.querySelectorAll('#rota-swap-tbody tr[data-swap]').forEach(row=>{
+      let swap={};
+      try{swap=JSON.parse(row.dataset.swap||'{}');}catch{return;}
+      const [aLabel,bLabel]=_rotaSwapShiftLabels(swap);
+      if(row.children[1])row.children[1].textContent=aLabel;
+      if(row.children[3])row.children[3].textContent=bLabel;
+    });
+  },200);
 }
 
 // Populates a swap request's per-employee assignment select with that
@@ -21972,7 +22185,7 @@ function renderRotaSwapRecord(swap){
 // existing assignments now (previously "My Shift"/"Swap With"/"Target
 // Shift" were three free-text inputs with no employee_id/date/shift
 // reference a backend could act on at all).
-function _populateSwapAssignmentSelect(employeeSelectId,assignmentSelectId){
+async function _populateSwapAssignmentSelect(employeeSelectId,assignmentSelectId){
   const empSel=document.getElementById(employeeSelectId);
   const assignSel=document.getElementById(assignmentSelectId);
   if(!empSel||!assignSel)return;
@@ -21980,6 +22193,11 @@ function _populateSwapAssignmentSelect(employeeSelectId,assignmentSelectId){
   assignSel.innerHTML='<option value="">— Select Shift —</option>';
   if(!empId)return;
   const today=new Date().toISOString().slice(0,10);
+  // Upcoming = the next year of this employee's shifts, loaded on demand.
+  assignSel.innerHTML='<option value="">Loading shifts…</option>';
+  await _ensureRotaRangeLoaded(today,weekDateFromStart(today,365),{employeeId:empId,render:false});
+  if((empSel.selectedOptions?.[0]?.dataset.empId||'')!==empId)return; // selection changed meanwhile
+  assignSel.innerHTML='<option value="">— Select Shift —</option>';
   const upcoming=[...rotaAssignmentsById.values()]
     .filter(a=>a.employee_id===empId&&a.date>=today)
     .sort((a,b)=>a.date.localeCompare(b.date));
@@ -22090,7 +22308,7 @@ function saveRotaDraft(status='Draft'){
     period:weekStartValue(),
     supervisor:document.getElementById('rota-dept-supervisor')?.value||'HR',
     status,
-    assignment_count:rotaAssignmentsById.size
+    assignment_count:selectedWeekAssignments('week').length
   };
   saveServer('rotaDrafts',record);
   // This used to hardcode every non-Draft status to "Pending Supervisor
@@ -22172,11 +22390,12 @@ function populateRotaRepeatEmployeeSelect(){
   if(current&&[...sel.options].some(o=>o.value===current))sel.value=current;
 }
 
-function applyRotaRepeat(){
+async function applyRotaRepeat(){
   const mode=document.getElementById('rota-repeat-mode')?.value||'none';
   if(mode==='none'){toast('Select a repeat duration first','warn');return;}
   const empFilter=document.getElementById('rota-repeat-employee')?.value||'all';
   const start=weekStartValue();
+  await _ensureRotaRangeLoaded(start,weekDateFromStart(start,6),{render:false});
   const weeks=mode==='1year'?52:260;
   let sourceAssignments=[...rotaAssignmentsById.values()].filter(a=>{
     const diff=Math.round((new Date(`${a.date}T00:00:00`)-new Date(`${start}T00:00:00`))/86400000);
@@ -22458,9 +22677,10 @@ function downloadRotaExcel(){
   toast('Excel file downloaded','ok');
 }
 
-function copyPreviousRota(){
+async function copyPreviousRota(){
   const start=weekStartValue();
   const priorStart=weekDateFromStart(start,-7);
+  await _ensureRotaRangeLoaded(priorStart,weekDateFromStart(priorStart,6),{render:false});
   const staffRows=filteredRotaStaff('week');
   let copied=0;
   staffRows.forEach(staff=>{
@@ -22573,7 +22793,7 @@ function submitRotaApproval(){
   audit('Rota submitted for approval','Rota Planning','Pending');
 }
 
-function approveRotaRow(btn,msg='Rota approved'){
+async function approveRotaRow(btn,msg='Rota approved'){
   const row=btn.closest('tr');
   const statusCell=row.querySelector('td:nth-last-child(2)');
   if(statusCell)statusCell.innerHTML='<span class="b b-g">Approved</span>';
@@ -22588,6 +22808,7 @@ function approveRotaRow(btn,msg='Rota approved'){
   // happened, so the open rota board kept showing the OLD assignment until
   // the next full page reload. Apply the identical swap locally too.
   if(isSwap&&payload.assignment_a_id&&payload.assignment_b_id&&payload.assignment_a_id!==payload.assignment_b_id){
+    await _ensureRotaAssignmentsLoaded([payload.assignment_a_id,payload.assignment_b_id]);
     const a=rotaAssignmentsById.get(payload.assignment_a_id);
     const b=rotaAssignmentsById.get(payload.assignment_b_id);
     if(a&&b){
@@ -23313,7 +23534,7 @@ function _bioDiagramPush(label){
       <text x="126" y="22" text-anchor="middle" font-size="8.5" fill="#065f46" font-weight="600">HTTPS Push</text>
       <rect x="163" y="10" width="210" height="40" rx="8" fill="#10b981" fill-opacity=".12" stroke="#10b981" stroke-width="1.5"/>
       <text x="268" y="27" text-anchor="middle" font-size="9.5" font-weight="700" fill="#065f46">TaxFlow Server</text>
-      <text x="268" y="41" text-anchor="middle" font-size="9" fill="#065f46">app.etaxflow.com</text>
+      <text x="268" y="41" text-anchor="middle" font-size="9" fill="#065f46">dev.etaxflow.com</text>
     </svg>
     <div style="text-align:center;font-size:11px;color:#166534;font-weight:600;margin-top:2px">✓ No local software needed — ${label} pushes punches directly to TaxFlow</div>
   </div>`;
@@ -23335,7 +23556,7 @@ function _bioDiagramTCP(deviceLabel){
       <text x="290" y="22" text-anchor="middle" font-size="8" fill="#065f46" font-weight="600">HTTPS</text>
       <rect x="323" y="10" width="152" height="40" rx="8" fill="#10b981" fill-opacity=".12" stroke="#10b981" stroke-width="1.5"/>
       <text x="399" y="27" text-anchor="middle" font-size="9.5" font-weight="700" fill="#065f46">TaxFlow Server</text>
-      <text x="399" y="41" text-anchor="middle" font-size="9" fill="#065f46">app.etaxflow.com</text>
+      <text x="399" y="41" text-anchor="middle" font-size="9" fill="#065f46">dev.etaxflow.com</text>
     </svg>
     <div style="text-align:center;font-size:11px;color:#1e40af;font-weight:600;margin-top:2px">Bridge script runs on an office PC on the same network as the device</div>
   </div>`;
@@ -26774,7 +26995,8 @@ function rowDeleteBlockReason(row,table){
   if(collection==='products'){
     const code=row.children[0]?.textContent.trim();
     const name=row.children[1]?.textContent.trim();
-    if(tableHasText('#sales-invoice-tbody',name)||tableHasText('#sales-return-tbody',name)||tableHasText('#stock-map-tbody',code)||tableHasText('#stock-map-tbody',name)){
+    // Links to sales invoices are checked on the server by serverLinkBlockReason().
+    if(tableHasText('#stock-map-tbody',code)||tableHasText('#stock-map-tbody',name)){
       return 'This product is linked to invoices or inventory mapping. Remove those links before deleting.';
     }
   }
@@ -26787,11 +27009,6 @@ function rowDeleteBlockReason(row,table){
     const unitName=row.children[1]?.textContent.trim()||first;
     if(tableHasText('#prod-tbody',unitName)){
       return 'This unit is used by products or services. Move those products to another unit before deleting.';
-    }
-  }
-  if(collection==='customers'){
-    if(tableHasText('#sales-invoice-tbody',first)){
-      return 'This customer has linked invoices. Delete or void those invoices before deleting the customer.';
     }
   }
   if(collection==='accounts'){
@@ -26809,19 +27026,9 @@ function rowDeleteBlockReason(row,table){
   if(collection==='purchaseRecords'){
     const ref=row.children[0]?.textContent.trim();
     const source=row.children[11]?.textContent.trim().toLowerCase()||'';
-    if(source.includes('ai')||tableHasText('#page-documents',ref)||tableHasText('#payment-out-tbody',ref)){
+    // Links to payments are checked on the server by serverLinkBlockReason().
+    if(source.includes('ai')||tableHasText('#page-documents',ref)){
       return 'This purchase is linked to extraction, documents, or payments. Remove those links before deleting.';
-    }
-  }
-  if(collection==='bills'){
-    const billNo=row.children[0]?.textContent.trim();
-    if(tableHasText('#payment-out-tbody',billNo)){
-      return 'This bill is linked to supplier payment records and cannot be deleted.';
-    }
-  }
-  if(collection==='vendors'){
-    if(tableHasText('#bill-tbody',first)||tableHasText('#payment-out-tbody',first)){
-      return 'This vendor is linked to bills or payments. Remove those records before deleting.';
     }
   }
   if(collection==='payments'){
@@ -26829,6 +27036,54 @@ function rowDeleteBlockReason(row,table){
   }
   if(page==='page-accounting'&&text.includes('journal')){
     return 'Journal records must use reversal entries instead of deletion.';
+  }
+  return '';
+}
+
+// True when a saved record in `collection` matches (see GET /registers/{collection}).
+async function registerHas(collection,params){
+  try{
+    const data=await registersApi(`/registers/${collection}`,{kind:'all',limit:1,...params});
+    return Number(data.total||0)>0;
+  }catch(err){
+    console.warn('Linked record check failed:',err);
+    return false;
+  }
+}
+
+// The rowDeleteBlockReason() checks that need every saved invoice, bill or payment,
+// not just the register page on screen.
+async function serverLinkBlockReason(row,table){
+  const collection=inferCollectionFromContext(table);
+  if(collection==='bills'){
+    const billNo=row.children[0]?.textContent.trim();
+    if(billNo&&await registerHas('payments',{kind:'supplier',contains:billNo})){
+      return 'This bill is linked to supplier payment records and cannot be deleted.';
+    }
+  }
+  if(collection==='purchaseRecords'){
+    const ref=row.children[1]?.textContent.trim();
+    if(ref&&await registerHas('payments',{kind:'supplier',contains:ref})){
+      return 'This purchase is linked to extraction, documents, or payments. Remove those links before deleting.';
+    }
+  }
+  if(collection==='vendors'){
+    const name=rowFirstValue(row);
+    if(name&&(await registerHas('bills',{party:name})||await registerHas('payments',{kind:'supplier',party:name}))){
+      return 'This vendor is linked to bills or payments. Remove those records before deleting.';
+    }
+  }
+  if(collection==='products'){
+    const name=row.children[1]?.textContent.trim();
+    if(name&&await salesInvoicesMention({product:name})){
+      return 'This product is linked to invoices or inventory mapping. Remove those links before deleting.';
+    }
+  }
+  if(collection==='customers'){
+    const name=rowFirstValue(row);
+    if(name&&await salesInvoicesMention({customer:name})){
+      return 'This customer has linked invoices. Delete or void those invoices before deleting the customer.';
+    }
   }
   return '';
 }
@@ -27135,7 +27390,9 @@ async function deleteCurrentDetailRow(){
     return;
   }
   const label=currentDetailRow.children[0]?.textContent.trim()||'Selected row';
-  const reason=currentDetailTable?rowDeleteBlockReason(currentDetailRow,currentDetailTable):'';
+  const reason=currentDetailTable
+    ?(rowDeleteBlockReason(currentDetailRow,currentDetailTable)||await serverLinkBlockReason(currentDetailRow,currentDetailTable))
+    :'';
   if(reason){
     toast(`Cannot delete ${label}: ${reason}`,'warn');
     audit('Delete blocked',label,reason);
@@ -27157,14 +27414,20 @@ async function deleteCurrentDetailRow(){
     }
     refreshEnhancedTable(currentDetailTable);
   }
-  apiRequest('delete',{collection,record}).catch(err=>console.warn('Database delete failed:',err));
+  apiRequest('delete',{collection,record})
+    .then(()=>{
+      if(collection==='salesInvoices'||collection==='payments')refreshSalesRegister();
+      if(collection==='bills'||collection==='payments')refreshRegister('bills');
+      if(collection==='quotations')refreshRegister('quotations');
+      if(collection==='expenses')refreshRegister('expenses');
+    })
+    .catch(err=>console.warn('Database delete failed:',err));
   saveServer('app_actions',{mode:'delete',record:label,page:document.getElementById('ptitle')?.textContent||'App'});
   audit('Deleted record',label,'Deleted');
   closeM('m-row-detail');
   currentDetailRow=null;
   currentDetailTable=null;
   toast('Record deleted','warn');
-  if(collection==='salesInvoices')refreshSalesInvoiceKpis();
 }
 
 function patchViewButtonsInPage(pageId,title){
@@ -27521,13 +27784,21 @@ function saveBill(){
   const fmt=n=>n.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
   const row=document.createElement('tr');
   row.innerHTML=`<td class="mono">${escapeHtml(billNo)}</td><td>${escapeHtml(vendor)}</td><td>${escapeHtml(date)}</td><td>${escapeHtml(due)}</td><td class="mono">${fmt(subtotal)}</td><td class="mono">${fmt(vatTotal)}</td><td class="mono">${fmt(total)}</td><td><span class="b b-a">Awaiting Payment</span></td><td><button class="btn btn-g btn-sm" onclick="openRowDetail(this,'Bill / Vendor Detail','Bill detail')">View</button></td>`;
-  document.getElementById('bill-tbody')?.prepend(row);
-  saveServer('bills',{id:'BILL-'+Date.now(),vendor,bill_no:billNo,date,due,notes,lines,subtotal,vat:vatTotal,total,status:'Awaiting Payment'});
+  const tbody=document.getElementById('bill-tbody');
+  if(tbody){removeEmptyState(tbody);tbody.prepend(row);}
+  // createOnly: the server refuses a bill number already used by any saved bill,
+  // including ones not on the current page.
+  saveServer('bills',{id:'BILL-'+Date.now(),vendor,bill_no:billNo,date,due,notes,lines,subtotal,vat:vatTotal,total,status:'Awaiting Payment'},{throwOnError:true,createOnly:true})
+    .then(()=>refreshRegister('bills'))
+    .catch(err=>{
+      row.remove();
+      toast(err?.status===409?`Bill ${billNo} already exists — not saved`:`Bill ${billNo} could not be saved — please try again`,'warn');
+      refreshRegister('bills');
+    });
   closeM('m-bill');
   const lbody=document.getElementById('bill-lines');if(lbody)lbody.innerHTML='';
   const le=document.getElementById('bill-lines-empty');if(le)le.style.display='';
   recalcBill();
-  _refreshBillPageStats();
   toast('Vendor bill saved','ok');
   audit('Saved vendor bill',billNo,'Saved');
 }
@@ -27552,9 +27823,9 @@ function saveVendor(){
   updateSupplierBalances();
 }
 
-function savePayment(){
+async function savePayment(){
   const type=document.getElementById('payment-type')?.value||'Customer Receipt';
-  const ref=(document.getElementById('payment-ref')?.value||nextPaymentReference(type)).trim();
+  const ref=(document.getElementById('payment-ref')?.value.trim()||await nextPaymentReference(type)).trim();
   const contact=(document.getElementById('payment-contact')?.value||'').trim();
   const amount=parseAmount(document.getElementById('payment-amount')?.value);
   const method=document.getElementById('payment-method')?.value||'Bank Transfer';
@@ -27584,12 +27855,17 @@ function savePayment(){
   if(isSupplierPaymentType(type))record.bill_no=primaryDoc;
   else record.invoice_no=primaryDoc;
 
-  renderPaymentRecord(record);
-  saveServer('payments',record);
-  if(primaryDoc)markPaymentDocumentPaid(record);
-  if(isSupplierPaymentType(type))_refreshBillPageStats();
+  const label=isSupplierPaymentType(type)?'Payment':'Receipt';
+  try{
+    // createOnly: the server refuses a number already used by any saved payment.
+    await saveServer('payments',record,{throwOnError:true,createOnly:true});
+  }catch(err){
+    toast(err?.status===409?`${label} number ${ref} is already used — pick another`:`${label} could not be saved — please try again`,'warn');
+    return;
+  }
+  refreshAfterPayment(record);
   closeM('m-payment');
-  toast(`${isSupplierPaymentType(type)?'Payment':'Receipt'} recorded — ${formatAed(amount)}`,'ok');
+  toast(`${label} recorded — ${formatAed(amount)}`,'ok');
   audit('Recorded payment',ref,'Posted');
 }
 
@@ -28197,7 +28473,7 @@ function shareCurrentQuotation(channel='options'){
     toast('Quotation not found','warn');
     return;
   }
-  saveServer('quotations',{...quote,last_shared_at:new Date().toISOString(),last_share_channel:channel});
+  saveQuotationRecord({...quote,last_shared_at:new Date().toISOString(),last_share_channel:channel});
   const label=channel==='email'?'Quotation email prepared':channel==='whatsapp'?'WhatsApp share prepared':'Quotation share options prepared';
   toast(label,'ok');
   audit('Shared quotation',quote.quote_no||'Quotation',channel);
@@ -28218,7 +28494,7 @@ function previewQuotation(btn){
 
 function shareQuotation(btn){
   const quote=quotationRecordFromRow(btn.closest('tr'));
-  saveServer('quotations',{...quote,last_shared_at:new Date().toISOString()});
+  saveQuotationRecord({...quote,last_shared_at:new Date().toISOString()});
   openQuotationPreview(quote);
   toast(`Share link prepared for ${quote.quote_no||'quotation'}`,'ok');
 }
@@ -28234,7 +28510,7 @@ function convertQuotation(btn){
   }
   const updated={...quote,status:'Converted',converted_at:new Date().toISOString()};
   row.dataset.quotation=JSON.stringify(updated);
-  saveServer('quotations',updated);
+  saveQuotationRecord(updated);
   const invoiceNo=`INV-${String(quote.quote_no||Date.now()).replace(/^QTN-?/,'')}`;
   const invoice={
     invoice_no:invoiceNo,
@@ -28251,13 +28527,13 @@ function convertQuotation(btn){
     lines:quotationLinesFromRecord(quote)
   };
   addSalesInvoiceRow(invoice,{persist:false});
-  saveServer('salesInvoices',invoice);
+  saveServer('salesInvoices',invoice).then(()=>refreshSalesRegister());
   toast(`${quote.quote_no||'Quotation'} converted to invoice draft ${invoiceNo}`,'ok');
 }
 
 function saveQuotationDraft(){
   calcQuotationTotals();
-  saveServer('quotations',buildDraftQuotationRecord('Draft'));
+  saveQuotationRecord(buildDraftQuotationRecord('Draft'));
   toast(`${quotationNumber()} saved as draft`,'ok');
 }
 
@@ -28269,7 +28545,7 @@ function previewDraftQuotation(){
 
 function shareDraftQuotation(){
   calcQuotationTotals();
-  saveServer('quotations',{...buildDraftQuotationRecord('Draft'),last_shared_at:new Date().toISOString()});
+  saveQuotationRecord({...buildDraftQuotationRecord('Draft'),last_shared_at:new Date().toISOString()});
   toast(`Share link prepared for ${quotationNumber()}`,'ok');
 }
 
@@ -28292,8 +28568,7 @@ function buildDraftQuotationRecord(status='Sent'){
 function sendDraftQuotation(){
   calcQuotationTotals();
   const record=buildDraftQuotationRecord('Sent');
-  renderQuotationRecord(record);
-  saveServer('quotations',record);
+  saveQuotationRecord(record);
   stab(document.querySelector('#page-quotations .tab:nth-child(1)'),'q-list');
   toast(`${quotationNumber()} sent to customer`,'ok');
 }
