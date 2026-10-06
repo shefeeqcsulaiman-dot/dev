@@ -13,7 +13,7 @@ services:
     github:
       branch: main
       deploy_on_push: true
-      repo: shefeeqcsulaiman-dot/host
+      repo: shefeeqcsulaiman-dot/dev
     http_port: 8000
     health_check:
       http_path: /health
@@ -76,11 +76,11 @@ services:
 
       - key: CORS_ORIGINS
         scope: RUN_TIME
-        value: https://dev.etaxflow.com,http://localhost:5173,http://127.0.0.1:5173
+        value: https://app.e4cs.com,http://localhost:5173,http://127.0.0.1:5173
 
       - key: API_BASE_URL
         scope: RUN_TIME
-        value: https://dev.etaxflow.com/api/v1
+        value: https://app.e4cs.com/api/v1
 
       # ── Workers & pool ────────────────────────────────────────────────
       # Cluster-wide DB connection budget. The pool below is PER UVICORN
@@ -184,7 +184,7 @@ services:
     github:
       branch: main
       deploy_on_push: true
-      repo: shefeeqcsulaiman-dot/host
+      repo: shefeeqcsulaiman-dot/dev
     instance_count: 1
     instance_size_slug: basic-s          # 1 vCPU · 2 GB
     envs:

@@ -14,6 +14,8 @@ from sqlalchemy.exc import TimeoutError as SQLATimeoutError
 from sqlalchemy.orm import Session
 
 import app.cache as cache
+from app.account_totals import account_totals as stored_account_totals
+from app.config import get_settings
 from app.auth_principal import Principal, require_principal_permission, resolve_active_branch
 from app.database import get_db
 from app.dependencies import get_current_user
@@ -1588,11 +1590,13 @@ def posted_account_totals(db: Session, company_id: str, branch_id: str | None = 
     memo = db.info.setdefault(_ACCOUNT_TOTALS_KEY, {})
     key = (company_id, branch_id)
     if key not in memo:
-        totals = _posted_journal_line_totals(db, company_id, branch_id)
-        memo[key] = {
-            account_id: (money(debit or 0), money(credit or 0))
-            for account_id, debit, credit in db.query(totals.c.account_id, totals.c.debit, totals.c.credit).all()
-        }
+        if get_settings().report_totals_source == "live":
+            totals = _posted_journal_line_totals(db, company_id, branch_id)
+            rows = db.query(totals.c.account_id, totals.c.debit, totals.c.credit).all()
+        else:
+            # Pre-calculated per account and month (app/account_totals.py).
+            rows = [(a, d, c) for a, (d, c) in stored_account_totals(db, company_id, branch_id).items()]
+        memo[key] = {account_id: (money(debit or 0), money(credit or 0)) for account_id, debit, credit in rows}
     return memo[key]
 
 

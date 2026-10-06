@@ -23534,7 +23534,7 @@ function _bioDiagramPush(label){
       <text x="126" y="22" text-anchor="middle" font-size="8.5" fill="#065f46" font-weight="600">HTTPS Push</text>
       <rect x="163" y="10" width="210" height="40" rx="8" fill="#10b981" fill-opacity=".12" stroke="#10b981" stroke-width="1.5"/>
       <text x="268" y="27" text-anchor="middle" font-size="9.5" font-weight="700" fill="#065f46">TaxFlow Server</text>
-      <text x="268" y="41" text-anchor="middle" font-size="9" fill="#065f46">dev.etaxflow.com</text>
+      <text x="268" y="41" text-anchor="middle" font-size="9" fill="#065f46">app.e4cs.com</text>
     </svg>
     <div style="text-align:center;font-size:11px;color:#166534;font-weight:600;margin-top:2px">✓ No local software needed — ${label} pushes punches directly to TaxFlow</div>
   </div>`;
@@ -23556,7 +23556,7 @@ function _bioDiagramTCP(deviceLabel){
       <text x="290" y="22" text-anchor="middle" font-size="8" fill="#065f46" font-weight="600">HTTPS</text>
       <rect x="323" y="10" width="152" height="40" rx="8" fill="#10b981" fill-opacity=".12" stroke="#10b981" stroke-width="1.5"/>
       <text x="399" y="27" text-anchor="middle" font-size="9.5" font-weight="700" fill="#065f46">TaxFlow Server</text>
-      <text x="399" y="41" text-anchor="middle" font-size="9" fill="#065f46">dev.etaxflow.com</text>
+      <text x="399" y="41" text-anchor="middle" font-size="9" fill="#065f46">app.e4cs.com</text>
     </svg>
     <div style="text-align:center;font-size:11px;color:#1e40af;font-weight:600;margin-top:2px">Bridge script runs on an office PC on the same network as the device</div>
   </div>`;
