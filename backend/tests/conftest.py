@@ -27,7 +27,17 @@ def database():
             TEST_DB.unlink()
     Base.metadata.create_all(bind=engine)
     yield
+    # Every journal write path the suite exercised must have kept the pre-calculated
+    # account totals (app/account_totals.py) equal to a live sum of journal lines.
+    from sqlalchemy import text
+
+    from app.account_totals import verify_company
+
+    with SessionLocal() as check:
+        companies = [c for (c,) in check.execute(text("SELECT id FROM companies"))]
+        problems = [p for company_id in companies for p in verify_company(check, company_id)]
     engine.dispose()
+    assert not problems, "account_period_totals out of step with journal lines:\n" + "\n".join(problems[:20])
     if TEST_DB.exists():
         with contextlib.suppress(PermissionError):
             TEST_DB.unlink()

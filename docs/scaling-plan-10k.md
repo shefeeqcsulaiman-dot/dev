@@ -45,7 +45,7 @@ Rough infrastructure cost at that size: a few thousand US dollars a month (reven
 
 **Up to about 2,000 companies:**
 - [ ] Move invoices, purchases, rota and attendance out of JSON into tables
-- [~] Pre-calculated totals: first step done (reports share one per-request account-totals result instead of re-adding journal lines 4 times; /reports/summary 390 -> 160 ms). Next: a stored per-account monthly totals table, which needs every journal write path (including the bulk DELETEs in app_data/superadmin/accounting clear-all) to keep it current
+- [x] Pre-calculated totals: reports read posted debit/credit per account and month from `account_period_totals` (migration 0006, `app/account_totals.py`), kept current on every journal write including bulk deletes; `REPORT_TOTALS_SOURCE=live` switches back to summing journal lines; `python -m app.account_totals [--rebuild]` checks/repairs; the test suite verifies every company at the end of each run. Sales/VAT/purchase monthly totals for the dashboard still read app-data (next: from the summary columns)
 - [ ] Read replica
 - [ ] Background jobs for heavy work
 - [ ] Split frontend
@@ -56,6 +56,13 @@ Rough infrastructure cost at that size: a few thousand US dollars a month (reven
 - [ ] Multi-region disaster recovery
 - [ ] Security certification (ISO 27001 / SOC 2)
 - [ ] Accredited e-invoicing provider status
+
+## Pre-calculated account totals: how they work now
+
+- `account_period_totals`: one row per company, branch, account and month (UTC) with posted debit/credit. The trial balance, balance sheet and cost of sales read it instead of every journal line, so their cost no longer grows with years of history.
+- Kept current automatically (`app/account_totals.py`): a save that adds/edits/deletes journal entries or lines recomputes the touched months right after the flush; bulk `query().delete()/update()` and batch inserts on journal tables are caught wherever they run and the affected companies are rebuilt at commit.
+- Safety: `REPORT_TOTALS_SOURCE=live` (env) makes reports sum journal lines directly, no deploy needed. `python -m app.account_totals` lists companies whose totals differ from their journals; `--rebuild` repairs them. `tests/conftest.py` checks every company after each test run.
+- Migration 0007 adds indexes on foreign keys that journal deletes make PostgreSQL check (deleting one invoice's lines took 6.4 s at 1.8M GL rows).
 
 ## Database migrations (Alembic): how it works now
 

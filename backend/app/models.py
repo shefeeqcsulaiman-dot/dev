@@ -314,6 +314,24 @@ class VoucherLine(Base):
     account: Mapped[Account] = relationship()
 
 
+class AccountPeriodTotal(Base):
+    """Posted journal-line totals per company, branch, account and month, maintained by
+    app/account_totals.py so reports read a few rows instead of every journal line."""
+    __tablename__ = "account_period_totals"
+    __table_args__ = (
+        Index("ix_account_period_totals_company_period", "company_id", "period"),
+        Index("ix_account_period_totals_company_account", "company_id", "account_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(String(36))
+    account_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    period: Mapped[str] = mapped_column(String(7), nullable=False)  # YYYY-MM (UTC), 0000-00 = no date
+    debit: Mapped[Decimal] = mapped_column(Numeric(16, 2), default=0)
+    credit: Mapped[Decimal] = mapped_column(Numeric(16, 2), default=0)
+
+
 class GeneralLedgerEntry(Base, TimestampMixin):
     __tablename__ = "general_ledger_entries"
     __table_args__ = (
@@ -323,6 +341,9 @@ class GeneralLedgerEntry(Base, TimestampMixin):
         Index("ix_gl_entries_company_account_date", "company_id", "account_id", "entry_date"),
         # Reversing/deleting a posting removes its GL rows by journal entry.
         Index("ix_gl_entries_journal_entry_id", "journal_entry_id"),
+        # Deleting journal lines makes PostgreSQL check this foreign key per line; unindexed
+        # it scanned the whole GL (6.4 s to delete one invoice's lines at 1.8M rows).
+        Index("ix_gl_entries_journal_line_id", "journal_line_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
@@ -571,6 +592,8 @@ class BankStatementLine(Base, TimestampMixin):
 
 class BankReconciliationMatch(Base, TimestampMixin):
     __tablename__ = "bank_reconciliation_matches"
+    # Re-posting deletes GL rows, which checks this foreign key.
+    __table_args__ = (Index("ix_bank_recon_matches_ledger_entry_id", "ledger_entry_id"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
@@ -857,6 +880,8 @@ class AuditLog(Base, TimestampMixin):
         # by company_id — audit_logs only ever grows, so this keeps that
         # query cheap as it does.
         Index("ix_audit_logs_company_created", "company_id", "created_at"),
+        # Deleting an employee checks this foreign key across the whole audit log.
+        Index("ix_audit_logs_employee_id", "employee_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
@@ -880,6 +905,7 @@ class AuditLog(Base, TimestampMixin):
 
 class AuditLogDetail(Base, TimestampMixin):
     __tablename__ = "audit_log_details"
+    __table_args__ = (Index("ix_audit_log_details_audit_log_id", "audit_log_id"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
@@ -1396,3 +1422,4 @@ class TrialRequest(Base, TimestampMixin):
 
 # Registers the session hooks that keep AppDataRecord.amount_paid current (needs AppDataRecord above).
 import app.doc_index  # noqa: E402,F401
+import app.account_totals  # noqa: E402,F401  -- keeps AccountPeriodTotal current

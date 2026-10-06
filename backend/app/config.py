@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     # Log a warning for any API request / SQL query at least this slow (0 = off).
     slow_request_ms: int = 1000
     slow_query_ms: int = 500
+    # Where reports get account totals: "stored" (account_period_totals, app/account_totals.py)
+    # or "live" (add up journal lines on every request, the old way) as a fallback switch.
+    report_totals_source: str = "stored"
     # Bootstrap data cap per company (max records returned on login)
     bootstrap_record_cap: int = 10000
 
