@@ -466,11 +466,15 @@
     var monthDays = days.filter(function(d) { return d.date.indexOf(month) === 0; });
     var withHours = monthDays.filter(function(d) { return d.mins != null; });
     var avgIn = monthDays.length ? Math.round(monthDays.reduce(function(a, d) { return a + _punchMins(d.first.punch_time); }, 0) / monthDays.length) : null;
-    var avgHrs = withHours.length ? Math.round(withHours.reduce(function(a, d) { return a + d.mins; }, 0) / withHours.length) : null;
+    var totalMins = withHours.reduce(function(a, d) { return a + d.mins; }, 0);
+    var avgHrs = withHours.length ? Math.round(totalMins / withHours.length) : null;
+    var openDays = monthDays.length - withHours.length;
     var lastPunch = rows[0];   // API returns newest first
     if (sumEl) {
-      var stat = function(label, val, sub) { return '<div class="att-stat"><div class="att-stat-label">' + label + '</div><div class="att-stat-val">' + val + '</div><div class="att-stat-sub">' + sub + '</div></div>'; };
+      var stat = function(label, val, sub, cls) { return '<div class="att-stat' + (cls ? ' ' + cls : '') + '"><div class="att-stat-label">' + label + '</div><div class="att-stat-val">' + val + '</div><div class="att-stat-sub">' + sub + '</div></div>'; };
+      var monthName = new Date(month + '-01T00:00:00').toLocaleDateString('en-US', {month: 'long'});
       sumEl.innerHTML =
+        stat('Total Hours', withHours.length ? _fmtDur(totalMins) : '—', monthName + (openDays ? ' · ' + openDays + ' day' + (openDays === 1 ? '' : 's') + ' without check-out not counted' : ''), 'is-total') +
         stat('Days Present', monthDays.length, 'This month') +
         stat('Avg. Check-in', avgIn == null ? '—' : _fmtClock(avgIn), 'This month') +
         stat('Avg. Hours / Day', avgHrs == null ? '—' : _fmtDur(avgHrs), withHours.length ? 'Over ' + withHours.length + ' day' + (withHours.length === 1 ? '' : 's') + ' with a check-out' : 'No completed days yet') +
@@ -530,6 +534,30 @@
   // Working-day "absent" is deliberately not inferred -- weekend days and per-company
   // rules aren't known here, and a wrong "Absent" would be worse than none.
   var _attCalMonth = null;
+  var _attCalRota = {}; // 'YYYY-MM' -> rota rows for that month (null while loading)
+  // Same rule as the server (app/rota_days.py): Off/Leave/Holiday marks, or a day without
+  // a rota entry in a Mon-Sun week that has entries.
+  function _rotaOffDays(rows) {
+    var byDate = {}, weeks = {}, out = {};
+    rows.forEach(function(a) {
+      if (!a.date) return;
+      byDate[a.date] = a;
+      weeks[_isoDateLocal(_mondayOf(new Date(a.date + 'T00:00:00')))] = 1;
+    });
+    return {byDate: byDate, weeks: weeks, kindOf: function(iso) {
+      var a = byDate[iso];
+      if (a) { var k = _rotaKind(a); return k === 'shift' || k === 'ot' || k === 'training' ? '' : k; }
+      return weeks[_isoDateLocal(_mondayOf(new Date(iso + 'T00:00:00')))] ? 'off' : '';
+    }};
+  }
+  function _loadAttCalRota(month) {
+    if (month in _attCalRota) return;
+    _attCalRota[month] = null;
+    fetch(apiBase() + '/ess/rota?month=' + encodeURIComponent(month), {headers: essHeaders()})
+      .then(function(r) { return r.ok ? r.json() : []; })
+      .then(function(rows) { _attCalRota[month] = Array.isArray(rows) ? rows : []; renderAttCalendar(); })
+      .catch(function() { _attCalRota[month] = []; });
+  }
   function essShiftAttMonth(delta) {
     var d = new Date((_attCalMonth || _todayISO().slice(0, 7)) + '-01T00:00:00');
     d.setMonth(d.getMonth() + delta);
@@ -543,6 +571,14 @@
     var month = _attCalMonth || (_attCalMonth = _todayISO().slice(0, 7));
     var title = document.getElementById('acal-title');
     if (title) title.textContent = new Date(month + '-01T00:00:00').toLocaleDateString('en-US', {month: 'long', year: 'numeric'}) + ' — Attendance';
+    var totalEl = document.getElementById('acal-total');
+    if (totalEl) {
+      var inMonth = days.filter(function(d) { return d.date.indexOf(month) === 0 && d.mins != null; });
+      var oldest = days.length ? days[days.length - 1].date.slice(0, 7) : null;
+      totalEl.innerHTML = inMonth.length
+        ? 'Worked <b>' + _fmtDur(inMonth.reduce(function(a, d) { return a + d.mins; }, 0)) + '</b> over ' + inMonth.length + ' day' + (inMonth.length === 1 ? '' : 's')
+        : (oldest && month < oldest ? 'Hours for this month aren’t available here' : 'No completed days this month');
+    }
     var byDate = {};
     days.forEach(function(d) { byDate[d.date] = d; });
     var leaveDates = {};
@@ -552,6 +588,8 @@
     });
     var holidays = {};
     (_essHolidaysCache || []).forEach(function(h) { holidays[h.date] = h.name; });
+    _loadAttCalRota(month);
+    var rota = _rotaOffDays(_attCalRota[month] || []);
     var y = Number(month.slice(0, 4)), m = Number(month.slice(5, 7));
     var firstDow = (new Date(y, m - 1, 1).getDay() + 6) % 7, dim = new Date(y, m, 0).getDate(), todayStr = _todayISO();
     var html = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(function(w) { return '<div class="acal-wd">' + w + '</div>'; }).join('');
@@ -561,6 +599,12 @@
       if (rec) { cls = (rec.last || ds === todayStr) ? 'acal-present' : 'acal-incomplete'; sub = String(rec.first.punch_time).substring(11, 16); tip = rec.last ? 'Present' : (ds === todayStr ? 'On shift' : 'No check-out'); }
       else if (leaveDates[ds]) { cls = 'acal-leave'; sub = 'Leave'; tip = 'Approved leave'; }
       else if (holidays[ds]) { cls = 'acal-holiday'; sub = 'Holiday'; tip = holidays[ds]; }
+      else {
+        var rk = rota.kindOf(ds);
+        if (rk === 'off') { cls = 'acal-off'; sub = 'Off'; tip = 'Day off on the rota'; }
+        else if (rk === 'leave') { cls = 'acal-leave'; sub = 'Leave'; tip = 'Leave on the rota'; }
+        else if (rk === 'holiday') { cls = 'acal-holiday'; sub = 'Holiday'; tip = 'Holiday on the rota'; }
+      }
       html += '<div class="acal-cell ' + cls + (ds === todayStr ? ' today' : '') + '" title="' + escHtml(tip) + '">' + day + (sub ? '<small>' + escHtml(sub) + '</small>' : '') + '</div>';
     }
     grid.innerHTML = html;
@@ -647,6 +691,7 @@
       if (r.status === 401) { essLogout(); return; }
       var rows = await r.json();
       _essData.leave = rows;
+      if (_rotaWaitingForLeave) { _rotaWaitingForLeave = false; loadRota(); }
       if (typeof renderAttCalendar === 'function') renderAttCalendar();
       var el = document.getElementById('leave-content');
       el.classList.remove('loading');
@@ -659,7 +704,8 @@
               '<div class="leave-type">' + escHtml(l.leave_type) + '</div>' +
               '<div class="leave-dates">' + escHtml(l.start_date) + ' → ' + escHtml(l.end_date) + ' (' + escHtml(l.days) + ' day' + (l.days === 1 ? '' : 's') + ')</div>' +
               (l.reason ? '<div class="leave-reason">' + escHtml(l.reason) + '</div>' : '') +
-              (st === 'pending' ? '<button class="link-btn danger" data-id="' + escHtml(l.id) + '" onclick="essCancelLeave(this.dataset.id)">Cancel request</button>' : '') +
+              (st === 'cancelled' && l.cancelled_by ? '<div class="leave-reason">Cancelled by ' + escHtml(l.cancelled_by) + (l.cancel_reason ? ' — ' + escHtml(l.cancel_reason) : '') + '</div>' : '') +
+              (l.can_cancel ? '<button class="link-btn danger" data-id="' + escHtml(l.id) + '" onclick="essCancelLeave(this.dataset.id)">' + (st === 'approved' ? 'Cancel leave' : 'Cancel request') + '</button>' : '') +
             '</div>' +
             '<span class="st-badge st-' + escHtml(st) + '">' + escHtml(l.status || 'pending') + '</span>' +
           '</div>';
@@ -830,7 +876,7 @@
     var t = (rawType || 'shift').toLowerCase();
     var map = {
       shift:    {cls: '',                  fallback: 'Scheduled shift'},
-      off:      {cls: 'rota-type-off',     fallback: 'Day off — no shift'},
+      off:      {cls: 'rota-type-off',     fallback: 'Day off'},
       leave:    {cls: 'rota-type-leave',   fallback: 'On approved leave'},
       holiday:  {cls: 'rota-type-holiday', fallback: 'Public holiday'},
       ot:       {cls: 'rota-type-ot',      fallback: 'Overtime shift'},
@@ -838,6 +884,34 @@
       training: {cls: 'rota-type-training',fallback: 'Training session'},
     };
     return map[t] || {cls: '', fallback: 'Scheduled'};
+  }
+  var _rotaWaitingForLeave = false;
+  function _rotaKind(a) {
+    var raw = String(a.mark && a.mark !== 'Shift' ? a.mark : (a.type || a.code || 'shift')).toLowerCase();
+    if (raw === 'off' || raw === 'leave' || raw === 'holiday' || raw === 'training') return raw;
+    if (raw === 'ot' || raw === 'overtime') return 'ot';
+    if (raw === 'l') return 'leave';
+    if (raw === 'ph') return 'holiday';
+    return 'shift';
+  }
+  // Days between the first and last scheduled day with no rota entry are days off
+  // (or leave, when an approved leave covers them).
+  function _fillRotaDayOffs(rows) {
+    var byDate = {};
+    rows.forEach(function(a) { if (a.date) byDate[a.date] = true; });
+    var dates = Object.keys(byDate).sort();
+    if (dates.length < 2) return rows;
+    if (!_essData.leave) _rotaWaitingForLeave = true;
+    var leaves = (_essData.leave || []).filter(function(l) { return /approved/i.test(l.status || ''); });
+    var out = rows.slice();
+    var d = new Date(dates[0] + 'T00:00:00'), last = new Date(dates[dates.length - 1] + 'T00:00:00');
+    for (var guard = 0; d <= last && guard < 400; guard++, d.setDate(d.getDate() + 1)) {
+      var iso = _isoDateLocal(d);
+      if (byDate[iso]) continue;
+      var lv = leaves.find(function(l) { return l.start_date <= iso && iso <= l.end_date; });
+      out.push(lv ? {date: iso, type: 'Leave', _gap: true, _leaveType: lv.leave_type} : {date: iso, type: 'Off', _gap: true});
+    }
+    return out.sort(function(a, b) { return (a.date || '') < (b.date || '') ? -1 : 1; });
   }
   function _mondayOf(d) {
     var day = d.getDay();
@@ -889,6 +963,7 @@
         var thisMonday = _mondayOf(today);
         var lastWeekLabel = null;
         var html = '';
+        rows = _fillRotaDayOffs(rows);
         rows.forEach(function(a) {
           var d = new Date((a.date || '') + 'T00:00:00');
           var valid = !isNaN(d.getTime());
@@ -901,11 +976,14 @@
           var dayNum = valid ? d.getDate() : '—';
           var isToday = valid && d.getTime() === today.getTime();
           var isTomorrow = valid && d.getTime() === tomorrow.getTime();
-          var meta = _rotaTypeMeta(a.type || a.code);
-          var timeRange = (a.start || '') + (a.end ? (' – ' + a.end) : '');
-          var subText = timeRange || meta.fallback;
-          var titleText = (a.type || a.code || 'Shift') +
-            (isToday ? '<span class="rota-today-pill">Today</span>' : (isTomorrow ? '<span class="rota-today-pill">Tomorrow</span>' : ''));
+          var kind = _rotaKind(a);
+          var meta = _rotaTypeMeta(kind);
+          var working = ['off', 'leave', 'holiday'].indexOf(kind) < 0;
+          var timeRange = working ? ((a.start || '') + (a.end ? (' – ' + a.end) : '')) : '';
+          var pill = isToday ? '<span class="rota-today-pill">Today</span>' : (isTomorrow ? '<span class="rota-today-pill">Tomorrow</span>' : '');
+          // Time first (what the employee needs), shift name underneath.
+          var titleText = escHtml(timeRange || meta.fallback) + (timeRange && a.location ? ' · ' + escHtml(a.location) : '') + pill;
+          var subText = working ? escHtml(a.type || a.code || 'Shift') : (a._leaveType ? escHtml(a._leaveType) : (a._gap ? 'No shift scheduled' : ''));
           // The task picker in HRMS's Weekly/Monthly Rota can attach one or
           // more tasks to a specific day's shift (its own title/color/time,
           // separate from the standalone "My Tasks" tab) -- /ess/rota
@@ -919,8 +997,8 @@
           html += '<div class="rota-row ' + meta.cls + (isToday ? ' is-today' : '') + '">' +
             '<div class="rota-date-chip"><div class="dow">' + dowShort + '</div><div class="d">' + dayNum + '</div></div>' +
             '<div style="flex:1;min-width:0">' +
-              '<div class="rota-shift-title" style="font-weight:600;font-size:13.5px;color:var(--text)">' + titleText + '</div>' +
-              '<div class="rota-shift-sub" style="font-size:12px;color:var(--text3)">' + subText + (a.location ? (' · ' + escHtml(a.location)) : '') + '</div>' +
+              '<div class="rota-shift-title" style="font-weight:700;font-size:15px;color:var(--text);font-variant-numeric:tabular-nums">' + titleText + '</div>' +
+              (subText ? '<div class="rota-shift-sub" style="font-size:12.5px;color:var(--text2);margin-top:2px">' + subText + '</div>' : '') +
               tasksHtml +
             '</div>' +
           '</div>';
@@ -1007,10 +1085,16 @@
         return '<th class="' + (iso === todayStr ? 'is-today' : '') + '">' + ROTA_WEEK_DAY_LABELS[i] + '<br>' + dd.getDate() + '</th>';
       }).join('');
       var bodyHtml = employees.map(function(emp) {
+        // Someone with shifts this week is off on the days without one; with none, the rota isn't set yet.
+        var scheduled = dayDates.some(function(dd) { return byEmpDate[emp.employee_no + '|' + _isoDateLocal(dd)]; });
         var cells = dayDates.map(function(dd) {
           var iso = _isoDateLocal(dd);
           var a = byEmpDate[emp.employee_no + '|' + iso];
-          if (!a || !a.code || a.code === 'OFF') return '<td><div class="dept-rota-cell is-off">–</div></td>';
+          var kind = a ? _rotaKind(a) : (scheduled ? 'off' : '');
+          if (!kind) return '<td><div class="dept-rota-cell is-blank" title="Not scheduled yet">–</div></td>';
+          if (kind === 'off' || !a.code) return '<td><div class="dept-rota-cell is-off">Off</div></td>';
+          if (kind === 'leave') return '<td><div class="dept-rota-cell is-leave">Leave</div></td>';
+          if (kind === 'holiday') return '<td><div class="dept-rota-cell is-holiday">Holiday</div></td>';
           var timeRange = (a.start && a.end) ? (a.start + '–' + a.end) : '';
           var taskCount = Array.isArray(a.tasks) ? a.tasks.length : 0;
           return '<td><div class="dept-rota-cell"><div class="code">' + escHtml(a.code) + '</div>' +
@@ -1161,7 +1245,8 @@
     }
     var nextEl = document.getElementById('dash-next-shift');
     if (nextEl) {
-      var upcoming = _essData.rota[0];
+      // The rota list starts a week back: take the first working shift from today on (same rule as the mobile card).
+      var upcoming = _essData.rota.find(function(a) { return (a.date || '') >= todayStr && ['off', 'leave', 'holiday'].indexOf(_rotaKind(a)) < 0; });
       nextEl.textContent = upcoming ? (fmtShortDate(upcoming.date) + (upcoming.code ? ' · ' + upcoming.code : '')) : 'No upcoming shifts';
     }
     var openTasks = _essData.tasks.filter(function(t) { return t.status !== 'done'; }).length;
@@ -1263,6 +1348,7 @@
     var ok = document.getElementById('ess-confirm-ok');
     ok.textContent = opts.okText || 'OK';
     var cancel = document.getElementById('ess-confirm-cancel');
+    cancel.textContent = opts.cancelText || 'Cancel';
     overlay.classList.add('on');
     return new Promise(function(resolve) {
       function done(value) {
@@ -1326,7 +1412,9 @@
     var k = REQ_KIND[q.kind] || REQ_KIND.leave;
     var when = q.submitted ? 'Sent ' + fmtShortDate(String(q.submitted).slice(0, 10)) : '';
     var cancel = (q.kind === 'leave' && q.can_cancel && !compact)
-      ? '<button class="link-btn danger" data-id="' + escHtml(q.id) + '" onclick="essCancelLeave(this.dataset.id)">Cancel request</button>' : '';
+      ? '<button class="link-btn danger" data-id="' + escHtml(q.id) + '" onclick="essCancelLeave(this.dataset.id)">' + (q.status === 'approved' ? 'Cancel leave' : 'Cancel request') + '</button>' : '';
+    if (q.kind === 'leave' && q.status === 'cancelled' && q.cancelled_by && !compact)
+      cancel = '<div class="req-reason">Cancelled by ' + escHtml(q.cancelled_by) + (q.cancel_reason ? ' — ' + escHtml(q.cancel_reason) : '') + '</div>';
     return '<div class="req-row' + (!compact && _essNewIds[q.id] ? ' is-new' : '') + '"' + (compact ? ' style="cursor:pointer" onclick="essGoTab(\'requests\')"' : '') + '>' +
       '<div class="req-ico">' + essIconSvg(k.icon) + '</div>' +
       '<div class="req-main"><div class="req-title">' + escHtml(_reqTitle(q)) + '</div><div class="req-sub">' + escHtml(_reqSub(q)) + '</div>' +
@@ -1386,7 +1474,7 @@
       _essOtElig.map(function(r, i) {
         var cls = !r.eligible ? 'rejected' : (r.eligibility.indexOf('Requested') === 0 ? 'approved' : 'pending');
         var act = r.eligible && !r.request_id ? '<button class="btn-ghost" style="padding:5px 10px;font-size:11.5px" onclick="essRequestOtFromRow(' + i + ')">Request</button>' : '';
-        return '<tr><td>' + escHtml(r.date) + (r.day_type === 'weekend' ? ' <span class="st-badge st-pending">Weekend</span>' : '') + '</td><td>' + escHtml(r.clock_in || '—') + '</td><td>' + escHtml(r.clock_out || '—') + '</td><td>' + escHtml(r.worked) + '</td><td>' + escHtml(r.extra) + '</td><td>' + escHtml(r.eligible_ot) + '</td><td><span class="st-badge st-' + cls + '">' + escHtml(r.eligibility) + '</span></td><td>' + act + '</td></tr>';
+        return '<tr><td>' + escHtml(r.date) + (r.day_type === 'weekend' ? ' <span class="st-badge st-pending">Weekend</span>' : '') + '</td><td>' + escHtml(r.clock_in || '—') + '</td><td>' + escHtml(r.clock_out || '—') + '</td><td>' + escHtml(r.worked) + (r.break ? '<div class="m-muted" style="font-size:11px">after ' + escHtml(r.break) + ' break</div>' : '') + '</td><td>' + escHtml(r.extra) + '</td><td>' + escHtml(r.eligible_ot) + '</td><td><span class="st-badge st-' + cls + '">' + escHtml(r.eligibility) + '</span></td><td>' + act + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
   function essRequestOtFromRow(i) {
@@ -1395,10 +1483,15 @@
   }
 
   async function essCancelLeave(id) {
-    if (!(await essConfirm({title: 'Cancel Leave Request', message: 'Cancel this leave request?', okText: 'Cancel Request'}))) return;
+    var rec = (_essData.leave || []).find(function(l) { return l.id === id; }) || {};
+    var approved = rec.status === 'approved';
+    var ok = await essConfirm(approved
+      ? {title: 'Cancel Approved Leave', message: 'Cancel your approved ' + (rec.leave_type || 'leave') + ' (' + rec.start_date + ' → ' + rec.end_date + ')? The days go back to your balance and HR will see it was cancelled.', okText: 'Cancel Leave', cancelText: 'Keep Leave'}
+      : {title: 'Cancel Leave Request', message: 'Cancel this leave request?', okText: 'Cancel Request', cancelText: 'Keep Request'});
+    if (!ok) return;
     try {
       await essApi('POST', '/ess/leave/' + encodeURIComponent(id) + '/cancel');
-      essToast('Leave request cancelled');
+      essToast(approved ? 'Leave cancelled — the days are back in your balance' : 'Leave request cancelled');
       loadLeave();
       essRefreshRequests();
       loadLeaveBalance();
@@ -1742,7 +1835,8 @@
     absent: {label: 'Absent', color: '#ef4444', bg: 'rgba(239,68,68,.12)'},
     leave: {label: 'On Leave', color: '#f59e0b', bg: 'rgba(245,158,11,.12)'},
     holiday: {label: 'Holiday', color: '#8b5cf6', bg: 'rgba(139,92,246,.12)'},
-    weekend: {label: 'Weekend', color: '#64748b', bg: 'rgba(100,116,139,.12)'}
+    weekend: {label: 'Weekend', color: '#64748b', bg: 'rgba(100,116,139,.12)'},
+    off: {label: 'Day Off', color: '#94a3b8', bg: 'rgba(148,163,184,.16)'}
   };
 
   // Dashboard banner: the caller's own department today -- counts, a presence bar, and who's in.
@@ -1751,13 +1845,13 @@
     if (!el) return;
     if (!rows.length) { el.innerHTML = '<div class="empty" style="padding:6px 0">No teammates found in your department.</div>'; return; }
     var cnt = function(st) { return rows.filter(function(e) { return e.status === st; }).length; };
-    var present = cnt('present'), leave = cnt('leave'), absent = cnt('absent');
+    var present = cnt('present'), leave = cnt('leave'), absent = cnt('absent'), off = cnt('off');
     var expected = present + leave + absent;
     var offDay = rows.every(function(e) { return e.status === 'weekend' || e.status === 'holiday'; });
     var pct = expected ? Math.round(present / expected * 100) : 0;
     var caption = offDay ? (rows[0].status === 'holiday' ? 'Public holiday — no attendance expected' : 'Weekend — no attendance expected')
-      : present + ' of ' + expected + ' in today (' + pct + '%)';
-    var rank = {present: 0, leave: 1, absent: 2};
+      : present + ' of ' + expected + ' in today (' + pct + '%)' + (off ? ' · ' + off + ' on a day off' : '');
+    var rank = {present: 0, leave: 1, absent: 2, off: 3};
     var sorted = rows.slice().sort(function(a, b) { return (rank[a.status] == null ? 3 : rank[a.status]) - (rank[b.status] == null ? 3 : rank[b.status]); });
     var list = sorted.slice(0, 5).map(function(e) {
       var meta = TEAM_STATUS_META[e.status] || TEAM_STATUS_META.absent;
@@ -1767,10 +1861,11 @@
         '<span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:10.5px;font-weight:600;white-space:nowrap;background:' + meta.bg + ';color:' + meta.color + '">' + meta.label + '</span></div>';
     }).join('');
     el.innerHTML =
-      '<div class="att-mini" style="margin-top:0;padding-top:0;border-top:none">' +
+      '<div class="att-mini" style="margin-top:0;padding-top:0;border-top:none;grid-template-columns:repeat(4,1fr)">' +
         '<div><b style="color:var(--green)">' + present + '</b><span>Present</span></div>' +
         '<div><b style="color:var(--amber)">' + leave + '</b><span>On leave</span></div>' +
-        '<div><b style="color:var(--red)">' + absent + '</b><span>Absent</span></div></div>' +
+        '<div><b style="color:var(--red)">' + absent + '</b><span>Absent</span></div>' +
+        '<div><b style="color:var(--text2)">' + off + '</b><span>Day off</span></div></div>' +
       '<div class="lb-bar" style="margin:10px 0 4px"><div class="lb-bar-fill" style="width:' + pct + '%;background:var(--green)"></div></div>' +
       '<div class="hint" style="margin:0 0 6px">' + caption + '</div>' + list +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><span class="hint" style="margin:0">' + (rows.length > 5 ? '+' + (rows.length - 5) + ' more' : rows.length + ' in your team') + '</span>' +
@@ -1789,7 +1884,7 @@
       if (sumEl) {
         var cnt = function(st) { return rows.filter(function(e) { return e.status === st; }).length; };
         var stat = function(label, val, sub) { return '<div class="att-stat"><div class="att-stat-label">' + label + '</div><div class="att-stat-val">' + val + '</div><div class="att-stat-sub">' + sub + '</div></div>'; };
-        sumEl.innerHTML = stat('Present Today', cnt('present'), 'In your department') + stat('Team Size', rows.length, 'Active colleagues') + stat('On Leave', cnt('leave'), 'Approved leave today') + stat('Absent', cnt('absent'), 'No punch yet');
+        sumEl.innerHTML = stat('Present Today', cnt('present'), 'In your department') + stat('Team Size', rows.length, 'Active colleagues') + stat('On Leave', cnt('leave'), 'Approved leave today') + stat('Day Off', cnt('off'), 'Off on the rota today') + stat('Absent', cnt('absent'), 'No punch yet');
       }
       if (body) {
         body.innerHTML = rows.length ? rows.map(function(e) {
@@ -1950,33 +2045,62 @@
   // form pre-filled for the employee to check and submit; balance / next-shift
   // questions are answered from the employee's own data. Nothing is submitted.
   var _essVoiceTimer = null;
+  // Same assistant-style popup as the main app (vc-* classes, see ess.css).
   function _essVoicePop() {
     var pop = document.getElementById('ess-voice-pop');
     if (pop) return pop;
     pop = document.createElement('div');
     pop.id = 'ess-voice-pop';
-    pop.className = 'ess-voice-pop';
+    pop.className = 'vc-pop';
     pop.setAttribute('role', 'status');
     pop.setAttribute('aria-live', 'polite');
     pop.hidden = true;
-    pop.innerHTML = '<div class="ess-voice-head"><span id="ess-voice-status"></span>' +
-      '<select id="ess-voice-lang" aria-label="Voice language" onchange="VoiceInput.setLang(this.value)"><option value="en-US">EN</option><option value="ar-AE">عربي</option></select>' +
-      '<button type="button" onclick="essVoiceClose()" aria-label="Close">×</button></div>' +
-      '<div class="ess-voice-heard" id="ess-voice-heard"></div>' +
-      '<div class="ess-voice-hint">Try “Apply annual leave next Monday to Wednesday”, “Request 2 hours overtime yesterday”, “What’s my leave balance?”, “When is my next shift?”</div>';
+    pop.innerHTML =
+      '<div class="vc-head">' +
+        '<span class="vc-avatar" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" opacity=".7"/></svg></span>' +
+        '<div class="vc-head-text"><b>TaxFlow AI</b><span id="ess-voice-mode"></span></div>' +
+        '<button type="button" class="vc-pop-close" onclick="essVoiceClose()" aria-label="Close">×</button>' +
+      '</div>' +
+      '<div class="vc-stage">' +
+        '<div class="vc-orb" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>' +
+        '<div class="vc-stage-text" id="ess-voice-stage-text"></div>' +
+        '<button type="button" class="vc-done" onclick="window.VoiceInput&&VoiceInput.stop()">Done</button>' +
+      '</div>' +
+      '<div class="vc-convo" id="ess-voice-convo">' +
+        '<div class="vc-msg vc-me" id="ess-voice-heard"></div>' +
+        '<div class="vc-msg vc-ai" id="ess-voice-ai"><div class="vc-typing" id="ess-voice-typing"><i></i><i></i><i></i></div><div class="vc-ai-text" id="ess-voice-status"></div></div>' +
+      '</div>' +
+      '<div class="vc-actions" id="ess-voice-actions"><button type="button" class="vc-retry" onclick="essVoice()"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4"/></svg>Try again</button></div>' +
+      '<div class="vc-foot"><span>Try “Apply annual leave next Monday to Wednesday”, “Request 2 hours overtime yesterday”, “What’s my leave balance?”</span></div>';
     document.body.appendChild(pop);
     return pop;
   }
-  function _essVoiceShow(status, heard, autoHide) {
+  // retry: show "Try again" (and stay open) after a miss or an error.
+  function _essVoiceShow(status, heard, autoHide, retry) {
     var pop = _essVoicePop();
     clearTimeout(_essVoiceTimer);
     pop.hidden = false;
-    document.getElementById('ess-voice-status').textContent = status;
-    document.getElementById('ess-voice-lang').value = VoiceInput.getLang();
+    var mode = /^Listening/.test(status) ? 'listening' : /^(Transcribing|Working)/.test(status) ? 'thinking' : 'answer';
+    pop.dataset.mode = mode;
+    document.getElementById('ess-voice-mode').textContent = mode === 'listening' ? 'Listening…' : mode === 'thinking' ? 'Thinking…' : 'Voice assistant';
+    document.getElementById('ess-voice-stage-text').textContent = status;
+    document.getElementById('ess-voice-typing').hidden = mode !== 'thinking';
+    document.getElementById('ess-voice-status').textContent = mode === 'answer' ? status : '';
     var h = document.getElementById('ess-voice-heard');
-    h.textContent = heard ? '“' + heard + '”' : '';
+    h.textContent = heard || '';
     h.hidden = !heard;
-    if (autoHide) _essVoiceTimer = setTimeout(essVoiceClose, autoHide);
+    document.getElementById('ess-voice-ai').hidden = mode === 'listening';
+    document.getElementById('ess-voice-convo').hidden = mode === 'listening' && !heard;
+    var canRetry = !!retry && mode === 'answer';
+    document.getElementById('ess-voice-actions').hidden = !canRetry;
+    if (autoHide && !canRetry) _essVoiceTimer = setTimeout(essVoiceClose, autoHide);
+  }
+  // Speech ended with nothing heard: the popup would otherwise stay on "Listening…".
+  function _essNoSpeech() {
+    setTimeout(function() {
+      var pop = document.getElementById('ess-voice-pop');
+      if (pop && !pop.hidden && pop.dataset.mode === 'listening') _essVoiceShow('I didn’t catch that — tap Try again and speak', null, 0, true);
+    }, 0);
   }
   function essVoiceClose() {
     clearTimeout(_essVoiceTimer);
@@ -2005,7 +2129,7 @@
     if (!r.ok) throw new Error((data && data.detail) || 'Transcription failed');
     return data.text;
   }
-  // Company voice switch / default language (Settings > AI & Voice).
+  // Company voice switch (Settings > AI & Voice). Voice is English-only.
   var _essVoiceSettings = null;
   async function essApplyVoiceSettings() {
     try {
@@ -2015,7 +2139,6 @@
       var btn = document.getElementById(id);
       if (btn) btn.hidden = !_essVoiceSettings.enabled;
     });
-    if (window.VoiceInput) VoiceInput.setCompanyLang(_essVoiceSettings.default_lang);
     return _essVoiceSettings;
   }
   if (localStorage.getItem(ESS_TOKEN_KEY)) setTimeout(essApplyVoiceSettings, 1200);
@@ -2034,9 +2157,16 @@
         _essMicState(s);
         if (s === 'listening') _essVoiceShow('Listening… tap the mic again when done');
         else if (s === 'processing') _essVoiceShow('Transcribing…');
+        else _essNoSpeech();
+      },
+      onInterim: function(text) {
+        var h = document.getElementById('ess-voice-heard');
+        if (!h) return;
+        h.textContent = text; h.hidden = !text;
+        document.getElementById('ess-voice-convo').hidden = !text;
       },
       onText: function(text) { essRunVoice(text, lang); },
-      onError: function(msg) { _essVoiceShow(msg, null, 5000); }
+      onError: function(msg) { _essVoiceShow(msg, null, 0, true); }
     });
   }
   function _essVoiceSet(id, value) {
@@ -2091,7 +2221,7 @@
     } catch (e) {
       // Company has the AI module off: hide the mic rather than fail every time.
       if (/isn.t enabled/.test(e.message)) { var mb = document.getElementById('ess-mic-btn'); if (mb) mb.hidden = true; }
-      _essVoiceShow(e.message, transcript, 6000);
+      _essVoiceShow(e.message, transcript, 0, true);
       return;
     }
     if (r.answer) {
@@ -2111,7 +2241,7 @@
       _essVoiceShow((n ? 'Filled ' + n + ' detail' + (n === 1 ? '' : 's') + ' — ' : '') + 'check the form and tap Submit', transcript, 6000);
       return;
     }
-    _essVoiceShow('Sorry, I didn’t catch a request in that.', transcript);
+    _essVoiceShow('Sorry, I didn’t catch a request in that.', transcript, 0, true);
   }
   document.addEventListener('keydown', function(e) {
     if (e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && e.code === 'Space' && document.getElementById('ess-mic-btn') && localStorage.getItem(ESS_TOKEN_KEY)) {
@@ -2153,7 +2283,7 @@
   function _mDays(punches) {
     var days = {};
     (punches || []).forEach(function(p) {
-      var d = p.punch_date, t = String(p.punch_time || '').slice(0, 5);
+      var d = p.punch_date, t = String(p.punch_time || '').substring(11, 16);
       if (!d || !t) return;
       var day = days[d] || (days[d] = {inT: null, outT: null});
       var dir = String(p.direction || '').toLowerCase();
@@ -2317,26 +2447,39 @@
 
   // Add to Home Screen: Android/desktop Chrome fire beforeinstallprompt; iOS
   // Safari has no prompt API, so the menu item explains the Share-sheet step.
+  var _essIsIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  function _essShowInstall(show) {
+    ['m-install', 'login-install'].forEach(function(id) { var b = document.getElementById(id); if (b) b.hidden = !show; });
+  }
   window.addEventListener('beforeinstallprompt', function(e) {
     e.preventDefault();
     _essInstallEvt = e;
-    var b = document.getElementById('m-install');
-    if (b) b.hidden = false;
+    _essShowInstall(true);
   });
+  window.addEventListener('appinstalled', function() { _essInstallEvt = null; _essShowInstall(false); });
   function essInstallApp() {
     if (_essInstallEvt) {
       _essInstallEvt.prompt();
+      _essInstallEvt.userChoice.then(function(c) { if (c && c.outcome === 'accepted') _essShowInstall(false); });
       _essInstallEvt = null;
-      var b = document.getElementById('m-install');
-      if (b) b.hidden = true;
-    } else {
-      essToast('Tap the Share button, then “Add to Home Screen”');
+      return;
     }
+    // No prompt available (iOS, or a browser without one): explain the manual step.
+    var msg = _essIsIOS
+      ? 'Tap the Share button, then “Add to Home Screen”.'
+      : 'Open your browser menu (⋮), then tap “Install app” or “Add to Home screen”.';
+    var help = document.getElementById('login-install-help');
+    var onLogin = document.getElementById('login-screen') && document.getElementById('login-screen').style.display !== 'none';
+    if (help && onLogin) { help.textContent = msg; help.hidden = false; }
+    else essToast(msg);
   }
   (function() {
-    var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
     var standalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
-    if (ios && !standalone) {
+    if (standalone) return;
+    // Login screen always offers it on phones (instructions if no prompt); the Me menu only on iOS or once prompted.
+    var login = document.getElementById('login-install');
+    if (login) login.hidden = false;
+    if (_essIsIOS) {
       var b = document.getElementById('m-install');
       if (b) b.hidden = false;
       _mSet('m-install-label', 'Add to Home Screen');

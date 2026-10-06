@@ -1,6 +1,8 @@
 import hashlib
 import json
 import re
+import threading
+from contextvars import ContextVar
 from datetime import date as _date, timedelta
 from decimal import Decimal
 from typing import Any
@@ -58,6 +60,15 @@ from app.models import (
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
+_build_locks: dict[str, threading.Lock] = {}
+_build_locks_guard = threading.Lock()
+
+
+def _build_lock(key: str) -> threading.Lock:
+    with _build_locks_guard:
+        return _build_locks.setdefault(key, threading.Lock())
+
+
 def _cached_or_build(key: str, fresh_ttl: int, build_fn) -> dict[str, Any]:
     """Fresh cache hit -> return immediately. Otherwise call build_fn(); on
     success, cache (with a 24h staleness safety net, see
@@ -76,6 +87,18 @@ def _cached_or_build(key: str, fresh_ttl: int, build_fn) -> dict[str, Any]:
     data, is_fresh = cache.get_with_staleness(key, fresh_ttl)
     if is_fresh:
         return data
+    if not cache.available():
+        return _build_and_cache(key, data, build_fn)
+    # One rebuild per key at a time; concurrent callers wait and reuse it (no cold-cache stampede).
+    with _build_lock(key):
+        data, is_fresh = cache.get_with_staleness(key, fresh_ttl)
+        if is_fresh:
+            return data
+        return _build_and_cache(key, data, build_fn)
+
+
+def _build_and_cache(key: str, data, build_fn) -> dict[str, Any]:
+    memo_token = _payload_memo.set({})
     try:
         result = build_fn()
     except (SQLATimeoutError, SQLAOperationalError):
@@ -84,6 +107,8 @@ def _cached_or_build(key: str, fresh_ttl: int, build_fn) -> dict[str, Any]:
             stale["stale"] = True
             return stale
         raise
+    finally:
+        _payload_memo.reset(memo_token)
     cache.set_with_staleness(key, result)
     return result
 
@@ -305,6 +330,7 @@ def _build_dashboard(db: Session, company_id: str, branch_id: str | None = None)
     }
     status = invoice_status(db, company_id, app_sales, branch_id)
     pur_summary = _purchase_summary(db, company_id, branch_id)
+    pur_summary["cost_of_sales"] = amount(_cost_of_sales(db, company_id, branch_id, money(pur_summary["net"])))
     hr_snapshot = _hr_dashboard_snapshot(db, company_id, app_counts)
     return {
         "kpis": {
@@ -391,24 +417,26 @@ def app_data_counts(db: Session, company_id: str) -> dict[str, int]:
     return {collection: int(total or 0) for collection, total in rows}
 
 
+# Within one report/dashboard build each collection is read and parsed once (see _cached_or_build).
+_payload_memo: ContextVar[dict | None] = ContextVar("report_payload_memo", default=None)
+
+
 def app_data_payloads(db: Session, company_id: str, collection: str) -> list[dict[str, Any]]:
-    rows = (
-        db.query(AppDataRecord.payload)
-        .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == collection)
-        .all()
-    )
-    payloads: list[dict[str, Any]] = []
-    for (payload,) in rows:
-        try:
-            data = json.loads(payload or "{}")
-        except (TypeError, json.JSONDecodeError):
-            continue
-        if isinstance(data, dict):
-            payloads.append(data)
-    return payloads
+    return [row for row, _ in app_data_payloads_with_branch(db, company_id, collection)]
 
 
 def app_data_payloads_with_branch(db: Session, company_id: str, collection: str) -> list[tuple[dict[str, Any], str | None]]:
+    memo = _payload_memo.get()
+    if memo is None:
+        return _load_payloads_with_branch(db, company_id, collection)
+    key = (company_id, collection)
+    if key not in memo:
+        memo[key] = _load_payloads_with_branch(db, company_id, collection)
+    # Callers may change the dicts they get, so each gets its own copies.
+    return [(dict(row), branch_id) for row, branch_id in memo[key]]
+
+
+def _load_payloads_with_branch(db: Session, company_id: str, collection: str) -> list[tuple[dict[str, Any], str | None]]:
     """Same as app_data_payloads() but also returns each row's AppDataRecord.branch_id
     (server-stamped at write time, see app_data.py — NULL for records saved by an
     admin/User principal rather than a branch-scoped Employee/Branch login)."""
@@ -1080,21 +1108,29 @@ def _cost_center_breakdown(db: Session, company_id: str, branch_id: str | None) 
     "Unassigned" rather than dropped, so totals here still reconcile to the
     real GL and a company that hasn't adopted cost centres yet still gets a
     truthful (if unsegmented) answer instead of an empty report."""
+    memo = _payload_memo.get()
+    memo_key = ("cost_centers", company_id, branch_id)
+    if memo is not None and memo_key in memo:
+        return [dict(r) for r in memo[memo_key]]
     accounts_by_id = {a.id: a for a in db.query(Account).filter(Account.company_id == company_id).all()}
-    query = db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == company_id)
+    # Summed per cost centre and account in SQL rather than loading every GL line.
+    query = db.query(
+        GeneralLedgerEntry.cost_center, GeneralLedgerEntry.account_id,
+        func.coalesce(func.sum(GeneralLedgerEntry.debit), 0), func.coalesce(func.sum(GeneralLedgerEntry.credit), 0),
+    ).filter(GeneralLedgerEntry.company_id == company_id)
     if branch_id:
         query = query.filter((GeneralLedgerEntry.branch_id == branch_id) | (GeneralLedgerEntry.branch_id.is_(None)))
     buckets: dict[str, dict[str, Decimal]] = {}
-    for row in query.all():
-        account = accounts_by_id.get(row.account_id)
+    for cost_center, account_id, debit, credit in query.group_by(GeneralLedgerEntry.cost_center, GeneralLedgerEntry.account_id).all():
+        account = accounts_by_id.get(account_id)
         if not account or account.is_group:
             continue
-        key = (row.cost_center or "").strip() or "Unassigned"
+        key = (cost_center or "").strip() or "Unassigned"
         bucket = buckets.setdefault(key, {"revenue": Decimal("0.00"), "expense": Decimal("0.00")})
         if account.type in _REVENUE_ACCOUNT_TYPES:
-            bucket["revenue"] += money(row.credit) - money(row.debit)
+            bucket["revenue"] += money(credit) - money(debit)
         elif account.type in _EXPENSE_ACCOUNT_TYPES:
-            bucket["expense"] += money(row.debit) - money(row.credit)
+            bucket["expense"] += money(debit) - money(credit)
     # Company-wide totals, for each center's SHARE of total revenue/expense
     # alongside its own margin — margin_pct alone doesn't tell a reader
     # whether a high-margin center is a small side operation or the bulk of
@@ -1116,6 +1152,8 @@ def _cost_center_breakdown(db: Session, company_id: str, branch_id: str | None) 
             "expense_pct_of_total": amount((expense / total_expense * Decimal("100")).quantize(Decimal("0.01")) if total_expense else Decimal("0.00")),
         })
     result.sort(key=lambda r: Decimal(r["profit"]), reverse=True)
+    if memo is not None:
+        memo[memo_key] = [dict(r) for r in result]
     return result
 
 
@@ -1227,6 +1265,23 @@ def _profitability_analysis(
     }
 
 
+def _cost_of_sales(db: Session, company_id: str, branch_id: str | None, purchases_net: Decimal) -> Decimal:
+    """Purchases less the increase in 1200 Inventory. Under perpetual inventory stock purchases sit
+    in Inventory until sold, so this equals Cost of Goods Sold; periodic companies expense purchases."""
+    row = db.query(Company.stock_mode, Company.inventory_accounting).filter(Company.id == company_id).first()
+    if not row or row[0] == "without_stock" or (row[1] or "periodic") != "perpetual":
+        return purchases_net
+    query = (
+        db.query(func.coalesce(func.sum(JournalLine.debit - JournalLine.credit), 0))
+        .join(JournalEntry, JournalEntry.id == JournalLine.journal_id)
+        .join(Account, Account.id == JournalLine.account_id)
+        .filter(JournalEntry.company_id == company_id, JournalEntry.status == "posted", Account.code == "1200")
+    )
+    if branch_id:
+        query = query.filter((JournalEntry.branch_id == branch_id) | (JournalEntry.branch_id.is_(None)))
+    return money(purchases_net - money(query.scalar()))
+
+
 def _manual_journal_expenses(db: Session, company_id: str, branch_id: str | None = None) -> Decimal:
     """Expense-account debits from hand-posted vouchers, which no other P&L
     source sees. Payroll-run journals (PAY-JE-...) are excluded because
@@ -1306,7 +1361,8 @@ def _build_summary(db: Session, company_id: str, branch_id: str | None = None) -
     app_expenses = app_data_payloads(db, company_id, "expenses")
     expenses += sum((record_amount(row, "subtotal", "net_amount", "total", "amount") for row in app_expenses), Decimal("0.00"))
     operating_expenses = expenses + payroll
-    gross_profit = revenue - purchases
+    cost_of_sales = _cost_of_sales(db, company_id, branch_id, purchases)
+    gross_profit = revenue - cost_of_sales
     net_profit = gross_profit - operating_expenses
     gross_margin = (gross_profit / revenue * Decimal("100")).quantize(Decimal("0.01")) if revenue else Decimal("0.00")
     # TaxLine has no branch_id column, so the DB-sourced portion of the VAT
@@ -1390,7 +1446,7 @@ def _build_summary(db: Session, company_id: str, branch_id: str | None = None) -
             "revenue": amount(revenue),
             "other_income": "0.00",
             "total_revenue": amount(revenue),
-            "cogs": amount(purchases),
+            "cogs": amount(cost_of_sales),
             "gross_profit": amount(gross_profit),
             "payroll": amount(payroll),
             "other_expenses": amount(expenses),
@@ -1398,7 +1454,7 @@ def _build_summary(db: Session, company_id: str, branch_id: str | None = None) -
             "net_profit": amount(net_profit),
             "ytd": {
                 "revenue": amount(revenue),
-                "cogs": amount(purchases),
+                "cogs": amount(cost_of_sales),
                 "gross_profit": amount(gross_profit),
                 "expenses": amount(operating_expenses),
                 "net_profit": amount(net_profit),

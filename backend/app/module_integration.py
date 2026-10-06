@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.accounting_posting import post_source_transaction
+from app.accounting_posting import PostingError, build_journal, post_source_transaction, repost_source_transaction
 from app.models import (
     Account,
     Company,
@@ -16,6 +16,7 @@ from app.models import (
     PostingJob,
     SourceTransaction,
     SourceTransactionLine,
+    TaxLine,
 )
 
 
@@ -232,6 +233,36 @@ def upsert_source_transaction(
     return tx
 
 
+def _posting_is_stale(db: Session, tx: SourceTransaction) -> bool:
+    """True when an already-posted transaction was edited: the net of its journals (and their
+    reversals) or its VAT line no longer matches what the current amounts would post."""
+    db.flush()
+    db.expire(tx, ["lines"])
+    try:
+        expected = build_journal(db, tx)
+    except PostingError:
+        return False  # can't build a replacement (e.g. missing account): keep what's posted
+    want: dict[str, Decimal] = {}
+    for line in expected.lines:
+        want[line.account_id] = want.get(line.account_id, Decimal("0")) + money(line.debit) - money(line.credit)
+    for obj in [expected, *expected.lines]:  # comparison only: never persist this draft
+        if obj in db:
+            db.expunge(obj)
+    journal_ids = [row[0] for row in db.query(JournalEntry.id).filter(
+        JournalEntry.company_id == tx.company_id, JournalEntry.source_module == tx.module, JournalEntry.source_id == tx.id).all()]
+    reversal_ids = [row[0] for row in db.query(JournalEntry.id).filter(
+        JournalEntry.company_id == tx.company_id, JournalEntry.source_module == "reversal",
+        JournalEntry.source_id.in_(journal_ids)).all()] if journal_ids else []
+    have: dict[str, Decimal] = {}
+    for line in db.query(JournalLine).filter(JournalLine.journal_id.in_(journal_ids + reversal_ids)).all():
+        have[line.account_id] = have.get(line.account_id, Decimal("0")) + money(line.debit) - money(line.credit)
+    nonzero = lambda d: {k: v for k, v in d.items() if v}
+    if nonzero(want) != nonzero(have):
+        return True
+    tax = db.query(TaxLine).filter(TaxLine.company_id == tx.company_id, TaxLine.source_id == tx.id).first()
+    return bool(tax) and (money(tax.taxable_amount) != money(tx.subtotal) or money(tax.tax_amount) != money(tx.vat))
+
+
 def approve_and_post_source(db: Session, tx: SourceTransaction, user_id: str | None) -> PostingJob:
     existing_job = (
         db.query(PostingJob)
@@ -239,6 +270,10 @@ def approve_and_post_source(db: Session, tx: SourceTransaction, user_id: str | N
         .first()
     )
     if existing_job:
+        # Edited after posting: the journal/GL/VAT used to stay at the original amounts until
+        # someone pressed "Update Ledger". Same reversal + fresh journal, now on save.
+        if _posting_is_stale(db, tx):
+            repost_source_transaction(db, tx, user_id)
         tx.status = "posted"
         return existing_job
     tx.status = "approved"

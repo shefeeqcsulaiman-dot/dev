@@ -13,8 +13,8 @@ from sqlalchemy.orm import Session, joinedload
 from app.auth_principal import resolve_active_branch
 from app.database import get_db
 from app.department_scope import scope_employee_query
-from app.dependencies import Principal, get_current_user, require_module, require_principal_permission
-from app.models import AppDataRecord, AuditLog, Employee, PayrollItem, PayrollRun, User, WpsBatch
+from app.dependencies import Principal, require_module, require_principal_permission
+from app.models import AppDataRecord, AuditLog, Company, Employee, PayrollItem, PayrollRun, WpsBatch
 from app.schemas import EmployeeOut, PayrollGenerate, PayrollRunOut, WpsBatchOut
 
 
@@ -300,12 +300,27 @@ def list_runs(
     return scoped
 
 
+def _payroll_operator(principal: Principal = Depends(require_principal_permission("payroll:run_payroll", "payroll:edit"))) -> Principal:
+    """Admin or a role allowed to run payroll. Runs pay the whole company/branch, so department-scoped roles can't."""
+    if principal.is_dept_scoped:
+        raise HTTPException(status_code=403, detail="Payroll runs cover every department, so a department-limited role can't run them")
+    return principal
+
+
+def _actor(principal: Principal) -> dict:
+    return {"user_id": principal.user.id} if principal.user else {"employee_id": principal.employee.id if principal.employee else None}
+
+
 @router.post("/generate", response_model=PayrollRunOut, status_code=201)
 def generate_payroll(
     payload: PayrollGenerate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(_payroll_operator),
 ) -> PayrollRun:
+    if not principal.can_cross_branch("hrms"):
+        own = resolve_active_branch(principal, payload.branch_id)
+        if own:
+            payload.branch_id = own
     # A branch-scoped run and a company-wide run (branch_id=None) for the
     # same period used to be treated as non-conflicting (different
     # branch_id), even though a company-wide run's employee_query below has
@@ -318,32 +333,32 @@ def generate_payroll(
     # re-cover every existing branch-scoped run).
     if payload.period > datetime.now(timezone.utc).strftime("%Y-%m"):
         raise HTTPException(status_code=422, detail="Cannot generate payroll for a future period")
-    conflict_filters = [PayrollRun.company_id == current_user.company_id, PayrollRun.period == payload.period]
+    conflict_filters = [PayrollRun.company_id == principal.company_id, PayrollRun.period == payload.period]
     if payload.branch_id:
         conflict_filters.append(or_(PayrollRun.branch_id.is_(None), PayrollRun.branch_id == payload.branch_id))
     existing = db.query(PayrollRun).filter(*conflict_filters).first()
     if existing:
         raise HTTPException(status_code=409, detail=f"Payroll run for {payload.period} already exists")
 
-    employee_query = db.query(Employee).filter(Employee.company_id == current_user.company_id, Employee.status == "active")
+    employee_query = db.query(Employee).filter(Employee.company_id == principal.company_id, Employee.status == "active")
     if payload.branch_id:
         employee_query = employee_query.filter(Employee.branch_id == payload.branch_id)
     employees = employee_query.all()
     if not employees:
         raise HTTPException(status_code=422, detail="No active employees found")
 
-    ot_hours_per_month = _ot_hours_per_month(db, current_user.company_id)
-    run = PayrollRun(company_id=current_user.company_id, branch_id=payload.branch_id, period=payload.period, status="draft")
+    ot_hours_per_month = _ot_hours_per_month(db, principal.company_id)
+    run = PayrollRun(company_id=principal.company_id, branch_id=payload.branch_id, period=payload.period, status="draft")
     gross_total = Decimal("0.00")
     deductions_total = Decimal("0.00")
     net_total = Decimal("0.00")
     for employee in employees:
         allowances = money(employee.housing_allowance) + money(employee.transport_allowance) + money(employee.other_allowance)
-        overtime = _overtime_pay(db, current_user.company_id, employee.employee_no, employee.full_name, payload.period, employee.basic_salary, ot_hours_per_month)
+        overtime = _overtime_pay(db, principal.company_id, employee.employee_no, employee.full_name, payload.period, employee.basic_salary, ot_hours_per_month)
         # Loan/advance balances are only drained when the run is approved.
-        loan_deduction = _employee_loan_deductions(db, current_user.company_id, employee.employee_no, employee.full_name, payload.period, apply=False)
-        advance_deduction = _salary_advance_deductions(db, current_user.company_id, employee.employee_no, employee.full_name, payload.period, apply=False)
-        adj_add, adj_ded = _payroll_adjustments(db, current_user.company_id, employee.employee_no, employee.full_name, payload.period)
+        loan_deduction = _employee_loan_deductions(db, principal.company_id, employee.employee_no, employee.full_name, payload.period, apply=False)
+        advance_deduction = _salary_advance_deductions(db, principal.company_id, employee.employee_no, employee.full_name, payload.period, apply=False)
+        adj_add, adj_ded = _payroll_adjustments(db, principal.company_id, employee.employee_no, employee.full_name, payload.period)
         overtime += adj_add
         deductions = loan_deduction + advance_deduction + adj_ded
         net = employee.basic_salary + allowances + overtime - deductions
@@ -383,7 +398,7 @@ def generate_payroll(
     return run
 
 
-def _load_run(db: Session, run_id: str, company_id: str) -> PayrollRun:
+def _load_run(db: Session, run_id: str, company_id: str, principal: Principal | None = None) -> PayrollRun:
     run = (
         db.query(PayrollRun)
         .options(joinedload(PayrollRun.items).joinedload(PayrollItem.employee))
@@ -392,6 +407,11 @@ def _load_run(db: Session, run_id: str, company_id: str) -> PayrollRun:
     )
     if not run:
         raise HTTPException(status_code=404, detail="Payroll run not found")
+    # A branch-locked login only handles its own branch's runs.
+    if principal is not None and not principal.can_cross_branch("hrms"):
+        own = resolve_active_branch(principal, None)
+        if own and run.branch_id != own:
+            raise HTTPException(status_code=404, detail="Payroll run not found")
     return run
 
 
@@ -399,19 +419,19 @@ def _load_run(db: Session, run_id: str, company_id: str) -> PayrollRun:
 def approve_payroll_run(
     run_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(_payroll_operator),
 ) -> PayrollRun:
     """Draft -> approved. Only now are loan/advance balances drained; the
     run's stored deductions were computed read-only at generation."""
-    run = _load_run(db, run_id, current_user.company_id)
+    run = _load_run(db, run_id, principal.company_id, principal)
     if run.status != "draft":
         raise HTTPException(status_code=409, detail=f"Payroll run is already {run.status}")
     for item in run.items:
         emp = item.employee
-        _employee_loan_deductions(db, current_user.company_id, emp.employee_no, emp.full_name, run.period)
-        _salary_advance_deductions(db, current_user.company_id, emp.employee_no, emp.full_name, run.period)
+        _employee_loan_deductions(db, principal.company_id, emp.employee_no, emp.full_name, run.period)
+        _salary_advance_deductions(db, principal.company_id, emp.employee_no, emp.full_name, run.period)
     run.status = "approved"
-    db.add(AuditLog(company_id=current_user.company_id, user_id=current_user.id, module="payroll",
+    db.add(AuditLog(company_id=principal.company_id, **_actor(principal), module="payroll",
                     action="payroll_approved", record_id=run.id, detail=f"Payroll {run.period} approved"))
     db.commit()
     db.refresh(run)
@@ -422,9 +442,9 @@ def approve_payroll_run(
 def delete_draft_payroll_run(
     run_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(_payroll_operator),
 ) -> None:
-    run = _load_run(db, run_id, current_user.company_id)
+    run = _load_run(db, run_id, principal.company_id, principal)
     if run.status != "draft":
         raise HTTPException(status_code=409, detail="Only a draft payroll run can be deleted")
     db.query(WpsBatch).filter(WpsBatch.payroll_run_id == run.id).delete(synchronize_session=False)
@@ -439,10 +459,10 @@ def payroll_run_sif(
     file_seq: str = Query(default="SIF-001"),
     pay_date: str = Query(default=""),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(_payroll_operator),
 ) -> Response:
     """CBUAE SIF built from the stored PayrollItems, never from client input."""
-    run = _load_run(db, run_id, current_user.company_id)
+    run = _load_run(db, run_id, principal.company_id, principal)
     period_digits = run.period.replace("-", "")
     transfer = re.sub(r"\D", "", pay_date) or datetime.now(timezone.utc).strftime("%Y%m%d")
     days = calendar.monthrange(int(run.period[:4]), int(run.period[5:7]))[1]
@@ -473,16 +493,10 @@ def payroll_run_sif(
 def create_wps_batch(
     run_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    principal: Principal = Depends(_payroll_operator),
 ) -> WpsBatch:
-    run = (
-        db.query(PayrollRun)
-        .options(joinedload(PayrollRun.items).joinedload(PayrollItem.employee))
-        .filter(PayrollRun.id == run_id, PayrollRun.company_id == current_user.company_id)
-        .first()
-    )
-    if not run:
-        raise HTTPException(status_code=404, detail="Payroll run not found")
+    run = _load_run(db, run_id, principal.company_id, principal)
+    currency = db.query(Company.currency).filter(Company.id == principal.company_id).scalar()
     rows = ["EDR,EmployeeNo,Name,IBAN,NetPay"]
     has_error = False
     excluded_total = Decimal("0.00")
@@ -505,7 +519,7 @@ def create_wps_batch(
             continue
         rows.append(f"EDR,{employee.employee_no},{employee.full_name},{employee.iban},{item.net_pay:.2f}")
     batch = WpsBatch(
-        company_id=current_user.company_id,
+        company_id=principal.company_id,
         payroll_run_id=run.id,
         batch_number=f"WPS-{run.period}-{run.id[:8]}",
         status="blocked" if has_error else "ready",
@@ -514,12 +528,12 @@ def create_wps_batch(
     db.add(batch)
     if has_error:
         db.add(AuditLog(
-            company_id=current_user.company_id,
-            user_id=current_user.id,
+            company_id=principal.company_id,
+            **_actor(principal),
             module="payroll",
             action="wps_batch_excluded_employees",
             record_id=run.id,
-            detail=f"AED {excluded_total:.2f} for {len(excluded_names)} employee(s) missing IBAN, not in this WPS file: {'; '.join(excluded_names)}",
+            detail=f"{currency or 'AED'} {excluded_total:.2f} for {len(excluded_names)} employee(s) missing IBAN, not in this WPS file: {'; '.join(excluded_names)}",
         ))
     db.commit()
     db.refresh(batch)

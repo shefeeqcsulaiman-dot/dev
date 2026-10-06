@@ -2,7 +2,7 @@ import json
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -210,6 +210,9 @@ class LeaveRequestOut(BaseModel):
     reason: str | None
     status: str
     created_at: str | None
+    cancelled_at: str | None = None
+    cancelled_by: str | None = None
+    cancel_reason: str | None = None
 
 
 def _out(r: LeaveRequest, emp: Employee) -> LeaveRequestOut:
@@ -218,7 +221,13 @@ def _out(r: LeaveRequest, emp: Employee) -> LeaveRequestOut:
         leave_type=r.leave_type, start_date=r.start_date, end_date=r.end_date,
         days=r.days, reason=r.reason, status=r.status,
         created_at=r.created_at.isoformat() if r.created_at else None,
+        cancelled_at=r.cancelled_at.isoformat() if r.cancelled_at else None,
+        cancelled_by=r.cancelled_by, cancel_reason=r.cancel_reason,
     )
+
+
+class LeaveCancelIn(BaseModel):
+    reason: str | None = Field(default=None, max_length=300)
 
 
 @router.get("/requests", response_model=list[LeaveRequestOut])
@@ -438,6 +447,29 @@ def reject_leave_request(
     return _out(req, emp)
 
 
+@router.post("/requests/{request_id}/cancel", response_model=LeaveRequestOut)
+def cancel_leave_request(
+    request_id: str,
+    payload: LeaveCancelIn | None = None,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("leave:edit")),
+) -> LeaveRequestOut:
+    """Withdraw a pending request or cancel approved leave (plans changed, employee
+    came back early). Kept as status "cancelled" with who/when/why, never deleted;
+    balances only count approved leave, so the days return to the employee."""
+    req = _get_request(db, request_id, principal)
+    if req.status not in ("pending", "approved"):
+        raise HTTPException(status_code=400, detail=f"Only pending or approved leave can be cancelled (this one is {req.status})")
+    req.status = "cancelled"
+    req.cancelled_at = datetime.now(timezone.utc)
+    req.cancelled_by = principal.display_name or ("HR" if principal.kind == "user" else "HRMS user")
+    req.cancel_reason = ((payload.reason if payload else None) or "").strip()[:300] or None
+    db.add(req)
+    db.commit()
+    emp = db.query(Employee).filter(Employee.id == req.employee_id).first()
+    return _out(req, emp)
+
+
 @router.delete("/requests/{request_id}", status_code=204, response_model=None)
 def delete_leave_request(
     request_id: str,
@@ -457,7 +489,7 @@ def delete_leave_request(
     if req.status == "approved":
         raise HTTPException(
             status_code=400,
-            detail="An approved leave request cannot be deleted directly — reject or reverse it first so the entitlement change stays on record.",
+            detail="An approved leave request cannot be deleted directly — cancel it instead so the change stays on record.",
         )
     db.delete(req)
     db.commit()

@@ -56,7 +56,7 @@ def test_cancel_pending_leave_marks_cancelled_and_keeps_history(client, db, auth
     assert again.status_code == 201, again.text
 
 
-def test_cannot_cancel_approved_or_someone_elses_leave(client, db, auth_headers):
+def test_cannot_cancel_started_approved_or_someone_elses_leave(client, db, auth_headers):
     cid = _company_id(client, auth_headers)
     emp_a, ha = _ess_login(client, db, auth_headers, cid, "ESSREQ-L2", "essreq.l2")
     _emp_b, hb = _ess_login(client, db, auth_headers, cid, "ESSREQ-L3", "essreq.l3")
@@ -66,12 +66,15 @@ def test_cannot_cancel_approved_or_someone_elses_leave(client, db, auth_headers)
     # another employee can't touch it (404, not 403 -- don't reveal it exists)
     assert client.post(f"/api/v1/ess/leave/{leave_id}/cancel", headers=hb).status_code == 404
 
+    # Approved leave that has already started is HR's to cancel (upcoming approved
+    # leave can be cancelled by the employee -- see test_leave_cancel.py).
     row = db.query(LeaveRequest).filter(LeaveRequest.id == leave_id).one()
     row.status = "approved"
+    row.start_date = (date.today() - timedelta(days=1)).isoformat()
     db.commit()
     r = client.post(f"/api/v1/ess/leave/{leave_id}/cancel", headers=ha)
     assert r.status_code == 409
-    assert "approved" in r.json()["detail"]
+    assert "started" in r.json()["detail"]
 
 
 # ── own task status ──────────────────────────────────────────────────────────
@@ -99,6 +102,22 @@ def test_employee_can_update_status_of_own_task_only(client, db, auth_headers):
     # someone else's task, and an invalid status
     assert client.patch("/api/v1/ess/tasks/TASK-ESS-B", headers=ha, json={"status": "done"}).status_code == 404
     assert client.patch("/api/v1/ess/tasks/TASK-ESS-A", headers=ha, json={"status": "bogus"}).status_code == 422
+
+
+def test_task_progress_follows_ess_status(client, db, auth_headers):
+    cid = _company_id(client, auth_headers)
+    emp, h = _ess_login(client, db, auth_headers, cid, "ESSREQ-T3", "essreq.t3")
+    r = client.post("/api/v1/app-data", headers=auth_headers, params={"action": "save"},
+                    json={"collection": "tasks", "record": {"id": "TASK-ESS-P", "title": "Audit shelf", "assigned_to": emp.id, "status": "progress", "progress": 40}})
+    assert r.status_code == 200, r.text
+
+    # Start/Back to To Do from an open task keeps the HR-set progress
+    assert client.patch("/api/v1/ess/tasks/TASK-ESS-P", headers=h, json={"status": "todo"}).json()["progress"] == 40
+    # Done is 100%, and reopening a Done task starts again at 0
+    assert client.patch("/api/v1/ess/tasks/TASK-ESS-P", headers=h, json={"status": "done"}).json()["progress"] == 100
+    assert client.patch("/api/v1/ess/tasks/TASK-ESS-P", headers=h, json={"status": "todo"}).json()["progress"] == 0
+    stored = next(t for t in _records(db, cid, "tasks") if t["id"] == "TASK-ESS-P")
+    assert (stored["status"], stored["progress"]) == ("todo", 0)
 
 
 # ── attendance corrections ───────────────────────────────────────────────────

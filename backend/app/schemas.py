@@ -1,5 +1,4 @@
 import json
-import datetime as _dt
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal
@@ -49,6 +48,8 @@ class RegisterRequest(BaseModel):
 class CompanyOut(BaseModel):
     id: str
     name: str
+    stock_mode: str | None = "with_stock"
+    inventory_accounting: str | None = "periodic"
     trade_name: str | None = None
     trn: str | None = None
     country: str
@@ -98,6 +99,9 @@ class CompanyUpdate(BaseModel):
     country: str | None = None
     currency: str | None = None
     vat_rate: Decimal | None = None
+    # Only Super Admin's PATCH reads this (companies.py ignores it).
+    stock_mode: Literal["with_stock", "without_stock"] | None = None
+    inventory_accounting: Literal["perpetual", "periodic"] | None = None
     emirate: str | None = None
     business_type: str | None = None
     business_activity: str | None = None
@@ -1022,67 +1026,8 @@ class DomainEventOut(BaseModel):
 
 class AIAssistRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
-    # "ar" asks for the answer in Arabic (e.g. a question spoken in Arabic)
+    # "ar" when the question was spoken/typed in Arabic -- the answer is read aloud in that language.
     answer_lang: Literal["en", "ar"] | None = None
-
-
-class VoiceTarget(BaseModel):
-    id: str = Field(min_length=1, max_length=40)
-    kind: Literal["page", "tab", "action", "query"]
-    label: str = Field(min_length=1, max_length=160)
-    alt: str | None = Field(default=None, max_length=160)
-
-
-class VoiceIntentRequest(BaseModel):
-    transcript: str = Field(min_length=1, max_length=500)
-    lang: Literal["en", "ar"] | None = None
-    targets: list[VoiceTarget] = Field(min_length=1, max_length=400)
-
-
-class VoiceIntentResponse(BaseModel):
-    intent: Literal["navigate", "open_form", "search", "answer", "query", "unknown"]
-    target: str | None = None
-    query: str | None = None
-    confidence: int = 0
-    alternatives: list[str] = []
-    source: Literal["rules", "llm"] = "rules"
-
-
-class VoiceSettings(BaseModel):
-    enabled: bool = True
-    default_lang: Literal["", "en-US", "ar-AE"] = ""
-    cloud_transcription: bool = True
-    daily_transcriptions: int = Field(default=200, ge=0, le=10000)
-
-
-class VoiceDraftRequest(BaseModel):
-    form: Literal["expense", "purchase", "sales_invoice", "customer", "vendor", "pos_cart"]
-    transcript: str = Field(min_length=1, max_length=1000)
-    lang: Literal["en", "ar"] | None = None
-    # Options the form already offers (categories, suppliers, products...), for name matching.
-    choices: dict[str, list[str]] = Field(default_factory=dict)
-    today: _dt.date | None = None
-
-    @field_validator("choices")
-    @classmethod
-    def _cap_choices(cls, value: dict[str, list[str]]) -> dict[str, list[str]]:
-        if len(value) > 10:
-            raise ValueError("too many choice lists")
-        return {str(k)[:40]: [str(o)[:160] for o in opts[:1000]] for k, opts in value.items()}
-
-
-class VoiceDraftLine(BaseModel):
-    product: str
-    quantity: str | None = None
-    price: str | None = None
-    matched: Literal["yes", "no"] = "no"
-
-
-class VoiceDraftResponse(BaseModel):
-    form: str
-    fields: dict[str, str] = {}
-    lines: list[VoiceDraftLine] = []
-    unmatched: dict[str, str] = {}
 
 
 class AITransactionValidationRequest(BaseModel):

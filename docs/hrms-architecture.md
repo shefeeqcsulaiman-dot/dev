@@ -2,7 +2,7 @@
 
 This document describes the HRMS module in detail. It complements `docs/architecture.md` §15–17 and §22 (HR/Rota/Payroll/WPS), which cover HRMS at whole-system level. This file is the authoritative HRMS-specific reference.
 
-HRMS is served standalone at `https://dev.etaxflow.com/hrms` (`frontend/public/taxflow/hrms.html`), separate from the main TaxFlow shell, with its own sidebar/topbar but sharing `styles.css`, auth, and the FastAPI backend.
+HRMS is served standalone at `https://app.etaxflow.com/hrms` (`frontend/public/taxflow/hrms.html`), separate from the main TaxFlow shell, with its own sidebar/topbar but sharing `styles.css`, auth, and the FastAPI backend.
 
 ## 1. Core Architectural Fact: Two-Tier Persistence
 

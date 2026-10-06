@@ -5,9 +5,14 @@ from app.models import Company, User
 from tests.test_module_permissions import _make_restricted_company
 
 
+def _today():
+    # The server dates renewals in UTC; the local date differs around midnight.
+    return datetime.now(timezone.utc).date()
+
+
 def _set_expiry(db, company_id, days_from_today):
     c = db.query(Company).filter(Company.id == company_id).one()
-    c.subscription_expires_at = None if days_from_today is None else (date.today() + timedelta(days=days_from_today)).isoformat()
+    c.subscription_expires_at = None if days_from_today is None else (_today() + timedelta(days=days_from_today)).isoformat()
     db.commit()
 
 
@@ -72,8 +77,8 @@ def test_bulk_extend_uses_future_expiry_or_today(client, db):
     assert r.json()["extended"] == 2
     db.expire_all()
     got = {c.id: c.subscription_expires_at for c in db.query(Company).filter(Company.id.in_([a, b])).all()}
-    assert got[a] == (date.today() + timedelta(days=40)).isoformat()
-    assert got[b] == (date.today() + timedelta(days=30)).isoformat()
+    assert got[a] == (_today() + timedelta(days=40)).isoformat()
+    assert got[b] == (_today() + timedelta(days=30)).isoformat()
 
 
 def test_bulk_extend_validates_and_requires_superadmin(client, db, auth_headers):

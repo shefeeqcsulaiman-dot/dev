@@ -37,6 +37,7 @@ from app.auth_principal import resolve_active_branch
 from app.department_scope import assert_employee_in_scope, scope_employee_query, scoped_employee_no_select, scoped_employee_nos
 from app.dependencies import Principal, get_current_user, require_module, require_principal_permission
 from app.limiter import limiter
+from app.rota_days import rota_break_seconds, rota_day_statuses
 from app.models import AppDataRecord, AttendanceDetail, BiometricDevice, Company, Employee, LeaveRequest, User
 from app.security import verify_password, hash_password
 
@@ -987,7 +988,9 @@ async def import_csv(
     Accepted columns (case-insensitive, order-independent):
       employee_id, employee_name, punch_time (YYYY-MM-DD HH:MM:SS), direction
     """
-    content = await file.read()
+    content = await file.read(5 * 1024 * 1024 + 1)
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="CSV file is too large (max 5 MB)")
     try:
         text = content.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -1401,11 +1404,26 @@ def attendance_today(
         }
         for emp_id in unique_employees
     ]
+    # Who the rota says isn't working that day (and who didn't punch anyway).
+    resolved_branch_id = branch_id if principal.can_cross_branch("attendance") else resolve_active_branch(principal, branch_id)
+    staff_query = db.query(Employee).filter(Employee.company_id == principal.company_id, Employee.status == "active")
+    if resolved_branch_id:
+        staff_query = staff_query.filter((Employee.branch_id == resolved_branch_id) | (Employee.branch_id.is_(None)))
+    staff = scope_employee_query(staff_query, principal).all()
+    day = datetime.strptime(today, "%Y-%m-%d").date()
+    rota = rota_day_statuses(db, principal.company_id, [e.employee_no for e in staff], day, day)
+    present_set = set(unique_employees)
+    off = [
+        {"employee_id": e.employee_no, "employee_name": e.full_name, "kind": rota[(e.employee_no, today)]}
+        for e in staff
+        if (e.employee_no, today) in rota and e.employee_no not in present_set
+    ]
     return {
         "date": today,
         "present_count": len(unique_employees),
         "employee_ids": unique_employees,
         "employees": employees,
+        "off": off,
     }
 
 
@@ -1517,6 +1535,20 @@ def _ot_after_cooloff(total_seconds: int, standard_seconds: int, cooloff_seconds
     return max(0, total_seconds - standard_seconds - cooloff_seconds)
 
 
+def _paid_seconds(row: Any, break_seconds: int) -> int:
+    """Time worked less the shift's unpaid break; time already clocked out between sessions counts toward it."""
+    total = int(getattr(row, "total_seconds", 0) or 0)
+    if not break_seconds:
+        return total
+    gaps, prev_out = 0, None
+    for n in range(1, 6):
+        cin, cout = getattr(row, f"clock_in_{n}", None), getattr(row, f"clock_out_{n}", None)
+        if prev_out and cin:
+            gaps += max(0, int((cin - prev_out).total_seconds()))
+        prev_out = cout
+    return max(0, total - max(0, break_seconds - gaps))
+
+
 def _late_rules(db: Session, company_id: str) -> tuple[str, int]:
     """(standard_start_time "HH:MM", grace_minutes) for the Late Coming
     Report -- a separate hr_settings record from ot-rules-config (OT is
@@ -1589,16 +1621,18 @@ def overtime_eligibility_rows(db: Session, company_id: str, employees: list[Empl
             if who:
                 requests[(str(who), day)] = rec
 
+    breaks = rota_break_seconds(db, company_id, list(by_no), start, end)
     rows = []
     for d in details:
-        excess = d.total_seconds - standard_seconds
+        paid = _paid_seconds(d, breaks.get((d.employee_id, d.work_date), 0))
+        excess = paid - standard_seconds
         if excess <= 0:
             continue
         emp = by_no[d.employee_id]
         sessions = [(getattr(d, f"clock_in_{n}"), getattr(d, f"clock_out_{n}")) for n in range(1, 6)]
         first_in = next((i for i, _ in sessions if i), None)
         last_out = next((o for _, o in reversed(sessions) if o), None)
-        eligible_seconds = _ot_after_cooloff(d.total_seconds, standard_seconds, cooloff)
+        eligible_seconds = _ot_after_cooloff(paid, standard_seconds, cooloff)
         req = requests.get((emp.id, d.work_date)) or requests.get((emp.employee_no, d.work_date)) or requests.get((emp.full_name.strip().lower(), d.work_date))
         if eligible_seconds <= 0:
             eligibility = "Not eligible (within cool-off)"
@@ -1616,7 +1650,8 @@ def overtime_eligibility_rows(db: Session, company_id: str, employees: list[Empl
             "day_type": "weekend" if weekend_days is not None and dow in weekend_days else "working",
             "clock_in": (first_in + offset).strftime("%H:%M") if first_in else None,
             "clock_out": (last_out + offset).strftime("%H:%M") if last_out else None,
-            "worked": _format_duration_hm(d.total_seconds),
+            "worked": _format_duration_hm(paid),
+            "break": _format_duration_hm(d.total_seconds - paid) if d.total_seconds > paid else None,
             "standard": _format_duration_hm(standard_seconds),
             "extra": _format_duration_hm(excess),
             "eligible_ot": _format_duration_hm(eligible_seconds),
@@ -1725,6 +1760,7 @@ def attendance_monthly_report(
         AttendanceDetail.work_date,
         AttendanceDetail.total_seconds,
         AttendanceDetail.ot_seconds,
+        *[getattr(AttendanceDetail, f"clock_{k}_{n}") for n in range(1, 6) for k in ("in", "out")],
     ).filter(
         AttendanceDetail.company_id == principal.company_id,
         AttendanceDetail.employee_id.in_(emp_nos),
@@ -1748,15 +1784,17 @@ def attendance_monthly_report(
         LeaveRequest.start_date <= period_end.isoformat(),
         LeaveRequest.end_date >= start.isoformat(),
     ).all()
-    leave_days_by_emp: dict[str, int] = {}
+    leave_dates_by_emp: dict[str, set[str]] = {}
     for lr in leave_rows:
         lr_start = max(start, date.fromisoformat(lr.start_date))
         lr_end = min(period_end, date.fromisoformat(lr.end_date))
         d = lr_start
         while d <= lr_end:
             if d.isoformat() in working_day_set:
-                leave_days_by_emp[lr.employee_id] = leave_days_by_emp.get(lr.employee_id, 0) + 1
+                leave_dates_by_emp.setdefault(lr.employee_id, set()).add(d.isoformat())
             d += timedelta(days=1)
+    rota_status = rota_day_statuses(db, principal.company_id, emp_nos, start, period_end)
+    breaks = rota_break_seconds(db, principal.company_id, emp_nos, start, period_end)
 
     result = []
     for emp in employees:
@@ -1772,9 +1810,22 @@ def attendance_monthly_report(
         # was short), not (total_hours - working_days * standard_hours).
         standard_seconds = int(standard_hours * 3600)
         total_seconds_month = sum(row.total_seconds for row in days.values())
-        ot_seconds_month = sum(_ot_after_cooloff(row.total_seconds, standard_seconds, ot_cooloff) for row in days.values())
-        leave_days = leave_days_by_emp.get(emp.id, 0)
-        absent_days = max(0, len(working_days) - present_days - leave_days)
+        ot_seconds_month = sum(
+            _ot_after_cooloff(_paid_seconds(row, breaks.get((emp.employee_no, day), 0)), standard_seconds, ot_cooloff)
+            for day, row in days.items()
+        )
+        leave_set = set(leave_dates_by_emp.get(emp.id, set()))
+        off_days = 0
+        for iso in working_day_set:
+            if iso in days or iso in leave_set:
+                continue
+            kind = rota_status.get((emp.employee_no, iso))
+            if kind == "leave":
+                leave_set.add(iso)
+            elif kind in ("off", "holiday"):
+                off_days += 1  # rota day off: not a working day for this person
+        leave_days = len(leave_set)
+        absent_days = max(0, len(working_days) - present_days - leave_days - off_days)
         result.append({
             "employee_id": emp.id,
             "employee_no": emp.employee_no,
@@ -1783,6 +1834,7 @@ def attendance_monthly_report(
             "present_days": present_days,
             "absent_days": absent_days,
             "leave_days": leave_days,
+            "off_days": off_days,
             # "H:MM" (e.g. "168:30"), not decimal hours -- see
             # _format_duration_hm's docstring for why decimal hours here is
             # actively misleading, not just less readable.
@@ -2005,6 +2057,8 @@ def attendance_employee_daily(
         if re.match(r"^\d{4}-\d{2}-\d{2}$", raw_date):
             holiday_dates.add(raw_date)
 
+    rota_status = rota_day_statuses(db, principal.company_id, [emp.employee_no], start, last_day)
+    breaks = rota_break_seconds(db, principal.company_id, [emp.employee_no], start, last_day)
     days = []
     d = start
     while d <= last_day:
@@ -2050,7 +2104,7 @@ def attendance_employee_daily(
         elif has_punches:
             status = "present"
         else:
-            status = "absent"
+            status = rota_status.get((emp.employee_no, iso)) or "absent"
         is_absent = status == "absent"
 
         days.append({
@@ -2068,11 +2122,13 @@ def attendance_employee_daily(
             # "H:MM", not decimal hours -- see _format_duration_hm's
             # docstring: "8.95" looks like it could already be a time.
             "total_hours": _format_duration_hm(total_seconds_day),
-            "ot_hours": _format_duration_hm(_ot_after_cooloff(total_seconds_day, standard_seconds_day, ot_cooloff)) if has_punches else "0:00",
-            "under_hours": _format_duration_hm(max(0, standard_seconds_day - total_seconds_day)) if has_punches and not (is_weekend or is_leave or is_holiday) else "0:00",
+            "ot_hours": _format_duration_hm(_ot_after_cooloff(
+                _paid_seconds(detail_row, breaks.get((emp.employee_no, iso), 0)), standard_seconds_day, ot_cooloff,
+            )) if has_punches else "0:00",
+            "under_hours": _format_duration_hm(max(0, standard_seconds_day - _paid_seconds(detail_row, breaks.get((emp.employee_no, iso), 0)))) if has_punches and not (is_weekend or is_leave or is_holiday) else "0:00",
             "absent": "Yes" if is_absent else "",
             "sick": "Yes" if is_sick else "",
-            "holiday": "Yes" if is_holiday else "",
+            "holiday": "Yes" if is_holiday or status == "holiday" else "",
         })
         d += timedelta(days=1)
 

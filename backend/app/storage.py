@@ -1,4 +1,5 @@
 import os
+import shutil
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -70,6 +71,18 @@ def upload_backup_bytes(key: str, data: bytes, content_type: str = "application/
         path.write_bytes(data)
         return str(path)
     s3_client().put_object(Bucket=settings.s3_bucket, Key=key, Body=data, ContentType=content_type)
+    return key
+
+
+def upload_backup_file(key: str, path: str, content_type: str = "application/zip") -> str:
+    """Same as upload_backup_bytes() but streams from a file on disk (multipart for big files)."""
+    ensure_bucket()
+    if use_local_storage():
+        dest = LOCAL_STORAGE_ROOT / key
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, dest)
+        return str(dest)
+    s3_client().upload_file(path, settings.s3_bucket, key, ExtraArgs={"ContentType": content_type})
     return key
 
 

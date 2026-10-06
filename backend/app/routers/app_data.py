@@ -11,10 +11,12 @@ import tempfile
 import re
 import urllib.request
 import zlib
+import socket
 import zipfile
+from contextvars import ContextVar
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 from uuid import uuid4
 from xml.etree import ElementTree
 
@@ -22,7 +24,8 @@ import datetime as _dt
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
+from starlette.background import BackgroundTask
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -35,10 +38,11 @@ from app.config import get_settings
 from app.database import get_db
 from app.auth_principal import resolve_active_branch
 from app.department_scope import SCOPED_COLLECTIONS, assert_record_writable, build_index, filter_records, record_in_scope
-from app.dependencies import Principal, branch_allows_module, company_allows_module, get_current_principal, get_current_user, require_module
+from app.dependencies import Principal, branch_allows_module, company_allows_module, get_current_principal, get_current_user, principal_module_allowed, require_company_admin, require_module
 from app.limiter import limiter
-from app.module_integration import sync_bill_accounting, sync_purchase_accounting, sync_receipt_payment_accounting, sync_sales_invoice_accounting
+from app.module_integration import approve_and_post_source, sync_bill_accounting, sync_purchase_accounting, sync_receipt_payment_accounting, sync_sales_invoice_accounting, upsert_source_transaction
 from app.routers.inventory import consume_valuation_layers
+from app.rota_days import rota_in_range
 from app.models import (
     PeriodLock,
     Account,
@@ -153,7 +157,7 @@ _BRANCH_FILTERED_COLLECTIONS = frozenset({
 # inferCollectionFromContext's payment-in/payment-out comment in app.js), so
 # there's no single correct module to gate them under.
 _COLLECTION_MODULE: dict[str, str] = {
-    "salesInvoices": "sales", "salesCategories": "sales",
+    "salesInvoices": "sales", "salesCategories": "sales", "salesPeople": "sales",
     "quotations": "quotations", "quotationLayout": "quotations",
     "posSales": "pos", "serviceTypes": "pos",
     "bills": "purchase", "purchaseRecords": "purchase", "purchaseDocuments": "purchase",
@@ -222,6 +226,43 @@ def _redact_employee_salary(record: dict[str, Any], principal: Principal) -> dic
     return record
 
 
+_DATE_FORMATS_DAY_FIRST = (
+    "%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y", "%d-%m-%y", "%d/%m/%y", "%d.%m.%y",
+    "%Y/%m/%d", "%Y.%m.%d",
+    "%d %b %Y", "%d %B %Y", "%d-%b-%Y", "%d-%B-%Y", "%d %b, %Y", "%d %B, %Y", "%d-%b-%y",
+    "%b %d %Y", "%B %d %Y", "%b %d, %Y", "%B %d, %Y",
+)
+
+
+def parse_document_date(value: Any) -> _dt.date | None:
+    """Invoice dates as AI/CSV give them ("20-02-2023", "20/02/23", "20 Feb 2023", ISO...).
+    Day-first (UAE convention) unless only month-first is a valid date, e.g. 02/20/2023."""
+    text = re.sub(r"\s+", " ", str(value or "").strip().rstrip("."))
+    if not text:
+        return None
+    try:
+        return _dt.date.fromisoformat(text[:10])
+    except ValueError:
+        pass
+    for fmt in _DATE_FORMATS_DAY_FIRST:
+        try:
+            return _dt.datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    for fmt in ("%m/%d/%Y", "%m-%d-%Y"):
+        try:
+            return _dt.datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def normalize_document_date(value: Any) -> Any:
+    """ISO YYYY-MM-DD when the date can be read; otherwise the original value, untouched."""
+    parsed = parse_document_date(value)
+    return parsed.isoformat() if parsed else value
+
+
 def _record_period_date(record: dict[str, Any]) -> _dt.datetime | None:
     period = record.get("period")
     if period and re.match(r"^\d{4}-\d{2}", str(period)):
@@ -230,12 +271,11 @@ def _record_period_date(record: dict[str, Any]) -> _dt.datetime | None:
         except ValueError:
             pass
     for key in ("date", "invoice_date", "bill_date", "expense_date", "created_at"):
-        value = record.get(key)
-        if value:
-            try:
-                return _dt.datetime.fromisoformat(str(value)[:10]).replace(tzinfo=_dt.timezone.utc)
-            except ValueError:
-                continue
+        # Non-ISO dates ("20-02-2023", common on AI-read invoices) used to fail to parse here,
+        # so the period lock was silently skipped for them.
+        parsed = parse_document_date(record.get(key))
+        if parsed:
+            return _dt.datetime(parsed.year, parsed.month, parsed.day, tzinfo=_dt.timezone.utc)
     return None
 
 
@@ -577,10 +617,7 @@ def list_rota_assignments_in_range(
         raise HTTPException(status_code=400, detail="'from' must not be after 'to'")
     company = resolve_principal_company(principal, db)
     assert_collection_module_enabled(db, principal, company, "rotaAssignments")
-    base_filters = [
-        AppDataRecord.company_id == principal.company_id,
-        AppDataRecord.collection == "rotaAssignments",
-    ]
+    base_filters = [AppDataRecord.company_id == principal.company_id, *rota_in_range(date_from, date_to)]
     collection_module = _COLLECTION_MODULE.get("rotaAssignments")
     cross_branch = bool(collection_module and principal.can_cross_branch(collection_module))
     if principal.branch_id and "rotaAssignments" in _BRANCH_FILTERED_COLLECTIONS and not cross_branch:
@@ -590,7 +627,7 @@ def list_rota_assignments_in_range(
         )
     elif branch_id:
         base_filters.append(AppDataRecord.branch_id == branch_id)
-    rows = db.query(AppDataRecord).filter(*base_filters).all()
+    rows = db.query(AppDataRecord).filter(*base_filters).order_by(AppDataRecord.created_at, AppDataRecord.id).all()
     records = [
         r for r in (serialize(row) for row in rows)
         if date_from <= str(r.get("date") or "") <= date_to
@@ -620,7 +657,7 @@ _COLLECTIONS_BY_MODULE: dict[str, list[str]] = {
     # reference data needed by more than one module, so they're duplicated
     # across every module list that plausibly needs them; the union below
     # dedupes naturally.
-    "sales": ["salesInvoices", "salesCategories", "salesUnits", "serviceTypes", "customers", "products"],
+    "sales": ["salesInvoices", "salesCategories", "salesUnits", "serviceTypes", "salesPeople", "customers", "products"],
     "quotations": ["quotations", "quotationLayout"],
     "purchase": ["bills", "purchaseDocuments", "vendors", "products"],
     "inventory": ["products", "inventorySettings"],
@@ -683,6 +720,11 @@ _HR_WRITE_PERMISSION_MODULES = frozenset({
 # entirely rather than tightening it.
 _HR_EDIT_GATED_MODULES = _HR_WRITE_PERMISSION_MODULES - {"employees"}
 
+_HR_MODULE_LABELS = {
+    "employees": "Employees", "leave": "Leave", "attendance": "Attendance", "rota": "Rota & Shift",
+    "overtime": "Overtime", "loans": "Loans & Advances", "recruitment": "Recruitment", "payroll": "Payroll",
+    "hr_workflow": "Task Management",
+}
 _ADMIN_ONLY_COLLECTIONS = frozenset({"users", "invoiceLayout"})
 _HR_SETTINGS_COLLECTIONS = frozenset({"companyAnnouncements"})
 _HR_COLLECTION_MODULE = {
@@ -694,6 +736,39 @@ _EMPLOYEE_SENSITIVE_FIELDS = (
 )
 
 
+# Main-app collections and the module whose role permission they need (HR collections have their
+# own gates below). Kept apart from _COLLECTION_MODULE, which drives the company-level module
+# switch: products/customers/vendors/accounts must stay writable whatever modules a company has.
+_ROLE_GATED_COLLECTIONS: dict[str, str] = {
+    **{c: m for c, m in _COLLECTION_MODULE.items() if m != "hrms"},
+    "products": "inventory", "customers": "sales", "vendors": "purchase", "accounts": "accounting",
+}
+_COLLECTION_ROLE_ALTERNATIVES: dict[str, tuple[str, ...]] = {
+    "products": ("sales", "pos", "purchase"),
+    "customers": ("pos", "quotations"),
+    "vendors": ("expense", "bank"),
+}
+
+
+def _assert_main_module_role(principal: Principal, collection: str, write: bool, delete: bool = False) -> None:
+    """A login may only read/write a main-app collection its role covers (see
+    principal_module_allowed). Collections with no module (layouts, settings) can't be written
+    by a read-only main-app role."""
+    if principal.is_admin:
+        return
+    module = _ROLE_GATED_COLLECTIONS.get(collection)
+    if module is None:
+        if principal.kind == "user" and write and not any(k.endswith(":edit") for k in principal.permissions):
+            raise HTTPException(status_code=403, detail="Your role is read-only")
+        return
+    options = (module, *_COLLECTION_ROLE_ALTERNATIVES.get(collection, ()))
+    if not any(principal_module_allowed(principal, m, write, delete) for m in options):
+        raise HTTPException(
+            status_code=403,
+            detail="Your role can't delete here" if delete else "Your role can't make changes here" if write else "Your role doesn't have access to this",
+        )
+
+
 def assert_collection_read_permission(principal: Principal, collection: str) -> None:
     """Employee logins with no role, or a role lacking the HR module's
     `:view`, must not list HR collections (other people's loans/advances...)."""
@@ -701,6 +776,7 @@ def assert_collection_read_permission(principal: Principal, collection: str) -> 
         return
     if principal.kind == "employee" and not principal.permissions:
         raise HTTPException(status_code=403, detail="Not permitted")
+    _assert_main_module_role(principal, collection, write=False)
     module = _HR_COLLECTION_MODULE.get(collection)
     if module and not principal.has(f"{module}:view"):
         raise HTTPException(status_code=403, detail="Not permitted")
@@ -754,6 +830,7 @@ def assert_collection_write_permission(principal: Principal, collection: str) ->
         return
     if principal.kind == "employee" and not principal.permissions:
         raise HTTPException(status_code=403, detail="You don't have permission to modify this data")
+    _assert_main_module_role(principal, collection, write=True)
     if collection in _ADMIN_ONLY_COLLECTIONS:
         raise HTTPException(status_code=403, detail="You don't have permission to modify this data")
     if collection in _HR_SETTINGS_COLLECTIONS and not principal.has("hr_settings:edit"):
@@ -772,7 +849,30 @@ def assert_collection_write_permission(principal: Principal, collection: str) ->
         if principal.has(needed):
             allowed.update(collections)
     if collection not in allowed:
-        raise HTTPException(status_code=403, detail="You don't have permission to modify this data")
+        label = _HR_MODULE_LABELS.get(_HR_COLLECTION_MODULE.get(collection, ""), "this section")
+        raise HTTPException(
+            status_code=403,
+            detail=f"Your role can't make changes in {label}. Ask an administrator to give your role {label} — Edit.",
+        )
+
+
+# Modules whose catalog has a separate "delete" permission (attendance/payroll don't).
+_HR_DELETE_GATED_MODULES = frozenset({"employees", "leave", "rota", "overtime", "loans", "recruitment", "hr_workflow"})
+
+
+def assert_collection_delete_permission(principal: Principal, collection: str) -> None:
+    """Write gate plus the module's own `:delete` -- previously an `:edit` role could delete too."""
+    assert_collection_write_permission(principal, collection)
+    if principal.is_admin:
+        return
+    _assert_main_module_role(principal, collection, write=True, delete=True)
+    module = _HR_COLLECTION_MODULE.get(collection)
+    if module in _HR_DELETE_GATED_MODULES and not principal.has(f"{module}:delete"):
+        label = _HR_MODULE_LABELS.get(module, "this section")
+        raise HTTPException(
+            status_code=403,
+            detail=f"Your role can't delete in {label}. Ask an administrator to give your role {label} — Delete.",
+        )
 
 
 # hrms.html (window.HRMS_STANDALONE) never renders anything from the
@@ -1001,6 +1101,7 @@ def bootstrap(
             "country": company.country,
             "currency": company.currency,
             "vat_rate": str(company.vat_rate) if company.vat_rate is not None else "5.00",
+            "stock_mode": company.stock_mode or "with_stock",
             "emirate": company.emirate,
             "business_type": company.business_type,
             "business_activity": company.business_activity,
@@ -1036,7 +1137,7 @@ def bootstrap(
     return result
 
 
-@router.get("/users")
+@router.get("/users", dependencies=[Depends(require_company_admin)])
 def list_company_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -1078,7 +1179,7 @@ def _export_row_to_dict(obj: Any, cols: list[str]) -> dict[str, Any]:
     return out
 
 
-@router.get("/export")
+@router.get("/export", dependencies=[Depends(require_company_admin)])
 @limiter.limit("10/minute")
 def export_all_data(
     request: Request,
@@ -1238,7 +1339,7 @@ def export_all_data(
     }
 
 
-@router.get("/user-export/{user_id}")
+@router.get("/user-export/{user_id}", dependencies=[Depends(require_company_admin)])
 def export_user_data(
     user_id: str,
     db: Session = Depends(get_db),
@@ -1290,7 +1391,7 @@ def export_user_data(
     }
 
 
-def build_company_sql_dump(db: Session, company_id: str, exported_by: str) -> tuple[str, str]:
+def iter_company_sql_dump(db: Session, company_id: str, exported_by: str) -> Iterator[str]:
     """Build the self-contained, restorable SQL backup for one company.
 
     Shared by the company owner's own Download Backup (export_db_dump()
@@ -1298,17 +1399,15 @@ def build_company_sql_dump(db: Session, company_id: str, exported_by: str) -> tu
     endpoints (routers/superadmin.py) — one source of truth for what a
     "full backup" actually contains, so a table added to one can't be
     forgotten in the other.
+
+    Yields the SQL piece by piece. app_data_records (where uploaded documents live, often tens
+    of MB per company) is read in batches and released as it goes -- building the whole file as
+    one string used to cost ~5x its size in memory (+200 MB for a 40 MB backup).
     """
     now_str = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-    date_str = _dt.datetime.utcnow().strftime("%Y%m%d")
 
     # ── fetch ALL data while the session is still open ────────────────
-    rows_adr = (
-        db.query(AppDataRecord)
-        .filter(AppDataRecord.company_id == company_id)
-        .order_by(AppDataRecord.created_at.asc())
-        .all()
-    )
+    adr_count = db.query(func.count(AppDataRecord.id)).filter(AppDataRecord.company_id == company_id).scalar() or 0
     rows_inv = (
         db.query(Invoice)
         .filter(Invoice.company_id == company_id)
@@ -1416,119 +1515,123 @@ def build_company_sql_dump(db: Session, company_id: str, exported_by: str) -> tu
         vals = ", ".join(_v(obj, c) for c in cols)
         return f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({vals}) ON CONFLICT (id) DO NOTHING;\n"
 
-    # ── build full SQL string in memory ──────────────────────────────
-    lines: list[str] = [
-        f"-- TaxFlow Database Backup\n",
-        f"-- Company ID : {company_id}\n",
-        f"-- Exported by: {exported_by}\n",
-        f"-- Exported at: {now_str}\n",
-        f"-- Restore    : psql -d <your_db> -f this_file.sql\n\n",
-        f"BEGIN;\n\n",
-    ]
+    # ── emit the SQL piece by piece ──────────────────────────────────
+    yield f"-- TaxFlow Database Backup\n"
+    yield f"-- Company ID : {company_id}\n"
+    yield f"-- Exported by: {exported_by}\n"
+    yield f"-- Exported at: {now_str}\n"
+    yield f"-- Restore    : psql -d <your_db> -f this_file.sql\n\n"
+    yield f"BEGIN;\n\n"
 
-    if rows_adr:
+    if adr_count:
         cols = ["id", "company_id", "collection", "record_key", "payload", "created_at", "updated_at"]
-        lines.append(f"-- app_data_records ({len(rows_adr)} rows)\n")
-        for r in rows_adr:
-            lines.append(_insert("app_data_records", cols, r))
-        lines.append("\n")
+        yield f"-- app_data_records ({adr_count} rows)\n"
+        for r in (
+            db.query(AppDataRecord)
+            .filter(AppDataRecord.company_id == company_id)
+            .order_by(AppDataRecord.created_at.asc(), AppDataRecord.id.asc())
+            .yield_per(200)
+        ):
+            yield _insert("app_data_records", cols, r)
+            db.expunge(r)
+        yield "\n"
 
     if rows_inv:
         cols = ["id", "company_id", "invoice_number", "customer_name", "customer_trn",
                 "issue_date", "due_date", "currency", "subtotal", "vat", "total",
                 "status", "notes", "created_at", "updated_at"]
-        lines.append(f"-- invoices ({len(rows_inv)} rows)\n")
+        yield (f"-- invoices ({len(rows_inv)} rows)\n")
         for r in rows_inv:
-            lines.append(_insert("invoices", cols, r))
-        lines.append("\n")
+            yield (_insert("invoices", cols, r))
+        yield ("\n")
 
     if rows_il:
         cols = ["id", "invoice_id", "description", "quantity", "unit_price", "vat_rate", "line_total"]
-        lines.append(f"-- invoice_lines ({len(rows_il)} rows)\n")
+        yield (f"-- invoice_lines ({len(rows_il)} rows)\n")
         for r in rows_il:
-            lines.append(_insert("invoice_lines", cols, r))
-        lines.append("\n")
+            yield (_insert("invoice_lines", cols, r))
+        yield ("\n")
 
     if rows_acc:
         cols = ["id", "company_id", "code", "name", "type", "is_group", "parent_id", "created_at", "updated_at"]
-        lines.append(f"-- accounts ({len(rows_acc)} rows)\n")
+        yield (f"-- accounts ({len(rows_acc)} rows)\n")
         for r in rows_acc:
-            lines.append(_insert("accounts", cols, r))
-        lines.append("\n")
+            yield (_insert("accounts", cols, r))
+        yield ("\n")
 
     # Tables dumped by reflection (every mapped column) so a schema change
     # can't silently drop a column. Order respects foreign keys; the GL
     # block below references journal_entries.
-    def _dump_model(model: Any, rows: list[Any]) -> None:
+    def _dump_model(model: Any, rows: list[Any]) -> Iterator[str]:
         if not rows:
             return
         table = model.__tablename__
         cols = [c.key for c in model.__mapper__.column_attrs]
-        lines.append(f"-- {table} ({len(rows)} rows)\n")
+        yield f"-- {table} ({len(rows)} rows)\n"
         for r in rows:
-            lines.append(_insert(table, cols, r))
-        lines.append("\n")
+            yield _insert(table, cols, r)
+        yield "\n"
 
-    _dump_model(Branch, db.query(Branch).filter(Branch.company_id == company_id).all())
+    yield from _dump_model(Branch, db.query(Branch).filter(Branch.company_id == company_id).all())
     je_rows = db.query(JournalEntry).filter(JournalEntry.company_id == company_id).all()
-    _dump_model(JournalEntry, je_rows)
+    yield from _dump_model(JournalEntry, je_rows)
     je_ids = [j.id for j in je_rows]
-    _dump_model(JournalLine, db.query(JournalLine).filter(JournalLine.journal_id.in_(je_ids)).all() if je_ids else [])
-    _dump_model(StockProductMapping, db.query(StockProductMapping).filter(StockProductMapping.company_id == company_id).all())
-    _dump_model(StockMovement, db.query(StockMovement).filter(StockMovement.company_id == company_id).all())
-    _dump_model(PeriodLock, db.query(PeriodLock).filter(PeriodLock.company_id == company_id).all())
+    yield from _dump_model(JournalLine, db.query(JournalLine).filter(JournalLine.journal_id.in_(je_ids)).all() if je_ids else [])
+    yield from _dump_model(StockProductMapping, db.query(StockProductMapping).filter(StockProductMapping.company_id == company_id).all())
+    yield from _dump_model(StockMovement, db.query(StockMovement).filter(StockMovement.company_id == company_id).all())
+    yield from _dump_model(PeriodLock, db.query(PeriodLock).filter(PeriodLock.company_id == company_id).all())
 
     if rows_emp:
         cols = ["id", "company_id", "employee_no", "full_name", "department", "designation", "basic_salary", "status", "created_at", "updated_at"]
-        lines.append(f"-- employees ({len(rows_emp)} rows)\n")
+        yield (f"-- employees ({len(rows_emp)} rows)\n")
         for r in rows_emp:
-            lines.append(_insert("employees", cols, r))
-        lines.append("\n")
+            yield (_insert("employees", cols, r))
+        yield ("\n")
 
     if rows_audit:
         cols = ["id", "company_id", "user_id", "action", "module", "record_id", "created_at"]
-        lines.append(f"-- audit_logs ({len(rows_audit)} rows)\n")
+        yield (f"-- audit_logs ({len(rows_audit)} rows)\n")
         for r in rows_audit:
-            lines.append(_insert("audit_logs", cols, r))
-        lines.append("\n")
+            yield (_insert("audit_logs", cols, r))
+        yield ("\n")
 
     if rows_st:
         cols = ["id", "company_id", "module", "reference", "party_name", "subtotal", "vat", "total", "status", "created_at", "updated_at"]
-        lines.append(f"-- source_transactions ({len(rows_st)} rows)\n")
+        yield (f"-- source_transactions ({len(rows_st)} rows)\n")
         for r in rows_st:
-            lines.append(_insert("source_transactions", cols, r))
-        lines.append("\n")
+            yield (_insert("source_transactions", cols, r))
+        yield ("\n")
 
     if rows_gl:
         cols = ["id", "company_id", "branch_id", "entry_date", "voucher_no", "voucher_type",
                 "account_id", "journal_entry_id", "journal_line_id", "debit", "credit",
                 "balance", "party", "cost_center", "narration"]
-        lines.append(f"-- general_ledger_entries ({len(rows_gl)} rows)\n")
+        yield (f"-- general_ledger_entries ({len(rows_gl)} rows)\n")
         for r in rows_gl:
-            lines.append(_insert("general_ledger_entries", cols, r))
-        lines.append("\n")
+            yield (_insert("general_ledger_entries", cols, r))
+        yield ("\n")
 
     if rows_pr:
         cols = ["id", "company_id", "branch_id", "period", "status", "gross_total", "deductions_total", "net_total", "created_at", "updated_at"]
-        lines.append(f"-- payroll_runs ({len(rows_pr)} rows)\n")
+        yield (f"-- payroll_runs ({len(rows_pr)} rows)\n")
         for r in rows_pr:
-            lines.append(_insert("payroll_runs", cols, r))
-        lines.append("\n")
+            yield (_insert("payroll_runs", cols, r))
+        yield ("\n")
 
     if rows_pi:
         cols = ["id", "run_id", "employee_id", "basic", "allowances", "overtime", "deductions", "net_pay", "wps_status"]
-        lines.append(f"-- payroll_items ({len(rows_pi)} rows)\n")
+        yield (f"-- payroll_items ({len(rows_pi)} rows)\n")
         for r in rows_pi:
-            lines.append(_insert("payroll_items", cols, r))
-        lines.append("\n")
+            yield (_insert("payroll_items", cols, r))
+        yield ("\n")
 
     if rows_leave:
         cols = ["id", "company_id", "employee_id", "leave_type", "start_date", "end_date", "days",
                 "reason", "status", "approved_by", "approved_by_employee_id", "approved_at", "created_at", "updated_at"]
-        lines.append(f"-- leave_requests ({len(rows_leave)} rows)\n")
+        yield (f"-- leave_requests ({len(rows_leave)} rows)\n")
         for r in rows_leave:
-            lines.append(_insert("leave_requests", cols, r))
-        lines.append("\n")
+            yield (_insert("leave_requests", cols, r))
+        yield ("\n")
 
     if rows_att:
         cols = ["id", "company_id", "employee_id", "employee_name", "work_date",
@@ -1536,40 +1639,69 @@ def build_company_sql_dump(db: Session, company_id: str, exported_by: str) -> tu
                 "clock_in_3", "clock_out_3", "work_seconds_3", "clock_in_4", "clock_out_4", "work_seconds_4",
                 "clock_in_5", "clock_out_5", "work_seconds_5", "total_seconds", "ot_seconds", "under_seconds",
                 "session_count", "raw_events", "created_at", "updated_at"]
-        lines.append(f"-- attendance_details ({len(rows_att)} rows)\n")
+        yield (f"-- attendance_details ({len(rows_att)} rows)\n")
         for r in rows_att:
-            lines.append(_insert("attendance_details", cols, r))
-        lines.append("\n")
+            yield (_insert("attendance_details", cols, r))
+        yield ("\n")
 
-    lines.append("COMMIT;\n")
-    lines.append(
-        f"\n-- {len(rows_adr)} data records · {len(rows_inv)} invoices · {len(rows_acc)} accounts · "
+    yield ("COMMIT;\n")
+    yield (
+        f"\n-- {adr_count} data records · {len(rows_inv)} invoices · {len(rows_acc)} accounts · "
         f"{len(rows_gl)} ledger entries · {len(rows_pr)} payroll runs · {len(rows_leave)} leave requests · "
         f"{len(rows_att)} attendance days · {len(rows_audit)} audit entries\n"
     )
 
-    sql_text = "".join(lines)
-    fname = f"taxflow-db-{company_id[:8]}-{date_str}.sql"
-    return sql_text, fname
 
 
-def build_all_companies_backup_zip(db: Session, exported_by: str) -> bytes:
-    """Zips every tenant company's SQL backup into one archive. Shared by
-    the on-demand /superadmin/companies/backup-all endpoint and the
-    nightly Celery task."""
-    companies = (
-        db.query(Company)
+def company_sql_dump_filename(company_id: str) -> str:
+    return f"taxflow-db-{company_id[:8]}-{_dt.datetime.utcnow().strftime('%Y%m%d')}.sql"
+
+
+def write_company_sql_dump(db: Session, company_id: str, exported_by: str, fileobj: Any) -> None:
+    """Write one company's SQL backup (UTF-8) into a binary file object, piece by piece."""
+    for chunk in iter_company_sql_dump(db, company_id, exported_by):
+        fileobj.write(chunk.encode("utf-8"))
+
+
+def sql_dump_file_response(db: Session, company_id: str, exported_by: str) -> Response:
+    """Download one company's backup: written to a temp file, streamed, then deleted."""
+    tmp = tempfile.NamedTemporaryFile(prefix="taxflow-backup-", suffix=".sql", delete=False)
+    try:
+        with tmp:
+            write_company_sql_dump(db, company_id, exported_by, tmp)
+    except Exception:
+        os.unlink(tmp.name)
+        raise
+    return FileResponse(
+        tmp.name,
+        media_type="text/plain; charset=utf-8",
+        filename=company_sql_dump_filename(company_id),
+        background=BackgroundTask(os.unlink, tmp.name),
+    )
+
+
+
+
+def write_all_companies_backup_zip(db: Session, exported_by: str, fileobj: Any) -> None:
+    """Zips every tenant company's SQL backup into `fileobj` (a temp file, not memory). Shared by
+    the on-demand /superadmin/companies/backup-all endpoint and the nightly Celery task.
+
+    Built one company at a time: each company's rows are released from the session after its
+    file is written. Building the whole archive in memory used to add ~200 MB+ to the process
+    (and Python keeps that memory), growing with the platform's total data."""
+    companies = [
+        (company_id, name)
+        for company_id, name in db.query(Company.id, Company.name)
         .filter(or_(Company.trn.is_(None), Company.trn != "SUPERADMIN-INTERNAL"))
         .order_by(Company.name.asc())
         .all()
-    )
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for company in companies:
-            sql_text, fname = build_company_sql_dump(db, company.id, exported_by)
-            safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in (company.name or company.id)).strip() or company.id
-            zf.writestr(f"{safe_name}/{fname}", sql_text)
-    return buf.getvalue()
+    ]
+    with zipfile.ZipFile(fileobj, "w", zipfile.ZIP_DEFLATED) as zf:
+        for company_id, name in companies:
+            safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in (name or company_id)).strip() or company_id
+            with zf.open(f"{safe_name}/{company_sql_dump_filename(company_id)}", "w", force_zip64=True) as entry:
+                write_company_sql_dump(db, company_id, exported_by, entry)
+            db.expunge_all()
 
 
 @router.get("/db-dump")
@@ -1583,12 +1715,7 @@ def export_db_dump(
     """Return a self-contained SQL file for the current company — restorable locally.
 
     Gated by the company's "backup" module (Superadmin > Module Permissions)."""
-    sql_text, fname = build_company_sql_dump(db, current_user.company_id, current_user.full_name)
-    return Response(
-        content=sql_text.encode("utf-8"),
-        media_type="text/plain; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
-    )
+    return sql_dump_file_response(db, current_user.company_id, current_user.full_name)
 
 
 @router.post("")
@@ -1625,6 +1752,8 @@ async def app_data_action(
         record = _guard_employee_write(db, principal, collection, record)
         assert_collection_period_open(db, principal, collection, record)
         _assert_department_writable(db, principal, collection, record)
+        if payload.get("create_only"):
+            _assert_record_is_new(db, principal.company_id, collection, record)
         saved = save_app_record(db, principal, collection, record)
         sync_domain_model(db, principal, collection, serialize(saved))
         db.commit()
@@ -1693,7 +1822,7 @@ async def app_data_action(
 
     if action == "delete":
         collection = str(payload.get("collection", "app_actions"))
-        assert_collection_write_permission(principal, collection)
+        assert_collection_delete_permission(principal, collection)
         record = payload.get("record", {})
         if not isinstance(record, dict):
             record = {"value": record}
@@ -1730,7 +1859,7 @@ async def app_data_action(
 
     if action == "bulk-delete":
         collection = str(payload.get("collection", "app_actions"))
-        assert_collection_write_permission(principal, collection)
+        assert_collection_delete_permission(principal, collection)
         records = payload.get("records", [])
         if not isinstance(records, list):
             records = []
@@ -1765,6 +1894,8 @@ async def app_data_action(
                 )
                 .delete(synchronize_session=False)
             )
+        if collection == "tasks" and deleted_count:
+            _unlink_deleted_tasks(db, principal.company_id, keys)
         # Bulk domain cleanup for purchaseRecords
         if collection == "purchaseRecords" and records:
             refs = [
@@ -1837,30 +1968,18 @@ async def app_data_action(
         return {"ok": True, "layout": record, "id": saved.id}
 
     if action == "documents.extract":
+        # Same gate as saving the result: a billed AI call needs the module the result is saved to
+        # (expense receipts reuse this extractor). Without it any login -- even with Purchases off
+        # -- could run AI extraction.
+        target = "expenses" if payload.get("documentType") == "expense" else "purchaseRecords"
+        assert_collection_module_enabled(db, principal, company, target)
+        assert_collection_write_permission(principal, target)
         file = payload.get("file", {})
         # Runs in a thread: it can make a blocking OpenAI/Anthropic call (and a
         # blocking subprocess for PDF rendering) taking up to ~90s, which would
         # otherwise freeze this whole async worker's event loop for every user.
         invoices = await run_in_threadpool(ingest_purchase_document, db, principal, file)
-        # Flag any extracted invoice whose invoice_no already exists in purchaseRecords
-        non_error_invoices = [inv for inv in invoices if not inv.get("extraction_error")]
-        invoice_nos = [str(inv.get("invoice_no") or "").strip() for inv in non_error_invoices]
-        invoice_nos = [n for n in invoice_nos if n]
-        if invoice_nos:
-            existing_keys = {
-                row[0]
-                for row in db.query(AppDataRecord.record_key)
-                .filter(
-                    AppDataRecord.company_id == principal.company_id,
-                    AppDataRecord.collection == "purchaseRecords",
-                    AppDataRecord.record_key.in_(invoice_nos),
-                )
-                .all()
-            }
-            for inv in non_error_invoices:
-                inv_no = str(inv.get("invoice_no") or "").strip()
-                if inv_no and inv_no in existing_keys:
-                    inv["already_in_db"] = True
+        _mark_purchase_duplicates(db, principal.company_id, invoices)
         log_action(
             db,
             principal,
@@ -1872,15 +1991,116 @@ async def app_data_action(
         return {"ok": True, "invoices": invoices}
 
     if action == "invoices.import":
+        assert_collection_module_enabled(db, principal, company, "salesInvoices")
+        assert_collection_write_permission(principal, "salesInvoices")
         file = payload.get("file", {})
         # See documents.extract above: same blocking-AI-call concern applies here.
         invoices = await run_in_threadpool(ingest_sales_invoice_document, db, principal, file)
+        _mark_sales_duplicates(db, principal.company_id, invoices)
         non_error = [inv for inv in invoices if not inv.get("extraction_error")]
         log_action(db, principal, "salesInvoices", "invoice_import_requested", {"file": file.get("name"), "invoices": len(non_error)})
         db.commit()
         return {"ok": True, "invoices": invoices}
 
     return {"ok": True, "action": action}
+
+
+def _existing_sales_invoice_numbers(db: Session, company_id: str, numbers: set[str]) -> set[str]:
+    """Lower-cased invoice numbers (from `numbers`) the company already has, in either the
+    salesInvoices records or the Invoice table -- the whole history, not just what a browser loaded."""
+    wanted = {n.strip().lower() for n in numbers if n and n.strip()}
+    if not wanted:
+        return set()
+    found = {
+        str(key).strip().lower()
+        for (key,) in db.query(AppDataRecord.record_key).filter(
+            AppDataRecord.company_id == company_id,
+            AppDataRecord.collection == "salesInvoices",
+            func.lower(func.trim(AppDataRecord.record_key)).in_(wanted),
+        ).all()
+    }
+    found.update(
+        str(number).strip().lower()
+        for (number,) in db.query(Invoice.invoice_number).filter(
+            Invoice.company_id == company_id,
+            func.lower(func.trim(Invoice.invoice_number)).in_(wanted),
+        ).all()
+    )
+    return found
+
+
+def _mark_sales_duplicates(db: Session, company_id: str, invoices: list[dict[str, Any]]) -> None:
+    candidates = [inv for inv in invoices if not inv.get("extraction_error") and str(inv.get("invoice_no") or "").strip()]
+    existing = _existing_sales_invoice_numbers(db, company_id, {str(inv["invoice_no"]) for inv in candidates})
+    for inv in candidates:
+        inv["db_checked"] = True
+        if str(inv["invoice_no"]).strip().lower() in existing:
+            inv["already_in_db"] = True
+
+
+def _assert_record_is_new(db: Session, company_id: str, collection: str, record: dict[str, Any]) -> None:
+    """save with create_only: refuse instead of overwriting a record that already uses this key."""
+    key = record_key(collection, record)
+    if not key:
+        return
+    if collection == "salesInvoices":
+        taken = bool(_existing_sales_invoice_numbers(db, company_id, {key}))
+    else:
+        taken = db.query(AppDataRecord.id).filter(
+            AppDataRecord.company_id == company_id,
+            AppDataRecord.collection == collection,
+            AppDataRecord.record_key == key,
+        ).first() is not None
+    if taken:
+        raise HTTPException(status_code=409, detail=f"{key} already exists")
+
+
+def _supplier_key(name: Any) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(name or "").lower())
+
+
+def _purchase_alt_ref(invoice_no: str, supplier: Any) -> str:
+    return f"{invoice_no} ({str(supplier or '').strip() or 'Supplier'})"
+
+
+def _mark_purchase_duplicates(db: Session, company_id: str, invoices: list[dict[str, Any]]) -> None:
+    """A purchase is a duplicate only when the SAME supplier (name or TRN) already has that
+    invoice number. Another supplier's invoice with the same number gets its own key
+    (suggested_ref) instead of being blocked or overwriting the stored one."""
+    candidates = [inv for inv in invoices if not inv.get("extraction_error") and str(inv.get("invoice_no") or "").strip()]
+    if not candidates:
+        return
+    keys: set[str] = set()
+    for inv in candidates:
+        inv_no = str(inv["invoice_no"]).strip()
+        keys.update({inv_no, _purchase_alt_ref(inv_no, inv.get("supplier"))})
+    stored: dict[str, dict[str, Any]] = {}
+    for key, payload in db.query(AppDataRecord.record_key, AppDataRecord.payload).filter(
+        AppDataRecord.company_id == company_id,
+        AppDataRecord.collection == "purchaseRecords",
+        AppDataRecord.record_key.in_(keys),
+    ).all():
+        try:
+            stored[key] = json.loads(payload or "{}") or {}
+        except (TypeError, ValueError):
+            stored[key] = {}
+
+    def same_supplier(rec: dict[str, Any], inv: dict[str, Any]) -> bool:
+        trn_a = re.sub(r"\D", "", str(rec.get("supplier_trn") or ""))
+        trn_b = re.sub(r"\D", "", str(inv.get("supplier_trn") or ""))
+        if trn_a and trn_b:
+            return trn_a == trn_b
+        name_a, name_b = _supplier_key(rec.get("supplier")), _supplier_key(inv.get("supplier"))
+        return not name_a or not name_b or name_a == name_b  # unknown supplier: stay cautious
+
+    for inv in candidates:
+        inv_no = str(inv["invoice_no"]).strip()
+        alt = _purchase_alt_ref(inv_no, inv.get("supplier"))
+        inv["db_checked"] = True
+        if (inv_no in stored and same_supplier(stored[inv_no], inv)) or (alt in stored and same_supplier(stored[alt], inv)):
+            inv["already_in_db"] = True
+        elif inv_no in stored:
+            inv["suggested_ref"] = alt
 
 
 def _stored_payload(row: AppDataRecord | None) -> dict[str, Any] | None:
@@ -2083,7 +2303,7 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
             subtotal=decimal_value(record.get("net_amount") or record.get("subtotal")),
             vat=decimal_value(record.get("tax_amount") or record.get("vat_amount")),
             total=decimal_value(record.get("total")),
-            lines=record.get("lines") if isinstance(record.get("lines"), list) else None,
+            lines=_purchase_posting_lines(db, principal, record),
             user_id=principal_user_id(principal),
             branch_id=str(record.get("branch_id") or "").strip() or principal.branch_id,
         )
@@ -2292,6 +2512,120 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
         log_action(db, principal, str(record.get("record") or "audit"), str(record.get("action") or "ui_action"), record)
 
 
+def company_tracks_stock(db: Session, company_id: str) -> bool:
+    """False for a Super Admin "without stock" company: purchases, sales and POS never move stock
+    (and never mint inventory items), so selling never needs stock on hand."""
+    mode = db.query(Company.stock_mode).filter(Company.id == company_id).scalar()
+    return mode != "without_stock"
+
+
+def company_uses_perpetual_inventory(db: Session, company_id: str) -> bool:
+    """Stock purchases post to 1200 Inventory and sales post their cost (Dr 5000 / Cr 1200)."""
+    row = db.query(Company.stock_mode, Company.inventory_accounting).filter(Company.id == company_id).first()
+    return bool(row) and row[0] != "without_stock" and (row[1] or "periodic") == "perpetual"
+
+
+def _ledger_codes(db: Session, company_id: str) -> dict[str, str]:
+    """Posting ledger name (lower-case) -> account code."""
+    return {
+        str(name or "").strip().lower(): code
+        for name, code in db.query(Account.name, Account.code).filter(
+            Account.company_id == company_id, Account.is_group.isnot(True),
+        ).all()
+    }
+
+
+def _category_adds_to_stock(category: Any, ledger_codes: dict[str, str]) -> bool:
+    """A line categorised to a ledger other than Inventory (an expense, a service...) isn't stock.
+    Inventory, Uncategorized, blank, or free text that isn't a ledger name (e.g. a CSV "Brand"
+    column mapped to category) still go to stock."""
+    key = str(category or "").strip().lower()
+    if key in {"", "uncategorized", "uncategorised", "inventory"} or key not in ledger_codes:
+        return True
+    return ledger_codes[key] == "1200"
+
+
+def _purchase_posting_lines(db: Session, principal: Principal, record: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Which ledger each purchase line debits: the ledger its category names; otherwise, under
+    perpetual inventory, 1200 Inventory for stock lines; otherwise the default (4000 Purchases)."""
+    lines = record.get("lines")
+    if not isinstance(lines, list) or not lines:
+        return None
+    ledger_codes = _ledger_codes(db, principal.company_id)
+    perpetual = company_uses_perpetual_inventory(db, principal.company_id)
+    out = []
+    for line in lines:
+        if not isinstance(line, dict):
+            continue
+        line = dict(line)
+        key = str(line.get("category") or "").strip().lower()
+        if key and key not in {"uncategorized", "uncategorised"} and key in ledger_codes:
+            line["account_code"] = ledger_codes[key]
+        elif perpetual and _category_adds_to_stock(line.get("category"), ledger_codes):
+            mapping = purchase_line_stock_mapping(db, principal, line, record, allow_create=False)
+            if not mapping or mapping.tracking not in ("No", "Optional"):
+                line["account_code"] = "1200"
+        out.append(line)
+    return out
+
+
+def _item_average_cost(db: Session, company_id: str, mapping: StockProductMapping) -> Decimal:
+    """Weighted average purchase cost of an item (its valuation layers), else its Item Master cost."""
+    qty, value = db.query(
+        func.coalesce(func.sum(InventoryValuationLayer.quantity_in), 0),
+        func.coalesce(func.sum(InventoryValuationLayer.quantity_in * InventoryValuationLayer.unit_cost), 0),
+    ).filter(
+        InventoryValuationLayer.company_id == company_id,
+        InventoryValuationLayer.item_code == mapping.sku,
+        InventoryValuationLayer.quantity_in > 0,
+    ).one()
+    qty, value = Decimal(str(qty or 0)), Decimal(str(value or 0))
+    if qty > 0:
+        return value / qty
+    return decimal_value(getattr(mapping, "cost", 0))
+
+
+def _cogs_transactions(db: Session, company_id: str, reference: str) -> list[SourceTransaction]:
+    return db.query(SourceTransaction).filter(
+        SourceTransaction.company_id == company_id,
+        SourceTransaction.module.in_(("cogs", "cogs_return")),
+        SourceTransaction.reference == reference,
+    ).all()
+
+
+def _sync_cogs(db: Session, principal: Principal, stock_reference: str, cost: Decimal, is_return: bool, branch_id: str | None) -> None:
+    """Post (or correct) the cost-of-sales entry for one sale/return under perpetual inventory.
+    A zero cost (cancelled, back to draft, no longer perpetual) reverses what was posted;
+    posted journals are never edited or deleted."""
+    from app.accounting_posting import reverse_journal_entry
+
+    reference = f"COGS-{stock_reference}"[:120]
+    module = "cogs_return" if is_return else "cogs"
+    cost = cost.quantize(Decimal("0.01"))
+    for tx in _cogs_transactions(db, principal.company_id, reference):
+        if cost > 0 and tx.module == module:
+            continue
+        journals = db.query(JournalEntry).filter(
+            JournalEntry.company_id == principal.company_id, JournalEntry.source_module == tx.module, JournalEntry.source_id == tx.id).all()
+        reversed_ids = {row[0] for row in db.query(JournalEntry.source_id).filter(
+            JournalEntry.company_id == principal.company_id, JournalEntry.source_module == "reversal",
+            JournalEntry.source_id.in_([j.id for j in journals])).all()} if journals else set()
+        for journal in journals:
+            if journal.id not in reversed_ids:
+                reverse_journal_entry(db, journal, principal_user_id(principal))
+        tx.subtotal = tx.total = Decimal("0")
+        db.query(SourceTransactionLine).filter(SourceTransactionLine.source_id == tx.id).delete(synchronize_session=False)
+    if cost <= 0:
+        return
+    tx = upsert_source_transaction(
+        db, company_id=principal.company_id, module=module, reference=reference, party_name="",
+        subtotal=cost, vat=Decimal("0"), total=cost,
+        lines=[{"description": "Cost of goods sold", "account_code": "5000", "amount": cost, "quantity": 1, "unit_price": cost}],
+        default_account_code="5000", branch_id=branch_id,
+    )
+    approve_and_post_source(db, tx, principal_user_id(principal))
+
+
 def sync_purchase_stock(db: Session, principal: Principal, record: dict[str, Any], reference: str) -> None:
     lines = record.get("lines")
     if not isinstance(lines, list):
@@ -2309,12 +2643,18 @@ def sync_purchase_stock(db: Session, principal: Principal, record: dict[str, Any
         InventoryValuationLayer.source_id == reference,
     ).delete(synchronize_session=False)
     db.flush()
+    if not company_tracks_stock(db, principal.company_id):
+        return
+
+    ledger_codes = _ledger_codes(db, principal.company_id)
 
     for line in lines:
         if not isinstance(line, dict):
             continue
         quantity = decimal_value(line.get("quantity") or line.get("qty") or line.get("purchase_qty") or line.get("qty_invoiced"))
         if quantity <= 0:
+            continue
+        if not _category_adds_to_stock(line.get("category"), ledger_codes):
             continue
         mapping = purchase_line_stock_mapping(db, principal, line, record, allow_create=allow_create_mapping)
         if not mapping:
@@ -2391,6 +2731,11 @@ def sync_pos_stock(db: Session, principal: Principal, record: dict[str, Any], re
         StockMovement.reference == reference,
     ).delete(synchronize_session=False)
     db.flush()
+    perpetual = company_uses_perpetual_inventory(db, principal.company_id)
+    if not company_tracks_stock(db, principal.company_id):
+        _sync_cogs(db, principal, reference, Decimal("0"), is_return, branch_id)
+        return
+    cost_total = Decimal("0")
 
     for item in items:
         if not isinstance(item, dict):
@@ -2410,6 +2755,8 @@ def sync_pos_stock(db: Session, principal: Principal, record: dict[str, Any], re
             continue
         if not is_return:
             _assert_stock_available(db, principal.company_id, mapping, quantity, blocked_stock)
+        if perpetual:
+            cost_total += quantity * _item_average_cost(db, principal.company_id, mapping)
         unit_cost = decimal_value(item.get("price") or item.get("unit_cost"))
         db.add(
             StockMovement(
@@ -2424,6 +2771,7 @@ def sync_pos_stock(db: Session, principal: Principal, record: dict[str, Any], re
         )
         if not is_return:
             consume_valuation_layers(db, principal.company_id, mapping.sku, quantity)
+    _sync_cogs(db, principal, reference, cost_total if perpetual else Decimal("0"), is_return, branch_id)
 
 
 def purchase_line_stock_mapping(
@@ -2494,6 +2842,16 @@ def _delete_source_transaction_cascade(db: Session, company_id: str, tx_id: str)
             JournalEntry.source_id == tx_id,
         ).all()
     ]
+    # Reversals made when an edited record was reposted point at the journal they reverse, not
+    # at the transaction -- delete them too, or they'd linger with nothing to cancel.
+    if journal_ids:
+        journal_ids += [
+            row[0] for row in db.query(JournalEntry.id).filter(
+                JournalEntry.company_id == company_id,
+                JournalEntry.source_module == "reversal",
+                JournalEntry.source_id.in_(journal_ids),
+            ).all()
+        ]
     if journal_ids:
         db.query(GeneralLedgerEntry).filter(
             GeneralLedgerEntry.journal_entry_id.in_(journal_ids)
@@ -2519,8 +2877,41 @@ def _delete_source_transaction_cascade(db: Session, company_id: str, tx_id: str)
     ).delete(synchronize_session=False)
 
 
+def _unlink_deleted_tasks(db: Session, company_id: str, task_ids: list[str]) -> None:
+    """Drop deleted tasks from the Rota shifts they were attached to (rotaAssignments[].tasks),
+    so HRMS Rota and the ESS rota stop showing a task that no longer exists."""
+    ids = {str(t) for t in task_ids if t}
+    if not ids:
+        return
+    rows = (
+        db.query(AppDataRecord)
+        .filter(
+            AppDataRecord.company_id == company_id,
+            AppDataRecord.collection == "rotaAssignments",
+            or_(*[AppDataRecord.payload.contains(t) for t in ids]),
+        )
+        .all()
+    )
+    for row in rows:
+        try:
+            data = json.loads(row.payload or "{}")
+        except (TypeError, ValueError):
+            continue
+        tasks = data.get("tasks") if isinstance(data, dict) else None
+        if not isinstance(tasks, list):
+            continue
+        kept = [t for t in tasks if not (isinstance(t, dict) and str(t.get("task_id") or "") in ids)]
+        if len(kept) != len(tasks):
+            data["tasks"] = kept
+            row.payload = json.dumps(data, ensure_ascii=False, default=str)
+    cache.delete(f"ess_appdata:{company_id}:rotaAssignments")
+
+
 def sync_domain_delete(db: Session, principal: Principal, collection: str, record: dict[str, Any]) -> None:
-    if collection == "products":
+    if collection == "tasks":
+        _unlink_deleted_tasks(db, principal.company_id, [str(record.get("id") or "")])
+
+    elif collection == "products":
         code = str(record.get("code") or record.get("sku") or record.get("id") or "").strip()
         if code:
             mapping = (
@@ -2558,6 +2949,8 @@ def sync_domain_delete(db: Session, principal: Principal, collection: str, recor
                 StockMovement.movement_type.in_(("sales_invoice", "sales_return")),
                 StockMovement.reference == f"SALE-{number}",
             ).delete(synchronize_session=False)
+            for cogs_tx in _cogs_transactions(db, principal.company_id, f"COGS-SALE-{number}"[:120]):
+                _delete_source_transaction_cascade(db, principal.company_id, cogs_tx.id)
             invoice = (
                 db.query(Invoice)
                 .filter(Invoice.company_id == principal.company_id, Invoice.invoice_number == number)
@@ -2614,6 +3007,8 @@ def sync_domain_delete(db: Session, principal: Principal, collection: str, recor
                 StockMovement.movement_type.in_(("pos_sale", "pos_return")),
                 StockMovement.reference == reference,
             ).delete(synchronize_session=False)
+            for cogs_tx in _cogs_transactions(db, principal.company_id, f"COGS-{reference}"[:120]):
+                _delete_source_transaction_cascade(db, principal.company_id, cogs_tx.id)
 
 
 def _negative_stock_blocked(db: Session, company_id: str) -> bool:
@@ -2660,12 +3055,15 @@ def sync_sales_invoice_stock(db: Session, principal: Principal, record: dict[str
         StockMovement.movement_type.in_(("sales_invoice", "sales_return")),
         StockMovement.reference == reference,
     ).delete(synchronize_session=False)
-    if invoice.status in ("draft", "cancelled"):
+    branch_id = str(record.get("branch_id") or "").strip() or principal.branch_id
+    perpetual = company_uses_perpetual_inventory(db, principal.company_id)
+    if invoice.status in ("draft", "cancelled") or not company_tracks_stock(db, principal.company_id):
+        _sync_cogs(db, principal, reference, Decimal("0"), is_return, branch_id)
         return
     db.flush()
     sign = Decimal("1") if is_return else Decimal("-1")
     blocked = _negative_stock_blocked(db, principal.company_id)
-    branch_id = str(record.get("branch_id") or "").strip() or principal.branch_id
+    cost_total = Decimal("0")
     for line in record.get("lines") if isinstance(record.get("lines"), list) else []:
         if not isinstance(line, dict):
             continue
@@ -2681,6 +3079,8 @@ def sync_sales_invoice_stock(db: Session, principal: Principal, record: dict[str
             continue
         if not is_return:
             _assert_stock_available(db, principal.company_id, mapping, quantity, blocked)
+        if perpetual:
+            cost_total += quantity * _item_average_cost(db, principal.company_id, mapping)
         db.add(StockMovement(
             company_id=principal.company_id,
             branch_id=branch_id,
@@ -2692,6 +3092,7 @@ def sync_sales_invoice_stock(db: Session, principal: Principal, record: dict[str
         ))
         if not is_return:
             consume_valuation_layers(db, principal.company_id, mapping.sku, quantity)
+    _sync_cogs(db, principal, reference, cost_total if perpetual else Decimal("0"), is_return, branch_id)
 
 
 def _record_pos_receipt(db: Session, principal: Principal, record: dict[str, Any], invoice: Invoice) -> None:
@@ -2741,6 +3142,11 @@ def sync_sales_invoice(db: Session, principal: Principal, record: dict[str, Any]
         for line in lines:
             quantity = decimal_value(line.get("qty") or line.get("quantity") or 1)
             unit_price = decimal_value(line.get("unit_price") or line.get("price_snapshot") or line.get("price"))
+            if not unit_price:
+                # Imported lines can carry only an amount; without this they posted as zero.
+                line_amount = decimal_value(line.get("total") or line.get("line_total") or line.get("amount"))
+                if line_amount and quantity > 0:
+                    unit_price = line_amount / quantity
             invoice.lines.append(
                 InvoiceLine(
                     description=str(line.get("description") or line.get("product_name") or "Invoice item"),
@@ -2884,6 +3290,7 @@ def _ingest_purchase_zip(db: Session, principal: Principal, zip_name: str, conte
 
 
 def _ingest_purchase_file(db: Session, principal: Principal, name: str, ext: str, content: bytes) -> list[dict[str, Any]]:
+    _last_ai_error.set("")
     try:
         if ext == "csv":
             rows = parse_csv_rows(content)
@@ -2902,10 +3309,14 @@ def _ingest_purchase_file(db: Session, principal: Principal, name: str, ext: str
         else:
             return [purchase_extraction_error(name, f"Unsupported purchase upload format: .{ext or 'unknown'}")]
     except Exception as exc:
+        if _last_ai_error.get():
+            return [purchase_extraction_error(name, f"AI reading failed: {_last_ai_error.get()}")]
         return [purchase_extraction_error(name, f"Could not parse file: {exc}")]
 
     invoices = merge_purchase_invoices(build_purchase_invoices_from_rows(db, principal, rows, name), name)
     if not invoices:
+        if _last_ai_error.get():
+            return [purchase_extraction_error(name, f"AI reading failed: {_last_ai_error.get()}")]
         hints = purchase_excel_debug_hint(content, ext)
         return [purchase_extraction_error(name, "No purchase invoice rows were found in the uploaded file" + hints)]
     return invoices
@@ -3414,6 +3825,7 @@ def extract_purchase_rows_with_openai(content: bytes, ext: str) -> list[dict[str
                 if rows:
                     return rows
             except Exception as exc:
+                _last_ai_error.set(describe_ai_error(exc))
                 _log.warning("Claude extraction failed, trying OpenAI: %s", exc)
 
     openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
@@ -3430,6 +3842,7 @@ def extract_purchase_rows_with_openai(content: bytes, ext: str) -> list[dict[str
         data = call_openai_invoice_extractor(openai_key, parts)
         _log.info("OpenAI returned keys: %s", list(data.keys()) if isinstance(data, dict) else type(data))
     except Exception as exc:
+        _last_ai_error.set(describe_ai_error(exc))
         _log.warning("OpenAI extraction failed: %s", exc)
         return []
     rows = openai_invoice_to_purchase_rows(data)
@@ -3546,8 +3959,109 @@ def openai_purchase_pdf_max_pages() -> int:
         return 10
 
 
+_CLAUDE_FALLBACK_MODELS = ("claude-sonnet-5-5", "claude-haiku-4-5-20251001")
+# Keep one extraction request inside the hosting gateway's time limit (a 504 loses the result):
+# shorter per-call timeout, and a rate limit (429) is retried once after a short wait.
+_AI_CALL_TIMEOUT = 60
+_AI_RATE_LIMIT_RETRIES = 1
+
+
+def _rate_limit_wait(exc: urllib.error.HTTPError) -> float:
+    try:
+        return max(1.0, min(10.0, float(exc.headers.get("retry-after") or 5)))
+    except (TypeError, ValueError):
+        return 5.0
+
+
+# Why the last AI call in this request failed, in words a user can act on. Extraction falls
+# back to text parsing / returns [] on AI errors, which used to hide the real cause (bad key,
+# rate limit, timeout) behind "no data found". Set per request (contextvars follow the thread).
+_last_ai_error: ContextVar[str] = ContextVar("_last_ai_error", default="")
+
+
+def describe_ai_error(exc: Exception) -> str:
+    if isinstance(exc, urllib.error.HTTPError):
+        if exc.code in (401, 403):
+            return "the AI service rejected the API key — check ANTHROPIC_API_KEY / OPENAI_API_KEY"
+        if exc.code == 429:
+            return "the AI service is busy (rate limit) — try again in a minute"
+        if exc.code >= 500:
+            return f"the AI service is temporarily unavailable ({exc.code}) — try again shortly"
+        return f"the AI service refused the file ({exc.code}) — it may be too large or unreadable"
+    if isinstance(exc, (TimeoutError, socket.timeout)) or "timed out" in str(exc).lower():
+        return "the AI service timed out — try again, or upload a smaller file"
+    if isinstance(exc, urllib.error.URLError):
+        return "couldn't reach the AI service — check the server's internet connection"
+    if isinstance(exc, ValueError):  # includes json.JSONDecodeError
+        return "the AI reply couldn't be read — try again"
+    return f"unexpected AI error ({type(exc).__name__})"
+
+
+def extraction_confidence(
+    *, invoice_no_found: bool, party: Any, date: Any, subtotal: Any, vat: Any, total: Any,
+    line_count: int, lines_sum: Any = None, check_totals: bool = True,
+) -> int:
+    """0-100 from what was actually extracted (replaces the old fixed 92/85, which meant the
+    "Low confidence" check could never fire). Under 70 = more than one real problem."""
+    score = 100
+    if not invoice_no_found:
+        score -= 30
+    if not str(party or "").strip() or str(party).strip().lower() in {"supplier", "customer"}:
+        score -= 25
+    if not parse_document_date(date):
+        score -= 15
+    if line_count <= 0:
+        score -= 15
+    subtotal_d, vat_d, total_d = decimal_value(subtotal), decimal_value(vat), decimal_value(total)
+    if total_d <= 0:
+        score -= 20
+    elif check_totals and abs(subtotal_d + vat_d - total_d) > max(Decimal("0.05"), total_d / 100):
+        score -= 20
+    if lines_sum is not None and subtotal_d > 0:
+        if abs(decimal_value(lines_sum) - subtotal_d) > max(Decimal("0.05"), subtotal_d / 100):
+            score -= 10
+    return max(0, min(100, score))
+
+
+def _claude_messages(api_key: str, content: list[dict[str, Any]], max_tokens: int) -> dict[str, Any]:
+    """POST /v1/messages with the configured model; if Anthropic rejects the model itself
+    (retired/renamed -> 404, or a 400 naming the model) retry with a current one, so a
+    stale model name degrades instead of taking extraction down (as on 2026-08-05)."""
+    import logging as _logging
+    import time as _time
+    configured = os.environ.get("ANTHROPIC_PURCHASE_MODEL", "claude-sonnet-5").strip() or "claude-sonnet-5"
+    models = [configured] + [m for m in _CLAUDE_FALLBACK_MODELS if m != configured]
+    last_exc: Exception | None = None
+    for model in models:
+        payload = {"model": model, "max_tokens": max_tokens, "temperature": 0, "messages": [{"role": "user", "content": content}]}
+        for attempt in range(_AI_RATE_LIMIT_RETRIES + 1):
+            request = urllib.request.Request(
+                "https://api.anthropic.com/v1/messages",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=_AI_CALL_TIMEOUT) as response:
+                    return json.loads(response.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                if exc.code == 429 and attempt < _AI_RATE_LIMIT_RETRIES:
+                    _time.sleep(_rate_limit_wait(exc))
+                    continue
+                body = ""
+                try:
+                    body = exc.read().decode("utf-8", "ignore")
+                except Exception:
+                    pass
+                if exc.code == 404 or (exc.code == 400 and "model" in body.lower()):
+                    _logging.getLogger(__name__).warning("Claude model %s rejected (%s); trying next model", model, exc.code)
+                    last_exc = exc
+                    break
+                raise
+    raise last_exc or RuntimeError("No Claude model accepted the request")
+
+
 def call_claude_invoice_extractor(api_key: str, parts: list[dict[str, Any]]) -> dict[str, Any]:
-    model = os.environ.get("ANTHROPIC_PURCHASE_MODEL", "claude-sonnet-5").strip() or "claude-sonnet-5"
     # Convert OpenAI-style content parts to Anthropic format
     anthropic_content: list[dict[str, Any]] = []
     for part in parts:
@@ -3563,33 +4077,7 @@ def call_claude_invoice_extractor(api_key: str, parts: list[dict[str, Any]]) -> 
         elif part.get("type") == "text":
             anthropic_content.append({"type": "text", "text": part["text"]})
     anthropic_content.append({"type": "text", "text": OPENAI_PURCHASE_EXTRACTION_PROMPT})
-    payload = {
-        "model": model,
-        "max_tokens": 8192,
-        "temperature": 0,
-        "messages": [{"role": "user", "content": anthropic_content}],
-    }
-    import time as _time
-    for attempt in range(3):
-        request = urllib.request.Request(
-            "https://api.anthropic.com/v1/messages",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=90) as response:
-                result = json.loads(response.read().decode("utf-8"))
-            break
-        except urllib.error.HTTPError as exc:
-            if exc.code == 429 and attempt < 2:
-                _time.sleep(30)
-                continue
-            raise
+    result = _claude_messages(api_key, anthropic_content, 8192)
     raw = str(result["content"][0]["text"] or "").strip()
     raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
     raw = re.sub(r"\s*```$", "", raw)
@@ -3606,7 +4094,7 @@ def call_openai_invoice_extractor(api_key: str, parts: list[dict[str, Any]]) -> 
         "temperature": 0,
     }
     import time as _time
-    for attempt in range(3):
+    for attempt in range(_AI_RATE_LIMIT_RETRIES + 1):
         request = urllib.request.Request(
             "https://api.openai.com/v1/chat/completions",
             data=json.dumps(payload).encode("utf-8"),
@@ -3617,12 +4105,12 @@ def call_openai_invoice_extractor(api_key: str, parts: list[dict[str, Any]]) -> 
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=90) as response:
+            with urllib.request.urlopen(request, timeout=_AI_CALL_TIMEOUT) as response:
                 result = json.loads(response.read().decode("utf-8"))
             break
         except urllib.error.HTTPError as exc:
-            if exc.code == 429 and attempt < 2:
-                _time.sleep(30)
+            if exc.code == 429 and attempt < _AI_RATE_LIMIT_RETRIES:
+                _time.sleep(_rate_limit_wait(exc))
                 continue
             raise
     raw = str(result["choices"][0]["message"]["content"] or "").strip()
@@ -3689,10 +4177,13 @@ def ingest_sales_invoice_document(db: Session, principal: Principal, file: dict[
         if ext in PURCHASE_IMAGE_EXTENSIONS or ext == "pdf":
             if not _has_ai_key():
                 return [{"extraction_error": True, "error_message": "AI extraction not configured — add ANTHROPIC_API_KEY or OPENAI_API_KEY to your .env file to enable PDF/image reading", "sourceFile": name}]
+            _last_ai_error.set("")
             result = _extract_sales_with_ai(content, ext, name)
             if result:
                 return result
-            return [{"extraction_error": True, "error_message": "Could not extract data from image/PDF. Try a clearer file or CSV/Excel.", "sourceFile": name}]
+            reason = _last_ai_error.get()
+            message = f"AI reading failed: {reason}" if reason else "Could not extract data from image/PDF. Try a clearer file or CSV/Excel."
+            return [{"extraction_error": True, "error_message": message, "sourceFile": name}]
         elif ext == "csv":
             return _parse_sales_csv(content, name)
         elif ext in {"xlsx", "xlsm"}:
@@ -3721,31 +4212,14 @@ def _extract_sales_with_ai(content: bytes, ext: str, name: str) -> list[dict[str
                 elif part.get("type") == "text":
                     anthropic_content.append({"type": "text", "text": part["text"]})
             anthropic_content.append({"type": "text", "text": SALES_INVOICE_EXTRACTION_PROMPT})
-            model = os.environ.get("ANTHROPIC_PURCHASE_MODEL", "claude-sonnet-5").strip() or "claude-sonnet-5"
-            payload = {"model": model, "max_tokens": 4096, "temperature": 0, "messages": [{"role": "user", "content": anthropic_content}]}
-            import time as _time
-            for attempt in range(3):
-                req = urllib.request.Request(
-                    "https://api.anthropic.com/v1/messages",
-                    data=json.dumps(payload).encode("utf-8"),
-                    headers={"x-api-key": anthropic_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"},
-                    method="POST",
-                )
-                try:
-                    with urllib.request.urlopen(req, timeout=90) as resp:
-                        result = json.loads(resp.read().decode("utf-8"))
-                    break
-                except urllib.error.HTTPError as exc:
-                    if exc.code == 429 and attempt < 2:
-                        _time.sleep(30)
-                        continue
-                    raise
+            result = _claude_messages(anthropic_key, anthropic_content, 4096)
             raw = re.sub(r"^```(?:json)?\s*", "", str(result["content"][0]["text"] or "").strip(), flags=re.IGNORECASE)
             raw = re.sub(r"\s*```$", "", raw)
             data = json.loads(raw)
             if not isinstance(data, dict):
                 data = {}
         except Exception as exc:
+            _last_ai_error.set(describe_ai_error(exc))
             import logging
             logging.getLogger(__name__).warning("Claude sales extraction failed, trying OpenAI: %s", exc)
     if not data:
@@ -3754,6 +4228,7 @@ def _extract_sales_with_ai(content: bytes, ext: str, name: str) -> list[dict[str
             try:
                 data = call_openai_invoice_extractor(openai_key, parts + [{"type": "text", "text": SALES_INVOICE_EXTRACTION_PROMPT}])
             except Exception as exc:
+                _last_ai_error.set(describe_ai_error(exc))
                 import logging
                 logging.getLogger(__name__).warning("OpenAI sales extraction failed: %s", exc)
     if not data:
@@ -3773,6 +4248,8 @@ def _ai_to_sales_invoice(data: dict[str, Any], source_file: str) -> dict[str, An
         qty = _sfloat(item.get("qty") or 1)
         unit_price = _sfloat(item.get("unit_price"))
         line_excl = _sfloat(item.get("line_total_excl_vat") or item.get("line_total")) or round(qty * unit_price, 2)
+        if not unit_price and line_excl:
+            unit_price = round(line_excl / (qty or 1), 4)  # the server re-totals from qty x unit price
         lines.append({
             "description": desc,
             "qty": qty,
@@ -3784,12 +4261,18 @@ def _ai_to_sales_invoice(data: dict[str, Any], source_file: str) -> dict[str, An
     subtotal = _sfloat(data.get("subtotal_excl_vat")) or round(sum(ln["total"] for ln in lines), 2)
     vat_amount = _sfloat(data.get("vat_amount")) or round(sum(ln["vat"] for ln in lines), 2)
     total = _sfloat(data.get("total_payable")) or round(subtotal + vat_amount, 2)
+    invoice_no_found = bool(str(data.get("invoice_number") or data.get("invoice_no") or "").strip())
     invoice_no = str(data.get("invoice_number") or data.get("invoice_no") or "").strip() or f"AI-{source_file[:12].upper()}"
+    confidence = extraction_confidence(
+        invoice_no_found=invoice_no_found, party=data.get("customer") or data.get("bill_to"),
+        date=data.get("invoice_date"), subtotal=subtotal, vat=vat_amount, total=total,
+        line_count=len(lines), lines_sum=sum(ln["total"] for ln in lines) if lines else None,
+    )
     return {
         "invoice_no": invoice_no,
         "customer": str(data.get("customer") or data.get("bill_to") or "").strip(),
-        "date": str(data.get("invoice_date") or "").strip(),
-        "due_date": str(data.get("due_date") or data.get("payment_terms") or "30 days").strip(),
+        "date": normalize_document_date(str(data.get("invoice_date") or "").strip()),
+        "due_date": normalize_document_date(str(data.get("due_date") or data.get("payment_terms") or "30 days").strip()),
         "subtotal": round(subtotal, 2),
         "vat_amount": round(vat_amount, 2),
         "vat": round(vat_amount, 2),
@@ -3802,7 +4285,7 @@ def _ai_to_sales_invoice(data: dict[str, Any], source_file: str) -> dict[str, An
         "status": "Draft",
         "source": "AI Upload",
         "sourceFile": source_file,
-        "confidence": 85,
+        "confidence": confidence,
     }
 
 
@@ -3832,8 +4315,8 @@ def _parse_sales_csv(content: bytes, name: str) -> list[dict[str, Any]]:
             invoices[inv_no] = {
                 "invoice_no": inv_no,
                 "customer": _col(row, "customer", "customer_name", "client", "bill_to"),
-                "date": _col(row, "date", "invoice_date", "issue_date"),
-                "due_date": _col(row, "due_date", "payment_due", "due"),
+                "date": normalize_document_date(_col(row, "date", "invoice_date", "issue_date")),
+                "due_date": normalize_document_date(_col(row, "due_date", "payment_due", "due")),
                 "subtotal": 0.0, "vat_amount": 0.0, "vat": 0.0, "total": 0.0,
                 "lines": [],
                 "status": _col(row, "status") or "Draft",
@@ -3845,6 +4328,8 @@ def _parse_sales_csv(content: bytes, name: str) -> list[dict[str, Any]]:
             qty = _sfloat(_col(row, "qty", "quantity")) or 1.0
             unit_price = _sfloat(_col(row, "unit_price", "price", "rate", "unit price"))
             line_total = _sfloat(_col(row, "total", "line_total", "amount")) or round(qty * unit_price, 2)
+            if not unit_price and line_total:
+                unit_price = round(line_total / qty, 4)
             line_vat = _sfloat(_col(row, "vat", "vat_amount", "tax"))
             invoices[inv_no]["lines"].append({
                 "description": desc,
@@ -4314,11 +4799,18 @@ def extract_pdf_text_with_ocr(content: bytes) -> str:
         return "\n".join(chunks).strip()
 
 
+_PDF_IMAGE_STREAM = re.compile(rb"/Subtype\s*/Image|/(DCTDecode|JPXDecode|CCITTFaxDecode|JBIG2Decode)")
+
+
 def extract_pdf_text(content: bytes) -> str:
     chunks: list[str] = []
     for match in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", content, flags=re.DOTALL):
         stream = match.group(1)
         header = content[max(0, match.start() - 300):match.start()]
+        # Image streams hold no text; scanning their bytes with the TJ regexes below took
+        # minutes per page on scanned PDFs (gateway 504s on bulk uploads).
+        if _PDF_IMAGE_STREAM.search(header):
+            continue
         if b"FlateDecode" in header:
             try:
                 stream = zlib.decompress(stream)
@@ -4335,7 +4827,7 @@ def extract_pdf_text(content: bytes) -> str:
 def extract_pdf_text_from_stream(stream: bytes) -> str:
     data = stream.decode("latin-1", errors="ignore")
     values: list[str] = []
-    for array in re.findall(r"\[(.*?)\]\s*TJ", data, flags=re.DOTALL):
+    for array in re.findall(r"\[([^\[\]]*)\]\s*TJ", data):
         values.extend(decode_pdf_string(value) for value in re.findall(r"\((?:\\.|[^\\()])*\)", array))
         values.append("\n")
     for value in re.findall(r"(\((?:\\.|[^\\()])*\))\s*Tj", data):
@@ -4942,6 +5434,8 @@ PURCHASE_FIELD_ALIASES = {
 def normalize_purchase_row(row: dict[str, Any]) -> dict[str, Any]:
     normalized = {normalize_header(key): value for key, value in row.items()}
     mapped = {field: first_present(normalized, names) for field, names in PURCHASE_FIELD_ALIASES.items()}
+    if mapped.get("date"):
+        mapped["date"] = normalize_document_date(mapped["date"])
     mapped["raw"] = {normalize_header(key): value for key, value in row.items() if str(value or "").strip()}
     return mapped
 
@@ -5015,7 +5509,7 @@ def build_purchase_invoices_from_rows(
                 "payment_account": str(row.get("payment_account") or "None"),
                 "payment_note": str(row.get("payment_note") or ""),
                 "notes": str(row.get("notes") or ""),
-                "confidence": 92,
+                "confidence": 0,  # scored below once the invoice is complete
                 "status": "Valid",
                 "issues": "",
                 "lines": [],
@@ -5052,6 +5546,11 @@ def build_purchase_invoices_from_rows(
             invoice["vat_amount"] = taxable * (company_vat_rate / Decimal("100"))
         invoice["total"] = taxable + invoice["vat_amount"] + decimal_value(invoice.get("shipping"))
         invoice["due"] = max(Decimal("0"), invoice["total"] - decimal_value(invoice.get("paid")))
+        invoice["confidence"] = extraction_confidence(
+            invoice_no_found=invoice["invoice_no"] != clean_base(filename), party=invoice["supplier"],
+            date=invoice["date"], subtotal=invoice["subtotal"], vat=invoice["vat_amount"], total=invoice["total"],
+            line_count=len(invoice["lines"]), check_totals=False,  # total is computed from the lines here
+        )
         invoices.append(json.loads(json.dumps(invoice, default=float)))
     return invoices
 
@@ -5197,7 +5696,7 @@ class WipeCompanyDataIn(BaseModel):
     confirm: str = ""
 
 
-@router.post("/wipe")
+@router.post("/wipe", dependencies=[Depends(require_company_admin)])
 @limiter.limit("5/minute")
 def wipe_company_data(
     request: Request,

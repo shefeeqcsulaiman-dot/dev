@@ -278,13 +278,8 @@ function CompanyRow({ idx, company, onSetExpiry, onResetPwd, onDelete }) {
       <Td style={{ color: "#374151" }}>{admin?.full_name || <span style={{ color: "#94a3b8" }}>—</span>}</Td>
       <Td style={{ color: "#2563eb" }}>{admin?.email || <span style={{ color: "#94a3b8" }}>—</span>}</Td>
       <Td>
-        {admin?.password_plain ? (
-          <code style={{ background: "#f1f5f9", padding: "3px 7px", borderRadius: "5px", fontSize: "12px", color: "#1e293b", fontFamily: "monospace" }}>
-            {admin.password_plain}
-          </code>
-        ) : (
-          <span style={{ color: "#94a3b8" }}>••••••</span>
-        )}
+        {/* Passwords are only ever stored hashed; never shown. */}
+        <span style={{ color: "#94a3b8" }}>••••••</span>
       </Td>
       <Td style={{ color: "#64748b", fontSize: "12px" }}>
         {company.created_at ? new Date(company.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}

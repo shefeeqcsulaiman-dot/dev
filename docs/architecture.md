@@ -2,7 +2,7 @@
 
 TaxFlow is a UAE business management platform for sales, purchases, accounting, tax, eInvoicing, payroll, HR, rota planning, documents, reporting, approvals, and audit control.
 
-The system is live in production at `https://dev.etaxflow.com` on DigitalOcean App Platform. The frontend is a vanilla JS single-page app served by FastAPI. The backend uses PostgreSQL with SQLAlchemy 2.0 and Redis for report caching. Local development uses SQLite. The production target is a modular, tenant-aware business system where source transactions, tax lines, accounting, audit, and reporting are controlled by backend services.
+The system is live in production at `https://app.etaxflow.com` on DigitalOcean App Platform. The frontend is a vanilla JS single-page app served by FastAPI. The backend uses PostgreSQL with SQLAlchemy 2.0 and Redis for report caching. Local development uses SQLite. The production target is a modular, tenant-aware business system where source transactions, tax lines, accounting, audit, and reporting are controlled by backend services.
 
 ## 1. Current Structure
 
@@ -50,7 +50,7 @@ Login:    admin@taxflowapp.com / admin123
 Production:
 
 ```text
-Live URL:         https://dev.etaxflow.com
+Live URL:         https://app.etaxflow.com
 App name:         etaxflow
 Platform:         DigitalOcean App Platform (nyc3)
 Instances:        2–6 × professional-s (2 vCPU / 2 GB), autoscales at 70% CPU
@@ -170,7 +170,7 @@ FastAPI        — auth, tenant context, module APIs, app-data bridge
 
 Do not replace `frontend/index.html` with the TaxFlow HTML. The Vite shell must stay at root.
 
-### Production (https://dev.etaxflow.com)
+### Production (https://app.etaxflow.com)
 
 ```text
 Browser
@@ -2910,66 +2910,3 @@ A six-track Playwright audit (Sales/Purchases/Inventory, POS/Bank/Accounting, Co
 **Documentation surfaces.** `STORYBOARD.md` (feature-by-feature functionality), `docs/storyboard.md` (screen layouts), `frontend/public/taxflow/handbook.html` (user handbook served at `/handbook`; screens `M.*` main app, `H.*` HRMS, `E.*` ESS; HRMS sidebar has a Handbook entry opening `/handbook#part-hrms`), `docs/hrms-architecture.md` §11 (OT cool-off/eligibility). Update all of them when a user-visible screen changes.
 
 **Frontend build.** After editing `app.js`/`ess.js`, run `cd frontend && npm run build:min && npm run inject-versions` — HTML pages load the `.min.js` bundles with version query strings.
-
-## 33. Voice (Phase 1 — AI Assistant, 2026-09-27)
-
-Voice is a thin input/output layer over the existing AI Assistant; it never writes data.
-
-- **`src/voice.js`** (plain script, loaded by `index.html` before `app.js`; versioned by `inject-versions`, not minified) exposes `window.VoiceInput` / `window.VoiceOutput`. Input prefers the browser's `SpeechRecognition`; otherwise (or on a browser STT network error) it records with `MediaRecorder` (max 60 s) and calls a caller-supplied `transcribe(blob, lang)`. Output uses `speechSynthesis`. Language (`en-US`/`ar-AE`) and mute live in `localStorage` (try/catch).
-- **AI panel wiring** (`app.js`, `toggleAIVoice()` and friends above `askSystemAI()`): transcript → `#system-ai-question` → `askSystemAI()`; a spoken question sets `answer_lang: "ar"` when asked in Arabic, and its answer is spoken.
-- **`POST /ai/transcribe`** (`routers/ai.py`, under `require_module("ai")`, 15/min): multipart `file` + optional `lang`; 422 empty, 413 over 5 MB; forwards to OpenAI (`OPENAI_TRANSCRIBE_MODEL`, default `gpt-4o-mini-transcribe`) via `ai_client.transcribe_audio()`; 503 when no key or the provider fails. Audio is never stored.
-- **`AIAssistRequest.answer_lang`** (`"en"`/`"ar"`) appends an "answer in Arabic" instruction to the `/ai/assist` prompt.
-- Tests: `backend/tests/test_voice.py` (STT/LLM mocked).
-- Not yet: voice data entry, ESS/POS voice, per-company voice settings and daily transcription cap (Phases 3–5 of the voice plan).
-
-### 33.1 Voice commands (Phase 2)
-
-- **Catalog, client side** (`buildVoiceCatalog()` in `app.js`): visible `.sb .nav` items (pages; `window.open` items skipped), the `.tabs .tab` / `.rep-nav-item` entries of pages reachable from a visible nav, and each such page's `META[page]` top action **only when its label starts with "+"** (blank create form). Ids are per-request (`p1`, `t7`, `a3`) mapped to closures that click the real element, so every existing guard (`_hrmsNavAllowed`, `_moduleNavAllowed`, `goHrmsTab`) still runs.
-- **`POST /ai/voice-intent`** (`routers/ai.py` → `app/voice_intent.py`, principal auth so HRMS employee logins work, `require_module("ai")`, 30/min): `{transcript, lang, targets[≤400]}` → `{intent: navigate|open_form|search|answer|unknown, target, query, confidence, alternatives, source}`. A rule matcher (verb stripping + difflib/token overlap) answers alone at ≥90; otherwise `call_llm` (`OPENAI_VOICE_MODEL` / `ANTHROPIC_VOICE_MODEL`). `sanitize()` drops any LLM reply whose target isn't in the list, whose kind doesn't fit the intent, or that picks search/answer without search words / a question — then the rule result is used. Reads no company data.
-- **Dispatcher** (`runVoiceCommand()`): confidence ≥60 → run target (search fills the first visible search/filter input on the page); `answer` → AI Assistant with the question (HRMS: message + page chips); otherwise "Did you mean…" chips. Confirmed commands are written to the local audit trail. Topbar `#vc-mic-btn` (index: `data-module-gate="ai"`; hrms: hidden in `applyModulePermissionNav`), Ctrl+Space / Esc.
-- `/ai/transcribe` now also uses principal auth (HRMS server-STT fallback).
-
-### 33.2 Voice data entry (Phase 3)
-
-- **`POST /ai/voice-draft`** (`routers/ai.py` → `app/voice_draft.py`, principal auth, `require_module("ai")`, 15/min): `{form: expense|purchase|sales_invoice|customer|vendor, transcript, lang, choices, today}` → `{fields, lines, unmatched}`; 503 when no AI key. Writes nothing (test asserts no `AuditLog` rows).
-- `FORMS` declares each form's fields and types. `sanitize_draft()` drops unknown keys and coerces: `money` (0 – 1e9, 2 dp), `date` (ISO), `trn` (exactly 15 digits), `email`, `phone`; `choice` fields must fuzzy-match a client-sent option (else reported in `unmatched`), `name` fields match when close and otherwise keep the spoken text. Lines (≤30) match products the same way and carry `matched: yes|no`.
-- Only strict `choice` lists are sent to the LLM; names/products are matched server-side so an unknown item is never swapped for a lookalike.
-- **Frontend** (`_VF_FORMS` / `voiceFill()` / `applyVoiceDraft()` in `app.js`): choices come from the form's `<select>` options and the `_AC_SOURCES` autocomplete lists; values are set with real `input`/`change` events so existing handlers (customer TRN/address fill, product price, totals) run; filled inputs get `.vf-filled` until the user edits them. Dictate buttons carry `data-module-gate="ai"`. No audit entry for drafts — the form's own Save logs the real action.
-
-### 33.3 HRMS & ESS voice (Phase 4)
-
-- **HRMS quick answers**: `_VC_HR_QUERIES` in `app.js` adds `kind: "query"` targets to the voice catalog (only when the matching `.sb .nav[data-staff-nav]` entry is visible). `/ai/voice-intent` gained intent `query` (must name a query target). Running one calls `goHrmsTab()` and answers from the endpoints that screen already uses — `/attendance/today` + `/leave/requests` (absent = active directory rows not checked in and not on approved leave), `/leave/requests` (pending), `/attendance/overtime-eligibility` for Monday→today (eligible, not yet requested) — so RBAC and department scoping are unchanged. Answers are spoken via `VoiceOutput`.
-- **ESS**: `POST /ess/voice-intent` (ESS bearer token, company `ai` module required → 403, 20/min) → `app/ess_voice.py`: rules first (balance / next shift / page words answer with no LLM call), LLM only for request forms. Intents: `navigate{page}`, `apply_leave`, `request_overtime`, `request_correction`, `request_advance`, `request_loan`, `leave_balance`, `next_shift`, `unknown`. `sanitize()` enforces the same windows the submit endpoints use (OT date within 31 days and not future, corrections within 60, leave within a year, hours 0.25–12, HH:MM times, known leave / OT / loan types). No employee id is accepted — balance and next shift reuse `ess_leave_balance()` / `ess_rota()` for the token's own employee. `POST /ess/voice-transcribe` is the ESS twin of `/ai/transcribe`.
-- ESS frontend (end of `ess.js`): `essVoice()` / `essRunVoice()` open `essOpenLeaveModal()` / `essOpenRequestModal()` pre-filled; the employee submits. The mic hides itself after a 403 (module off).
-
-### 33.4 POS voice order (Phase 5)
-
-- `/ai/voice-draft` form `pos_cart` (lines only; spoken prices are discarded server-side). `pos.html` loads `src/voice.js` (now versioned by `inject-versions` too) and sends `_products` names as the product choices.
-- `posVoiceParse()` shows a confirm panel (`#pos-voice-modal`); `posVoiceConfirm()` adds each checked line through `addToCart()` — with `window._posRendered` pointed at the full product list for that call so a filtered grid can't shift the index — then `setQty(id, before + qty)`. Unmatched products can't be added.
-
-### 33.5 Voice settings & cost guard
-
-- `app/voice_settings.py`: per-company settings in `AppDataRecord` (`collection="voiceSettings"`, `record_key="company"`) — `enabled`, `default_lang` (`""|en-US|ar-AE`), `cloud_transcription`, `daily_transcriptions` (default 200) — and a per-day counter (`collection="voiceUsage"`, `record_key=<ISO date>`). No migration.
-- `GET/PUT /ai/voice-settings` (PUT admin-only, audit-logged `voice_settings_saved`); `GET /ess/voice-settings` for the portal. `require_voice_enabled()` guards `/ai/voice-intent`, `/ai/voice-draft`, `/ess/voice-intent`; `reserve_transcription()` guards both transcribe endpoints (403 when voice or server STT is off, 429 over the daily cap) and counts the request before calling the provider.
-- Frontend: `applyVoiceSettings()` (app.js, main + HRMS) sets `body.voice-off` (CSS hides `#vc-mic-btn`, `.vf-btn`, `#ai-voice-controls`) and `VoiceInput.setCompanyLang()`; POS and ESS hide their mic the same way. Settings tab `#set-voice` (`loadVoiceSettingsForm()` / `saveVoiceSettingsForm()`).
-- Privacy: audio is forwarded to the STT provider and discarded; transcripts go to the LLM only to resolve the command/draft; voice drafts are not audit-logged (the user's own Save is), confirmed voice navigation/questions are logged locally with a 60-character excerpt.
-
-## 34. ESS phone app layout (2026-09-27)
-
-- Pure presentation layer over the existing ESS page, active at `max-width: 760px` only (`ess.css` "Mobile app layer"): `.m-only` sections in `ess.html` (`.m-home` in `#tb-dashboard`, `.m-att` in `#tb-attendance`, `.m-me` in `#tb-profile`, `.m-tabbar`), sidebar/top bar hidden, modals become bottom sheets.
-- `ess.js` "Mobile app layer": `essLoadMobile()` (called from `showApp()`) fills the phone views from `/ess/me`, `/ess/leave-balance`, `/ess/requests`, `/ess/announcements`, `/ess/rota`, `/ess/attendance` and `/hr/dashboard`; `essSyncTabbar()` is called from `essTab()` so every navigation path keeps the tab bar in sync; `essMobileCheck()` wraps the existing `gpsCheckIn()` / `gpsCheckOut()` (check-out confirms first). Leave-type chips drive the real `#leave-type` select.
-- `/hr/dashboard` now includes the caller's own `checked_in`, `check_in_time`, `check_in_at` (ISO UTC) and `today_sessions` for **every** role (`_own_session_status()` in `hr_access.py`) — previously Administrator / HR Manager / Manager dashboards omitted them, so their GPS check-in page always showed "Not checked in". Tests: `test_ess_mobile_status.py`.
-- The ESS start-up block (`showApp()` for a remembered session) now sits at the very end of `ess.js` so everything it calls is defined first.
-- PWA: `ess-manifest.json` (start `/ess`, standalone, theme `#2563eb`), `ess-icon-192/512.png`, iOS `apple-mobile-web-app-*` meta; the Me menu offers `beforeinstallprompt` on Android/Chrome and Share-sheet instructions on iOS. No service worker (not required for install on current Chrome; avoids stale-cache issues).
-
-## 35. AI Assistant answers from live company data (2026-09-28)
-
-- `app/ai_context.py` `build_ai_context()` builds a compact JSON snapshot for `/ai/assist` from the cached report builders (`reports._build_dashboard` / `_build_summary`, 60s / 120s cache): totals to date, P&L, monthly revenue/VAT (12 months), invoices by status field, `receivables_summary` (past due by **due date**, from AR aging — the status-field "overdue" bucket only counts invoices explicitly marked overdue), AR/AP aging top 10, top customers/suppliers, working capital, health score, VAT position + next return due date (calendar quarters, `voice_briefing.next_vat_due`), staff snapshot and by department, low stock (via `inventory.list_stock_levels`), open exceptions.
-- The system prompt restricts answers to that data (no invented numbers; say which report has it otherwise), explains negative VAT = refund and monthly vs to-date figures, and asks for formatted amounts. Works for spoken and typed questions and Arabic (`answer_lang`).
-- Without an AI key, `rule_answer()` answers common questions (profit, receivables/overdue, VAT, revenue, staff, stock, suppliers) directly from the snapshot. Tests: `test_ai_data_answers.py`.
-
-### 35.1 Daily briefing
-
-- `GET /ai/briefing?lang=en|ar` (admin user, `ai` module, 20/min) → `app/voice_briefing.build_briefing()`: `{intro, items:[{key,page,text}], text, lang, vat_due}` from the cached dashboard plus `ai_context` `receivables_summary` (past due by due date). VAT due = quarter end + 28 days (calendar quarters). No LLM.
-- Frontend: `playDailyBriefing()` (app.js) shows the items in the voice popup (`#vc-pop-body`) with page chips and speaks `text`; `#dash-btn-briefing` on the dashboard header and a `Daily briefing` voice query target (main app only). Tests: `test_daily_briefing.py`.
-

@@ -31,8 +31,40 @@ def _ess_login(client, db, admin_headers, company_id, employee_no, username, dep
     return emp, headers
 
 
+def _every_day_is_a_working_day(db, company_id):
+    """'custom' weekend policy = no weekend, so this test passes on any weekday (other tests leave
+    the shared company on a Fri/Sat weekend). Returns the previous payload to restore."""
+    row = db.query(AppDataRecord).filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == "hr_settings",
+                                         AppDataRecord.record_key == "weekend-policy-config").first()
+    previous = row.payload if row else None
+    if not row:
+        row = AppDataRecord(company_id=company_id, collection="hr_settings", record_key="weekend-policy-config")
+        db.add(row)
+    row.payload = json.dumps({"mode": "custom"})
+    db.commit()
+    return previous
+
+
+def _restore_weekend_policy(db, company_id, previous):
+    row = db.query(AppDataRecord).filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == "hr_settings",
+                                         AppDataRecord.record_key == "weekend-policy-config").first()
+    if previous is None:
+        db.delete(row)
+    else:
+        row.payload = previous
+    db.commit()
+
+
 def test_team_today_shows_present_absent_and_leave_within_the_same_department(client, db, auth_headers):
     company_id = _company_id(client, auth_headers)
+    previous_policy = _every_day_is_a_working_day(db, company_id)
+    try:
+        _check_team_today(client, db, auth_headers, company_id)
+    finally:
+        _restore_weekend_policy(db, company_id, previous_policy)
+
+
+def _check_team_today(client, db, auth_headers, company_id):
     emp_present, headers = _ess_login(client, db, auth_headers, company_id, "TTODAY-PRESENT", "ttoday.present", department="TeamTodayDept")
     emp_absent, _ = _ess_login(client, db, auth_headers, company_id, "TTODAY-ABSENT", "ttoday.absent", department="TeamTodayDept")
     emp_leave, _ = _ess_login(client, db, auth_headers, company_id, "TTODAY-LEAVE", "ttoday.leave", department="TeamTodayDept")
@@ -95,3 +127,45 @@ def test_holidays_visible_to_ess_and_sorted_by_date(client, db, auth_headers):
 def test_holidays_requires_ess_auth(client):
     r = client.get("/api/v1/ess/holidays")
     assert r.status_code == 401
+
+
+def test_team_today_shows_rota_days_off(client, db, auth_headers):
+    from datetime import timedelta
+    company_id = _company_id(client, auth_headers)
+    me, headers = _ess_login(client, db, auth_headers, company_id, "TOFF-EXPLICIT", "toff.explicit", department="TeamOffDept")
+    gap, _ = _ess_login(client, db, auth_headers, company_id, "TOFF-GAP", "toff.gap", department="TeamOffDept")
+    unscheduled, _ = _ess_login(client, db, auth_headers, company_id, "TOFF-NONE", "toff.none", department="TeamOffDept")
+    worked, _ = _ess_login(client, db, auth_headers, company_id, "TOFF-WORKED", "toff.worked", department="TeamOffDept")
+
+    today = (datetime.now(UTC) + _company_offset(db, company_id)).date()
+    other_day = today + timedelta(days=1) if today.weekday() < 6 else today - timedelta(days=1)  # same Mon-Sun week
+
+    def rota(emp, day, **fields):
+        rec = {"id": f"{emp.employee_no}-{day}", "employee_id": emp.employee_no, "date": day.isoformat(), **fields}
+        r = client.post("/api/v1/app-data", headers=auth_headers, params={"action": "save"}, json={"collection": "rotaAssignments", "record": rec})
+        assert r.status_code == 200, r.text
+
+    rota(me, today, code="OFF", mark="Off", type="Off")
+    rota(gap, other_day, code="M", mark="Shift", start="09:00", end="17:00")
+    rota(worked, today, code="OFF", mark="Off", type="Off")
+    upsert_attendance_event(db, company_id=company_id, employee_id=worked.employee_no,
+                             punch_time=datetime.now(UTC), direction="in", source="manual")
+
+    rows = {row["employee_no"]: row["status"] for row in client.get("/api/v1/ess/team/today", headers=headers).json()}
+    if rows["TOFF-NONE"] in ("weekend", "holiday"):
+        return  # company-wide day off today; rota statuses don't apply
+    assert rows["TOFF-EXPLICIT"] == "off"
+    assert rows["TOFF-GAP"] == "off"
+    assert rows["TOFF-NONE"] == "absent"
+    assert rows["TOFF-WORKED"] == "present"  # checked in on a day off still counts as present
+
+
+def test_team_today_uses_rota_leave_mark(client, db, auth_headers):
+    company_id = _company_id(client, auth_headers)
+    emp, headers = _ess_login(client, db, auth_headers, company_id, "TOFF-LMARK", "toff.lmark", department="TeamLeaveMarkDept")
+    today = (datetime.now(UTC) + _company_offset(db, company_id)).date().isoformat()
+    r = client.post("/api/v1/app-data", headers=auth_headers, params={"action": "save"}, json={"collection": "rotaAssignments",
+        "record": {"id": f"TOFF-LMARK-{today}", "employee_id": "TOFF-LMARK", "date": today, "code": "L", "mark": "Leave"}})
+    assert r.status_code == 200, r.text
+    status = client.get("/api/v1/ess/team/today", headers=headers).json()[0]["status"]
+    assert status in ("leave", "weekend", "holiday")

@@ -205,7 +205,7 @@ def test_employee_blocked_by_branch_module_toggle_on_gated_router(client, db, au
     emp = Employee(company_id=company_id, employee_no="BR-MOD-A", full_name="Module Toggle Staff A", branch_id=branch["id"])
     db.add(emp)
     db.commit()
-    headers = _grant_role_and_login(client, auth_headers, emp.id, "modtest.brancha", ["employees:view"], "Module Toggle Role A")
+    headers = _grant_role_and_login(client, auth_headers, emp.id, "modtest.brancha", ["employees:view", "inventory:view"], "Module Toggle Role A")
 
     r = client.get("/api/v1/inventory/stock-levels", headers=headers)
     assert r.status_code == 403, r.text
@@ -221,7 +221,7 @@ def test_employee_allowed_when_branch_module_enabled(client, db, auth_headers):
     emp = Employee(company_id=company_id, employee_no="BR-MOD-B", full_name="Module Toggle Staff B", branch_id=branch["id"])
     db.add(emp)
     db.commit()
-    headers = _grant_role_and_login(client, auth_headers, emp.id, "modtest.branchb", ["employees:view"], "Module Toggle Role B")
+    headers = _grant_role_and_login(client, auth_headers, emp.id, "modtest.branchb", ["employees:view", "inventory:view"], "Module Toggle Role B")
 
     r = client.get("/api/v1/inventory/stock-levels", headers=headers)
     assert r.status_code == 200, r.text
@@ -238,7 +238,7 @@ def test_employee_unrestricted_branch_module_toggle_unaffected(client, db, auth_
     emp = Employee(company_id=company_id, employee_no="BR-MOD-C", full_name="Unrestricted Staff", branch_id=branch["id"])
     db.add(emp)
     db.commit()
-    headers = _grant_role_and_login(client, auth_headers, emp.id, "modtest.branchc", ["employees:view"], "Unrestricted Toggle Role")
+    headers = _grant_role_and_login(client, auth_headers, emp.id, "modtest.branchc", ["employees:view", "inventory:view"], "Unrestricted Toggle Role")
 
     r = client.get("/api/v1/inventory/stock-levels", headers=headers)
     assert r.status_code == 200, r.text
@@ -256,7 +256,7 @@ def test_employee_blocked_by_branch_module_toggle_on_appdata_writes(client, db, 
     emp = Employee(company_id=company_id, employee_no="BR-MOD-D", full_name="Module Toggle Staff D", branch_id=branch["id"])
     db.add(emp)
     db.commit()
-    headers = _grant_role_and_login(client, auth_headers, emp.id, "modtest.branchd", ["employees:view"], "Module Toggle Role D")
+    headers = _grant_role_and_login(client, auth_headers, emp.id, "modtest.branchd", ["employees:view", "sales:view", "sales:edit", "purchase:view", "purchase:edit"], "Module Toggle Role D")
 
     r = client.post(
         "/api/v1/app-data?action=save", headers=headers,

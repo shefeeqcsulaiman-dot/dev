@@ -1,0 +1,78 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "taxflow-backend",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--reload",
+        "--port",
+        "8000",
+        "--app-dir",
+        "E:/tax/backend"
+      ],
+      "port": 8000
+    },
+    {
+      "name": "taxflow-qa-scratch",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "C:/Users/SHEFI/AppData/Local/Temp/claude/E--tax/b096e8b6-ef85-4652-b256-6bcfd925b38a/scratchpad/ui_server.py"
+      ],
+      "port": 8766
+    },
+    {
+      "name": "taxflow-qa-ai",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "C:/Users/SHEFI/AppData/Local/Temp/claude/E--tax/b096e8b6-ef85-4652-b256-6bcfd925b38a/scratchpad/ui_server_ai.py"
+      ],
+      "port": 8767
+    },
+    {
+      "name": "brochure-demo",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "C:/Users/SHEFI/AppData/Local/Temp/claude/E--tax/45c59c38-4e8d-4a40-a2ee-459d4d4941f4/scratchpad/brochure/demo_server.py"
+      ],
+      "port": 8021
+    },
+    {
+      "name": "speed-before",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "C:/Users/SHEFI/AppData/Local/Temp/claude/E--tax/45c59c38-4e8d-4a40-a2ee-459d4d4941f4/scratchpad/speed/server.py",
+        "E:/tax/backend",
+        "C:/tmp/snapbig.db",
+        "8031"
+      ],
+      "port": 8031
+    },
+    {
+      "name": "speed-after",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "C:/Users/SHEFI/AppData/Local/Temp/claude/E--tax/45c59c38-4e8d-4a40-a2ee-459d4d4941f4/scratchpad/speed/server.py",
+        "E:/tax/backend",
+        "C:/tmp/snap.db",
+        "8032"
+      ],
+      "port": 8032
+    },
+    {
+      "name": "loadtest",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "C:/Users/SHEFI/AppData/Local/Temp/claude/E--tax/45c59c38-4e8d-4a40-a2ee-459d4d4941f4/scratchpad/loadtest/lt_server.py",
+        "E:/tax/backend",
+        "sqlite:///C:/tmp/lt-100.db",
+        "8041",
+        "3"
+      ],
+      "port": 8041
+    }
+  ]
+}

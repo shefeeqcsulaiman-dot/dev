@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_module
+from app.dependencies import get_current_user, require_company_admin, require_module
 from app.models import AppDataRecord, User
 from app.schemas import AppRecordIn, AppRecordOut
 
@@ -91,31 +91,31 @@ def create_purchase(payload: AppRecordIn, db: Session = Depends(get_db), current
     return create_record("purchases", payload, db, current_user)
 
 
-@router.get("/items", response_model=list[AppRecordOut])
+@router.get("/items", response_model=list[AppRecordOut], dependencies=[Depends(require_company_admin)])
 def list_items(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[AppRecordOut]:
     return list_records("items", db, current_user)
 
 
-@router.post("/items", response_model=AppRecordOut, status_code=201)
+@router.post("/items", response_model=AppRecordOut, status_code=201, dependencies=[Depends(require_company_admin)])
 def create_item(payload: AppRecordIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> AppRecordOut:
     return create_record("items", payload, db, current_user)
 
 
-@router.get("/units", response_model=list[AppRecordOut])
+@router.get("/units", response_model=list[AppRecordOut], dependencies=[Depends(require_company_admin)])
 def list_units(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[AppRecordOut]:
     return list_records("units", db, current_user)
 
 
-@router.post("/units", response_model=AppRecordOut, status_code=201)
+@router.post("/units", response_model=AppRecordOut, status_code=201, dependencies=[Depends(require_company_admin)])
 def create_unit(payload: AppRecordIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> AppRecordOut:
     return create_record("units", payload, db, current_user)
 
 
-@router.get("/settings", response_model=list[AppRecordOut])
+@router.get("/settings", response_model=list[AppRecordOut], dependencies=[Depends(require_company_admin)])
 def list_settings(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[AppRecordOut]:
     return list_records("settings", db, current_user)
 
 
-@router.post("/settings", response_model=AppRecordOut, status_code=201)
+@router.post("/settings", response_model=AppRecordOut, status_code=201, dependencies=[Depends(require_company_admin)])
 def create_setting(payload: AppRecordIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> AppRecordOut:
     return create_record("settings", payload, db, current_user)

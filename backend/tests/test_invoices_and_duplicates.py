@@ -23,7 +23,9 @@ def test_invoice_vat_calculation(client, auth_headers):
 
 def test_invoice_posts_to_accounting_and_corporate_tax(client, auth_headers, db):
     db.expire_all()
-    existing_corporate_tax = db.query(CorporateTaxRecord).order_by(CorporateTaxRecord.created_at.desc()).first()
+    company_id = client.get("/api/v1/auth/me", headers=auth_headers).json()["company"]["id"]
+    # This company's own record — the newest record overall can belong to another test's company.
+    existing_corporate_tax = db.query(CorporateTaxRecord).filter(CorporateTaxRecord.company_id == company_id).order_by(CorporateTaxRecord.created_at.desc()).first()
     previous_profit = existing_corporate_tax.accounting_profit if existing_corporate_tax else Decimal("0.00")
 
     response = client.post(
@@ -53,7 +55,7 @@ def test_invoice_posts_to_accounting_and_corporate_tax(client, auth_headers, db)
     )
     assert journal.status == "posted"
 
-    corporate_tax = db.query(CorporateTaxRecord).order_by(CorporateTaxRecord.created_at.desc()).first()
+    corporate_tax = db.query(CorporateTaxRecord).filter(CorporateTaxRecord.company_id == company_id).order_by(CorporateTaxRecord.created_at.desc()).first()
     assert corporate_tax is not None
     assert corporate_tax.status == "calculated"
     assert corporate_tax.accounting_profit == previous_profit + Decimal("500.00")

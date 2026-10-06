@@ -219,6 +219,20 @@ def build_journal(db: Session, transaction: SourceTransaction) -> JournalEntry:
         if vat:
             lines.append(line(accounts["2210"], "Input VAT", debit=vat))
         lines.append(line(accounts["2100"], "Supplier payable", credit=total))
+    elif transaction.module in {"cogs", "cogs_return"}:
+        # Perpetual inventory: a sale moves its cost out of stock (Dr COGS, Cr Inventory); a
+        # return moves it back. Source lines carry the COGS account (5000).
+        require_accounts(accounts, ["1200"])
+        is_return = transaction.module == "cogs_return"
+        for source_line in transaction.lines:
+            source_amount = money(source_line.amount)
+            if source_amount:
+                account = accounts.get(source_line.account_code)
+                if not account:
+                    raise PostingError(f"Missing account mapping: {source_line.account_code}")
+                lines.append(line(account, source_line.description, credit=source_amount) if is_return
+                             else line(account, source_line.description, debit=source_amount))
+        lines.append(line(accounts["1200"], "Inventory", debit=total) if is_return else line(accounts["1200"], "Inventory", credit=total))
     elif transaction.module in {"receipt", "payment"}:
         # Customer receipt: Dr Cash & Bank, Cr Accounts Receivable (clears AR).
         # Supplier payment: Dr Accounts Payable, Cr Cash & Bank (clears AP).
@@ -260,7 +274,7 @@ def build_journal(db: Session, transaction: SourceTransaction) -> JournalEntry:
 def ensure_tax_line(db: Session, transaction: SourceTransaction) -> None:
     # Zero VAT can mean zero-rated (still a real taxable supply, must be
     # reported) rather than "nothing to report" — only skip truly empty lines.
-    if not money(transaction.subtotal):
+    if not money(transaction.subtotal) or transaction.module in {"cogs", "cogs_return"}:
         return
     exists = (
         db.query(TaxLine)

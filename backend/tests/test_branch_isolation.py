@@ -360,7 +360,7 @@ def test_purchase_records_collection_filtered_by_branch(client, db, auth_headers
     emp_a = Employee(company_id=company_id, employee_no="BR-INV-E", full_name="Inv Branch E Staff", branch_id=branch_a["id"])
     db.add(emp_a)
     db.commit()
-    headers_a = _grant_role_and_login(client, auth_headers, emp_a.id, "branchtest.inve", ["employees:view"], "Purchases Only Role")
+    headers_a = _grant_role_and_login(client, auth_headers, emp_a.id, "branchtest.inve", ["purchase:view"], "Purchases Only Role")
 
     _save_purchase_record(client, auth_headers, "PUR-INV-E-001", branch_a["id"], "INV-ISO-SKU-3", 1)
     _save_purchase_record(client, auth_headers, "PUR-INV-F-001", branch_b["id"], "INV-ISO-SKU-4", 1)
@@ -559,7 +559,9 @@ def test_branch_employee_cannot_escalate_via_branch_id_query_param(client, db, a
 
     listed = client.get(f"/api/v1/app-data/records/purchaseRecords?branch_id={branch_b['id']}", headers=headers_a)
     assert listed.status_code == 200, listed.text
-    refs = {rec["ref"] for rec in listed.json()["records"]}
+    # Only this test's records: purchases with no branch (other tests' leftovers on the shared
+    # company) are visible to every branch by design.
+    refs = {rec["ref"] for rec in listed.json()["records"] if str(rec.get("ref", "")).startswith("PUR-ESC-")}
     assert refs == {"PUR-ESC-A-001"}
     assert "PUR-ESC-B-001" not in refs
 
@@ -817,10 +819,10 @@ def test_cross_branch_permission_is_scoped_per_module_not_global(client, db, aut
     emp_a = Employee(company_id=company_id, employee_no="XB-SCOPE-A", full_name="XB Scope Staff", branch_id=branch_a["id"])
     db.add(emp_a)
     db.commit()
-    # Only sales:view_all_branches granted — NOT purchase.
+    # sales:view_all_branches granted, purchase only plain view — NOT purchase cross-branch.
     headers_a = _grant_role_and_login(
         client, auth_headers, emp_a.id, "xbtest.scopea",
-        ["employees:view", "sales:view_all_branches"], "XB Scope Role",
+        ["employees:view", "purchase:view", "sales:view_all_branches"], "XB Scope Role",
     )
 
     _save_purchase_record(client, auth_headers, "PUR-XB-SCOPE-A-001", branch_a["id"], "XB-SCOPE-SKU-A", 1)
@@ -828,7 +830,7 @@ def test_cross_branch_permission_is_scoped_per_module_not_global(client, db, aut
 
     listed = client.get("/api/v1/app-data/records/purchaseRecords", headers=headers_a)
     assert listed.status_code == 200, listed.text
-    refs = {rec["ref"] for rec in listed.json()["records"]}
+    refs = {rec["ref"] for rec in listed.json()["records"] if str(rec.get("ref", "")).startswith("PUR-XB-SCOPE-")}
     # Still branch-locked for purchase — the sales flag doesn't leak here.
     assert refs == {"PUR-XB-SCOPE-A-001"}
     assert "PUR-XB-SCOPE-B-001" not in refs

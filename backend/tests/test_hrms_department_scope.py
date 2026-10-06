@@ -9,7 +9,9 @@ Two throw-away departments ("ScopeDeptA", "ScopeDeptB") keep these tests
 independent of whatever other test files left in the shared test company;
 assertions look at this file's own SCP-* rows, never at counts."""
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
+
+from app.routers.attendance import _company_offset, _local_today
 
 from app.models import (
     AppDataRecord, AttendanceDetail, AttendanceSession, CompanyLocation, Employee, EmployeeLocation, LeaveRequest,
@@ -19,8 +21,8 @@ from app.models import (
 DEPT_A, DEPT_B = "ScopeDeptA", "ScopeDeptB"
 PERMS = [
     "employees:view", "employees:edit", "employees:delete", "leave:view", "leave:edit", "leave:delete",
-    "attendance:view", "attendance:edit", "overtime:view", "overtime:edit", "loans:view", "loans:edit",
-    "rota:view", "rota:edit", "payroll:view", "hr_workflow:view", "hr_workflow:edit", "hr_workflow:delete",
+    "attendance:view", "attendance:edit", "overtime:view", "overtime:edit", "overtime:delete", "loans:view", "loans:edit", "loans:delete",
+    "rota:view", "rota:edit", "rota:delete", "payroll:view", "hr_workflow:view", "hr_workflow:edit", "hr_workflow:delete",
     "hr_settings:view", "hr_settings:edit", "hr_settings:delete",
 ]
 
@@ -77,7 +79,8 @@ def _world(client, db, auth_headers, tag):
         assert _save(client, auth_headers, "employeeLoans", {"id": f"LN-{who}-{tag}", "employee": emp.full_name, "employee_id": emp.employee_no, "amount": 100, "status": "Pending"}).status_code == 200
         assert _save(client, auth_headers, "rotaAssignments", {"id": f"RA-{who}-{tag}", "employee": emp.full_name, "employee_id": emp.employee_no, "date": "2026-09-02"}).status_code == 200
         db.add(LeaveRequest(company_id=cid, employee_id=emp.id, leave_type="Annual Leave", start_date="2026-10-01", end_date="2026-10-02", days=2, status="pending"))
-        today = date.today().isoformat()
+        # Company-local date, as /attendance/today uses — date.today() is a day behind after 20:00 UTC in the UAE.
+        today = _local_today(_company_offset(db, cid)).isoformat()
         now = datetime.now(UTC)
         db.add(AttendanceDetail(
             company_id=cid, employee_id=emp.employee_no, employee_name=emp.full_name, work_date=today, clock_in_1=now,

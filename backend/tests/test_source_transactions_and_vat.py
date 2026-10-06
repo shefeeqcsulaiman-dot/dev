@@ -101,12 +101,28 @@ def test_repost_by_reference_syncs_stale_ledger_after_purchase_edit(client, auth
     )
     assert second_save.status_code == 200, second_save.text
 
+    # Saving the edit now corrects the ledger by itself: the original journal is reversed (never
+    # mutated) and a fresh one posted from the new amounts.
     journals_after_edit = client.get("/api/v1/journal", headers=auth_headers).json()["records"]
+    reversals = [j for j in journals_after_edit if j["source_module"] == "reversal" and j["source_id"] == original["id"]]
+    assert len(reversals) == 1, "exactly one reversal of the original"
+    assert sorted((Decimal(l["debit"]), Decimal(l["credit"])) for l in reversals[0]["lines"]) == sorted((Decimal(l["credit"]), Decimal(l["debit"])) for l in original["lines"])
     purchase_journals_after_edit = [j for j in journals_after_edit if j["source_module"] == "purchase"]
-    assert len(purchase_journals_after_edit) == original_count  # confirms the bug: no new journal from the edit alone
-    assert purchase_journals_after_edit[0]["id"] == original["id"]
+    assert len(purchase_journals_after_edit) == original_count + 1, "original stays, a fresh corrected journal is added"
+    fresh = next(j for j in purchase_journals_after_edit if j["id"] != original["id"] and j["id"] not in {p["id"] for p in purchase_journals_before})
+    assert any(Decimal(l["debit"]) == Decimal("200.00") for l in fresh["lines"])
+    original_after = next(j for j in journals_after_edit if j["id"] == original["id"])
+    assert original_after["lines"] == original["lines"], "the original posted journal is untouched"
 
-    # Now trigger the manual repost.
+    # Re-saving with nothing changed doesn't repost again.
+    third_save = client.post("/api/v1/app-data?action=save", headers=auth_headers, json={"collection": "purchaseRecords", "record": {
+        "ref": ref, "supplier": "Repost Test Supplier", "net_amount": 200, "tax_amount": 10, "total": 210,
+        "lines": [{"sku": "REPOST-SKU", "product": "Repost Item", "quantity": 2, "unit_cost": 100, "line_total": 200}]}})
+    assert third_save.status_code == 200, third_save.text
+    unchanged = client.get("/api/v1/journal", headers=auth_headers).json()["records"]
+    assert len([j for j in unchanged if j["source_module"] == "reversal"]) == len([j for j in journals_after_edit if j["source_module"] == "reversal"])
+
+    # The manual "Update Ledger" action still works and VAT reflects the corrected amount.
     reposted = client.post(
         "/api/v1/source-transactions/repost-by-reference",
         headers=auth_headers,
@@ -114,38 +130,10 @@ def test_repost_by_reference_syncs_stale_ledger_after_purchase_edit(client, auth
     )
     assert reposted.status_code == 200, reposted.text
     assert reposted.json()["subtotal"] == "200.00"
-
-    all_journals_after = client.get("/api/v1/journal", headers=auth_headers).json()["records"]
-    reversal_journals = [j for j in all_journals_after if j["source_module"] == "reversal" and j["source_id"] == original["id"]]
-    assert len(reversal_journals) == 1, "exactly one reversal must be created, matching the original's lines inverted"
-    reversal = reversal_journals[0]
-    assert sorted((Decimal(l["debit"]), Decimal(l["credit"])) for l in reversal["lines"]) == sorted((Decimal(l["credit"]), Decimal(l["debit"])) for l in original["lines"])
-
-    new_purchase_journals = [j for j in all_journals_after if j["source_module"] == "purchase"]
-    assert len(new_purchase_journals) == original_count + 1, "original stays untouched, a fresh corrected journal is added"
-    fresh = next(j for j in new_purchase_journals if j["id"] != original["id"])
-    assert any(Decimal(l["debit"]) == Decimal("200.00") or Decimal(l["credit"]) == Decimal("200.00") for l in fresh["lines"])
-
-    # The original posted journal itself must be byte-for-byte untouched.
-    original_after = next(j for j in all_journals_after if j["id"] == original["id"])
-    assert original_after["lines"] == original["lines"]
-
-    # VAT reporting must reflect the corrected amount, not the stale original.
     tax_lines = client.get("/api/v1/tax/lines", headers=auth_headers).json()
     matching_tax = [t for t in tax_lines if t["source_id"] == reposted.json()["id"]]
     assert len(matching_tax) == 1
     assert Decimal(matching_tax[0]["tax_amount"]) == Decimal("10.00")
-
-    # Calling it again with nothing changed must not create yet another reversal.
-    idempotent = client.post(
-        "/api/v1/source-transactions/repost-by-reference",
-        headers=auth_headers,
-        json={"module": "purchase", "reference": ref},
-    )
-    assert idempotent.status_code == 200, idempotent.text
-    journals_final = client.get("/api/v1/journal", headers=auth_headers).json()["records"]
-    reversals_final = [j for j in journals_final if j["source_module"] == "reversal"]
-    assert len(reversals_final) == 2  # one more reversal for the just-posted fresh journal — still exactly one per repost call
 
 
 def test_repost_by_reference_requires_existing_posted_record(client, auth_headers):

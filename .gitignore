@@ -22,6 +22,8 @@ env/
 *.sqlite3
 *-journal
 *.db-journal*
+*.db-wal
+*.db-shm
 *.log
 backend/local-storage/
 pytest-cache-files-*/
@@ -38,5 +40,3 @@ build/
 Thumbs.db
 .idea/
 .vscode/
-*.db-shm
-*.db-wal

@@ -39,7 +39,7 @@ Environment variables (override defaults)
   ZK_DEVICE_IP        IP address of the biometric device
   ZK_DEVICE_PORT      TCP port (default 4370)
   ZK_POLL_INTERVAL    Seconds between polls (default 30)
-  API_BASE_URL        ETaxFlow API base (e.g. https://dev.etaxflow.com)
+  API_BASE_URL        ETaxFlow API base (e.g. https://app.etaxflow.com)
   DEVICE_API_KEY      API key from HRMS → Biometric Devices
 """
 
@@ -65,7 +65,7 @@ except ImportError:
 #   DEVICE_API_KEY=your_key_here
 #   ZK_DEVICE_IP=192.168.1.201
 #   ZK_DEVICE_PORT=4370
-#   API_BASE_URL=https://dev.etaxflow.com
+#   API_BASE_URL=https://app.etaxflow.com
 
 def _load_conf() -> dict[str, str]:
     conf: dict[str, str] = {}
@@ -91,7 +91,7 @@ _ZK_DEVICE_IP_EXPLICIT = _is_explicitly_set("ZK_DEVICE_IP")
 ZK_DEVICE_IP     = _get("ZK_DEVICE_IP",     "192.168.1.201")
 ZK_DEVICE_PORT   = int(_get("ZK_DEVICE_PORT", "4370"))
 ZK_POLL_INTERVAL = int(_get("ZK_POLL_INTERVAL", "30"))
-API_BASE_URL     = _get("API_BASE_URL",     "https://dev.etaxflow.com").rstrip("/")
+API_BASE_URL     = _get("API_BASE_URL",     "https://app.etaxflow.com").rstrip("/")
 DEVICE_API_KEY   = _get("DEVICE_API_KEY",   "")
 # ZKTeco devices report attendance in the device's own local clock (naive
 # datetime, no tzinfo). UAE has no DST, so this is a fixed UTC+4 offset by

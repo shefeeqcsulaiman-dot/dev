@@ -38,5 +38,6 @@ COPY --from=frontend-build /build/public/taxflow/hrms.html ./frontend/public/tax
 COPY --from=frontend-build /build/public/taxflow/ess.html ./frontend/public/taxflow/ess.html
 
 EXPOSE 8000
-# WORKERS defaults to 2 — set to 4 on Render standard/pro plans (2+ vCPU)
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WORKERS:-2}
+# WORKERS defaults to 2 — set to 3 on 2 GB / 2 vCPU plans. Workers are recycled after
+# MAX_REQUESTS requests so their memory is released (see backend/Dockerfile).
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WORKERS:-2} --limit-max-requests ${MAX_REQUESTS:-2000}

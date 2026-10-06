@@ -1,11 +1,14 @@
 import datetime as _dt
 import json
+import os
+import tempfile
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
+from starlette.background import BackgroundTask
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
@@ -15,7 +18,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.dependencies import Principal, get_current_principal, get_current_user
 from app.limiter import limiter
-from app.routers.app_data import build_all_companies_backup_zip, build_company_sql_dump
+from app.routers.app_data import sql_dump_file_response, write_all_companies_backup_zip
 # Re-exported here under the same name for every pre-existing call site in
 # this file — moved to app/module_catalog.py (Branch Login Phase 1) so core
 # auth code (auth_principal.py, dependencies.py) and branches.py can import
@@ -102,6 +105,8 @@ class CreateCompanyIn(BaseModel):
     country: str | None = None
     currency: str | None = None
     vat_rate: Decimal | None = None
+    stock_mode: Literal["with_stock", "without_stock"] = "with_stock"
+    inventory_accounting: Literal["perpetual", "periodic"] = "perpetual"
 
 
 
@@ -293,6 +298,8 @@ def list_companies(db: Session = Depends(get_db), _: User = Depends(_require_sup
                 "country": company.country,
                 "currency": company.currency,
                 "vat_rate": str(company.vat_rate),
+                "stock_mode": company.stock_mode or "with_stock",
+                "inventory_accounting": company.inventory_accounting or "periodic",
                 "emirate": company.emirate,
                 "business_type": company.business_type,
                 "business_activity": company.business_activity,
@@ -366,12 +373,7 @@ def superadmin_company_db_dump(
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(404, "Company not found")
-    sql_text, fname = build_company_sql_dump(db, company_id, f"Superadmin ({current_user.full_name})")
-    return Response(
-        content=sql_text.encode("utf-8"),
-        media_type="text/plain; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
-    )
+    return sql_dump_file_response(db, company_id, f"Superadmin ({current_user.full_name})")
 
 
 @router.get("/companies/backup-all")
@@ -387,12 +389,21 @@ def superadmin_backup_all_companies(
     rather than concatenated into one script -- keeps each tenant's data
     separable for a real single-company restore, and a bad/huge company
     dump can't corrupt the file boundaries of the others."""
-    zip_bytes = build_all_companies_backup_zip(db, f"Superadmin ({current_user.full_name})")
+    exported_by = f"Superadmin ({current_user.full_name})"
+    tmp = tempfile.NamedTemporaryFile(prefix="taxflow-backup-", suffix=".zip", delete=False)
+    try:
+        with tmp:
+            write_all_companies_backup_zip(db, exported_by, tmp)
+    except Exception:
+        os.unlink(tmp.name)
+        raise
     date_str = _dt.datetime.utcnow().strftime("%Y%m%d")
-    return Response(
-        content=zip_bytes,
+    # Streamed from disk in chunks, then deleted.
+    return FileResponse(
+        tmp.name,
         media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="taxflow-all-companies-backup-{date_str}.zip"'},
+        filename=f"taxflow-all-companies-backup-{date_str}.zip",
+        background=BackgroundTask(os.unlink, tmp.name),
     )
 
 
@@ -458,6 +469,8 @@ def create_company(
         country=(body.country or "United Arab Emirates").strip() or "United Arab Emirates",
         subscription_expires_at=body.expires_at,
         modules_enabled=json.dumps(mods),
+        stock_mode=body.stock_mode,
+        inventory_accounting=body.inventory_accounting,
     )
     # currency/vat_rate otherwise fall back to the Company model's own
     # defaults (AED/5.00) — only set explicitly when the frontend sends a
@@ -529,6 +542,10 @@ def update_company(
         company.currency = body.currency.strip()
     if body.vat_rate is not None:
         company.vat_rate = body.vat_rate
+    if body.stock_mode:
+        company.stock_mode = body.stock_mode
+    if body.inventory_accounting:
+        company.inventory_accounting = body.inventory_accounting
     if body.trn:
         company.trn = body.trn.strip()
 

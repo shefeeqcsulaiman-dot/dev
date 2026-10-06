@@ -47,5 +47,7 @@ COPY --from=frontend-build /build/public/taxflow/hrms.html ./frontend/public/tax
 COPY --from=frontend-build /build/public/taxflow/ess.html ./frontend/public/taxflow/ess.html
 
 EXPOSE 8000
-# WORKERS defaults to 4; override with -e WORKERS=8 for higher-traffic deployments
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WORKERS:-4}
+# Each worker is a full copy of the app (~150-250 MB), so on a 2 GB / 2 vCPU instance keep
+# WORKERS at 3. --limit-max-requests retires a worker after MAX_REQUESTS requests and uvicorn
+# starts a fresh one, so memory a worker accumulated (Python never returns it) is released.
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WORKERS:-3} --limit-max-requests ${MAX_REQUESTS:-2000}

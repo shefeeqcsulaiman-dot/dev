@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
-from app.dependencies import Principal, get_current_principal, get_current_user, get_db
+from app.company_defaults import seed_company_defaults
+from app.dependencies import get_current_principal, get_current_user, get_db, Principal, require_company_admin
 from app.security import hash_password
 from app.models import Company, User, uuid as _new_uuid
 from app.schemas import CompanyOut, CompanyUpdate
@@ -120,7 +121,7 @@ def company_logo(company_id: str, request: Request, db: Session = Depends(get_db
     return Response(content=raw, media_type=content_type, headers=headers)
 
 
-@router.put("/current", response_model=CompanyOut)
+@router.put("/current", response_model=CompanyOut, dependencies=[Depends(require_company_admin)])
 def update_company(
     payload: CompanyUpdate,
     db: Session = Depends(get_db),
@@ -132,6 +133,8 @@ def update_company(
         company = Company(id=_new_uuid(), name=payload.name or "My Company")
         db.add(company)
         db.flush()
+        # Same as sign-up and Super Admin: without the chart of accounts nothing can post.
+        seed_company_defaults(db, company.id)
         current_user.company_id = company.id
         db.add(current_user)
 
@@ -185,7 +188,7 @@ class NewCompanyUserIn(BaseModel):
     email: EmailStr
     full_name: str = ""
     password: str = Field(min_length=6)
-    role: str = "user"
+    role: str = "viewer"
 
 
 @router.post("/current/users", status_code=201)
@@ -200,7 +203,7 @@ def create_company_user(
     email = body.email.strip().lower()
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(status_code=409, detail="Email already registered")
-    role = body.role if body.role in ("user", "accountant", "viewer") else "user"
+    role = body.role if body.role in ("admin", "manager", "accountant", "sales", "viewer", "user") else "viewer"
     user = User(
         company_id=current_user.company_id,
         email=email,

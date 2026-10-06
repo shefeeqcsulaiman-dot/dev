@@ -1,9 +1,11 @@
+import json
+import re
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, event, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -42,6 +44,13 @@ class Company(Base, TimestampMixin):
     country: Mapped[str] = mapped_column(String(80), default="United Arab Emirates")
     currency: Mapped[str] = mapped_column(String(3), default="AED")
     vat_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("5.00"))
+    # "with_stock" (default) or "without_stock": a no-stock company (services, trading without
+    # inventory) never moves stock on purchases, sales or POS. Set by Super Admin.
+    stock_mode: Mapped[str] = mapped_column(String(20), default="with_stock")
+    # "perpetual": stock purchases post to 1200 Inventory and each sale posts its cost
+    # (Dr 5000 COGS / Cr 1200). "periodic": purchases expense to 4000 (the original behaviour,
+    # kept for companies that existed before this setting -- see the migration default).
+    inventory_accounting: Mapped[str] = mapped_column(String(20), default="perpetual")
     emirate: Mapped[str | None] = mapped_column(String(80), nullable=True)
     business_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
     business_activity: Mapped[str | None] = mapped_column(String(160), nullable=True)
@@ -783,6 +792,7 @@ class AppDataRecord(Base, TimestampMixin):
         Index("ix_app_data_company_collection_created", "company_id", "collection", "created_at"),
         # Covers the save/delete lookup: WHERE company_id=? AND collection=? AND record_key=?
         Index("ix_app_data_company_collection_key", "company_id", "collection", "record_key"),
+        Index("ix_app_data_company_collection_date", "company_id", "collection", "record_date"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
@@ -791,6 +801,27 @@ class AppDataRecord(Base, TimestampMixin):
     collection: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
     record_key: Mapped[str | None] = mapped_column(String(160), index=True)
     payload: Mapped[str] = mapped_column(Text, nullable=False)
+    # Payload's "date" (YYYY-MM-DD) for DATED_COLLECTIONS, so date-window reads can filter in SQL.
+    record_date: Mapped[str | None] = mapped_column(String(10))
+
+
+DATED_COLLECTIONS = frozenset({"rotaAssignments"})
+_ISO_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def payload_record_date(payload: str | None) -> str | None:
+    try:
+        day = str(json.loads(payload or "{}").get("date") or "")[:10]
+    except (TypeError, ValueError, AttributeError):
+        return None
+    return day if _ISO_DAY.match(day) else None
+
+
+@event.listens_for(AppDataRecord, "before_insert")
+@event.listens_for(AppDataRecord, "before_update")
+def _stamp_record_date(_mapper, _connection, target: AppDataRecord) -> None:
+    if target.collection in DATED_COLLECTIONS:
+        target.record_date = payload_record_date(target.payload)
 
 
 class AuditLog(Base, TimestampMixin):
@@ -1304,6 +1335,10 @@ class LeaveRequest(Base, TimestampMixin):
     # since exactly one of the two is ever set depending on who approved.
     approved_by_employee_id: Mapped[str | None] = mapped_column(ForeignKey("employees.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set when status becomes "cancelled" (by HR in HRMS, or by the employee in ESS).
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_by: Mapped[str | None] = mapped_column(String(160))
+    cancel_reason: Mapped[str | None] = mapped_column(String(300))
 
 
 class ApprovalMatrixRecord(Base, TimestampMixin):

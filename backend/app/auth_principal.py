@@ -345,9 +345,40 @@ def _principal_from_branch_token(token: str, db: Session) -> Principal | None:
     db.commit()
     return Principal(
         kind="branch", company_id=branch.company_id, display_name=branch.name,
-        is_admin=False, permissions=frozenset(f"{m}:view" for m in enabled),
+        is_admin=False, permissions=frozenset(f"{m}:{level}" for m in enabled for level in ("view", "edit", "delete")),
         branch=branch, branch_id=branch.id, accessible_branch_ids=frozenset({branch.id}),
     )
+
+
+# Main-app user roles (Settings > Users & Roles). Admin -- and the legacy "user" role, whose
+# accounts may predate role selection -- keep full access; the others get exactly these modules.
+# Pages match app.js's _NAV_ROLE_MAP, so the server now enforces what the sidebar already showed.
+_BRANCH_AWARE_MODULES = ("sales", "pos", "purchase", "inventory", "accounting", "reports")
+_MAIN_MODULES = ("sales", "quotations", "pos", "purchase", "inventory", "expense", "bank",
+                 "accounting", "corporate", "notifications", "expert", "reports", "exception", "ai")
+USER_ROLE_ACCESS: dict[str, dict[str, tuple[str, ...]]] = {
+    "manager": {"view": _MAIN_MODULES, "edit": _MAIN_MODULES},
+    "accountant": {
+        "view": ("sales", "quotations", "purchase", "inventory", "expense", "bank", "accounting", "reports", "exception"),
+        "edit": ("sales", "quotations", "purchase", "expense", "bank", "accounting"),
+    },
+    "sales": {"view": ("sales", "quotations", "reports"), "edit": ("sales", "quotations")},
+    "viewer": {"view": ("sales", "quotations", "purchase", "inventory", "expense", "reports", "exception"), "edit": ()},
+}
+FULL_ACCESS_USER_ROLES = ("admin", "superadmin", "user")
+
+
+def user_role_permissions(role: str | None) -> frozenset[str] | None:
+    """None = full access (admin); otherwise the role's permission keys (unknown role = viewer)."""
+    role = (role or "user").strip().lower()
+    if role in FULL_ACCESS_USER_ROLES:
+        return None
+    access = USER_ROLE_ACCESS.get(role, USER_ROLE_ACCESS["viewer"])
+    keys = {f"{m}:view" for m in access["view"] + access["edit"]}
+    keys |= {f"{m}:edit" for m in access["edit"]}
+    # Company-level users aren't tied to a branch: they see every branch of what they can view.
+    keys |= {f"{m}:view_all_branches" for m in access["view"] + access["edit"] if m in _BRANCH_AWARE_MODULES}
+    return frozenset(keys)
 
 
 def _principal_from_user_token(token: str, db: Session) -> Principal | None:
@@ -362,9 +393,11 @@ def _principal_from_user_token(token: str, db: Session) -> Principal | None:
     if not getattr(user, "is_active", True):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
     assert_company_active(user.company.subscription_expires_at if user.company else None)
+    role_permissions = user_role_permissions(user.role)
     return Principal(
         kind="user", company_id=user.company_id, display_name=user.full_name,
-        is_admin=True, permissions=frozenset(), user=user,
+        is_admin=role_permissions is None, permissions=role_permissions or frozenset(), user=user,
+        role_name=None if role_permissions is None else (user.role or "").title(),
     )
 
 

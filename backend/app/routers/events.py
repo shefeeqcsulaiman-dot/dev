@@ -4,12 +4,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_company_admin
 from app.models import DomainEvent, EventOutbox, User
 from app.schemas import DomainEventIn, DomainEventOut
 
 
-router = APIRouter(prefix="/events", tags=["events"])
+router = APIRouter(prefix="/events", dependencies=[Depends(require_company_admin)], tags=["events"])
 
 
 @router.get("", response_model=list[DomainEventOut])

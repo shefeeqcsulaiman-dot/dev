@@ -3,14 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>TaxFlow UAE — Business Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=f3c668580c" as="style">
-<link rel="preload" href="src/app.js?v=c8d2935eea" as="script">
+<link rel="preload" href="src/styles.css?v=f14f81f61a" as="style">
+<link rel="preload" href="src/app.js?v=c60e7fdd7c" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=f3c668580c">
+<link rel="stylesheet" href="src/styles.css?v=f14f81f61a">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
 </head>
 <body class="theme-light">
@@ -252,14 +255,14 @@
               <span id="dash-rev-trend" class="dv2-kpi-badge up" style="font-size:10.5px">—</span>
             </div>
             <!-- Main value -->
-            <div class="mono" style="font-size:22px;font-weight:700;color:#10b981;letter-spacing:-0.5px;margin-bottom:12px;text-align:center" id="dash-revenue">AED 0.00</div>
+            <div class="mono" style="font-size:22px;font-weight:700;color:#10b981;letter-spacing:-0.5px;margin-bottom:12px;text-align:center" id="dash-revenue" data-currency-label>AED 0.00</div>
             <div style="border-top:1px solid var(--border);margin-bottom:10px"></div>
             <!-- Slide 0: Full stats -->
             <div id="rev-slide-0">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
                 <div style="background:rgba(16,185,129,.07);border-radius:10px;padding:8px 10px">
                   <div style="font-size:10px;color:var(--text3);margin-bottom:3px" data-i18n="dash_collected">Collected</div>
-                  <div class="mono" style="font-size:12px;font-weight:700;color:var(--text)" id="dash-rev-collected">AED 0.00</div>
+                  <div class="mono" style="font-size:12px;font-weight:700;color:var(--text)" id="dash-rev-collected" data-currency-label>AED 0.00</div>
                 </div>
                 <div style="background:var(--surface2);border-radius:10px;padding:8px 10px">
                   <div style="font-size:10px;color:var(--text3);margin-bottom:3px" data-i18n="dash_paid_invoices">Paid Invoices</div>
@@ -340,14 +343,14 @@
               <div id="dash-purchases-sub" style="font-size:11.5px;color:var(--text3)">0 Bills</div>
               <span id="dash-pur-trend" class="dv2-kpi-badge up" style="font-size:10.5px">—</span>
             </div>
-            <div class="mono" style="font-size:22px;font-weight:700;color:#4f8ef0;letter-spacing:-0.5px;margin-bottom:12px;text-align:center" id="dash-total-purchases">AED 0.00</div>
+            <div class="mono" style="font-size:22px;font-weight:700;color:#4f8ef0;letter-spacing:-0.5px;margin-bottom:12px;text-align:center" id="dash-total-purchases" data-currency-label>AED 0.00</div>
             <div style="border-top:1px solid var(--border);margin-bottom:10px"></div>
             <!-- Slide 0: Full stats -->
             <div id="pur-slide-0">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
                 <div style="background:rgba(79,142,240,.07);border-radius:10px;padding:8px 10px">
                   <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Amount Paid</div>
-                  <div class="mono" style="font-size:12px;font-weight:700;color:var(--text)" id="dash-pur-paid-amount">AED 0.00</div>
+                  <div class="mono" style="font-size:12px;font-weight:700;color:var(--text)" id="dash-pur-paid-amount" data-currency-label>AED 0.00</div>
                 </div>
                 <div style="background:var(--surface2);border-radius:10px;padding:8px 10px">
                   <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Paid Bills</div>
@@ -416,18 +419,18 @@
               <div id="dash-profit-sub" style="font-size:11px;color:var(--text3)">Revenue − Purchases</div>
               <span id="dash-profit-trend" class="dv2-kpi-badge up" style="font-size:10.5px">—</span>
             </div>
-            <div class="mono" style="font-size:22px;font-weight:700;color:#8b5cf6;letter-spacing:-0.5px;margin-bottom:10px;text-align:center" id="dash-gross-profit">AED 0</div>
+            <div class="mono" style="font-size:22px;font-weight:700;color:#8b5cf6;letter-spacing:-0.5px;margin-bottom:10px;text-align:center" id="dash-gross-profit" data-currency-label>AED 0</div>
 <div style="border-top:1px solid var(--border);margin-bottom:10px"></div>
             <!-- Slide 0: Net Profit Margin bar -->
             <div id="prof-slide-0">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
                 <div style="background:rgba(139,92,246,.07);border-radius:10px;padding:8px 10px">
                   <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Total Income</div>
-                  <div class="mono" style="font-size:12px;font-weight:700;color:var(--text)" id="dash-total-income">AED 0</div>
+                  <div class="mono" style="font-size:12px;font-weight:700;color:var(--text)" id="dash-total-income" data-currency-label>AED 0</div>
                 </div>
                 <div style="background:var(--surface2);border-radius:10px;padding:8px 10px">
                   <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Total Expenses</div>
-                  <div class="mono" style="font-size:12px;font-weight:700;color:var(--text)" id="dash-total-expenses">AED 0</div>
+                  <div class="mono" style="font-size:12px;font-weight:700;color:var(--text)" id="dash-total-expenses" data-currency-label>AED 0</div>
                 </div>
               </div>
               <div style="background:var(--surface2);border-radius:99px;height:5px;margin-bottom:7px;overflow:hidden">
@@ -518,7 +521,7 @@
               <span style="font-size:11.5px;color:var(--text3)">Net Liquid Position</span>
               <span id="dash-liquid-badge" class="dv2-kpi-badge up" style="font-size:10.5px">—</span>
             </div>
-            <div class="mono" style="font-size:22px;font-weight:700;color:#0891b2;letter-spacing:-0.5px;margin-bottom:12px" id="dash-liquid-net">AED 0.00</div>
+            <div class="mono" style="font-size:22px;font-weight:700;color:#0891b2;letter-spacing:-0.5px;margin-bottom:12px" id="dash-liquid-net" data-currency-label>AED 0.00</div>
             <div style="border-top:1px solid var(--border);margin-bottom:10px"></div>
             <div style="display:flex;flex-direction:column;gap:9px">
               <div style="display:flex;align-items:center;justify-content:space-between">
@@ -526,21 +529,21 @@
                   <div style="width:8px;height:8px;border-radius:50%;background:#10b981;flex-shrink:0"></div>
                   <span style="font-size:11px;color:var(--text3)">Cash & Bank</span>
                 </div>
-                <span class="mono" style="font-size:12px;font-weight:700;color:#10b981" id="dash-liquid-cash">AED 0.00</span>
+                <span class="mono" style="font-size:12px;font-weight:700;color:#10b981" id="dash-liquid-cash" data-currency-label>AED 0.00</span>
               </div>
               <div style="display:flex;align-items:center;justify-content:space-between">
                 <div style="display:flex;align-items:center;gap:6px">
                   <div style="width:8px;height:8px;border-radius:50%;background:#6366f1;flex-shrink:0"></div>
                   <span style="font-size:11px;color:var(--text3)">Trade Receivables</span>
                 </div>
-                <span class="mono" style="font-size:12px;font-weight:700;color:#6366f1" id="dash-liquid-ar">AED 0.00</span>
+                <span class="mono" style="font-size:12px;font-weight:700;color:#6366f1" id="dash-liquid-ar" data-currency-label>AED 0.00</span>
               </div>
               <div style="display:flex;align-items:center;justify-content:space-between">
                 <div style="display:flex;align-items:center;gap:6px">
                   <div style="width:8px;height:8px;border-radius:50%;background:#ef4444;flex-shrink:0"></div>
                   <span style="font-size:11px;color:var(--text3)">Trade Payables</span>
                 </div>
-                <span class="mono" style="font-size:12px;font-weight:700;color:#ef4444" id="dash-liquid-ap">AED 0.00</span>
+                <span class="mono" style="font-size:12px;font-weight:700;color:#ef4444" id="dash-liquid-ap" data-currency-label>AED 0.00</span>
               </div>
             </div>
             <div style="background:var(--surface2);border-radius:99px;height:5px;margin-top:12px;overflow:hidden">
@@ -640,7 +643,7 @@
       <!-- ROW 5: Workforce Snapshot (same design as hrms.html's own KPI row -- see renderWorkforceSnapshot() in app.js, data comes from /reports/dashboard's hr_snapshot field, no extra fetch) -->
       <div class="main-kpi-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px">
         <div class="main-kpi-card">
-          <div class="main-kpi-icon" style="background:#eff6ff">
+          <div class="main-kpi-icon" style="background:var(--accent-glow)">
             <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.6"><circle cx="8" cy="7" r="3.5"/><path d="M2 18c0-3.5 2.7-5.5 6-5.5s6 2 6 5.5"/><circle cx="17" cy="7" r="2.5"/><path d="M20 17.5c0-2.5-1.5-4-3-4.5"/></svg>
           </div>
           <div>
@@ -650,52 +653,52 @@
           </div>
         </div>
         <div class="main-kpi-card">
-          <div class="main-kpi-icon" style="background:#f0fdf4">
+          <div class="main-kpi-icon" style="background:var(--green-bg)">
             <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#16a34a" stroke-width="1.6"><circle cx="11" cy="11" r="8" stroke-width="1.4"/><path d="M7 11l3 3 5-5"/></svg>
           </div>
           <div>
             <div class="main-kpi-lbl">Present Today</div>
-            <div class="main-kpi-val" id="main-kpi-present" style="color:#16a34a">—</div>
+            <div class="main-kpi-val" id="main-kpi-present" style="color:var(--green)">—</div>
             <div class="main-kpi-trend" id="main-kpi-present-trend"><span>— of total</span></div>
           </div>
         </div>
         <div class="main-kpi-card">
-          <div class="main-kpi-icon" style="background:#faf5ff">
+          <div class="main-kpi-icon" style="background:var(--purple-bg)">
             <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#7c3aed" stroke-width="1.6"><path d="M11 2l2 3h4l-3 2.5 1.5 4-4.5-2.5L6.5 11.5 8 7.5 5 5h4z"/><path d="M4 18c1-2 3-3 7-3s6 1 7 3"/></svg>
           </div>
           <div>
             <div class="main-kpi-lbl">On Leave</div>
-            <div class="main-kpi-val" id="main-kpi-leave" style="color:#7c3aed">—</div>
+            <div class="main-kpi-val" id="main-kpi-leave" style="color:var(--purple)">—</div>
             <div class="main-kpi-trend"><span>approved leaves</span></div>
           </div>
         </div>
         <div class="main-kpi-card">
-          <div class="main-kpi-icon" style="background:#fff7ed">
+          <div class="main-kpi-icon" style="background:var(--amber-bg)">
             <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#ea580c" stroke-width="1.6"><rect x="3" y="5" width="16" height="12" rx="2"/><path d="M3 9h16M7 13h3M14 13h1"/></svg>
           </div>
           <div>
             <div class="main-kpi-lbl">Net Payroll (this month)</div>
-            <div class="main-kpi-val" id="main-kpi-payroll" style="color:#ea580c">—</div>
+            <div class="main-kpi-val" id="main-kpi-payroll" style="color:var(--amber)">—</div>
             <div class="main-kpi-trend"><span>runs this year</span></div>
           </div>
         </div>
         <div class="main-kpi-card">
-          <div class="main-kpi-icon" style="background:#eff6ff">
+          <div class="main-kpi-icon" style="background:var(--accent-glow)">
             <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#2563eb" stroke-width="1.6"><rect x="3" y="7" width="16" height="11" rx="2"/><path d="M8 7V5a3 3 0 016 0v2"/><path d="M11 12v3M9.5 13.5h3"/></svg>
           </div>
           <div>
             <div class="main-kpi-lbl">Open Positions</div>
-            <div class="main-kpi-val" id="main-kpi-recs" style="color:#2563eb">—</div>
+            <div class="main-kpi-val" id="main-kpi-recs" style="color:var(--accent)">—</div>
             <div class="main-kpi-trend"><span>active requisitions</span></div>
           </div>
         </div>
         <div class="main-kpi-card">
-          <div class="main-kpi-icon" style="background:#fef2f2">
-            <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#dc2626" stroke-width="1.6"><rect x="4" y="3" width="14" height="16" rx="2"/><path d="M8 7h6M8 10.5h6M8 14h4"/><circle cx="16" cy="16" r="4" fill="#fef2f2" stroke="#dc2626"/><path d="M16 14.5v2M16 17.5v.5"/></svg>
+          <div class="main-kpi-icon" style="background:var(--red-bg)">
+            <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="#dc2626" stroke-width="1.6"><rect x="4" y="3" width="14" height="16" rx="2"/><path d="M8 7h6M8 10.5h6M8 14h4"/><circle cx="16" cy="16" r="4" fill="none" stroke="#dc2626"/><path d="M16 14.5v2M16 17.5v.5"/></svg>
           </div>
           <div>
             <div class="main-kpi-lbl">Pending Approvals</div>
-            <div class="main-kpi-val" id="main-kpi-pending" style="color:#dc2626">—</div>
+            <div class="main-kpi-val" id="main-kpi-pending" style="color:var(--red)">—</div>
             <a class="main-kpi-action" onclick="go('hrms')">View all</a>
           </div>
         </div>
@@ -750,10 +753,10 @@
               </div>
             </div>
             <div class="dv2-vat-legend">
-              <div class="dv2-vat-item"><span class="dv2-dot purple"></span><div><div style="font-size:11px;color:var(--text3)">Output VAT</div><div class="dv2-vat-num" id="dash-vat-output">AED 0.00</div></div></div>
-              <div class="dv2-vat-item"><span class="dv2-dot green"></span><div><div style="font-size:11px;color:var(--text3)">Input VAT</div><div class="dv2-vat-num" id="dash-vat-input">AED 0.00</div></div></div>
+              <div class="dv2-vat-item"><span class="dv2-dot purple"></span><div><div style="font-size:11px;color:var(--text3)">Output VAT</div><div class="dv2-vat-num" id="dash-vat-output" data-currency-label>AED 0.00</div></div></div>
+              <div class="dv2-vat-item"><span class="dv2-dot green"></span><div><div style="font-size:11px;color:var(--text3)">Input VAT</div><div class="dv2-vat-num" id="dash-vat-input" data-currency-label>AED 0.00</div></div></div>
               <div style="border-top:1px solid var(--border);margin:8px 0 6px"></div>
-              <div class="dv2-vat-item"><span class="dv2-dot amber"></span><div><div style="font-size:11px;color:var(--text3)">Net Payable</div><div class="dv2-vat-num amber-text" id="dash-vat-net">AED 0.00</div></div></div>
+              <div class="dv2-vat-item"><span class="dv2-dot amber"></span><div><div style="font-size:11px;color:var(--text3)">Net Payable</div><div class="dv2-vat-num amber-text" id="dash-vat-net" data-currency-label>AED 0.00</div></div></div>
             </div>
           </div>
         </div>
@@ -801,7 +804,7 @@
           <!-- Book balance -->
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
             <span style="font-size:11px;color:var(--text3)">Book Balance</span>
-            <span class="mono" style="font-size:13px;font-weight:700;color:#6366f1" id="dash-bank-book">AED 0.00</span>
+            <span class="mono" style="font-size:13px;font-weight:700;color:#6366f1" id="dash-bank-book" data-currency-label>AED 0.00</span>
           </div>
           <div style="border-top:1px solid var(--border);margin:8px 0"></div>
           <!-- Inflow / Outflow -->
@@ -811,21 +814,21 @@
                 <div style="width:7px;height:7px;border-radius:50%;background:#10b981"></div>
                 <span style="font-size:11px;color:var(--text3)">Receipts</span>
               </div>
-              <span class="mono" style="font-size:11.5px;font-weight:600;color:#10b981" id="dash-bank-inflow">AED 0.00</span>
+              <span class="mono" style="font-size:11.5px;font-weight:600;color:#10b981" id="dash-bank-inflow" data-currency-label>AED 0.00</span>
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between">
               <div style="display:flex;align-items:center;gap:5px">
                 <div style="width:7px;height:7px;border-radius:50%;background:#ef4444"></div>
                 <span style="font-size:11px;color:var(--text3)">Payments</span>
               </div>
-              <span class="mono" style="font-size:11.5px;font-weight:600;color:#ef4444" id="dash-bank-outflow">AED 0.00</span>
+              <span class="mono" style="font-size:11.5px;font-weight:600;color:#ef4444" id="dash-bank-outflow" data-currency-label>AED 0.00</span>
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between">
               <div style="display:flex;align-items:center;gap:5px">
                 <div style="width:7px;height:7px;border-radius:50%;background:#6366f1"></div>
                 <span style="font-size:11px;color:var(--text3)">Net Cash Flow</span>
               </div>
-              <span class="mono" style="font-size:11.5px;font-weight:600;color:var(--text)" id="dash-bank-net">AED 0.00</span>
+              <span class="mono" style="font-size:11.5px;font-weight:600;color:var(--text)" id="dash-bank-net" data-currency-label>AED 0.00</span>
             </div>
           </div>
           <!-- Progress bar -->
@@ -1014,6 +1017,7 @@
     <div class="tab" onclick="stab(this,'s-invoices')" data-i18n="tab_invoices">Invoices</div>
     <div class="tab" onclick="openSalesAddChoice()" data-i18n="tab_add_sales">Add Sales</div>
     <div class="tab" onclick="stab(this,'s-customers')" data-i18n="tab_customers">Customers</div>
+    <div class="tab" onclick="stab(this,'s-salespeople');renderSalesPeopleList(true)">Sales Person</div>
   </div>
 
   <!-- Upload Sales Invoices -->
@@ -1113,19 +1117,19 @@
     <div class="sinv-kpi-row mb16">
       <div class="sinv-kpi-card">
         <div class="sinv-kpi-icon c-blue">&#128176;</div>
-        <div><div class="sinv-kpi-val c-blue" id="sinv-kpi-total">AED 0.00</div><div class="sinv-kpi-lbl">Total Invoiced</div></div>
+        <div><div class="sinv-kpi-val c-blue" id="sinv-kpi-total" data-currency-label>AED 0.00</div><div class="sinv-kpi-lbl">Total Invoiced</div></div>
       </div>
       <div class="sinv-kpi-card">
         <div class="sinv-kpi-icon c-green">&#10003;</div>
-        <div><div class="sinv-kpi-val c-green" id="sinv-kpi-collected">AED 0.00</div><div class="sinv-kpi-lbl">Collected</div></div>
+        <div><div class="sinv-kpi-val c-green" id="sinv-kpi-collected" data-currency-label>AED 0.00</div><div class="sinv-kpi-lbl">Collected</div></div>
       </div>
       <div class="sinv-kpi-card">
         <div class="sinv-kpi-icon c-amber">&#9200;</div>
-        <div><div class="sinv-kpi-val c-amber" id="sinv-kpi-pending">AED 0.00</div><div class="sinv-kpi-lbl">Pending</div></div>
+        <div><div class="sinv-kpi-val c-amber" id="sinv-kpi-pending" data-currency-label>AED 0.00</div><div class="sinv-kpi-lbl">Pending</div></div>
       </div>
       <div class="sinv-kpi-card">
         <div class="sinv-kpi-icon c-red">!</div>
-        <div><div class="sinv-kpi-val c-red" id="sinv-kpi-overdue">AED 0.00</div><div class="sinv-kpi-lbl">Overdue</div></div>
+        <div><div class="sinv-kpi-val c-red" id="sinv-kpi-overdue" data-currency-label>AED 0.00</div><div class="sinv-kpi-lbl">Overdue</div></div>
       </div>
     </div>
     <div class="card">
@@ -1173,10 +1177,19 @@
             <div class="fg" style="margin:0"><label class="fl" id="sales-date-label">Invoice Date</label><input class="fi" type="date" id="inv-date" required oninput="updateSalesInvPreview()"></div>
             <div class="fg" style="margin:0"><label class="fl">Due Date</label><input class="fi" type="date" id="inv-due" oninput="updateSalesInvPreview()"></div>
           </div>
-          <div class="fr3">
+          <div class="fr3 mb10">
             <div class="fg" style="margin:0"><label class="fl">Purchase Order No.</label><input class="fi mono" id="inv-po" placeholder="PO-0001"></div>
             <div class="fg" style="margin:0"><label class="fl">Delivery Note No.</label><input class="fi mono" id="inv-delivery" placeholder="DN-0001"></div>
             <div class="fg" style="margin:0"><label class="fl">Reference No.</label><input class="fi mono" id="inv-ref" placeholder="REF-0001"></div>
+          </div>
+          <div class="fr3">
+            <div class="fg" style="margin:0">
+              <label class="fl" for="inv-salesperson">Sales Person</label>
+              <div class="field-action-row">
+                <select class="fi" id="inv-salesperson" onchange="updateSalesInvPreview()"><option value="">— Select sales person —</option></select>
+                <button class="btn btn-g btn-sm" type="button" onclick="openAddSalesperson()" title="Add a new sales person">+ Add</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1220,9 +1233,9 @@
           </div>
           <div class="sinv-totals-wrap">
             <div class="sinv-totals-box">
-              <div class="sinv-tot-row"><span>Subtotal</span><span id="subtotal" class="mono">AED 0.00</span></div>
-              <div class="sinv-tot-row sinv-vat-row"><span id="sinv-vat-label">VAT (5%)</span><span id="vat-amt" class="mono">AED 0.00</span></div>
-              <div class="sinv-tot-grand"><span id="sales-total-label">Total Due</span><strong id="inv-total" class="mono">AED 0.00</strong></div>
+              <div class="sinv-tot-row"><span>Subtotal</span><span id="subtotal" class="mono" data-currency-label>AED 0.00</span></div>
+              <div class="sinv-tot-row sinv-vat-row"><span id="sinv-vat-label">VAT (5%)</span><span id="vat-amt" class="mono" data-currency-label>AED 0.00</span></div>
+              <div class="sinv-tot-grand"><span id="sales-total-label">Total Due</span><strong id="inv-total" class="mono" data-currency-label>AED 0.00</strong></div>
             </div>
           </div>
         </div>
@@ -1260,9 +1273,9 @@
             <div class="sinv-prev-row"><span>Date</span><span id="sinv-prev-date">&#x2014;</span></div>
             <div class="sinv-prev-row"><span>Due</span><span id="sinv-prev-due">&#x2014;</span></div>
             <div class="sinv-prev-divider"></div>
-            <div class="sinv-prev-row"><span>Subtotal</span><span id="sinv-prev-sub" class="mono">AED 0.00</span></div>
-            <div class="sinv-prev-row sinv-prev-vat"><span id="sinv-prev-vat-label">VAT 5%</span><span id="sinv-prev-vat" class="mono">AED 0.00</span></div>
-            <div class="sinv-prev-total-row"><span>Total Due</span><strong id="sinv-prev-total" class="mono">AED 0.00</strong></div>
+            <div class="sinv-prev-row"><span>Subtotal</span><span id="sinv-prev-sub" class="mono" data-currency-label>AED 0.00</span></div>
+            <div class="sinv-prev-row sinv-prev-vat"><span id="sinv-prev-vat-label">VAT 5%</span><span id="sinv-prev-vat" class="mono" data-currency-label>AED 0.00</span></div>
+            <div class="sinv-prev-total-row"><span>Total Due</span><strong id="sinv-prev-total" class="mono" data-currency-label>AED 0.00</strong></div>
           </div>
           <div class="sinv-preview-actions">
             <button class="btn btn-g btn-sm" style="width:100%" onclick="openDraftInvoicePreview()">&#x1F4C4; Full PDF Preview</button>
@@ -1290,6 +1303,18 @@
         <thead><tr><th>Name</th><th>TRN</th><th>Emirate</th><th>Contact</th><th>Total Business</th><th></th></tr></thead>
         <tbody id="customer-tbody">
           <tr data-empty-state="1"><td colspan="6" style="color:var(--text3);text-align:center">No customers in database yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-body" id="s-salespeople">
+    <div class="card">
+      <div class="card-hd"><div class="card-title">Sales People</div><div class="flx" style="gap:6px"><button class="btn btn-g btn-sm" onclick="exportNearestTable(this,'sales-people.csv')">⬇ CSV</button><button class="btn btn-p" onclick="openAddSalesperson(true)">+ Add Sales Person</button></div></div>
+      <table class="tbl" data-delete-actions-bound="skip">
+        <thead><tr><th>Name</th><th>Mobile</th><th>Email</th><th>Status</th><th>Invoices</th><th>Total Sales</th><th></th></tr></thead>
+        <tbody id="salespeople-tbody">
+          <tr data-empty-state="1"><td colspan="7" style="color:var(--text3);text-align:center">No sales people yet.</td></tr>
         </tbody>
       </table>
     </div>
@@ -1329,9 +1354,9 @@
       </div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Totals</div></div>
-        <div class="tot-row"><span>Subtotal</span><span class="mono" id="quote-subtotal">AED 0.00</span></div>
-        <div class="tot-row"><span>VAT 5%</span><span class="mono" id="quote-vat">AED 0.00</span></div>
-        <div class="tot-final"><span>Total</span><span class="mono" id="quote-total">AED 0.00</span></div>
+        <div class="tot-row"><span>Subtotal</span><span class="mono" id="quote-subtotal" data-currency-label>AED 0.00</span></div>
+        <div class="tot-row"><span>VAT 5%</span><span class="mono" id="quote-vat" data-currency-label>AED 0.00</span></div>
+        <div class="tot-final"><span>Total</span><span class="mono" id="quote-total" data-currency-label>AED 0.00</span></div>
       </div>
     </div>
     <div class="card mb16">
@@ -1478,9 +1503,9 @@
       </div>
     </div>
     <div class="g3">
-      <div class="stat"><div class="stat-lbl">Total Extracted</div><div class="stat-val" style="color:var(--green);font-size:20px">47</div><div class="stat-delta" style="color:var(--text3)">invoices this period</div></div>
-      <div class="stat"><div class="stat-lbl">Needs Review</div><div class="stat-val" style="color:var(--amber);font-size:20px">3</div></div>
-      <div class="stat"><div class="stat-lbl">Extraction Errors</div><div class="stat-val" style="color:var(--red);font-size:20px">1</div></div>
+      <div class="stat"><div class="stat-lbl">Total Extracted</div><div class="stat-val" style="color:var(--green);font-size:20px" id="ext-stat-total">0</div><div class="stat-delta" style="color:var(--text3)">waiting to be saved</div></div>
+      <div class="stat"><div class="stat-lbl">Needs Review</div><div class="stat-val" style="color:var(--amber);font-size:20px" id="ext-stat-review">0</div></div>
+      <div class="stat"><div class="stat-lbl">Extraction Errors</div><div class="stat-val" style="color:var(--red);font-size:20px" id="ext-stat-errors">0</div></div>
     </div>
   </div>
 
@@ -1710,9 +1735,9 @@
   </div>
   <div class="tab-body on" id="bk-accounts">
     <div class="g3 mb16">
-      <div class="stat"><div class="stat-lbl" data-i18n="bk_total_balance">Total Balance</div><div class="stat-val" style="color:var(--green)">AED 0.00</div></div>
-      <div class="stat"><div class="stat-lbl" data-i18n="bk_recorded_inflow">Recorded Inflow</div><div class="stat-val" style="color:var(--accent)">AED 0.00</div></div>
-      <div class="stat"><div class="stat-lbl" data-i18n="bk_recorded_outflow">Recorded Outflow</div><div class="stat-val" style="color:var(--red)">AED 0.00</div></div>
+      <div class="stat"><div class="stat-lbl" data-i18n="bk_total_balance">Total Balance</div><div class="stat-val" style="color:var(--green)" data-currency-label>AED 0.00</div></div>
+      <div class="stat"><div class="stat-lbl" data-i18n="bk_recorded_inflow">Recorded Inflow</div><div class="stat-val" style="color:var(--accent)" data-currency-label>AED 0.00</div></div>
+      <div class="stat"><div class="stat-lbl" data-i18n="bk_recorded_outflow">Recorded Outflow</div><div class="stat-val" style="color:var(--red)" data-currency-label>AED 0.00</div></div>
     </div>
     <div class="card mb16">
       <div class="card-hd"><div class="card-title" data-i18n="bk_registered_accounts">Registered Bank Accounts</div><button class="btn btn-p" onclick="showM('m-bank')" data-i18n="bk_add_account">+ Add Account</button></div>
@@ -1753,9 +1778,9 @@
         </div>
       </div>
       <div class="g3 mb16">
-        <div class="stat"><div class="stat-lbl">Bank Statement Balance</div><div class="stat-val" id="bank-statement-balance" style="color:var(--accent);font-size:18px">AED 0.00</div></div>
-        <div class="stat"><div class="stat-lbl">Book Balance</div><div class="stat-val" id="bank-book-balance" style="color:var(--green);font-size:18px">AED 0.00</div></div>
-        <div class="stat"><div class="stat-lbl">Unmatched Difference</div><div class="stat-val" id="bank-reconcile-difference" style="color:var(--amber);font-size:18px">AED 0.00</div><div class="stat-delta dn" id="bank-reconcile-note"></div></div>
+        <div class="stat"><div class="stat-lbl">Bank Statement Balance</div><div class="stat-val" id="bank-statement-balance" style="color:var(--accent);font-size:18px" data-currency-label>AED 0.00</div></div>
+        <div class="stat"><div class="stat-lbl">Book Balance</div><div class="stat-val" id="bank-book-balance" style="color:var(--green);font-size:18px" data-currency-label>AED 0.00</div></div>
+        <div class="stat"><div class="stat-lbl">Unmatched Difference</div><div class="stat-val" id="bank-reconcile-difference" style="color:var(--amber);font-size:18px" data-currency-label>AED 0.00</div><div class="stat-delta dn" id="bank-reconcile-note"></div></div>
       </div>
     </div>
     <div class="g2">
@@ -1802,9 +1827,9 @@
 
   <div class="tab-body on" id="pay-run">
     <div class="g4 mb16">
-      <div class="stat"><div class="stat-lbl">Gross Payroll</div><div class="stat-val" id="pay-stat-gross" style="color:var(--accent)">AED 0</div><div class="stat-delta" id="pay-stat-period">—</div></div>
-      <div class="stat"><div class="stat-lbl">Deductions</div><div class="stat-val" id="pay-stat-ded" style="color:var(--amber)">AED 0</div><div class="stat-delta">loans · absence · penalties</div></div>
-      <div class="stat"><div class="stat-lbl">Net Pay</div><div class="stat-val" id="pay-stat-net" style="color:var(--green)">AED 0</div><div class="stat-delta">ready for WPS</div></div>
+      <div class="stat"><div class="stat-lbl">Gross Payroll</div><div class="stat-val" id="pay-stat-gross" style="color:var(--accent)" data-currency-label>AED 0</div><div class="stat-delta" id="pay-stat-period">—</div></div>
+      <div class="stat"><div class="stat-lbl">Deductions</div><div class="stat-val" id="pay-stat-ded" style="color:var(--amber)" data-currency-label>AED 0</div><div class="stat-delta">loans · absence · penalties</div></div>
+      <div class="stat"><div class="stat-lbl">Net Pay</div><div class="stat-val" id="pay-stat-net" style="color:var(--green)" data-currency-label>AED 0</div><div class="stat-delta">ready for WPS</div></div>
       <div class="stat"><div class="stat-lbl">Exceptions</div><div class="stat-val" id="pay-stat-exc" style="color:var(--red)">0</div><div class="stat-delta">need review</div></div>
     </div>
 
@@ -1877,9 +1902,9 @@
           <div class="fg"><label class="fl">Additional Months</label><input class="fi mono" id="eos-months" value="3" oninput="calcGratuity()"></div>
         </div>
         <div class="inv-total-box" style="width:100%;min-width:0">
-          <div class="tot-row"><span style="color:var(--text3)">Daily Basic Rate</span><span class="mono" id="eos-daily">AED 283.33</span></div>
+          <div class="tot-row"><span style="color:var(--text3)">Daily Basic Rate</span><span class="mono" id="eos-daily" data-currency-label>AED 283.33</span></div>
           <div class="tot-row"><span style="color:var(--text3)">Eligible Gratuity Days</span><span class="mono" id="eos-days">110.25</span></div>
-          <div class="tot-final"><span>Estimated EOSB</span><span class="mono" id="eos-total" style="color:var(--green)">AED 31,237.50</span></div>
+          <div class="tot-final"><span>Estimated EOSB</span><span class="mono" id="eos-total" style="color:var(--green)" data-currency-label>AED 31,237.50</span></div>
         </div>
         <div id="eos-note" style="font-size:12px;color:var(--muted);margin-top:8px;padding:8px;background:var(--surface2);border-radius:6px"></div>
       </div>
@@ -1983,9 +2008,9 @@
         <table class="tbl" data-keep-static="1">
           <thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead>
           <tbody>
-            <tr><td>Salary Expense</td><td class="mono" id="pay-je-gross">AED 0.00</td><td></td></tr>
-            <tr><td>Employee Deductions Payable</td><td></td><td class="mono" id="pay-je-ded">AED 0.00</td></tr>
-            <tr><td>Salaries Payable / Bank</td><td></td><td class="mono" id="pay-je-net">AED 0.00</td></tr>
+            <tr><td>Salary Expense</td><td class="mono" id="pay-je-gross" data-currency-label>AED 0.00</td><td></td></tr>
+            <tr><td>Employee Deductions Payable</td><td></td><td class="mono" id="pay-je-ded" data-currency-label>AED 0.00</td></tr>
+            <tr><td>Salaries Payable / Bank</td><td></td><td class="mono" id="pay-je-net" data-currency-label>AED 0.00</td></tr>
           </tbody>
         </table>
       </div>
@@ -2017,6 +2042,7 @@
       <div class="stat"><div class="stat-lbl">Out of Stock</div><div class="stat-val" style="color:var(--red)">0</div><div class="stat-delta">need reorder</div></div>
     </div>
     <div class="card">
+      <div id="stock-mode-note" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:8px;background:var(--bg2);border:1px solid var(--border);font-size:12.5px;color:var(--text2)">This company is set up <b>without stock</b>: purchases, sales and POS don't change quantities, and products can be sold without stock on hand.</div>
       <div class="card-hd"><div class="card-title">Current Stock Levels</div><div class="flx"><button class="btn btn-g" onclick="clearInventoryTable()">Clear Table</button><button class="btn btn-p" onclick="openInventoryItemModal()">+ Add Item</button></div></div>
       <table class="tbl">
         <thead><tr><th>Item Code</th><th>Item Name</th><th>Qty</th><th>Unit</th><th>Value</th><th>Status</th></tr></thead>
@@ -2095,10 +2121,10 @@
 
   <div class="tab-body" id="exp-list">
     <div class="g4 mb16">
-      <div class="stat"><div class="stat-lbl">Total Expenses</div><div class="stat-val" style="color:var(--accent)">AED 84,500</div><div class="stat-delta">this month</div></div>
-      <div class="stat"><div class="stat-lbl">Pending Approval</div><div class="stat-val" style="color:var(--amber)">AED 12,400</div><div class="stat-delta">5 items</div></div>
-      <div class="stat"><div class="stat-lbl">Approved</div><div class="stat-val" style="color:var(--green)">AED 68,200</div><div class="stat-delta">this month</div></div>
-      <div class="stat"><div class="stat-lbl">Rejected</div><div class="stat-val" style="color:var(--red)">AED 3,900</div><div class="stat-delta">2 items</div></div>
+      <div class="stat"><div class="stat-lbl">Total Expenses</div><div class="stat-val" style="color:var(--accent)" data-currency-label>AED 84,500</div><div class="stat-delta">this month</div></div>
+      <div class="stat"><div class="stat-lbl">Pending Approval</div><div class="stat-val" style="color:var(--amber)" data-currency-label>AED 12,400</div><div class="stat-delta">5 items</div></div>
+      <div class="stat"><div class="stat-lbl">Approved</div><div class="stat-val" style="color:var(--green)" data-currency-label>AED 68,200</div><div class="stat-delta">this month</div></div>
+      <div class="stat"><div class="stat-lbl">Rejected</div><div class="stat-val" style="color:var(--red)" data-currency-label>AED 3,900</div><div class="stat-delta">2 items</div></div>
     </div>
     <div class="card">
       <div class="card-hd"><div class="card-title">All Expenses</div><button class="btn btn-p" onclick="go('expense');setTimeout(()=>stab(document.querySelectorAll('#page-expense .tab')[1],'exp-create'),50)">+ New Expense</button></div>
@@ -2301,7 +2327,7 @@
             <span style="width:80px;flex-shrink:0">Code</span>
             <span style="flex:1">Account Name</span>
             <span style="width:110px">Type</span>
-            <span style="width:82px">Opening (AED)</span>
+            <span style="width:82px" data-currency-label>Opening (AED)</span>
             <span style="width:62px"></span>
           </div>
           <div id="ai-ledger-tree" class="ai-ledger-tree"></div>
@@ -2375,9 +2401,9 @@
       <div class="flx" style="margin-top:8px"><button class="btn btn-g btn-sm" onclick="addJournalLine()">+ Add Line</button><button class="btn btn-g btn-sm" onclick="prepareJournalForm(true)">Clear</button></div>
       <div class="inv-total-row">
         <div class="inv-total-box">
-          <div class="tot-row"><span style="color:var(--text3)">Total Debit</span><span class="mono" id="j-dr">AED 0.00</span></div>
-          <div class="tot-row"><span style="color:var(--text3)">Total Credit</span><span class="mono" id="j-cr">AED 0.00</span></div>
-          <div class="tot-final"><span>Difference</span><span class="mono" id="j-diff" style="color:var(--red)">AED 0.00</span></div>
+          <div class="tot-row"><span style="color:var(--text3)">Total Debit</span><span class="mono" id="j-dr" data-currency-label>AED 0.00</span></div>
+          <div class="tot-row"><span style="color:var(--text3)">Total Credit</span><span class="mono" id="j-cr" data-currency-label>AED 0.00</span></div>
+          <div class="tot-final"><span>Difference</span><span class="mono" id="j-diff" style="color:var(--red)" data-currency-label>AED 0.00</span></div>
         </div>
       </div>
     </div>
@@ -2532,7 +2558,7 @@
       </div>
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Depreciation Posting</div><div class="card-sub">Monthly depreciation journal</div></div></div>
-        <div class="tline-item"><div class="tline-dot" style="background:var(--red-bg);color:var(--red)">Dr</div><div><div>Depreciation Expense</div><div class="card-sub">AED 4,250 monthly charge</div></div></div>
+        <div class="tline-item"><div class="tline-dot" style="background:var(--red-bg);color:var(--red)">Dr</div><div><div>Depreciation Expense</div><div class="card-sub" data-currency-label>AED 4,250 monthly charge</div></div></div>
         <div class="tline-item" style="padding-bottom:0"><div class="tline-dot" style="background:var(--green-bg);color:var(--green)">Cr</div><div><div>Accumulated Depreciation</div><div class="card-sub">Posted after approval</div></div></div>
       </div>
     </div>
@@ -2630,10 +2656,10 @@
        the Reports stat tile it actually meant to target. -->
   <div class="tab-body on" id="corp-tax-tab">
     <div class="g4 mb16">
-      <div class="stat"><div class="stat-lbl">Accounting Profit</div><div class="stat-val" style="color:var(--accent)">AED 1.24M</div><div class="stat-delta">before CT adjustments</div></div>
-      <div class="stat"><div class="stat-lbl">Adjustments</div><div class="stat-val" style="color:var(--amber)">AED 82K</div><div class="stat-delta">add backs / deductions</div></div>
-      <div class="stat"><div class="stat-lbl">Taxable Income</div><div class="stat-val" style="color:var(--purple)">AED 1.32M</div><div class="stat-delta">after losses</div></div>
-      <div class="stat"><div class="stat-lbl">Corporate Tax</div><div class="stat-val" style="color:var(--green)">AED 84.6K</div><div class="stat-delta">draft return</div></div>
+      <div class="stat"><div class="stat-lbl">Accounting Profit</div><div class="stat-val" style="color:var(--accent)" data-currency-label>AED 1.24M</div><div class="stat-delta">before CT adjustments</div></div>
+      <div class="stat"><div class="stat-lbl">Adjustments</div><div class="stat-val" style="color:var(--amber)" data-currency-label>AED 82K</div><div class="stat-delta">add backs / deductions</div></div>
+      <div class="stat"><div class="stat-lbl">Taxable Income</div><div class="stat-val" style="color:var(--purple)" data-currency-label>AED 1.32M</div><div class="stat-delta">after losses</div></div>
+      <div class="stat"><div class="stat-lbl">Corporate Tax</div><div class="stat-val" style="color:var(--green)" data-currency-label>AED 84.6K</div><div class="stat-delta">draft return</div></div>
     </div>
     <div class="g2">
       <div class="card">
@@ -2659,8 +2685,8 @@
   </div>
   <div class="tab-body on" id="bill-list">
     <div class="g4 mb16">
-      <div class="stat"><div class="stat-lbl">Open Bills</div><div class="stat-val" id="bill-stat-open" style="color:var(--amber)">AED 0.00</div><div class="stat-delta" id="bill-stat-open-sub">0 unpaid bills</div></div>
-      <div class="stat"><div class="stat-lbl">Due This Week</div><div class="stat-val" id="bill-stat-due" style="color:var(--red)">AED 0.00</div><div class="stat-delta" id="bill-stat-due-sub">0 vendor payments</div></div>
+      <div class="stat"><div class="stat-lbl">Open Bills</div><div class="stat-val" id="bill-stat-open" style="color:var(--amber)" data-currency-label>AED 0.00</div><div class="stat-delta" id="bill-stat-open-sub">0 unpaid bills</div></div>
+      <div class="stat"><div class="stat-lbl">Due This Week</div><div class="stat-val" id="bill-stat-due" style="color:var(--red)" data-currency-label>AED 0.00</div><div class="stat-delta" id="bill-stat-due-sub">0 vendor payments</div></div>
       <div class="stat"><div class="stat-lbl">PO Commitments</div><div class="stat-val" style="color:var(--purple)">—</div><div class="stat-delta">Purchase Orders not tracked yet</div></div>
       <div class="stat"><div class="stat-lbl">Missing Docs</div><div class="stat-val" style="color:var(--text3)">—</div><div class="stat-delta">Not tracked yet</div></div>
     </div>
@@ -2832,7 +2858,6 @@
         <textarea class="fi" id="system-ai-question" rows="2" placeholder="Ask TaxFlow AI..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();askSystemAI()}"></textarea>
         <div class="ai-voice" id="ai-voice-controls" hidden>
           <button type="button" class="btn btn-g ai-mic" id="ai-mic-btn" onclick="toggleAIVoice()" title="Speak your question" aria-label="Speak your question" aria-pressed="false"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4"/></svg></button>
-          <select class="fi ai-voice-lang" id="ai-voice-lang" onchange="setAIVoiceLang(this.value)" aria-label="Voice language"><option value="en-US">EN</option><option value="ar-AE">عربي</option></select>
           <button type="button" class="btn btn-g btn-sm ai-voice-mute" id="ai-voice-mute" onclick="toggleAIVoiceMute()" aria-label="Toggle spoken answers">🔊</button>
         </div>
         <button class="btn btn-p" id="ai-send-btn" onclick="askSystemAI()">Send</button>
@@ -3566,7 +3591,7 @@
           <div class="fr3">
             <div class="fg"><label class="fl">Payment Terms</label><select class="fi" id="inv-layout-terms" onchange="updateInvoiceLayoutPreview()"><option>Net 30</option><option>Due on receipt</option><option>Net 15</option><option>Net 45</option></select></div>
             <div class="fg"><label class="fl">Due Days</label><input class="fi mono" id="inv-layout-due-days" value="30" oninput="updateInvoiceLayoutPreview()"></div>
-            <div class="fg"><label class="fl">Currency Format</label><select class="fi" id="inv-layout-currency" onchange="updateInvoiceLayoutPreview()"><option>AED 1,234.00</option><option>د.إ 1,234.00</option><option>1,234.00 AED</option></select></div>
+            <div class="fg"><label class="fl">Currency Format</label><select class="fi" id="inv-layout-currency" onchange="updateInvoiceLayoutPreview()"><option data-currency-label>AED 1,234.00</option><option>د.إ 1,234.00</option><option data-currency-label>1,234.00 AED</option></select></div>
           </div>
           <div class="fr3">
             <div class="toggle-row"><div><div>Show Payment Terms</div><div class="toggle-copy">Display payment terms in invoice information.</div></div><input type="checkbox" id="inv-layout-show-payment-terms" checked onchange="updateInvoiceLayoutPreview()"></div>
@@ -3718,7 +3743,6 @@
       <div class="toggle-row"><div><div>Enable voice</div><div class="toggle-copy">Turn off to hide every mic and Dictate button for all users.</div></div><input type="checkbox" id="vs-enabled"></div>
       <div class="toggle-row"><div><div>Allow server transcription</div><div class="toggle-copy">For browsers without built-in speech recognition (e.g. Firefox). Audio is sent to the AI provider and never stored. Off = Chrome, Edge and Safari only.</div></div><input type="checkbox" id="vs-cloud"></div>
       <div class="fr2" style="margin-top:12px">
-        <div class="fg"><label class="fl" for="vs-lang">Default voice language</label><select class="fi" id="vs-lang"><option value="">Each browser's language</option><option value="en-US">English</option><option value="ar-AE">Arabic — عربي</option></select></div>
         <div class="fg"><label class="fl" for="vs-cap">Server transcriptions per day</label><input class="fi mono" id="vs-cap" type="number" min="0" max="10000" step="1"></div>
       </div>
       <div class="flx-b" style="margin-top:8px"><span class="card-sub" id="vs-usage"></span><button class="btn btn-p" onclick="saveVoiceSettingsForm()">Save voice settings</button></div>
@@ -4717,6 +4741,16 @@ period_locks ─&lt; audit_logs
   </div>
 </div>
 
+<div class="overlay" id="m-salesperson" onclick="closeOvBg(event,'m-salesperson')">
+  <div class="modal"><div class="modal-title" id="sp-modal-title">Add Sales Person</div><div class="modal-sub">Shown on sales invoices and used for sales reports</div>
+    <input type="hidden" id="sp-edit-id">
+    <div class="fg"><label class="fl" for="sp-name">Name</label><input class="fi" id="sp-name" placeholder="Full name" dir="auto"></div>
+    <div class="fr2"><div class="fg"><label class="fl" for="sp-phone">Mobile</label><input class="fi" id="sp-phone" placeholder="+971 5x xxx xxxx"></div><div class="fg"><label class="fl" for="sp-email">Email</label><input class="fi" id="sp-email" type="email"></div></div>
+    <div class="fg" id="sp-status-wrap" style="display:none"><label class="fl" for="sp-status">Status</label><select class="fi" id="sp-status"><option value="Active">Active</option><option value="Inactive">Inactive — hidden from new invoices</option></select></div>
+    <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-salesperson')">Cancel</button><button class="btn btn-p" onclick="saveSalesperson()">Save</button></div>
+  </div>
+</div>
+
 <div class="overlay" id="m-bill" onclick="closeOvBg(event,'m-bill')">
   <div class="modal modal-lg">
     <div class="modal-title">New Vendor Bill</div>
@@ -4746,9 +4780,9 @@ period_locks ─&lt; audit_logs
     <!-- Totals -->
     <div style="display:flex;justify-content:flex-end;margin-top:14px">
       <div style="min-width:240px;border-top:1px solid var(--border2);padding-top:10px">
-        <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px"><span style="color:var(--text2)">Subtotal</span><span class="mono" id="bill-subtotal">AED 0.00</span></div>
-        <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px"><span style="color:var(--text2)">VAT</span><span class="mono" id="bill-vat-total">AED 0.00</span></div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:14px;font-weight:700;border-top:1px solid var(--border2);margin-top:4px"><span>Total</span><span class="mono" id="bill-grand-total">AED 0.00</span></div>
+        <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px"><span style="color:var(--text2)">Subtotal</span><span class="mono" id="bill-subtotal" data-currency-label>AED 0.00</span></div>
+        <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px"><span style="color:var(--text2)">VAT</span><span class="mono" id="bill-vat-total" data-currency-label>AED 0.00</span></div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:14px;font-weight:700;border-top:1px solid var(--border2);margin-top:4px"><span>Total</span><span class="mono" id="bill-grand-total" data-currency-label>AED 0.00</span></div>
       </div>
     </div>
     <div class="fg" style="margin-top:10px"><label class="fl">Notes</label><input class="fi" id="bill-desc" placeholder="Optional notes or reference"></div>
@@ -5404,7 +5438,7 @@ period_locks ─&lt; audit_logs
     <div id="acc-level-info" class="coa-level-info"></div>
     <div class="fr2" id="acc-opening-wrap">
       <div class="fg" style="flex:2">
-        <label class="fl">Opening Balance (AED) <span style="color:var(--text3);font-weight:400">— leave 0.00 if none</span></label>
+        <label class="fl">Opening Balance (<span data-currency-label>AED</span>) <span style="color:var(--text3);font-weight:400">— leave 0.00 if none</span></label>
         <input class="fi mono" id="acc-opening" placeholder="0.00" value="0.00" inputmode="decimal">
       </div>
       <div class="fg">
@@ -5673,7 +5707,7 @@ period_locks ─&lt; audit_logs
      window.TAXFLOW_API_BASE_URL synchronously, and defer preserves source
      order relative to app.js's own defer, so config.js still runs first. -->
 <script src="config.js" defer></script>
-<script src="src/voice.js?v=aa56e95978" defer></script>
-<script src="src/app.js?v=c8d2935eea" defer></script>
+<script src="src/voice.js?v=54b0d66150" defer></script>
+<script src="src/app.js?v=c60e7fdd7c" defer></script>
 </body>
 </html>

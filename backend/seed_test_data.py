@@ -517,16 +517,25 @@ if ar and sales_acc and vat_out and ap and purch_acc and vat_in and cash and sal
             db.add(je)
             db.flush()
             total_dr = aed(base_amt + vat_amt_val)
-            db.add(JournalLine(id=uid(), journal_id=je.id, account_id=debit_acc.id,
-                               debit=total_dr, credit=aed(0), description=desc))
-            if debit_acc2:
+            if debit_acc2 and debit_acc is ar:
+                # Sales: Dr Receivable (gross) / Cr Sales (net) / Cr VAT Output (VAT)
+                db.add(JournalLine(id=uid(), journal_id=je.id, account_id=ar.id,
+                                   debit=total_dr, credit=aed(0), description=desc))
                 db.add(JournalLine(id=uid(), journal_id=je.id, account_id=debit_acc2.id,
-                                   debit=aed(vat_amt_val), credit=aed(0)))
-                db.add(JournalLine(id=uid(), journal_id=je.id, account_id=credit_acc.id,
                                    debit=aed(0), credit=aed(base_amt)))
                 db.add(JournalLine(id=uid(), journal_id=je.id, account_id=credit_acc.id,
                                    debit=aed(0), credit=aed(vat_amt_val)))
+            elif debit_acc2:
+                # Purchases: Dr Purchases (net) / Dr VAT Input (VAT) / Cr Payable (gross)
+                db.add(JournalLine(id=uid(), journal_id=je.id, account_id=debit_acc.id,
+                                   debit=aed(base_amt), credit=aed(0), description=desc))
+                db.add(JournalLine(id=uid(), journal_id=je.id, account_id=debit_acc2.id,
+                                   debit=aed(vat_amt_val), credit=aed(0)))
+                db.add(JournalLine(id=uid(), journal_id=je.id, account_id=credit_acc.id,
+                                   debit=aed(0), credit=total_dr))
             else:
+                db.add(JournalLine(id=uid(), journal_id=je.id, account_id=debit_acc.id,
+                                   debit=total_dr, credit=aed(0), description=desc))
                 db.add(JournalLine(id=uid(), journal_id=je.id, account_id=credit_acc.id,
                                    debit=aed(0), credit=total_dr, description=desc))
 

@@ -7,7 +7,6 @@ subject prefix and secret key, so an /hr/login token also works against
 """
 
 import json
-import app.timezone_utils as timezone_utils
 import math
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -15,7 +14,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from jose import jwt
 from pydantic import BaseModel
-from sqlalchemy import or_
+from sqlalchemy import or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -52,6 +51,7 @@ from app.models import (
     RolePermission,
 )
 from app.security import pwd_context, verify_employee_password
+import app.timezone_utils as timezone_utils
 
 # /login and /logout stay on the ungated `router` (issuing/discarding a token
 # can't itself require a module check — there's no principal yet); every
@@ -106,16 +106,16 @@ _PERMISSION_CATALOG: dict[str, list[str]] = {
     # "module" vocabulary threads through the company-level Module
     # Permissions gate, the bootstrap collection allowlist, and this
     # per-role permission gate instead of three parallel naming schemes.
-    "sales": ["view", "view_all_branches"],
-    "quotations": ["view"],
-    "pos": ["view", "view_all_branches"],
-    "purchase": ["view", "view_all_branches"],
-    "inventory": ["view", "view_all_branches"],
-    "expense": ["view"],
-    "bank": ["view"],
-    "accounting": ["view", "view_all_branches"],
-    "corporate": ["view"],
-    "notifications": ["view"],
+    "sales": ["view", "edit", "delete", "view_all_branches"],
+    "quotations": ["view", "edit", "delete"],
+    "pos": ["view", "edit", "delete", "view_all_branches"],
+    "purchase": ["view", "edit", "delete", "view_all_branches"],
+    "inventory": ["view", "edit", "delete", "view_all_branches"],
+    "expense": ["view", "edit", "delete"],
+    "bank": ["view", "edit", "delete"],
+    "accounting": ["view", "edit", "delete", "view_all_branches"],
+    "corporate": ["view", "edit", "delete"],
+    "notifications": ["view", "edit", "delete"],
     "expert": ["view"],
 }
 
@@ -125,26 +125,41 @@ _DEFAULT_ROLES: dict[str, list[str]] = {
         "hr:manage_roles", "hr:manage_locations", "hr:manage_employees", "hr:view_all_attendance",
         "attendance:check_in_out", "attendance:view_own_attendance", "attendance:view", "attendance:edit",
         "dashboard:hr", "dashboard:view",
-        "employees:view", "employees:edit", "employees:delete",
+        "employees:view", "employees:edit", "employees:delete", "employees:view_salary",
         "leave:view", "leave:edit", "leave:delete",
         "rota:view", "rota:edit", "rota:delete",
+        "overtime:view", "overtime:edit", "overtime:delete",
+        "loans:view", "loans:edit", "loans:delete",
+        "hr_workflow:view", "hr_workflow:edit", "hr_workflow:delete",
+        "recruitment:view", "recruitment:edit", "recruitment:delete",
+        "performance:view", "performance:edit", "performance:delete",
+        "payroll:view", "payroll:view_payroll",
+        "reports:view", "ai_insights:view",
         "hr_settings:view", "hr_settings:edit",
     ],
     "Payroll Officer": [
         "payroll:run_payroll", "payroll:view_payroll", "payroll:view", "payroll:edit",
-        "attendance:check_in_out", "attendance:view_own_attendance",
+        "attendance:check_in_out", "attendance:view_own_attendance", "attendance:view",
         "dashboard:payroll", "dashboard:view",
+        "employees:view", "employees:view_salary",
+        "overtime:view", "loans:view", "reports:view",
     ],
     "Manager": [
         "hr:view_all_attendance", "attendance:check_in_out", "attendance:view_own_attendance", "attendance:view",
         "dashboard:manager", "dashboard:view",
-        "employees:view", "leave:view", "leave:edit", "rota:view",
+        "employees:view", "leave:view", "leave:edit", "rota:view", "rota:edit",
+        "overtime:view", "overtime:edit", "hr_workflow:view", "hr_workflow:edit",
     ],
     "Employee": [
         "attendance:check_in_out", "attendance:view_own_attendance",
         "dashboard:employee", "dashboard:view",
     ],
 }
+# Built-in roles get their defaults when created, plus once per bump of this flag at startup.
+# Bump it whenever _DEFAULT_ROLES gains permissions; admins' own edits are kept otherwise.
+_DEFAULT_ROLES_FLAG = "default_roles_v2"
+# The Employee role is the self-service default every new login falls back to — not editable.
+_LOCKED_SYSTEM_ROLES = frozenset({"Employee"})
 
 
 def _ensure_permission_catalog(db: Session) -> dict[str, Permission]:
@@ -193,13 +208,20 @@ def _role_permission_keys_bulk(db: Session, roles: list[Role]) -> dict[str, set[
     return out
 
 
-def _ensure_default_roles(db: Session, company_id: str) -> dict[str, Role]:
-    """Idempotently seeds the default role set for a company on first use."""
+def _default_grant_keys(catalog: dict[str, Permission], perm_keys: list[str]) -> list[str]:
+    # "*" never implies the cross-branch opt-ins — those must be granted per role explicitly.
+    if perm_keys == ["*"]:
+        return [k for k in catalog if not k.endswith(":view_all_branches")]
+    return perm_keys
+
+
+def _ensure_default_roles(db: Session, company_id: str, refresh_permissions: bool = False) -> dict[str, Role]:
+    """Creates any missing built-in role with its defaults. Existing roles keep the permissions
+    an admin gave them unless refresh_permissions (the one-time startup upgrade) is set."""
     catalog = _ensure_permission_catalog(db)
     roles = {r.role_name: r for r in db.query(Role).filter(Role.company_id == company_id).all()}
-    # every existing role's granted permission ids in ONE query (was one query per default role)
     links_by_role: dict[str, set[str]] = {}
-    if roles:
+    if roles and refresh_permissions:
         for role_id, permission_id in db.query(RolePermission.role_id, RolePermission.permission_id).filter(
             RolePermission.role_id.in_([r.id for r in roles.values()])
         ).all():
@@ -207,45 +229,62 @@ def _ensure_default_roles(db: Session, company_id: str) -> dict[str, Role]:
     changed = False
     for role_name, perm_keys in _DEFAULT_ROLES.items():
         role = roles.get(role_name)
+        created = False
         if not role:
-            # The built-in "Manager" role reads as a department/team-level manager
-            # (its own dashboard widget is scoped to "team", see the "Manager"
-            # branch of get_hr_dashboard() below) -- default it to the employee's
-            # own department (the existing "@own" marker, same as the manual
-            # "Only the employee's own department" role option) so a brand-new
-            # company's managers see their own team by default, not every
-            # department company-wide. The other presets stay company-wide on
-            # purpose: Administrator and HR Manager are meant to see and manage
-            # everything; Payroll Officer runs payroll for the whole company;
-            # Employee is self-service only (its own separate restriction, not
-            # department scoping).
+            # Manager defaults to the login's own department; the other presets are company-wide.
             department_scope = json.dumps([OWN_DEPARTMENT]) if role_name == "Manager" else None
             role = Role(company_id=company_id, role_name=role_name, is_system_role=True, department_scope=department_scope)
             db.add(role)
             db.flush()
             roles[role_name] = role
-            changed = True
+            changed = created = True
+        if not (created or (refresh_permissions and role.is_system_role)):
+            continue
         existing_links = links_by_role.setdefault(role.id, set())
-        # "*" (Administrator) picks up every ordinary permission key, but
-        # NEVER the cross-branch opt-ins (Branch Security Layer Phase 2) —
-        # those are a privilege escalation (company-wide visibility for a
-        # branch-assigned identity), not an ordinary view/edit permission,
-        # and must be granted explicitly per role, never implied by a
-        # wildcard. Without this, every branch's "Administrator" role
-        # (branch-manager-equivalent, not the same as a full company admin)
-        # would silently see every OTHER branch's data too.
-        if perm_keys == ["*"]:
-            grant_keys = [k for k in catalog.keys() if not k.endswith(":view_all_branches")]
-        else:
-            grant_keys = perm_keys
-        for key in grant_keys:
+        for key in _default_grant_keys(catalog, perm_keys):
             perm = catalog.get(key)
             if perm and perm.id not in existing_links:
                 db.add(RolePermission(role_id=role.id, permission_id=perm.id))
+                existing_links.add(perm.id)
                 changed = True
     if changed:
         db.commit()
     return roles
+
+
+def backfill_default_role_permissions(db: Session) -> None:
+    """Startup, once per _DEFAULT_ROLES_FLAG: give every company's built-in roles any newly added default."""
+    db.execute(text("CREATE TABLE IF NOT EXISTS schema_flags (name VARCHAR(80) PRIMARY KEY)"))
+    if db.execute(text("SELECT 1 FROM schema_flags WHERE name = :n"), {"n": _DEFAULT_ROLES_FLAG}).first():
+        return
+    company_ids = [r[0] for r in db.query(Role.company_id).filter(Role.is_system_role.is_(True)).distinct().all()]
+    for company_id in company_ids:
+        _ensure_default_roles(db, company_id, refresh_permissions=True)
+    db.execute(text("INSERT INTO schema_flags (name) VALUES (:n) ON CONFLICT (name) DO NOTHING"), {"n": _DEFAULT_ROLES_FLAG})
+    db.commit()
+
+
+_MAIN_EDITABLE_MODULES = ("sales", "quotations", "pos", "purchase", "inventory", "expense", "bank", "accounting", "corporate", "notifications")
+
+
+def backfill_main_module_edit(db: Session) -> None:
+    """Startup, once: main-app modules gained Edit/Delete (View used to allow changes too), so every
+    role that could view a module keeps changing it until an admin narrows it."""
+    db.execute(text("CREATE TABLE IF NOT EXISTS schema_flags (name VARCHAR(80) PRIMARY KEY)"))
+    if db.execute(text("SELECT 1 FROM schema_flags WHERE name = 'main_module_edit_v1'")).first():
+        return
+    catalog = _ensure_permission_catalog(db)
+    roles = db.query(Role).all()
+    for role in roles:
+        held = _role_permission_keys_bulk(db, [role])[role.id]
+        for module in _MAIN_EDITABLE_MODULES:
+            if f"{module}:view" in held or f"{module}:view_all_branches" in held:
+                for level in ("edit", "delete"):
+                    perm = catalog.get(f"{module}:{level}")
+                    if perm and f"{module}:{level}" not in held:
+                        db.add(RolePermission(role_id=role.id, permission_id=perm.id))
+    db.execute(text("INSERT INTO schema_flags (name) VALUES ('main_module_edit_v1') ON CONFLICT (name) DO NOTHING"))
+    db.commit()
 
 
 # ── geofencing ──────────────────────────────────────────────────────────────
@@ -439,37 +478,6 @@ def hr_me(db: Session = Depends(get_db), emp: Employee = Depends(get_current_emp
 
 # ── role-based dashboard ────────────────────────────────────────────────────
 
-def _own_session_status(db: Session, emp: Employee) -> dict:
-    """The caller's own GPS check-in state. Included for every role, since the
-    ESS check-in button needs it for managers and HR staff too; today_sessions
-    are ISO UTC timestamps so the phone can show them in local time."""
-    country = db.query(Company.country).filter(Company.id == emp.company_id).scalar()
-    offset = timezone_utils.company_utc_offset(country)
-    now = datetime.now(UTC)
-    local_midnight = datetime.combine((now + offset).date(), datetime.min.time(), tzinfo=UTC) - offset
-
-    def aware(d: datetime | None) -> datetime | None:
-        return d.replace(tzinfo=UTC) if d is not None and d.tzinfo is None else d
-
-    recent = (
-        db.query(AttendanceSession)
-        .filter(AttendanceSession.employee_id == emp.id)
-        .filter(or_(AttendanceSession.status == "open", AttendanceSession.check_in >= now - timedelta(days=2)))
-        .order_by(AttendanceSession.check_in)
-        .all()
-    )
-    open_session = next((r for r in recent if r.status == "open"), None)
-    return {
-        "checked_in": bool(open_session),
-        "check_in_time": str(open_session.check_in) if open_session else None,
-        "check_in_at": aware(open_session.check_in).isoformat() if open_session else None,
-        "today_sessions": [
-            {"check_in": aware(r.check_in).isoformat(), "check_out": aware(r.check_out).isoformat() if r.check_out else None}
-            for r in recent if aware(r.check_in) >= local_midnight
-        ],
-    }
-
-
 @gated_router.get("/dashboard")
 def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> dict:
     role = db.get(Role, emp.role_id) if emp.role_id else None
@@ -479,7 +487,6 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
     if role_name in ("Administrator", "HR Manager"):
         return {
             "role": role_name,
-            **_own_session_status(db, emp),
             "total_employees": scope_employee_query_by_names(
                 db.query(Employee).filter(Employee.company_id == company_id), employee_scope(db, emp),
             ).count(),
@@ -511,7 +518,6 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
             ))
         return {
             "role": role_name,
-            **_own_session_status(db, emp),
             "latest_run_period": latest.period if latest else None,
             "latest_run_status": latest.status if latest else None,
             "latest_run_net_total": net_total,
@@ -519,7 +525,6 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
     if role_name == "Manager":
         return {
             "role": role_name,
-            **_own_session_status(db, emp),
             "team_active_sessions": _scope_attendance_to_branch(
                 db.query(AttendanceSession).filter(
                     AttendanceSession.company_id == company_id, AttendanceSession.status == "open"
@@ -529,7 +534,37 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
         }
 
     # Employee dashboard — own status only
-    return {"role": role_name, **_own_session_status(db, emp)}
+    open_session = (
+        db.query(AttendanceSession)
+        .filter(AttendanceSession.employee_id == emp.id, AttendanceSession.status == "open")
+        .first()
+    )
+    # Sessions since company-local midnight, for the ESS mobile In/Out/Hours tiles
+    country = db.query(Company.country).filter(Company.id == company_id).scalar()
+    offset = timezone_utils.company_utc_offset(country)
+    local_now = datetime.now(UTC) + offset
+    day_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0) - offset
+    today_sessions = (
+        db.query(AttendanceSession)
+        .filter(AttendanceSession.employee_id == emp.id, AttendanceSession.check_in >= day_start)
+        .order_by(AttendanceSession.check_in)
+        .all()
+    )
+    return {
+        "role": role_name,
+        "checked_in": bool(open_session),
+        "check_in_time": str(open_session.check_in) if open_session else None,
+        "check_in_at": _iso_utc(open_session.check_in) if open_session else None,
+        "today_sessions": [
+            {"check_in": _iso_utc(s.check_in), "check_out": _iso_utc(s.check_out) if s.check_out else None}
+            for s in today_sessions
+        ],
+    }
+
+
+def _iso_utc(dt: datetime) -> str:
+    """ISO-8601 with an explicit UTC offset (SQLite hands back naive datetimes)."""
+    return (dt if dt.tzinfo else dt.replace(tzinfo=UTC)).isoformat()
 
 
 # ── roles & permissions ─────────────────────────────────────────────────────
@@ -552,13 +587,37 @@ class RoleCreateRequest(BaseModel):
     department_scope: list[str] = []
 
 
+def _assert_can_grant(principal: Principal, keys: set[str] | list[str], department_scope: list[str] | None) -> None:
+    """A non-admin can't hand out more than they hold: every permission must be in their own role,
+    and a department-scoped login can only give out its own departments (never company-wide).
+    Without this, "HR settings: edit" could create or assign a role with everything -- including
+    the Administrator role -- and take it."""
+    if principal.is_admin:
+        return
+    missing = sorted(set(keys) - set(principal.permissions))
+    if missing:
+        raise HTTPException(
+            status_code=403,
+            detail=f"You can't grant permissions your own role doesn't have: {', '.join(missing[:5])}{'…' if len(missing) > 5 else ''}",
+        )
+    if principal.is_dept_scoped:
+        wanted = {str(d).strip().lower() for d in (department_scope or []) if str(d).strip()}
+        # "@own" = the holder's own department; assigning already requires the employee to be in
+        # the assigner's departments (assert_employee_in_scope), so it can't reach outside them.
+        if not wanted or not (wanted - {OWN_DEPARTMENT.lower()}) <= principal.department_scope:
+            raise HTTPException(status_code=403, detail="You can only give access to your own departments")
+
+
 def _normalize_department_scope(names: list[str]) -> str | None:
     cleaned = sorted({str(n).strip() for n in names if str(n).strip()})
     return json.dumps(cleaned) if cleaned else None
 
 
 @gated_router.get("/roles", response_model=list[RoleOut])
-def list_roles(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> list[RoleOut]:
+def list_roles(
+    db: Session = Depends(get_db),
+    emp: Employee = Depends(require_permission("hr_settings:view", "hr:manage_roles")),
+) -> list[RoleOut]:
     _ensure_default_roles(db, emp.company_id)
     roles = db.query(Role).filter(Role.company_id == emp.company_id).order_by(Role.role_name).all()
     perms_by_role = _role_permission_keys_bulk(db, roles)
@@ -579,6 +638,13 @@ def create_role(
     emp: Employee = Depends(require_permission("hr:manage_roles")),
 ) -> RoleOut:
     catalog = _ensure_permission_catalog(db)
+    holder = db.get(Role, emp.role_id) if emp.role_id else None
+    _assert_can_grant(
+        Principal(kind="employee", company_id=emp.company_id, display_name=emp.full_name, is_admin=False,
+                  permissions=frozenset(_role_permission_keys(db, holder)),
+                  department_scope=frozenset(d.lower() for d in resolve_department_scope(holder, emp))),
+        payload.permission_keys, payload.department_scope,
+    )
     role = Role(
         company_id=emp.company_id, role_name=payload.role_name.strip(), description=payload.description,
         department_scope=_normalize_department_scope(payload.department_scope),
@@ -598,7 +664,10 @@ def create_role(
 
 
 @gated_router.get("/permissions")
-def list_permissions(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> list[dict]:
+def list_permissions(
+    db: Session = Depends(get_db),
+    emp: Employee = Depends(require_permission("hr_settings:view", "hr:manage_roles")),
+) -> list[dict]:
     catalog = _ensure_permission_catalog(db)
     db.commit()
     return [{"key": key, "module": p.module, "permission_name": p.permission_name} for key, p in catalog.items()]
@@ -678,6 +747,7 @@ def admin_create_role(
         perm = catalog.get(key)
         if perm and key not in allowed_keys:
             raise HTTPException(status_code=400, detail=f"'{perm.module}' is not enabled for your company — cannot grant this permission")
+    _assert_can_grant(principal, payload.permission_keys, payload.department_scope)
     role_name = payload.role_name.strip()
     if not role_name:
         raise HTTPException(status_code=400, detail="Role name is required")
@@ -711,8 +781,8 @@ def admin_update_role(
     role = db.query(Role).filter(Role.id == role_id, Role.company_id == principal.company_id).first()
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
-    if role.is_system_role:
-        raise HTTPException(status_code=400, detail="Default system roles cannot be edited — create a custom role instead")
+    if role.is_system_role and role.role_name in _LOCKED_SYSTEM_ROLES:
+        raise HTTPException(status_code=400, detail=f"The default {role.role_name} role can't be edited — create a custom role instead")
     catalog = _ensure_permission_catalog(db)
     company_modules = db.query(Company.modules_enabled).filter(Company.id == principal.company_id).scalar()
     allowed_keys = _company_allowed_catalog_keys(catalog, company_modules)
@@ -720,7 +790,11 @@ def admin_update_role(
         perm = catalog.get(key)
         if perm and key not in allowed_keys:
             raise HTTPException(status_code=400, detail=f"'{perm.module}' is not enabled for your company — cannot grant this permission")
-    role_name = payload.role_name.strip()
+    # Both the new permissions and the role as it stands: a non-admin can't edit a role that
+    # already holds more than they do (e.g. strip it, or rename it into something they can take).
+    _assert_can_grant(principal, set(payload.permission_keys) | _role_permission_keys(db, role), payload.department_scope)
+    # Built-in roles are looked up by name (_ensure_default_roles), so their name never changes.
+    role_name = role.role_name if role.is_system_role else payload.role_name.strip()
     if not role_name:
         raise HTTPException(status_code=400, detail="Role name is required")
     if db.query(Role).filter(Role.company_id == principal.company_id, Role.role_name.ilike(role_name), Role.id != role.id).first():
@@ -736,7 +810,7 @@ def admin_update_role(
             db.add(RolePermission(role_id=role.id, permission_id=perm.id))
     db.commit()
     return RoleOut(
-        id=role.id, role_name=role.role_name, description=role.description, is_system_role=False,
+        id=role.id, role_name=role.role_name, description=role.description, is_system_role=role.is_system_role,
         permissions=sorted(_role_permission_keys(db, role)),
         department_scope=_role_department_scope(role),
     )
@@ -839,6 +913,8 @@ def set_employee_portal_access(
             role = db.query(Role).filter(Role.id == payload.role_id, Role.company_id == principal.company_id).first()
             if not role:
                 raise HTTPException(status_code=404, detail="Role not found")
+            if role.id != target.role_id:
+                _assert_can_grant(principal, _role_permission_keys(db, role), _role_department_scope(role))
         target.role_id = payload.role_id or None
 
     if payload.is_active is not None:

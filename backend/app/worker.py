@@ -110,9 +110,12 @@ def nightly_all_companies_backup() -> str:
     """Nightly offsite copy of every company's SQL backup to S3/Spaces,
     on top of the managed Postgres provider's own snapshots. Logs an
     AuditLog against the SUPERADMIN-INTERNAL sentinel company either way."""
+    import os
+    import tempfile
+
     from app import storage
     from app.models import AuditLog, Company
-    from app.routers.app_data import build_all_companies_backup_zip
+    from app.routers.app_data import write_all_companies_backup_zip
 
     db = SessionLocal()
     try:
@@ -120,10 +123,18 @@ def nightly_all_companies_backup() -> str:
         date_str = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         key = f"{_BACKUP_KEY_PREFIX}taxflow-all-companies-backup-{date_str}.zip"
         try:
-            zip_bytes = build_all_companies_backup_zip(db, "Automated nightly backup")
-            storage.upload_backup_bytes(key, zip_bytes)
+            # Built in a temp file and uploaded from disk, not held in memory.
+            tmp = tempfile.NamedTemporaryFile(prefix="taxflow-backup-", suffix=".zip", delete=False)
+            try:
+                with tmp:
+                    write_all_companies_backup_zip(db, "Automated nightly backup", tmp)
+                size = os.path.getsize(tmp.name)
+                storage.upload_backup_file(key, tmp.name)
+            finally:
+                os.unlink(tmp.name)
+            sa_company = db.query(Company).filter(Company.trn == "SUPERADMIN-INTERNAL").first()
             deleted = storage.delete_old_backups(_BACKUP_KEY_PREFIX, _BACKUP_RETENTION_DAYS)
-            detail = f"Uploaded {key} ({len(zip_bytes)} bytes); pruned {len(deleted)} backup(s) older than {_BACKUP_RETENTION_DAYS} days"
+            detail = f"Uploaded {key} ({size} bytes); pruned {len(deleted)} backup(s) older than {_BACKUP_RETENTION_DAYS} days"
             logger.info("Nightly all-companies backup succeeded: %s", detail)
             action = "nightly_backup_completed"
         except Exception as exc:

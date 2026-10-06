@@ -28,10 +28,9 @@ const cssVersion = shortHash(path.join(taxflowDir, "src", "styles.css"));
 // ESS keeps its own stylesheet/script (moved out of ess.html so they can be cached)
 const essJsVersion = shortHash(path.join(taxflowDir, "src", "ess.js"));
 const essCssVersion = shortHash(path.join(taxflowDir, "src", "ess.css"));
-// Shared push-to-talk voice layer (index.html AI Assistant)
 const voiceJsVersion = shortHash(path.join(taxflowDir, "src", "voice.js"));
 
-const htmlFiles = ["index.html", "hrms.html", "ess.html", "pos.html"].map((name) => path.join(taxflowDir, name));
+const htmlFiles = ["index.html", "hrms.html", "ess.html"].map((name) => path.join(taxflowDir, name));
 
 for (const htmlPath of htmlFiles) {
   let html = readFileSync(htmlPath, "utf-8");
@@ -48,4 +47,3 @@ console.log(`  app.js version:     ${jsVersion}`);
 console.log(`  styles.css version: ${cssVersion}`);
 console.log(`  ess.js version:     ${essJsVersion}`);
 console.log(`  ess.css version:    ${essCssVersion}`);
-console.log(`  voice.js version:   ${voiceJsVersion}`);

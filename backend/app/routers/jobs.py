@@ -2,13 +2,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_company_admin
 from app.models import Job, User
 from app.schemas import JobOut
 from app.worker import generate_vat_summary
 
 
-router = APIRouter(prefix="/jobs", tags=["jobs"])
+router = APIRouter(prefix="/jobs", dependencies=[Depends(require_company_admin)], tags=["jobs"])
 
 
 @router.get("", response_model=list[JobOut])

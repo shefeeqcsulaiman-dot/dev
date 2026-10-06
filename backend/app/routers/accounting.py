@@ -144,6 +144,16 @@ def ai_generate_ledger(
 
     # Validate and enrich the result
     validated = _validate_ai_ledger_tree(ai_result.get("tree", []), existing_codes)
+    currency = (current_user.company.currency if current_user.company else None) or "AED"
+    if currency != "AED":
+        def relabel(node):
+            if isinstance(node, dict):
+                if isinstance(node.get("name"), str):
+                    node["name"] = node["name"].replace("(AED)", f"({currency})")
+                for child in node.get("children") or []:
+                    relabel(child)
+        for node in validated:
+            relabel(node)
     return {"tree": validated, "summary": ai_result.get("summary", ""), "prompt": prompt}
 
 

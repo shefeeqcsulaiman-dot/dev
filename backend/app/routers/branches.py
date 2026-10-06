@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.auth_principal import assert_company_active
 from app.config import get_settings
-from app.dependencies import Principal, company_allows_module, get_current_principal, get_current_user, get_db
+from app.dependencies import company_allows_module, get_current_principal, get_current_user, get_db, Principal, require_company_admin
 from app.limiter import limiter
 from app.models import AppDataRecord, Branch, Company, CompanyLocation, Employee, ImpersonationSession, User
 from app.models import uuid as new_uuid
@@ -138,7 +138,7 @@ def list_branches(
     return [_branch_out(b) for b in branches]
 
 
-@router.post("", response_model=BranchOut, status_code=201)
+@router.post("", response_model=BranchOut, status_code=201, dependencies=[Depends(require_company_admin)])
 def create_branch(
     payload: BranchCreate,
     db: Session = Depends(get_db),
@@ -167,7 +167,7 @@ def create_branch(
     return _branch_out(branch)
 
 
-@router.put("/{branch_id}", response_model=BranchOut)
+@router.put("/{branch_id}", response_model=BranchOut, dependencies=[Depends(require_company_admin)])
 def update_branch(
     branch_id: str,
     payload: BranchUpdate,
@@ -203,7 +203,7 @@ def update_branch(
     return _branch_out(branch)
 
 
-@router.delete("/{branch_id}")
+@router.delete("/{branch_id}", dependencies=[Depends(require_company_admin)])
 def delete_branch(
     branch_id: str,
     db: Session = Depends(get_db),
@@ -274,7 +274,7 @@ def branch_login(request: Request, payload: BranchLoginRequest, db: Session = De
     return BranchToken(access_token=_create_branch_token(branch.id))
 
 
-@router.post("/{branch_id}/impersonate", response_model=BranchToken)
+@router.post("/{branch_id}/impersonate", response_model=BranchToken, dependencies=[Depends(require_company_admin)])
 @limiter.limit("20/minute")
 def impersonate_branch(
     request: Request,

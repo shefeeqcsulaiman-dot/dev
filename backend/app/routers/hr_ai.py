@@ -449,7 +449,8 @@ Return JSON:
 @limiter.limit("15/minute")
 def jd_generate(request: Request, payload: JdGenerateRequest, current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     """Generate a UAE-compliant Job Description using AI."""
-    salary_hint = f"Salary range: {payload.salary_range} AED/month" if payload.salary_range else ""
+    currency = (current_user.company.currency if current_user.company else None) or "AED"
+    salary_hint = f"Salary range: {payload.salary_range} {currency}/month" if payload.salary_range else ""
     exp_hint = f"Experience required: {payload.experience_years} years" if payload.experience_years else ""
 
     prompt = f"""Generate a professional Job Description for a UAE company.

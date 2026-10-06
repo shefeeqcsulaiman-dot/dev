@@ -2,7 +2,7 @@
 
 **Platform:** UAE Business Management & Compliance Platform  
 **Stack:** FastAPI · SQLite (dev) / PostgreSQL (prod) · Single-page frontend  
-**Live URL:** https://dev.etaxflow.com  
+**Live URL:** https://app.etaxflow.com  
 **Default login:** admin@taxflowapp.com / admin123
 
 ---
@@ -390,14 +390,6 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 
 ## 12. Employee Self-Service (ESS Portal)
 
-### 12.0 Phone app layout (screens up to 760px wide)
-- Sidebar and top bar are replaced by a bottom tab bar: **Home · Attend · 🎤 voice · Requests · Me**; desktop and tablet keep the existing layout
-- **Home**: greeting, today's (or next) shift card with a **Check in / Check out** button, shortcuts (Leave, Overtime, Payslip, Rota), annual leave left, pending requests, latest announcement
-- **Attend**: live clock, large round check-in button (red when checked in; check-out asks for confirmation), today's In / Out / Hours, last 7 days
-- **Request forms** open as bottom sheets; leave type is picked with chips
-- **Me**: Payslips, Rota and shifts, Leave and holidays, My tasks, My team, Install the app / Add to Home Screen, Sign out — then the usual profile, documents and password
-- **Installable**: "Add to Home Screen" opens it full-screen with its own icon (`/ess-manifest.json`)
-
 **Entry:** `/ess` — separate portal with own login  
 **Authentication:** Employee logs in with Employee No. + password (default password = employee no.)
 
@@ -503,48 +495,6 @@ FTA Readiness panel: TRN Validation %, VAT Math %, Document Coverage %
 - Chat interface connected to live company data
 - Ask questions: "What is my VAT payable for June?", "Show unpaid invoices over AED 10,000"
 - Powered by LLM with company context
-- **Voice:** mic button beside Send (push-to-talk; click again to stop), EN / عربي language picker and a speaker toggle for spoken answers. The transcript is sent like a typed question and the answer is read aloud; questions asked in Arabic are answered in Arabic. Uses the browser's own speech recognition (Chrome, Edge, Safari); other browsers record up to ~60 s and transcribe on the server (`POST /ai/transcribe`, needs `OPENAI_API_KEY`). Voice never saves or posts anything.
-
-### 15.1a Voice commands
-**Entry:** mic button in the topbar (main app and HRMS) or **Ctrl+Space**; Esc closes.
-- Say where to go: "Open payroll", "Trial balance", "Show me the customers", "Leave requests", "افتح المخزون"
-- Open a blank form: "New expense", "Create a new quotation", "Add employee" (only the "+ New …" buttons — never Run Payroll, Publish Rota, Save)
-- Search: "Search for Al Noor in sales" types the term into that page's search box
-- Questions ("What should I check before VAT filing?") go to the AI Assistant (main app)
-- Unclear commands show "Did you mean…" buttons; nothing is opened until you pick one
-- Only screens you can already see in your sidebar are reachable by voice
-
-### 15.1b Voice data entry
-**Entry:** **🎤 Dictate** button on New Expense, Add Purchase (manual), New Invoice, Add Customer and Add Vendor.
-- Speak the details ("Taxi to the client yesterday, 85 dirhams plus 4.25 VAT, Careem, transport"); the form fills in and every voice-filled field is highlighted until you edit it
-- Relative dates ("yesterday", "30th of October") become real dates; spoken emails/TRNs/phones are cleaned up; invalid values are left blank
-- Supplier / customer / product / category names are matched against your existing lists; anything not found is left as spoken (or blank for strict dropdowns) and listed in the popup ("Not in your product list: …")
-- Item lines are added for purchases and invoices
-- **Nothing is saved** — you review and press the form's normal Save / Submit button
-
-### 15.1c Voice in HRMS & ESS
-- **HRMS quick answers** (topbar mic): "Who is absent today?", "Pending leave requests", "Who is eligible for overtime this week?" open that screen and answer aloud from the same data it shows (only offered if you can see that screen)
-- **ESS** (mic in the portal's top bar, or Ctrl+Space): "Apply annual leave next Monday to Wednesday", "Request 2 hours overtime yesterday from 6 to 8 pm", "Salary advance of 1500 for rent", "Loan of 10,000 over 12 months", "I forgot to punch out yesterday" open the usual request form already filled in — the employee checks it and taps Submit
-- ESS questions: "What's my leave balance?", "When is my next shift?" are answered from the employee's own data; "Open payslips" etc. jump to that page
-
-### 15.1d POS voice order
-**Entry:** mic button next to the POS product search (or Ctrl+Space); push-to-talk only.
-- Say the items: "Add two Pepsi and half a kilo of tomatoes"
-- A panel lists what was recognised with editable quantities; items not in your product list are shown greyed out and can't be added
-- Nothing reaches the cart until the cashier taps **Add to cart**; prices always come from the product record, never from speech; the usual low-stock warning still shows
-
-### 15.1f Daily briefing
-**Entry:** **Briefing** button on the dashboard header, or say "good morning" / "brief me" to the topbar mic.
-- Reads out and lists today's position: amount past due and how many customers, purchases waiting for payment, next VAT return due date (plus VAT payable or refund expected), staff checked in today and pending approvals, open exceptions
-- Each line has a button to its page (Receivables, Purchases, VAT report, HRMS, Exceptions)
-- English or Arabic (follows the app language / voice language); hidden when voice is turned off
-
-### 15.1e Voice settings (Settings > AI & Voice)
-- **Enable voice** — off hides every mic and Dictate button (main app, HRMS, ESS, POS) and the voice endpoints refuse requests
-- **Allow server transcription** — off = browser speech recognition only (Chrome, Edge, Safari); Firefox users then can't use voice
-- **Default voice language** — English / Arabic / each browser's own; a user's own EN/عربي pick still wins
-- **Server transcriptions per day** — cost cap (default 200); today's usage is shown; browser speech recognition is free and uncapped
-- Audio is never stored; only the text is sent to the AI to work out the command or form values
 
 ### 15.2 AI Invoice Extraction
 - Upload supplier invoice images (JPG/PNG/PDF)

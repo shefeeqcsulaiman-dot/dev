@@ -11,10 +11,12 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="TaxFlow ESS">
   <link rel="apple-touch-icon" href="/ess-icon-192.png">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
   <title>Employee Self-Service — ETaxFlow</title>
   <link rel="preload" href="/fonts/dmsans-rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu0-K4.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/syne-8vIH7w4qzmVxm2BL9A.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="src/ess.css?v=bd76fafbcc">
+  <link rel="stylesheet" href="src/ess.css?v=3e0ef43bb1">
   <script>
     // Runs before body paints, so a saved/system dark preference applies
     // immediately instead of flashing light-then-dark once the main
@@ -53,6 +55,11 @@
         onkeydown="if(event.key==='Enter')essLogin()">
     </div>
     <button id="ess-login-btn" class="btn-login" onclick="essLogin()">Sign In</button>
+    <!-- Install as a phone app (phones only; hidden once installed) -->
+    <div class="m-only login-install" id="login-install" hidden>
+      <button type="button" class="btn-install" onclick="essInstallApp()"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg><span>Download the app</span></button>
+      <div class="login-install-help" id="login-install-help" hidden></div>
+    </div>
     <div class="login-hint">Having trouble? Contact your HR administrator.</div>
   </div>
 </div>
@@ -437,8 +444,9 @@
           <div class="card-hd" style="align-items:center;margin-bottom:0">
             <div>
               <div class="card-title" style="margin-bottom:0" id="acal-title">Attendance Calendar</div>
+              <div class="acal-total" id="acal-total"></div>
               <div class="acal-legend" style="margin-top:8px">
-                <span class="acal-lg acal-present">Present</span><span class="acal-lg acal-incomplete">No check-out</span><span class="acal-lg acal-leave">Leave</span><span class="acal-lg acal-holiday">Holiday</span>
+                <span class="acal-lg acal-present">Present</span><span class="acal-lg acal-incomplete">No check-out</span><span class="acal-lg acal-leave">Leave</span><span class="acal-lg acal-holiday">Holiday</span><span class="acal-lg acal-off">Off</span>
               </div>
             </div>
             <div style="display:flex;gap:6px">
@@ -685,7 +693,7 @@
      window.TAXFLOW_API_BASE_URL synchronously, and defer preserves source
      order between them, so config.js still runs before ess.js. -->
 <script src="/config.js" defer></script>
-<script src="src/voice.js?v=aa56e95978" defer></script>
-<script src="src/ess.js?v=c4f5c9201a" defer></script>
+<script src="src/voice.js?v=54b0d66150" defer></script>
+<script src="src/ess.js?v=01bf62c928" defer></script>
 </body>
 </html>

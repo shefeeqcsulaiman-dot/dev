@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     db_pool_size: int = 20
     db_max_overflow: int = 40
     db_pool_timeout: int = 30
+    # Apply Alembic migrations when the app starts (app.migrate). Safe with many
+    # workers on PostgreSQL (advisory lock). Set false when a pre-deploy job
+    # runs `python -m app.migrate` instead.
+    run_migrations_on_startup: bool = True
     # Bootstrap data cap per company (max records returned on login)
     bootstrap_record_cap: int = 10000
 

@@ -13,7 +13,7 @@ services:
     github:
       branch: main
       deploy_on_push: true
-      repo: shefeeqcsulaiman-dot/dev.etaxflow
+      repo: shefeeqcsulaiman-dot/host
     http_port: 8000
     health_check:
       http_path: /health
@@ -66,11 +66,11 @@ services:
 
       - key: CORS_ORIGINS
         scope: RUN_TIME
-        value: https://dev.etaxflow.com,http://localhost:5173,http://127.0.0.1:5173
+        value: https://app.etaxflow.com,http://localhost:5173,http://127.0.0.1:5173
 
       - key: API_BASE_URL
         scope: RUN_TIME
-        value: https://dev.etaxflow.com/api/v1
+        value: https://app.etaxflow.com/api/v1
 
       # ── Workers & pool ────────────────────────────────────────────────
       # Cluster-wide DB connection budget: this pool (10+15=25/instance) x
@@ -80,9 +80,16 @@ services:
       # Databases -> cluster -> Settings) before raising further — a pool
       # budget that exceeds the DB's own ceiling is what caused the
       # intermittent 500s this was tuned to fix, not too-small a pool.
+      # 3 workers per 2 GB / 2 vCPU instance: each worker is a full copy of the app
+      # (~150-250 MB) with its own DB pool, so 6 left little memory for heavy requests.
       - key: WORKERS
         scope: RUN_TIME
-        value: "6"
+        value: "3"
+
+      # Recycle each worker after this many requests (uvicorn --limit-max-requests).
+      - key: MAX_REQUESTS
+        scope: RUN_TIME
+        value: "2000"
 
       - key: DB_POOL_SIZE
         scope: RUN_TIME
@@ -164,7 +171,7 @@ services:
     github:
       branch: main
       deploy_on_push: true
-      repo: shefeeqcsulaiman-dot/dev.etaxflow
+      repo: shefeeqcsulaiman-dot/host
     instance_count: 1
     instance_size_slug: basic-s          # 1 vCPU · 2 GB
     envs:

@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_company_admin
 from app.models import AuditLog, User
 from app.schemas import AuditLogOut
 
 
-router = APIRouter(prefix="/audit", tags=["audit"])
+router = APIRouter(prefix="/audit", dependencies=[Depends(require_company_admin)], tags=["audit"])
 
 
 @router.get("/trail", response_model=list[AuditLogOut])

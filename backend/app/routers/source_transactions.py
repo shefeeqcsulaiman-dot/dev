@@ -6,12 +6,12 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.accounting_posting import PostingError, post_source_transaction, repost_source_transaction
 from app.database import get_db
-from app.dependencies import company_allows_module, get_current_user
+from app.dependencies import company_allows_module, get_current_user, require_module
 from app.models import Account, AuditLog, PostingJob, SourceTransaction, SourceTransactionLine, User
 from app.schemas import PostingJobOut, RepostByReferenceIn, SourceTransactionCreate, SourceTransactionOut
 
 
-router = APIRouter(prefix="/source-transactions", tags=["source transactions"])
+router = APIRouter(prefix="/source-transactions", dependencies=[Depends(require_module("accounting"))], tags=["source transactions"])
 
 
 def recalc(transaction: SourceTransaction) -> None:

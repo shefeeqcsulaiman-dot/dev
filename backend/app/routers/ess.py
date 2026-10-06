@@ -5,21 +5,19 @@ from calendar import monthrange
 from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from jose import JWTError, jwt
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 import app.cache as cache
-import app.ess_voice as ess_voice
 import app.timezone_utils as timezone_utils
 from app.auth_principal import resolve_department_scope
 from app.config import get_settings
-from app.ai_client import transcribe_audio
-from app.voice_settings import get_voice_settings, require_voice_enabled, reserve_transcription
 from app.database import get_db
 from app.dependencies import assert_company_active, company_allows_module
 from app.limiter import limiter
+from app.rota_days import rota_day_statuses, rota_in_range
 from app.models import AppDataRecord, AttendanceDetail, AuditLog, Company, Employee, LeaveRequest, PayrollItem, PayrollRun, Role
 from app.routers.attendance import _company_offset, _ot_cooloff_seconds, overtime_eligibility_rows, _late_rules, _local_today, _standard_hours_per_day, _weekend_day_set
 from app.routers.leave import (
@@ -313,6 +311,8 @@ def ess_team_today(request: Request, db: Session = Depends(get_db)) -> list[dict
         ).all()
     }
 
+    rota_status = rota_day_statuses(db, emp.company_id, peer_nos, today, today)
+
     out = []
     for p in peers:
         detail_row = details_by_emp_no.get(p.employee_no)
@@ -326,7 +326,7 @@ def ess_team_today(request: Request, db: Session = Depends(get_db)) -> list[dict
         elif has_punches:
             day_status = "present"
         else:
-            day_status = "absent"
+            day_status = rota_status.get((p.employee_no, today_iso)) or "absent"
         check_in = None
         if detail_row and detail_row.clock_in_1:
             check_in = (detail_row.clock_in_1 + offset).strftime("%H:%M")
@@ -587,11 +587,18 @@ def ess_payslips(request: Request, db: Session = Depends(get_db)) -> list:
     ]
 
 
-def _leave_out(r: LeaveRequest) -> dict:
+def _leave_can_cancel(r: LeaveRequest, today: str) -> bool:
+    """Same rule as ess_cancel_leave(): pending any time, approved until it starts."""
+    return r.status == "pending" or (r.status == "approved" and r.start_date > today)
+
+
+def _leave_out(r: LeaveRequest, today: str | None = None) -> dict:
     return {
         "id": r.id, "leave_type": r.leave_type, "start_date": r.start_date, "end_date": r.end_date,
         "days": r.days, "reason": r.reason, "status": r.status,
         "created_at": r.created_at.isoformat() if r.created_at else None,
+        "cancelled_by": r.cancelled_by, "cancel_reason": r.cancel_reason,
+        "can_cancel": _leave_can_cancel(r, today) if today else r.status == "pending",
     }
 
 
@@ -611,7 +618,8 @@ def ess_leave(request: Request, db: Session = Depends(get_db)) -> list:
         .limit(50)
         .all()
     )
-    return [_leave_out(r) for r in rows]
+    today = _local_today(_company_offset(db, emp.company_id)).isoformat()
+    return [_leave_out(r, today) for r in rows]
 
 
 class EssLeaveRequestIn(BaseModel):
@@ -665,6 +673,20 @@ def ess_create_leave(payload: EssLeaveRequestIn, request: Request, db: Session =
     db.add(req)
     db.commit()
     return _leave_out(req)
+
+
+def _rota_assignments_between(db: Session, company_id: str, lo: str, hi: str) -> list[dict]:
+    """rotaAssignments dated lo..hi only, filtered in SQL rather than the whole rota history."""
+    out = []
+    query = db.query(AppDataRecord.payload).filter(AppDataRecord.company_id == company_id, *rota_in_range(lo, hi))
+    for (raw,) in query.order_by(AppDataRecord.created_at, AppDataRecord.id).all():
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(parsed, dict) and lo <= str(parsed.get("date") or "") <= hi:
+            out.append(parsed)
+    return out
 
 
 def _employee_app_data_records(db: Session, company_id: str, collection: str) -> list[dict]:
@@ -742,7 +764,6 @@ def ess_rota(
     (2026-09-02) assumed the Tasks convention here too and silently
     returned empty for every real employee with real rota data."""
     emp = ess_bearer(request, db)
-    assignments = _employee_app_data_records(db, emp.company_id, "rotaAssignments")
     if month:
         m = re.match(r"^(\d{4})-(\d{2})$", month)
         if not m:
@@ -757,8 +778,8 @@ def ess_rota(
         window_start = (today - timedelta(days=7)).isoformat()
         window_end = (today + timedelta(days=30)).isoformat()
     mine = [
-        a for a in assignments
-        if a.get("employee_id") == emp.employee_no and window_start <= (a.get("date") or "") <= window_end
+        a for a in _rota_assignments_between(db, emp.company_id, window_start, window_end)
+        if a.get("employee_id") == emp.employee_no
     ]
     mine.sort(key=lambda a: a.get("date") or "")
     return mine
@@ -802,10 +823,9 @@ def ess_team_rota(
         return {"employees": [], "assignments": []}
 
     peer_nos = {p.employee_no for p in peers}
-    assignments = _employee_app_data_records(db, emp.company_id, "rotaAssignments")
     rows = [
-        a for a in assignments
-        if a.get("employee_id") in peer_nos and week_start_iso <= (a.get("date") or "") <= week_end_iso
+        a for a in _rota_assignments_between(db, emp.company_id, week_start_iso, week_end_iso)
+        if a.get("employee_id") in peer_nos
     ]
     return {
         "employees": [
@@ -903,12 +923,16 @@ def _local_today_for(db: Session, emp: Employee) -> date:
 
 # ── quick wins: cancel a pending leave request / update own task status ──────
 
+class EssLeaveCancelIn(BaseModel):
+    reason: str | None = None
+
+
 @router.post("/leave/{leave_id}/cancel")
-def ess_cancel_leave(leave_id: str, request: Request, db: Session = Depends(get_db)) -> dict:
-    """An employee can withdraw their OWN leave request while it is still
-    pending. Approved/rejected requests are HR's decision and can't be
-    withdrawn from here. Kept as a "cancelled" status (not a delete) so the
-    history -- and HR's audit trail -- survives."""
+def ess_cancel_leave(leave_id: str, request: Request, payload: EssLeaveCancelIn | None = None, db: Session = Depends(get_db)) -> dict:
+    """An employee can cancel their OWN leave: a pending request any time, and
+    approved leave until it starts (once it has started, HR cancels it in HRMS).
+    Kept as a "cancelled" status (not a delete) so the history -- and HR's audit
+    trail -- survives; balances only count approved leave, so the days return."""
     emp = ess_bearer(request, db)
     req = (
         db.query(LeaveRequest)
@@ -917,9 +941,16 @@ def ess_cancel_leave(leave_id: str, request: Request, db: Session = Depends(get_
     )
     if not req:
         raise HTTPException(status_code=404, detail="Leave request not found")
-    if req.status != "pending":
-        raise HTTPException(status_code=409, detail=f"Only a pending request can be cancelled (this one is already {req.status})")
+    if req.status == "approved":
+        today = _local_today(_company_offset(db, emp.company_id)).isoformat()
+        if req.start_date <= today:
+            raise HTTPException(status_code=409, detail="This leave has already started — ask HR to cancel it")
+    elif req.status != "pending":
+        raise HTTPException(status_code=409, detail=f"Only pending or upcoming approved leave can be cancelled (this one is {req.status})")
     req.status = "cancelled"
+    req.cancelled_at = datetime.now(UTC)
+    req.cancelled_by = emp.full_name
+    req.cancel_reason = ((payload.reason if payload else None) or "").strip()[:300] or None
     _ess_audit(db, emp, "leave_cancelled", {"id": req.id, "start": req.start_date, "end": req.end_date})
     db.commit()
     return _leave_out(req)
@@ -932,8 +963,8 @@ class EssTaskStatusIn(BaseModel):
 @router.patch("/tasks/{task_id}")
 def ess_update_task(task_id: str, payload: EssTaskStatusIn, request: Request, db: Session = Depends(get_db)) -> dict:
     """Lets an employee move a task assigned to THEM between To Do / In
-    Progress / Done. Only the status field changes -- title, assignee, due
-    date and the rest stay HR/manager-controlled."""
+    Progress / Done. Only status (and progress, kept in step with it)
+    changes -- title, assignee, due date and the rest stay HR/manager-controlled."""
     emp = ess_bearer(request, db)
     row = (
         db.query(AppDataRecord)
@@ -948,7 +979,13 @@ def ess_update_task(task_id: str, payload: EssTaskStatusIn, request: Request, db
             data = {}
     if not row or not isinstance(data, dict) or data.get("assigned_to") != emp.id:
         raise HTTPException(status_code=404, detail="Task not found")
+    was_done = data.get("status") == "done"
     data["status"] = payload.status
+    # Keep progress in step with HRMS: Done is 100%, reopening a Done task starts again at 0.
+    if payload.status == "done":
+        data["progress"] = 100
+    elif was_done:
+        data["progress"] = 0
     row.payload = json.dumps(data, ensure_ascii=False, default=str)
     _ess_audit(db, emp, "task_status_changed", {"id": task_id, "status": payload.status})
     db.commit()
@@ -1142,6 +1179,7 @@ def ess_requests(request: Request, db: Session = Depends(get_db)) -> list[dict]:
     the Requests page, the dashboard list and the notification bell."""
     emp = ess_bearer(request, db)
     out: list[dict] = []
+    today = _local_today(_company_offset(db, emp.company_id)).isoformat()
     for r in (
         db.query(LeaveRequest)
         .filter(LeaveRequest.company_id == emp.company_id, LeaveRequest.employee_id == emp.id)
@@ -1153,7 +1191,8 @@ def ess_requests(request: Request, db: Session = Depends(get_db)) -> list[dict]:
             "kind": "leave", "id": r.id, "status": (r.status or "pending").lower(),
             "submitted": r.created_at.isoformat() if r.created_at else None,
             "leave_type": r.leave_type, "start_date": r.start_date, "end_date": r.end_date, "days": r.days,
-            "reason": r.reason, "can_cancel": r.status == "pending",
+            "reason": r.reason, "can_cancel": _leave_can_cancel(r, today),
+            "cancelled_by": r.cancelled_by, "cancel_reason": r.cancel_reason,
         })
     for kind, (collection, _prefix) in _REQUEST_COLLECTIONS.items():
         for r in _own_request_records(db, emp, collection):
@@ -1291,91 +1330,3 @@ def ess_documents(request: Request, db: Session = Depends(get_db)) -> list[dict]
             state = "valid"
         out.append({"label": label, "expiry": raw[:10] if raw else None, "days_left": days, "state": state})
     return out
-
-
-# ── Voice (Phase 4) ──────────────────────────────────────────────────────────
-# Both endpoints act only on the token's own employee and fall under the
-# company's "ai" module switch. Neither writes anything: form intents return
-# values for the portal to pre-fill, and the employee submits them.
-
-def _require_ai_module(db: Session, emp: Employee) -> None:
-    modules = db.query(Company.modules_enabled).filter(Company.id == emp.company_id).scalar()
-    if not company_allows_module(modules, "ai"):
-        raise HTTPException(status_code=403, detail="Voice isn't enabled for your company")
-    require_voice_enabled(db, emp.company_id)
-
-
-class EssVoiceIn(BaseModel):
-    transcript: str = Field(min_length=1, max_length=500)
-    lang: Literal["en", "ar"] | None = None
-
-
-def _balance_answer(balance: dict, leave_type: str | None) -> str:
-    by_type = balance.get("by_type") or {}
-    if leave_type and leave_type in by_type:
-        b = by_type[leave_type]
-        return f"You have {b['remaining']} of {b['entitlement']} days of {leave_type} left ({b['used']} used)."
-    parts = [f"{name}: {b['remaining']} of {b['entitlement']} days left" for name, b in by_type.items()
-             if name == "Annual Leave" or b.get("used")]
-    return ("; ".join(parts) + ".") if parts else "No leave balance is set up for you yet."
-
-
-def _next_shift_answer(rows: list, today: date) -> str:
-    upcoming = [r for r in rows if (r.get("date") or "") >= today.isoformat()
-                and str(r.get("type") or r.get("code") or "").lower() not in ("off", "leave", "holiday")]
-    if not upcoming:
-        return "You have no upcoming shifts in your rota."
-    r = upcoming[0]
-    when = "today" if r["date"] == today.isoformat() else date.fromisoformat(r["date"]).strftime("%A %d %B")
-    times = f", {r['start']}–{r['end']}" if r.get("start") and r.get("end") else ""
-    label = r.get("type") or r.get("code") or ""
-    return f"Your next shift is {when}{times}" + (f" ({label})" if label else "") + "."
-
-
-@router.get("/voice-settings")
-def ess_voice_settings(request: Request, db: Session = Depends(get_db)) -> dict:
-    """What the portal needs to show or hide its mic and pick a language."""
-    emp = ess_bearer(request, db)
-    modules = db.query(Company.modules_enabled).filter(Company.id == emp.company_id).scalar()
-    settings = get_voice_settings(db, emp.company_id)
-    return {"enabled": bool(settings["enabled"]) and company_allows_module(modules, "ai"), "default_lang": settings["default_lang"]}
-
-
-@router.post("/voice-intent")
-@limiter.limit("20/minute")
-def ess_voice_intent(payload: EssVoiceIn, request: Request, db: Session = Depends(get_db)) -> dict:
-    emp = ess_bearer(request, db)
-    _require_ai_module(db, emp)
-    today = _local_today_for(db, emp)
-    result = ess_voice.resolve(payload.transcript, today, payload.lang)
-    answer = None
-    if result["intent"] == "leave_balance":
-        answer = _balance_answer(ess_leave_balance(request, db), result["fields"].get("leave_type"))
-    elif result["intent"] == "next_shift":
-        answer = _next_shift_answer(ess_rota(request, None, db), today)
-    return {**result, "answer": answer}
-
-
-@router.post("/voice-transcribe")
-@limiter.limit("15/minute")
-def ess_voice_transcribe(
-    request: Request,
-    file: UploadFile = File(...),
-    lang: str | None = Form(None),
-    db: Session = Depends(get_db),
-) -> dict:
-    """ESS twin of /ai/transcribe (which only accepts main-app logins)."""
-    emp = ess_bearer(request, db)
-    _require_ai_module(db, emp)
-    audio = file.file.read(5 * 1024 * 1024 + 1)
-    if not audio:
-        raise HTTPException(status_code=422, detail="Empty audio")
-    if len(audio) > 5 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Recording too long - keep voice input under about a minute")
-    lang_code = (lang or "").split("-")[0].lower()
-    lang_code = lang_code if lang_code in ("en", "ar") else None
-    reserve_transcription(db, emp.company_id)
-    result = transcribe_audio(audio, file.filename or "audio.webm", file.content_type or "audio/webm", lang_code)
-    if "error" in result:
-        raise HTTPException(status_code=503, detail=result["error"])
-    return {"text": result["text"], "lang": lang_code or ""}

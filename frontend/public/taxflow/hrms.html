@@ -3,14 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>HRMS Portal — TaxFlow</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=f3c668580c" as="style">
-<link rel="preload" href="src/app.js?v=c8d2935eea" as="script">
+<link rel="preload" href="src/styles.css?v=f14f81f61a" as="style">
+<link rel="preload" href="src/app.js?v=c60e7fdd7c" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=f3c668580c">
+<link rel="stylesheet" href="src/styles.css?v=f14f81f61a">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -186,7 +189,27 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 @media(max-width:760px){
   .hrms-kpi-row{display:flex!important;overflow-x:auto;gap:12px!important;padding-bottom:4px;-webkit-overflow-scrolling:touch;}
   .hrms-kpi-row>.hrms-kpi-card{flex:0 0 210px;}
+  /* Compact topbar: search flexes, date hidden, avatar-only user chip, icon-only sign out */
+  .hrms-topbar{padding:0 10px;gap:6px;}
+  .hrms-search{flex:1 1 auto;min-width:0;padding:8px 10px;}
+  .hrms-search input{min-width:0;width:100%;}
+  .tb-right-hrms{gap:6px;flex-shrink:0;}
+  .tb-right-hrms .hm-date{display:none!important;}
+  .tb-right-hrms .hm-user{padding:3px;margin-left:0;}
+  .tb-right-hrms .hm-user>div:not(.hm-avatar){display:none;}
+  .tb-right-hrms>button[onclick="hrmsSignOut()"]{padding:8px!important;font-size:0!important;gap:0!important;}
+  .tb-right-hrms .hm-icon-btn{width:34px;height:34px;}
 }
+@media(max-width:400px){
+  .tb-right-hrms .hm-icon-btn[title="Leave Requests"]{display:none;}
+}
+@media(max-width:600px){
+  .hc-ai-grid{grid-template-columns:1fr!important;}
+}
+/* View-only roles: hide Rota & Shift change controls (server rejects the writes anyway). */
+[data-hr-readonly~="rota"] #page-rota :is([onclick^="openShiftModal"],[onclick^="copyPreviousRota"],[onclick^="autoGenerate"],[onclick^="saveRotaDraft"],[onclick^="submitRotaApproval"],[onclick^="publishRota"],[onclick^="applyRotaRepeat"],[onclick^="requestExtraStaff"],[onclick*="m-shift-swap"],[onclick^="editShift"],[onclick^="deleteShift"],[onclick*="notifications queued"],[onclick*="Employees notified"],#rota-repeat-row){display:none!important}
+[data-hr-nodelete~="rota"] #page-rota [onclick^="deleteShift"]{display:none!important}
+#m-edit-shift.is-readonly .modal-foot .btn-danger,#m-edit-shift.is-readonly .modal-foot .btn-p,#m-edit-shift.is-readonly [onclick^="addRotaEditTaskRow"],#m-edit-shift.is-readonly [data-task-row] button{display:none!important}
 </style>
 </head>
 <body class="theme-light">
@@ -561,7 +584,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
             <circle cx="50" cy="50" r="38" fill="none" stroke="#ef4444" stroke-width="13" stroke-dasharray="12.6 226.2" stroke-dashoffset="-226.5" transform="rotate(-90 50 50)"/>
           </svg>
           <div class="hc-donut-center">
-            <div style="font-size:9px;font-weight:700;color:var(--text)">AED</div>
+            <div style="font-size:9px;font-weight:700;color:var(--text)" data-currency-label>AED</div>
             <div style="font-size:13px;font-weight:700;color:var(--text);line-height:1" id="hrms-payroll-total">—</div>
           </div>
         </div>
@@ -628,7 +651,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
     </svg>
   </div>
   <div style="padding:14px 18px 16px">
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+    <div class="hc-ai-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
       <div class="hc-ai">
         <div class="hc-ai-hd">
           <div class="hc-ai-icon" style="background:#eff6ff"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#2563eb" stroke-width="1.4"><path d="M8 2c2 0 4 1 4 3s-2 2.5-4 3c-2 .5-4 1-4 3"/><circle cx="8" cy="13.5" r=".8" fill="#2563eb" stroke="none"/></svg></div>
@@ -1216,7 +1239,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
         <div class="toggle-row"><div><div>Allow employee loans</div><div class="toggle-copy">Enable loan request module for all employees.</div></div><input type="checkbox" checked></div>
         <div class="toggle-row"><div><div>Max loan: 3× basic salary</div><div class="toggle-copy">System blocks requests exceeding 3 months base salary.</div></div><input type="checkbox" checked></div>
         <div class="toggle-row"><div><div>Auto EMI payroll deduction</div><div class="toggle-copy">Monthly installment auto-deducted from net salary.</div></div><input type="checkbox" checked></div>
-        <div class="toggle-row"><div><div>Require MD approval above AED 10,000</div><div class="toggle-copy">Loans above threshold need MD or Finance Director sign-off.</div></div><input type="checkbox" checked></div>
+        <div class="toggle-row"><div><div data-currency-label>Require MD approval above AED 10,000</div><div class="toggle-copy">Loans above threshold need MD or Finance Director sign-off.</div></div><input type="checkbox" checked></div>
         <div class="toggle-row"><div><div>Allow salary advances</div><div class="toggle-copy">Employees may request one advance per month (max 50% of salary).</div></div><input type="checkbox" checked></div>
       </div>
     </div>
@@ -1355,7 +1378,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
           <div class="ot-rule-options">
             <label class="ot-rule-opt active" id="ot-lbl-fixed" onclick="selectOtRate('fixed')">
               <input type="radio" name="ot-rate-type" value="fixed" checked>
-              <div><div class="ot-rule-opt-title">1. Fixed</div><div class="ot-rule-opt-sub">Fixed AED/hour amount regardless of employee salary</div></div>
+              <div><div class="ot-rule-opt-title">1. Fixed</div><div class="ot-rule-opt-sub" data-currency-label>Fixed AED/hour amount regardless of employee salary</div></div>
             </label>
             <label class="ot-rule-opt" id="ot-lbl-monthly" onclick="selectOtRate('monthly')">
               <input type="radio" name="ot-rate-type" value="monthly">
@@ -2161,7 +2184,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
         <button class="btn btn-warn btn-sm" onclick="submitRotaApproval()">Submit Approval</button>
         <button class="btn btn-p btn-sm" onclick="publishRota()">Publish Rota</button>
       </div>
-      <div class="flx" style="gap:8px;align-items:center;padding-top:8px;flex-wrap:wrap">
+      <div class="flx" id="rota-repeat-row" style="gap:8px;align-items:center;padding-top:8px;flex-wrap:wrap">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="15" height="15" style="opacity:.45;flex-shrink:0"><path d="M2 4h9a3 3 0 0 1 0 6H4"/><path d="M4 7l-2.5 3L4 13"/></svg>
         <span style="font-size:12px;color:var(--text3);white-space:nowrap">Repeat this rota:</span>
         <select class="fi" id="rota-repeat-mode" style="width:160px;height:30px;padding:3px 8px;font-size:12px">
@@ -2177,7 +2200,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
       </div>
     </div>
 
-    <div class="g2 mb16" style="grid-template-columns:2fr 1fr">
+    <div class="g2 g2-main-side mb16">
       <div class="card">
         <div class="card-hd">
           <div><div class="card-title">Staff Schedule</div><div class="card-sub">Click a cell to edit. Saved cells update weekly, monthly, and department views.</div></div>
@@ -2357,9 +2380,9 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
         </div>
       </div>
       <table class="tbl" data-delete-actions-bound="skip">
-        <thead><tr><th>Employee</th><th>Department</th><th id="hrr-att-thead-present" style="cursor:pointer;user-select:none" onclick="sortHrAttendanceReport('present_days')" title="Click to sort">Present</th><th id="hrr-att-thead-absent" style="cursor:pointer;user-select:none" onclick="sortHrAttendanceReport('absent_days')" title="Click to sort">Absent</th><th>Leave</th><th>Total Hours</th><th>OT Hours</th></tr></thead>
+        <thead><tr><th>Employee</th><th>Department</th><th id="hrr-att-thead-present" style="cursor:pointer;user-select:none" onclick="sortHrAttendanceReport('present_days')" title="Click to sort">Present</th><th id="hrr-att-thead-absent" style="cursor:pointer;user-select:none" onclick="sortHrAttendanceReport('absent_days')" title="Click to sort">Absent</th><th>Leave</th><th title="Days off on the rota — not counted as absent">Days Off</th><th>Total Hours</th><th>OT Hours</th></tr></thead>
         <tbody id="hrr-att-tbody">
-          <tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">Loading…</td></tr>
+          <tr><td colspan="8" style="color:var(--text3);text-align:center;padding:24px">Loading…</td></tr>
         </tbody>
       </table>
     </div>
@@ -2547,9 +2570,9 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 
   <div class="tab-body on" id="pay-run">
     <div class="g4 mb16">
-      <div class="stat"><div class="stat-lbl">Gross Payroll</div><div class="stat-val" id="pay-stat-gross" style="color:var(--accent)">AED 0</div><div class="stat-delta" id="pay-stat-period">—</div></div>
-      <div class="stat"><div class="stat-lbl">Deductions</div><div class="stat-val" id="pay-stat-ded" style="color:var(--amber)">AED 0</div><div class="stat-delta">loans · absence · penalties</div></div>
-      <div class="stat"><div class="stat-lbl">Net Pay</div><div class="stat-val" id="pay-stat-net" style="color:var(--green)">AED 0</div><div class="stat-delta">ready for WPS</div></div>
+      <div class="stat"><div class="stat-lbl">Gross Payroll</div><div class="stat-val" id="pay-stat-gross" style="color:var(--accent)" data-currency-label>AED 0</div><div class="stat-delta" id="pay-stat-period">—</div></div>
+      <div class="stat"><div class="stat-lbl">Deductions</div><div class="stat-val" id="pay-stat-ded" style="color:var(--amber)" data-currency-label>AED 0</div><div class="stat-delta">loans · absence · penalties</div></div>
+      <div class="stat"><div class="stat-lbl">Net Pay</div><div class="stat-val" id="pay-stat-net" style="color:var(--green)" data-currency-label>AED 0</div><div class="stat-delta">ready for WPS</div></div>
       <div class="stat"><div class="stat-lbl">Exceptions</div><div class="stat-val" id="pay-stat-exc" style="color:var(--red)">0</div><div class="stat-delta">need review</div></div>
     </div>
 
@@ -2622,9 +2645,9 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
           <div class="fg"><label class="fl">Additional Months</label><input class="fi mono" id="eos-months" value="3" oninput="calcGratuity()"></div>
         </div>
         <div class="inv-total-box" style="width:100%;min-width:0">
-          <div class="tot-row"><span style="color:var(--text3)">Daily Basic Rate</span><span class="mono" id="eos-daily">AED 283.33</span></div>
+          <div class="tot-row"><span style="color:var(--text3)">Daily Basic Rate</span><span class="mono" id="eos-daily" data-currency-label>AED 283.33</span></div>
           <div class="tot-row"><span style="color:var(--text3)">Eligible Gratuity Days</span><span class="mono" id="eos-days">110.25</span></div>
-          <div class="tot-final"><span>Estimated EOSB</span><span class="mono" id="eos-total" style="color:var(--green)">AED 31,237.50</span></div>
+          <div class="tot-final"><span>Estimated EOSB</span><span class="mono" id="eos-total" style="color:var(--green)" data-currency-label>AED 31,237.50</span></div>
         </div>
         <div id="eos-note" style="font-size:12px;color:var(--muted);margin-top:8px;padding:8px;background:var(--surface2);border-radius:6px"></div>
       </div>
@@ -2728,9 +2751,9 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
         <table class="tbl" data-delete-actions-bound="skip" data-keep-static="1">
           <thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead>
           <tbody>
-            <tr><td>Salary Expense</td><td class="mono" id="pay-je-gross">AED 0.00</td><td></td></tr>
-            <tr><td>Employee Deductions Payable</td><td></td><td class="mono" id="pay-je-ded">AED 0.00</td></tr>
-            <tr><td>Salaries Payable / Bank</td><td></td><td class="mono" id="pay-je-net">AED 0.00</td></tr>
+            <tr><td>Salary Expense</td><td class="mono" id="pay-je-gross" data-currency-label>AED 0.00</td><td></td></tr>
+            <tr><td>Employee Deductions Payable</td><td></td><td class="mono" id="pay-je-ded" data-currency-label>AED 0.00</td></tr>
+            <tr><td>Salaries Payable / Bank</td><td></td><td class="mono" id="pay-je-net" data-currency-label>AED 0.00</td></tr>
           </tbody>
         </table>
       </div>
@@ -3091,8 +3114,8 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 (function(){if(!localStorage.getItem('taxflow_token')){window.location.href='/';}})();
 window.HRMS_STANDALONE=true;
 </script>
-<script src="src/voice.js?v=aa56e95978" defer></script>
-<script src="src/app.js?v=c8d2935eea" defer></script>
+<script src="src/voice.js?v=54b0d66150" defer></script>
+<script src="src/app.js?v=c60e7fdd7c" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
@@ -3227,7 +3250,7 @@ function hrsTab(section){
             <input class="fi" id="hrms-ai-jd-exp" placeholder="Experience (e.g. 3-5 years)">
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-            <input class="fi" id="hrms-ai-jd-salary" placeholder="Salary Range (AED)">
+            <input class="fi" id="hrms-ai-jd-salary" placeholder="Salary Range (AED)" data-currency-placeholder>
             <button class="btn btn-p btn-sm" onclick="hrmsAiJdGenerate()" id="hrms-ai-jd-btn">Generate JD</button>
           </div>
           <textarea class="fi" id="hrms-ai-jd-req" rows="2" placeholder="Key requirements (optional)..."></textarea>
@@ -3417,6 +3440,13 @@ async function applyHrmsPermissionNav(){
 
     var allowed=new Set(window.HRMS_PERMISSIONS.filter(function(p){return p.endsWith(':view');}).map(function(p){return p.split(':')[0];}));
     window.HRMS_ALLOWED_MODULES=allowed;
+    // Modules this role can see but not change -- CSS hides their edit controls.
+    var readOnly=['employees','leave','attendance','rota','overtime','loans','recruitment','payroll','hr_settings','hr_workflow','performance']
+      .filter(function(m){return allowed.has(m)&&window.HRMS_PERMISSIONS.indexOf(m+':edit')<0;});
+    document.documentElement.setAttribute('data-hr-readonly',readOnly.join(' '));
+    var noDelete=['employees','leave','rota','overtime','loans','recruitment','hr_workflow']
+      .filter(function(m){return allowed.has(m)&&window.HRMS_PERMISSIONS.indexOf(m+':delete')<0;});
+    document.documentElement.setAttribute('data-hr-nodelete',noDelete.join(' '));
 
     // HRMS access gate, part 2. A sub-user whose role has NO HRMS module (the
     // base "Employee" role, or any role with only dashboard/check-in rights)

@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <title>Super Admin — ETaxFlow</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -668,6 +671,8 @@
       <select class="fi" id="c-country" onchange="onCreateCompanyCountryChange()"></select>
       <div id="c-country-hint" style="font-size:11px;color:var(--muted);margin-top:5px"></div>
     </div>
+    <div class="fg"><label class="fl">Stock</label><select class="fi" id="c-stock" onchange="syncStockAccountingVisibility('c')"><option value="with_stock">With stock — track quantities</option><option value="without_stock">Without stock — no inventory needed</option></select></div>
+    <div class="fg" id="c-invacc-wrap"><label class="fl">Stock accounting</label><select class="fi" id="c-invacc"><option value="perpetual">Perpetual — Inventory + cost of sales</option><option value="periodic">Periodic — purchases expensed</option></select></div>
     <div class="fr2">
       <div class="fg"><label class="fl">TRN (optional)</label><input class="fi mono" id="c-trn" placeholder="100000000000003"></div>
       <div class="fg"><label class="fl">Subscription Expiry</label><input class="fi" id="c-expiry" type="date"></div>
@@ -703,6 +708,8 @@
     <input type="hidden" id="edit-co-admin-role">
     <div class="fg"><label class="fl">Company Name</label><input class="fi" id="edit-co-name" placeholder="Acme LLC"></div>
     <div class="fg"><label class="fl">Country</label><select class="fi" id="edit-co-country" onchange="onEditCompanyCountryChange()"></select><div id="edit-co-country-hint" style="font-size:var(--fs-xs);color:var(--muted);margin-top:4px"></div></div>
+    <div class="fg"><label class="fl">Stock</label><select class="fi" id="edit-co-stock" onchange="syncStockAccountingVisibility('edit-co')"><option value="with_stock">With stock — track quantities</option><option value="without_stock">Without stock — no inventory needed</option></select><div style="font-size:var(--fs-xs);color:var(--muted);margin-top:4px">Applies to new purchases, sales and POS from now on; existing stock movements are kept.</div></div>
+    <div class="fg" id="edit-co-invacc-wrap"><label class="fl">Stock accounting</label><select class="fi" id="edit-co-invacc"><option value="perpetual">Perpetual — Inventory + cost of sales</option><option value="periodic">Periodic — purchases expensed</option></select></div>
     <div class="fr2">
       <div class="fg"><label class="fl">TRN (optional)</label><input class="fi mono" id="edit-co-trn" placeholder="100000000000003"></div>
       <div class="fg"><label class="fl">Subscription Expiry</label><input class="fi" id="edit-co-expiry" type="date"></div>
@@ -1264,9 +1271,20 @@
     const menu=document.getElementById(id);
     const wasOpen=menu.classList.contains('on');
     closeAllMenus();
-    if(!wasOpen) menu.classList.add('on');
+    if(wasOpen) return;
+    // Fixed to the viewport: the table's horizontal scroll box would otherwise clip the menu.
+    const btn=evt.currentTarget.getBoundingClientRect();
+    menu.style.position='fixed';
+    menu.style.right=Math.max(8, window.innerWidth-btn.right)+'px';
+    menu.style.top='0px';
+    menu.classList.add('on');
+    const h=menu.offsetHeight;
+    const below=btn.bottom+6;
+    menu.style.top=(below+h>window.innerHeight-8 && btn.top-h-6>8 ? btn.top-h-6 : below)+'px';
   }
   document.addEventListener('click', closeAllMenus);
+  window.addEventListener('resize', closeAllMenus);
+  document.addEventListener('scroll', e=>{ if(!(e.target.closest&&e.target.closest('.menu'))) closeAllMenus(); }, true);
 
   // ── Company detail drawer (Users / Branches / Employees) ─────────
   let _drawerCompanyId=null, _drawerTab='users';
@@ -1389,6 +1407,17 @@
     populateCreateCountrySelect('United Arab Emirates');
     openModal('m-create');
     buildModGrid('c-mod-grid', MODULE_DEFS.map(m=>m.key));
+    const stockSel=document.getElementById('c-stock');
+    if(stockSel)stockSel.value='with_stock';
+    const accSel=document.getElementById('c-invacc');
+    if(accSel)accSel.value='perpetual';
+    syncStockAccountingVisibility('c');
+  }
+
+  // Stock accounting only matters for a company that keeps stock.
+  function syncStockAccountingVisibility(prefix){
+    const wrap=document.getElementById(prefix+'-invacc-wrap');
+    if(wrap)wrap.style.display=document.getElementById(prefix+'-stock')?.value==='without_stock'?'none':'';
   }
 
   async function createCompany(){
@@ -1404,10 +1433,12 @@
     const modules = getCheckedModules('c-mod-grid');
     const countryName=document.getElementById('c-country')?.value||'United Arab Emirates';
     const countryDef=SA_CREATE_COUNTRIES.find(c=>c.name===countryName)||SA_CREATE_COUNTRIES[0];
+    const stockMode=document.getElementById('c-stock')?.value||'with_stock';
+    const inventoryAccounting=document.getElementById('c-invacc')?.value||'perpetual';
     if(!name||!email||!password){ errEl.textContent='Company name, email and password are required.'; errEl.style.display='block'; return; }
     btn.disabled=true; btn.textContent='Creating…';
     try{
-      const res = await apiFetch('/superadmin/companies',{method:'POST',body:JSON.stringify({name,email,password,full_name:fullName,trn,expires_at:expiry,modules,country:countryDef.name,currency:countryDef.currency,vat_rate:countryDef.vat})});
+      const res = await apiFetch('/superadmin/companies',{method:'POST',body:JSON.stringify({name,email,password,full_name:fullName,trn,expires_at:expiry,modules,country:countryDef.name,currency:countryDef.currency,vat_rate:countryDef.vat,stock_mode:stockMode,inventory_accounting:inventoryAccounting})});
       const data = await res.json();
       if(!res.ok){ errEl.textContent=data.detail||'Failed to create company.'; errEl.style.display='block'; return; }
       // If this creation started from convertTrialToCompany(), close the
@@ -1442,6 +1473,9 @@
       onEditCompanyCountryChange();
     }
     document.getElementById('edit-co-trn').value=c.trn||'';
+    document.getElementById('edit-co-stock').value=c.stock_mode==='without_stock'?'without_stock':'with_stock';
+    document.getElementById('edit-co-invacc').value=c.inventory_accounting==='perpetual'?'perpetual':'periodic';
+    syncStockAccountingVisibility('edit-co');
     document.getElementById('edit-co-expiry').value=c.subscription_expires_at?c.subscription_expires_at.slice(0,10):'';
     // Previously fell back to c.users[0] (whichever user happens to sort
     // first) when no user had role==='admin' exactly — if that first user
@@ -1505,7 +1539,7 @@
     // never erases existing profile data.
     const countrySel=document.getElementById('edit-co-country');
     const newCountry=countrySel?.value||null;
-    const body={ name, trn:val('edit-co-trn'), country:newCountry };
+    const body={ name, trn:val('edit-co-trn'), country:newCountry, stock_mode:document.getElementById('edit-co-stock').value||'with_stock', inventory_accounting:document.getElementById('edit-co-invacc').value||'periodic' };
     if(countrySel&&newCountry!==countrySel.dataset.original){
       const countryDef=SA_CREATE_COUNTRIES.find(x=>x.name===newCountry);
       if(countryDef)body.currency=countryDef.currency;

@@ -41,12 +41,12 @@ def test_task_save_list_and_delete(client, auth_headers):
     assert saved["priority"] == "High"
 
     # Move to a different status (quick move, same as moveTaskStatus() does).
-    updated = {**record, "status": "in_progress"}
+    updated = {**record, "status": "progress"}
     r3 = _save_task(client, auth_headers, updated)
     assert r3.status_code == 200, r3.text
     tasks2 = client.get("/api/v1/app-data/records/tasks", headers=auth_headers).json()["records"]
     saved2 = next(t for t in tasks2 if t["id"] == "TASK-TEST-001")
-    assert saved2["status"] == "in_progress"
+    assert saved2["status"] == "progress"
 
     r4 = client.post(
         "/api/v1/app-data?action=delete",
@@ -63,6 +63,30 @@ def test_task_isolated_between_companies(client, auth_headers, second_tenant_hea
     r = client.get("/api/v1/app-data/records/tasks", headers=second_tenant_headers)
     tasks = r.json()["records"]
     assert not any(t.get("id") == "TASK-ISO-001" for t in tasks)
+
+
+def _rota_tasks(client, headers, rota_id):
+    records = client.get("/api/v1/app-data/records/rotaAssignments?limit=500", headers=headers).json()["records"]
+    return [t["task_id"] for t in next(r for r in records if r["id"] == rota_id)["tasks"]]
+
+
+def test_deleted_task_is_removed_from_rota_shifts(client, auth_headers):
+    for tid in ("TASK-ROTA-1", "TASK-ROTA-2", "TASK-ROTA-3"):
+        assert _save_task(client, auth_headers, {"id": tid, "title": tid, "status": "todo"}).status_code == 200
+    shift = {
+        "id": "ROTA-TASK-LINK-1", "employee_id": "E-1", "date": "2026-10-05", "type": "Work",
+        "tasks": [{"task_id": t, "title": t, "color": "#3b82f6", "start": "", "end": ""} for t in ("TASK-ROTA-1", "TASK-ROTA-2", "TASK-ROTA-3")],
+    }
+    r = client.post("/api/v1/app-data?action=save", headers=auth_headers, json={"collection": "rotaAssignments", "record": shift})
+    assert r.status_code == 200, r.text
+
+    r = client.post("/api/v1/app-data?action=delete", headers=auth_headers, json={"collection": "tasks", "record": {"id": "TASK-ROTA-1"}})
+    assert r.status_code == 200, r.text
+    assert _rota_tasks(client, auth_headers, "ROTA-TASK-LINK-1") == ["TASK-ROTA-2", "TASK-ROTA-3"]
+
+    r = client.post("/api/v1/app-data?action=bulk-delete", headers=auth_headers, json={"collection": "tasks", "records": [{"id": "TASK-ROTA-3"}]})
+    assert r.status_code == 200, r.text
+    assert _rota_tasks(client, auth_headers, "ROTA-TASK-LINK-1") == ["TASK-ROTA-2"]
 
 
 def test_payroll_employees_excludes_inactive(client, db, auth_headers):

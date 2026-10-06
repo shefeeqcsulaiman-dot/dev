@@ -1,37 +1,23 @@
-import datetime
 import json
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.ai_client import call_llm, transcribe_audio
-from app.ai_context import build_ai_context, rule_answer
-from app.voice_briefing import build_briefing
-from app.auth_principal import Principal, get_current_principal
+from app.ai_client import call_llm
 from app.database import get_db
 from app.dependencies import get_current_user, require_module
 from app.limiter import limiter
-from app.routers.app_data import get_company_vat_rate, log_action
+from app.routers.app_data import get_company_vat_rate
 from app.models import Account, AppDataRecord, AuditLog, ExceptionEvent, Invoice, SourceTransaction, TaxLine, User
-from app.schemas import AIAssistRequest, AIExceptionExplainRequest, AIResponse, AITransactionValidationRequest, VoiceDraftRequest, VoiceDraftResponse, VoiceIntentRequest, VoiceSettings, VoiceIntentResponse
-from app.voice_draft import build_draft
-from app.voice_settings import get_voice_settings, require_voice_enabled, reserve_transcription, save_voice_settings, transcriptions_today
-from app.voice_intent import resolve_intent
+from app.schemas import AIAssistRequest, AIExceptionExplainRequest, AIResponse, AITransactionValidationRequest
 
 ASSISTANT_SYSTEM_PROMPT = (
     "You are TaxFlow AI, a safe review-layer assistant embedded in a UAE tax and accounting SaaS app. "
-    "You answer questions about the company's own live data, explain workflows, and suggest next actions — "
-    "you never post transactions, approve anything, or claim an action was taken. Answer from COMPANY DATA "
-    "only: quote the real figures with the currency, and you may add, compare or rank them (e.g. month over "
-    "month, top customers, margin %). If the data needed isn't in COMPANY DATA, say so plainly and name the "
-    "report or page that has it — never invent numbers. A negative vat_payable means input VAT exceeds output "
-    "VAT, so a refund/credit is due, not a payment. Only monthly_revenue_and_vat is per month; "
-    "profit_and_loss, totals_to_date and the aging figures cover all recorded transactions, so never "
-    "describe them as one month's figures. Write amounts with thousands separators and 2 decimals "
-    "(e.g. AED 12,345.60). Keep the answer to 2-5 short sentences; for a ranking, "
-    "list up to 5 items inline. "
+    "You explain workflows, review data, and suggest next actions — you never post transactions, approve "
+    "anything, or claim an action was taken. Ground your answer in the company snapshot and open exceptions "
+    "given to you; cite real numbers from them when relevant. Keep the answer to 2-4 sentences. "
     "Respond with valid JSON only — no markdown, no explanation outside the JSON — matching exactly this shape: "
     '{"answer": "", "confidence": 0, "suggested_actions": ["...", "...", "..."]}. '
     "\"confidence\" is 0-100, how confident you are that this answer is accurate and complete given the data "
@@ -77,12 +63,12 @@ def suggest_account(description: str, module: str) -> str:
     return "4000" if module.lower() in {"purchase", "purchase_bill", "expense"} else "3000"
 
 
-def vat_issues(subtotal: Decimal, vat: Decimal, treatment: str, supplier_trn: str | None, evidence_present: bool, vat_rate: Decimal = Decimal("5")) -> list[str]:
+def vat_issues(subtotal: Decimal, vat: Decimal, treatment: str, supplier_trn: str | None, evidence_present: bool, vat_rate: Decimal = Decimal("5"), currency: str = "AED") -> list[str]:
     issues: list[str] = []
     expected_vat = subtotal * (vat_rate / Decimal("100"))
     taxable = treatment.lower() in {"standard", "vat5", "5", "5%"}
     if taxable and subtotal > 0 and abs(vat - expected_vat) > Decimal("1.00"):
-        issues.append(f"VAT differs from {vat_rate}% by more than AED 1.00; expected about AED {expected_vat:.2f}.")
+        issues.append(f"VAT differs from {vat_rate}% by more than {currency} 1.00; expected about {currency} {expected_vat:.2f}.")
     if vat > 0 and not evidence_present:
         issues.append("Taxable VAT is present but supporting tax evidence is not marked as available.")
     if vat > 0 and (not supplier_trn or len("".join(ch for ch in supplier_trn if ch.isdigit())) != 15):
@@ -117,14 +103,14 @@ def workbench(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     )
 
 
-def _rule_based_assist(q: str, snapshot: dict[str, int | str]) -> AIResponse:
+def _rule_based_assist(q: str, snapshot: dict[str, int | str], currency: str = "AED") -> AIResponse:
     controls = [
         "Create drafts first; never direct-post from AI.",
         "Validate account mappings, VAT math, TRN, and evidence before approval.",
         "Keep audit logs for user approvals and corrections.",
     ]
     if any(word in q for word in ("vat", "tax", "trn", "filing")):
-        answer = f"VAT readiness should focus on math, TRN, evidence, and source status. Current net VAT from posted tax lines is AED {snapshot['net_vat']}."
+        answer = f"VAT readiness should focus on math, TRN, evidence, and source status. Current net VAT from posted tax lines is {currency} {snapshot['net_vat']}."
         actions = ["Review purchase invoices with VAT but missing supplier TRN.", "Confirm tax evidence before input VAT recovery.", "Use VAT return only after source transactions are approved."]
     elif any(word in q for word in ("exception", "error", "failed", "duplicate")):
         answer = f"The exception queue currently has {snapshot['open_exception_count']} open saved exceptions. AI can explain impact, likely root cause, and next action without changing status."
@@ -157,28 +143,28 @@ def _recent_open_exceptions(db: Session, company_id: str, limit: int = 5) -> lis
 def assist(request: Request, payload: AIAssistRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> AIResponse:
     q = payload.question.lower()
     snapshot = company_snapshot(db, current_user.company_id)
-    fallback = _rule_based_assist(q, snapshot)
-    data = build_ai_context(db, current_user)
-    # No AI key / AI failure: answer common data questions straight from the snapshot.
-    direct = rule_answer(payload.question, data)
-    if direct:
-        fallback = fallback.model_copy(update={"answer": direct, "confidence": 90})
+    fallback = _rule_based_assist(q, snapshot, (current_user.company.currency if current_user.company else None) or "AED")
 
-    prompt = f"""COMPANY DATA (live, amounts in {data.get('company', {}).get('currency', 'AED')}; "to date" = all recorded transactions):
-{json.dumps(data, default=str, ensure_ascii=False)}
+    prompt = f"""COMPANY CURRENCY: {(current_user.company.currency if current_user.company else None) or "AED"} (state amounts in this currency)
+
+COMPANY SNAPSHOT:
+{json.dumps(snapshot, indent=2)}
+
+RECENT OPEN EXCEPTIONS (most recent first):
+{json.dumps(_recent_open_exceptions(db, current_user.company_id), indent=2)}
 
 USER QUESTION: {payload.question}"""
+    system = ASSISTANT_SYSTEM_PROMPT
     if payload.answer_lang == "ar":
-        prompt += '\n\nWrite "answer" and "suggested_actions" in Arabic.'
+        system += " Write \"answer\" and \"suggested_actions\" in Arabic."
 
     result = call_llm(
         prompt,
-        ASSISTANT_SYSTEM_PROMPT,
+        system,
         openai_model_env="OPENAI_ASSIST_MODEL",
         openai_default="gpt-4o-mini",
         anthropic_model_env="ANTHROPIC_ASSIST_MODEL",
         anthropic_default="claude-haiku-4-5-20251001",
-        max_tokens=900,
     )
 
     answer = result.get("answer") if isinstance(result, dict) else None
@@ -203,97 +189,6 @@ USER QUESTION: {payload.question}"""
     )
 
 
-MAX_VOICE_AUDIO_BYTES = 5 * 1024 * 1024  # ~60 s of compressed speech
-
-
-@router.post("/transcribe")
-@limiter.limit("15/minute")
-def transcribe(
-    request: Request,
-    file: UploadFile = File(...),
-    lang: str | None = Form(None),
-    principal: Principal = Depends(get_current_principal),
-    db: Session = Depends(get_db),
-) -> dict[str, str]:
-    """Server fallback for voice input when the browser has no built-in speech
-    recognition. Audio is forwarded to the STT provider and never stored."""
-    audio = file.file.read(MAX_VOICE_AUDIO_BYTES + 1)
-    if not audio:
-        raise HTTPException(status_code=422, detail="Empty audio")
-    if len(audio) > MAX_VOICE_AUDIO_BYTES:
-        raise HTTPException(status_code=413, detail="Recording too long - keep voice input under about a minute")
-    lang_code = (lang or "").split("-")[0].lower() or None
-    if lang_code not in (None, "en", "ar"):
-        lang_code = None
-    reserve_transcription(db, principal.company_id)
-    result = transcribe_audio(audio, file.filename or "audio.webm", file.content_type or "audio/webm", lang_code)
-    if "error" in result:
-        raise HTTPException(status_code=503, detail=result["error"])
-    return {"text": result["text"], "lang": lang_code or ""}
-
-
-@router.get("/briefing")
-@limiter.limit("20/minute")
-def daily_briefing(request: Request, lang: str = "en", db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict:
-    """Short spoken summary of today's position: past-due receivables, unpaid
-    purchases, VAT due date, staff today, open exceptions. Read-only."""
-    ctx = build_ai_context(db, current_user)
-    from app.routers import reports
-
-    dashboard = reports._cached_or_build(f"dashboard:{current_user.company_id}:all", 60,
-                                         lambda: reports._build_dashboard(db, current_user.company_id, None))
-    first_name = (current_user.full_name or "").split(" ")[0] or None
-    return build_briefing(
-        db, current_user.company_id, dashboard, datetime.date.today(),
-        lang="ar" if lang.lower().startswith("ar") else "en",
-        currency=(ctx.get("company") or {}).get("currency", "AED"), name=first_name,
-        receivables=ctx.get("receivables_summary"),
-    )
-
-
-@router.get("/voice-settings")
-def read_voice_settings(principal: Principal = Depends(get_current_principal), db: Session = Depends(get_db)) -> dict:
-    return {**get_voice_settings(db, principal.company_id), "transcriptions_today": transcriptions_today(db, principal.company_id)}
-
-
-@router.put("/voice-settings")
-def update_voice_settings(payload: VoiceSettings, principal: Principal = Depends(get_current_principal), db: Session = Depends(get_db)) -> dict:
-    if not principal.is_admin:
-        raise HTTPException(status_code=403, detail="Only an admin can change voice settings")
-    saved = save_voice_settings(db, principal.company_id, payload.model_dump())
-    log_action(db, principal, "settings", "voice_settings_saved", saved)
-    db.commit()
-    return {**saved, "transcriptions_today": transcriptions_today(db, principal.company_id)}
-
-
-@router.post("/voice-intent", response_model=VoiceIntentResponse)
-@limiter.limit("30/minute")
-def voice_intent(request: Request, payload: VoiceIntentRequest, principal: Principal = Depends(get_current_principal), db: Session = Depends(get_db)) -> VoiceIntentResponse:
-    """Maps a spoken command onto one of the targets the client can already
-    see (pages, tabs, blank create-forms). Reads no company data and writes nothing."""
-    require_voice_enabled(db, principal.company_id)
-    seen: set[str] = set()
-    targets = []
-    for t in payload.targets:
-        if t.id not in seen:
-            seen.add(t.id)
-            targets.append(t.model_dump())
-    return VoiceIntentResponse(**resolve_intent(payload.transcript, targets, payload.lang))
-
-
-@router.post("/voice-draft", response_model=VoiceDraftResponse)
-@limiter.limit("15/minute")
-def voice_draft(request: Request, payload: VoiceDraftRequest, principal: Principal = Depends(get_current_principal), db: Session = Depends(get_db)) -> VoiceDraftResponse:
-    """Dictation -> field values for one existing form. Returns a draft only;
-    the page fills its form and the user saves it through the normal path."""
-    require_voice_enabled(db, principal.company_id)
-    today = payload.today or datetime.date.today()
-    result = build_draft(payload.form, payload.transcript, payload.choices, today, payload.lang)
-    if "error" in result:
-        raise HTTPException(status_code=503, detail=f"Voice data entry needs the AI service: {result['error']}")
-    return VoiceDraftResponse(**result)
-
-
 @router.post("/validate-transaction", response_model=AIResponse)
 def validate_transaction(payload: AITransactionValidationRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> AIResponse:
     subtotal = Decimal("0.00")
@@ -312,7 +207,8 @@ def validate_transaction(payload: AITransactionValidationRequest, db: Session = 
         elif line.account_code != suggested:
             suggestions.append(f"{line.description}: review account {line.account_code}; AI suggestion is {suggested} - {account_label}.")
     vat_rate = get_company_vat_rate(current_user.company)
-    issues = vat_issues(subtotal, vat, payload.tax_treatment, payload.supplier_trn, payload.evidence_present, vat_rate)
+    currency = (current_user.company.currency if current_user.company else None) or "AED"
+    issues = vat_issues(subtotal, vat, payload.tax_treatment, payload.supplier_trn, payload.evidence_present, vat_rate, currency)
     confidence = 92 if not issues and not suggestions else 72 if len(issues) + len(suggestions) <= 2 else 55
     return AIResponse(
         answer="AI transaction review completed. This is a draft review only; approval and posting must use the existing source transaction flow.",

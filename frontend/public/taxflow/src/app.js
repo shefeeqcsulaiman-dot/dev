@@ -588,10 +588,11 @@ function ensureAppConfirmModal(){
   return overlay;
 }
 
-function appConfirm({title='Confirm Action',message='Please confirm this action.',messageHtml='',okText='Delete',tone='danger'}={}){
+function appConfirm({title='Confirm Action',message='Please confirm this action.',messageHtml='',okText='Delete',cancelText='Cancel',tone='danger'}={}){
   const overlay=ensureAppConfirmModal();
   const ok=overlay.querySelector('#app-confirm-ok');
   const cancel=overlay.querySelector('#app-confirm-cancel');
+  cancel.textContent=cancelText;
   overlay.querySelector('#app-confirm-title').textContent=title;
   const msgEl=overlay.querySelector('#app-confirm-message');
   if(messageHtml){
@@ -707,7 +708,8 @@ async function saveUser(){
   let password=document.getElementById('user-temp-password')?.value||'';
   const generated=!password;
   if(generated)password=Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,6).toUpperCase()+'7';
-  const apiRole={Accountant:'accountant',Viewer:'viewer'}[role]||'user';
+  // The server enforces these roles (they used to all become a full-access 'user').
+  const apiRole={Admin:'admin',Manager:'manager',Accountant:'accountant',Sales:'sales',Viewer:'viewer'}[role]||'viewer';
   try{
     await moduleApi('/companies/current/users',{method:'POST',body:{email,full_name:name,password,role:apiRole}});
   }catch(err){
@@ -1196,7 +1198,7 @@ function openEmployeeProfile(btn){
       <div class="g4 mb16">
         <div class="stat"><div class="stat-lbl">Department</div><div class="stat-val" style="font-size:18px;color:var(--accent)">${escapeHtml(employee.department||'-')}</div></div>
         <div class="stat"><div class="stat-lbl">Shift Hours</div><div class="stat-val" style="font-size:18px;color:var(--green)">${(()=>{const h=Number(employee.shift_hours||0);if(h>0){const t=(employee.shift_hours_type||'weekly');return escapeHtml(t.charAt(0).toUpperCase()+t.slice(1)+' · '+h+'h');}return escapeHtml(employee.shift||'—');})()}</div></div>
-        <div class="stat"><div class="stat-lbl">Total Salary</div><div class="stat-val" style="font-size:18px;color:var(--purple)">${window.HRMS_CAN_VIEW_SALARY===false?'—':'AED '+Number(employee.salary||0).toLocaleString('en-AE')}</div></div>
+        <div class="stat"><div class="stat-lbl">Total Salary</div><div class="stat-val" style="font-size:18px;color:var(--purple)">${window.HRMS_CAN_VIEW_SALARY===false?'—':currentCurrency()+' '+Number(employee.salary||0).toLocaleString('en-AE')}</div></div>
         <div class="stat"><div class="stat-lbl">Supervisor</div><div class="stat-val" style="font-size:18px;color:var(--amber)">${escapeHtml(employee.supervisor||'-')}</div></div>
       </div>
       <div class="g2 mb16">
@@ -2110,6 +2112,14 @@ function quickAddInventoryUnit(){
 
 let _invEditCode=null;
 
+// Super Admin "without stock" company: nothing moves stock server-side, so new items default
+// to Stock Tracking = No and Stock Levels says why quantities stay at zero.
+function companyTracksStock(){return window.COMPANY_STOCK_MODE!=='without_stock';}
+function applyCompanyStockMode(){
+  const note=document.getElementById('stock-mode-note');
+  if(note)note.style.display=companyTracksStock()?'none':'';
+}
+
 function openInventoryItemModal(editRow=null){
   syncInventoryItemOptions();
   _invEditCode=null;
@@ -2118,6 +2128,7 @@ function openInventoryItemModal(editRow=null){
     if(el.tagName==='SELECT')el.selectedIndex=0;
     else el.value='';
   });
+  if(!editRow&&!companyTracksStock()){const t=document.getElementById('inv-item-tracking');if(t)t.value='No';}
   const titleEl=document.getElementById('inv-item-modal-title');
   const saveBtn=document.getElementById('inv-item-save-btn');
   const codeField=document.getElementById('inv-item-code');
@@ -2388,8 +2399,8 @@ async function loadCompanyLocations(){
     const rows=await r.json();
     HR_LOCATIONS_CACHE=rows;
     tbody.innerHTML=rows.length?rows.map(l=>`<tr>
-      <td>${l.location_name}</td><td>${l.latitude.toFixed(6)}, ${l.longitude.toFixed(6)}</td>
-      <td>${l.allowed_radius_meters}m</td><td>${l.status}</td>
+      <td>${escapeHtml(l.location_name)}</td><td>${Number(l.latitude).toFixed(6)}, ${Number(l.longitude).toFixed(6)}</td>
+      <td>${Number(l.allowed_radius_meters)||0}m</td><td>${escapeHtml(l.status)}</td>
       <td><button class="btn btn-g btn-sm" onclick="deleteCompanyLocation('${l.id}')">Delete</button></td>
     </tr>`).join(''):'<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">No locations yet.</td></tr>';
     populateAssignLocationSelect();
@@ -2426,9 +2437,9 @@ async function loadEmployeeLocationAssignments(){
     if(r.status===403){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:16px">Your role does not have access to manage assignments.</td></tr>';return;}
     const rows=await r.json();
     tbody.innerHTML=rows.length?rows.map(a=>`<tr>
-      <td>${a.employee_name}</td><td>${a.location_name}</td>
+      <td>${escapeHtml(a.employee_name)}</td><td>${escapeHtml(a.location_name)}</td>
       <td>${a.is_primary?'<span class="b b-g">Primary</span>':''}</td>
-      <td><button class="btn btn-g btn-sm" onclick="unassignEmployeeLocation('${a.id}')">Unassign</button></td>
+      <td><button class="btn btn-g btn-sm" onclick="unassignEmployeeLocation('${escapeHtml(a.id)}')">Unassign</button></td>
     </tr>`).join(''):'<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:16px">No employees assigned yet.</td></tr>';
   }catch(e){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3)">Failed to load.</td></tr>';}
 }
@@ -2489,10 +2500,10 @@ async function loadLiveLocations(){
     if(r.status===403){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Your role does not have live-attendance access.</td></tr>';return;}
     const rows=await r.json();
     tbody.innerHTML=rows.length?rows.map(p=>`<tr>
-      <td>${p.employee_name}</td>
-      <td>${p.check_in.substring(0,16).replace('T',' ')}</td>
+      <td>${escapeHtml(p.employee_name)}</td>
+      <td>${escapeHtml(String(p.check_in||'').substring(0,16).replace('T',' '))}</td>
       <td>${p.inside_geofence?'<span class="b b-g">Inside</span>':'<span class="b b-r">Outside</span>'}</td>
-      <td>${p.last_ping.substring(0,16).replace('T',' ')}</td>
+      <td>${escapeHtml(String(p.last_ping||'').substring(0,16).replace('T',' '))}</td>
     </tr>`).join(''):'<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">No employees currently checked in.</td></tr>';
   }catch(e){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3)">Failed to load.</td></tr>';}
 }
@@ -2512,11 +2523,7 @@ function localApiUrlFor(url){
 // no token in storage AT ALL, which covers a brand-new visitor who never
 // logged in on this browser, or someone who cleared storage — telling
 // them their SESSION "expired" is wrong; there was never one to expire.
-let _loginRedirectPending=false;
 function showLoginOverlay(expired=true){
-  // Several requests can fail together; show one message and redirect once.
-  if(_loginRedirectPending)return;
-  _loginRedirectPending=true;
   try{toast(expired?'Session expired — please sign in again':'Please sign in to continue','warn');}catch{}
   setTimeout(()=>window.location.replace('/login'),1200);
 }
@@ -2554,10 +2561,12 @@ async function submitLogin(){
 // Role-based nav visibility. Roles from JWT: 'admin' (full access), 'viewer',
 // 'accountant', 'sales' — defined as the User.role field in the backend.
 // 'superadmin' is redirected to /superadmin at login page level.
+// Pages per main-app role — mirrors USER_ROLE_ACCESS (auth_principal.py), which the server enforces.
 const _NAV_ROLE_MAP={
-  viewer:   ['sales','quotations','purchase','inventory','expense','reports','exception'],
-  sales:    ['sales','quotations','reports'],
-  accountant:['sales','quotations','purchase','expense','bank','accounting','reports','exception'],
+  viewer:   ['dashboard','sales','quotations','purchase','bills','inventory','expense','reports','exception'],
+  sales:    ['dashboard','sales','quotations','reports'],
+  accountant:['dashboard','sales','quotations','purchase','bills','inventory','expense','bank','accounting','reports','exception'],
+  manager:  ['dashboard','sales','quotations','pos','purchase','bills','inventory','expense','bank','accounting','corporate','documents','notifications','ai','reports','expert','exception'],
 };
 async function applyRoleBasedNav(){
   try{
@@ -2588,6 +2597,10 @@ async function applyRoleBasedNav(){
       const page=match[1];
       nav.style.display=allowed.has(page)?'':'none';
     });
+    // POS and HRMS open their own apps (window.open, not go()), so the loop above misses their
+    // sidebar links and header buttons. No main-app role includes HR; only some include POS.
+    document.querySelectorAll(`[onclick*="window.open('/pos'"]`).forEach(el=>{if(!allowed.has('pos'))el.style.display='none';});
+    document.querySelectorAll(`[onclick*="window.open('/hrms'"]`).forEach(el=>{el.style.display='none';});
   }catch(e){
     console.warn('[RoleNav]',e);
   }
@@ -2869,19 +2882,7 @@ async function _authenticatedFetchUncached(url,options={}){
       try{detail=(await response.clone().json())?.detail||'';}catch{}
       if(detail==='User no longer exists')return response;
     }
-    // One 401 isn't proof the session is gone: a single server instance can
-    // reject a token the others accept, and clearing the token here used to
-    // make every later request fail too ("Session expired" x4 right after
-    // login). A 401 is decided before the request is handled, so retrying
-    // is safe; only a token that keeps failing is treated as expired.
-    const sentAuth=requestOptions.headers.Authorization||'';
-    for(let attempt=1;attempt<=2&&response.status===401&&sentAuth;attempt++){
-      await new Promise(resolve=>setTimeout(resolve,250*attempt));
-      response=await fetchWithBackendFallback(url,{...options,headers:{...backendHeaders(),...(options.headers||{})}});
-    }
-    if(response.status!==401)return response;
-    // Another request may already have signed in again; don't wipe that token.
-    if(!sentAuth||backendHeaders().Authorization===sentAuth)localStorage.removeItem('taxflow_token');
+    localStorage.removeItem('taxflow_token');
     const relogged=await loginLocalBackend();
     if(relogged){
       response=await fetchWithBackendFallback(url,{...options,headers:{...backendHeaders(),...(options.headers||{})}});
@@ -2909,6 +2910,15 @@ function syncCurrencyHeaderLabels(){
   document.querySelectorAll('[data-currency-label]').forEach(el=>{
     el.textContent=el.textContent.replace(/\bAED\b/,currency);
   });
+  document.querySelectorAll('[data-currency-placeholder]').forEach(el=>{
+    el.placeholder=el.placeholder.replace(/\bAED\b/,currency);
+  });
+  // New bank accounts default to the company currency, which may not be in the static list.
+  const bankCur=document.getElementById('bank-currency');
+  if(bankCur){
+    if(![...bankCur.options].some(o=>o.value===currency))bankCur.add(new Option(currency,currency),0);
+    bankCur.value=currency;
+  }
 }
 
 // The company's configured VAT rate (Settings > Tax Settings) — set from
@@ -3087,7 +3097,10 @@ function applyCompanyToUi(company){
   if(taxVatDisplay)taxVatDisplay.value=vatRateNum+'%';
   window.COMPANY_CURRENCY=company.currency||'AED';
   window.COMPANY_VAT_RATE=vatRateNum;
+  window.COMPANY_STOCK_MODE=company.stock_mode||'with_stock';
+  applyCompanyStockMode();
   syncCurrencyHeaderLabels();
+  if(_lastTopCustomers)renderTopCustomers(_lastTopCustomers);
   // Create Invoice tab's totals default to a static "AED 0.00" in the HTML
   // (index.html) until the user edits a line item — refresh them here too,
   // so a non-AED company doesn't see the wrong currency on a freshly
@@ -3195,8 +3208,6 @@ function applyModulePermissionNav(modulesEnabled){
   // page and would no-op harmlessly anyway (no .sb/[data-module] elements
   // exist in hrms.html's DOM).
   window.COMPANY_ALLOWED_MODULES=Array.isArray(modulesEnabled)?new Set(modulesEnabled):null;
-  // hrms.html's topbar mic has no data-module-gate pass (early return below).
-  if(window.HRMS_STANDALONE)document.getElementById('vc-mic-btn')?.classList.toggle('hidden',!_vcAllowed());
   if(window.HRMS_STANDALONE)return;
   if(!Array.isArray(modulesEnabled)){
     document.querySelectorAll('.sb .nav[data-module]').forEach(n=>n.classList.remove('hidden'));
@@ -3730,8 +3741,8 @@ function renderCachedDashboardSnapshot(){
     renderFullDashboardFromDatabase(cached);
     return;
   }
-  setDashboardStat('Total Revenue + VAT','AED 0.00','Syncing database...');
-  setDashboardStat('VAT Payable','AED 0.00','Syncing database...');
+  setDashboardStat('Total Revenue + VAT',formatAed(0),'Syncing database...');
+  setDashboardStat('VAT Payable',formatAed(0),'Syncing database...');
   setDashboardStat('Open Invoices','0','Syncing database...');
   setDashboardStat('Staff Present','0/0','Syncing database...');
 }
@@ -3780,7 +3791,7 @@ function renderWorkforceSnapshot(snap){
   set('main-kpi-recs',Number(snap.open_positions||0)||'0');
   set('main-kpi-pending',Number(snap.pending_approvals||0)||'0');
   const payrollNet=parseAmount(snap.net_payroll_this_month||0);
-  const fmtCompactAed=n=>n>=1000?'AED '+(n/1000).toFixed(1)+'K':'AED '+n.toFixed(0);
+  const fmtCompactAed=n=>currentCurrency()+' '+(n>=1000?(n/1000).toFixed(1)+'K':n.toFixed(0));
   set('main-kpi-payroll',payrollNet>0?fmtCompactAed(payrollNet):'—');
 }
 
@@ -3788,7 +3799,7 @@ function _refreshPurchaseDashboardCard(){
   // Called after bootstrap fills _hydratedBills — updates only the purchase card elements
   const lp=_computeLocalPurchaseStats();
   if(!lp.count)return;
-  const setEl=(id,v)=>{const el=document.getElementById(id);if(el&&el.textContent==='AED 0.00'||el?.textContent==='0 Bills')el.textContent=v;};
+  const setEl=(id,v)=>{const el=document.getElementById(id);if(el&&(el.textContent==='AED 0.00'||el.textContent===formatAed(0))||el?.textContent==='0 Bills')el.textContent=v;};
   // Only update if currently showing zero (avoid overwriting good API data)
   const purEl=document.getElementById('dash-total-purchases');
   const purSubEl=document.getElementById('dash-purchases-sub');
@@ -3837,7 +3848,10 @@ function renderDashboardHero(data,kpis={},counts={}){
     return cat.includes('direct')?sum+parseAmount(row.children[5]?.textContent||'0'):sum;
   },0);
   const openingStock=0;
-  const grossProfit=revenueNet+closingStock-openingStock-purchasesNet-directExpenses;
+  // Server's cost of sales (perpetual: purchases less stock still on hand); else estimate locally.
+  const serverCost=purSum.cost_of_sales!=null?parseAmount(purSum.cost_of_sales):null;
+  const costOfSales=serverCost!=null?serverCost:purchasesNet-closingStock+openingStock;
+  const grossProfit=revenueNet-costOfSales-directExpenses;
 
   // KPI cards
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
@@ -3853,8 +3867,8 @@ function renderDashboardHero(data,kpis={},counts={}){
   set('dash-vat-sub',vatPayable>0?'Payable to FTA':'Credit position');
   set('dash-gross-profit',formatAed(grossProfit));
   set('dash-total-income',formatAed(revenueNet));
-  set('dash-total-expenses',formatAed(purchasesNet));
-  set('dash-profit-sub',closingStock>0?`Closing stock: ${formatAed(closingStock)}`:'');
+  set('dash-total-expenses',formatAed(costOfSales+directExpenses));
+  set('dash-profit-sub',serverCost==null&&closingStock>0?`Closing stock: ${formatAed(closingStock)}`:'');
   // Profit card: margin bar
   const marginPct=revenueNet>0?Math.max(0,Math.round(grossProfit/revenueNet*100)):0;
   set('dash-margin-pct',`${marginPct}%`);
@@ -4068,7 +4082,9 @@ function renderRecentActivity(rows){
   </div>`;
 }
 
+let _lastTopCustomers=null;  // re-rendered once the company currency is known
 function renderTopCustomers(rows){
+  _lastTopCustomers=rows;
   // Legacy table (hidden, kept for compat)
   const tbody=document.getElementById('dash-top-customers');
   if(tbody){
@@ -4899,7 +4915,7 @@ function exportReportExcel(targetId,title){
 
   function cellXml(text,isHeader){
     const clean=String(text||'').replace(/\s+/g,' ').trim();
-    const num=clean.replace(/,/g,'').replace(/AED\s*/i,'').replace(/%$/,'');
+    const num=clean.replace(/,/g,'').replace(/^[A-Z]{3}\s*/,'').replace(/%$/,'');
     const isNum=clean!==''&&!isNaN(parseFloat(num))&&isFinite(num)&&!/^0\d/.test(num);
     const esc=clean.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     if(isHeader)return `<Cell ss:StyleID="H"><Data ss:Type="String">${esc}</Data></Cell>`;
@@ -4982,14 +4998,23 @@ async function apiRequest(action,payload,options={}){
     method:options.method||'POST',
     body:options.method==='GET'?undefined:JSON.stringify(payload||{})
   });
-  if(!response.ok)throw new Error('FastAPI app-data endpoint returned '+response.status);
+  if(!response.ok){
+    // Keep the server's reason (e.g. "Outside your department scope") so screens can show it.
+    let detail='';
+    try{detail=(await response.json())?.detail||'';}catch{}
+    const err=new Error(typeof detail==='string'&&detail?detail:'FastAPI app-data endpoint returned '+response.status);
+    err.status=response.status;
+    err.serverDetail=typeof detail==='string'?detail:'';
+    throw err;
+  }
   const data=await response.json();
   if(data&&data.ok===false)throw new Error(data.error||'FastAPI app-data request failed');
   return data;
 }
 
 function saveServer(collection,record,options={}){
-  return apiRequest('save',{collection,record}).catch(err=>{
+  // createOnly: the server refuses (409) instead of overwriting a record with the same key.
+  return apiRequest('save',options.createOnly?{collection,record,create_only:true}:{collection,record}).catch(err=>{
     console.warn('Database save failed:',err);
     if(options.throwOnError)throw err;
     return null;
@@ -5018,6 +5043,12 @@ function bulkSaveServer(collection,records,options={}){
     if(options.throwOnError)throw err;
     return null;
   });
+}
+
+// Client-side mirror of the role's permissions (server still enforces). Unknown/admin -> allowed.
+function hrmsCan(perm){
+  if(window.HRMS_IS_ADMIN||!Array.isArray(window.HRMS_PERMISSIONS))return true;
+  return window.HRMS_PERMISSIONS.includes(perm);
 }
 
 function deleteServer(collection,record,options={}){
@@ -5316,7 +5347,7 @@ function clearDemoCardsAndCounters(){
   setText('file-count-badge','0 files');
   document.querySelectorAll('.page:not(#page-dashboard) .stat-val').forEach(node=>{
     const current=node.textContent.trim();
-    node.textContent=/^AED/i.test(current)||current.startsWith(AED_SYMBOL)?'AED 0.00':'0';
+    node.textContent=/^AED/i.test(current)||current.startsWith(AED_SYMBOL)?formatAed(0):'0';
   });
   document.querySelectorAll('.page:not(#page-dashboard) .stat-delta').forEach(node=>{node.textContent='';});
   document.querySelectorAll('button').forEach(button=>{
@@ -5363,12 +5394,12 @@ function resetDraftEntryDefaults(){
     setFieldValue(row.querySelector('.quote-price'),'0.00');
     setFieldValue(row.querySelector('.quote-amount'),'0.00');
   });
-  setText('subtotal','AED 0.00');
-  setText('vat-amt','AED 0.00');
-  setText('inv-total','AED 0.00');
-  setText('quote-subtotal','AED 0.00');
-  setText('quote-vat','AED 0.00');
-  setText('quote-total','AED 0.00');
+  setText('subtotal',formatAed(0));
+  setText('vat-amt',formatAed(0));
+  setText('inv-total',formatAed(0));
+  setText('quote-subtotal',formatAed(0));
+  setText('quote-vat',formatAed(0));
+  setText('quote-total',formatAed(0));
 }
 
 function quotationActionsHtml(){
@@ -5444,7 +5475,7 @@ function renderCustomerRecord(customer){
   row.dataset.address=customer.address||'';
   row.dataset.email=customer.email||'';
   row.dataset.phone=customer.phone||'';
-  row.innerHTML=`<td>${escapeHtml(customer.name)}</td><td class="mono">${escapeHtml(customer.trn||'Not registered')}</td><td>${escapeHtml(customer.emirate||'Dubai')}</td><td>${escapeHtml(customer.email||customer.phone||'-')}</td><td class="mono" style="color:var(--accent)">${'AED'} 0</td><td><button class="btn btn-g btn-sm">View</button></td>`;
+  row.innerHTML=`<td>${escapeHtml(customer.name)}</td><td class="mono">${escapeHtml(customer.trn||'Not registered')}</td><td>${escapeHtml(customer.emirate||'Dubai')}</td><td>${escapeHtml(customer.email||customer.phone||'-')}</td><td class="mono" style="color:var(--accent)">${escapeHtml(currentCurrency())} 0</td><td><button class="btn btn-g btn-sm">View</button></td>`;
   removeEmptyState(tbody);
   tbody.prepend(row);
   refreshInvoiceCustomerOptions();
@@ -6942,7 +6973,7 @@ function markPaymentDocumentPaid(payment){
         try{const d=JSON.parse(row.dataset.salesInvoice);d.status='Paid';d.balance_due=0;d.amount_paid=invoiceTotal;row.dataset.salesInvoice=JSON.stringify(d);}catch{}
       }
     }else{
-      statusCell.innerHTML=`<span class="b b-a" title="Remaining: AED ${fmt(remaining)}">Partial</span>`;
+      statusCell.innerHTML=`<span class="b b-a" title="Remaining: ${escapeHtml(currentCurrency())} ${fmt(remaining)}">Partial</span>`;
       if(row.dataset.salesInvoice){
         try{const d=JSON.parse(row.dataset.salesInvoice);d.status='Partial';d.balance_due=remaining;d.amount_paid=newPaid;row.dataset.salesInvoice=JSON.stringify(d);}catch{}
       }
@@ -6996,7 +7027,7 @@ function reverseMarkPaymentDocumentPaid(payment){
         try{const d=JSON.parse(row.dataset.salesInvoice);d.status='Paid';d.balance_due=0;d.amount_paid=invoiceTotal;row.dataset.salesInvoice=JSON.stringify(d);}catch{}
       }
     }else{
-      statusCell.innerHTML=`<span class="b b-a" title="Remaining: AED ${fmt(remaining)}">Partial</span>`;
+      statusCell.innerHTML=`<span class="b b-a" title="Remaining: ${escapeHtml(currentCurrency())} ${fmt(remaining)}">Partial</span>`;
       if(row.dataset.salesInvoice){
         try{const d=JSON.parse(row.dataset.salesInvoice);d.status='Partial';d.balance_due=remaining;d.amount_paid=newPaid;row.dataset.salesInvoice=JSON.stringify(d);}catch{}
       }
@@ -7011,7 +7042,7 @@ async function deleteSupplierPayment(ref){
   const amt=Number(payment.amount||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
   const confirmed=await appConfirm({
     title:'Delete Payment',
-    message:`Delete payment ${payment.ref} to ${payment.contact||'this supplier'} (AED ${amt})? This reverses the accounting entry and marks the bill it was applied to as outstanding again.`,
+    message:`Delete payment ${payment.ref} to ${payment.contact||'this supplier'} (${currentCurrency()} ${amt})? This reverses the accounting entry and marks the bill it was applied to as outstanding again.`,
     okText:'Delete'
   });
   if(!confirmed)return;
@@ -7034,7 +7065,7 @@ async function deleteSupplierPayment(ref){
   }
   applySupplierPaymentCardView();
   updateFinanceFromDatabaseRecords();
-  audit('Payment deleted','Bank & Payments',`${payment.ref} — AED ${amt} to ${payment.contact||'supplier'}`);
+  audit('Payment deleted','Bank & Payments',`${payment.ref} — ${currentCurrency()} ${amt} to ${payment.contact||'supplier'}`);
   toast('Payment deleted','ok');
 }
 
@@ -7055,7 +7086,7 @@ function renderSupplierPaymentCard(payment){
     return `<div class="pay-card-alloc-row">
       <span class="pay-card-alloc-ref">${escapeHtml(ref)}</span>
       <span class="pay-card-alloc-desc">Invoice / Bill</span>
-      <span class="pay-card-alloc-amt">AED ${amt}</span>
+      <span class="pay-card-alloc-amt">${escapeHtml(currentCurrency())} ${amt}</span>
     </div>`;
   }).join('');
   const totalAmt=Number(payment.amount||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -7072,7 +7103,7 @@ function renderSupplierPaymentCard(payment){
       </div>
       <div class="pay-card-right">
         <div style="text-align:right">
-          <div class="pay-card-amount">AED ${totalAmt}</div>
+          <div class="pay-card-amount">${escapeHtml(currentCurrency())} ${totalAmt}</div>
           <div class="pay-card-amount-label">PAID</div>
         </div>
         <svg class="pay-card-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6l4 4 4-4"/></svg>
@@ -7213,7 +7244,7 @@ function renderBankAccountRecord(account){
     updateFinanceFromDatabaseRecords();
     return;
   }
-  const currency=account.currency||'AED';
+  const currency=account.currency||currentCurrency();
   const balance=Number(account.balance??account.opening_balance??0);
   const type=account.type||account.account_type||'Current';
   const typeClass=String(type).toLowerCase().includes('saving')?'b-t':'b-b';
@@ -7362,7 +7393,7 @@ async function _ensureReconciliationBankAccount(){
       account_id:bankLedger.id,
       bank_name:appBank?.bank||appBank?.bank_name||'Primary Operating Account',
       iban:appBank?.iban||null,
-      currency:appBank?.currency||'AED',
+      currency:appBank?.currency||currentCurrency(),
       status:'active',
     }});
     _reconBankAccountId=created.id;
@@ -7545,7 +7576,7 @@ function buildBankAccountFromForm(){
     holder:document.getElementById('bank-holder')?.value?.trim()||currentCompany?.name||'',
     iban:document.getElementById('bank-iban')?.value?.trim()||'',
     type:document.getElementById('bank-type')?.value||'Current',
-    currency:document.getElementById('bank-currency')?.value||'AED',
+    currency:document.getElementById('bank-currency')?.value||currentCurrency(),
     swift:document.getElementById('bank-swift')?.value?.trim()||'',
     branch:document.getElementById('bank-branch')?.value?.trim()||'',
     balance:parseAmount(document.getElementById('bank-balance')?.value),
@@ -7640,9 +7671,14 @@ async function runExpAiExtraction(){
     entry.status='Extracting';
     expAiRenderFileList();
     try{
-      const payload={file:{name:entry.name,size:entry.size,base64:entry.base64}};
-      const resp=await authenticatedFetch(`${apiBaseUrl()}/app-data?action=documents.extract`,{method:'POST',body:JSON.stringify(payload)});
-      const data=resp.ok?await resp.json():null;
+      const payload={documentType:'expense',file:{name:entry.name,size:entry.size,base64:entry.base64}};
+      const resp=await authenticatedFetch(`${apiBaseUrl()}/app-data?action=documents.extract`,{method:'POST',body:JSON.stringify(payload),signal:_extractionAbortSignal()});
+      if(!resp.ok){
+        let detail='';
+        try{const d=await resp.json();detail=d.detail||'';}catch{}
+        throw new Error(detail||`server returned ${resp.status}`);
+      }
+      const data=await resp.json();
       const invoices=Array.isArray(data)?data:(data?.invoices||[]);
       entry.status='Done';
       if(invoices.length)expAiRenderExtracted(invoices,entry.name);
@@ -9097,6 +9133,7 @@ function hydrateFromServer(){
         renderStats.salesCategories=await renderRecordList(data.salesCategories,renderSalesCategoryRecord,'sales category');
         renderStats.salesUnits=await renderRecordList(data.salesUnits,renderSalesUnitRecord,'sales unit');
         renderStats.serviceTypes=await renderRecordList(data.serviceTypes,renderServiceTypeRecord,'service type');
+        setSalesPeople(data.salesPeople);
         await _yield();
         renderStats.customers=await renderRecordList(data.customers,renderCustomerRecord,'customer');
         renderStats.users=await renderRecordList(data.users,renderUserRecord,'user');
@@ -9236,6 +9273,11 @@ function hydrateFromServer(){
       }finally{isHydratingFromServer=false;}
       updateLeaveBalance();
       filterLedger();
+      // HRMS dashboard widgets otherwise only refresh on fixed timers, which a slow load outlasts.
+      if(window.HRMS_STANDALONE){
+        if(typeof refreshHrmsKpis==='function')refreshHrmsKpis();
+        if(typeof refreshHrmsDashboard==='function')refreshHrmsDashboard();
+      }
     },1400);
     const totalLoaded=[
       productRows,
@@ -9620,7 +9662,8 @@ function lineFromInvoiceLike(inv={}){
 
 function addSelectedPurchaseInvoice(map,invoice){
   const invoiceNo=String(invoice?.invoice_no||invoice?.invoice_number||invoice?.ref||'').trim();
-  const key=invoiceKey(invoiceNo);
+  // Parts of the same supplier's invoice merge; another supplier's same number stays separate.
+  const key=purchaseAiSessionKey({invoice_no:invoiceNo,supplier:invoice?.supplier});
   if(!key)return;
   const existing=map.get(key);
   if(existing){
@@ -9639,14 +9682,22 @@ const _productNameSet = new Set();
 function invoiceKey(value){
   return String(value||'').trim().toLowerCase();
 }
+// Saved purchases are keyed by invoice no.; when another supplier already uses that number the
+// server suggests "<no> (<supplier>)" — only valid while the invoice number hasn't been edited.
+function purchaseAiRef(inv){
+  const no=String(inv?.invoice_no||'').trim();
+  const alt=String(inv?.suggested_ref||'');
+  return no&&alt.startsWith(`${no} (`)?alt:no;
+}
+// Same invoice number from two different suppliers is two different invoices.
+function purchaseAiSessionKey(inv){
+  const no=invoiceKey(inv?.invoice_no);
+  return no?`${no}|${String(inv?.supplier||'').toLowerCase().replace(/[^a-z0-9]/g,'')}`:'';
+}
 
 function registerSalesInvoiceKey(value){
   const key=invoiceKey(value);
   if(key)salesInvoiceDbKeys.add(key);
-}
-
-function buildFallbackSalesExtraction(entry){
-  return [];
 }
 
 async function requestSalesInvoiceExtraction(entry){
@@ -9656,31 +9707,29 @@ async function requestSalesInvoiceExtraction(entry){
     importType:entry.importType,
     period:entry.period
   };
-
+  // Errors are thrown, not swallowed: the old extractionFallback path turned a 504 into
+  // "Extracted, 0 invoices", so the file looked done and was never retried.
+  const endpoint=APP_CONFIG.salesExtractionEndpoint||`${apiBaseUrl()}/app-data?action=invoices.import`;
+  let response;
   try{
-    const endpoint=APP_CONFIG.salesExtractionEndpoint||`${apiBaseUrl()}/app-data?action=invoices.import`;
-    let response;
-    try{
-      response=await authenticatedFetch(endpoint,{
-        method:'POST',
-        body:JSON.stringify(payload),
-        signal:_extractionAbortSignal()
-      });
-    }catch(err){
-      if(err.name==='AbortError')throw new Error('Invoice import timed out after 2 minutes — please try again');
-      throw err;
-    }
-    if(!response.ok)throw new Error('Invoice import service returned '+response.status);
-    const data=await response.json();
-    const invoices=Array.isArray(data)?data:data.invoices;
-    if(!Array.isArray(invoices))throw new Error('Invoice import service returned an invalid payload');
-    return invoices;
+    response=await authenticatedFetch(endpoint,{
+      method:'POST',
+      body:JSON.stringify(payload),
+      signal:_extractionAbortSignal()
+    });
   }catch(err){
-    if(!APP_CONFIG.extractionFallback)throw err;
-    console.warn('Sales invoice extraction unavailable:',err);
-    toast('Invoice extraction unavailable. No demo data was added.','warn');
-    return buildFallbackSalesExtraction(entry);
+    if(err.name==='AbortError')throw new Error('Invoice import timed out after 2 minutes — please try again');
+    throw err;
   }
+  if(!response.ok){
+    let detail='';
+    try{const d=await response.json();detail=d.detail||d.message||'';}catch{}
+    throw new Error(`Invoice import failed (${response.status})${detail?': '+detail:''}`);
+  }
+  const data=await response.json();
+  const invoices=Array.isArray(data)?data:data.invoices;
+  if(!Array.isArray(invoices))throw new Error('Invoice import service returned an invalid payload');
+  return invoices;
 }
 
 function isSupportedSalesFile(file){
@@ -9692,15 +9741,17 @@ function salesDzLeave(){document.getElementById('sales-zone').classList.remove('
 function salesDzDrop(e){
   e.preventDefault();
   document.getElementById('sales-zone').classList.remove('over');
-  [...e.dataTransfer.files].forEach(f=>readAndAddSalesFile(f));
+  const files=[...e.dataTransfer.files];
+  files.forEach(f=>readAndAddSalesFile(f,files.length>1));
 }
 
 function salesUpload(inp){
-  [...inp.files].forEach(f=>readAndAddSalesFile(f));
+  const files=[...inp.files];
+  files.forEach(f=>readAndAddSalesFile(f,files.length>1));
   inp.value='';
 }
 
-function readAndAddSalesFile(file){
+function readAndAddSalesFile(file,bulk=false){
   if(!isSupportedSalesFile(file)){
     toast('Unsupported file: '+file.name,'err');
     return;
@@ -9715,7 +9766,8 @@ function readAndAddSalesFile(file){
       base64:e.target.result,
       importType:document.getElementById('sales-import-type')?.value||'Sales Tax Invoices',
       period:document.getElementById('sales-import-period')?.value||'',
-      status:'Queued'
+      status:'Queued',
+      _bulk:bulk
     };
     salesUploadedFiles.push(entry);
     animateSalesUpload(entry);
@@ -9736,8 +9788,8 @@ function animateSalesUpload(entry){
         pg.style.display='none';fill.style.width='0%';fill.classList.remove('running');
         entry.status='Ready';
         renderSalesFileList();
-        toast(entry.name+' uploaded','ok');
-        setTimeout(()=>extractSalesInvoiceFile(entry),500);
+        if(!entry._bulk)toast(entry.name+' uploaded','ok');
+        queueSalesExtraction(entry);
       },250);
     }
     fill.style.width=Math.min(p,100)+'%';
@@ -9759,11 +9811,12 @@ function renderSalesFileList(){
     const statusBadge={
       Queued:'<span class="b b-gray">Queued</span>',
       Ready:'<span class="b b-b">Ready</span>',
+      Waiting:'<span class="b b-gray">Waiting</span>',
       Extracting:'<span class="b b-a">Reading-</span>',
       Extracted:'<span class="b b-g">Stored data</span>',
       Error:'<span class="b b-r">Error</span>'
     }[f.status]||'<span class="b b-gray">Unknown</span>';
-    const btn=f.status==='Ready'?`<button class="btn btn-p btn-sm" onclick="extractSalesInvoiceFile(salesUploadedFiles.find(x=>x.id==='${f.id}'))">Read Data</button>`:'';
+    const btn=f.status==='Ready'?`<button class="btn btn-p btn-sm" onclick="queueSalesExtraction(salesUploadedFiles.find(x=>x.id==='${f.id}'))">Read Data</button>`:'';
     const row=document.createElement('div');
     row.style.cssText='display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)';
     row.innerHTML=`<span style="font-size:20px">${getFileIcon(f.name)}</span><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(f.name)}</div><div class="mono" style="color:var(--text3);font-size:11px">${fmtSize(f.size)} - ${escapeHtml(f.importType)} - ${escapeHtml(f.period)}</div></div><div class="flx">${statusBadge}${btn}</div>`;
@@ -9771,7 +9824,46 @@ function renderSalesFileList(){
   });
 }
 
-async function extractSalesInvoiceFile(entry){
+// Bulk uploads: every sales file used to start its own AI request the moment it finished
+// uploading (20 PDFs = 20 parallel calls -> AI rate limit / gateway 504). Same small queue
+// as purchases (_pumpExtractQueue), with one summary toast for the batch.
+const _SALES_EXTRACT_MAX_PARALLEL=3;
+const _salesExtractQueue=[];
+let _salesExtractRunning=0;
+const _salesExtractBatch={total:0,done:0,ok:0,failed:0};
+function queueSalesExtraction(entry){
+  if(!entry){toast('Sales invoice file not found','err');return;}
+  if(entry._extractQueued||entry.status==='Extracting'||entry.status==='Extracted')return;
+  entry._extractQueued=true;
+  entry.status='Waiting';
+  _salesExtractQueue.push(entry);
+  _salesExtractBatch.total++;
+  renderSalesFileList();
+  _pumpSalesExtractQueue();
+}
+function _pumpSalesExtractQueue(){
+  while(_salesExtractRunning<_SALES_EXTRACT_MAX_PARALLEL&&_salesExtractQueue.length){
+    const entry=_salesExtractQueue.shift();
+    _salesExtractRunning++;
+    extractSalesInvoiceFile(entry,{quiet:_salesExtractBatch.total>1||entry._bulk}).finally(()=>{
+      _salesExtractRunning--;
+      if(entry.status!=='Waiting'){
+        entry._extractQueued=false;
+        _salesExtractBatch.done++;
+        if(entry.status==='Error')_salesExtractBatch.failed++;else _salesExtractBatch.ok++;
+      }
+      if(!_salesExtractQueue.length&&!_salesExtractRunning){
+        if(_salesExtractBatch.total>1||entry._bulk){
+          toast(`Invoice reading finished: ${_salesExtractBatch.ok} of ${_salesExtractBatch.done} file(s) read`+(_salesExtractBatch.failed?` — ${_salesExtractBatch.failed} failed, use Extract Pending to retry`:''),_salesExtractBatch.failed?'warn':'ok');
+        }
+        Object.assign(_salesExtractBatch,{total:0,done:0,ok:0,failed:0});
+      }
+      _pumpSalesExtractQueue();
+    });
+  }
+}
+
+async function extractSalesInvoiceFile(entry,options={}){
   if(!entry){toast('Sales invoice file not found','err');return;}
   entry.status='Extracting';
   renderSalesFileList();
@@ -9801,16 +9893,24 @@ async function extractSalesInvoiceFile(entry){
     appendSalesExtractedRows(invoices);
     if(invoices.some(inv=>!validateSalesAiInvoice(inv).valid)){
       refreshSalesValidationPanel();
-      toast('Validation issues found - review required','warn');
+      if(!options.quiet)toast('Validation issues found - review required','warn');
     }
-    toast('Read '+invoices.length+' invoice(s) from '+entry.name+' ?','ok');
+    if(!options.quiet)toast('Read '+invoices.length+' invoice(s) from '+entry.name,'ok');
   }catch(err){
     clearInterval(ticker);
     if(ep)ep.style.display='none';
     if(fill){fill.style.width='0%';fill.classList.remove('running');}
+    // Gateway timeout / dropped connection: back into the queue once.
+    if(_isRetryableExtractError(err)&&!entry._extractRetried){
+      entry._extractRetried=true;
+      entry.status='Waiting';
+      _salesExtractQueue.push(entry);
+      renderSalesFileList();
+      return;
+    }
     entry.status='Error';
     renderSalesFileList();
-    toast('Invoice read failed: '+err.message,'err');
+    toast(options.quiet?`Invoice read failed for ${entry.name}`:'Invoice read failed: '+err.message,'err');
   }
 }
 
@@ -9831,59 +9931,91 @@ function appendSalesExtractedRows(invoices){
       return;
     }
     const validation=validateSalesAiInvoice(inv);
-    const confCls=inv.confidence>=90?'b-g':inv.confidence>=70?'b-a':'b-r';
+    const confCls=inv.confidence==null?'b-gray':inv.confidence>=90?'b-g':inv.confidence>=70?'b-a':'b-r';
     const stCls=validation.valid?'b-g':'b-a';
     const row=document.createElement('tr');
     row.dataset.salesInv=JSON.stringify(inv);
     row.dataset.validation=validation.valid?'valid':'review';
-    row.innerHTML=`<td><input type="checkbox" class="sales-ai-select" ${validation.valid?'checked':''} aria-label="Select ${escapeHtml(inv.invoice_no)}"></td><td class="mono">${escapeHtml(inv.invoice_no)}</td><td>${escapeHtml(inv.customer)}</td><td class="mono">${escapeHtml(inv.customer_trn||'')}</td><td>${escapeHtml(inv.date)}</td><td class="mono">${fmt(inv.subtotal)}</td><td class="mono">${fmt(inv.vat_amount)}</td><td class="mono">${fmt(inv.total)}</td><td><span class="b ${confCls}">${Number(inv.confidence||0)}%</span></td><td class="sales-ai-validation"><span class="b ${stCls}">${validation.valid?'Valid':'Review'}</span></td><td class="sales-ai-details" style="color:var(--text3);font-size:12px">${escapeHtml(validation.issues.join('; ')||'Ready to save')}</td><td data-action-col="1">${salesAiUploadActionsHtml()}</td>`;
+    row.innerHTML=`<td><input type="checkbox" class="sales-ai-select" ${validation.valid?'checked':''} aria-label="Select ${escapeHtml(inv.invoice_no)}"></td><td class="mono">${escapeHtml(inv.invoice_no)}</td><td>${escapeHtml(inv.customer)}</td><td class="mono">${escapeHtml(inv.customer_trn||'')}</td><td>${escapeHtml(inv.date)}</td><td class="mono">${fmt(inv.subtotal)}</td><td class="mono">${fmt(inv.vat_amount)}</td><td class="mono">${fmt(inv.total)}</td><td><span class="b ${confCls}">${inv.confidence==null?'—':Number(inv.confidence)+'%'}</span></td><td class="sales-ai-validation"><span class="b ${stCls}">${validation.valid?'Valid':'Review'}</span></td><td class="sales-ai-details" style="color:var(--text3);font-size:12px">${escapeHtml(validation.issues.join('; ')||'Ready to save')}</td><td data-action-col="1">${salesAiUploadActionsHtml()}</td>`;
     tbody.prepend(row);
   });
   revalidateSalesAiRows();
 }
 
 function runSalesImport(){
-  const ready=salesUploadedFiles.filter(f=>f.status==='Ready'||f.status==='Queued');
+  // 'Queued' files are still uploading and queue themselves when done.
+  const ready=salesUploadedFiles.filter(f=>f.status==='Ready'||f.status==='Error');
   if(ready.length===0){toast('No pending sales invoice files to read','warn');return;}
-  ready.forEach((f,i)=>setTimeout(()=>extractSalesInvoiceFile(f),i*450));
+  ready.forEach(f=>{f._extractRetried=false;queueSalesExtraction(f);});
 }
 
-function storeExtractedSalesInvoices(options={}){
+// Each invoice is saved and confirmed by the server before its row says "Saved" (the old
+// fire-and-forget save showed "Saved" even when the server refused it). createOnly makes the
+// server refuse an invoice number that already exists anywhere in the company's history,
+// instead of silently overwriting that invoice.
+let _salesStoreRunning=false;
+async function storeExtractedSalesInvoices(options={}){
+  if(_salesStoreRunning)return;
   const rows=[...document.querySelectorAll('#sales-ext-tbody tr[data-sales-inv]')]
     .filter(row=>row.dataset.skipped!=='1')
     .filter(row=>options.auto||row.querySelector('.sales-ai-select')?.checked);
   if(rows.length===0){toast('No extracted sales invoices to store','warn');return;}
+  _salesStoreRunning=true;
   let stored=0;
   let blocked=0;
-  rows.forEach(row=>{
-    const inv=JSON.parse(row.dataset.salesInv||'{}');
+  let failed=0;
+  const mark=(row,cls,label,details)=>{
+    const vc=row.querySelector('.sales-ai-validation');
+    const dc=row.querySelector('.sales-ai-details');
+    if(vc)vc.innerHTML=`<span class="b ${cls}">${escapeHtml(label)}</span>`;
+    if(dc)dc.textContent=details;
+  };
+  const saveRow=async row=>{
+    let inv={};
+    try{inv=JSON.parse(row.dataset.salesInv||'{}');}catch{}
     const validation=validateSalesAiInvoice(inv);
     if(!validation.valid){
       blocked++;
-      const vc=row.querySelector('.sales-ai-validation');
-      const dc=row.querySelector('.sales-ai-details');
-      if(vc)vc.innerHTML='<span class="b b-a">Review</span>';
-      if(dc)dc.textContent=validation.issues.join('; ');
+      mark(row,'b-a','Review',validation.issues.join('; '));
       return;
     }
-    if(addSalesInvoiceRow(inv)){
-      stored++;
-      const vc=row.querySelector('.sales-ai-validation');
-      const dc=row.querySelector('.sales-ai-details');
-      const sel=row.querySelector('.sales-ai-select');
-      if(vc)vc.innerHTML='<span class="b b-g">Saved</span>';
-      if(dc)dc.textContent='Saved to invoice register';
-      if(sel)sel.checked=false;
-      row.dataset.skipped='1';
+    const record={...inv,source:inv.source||'AI Upload',status:inv.status||'Draft',created_at:inv.created_at||new Date().toISOString()};
+    try{
+      await saveServer('salesInvoices',record,{throwOnError:true,createOnly:true});
+    }catch(err){
+      failed++;
+      if(err.status===409){
+        registerSalesInvoiceKey(inv.invoice_no);
+        mark(row,'b-a','Review','Duplicate invoice number in database');
+      }else{
+        mark(row,'b-r','Failed',`Not saved: ${err.serverDetail||err.message||'server error'}`);
+      }
+      return;
     }
-  });
+    addSalesInvoiceRow(record,{persist:false});
+    stored++;
+    mark(row,'b-g','Saved','Saved to invoice register');
+    const sel=row.querySelector('.sales-ai-select');
+    if(sel)sel.checked=false;
+    row.dataset.skipped='1';
+  };
+  try{
+    // A few at a time: fast for a big batch without flooding the API.
+    const queue=[...rows];
+    await Promise.all(Array.from({length:Math.min(4,queue.length)},async()=>{
+      while(queue.length)await saveRow(queue.shift());
+    }));
+  }finally{
+    _salesStoreRunning=false;
+  }
   if(stored>0){
+
     const tab=document.querySelector('#page-sales .tab:nth-child(4)');
-    if(tab&&!options.auto)stab(tab,'s-invoices');
+    if(tab&&!options.auto&&!failed)stab(tab,'s-invoices');
     audit('Stored imported sales invoices',stored+' invoice(s)','Saved');
   }
   refreshSalesValidationPanel();
-  toast(stored+' invoice(s) saved'+(blocked?`; ${blocked} row(s) need review`:''),'ok');
+  toast(`${stored} invoice(s) saved`+(blocked?`; ${blocked} need review`:'')+(failed?`; ${failed} not saved — see the rows marked Failed/Review`:''),failed?'warn':'ok');
 }
 
 function validateSalesAiInvoice(inv){
@@ -9894,13 +10026,14 @@ function validateSalesAiInvoice(inv){
   const vat=Number(inv.vat_amount||0);
   const total=Number(inv.total||0);
   if(!invoiceNo)issues.push('Invoice number missing');
-  if(invoiceNo&&salesInvoiceDbKeys.has(invoiceKey(invoiceNo)))issues.push('Duplicate invoice number in database');
+  // already_in_db comes from the server's check of the full history (the browser only loads the newest 1,500).
+  if(invoiceNo&&(inv.already_in_db||salesInvoiceDbKeys.has(invoiceKey(invoiceNo))))issues.push('Duplicate invoice number in database');
   if(invoiceNo&&countSalesAiInvoiceNo(invoiceNo)>1)issues.push('Duplicate invoice number in AI upload');
   if(!String(inv.customer||'').trim())issues.push('Customer missing');
   if(!String(inv.date||'').trim())issues.push('Date missing');
   if(trn&&trn.length!==15)issues.push('Customer TRN must be 15 digits');
   if(total&&Math.abs((subtotal+vat)-total)>.05)issues.push('Total does not match subtotal + VAT');
-  if(Number(inv.confidence||0)<70)issues.push('Low confidence extraction');
+  if(inv.confidence!=null&&Number(inv.confidence)<70)issues.push('Low confidence extraction');
   return {valid:issues.length===0,issues};
 }
 
@@ -10083,6 +10216,7 @@ function editSalesInvoiceFromRow(btn){
       set('inv-po',inv.po_number||inv.po_no||'');
       set('inv-delivery',inv.delivery_note_no||'');
       set('inv-ref',inv.reference_no||inv.ref||'');
+      renderSalespersonOptions(inv.salesperson||'');
       set('inv-cust',inv.customer);
       set('inv-ctrn',inv.customer_trn||'');
       set('inv-caddr',inv.customer_address||'');
@@ -10909,7 +11043,7 @@ function quotationLayoutPreviewHtml(quote=sampleQuotationLayoutRecord(),layout=g
         <tbody>
           ${lines.slice(0,2).map(line=>`<tr><td><strong>${escapeHtml(line.description||line.item||'Item')}</strong></td><td class="mono num">${fmt(line.amount)}</td></tr>`).join('')}
           ${layout.showVat?`<tr><td>VAT 5%</td><td class="mono num">${fmt(vat)}</td></tr>`:''}
-          <tr><td style="font-weight:800">Total</td><td class="mono num" style="font-weight:800;color:var(--invoice-accent)">${'AED'} ${fmt(total)}</td></tr>
+          <tr><td style="font-weight:800">Total</td><td class="mono num" style="font-weight:800;color:var(--invoice-accent)">${escapeHtml(currentCurrency())} ${fmt(total)}</td></tr>
         </tbody>
       </table>
       <div class="invoice-summary-grid" style="grid-template-columns:1fr;gap:12px;padding:16px">
@@ -11113,6 +11247,7 @@ function publicInvoicePayload(inv=currentSalesInvoice){
       po_number:inv?.po_number||'',
       delivery_note_no:inv?.delivery_note_no||'',
       reference_no:inv?.reference_no||'',
+      salesperson:inv?.salesperson||'',
       date:inv?.date||'',
       due_date:inv?.due_date||'',
       subtotal:Number(inv?.subtotal||0),
@@ -11567,7 +11702,7 @@ function updateInvoiceLayoutPreview(){
           <tr><td><strong>Steel materials</strong></td><td class="mono num">${sampleSubtotal.toLocaleString('en-AE',{minimumFractionDigits:2})}</td></tr>
           ${layout.showVatRate?`<tr><td>${escapeHtml(layout.vatLabel)} 5%</td><td class="mono num">${sampleVat.toLocaleString('en-AE',{minimumFractionDigits:2})}</td></tr>`:''}
           ${layout.taxSummary?`<tr><td>${escapeHtml(invoiceBilingualLabel(layout,'VAT Summary','ملخص الضريبة'))}</td><td class="mono num">${sampleVat.toLocaleString('en-AE',{minimumFractionDigits:2})}</td></tr>`:''}
-          <tr><td style="font-weight:800">${escapeHtml(labels.total)}</td><td class="mono num" style="font-weight:800;color:var(--invoice-accent)">${sampleTotal.toLocaleString('en-AE',{minimumFractionDigits:2})} AED</td></tr>
+          <tr><td style="font-weight:800">${escapeHtml(labels.total)}</td><td class="mono num" style="font-weight:800;color:var(--invoice-accent)">${sampleTotal.toLocaleString('en-AE',{minimumFractionDigits:2})} ${escapeHtml(currentCurrency())}</td></tr>
         </tbody>
       </table>
       <div class="invoice-summary-grid" style="grid-template-columns:1fr;gap:12px;padding:16px">
@@ -11772,7 +11907,8 @@ function renderSalesInvoicePreview(inv){
   const invoiceRefs=[
     layout.showPoNumber&&inv.po_number?[layout.poLabel,inv.po_number]:null,
     layout.showDeliveryNote&&inv.delivery_note_no?[layout.deliveryLabel,inv.delivery_note_no]:null,
-    layout.showReferenceNo&&inv.reference_no?[layout.referenceLabel,inv.reference_no]:null
+    layout.showReferenceNo&&inv.reference_no?[layout.referenceLabel,inv.reference_no]:null,
+    inv.salesperson?['Sales Person',inv.salesperson]:null
   ].filter(Boolean);
   const bankRows=[
     layout.bankName&&['Bank Name',layout.bankName],
@@ -11988,6 +12124,7 @@ function buildDraftInvoice(){
     po_number:document.getElementById('inv-po')?.value||'',
     delivery_note_no:document.getElementById('inv-delivery')?.value||'',
     reference_no:document.getElementById('inv-ref')?.value||'',
+    salesperson:document.getElementById('inv-salesperson')?.value||'',
     date:document.getElementById('inv-date')?.value||'',
     due_date:document.getElementById('inv-due')?.value||'',
     subtotal,
@@ -12183,7 +12320,7 @@ function invoiceShareMessage(inv=currentSalesInvoice,url=null){
   const total=Number(inv?.total||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
   const label=isSalesReturn(inv)?'sales return':'invoice';
   const link=url||publicInvoiceUrl(inv);
-  return `Dear ${inv?.customer||'Customer'}, please find ${label} ${inv?.invoice_no||'Draft'} for AED ${total}. Due date: ${inv?.due_date||'-'}.\n\nView document online: ${link}\nPDF document: please attach the PDF opened from TaxFlow.`;
+  return `Dear ${inv?.customer||'Customer'}, please find ${label} ${inv?.invoice_no||'Draft'} for ${inv?.currency||currentCurrency()} ${total}. Due date: ${inv?.due_date||'-'}.\n\nView document online: ${link}\nPDF document: please attach the PDF opened from TaxFlow.`;
 }
 
 const _shortUrlCache=new Map();
@@ -12265,6 +12402,161 @@ function shareInvoicePdfAndLink(channel){
 
 let customerReturnToInvoice=false;
 let customerReturnToQuotation=false;
+
+// ── Sales people (salesPeople collection) ───────────────────────────────
+// salesPeopleAll feeds Sales > Sales Person (incl. Inactive); salesPeople (Active only) feeds the invoice picker.
+let salesPeopleAll=[];
+let salesPeople=[];
+let _salespersonFromList=false;
+function setSalesPeople(rows){
+  const seen=new Set();
+  salesPeopleAll=(Array.isArray(rows)?rows:[]).filter(p=>p&&p.name)
+    .sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')))
+    .filter(p=>{const k=String(p.name).trim().toLowerCase();if(seen.has(k))return false;seen.add(k);return true;})
+    .sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+  salesPeople=salesPeopleAll.filter(p=>p.status!=='Inactive');
+  renderSalespersonOptions();
+  renderSalesPeopleList();
+}
+async function refreshSalesPeopleFromServer(){
+  try{
+    const res=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/salesPeople?limit=500`);
+    if(res.ok){const j=await res.json();setSalesPeople(j.records||[]);}
+  }catch(err){/* keep the list we have */}
+}
+function renderSalespersonOptions(selected){
+  const sel=document.getElementById('inv-salesperson');
+  if(!sel)return;
+  const current=selected!==undefined?selected:sel.value;
+  const names=salesPeople.map(p=>p.name);
+  // keep an old invoice's sales person selectable even if they were removed from the list
+  if(current&&!names.includes(current))names.push(current);
+  sel.innerHTML='<option value="">— Select sales person —</option>'+names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  sel.value=current||'';
+}
+// Invoice count and sales total per sales person, from the invoices loaded in the register.
+function _salesPersonStats(){
+  const stats=new Map();
+  salesRegisterRows().forEach(row=>{
+    let inv={};
+    try{inv=JSON.parse(row.dataset.salesInvoice||'{}');}catch{return;}
+    const key=String(inv.salesperson||'').trim().toLowerCase();
+    if(!key)return;
+    const st=stats.get(key)||{count:0,total:0};
+    st.count++;
+    st.total+=parseAmount(inv.total||inv.subtotal||0);
+    stats.set(key,st);
+  });
+  return stats;
+}
+async function renderSalesPeopleList(refresh=false){
+  if(refresh){await refreshSalesPeopleFromServer();return;}
+  const tbody=document.getElementById('salespeople-tbody');
+  if(!tbody)return;
+  if(!salesPeopleAll.length){
+    tbody.innerHTML='<tr data-empty-state="1"><td colspan="7" style="color:var(--text3);text-align:center">No sales people yet. Click + Add Sales Person.</td></tr>';
+    return;
+  }
+  const stats=_salesPersonStats();
+  tbody.innerHTML=salesPeopleAll.map(p=>{
+    const st=stats.get(String(p.name).trim().toLowerCase())||{count:0,total:0};
+    const active=p.status!=='Inactive';
+    // Invoices store the name, so someone with invoices can be made Inactive but not deleted.
+    const del=st.count?'':` <button class="icon-btn danger" type="button" title="Delete" onclick="deleteSalesperson('${escapeHtml(p.id)}')">${deleteIconSvg()}</button>`;
+    return `<tr>
+      <td style="font-weight:600">${escapeHtml(p.name)}</td>
+      <td class="mono">${escapeHtml(p.phone||'—')}</td>
+      <td>${escapeHtml(p.email||'—')}</td>
+      <td><span class="b ${active?'b-g':'b-gray'}">${active?'Active':'Inactive'}</span></td>
+      <td class="mono">${st.count}</td>
+      <td class="mono">${formatAed(st.total)}</td>
+      <td data-action-col="1" style="white-space:nowrap"><button class="icon-btn edit" type="button" title="Edit" onclick="openEditSalesperson('${escapeHtml(p.id)}')">${editIconSvg()}</button>${del}</td>
+    </tr>`;
+  }).join('');
+}
+function _fillSalespersonModal(p,title){
+  document.getElementById('sp-modal-title').textContent=title;
+  document.getElementById('sp-edit-id').value=p?.id||'';
+  document.getElementById('sp-name').value=p?.name||'';
+  document.getElementById('sp-phone').value=p?.phone||'';
+  document.getElementById('sp-email').value=p?.email||'';
+  document.getElementById('sp-status').value=p?.status==='Inactive'?'Inactive':'Active';
+  document.getElementById('sp-status-wrap').style.display=p?'':'none';
+  showM('m-salesperson');
+  setTimeout(()=>document.getElementById('sp-name')?.focus(),50);
+}
+function openAddSalesperson(fromList=false){
+  _salespersonFromList=fromList;
+  _fillSalespersonModal(null,'Add Sales Person');
+}
+function openEditSalesperson(id){
+  const p=salesPeopleAll.find(x=>x.id===id);
+  if(!p){toast('Sales person not found','err');return;}
+  _salespersonFromList=true;
+  _fillSalespersonModal(p,'Edit Sales Person');
+}
+async function saveSalesperson(){
+  const name=(document.getElementById('sp-name')?.value||'').trim().replace(/\s+/g,' ');
+  if(!name){toast("Enter the sales person's name",'warn');document.getElementById('sp-name')?.focus();return;}
+  const editId=document.getElementById('sp-edit-id')?.value||'';
+  // The list may not have loaded yet, or someone else may have added this name: check the server's list first.
+  await refreshSalesPeopleFromServer();
+  const existing=salesPeopleAll.find(p=>p.name.toLowerCase()===name.toLowerCase()&&p.id!==editId);
+  if(existing){
+    if(editId){toast(`${existing.name} is already in the list`,'warn');return;}
+    if(!_salespersonFromList)renderSalespersonOptions(existing.name);
+    closeM('m-salesperson');
+    toast(`${existing.name} is already in the list${_salespersonFromList?'':' — selected'}`,'info');
+    return;
+  }
+  const original=editId?salesPeopleAll.find(p=>p.id===editId):null;
+  if(editId&&!original){toast('This sales person was deleted by someone else','warn');closeM('m-salesperson');return;}
+  const record={
+    ...(original||{}),
+    id:original?.id||`SP-${Date.now()}`,
+    name,
+    phone:(document.getElementById('sp-phone')?.value||'').trim(),
+    email:(document.getElementById('sp-email')?.value||'').trim(),
+    status:original?(document.getElementById('sp-status')?.value||'Active'):'Active',
+    created_at:original?.created_at||new Date().toISOString(),
+    ...(original?{updated_at:new Date().toISOString()}:{})
+  };
+  try{
+    await saveServer('salesPeople',record,{throwOnError:true});
+  }catch(err){
+    toast(`Could not save the sales person${err?.serverDetail?': '+err.serverDetail:''}`,'err');
+    return;
+  }
+  setSalesPeople([...salesPeopleAll.filter(p=>p.id!==record.id),record]);
+  if(!original&&!_salespersonFromList)renderSalespersonOptions(record.name);
+  closeM('m-salesperson');
+  if(original){
+    const renamedWithInvoices=original.name!==name&&(_salesPersonStats().get(original.name.trim().toLowerCase())?.count||0)>0;
+    toast(renamedWithInvoices?`Sales person updated — existing invoices still show "${original.name}"`:'Sales person updated',renamedWithInvoices?'info':'ok');
+    audit('Edited sales person',name,'Saved');
+  }else{
+    toast(`Sales person ${name} added`,'ok');
+    audit('Added sales person',name,'Saved');
+  }
+}
+async function deleteSalesperson(id){
+  const p=salesPeopleAll.find(x=>x.id===id);
+  if(!p)return;
+  if((_salesPersonStats().get(p.name.trim().toLowerCase())?.count||0)>0){
+    toast(`${p.name} is on existing invoices — set them to Inactive instead`,'warn');
+    return;
+  }
+  if(!(await appConfirm({title:'Delete Sales Person',message:`Delete "${p.name}"?`,okText:'Delete',tone:'danger'})))return;
+  try{
+    await deleteServer('salesPeople',{id},{throwOnError:true});
+  }catch(err){
+    toast(`Could not delete${err?.serverDetail?': '+err.serverDetail:''}`,'err');
+    return;
+  }
+  setSalesPeople(salesPeopleAll.filter(x=>x.id!==id));
+  toast('Sales person deleted','ok');
+  audit('Deleted sales person',p.name,'Deleted');
+}
 
 function openAddCustomerFromInvoice(){
   customerReturnToInvoice=true;
@@ -12395,11 +12687,15 @@ function dzLeave(id){document.getElementById(id).classList.remove('over');}
 function dzDrop(e,id){
   e.preventDefault();document.getElementById(id).classList.remove('over');
   const files=[...e.dataTransfer.files];
-  files.forEach(f=>readAndAddFile(f));
+  const bulk=files.length>1;
+  if(bulk)toast(`Uploading ${files.length} files — AI extraction runs a few at a time`,'info');
+  files.forEach(f=>readAndAddFile(f,{bulk}));
 }
 function purUpload(inp){
   const files=[...inp.files];
-  files.forEach(f=>readAndAddFile(f));
+  const bulk=files.length>1;
+  if(bulk)toast(`Uploading ${files.length} files — AI extraction runs a few at a time`,'info');
+  files.forEach(f=>readAndAddFile(f,{bulk}));
   inp.value=''; // reset so same file can be re-selected
 }
 
@@ -12413,19 +12709,19 @@ function isSupportedPurchaseFile(file){
   return /\.(pdf|csv|xlsx|xlsm|xls|jpg|jpeg|png|bmp|webp|tif|tiff|zip)$/i.test(file.name);
 }
 
-function readAndAddFile(file){
+function readAndAddFile(file,opts={}){
   if(!isSupportedPurchaseFile(file)){
     toast('Unsupported file: '+file.name,'err');
     return;
   }
   const cat=document.getElementById('pur-cat')?.value||'Purchase Invoices';
   const period=document.getElementById('pur-period')?.value||'';
-  const entry={name:file.name,size:file.size,type:file.type,base64:'',category:cat,period,status:'Reading',id:'F'+Date.now()+Math.random().toString(36).slice(2,6)};
+  const entry={name:file.name,size:file.size,type:file.type,base64:'',category:cat,period,status:'Reading',id:'F'+Date.now()+Math.random().toString(36).slice(2,6),_bulk:!!opts.bulk};
   uploadedFiles.push(entry);
   renderFileList();
   updatePurchaseValidationFileStatus();
   updateFileCount();
-  toast(`Reading ${file.name}...`,'info');
+  if(!entry._bulk)toast(`Reading ${file.name}...`,'info');
   const reader=new FileReader();
   reader.onload=async function(e){
     const raw=e.target.result;
@@ -12462,7 +12758,7 @@ function animateUpload(name,size,entry){
         renderFileList();
         updatePurchaseValidationFileStatus();
         updateFileCount();
-        toast(name+' uploaded','ok');
+        if(!entry._bulk)toast(name+' uploaded','ok');
         // auto-extract if setting says yes
         const autoEl=document.querySelector('#page-purchase select[id="pur-auto"]');
         if(!autoEl||String(autoEl.value||'').toLowerCase()==='yes')setTimeout(()=>extractSingleFile(entry),600);
@@ -12527,8 +12823,8 @@ function renderFileList(){
     row.innerHTML=`
       <span style="font-size:20px">${getFileIcon(f.name)}</span>
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</div>
-        <div class="mono" style="color:var(--text3);font-size:11px">${fmtSize(f.size)} - ${f.category} - ${f.period}</div>
+        <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(f.name)}</div>
+        <div class="mono" style="color:var(--text3);font-size:11px">${fmtSize(f.size)} - ${escapeHtml(f.category)} - ${escapeHtml(f.period)}</div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">${statusBadge}${extractBtn}</div>`;
     list.appendChild(row);
@@ -12710,13 +13006,52 @@ function _updateExtractBadge(){
   }
 }
 
-async function extractSingleFile(entry){
+// Bulk uploads: every file used to start its own AI request at once (23 PDFs = 23
+// parallel calls), which hit the AI rate limit and the gateway timeout (504).
+// Files now go through a small queue, with one summary toast for the batch.
+const _EXTRACT_MAX_PARALLEL=3;
+const _extractQueue=[];
+let _extractRunning=0;
+const _extractBatch={total:0,done:0,ok:0,failed:0};
+function extractSingleFile(entry){
   if(!entry){toast('File not found','err');return;}
+  if(_extractQueue.includes(entry))return;
+  entry.status='Queued';
+  _extractQueue.push(entry);
+  _extractBatch.total++;
+  renderFileList();
+  _pumpExtractQueue();
+}
+function _pumpExtractQueue(){
+  while(_extractRunning<_EXTRACT_MAX_PARALLEL&&_extractQueue.length){
+    const entry=_extractQueue.shift();
+    _extractRunning++;
+    _extractSingleFileNow(entry).finally(()=>{
+      _extractRunning--;
+      if(entry.status!=='Queued'){
+        _extractBatch.done++;
+        if(entry.status==='Error')_extractBatch.failed++;else _extractBatch.ok++;
+      }
+      if(!_extractQueue.length&&!_extractRunning){
+        if(_extractBatch.total>1||entry._bulk){
+          toast(`AI extraction finished: ${_extractBatch.ok} of ${_extractBatch.done} file(s) extracted`+(_extractBatch.failed?` — ${_extractBatch.failed} failed, use Run Extraction to retry`:''),_extractBatch.failed?'warn':'ok');
+        }
+        Object.assign(_extractBatch,{total:0,done:0,ok:0,failed:0});
+      }
+      _pumpExtractQueue();
+    });
+  }
+}
+function _isRetryableExtractError(err){
+  return /\((502|503|504)\)|Failed to fetch|NetworkError|timed out/i.test(String(err?.message||''));
+}
+async function _extractSingleFileNow(entry){
+  const quiet=_extractBatch.total>1||entry._bulk;
   entry.status='Extracting';
   _extractingCount++;
   _updateExtractBadge();
   renderFileList();
-  toast('AI extracting: '+entry.name+'-','info');
+  if(!quiet)toast('AI extracting: '+entry.name,'info');
 
   // Switch to the AI Extraction tab so user sees progress
   const extTab=document.querySelector('#page-purchase .tab:nth-child(2)');
@@ -12733,7 +13068,9 @@ async function extractSingleFile(entry){
   const eLabel=document.getElementById('ext-prog-label');
   if(eLabel){
     _batchExtractStarted++;
-    eLabel.textContent=(_batchExtractTotal>1&&_batchExtractStarted<=_batchExtractTotal)
+    eLabel.textContent=quiet
+      ?`Extracting ${_extractBatch.done+_extractRunning} of ${_extractBatch.total} files...`
+      :(_batchExtractTotal>1&&_batchExtractStarted<=_batchExtractTotal)
       ?`Extracting file ${_batchExtractStarted} of ${_batchExtractTotal}...`
       :'Extracting...';
   }
@@ -12767,12 +13104,13 @@ async function extractSingleFile(entry){
     if(ef)ef.style.width='100%';
     if(epct)epct.textContent='100%';
     setTimeout(()=>{if(ep)ep.style.display='none';if(ef){ef.style.width='0%';ef.classList.remove('running');}},600);
-    toast(extractionFailed
-      ? `Extraction needs review for ${entry.name}`
-      : `Extracted ${entry.invoices.length} invoice(s) from ${entry.name}`, extractionFailed?'warn':'ok');
-
-    if(Array.isArray(entry.invoices)&&entry.invoices.some(i=>!validatePurchaseAiInvoice(i).valid)){
-      toast('Validation issues found - review required','warn');
+    if(!quiet){
+      toast(extractionFailed
+        ? `Extraction needs review for ${entry.name}`
+        : `Extracted ${entry.invoices.length} invoice(s) from ${entry.name}`, extractionFailed?'warn':'ok');
+      if(Array.isArray(entry.invoices)&&entry.invoices.some(i=>!validatePurchaseAiInvoice(i).valid)){
+        toast('Validation issues found - review required','warn');
+      }
     }
     _extractingCount=Math.max(0,_extractingCount-1);
     _updateExtractBadge();
@@ -12781,11 +13119,22 @@ async function extractSingleFile(entry){
     clearInterval(ticker);
     if(ep)ep.style.display='none';
     if(ef){ef.style.width='0%';ef.classList.remove('running');}
+    // Gateway timeout / dropped connection: put the file back in the queue once.
+    if(_isRetryableExtractError(err)&&!entry._extractRetried){
+      entry._extractRetried=true;
+      entry.status='Queued';
+      _extractQueue.push(entry);
+      renderFileList();
+      _extractingCount=Math.max(0,_extractingCount-1);
+      _updateExtractBadge();
+      return;
+    }
     entry.status='Error';
     persistPurchaseDocumentRecord(entry);
     renderFileList();
     updatePurchaseValidationFileStatus();
-    toast('Extraction failed: '+(err.message||'Unknown error'),'err');
+    if(!quiet)toast('Extraction failed: '+(err.message||'Unknown error'),'err');
+    else toast(`Extraction failed for ${entry.name}`,'err');
     console.error('[AI Extract]',err);
     _extractingCount=Math.max(0,_extractingCount-1);
     _updateExtractBadge();
@@ -12905,7 +13254,7 @@ async function exportPurchaseAiToExcel(){
           'Purchase Date':str(inv.date),
           'Due Date':str(inv.due_date),
           'Location':str(inv.location),
-          'Currency':str(inv.currency||'AED'),
+          'Currency':str(inv.currency||currentCurrency()),
           'Line #':i+1,
           'Product / Description':str(line.product||line.name||line.description||line.item),
           'SKU / Code':str(line.sku||line.code),
@@ -13271,7 +13620,8 @@ async function purchaseRecordFromExtractedInvoice(inv){
   const source_image=sourceFile?.base64||inv.source_image||'';
   const source_filename=sourceFile?.name||inv._source_filename||inv.source_filename||'';
   return {
-    ref:inv.invoice_no,
+    ref:purchaseAiRef(inv),
+    invoice_no:inv.invoice_no||'',
     supplier:inv.supplier||'Supplier',
     address:inv.address||'',
     date:inv.date||'',
@@ -13298,7 +13648,7 @@ async function purchaseRecordFromExtractedInvoice(inv){
     needs_product_review:purchaseAiNumber(inv.confidence)<70||String(inv.status||'').toLowerCase()==='error'||Boolean(inv.extraction_error),
     supplier_trn:inv.supplier_trn||'',
     bill_to:inv.bill_to||'',
-    currency:inv.currency||'AED',
+    currency:inv.currency||currentCurrency(),
     issues:inv.issues||'',
     discount_type:inv.discount_type||'None',
     discount_value:purchaseAiNumber(inv.discount_value),
@@ -13400,10 +13750,11 @@ function autoSyncUnitsAndCategoriesFromPurchaseLines(records){
 
 async function storeExtractedPurchaseRecords(){
   const rows=purchaseAiRows();
-  const visibleInvoiceNos=new Set(rows.map(row=>String(row.dataset.invoiceNo||'')));
+  const rowKey=row=>{try{return purchaseAiSessionKey({...JSON.parse(row.dataset.inv||'{}'),invoice_no:row.dataset.invoiceNo});}catch{return '';}};
+  const visibleInvoiceNos=new Set(rows.map(rowKey));
   const skippedOrUnchecked=new Set(rows
     .filter(row=>row.dataset.skipped==='1'||!row.querySelector('.purchase-ai-select')?.checked)
-    .map(row=>String(row.dataset.invoiceNo||'')));
+    .map(rowKey));
   const selectedInvoices=new Map();
   rows
     .filter(row=>row.dataset.skipped!=='1')
@@ -13419,8 +13770,9 @@ async function storeExtractedPurchaseRecords(){
     const saved=file.savedInvoiceNos instanceof Set?file.savedInvoiceNos:new Set(file.savedInvoiceNos||[]);
     (file.invoices||[]).forEach(inv=>{
       const invoiceNo=String(inv.invoice_no||'');
-      if(!invoiceNo||saved.has(invoiceNo)||skippedOrUnchecked.has(invoiceNo))return;
-      if(!visibleInvoiceNos.has(invoiceNo)||!selectedInvoices.has(invoiceKey(invoiceNo)))addSelectedPurchaseInvoice(selectedInvoices,inv);
+      const key=purchaseAiSessionKey(inv);
+      if(!invoiceNo||saved.has(invoiceNo)||skippedOrUnchecked.has(key))return;
+      if(!visibleInvoiceNos.has(key)||!selectedInvoices.has(key))addSelectedPurchaseInvoice(selectedInvoices,inv);
     });
   });
   if(selectedInvoices.size===0){toast('No extracted purchase invoices to store','warn');return;}
@@ -13443,8 +13795,11 @@ async function storeExtractedPurchaseRecords(){
   let existing=0;
   let reviewSaved=0;
   let failed=0;
+  let failReason='';
   const recordsToSave=[];
   const savedInvoiceNos=[];
+  const doneCardKeys=new Set();   // cards to clear from the panel once saved / already fully in DB
+  const batchRefs=new Map();      // ref -> supplier key, for invoices saved in this batch
   const existingRows=purchaseRecordRowMap();
   const existingRefs=new Set(existingRows.keys());
   const aiInvoiceCounts=purchaseAiInvoiceCounts();
@@ -13453,9 +13808,19 @@ async function storeExtractedPurchaseRecords(){
     const validation=validatePurchaseAiInvoice(inv,{aiInvoiceCounts,existingPurchaseRefs:existingRefs,existingDuplicateKeys});
     if(!validation.valid){
       reviewSaved++;
-      markPurchaseAiInvoiceRows(inv.invoice_no,'Review',validation.issues.join('; ')||'Saved with review notes');
+      markPurchaseAiInvoiceRows(inv.invoice_no,'Review',validation.issues.join('; ')||'Saved with review notes',false,inv.supplier);
     }
     const record=await purchaseRecordFromExtractedInvoice(inv);
+    // A number already used by a different supplier (saved, or earlier in this batch) gets its
+    // own key so one supplier's invoice can never overwrite another's.
+    const supKey=purchaseAiSessionKey({invoice_no:'x',supplier:record.supplier});
+    const refTaken=ref=>{
+      const ex=findPurchaseRecordByRef(ref);
+      const batchSup=batchRefs.get(invoiceKey(ref));
+      return (ex&&purchaseAiSessionKey({invoice_no:'x',supplier:ex.supplier})!==supKey)||(batchSup&&batchSup!==supKey);
+    };
+    if(record.ref&&refTaken(record.ref))record.ref=`${record.invoice_no||inv.invoice_no} (${record.supplier||'Supplier'})`;
+    batchRefs.set(invoiceKey(record.ref),supKey);
     const refKey=invoiceKey(record.ref||record.invoice_no);
     const existingRecord=findPurchaseRecordByRef(record.ref||record.invoice_no);
     const merged=existingRecord?mergePurchaseRecords(existingRecord,record):{record,mergedSameProduct:0,addedProducts:Array.isArray(record.lines)?record.lines.length:0};
@@ -13464,13 +13829,14 @@ async function storeExtractedPurchaseRecords(){
       : 'created';
     if(result==='same'){
       existing++;
-      markExtractedInvoiceUploaded(inv.invoice_no);
-      markPurchaseAiInvoiceRows(inv.invoice_no,'Already Exists','All products already in database — nothing new to add',true);
+      doneCardKeys.add(purchaseAiSessionKey(inv));
+      markExtractedInvoiceUploaded(inv);
+      markPurchaseAiInvoiceRows(inv.invoice_no,'Already Exists','All products already in database — nothing new to add',true,inv.supplier);
       continue;
     }
     if(result==='updated')updated++;
     if(result==='created')stored++;
-    recordsToSave.push({record:merged.record,result,invoiceNo:inv.invoice_no,refKey,merge:merged});
+    recordsToSave.push({record:merged.record,result,invoiceNo:inv.invoice_no,refKey,merge:merged,cardKey:purchaseAiSessionKey(inv)});
   }
   const fpl=document.getElementById('fullpage-loader');
   const fplFill=document.getElementById('fullpage-loader-fill');
@@ -13500,46 +13866,68 @@ async function storeExtractedPurchaseRecords(){
         if(fplCount)fplCount.textContent='';
         fpl.style.display='flex';
       }
-      await savePurchaseRecordsInChunks(recordsToSave.map(item=>item.record),(done,total)=>{
-        const p=Math.round(done/total*100);
-        if(fplFill)fplFill.style.width=p+'%';
-        if(fplPct)fplPct.textContent=p+'%';
-        if(fplSub)fplSub.textContent=`${done} of ${total} saved`;
-      });
+      // Chunks commit one by one: if a later chunk fails, the earlier ones ARE saved, so only
+      // the unsaved invoices are reported as failed (it used to say every invoice failed).
+      let savedCount=recordsToSave.length;
+      let saveErr=null;
+      try{
+        await savePurchaseRecordsInChunks(recordsToSave.map(item=>item.record),(done,total)=>{
+          const p=Math.round(done/total*100);
+          if(fplFill)fplFill.style.width=p+'%';
+          if(fplPct)fplPct.textContent=p+'%';
+          if(fplSub)fplSub.textContent=`${done} of ${total} saved`;
+        });
+      }catch(err){
+        saveErr=err;
+        savedCount=err.savedCount||0;
+        console.warn('Purchase AI bulk save failed:',err);
+      }
       if(fpl)fpl.style.display='none';
-      setInventoryTableCleared(false);
-      recordsToSave.forEach(item=>{
-        const oldRow=existingRows.get(item.refKey);
-        if(oldRow)oldRow.remove();
-        purchaseRecordCache.set(String(item.record.ref||item.record.invoice_no),item.record);
-        savedInvoiceNos.push(item.invoiceNo);
-      });
-      renderPurchaseRecordWindow();
-      syncStockLevelsFromProducts();
-      autoSyncUnitsAndCategoriesFromPurchaseLines(recordsToSave.map(item=>item.record));
-      markExtractedInvoicesUploaded(savedInvoiceNos);
-      markPurchaseAiInvoicesBulk(recordsToSave.map(item=>({
-        invoiceNo:item.invoiceNo,
-        status:item.result==='updated'?'Updated':'Saved',
-        details:item.result==='updated'
-          ? `Existing invoice updated: ${item.merge.mergedSameProduct} already existed (skipped), ${item.merge.addedProducts} new product line(s) added`
-          : 'Saved to purchase records',
-        skip:true
-      })));
+      const savedItems=recordsToSave.slice(0,savedCount);
+      const failedItems=recordsToSave.slice(savedCount);
+      if(savedItems.length){
+        setInventoryTableCleared(false);
+        savedItems.forEach(item=>{
+          const oldRow=existingRows.get(item.refKey);
+          if(oldRow)oldRow.remove();
+          purchaseRecordCache.set(String(item.record.ref||item.record.invoice_no),item.record);
+          savedInvoiceNos.push(item.invoiceNo);
+        });
+        renderPurchaseRecordWindow();
+        syncStockLevelsFromProducts();
+        autoSyncUnitsAndCategoriesFromPurchaseLines(savedItems.map(item=>item.record));
+        markExtractedInvoicesUploaded([...doneCardKeys,...savedItems.map(item=>item.cardKey)]);
+        savedItems.forEach(item=>doneCardKeys.add(item.cardKey));
+        markPurchaseAiInvoicesBulk(savedItems.map(item=>({
+          invoiceNo:item.invoiceNo,
+          supplier:item.record.supplier,
+          status:item.result==='updated'?'Updated':'Saved',
+          details:item.result==='updated'
+            ? `Existing invoice updated: ${item.merge.mergedSameProduct} already existed (skipped), ${item.merge.addedProducts} new product line(s) added`
+            : 'Saved to purchase records',
+          skip:true
+        })));
+      }
+      if(failedItems.length){
+        failed=failedItems.length;
+        stored=savedItems.filter(item=>item.result==='created').length;
+        updated=savedItems.filter(item=>item.result==='updated').length;
+        const reason=saveErr?.serverDetail||'Database save failed';
+        failReason=reason;
+        markPurchaseAiInvoicesBulk(failedItems.map(item=>({
+          invoiceNo:item.invoiceNo,
+          supplier:item.record.supplier,
+          status:'Review',
+          details:`${reason}; try saving again`,
+          skip:false
+        })));
+      }
     }catch(err){
       if(fpl)fpl.style.display='none';
-      failed=recordsToSave.length;
-      stored=0;
-      updated=0;
-      markPurchaseAiInvoicesBulk(recordsToSave.map(item=>({
-        invoiceNo:item.invoiceNo,
-        status:'Review',
-        details:'Database bulk save failed; try saving again',
-        skip:false
-      })));
       console.warn('Purchase AI bulk save failed:',err);
     }
   }
+  if(doneCardKeys.size)removeSavedPurchaseAiCards(doneCardKeys);
   if(stored>0||updated>0){
     audit('Stored extracted purchase invoices',`${stored} added, ${updated} updated`,'Saved');
     const tab=document.querySelector('#page-purchase .tab:nth-child(5)');
@@ -13573,7 +13961,7 @@ async function storeExtractedPurchaseRecords(){
       </div>`).join('');
     resultEl.style.display='block';
   }
-  const msg=`${stored} added, ${updated} updated, ${existing} already exist${reviewSaved?`; ${reviewSaved} with review notes`:''}${failed?`; ${failed} failed`:''}`;
+  const msg=`${stored} added, ${updated} updated, ${existing} already exist${reviewSaved?`; ${reviewSaved} with review notes`:''}${failed?`; ${failed} failed${failReason?` (${failReason})`:''}`:''}`;
   toast(msg,failed?'warn':'ok');
 }
 
@@ -13647,7 +14035,12 @@ async function savePurchaseRecordsInChunks(records,onProgress){
   const chunkSize=hasImages?1:500;
   for(let index=0;index<records.length;index+=chunkSize){
     const chunk=records.slice(index,index+chunkSize);
-    await bulkSaveServer('purchaseRecords',chunk,{throwOnError:true});
+    try{
+      await bulkSaveServer('purchaseRecords',chunk,{throwOnError:true});
+    }catch(err){
+      err.savedCount=index;  // every earlier chunk was committed
+      throw err;
+    }
     const done=Math.min(index+chunk.length,records.length);
     if(onProgress)onProgress(done,records.length);
   }
@@ -13664,39 +14057,46 @@ function purchaseRecordRowMap(){
   return map;
 }
 
-function markExtractedInvoiceUploaded(invoiceNo){
-  const key=String(invoiceNo||'');
-  uploadedFiles.forEach(file=>{
-    if(!Array.isArray(file.invoices))return;
-    if(file.invoices.some(inv=>String(inv.invoice_no||'')===key)){
-      file.savedInvoiceNos=file.savedInvoiceNos instanceof Set?file.savedInvoiceNos:new Set(file.savedInvoiceNos||[]);
-      file.savedInvoiceNos.add(key);
-      persistPurchaseDocumentRecord(file);
-    }
-  });
-  renderPurchaseValidationDocumentStatus();
+// Both take invoices (or invoice-number + supplier keys) so a same-numbered invoice from
+// another supplier isn't marked saved by mistake.
+function markExtractedInvoiceUploaded(inv){
+  markExtractedInvoicesUploaded([inv]);
 }
 
-function markExtractedInvoicesUploaded(invoiceNos){
-  const keys=new Set((invoiceNos||[]).map(value=>String(value||'')));
+function markExtractedInvoicesUploaded(invoices){
+  const keys=new Set((invoices||[]).map(v=>typeof v==='string'?v:purchaseAiSessionKey(v)).filter(Boolean));
   uploadedFiles.forEach(file=>{
     if(!Array.isArray(file.invoices))return;
-    const matched=file.invoices.some(inv=>keys.has(String(inv.invoice_no||'')));
-    if(!matched)return;
+    const hits=file.invoices.filter(inv=>keys.has(purchaseAiSessionKey(inv)));
+    if(!hits.length)return;
     file.savedInvoiceNos=file.savedInvoiceNos instanceof Set?file.savedInvoiceNos:new Set(file.savedInvoiceNos||[]);
-    file.invoices.forEach(inv=>{
-      const key=String(inv.invoice_no||'');
-      if(keys.has(key))file.savedInvoiceNos.add(key);
-    });
+    hits.forEach(inv=>file.savedInvoiceNos.add(String(inv.invoice_no||'')));
     persistPurchaseDocumentRecord(file);
   });
   renderPurchaseValidationDocumentStatus();
 }
 
-function markPurchaseAiInvoicesBulk(updates){
-  const updateMap=new Map((updates||[]).map(item=>[String(item.invoiceNo||''),item]));
+// Saved invoices leave the AI Extraction list; unsaved/failed ones stay for review.
+function removeSavedPurchaseAiCards(keys){
+  const tbody=document.getElementById('ext-tbody');
+  if(!tbody||!keys?.size)return;
   purchaseAiRows().forEach(row=>{
-    const update=updateMap.get(String(row.dataset.invoiceNo||''));
+    let inv={};try{inv=JSON.parse(row.dataset.inv||'{}');}catch{return;}
+    if(keys.has(purchaseAiSessionKey(inv)))row.remove();
+  });
+  if(!purchaseAiRows().length&&!tbody.querySelector('.ai-error-card')){
+    tbody.innerHTML='<div class="ai-empty-state">AI uploaded purchase data will appear here for validation.</div>';
+  }else{
+    ensurePurchaseAiUploadTile();
+  }
+  if(typeof updateExtractionStats==='function')updateExtractionStats();
+}
+
+function markPurchaseAiInvoicesBulk(updates){
+  const updateMap=new Map();
+  (updates||[]).forEach(item=>{const k=String(item.invoiceNo||'');updateMap.set(k,[...(updateMap.get(k)||[]),item]);});
+  purchaseAiRows().forEach(row=>{
+    const update=(updateMap.get(String(row.dataset.invoiceNo||''))||[]).find(u=>_purchaseAiRowSupplierMatches(row,u.supplier??null));
     if(!update)return;
     const pillCls=update.status==='Saved'||update.status==='Updated'?'approved':update.status==='Review'?'partial':'pending';
     const pillLabel=update.status==='Saved'||update.status==='Updated'?'Approved':update.status;
@@ -13779,9 +14179,14 @@ function normalizePurchaseRecordForCompare(record={}){
   };
 }
 
-function markPurchaseAiInvoiceRows(invoiceNo,status,details,skip=false){
+function _purchaseAiRowSupplierMatches(row,supplier){
+  if(supplier==null)return true;
+  try{return purchaseAiSessionKey({invoice_no:'x',supplier:JSON.parse(row.dataset.inv||'{}').supplier})===purchaseAiSessionKey({invoice_no:'x',supplier});}catch{return true;}
+}
+function markPurchaseAiInvoiceRows(invoiceNo,status,details,skip=false,supplier=null){
   purchaseAiRows().forEach(row=>{
     if((row.dataset.invoiceNo||'')!==String(invoiceNo||''))return;
+    if(!_purchaseAiRowSupplierMatches(row,supplier))return;
     const pillCls=status==='Saved'||status==='Approved'?'approved':status==='Review'?'partial':'pending';
     const vc=row.querySelector('.purchase-ai-validation');
     const dc=row.querySelector('.purchase-ai-details');
@@ -13795,10 +14200,23 @@ function markPurchaseAiInvoiceRows(invoiceNo,status,details,skip=false){
   });
 }
 
+// Same calendar date whatever the format: older AI records were stored as "20-02-2023",
+// new imports come back from the server as "2023-02-20". Day-first like the server.
+function _purchaseDateKey(value){
+  const text=String(value||'').trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(text))return text.slice(0,10);
+  const m=/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})$/.exec(text);
+  if(!m)return text.toLowerCase();
+  let [day,month]=[Number(m[1]),Number(m[2])];
+  if(month>12&&day<=12)[day,month]=[month,day];
+  const year=m[3].length===2?2000+Number(m[3]):Number(m[3]);
+  return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+}
+
 function purchaseAiDuplicateKey(inv){
   // Fingerprint: supplier + date + first-line SKU/product + first-line qty
   const supplier=String(inv.supplier||'').trim().toLowerCase();
-  const date=String(inv.date||'').trim();
+  const date=_purchaseDateKey(inv.date);
   const lines=Array.isArray(inv.lines)?inv.lines:[];
   const firstLine=lines[0]||{};
   const sku=String(firstLine.sku||firstLine.code||purchaseAiProductName(firstLine)||firstLine.product||'').trim().toLowerCase();
@@ -13835,10 +14253,10 @@ function validatePurchaseAiInvoice(inv,options={}){
   if(inv.already_in_db)issues.push('Already in database — this invoice number already exists in purchase records');
   // Session-level duplicate: same invoice uploaded more than once in this session
   if(invoiceNo&&options.aiInvoiceCounts){
-    const sessionCount=options.aiInvoiceCounts.get(invoiceKeyValue)||0;
+    const sessionCount=options.aiInvoiceCounts.get(purchaseAiSessionKey(inv))||0;
     if(sessionCount>1)issues.push('Duplicate upload — same invoice number already in this session');
   }
-  if(invoiceNo&&!inv.already_in_db){
+  if(invoiceNo&&!inv.already_in_db&&!inv.db_checked){
     const existsInRecords=options.existingPurchaseRefs
       ? options.existingPurchaseRefs.has(invoiceKeyValue)
       : tableHasText('#purchase-record-tbody',invoiceNo);
@@ -13975,7 +14393,7 @@ function showPurchaseAiDetail(btn){
         ${field('Due Date',escapeHtml(inv.due_date||''))}
         ${field('Payment Method',escapeHtml(inv.payment_method||''))}
         ${field('Location',escapeHtml(inv.location||''))}
-        ${field('Currency',escapeHtml(inv.currency||'AED'))}
+        ${field('Currency',escapeHtml(inv.currency||currentCurrency()))}
         ${field('Notes',escapeHtml(inv.notes||inv.additional_notes||''))}
       </div>
 
@@ -14037,7 +14455,7 @@ function ensurePurchaseAiEditModal(){
           <div>
             <div class="purchase-invoice-kicker">Supplier Invoice</div>
             <input class="purchase-invoice-title mono" id="pai-invoice" placeholder="Invoice No.">
-            <div class="card-sub">AI Extracted · <span class="mono">AED</span></div>
+            <div class="card-sub">AI Extracted · <span class="mono">${escapeHtml(currentCurrency())}</span></div>
           </div>
           <div class="purchase-invoice-meta">
             <label>Supplier<input class="fi" id="pai-supplier" placeholder="Supplier name"></label>
@@ -14193,7 +14611,7 @@ function openPurchaseAiView(btn){
   const validation=validatePurchaseAiInvoice(inv);
   renderPurchaseRecordPreview({
     ...inv,
-    ref:inv.invoice_no,
+    ref:purchaseAiRef(inv),
     tax_amount:inv.vat_amount,
     net_amount:inv.net_amount||inv.subtotal,
     source:inv.source||'AI Upload',
@@ -14360,6 +14778,7 @@ function savePurchaseAiEdit(next=false){
   let inv={};
   try{inv=JSON.parse(purchaseAiEditRow.dataset.inv||'{}');}catch{return;}
   const oldInvoiceNo=inv.invoice_no||purchaseAiEditRow.dataset.invoiceNo||'';
+  const oldSupplier=inv.supplier;
   const oldInvoiceUid=purchaseAiEditRow.dataset.invoiceUid||`${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
   const lines=collectPurchaseAiEditLines();
   if(!lines.length){toast('Add at least one purchase item','warn');return;}
@@ -14401,7 +14820,7 @@ function savePurchaseAiEdit(next=false){
     lines
   };
   updatePurchaseAiInvoiceRows(oldInvoiceNo,inv);
-  updateUploadedPurchaseInvoice(oldInvoiceNo,inv);
+  updateUploadedPurchaseInvoice(oldInvoiceNo,inv,oldSupplier);
   revalidatePurchaseAiRows();
   toast('Extracted purchase updated','ok');
   const current=purchaseAiEditRow;
@@ -14413,11 +14832,11 @@ function savePurchaseAiEdit(next=false){
   }
 }
 
-function updateUploadedPurchaseInvoice(oldInvoiceNo,inv){
-  const oldKey=String(oldInvoiceNo||'');
+function updateUploadedPurchaseInvoice(oldInvoiceNo,inv,oldSupplier){
+  const oldKey=purchaseAiSessionKey({invoice_no:oldInvoiceNo,supplier:oldSupplier});
   uploadedFiles.forEach(file=>{
     if(!Array.isArray(file.invoices))return;
-    const index=file.invoices.findIndex(item=>String(item.invoice_no||'')===oldKey);
+    const index=file.invoices.findIndex(item=>purchaseAiSessionKey(item)===oldKey);
     if(index>=0)file.invoices[index]=inv;
   });
 }
@@ -14476,7 +14895,9 @@ function togglePurchaseAiSelection(checked){
 function skipPurchaseAiRow(btn){
   const row=purchaseAiRowFromButton(btn);
   if(!row)return;
-  markPurchaseAiInvoiceRows(row.dataset.invoiceNo,'Skipped','Skipped by user',true);
+  let supplier=null;
+  try{supplier=JSON.parse(row.dataset.inv||'{}').supplier??null;}catch{}
+  markPurchaseAiInvoiceRows(row.dataset.invoiceNo,'Skipped','Skipped by user',true,supplier);
   toast('Purchase AI row skipped','info');
 }
 
@@ -14522,9 +14943,20 @@ async function deletePurchaseAiRow(btn){
   const tbody=row?.parentElement;
   const confirmed=await appConfirm({title:'Delete this invoice?',messageHtml,okText:'Delete',tone:'danger'});
   if(!confirmed)return;
+  // Same invoice no. from another supplier is a different invoice — leave its card alone.
   purchaseAiRows().forEach(item=>{
-    if((item.dataset.invoiceNo||'')===invoiceNo)item.remove();
+    if((item.dataset.invoiceNo||'')===invoiceNo&&_purchaseAiRowSupplierMatches(item,inv.supplier))item.remove();
   });
+  // Also drop it from its uploaded file, or Save All (which re-reads file.invoices) saves it anyway.
+  const deletedKey=purchaseAiSessionKey({...inv,invoice_no:invoiceNo});
+  uploadedFiles.forEach(file=>{
+    if(!Array.isArray(file.invoices))return;
+    const kept=file.invoices.filter(item=>purchaseAiSessionKey(item)!==deletedKey);
+    if(kept.length===file.invoices.length)return;
+    file.invoices=kept;
+    persistPurchaseDocumentRecord(file);
+  });
+  updatePurchaseValidationFileStatus();
   if(tbody&&purchaseAiRows(tbody).length===0){
     tbody.innerHTML='<div class="ai-empty-state">AI uploaded purchase data will appear here for validation.</div>';
   }else{
@@ -14560,7 +14992,7 @@ function purchaseAiInvoiceCounts(){
   uploadedFiles.forEach(file=>{
     (file.invoices||[]).forEach((inv,index)=>{
       if(isPurchaseExtractionError(inv))return;
-      const key=invoiceKey(inv.invoice_no);
+      const key=purchaseAiSessionKey(inv);
       if(!key)return;
       const entry=counts.get(key)||new Set();
       entry.add(`${file.id||file.name}:${index}`);
@@ -14573,7 +15005,7 @@ function purchaseAiInvoiceCounts(){
   purchaseAiRows().forEach((row,index)=>{
     try{
       const inv=JSON.parse(row.dataset.inv||'{}');
-      const key=invoiceKey(inv.invoice_no);
+      const key=purchaseAiSessionKey(inv);
       if(!key)return;
       const uid=row.dataset.invoiceUid||`${row.dataset.invoiceNo||key}:${index}`;
       const entry=counts.get(key)||new Set();
@@ -14593,15 +15025,16 @@ function purchaseRecordRefSet(){
 }
 
 function updateExtractionStats(){
-  const all=uploadedFiles.flatMap(f=>f.invoices||[]);
+  // Only invoices still waiting in the list (saved ones are cleared from it).
+  const all=uploadedFiles.flatMap(f=>{
+    const saved=f.savedInvoiceNos instanceof Set?f.savedInvoiceNos:new Set(f.savedInvoiceNos||[]);
+    return (f.invoices||[]).filter(inv=>isPurchaseExtractionError(inv)||!saved.has(String(inv.invoice_no||'')));
+  });
   const invoices=all.filter(inv=>!isPurchaseExtractionError(inv));
   const total=invoices.length;
   const review=invoices.filter(inv=>!validatePurchaseAiInvoice(inv).valid).length;
   const errors=all.length-invoices.length;
-  const stats=document.querySelectorAll('#page-purchase #p-extract .stat .stat-val');
-  if(stats[0])stats[0].textContent=total;
-  if(stats[1])stats[1].textContent=review;
-  if(stats[2])stats[2].textContent=errors;
+  // (Used to write into the first three .stat tiles in the tab — the per-file status cards.)
   const totalEl=document.getElementById('ext-stat-total');
   const reviewEl=document.getElementById('ext-stat-review');
   const errEl=document.getElementById('ext-stat-errors');
@@ -14789,9 +15222,11 @@ function resolveReview(btn,choice){
 function runOCR(){
   // Extract ALL ready files
   let ready=uploadedFiles.filter(f=>f.status==='Ready'||f.status==='Queued');
+  if(ready.length===0)ready=uploadedFiles.filter(f=>f.status==='Error');  // retry every failed file
   if(ready.length===0){
-    ready=uploadedFiles.filter(f=>f.status==='Extracted'||f.status==='Error').slice(-1);
+    ready=uploadedFiles.filter(f=>f.status==='Extracted').slice(-1);
   }
+  ready.forEach(f=>{delete f._extractRetried;});
   if(ready.length===0){toast('No new files to extract. Upload files first.','warn');return;}
   ready.forEach(file=>{file.status='Ready';});
   _batchExtractTotal=ready.length;
@@ -14857,7 +15292,8 @@ async function wipeAllCompanyData(){
 function _incompleteUploadFiles(){
   return uploadedFiles.filter(f=>{
     if(f.category==='Purchase Records')return false;
-    if(f.status==='Extracting'||f.status==='Extracted')return false;
+    // In flight: still reading, waiting in the extraction queue, or extracting.
+    if(['Reading','Queued','Extracting','Extracted'].includes(f.status)||_extractQueue.includes(f))return false;
     const invoices=Array.isArray(f.invoices)?f.invoices:[];
     return invoices.length===0;
   });
@@ -14893,7 +15329,8 @@ async function autoClearIncompleteUploads(){
   // extractSingleFile() itself triggers for every file it processes (see
   // _incompleteUploadFiles()'s comment) — so its deletion criteria must be
   // conservative, not just clearPendingUploads()'s manual-button criteria.
-  const toDelete=_incompleteUploadFiles();
+  // "Ready" files are about to join the extraction queue — leave them too.
+  const toDelete=_incompleteUploadFiles().filter(f=>f.status!=='Ready');
   if(!toDelete.length)return;
   Promise.all(toDelete.map(f=>deleteServer('purchaseDocuments',{id:f.id}))).catch(()=>{});
   const deleteIds=new Set(toDelete.map(f=>f.id));
@@ -15651,7 +16088,7 @@ function renderPurchaseRecordPreview(purchase,options={}){
   if(saveBtn)saveBtn.classList.toggle('hidden',!editable);
   const addLineBtn=document.getElementById('purchase-view-add-line');
   if(addLineBtn)addLineBtn.classList.toggle('hidden',!editable);
-  const cur=purchase.currency||'AED';
+  const cur=purchase.currency||currentCurrency();
   const discount=parseAmount(purchase.discount_value||purchase.discount);
   const discountType=purchase.discount_type||'None';
   const taxType=purchase.tax_type||(vat>0?'VAT 5%':'None');
@@ -16482,7 +16919,7 @@ async function loadPosSalesHub(){
         <td style="padding:8px 16px;border-bottom:1px solid var(--border);font-weight:600;color:var(--accent)">${escapeHtml(s.receipt_no||'')}</td>
         <td style="padding:8px 16px;border-bottom:1px solid var(--border);color:var(--text2)">${escapeHtml(s.date||'')}</td>
         <td style="padding:8px 16px;border-bottom:1px solid var(--border)">${escapeHtml(s.customer||'Walk-in')}</td>
-        <td style="padding:8px 16px;border-bottom:1px solid var(--border);text-align:right;font-weight:700;font-variant-numeric:tabular-nums">AED ${Number(s.total||0).toFixed(2)}</td>
+        <td style="padding:8px 16px;border-bottom:1px solid var(--border);text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${escapeHtml(currentCurrency())} ${Number(s.total||0).toFixed(2)}</td>
         <td style="padding:8px 16px;border-bottom:1px solid var(--border);color:var(--text2)">${escapeHtml(s.payment_method==='card'?'Card':'Cash')}</td>
         <td style="padding:8px 16px;border-bottom:1px solid var(--border)"><span class="b ${s.status==='draft'?'b-y':'b-g'}">${s.status==='draft'?'Draft':'Completed'}</span></td>
       </tr>`).join('')}</tbody>
@@ -16648,7 +17085,7 @@ function recalcJournal(){
   const debit=lines.reduce((sum,line)=>sum+line.debit,0);
   const credit=lines.reduce((sum,line)=>sum+line.credit,0);
   const diff=debit-credit;
-  const fmt=n=>'AED '+Number(n||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmt=n=>formatAed(n);
   const dr=document.getElementById('j-dr'),cr=document.getElementById('j-cr'),df=document.getElementById('j-diff');
   if(dr)dr.textContent=fmt(debit);
   if(cr)cr.textContent=fmt(credit);
@@ -17142,7 +17579,7 @@ function renderCorporateCredit(records=[]){
 
 function renderCorporateConsolidation(records=[]){
   replaceTableBody('corp-consolidation-tbody',records,record=>`
-    <tr><td>${escapeHtml(record.subsidiary_name||record.subsidiary||'-')}</td><td>${escapeHtml(record.currency||'AED')}</td><td class="mono">${corporateAmount(record.translated_amount||0)}</td><td>${corporateBadge(record.status||'Draft')}</td></tr>
+    <tr><td>${escapeHtml(record.subsidiary_name||record.subsidiary||'-')}</td><td>${escapeHtml(record.currency||currentCurrency())}</td><td class="mono">${corporateAmount(record.translated_amount||0)}</td><td>${corporateBadge(record.status||'Draft')}</td></tr>
   `,'No consolidation records in database yet.');
 }
 
@@ -17540,7 +17977,7 @@ function refreshHrmsKpis(){
   document.querySelectorAll('#payroll-tbody tr:not([data-empty-state]) .pay-net').forEach(cell=>{
     payrollNetTotal+=parseAmount(cell.textContent);
   });
-  const fmtAed=n=>n>=1000?'AED '+(n/1000).toFixed(1)+'K':'AED '+n.toFixed(0);
+  const fmtAed=n=>currentCurrency()+' '+(n>=1000?(n/1000).toFixed(1)+'K':n.toFixed(0));
   const set=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
   set('hrms-kpi-emp',empCount||'0');
   set('hrms-kpi-leave',onLeaveToday||'0');
@@ -17709,8 +18146,8 @@ function refreshHrmsDashboard(){
     ded+=parseAmount(row.querySelector('.pay-ded')?.value);
   });
   const net=Math.max(0,gross+allow+ot-ded);
-  const fmt2=n=>'AED '+n.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const fmtK=n=>n>=1000?'AED '+(n/1000).toFixed(1)+'K':'AED '+n.toFixed(0);
+  const fmt2=n=>formatAed(n);
+  const fmtK=n=>currentCurrency()+' '+(n>=1000?(n/1000).toFixed(1)+'K':n.toFixed(0));
   set('hrms-pay-gross',gross>0?fmt2(gross):'—');
   set('hrms-pay-allow',allow>0?fmt2(allow):'—');
   set('hrms-pay-ot-total',ot>0?fmt2(ot):'—');
@@ -17883,18 +18320,22 @@ function renderLeaveTable(){
     return;
   }
   tbody.innerHTML=_leaveRequestsCache.map(rec=>{
-    const statusCls=rec.status==='approved'?'b-g':rec.status==='rejected'?'b-r':'b-a';
+    const statusCls=rec.status==='approved'?'b-g':rec.status==='rejected'?'b-r':rec.status==='cancelled'?'b-gray':'b-a';
     const typeCls={Annual:'b-a',Sick:'b-t',Emergency:'b-p',Unpaid:'b-gray',Hajj:'b-b'}[rec.leave_type?.replace(' Leave','')]||'b-b';
+    const id=escapeHtml(rec.id);
+    const cancelBtn=`<button class="btn btn-g btn-sm" onclick="cancelLeave('${id}')" title="Cancel this leave — the days go back to the balance">Cancel</button>`;
     const actions=rec.status==='pending'
-      ?`<div class="flx"><button class="btn btn-success btn-sm" onclick="approveLeave('${escapeHtml(rec.id)}')">✓</button><button class="btn btn-danger btn-sm" onclick="rejectLeave('${escapeHtml(rec.id)}')">✕</button></div>`
-      :`<span class="b ${statusCls}" style="text-transform:capitalize">${escapeHtml(rec.status)}</span>`;
-    return `<tr data-record-id="${escapeHtml(rec.id)}">
+      ?`<div class="flx"><button class="btn btn-success btn-sm" onclick="approveLeave('${id}')" title="Approve">✓</button><button class="btn btn-danger btn-sm" onclick="rejectLeave('${id}')" title="Reject">✕</button>${cancelBtn}</div>`
+      :rec.status==='approved'?cancelBtn:'';
+    const cancelInfo=rec.status==='cancelled'
+      ?`Cancelled${rec.cancelled_by?' by '+rec.cancelled_by:''}${rec.cancelled_at?' on '+rec.cancelled_at.slice(0,10):''}${rec.cancel_reason?' — '+rec.cancel_reason:''}`:'';
+    return `<tr data-record-id="${id}">
       <td>${escapeHtml(rec.employee_name)}</td>
       <td><span class="b ${typeCls}">${escapeHtml(rec.leave_type?.replace(' Leave','')||rec.leave_type)}</span></td>
       <td>${escapeHtml(rec.start_date)}</td>
       <td>${escapeHtml(rec.end_date)}</td>
       <td>${rec.days||'—'}</td>
-      <td><span class="b ${statusCls}" style="text-transform:capitalize">${escapeHtml(rec.status)}</span></td>
+      <td><span class="b ${statusCls}" style="text-transform:capitalize"${cancelInfo?` title="${escapeHtml(cancelInfo)}"`:''}>${escapeHtml(rec.status)}</span></td>
       <td>${actions}</td>
     </tr>`;
   }).join('');
@@ -17922,6 +18363,26 @@ async function rejectLeave(id){
       audit('Leave rejected',id,'Rejected');
       loadLeaveRequests();
     }else{const d=await r.json().catch(()=>({}));toast(d.detail||'Failed to reject','err');}
+  }catch(e){toast('Cannot reach server','err');}
+}
+
+async function cancelLeave(id){
+  const rec=_leaveRequestsCache.find(r=>r.id===id)||{};
+  const what=`${escapeHtml(rec.employee_name||'this employee')} — ${escapeHtml(rec.leave_type||'leave')}, ${escapeHtml(rec.start_date||'')} to ${escapeHtml(rec.end_date||'')} (${rec.days||'?'} day${rec.days===1?'':'s'})`;
+  const ok=await appConfirm({title:'Cancel leave',okText:'Cancel leave',cancelText:'Keep leave',
+    messageHtml:`<div style="margin-bottom:10px">${what}</div>`
+      +(rec.status==='approved'?'<div style="margin-bottom:10px;color:var(--text3);font-size:12.5px">The days go back to the employee’s leave balance.</div>':'')
+      +'<label class="fl" for="leave-cancel-reason">Reason (optional)</label><input class="fi" id="leave-cancel-reason" maxlength="300" placeholder="e.g. Employee returned early">'});
+  if(!ok)return;
+  const reason=(document.getElementById('leave-cancel-reason')?.value||'').trim();
+  try{
+    _getResponseCache.clear();
+    const r=await fetch(`${apiBaseUrl()}/leave/requests/${id}/cancel`,{method:'POST',headers:backendHeaders(),body:JSON.stringify({reason:reason||null})});
+    if(r.ok){
+      toast('Leave cancelled','warn');
+      audit('Leave cancelled',id,reason||'Cancelled');
+      loadLeaveRequests();
+    }else{const d=await r.json().catch(()=>({}));toast(d.detail||'Failed to cancel','err');}
   }catch(e){toast('Cannot reach server','err');}
 }
 
@@ -18013,7 +18474,7 @@ function renderLeaveCalendar(){
     const from=cells[2]?.textContent.trim();
     const to=cells[3]?.textContent.trim();
     const status=(cells[5]?.textContent.trim()||'').toLowerCase();
-    if(status==='rejected'||!emp||!from||!to)return;
+    if(status==='rejected'||status==='cancelled'||!emp||!from||!to)return;
     const d=new Date(from);
     const end=new Date(to);
     let guard=0;
@@ -18250,7 +18711,7 @@ async function hrmsAiCvParse(){
       ['Name',res.full_name],['Email',res.email],['Phone',res.phone],
       ['Nationality',res.nationality],['Visa',res.visa_type],
       ['Department',res.department_suggestion],['Designation',res.designation],
-      ['Salary Suggestion',res.basic_salary_suggestion?'AED '+res.basic_salary_suggestion:'—'],
+      ['Salary Suggestion',res.basic_salary_suggestion?currentCurrency()+' '+res.basic_salary_suggestion:'—'],
       ['Experience',res.years_experience?res.years_experience+' yrs':'—'],
       ['Skills',(res.skills||[]).slice(0,5).join(', ')],
       ['Languages',(res.languages||[]).join(', ')],
@@ -18584,7 +19045,7 @@ function selectOtRate(type){
       const h=parseFloat(document.getElementById('ot-work-hours')?.value||8);
       const rate=(5000/(d*h)).toFixed(2);
       const ex=document.getElementById('ot-monthly-example');
-      if(ex)ex.value=`5000 ÷ (${d} × ${h}) = AED ${rate}/hr base × multiplier`;
+      if(ex)ex.value=`5000 ÷ (${d} × ${h}) = ${currentCurrency()} ${rate}/hr base × multiplier`;
     };
     ['ot-work-days','ot-work-hours'].forEach(id=>{
       const el=document.getElementById(id);
@@ -19392,8 +19853,10 @@ function renderRoleTable(){
     const permBadges=perms.slice(0,6).map(p=>`<span class="b b-b" style="margin:1px 2px;font-size:9px">${escapeHtml(p)}</span>`).join('')
       +(perms.length>6?`<span style="font-size:10px;color:var(--text3)"> +${perms.length-6} more</span>`:'');
     const typeBadge=r.is_system_role?'<span class="b b-gray" title="Built-in default role">System</span>':'<span class="b b-b">Custom</span>';
+    const editBtn=`<button class="icon-btn edit" title="Edit role" onclick="showRoleModal('${escapeHtml(r.id)}')">${editIconSvg()}</button>`;
+    // Built-in roles can be edited (not renamed or deleted) — except the self-service Employee role.
     const actions=r.is_system_role
-      ?'<span style="font-size:11px;color:var(--text3)">Default role</span>'
+      ?(r.role_name==='Employee'?'<span style="font-size:11px;color:var(--text3)">Default role</span>':editBtn)
       :`<button class="icon-btn edit" title="Edit role" onclick="showRoleModal('${escapeHtml(r.id)}')">${editIconSvg()}</button> <button class="icon-btn danger" title="Delete role" onclick="deleteRole('${escapeHtml(r.id)}')">${deleteIconSvg()}</button>`;
     const deptScope=r.department_scope||[];
     const deptNote=deptScope.length
@@ -19472,7 +19935,10 @@ function showRoleModal(id){
   if(titleEl)titleEl.textContent=isEdit?'Edit Role':'Add Custom Role';
   const subEl=document.getElementById('role-modal-sub');
   if(subEl)subEl.textContent=isEdit?`Editing role: ${role?.role_name||''}`:"Employees assigned this role will only see/do what's checked below — same permissions enforced everywhere (ESS portal, GPS attendance, dashboards)";
-  document.getElementById('role-name').value=role?.role_name||'';
+  const nameEl=document.getElementById('role-name');
+  nameEl.value=role?.role_name||'';
+  nameEl.readOnly=!!role?.is_system_role;
+  nameEl.title=role?.is_system_role?'Built-in role names are fixed':'';
   document.getElementById('role-description').value=role?.description||'';
 
   const deptGrid=document.getElementById('role-dept-grid');
@@ -19524,6 +19990,10 @@ async function saveRoleModal(){
   const roleName=(document.getElementById('role-name')?.value||'').trim();
   const description=(document.getElementById('role-description')?.value||'').trim()||null;
   const permissionKeys=[...document.querySelectorAll('#m-role .role-perm-cb:checked')].map(cb=>cb.value);
+  // Keep permissions the grid doesn't offer (e.g. a module switched off for the company) instead of dropping them.
+  const shown=new Set([...document.querySelectorAll('#m-role .role-perm-cb')].map(cb=>cb.value));
+  const editing=editId?_hrRolesCache.find(r=>r.id===editId):null;
+  (editing?.permissions||[]).forEach(k=>{if(!shown.has(k))permissionKeys.push(k);});
   const departmentScope=[...document.querySelectorAll('#m-role .role-dept-cb:checked')].map(cb=>cb.value);
   if(document.getElementById('role-dept-own')?.checked)departmentScope.push('@own'); // marker: only the login's own department
   if(!roleName){toast('Enter a role name','warn');return;}
@@ -19933,7 +20403,7 @@ function renderLoanRecord(rec){
   const tr=document.createElement('tr');
   tr.dataset.recordId=rec.id;
   tr.dataset.record=JSON.stringify(rec);
-  tr.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td>${escapeHtml(rec.type)}</td><td class="mono">AED ${amount.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td class="mono">AED ${Number(rec.emi||0).toFixed(2)}</td><td class="mono">AED ${balance.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td><span class="b ${statusCls}">${escapeHtml(rec.status||'Pending')}</span></td><td>${actions}</td>`;
+  tr.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td>${escapeHtml(rec.type)}</td><td class="mono">${formatAed(amount)}</td><td class="mono">${formatAed(rec.emi)}</td><td class="mono">${formatAed(balance)}</td><td><span class="b ${statusCls}">${escapeHtml(rec.status||'Pending')}</span></td><td>${actions}</td>`;
   tbody.prepend(tr);
   _refreshPayrollLoansCard();
 }
@@ -19963,7 +20433,7 @@ function _refreshPayrollLoansCard(){
     rows.push({employee:rec.employee,type:'Salary Advance',original:amount,monthly:amount,balance:amount,start:rec.month||'—',status:rec.status});
   });
   if(!rows.length){emptyTableMessage(target,'No approved loans or advances yet.');return;}
-  target.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.employee)}</td><td>${escapeHtml(r.type)}</td><td class="mono">AED ${r.original.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td class="mono">AED ${r.monthly.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td class="mono">AED ${r.balance.toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td>${escapeHtml(r.start)}</td><td><span class="b b-g">${escapeHtml(r.status)}</span></td></tr>`).join('');
+  target.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.employee)}</td><td>${escapeHtml(r.type)}</td><td class="mono">${formatAed(r.original)}</td><td class="mono">${formatAed(r.monthly)}</td><td class="mono">${formatAed(r.balance)}</td><td>${escapeHtml(r.start)}</td><td><span class="b b-g">${escapeHtml(r.status)}</span></td></tr>`).join('');
 }
 
 // Previously saved only {id,status} — save_app_record() does a full payload
@@ -20032,7 +20502,7 @@ function renderLoanAdvanceRecord(rec){
   const tr=document.createElement('tr');
   tr.dataset.recordId=rec.id;
   tr.dataset.record=JSON.stringify(rec);
-  tr.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td class="mono">${escapeHtml(rec.month)}</td><td class="mono">AED ${Number(rec.amount||0).toLocaleString('en-AE',{minimumFractionDigits:2})}</td><td>${requestedStr}</td><td><span class="b ${statusCls}">${escapeHtml(rec.status||'Pending')}</span></td><td>${actions}</td>`;
+  tr.innerHTML=`<td>${escapeHtml(rec.employee)}</td><td class="mono">${escapeHtml(rec.month)}</td><td class="mono">${formatAed(rec.amount)}</td><td>${requestedStr}</td><td><span class="b ${statusCls}">${escapeHtml(rec.status||'Pending')}</span></td><td>${actions}</td>`;
   tbody.prepend(tr);
   _refreshPayrollLoansCard();
 }
@@ -20150,7 +20620,7 @@ function renderCandidateRecord(rec){
   const tr=document.createElement('tr');
   tr.dataset.recordId=rec.id;
   tr.dataset.stage=stage;
-  tr.innerHTML=`<td>${escapeHtml(rec.name)}</td><td>${escapeHtml(rec.position||'')}</td><td>${escapeHtml(rec.nationality||'')}</td><td class="mono">${escapeHtml(String(rec.experience||0))} yrs</td><td class="mono">AED ${Number(rec.salary||0).toLocaleString()}</td><td>${escapeHtml(rec.source||'')}</td><td><span class="b ${stageCls}">${escapeHtml(stage)}</span></td><td><div class="flx"><button class="btn btn-g btn-sm" disabled title="Not available yet">Interview</button><button class="btn btn-g btn-sm" disabled title="Not available yet">Offer</button></div></td>`;
+  tr.innerHTML=`<td>${escapeHtml(rec.name)}</td><td>${escapeHtml(rec.position||'')}</td><td>${escapeHtml(rec.nationality||'')}</td><td class="mono">${escapeHtml(String(rec.experience||0))} yrs</td><td class="mono">${escapeHtml(currentCurrency())} ${Number(rec.salary||0).toLocaleString()}</td><td>${escapeHtml(rec.source||'')}</td><td><span class="b ${stageCls}">${escapeHtml(stage)}</span></td><td><div class="flx"><button class="btn btn-g btn-sm" disabled title="Not available yet">Interview</button><button class="btn btn-g btn-sm" disabled title="Not available yet">Offer</button></div></td>`;
   tbody.prepend(tr);
 }
 
@@ -20621,9 +21091,12 @@ function rotaCellHtml(assignment){
   const code=assignment?.code||defaults.code;
   const start=assignment?.start||defaults.start;
   const end=assignment?.end||defaults.end;
-  const time=start&&end?`${start}-${end}`:'-';
   const className=assignment?.className||defaults.className;
-  const icon=assignment?.status==='Published'?'OK':(className==='off'?'-':className==='draft'?'o':className==='overtime'?'!':'OK');
+  const isOff=className==='off'||code==='OFF';
+  // Start/end as two pieces so a narrow cell wraps cleanly instead of breaking after a hyphen.
+  const time=start&&end?`<b>${escapeHtml(start)}</b><b>${escapeHtml(end)}</b>`:'';
+  const mark=assignment?.mark||'';
+  const note=isOff?'Day off':mark==='Leave'||code==='L'?'Leave':mark==='Holiday'||code==='PH'?'Holiday':mark==='Training'||code==='TR'?'Training':mark==='OT'||className==='overtime'?'Overtime':className==='draft'?'Draft':'';
   const tasks=Array.isArray(assignment?.tasks)?assignment.tasks:[];
   const taskCount=tasks.length;
   // A visible extra line in the cell's normal flow, not a tiny corner
@@ -20637,7 +21110,7 @@ function rotaCellHtml(assignment){
   // names are still in the hover tooltip.
   const dots=tasks.slice(0,3).map(t=>`<span class="rota-task-dot" style="background:${escapeHtml(t.color||TASK_COLORS[0])}"></span>`).join('');
   const taskRow=taskCount?`<i class="rota-task-badge" title="${taskCount} task${taskCount>1?'s':''} attached: ${escapeHtml(tasks.map(t=>t.title).filter(Boolean).join(', '))}">${dots}<b>${taskCount} task${taskCount>1?'s':''}</b></i>`:'';
-  return `<div class="rota-cell ${escapeHtml(className)}"><strong>${escapeHtml(code)}</strong><span>${escapeHtml(time)}</span><em>${escapeHtml(icon)}</em>${taskRow}</div>`;
+  return `<div class="rota-cell ${escapeHtml(className)}"><strong>${escapeHtml(code)}</strong>${time&&!isOff?`<span class="rota-time">${time}</span>`:''}${note?`<em>${escapeHtml(note)}</em>`:''}${taskRow}</div>`;
 }
 
 function rotaHours(assignment){
@@ -20663,8 +21136,7 @@ function openRotaCellEditor(cell){
   const employee=cell.dataset.employeeName||assignment?.employee_name||'Employee';
   const rota=cell.querySelector('.rota-cell');
   const code=rota?.querySelector('strong')?.textContent.trim()||'M';
-  const time=rota?.querySelector('span')?.textContent.trim()||'09:00-18:00';
-  const [start='',end='']=time.includes('-')?time.split('-').map(part=>part.trim()):['',''];
+  const [start='',end='']=[...(rota?.querySelectorAll('.rota-time b')||[])].map(b=>b.textContent.trim());
   const type=rotaCellTypeFromCode(code);
   setText('rota-edit-sub',`${employee} - ${day}`);
   populateRotaEditTypeSelect(type);
@@ -20674,6 +21146,12 @@ function openRotaCellEditor(cell){
   setSelectValue(document.getElementById('rota-edit-mark'),assignment?.mark||ROTA_EDIT_DEFAULTS[type]?.mark||'Shift');
   setFieldValue(document.getElementById('rota-edit-notes'),assignment?.notes||'');
   renderRotaEditTasks(assignment?.tasks||[]);
+  const readOnly=!hrmsCan('rota:edit');
+  const modal=document.getElementById('m-edit-shift');
+  modal?.classList.toggle('is-readonly',readOnly);
+  modal?.querySelectorAll('input,select,textarea').forEach(el=>{el.disabled=readOnly;});
+  const titleEl=modal?.querySelector('.modal-title');
+  if(titleEl)titleEl.textContent=readOnly?'Shift Details':'Edit Shift';
   showM('m-edit-shift');
 }
 
@@ -20776,7 +21254,17 @@ async function _collectRotaEditTasks(){
       results.push({task_id:taskId,title:task?.title||'',color:task?.color||TASK_COLORS[0],start,end});
       continue;
     }
-    const assigned=await _ensureTaskAssignedToEmployee(taskId,employeeUuid,employeeName);
+    // The exact instance already linked to this employee (even if Done) stays linked on re-save.
+    const picked=_taskListCache.find(t=>t.id===taskId);
+    let assigned=picked&&picked.assigned_to===employeeUuid?picked:null;
+    if(!assigned){
+      try{
+        assigned=await _ensureTaskAssignedToEmployee(taskId,employeeUuid,employeeName);
+      }catch(e){
+        toast(`Could not assign task "${picked?.title||''}" — it was left off this shift`,'err');
+        continue;
+      }
+    }
     if(!assigned)continue;
     results.push({task_id:assigned.id,title:assigned.title,color:assigned.color||TASK_COLORS[0],start,end});
   }
@@ -20889,7 +21377,7 @@ async function saveActiveRotaAssignmentFromModal(forceOff=false){
     await saveServer('rotaAssignments',assignment,{throwOnError:true});
   }catch(err){
     console.warn('Rota assignment save failed:',err);
-    return {...assignment,_saveFailed:true};
+    return {...assignment,_saveFailed:true,_saveError:err?.serverDetail||''};
   }
   activeRotaCell.dataset.assignment=JSON.stringify(assignment);
   activeRotaCell.innerHTML=rotaCellHtml(assignment);
@@ -20900,10 +21388,13 @@ async function saveActiveRotaAssignmentFromModal(forceOff=false){
 }
 
 async function saveRotaCellShift(){
+  if(!hrmsCan('rota:edit')){toast('Your role can view the rota but not change it','warn');return;}
   const assignment=await saveActiveRotaAssignmentFromModal(false);
   if(!assignment)return;
   if(assignment._saveFailed){
-    toast('Could not save this shift — check your connection (or that you\'re still signed in) and try again','err');
+    toast(assignment._saveError
+      ?`Could not save this shift: ${assignment._saveError}`
+      :'Could not save this shift — check your connection (or that you\'re still signed in) and try again','err');
     return;
   }
   closeM('m-edit-shift');
@@ -20912,10 +21403,13 @@ async function saveRotaCellShift(){
 }
 
 async function removeRotaCellShift(){
+  if(!hrmsCan('rota:edit')){toast('Your role can view the rota but not change it','warn');return;}
   const assignment=await saveActiveRotaAssignmentFromModal(true);
   if(!assignment)return;
   if(assignment._saveFailed){
-    toast('Could not remove this shift — check your connection (or that you\'re still signed in) and try again','err');
+    toast(assignment._saveError
+      ?`Could not remove this shift: ${assignment._saveError}`
+      :'Could not remove this shift — check your connection (or that you\'re still signed in) and try again','err');
     return;
   }
   closeM('m-edit-shift');
@@ -21267,6 +21761,10 @@ function renderShiftDeptGrid(selected){
   if(!grid)return;
   const chosen=new Set((selected||[]).map(d=>String(d).trim().toLowerCase()));
   const names=[..._getDeptNames()];
+  // Companies that never filled in HR Settings > Departments still have departments on their employees.
+  if(!(Array.isArray(window.HRMS_DEPT_SCOPE)&&window.HRMS_DEPT_SCOPE.length)&&typeof _getAttendanceEmployees==='function'){
+    _getAttendanceEmployees().forEach(e=>{const d=String(e.department||'').trim();if(d&&!names.some(n=>n.toLowerCase()===d.toLowerCase()))names.push(d);});
+  }
   // keep a shift's existing department visible even if it's no longer in the department list
   (selected||[]).forEach(d=>{if(d&&!names.some(n=>n.toLowerCase()===String(d).toLowerCase()))names.push(String(d));});
   grid.innerHTML=names.length
@@ -21277,11 +21775,29 @@ function selectedShiftDepartments(){
   return [...document.querySelectorAll('#m-shift .shift-dept-cb:checked')].map(cb=>cb.value);
 }
 // "+ Add Shift": reset to add-mode and pre-tick a department-limited login's own departments.
-function openShiftModal(){
+// Code of the shift being edited; null while adding. The code is the shift's id and
+// rota assignments refer to it, so it can't be changed while editing.
+let _editingShiftCode=null;
+function resetShiftForm(){
+  _editingShiftCode=null;
+  setFieldValue(document.getElementById('shift-name'),'');
+  setFieldValue(document.getElementById('shift-code'),'');
+  setFieldValue(document.getElementById('shift-start'),'09:00');
+  setFieldValue(document.getElementById('shift-end'),'18:00');
+  setFieldValue(document.getElementById('shift-break'),'60');
+  setFieldValue(document.getElementById('shift-grace'),'10 minutes');
+  setFieldValue(document.getElementById('shift-ot-after'),'8 hours');
+  setSelectValue(document.getElementById('shift-status'),'Active');
+  const codeEl=document.getElementById('shift-code');
+  if(codeEl){codeEl.readOnly=false;codeEl.title='';}
   const titleEl=document.querySelector('#m-shift .modal-title');
   const btnEl=document.querySelector('#m-shift .btn-p');
   if(titleEl)titleEl.textContent='Add Shift';
   if(btnEl)btnEl.textContent='Save Shift';
+}
+function openShiftModal(){
+  if(!hrmsCan('rota:edit')){toast('Your role can view shifts but not add them','warn');return;}
+  resetShiftForm();
   const scope=window.HRMS_DEPT_SCOPE;
   renderShiftDeptGrid(Array.isArray(scope)&&scope.length?scope:[]);
   showM('m-shift');
@@ -21322,6 +21838,7 @@ function renderRotaShiftRecord(shift){
 // way at all to fix a typo or change a saved shift's timing/break/grace
 // without deleting and re-adding it.
 function editShift(btn){
+  if(!hrmsCan('rota:edit')){toast('Your role can view shifts but not change them','warn');return;}
   const row=btn.closest('tr');
   let shift={};try{shift=JSON.parse(row.dataset.shift||'{}');}catch{}
   if(!shift.code)return;
@@ -21334,6 +21851,9 @@ function editShift(btn){
   setFieldValue(document.getElementById('shift-ot-after'),shift.ot_after||shift.overtime_after||'');
   setSelectValue(document.getElementById('shift-status'),shift.status||'Active');
   renderShiftDeptGrid(shiftDepartmentList(shift));
+  _editingShiftCode=String(shift.code).toUpperCase();
+  const codeEl=document.getElementById('shift-code');
+  if(codeEl){codeEl.readOnly=true;codeEl.title='The code can’t be changed — rota assignments use it';}
   const titleEl=document.querySelector('#m-shift .modal-title');
   const btnEl=document.querySelector('#m-shift .btn-p');
   if(titleEl)titleEl.textContent='Edit Shift';
@@ -21342,12 +21862,16 @@ function editShift(btn){
 }
 
 async function deleteShift(btn){
+  if(!hrmsCan('rota:delete')){toast('Your role can’t delete shifts','warn');return;}
   const row=btn.closest('tr');
   let shift={};try{shift=JSON.parse(row.dataset.shift||'{}');}catch{}
   if(!(await appConfirm({title:'Delete Shift',message:`Delete shift "${shift.name||shift.code||'this shift'}"?`,okText:'Delete'})))return;
+  if(shift.code){
+    try{await deleteServer('rotaShifts',shift,{throwOnError:true});}
+    catch(err){toast(`Could not delete this shift${err?.serverDetail?': '+err.serverDetail:''}`,'err');return;}
+  }
   row.remove();
   updateRotaStats();
-  if(shift.code)deleteServer('rotaShifts',shift);
   toast('Shift deleted','warn');
   audit('Deleted rota shift',shift.code||'','Deleted');
 }
@@ -21379,28 +21903,43 @@ async function saveShift(){
     toast('Shift name and code are required','warn');
     return;
   }
+  if(!record.start||!record.end){
+    toast('Enter the shift start and end times','warn');
+    return;
+  }
+  const [sh,sm]=record.start.split(':').map(Number),[eh,em]=record.end.split(':').map(Number);
+  let spanMinutes=(eh*60+em)-(sh*60+sm);
+  if(spanMinutes<=0)spanMinutes+=24*60;  // overnight shift
+  if(!(record.break_minutes>=0)||record.break_minutes>=spanMinutes){
+    toast('Break minutes must be 0 or more and shorter than the shift','warn');
+    return;
+  }
   if(Array.isArray(window.HRMS_DEPT_SCOPE)&&window.HRMS_DEPT_SCOPE.length&&!record.departments.length){
     toast('Pick at least one of your departments for this shift','warn');
     return;
   }
-  renderRotaShiftRecord(record);
-  const saved=await saveServer('rotaShifts',record,{throwOnError:true}).catch(err=>{
+  // Adding with a code that's already used would silently replace that shift.
+  if(!_editingShiftCode){
+    const clash=[...document.querySelectorAll('#rota-shift-tbody tr:not([data-empty-state])')]
+      .find(row=>(row.children[1]?.textContent||'').trim().toUpperCase()===record.code);
+    if(clash){
+      toast(`Shift code ${record.code} is already used by “${clash.children[0]?.textContent.trim()}” — pick another code, or use Edit`,'warn');
+      document.getElementById('shift-code')?.focus();
+      return;
+    }
+  }
+  try{
+    await saveServer('rotaShifts',record,{throwOnError:true});
+  }catch(err){
     console.warn('Rota shift save failed:',err);
-    toast('Shift added on screen, but database save failed','warn');
-    return null;
-  });
+    toast(err?.serverDetail?`Could not save this shift: ${err.serverDetail}`:'Could not save this shift — check your connection and try again','err');
+    return;
+  }
+  renderRotaShiftRecord(record);
   closeM('m-shift');
-  ['shift-name','shift-code','shift-break','shift-grace','shift-ot-after'].forEach(id=>setFieldValue(document.getElementById(id),''));
-  setFieldValue(document.getElementById('shift-start'),'09:00');
-  setFieldValue(document.getElementById('shift-end'),'18:00');
-  // Reset back from editShift()'s "Edit Shift"/"Save Changes" relabeling —
-  // otherwise the next "+ Add Shift" click kept showing the edit-mode title.
-  const titleEl=document.querySelector('#m-shift .modal-title');
-  const btnEl=document.querySelector('#m-shift .btn-p');
-  if(titleEl)titleEl.textContent='Add Shift';
-  if(btnEl)btnEl.textContent='Save Shift';
-  if(saved)toast('Shift saved to database','ok');
-  audit('Saved rota shift',record.code,saved?'Saved':'Local only');
+  resetShiftForm();
+  toast('Shift saved to database','ok');
+  audit('Saved rota shift',record.code,'Saved');
 }
 
 function renderRotaSwapRecord(swap){
@@ -21592,7 +22131,9 @@ function updateRotaStats(){
   const conflicts=document.querySelectorAll('#page-rota .rota-cell.conflict,#rota-approval-tbody .b-r,#rota-swap-tbody .b-r').length;
   const pending=swaps.filter(row=>/pending|review/i.test(row.textContent)).length+approvals.filter(row=>/pending|review/i.test(row.textContent)).length;
   if(stats[0])stats[0].textContent=String(shifts);
-  if(stats[1])stats[1].textContent=String(new Set([...document.querySelectorAll('#employee-tbody tr:not([data-empty-state]) td:nth-child(3)')].map(td=>td.textContent.trim()).filter(Boolean)).size||0);
+  // From employee records, not a table column (column 3 became "Nick Name", so this always read 1).
+  const emps=typeof _getAttendanceEmployees==='function'?_getAttendanceEmployees():[];
+  if(stats[1])stats[1].textContent=String(new Set(emps.map(e=>String(e.department||'').trim().toLowerCase()).filter(Boolean)).size);
   if(stats[2])stats[2].textContent=String(conflicts);
   if(stats[3])stats[3].textContent=String(pending);
 }
@@ -22182,7 +22723,7 @@ function runEditValidation(){
   const issues = [];
 
   if(trn.length!==15) issues.push('? TRN must be exactly 15 digits (currently '+trn.length+')');
-  if(sub>0 && Math.abs(vat-expected)>1) issues.push('? VAT AED '+vat.toFixed(2)+' ? '+currentVatRate()+'% of AED '+sub.toFixed(2)+' = AED '+expected.toFixed(2));
+  if(sub>0 && Math.abs(vat-expected)>1) issues.push('? VAT '+currentCurrency()+' '+vat.toFixed(2)+' ? '+currentVatRate()+'% of '+currentCurrency()+' '+sub.toFixed(2)+' = '+currentCurrency()+' '+expected.toFixed(2));
 
   panel.style.display='block';
   if(issues.length===0){
@@ -22254,7 +22795,7 @@ function saveEditedInvoice(){
 
 // -- PAYROLL ------------------------------------------------------
 function money(n){
-  return 'AED '+Number(n||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return formatAed(n);  // company currency, not a hardcoded "AED"
 }
 
 function parseMoneyInput(el){
@@ -22772,7 +23313,7 @@ function _bioDiagramPush(label){
       <text x="126" y="22" text-anchor="middle" font-size="8.5" fill="#065f46" font-weight="600">HTTPS Push</text>
       <rect x="163" y="10" width="210" height="40" rx="8" fill="#10b981" fill-opacity=".12" stroke="#10b981" stroke-width="1.5"/>
       <text x="268" y="27" text-anchor="middle" font-size="9.5" font-weight="700" fill="#065f46">TaxFlow Server</text>
-      <text x="268" y="41" text-anchor="middle" font-size="9" fill="#065f46">dev.etaxflow.com</text>
+      <text x="268" y="41" text-anchor="middle" font-size="9" fill="#065f46">app.etaxflow.com</text>
     </svg>
     <div style="text-align:center;font-size:11px;color:#166534;font-weight:600;margin-top:2px">✓ No local software needed — ${label} pushes punches directly to TaxFlow</div>
   </div>`;
@@ -22794,7 +23335,7 @@ function _bioDiagramTCP(deviceLabel){
       <text x="290" y="22" text-anchor="middle" font-size="8" fill="#065f46" font-weight="600">HTTPS</text>
       <rect x="323" y="10" width="152" height="40" rx="8" fill="#10b981" fill-opacity=".12" stroke="#10b981" stroke-width="1.5"/>
       <text x="399" y="27" text-anchor="middle" font-size="9.5" font-weight="700" fill="#065f46">TaxFlow Server</text>
-      <text x="399" y="41" text-anchor="middle" font-size="9" fill="#065f46">dev.etaxflow.com</text>
+      <text x="399" y="41" text-anchor="middle" font-size="9" fill="#065f46">app.etaxflow.com</text>
     </svg>
     <div style="text-align:center;font-size:11px;color:#1e40af;font-weight:600;margin-top:2px">Bridge script runs on an office PC on the same network as the device</div>
   </div>`;
@@ -23659,7 +24200,9 @@ async function openAttendanceDayDetail(dateStr){
     const data=res.ok?await res.json():{employees:[]};
     const present=Array.isArray(data.employees)?data.employees:[];
     const totalActive=_getAttendanceEmployees().length;
-    const absentCount=Math.max(0,totalActive-present.length-leaveList.length);
+    // Rota days off aren't absences (skip anyone already listed as on leave).
+    const offList=(Array.isArray(data.off)?data.off:[]).filter(o=>!leaveNames.has(o.employee_name));
+    const absentCount=Math.max(0,totalActive-present.length-leaveList.length-offList.length);
     const section=(label,cls,rows)=>rows.length?`<div style="margin-bottom:10px">
       <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">${escapeHtml(label)} (${rows.length})</div>
       ${rows.map(r=>`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12.5px;border-bottom:1px solid var(--border2)"><span>${escapeHtml(r.name)}</span><span class="b ${cls}" style="font-size:10px">${escapeHtml(r.detail)}</span></div>`).join('')}
@@ -23668,11 +24211,13 @@ async function openAttendanceDayDetail(dateStr){
       <div class="flx" style="gap:16px;margin-bottom:12px">
         <div><div style="font-size:20px;font-weight:700;color:var(--green)">${present.length}</div><div style="font-size:11px;color:var(--text3)">Present</div></div>
         <div><div style="font-size:20px;font-weight:700;color:var(--amber)">${leaveList.length}</div><div style="font-size:11px;color:var(--text3)">On Leave</div></div>
+        <div><div style="font-size:20px;font-weight:700;color:var(--text2)">${offList.length}</div><div style="font-size:11px;color:var(--text3)">Day Off</div></div>
         <div><div style="font-size:20px;font-weight:700;color:var(--red)">${absentCount}</div><div style="font-size:11px;color:var(--text3)">Absent</div></div>
       </div>
       ${section('Present',present.length?'b-g':'',present.map(e=>({name:e.employee_name||e.employee_id,detail:e.check_out_time?`${e.check_in_time||'—'} → ${e.check_out_time}`:(e.check_in_time||'—')})))}
       ${section('On Leave','b-a',leaveList.map(l=>({name:l.name,detail:l.type||'Leave'})))}
-      ${(!present.length&&!leaveList.length)?'<div style="text-align:center;color:var(--text3);padding:16px 0">No punches or leave recorded for this day.</div>':''}
+      ${section('Day Off','',offList.map(o=>({name:o.employee_name||o.employee_id,detail:o.kind==='leave'?'Leave (rota)':o.kind==='holiday'?'Holiday (rota)':'Off (rota)'})))}
+      ${(!present.length&&!leaveList.length&&!offList.length)?'<div style="text-align:center;color:var(--text3);padding:16px 0">No punches or leave recorded for this day.</div>':''}
     `;
   }catch(e){
     body.innerHTML='<div style="text-align:center;color:var(--red);padding:20px">Could not load this day\'s attendance.</div>';
@@ -23740,17 +24285,18 @@ function _renderHrAttReportRows(){
     <td class="mono">${e.present_days}</td>
     <td class="mono"${e.absent_days>0?' style="color:var(--red)"':''}>${e.absent_days}</td>
     <td class="mono">${e.leave_days}</td>
+    <td class="mono" style="color:var(--text3)">${e.off_days??0}</td>
     <td class="mono">${e.total_hours}</td>
     <td class="mono">${e.ot_hours}</td>
-  </tr>`).join(''):'<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:24px">No active employees.</td></tr>';
+  </tr>`).join(''):'<tr><td colspan="8" style="color:var(--text3);text-align:center;padding:24px">No active employees.</td></tr>';
 }
 
 function downloadHrAttendanceReportCsv(){
   const data=_hrAttReportCache;
   if(!data||!(data.employees||[]).length){toast('No report data to export — load the report first','warn');return;}
   const escape=v=>{const s=String(v??'');return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s;};
-  const headers=['Employee','Department','Present Days','Absent Days','Leave Days','Total Hours','OT Hours'];
-  const rows=data.employees.map(e=>[e.employee_name,e.department,e.present_days,e.absent_days,e.leave_days,e.total_hours,e.ot_hours]);
+  const headers=['Employee','Department','Present Days','Absent Days','Leave Days','Days Off (rota)','Total Hours','OT Hours'];
+  const rows=data.employees.map(e=>[e.employee_name,e.department,e.present_days,e.absent_days,e.leave_days,e.off_days??0,e.total_hours,e.ot_hours]);
   const companyName=document.getElementById('sb-company-name')?.textContent||'TaxFlow HRMS';
   const csv=[
     `${companyName} — Attendance Report`,
@@ -23887,7 +24433,7 @@ function _empAttDetailRowHtml(d){
     const clockOutCell=s.clock_out?escapeHtml(s.clock_out):(s.clock_in&&!d.is_today?'<span style="color:var(--text3);font-style:italic">No checkout</span>':'—');
     return `<td>${s.clock_in?escapeHtml(s.clock_in):'—'}</td><td>${clockOutCell}</td><td>${s.work_time?escapeHtml(s.work_time):'—'}</td>`;
   }).join('');
-  const rowStyle=d.status==='weekend'||d.status==='upcoming'?' style="color:var(--text3)"':d.status==='absent'?' style="color:var(--red)"':'';
+  const rowStyle=d.status==='weekend'||d.status==='upcoming'||d.status==='off'?' style="color:var(--text3)"':d.status==='absent'?' style="color:var(--red)"':'';
   return `<tr${rowStyle}>
     <td>${escapeHtml(d.emp_no||'')}</td>
     <td>${escapeHtml(d.ac_no||'')}</td>
@@ -23898,7 +24444,7 @@ function _empAttDetailRowHtml(d){
     <td>${d.total_hours&&d.total_hours!=='0:00'?escapeHtml(d.total_hours):'—'}</td>
     <td>${d.ot_hours&&d.ot_hours!=='0:00'?escapeHtml(d.ot_hours):'—'}</td>
     <td>${d.under_hours&&d.under_hours!=='0:00'?escapeHtml(d.under_hours):'—'}</td>
-    <td>${escapeHtml(d.absent||'')}</td>
+    <td>${d.status==='off'?'<span style="font-style:italic">Day off</span>':escapeHtml(d.absent||'')}</td>
     <td>${escapeHtml(d.sick||'')}</td>
     <td>${escapeHtml(d.holiday||'')}</td>
   </tr>`;
@@ -23963,12 +24509,23 @@ function _normalizeTaskStatus(status){
 }
 const TASK_REPEAT_LABEL={none:'—',daily:'Daily',weekly:'Weekly',monthly:'Monthly'};
 
+// Local (not UTC) YYYY-MM-DD — toISOString() is still "yesterday" until 04:00 in UAE.
+function _taskLocalToday(){
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+async function _fetchTaskRecords(){
+  const r=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/tasks?limit=500`);
+  if(!r.ok)throw new Error(`Could not load tasks (${r.status})`);
+  const data=await r.json();
+  return Array.isArray(data?.records)?data.records:[];
+}
+
 async function loadTasks(){
   await populateTaskAssigneeSelect();
   try{
-    const r=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/tasks?limit=500`);
-    const data=r.ok?await r.json():null;
-    _taskListCache=Array.isArray(data?.records)?data.records:[];
+    _taskListCache=await _fetchTaskRecords();
   }catch(e){
     console.warn('[loadTasks]',e);
     _taskListCache=[];
@@ -23980,11 +24537,12 @@ async function loadTasks(){
 // Checked once per page visit (this feature is Tier 2/JSON-backed, not
 // worth a dedicated backend scheduler yet — see docs/hrms-architecture.md
 // §6). For any repeating task whose due date has already passed and that
-// hasn't spawned its next occurrence yet, creates a fresh copy (new id,
-// same details/assignee, status reset to To Do, due date advanced by the
-// repeat interval) and flags the original with next_spawned so it's never
-// spawned twice. The original is left exactly as it was — still visibly
-// overdue if it was never finished — rather than silently marking it Done.
+// hasn't spawned its next occurrence yet, creates ONE fresh copy (status
+// To Do, progress 0) due on the first occurrence on/after today — missed
+// occurrences are skipped, not back-filled — and flags the original with
+// next_spawned. The copy's id is derived from the series + due date, so two
+// managers opening the page at once upsert the same record, not two.
+// Unassigned templates never spawn. The original is left as it was.
 function _nextRepeatDueDate(dueDate,repeat){
   const d=new Date(`${dueDate}T00:00:00`);
   if(repeat==='daily'){
@@ -24008,20 +24566,28 @@ function _nextRepeatDueDate(dueDate,repeat){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 async function _processRepeatingTasks(){
-  const today=new Date();
-  const todayStr=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-  const due=_taskListCache.filter(t=>t.repeat&&t.repeat!=='none'&&t.due_date&&t.due_date<todayStr&&!t.next_spawned);
+  const todayStr=_taskLocalToday();
+  const due=_taskListCache.filter(t=>t.assigned_to&&t.repeat&&t.repeat!=='none'&&t.due_date&&t.due_date<todayStr&&!t.next_spawned);
   for(const t of due){
-    const nextDue=_nextRepeatDueDate(t.due_date,t.repeat);
+    let nextDue=_nextRepeatDueDate(t.due_date,t.repeat);
+    while(nextDue&&nextDue<todayStr)nextDue=_nextRepeatDueDate(nextDue,t.repeat);
     if(!nextDue)continue;
-    const clone={
-      ...t,id:`TASK-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
-      due_date:nextDue,status:'todo',next_spawned:false,created_at:new Date().toISOString(),
-    };
-    t.next_spawned=true;
-    await saveServer('tasks',t);
-    await saveServer('tasks',clone);
-    _taskListCache.push(clone);
+    const seriesId=t.series_id||t.id;
+    const cloneId=`${seriesId}-${nextDue}`;
+    try{
+      if(!_taskListCache.some(x=>x.id===cloneId)){
+        const clone={
+          ...t,id:cloneId,series_id:seriesId,
+          due_date:nextDue,status:'todo',progress:0,next_spawned:false,created_at:new Date().toISOString(),
+        };
+        await saveServer('tasks',clone,{throwOnError:true});
+        _taskListCache.push(clone);
+      }
+      await saveServer('tasks',{...t,next_spawned:true},{throwOnError:true});
+      t.next_spawned=true;
+    }catch(e){
+      console.warn('[processRepeatingTasks]',e);
+    }
   }
 }
 
@@ -24116,11 +24682,20 @@ async function confirmAssignTask(){
   const source=_taskListCache.find(x=>x.id===templateId);
   if(!source)return;
   const assignedNames=[];
+  const failedNames=[];
   for(const cb of checked){
     const employeeId=cb.value;
     const employeeName=cb.dataset.name||'';
-    const task=await _ensureTaskAssignedToEmployee(templateId,employeeId,employeeName);
-    if(task)assignedNames.push(employeeName);
+    try{
+      const task=await _ensureTaskAssignedToEmployee(templateId,employeeId,employeeName);
+      if(task)assignedNames.push(employeeName);
+    }catch(e){
+      failedNames.push(employeeName);
+    }
+  }
+  if(!assignedNames.length){
+    toast(`Could not assign "${source.title}" — please try again`,'err');
+    return;
   }
   hideM('m-assign-task');
   // Same reasoning as saveTaskModal() -- a stale "Assigned To: <someone
@@ -24131,6 +24706,7 @@ async function confirmAssignTask(){
   if(checked.length===1&&empFilter&&empFilter.value&&empFilter.value!==checked[0].value)empFilter.value='';
   renderTaskBoard();
   toast(`"${source.title}" assigned to ${assignedNames.length} employee${assignedNames.length===1?'':'s'}: ${assignedNames.join(', ')}`,'ok');
+  if(failedNames.length)toast(`Could not assign to: ${failedNames.join(', ')}`,'err');
 }
 
 // Shared by confirmAssignTask() (Task Management's "+ Assign Task",
@@ -24138,15 +24714,16 @@ async function confirmAssignTask(){
 // _rotaEditTaskOptionsHtml, which lists every saved task -- assigned or
 // not -- so a manager can assign-and-schedule in one step instead of
 // visiting Task Management first). Picking a template not already
-// assigned to this employee clones it into a real assignment; if one
-// already exists (same title, same employee) that's reused instead, so
-// repeating the same assignment (e.g. re-saving the same rota day) never
-// spawns a duplicate task instance.
+// assigned to this employee clones it into a real assignment; an OPEN one
+// (same title, same employee, not Done) is reused instead so the same
+// assignment never duplicates — a Done one gets a fresh instance.
+// Throws if the save fails.
 async function _ensureTaskAssignedToEmployee(templateId,employeeId,employeeName){
   const source=_taskListCache.find(x=>x.id===templateId);
   if(!source)return null;
-  if(source.assigned_to===employeeId)return source;
-  const existing=_taskListCache.find(t=>t.assigned_to===employeeId&&t.title===source.title);
+  const isOpen=t=>_normalizeTaskStatus(t.status)!=='done';
+  if(source.assigned_to===employeeId&&isOpen(source))return source;
+  const existing=_taskListCache.find(t=>t.assigned_to===employeeId&&t.title===source.title&&isOpen(t));
   if(existing)return existing;
   const task={
     id:`TASK-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
@@ -24164,7 +24741,7 @@ async function _ensureTaskAssignedToEmployee(templateId,employeeId,employeeName)
     next_spawned:false,
     created_at:new Date().toISOString(),
   };
-  await saveServer('tasks',task);
+  await saveServer('tasks',task,{throwOnError:true});
   _taskListCache.push(task);
   return task;
 }
@@ -24186,20 +24763,65 @@ function showTaskModal(id){
   document.getElementById('task-progress-value').textContent=progressVal;
   const delBtn=document.getElementById('task-delete-btn');
   if(delBtn)delBtn.style.display=t?'':'none';
+  _taskModalOriginal=t?_readTaskModalFields():null;
   showM('m-task');
   setTimeout(()=>document.getElementById('task-title').focus(),120);
 }
 
-async function saveTaskModal(){
-  const title=(document.getElementById('task-title')?.value||'').trim();
-  if(!title){toast('Task name is required','warn');return;}
-  const id=document.getElementById('task-edit-id')?.value||`TASK-${Date.now()}`;
-  const existing=_taskListCache.find(x=>x.id===id);
-  const task={
-    id,
-    title,
+// Field values as the Edit modal opened them — saveTaskModal() only writes the
+// fields the user actually changed, so an employee's ESS status update made
+// while the modal (or the page) was open isn't overwritten by a stale copy.
+let _taskModalOriginal=null;
+const _TASK_MODAL_FIELDS=['title','department','description','color','priority','due_date','status','progress','repeat'];
+
+function _readTaskModalFields(){
+  return {
+    title:(document.getElementById('task-title')?.value||'').trim(),
     department:document.getElementById('task-department')?.value||'',
     description:(document.getElementById('task-description')?.value||'').trim(),
+    color:document.getElementById('task-color')?.value||TASK_COLORS[0],
+    priority:document.getElementById('task-priority')?.value||'Medium',
+    due_date:document.getElementById('task-due-date')?.value||'',
+    status:document.getElementById('task-status')?.value||'todo',
+    progress:Number(document.getElementById('task-progress')?.value||0),
+    repeat:document.getElementById('task-repeat')?.value||'none',
+  };
+}
+
+async function saveTaskModal(){
+  const form=_readTaskModalFields();
+  if(!form.title){toast('Task name is required','warn');return;}
+  const id=document.getElementById('task-edit-id')?.value||`TASK-${Date.now()}`;
+  let existing=_taskListCache.find(x=>x.id===id);
+  if(existing){
+    try{
+      _taskListCache=await _fetchTaskRecords();
+    }catch(e){
+      toast('Could not save task — please check your connection and try again','err');
+      return;
+    }
+    existing=_taskListCache.find(x=>x.id===id);
+    if(!existing){
+      hideM('m-task');
+      renderTaskBoard();
+      toast('This task was deleted by someone else','warn');
+      return;
+    }
+    const orig=_taskModalOriginal||form;
+    const latest={
+      ...existing,
+      status:_normalizeTaskStatus(existing.status),
+      progress:existing.status==='done'?100:Number(existing.progress||0),
+    };
+    _TASK_MODAL_FIELDS.forEach(f=>{
+      if(form[f]===orig[f])form[f]=latest[f]??form[f];
+    });
+  }
+  const task={
+    id,
+    title:form.title,
+    department:form.department,
+    description:form.description,
     // "Assign To" was removed from this modal (2026-09-22) -- assigning is done from
     // the page's "+ Assign Task" panel / Assigned To filter, or the Rota cell editor.
     // A save here must never touch whatever assignment those already set: an edit
@@ -24207,21 +24829,28 @@ async function saveTaskModal(){
     // this field ever existed.
     assigned_to:existing?.assigned_to||'',
     assigned_to_name:existing?.assigned_to_name||'',
-    color:document.getElementById('task-color')?.value||TASK_COLORS[0],
-    priority:document.getElementById('task-priority')?.value||'Medium',
-    due_date:document.getElementById('task-due-date')?.value||'',
-    status:document.getElementById('task-status')?.value||'todo',
+    color:form.color,
+    priority:form.priority,
+    due_date:form.due_date,
+    status:form.status,
     // Done always reads back as 100% regardless of what the slider was
     // left at — a finished task is fully done by definition.
-    progress:document.getElementById('task-status')?.value==='done'?100:Number(document.getElementById('task-progress')?.value||0),
-    repeat:document.getElementById('task-repeat')?.value||'none',
+    progress:form.status==='done'?100:form.progress,
+    repeat:form.repeat,
     // Editing an existing task's own due date forward re-arms its repeat
     // (it's no longer "already spawned" for its new date); a brand-new
     // task obviously hasn't spawned anything yet either.
-    next_spawned:existing&&existing.due_date===document.getElementById('task-due-date')?.value?(existing.next_spawned||false):false,
+    next_spawned:existing&&existing.due_date===form.due_date?(existing.next_spawned||false):false,
     created_at:existing?.created_at||new Date().toISOString(),
   };
-  await saveServer('tasks',task);
+  // Carry over fields this modal doesn't edit (series_id, ESS-side fields...).
+  if(existing)Object.keys(existing).forEach(k=>{if(!(k in task))task[k]=existing[k];});
+  try{
+    await saveServer('tasks',task,{throwOnError:true});
+  }catch(e){
+    toast(`Could not save task: ${e.serverDetail||e.message}`,'err');
+    return;
+  }
   const idx=_taskListCache.findIndex(x=>x.id===id);
   if(idx>=0)_taskListCache[idx]=task;else _taskListCache.push(task);
   hideM('m-task');
@@ -24248,23 +24877,28 @@ async function saveTaskModal(){
 async function deleteTaskFromModal(){
   const id=document.getElementById('task-edit-id')?.value;
   if(!id)return;
-  await deleteTaskDirect(id);
-  hideM('m-task');
+  if(await deleteTaskDirect(id))hideM('m-task');
 }
 
 async function deleteTaskDirect(id){
   const t=_taskListCache.find(x=>x.id===id);
-  if(!t)return;
-  if(!(await appConfirm({title:'Delete Task',message:`Delete task "${t.title||'this task'}"?`,okText:'Delete'})))return;
-  await deleteServer('tasks',{id});
+  if(!t)return false;
+  if(!(await appConfirm({title:'Delete Task',message:`Delete task "${t.title||'this task'}"?`,okText:'Delete'})))return false;
+  try{
+    await deleteServer('tasks',{id},{throwOnError:true});
+  }catch(e){
+    toast(`Could not delete task: ${e.serverDetail||e.message}`,'err');
+    return false;
+  }
   _taskListCache=_taskListCache.filter(x=>x.id!==id);
   renderTaskBoard();
   toast('Task deleted','ok');
+  return true;
 }
 
 function _taskTableRowHtml(t){
   const priorityCls=t.priority==='High'?'b-r':t.priority==='Low'?'b-g':'b-a';
-  const overdue=t.due_date&&t.status!=='done'&&t.due_date<new Date().toISOString().slice(0,10);
+  const overdue=t.due_date&&t.status!=='done'&&t.due_date<_taskLocalToday();
   const normStatus=_normalizeTaskStatus(t.status);
   const statusCls=normStatus==='done'?'b-g':normStatus==='progress'?'b-b':'b-gray';
   const progress=t.status==='done'?100:(t.progress||0);
@@ -24275,7 +24909,7 @@ function _taskTableRowHtml(t){
     <td><span class="b ${priorityCls}">${escapeHtml(t.priority||'Medium')}</span></td>
     <td class="mono"${overdue?' style="color:var(--red)"':''}>${escapeHtml(t.due_date||'—')}</td>
     <td>${escapeHtml(TASK_REPEAT_LABEL[t.repeat||'none']||'—')}</td>
-    <td><span class="b ${statusCls}">${escapeHtml(TASK_STATUS_LABEL[t.status||'todo'])}</span></td>
+    <td><span class="b ${statusCls}">${escapeHtml(TASK_STATUS_LABEL[normStatus])}</span></td>
     <td style="min-width:70px"><div class="task-progress-bar" title="${progress}% complete"><div class="task-progress-fill" style="width:${progress}%"></div></div></td>
     <td style="white-space:nowrap"><button class="icon-btn edit" title="Edit" onclick="showTaskModal('${escapeHtml(t.id)}')">${editIconSvg()}</button> <button class="icon-btn danger" title="Delete" onclick="deleteTaskDirect('${escapeHtml(t.id)}')">${deleteIconSvg()}</button></td>
   </tr>`;
@@ -24516,7 +25150,7 @@ function calcGratuity(){
     const notes=[];
     if(serviceYears<1)notes.push('Less than 1 year — no gratuity entitlement');
     else if(reason==='resignation'&&contractType==='unlimited'&&serviceYears<5)notes.push(`Resignation before 5 years: ${Math.round(multiplier*100)}% of full gratuity`);
-    if(raw>cap)notes.push('Capped at 2 years\' total salary (AED '+money(cap)+')');
+    if(raw>cap)notes.push('Capped at 2 years\' total salary ('+money(cap)+')');
     if(!notes.length&&multiplier===1)notes.push('Full gratuity entitlement under UAE Labour Law');
     noteEl.textContent=notes.join(' · ');
   }
@@ -24721,7 +25355,7 @@ function calcCorporateTax(){
     note='0% tax bracket applies (taxable income ≤ AED 375,000)';
   }else{
     taxLiability=(taxableIncome-threshold)*rate;
-    note=`9% on AED ${(taxableIncome-threshold).toLocaleString('en-AE')} above threshold`;
+    note=`9% on ${currentCurrency()} ${(taxableIncome-threshold).toLocaleString('en-AE')} above threshold`;
   }
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
   set('ct-taxable-income',formatAed(taxableIncome));
@@ -24759,7 +25393,7 @@ async function saveCorporateTaxReturn(){
       non_deductible_expenses:nonDed,
       exempt_income:exempt,
     }});
-    if(statusEl)statusEl.textContent=`Saved — CT payable AED ${Number(saved.corporate_tax_payable||0).toLocaleString('en-AE',{minimumFractionDigits:2})} for ${period}`;
+    if(statusEl)statusEl.textContent=`Saved — CT payable ${formatAed(saved.corporate_tax_payable)} for ${period}`;
     toast('Corporate tax return saved ✓','ok');
   }catch(err){
     if(statusEl)statusEl.textContent='';
@@ -24857,7 +25491,7 @@ function checkAlertRules(){
   const fired=[];
   _alertRules.filter(r=>r.enabled).forEach(r=>{
     if(r.type==='cash_below'&&cashBal<r.threshold){
-      fired.push(`Cash balance AED ${cashBal.toLocaleString('en-AE')} is below threshold AED ${Number(r.threshold).toLocaleString('en-AE')}`);
+      fired.push(`Cash balance ${currentCurrency()} ${cashBal.toLocaleString('en-AE')} is below threshold ${currentCurrency()} ${Number(r.threshold).toLocaleString('en-AE')}`);
     }
   });
   if(fired.length){
@@ -25015,7 +25649,7 @@ function renderAIWorkbench(data){
       <div class="ai-workbench-stat"><span>Source transactions</span><b>${escapeHtml(snapshot.source_transaction_count??0)}</b></div>
       <div class="ai-workbench-stat"><span>Invoices tracked</span><b>${escapeHtml(snapshot.invoice_count??0)}</b></div>
       <div class="ai-workbench-stat"><span>Open exceptions</span><b style="color:${openExceptions>0?'var(--amber)':'var(--text)'}">${escapeHtml(snapshot.open_exception_count??0)}</b></div>
-      <div class="ai-workbench-stat"><span>Net VAT (posted)</span><b>AED ${escapeHtml(snapshot.net_vat??'0.00')}</b></div>
+      <div class="ai-workbench-stat"><span>Net VAT (posted)</span><b>${escapeHtml(currentCurrency())} ${escapeHtml(snapshot.net_vat??'0.00')}</b></div>
       <div class="ai-workbench-stat"><span>Audit records</span><b>${escapeHtml(snapshot.audit_log_count??0)}</b></div>
     `;
   }
@@ -25122,26 +25756,26 @@ function buildSystemAIResponse(question){
   return 'TaxFlow is organized into Dashboard, Sales & Invoices, Quotations, Purchases, Expenses, Bank, Accounting, Reports, Inventory, Staff, Payroll, Expert Review, Settings, and this AI Assistant. Ask about a module name or workflow such as quotation creation, invoice creation, purchase extraction, stock mapping, journal posting, VAT filing, payroll WPS, settings, or production roadmap.';
 }
 
-// Voice input for the AI Assistant (src/voice.js). Push-to-talk; the transcript
-// goes into the question box and is sent like a typed question.
+// ── Voice (main app + HRMS) ──
+// AI Assistant mic, voice commands (topbar mic / Ctrl+Space), Dictate on forms and
+// the spoken daily briefing. Voice only opens or fills things — people still press Save.
 let _aiVoiceLang=null;
-
 async function _aiTranscribe(blob,lang){
   const form=new FormData();
   form.append('file',blob,'voice.'+((blob.type.split('/')[1]||'webm').split(';')[0]));
   form.append('lang',lang);
-  const headers={};
-  const token=localStorage.getItem('taxflow_token');
+  const headers={},token=localStorage.getItem('taxflow_token');
   if(token)headers.Authorization='Bearer '+token;
-  const res=await fetch(`${apiBaseUrl()}/ai/transcribe`,{method:'POST',headers,body:form});
-  if(!res.ok){
-    let detail=`Transcription failed (${res.status})`;
-    try{detail=(await res.json()).detail||detail;}catch{}
-    throw new Error(detail);
+  const r=await fetch(`${apiBaseUrl()}/ai/transcribe`,{method:'POST',headers,body:form});
+  if(!r.ok){
+    let msg=`Transcription failed (${r.status})`;
+    try{msg=(await r.json()).detail||msg;}catch{}
+    throw new Error(msg);
   }
-  return (await res.json()).text;
+  return (await r.json()).text;
 }
 
+// AI Assistant mic
 function _aiMicState(state){
   const btn=document.getElementById('ai-mic-btn');
   if(!btn)return;
@@ -25152,44 +25786,31 @@ function _aiMicState(state){
   if(state==='listening')setAIStatus('Listening… click the mic again when you are done.');
   else if(state==='processing')setAIStatus('Transcribing your question…');
 }
-
 function toggleAIVoice(){
   if(!window.VoiceInput||!VoiceInput.supported()){toast('Voice input is not supported in this browser','warn');return;}
   if(VoiceInput.isActive()){VoiceInput.stop();return;}
   if(window.VoiceOutput)VoiceOutput.stop();
   const lang=VoiceInput.getLang();
-  VoiceInput.start({
-    lang,
-    transcribe:_aiTranscribe,
-    onState:_aiMicState,
+  VoiceInput.start({lang,transcribe:_aiTranscribe,onState:_aiMicState,
+    onInterim:text=>{const input=document.getElementById('system-ai-question');if(input)input.value=text;},
     onText:text=>{
       const input=document.getElementById('system-ai-question');
       if(input)input.value=text;
       _aiVoiceLang=lang;
       askSystemAI();
     },
-    onError:msg=>{setAIStatus(msg);toast(msg,'warn');}
-  });
+    onError:msg=>{setAIStatus(msg);toast(msg,'warn');}});
 }
-
-function setAIVoiceLang(lang){
-  if(window.VoiceInput)VoiceInput.setLang(lang);
-  syncAIVoiceControls();
-}
-
 function toggleAIVoiceMute(){
   if(!window.VoiceOutput)return;
   VoiceOutput.setMuted(!VoiceOutput.isMuted());
   syncAIVoiceControls();
 }
-
 function syncAIVoiceControls(){
-  const wrap=document.getElementById('ai-voice-controls');
-  if(!wrap)return;
-  if(!window.VoiceInput||!VoiceInput.supported()){wrap.hidden=true;return;}
-  wrap.hidden=false;
-  const langSel=document.getElementById('ai-voice-lang');
-  if(langSel)langSel.value=VoiceInput.getLang();
+  const box=document.getElementById('ai-voice-controls');
+  if(!box)return;
+  if(!window.VoiceInput||!VoiceInput.supported()){box.hidden=true;return;}
+  box.hidden=false;
   const mute=document.getElementById('ai-voice-mute');
   if(mute){
     const muted=window.VoiceOutput?VoiceOutput.isMuted():true;
@@ -25200,40 +25821,34 @@ function syncAIVoiceControls(){
 }
 document.addEventListener('DOMContentLoaded',syncAIVoiceControls);
 
-// Settings > AI & Voice. Applied on every page load: voice off hides every
-// mic / Dictate button (body.voice-off) and the company language becomes the
-// default until a user picks their own.
+// Company voice switch (Settings > AI & Voice): body.voice-off hides every mic.
 async function applyVoiceSettings(){
   if(!localStorage.getItem('taxflow_token'))return;
   try{
     const s=await moduleApi('/ai/voice-settings');
-    document.body.classList.toggle('voice-off',!s.enabled);
-    if(window.VoiceInput)VoiceInput.setCompanyLang(s.default_lang);
+    document.body.classList.toggle('voice-off',!s.available);
     syncAIVoiceControls();
   }catch(err){
-    // 403 = the AI module is off for this company.
     if(/not enabled|403/.test(String(err.message||err)))document.body.classList.add('voice-off');
   }
 }
 document.addEventListener('DOMContentLoaded',()=>setTimeout(applyVoiceSettings,1200));
-
 async function loadVoiceSettingsForm(){
   try{
     const s=await moduleApi('/ai/voice-settings');
     document.getElementById('vs-enabled').checked=!!s.enabled;
-    document.getElementById('vs-lang').value=s.default_lang||'';
     document.getElementById('vs-cloud').checked=!!s.cloud_transcription;
     document.getElementById('vs-cap').value=s.daily_transcriptions;
-    document.getElementById('vs-usage').textContent=`${s.transcriptions_today} of ${s.daily_transcriptions} server transcriptions used today`;
+    document.getElementById('vs-usage').textContent=`${s.transcriptions_today} of ${s.daily_transcriptions} server transcriptions used today`
+      +(s.enabled&&!s.available?' · Voice needs an AI key on the server and the AI module enabled':'');
   }catch(err){
     document.getElementById('vs-usage').textContent=`Could not load voice settings: ${err.message||err}`;
   }
 }
-
 async function saveVoiceSettingsForm(){
   const body={
     enabled:document.getElementById('vs-enabled').checked,
-    default_lang:document.getElementById('vs-lang').value,
+    default_lang:'en-US',
     cloud_transcription:document.getElementById('vs-cloud').checked,
     daily_transcriptions:Math.max(0,Math.min(10000,parseInt(document.getElementById('vs-cap').value,10)||0))
   };
@@ -25245,65 +25860,70 @@ async function saveVoiceSettingsForm(){
   }catch(err){toast(err.message||'Could not save voice settings','err');}
 }
 
-// ── Voice commands (Phase 2) ─────────────────────────────────────────────
-// Topbar mic / Ctrl+Space. The catalog is built from what this user can see
-// right now (visible sidebar items, their pages' tabs, "+ New ..." actions),
-// so voice can only reach what a click could. Nothing is ever saved.
-let _vcCatalog=new Map();
-let _vcHideTimer=null;
-
+// Voice commands: build a catalog of what this user can see right now (sidebar pages,
+// their tabs, "+ New …" actions, HRMS questions), let the backend pick one, then run it.
+let _vcCatalog=new Map(),_vcHideTimer=null;
 function _vcShown(el,stopAt){
   for(let n=el;n&&n!==document.body&&n!==stopAt;n=n.parentElement){
-    if(n.hidden||n.classList.contains('hidden'))return false;
-    if(getComputedStyle(n).display==='none')return false;
+    if(n.hidden||n.classList.contains('hidden')||getComputedStyle(n).display==='none')return false;
   }
   return true;
 }
-
-function _vcText(el){
-  return String(el?.textContent||'').replace(/\s+/g,' ').trim();
-}
-
-// HRMS quick answers (voice Phase 4). Each opens its screen and answers from
-// the same permission-checked endpoints that screen uses; offered only when
-// that screen's sidebar entry is visible to this user.
-function _vcNames(list,max=8){
-  const names=list.slice(0,max);
-  return names.join(', ')+(list.length>max?` and ${list.length-max} more`:'');
-}
-
+function _vcText(el){return String(el?.textContent||'').replace(/\s+/g,' ').trim();}
+function _vcNames(names,max=8){return names.slice(0,max).join(', ')+(names.length>max?` and ${names.length-max} more`:'');}
 const _VC_HR_QUERIES=[
   {nav:'hr-att',label:'Who is absent today',alt:'absent not checked in attendance today',open:()=>goHrmsTab(2,'hr-att'),answer:async()=>{
     const today=new Date().toLocaleDateString('en-CA');
-    // Leave data needs leave:view; without it, leave just isn't subtracted.
     const [att,leaves]=await Promise.all([moduleApi('/attendance/today'),moduleApi('/leave/requests').catch(()=>[])]);
-    const present=Array.isArray(att?.employees)?att.employees:[];
-    const presentKeys=new Set(present.flatMap(e=>[String(e.employee_id||'').toLowerCase(),String(e.employee_name||'').toLowerCase()]));
+    const rows=Array.isArray(att?.employees)?att.employees:[];
+    const inIds=new Set(rows.flatMap(r=>[String(r.employee_id||'').toLowerCase(),String(r.employee_name||'').toLowerCase()]));
     const onLeave=new Set((leaves||[]).filter(l=>l.status==='approved'&&l.start_date<=today&&today<=l.end_date).map(l=>String(l.employee_name||'').toLowerCase()));
-    const emps=_getAttendanceEmployees();
-    if(!emps.length)return `${present.length} employee${present.length===1?'':'s'} checked in today.`;
-    const missing=emps.filter(e=>!presentKeys.has(String(e.id||'').toLowerCase())&&!presentKeys.has(String(e.name||'').toLowerCase())&&!onLeave.has(String(e.name||'').toLowerCase()));
-    const leaveNote=onLeave.size?` ${onLeave.size} on approved leave.`:'';
-    if(!missing.length)return `Everyone has checked in today.${leaveNote}`;
-    return `${missing.length} not checked in yet today: ${_vcNames(missing.map(e=>e.name))}.${leaveNote}`;
+    const everyone=_getAttendanceEmployees();
+    if(!everyone.length)return `${rows.length} employee${rows.length===1?'':'s'} checked in today.`;
+    const offIds=new Set((Array.isArray(att?.off)?att.off:[]).flatMap(o=>[String(o.employee_id||'').toLowerCase(),String(o.employee_name||'').toLowerCase()]));
+    const isOff=e=>offIds.has(String(e.id||'').toLowerCase())||offIds.has(String(e.name||'').toLowerCase());
+    const missing=everyone.filter(e=>!inIds.has(String(e.id||'').toLowerCase())&&!inIds.has(String(e.name||'').toLowerCase())&&!onLeave.has(String(e.name||'').toLowerCase())&&!isOff(e));
+    const offCount=everyone.filter(e=>isOff(e)&&!onLeave.has(String(e.name||'').toLowerCase())).length;
+    const leaveNote=(onLeave.size?` ${onLeave.size} on approved leave.`:'')+(offCount?` ${offCount} on a day off.`:'');
+    return missing.length?`${missing.length} not checked in yet today: ${_vcNames(missing.map(e=>e.name))}.${leaveNote}`:`Everyone has checked in today.${leaveNote}`;
   }},
   {nav:'hr-leave',label:'Pending leave requests',alt:'leave waiting for approval',open:()=>goHrmsTab(4,'hr-leave'),answer:async()=>{
-    const rows=(await moduleApi('/leave/requests')||[]).filter(l=>String(l.status).toLowerCase()==='pending');
-    if(!rows.length)return 'There are no pending leave requests.';
-    return `${rows.length} pending leave request${rows.length===1?'':'s'}: ${_vcNames(rows.map(l=>`${l.employee_name} (${l.leave_type}, ${l.days} day${l.days===1?'':'s'})`),5)}.`;
+    const pending=(await moduleApi('/leave/requests')||[]).filter(r=>String(r.status).toLowerCase()==='pending');
+    return pending.length
+      ?`${pending.length} pending leave request${pending.length===1?'':'s'}: ${_vcNames(pending.map(r=>`${r.employee_name} (${r.leave_type}, ${r.days} day${r.days===1?'':'s'})`),5)}.`
+      :'There are no pending leave requests.';
   }},
   {nav:'hr-ot',label:'Who is eligible for overtime this week',alt:'overtime eligible this week',open:()=>goHrmsTab(3,'hr-ot'),answer:async()=>{
-    const now=new Date();
-    const monday=new Date(now);monday.setDate(now.getDate()-((now.getDay()+6)%7));
+    const now=new Date(),monday=new Date(now);
+    monday.setDate(now.getDate()-(now.getDay()+6)%7);
     const qs=new URLSearchParams({date_from:monday.toLocaleDateString('en-CA'),date_to:now.toLocaleDateString('en-CA')});
-    const data=await moduleApi(`/attendance/overtime-eligibility?${qs}`);
-    const open=(data?.rows||[]).filter(r=>r.eligible&&!r.request_id);
-    if(!open.length)return 'Nobody has un-requested overtime this week.';
-    const people=[...new Set(open.map(r=>r.employee))];
-    return `${people.length} employee${people.length===1?'':'s'} worked eligible overtime this week without a request yet: ${_vcNames(people)}.`;
+    const rows=((await moduleApi(`/attendance/overtime-eligibility?${qs}`))?.rows||[]).filter(r=>r.eligible&&!r.request_id);
+    if(!rows.length)return 'Nobody has un-requested overtime this week.';
+    const names=[...new Set(rows.map(r=>r.employee))];
+    return `${names.length} employee${names.length===1?'':'s'} worked eligible overtime this week without a request yet: ${_vcNames(names)}.`;
   }}
 ];
-
+// [label, key] — key is the quoted argument in that HRMS sidebar entry's onclick.
+const _VC_HRMS_PAGES=[['Employees','hr-emp'],['Attendance','hr-att'],['Rota & Shift','rota'],['Leave','hr-leave'],['Payroll','payroll'],
+  ['Overtime','hr-ot'],['Loans & Advances','hr-loans'],['Recruitment','recruitment'],['Performance','hrext-perf'],['Training','hrext-train'],
+  ['Assets','hrext-assets'],['Task Management','tasks'],['HR Reports','hrms-reports']];
+function _vcOpenHrms(key,label){
+  const url='/hrms#open='+key;
+  // Opened after an async call, so a popup blocker may stop it; offer a tap instead.
+  if(!window.open(url,'_blank')){
+    _vcShow('Your browser blocked the new tab',{chips:[{label:`Open HRMS › ${label}`,onClick:()=>{closeVoiceCommand();window.open(url,'_blank');}}]});
+  }
+}
+// HRMS side of the deep link: /hrms#open=<key> clicks that sidebar entry once the page is ready.
+window.addEventListener('load',()=>{
+  const m=window.HRMS_STANDALONE&&location.hash.match(/^#open=([\w-]+)$/);
+  if(!m)return;
+  history.replaceState(null,'',location.pathname+location.search);
+  setTimeout(()=>{
+    const nav=[...document.querySelectorAll('.sb .nav[onclick]')].find(n=>(n.getAttribute('onclick')||'').includes(`'${m[1]}'`)&&_vcShown(n));
+    if(nav)nav.click();
+  },900);
+});
 function buildVoiceCatalog(){
   const catalog=new Map();
   let n=0;
@@ -25312,102 +25932,130 @@ function buildVoiceCatalog(){
     const id=kind[0]+(++n);
     catalog.set(id,{id,kind,label:label.slice(0,160),alt:alt&&alt!==label?alt.slice(0,160):null,run});
   };
-  const pageNavs=new Map();
+  const pages=new Map();
   document.querySelectorAll('.sb .nav[onclick]').forEach(nav=>{
-    const onclick=nav.getAttribute('onclick')||'';
-    // New-window items (POS, HRMS) would be popup-blocked outside a real click.
-    if(/window\.open|location/.test(onclick)||!_vcShown(nav))return;
-    const label=_vcText(nav);
-    const page=(onclick.match(/^\s*go\('([\w-]+)'\)\s*;?\s*$/)||[])[1];
-    if(page)pageNavs.set(page,{nav,label});
+    const code=nav.getAttribute('onclick')||'';
+    if(/window\.open|location/.test(code)||!_vcShown(nav))return;
+    const label=_vcText(nav),page=(code.match(/^\s*go\('([\w-]+)'\)\s*;?\s*$/)||[])[1];
+    if(page)pages.set(page,{nav,label});
     add('page',label,page?META[page]?.t:null,()=>nav.click());
   });
-  pageNavs.forEach(({nav,label},page)=>{
-    const pageEl=document.getElementById('page-'+page);
-    if(pageEl){
-      // Page tabs, plus the Reports page's own left-hand report list.
-      pageEl.querySelectorAll('.tabs .tab[onclick*="stab("],.rep-nav-item[onclick]').forEach(tab=>{
-        if(!_vcShown(tab,pageEl))return;
-        const tabLabel=_vcText(tab);
-        if(tabLabel)add('tab',`${label} › ${tabLabel}`,null,()=>{nav.click();setTimeout(()=>tab.click(),80);});
-      });
-    }
-    const m=META[page];
-    // Only "+ ..." top actions: they open a blank form. Others (Run Payroll,
-    // Publish Rota, Save All) act immediately and are never voice-triggered.
-    if(m&&typeof m.ao==='function'&&/^\+/.test(m.a||'')){
-      // A bare "+ New" gets the page name so it can be matched by voice.
-      add('action',/^\+\s*\w+$/.test(m.a)?`${m.a} ${m.t||label}`:m.a,m.t||label,()=>{nav.click();setTimeout(()=>m.ao(),80);});
+  pages.forEach(({nav,label},page)=>{
+    const el=document.getElementById('page-'+page);
+    if(el)el.querySelectorAll('.tabs .tab[onclick*="stab("],.rep-nav-item[onclick]').forEach(tab=>{
+      if(!_vcShown(tab,el))return;
+      const t=_vcText(tab);
+      if(t)add('tab',`${label} › ${t}`,null,()=>{nav.click();setTimeout(()=>tab.click(),80);});
+    });
+    const meta=META[page];
+    if(meta&&typeof meta.ao==='function'&&/^\+/.test(meta.a||'')){
+      add('action',/^\+\s*\w+$/.test(meta.a)?`${meta.a} ${meta.t||label}`:meta.a,meta.t||label,()=>{nav.click();setTimeout(()=>meta.ao(),80);});
     }
   });
+  // HR screens live in HRMS (its own tab), so the main app offers them as HRMS deep links.
+  const hrNav=document.getElementById('nav-hrms');
+  if(!window.HRMS_STANDALONE&&hrNav&&_vcShown(hrNav)){
+    _VC_HRMS_PAGES.forEach(([label,key])=>add('page',`HRMS › ${label}`,label,()=>_vcOpenHrms(key,label)));
+  }
   if(!window.HRMS_STANDALONE&&document.getElementById('dash-btn-briefing')){
     add('query','Daily briefing','good morning brief me today summary what is happening',async()=>{await playDailyBriefing();return null;});
   }
-  if(window.HRMS_STANDALONE){
-    _VC_HR_QUERIES.forEach(q=>{
-      const nav=document.querySelector(`.sb .nav[data-staff-nav="${q.nav}"]`);
-      if(nav&&_vcShown(nav))add('query',q.label,q.alt,async()=>{q.open();return q.answer();});
-    });
-  }
+  if(window.HRMS_STANDALONE)_VC_HR_QUERIES.forEach(q=>{
+    const nav=document.querySelector(`.sb .nav[data-staff-nav="${q.nav}"]`);
+    if(nav&&_vcShown(nav))add('query',q.label,q.alt,async()=>{q.open();return q.answer();});
+  });
   _vcCatalog=catalog;
   return [...catalog.values()].map(({id,kind,label,alt})=>({id,kind,label,alt}));
 }
-
+// Assistant-style popup: header with the AI's name and state, a pulsing voice orb while
+// listening, then a small conversation — what you said on the right, the AI's reply on the left.
 function _vcPop(){
   let pop=document.getElementById('vc-pop');
   if(pop)return pop;
   pop=document.createElement('div');
-  pop.id='vc-pop';
-  pop.className='vc-pop';
-  pop.setAttribute('role','status');
-  pop.setAttribute('aria-live','polite');
+  pop.id='vc-pop';pop.className='vc-pop';
+  pop.setAttribute('role','status');pop.setAttribute('aria-live','polite');
   pop.hidden=true;
   pop.innerHTML=`
-    <div class="vc-pop-head">
-      <span class="vc-pop-status" id="vc-pop-status"></span>
-      <select class="vc-pop-lang" id="vc-pop-lang" aria-label="Voice language" onchange="VoiceInput.setLang(this.value);syncAIVoiceControls()"><option value="en-US">EN</option><option value="ar-AE">عربي</option></select>
+    <div class="vc-head">
+      <span class="vc-avatar" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" opacity=".7"/></svg></span>
+      <div class="vc-head-text"><b>TaxFlow AI</b><span id="vc-pop-mode"></span></div>
       <button type="button" class="vc-pop-close" onclick="closeVoiceCommand()" aria-label="Close">×</button>
     </div>
-    <div class="vc-pop-heard" id="vc-pop-heard"></div>
-    <ul class="vc-pop-body" id="vc-pop-body"></ul>
-    <div class="vc-pop-note" id="vc-pop-note"></div>
-    <div class="vc-pop-chips" id="vc-pop-chips"></div>
-    <div class="vc-pop-hint" id="vc-pop-hint"></div>`;
+    <div class="vc-stage" id="vc-stage">
+      <div class="vc-orb" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="vc-stage-text" id="vc-stage-text"></div>
+      <button type="button" class="vc-done" onclick="window.VoiceInput&&VoiceInput.stop()">Done</button>
+    </div>
+    <div class="vc-convo" id="vc-convo">
+      <div class="vc-msg vc-me" id="vc-pop-heard" dir="auto"></div>
+      <div class="vc-msg vc-ai" id="vc-ai-msg">
+        <div class="vc-typing" id="vc-typing" aria-label="Thinking"><i></i><i></i><i></i></div>
+        <div class="vc-ai-text" id="vc-pop-status" dir="auto"></div>
+        <ul class="vc-pop-body" id="vc-pop-body" dir="auto"></ul>
+        <div class="vc-pop-note" id="vc-pop-note"></div>
+        <div class="vc-pop-chips" id="vc-pop-chips"></div>
+      </div>
+    </div>
+    <div class="vc-actions" id="vc-actions"><button type="button" class="vc-retry" onclick="_vcDoRetry()"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4"/></svg>Try again</button></div>
+    <div class="vc-foot"><span id="vc-pop-hint"></span><span class="vc-keys"><kbd>Ctrl</kbd><kbd>Space</kbd></span></div>`;
   document.body.appendChild(pop);
   return pop;
 }
-
-function _vcShow(status,{heard,chips,autoHide,note,hint,body}={}){
+// The popup's state follows the status text callers already send.
+function _vcMode(status){
+  if(/^Listening/.test(status))return 'listening';
+  if(/^(Transcribing|Working|Checking|Filling|Preparing)/.test(status))return 'thinking';
+  return 'answer';
+}
+// "Try again" re-runs whatever voice action last listened (command or Dictate).
+let _vcRetryFn=null;
+function _vcDoRetry(){if(_vcRetryFn)_vcRetryFn();}
+// Speech ended with nothing heard: the popup would otherwise stay on "Listening…".
+function _vcNoSpeech(){
+  setTimeout(()=>{
+    const pop=document.getElementById('vc-pop');
+    if(pop&&!pop.hidden&&pop.dataset.mode==='listening')_vcShow('I didn’t catch that — tap Try again and speak',{retry:true});
+  },0);
+}
+function _vcShow(status,{heard,chips,autoHide,note,hint,body,retry}={}){
   const pop=_vcPop();
   clearTimeout(_vcHideTimer);
   pop.hidden=false;
-  document.getElementById('vc-pop-status').textContent=status;
-  const lang=document.getElementById('vc-pop-lang');
-  if(lang&&window.VoiceInput)lang.value=VoiceInput.getLang();
-  const heardEl=document.getElementById('vc-pop-heard');
-  heardEl.textContent=heard?`“${heard}”`:'';
-  heardEl.hidden=!heard;
-  const bodyEl=document.getElementById('vc-pop-body');
-  bodyEl.innerHTML=(body||[]).map(line=>`<li>${escapeHtml(line)}</li>`).join('');
-  bodyEl.hidden=!(body&&body.length);
-  const noteEl=document.getElementById('vc-pop-note');
-  noteEl.textContent=note||'';
-  noteEl.hidden=!note;
+  const mode=_vcMode(status);
+  pop.dataset.mode=mode;
+  document.getElementById('vc-pop-mode').textContent=mode==='listening'?'Listening…':mode==='thinking'?'Thinking…':'Voice assistant';
+  document.getElementById('vc-stage-text').textContent=status;
+  document.getElementById('vc-typing').hidden=mode!=='thinking';
+  document.getElementById('vc-pop-status').textContent=mode==='answer'?status:'';
+  const h=document.getElementById('vc-pop-heard');
+  h.textContent=heard||'';h.hidden=!heard;
+  document.getElementById('vc-ai-msg').hidden=mode==='listening';
+  document.getElementById('vc-convo').hidden=mode==='listening'&&!heard;
+  const b=document.getElementById('vc-pop-body');
+  b.innerHTML=(body||[]).map(t=>`<li>${escapeHtml(t)}</li>`).join('');b.hidden=!(body&&body.length);
+  const nt=document.getElementById('vc-pop-note');
+  nt.textContent=note||'';nt.hidden=!note;
   document.getElementById('vc-pop-hint').textContent=hint||_VF_DEFAULT_HINT;
-  const chipsEl=document.getElementById('vc-pop-chips');
-  chipsEl.innerHTML='';
+  const c=document.getElementById('vc-pop-chips');
+  c.innerHTML='';
   (chips||[]).forEach(chip=>{
-    const b=document.createElement('button');
-    b.type='button';
-    b.className='btn btn-g btn-sm';
-    b.textContent=chip.label;
-    b.onclick=chip.onClick;
-    chipsEl.appendChild(b);
+    const btn=document.createElement('button');
+    btn.type='button';btn.className='vc-chip';btn.textContent=chip.label;btn.onclick=chip.onClick;
+    c.appendChild(btn);
   });
-  chipsEl.hidden=!(chips&&chips.length);
-  if(autoHide)_vcHideTimer=setTimeout(closeVoiceCommand,autoHide);
+  c.hidden=!(chips&&chips.length);
+  const canRetry=!!(retry&&_vcRetryFn&&mode==='answer');
+  document.getElementById('vc-actions').hidden=!canRetry;
+  if(autoHide&&!canRetry)_vcHideTimer=setTimeout(closeVoiceCommand,autoHide);
 }
-
+// Words so far, shown in the popup while still listening.
+function _vcLive(text){
+  const h=document.getElementById('vc-pop-heard');
+  if(!h)return;
+  h.textContent=text;h.hidden=!text;
+  document.getElementById('vc-convo').hidden=!text;
+}
 function closeVoiceCommand(){
   clearTimeout(_vcHideTimer);
   if(window.VoiceInput&&VoiceInput.isActive())VoiceInput.cancel();
@@ -25415,7 +26063,6 @@ function closeVoiceCommand(){
   if(pop)pop.hidden=true;
   _vcMicState('idle');
 }
-
 function _vcMicState(state){
   const btn=document.getElementById('vc-mic-btn');
   if(!btn)return;
@@ -25423,49 +26070,39 @@ function _vcMicState(state){
   btn.classList.toggle('processing',state==='processing');
   btn.setAttribute('aria-pressed',state==='listening'?'true':'false');
 }
-
-function _vcAllowed(){
-  return !window.COMPANY_ALLOWED_MODULES||window.COMPANY_ALLOWED_MODULES.has('ai');
-}
-
+function _vcAllowed(){return !window.COMPANY_ALLOWED_MODULES||window.COMPANY_ALLOWED_MODULES.has('ai');}
 function toggleVoiceCommand(){
   if(!window.VoiceInput||!VoiceInput.supported()){toast('Voice input is not supported in this browser','warn');return;}
   if(!_vcAllowed()){toast("The AI module isn't enabled for your company",'warn');return;}
   if(VoiceInput.isActive()){VoiceInput.stop();return;}
   if(window.VoiceOutput)VoiceOutput.stop();
+  _vcRetryFn=toggleVoiceCommand;
   const lang=VoiceInput.getLang();
-  VoiceInput.start({
-    lang,
-    transcribe:_aiTranscribe,
-    onState:state=>{
-      _vcMicState(state);
-      if(state==='listening')_vcShow('Listening… click the mic or press Ctrl+Space when done');
-      else if(state==='processing')_vcShow('Transcribing…');
+  VoiceInput.start({lang,transcribe:_aiTranscribe,
+    onState:s=>{
+      _vcMicState(s);
+      if(s==='listening')_vcShow('Listening… click the mic or press Ctrl+Space when done');
+      else if(s==='processing')_vcShow('Transcribing…');
+      else _vcNoSpeech();
     },
+    onInterim:_vcLive,
     onText:text=>runVoiceCommand(text,lang),
-    onError:msg=>_vcShow(msg,{autoHide:5000})
-  });
+    onError:msg=>_vcShow(msg,{retry:true})});
 }
-
-function _vcRun(entry,query){
+function _vcRun(entry,search){
   if(!entry)return;
   entry.run();
-  if(query)setTimeout(()=>_vcFillSearch(query),260);
+  if(search)setTimeout(()=>_vcFillSearch(search),260);
 }
-
-function _vcFillSearch(query){
-  const page=document.querySelector('.page.on');
-  const inputs=[...(page||document).querySelectorAll('input[type="search"],input[placeholder]')]
-    .filter(i=>(i.type==='search'||/search|filter|find|بحث/i.test(i.placeholder||''))&&i.offsetParent!==null);
-  const input=inputs[0];
-  if(!input){toast(`No search box on this page for “${query}”`,'warn');return;}
-  input.focus();
-  input.value=query;
-  ['input','keyup','change'].forEach(type=>input.dispatchEvent(new Event(type,{bubbles:true})));
+function _vcFillSearch(text){
+  const box=[...(document.querySelector('.page.on')||document).querySelectorAll('input[type="search"],input[placeholder]')]
+    .filter(i=>(i.type==='search'||/search|filter|find|بحث/i.test(i.placeholder||''))&&i.offsetParent!==null)[0];
+  if(!box){toast(`No search box on this page for “${text}”`,'warn');return;}
+  box.focus();box.value=text;
+  ['input','keyup','change'].forEach(ev=>box.dispatchEvent(new Event(ev,{bubbles:true})));
 }
-
 function _vcAnswer(question,lang,alternatives){
-  const aiNav=document.querySelector('[data-module-gate="ai"][onclick*="go(\'ai\')"]');
+  const aiNav=document.querySelector(`[data-module-gate="ai"][onclick*="go('ai')"]`);
   if(window.HRMS_STANDALONE||!document.getElementById('page-ai')||(aiNav&&!_vcShown(aiNav))){
     const chips=_vcChips(alternatives||[],null);
     _vcShow(chips.length?'That sounds like a question — these pages may help:':'That sounds like a question — ask it in the AI Assistant (main app).',{heard:question,chips,autoHide:chips.length?0:6000});
@@ -25481,71 +26118,62 @@ function _vcAnswer(question,lang,alternatives){
   },80);
 }
 
-// Daily briefing: dashboard "Briefing" button or "good morning" / "brief me".
-// Reads out and lists today's position (GET /ai/briefing); each item has a
-// button to its page. Read-only.
-const _BRIEF_LABELS={
-  en:{overdue:'Receivables',purchases:'Purchases',vat:'VAT report',staff:'HRMS',exceptions:'Exceptions'},
-  ar:{overdue:'المستحقات',purchases:'المشتريات',vat:'تقرير الضريبة',staff:'الموارد البشرية',exceptions:'الاستثناءات'}
-};
-function _briefingLang(){
-  if(typeof _appLang!=='undefined'&&_appLang==='ar')return 'ar';
-  return window.VoiceInput&&VoiceInput.getLang()==='ar-AE'?'ar':'en';
-}
+// Daily briefing (dashboard "Briefing" button, or say "good morning")
+const _BRIEF_LABELS={overdue:'Receivables',purchases:'Purchases',vat:'VAT report',staff:'HRMS',exceptions:'Exceptions'};
 function _briefGo(page){
   closeVoiceCommand();
   if(page==='hrms'){window.open('/hrms','_blank');return;}
+  if(page==='exceptions'){
+    go('settings');
+    setTimeout(()=>document.querySelector('#page-settings .tab[onclick*="set-exception"]')?.click(),80);
+    return;
+  }
   go(page);
 }
 async function playDailyBriefing(){
-  const lang=_briefingLang();
-  _vcShow(lang==='ar'?'جارٍ تجهيز الملخص…':'Preparing your briefing…');
-  let b;
-  try{b=await moduleApi(`/ai/briefing?lang=${lang}`);}
+  _vcShow('Preparing your briefing…');
+  let data;
+  try{data=await moduleApi('/ai/briefing?lang=en');}
   catch(err){_vcShow(`Briefing unavailable: ${err.message||err}`,{autoHide:6000});return null;}
-  const labels=_BRIEF_LABELS[lang];
-  _vcShow(b.intro,{
-    body:(b.items||[]).map(i=>i.text),
-    chips:(b.items||[]).filter(i=>labels[i.key]).map(i=>({label:labels[i.key],onClick:()=>_briefGo(i.page)})),
-    hint:lang==='ar'?'اضغط على أي بند لفتح صفحته.':'Tap an item to open it. Say “good morning” any time to hear this again.'
+  _vcShow(data.intro,{
+    body:(data.items||[]).map(i=>i.text),
+    chips:(data.items||[]).filter(i=>_BRIEF_LABELS[i.key]).map(i=>({label:_BRIEF_LABELS[i.key],onClick:()=>_briefGo(i.page)})),
+    hint:'Tap an item to open it. Say “good morning” any time to hear this again.'
   });
-  if(window.VoiceOutput)VoiceOutput.speak(b.text,lang==='ar'?'ar-AE':'en-US');
-  return b;
+  if(window.VoiceOutput)VoiceOutput.speak(data.text,'en-US');
+  return data;
 }
-
-async function _vcRunQuery(entry,transcript){
-  _vcShow('Checking…',{heard:transcript});
+async function _vcRunQuery(entry,heard){
+  _vcShow('Checking…',{heard});
   try{
     const answer=await entry.run();
     if(answer==null)return;
-    _vcShow(answer,{heard:transcript});
+    _vcShow(answer,{heard});
     if(window.VoiceOutput)VoiceOutput.speak(answer);
   }catch(err){
-    _vcShow(`Couldn't get that: ${err.message||err}`,{heard:transcript,autoHide:6000});
+    _vcShow(`Couldn't get that: ${err.message||err}`,{heard,autoHide:6000});
   }
-  audit('Voice question',(transcript||entry.label).slice(0,60),entry.label.slice(0,60));
+  audit('Voice question',(heard||entry.label).slice(0,60),entry.label.slice(0,60));
+}
+function _vcChips(ids,search){
+  return ids.map(id=>_vcCatalog.get(id)).filter(Boolean).map(entry=>({label:entry.label,onClick:()=>{
+    if(entry.kind==='query'){_vcRunQuery(entry,'');return;}
+    closeVoiceCommand();
+    _vcRun(entry,search);
+  }}));
 }
 
-function _vcChips(ids,query){
-  return ids.map(id=>_vcCatalog.get(id)).filter(Boolean).map(entry=>({
-    label:entry.label,
-    onClick:()=>{if(entry.kind==='query'){_vcRunQuery(entry,'');return;}closeVoiceCommand();_vcRun(entry,query);}
-  }));
-}
-
-// ── Voice data entry (Phase 3) ───────────────────────────────────────────
-// "Dictate" on a form: speech -> POST /ai/voice-draft -> fields filled and
-// highlighted. Only fills the open form; the user still presses Save.
-const _VF_DEFAULT_HINT='Try “Open payroll”, “New invoice”, “Search Al Noor in sales”. Ctrl+Space to talk.';
-
+// Dictate: fill the open form from speech. Field ids map the backend's field names to this page's inputs.
+const _VF_DEFAULT_HINT='Try “Open payroll”, “New invoice”, “Search Al Noor in sales”';
+// "Please Select" / "-- choose --" rows are not real options.
+const _vfIsPlaceholder=t=>/^(please\s+)?(select|choose)\b|^$/i.test(t.replace(/^[\s\-—]+|[\s\-—]+$/g,''));
 function _vfOptions(id){
-  return [...(document.getElementById(id)?.options||[])].filter(o=>o.value!=='').map(o=>o.textContent.trim()).filter(Boolean);
+  return [...(document.getElementById(id)?.options||[])].filter(o=>o.value!=='').map(o=>o.textContent.trim()).filter(t=>t&&!_vfIsPlaceholder(t));
 }
-
 function _vfAc(key){
-  try{return (_AC_SOURCES[key]?.()||[]).map(item=>item.value).filter(Boolean).slice(0,1000);}catch(err){return [];}
+  try{return (_AC_SOURCES[key]?.()||[]).map(o=>String(o.value||'').trim()).filter(t=>t&&!_vfIsPlaceholder(t)).slice(0,1000);}
+  catch{return [];}
 }
-
 const _VF_FORMS={
   expense:{
     hint:'e.g. “Taxi to the client yesterday, 85 dirhams plus 4.25 VAT, Careem, transport”',
@@ -25557,24 +26185,15 @@ const _VF_FORMS={
     hint:'e.g. “From Gulf Steel, 10 steel rods at 12.50 and 5 cement bags at 20, reference PO 118”',
     choices:()=>({supplier:_vfOptions('mp-supplier'),product:_vfAc('purchase-product')}),
     fields:{supplier:'mp-supplier',reference:'mp-ref',date:'mp-date',notes:'mp-notes'},
-    lines:lines=>_vfFillLines(lines,{
-      rows:()=>[...document.querySelectorAll('#mp-lines tr')],
-      add:()=>{addManualPurchaseLine();return document.querySelector('#mp-lines tr:last-child');},
-      product:'.mp-product',qty:'.mp-qty',price:'.mp-cost',
-      recalc:()=>calcManualPurchase()
-    })
+    lines:lines=>_vfFillLines(lines,{rows:()=>[...document.querySelectorAll('#mp-lines tr')],add:()=>{addManualPurchaseLine();return document.querySelector('#mp-lines tr:last-child');},
+      product:'.mp-product',qty:'.mp-qty',price:'.mp-cost',recalc:()=>calcManualPurchase()})
   },
   sales_invoice:{
     hint:'e.g. “Invoice Al Noor Trading, 3 laptops at 2,500 each, due in 30 days”',
     choices:()=>({customer:_vfAc('invoice-customer'),product:_vfAc('invoice-product')}),
     fields:{customer:'inv-cust',date:'inv-date',due_date:'inv-due',po:'inv-po',reference:'inv-ref'},
-    lines:lines=>_vfFillLines(lines,{
-      rows:()=>[...document.querySelectorAll('#inv-lines .inv-item')],
-      add:()=>addLine(),
-      product:'.inv-product',qty:'.inv-qty',price:'.inv-price',
-      priceLocked:true,
-      recalc:()=>calcLine(null)
-    })
+    lines:lines=>_vfFillLines(lines,{rows:()=>[...document.querySelectorAll('#inv-lines .inv-item')],add:()=>addLine(),
+      product:'.inv-product',qty:'.inv-qty',price:'.inv-price',priceLocked:true,recalc:()=>calcLine(null)})
   },
   customer:{
     hint:'e.g. “Al Noor Trading, TRN 100234567800003, Sharjah, email info at alnoor dot ae”',
@@ -25587,16 +26206,16 @@ const _VF_FORMS={
     fields:{name:'vendor-name',trn:'vendor-trn',category:'vendor-category',email:'vendor-email',phone:'vendor-phone',address:'vendor-address'}
   }
 };
-
 function _vfMark(el){
   if(!el)return;
   el.classList.add('vf-filled');
-  // The highlight clears as soon as the user edits the field themselves.
-  const clear=e=>{if(e.isTrusted){el.classList.remove('vf-filled');el.removeEventListener('input',clear);el.removeEventListener('change',clear);}};
-  el.addEventListener('input',clear);
-  el.addEventListener('change',clear);
+  const clear=ev=>{
+    if(!ev.isTrusted)return;
+    el.classList.remove('vf-filled');
+    el.removeEventListener('input',clear);el.removeEventListener('change',clear);
+  };
+  el.addEventListener('input',clear);el.addEventListener('change',clear);
 }
-
 function _vfSet(el,value){
   if(!el||value==null)return false;
   if(el.tagName==='SELECT'){
@@ -25611,7 +26230,6 @@ function _vfSet(el,value){
   _vfMark(el);
   return true;
 }
-
 function _vfFillLines(lines,cfg){
   let filled=0;
   const unknown=[];
@@ -25631,7 +26249,6 @@ function _vfFillLines(lines,cfg){
   try{cfg.recalc();}catch(err){console.warn(err);}
   return {filled,unknown};
 }
-
 let _vfActiveBtn=null;
 function _vfBtnState(state){
   if(!_vfActiveBtn)return;
@@ -25639,59 +26256,54 @@ function _vfBtnState(state){
   _vfActiveBtn.classList.toggle('processing',state==='processing');
   if(state==='idle')_vfActiveBtn=null;
 }
-
 function voiceFill(form,btn){
-  const cfg=_VF_FORMS[form];
-  if(!cfg)return;
+  const spec=_VF_FORMS[form];
+  if(!spec)return;
   if(!window.VoiceInput||!VoiceInput.supported()){toast('Voice input is not supported in this browser','warn');return;}
   if(!_vcAllowed()){toast("The AI module isn't enabled for your company",'warn');return;}
   if(VoiceInput.isActive()){VoiceInput.stop();return;}
   if(window.VoiceOutput)VoiceOutput.stop();
   _vfActiveBtn=btn||null;
+  _vcRetryFn=()=>voiceFill(form,btn);
   const lang=VoiceInput.getLang();
-  VoiceInput.start({
-    lang,
-    transcribe:_aiTranscribe,
-    onState:state=>{
-      _vfBtnState(state);
-      if(state==='listening')_vcShow('Listening… describe it, then click Dictate again',{hint:cfg.hint});
-      else if(state==='processing')_vcShow('Transcribing…',{hint:cfg.hint});
+  VoiceInput.start({lang,transcribe:_aiTranscribe,
+    onState:s=>{
+      _vfBtnState(s);
+      if(s==='listening')_vcShow('Listening… describe it, then click Dictate again',{hint:spec.hint});
+      else if(s==='processing')_vcShow('Transcribing…',{hint:spec.hint});
+      else _vcNoSpeech();
     },
+    onInterim:_vcLive,
     onText:text=>applyVoiceDraft(form,text,lang),
-    onError:msg=>{_vfBtnState('idle');_vcShow(msg,{autoHide:5000});}
-  });
+    onError:msg=>{_vfBtnState('idle');_vcShow(msg,{retry:true});}});
 }
-
 async function applyVoiceDraft(form,text,lang){
-  const cfg=_VF_FORMS[form];
-  const transcript=String(text||'').trim();
-  if(!cfg||!transcript)return;
-  _vcShow('Filling the form…',{heard:transcript,hint:cfg.hint});
+  const spec=_VF_FORMS[form],transcript=String(text||'').trim();
+  if(!spec||!transcript)return;
+  _vcShow('Filling the form…',{heard:transcript,hint:spec.hint});
   let draft;
   try{
-    draft=await moduleApi('/ai/voice-draft',{method:'POST',body:{
-      form,transcript,lang:lang==='ar-AE'?'ar':'en',choices:cfg.choices(),today:new Date().toLocaleDateString('en-CA')
-    }});
+    draft=await moduleApi('/ai/voice-draft',{method:'POST',body:{form,transcript,lang:lang==='ar-AE'?'ar':'en',choices:spec.choices(),today:new Date().toLocaleDateString('en-CA')}});
   }catch(err){
-    _vcShow(`Voice entry failed: ${err.message||err}`,{heard:transcript,autoHide:7000});
+    _vcShow(`Voice entry failed: ${err.message||err}`,{heard:transcript,retry:true});
     return;
   }
   let filled=0;
   const notes=[];
   Object.entries(draft.fields||{}).forEach(([name,value])=>{
-    const el=document.getElementById(cfg.fields[name]);
+    const el=document.getElementById(spec.fields[name]);
     if(_vfSet(el,value))filled++;
     else if(el)notes.push(`${name}: “${value}” isn't one of the options`);
   });
   Object.entries(draft.unmatched||{}).forEach(([name,value])=>notes.push(`${name}: couldn't find “${value}” — pick it or add it first`));
-  if(cfg.lines&&(draft.lines||[]).length){
-    const res=cfg.lines(draft.lines);
+  if(spec.lines&&(draft.lines||[]).length){
+    const res=spec.lines(draft.lines);
     filled+=res.filled;
     if(res.unknown.length)notes.push(`Not in your product list: ${res.unknown.join(', ')}`);
   }
-  if(cfg.after)try{cfg.after();}catch(err){console.warn(err);}
+  if(spec.after){try{spec.after();}catch(err){console.warn(err);}}
   if(!filled){
-    _vcShow('Nothing to fill from that — try again with the details',{heard:transcript,note:notes.join(' · '),hint:cfg.hint});
+    _vcShow('Nothing to fill from that — try again with the details',{heard:transcript,note:notes.join(' · '),hint:spec.hint,retry:true});
     return;
   }
   _vcShow(`Filled ${filled} field${filled===1?'':'s'} from voice — check them, then press Save`,{heard:transcript,note:notes.join(' · '),hint:'Highlighted fields came from voice. Nothing is saved until you press Save.'});
@@ -25702,28 +26314,26 @@ async function runVoiceCommand(text,lang){
   if(!transcript)return;
   const targets=buildVoiceCatalog();
   _vcShow('Working out where to go…',{heard:transcript});
-  let res;
+  let r;
   try{
-    res=await moduleApi('/ai/voice-intent',{method:'POST',body:{transcript,lang:lang==='ar-AE'?'ar':'en',targets}});
+    r=await moduleApi('/ai/voice-intent',{method:'POST',body:{transcript,lang:lang==='ar-AE'?'ar':'en',targets}});
   }catch(err){
-    _vcShow(`Voice command failed: ${err.message||err}`,{heard:transcript,autoHide:6000});
+    _vcShow(`Voice command failed: ${err.message||err}`,{heard:transcript,retry:true});
     return;
   }
-  const entry=res.target?_vcCatalog.get(res.target):null;
-  if(entry&&res.intent==='query'&&res.confidence>=60){_vcRunQuery(entry,transcript);return;}
-  if(res.intent==='answer'&&res.query){_vcAnswer(res.query,lang,res.alternatives);return;}
-  if(entry&&['navigate','open_form','search'].includes(res.intent)&&res.confidence>=60){
-    const verb=res.intent==='open_form'?'Opening form':res.intent==='search'?`Searching “${res.query}” in`:'Opening';
+  const entry=r.target?_vcCatalog.get(r.target):null;
+  if(entry&&r.intent==='query'&&r.confidence>=60){_vcRunQuery(entry,transcript);return;}
+  if(r.intent==='answer'&&r.query){_vcAnswer(r.query,lang,r.alternatives);return;}
+  if(entry&&['navigate','open_form','search'].includes(r.intent)&&r.confidence>=60){
+    const verb=r.intent==='open_form'?'Opening form':r.intent==='search'?`Searching “${r.query}” in`:'Opening';
     _vcShow(`${verb} ${entry.label}`,{heard:transcript,autoHide:2500});
-    _vcRun(entry,res.intent==='search'?res.query:null);
+    _vcRun(entry,r.intent==='search'?r.query:null);
     audit('Voice command',transcript.slice(0,60),entry.label.slice(0,60));
     return;
   }
-  const ids=[...(entry?[entry.id]:[]),...(res.alternatives||[])].filter((id,i,a)=>a.indexOf(id)===i).slice(0,4);
-  const query=res.intent==='search'?res.query:null;
-  _vcShow(ids.length?'Did you mean…':'Sorry, I couldn’t match that to a page.',{heard:transcript,chips:_vcChips(ids,query)});
+  const ids=[...(entry?[entry.id]:[]),...(r.alternatives||[])].filter((id,i,a)=>a.indexOf(id)===i).slice(0,4);
+  _vcShow(ids.length?'Did you mean…':'Sorry, I couldn’t match that to a page.',{heard:transcript,chips:_vcChips(ids,r.intent==='search'?r.query:null),retry:true});
 }
-
 document.addEventListener('keydown',e=>{
   if(e.ctrlKey&&!e.altKey&&!e.metaKey&&!e.shiftKey&&e.code==='Space'&&document.getElementById('vc-mic-btn')){
     e.preventDefault();
@@ -25747,15 +26357,16 @@ async function askSystemAI(prompt){
   if(input&&!prompt)input.value='';
   if(send)send.disabled=true;
   setAIStatus('TaxFlow AI is answering...');
+  // Set by the mic: answer in the spoken language and read the answer aloud.
+  const spokenLang=_aiVoiceLang;
+  _aiVoiceLang=null;
   try{
-    // Spoken questions get a spoken answer, in the language they were asked in.
-    const voiceLang=_aiVoiceLang;_aiVoiceLang=null;
     const body={question};
-    if(voiceLang==='ar-AE'||/[\u0600-\u06FF]/.test(question))body.answer_lang='ar';
+    if(spokenLang==='ar-AE'||/[؀-ۿ]/.test(question))body.answer_lang='ar';
     const data=await moduleApi('/ai/assist',{method:'POST',body});
     if(pending)pending.querySelector('.ai-bubble').innerHTML=`<div class="ai-msg-meta">TaxFlow AI</div>${aiResponseSections(data)}`;
     setAIStatus(`Answered with ${data.confidence||0}% confidence. Human approval is still required for posting.`);
-    if(voiceLang&&window.VoiceOutput)VoiceOutput.speak(data.answer);
+    if(spokenLang&&window.VoiceOutput)VoiceOutput.speak(data.answer);
   }catch(err){
     console.warn('Backend AI assistant unavailable:',err);
     if(pending){
@@ -26881,7 +27492,7 @@ function recalcBill(){
     const amtEl=row.querySelector('.bill-line-amt');
     if(amtEl)amtEl.textContent=(net+vat).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
   });
-  const fmt=n=>'AED '+n.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmt=n=>formatAed(n);
   const s=document.getElementById('bill-subtotal'),v=document.getElementById('bill-vat-total'),g=document.getElementById('bill-grand-total');
   if(s)s.textContent=fmt(subtotal);if(v)v.textContent=fmt(vatTotal);if(g)g.textContent=fmt(subtotal+vatTotal);
 }
@@ -26978,7 +27589,7 @@ function savePayment(){
   if(primaryDoc)markPaymentDocumentPaid(record);
   if(isSupplierPaymentType(type))_refreshBillPageStats();
   closeM('m-payment');
-  toast(`${isSupplierPaymentType(type)?'Payment':'Receipt'} recorded — AED ${amount.toLocaleString('en-AE',{minimumFractionDigits:2})}`,'ok');
+  toast(`${isSupplierPaymentType(type)?'Payment':'Receipt'} recorded — ${formatAed(amount)}`,'ok');
   audit('Recorded payment',ref,'Posted');
 }
 
@@ -27668,9 +28279,9 @@ function buildDraftQuotationRecord(status='Sent'){
     customer:document.getElementById('quote-customer')?.value?.trim()||'New Customer',
     date:document.getElementById('quote-date')?.value||'Today',
     valid_until:document.getElementById('quote-valid')?.value||'15 days',
-    subtotal:document.getElementById('quote-subtotal')?.textContent?.replace('AED ','').replace('AED ','')||'0.00',
-    vat_amount:document.getElementById('quote-vat')?.textContent?.replace('AED ','').replace('AED ','')||'0.00',
-    total:document.getElementById('quote-total')?.textContent?.replace('AED ','').replace('AED ','')||'0.00',
+    subtotal:document.getElementById('quote-subtotal')?.textContent?.replace(/^[A-Z]{3}\s*/,'').replace(/,/g,'')||'0.00',
+    vat_amount:document.getElementById('quote-vat')?.textContent?.replace(/^[A-Z]{3}\s*/,'').replace(/,/g,'')||'0.00',
+    total:document.getElementById('quote-total')?.textContent?.replace(/^[A-Z]{3}\s*/,'').replace(/,/g,'')||'0.00',
     status,
     owner:'Sales Team',
     subject:document.getElementById('quote-subject')?.value?.trim()||'',
@@ -28192,7 +28803,7 @@ async function loadOtEligibility(){
     body.innerHTML=_otEligibilityRows.map((r,i)=>{
       const cls=!r.eligible?'b-r':r.eligibility.startsWith('Requested')?'b-g':'b-a';
       const act=r.eligible&&!r.request_id?`<button class="btn btn-p btn-sm" onclick="requestOtFromAttendance(${i})">Request OT</button>`:'';
-      return `<tr><td>${escapeHtml(r.employee)}<div class="card-sub">${escapeHtml(r.employee_no)}${r.department?' · '+escapeHtml(r.department):''}</div></td><td>${escapeHtml(r.date)}${r.day_type==='weekend'?' <span class="b b-a">Weekend</span>':''}</td><td class="mono">${escapeHtml(r.clock_in||'—')}</td><td class="mono">${escapeHtml(r.clock_out||'—')}</td><td class="mono">${escapeHtml(r.worked)}</td><td class="mono">${escapeHtml(r.extra)}</td><td class="mono">${escapeHtml(r.eligible_ot)}</td><td><span class="b ${cls}">${escapeHtml(r.eligibility)}</span></td><td>${act}</td></tr>`;
+      return `<tr><td>${escapeHtml(r.employee)}<div class="card-sub">${escapeHtml(r.employee_no)}${r.department?' · '+escapeHtml(r.department):''}</div></td><td>${escapeHtml(r.date)}${r.day_type==='weekend'?' <span class="b b-a">Weekend</span>':''}</td><td class="mono">${escapeHtml(r.clock_in||'—')}</td><td class="mono">${escapeHtml(r.clock_out||'—')}</td><td class="mono">${escapeHtml(r.worked)}${r.break?`<div class="card-sub">after ${escapeHtml(r.break)} break</div>`:''}</td><td class="mono">${escapeHtml(r.extra)}</td><td class="mono">${escapeHtml(r.eligible_ot)}</td><td><span class="b ${cls}">${escapeHtml(r.eligibility)}</span></td><td>${act}</td></tr>`;
     }).join('');
   }catch(err){body.innerHTML=`<tr><td colspan="9" style="color:var(--red);text-align:center">${escapeHtml(err.message||'Could not load')}</td></tr>`;}
 }

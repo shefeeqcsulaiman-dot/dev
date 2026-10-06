@@ -40,7 +40,7 @@ def test_employee_can_save_and_read_app_data_record(client, db, auth_headers):
     emp = Employee(company_id=company_id, employee_no="BR-WRITE-A", full_name="Write Access Employee")
     db.add(emp)
     db.commit()
-    emp_headers = _grant_role_and_login(client, auth_headers, emp.id, "branchtest.write1", ["employees:view"], "Write Test Role")
+    emp_headers = _grant_role_and_login(client, auth_headers, emp.id, "branchtest.write1", ["employees:view", "inventory:view", "inventory:edit", "inventory:delete"], "Write Test Role")
 
     saved = client.post(
         "/api/v1/app-data?action=save",
@@ -62,7 +62,7 @@ def test_employee_write_attributed_to_employee_not_user_in_audit_log(client, db,
     emp = Employee(company_id=company_id, employee_no="BR-WRITE-B", full_name="Audit Trail Employee")
     db.add(emp)
     db.commit()
-    emp_headers = _grant_role_and_login(client, auth_headers, emp.id, "branchtest.write2", ["employees:view"], "Write Test Role")
+    emp_headers = _grant_role_and_login(client, auth_headers, emp.id, "branchtest.write2", ["employees:view", "inventory:view", "inventory:edit", "inventory:delete"], "Write Test Role")
 
     saved = client.post(
         "/api/v1/app-data?action=save",
@@ -112,7 +112,7 @@ def test_employee_save_stamps_appdata_record_branch_id(client, db, auth_headers)
     emp = Employee(company_id=company_id, employee_no="BR-WRITE-C", full_name="Branch Stamped Employee", branch_id=branch["id"])
     db.add(emp)
     db.commit()
-    emp_headers = _grant_role_and_login(client, auth_headers, emp.id, "branchtest.write3", ["employees:view"], "Write Test Role")
+    emp_headers = _grant_role_and_login(client, auth_headers, emp.id, "branchtest.write3", ["employees:view", "inventory:view", "inventory:edit", "inventory:delete"], "Write Test Role")
 
     saved = client.post(
         "/api/v1/app-data?action=save",
@@ -134,7 +134,7 @@ def test_employee_bulk_save_and_delete_work(client, db, auth_headers):
     emp = Employee(company_id=company_id, employee_no="BR-WRITE-D", full_name="Bulk Write Employee")
     db.add(emp)
     db.commit()
-    emp_headers = _grant_role_and_login(client, auth_headers, emp.id, "branchtest.write4", ["employees:view"], "Write Test Role")
+    emp_headers = _grant_role_and_login(client, auth_headers, emp.id, "branchtest.write4", ["employees:view", "inventory:view", "inventory:edit", "inventory:delete"], "Write Test Role")
 
     bulk = client.post(
         "/api/v1/app-data?action=bulk-save",
@@ -164,7 +164,7 @@ def test_wipe_company_data_stays_admin_only(client, db, auth_headers):
     emp = Employee(company_id=company_id, employee_no="BR-WRITE-E", full_name="No Wipe Access Employee")
     db.add(emp)
     db.commit()
-    emp_headers = _grant_role_and_login(client, auth_headers, emp.id, "branchtest.write5", ["employees:view"], "Write Test Role")
+    emp_headers = _grant_role_and_login(client, auth_headers, emp.id, "branchtest.write5", ["employees:view", "inventory:view", "inventory:edit", "inventory:delete"], "Write Test Role")
 
     resp = client.post("/api/v1/app-data/wipe", headers=emp_headers, json={"confirm": "DELETE ALL"})
     assert resp.status_code in (401, 403)

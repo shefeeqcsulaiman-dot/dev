@@ -1,7 +1,7 @@
 import json
 import logging
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session, joinedload
 
@@ -72,7 +72,41 @@ def branch_allows_module(modules_enabled_json: str | None, module_key: str) -> b
     return company_allows_module(modules_enabled_json, module_key)
 
 
-def require_module(module_key: str):
+# Modules whose own routes carry fine-grained permission checks (HRMS: employees:view,
+# leave:edit...) -- the role check in require_module() leaves them to those.
+_ROLE_CHECK_EXEMPT_MODULES = frozenset({"hrms", "ess"})
+# A login that can use these modules may also read the one named: POS staff need stock levels
+# and a POS sale writes its sales invoice; purchasing reads stock too.
+_MODULE_VIEW_ALTERNATIVES: dict[str, tuple[str, ...]] = {
+    "inventory": ("pos", "purchase", "sales"),
+    "sales": ("pos",),
+}
+
+
+def principal_module_allowed(principal: Principal, module_key: str, write: bool, delete: bool = False) -> bool:
+    """Role check for a main-app module. Admins: always. Main-app users (Settings > Users & Roles):
+    read needs <module>:view, write or delete needs <module>:edit. Employee and branch logins:
+    read needs :view, create/change needs :edit, delete needs :delete."""
+    if principal.is_admin or module_key in _ROLE_CHECK_EXEMPT_MODULES:
+        return True
+    if principal.kind == "user":
+        if write or delete:
+            return principal.has(f"{module_key}:edit")
+        return principal.has(f"{module_key}:view", f"{module_key}:edit", f"{module_key}:view_all_branches")
+    options = (module_key, *_MODULE_VIEW_ALTERNATIVES.get(module_key, ()))
+    # "view all branches" of a module includes viewing it.
+    levels = ("delete",) if delete else ("edit",) if write else ("view", "view_all_branches", "edit")
+    return principal.has(*(f"{m}:{level}" for m in options for level in levels))
+
+
+def require_company_admin(principal: Principal = Depends(get_current_principal)) -> Principal:
+    """Company settings, users, backups, data wipe, branch management: company admins only."""
+    if not principal.is_admin or principal.kind != "user":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only a company admin can do this")
+    return principal
+
+
+def require_module(module_key: str, check_role: bool = True):
     """Dependency factory enforcing superadmin's per-company Module
     Permissions server-side. The frontend sidebar hide (applyModulePermissionNav
     in app.js) is UI politeness only, same as the existing HRMS per-employee
@@ -82,6 +116,7 @@ def require_module(module_key: str):
     User-admin and Employee-sub-user routes (Payroll/Leave/Attendance/HR
     admin) without duplicating the check per auth style."""
     def _check(
+        request: Request,
         principal: Principal = Depends(get_current_principal),
         db: Session = Depends(get_db),
     ) -> Principal:
@@ -119,5 +154,8 @@ def require_module(module_key: str):
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=f"The '{module_key}' module is not enabled for your branch",
                 )
+        # The company having a module doesn't mean this login's role may use it.
+        if check_role and not principal_module_allowed(principal, module_key, request.method not in ("GET", "HEAD"), request.method == "DELETE"):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Your role doesn't have access to this")
         return principal
     return _check

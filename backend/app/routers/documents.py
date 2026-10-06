@@ -1,14 +1,21 @@
-from fastapi import APIRouter, Depends, File, UploadFile
+import io
+import os
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_company_admin
 from app.models import Document, User
 from app.schemas import DocumentOut
 from app.storage import upload_fileobj
 
 
-router = APIRouter(prefix="/documents", tags=["documents"])
+router = APIRouter(prefix="/documents", dependencies=[Depends(require_company_admin)], tags=["documents"])
+
+MAX_DOCUMENT_BYTES = 20 * 1024 * 1024
+# Business documents only; no HTML/SVG/scripts, which a browser could run if ever served back.
+ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".heic", ".gif", ".csv", ".xlsx", ".xls", ".docx", ".doc", ".txt"}
 
 
 @router.get("", response_model=list[DocumentOut])
@@ -30,11 +37,17 @@ def upload_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Document:
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=415, detail="This file type isn't allowed — upload a PDF, image, spreadsheet, Word or text document")
+    content = file.file.read(MAX_DOCUMENT_BYTES + 1)
+    if len(content) > MAX_DOCUMENT_BYTES:
+        raise HTTPException(status_code=413, detail="File is too large (max 20 MB)")
     storage_key = upload_fileobj(
         current_user.company_id,
         file.filename or "document",
         file.content_type or "application/octet-stream",
-        file.file,
+        io.BytesIO(content),
     )
     document = Document(
         company_id=current_user.company_id,
