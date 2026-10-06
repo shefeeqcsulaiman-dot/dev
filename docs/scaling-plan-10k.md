@@ -45,7 +45,7 @@ Rough infrastructure cost at that size: a few thousand US dollars a month (reven
 
 **Up to about 2,000 companies:**
 - [ ] Move invoices, purchases, rota and attendance out of JSON into tables
-- [x] Pre-calculated totals: reports read posted debit/credit per account and month from `account_period_totals` (migration 0006, `app/account_totals.py`), kept current on every journal write including bulk deletes; `REPORT_TOTALS_SOURCE=live` switches back to summing journal lines; `python -m app.account_totals [--rebuild]` checks/repairs; the test suite verifies every company at the end of each run. Sales/VAT/purchase monthly totals for the dashboard still read app-data (next: from the summary columns)
+- [x] Pre-calculated totals: reports read posted debit/credit per account and month from `account_period_totals` (migration 0006, `app/account_totals.py`), kept current on every journal write including bulk deletes; `REPORT_TOTALS_SOURCE=live` switches back to summing journal lines; `python -m app.account_totals [--rebuild]` checks/repairs; the test suite verifies every company at the end of each run. Dashboard: sales invoices already posted as real Invoices are skipped in SQL instead of parsed, and monthly revenue/VAT reads only the columns it needs (dashboard 138 -> 96 ms on a 1-year company, identical output). Still parsed per request: purchase/bill app-data documents for the purchase cards
 - [ ] Read replica
 - [ ] Background jobs for heavy work
 - [ ] Split frontend

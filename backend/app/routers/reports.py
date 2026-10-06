@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import event, func, text
+from sqlalchemy import and_, event, func, select, text
 from sqlalchemy.exc import OperationalError as SQLAOperationalError
 from sqlalchemy.exc import TimeoutError as SQLATimeoutError
 from sqlalchemy.orm import Session
@@ -478,9 +478,32 @@ def app_sales_invoice_records(db: Session, company_id: str, branch_id: str | Non
         for (value,) in db.query(Invoice.invoice_number).filter(Invoice.company_id == company_id).all()
         if normalized_ref(value)
     }
+    # Every saved app-data invoice (bar negative credit notes) also posts a real Invoice
+    # row with the same number, so nearly all of them are dropped below. Skip those in SQL
+    # instead of parsing every invoice's JSON on each dashboard/report request: a row is
+    # left out here only when the Python check would certainly drop it too (its stored
+    # key, which is its invoice_no, matches a posted invoice number and invoice_no is a
+    # non-empty string). Anything less certain still goes through the check below.
+    posted_numbers = select(func.lower(func.trim(Invoice.invoice_number))).where(Invoice.company_id == company_id)
+    rows = (
+        db.query(AppDataRecord.payload, AppDataRecord.branch_id)
+        .filter(
+            AppDataRecord.company_id == company_id,
+            AppDataRecord.collection == "salesInvoices",
+            ~and_(
+                func.lower(func.trim(AppDataRecord.record_key)).in_(posted_numbers),
+                AppDataRecord.payload.like('%"invoice_no": "_%'),
+            ),
+        )
+        .all()
+    )
     records = []
-    for row, row_branch_id in app_data_payloads_with_branch(db, company_id, "salesInvoices"):
-        if not _branch_row_included(row_branch_id, branch_id):
+    for payload, row_branch_id in rows:
+        try:
+            row = json.loads(payload or "{}")
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(row, dict) or not _branch_row_included(row_branch_id, branch_id):
             continue
         invoice_ref = normalized_ref(row.get("invoice_no") or row.get("invoice_number") or row.get("ref"))
         if invoice_ref and invoice_ref in existing_refs:
@@ -572,14 +595,15 @@ def monthly_revenue_vat(db: Session, company_id: str, app_sales: list[dict[str, 
     # for edge-of-month safety) keeps the query cost roughly constant
     # regardless of company age, with no behavior change to the output.
     cutoff = (_date.today().replace(day=1) - timedelta(days=210)).replace(day=1)
-    invoice_query = db.query(Invoice).filter(Invoice.company_id == company_id, Invoice.created_at >= cutoff)
+    # Just the three columns used (not whole ORM objects: building those was most of this
+    # function's time on the dashboard).
+    invoice_query = db.query(Invoice.created_at, Invoice.total, Invoice.vat).filter(Invoice.company_id == company_id, Invoice.created_at >= cutoff)
     if branch_id:
         invoice_query = invoice_query.filter((Invoice.branch_id == branch_id) | (Invoice.branch_id.is_(None)))
-    invoices = invoice_query.all()
-    for invoice in invoices:
-        item = periods.setdefault(period_label(invoice.created_at), {"sales": Decimal("0.00"), "purchases": Decimal("0.00"), "output_vat": Decimal("0.00"), "input_vat": Decimal("0.00")})
-        item["sales"] += money(invoice.total)
-        item["output_vat"] += money(invoice.vat)
+    for created_at, total, vat in invoice_query.all():
+        item = periods.setdefault(period_label(created_at), {"sales": Decimal("0.00"), "purchases": Decimal("0.00"), "output_vat": Decimal("0.00"), "input_vat": Decimal("0.00")})
+        item["sales"] += money(total)
+        item["output_vat"] += money(vat)
     for invoice in app_sales:
         item = periods.setdefault(period_label(invoice.get("date") or invoice.get("created_at")), {"sales": Decimal("0.00"), "purchases": Decimal("0.00"), "output_vat": Decimal("0.00"), "input_vat": Decimal("0.00")})
         item["sales"] += record_amount(invoice, "total", "amount", "net_amount")
@@ -591,11 +615,11 @@ def monthly_revenue_vat(db: Session, company_id: str, app_sales: list[dict[str, 
     ]
     if branch_id:
         purchase_filters.append((SourceTransaction.branch_id == branch_id) | (SourceTransaction.branch_id.is_(None)))
-    purchases = db.query(SourceTransaction).filter(*purchase_filters).all()
-    for purchase in purchases:
-        item = periods.setdefault(period_label(purchase.created_at), {"sales": Decimal("0.00"), "purchases": Decimal("0.00"), "output_vat": Decimal("0.00"), "input_vat": Decimal("0.00")})
-        item["purchases"] += money(purchase.total)
-        item["input_vat"] += money(purchase.vat)
+    purchases = db.query(SourceTransaction.created_at, SourceTransaction.total, SourceTransaction.vat).filter(*purchase_filters).all()
+    for created_at, total, vat in purchases:
+        item = periods.setdefault(period_label(created_at), {"sales": Decimal("0.00"), "purchases": Decimal("0.00"), "output_vat": Decimal("0.00"), "input_vat": Decimal("0.00")})
+        item["purchases"] += money(total)
+        item["input_vat"] += money(vat)
     if not periods:
         periods["Current"] = {"sales": Decimal("0.00"), "purchases": Decimal("0.00"), "output_vat": Decimal("0.00"), "input_vat": Decimal("0.00")}
     return [
