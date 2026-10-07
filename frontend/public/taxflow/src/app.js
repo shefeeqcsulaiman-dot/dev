@@ -2870,6 +2870,21 @@ async function authenticatedFetch(url,rawOptions={}){
   return response.clone();
 }
 
+// True when the stored token is still accepted by the server. One check at a time:
+// a page firing several requests that all 401 at once shares the same answer.
+let _sessionCheck=null;
+function _sessionStillValid(){
+  const token=localStorage.getItem('taxflow_token');
+  if(!token)return Promise.resolve(false);
+  if(!_sessionCheck){
+    _sessionCheck=fetch(`${apiBaseUrl()}/auth/whoami`,{headers:{Authorization:'Bearer '+token}})
+      .then(r=>r.ok)
+      .catch(()=>false)
+      .finally(()=>setTimeout(()=>{_sessionCheck=null;},5000));
+  }
+  return _sessionCheck;
+}
+
 async function _authenticatedFetchUncached(url,options={}){
   await ensureBackendSession();
   url=_withActiveBranchParam(url);
@@ -2892,11 +2907,18 @@ async function _authenticatedFetchUncached(url,options={}){
   // and loadExceptionCenter() reachable the same way) — a bug CLASS, since
   // 93 backend endpoints are User-only vs 12 that accept any principal.
   if(response.status===401){
+    let detail='';
+    try{detail=(await response.clone().json())?.detail||'';}catch{}
     const principalKind=localStorage.getItem('taxflow_principal_kind');
-    if(principalKind==='employee'||principalKind==='branch'){
-      let detail='';
-      try{detail=(await response.clone().json())?.detail||'';}catch{}
-      if(detail==='User no longer exists')return response;
+    if((principalKind==='employee'||principalKind==='branch')&&detail==='User no longer exists')return response;
+    // One endpoint answering 401 used to end the whole session on the spot. Ask the
+    // server whether the session itself is still good first (/auth/whoami accepts every
+    // login type): if it is, only this request failed -- report which one in the
+    // console and keep the user signed in. Only a session the server really rejects
+    // goes on to the re-login/sign-out path below.
+    if(await _sessionStillValid()){
+      console.warn(`401 from ${url} (${detail||'no detail'}) while the session is still valid -- not signing out`);
+      return response;
     }
     localStorage.removeItem('taxflow_token');
     const relogged=await loginLocalBackend();
