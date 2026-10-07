@@ -6,9 +6,14 @@ stranger's company data the moment any bug ever nulls/breaks a company_id.
 Fixed to fail closed: GET /companies/current now 404s instead of guessing,
 and PUT /companies/current falls through to its existing "create a new
 company for this user" branch instead of taking over an existing tenant."""
+import pytest
+
+from app.database import engine
 from app.models import Company, User
 
 
+@pytest.mark.skipif(engine.dialect.name != "sqlite",
+                    reason="PostgreSQL's foreign key already makes an orphaned users.company_id impossible")
 def test_orphaned_company_id_fails_closed_not_linked_to_another_tenant(client, db, auth_headers, second_tenant_headers):
     # second_tenant_headers's login already created a second real Company —
     # confirm it exists and note its name, so we can prove auth_headers's

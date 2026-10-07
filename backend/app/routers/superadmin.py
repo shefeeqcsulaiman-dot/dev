@@ -761,6 +761,9 @@ def delete_company(
     # transactions — reproduced live on a real customer's data, not caught
     # by the earlier GPS/RBAC/Leave fix since this is a separate ordering
     # bug in a section that predates all of that).
+    # Bank reconciliation matches point at GL rows (a foreign key PostgreSQL enforces), so
+    # they go first; they're removed again below with the rest of the bank data (no-op).
+    db.query(BankReconciliationMatch).filter(BankReconciliationMatch.company_id == cid).delete(**s)
     db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == cid).delete(**s)
 
     je_ids = db.query(JournalEntry.id).filter(JournalEntry.company_id == cid).subquery()

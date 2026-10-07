@@ -1,7 +1,7 @@
 """Security review 2026-09-29: upload limits, security headers (CSP etc.) and
 the legacy plain-text password column being wiped on startup."""
 import app.routers.documents as documents
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 from app.database import engine
 
@@ -42,7 +42,7 @@ def test_legacy_plaintext_passwords_are_wiped_on_startup():
     from app.main import ensure_schema_updates
 
     with engine.begin() as conn:
-        cols = {r[1] for r in conn.execute(text("PRAGMA table_info(users)"))}
+        cols = {c["name"] for c in inspect(conn).get_columns("users")}
         if "password_plain" not in cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN password_plain VARCHAR(255)"))
         conn.execute(text("UPDATE users SET password_plain = 'hunter2'"))

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from app.accounting_posting import create_gl_entries_from_journal, money, post_source_transaction
+from app.accounting_posting import create_gl_entries_from_journal, money, post_source_transaction, release_bank_matches
 from app.auth_principal import Principal, require_principal_permission, resolve_active_branch
 from app.database import get_db
 from app.dependencies import get_current_user, require_module
@@ -674,6 +674,7 @@ def _delete_journal_cascade(db: Session, journal: JournalEntry) -> None:
     so a bulk caller (clear_all_journals) can batch many of these into one
     transaction."""
     journal_id = journal.id
+    release_bank_matches(db, GeneralLedgerEntry.journal_entry_id == journal_id)
     db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.journal_entry_id == journal_id).delete()
     db.query(Voucher).filter(Voucher.posted_journal_id == journal_id).update(
         {"posted_journal_id": None, "status": "approved"}

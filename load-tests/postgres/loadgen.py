@@ -25,6 +25,9 @@ STAGES = [int(x) for x in sys.argv[2].split(",")]
 STAGE_SECONDS = int(sys.argv[3])
 OFFICE_SHARE = float(sys.argv[4])
 OUT = sys.argv[5] if len(sys.argv) > 5 else None
+# Release gate (CI): exit 1 if any stage's 95th percentile or server-error rate is above these.
+MAX_P95_MS = float(os.environ.get("LT_MAX_P95_MS", "0") or 0)
+MAX_ERROR_PCT = float(os.environ.get("LT_MAX_ERROR_PCT", "0") or 0)
 OFFICE_THINK, EMP_THINK = 8.0, 30.0   # average seconds between one user's actions
 
 db = SessionLocal()
@@ -160,5 +163,13 @@ async def main():
                 break
         stop.set()
         await asyncio.gather(*(t for _, t in tasks), return_exceptions=True)
+    return results
 
-asyncio.run(main())
+
+results = asyncio.run(main())
+failed = [s for s in results
+          if (MAX_P95_MS and s["p95_ms"] > MAX_P95_MS) or (MAX_ERROR_PCT and s["error_pct"] > MAX_ERROR_PCT)]
+if failed or (MAX_P95_MS and len(results) < len(STAGES)):
+    print(f"LOAD TEST FAILED: limits p95 <= {MAX_P95_MS:.0f} ms, errors <= {MAX_ERROR_PCT}% "
+          f"(stages over the limit: {[s['users'] for s in failed]}, stages run: {len(results)}/{len(STAGES)})", flush=True)
+    sys.exit(1)

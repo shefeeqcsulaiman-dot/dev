@@ -168,10 +168,12 @@ def test_sync_uses_saudi_offset_not_hardcoded_uae(client, auth_headers, db, monk
     assert resp.json()["synced"] == 1
 
     row = db.query(AttendanceDetail).filter(AttendanceDetail.employee_id == "EMP-SA-001").one()
-    # SQLite round-trips DateTime(timezone=True) as naive (same quirk noted
-    # elsewhere in this suite) — compare the naive readback against a naive
-    # literal rather than a tz-aware one.
-    assert row.clock_in_1 == datetime(2026, 1, 15, 6, 0, 0)
+    # SQLite round-trips DateTime(timezone=True) as naive, PostgreSQL as aware --
+    # compare in UTC either way.
+    clock_in = row.clock_in_1
+    if clock_in.tzinfo is not None:
+        clock_in = clock_in.astimezone(UTC).replace(tzinfo=None)
+    assert clock_in == datetime(2026, 1, 15, 6, 0, 0)
     assert row.work_date == "2026-01-15"
 
 

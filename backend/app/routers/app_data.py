@@ -33,7 +33,7 @@ from starlette.concurrency import run_in_threadpool
 import app.cache as cache
 import app.timezone_utils as timezone_utils
 from app import attendance_store
-from app.accounting_posting import ensure_credit_note_tax_line
+from app.accounting_posting import ensure_credit_note_tax_line, release_bank_matches
 from app.config import get_settings
 from app.database import get_db
 from app.auth_principal import resolve_active_branch
@@ -1979,6 +1979,7 @@ async def app_data_action(
                         ).all()
                     ]
                     if journal_ids:
+                        release_bank_matches(db, GeneralLedgerEntry.journal_entry_id.in_(journal_ids))
                         db.query(GeneralLedgerEntry).filter(
                             GeneralLedgerEntry.journal_entry_id.in_(journal_ids)
                         ).delete(synchronize_session=False)
@@ -2915,6 +2916,7 @@ def _delete_source_transaction_cascade(db: Session, company_id: str, tx_id: str)
             ).all()
         ]
     if journal_ids:
+        release_bank_matches(db, GeneralLedgerEntry.journal_entry_id.in_(journal_ids))
         db.query(GeneralLedgerEntry).filter(
             GeneralLedgerEntry.journal_entry_id.in_(journal_ids)
         ).delete(synchronize_session=False)

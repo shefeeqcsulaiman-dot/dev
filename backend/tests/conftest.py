@@ -8,7 +8,10 @@ from sqlalchemy.orm import Session
 
 
 TEST_DB = Path(__file__).resolve().parent.parent / f"taxflow-pytest-{os.getpid()}.db"
-os.environ["DATABASE_URL"] = f"sqlite:///./{TEST_DB.name}"
+# TEST_DATABASE_URL runs the suite against another database (CI runs it on PostgreSQL as
+# well as SQLite). It must be a throwaway database: every table is dropped at the start.
+PG_TEST_URL = os.environ.get("TEST_DATABASE_URL")
+os.environ["DATABASE_URL"] = PG_TEST_URL or f"sqlite:///./{TEST_DB.name}"
 os.environ["SECRET_KEY"] = "taxflow-test-secret"
 os.environ["CELERY_TASK_ALWAYS_EAGER"] = "true"
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -22,7 +25,15 @@ from app.security import hash_password  # noqa: E402
 
 @pytest.fixture(scope="session", autouse=True)
 def database():
-    if TEST_DB.exists():
+    if PG_TEST_URL:
+        # Start from an empty schema, including tables code creates outside the models
+        # (e.g. schema_flags), so a re-run sees the same database a fresh CI job does.
+        from sqlalchemy import text as _text
+
+        with engine.begin() as conn:
+            conn.execute(_text("DROP SCHEMA public CASCADE"))
+            conn.execute(_text("CREATE SCHEMA public"))
+    elif TEST_DB.exists():
         with contextlib.suppress(PermissionError):
             TEST_DB.unlink()
     Base.metadata.create_all(bind=engine)

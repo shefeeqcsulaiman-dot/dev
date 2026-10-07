@@ -457,3 +457,24 @@ def fail_job(job: PostingJob, message: str) -> PostingJob:
     job.retry_count = (job.retry_count or 0) + 1
     job.error_message = message
     return job
+
+
+def release_bank_matches(db: Session, *gl_filters) -> None:
+    """Before GL rows are deleted: undo any bank reconciliation matched to them, the same
+    way unmatch_bank_line() does (statement line back to "unmatched", match removed).
+    bank_reconciliation_matches.ledger_entry_id is a foreign key, so PostgreSQL refused
+    the delete outright (Clear Ledger Records, deleting an invoice/purchase or a journal
+    returned 500 for any company that had reconciled those lines); SQLite never enforced
+    it and left matches pointing at rows that no longer existed."""
+    from sqlalchemy import select
+
+    from app.models import BankReconciliationMatch, BankStatementLine, GeneralLedgerEntry
+
+    gl_ids = select(GeneralLedgerEntry.id).where(*gl_filters)
+    statement_ids = select(BankReconciliationMatch.statement_line_id).where(BankReconciliationMatch.ledger_entry_id.in_(gl_ids))
+    db.query(BankStatementLine).filter(BankStatementLine.id.in_(statement_ids)).update(
+        {"status": "unmatched"}, synchronize_session=False
+    )
+    db.query(BankReconciliationMatch).filter(BankReconciliationMatch.ledger_entry_id.in_(gl_ids)).delete(
+        synchronize_session=False
+    )
