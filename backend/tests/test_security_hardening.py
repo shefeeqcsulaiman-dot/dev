@@ -137,9 +137,10 @@ def test_cors_wildcard_blocked_in_production():
     make credentialed cross-origin requests. Must be blocked at production
     startup, same as an insecure SECRET_KEY/ADMIN_PASSWORD already is."""
     settings = get_settings()
-    original_env, original_origins = settings.app_env, settings.cors_origins
+    original_env, original_origins, original_db = settings.app_env, settings.cors_origins, settings.database_url
     try:
         settings.app_env = "production"
+        settings.database_url = "postgresql+psycopg2://u:p@db.example:5432/app"
         settings.secret_key = "a-real-production-secret"
         settings.admin_password = "a-real-admin-password"
         settings.superadmin_password = "a-real-superadmin-password"
@@ -154,3 +155,30 @@ def test_cors_wildcard_blocked_in_production():
     finally:
         settings.app_env = original_env
         settings.cors_origins = original_origins
+        settings.database_url = original_db
+
+
+def test_sqlite_database_blocked_in_production():
+    """Production without DATABASE_URL fell back to a per-container SQLite file: each
+    instance had its own users, so sessions broke between instances and no one saw the
+    real data. Production startup must refuse that."""
+    settings = get_settings()
+    saved = (settings.app_env, settings.database_url, settings.secret_key, settings.admin_password,
+             settings.superadmin_password, settings.cors_origins)
+    try:
+        settings.app_env = "production"
+        settings.secret_key = "a-real-production-secret"
+        settings.admin_password = "a-real-admin-password"
+        settings.superadmin_password = "a-real-superadmin-password"
+        settings.cors_origins = "https://app.e4cs.com"
+        settings.database_url = "sqlite:///./taxflow.db"
+        try:
+            settings.assert_production_secrets()
+            assert False, "expected RuntimeError for SQLite in production"
+        except RuntimeError as e:
+            assert "DATABASE_URL" in str(e)
+        settings.database_url = "postgresql+psycopg2://u:p@db.example:5432/app"
+        settings.assert_production_secrets()  # should not raise
+    finally:
+        (settings.app_env, settings.database_url, settings.secret_key, settings.admin_password,
+         settings.superadmin_password, settings.cors_origins) = saved

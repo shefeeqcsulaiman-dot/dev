@@ -78,6 +78,14 @@ class Settings(BaseSettings):
                 f"PRODUCTION STARTUP BLOCKED — insecure default values detected for: "
                 f"{', '.join(insecure)}. Set them via environment variables."
             )
+        if self.database_url.startswith("sqlite"):
+            # Without DATABASE_URL every container silently made its own SQLite file: users
+            # signed in on one instance were unknown to the next (401s, sessions dropping),
+            # and nobody saw the real data. Refuse to start instead.
+            raise RuntimeError(
+                "PRODUCTION STARTUP BLOCKED — DATABASE_URL is not set (falling back to SQLite). "
+                "Set it to the managed PostgreSQL connection string."
+            )
         # allow_credentials=True + a literal "*" origin makes Starlette's
         # CORSMiddleware reflect whatever Origin header the request sent —
         # effectively any site can make credentialed cross-origin requests.
