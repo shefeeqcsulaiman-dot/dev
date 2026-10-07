@@ -42,6 +42,18 @@ employees on the phone app every ~30 s) and prints requests/s, median and 95th-p
 times, the slowest action and errors per stage; `run.json` has per-action detail. It stops
 when 95% of responses take over 5 s or errors pass 5%.
 
+## In CI
+
+- `.github/workflows/backend-tests.yml` runs the whole test suite on PostgreSQL 16 as well
+  as SQLite on every push (`TEST_DATABASE_URL` points `tests/conftest.py` at a throwaway
+  database; its schema is reset at the start).
+- `.github/workflows/load-test.yml` runs this load test on every `v*` tag and on demand
+  (Actions -> Load test -> Run workflow, with the number of companies and user stages as
+  inputs). It seeds, starts one 3-worker instance and fails when a stage's 95th percentile
+  passes `LT_MAX_P95_MS` (2000) or server errors pass `LT_MAX_ERROR_PCT` (1%). The GitHub
+  runner is a shared 4-vCPU VM, so its numbers are lower than a production instance's;
+  compare runs with each other, not with the table below.
+
 ## Results, 2026-10-06
 
 Data: 200 companies, 5,000 employees, 240k accounting invoices, 1.8M journal lines, 1.24M

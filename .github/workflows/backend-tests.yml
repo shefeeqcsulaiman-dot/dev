@@ -32,6 +32,40 @@ jobs:
           ANTHROPIC_API_KEY: ""
         run: python -m pytest tests -q -p no:warnings
 
+  tests-postgres:
+    # Same suite against PostgreSQL (production's database): SQLite doesn't enforce foreign
+    # keys, returns naive datetimes and orders rows differently, which hid real bugs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: taxflow_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt pytest python-dotenv
+      - name: Run tests on PostgreSQL
+        working-directory: backend
+        env:
+          OPENAI_API_KEY: ""
+          ANTHROPIC_API_KEY: ""
+          TEST_DATABASE_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/taxflow_test
+        run: python -m pytest tests -q -p no:warnings
+
   dependency-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 10

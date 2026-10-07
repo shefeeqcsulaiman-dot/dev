@@ -44,9 +44,17 @@ def _toggle_limiter_enabled(value: bool) -> bool:
     return previous
 
 
+def _ensure_company(db, company_id):
+    # PostgreSQL enforces employees.company_id's foreign key (SQLite doesn't).
+    if not db.get(Company, company_id):
+        db.add(Company(id=company_id, name=f"Rate limit {company_id}", trn=f"RL-{company_id}"))
+        db.flush()
+
+
 def test_ess_login_rate_limited(client, db):
     previous = _toggle_limiter_enabled(True)
     try:
+        _ensure_company(db, "rate-limit-test-co")
         emp = Employee(company_id="rate-limit-test-co", employee_no="RATE-001", full_name="Rate Limit Test")
         db.add(emp)
         db.commit()
@@ -62,6 +70,7 @@ def test_ess_login_rate_limited(client, db):
 def test_hr_login_rate_limited(client, db):
     previous = _toggle_limiter_enabled(True)
     try:
+        _ensure_company(db, "rate-limit-test-co-2")
         emp = Employee(company_id="rate-limit-test-co-2", employee_no="RATE-002", full_name="Rate Limit Test 2")
         db.add(emp)
         db.commit()

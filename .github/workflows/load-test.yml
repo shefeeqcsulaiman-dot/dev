@@ -1,0 +1,75 @@
+name: Load test (PostgreSQL)
+
+# Release gate: seed a PostgreSQL database, run one production-shaped instance
+# (3 workers, pool 10+15) and step up simulated users. Fails when a stage's 95th
+# percentile or server-error rate passes the limits below. See load-tests/postgres/README.md.
+# Runs on version tags and on demand (Actions -> Load test -> Run workflow).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      companies:
+        description: Companies to seed
+        default: "20"
+      stages:
+        description: Simultaneous users per stage
+        default: "50,100,150"
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: taxflow_lt
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/taxflow_lt
+      SECRET_KEY: load-test-secret-ci-only
+      REDIS_URL: memory://
+      APP_ENV: development
+      # The runner is a 4-vCPU VM shared with the load generator: limits are set for that,
+      # not for a production instance. Tighten as results settle.
+      LT_MAX_P95_MS: "2000"
+      LT_MAX_ERROR_PCT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt httpx
+      - name: Migrate and seed
+        working-directory: backend
+        run: |
+          python -m app.migrate
+          python scripts/run_bulk_seed.py --companies "${{ github.event.inputs.companies || '20' }}" --branches-per-company 2             --employees-per-company 25 --customers-per-company 60 --suppliers-per-company 30 --products-per-company 80             --sales-per-company 1200 --purchases-per-company 600 --years 1 --yes
+          python ../load-tests/postgres/lt_seed_extra.py
+          python -m app.account_totals
+      - name: Start one instance
+        run: |
+          python load-tests/postgres/lt_server.py 8071 3 10 15 > server.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:8071/health && break; sleep 2; done
+      - name: Run stages
+        working-directory: backend
+        run: python ../load-tests/postgres/loadgen.py http://127.0.0.1:8071 "${{ github.event.inputs.stages || '50,100,150' }}" 60 0.3 ../load-results.json
+      - name: Server log
+        if: always()
+        run: tail -n 100 server.log || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-test-results
+          path: load-results.json

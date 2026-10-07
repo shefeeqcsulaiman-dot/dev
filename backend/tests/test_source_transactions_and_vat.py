@@ -112,7 +112,10 @@ def test_repost_by_reference_syncs_stale_ledger_after_purchase_edit(client, auth
     fresh = next(j for j in purchase_journals_after_edit if j["id"] != original["id"] and j["id"] not in {p["id"] for p in purchase_journals_before})
     assert any(Decimal(l["debit"]) == Decimal("200.00") for l in fresh["lines"])
     original_after = next(j for j in journals_after_edit if j["id"] == original["id"])
-    assert original_after["lines"] == original["lines"], "the original posted journal is untouched"
+    def _by_id(lines):  # line order isn't defined (PostgreSQL returns them in any order)
+        return sorted(lines, key=lambda line: line["id"])
+
+    assert _by_id(original_after["lines"]) == _by_id(original["lines"]), "the original posted journal is untouched"
 
     # Re-saving with nothing changed doesn't repost again.
     third_save = client.post("/api/v1/app-data?action=save", headers=auth_headers, json={"collection": "purchaseRecords", "record": {
