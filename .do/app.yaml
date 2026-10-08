@@ -79,15 +79,16 @@ services:
         scope: RUN_TIME
         value: "1440"
 
-      # Both public names of this app. Pages and API are served by the same app, so
+      # Public names of this app (e4cs.com is the main one since 2026-10-08; app.e4cs.com is
+      # kept while links and devices move over). Pages and API are served by the same app, so
       # browsers call the API on whichever domain the page came from (same origin);
       # CORS only matters for pages hosted elsewhere.
       - key: CORS_ORIGINS
         scope: RUN_TIME
-        value: https://app.e4cs.com,https://app.etaxflow.com,http://localhost:5173,http://127.0.0.1:5173
+        value: https://e4cs.com,https://www.e4cs.com,https://app.e4cs.com,https://app.etaxflow.com,http://localhost:5173,http://127.0.0.1:5173
 
       # API_BASE_URL deliberately NOT set: unset, config.js tells the browser to use the
-      # page's own origin, so the app works on app.etaxflow.com and app.e4cs.com alike.
+      # page's own origin, so the app works on e4cs.com, app.etaxflow.com and app.e4cs.com alike.
       # Setting it to one domain sends every browser there -- if that name doesn't resolve
       # (app.e4cs.com had no DNS record on 2026-10-08), the whole app stops working.
 
