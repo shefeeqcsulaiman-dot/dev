@@ -4,9 +4,6 @@ own restorable SQL file). Both reuse build_company_sql_dump(), the same
 builder the company owner's own GET /app-data/db-dump now calls, so the
 existing owner endpoint is covered here too as a regression check on the
 refactor."""
-import io
-import zipfile
-
 from app.models import Company, Employee, User
 from app.security import hash_password
 
@@ -52,7 +49,7 @@ def test_single_company_backup_404_for_unknown_company(client, db):
     assert r.status_code == 404
 
 
-def test_backup_all_returns_zip_with_one_sql_file_per_company_and_excludes_internal_company(client, db):
+def test_each_company_backup_holds_only_its_own_data(client, db):
     _client_ref["client"] = client
     a = Company(name="Zip Co A", trn="BACKUP-ZIP-A")
     b = Company(name="Zip Co B", trn="BACKUP-ZIP-B")
@@ -61,29 +58,9 @@ def test_backup_all_returns_zip_with_one_sql_file_per_company_and_excludes_inter
     db.add(Employee(company_id=a.id, employee_no="ZA-1", full_name="Zip A Employee"))
     db.add(Employee(company_id=b.id, employee_no="ZB-1", full_name="Zip B Employee"))
     db.commit()
-    # The seeded internal superadmin company (unique TRN) already exists in
-    # the test DB; reuse it rather than colliding on a second insert.
-    internal = db.query(Company).filter(Company.trn == "SUPERADMIN-INTERNAL").first()
-    if not internal:
-        internal = Company(name="Internal Superadmin Co", trn="SUPERADMIN-INTERNAL")
-        db.add(internal)
-        db.commit()
-
-    r = client.get("/api/v1/superadmin/companies/backup-all", headers=_make_superadmin(db))
-    assert r.status_code == 200, r.text
-    assert r.headers["content-type"] == "application/zip"
-
-    zf = zipfile.ZipFile(io.BytesIO(r.content))
-    names = zf.namelist()
-    a_files = [n for n in names if f"taxflow-db-{a.id[:8]}" in n]
-    b_files = [n for n in names if f"taxflow-db-{b.id[:8]}" in n]
-    internal_files = [n for n in names if f"taxflow-db-{internal.id[:8]}" in n]
-    assert len(a_files) == 1 and len(b_files) == 1
-    assert internal_files == []
-
-    a_sql = zf.read(a_files[0]).decode("utf-8")
-    b_sql = zf.read(b_files[0]).decode("utf-8")
-    # Each company's file holds only its own data -- never a neighbour's.
+    sa = _make_superadmin(db)
+    a_sql = client.get(f"/api/v1/superadmin/companies/{a.id}/db-dump", headers=sa).text
+    b_sql = client.get(f"/api/v1/superadmin/companies/{b.id}/db-dump", headers=sa).text
     assert "ZA-1" in a_sql and "ZB-1" not in a_sql
     assert "ZB-1" in b_sql and "ZA-1" not in b_sql
 
@@ -94,7 +71,6 @@ def test_backup_endpoints_reject_non_superadmin(client, db, auth_headers):
     db.add(target)
     db.commit()
     assert client.get(f"/api/v1/superadmin/companies/{target.id}/db-dump", headers=auth_headers).status_code == 403
-    assert client.get("/api/v1/superadmin/companies/backup-all", headers=auth_headers).status_code == 403
 
 
 def test_company_owner_own_backup_still_works_after_refactor(client, auth_headers):

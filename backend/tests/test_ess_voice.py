@@ -281,7 +281,7 @@ def _post_audio(client, voice):
 
 
 def test_transcribe_sends_company_names_and_new_model(client, db, voice, monkeypatch):
-    monkeypatch.setattr(voice_mod, "_vocab_cache", {})
+    monkeypatch.setattr(voice_mod, "_vocab_cache", voice_mod.cache.LocalTTLCache(max_entries=10))
     monkeypatch.delenv("OPENAI_TRANSCRIBE_MODEL", raising=False)
     sent = []
 
@@ -300,7 +300,7 @@ def test_transcribe_sends_company_names_and_new_model(client, db, voice, monkeyp
 
 def test_transcribe_falls_back_when_model_is_refused(client, voice, monkeypatch):
     import urllib.error
-    monkeypatch.setattr(voice_mod, "_vocab_cache", {})
+    monkeypatch.setattr(voice_mod, "_vocab_cache", voice_mod.cache.LocalTTLCache(max_entries=10))
     monkeypatch.delenv("OPENAI_TRANSCRIBE_MODEL", raising=False)
     models = []
 

@@ -1,24 +1,22 @@
 import datetime as _dt
 import json
-import os
-import tempfile
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from fastapi.responses import FileResponse, Response
-from starlette.background import BackgroundTask
+from fastapi.responses import Response
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import func, or_, text
+from sqlalchemy import and_, case, func, or_, select, text
 from sqlalchemy.orm import Session
 
+from app import cache
 from app.company_defaults import seed_company_defaults
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import Principal, get_current_principal, get_current_user
 from app.limiter import limiter
-from app.routers.app_data import sql_dump_file_response, write_all_companies_backup_zip
+from app.routers.app_data import sql_dump_file_response
 # Re-exported here under the same name for every pre-existing call site in
 # this file — moved to app/module_catalog.py (Branch Login Phase 1) so core
 # auth code (auth_principal.py, dependencies.py) and branches.py can import
@@ -228,135 +226,413 @@ def extend_renewals(
     return {"ok": True, "extended": len(results), "results": results}
 
 
-@router.get("/companies")
-def list_companies(db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
-    companies = (
-        db.query(Company)
-        .filter(or_(Company.trn.is_(None), Company.trn != "SUPERADMIN-INTERNAL"))
-        .order_by(Company.created_at.desc())
-        .all()
-    )
-    company_ids = [c.id for c in companies]
+def _tenant_companies_filter():
+    return or_(Company.trn.is_(None), Company.trn != "SUPERADMIN-INTERNAL")
 
-    # Previously 4 queries PER company (users, employee_count, branches,
-    # employees) — O(n) round trips that scaled with tenant count, same
-    # shape as the /invoices and dashboard() chattiness fixed earlier this
-    # pass (see docs/architecture.md §29). Batched into 4 queries total,
-    # grouped into per-company buckets in Python.
-    users_by_company: dict[str, list[User]] = {}
-    if company_ids:
-        for u in db.query(User).filter(User.company_id.in_(company_ids)).all():
-            users_by_company.setdefault(u.company_id, []).append(u)
 
-    active_employee_counts: dict[str, int] = {}
-    if company_ids:
-        for cid, cnt in (
-            db.query(Employee.company_id, func.count(Employee.id))
-            .filter(Employee.company_id.in_(company_ids), Employee.status == "active")
-            .group_by(Employee.company_id)
-            .all()
-        ):
-            active_employee_counts[cid] = cnt
-
-    branches_by_company: dict[str, list[Branch]] = {}
-    if company_ids:
-        for b in db.query(Branch).filter(Branch.company_id.in_(company_ids)).order_by(Branch.name).all():
-            branches_by_company.setdefault(b.company_id, []).append(b)
-
-    # Still capped to 200 per company (a roster can run into the
-    # hundreds/thousands; active_employee_counts above already conveys the
-    # true total past this cap) — capped in Python after one fetch rather
-    # than with a per-company LIMIT, since that would need a window
-    # function to stay correct across companies in a single query.
-    employees_by_company: dict[str, list[Employee]] = {}
-    if company_ids:
-        for e in db.query(Employee).filter(Employee.company_id.in_(company_ids)).order_by(Employee.employee_no).all():
-            bucket = employees_by_company.setdefault(e.company_id, [])
-            if len(bucket) < 200:
-                bucket.append(e)
-
-    result = []
-    now_utc = datetime.now(timezone.utc)
-    for company in companies:
-        users = users_by_company.get(company.id, [])
-        last_login_at, inactive_days = _company_last_login(users, now_utc)
-        employee_count = active_employee_counts.get(company.id, 0)
-        branches = branches_by_company.get(company.id, [])
-        branch_names = {b.id: b.name for b in branches}
-        employees = employees_by_company.get(company.id, [])
-        sub_users = [u for u in users if u.role not in ("admin", "superadmin")]
-        try:
-            mods = json.loads(company.modules_enabled) if company.modules_enabled else ALL_MODULES
-        except Exception:
-            mods = ALL_MODULES
-        result.append(
-            {
-                "id": company.id,
-                "name": company.name,
-                "trade_name": company.trade_name,
-                "trn": company.trn,
-                "country": company.country,
-                "currency": company.currency,
-                "vat_rate": str(company.vat_rate),
-                "stock_mode": company.stock_mode or "with_stock",
-                "inventory_accounting": company.inventory_accounting or "periodic",
-                "emirate": company.emirate,
-                "business_type": company.business_type,
-                "business_activity": company.business_activity,
-                "legal_structure": company.legal_structure,
-                "trade_license_no": company.trade_license_no,
-                "trade_license_issue_date": company.trade_license_issue_date,
-                "trade_license_expiry": company.trade_license_expiry,
-                "free_zone": company.free_zone,
-                "address": company.address,
-                "po_box": company.po_box,
-                "phone": company.phone,
-                "website": company.website,
-                "fta_username": company.fta_username,
-                "created_at": company.created_at.isoformat() if company.created_at else None,
-                "subscription_expires_at": company.subscription_expires_at,
-                "last_login_at": last_login_at.isoformat() if last_login_at else None,
-                "inactive_days": inactive_days,
-                "employee_count": employee_count,
-                "sub_user_count": len(sub_users),
-                "modules_enabled": mods,
-                "users": [
-                    {
-                        "id": u.id,
-                        "email": u.email,
-                        "full_name": u.full_name,
-                        "role": u.role,
-                        "is_active": getattr(u, "is_active", True),
-                        "created_at": u.created_at.isoformat() if u.created_at else None,
-                    }
-                    for u in users
-                    if u.role != "superadmin"
-                ],
-                "branches": [
-                    {
-                        "id": b.id,
-                        "name": b.name,
-                        "code": b.code,
-                        "city": b.city,
-                        "status": b.status,
-                    }
-                    for b in branches
-                ],
-                "employees": [
-                    {
-                        "id": e.id,
-                        "employee_no": e.employee_no,
-                        "full_name": e.full_name,
-                        "department": e.department,
-                        "designation": e.designation,
-                        "status": e.status,
-                        "branch_name": branch_names.get(e.branch_id),
-                    }
-                    for e in employees
-                ],
-            }
+def _company_stats_subqueries():
+    """Per-company user count, last login (super admins excluded) and active employee
+    count, as subqueries to join onto the companies query, so lists page and sort in SQL."""
+    users = (
+        select(
+            User.company_id.label("company_id"),
+            func.count(User.id).label("user_count"),
+            func.sum(case((User.role.notin_(("admin", "superadmin")), 1), else_=0)).label("sub_user_count"),
+            func.max(User.last_login).label("last_login"),
         )
-    return result
+        .where(User.role != "superadmin")
+        .group_by(User.company_id)
+        .subquery()
+    )
+    employees = (
+        select(Employee.company_id.label("company_id"), func.count(Employee.id).label("employee_count"))
+        .where(Employee.status == "active")
+        .group_by(Employee.company_id)
+        .subquery()
+    )
+    branches = (
+        select(Branch.company_id.label("company_id"), func.count(Branch.id).label("branch_count"))
+        .group_by(Branch.company_id)
+        .subquery()
+    )
+    return users, employees, branches
+
+
+def _aware(ts: datetime | None) -> datetime | None:
+    if ts is None:
+        return None
+    return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+
+
+def _company_modules(company: Company) -> list[str]:
+    try:
+        return json.loads(company.modules_enabled) if company.modules_enabled else ALL_MODULES
+    except Exception:
+        return ALL_MODULES
+
+
+def _company_row(company: Company, user_count: int, sub_user_count: int, last_login: datetime | None,
+                 employee_count: int, branch_count: int, now_utc: datetime) -> dict:
+    last_login = _aware(last_login)
+    return {
+        "id": company.id,
+        "name": company.name,
+        "trade_name": company.trade_name,
+        "trn": company.trn,
+        "country": company.country,
+        "currency": company.currency,
+        "vat_rate": str(company.vat_rate),
+        "stock_mode": company.stock_mode or "with_stock",
+        "inventory_accounting": company.inventory_accounting or "periodic",
+        "emirate": company.emirate,
+        "business_type": company.business_type,
+        "business_activity": company.business_activity,
+        "legal_structure": company.legal_structure,
+        "trade_license_no": company.trade_license_no,
+        "trade_license_issue_date": company.trade_license_issue_date,
+        "trade_license_expiry": company.trade_license_expiry,
+        "free_zone": company.free_zone,
+        "address": company.address,
+        "po_box": company.po_box,
+        "phone": company.phone,
+        "website": company.website,
+        "fta_username": company.fta_username,
+        "created_at": company.created_at.isoformat() if company.created_at else None,
+        "subscription_expires_at": company.subscription_expires_at,
+        "last_login_at": last_login.isoformat() if last_login else None,
+        "inactive_days": max(0, (now_utc - last_login).days) if last_login else None,
+        "employee_count": employee_count or 0,
+        "user_count": user_count or 0,
+        "sub_user_count": sub_user_count or 0,
+        "branch_count": branch_count or 0,
+        "modules_enabled": _company_modules(company),
+    }
+
+
+_COMPANY_STATUSES = ("active", "expiring", "expired", "inactive", "no_users", "no_expiry", "new_month")
+
+
+def _status_condition(status: str, users_sq, now_utc: datetime):
+    """SQL condition for a status filter. subscription_expires_at is an ISO date string
+    (YYYY-MM-DD...), so comparing its first 10 characters orders by date."""
+    today = now_utc.date().isoformat()
+    in7 = (now_utc.date() + timedelta(days=7)).isoformat()
+    exp = func.substr(Company.subscription_expires_at, 1, 10)
+    has_exp = and_(Company.subscription_expires_at.isnot(None), Company.subscription_expires_at != "")
+    if status == "active":
+        return or_(~has_exp, exp >= today)
+    if status == "expiring":
+        return and_(has_exp, exp > today, exp <= in7)
+    if status == "expired":
+        return and_(has_exp, exp < today)
+    if status == "inactive":
+        # Still subscribed, but nobody has signed in for 30+ days (churn risk).
+        return and_(or_(~has_exp, exp >= today), users_sq.c.last_login < now_utc - timedelta(days=30))
+    if status == "no_users":
+        return func.coalesce(users_sq.c.user_count, 0) == 0
+    if status == "no_expiry":
+        return ~has_exp
+    if status == "new_month":
+        return Company.created_at >= datetime(now_utc.year, now_utc.month, 1, tzinfo=timezone.utc)
+    raise HTTPException(status_code=422, detail=f"Unknown status filter: {status}")
+
+
+def _companies_query(db: Session, q: str, status: str):
+    users_sq, emp_sq, br_sq = _company_stats_subqueries()
+    query = (
+        db.query(
+            Company,
+            func.coalesce(users_sq.c.user_count, 0),
+            func.coalesce(users_sq.c.sub_user_count, 0),
+            users_sq.c.last_login,
+            func.coalesce(emp_sq.c.employee_count, 0),
+            func.coalesce(br_sq.c.branch_count, 0),
+        )
+        .outerjoin(users_sq, users_sq.c.company_id == Company.id)
+        .outerjoin(emp_sq, emp_sq.c.company_id == Company.id)
+        .outerjoin(br_sq, br_sq.c.company_id == Company.id)
+        .filter(_tenant_companies_filter())
+    )
+    q = (q or "").strip()
+    if q:
+        like = f"%{q.lower()}%"
+        # Also finds a company by one of its users' email addresses.
+        user_match = select(User.company_id).where(func.lower(User.email).like(like))
+        query = query.filter(or_(
+            func.lower(Company.name).like(like),
+            func.lower(func.coalesce(Company.trn, "")).like(like),
+            func.lower(func.coalesce(Company.country, "")).like(like),
+            Company.id.in_(user_match),
+        ))
+    now_utc = datetime.now(timezone.utc)
+    if status:
+        query = query.filter(_status_condition(status, users_sq, now_utc))
+    return query, users_sq, emp_sq
+
+
+@router.get("/companies")
+def list_companies(
+    q: str = "",
+    status: str = "",
+    sort: Literal["name", "size", "expiry", "created_at"] = "created_at",
+    dir: Literal["asc", "desc"] = "desc",
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    """One page of tenant companies, searched, filtered and sorted in the database.
+    `q` matches name, TRN, country or a user's email; `status` is one of
+    _COMPANY_STATUSES. Users, branches and employees are in GET /companies/{id}."""
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+    query, users_sq, emp_sq = _companies_query(db, q, status)
+    total = query.order_by(None).count()
+    exp_sort = func.substr(Company.subscription_expires_at, 1, 10)
+    keys = {
+        "name": func.lower(Company.name),
+        "size": func.coalesce(emp_sq.c.employee_count, 0) + func.coalesce(users_sq.c.user_count, 0),
+        "expiry": exp_sort,
+        "created_at": Company.created_at,
+    }
+    key = keys[sort]
+    order = [key.asc() if dir == "asc" else key.desc()]
+    if sort == "expiry":
+        # No expiry date counts as "never expires": last when ascending, first when descending.
+        no_exp = case((or_(Company.subscription_expires_at.is_(None), Company.subscription_expires_at == ""), 1), else_=0)
+        order.insert(0, no_exp.asc() if dir == "asc" else no_exp.desc())
+    order.append(Company.id)
+    now_utc = datetime.now(timezone.utc)
+    rows = query.order_by(*order).offset(offset).limit(limit).all()
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "items": [_company_row(c, uc, suc, ll, ec, bc, now_utc) for c, uc, suc, ll, ec, bc in rows],
+    }
+
+
+@router.get("/companies/overview")
+def companies_overview(db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
+    """Headline counts and insight samples for the Overview page, counted in SQL."""
+    now_utc = datetime.now(timezone.utc)
+    users_sq, emp_sq, _br = _company_stats_subqueries()
+    base = (
+        db.query(Company)
+        .outerjoin(users_sq, users_sq.c.company_id == Company.id)
+        .filter(_tenant_companies_filter())
+    )
+    counts = {s: base.filter(_status_condition(s, users_sq, now_utc)).count() for s in _COMPANY_STATUSES}
+    counts["companies"] = base.count()
+    counts["users"] = (
+        db.query(func.count(User.id))
+        .join(Company, Company.id == User.company_id)
+        .filter(User.role != "superadmin", _tenant_companies_filter())
+        .scalar() or 0
+    )
+    counts["employees"] = (
+        db.query(func.count(Employee.id))
+        .join(Company, Company.id == Employee.company_id)
+        .filter(Employee.status == "active", _tenant_companies_filter())
+        .scalar() or 0
+    )
+
+    def sample(status: str, limit: int = 3, order=None):
+        rows = (
+            db.query(Company.id, Company.name, Company.subscription_expires_at, users_sq.c.last_login)
+            .outerjoin(users_sq, users_sq.c.company_id == Company.id)
+            .filter(_tenant_companies_filter(), _status_condition(status, users_sq, now_utc))
+            .order_by(order if order is not None else func.lower(Company.name))
+            .limit(limit)
+            .all()
+        )
+        out = []
+        for cid, name, exp, last_login in rows:
+            last_login = _aware(last_login)
+            out.append({
+                "id": cid,
+                "name": name,
+                "subscription_expires_at": exp,
+                "inactive_days": max(0, (now_utc - last_login).days) if last_login else None,
+            })
+        return out
+
+    return {
+        "counts": counts,
+        "samples": {
+            "expired": sample("expired"),
+            # Every company expiring within 7 days: the Overview lists them and offers to extend them all.
+            "expiring": sample("expiring", limit=500, order=Company.subscription_expires_at),
+            "no_users": sample("no_users"),
+            "no_expiry": sample("no_expiry"),
+            "inactive": sample("inactive", order=users_sq.c.last_login),
+        },
+    }
+
+
+@router.get("/companies/export.csv")
+def export_companies_csv(
+    q: str = "",
+    status: str = "",
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    """Every matching company as CSV."""
+    query, _u, _e = _companies_query(db, q, status)
+    query = query.order_by(Company.created_at.desc(), Company.id)
+    now_utc = datetime.now(timezone.utc)
+    today = now_utc.date().isoformat()
+
+    def to_row(row):
+        c, user_count, _suc, _ll, employee_count, _bc = row
+        exp = (c.subscription_expires_at or "")[:10]
+        state = "Active (no expiry)" if not exp else ("Expired" if exp < today else "Active")
+        return [c.name or "", c.trn or "", c.country or "", employee_count or 0, user_count or 0, state, exp,
+                c.created_at.date().isoformat() if c.created_at else ""]
+
+    header = ["Name", "TRN", "Country", "Employees", "Users", "Status", "Expires", "Created"]
+    return _csv_response(query, header, to_row, f"companies-{today}.csv", db)
+
+
+@router.get("/companies/{company_id}")
+def get_company(company_id: str, db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
+    """One company with its users, branches and up to 200 employees (Details drawer)."""
+    query, _u, _e = _companies_query(db, "", "")
+    found = query.filter(Company.id == company_id).first()
+    if not found:
+        raise HTTPException(status_code=404, detail="Company not found")
+    company, uc, suc, ll, ec, bc = found
+    row = _company_row(company, uc, suc, ll, ec, bc, datetime.now(timezone.utc))
+    users = db.query(User).filter(User.company_id == company_id, User.role != "superadmin").order_by(User.created_at).all()
+    branches = db.query(Branch).filter(Branch.company_id == company_id).order_by(Branch.name).all()
+    branch_names = {b.id: b.name for b in branches}
+    employees = (
+        db.query(Employee).filter(Employee.company_id == company_id)
+        .order_by(Employee.employee_no).limit(200).all()
+    )
+    row["users"] = [
+        {
+            "id": u.id,
+            "email": u.email,
+            "full_name": u.full_name,
+            "role": u.role,
+            "is_active": getattr(u, "is_active", True),
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        }
+        for u in users
+    ]
+    row["branches"] = [
+        {"id": b.id, "name": b.name, "code": b.code, "city": b.city, "status": b.status}
+        for b in branches
+    ]
+    row["employees"] = [
+        {
+            "id": e.id,
+            "employee_no": e.employee_no,
+            "full_name": e.full_name,
+            "department": e.department,
+            "designation": e.designation,
+            "status": e.status,
+            "branch_name": branch_names.get(e.branch_id),
+        }
+        for e in employees
+    ]
+    return row
+
+
+def _users_query(db: Session, q: str):
+    query = (
+        db.query(User, Company.name)
+        .join(Company, Company.id == User.company_id)
+        .filter(User.role != "superadmin", _tenant_companies_filter())
+    )
+    q = (q or "").strip()
+    if q:
+        like = f"%{q.lower()}%"
+        query = query.filter(or_(
+            func.lower(func.coalesce(User.full_name, "")).like(like),
+            func.lower(User.email).like(like),
+            func.lower(User.role).like(like),
+            func.lower(Company.name).like(like),
+        ))
+    return query.order_by(User.created_at.desc(), User.id)
+
+
+@router.get("/users")
+def list_users(
+    q: str = "",
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    """Users of every tenant company, newest first, one page at a time. `q` matches
+    name, email, role or company name."""
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+    query = _users_query(db, q)
+    total = query.order_by(None).count()
+    rows = query.offset(offset).limit(limit).all()
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "items": [
+            {
+                "id": u.id,
+                "email": u.email,
+                "full_name": u.full_name,
+                "role": u.role,
+                "is_active": getattr(u, "is_active", True),
+                "created_at": u.created_at.isoformat() if u.created_at else None,
+                "company_id": u.company_id,
+                "company_name": name,
+            }
+            for u, name in rows
+        ],
+    }
+
+
+def _csv_response(query, header: list[str], to_row, filename: str, db: Session):
+    """Streams `query` as CSV, 500 rows per database round trip, so memory stays flat."""
+    import csv
+    import io
+
+    from fastapi.responses import StreamingResponse
+
+    def rows():
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(header)
+        offset = 0
+        while True:
+            page = query.offset(offset).limit(500).all()
+            if not page:
+                break
+            for row in page:
+                writer.writerow(to_row(row))
+            yield buf.getvalue()
+            buf.seek(0)
+            buf.truncate(0)
+            offset += 500
+            db.expunge_all()
+        yield buf.getvalue()
+
+    return StreamingResponse(rows(), media_type="text/csv",
+                             headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.get("/users/export.csv")
+def export_users_csv(q: str = "", db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
+    """Every matching user as CSV."""
+    def to_row(row):
+        u, company_name = row
+        return [u.full_name or "", u.email or "", company_name or "", u.role or "",
+                "Active" if getattr(u, "is_active", True) is not False else "Disabled",
+                u.created_at.date().isoformat() if u.created_at else ""]
+
+    filename = f"users-{datetime.now(timezone.utc).date().isoformat()}.csv"
+    return _csv_response(_users_query(db, q), ["Name", "Email", "Company", "Role", "Status", "Joined"], to_row, filename, db)
 
 
 @router.get("/companies/{company_id}/db-dump")
@@ -374,37 +650,6 @@ def superadmin_company_db_dump(
     if not company:
         raise HTTPException(404, "Company not found")
     return sql_dump_file_response(db, company_id, f"Superadmin ({current_user.full_name})")
-
-
-@router.get("/companies/backup-all")
-@limiter.limit("3/minute")
-def superadmin_backup_all_companies(
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(_require_superadmin),
-) -> Response:
-    """One .zip containing every company's own restorable SQL backup file
-    (same format/content as the per-company endpoint above), so Superadmin
-    can pull a full-platform backup in one action. Zipped per-company
-    rather than concatenated into one script -- keeps each tenant's data
-    separable for a real single-company restore, and a bad/huge company
-    dump can't corrupt the file boundaries of the others."""
-    exported_by = f"Superadmin ({current_user.full_name})"
-    tmp = tempfile.NamedTemporaryFile(prefix="taxflow-backup-", suffix=".zip", delete=False)
-    try:
-        with tmp:
-            write_all_companies_backup_zip(db, exported_by, tmp)
-    except Exception:
-        os.unlink(tmp.name)
-        raise
-    date_str = _dt.datetime.utcnow().strftime("%Y%m%d")
-    # Streamed from disk in chunks, then deleted.
-    return FileResponse(
-        tmp.name,
-        media_type="application/zip",
-        filename=f"taxflow-all-companies-backup-{date_str}.zip",
-        background=BackgroundTask(os.unlink, tmp.name),
-    )
 
 
 @router.post("/companies/{company_id}/set-expiry")
@@ -1134,28 +1379,40 @@ def usage_analytics(
     _: User = Depends(_require_superadmin),
 ):
     days = max(1, min(days, 90))
+    # A trend chart: up to 10 minutes old is fine. Counting every record of the last
+    # 30-90 days across all companies takes seconds once there are millions of rows
+    # (6 s at 2.4M in the load test), so it is cached in Redis, or per process
+    # without Redis (bounded, see _cached()).
+    key = f"sa:usage:{days}:{company_id or '*'}"
+    return cache.remember(key, 600, lambda: _usage_analytics(db, days, company_id), _local_cache)
+
+
+_local_cache = cache.LocalTTLCache(max_entries=64)
+
+
+def _usage_analytics(db: Session, days: int, company_id: Optional[str]) -> dict:
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
-    # Previously pulled every matching AppDataRecord row (company_id,
-    # collection, created_at) into Python and aggregated it there — fine at
-    # today's volume, but a company with heavy activity over 90 days could
-    # mean hundreds of thousands of rows crossing the wire just to be
-    # counted. Replaced with GROUP BY queries: each returns at most a few
-    # hundred rows (one per day, per company, or per collection — all
-    # small, bounded result sets) regardless of how many records exist.
+    # GROUP BY queries that return small, bounded result sets (per day and
+    # collection, or the top companies) whatever the number of records. One scan
+    # gives the total, the daily trend and the module breakdown; one more gives
+    # the top companies.
     base_filter = [AppDataRecord.created_at >= since]
     if company_id:
         base_filter.append(AppDataRecord.company_id == company_id)
 
-    total_records = db.query(func.count(AppDataRecord.id)).filter(*base_filter).scalar() or 0
-
-    daily_rows = (
-        db.query(func.date(AppDataRecord.created_at), func.count(AppDataRecord.id))
+    day_collection_rows = (
+        db.query(func.date(AppDataRecord.created_at), AppDataRecord.collection, func.count(AppDataRecord.id))
         .filter(*base_filter)
-        .group_by(func.date(AppDataRecord.created_at))
+        .group_by(func.date(AppDataRecord.created_at), AppDataRecord.collection)
         .all()
     )
-    daily_counts = {str(d): c for d, c in daily_rows}
+    daily_counts: dict[str, int] = {}
+    collection_counts: dict[str, int] = {}
+    for d, collection, cnt in day_collection_rows:
+        daily_counts[str(d)] = daily_counts.get(str(d), 0) + cnt
+        collection_counts[collection] = collection_counts.get(collection, 0) + cnt
+    total_records = sum(daily_counts.values())
 
     dates = [(datetime.now(timezone.utc).date() - timedelta(days=i)).isoformat() for i in range(days - 1, -1, -1)]
     daily_trend = [{"date": d, "count": daily_counts.get(d, 0)} for d in dates]
@@ -1184,14 +1441,8 @@ def usage_analytics(
         for cid, cnt in top_company_rows
     ]
 
-    collection_rows = (
-        db.query(AppDataRecord.collection, func.count(AppDataRecord.id))
-        .filter(*base_filter)
-        .group_by(AppDataRecord.collection)
-        .all()
-    )
     module_counts: dict[str, int] = {}
-    for collection, cnt in collection_rows:
+    for collection, cnt in collection_counts.items():
         module = _COLLECTION_MODULE_MAP.get(collection, "other")
         module_counts[module] = module_counts.get(module, 0) + cnt
     module_breakdown = sorted(

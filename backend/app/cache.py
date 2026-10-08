@@ -163,16 +163,85 @@ def delete(key: str) -> None:
 
 
 def delete_prefix(prefix: str) -> None:
-    """Delete all keys matching tf:<prefix>*"""
+    """Delete all keys matching tf:<prefix>*.
+
+    SCAN, not KEYS: KEYS walks the whole keyspace in one blocking call, and this runs
+    on every company write (invalidate_company), so with thousands of companies'
+    keys it would stall Redis for everyone."""
     r = _redis()
     if r is None:
         return
     try:
-        keys = r.keys(f"tf:{prefix}*")
-        if keys:
-            r.delete(*keys)
+        batch = []
+        for key in r.scan_iter(match=f"tf:{prefix}*", count=500):
+            batch.append(key)
+            if len(batch) >= 500:
+                r.delete(*batch)
+                batch = []
+        if batch:
+            r.delete(*batch)
     except Exception:
         pass
+
+
+class LocalTTLCache:
+    """Per-process cache with a size limit: the fallback when Redis isn't there.
+    Entries expire after their TTL and the least recently used go first once
+    `max_entries` is reached, so memory stays bounded however many companies use it."""
+
+    def __init__(self, max_entries: int):
+        from collections import OrderedDict
+        import threading
+
+        self.max_entries = max_entries
+        self._data: "OrderedDict[str, tuple[float, Any]]" = OrderedDict()
+        self._lock = threading.Lock()
+
+    def get(self, key: str) -> Any | None:
+        with self._lock:
+            hit = self._data.get(key)
+            if hit is None:
+                return None
+            if hit[0] <= time.monotonic():
+                del self._data[key]
+                return None
+            self._data.move_to_end(key)
+            return hit[1]
+
+    def set(self, key: str, value: Any, ttl: int) -> None:
+        with self._lock:
+            self._data[key] = (time.monotonic() + ttl, value)
+            self._data.move_to_end(key)
+            while len(self._data) > self.max_entries:
+                self._data.popitem(last=False)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._data.clear()
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __contains__(self, key: str) -> bool:
+        return self.get(key) is not None
+
+
+def remember(key: str, ttl: int, compute, local: LocalTTLCache) -> Any:
+    """Cached value for `key`, computed on a miss: shared across servers through Redis
+    when it's connected, otherwise kept in `local` (this process only, bounded)."""
+    if available():
+        hit = get(key)
+        if hit is not None:
+            return hit
+        value = compute()
+        set(key, value, ttl=ttl)
+        return value
+    hit = local.get(key)
+    if hit is not None:
+        return hit
+    value = compute()
+    local.set(key, value, ttl)
+    return value
 
 
 def invalidate_company(company_id: str) -> None:

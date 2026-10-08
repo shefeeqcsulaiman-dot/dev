@@ -18,14 +18,14 @@ def _set_expiry(db, company_id, days_from_today):
 
 def test_login_records_last_login_and_company_list_exposes_it(client, db):
     cid, headers, sa = _make_restricted_company(client, db, "rn-login", ["sales"])
-    row = next(c for c in client.get("/api/v1/superadmin/companies", headers=sa).json() if c["id"] == cid)
+    row = client.get(f"/api/v1/superadmin/companies/{cid}", headers=sa).json()
     # _make_restricted_company already logs the admin in once
     assert row["last_login_at"] is not None
     assert row["inactive_days"] == 0
     admin = db.query(User).filter(User.company_id == cid, User.role == "admin").one()
     admin.last_login = datetime.now(timezone.utc) - timedelta(days=45)
     db.commit()
-    row = next(c for c in client.get("/api/v1/superadmin/companies", headers=sa).json() if c["id"] == cid)
+    row = client.get(f"/api/v1/superadmin/companies/{cid}", headers=sa).json()
     assert row["inactive_days"] in (44, 45)
 
 
@@ -33,7 +33,7 @@ def test_company_with_no_recorded_login_reports_none(client, db):
     cid, _, sa = _make_restricted_company(client, db, "rn-nologin", ["sales"])
     db.query(User).filter(User.company_id == cid).update({"last_login": None})
     db.commit()
-    row = next(c for c in client.get("/api/v1/superadmin/companies", headers=sa).json() if c["id"] == cid)
+    row = client.get(f"/api/v1/superadmin/companies/{cid}", headers=sa).json()
     assert row["last_login_at"] is None and row["inactive_days"] is None
 
 

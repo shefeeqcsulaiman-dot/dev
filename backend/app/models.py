@@ -76,6 +76,7 @@ class Company(Base, TimestampMixin):
 
 class User(Base, TimestampMixin):
     __tablename__ = "users"
+    __table_args__ = (Index("ix_users_company_last_login", "company_id", "last_login"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
@@ -828,6 +829,7 @@ class AppDataRecord(Base, TimestampMixin):
         Index("ix_app_data_company_collection_date", "company_id", "collection", "record_date"),
         Index("ix_app_data_company_collection_status", "company_id", "collection", "doc_status"),
         Index("ix_app_data_company_collection_party", "company_id", "collection", "party"),
+        Index("ix_app_data_company_collection_fig_ref", "company_id", "collection", "fig_ref"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
@@ -847,6 +849,15 @@ class AppDataRecord(Base, TimestampMixin):
     salesperson: Mapped[str | None] = mapped_column(String(120))
     amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     amount_paid: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    # Report figures for sales invoices, purchases, bills and expenses (doc_index.doc_figures()),
+    # so the dashboard, summary, VAT and branch figures are SQL sums.
+    fig_status: Mapped[str | None] = mapped_column(String(40))
+    fig_ref: Mapped[str | None] = mapped_column(String(160))
+    fig_gross: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    fig_net: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    fig_vat: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    fig_taxable: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    fig_paid: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
 
 
 DATED_COLLECTIONS = frozenset({"rotaAssignments"})
@@ -1335,7 +1346,10 @@ class EmployeeLocation(Base, TimestampMixin):
 
 class AttendanceSession(Base, TimestampMixin):
     __tablename__ = "attendance_sessions"
-    __table_args__ = (Index("ix_att_session_company_emp_status", "company_id", "employee_id", "status"),)
+    __table_args__ = (
+        Index("ix_att_session_company_emp_status", "company_id", "employee_id", "status"),
+        Index("ix_att_session_status_check_in", "status", "check_in"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
@@ -1354,7 +1368,10 @@ class AttendanceSession(Base, TimestampMixin):
 
 class EmployeeLocationLog(Base, TimestampMixin):
     __tablename__ = "employee_location_logs"
-    __table_args__ = (Index("ix_emp_loc_log_company_emp_created", "company_id", "employee_id", "created_at"),)
+    __table_args__ = (
+        Index("ix_emp_loc_log_company_emp_created", "company_id", "employee_id", "created_at"),
+        Index("ix_emp_loc_log_session_created", "session_id", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)

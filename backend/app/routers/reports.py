@@ -8,13 +8,21 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import and_, event, func, select, text
+from sqlalchemy import and_, case, event, func, or_, select, text
 from sqlalchemy.exc import OperationalError as SQLAOperationalError
 from sqlalchemy.exc import TimeoutError as SQLATimeoutError
 from sqlalchemy.orm import Session
 
 import app.cache as cache
 from app.account_totals import account_totals as stored_account_totals
+from app.doc_index import (
+    PAID_STATUSES,
+    money,
+    normalized_ref,
+    purchase_row_amount as _purchase_row_amount,
+    purchase_row_net as _purchase_row_net,
+    record_amount,
+)
 from app.config import get_settings
 from app.auth_principal import Principal, require_principal_permission, resolve_active_branch
 from app.database import get_db
@@ -62,13 +70,17 @@ from app.models import (
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
-_build_locks: dict[str, threading.Lock] = {}
-_build_locks_guard = threading.Lock()
+# A fixed set of locks, picked by hashing the cache key: one lock per key used to be
+# kept forever (every company x report x branch), growing with the number of companies.
+# Two keys sharing a lock only means one waits for the other's rebuild.
+_BUILD_LOCK_STRIPES = 256
+_build_locks = tuple(threading.Lock() for _ in range(_BUILD_LOCK_STRIPES))
 
 
 def _build_lock(key: str) -> threading.Lock:
-    with _build_locks_guard:
-        return _build_locks.setdefault(key, threading.Lock())
+    import zlib
+
+    return _build_locks[zlib.crc32(key.encode()) % _BUILD_LOCK_STRIPES]
 
 
 def _cached_or_build(key: str, fresh_ttl: int, build_fn) -> dict[str, Any]:
@@ -370,10 +382,6 @@ def _build_dashboard(db: Session, company_id: str, branch_id: str | None = None)
     }
 
 
-def money(value: object) -> Decimal:
-    return Decimal(str(value or 0)).quantize(Decimal("0.01"))
-
-
 def amount(value: Decimal) -> str:
     return f"{value:.2f}"
 
@@ -419,55 +427,17 @@ def app_data_counts(db: Session, company_id: str) -> dict[str, int]:
     return {collection: int(total or 0) for collection, total in rows}
 
 
-# Within one report/dashboard build each collection is read and parsed once (see _cached_or_build).
+# Per-request memo for one report/dashboard build (see _cached_or_build), so figures two
+# parts of a build both need are computed once.
 _payload_memo: ContextVar[dict | None] = ContextVar("report_payload_memo", default=None)
-
-
-def app_data_payloads(db: Session, company_id: str, collection: str) -> list[dict[str, Any]]:
-    return [row for row, _ in app_data_payloads_with_branch(db, company_id, collection)]
-
-
-def app_data_payloads_with_branch(db: Session, company_id: str, collection: str) -> list[tuple[dict[str, Any], str | None]]:
-    memo = _payload_memo.get()
-    if memo is None:
-        return _load_payloads_with_branch(db, company_id, collection)
-    key = (company_id, collection)
-    if key not in memo:
-        memo[key] = _load_payloads_with_branch(db, company_id, collection)
-    # Callers may change the dicts they get, so each gets its own copies.
-    return [(dict(row), branch_id) for row, branch_id in memo[key]]
-
-
-def _load_payloads_with_branch(db: Session, company_id: str, collection: str) -> list[tuple[dict[str, Any], str | None]]:
-    """Same as app_data_payloads() but also returns each row's AppDataRecord.branch_id
-    (server-stamped at write time, see app_data.py — NULL for records saved by an
-    admin/User principal rather than a branch-scoped Employee/Branch login)."""
-    rows = (
-        db.query(AppDataRecord.payload, AppDataRecord.branch_id)
-        .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == collection)
-        .all()
-    )
-    out: list[tuple[dict[str, Any], str | None]] = []
-    for payload, branch_id in rows:
-        try:
-            data = json.loads(payload or "{}")
-        except (TypeError, json.JSONDecodeError):
-            continue
-        if isinstance(data, dict):
-            out.append((data, branch_id))
-    return out
-
-
-def normalized_ref(value: object) -> str:
-    return str(value or "").strip().lower()
 
 
 def _branch_row_included(row_branch_id: str | None, branch_id: str | None) -> bool:
     """Same rule _posted_journal_line_totals() uses for JournalEntry.branch_id:
     an unscoped caller (branch_id=None) sees everything; a branch-scoped
     caller sees its own branch's rows PLUS any row with no branch_id at all
-    (predates Branch Management, or was saved by an admin/User principal —
-    see app_data_payloads_with_branch()'s own docstring) rather than losing
+    (predates Branch Management, or was saved by an admin/User principal
+    rather than a branch-scoped login) rather than losing
     that data entirely."""
     return branch_id is None or row_branch_id == branch_id or row_branch_id is None
 
@@ -537,41 +507,49 @@ def app_purchase_records(db: Session, company_id: str, branch_id: str | None = N
         .all()
         if normalized_ref(reference)
     }
+    # Rows whose posting reference (fig_ref, stamped on save with the formula below)
+    # matches a posted input TaxLine are left out in SQL instead of decoding every
+    # purchase and bill; the Python check below still runs on what is left.
+    posted_refs = (
+        select(func.lower(func.trim(SourceTransaction.reference)))
+        .join(TaxLine, TaxLine.source_id == SourceTransaction.id)
+        .where(
+            SourceTransaction.company_id == company_id,
+            SourceTransaction.module.in_(["purchase", "purchase_bill"]),
+            TaxLine.direction == "input",
+        )
+    )
+    query = db.query(AppDataRecord.collection, AppDataRecord.payload, AppDataRecord.branch_id).filter(
+        AppDataRecord.company_id == company_id,
+        AppDataRecord.collection.in_(("purchaseRecords", "bills")),
+        or_(AppDataRecord.fig_ref.is_(None), AppDataRecord.fig_ref.notin_(posted_refs)),
+    )
+    if branch_id:
+        query = query.filter(or_(AppDataRecord.branch_id == branch_id, AppDataRecord.branch_id.is_(None)))
     records = []
-    for row, row_branch_id in app_data_payloads_with_branch(db, company_id, "purchaseRecords"):
-        if not _branch_row_included(row_branch_id, branch_id):
+    for collection, payload, _row_branch_id in query.order_by(AppDataRecord.collection.desc(), AppDataRecord.created_at, AppDataRecord.id).all():
+        try:
+            row = json.loads(payload or "{}")
+        except (TypeError, json.JSONDecodeError):
             continue
-        # Mirrors app_data.py's sync_domain_model() reference formula for
-        # purchaseRecords, so a row with no ref/invoice_no still dedupes
-        # correctly against the "PURCHASE-{id}" fallback reference its own
-        # posted TaxLine was created under.
-        purchase_ref = normalized_ref(
-            row.get("ref") or row.get("invoice_no")
-            or (f"PURCHASE-{row['id']}" if row.get("id") else None)
-        )
-        if purchase_ref and purchase_ref in existing_refs:
+        if not isinstance(row, dict):
             continue
-        records.append(row)
-    for row, row_branch_id in app_data_payloads_with_branch(db, company_id, "bills"):
-        if not _branch_row_included(row_branch_id, branch_id):
-            continue
-        # Mirrors app_data.py's sync_domain_model() reference formula for bills.
-        bill_ref = normalized_ref(
-            row.get("bill_no")
-            or (f"BILL-{row['id']}" if row.get("id") else None)
-        )
-        if bill_ref and bill_ref in existing_refs:
+        if collection == "purchaseRecords":
+            # Mirrors app_data.py's sync_domain_model() reference formula for
+            # purchaseRecords, so a row with no ref/invoice_no still dedupes
+            # correctly against the "PURCHASE-{id}" fallback reference its own
+            # posted TaxLine was created under.
+            ref = normalized_ref(
+                row.get("ref") or row.get("invoice_no")
+                or (f"PURCHASE-{row['id']}" if row.get("id") else None)
+            )
+        else:
+            # Mirrors app_data.py's sync_domain_model() reference formula for bills.
+            ref = normalized_ref(row.get("bill_no") or (f"BILL-{row['id']}" if row.get("id") else None))
+        if ref and ref in existing_refs:
             continue
         records.append(row)
     return records
-
-
-def record_amount(record: dict[str, Any], *keys: str) -> Decimal:
-    for key in keys:
-        value = record.get(key)
-        if value not in (None, ""):
-            return money(value)
-    return Decimal("0.00")
 
 
 def is_paid_status(value: object) -> bool:
@@ -679,69 +657,42 @@ def top_customers(db: Session, company_id: str, app_sales: list[dict[str, Any]],
     ]
 
 
-def _purchase_row_amount(row: dict[str, Any]) -> Decimal:
-    """Extract the total amount from a purchase record using multiple fallback strategies."""
-    # 1. Try common total fields — skip if zero (might be unset placeholder)
-    for key in ("total", "grand_total", "amount"):
-        val = row.get(key)
-        if val not in (None, ""):
-            d = money(val)
-            if d != Decimal("0"):
-                return d
-    # 2. net_amount + tax_amount
-    net = money(row.get("net_amount") or row.get("subtotal") or 0)
-    tax = money(row.get("tax_amount") or row.get("vat_amount") or row.get("vat") or 0)
-    if net or tax:
-        return net + tax
-    # 3. Sum product lines
-    lines = row.get("lines")
-    if isinstance(lines, list):
-        line_sum = sum(
-            money(ln.get("total") or ln.get("line_total") or ln.get("amount") or 0)
-            for ln in lines
-        )
-        if line_sum:
-            return line_sum
-    return Decimal("0.00")
-
-
-def _purchase_row_net(row: dict[str, Any]) -> Decimal:
-    """Extract net amount (excl. VAT) from a purchase record."""
-    net = money(row.get("net_amount") or row.get("subtotal") or 0)
-    if net:
-        return net
-    # Fall back: total minus VAT
-    total = _purchase_row_amount(row)
-    vat = money(row.get("vat_amount") or row.get("tax_amount") or row.get("vat") or 0)
-    return total - vat if total else Decimal("0.00")
+def _branch_filter(query, branch_id: str | None):
+    """_branch_row_included() as SQL: a branch sees its own rows plus rows with no branch."""
+    if branch_id:
+        query = query.filter(or_(AppDataRecord.branch_id == branch_id, AppDataRecord.branch_id.is_(None)))
+    return query
 
 
 def _purchase_summary(db: Session, company_id: str, branch_id: str | None = None) -> dict[str, Any]:
-    records = [
-        row for row, row_branch_id in (
-            app_data_payloads_with_branch(db, company_id, "purchaseRecords")
-            + app_data_payloads_with_branch(db, company_id, "bills")
-        )
-        if _branch_row_included(row_branch_id, branch_id)
-    ]
+    """Purchases and bills: totals, net and paid/pending, summed in SQL from the
+    figures stamped on each record (doc_index.doc_figures())."""
+    query = db.query(
+        AppDataRecord.fig_status,
+        func.count(AppDataRecord.id),
+        func.coalesce(func.sum(AppDataRecord.fig_gross), 0),
+        func.coalesce(func.sum(AppDataRecord.fig_net), 0),
+        func.coalesce(func.sum(AppDataRecord.fig_paid), 0),
+        # A paid record counts its recorded paid amount, or its total when none is recorded.
+        func.coalesce(func.sum(case((func.coalesce(AppDataRecord.fig_paid, 0) != 0, AppDataRecord.fig_paid), else_=AppDataRecord.fig_gross)), 0),
+    ).filter(AppDataRecord.company_id == company_id, AppDataRecord.collection.in_(("purchaseRecords", "bills")))
     total = Decimal("0")
     net_total = Decimal("0")
     paid_amount = Decimal("0")
     paid_count = 0
     pending_count = 0
-    for rec in records:
-        row_total = _purchase_row_amount(rec)
-        row_net = _purchase_row_net(rec)
-        row_paid = record_amount(rec, "paid", "paid_amount")
-        total += row_total
-        net_total += row_net
-        if is_paid_status(normalized_ref(rec.get("status") or "")):
-            paid_count += 1
-            paid_amount += row_paid if row_paid else row_total
+    total_count = 0
+    for status, n, gross, net, paid_field, paid_or_gross in _branch_filter(query, branch_id).group_by(AppDataRecord.fig_status).all():
+        n = int(n or 0)
+        total_count += n
+        total += money(gross)
+        net_total += money(net)
+        if normalized_ref(status) in PAID_STATUSES:
+            paid_count += n
+            paid_amount += money(paid_or_gross)
         else:
-            pending_count += 1
-            paid_amount += row_paid
-    total_count = len(records)
+            pending_count += n
+            paid_amount += money(paid_field)
 
     # Fallback to SourceTransaction when no AppDataRecord entries exist
     if total == Decimal("0") and total_count == 0:
@@ -868,23 +819,39 @@ def _build_branch_performance(db: Session, company_id: str) -> dict[str, Any]:
             "pending_count": 0, "pending_amount": Decimal("0.00"),
         })
 
-    for row, branch_id in app_data_payloads_with_branch(db, company_id, "salesInvoices"):
-        status = normalized_ref(row.get("status"))
+    # Grouped by branch and status in SQL from the stamped figures (doc_index.doc_figures());
+    # the status rules are applied per group below.
+    sales = (
+        db.query(
+            AppDataRecord.branch_id, AppDataRecord.fig_status, func.count(AppDataRecord.id),
+            func.coalesce(func.sum(AppDataRecord.fig_net), 0), func.coalesce(func.sum(AppDataRecord.fig_gross), 0),
+        )
+        .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == "salesInvoices")
+        .group_by(AppDataRecord.branch_id, AppDataRecord.fig_status)
+        .all()
+    )
+    for branch_id, status, n, net, gross in sales:
+        status = normalized_ref(status)
+        n = int(n or 0)
         b = bucket(branch_id)
         if status != "draft":
-            b["revenue"] += record_amount(row, "subtotal", "net_amount", "amount")
+            b["revenue"] += money(net)
         key = _INVOICE_STATUS_KEY.get(status) or ("pending" if status in {"ready", "sent", "unpaid"} else None)
         if key == "paid":
-            b["paid_count"] += 1
-            b["paid_amount"] += record_amount(row, "total", "amount", "net_amount")
+            b["paid_count"] += n
+            b["paid_amount"] += money(gross)
         elif key in ("pending", "overdue"):
-            b["pending_count"] += 1
-            b["pending_amount"] += record_amount(row, "total", "amount", "net_amount")
+            b["pending_count"] += n
+            b["pending_amount"] += money(gross)
 
-    for row, branch_id in app_data_payloads_with_branch(db, company_id, "purchaseRecords"):
-        bucket(branch_id)["purchases"] += _purchase_row_net(row)
-    for row, branch_id in app_data_payloads_with_branch(db, company_id, "bills"):
-        bucket(branch_id)["purchases"] += _purchase_row_net(row)
+    purchases = (
+        db.query(AppDataRecord.branch_id, func.coalesce(func.sum(AppDataRecord.fig_net), 0))
+        .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection.in_(("purchaseRecords", "bills")))
+        .group_by(AppDataRecord.branch_id)
+        .all()
+    )
+    for branch_id, net in purchases:
+        bucket(branch_id)["purchases"] += money(net)
 
     # Every real Branch must appear in the response even with zero activity
     # so far — otherwise a newly created (or simply quiet) branch never
@@ -1380,8 +1347,11 @@ def _build_summary(db: Session, company_id: str, branch_id: str | None = None) -
     # (AppDataRecord.branch_id does, but expenses aren't written through the
     # branch-aware save path today) — left company-wide, same as corporate/
     # assets/budget_cash/control below.
-    app_expenses = app_data_payloads(db, company_id, "expenses")
-    expenses += sum((record_amount(row, "subtotal", "net_amount", "total", "amount") for row in app_expenses), Decimal("0.00"))
+    expenses += money(
+        db.query(func.coalesce(func.sum(AppDataRecord.fig_net), 0))
+        .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == "expenses")
+        .scalar()
+    )
     operating_expenses = expenses + payroll
     cost_of_sales = _cost_of_sales(db, company_id, branch_id, purchases)
     gross_profit = revenue - cost_of_sales

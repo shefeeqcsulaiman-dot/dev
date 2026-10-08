@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import re
-import time
 import urllib.error
 import urllib.request
 import uuid
@@ -17,6 +16,7 @@ from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 import app.timezone_utils as timezone_utils
+from app import cache
 from app.ai_client import _anthropic_key, _openai_key
 from app.dependencies import company_allows_module
 from app.models import AppDataRecord, Company, Employee
@@ -113,7 +113,8 @@ def _consume_transcription(db: Session, company_id: str, cap: int) -> None:
 
 
 _VOCAB_TTL = 600
-_vocab_cache: dict[str, tuple[float, str]] = {}
+# Per company: in Redis when connected, otherwise this process only, at most 500 companies.
+_vocab_cache = cache.LocalTTLCache(max_entries=500)
 
 
 def _names(db: Session, company_id: str, collection: str, limit: int) -> list[str]:
@@ -135,9 +136,10 @@ def _names(db: Session, company_id: str, collection: str, limit: int) -> list[st
 
 def transcription_prompt(db: Session, company_id: str) -> str:
     """Names the transcriber should expect (staff, customers, suppliers, shifts) -- the main source of misheard words."""
-    cached = _vocab_cache.get(company_id)
-    if cached and cached[0] > time.time():
-        return cached[1]
+    return cache.remember(f"voice_vocab:{company_id}", _VOCAB_TTL, lambda: _build_transcription_prompt(db, company_id), _vocab_cache)
+
+
+def _build_transcription_prompt(db: Session, company_id: str) -> str:
     staff = [r[0] for r in db.query(Employee.full_name).filter(Employee.company_id == company_id, Employee.status == "active").limit(150).all() if r[0]]
     names: list[str] = []
     seen: set[str] = set()
@@ -155,7 +157,6 @@ def transcription_prompt(db: Session, company_id: str) -> str:
         budget -= len(name) + 2
     if picked:
         prompt += " Names: " + ", ".join(picked) + "."
-    _vocab_cache[company_id] = (time.time() + _VOCAB_TTL, prompt)
     return prompt
 
 

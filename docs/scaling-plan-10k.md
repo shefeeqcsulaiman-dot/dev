@@ -44,7 +44,7 @@ Rough infrastructure cost at that size: a few thousand US dollars a month (reven
 - [x] PostgreSQL load test (load-tests/postgres/README.md): one instance (3 workers) holds about 400-500 people online at once; the app CPU saturates first, not PostgreSQL. Fixed on the way: startup race across workers, missing posting-table indexes (migration 0005), per-IP rate limits (now per login). Automated: CI runs the full test suite on PostgreSQL on every push, and `.github/workflows/load-test.yml` runs the load test on every `v*` tag / on demand with p95 and error-rate limits.
 
 **Up to about 2,000 companies:**
-- [ ] Move invoices, purchases, rota and attendance out of JSON into tables
+- [~] Move invoices, purchases, rota and attendance out of JSON into tables. Step 2 done (2026-10-08): report figures are real columns (`fig_*`, migration 0009), so the dashboard, summary, VAT and branch-performance figures for sales invoices, purchases, bills and expenses are SQL sums; nothing in reports.py decodes a whole collection any more. Still JSON: the records themselves (the UI saves and reads them through app-data), products, customers, employees and rota
 - [x] Pre-calculated totals: reports read posted debit/credit per account and month from `account_period_totals` (migration 0006, `app/account_totals.py`), kept current on every journal write including bulk deletes; `REPORT_TOTALS_SOURCE=live` switches back to summing journal lines; `python -m app.account_totals [--rebuild]` checks/repairs; the test suite verifies every company at the end of each run. Dashboard: sales invoices already posted as real Invoices are skipped in SQL instead of parsed, and monthly revenue/VAT reads only the columns it needs (dashboard 138 -> 96 ms on a 1-year company, identical output). Still parsed per request: purchase/bill app-data documents for the purchase cards
 - [ ] Read replica
 - [ ] Background jobs for heavy work
@@ -56,6 +56,24 @@ Rough infrastructure cost at that size: a few thousand US dollars a month (reven
 - [ ] Multi-region disaster recovery
 - [ ] Security certification (ISO 27001 / SOC 2)
 - [ ] Accredited e-invoicing provider status
+
+## Report figures: how they work now (2026-10-08)
+
+- Each sales invoice, purchase record, bill and expense carries its report figures as columns, stamped on every save by `doc_index.doc_figures()` (the same rules reports.py applied to the decoded JSON, now shared from doc_index): `fig_status` (status as reports compare it), `fig_ref` (the reference it posts its Invoice / input TaxLine under), `fig_gross`, `fig_net`, `fig_vat`, `fig_taxable`, `fig_paid`.
+- `_purchase_summary()`, `_build_branch_performance()` and the app-data expense total are grouped SQL sums of them. `app_purchase_records()` skips purchases already posted as input TaxLines in SQL (`fig_ref`, index `ix_app_data_company_collection_fig_ref`) and only decodes the unposted ones.
+- Checked against the previous code on the 200-company load-test data (every company, with and without a branch filter: purchase summary, unposted purchases, branch performance, dashboard, summary): identical output. Branch performance 6.6x faster, purchase summary 3.8x.
+- An amount that can't be read (e.g. "AED 100" in a total field) used to fail the whole report with a 500; that record now adds nothing to the total.
+- Migration 0009 fills the columns for existing records: 385,000 records took 4.4 minutes. Migrations run at startup, before the server answers health checks, so a migration that long on a big production database would fail the deploy: run `python -m app.migrate` as a DigitalOcean pre-deploy job first (and set `RUN_MIGRATIONS_ON_STARTUP=false`) once production holds real data.
+
+## Super Admin, scheduled jobs and per-server memory: how they work now (2026-10-07)
+
+- **Startup:** the role, ledger and user backfills already run once each (a `schema_flags` row) and cost about 2 queries per start; measured on 202 companies: 5-17 ms each.
+- **Super Admin lists are paged in the database.** `GET /superadmin/companies` (`q` = name/TRN/country/user email, `status` = active/expiring/expired/inactive/no_users/no_expiry/new_month, `sort`, `dir`, `limit`, `offset`) returns `{items, total}` in 2 queries; users, branches and employees come from `GET /superadmin/companies/{id}` when Details or Edit opens. `GET /companies/overview` gives the Overview counts and insight samples; `GET /superadmin/users` pages users; `/companies/export.csv` and `/users/export.csv` stream every matching row. 202 companies: 23-67 ms per page.
+- **"Download All Backups" (one zip of every company) is gone.** The nightly job (`backup.nightly_all_companies`) queues `backup.company_batch` tasks of 50 companies; each writes `platform-backups/<date>/<company id>.sql.gz`, and one failing company is logged and audited without stopping the rest. Old files are pruned after 30 days (recursive, 1,000 keys per delete request). One company's backup is still downloadable from its row menu.
+- **5-minute jobs:** the stale check-out sweep finds stale sessions in one query (it used to run one query per open session); the BioTime sync queues one task per active BioTime server, so a slow server doesn't hold up the others. Migration `0008_scheduled_job_indexes` adds the indexes they use (sessions by status and check-in, location pings by session, users by company and last login).
+- **Usage Analytics** counts with 2 grouped queries instead of 4 and is cached for 10 minutes (6.3 s -> 2.6 s, then 21 ms, at 2.4M records).
+- **Per-server memory is bounded.** `cache.LocalTTLCache` (size-limited, expiring) is the fallback when Redis isn't connected, via `cache.remember()`; used for usage analytics and the voice name list. Report rebuild locks are a fixed set of 256 (was one per company and report, forever). Revoked impersonation tokens are pruned when they expire. `cache.delete_prefix()` uses SCAN instead of KEYS, which blocked Redis on every company write.
+- **Production needs Redis as Celery's broker.** Production has no `REDIS_URL` today, so the worker can't share a queue with the API servers or spread batches across processes; check its logs that the nightly backup and 5-minute jobs actually run. Moving AI extraction, payroll runs and exports to background jobs (item 7) depends on this.
 
 ## Pre-calculated account totals: how they work now
 
