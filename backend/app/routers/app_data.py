@@ -46,6 +46,7 @@ from app.routers.inventory import consume_valuation_layers
 from app.rota_days import rota_in_range
 from app.models import (
     PeriodLock,
+    Job,
     Account,
     AppDataRecord,
     AttendanceDetail,
@@ -518,6 +519,28 @@ def _keep_stored_employee_photo(record: dict[str, Any], existing: AppDataRecord 
         record["photo"] = stored_photo
     else:
         record.pop("photo", None)
+
+
+def _start_job(request: Request, db: Session, principal: Principal, kind: str, work) -> dict[str, object]:
+    """Run `work(db, principal)` as a background job (app/background.py) and return its id;
+    the browser polls GET /app-data/jobs/{id} for the result."""
+    from app import background
+
+    token = request.headers.get("Authorization", "")[7:]
+    job = background.start(db, principal.company_id, kind, token, work)
+    return {"ok": True, **background.view(job), "job_id": job.id}
+
+
+@router.get("/jobs/{job_id}")
+def get_job(job_id: str, db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> dict[str, object]:
+    """Status of a background job started by this company; `result` once completed,
+    `error` once failed."""
+    from app import background
+
+    job = db.query(Job).filter(Job.id == job_id, Job.company_id == principal.company_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return background.view(job)
 
 
 @router.get("/employee-photo/{record_id}")
@@ -2014,32 +2037,44 @@ async def app_data_action(
         assert_collection_module_enabled(db, principal, company, target)
         assert_collection_write_permission(principal, target)
         file = payload.get("file", {})
+
+        def extract(job_db: Session, job_principal: Principal) -> dict[str, Any]:
+            invoices = ingest_purchase_document(job_db, job_principal, file)
+            _mark_purchase_duplicates(job_db, job_principal.company_id, invoices)
+            log_action(
+                job_db,
+                job_principal,
+                "documents",
+                "document_extraction_requested",
+                {"file": file.get("name"), "invoices": len(invoices)},
+            )
+            job_db.commit()
+            return {"ok": True, "invoices": invoices}
+
+        if request.query_params.get("background"):
+            return _start_job(request, db, principal, "documents.extract", extract)
         # Runs in a thread: it can make a blocking OpenAI/Anthropic call (and a
         # blocking subprocess for PDF rendering) taking up to ~90s, which would
         # otherwise freeze this whole async worker's event loop for every user.
-        invoices = await run_in_threadpool(ingest_purchase_document, db, principal, file)
-        _mark_purchase_duplicates(db, principal.company_id, invoices)
-        log_action(
-            db,
-            principal,
-            "documents",
-            "document_extraction_requested",
-            {"file": file.get("name"), "invoices": len(invoices)},
-        )
-        db.commit()
-        return {"ok": True, "invoices": invoices}
+        return await run_in_threadpool(extract, db, principal)
 
     if action == "invoices.import":
         assert_collection_module_enabled(db, principal, company, "salesInvoices")
         assert_collection_write_permission(principal, "salesInvoices")
         file = payload.get("file", {})
+
+        def import_invoices(job_db: Session, job_principal: Principal) -> dict[str, Any]:
+            invoices = ingest_sales_invoice_document(job_db, job_principal, file)
+            _mark_sales_duplicates(job_db, job_principal.company_id, invoices)
+            non_error = [inv for inv in invoices if not inv.get("extraction_error")]
+            log_action(job_db, job_principal, "salesInvoices", "invoice_import_requested", {"file": file.get("name"), "invoices": len(non_error)})
+            job_db.commit()
+            return {"ok": True, "invoices": invoices}
+
+        if request.query_params.get("background"):
+            return _start_job(request, db, principal, "invoices.import", import_invoices)
         # See documents.extract above: same blocking-AI-call concern applies here.
-        invoices = await run_in_threadpool(ingest_sales_invoice_document, db, principal, file)
-        _mark_sales_duplicates(db, principal.company_id, invoices)
-        non_error = [inv for inv in invoices if not inv.get("extraction_error")]
-        log_action(db, principal, "salesInvoices", "invoice_import_requested", {"file": file.get("name"), "invoices": len(non_error)})
-        db.commit()
-        return {"ok": True, "invoices": invoices}
+        return await run_in_threadpool(import_invoices, db, principal)
 
     return {"ok": True, "action": action}
 

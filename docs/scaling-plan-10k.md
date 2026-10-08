@@ -47,7 +47,7 @@ Rough infrastructure cost at that size: a few thousand US dollars a month (reven
 - [~] Move invoices, purchases, rota and attendance out of JSON into tables. Step 2 done (2026-10-08): report figures are real columns (`fig_*`, migration 0009), so the dashboard, summary, VAT and branch-performance figures for sales invoices, purchases, bills and expenses are SQL sums; nothing in reports.py decodes a whole collection any more. Still JSON: the records themselves (the UI saves and reads them through app-data), products, customers, employees and rota
 - [x] Pre-calculated totals: reports read posted debit/credit per account and month from `account_period_totals` (migration 0006, `app/account_totals.py`), kept current on every journal write including bulk deletes; `REPORT_TOTALS_SOURCE=live` switches back to summing journal lines; `python -m app.account_totals [--rebuild]` checks/repairs; the test suite verifies every company at the end of each run. Dashboard: sales invoices already posted as real Invoices are skipped in SQL instead of parsed, and monthly revenue/VAT reads only the columns it needs (dashboard 138 -> 96 ms on a 1-year company, identical output). Still parsed per request: purchase/bill app-data documents for the purchase cards
 - [ ] Read replica
-- [ ] Background jobs for heavy work
+- [~] Background jobs for heavy work: AI invoice reading (purchases, expense receipts, sales import, batch .zip uploads) runs as a background job (2026-10-08, see below). Still in the request: payroll generate, exports
 - [ ] Split frontend
 
 **Up to 10,000 companies:**
@@ -56,6 +56,12 @@ Rough infrastructure cost at that size: a few thousand US dollars a month (reven
 - [ ] Multi-region disaster recovery
 - [ ] Security certification (ISO 27001 / SOC 2)
 - [ ] Accredited e-invoicing provider status
+
+## Background jobs: how they work now (2026-10-08)
+
+- `POST /app-data?action=documents.extract|invoices.import&background=1` saves a `Job` row and returns its id at once; `GET /app-data/jobs/{id}` gives `status` (queued/running/completed/failed), `result` once completed, `error` once failed. Without `background=1` the actions answer in the request, as before. The browser (`runExtractionJob()` in app.js) uses the job path for purchase uploads, expense receipts and sales import, asking every 2 s for up to 15 minutes, so a long file or .zip batch no longer ends in a 504.
+- `app/background.py` runs jobs on a 4-thread pool inside the API process, each in its own database session with the caller's Principal rebuilt from their login token (`auth_principal.principal_from_token()`). Threads rather than Celery because the work mostly waits on the AI provider and production has no Redis broker; move to Celery once Redis exists and jobs need to outlive a restart.
+- A running job touches its row every minute (heartbeat), however long it takes; one cut off by a restart (deploy, worker recycling) stops beating and shows as failed after 30 minutes, with a "please try again" message. With `CELERY_TASK_ALWAYS_EAGER` (tests, local dev) jobs run inline.
 
 ## Report figures: how they work now (2026-10-08)
 
