@@ -356,6 +356,15 @@ def set_inventory_backfill_disabled(db: Session, company_id: str) -> None:
 
 
 def backfill_purchase_stock_movements(db: Session, principal: Principal) -> None:
+    # Same rules as saving a purchase (sync_purchase_stock): a "without stock" company never
+    # gets stock movements, and a line categorised to a non-Inventory ledger (an expense, a
+    # service) isn't stock. The backfill used to ignore both. Checked before the query below:
+    # a without-stock company's purchases never get movements, so they'd all be loaded on
+    # every stock read only to be skipped.
+    from app.routers.app_data import _category_adds_to_stock, _ledger_codes, company_tracks_stock
+
+    if not company_tracks_stock(db, principal.company_id):
+        return
     # Purchases whose reference already has purchase movements are skipped in SQL, before
     # anything is loaded or parsed: this runs on every mappings/stock-levels/stock-movements
     # read, and used to parse the company's whole purchase history each time (0.2-0.3 s at
@@ -377,6 +386,7 @@ def backfill_purchase_stock_movements(db: Session, principal: Principal) -> None
     )
     if not records:
         return
+    ledger_codes = _ledger_codes(db, principal.company_id)
     # This runs on every GET /inventory/stock-levels and /stock-movements
     # call (unless disabled) — was one existence-check query PER purchase
     # record, every single time, even when nothing had changed since the
@@ -421,6 +431,8 @@ def backfill_purchase_stock_movements(db: Session, principal: Principal) -> None
         branch_id = item.branch_id or principal.branch_id
         for line in lines:
             if not isinstance(line, dict):
+                continue
+            if not _category_adds_to_stock(line.get("category"), ledger_codes):
                 continue
             quantity = decimal_value(line.get("quantity") or line.get("qty") or line.get("purchase_qty") or line.get("qty_invoiced"))
             if quantity <= 0:

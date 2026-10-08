@@ -70,3 +70,54 @@ def test_direct_url_is_used_for_migrations_when_set(tmp_path, monkeypatch):
         assert _revision(eng) == head_revision()
     finally:
         eng.dispose()
+
+
+def test_revision_ids_fit_alembic_version_column():
+    """alembic_version.version_num is VARCHAR(32): PostgreSQL refuses a longer id (SQLite
+    doesn't check, which is how a 35-character 0012 got through), so every startup on a
+    PostgreSQL database would fail to record it."""
+    from alembic.script import ScriptDirectory
+    from app.migrate import alembic_config
+
+    too_long = [rev.revision for rev in ScriptDirectory.from_config(alembic_config()).walk_revisions() if len(rev.revision) > 32]
+    assert too_long == []
+
+
+def test_database_recorded_under_a_renamed_revision_still_upgrades(scratch_engine):
+    from app.migrate import _RENAMED_REVISIONS
+
+    run_migrations(scratch_engine)
+    old, new = next(iter(_RENAMED_REVISIONS.items()))
+    with scratch_engine.begin() as conn:
+        conn.execute(text("UPDATE alembic_version SET version_num = :old"), {"old": old})
+    run_migrations(scratch_engine)
+    assert _revision(scratch_engine) == head_revision()
+
+
+def test_migrations_on_postgresql():
+    """The PostgreSQL CI job builds tables from the models (conftest), so it never ran the
+    migrations themselves; PostgreSQL-only failures (a too-long revision id, a statement
+    SQLite accepts) went unseen. With TEST_DATABASE_URL set, migrate a scratch database:
+    empty -> head, then a second run that must change nothing."""
+    import os
+
+    from sqlalchemy.engine import make_url
+
+    url = os.environ.get("TEST_DATABASE_URL")
+    if not url or not url.startswith("postgresql"):
+        pytest.skip("needs TEST_DATABASE_URL (PostgreSQL)")
+    admin = create_engine(url, isolation_level="AUTOCOMMIT")
+    name = f"mig_{uuid.uuid4().hex[:12]}"
+    with admin.connect() as conn:
+        conn.execute(text(f'CREATE DATABASE "{name}"'))
+    scratch = create_engine(make_url(url).set(database=name))
+    try:
+        run_migrations(scratch)
+        run_migrations(scratch)
+        assert _revision(scratch) == head_revision()
+        assert set(Base.metadata.tables) <= set(inspect(scratch).get_table_names())
+    finally:
+        scratch.dispose()
+        with admin.connect() as conn:
+            conn.execute(text(f'DROP DATABASE IF EXISTS "{name}"'))
+        admin.dispose()

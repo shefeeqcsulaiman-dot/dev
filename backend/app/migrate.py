@@ -80,6 +80,24 @@ def head_revision() -> str:
     return ScriptDirectory.from_config(alembic_config()).get_current_head()
 
 
+# Revision ids that were renamed after release: old -> new. alembic_version.version_num is
+# VARCHAR(32); 0012 was first named "0012_stock_movement_reference_index" (35 characters),
+# which PostgreSQL refused to record (SQLite doesn't check lengths, so it can hold the old
+# name). A database recorded under an old name is moved to the new one before upgrading,
+# or Alembic would stop at a revision it no longer knows.
+_RENAMED_REVISIONS = {"0012_stock_movement_reference_index": "0012_stock_movement_ref_index"}
+
+
+def _apply_revision_renames(connection: Connection) -> None:
+    for old, new in _RENAMED_REVISIONS.items():
+        result = connection.execute(
+            text("UPDATE alembic_version SET version_num = :new WHERE version_num = :old"), {"new": new, "old": old}
+        )
+        if result.rowcount:
+            log.info("Renamed recorded revision %s -> %s", old, new)
+    connection.commit()
+
+
 def _migrate(connection: Connection) -> None:
     import app.models  # noqa: F401  -- registers every table on Base.metadata
 
@@ -103,6 +121,7 @@ def _migrate(connection: Connection) -> None:
         command.stamp(cfg, BASELINE_REVISION)
         connection.commit()
 
+    _apply_revision_renames(connection)
     before = current_revision(connection)
     command.upgrade(cfg, "head")
     connection.commit()

@@ -96,6 +96,7 @@ Rough infrastructure cost at that size: a few thousand US dollars a month (reven
 - `app/migrate.py` `run_migrations()` runs at startup (`RUN_MIGRATIONS_ON_STARTUP=true`, the default). On PostgreSQL it takes an advisory lock so only one worker migrates; the others wait and then find nothing to do.
 - First run on an existing database: it creates missing tables, applies the legacy patches once, stamps `0001_baseline`, then upgrades to head. On an empty database: it creates from the models and stamps head.
 - New change: `cd backend && alembic revision -m "add x"`, fill in `upgrade()`/`downgrade()`, then `alembic upgrade head` (or just restart the app).
+- Keep revision ids to 32 characters (`alembic_version.version_num` is VARCHAR(32)). 0012 was first released as `0012_stock_movement_reference_index` (35): PostgreSQL refused to record it, so the whole 0010-0012 upgrade rolled back on every start and `document_lines` never existed there; SQLite doesn't check lengths, so local runs and the tests passed. Renamed `0012_stock_movement_ref_index` (2026-10-08); `app.migrate._RENAMED_REVISIONS` moves a database recorded under the old name. `tests/test_migrations.py` now checks id lengths and, when the suite runs on PostgreSQL (CI's second job), migrates a scratch PostgreSQL database from empty to head twice.
 - Optional later: run `python -m app.migrate` as a DigitalOcean pre-deploy job and set `RUN_MIGRATIONS_ON_STARTUP=false`.
 
 ## Paged registers: how they work now

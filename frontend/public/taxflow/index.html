@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=f14f81f61a" as="style">
-<link rel="preload" href="src/app.js?v=1cca4d2ea2" as="script">
+<link rel="preload" href="src/app.js?v=dfbc77fcf1" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=f14f81f61a">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
@@ -1385,7 +1385,7 @@
         <div class="card-sub">Item</div><div class="card-sub">Qty</div><div class="card-sub">Unit Price</div><div class="card-sub">Amount</div><div></div>
       </div>
       <div id="quote-lines">
-        <div class="inv-item quote-line"><select class="fi quote-item" onchange="selectQuotationItem(this)" onfocus="refreshQuotationProductOptions()"><option value="">Select item...</option></select><input class="fi quote-qty" value="1" oninput="calcQuotationLine(this)"><input class="fi quote-price" value="0.00" oninput="calcQuotationLine(this)"><input class="fi mono quote-amount" value="0.00" readonly style="background:var(--bg)"><button class="btn btn-g" style="padding:4px 8px" onclick="removeQuotationLine(this)">x</button></div>
+        <div class="inv-item quote-line"><input class="fi quote-item" data-ac="invoice-product" placeholder="Search item..." autocomplete="off" dir="auto" onchange="selectQuotationItem(this)"><input class="fi quote-qty" value="1" oninput="calcQuotationLine(this)"><input class="fi quote-price" value="0.00" oninput="calcQuotationLine(this)"><input class="fi mono quote-amount" value="0.00" readonly style="background:var(--bg)"><button class="btn btn-g" style="padding:4px 8px" onclick="removeQuotationLine(this)">x</button></div>
       </div>
     </div>
     <div class="flx-b">
@@ -5756,6 +5756,6 @@ period_locks ─&lt; audit_logs
      order relative to app.js's own defer, so config.js still runs first. -->
 <script src="config.js" defer></script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=1cca4d2ea2" defer></script>
+<script src="src/app.js?v=dfbc77fcf1" defer></script>
 </body>
 </html>
