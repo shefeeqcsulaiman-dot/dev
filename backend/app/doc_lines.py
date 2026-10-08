@@ -1,10 +1,11 @@
 """Line items of JSON app-data documents as real rows (document_lines).
 
-Step 3 of moving these records out of JSON (docs/scaling-plan-10k.md): each sales
-invoice's "lines" are written to document_lines whenever the invoice is saved, so
+Step 3 of moving these records out of JSON (docs/scaling-plan-10k.md): the "lines" of
+each sales invoice, quotation, bill and purchase record are written to document_lines
+whenever the document is saved, so
 line-level reads can be SQL queries instead of decoding every invoice the company
-has. Used today by the register's product filter ("invoices containing this
-product"). The JSON record is still the source of truth; these rows are rebuilt from
+has. Used today by the registers' product filter ("documents containing this
+product") and the stock movements feed (app/routers/stock_feed.py, sales invoices). The JSON record is still the source of truth; these rows are rebuilt from
 it and can always be rebuilt again (`python -m app.doc_lines --rebuild`).
 
 Measured on 5,000 invoices / 25,000 lines (SQLite): the product filter is ~30%
@@ -33,7 +34,9 @@ from sqlalchemy.orm import Session
 
 from app.models import AppDataRecord, DocumentLine
 
-LINE_COLLECTIONS = frozenset({"salesInvoices"})
+LINE_COLLECTIONS = frozenset({"salesInvoices", "quotations", "bills", "purchaseRecords"})
+# The document number each collection is saved under (app_data.record_key()).
+_DOC_NUMBER = {"salesInvoices": "invoice_no", "quotations": "quote_no", "bills": "bill_no", "purchaseRecords": "ref"}
 
 _BUSY = "_doc_lines_busy"
 _REFRESH = "_doc_lines_refresh"        # record ids whose lines to rebuild after the flush
@@ -79,7 +82,7 @@ def line_rows(company_id: str, record_id: str, collection: str, payload: str | N
         "record_id": record_id,
         "collection": collection,
         "doc_date": _clip(doc_date, 40) if doc_date else None,
-        "doc_ref": _clip(doc.get("invoice_no"), 160),
+        "doc_ref": _clip(doc.get(_DOC_NUMBER.get(collection, "invoice_no")), 160),
         "doc_source": _key(doc.get("source"))[:40] if doc.get("source") else None,
     }
     rows = []
@@ -87,7 +90,8 @@ def line_rows(company_id: str, record_id: str, collection: str, payload: str | N
         if not isinstance(line, dict):
             continue
         qty = line.get("qty") or line.get("quantity") or 0
-        price = line.get("unit_price") if line.get("unit_price") not in (None, "") else line.get("price")
+        # Sales/quotes/bills say unit_price or price; purchases say unit_cost (or cost).
+        price = next((line.get(k) for k in ("unit_price", "price", "unit_cost", "cost") if line.get(k) not in (None, "")), None)
         total = next((line.get(k) for k in ("amount", "total", "line_total") if line.get(k) not in (None, "")), None)
         rows.append({
             **head,
@@ -96,7 +100,7 @@ def line_rows(company_id: str, record_id: str, collection: str, payload: str | N
             "description_key": _key(line.get("description")),
             "product_name_key": _key(line.get("product_name")),
             "product_key": _key(line.get("product")),
-            "product_code": _clip(line.get("product_code"), 80),
+            "product_code": _clip(line.get("product_code") or line.get("sku") or line.get("code"), 80),
             "unit": _clip(line.get("unit"), 40),
             "quantity": _number(qty),
             "unit_price": _number(price, "0.01"),
@@ -169,6 +173,39 @@ def _insert_only(session: Session, records: list[tuple[str, str, str, str | None
             session.execute(insert(DocumentLine), rows[start:start + 1000])
     finally:
         session.info.pop(_BUSY, None)
+
+
+def refill_all(bind: Any, batch: int = 1000) -> None:
+    """Rebuild every row of document_lines from the JSON records, on a Connection
+    (migrations). Keyset batches, so memory stays flat however many records there are."""
+    import sqlalchemy as sa
+
+    table = sa.table(
+        "document_lines",
+        *(sa.column(c) for c in (
+            "company_id", "record_id", "collection", "line_no", "doc_date", "doc_ref", "doc_source", "item_name",
+            "description_key", "product_name_key", "product_key", "product_code", "unit")),
+        sa.column("quantity", sa.Numeric(18, 6)),
+        sa.column("unit_price", sa.Numeric(14, 2)),
+        sa.column("line_total", sa.Numeric(14, 2)),
+    )
+    records = sa.table("app_data_records", sa.column("id"), sa.column("company_id"),
+                       sa.column("collection"), sa.column("payload"))
+    bind.execute(sa.delete(table))
+    last_id = ""
+    while True:
+        rows = bind.execute(
+            sa.select(records.c.id, records.c.company_id, records.c.collection, records.c.payload)
+            .where(records.c.collection.in_(LINE_COLLECTIONS), records.c.id > last_id)
+            .order_by(records.c.id)
+            .limit(batch)
+        ).all()
+        if not rows:
+            return
+        lines = [line for rid, cid, coll, payload in rows for line in line_rows(cid, rid, coll, payload)]
+        if lines:
+            bind.execute(sa.insert(table), lines)
+        last_id = rows[-1][0]
 
 
 def verify_company(session: Session, company_id: str) -> bool:

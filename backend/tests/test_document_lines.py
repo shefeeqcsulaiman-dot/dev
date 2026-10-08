@@ -163,6 +163,65 @@ def test_record_moved_out_of_a_line_collection_loses_its_lines(db, tenant):
                         payload=json.dumps({"invoice_no": "MOVE-1", "lines": [{"description": "X", "qty": 1}]}))
     db.add(row)
     db.commit()
-    row.collection = "quotations"
+    row.collection = "customers"
     db.commit()
     assert db.query(DocumentLine).filter(DocumentLine.record_id == row.id).count() == 0
+
+
+def _save_to(client, headers, collection, record):
+    r = client.post("/api/v1/app-data?action=save", headers=headers, json={"collection": collection, "record": record})
+    assert r.status_code == 200, r.text
+
+
+def test_quotations_bills_and_purchases_get_lines_too(client, db, tenant):
+    company_id, headers = tenant
+    _save_to(client, headers, "quotations", {"quote_no": "Q-1", "customer": "Acme", "date": "2026-09-01",
+             "lines": [{"description": "Widget", "qty": 2, "price": 50, "amount": 100}]})
+    _save_to(client, headers, "bills", {"bill_no": "B-1", "vendor": "Supp", "date": "2026-09-02",
+             "lines": [{"description": "Paper", "qty": 3, "unit_price": 4, "total": 12.6}]})
+    _save_to(client, headers, "purchaseRecords", {"ref": "PR-1", "supplier": "Supp", "date": "2026-09-03",
+             "lines": [{"sku": "WID-1", "product": "Widget", "quantity": 5, "unit_cost": 40, "line_total": 200}]})
+    db.expire_all()
+    got = {
+        (coll, ref): (item, float(qty), float(price), code)
+        for coll, ref, item, qty, price, code in db.execute(
+            select(DocumentLine.collection, DocumentLine.doc_ref, DocumentLine.item_name, DocumentLine.quantity,
+                   DocumentLine.unit_price, DocumentLine.product_code)
+            .where(DocumentLine.company_id == company_id))
+    }
+    assert got == {
+        ("quotations", "Q-1"): ("Widget", 2.0, 50.0, None),
+        ("bills", "B-1"): ("Paper", 3.0, 4.0, None),
+        ("purchaseRecords", "PR-1"): ("Widget", 5.0, 40.0, "WID-1"),   # purchase fields: unit_cost, sku
+    }
+    assert doc_lines.verify_company(db, company_id)
+
+
+def test_product_filter_on_bill_and_quotation_registers(client, db, tenant):
+    _, headers = tenant
+    _save_to(client, headers, "quotations", {"quote_no": "Q-2", "customer": "Acme", "lines": [{"description": "Widget", "qty": 1}]})
+    _save_to(client, headers, "quotations", {"quote_no": "Q-3", "customer": "Acme", "lines": [{"description": "Bolt", "qty": 1}]})
+    _save_to(client, headers, "bills", {"bill_no": "B-2", "vendor": "Supp", "lines": [{"description": "Paper", "qty": 1}]})
+
+    def keys(collection, product):
+        r = client.get(f"/api/v1/app-data/registers/{collection}", headers=headers, params={"product": product})
+        assert r.status_code == 200, r.text
+        return sorted(rec.get("quote_no") or rec.get("bill_no") for rec in r.json()["records"])
+
+    assert keys("quotations", "WIDGET") == ["Q-2"]
+    assert keys("bills", "paper") == ["B-2"]
+    assert keys("bills", "widget") == []
+
+
+def test_refill_all_rebuilds_every_collection(db, tenant):
+    company_id, _ = tenant
+    db.add(AppDataRecord(company_id=company_id, collection="bills", record_key="B-REFILL",
+                         payload=json.dumps({"bill_no": "B-REFILL", "lines": [{"description": "Ink", "qty": 1}]})))
+    db.commit()
+    db.query(DocumentLine).filter(DocumentLine.company_id == company_id).delete(synchronize_session=False)
+    db.commit()
+    doc_lines.refill_all(db.connection())
+    db.commit()
+    assert doc_lines.verify_company(db, company_id)
+    assert db.query(DocumentLine).filter(DocumentLine.record_id.isnot(None),
+                                         DocumentLine.company_id == company_id).count() == 1
