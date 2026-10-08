@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=f14f81f61a" as="style">
-<link rel="preload" href="src/app.js?v=b9ccba54fd" as="script">
+<link rel="preload" href="src/app.js?v=e89a8e5273" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=f14f81f61a">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
@@ -1186,7 +1186,7 @@
         <div class="sinv-section mb10">
           <div class="sinv-section-title">Invoice Details</div>
           <div class="fr3 mb10">
-            <div class="fg" style="margin:0"><label class="fl" id="sales-no-label">Invoice No.</label><input class="fi mono" id="inv-no" dir="auto" required oninput="updateSalesInvPreview()"></div>
+            <div class="fg" style="margin:0"><label class="fl" id="sales-no-label">Invoice No. <span style="color:var(--red)">*</span></label><input class="fi mono" id="inv-no" dir="auto" required oninput="updateSalesInvPreview()"></div>
             <div class="fg" style="margin:0"><label class="fl" id="sales-date-label">Invoice Date</label><input class="fi" type="date" id="inv-date" required oninput="updateSalesInvPreview()"></div>
             <div class="fg" style="margin:0"><label class="fl">Due Date</label><input class="fi" type="date" id="inv-due" oninput="updateSalesInvPreview()"></div>
           </div>
@@ -1211,7 +1211,7 @@
           <div class="sinv-section-title">Bill To</div>
           <div class="fr2 mb8">
             <div class="fg" style="margin:0">
-              <label class="fl">Customer Name</label>
+              <label class="fl">Customer Name <span style="color:var(--red)">*</span></label>
               <div class="field-action-row">
                 <input class="fi" id="inv-cust" data-ac="invoice-customer" placeholder="Select or type customer" dir="auto" required autocomplete="off" oninput="applyInvoiceCustomerSelection();updateSalesInvPreview()" onchange="applyInvoiceCustomerSelection();updateSalesInvPreview()">
                 <button class="btn btn-g btn-sm" type="button" onclick="openAddCustomerFromInvoice()">+ Add</button>
@@ -2818,9 +2818,9 @@
       <div class="drop-zone" style="opacity:.55;cursor:not-allowed" onclick="toast('Document upload isn\'t available yet — coming soon','info')"><div style="font-size:32px;margin-bottom:8px">📎</div><div class="drop-title">Upload Documents</div><div class="drop-sub">Not available yet — invoices, bills, receipts, contracts, audit files, trade licenses</div></div>
       <div class="card">
         <div class="card-hd"><div class="card-title">Storage Summary</div><span class="b b-g">Encrypted</span></div>
-        <div class="risk-row"><span>Invoices</span><div class="risk-track"><div class="risk-fill" style="width:76%"></div></div><span class="mono">184</span></div>
-        <div class="risk-row"><span>Receipts</span><div class="risk-track"><div class="risk-fill warn" style="width:42%"></div></div><span class="mono">92</span></div>
-        <div class="risk-row"><span>Audit docs</span><div class="risk-track"><div class="risk-fill" style="width:61%"></div></div><span class="mono">38</span></div>
+        <div class="risk-row"><span>Invoices</span><div class="risk-track"><div class="risk-fill" style="width:0%"></div></div><span class="mono">0</span></div>
+        <div class="risk-row"><span>Receipts</span><div class="risk-track"><div class="risk-fill warn" style="width:0%"></div></div><span class="mono">0</span></div>
+        <div class="risk-row"><span>Audit docs</span><div class="risk-track"><div class="risk-fill" style="width:0%"></div></div><span class="mono">0</span></div>
       </div>
     </div>
     <div class="card">
@@ -2831,7 +2831,7 @@
   <div class="tab-body" id="doc-receipts">
     <div class="card">
       <div class="card-hd"><div class="card-title">Receipt Inbox</div><button class="btn btn-g btn-sm" disabled title="Not available yet">Capture Receipt</button></div>
-      <table class="tbl"><thead><tr><th>Receipt</th><th>Merchant</th><th>Date</th><th>Amount</th><th>Matched To</th><th>Status</th></tr></thead><tbody><tr><td>receipt_3391.jpg</td><td>Dubai Taxi</td><td>23 Jun</td><td class="mono">86.00</td><td>Travel Expense</td><td><span class="b b-g">Matched</span></td></tr><tr><td>receipt_3392.png</td><td>OfficeMart</td><td>22 Jun</td><td class="mono">420.00</td><td>Unassigned</td><td><span class="b b-a">Review</span></td></tr></tbody></table>
+      <table class="tbl"><thead><tr><th>Receipt</th><th>Merchant</th><th>Date</th><th>Amount</th><th>Matched To</th><th>Status</th></tr></thead><tbody><tr data-empty-state><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No receipts yet.</td></tr></tbody></table>
     </div>
   </div>
   <div class="tab-body" id="doc-audit">
@@ -5403,14 +5403,14 @@ period_locks ─&lt; audit_logs
     <div class="fg"><label class="fl">Description</label><input class="fi" id="inv-item-description" placeholder="Short description (optional)"></div>
     <div class="fr2">
       <div class="fg">
-        <div class="flx-b"><label class="fl">Category</label><button type="button" class="btn-link" onclick="toggleInvCategoryAdd()" id="inv-cat-add-btn">+ New</button></div>
+        <div class="flx-b"><label class="fl">Category <span style="color:var(--red)">*</span></label><button type="button" class="btn-link" onclick="toggleInvCategoryAdd()" id="inv-cat-add-btn">+ New</button></div>
         <select class="fi" id="inv-item-category"><option value="">Select Category</option></select>
         <div id="inv-cat-quick-add" style="display:none;margin-top:6px;display:none">
           <div class="flx" style="gap:6px"><input class="fi" id="inv-cat-new-name" placeholder="Category name" style="flex:1"><button class="btn btn-p btn-sm" onclick="quickAddInventoryCategory()">Add</button><button class="btn btn-g btn-sm" onclick="toggleInvCategoryAdd()">✕</button></div>
         </div>
       </div>
       <div class="fg">
-        <div class="flx-b"><label class="fl">Unit of Measure</label><button type="button" class="btn-link" onclick="toggleInvUnitAdd()">+ New</button></div>
+        <div class="flx-b"><label class="fl">Unit of Measure <span style="color:var(--red)">*</span></label><button type="button" class="btn-link" onclick="toggleInvUnitAdd()">+ New</button></div>
         <select class="fi" id="inv-item-unit"><option value="">Select Unit</option></select>
         <div id="inv-unit-quick-add" style="display:none;margin-top:6px">
           <div class="flx" style="gap:6px"><input class="fi" id="inv-unit-new-name" placeholder="Unit name e.g. KG" style="flex:1"><button class="btn btn-p btn-sm" onclick="quickAddInventoryUnit()">Add</button><button class="btn btn-g btn-sm" onclick="toggleInvUnitAdd()">✕</button></div>
@@ -5756,6 +5756,6 @@ period_locks ─&lt; audit_logs
      order relative to app.js's own defer, so config.js still runs first. -->
 <script src="config.js" defer></script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=b9ccba54fd" defer></script>
+<script src="src/app.js?v=e89a8e5273" defer></script>
 </body>
 </html>
