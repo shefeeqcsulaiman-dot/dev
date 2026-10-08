@@ -860,6 +860,39 @@ class AppDataRecord(Base, TimestampMixin):
     fig_paid: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
 
 
+class DocumentLine(Base):
+    """One line item of a document kept as JSON app-data (sales invoices first), as real
+    columns: maintained by app/doc_lines.py on every write, so line-level reads (stock
+    movements, "invoices with this product") run in SQL instead of decoding every
+    record. The JSON record stays the source of truth; these rows are derived from it.
+    Always read joined to app_data_records, so a row whose record is gone never shows."""
+    __tablename__ = "document_lines"
+    __table_args__ = (
+        Index("ix_document_lines_record", "record_id"),
+        Index("ix_document_lines_company_collection", "company_id", "collection"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    record_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    collection: Mapped[str] = mapped_column(String(80), nullable=False)
+    line_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    # From the document: its "date" as saved, its number, its "source" (lower-cased).
+    doc_date: Mapped[str | None] = mapped_column(String(40))
+    doc_ref: Mapped[str | None] = mapped_column(String(160))
+    doc_source: Mapped[str | None] = mapped_column(String(40))
+    # The line: description (else product) as shown, and lower-cased match keys.
+    item_name: Mapped[str | None] = mapped_column(String(255))
+    description_key: Mapped[str | None] = mapped_column(String(255))
+    product_name_key: Mapped[str | None] = mapped_column(String(255))
+    product_key: Mapped[str | None] = mapped_column(String(255))
+    product_code: Mapped[str | None] = mapped_column(String(80))
+    unit: Mapped[str | None] = mapped_column(String(40))
+    quantity: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    unit_price: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    line_total: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+
+
 DATED_COLLECTIONS = frozenset({"rotaAssignments"})
 _ISO_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -1440,3 +1473,4 @@ class TrialRequest(Base, TimestampMixin):
 # Registers the session hooks that keep AppDataRecord.amount_paid current (needs AppDataRecord above).
 import app.doc_index  # noqa: E402,F401
 import app.account_totals  # noqa: E402,F401  -- keeps AccountPeriodTotal current
+import app.doc_lines  # noqa: E402,F401  -- keeps DocumentLine current

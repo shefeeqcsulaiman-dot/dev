@@ -3264,7 +3264,8 @@ def sync_sales_invoice(db: Session, principal: Principal, record: dict[str, Any]
         invoice.branch_id = branch_id
     invoice.status = "issued" if str(record.get("status", "")).lower() in {"ready", "pending"} else str(record.get("status") or "draft").lower()
     company_vat_rate = get_company_vat_rate(resolve_principal_company(principal, db))
-    lines = record.get("lines") if isinstance(record.get("lines"), list) else []
+    # A line that isn't an object (e.g. stray text in an imported invoice) used to 500 the save.
+    lines = [line for line in record.get("lines") or [] if isinstance(line, dict)] if isinstance(record.get("lines"), list) else []
     if lines:
         invoice.lines = []
         for line in lines:

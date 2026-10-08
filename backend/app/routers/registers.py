@@ -17,13 +17,14 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import Principal, get_current_principal
 from app.doc_index import PAID_TOLERANCE, SPECS, effective_status, parse_document_date
-from app.models import AppDataRecord
+from app.doc_lines import LINE_COLLECTIONS
+from app.models import AppDataRecord, DocumentLine
 from app.routers.app_data import (
     _collection_read_filters,
     assert_collection_module_enabled,
@@ -135,7 +136,15 @@ def list_register(
         filters.append(func.lower(AppDataRecord.payload).like(_like(contains), escape="\\"))
     if party and party.strip():
         filters.append(func.lower(AppDataRecord.party) == party.strip().lower())
-    if product and product.strip():
+    if product and product.strip() and collection in LINE_COLLECTIONS:
+        # A line whose description, product name or product is exactly this (any case),
+        # from document_lines (app/doc_lines.py).
+        key = product.strip().lower()
+        filters.append(exists().where(
+            DocumentLine.record_id == AppDataRecord.id,
+            or_(DocumentLine.description_key == key, DocumentLine.product_name_key == key, DocumentLine.product_key == key),
+        ))
+    elif product and product.strip():
         # Payloads are json.dumps() output, so a line field reads exactly `"description": "<name>"`.
         name = json.dumps(product.strip().lower(), ensure_ascii=False)
         needles = [_like_escape(f'"{field}": {name}') for field in ("description", "product_name", "product")]
