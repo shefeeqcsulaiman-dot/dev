@@ -27,7 +27,7 @@ def _token_subject(token: str) -> str | None:
     """The user/employee id of a validly signed access token, else None (quietly: a bad
     token is the auth layer's to reject and log, not the rate limiter's)."""
     try:
-        from jose import jwt
+        import jwt
 
         from app.config import get_settings
         from app.security import ALGORITHM

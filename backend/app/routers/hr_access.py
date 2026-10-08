@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from jose import jwt
+import jwt
 from pydantic import BaseModel
 from sqlalchemy import or_, text
 from sqlalchemy.exc import IntegrityError

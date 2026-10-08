@@ -16,7 +16,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from fastapi import Depends, HTTPException, Request, status
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError as JWTError
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import get_settings
