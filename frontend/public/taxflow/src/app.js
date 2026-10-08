@@ -5269,6 +5269,15 @@ function removeEmptyState(tbody){
   tbody?.querySelectorAll('[data-empty-state]').forEach(row=>row.remove());
 }
 
+// removeEmptyState() for tables whose placeholder is a whole <tr> that is the only row
+// when present (static markup and emptyTableMessage()): checks the first and last rows
+// only, instead of searching every cell (~2.7 ms per row added at 3,000 customers).
+function removeEmptyStateRow(tbody){
+  [tbody?.firstElementChild,tbody?.lastElementChild].forEach(row=>{
+    if(row?.dataset?.emptyState!==undefined)row.remove();
+  });
+}
+
 function clearStaticDemoData(){
   const emptyTables={
     'sales-invoice-tbody':'No sales invoices in database yet.',
@@ -5568,7 +5577,7 @@ function renderCustomerRecord(customer){
   row.dataset.email=customer.email||'';
   row.dataset.phone=customer.phone||'';
   row.innerHTML=`<td>${escapeHtml(customer.name)}</td><td class="mono">${escapeHtml(customer.trn||'Not registered')}</td><td>${escapeHtml(customer.emirate||'Dubai')}</td><td>${escapeHtml(customer.email||customer.phone||'-')}</td><td class="mono" style="color:var(--accent)">${escapeHtml(currentCurrency())} 0</td><td><button class="btn btn-g btn-sm">View</button></td>`;
-  removeEmptyState(tbody);
+  removeEmptyStateRow(tbody);
   tbody.prepend(row);
   noteFirstCellValue(tbody,customer.name);
   refreshInvoiceCustomerOptions();
@@ -5596,9 +5605,21 @@ function invoiceCustomerRecords(){
   return records;
 }
 
+// The product/customer fields use the custom dropdown (_AC_SOURCES), not these <datalist>s,
+// which no field points at any more. Rebuilding one from every customer/product on each
+// row added cost ~30 ms per customer at 1,700 customers (minutes of start-up with
+// thousands), so they're only rebuilt while some field still uses them.
+// Checked once per list: the fields are in the page's HTML, and a [list=...] lookup that
+// matches nothing walks the whole document (~12 ms with thousands of table rows).
+const _datalistUse=new Map();
+function _datalistInUse(id){
+  if(!_datalistUse.has(id))_datalistUse.set(id,!!document.querySelector(`[list="${id}"]`));
+  return _datalistUse.get(id);
+}
+
 function refreshInvoiceCustomerOptions(){
   const list=document.getElementById('invoice-customer-options');
-  if(!list)return;
+  if(!list||!_datalistInUse('invoice-customer-options'))return;
   list.innerHTML=invoiceCustomerRecords()
     .map(customer=>`<option value="${escapeHtml(customer.name)}" label="${escapeHtml([customer.trn,customer.emirate,customer.contact].filter(Boolean).join(' - '))}"></option>`)
     .join('');
@@ -5618,7 +5639,7 @@ function applyInvoiceCustomerSelection(){
 
 function refreshQuotationCustomerOptions(){
   const list=document.getElementById('quote-customer-options');
-  if(!list)return;
+  if(!list||!_datalistInUse('quote-customer-options'))return;
   list.innerHTML=invoiceCustomerRecords()
     .map(customer=>`<option value="${escapeHtml(customer.name)}" label="${escapeHtml([customer.trn,customer.emirate,customer.contact].filter(Boolean).join(' - '))}"></option>`)
     .join('');
@@ -6483,13 +6504,32 @@ function renderVendorRecord(vendor){
   row.dataset.vendorTrn=trn;
   const openBalance=_vendorOpenBalance(vendor.name);
   row.innerHTML=`<td>${escapeHtml(vendor.name)}</td><td class="mono">${escapeHtml(trn||'Not registered')}</td><td>${escapeHtml(vendor.category||'Services')}</td><td>${escapeHtml(vendor.email||'-')}</td><td>${escapeHtml(vendor.address||'-')}</td><td class="mono">${openBalance.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td><span class="b b-g">Active</span></td>`;
-  removeEmptyState(tbody);
+  removeEmptyStateRow(tbody);
   tbody.prepend(row);
   noteFirstCellValue(tbody,vendor.name);
   _noteTableIndex(tbody,'trn',trn);
-  syncSupplierOptions(vendor.name);
-  syncInventoryItemOptions();
+  if(isHydratingFromServer){
+    _scheduleVendorOptionSync(vendor.name);
+  }else{
+    syncSupplierOptions(vendor.name);
+    syncInventoryItemOptions();
+  }
   ensureSupplierLedger(vendor.name);
+}
+
+// While the start-up load draws suppliers, the drop-downs that list every supplier are
+// rebuilt once per batch, not once per supplier (each rebuild reads every supplier row:
+// ~10 ms at 1,000 suppliers, so the load was quadratic). Same end state: the last
+// supplier loaded is passed as before.
+let _vendorOptionsTimer=null,_vendorOptionsSelected='';
+function _scheduleVendorOptionSync(name){
+  _vendorOptionsSelected=name;
+  if(_vendorOptionsTimer)return;
+  _vendorOptionsTimer=setTimeout(()=>{
+    _vendorOptionsTimer=null;
+    syncSupplierOptions(_vendorOptionsSelected);
+    syncInventoryItemOptions();
+  },0);
 }
 
 async function ensureSupplierLedger(vendorName){
@@ -15935,7 +15975,7 @@ function purchaseProductRecords(){
 
 function refreshPurchaseProductSuggestions(){
   const list=document.getElementById('purchase-product-options');
-  if(!list)return;
+  if(!list||!_datalistInUse('purchase-product-options'))return;
   list.innerHTML=purchaseProductRecords()
     .map(item=>`<option value="${escapeHtml(item.name)}" label="${escapeHtml([item.code,item.unit,item.supplier].filter(Boolean).join(' - '))}"></option>`)
     .join('');
@@ -16905,7 +16945,7 @@ function invoiceProductRecords(){
 
 function refreshInvoiceProductSuggestions(){
   const list=document.getElementById('invoice-product-options');
-  if(!list)return;
+  if(!list||!_datalistInUse('invoice-product-options'))return;
   const items=invoiceProductRecords();
   // Count how many items share each display name so we can disambiguate
   const nameCounts=new Map();
@@ -23663,7 +23703,7 @@ function _bioDiagramPush(label){
       <text x="126" y="22" text-anchor="middle" font-size="8.5" fill="#065f46" font-weight="600">HTTPS Push</text>
       <rect x="163" y="10" width="210" height="40" rx="8" fill="#10b981" fill-opacity=".12" stroke="#10b981" stroke-width="1.5"/>
       <text x="268" y="27" text-anchor="middle" font-size="9.5" font-weight="700" fill="#065f46">TaxFlow Server</text>
-      <text x="268" y="41" text-anchor="middle" font-size="9" fill="#065f46">app.e4cs.com</text>
+      <text x="268" y="41" text-anchor="middle" font-size="9" fill="#065f46">e4cs.com</text>
     </svg>
     <div style="text-align:center;font-size:11px;color:#166534;font-weight:600;margin-top:2px">✓ No local software needed — ${label} pushes punches directly to TaxFlow</div>
   </div>`;
@@ -23685,7 +23725,7 @@ function _bioDiagramTCP(deviceLabel){
       <text x="290" y="22" text-anchor="middle" font-size="8" fill="#065f46" font-weight="600">HTTPS</text>
       <rect x="323" y="10" width="152" height="40" rx="8" fill="#10b981" fill-opacity=".12" stroke="#10b981" stroke-width="1.5"/>
       <text x="399" y="27" text-anchor="middle" font-size="9.5" font-weight="700" fill="#065f46">TaxFlow Server</text>
-      <text x="399" y="41" text-anchor="middle" font-size="9" fill="#065f46">app.e4cs.com</text>
+      <text x="399" y="41" text-anchor="middle" font-size="9" fill="#065f46">e4cs.com</text>
     </svg>
     <div style="text-align:center;font-size:11px;color:#1e40af;font-weight:600;margin-top:2px">Bridge script runs on an office PC on the same network as the device</div>
   </div>`;
