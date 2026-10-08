@@ -3607,8 +3607,14 @@ async function _fetchReportWithRetry(url){
   throw lastErr;
 }
 
+// syncDashboardFromDatabase() runs from several places (start-up, refresh, after saves) that
+// can overlap; each call takes a number, and an older call that finishes late (or fails)
+// leaves the cards alone, so it can't replace a newer result with "Check backend connection".
+let _dashboardSyncSeq=0;
 async function syncDashboardFromDatabase(){
+  const seq=++_dashboardSyncSeq;
   const ready=await ensureBackendSession();
+  if(seq!==_dashboardSyncSeq)return;
   if(!ready){
     setDashboardStat('Total Revenue + VAT','Login needed','Open the root app and sign in');
     setDashboardStat('VAT Payable','Login needed','No backend token found');
@@ -3621,6 +3627,7 @@ async function syncDashboardFromDatabase(){
     const [response]=await Promise.all([_fetchReportWithRetry(`${apiBaseUrl()}/reports/dashboard`),loadExpenseTotals()]);
     if(!response.ok)throw new Error('Dashboard API returned '+response.status);
     const data=await response.json();
+    if(seq!==_dashboardSyncSeq)return;
     window.__taxflowFreshDashboardLoaded=true;
     try{localStorage.setItem('taxflow_dashboard_snapshot',JSON.stringify(data));}catch{}
     if(data.company)applyCompanyToUi(data.company);
@@ -3629,6 +3636,7 @@ async function syncDashboardFromDatabase(){
     renderFullDashboardFromDatabase(data);
     syncBranchPerformanceFromDatabase();
   }catch(err){
+    if(seq!==_dashboardSyncSeq)return;
     console.warn('Dashboard database sync failed:',err);
     setDashboardStat('Total Revenue + VAT','—','Check backend connection');
     setDashboardStat('VAT Payable','—','Dashboard sync failed');
@@ -12365,7 +12373,8 @@ function configureSalesFormMode(){
   const isReturn=currentSalesTransactionType==='return';
   setText('sales-form-title',isReturn?'Sales Return Details':'Invoice Details');
   setText('sales-form-sub',isReturn?'Create a customer return for returned goods or credit adjustment':'Create a sales invoice for goods or services');
-  setText('sales-no-label',isReturn?'Return No.':'Invoice No.');
+  const noLabel=document.getElementById('sales-no-label');
+  if(noLabel)noLabel.innerHTML=`${isReturn?'Return No.':'Invoice No.'} <span style="color:var(--red)">*</span>`;
   setText('sales-date-label',isReturn?'Return Date':'Invoice Date');
   setText('sales-total-label',isReturn?'Return Total':'Total');
   setText('sales-save-send-btn',isReturn?'Save Return':'Save and Send');
