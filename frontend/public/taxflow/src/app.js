@@ -5504,12 +5504,59 @@ function buildQuotationRow(quote){
   return row;
 }
 
+// First-cell values (lower-cased) of a table's rows, built once and reused: render
+// functions check every new row against the table, which scanned every row each time
+// (thousands of customers loading = millions of text reads). Any change to the table
+// (rows added, removed or edited anywhere) drops the cache via a MutationObserver; its
+// callback runs after the current script, so a bulk load keeps using the cache, kept
+// current by noteFirstCellValue() for each row the loader adds.
+// Valid only while the table looks as the index last saw it (row count, first and last
+// row): a row added by code that doesn't call noteFirstCellValue() changes that, and the
+// index is rebuilt (as exact as the old scan); loaders that note each row keep the fast
+// path. All three are kept by the browser, so checking costs nothing.
+const _tableIndexes=new WeakMap();  // tbody -> {shape, sets: Map(index name -> Set)}
+const _tableIndexWatched=new WeakSet();
+function _tableShape(tbody){
+  return [tbody.rows.length,tbody.firstElementChild,tbody.lastElementChild];
+}
+function _sameShape(a,b){
+  return a[0]===b[0]&&a[1]===b[1]&&a[2]===b[2];
+}
+function _tableIndex(tbody,name,extract){
+  let entry=_tableIndexes.get(tbody);
+  const shape=_tableShape(tbody);
+  if(!entry||!_sameShape(entry.shape,shape)){
+    entry={shape,sets:new Map()};
+    _tableIndexes.set(tbody,entry);
+  }
+  let set=entry.sets.get(name);
+  if(!set){
+    set=new Set([...tbody.querySelectorAll(':scope > tr:not([data-empty-state])')].map(extract).filter(Boolean));
+    entry.sets.set(name,set);
+  }
+  if(!_tableIndexWatched.has(tbody)){
+    _tableIndexWatched.add(tbody);
+    new MutationObserver(()=>_tableIndexes.delete(tbody)).observe(tbody,{childList:true,subtree:true,characterData:true});
+  }
+  return set;
+}
+function _noteTableIndex(tbody,name,value){
+  if(value)_tableIndexes.get(tbody)?.sets.get(name)?.add(value);
+}
+function _firstCellText(row){
+  const first=[...row.children].find(cell=>cell.dataset.inventoryBulkCol!=='1');
+  return first?.textContent.trim().toLowerCase()||'';
+}
+// Call right after adding a row whose first cell is `value`.
+function noteFirstCellValue(tbody,value){
+  const entry=_tableIndexes.get(tbody);
+  if(!entry)return;
+  entry.sets.get('first')?.add(String(value||'').trim().toLowerCase());
+  entry.shape=_tableShape(tbody);
+}
 function hasFirstCellValue(tbody,value){
   const target=String(value||'').trim().toLowerCase();
-  return !!tbody&&[...tbody.querySelectorAll('tr:not([data-empty-state])')].some(row=>{
-    const first=[...row.children].find(cell=>cell.dataset.inventoryBulkCol!=='1');
-    return first?.textContent.trim().toLowerCase()===target;
-  });
+  return !!tbody&&_tableIndex(tbody,'first',_firstCellText).has(target);
 }
 
 function renderCustomerRecord(customer){
@@ -5523,6 +5570,7 @@ function renderCustomerRecord(customer){
   row.innerHTML=`<td>${escapeHtml(customer.name)}</td><td class="mono">${escapeHtml(customer.trn||'Not registered')}</td><td>${escapeHtml(customer.emirate||'Dubai')}</td><td>${escapeHtml(customer.email||customer.phone||'-')}</td><td class="mono" style="color:var(--accent)">${escapeHtml(currentCurrency())} 0</td><td><button class="btn btn-g btn-sm">View</button></td>`;
   removeEmptyState(tbody);
   tbody.prepend(row);
+  noteFirstCellValue(tbody,customer.name);
   refreshInvoiceCustomerOptions();
   refreshQuotationCustomerOptions();
 }
@@ -6427,8 +6475,8 @@ function renderVendorRecord(vendor){
   const tbody=document.getElementById('vendor-tbody');
   if(!tbody||!vendor?.name||hasFirstCellValue(tbody,vendor.name))return;
   const trn=String(vendor.trn||'').replace(/\D/g,'');
-  if(trn&&[...tbody.querySelectorAll('tr:not([data-empty-state]) td:nth-child(2)')]
-    .some(td=>String(td.textContent||'').replace(/\D/g,'')===trn))return;
+  const vendorTrn=row=>String(row.children[1]?.textContent||'').replace(/\D/g,'');
+  if(trn&&_tableIndex(tbody,'trn',vendorTrn).has(trn))return;
   const row=document.createElement('tr');
   row.dataset.serverRecord='vendors';
   row.dataset.address=vendor.address||'';
@@ -6437,6 +6485,8 @@ function renderVendorRecord(vendor){
   row.innerHTML=`<td>${escapeHtml(vendor.name)}</td><td class="mono">${escapeHtml(trn||'Not registered')}</td><td>${escapeHtml(vendor.category||'Services')}</td><td>${escapeHtml(vendor.email||'-')}</td><td>${escapeHtml(vendor.address||'-')}</td><td class="mono">${openBalance.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td><span class="b b-g">Active</span></td>`;
   removeEmptyState(tbody);
   tbody.prepend(row);
+  noteFirstCellValue(tbody,vendor.name);
+  _noteTableIndex(tbody,'trn',trn);
   syncSupplierOptions(vendor.name);
   syncInventoryItemOptions();
   ensureSupplierLedger(vendor.name);
@@ -16784,9 +16834,15 @@ function invoiceProductRecords(){
     if(code)recordByCode.set(code,record);
     return record;
   };
+  // Item Master rows by lower-cased code and by name, built once: each stock-mapping row
+  // below used to scan every item row (mappings x items text reads; with 2,000+ products,
+  // millions per call, freezing the page at start-up).
+  const itemRowByCode=new Map(),itemRowByName=new Map();
   document.querySelectorAll('#prod-tbody tr:not([data-empty-state])').forEach(row=>{
     const code=inventoryRowCellText(row,0);
     const name=inventoryRowCellText(row,1);
+    if(code&&!itemRowByCode.has(code.toLowerCase()))itemRowByCode.set(code.toLowerCase(),row);
+    if(name&&!itemRowByName.has(name.toLowerCase()))itemRowByName.set(name.toLowerCase(),row);
     if(!name)return;
     const dataCellCount=[...row.children].filter(cell=>cell.dataset.inventoryBulkCol!=='1').length;
     const isItemMasterRow=dataCellCount>=9;
@@ -16803,13 +16859,11 @@ function invoiceProductRecords(){
     const taxflowName=inventoryRowCellText(row,2)||displayName;
     const name=displayName||taxflowName;  // Display Name is the invoice-facing name
     if(!name)return;
-    const itemRow=[...document.querySelectorAll('#prod-tbody tr:not([data-empty-state])')]
-      .find(item=>{
-        const itemCode=inventoryRowCellText(item,0).toLowerCase();
-        const itemName=inventoryRowCellText(item,1).toLowerCase();
-        const sku=String(row.dataset.stockSku||'').toLowerCase();
-        return itemCode===sku||itemName===displayName.toLowerCase()||itemName===taxflowName.toLowerCase();
-      });
+    // Same rule as before (first item whose code is the SKU or whose name is either name),
+    // looked up instead of scanned.
+    const sku=String(row.dataset.stockSku||'').toLowerCase();
+    const candidates=[itemRowByCode.get(sku),itemRowByName.get(displayName.toLowerCase()),itemRowByName.get(taxflowName.toLowerCase())].filter(Boolean);
+    const itemRow=candidates.length?candidates.reduce((first,r)=>(first.compareDocumentPosition(r)&Node.DOCUMENT_POSITION_PRECEDING)?r:first):undefined;
     // Selling price: price_outer > inc_vat > cost+markup fallback
     const priceOuter=Number(row.dataset.priceOuter||0);
     const incVat=Number(row.dataset.incVat||0);
@@ -26808,6 +26862,30 @@ function tableControlsTemplate(){
   `;
 }
 
+// Lists that start-up only partly loads (the products page shows the newest 2,000): their
+// search box also asks the server (GET /app-data/catalog/...) and adds the matches it
+// returns to the table, so an older record can still be found and opened. Each render
+// function skips records already on the page; the table refilters itself when rows arrive.
+const _TABLE_SERVER_SEARCH={
+  'prod-tbody':['products',record=>renderProductRecord(record)],
+  'customer-tbody':['customers',record=>renderCustomerRecord(record)],
+  'vendor-tbody':['vendors',record=>renderVendorRecord(record)],
+};
+function _searchServerForTable(table,state){
+  const entry=_TABLE_SERVER_SEARCH[table?.tBodies?.[0]?.id];
+  if(!entry)return;
+  const [collection,render]=entry;
+  const q=state.input.value.trim();
+  clearTimeout(state.serverSearchTimer);
+  if(q.length<2)return;
+  state.serverSearchTimer=setTimeout(async()=>{
+    let records=[];
+    try{records=await searchCatalog(collection,q);}catch(err){return;}
+    if(state.input.value.trim()!==q)return;  // typed on since; a newer search follows
+    records.forEach(record=>{try{render(record);}catch(err){console.warn('Search result not shown:',err);}});
+  },300);
+}
+
 function skipTableTools(table){
   return table?.dataset?.noTableTools==='1';
 }
@@ -26878,6 +26956,7 @@ function enhanceTable(table){
     state.query=state.input.value.trim().toLowerCase();
     state.page=1;
     refreshEnhancedTable(table);
+    _searchServerForTable(table,state);
   });
   state.size.addEventListener('change',()=>{
     state.pageSize=state.size.value==='all'?'all':Number(state.size.value);
