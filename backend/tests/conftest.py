@@ -12,6 +12,9 @@ TEST_DB = Path(__file__).resolve().parent.parent / f"taxflow-pytest-{os.getpid()
 # well as SQLite). It must be a throwaway database: every table is dropped at the start.
 PG_TEST_URL = os.environ.get("TEST_DATABASE_URL")
 os.environ["DATABASE_URL"] = PG_TEST_URL or f"sqlite:///./{TEST_DB.name}"
+# APP_ENV defaults to "production" (app/config.py), whose startup check refuses the test
+# passwords. A developer's backend/.env sets it locally; CI has no .env, so set it here.
+os.environ["APP_ENV"] = "test"
 os.environ["SECRET_KEY"] = "taxflow-test-secret"
 os.environ["CELERY_TASK_ALWAYS_EAGER"] = "true"
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
