@@ -16958,7 +16958,8 @@ function quotationProductOptionsHtml(selected=''){
 }
 
 function refreshQuotationProductOptions(){
-  document.querySelectorAll('#quote-lines .quote-item').forEach(select=>{
+  // Only drop-downs need their options rebuilt; the search field reads the list as you type.
+  document.querySelectorAll('#quote-lines select.quote-item').forEach(select=>{
     const current=select.value;
     select.innerHTML=quotationProductOptionsHtml(current);
     if(current&&![...select.options].some(option=>option.value===current)){
@@ -16969,18 +16970,29 @@ function refreshQuotationProductOptions(){
 }
 
 function selectQuotationItem(select){
-  const value=(select?.value||'').trim().toLowerCase();
+  const raw=(select?.value||'').trim();
+  const value=raw.toLowerCase();
   if(!value){
     calcQuotationTotals();
     return;
   }
+  // A drop-down option (older saved forms) or a suggestion; suggestions add " · CODE" when
+  // two items share a name, so match on the code when there is one.
   const selectedOption=select?.selectedOptions?.[0];
-  const match=quotationProductRecords().find(item=>[item.name,item.displayName,item.taxflowName,item.code,...(item.aliases||[])].filter(Boolean).some(text=>String(text||'').toLowerCase()===value));
+  const [namePart,codePart]=raw.includes(' · ')?[raw.split(' · ')[0].trim().toLowerCase(),raw.split(' · ').pop().trim().toLowerCase()]:[value,''];
+  const names=item=>[item.name,item.displayName,item.taxflowName,item.code,...(item.aliases||[])].filter(Boolean).map(text=>String(text).toLowerCase());
+  const records=quotationProductRecords();
+  const match=(codePart&&records.find(item=>String(item.code||'').toLowerCase()===codePart&&names(item).includes(namePart)))
+    ||records.find(item=>names(item).includes(value))
+    ||records.find(item=>names(item).includes(namePart));
   if(!match){
     calcQuotationTotals();
     return;
   }
   const row=select.closest('.quote-line');
+  // The " · CODE" suffix only tells same-named items apart in the list; the line keeps the
+  // item's name (its code is kept in row.dataset.productCode below).
+  if(codePart&&select.tagName==='INPUT')select.value=match.displayName||match.name||raw.split(' · ')[0].trim();
   const price=row?.querySelector('.quote-price');
   const productPrice=parseAmount(selectedOption?.dataset.price||match.price||0);
   if(row){
@@ -28340,8 +28352,10 @@ function calcQuotationLine(input){
   calcQuotationTotals();
 }
 
+// The item field searches like an invoice line (same product list plus the server search,
+// see _AC_CATALOG): a drop-down could only offer the products loaded at start-up.
 function quotationLineHtml(selected=''){
-  return `<select class="fi quote-item" onchange="selectQuotationItem(this)" onfocus="refreshQuotationProductOptions()">${quotationProductOptionsHtml(selected)}</select><input class="fi quote-qty" value="1" oninput="calcQuotationLine(this)"><input class="fi quote-price" value="0.00" oninput="calcQuotationLine(this)"><input class="fi mono quote-amount" value="0.00" readonly style="background:var(--bg)"><button class="btn btn-g" style="padding:4px 8px" onclick="removeQuotationLine(this)">x</button>`;
+  return `<input class="fi quote-item" data-ac="invoice-product" placeholder="Search item..." autocomplete="off" dir="auto" value="${escapeHtml(selected)}" onchange="selectQuotationItem(this)"><input class="fi quote-qty" value="1" oninput="calcQuotationLine(this)"><input class="fi quote-price" value="0.00" oninput="calcQuotationLine(this)"><input class="fi mono quote-amount" value="0.00" readonly style="background:var(--bg)"><button class="btn btn-g" style="padding:4px 8px" onclick="removeQuotationLine(this)">x</button>`;
 }
 
 function addQuotationLine(){

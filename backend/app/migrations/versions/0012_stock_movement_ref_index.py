@@ -5,14 +5,14 @@ purchase, and the stock movements feed's check for invoices that already have re
 movements -- scanned all of a company's stock movements. On 25,000 sales lines and
 15,000 movements, one page of GET /app-data/stock-movements took 77 s without it.
 
-Revision ID: 0012_stock_movement_reference_index
+Revision ID: 0012_stock_movement_ref_index
 Revises: 0011_more_document_lines
 Create Date: 2026-10-08
 """
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0012_stock_movement_reference_index"
+revision = "0012_stock_movement_ref_index"
 down_revision = "0011_more_document_lines"
 branch_labels = None
 depends_on = None
