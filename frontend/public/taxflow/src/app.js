@@ -5057,6 +5057,7 @@ async function apiRequest(action,payload,options={}){
 }
 
 function saveServer(collection,record,options={}){
+  _catalogCache?.[collection]?.clear();  // picker search results may now be out of date
   // createOnly: the server refuses (409) instead of overwriting a record with the same key.
   return apiRequest('save',options.createOnly?{collection,record,create_only:true}:{collection,record}).catch(err=>{
     console.warn('Database save failed:',err);
@@ -5096,6 +5097,7 @@ function hrmsCan(perm){
 }
 
 function deleteServer(collection,record,options={}){
+  _catalogCache?.[collection]?.clear();
   return apiRequest('delete',{collection,record}).catch(err=>{
     console.warn('Database delete failed:',err);
     if(options.throwOnError)throw err;
@@ -5527,15 +5529,24 @@ function renderCustomerRecord(customer){
 }
 
 function invoiceCustomerRecords(){
-  return [...document.querySelectorAll('#customer-tbody tr:not([data-empty-state])')].map(row=>({
+  const records=[...document.querySelectorAll('#customer-tbody tr:not([data-empty-state])')].map(row=>({
     name:row.children[0]?.textContent.trim()||'',
     trn:(row.children[1]?.textContent.trim()||'').replace(/^Not registered$/i,''),
     emirate:row.children[2]?.textContent.trim()||'',
-    contact:row.children[3]?.textContent.trim()||'',
+    contact:(row.children[3]?.textContent.trim()||'').replace(/^[-—]$/,''),  // "-" = no contact
     address:row.dataset.address||'',
     email:row.dataset.email||'',
     phone:row.dataset.phone||''
   })).filter(customer=>customer.name);
+  // Customers found by the picker's server search that aren't loaded on this page.
+  const loaded=new Set(records.map(c=>c.name.toLowerCase()));
+  catalogRecords('customers').forEach(c=>{
+    const name=String(c.name||'').trim();
+    if(!name||loaded.has(name.toLowerCase()))return;
+    loaded.add(name.toLowerCase());
+    records.push({name,trn:c.trn||'',emirate:c.emirate||'',contact:c.email||c.phone||'',address:c.address||'',email:c.email||'',phone:c.phone||''});
+  });
+  return records;
 }
 
 function refreshInvoiceCustomerOptions(){
@@ -9436,6 +9447,57 @@ function jsonAttr(value){
 // dispatches a real 'change' event, so every downstream side effect (fill
 // unit/price, fill TRN/address, etc.) keeps working exactly as it did with
 // the native datalist, with zero changes to that logic.
+// ── Server search behind the product / customer pickers ───────────────────
+// The start-up data carries only the newest 500 products (and is capped overall), so a
+// picker that only filtered what was loaded couldn't find the rest. While you type
+// (2+ characters) the picker also asks GET /app-data/catalog/<list>; matches are kept in
+// _catalogCache and merged into invoiceProductRecords(), purchaseProductRecords() and
+// invoiceCustomerRecords(), so choosing one fills unit/price/TRN/address as before.
+const _CATALOG_CACHE_MAX=2000;
+// var, not const: saveServer()/deleteServer() above may run before this line is reached.
+var _catalogCache={products:new Map(),customers:new Map(),vendors:new Map()};
+const _AC_CATALOG={'invoice-customer':'customers','quote-customer':'customers','invoice-product':'products','purchase-product':'products'};
+let _catalogTimer=null;
+
+function _catalogKey(collection,record){
+  return String((collection==='products'?(record.code||record.name):record.name)||'').trim().toLowerCase();
+}
+
+async function searchCatalog(collection,q){
+  const resp=await authenticatedFetch(`${apiBaseUrl()}/app-data/catalog/${collection}?q=${encodeURIComponent(q)}&limit=20`);
+  if(!resp.ok)return [];
+  const records=(await resp.json()).records||[];
+  const cache=_catalogCache[collection];
+  records.forEach(record=>{
+    const key=_catalogKey(collection,record);
+    if(!key)return;
+    cache.delete(key);
+    cache.set(key,record);
+  });
+  while(cache.size>_CATALOG_CACHE_MAX)cache.delete(cache.keys().next().value);
+  return records;
+}
+
+function catalogRecords(collection){
+  return [..._catalogCache[collection].values()];
+}
+
+function _catalogSearchFor(input){
+  const key=input?.dataset?.ac;
+  const collection=_AC_CATALOG[key];
+  const q=(input?.value||'').trim();
+  if(!collection||q.length<2)return;
+  clearTimeout(_catalogTimer);
+  _catalogTimer=setTimeout(async()=>{
+    try{await searchCatalog(collection,q.split(' · ')[0]);}catch(err){return;}
+    // _acRender() closes (and forgets the field) when nothing loaded matched; reopen it
+    // with the server's matches if the user is still in this field.
+    if(document.activeElement!==input)return;
+    _acInput=input;
+    _acRender(_AC_SOURCES[key](),input.value);
+  },250);
+}
+
 const _AC_SOURCES={
   'invoice-customer':()=>invoiceCustomerRecords().map(c=>({value:c.name,label:[c.trn,c.emirate,c.contact].filter(Boolean).join(' - ')})),
   'quote-customer':()=>invoiceCustomerRecords().map(c=>({value:c.name,label:[c.trn,c.emirate,c.contact].filter(Boolean).join(' - ')})),
@@ -9521,8 +9583,11 @@ document.addEventListener('focusin',e=>{
 });
 document.addEventListener('input',e=>{
   const key=e.target?.dataset?.ac;
-  if(!key||!_AC_SOURCES[key]||e.target!==_acInput)return;
+  if(!key||!_AC_SOURCES[key])return;
+  // A field can be typed into without a focus event (e.g. focused before the page loaded).
+  _acInput=e.target;
   _acRender(_AC_SOURCES[key](),e.target.value);
+  _catalogSearchFor(e.target);
 });
 document.addEventListener('keydown',e=>{
   if(!_acInput||e.target!==_acInput||!_acDropdown||_acDropdown.style.display==='none')return;
@@ -15882,6 +15947,17 @@ function purchaseProductRecords(){
       supplier:(cells[1]?.textContent.trim()||'').replace(/^Not assigned$/,'')
     });
   });
+  // Products found by the picker's server search that aren't loaded on this page.
+  const codes=new Set(records.map(r=>String(r.code||'').toLowerCase()).filter(Boolean));
+  const names=new Set(records.map(r=>r.name.toLowerCase()));
+  catalogRecords('products').forEach(p=>{
+    const name=String(p.name||'').trim();
+    const code=String(p.code||'').trim();
+    if(!name||(code&&codes.has(code.toLowerCase()))||names.has(name.toLowerCase()))return;
+    if(code)codes.add(code.toLowerCase());
+    names.add(name.toLowerCase());
+    records.push({code,name,unit:p.unit||'PCS',cost:Number(p.cost??p.unit_cost??0),supplier:p.supplier_name||p.supplier||''});
+  });
   return records;
 }
 
@@ -16834,6 +16910,19 @@ function invoiceProductRecords(){
       cost,
       markupPercent:markup
     },true);
+  });
+  // Products found by the picker's server search that aren't loaded on this page; priced
+  // like an Item Master row (selling price, else cost). addRecord() skips known codes.
+  const loadedNames=new Set(records.map(r=>String(r.name||'').toLowerCase()));
+  catalogRecords('products').forEach(p=>{
+    const name=String(p.name||'').trim();
+    if(!name||(!p.code&&loadedNames.has(name.toLowerCase())))return;
+    addRecord({
+      code:p.code||'',
+      name,
+      unit:p.unit||'PCS',
+      price:Number(p.selling_price??p.price??p.sales_price??p.unit_price??p.cost??0)
+    });
   });
   return records;
 }

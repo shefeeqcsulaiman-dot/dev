@@ -26,7 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from starlette.background import BackgroundTask
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -641,6 +641,47 @@ def list_collection_records(
         "total": total,
         "has_more": offset + len(rows) < total,
     }
+
+
+# Reference lists the pickers search (product, customer, supplier fields on invoices,
+# quotations, purchases). Bootstrap only carries the newest of them (products: 500), so
+# a picker that only filtered what was loaded couldn't find the rest.
+_CATALOG_COLLECTIONS = frozenset({"products", "customers", "vendors"})
+
+
+@router.get("/catalog/{collection}")
+def search_catalog(
+    collection: str,
+    q: str = Query(default="", max_length=120),
+    limit: int = Query(default=20, ge=1, le=50),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> dict[str, object]:
+    """Records of products/customers/vendors whose key (code or name) or saved fields
+    contain `q` (any case), keys starting with `q` first. Same access rules as
+    GET /records/{collection}."""
+    if collection not in _CATALOG_COLLECTIONS:
+        raise HTTPException(status_code=404, detail="Not a searchable list")
+    company = resolve_principal_company(principal, db)
+    assert_collection_module_enabled(db, principal, company, collection)
+    assert_collection_read_permission(principal, collection)
+    filters = _collection_read_filters(principal, collection, None)
+    needle = q.strip().lower()
+    if needle:
+        like = "%" + needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        # The payload is JSON text, so names and other fields are matched inside it;
+        # \u-escaped characters (json.dumps default) are matched through the key only.
+        filters.append(or_(
+            func.lower(AppDataRecord.record_key).like(like, escape="\\"),
+            func.lower(AppDataRecord.payload).like(like, escape="\\"),
+        ))
+        prefix = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        rank = case((func.lower(AppDataRecord.record_key).like(prefix, escape="\\"), 0), else_=1)
+        order = (rank, func.lower(AppDataRecord.record_key), AppDataRecord.id)
+    else:
+        order = (AppDataRecord.created_at.desc(), AppDataRecord.id.desc())
+    rows = db.query(AppDataRecord).filter(*filters).order_by(*order).limit(limit).all()
+    return {"ok": True, "collection": collection, "records": [serialize_for_list(row) for row in rows]}
 
 
 def _rota_read_filters(db: Session, principal: Principal, branch_id: str | None) -> list[Any]:
