@@ -76,7 +76,11 @@ jobs:
           python-version: "3.12"
       - name: pip-audit
         # ecdsa (via python-jose) has no fixed release; the app signs tokens with HS256 only,
-        # so its ECDSA code path is never used. Remove this ignore once python-jose is replaced.
+        # so its ECDSA code path is never used.
+        # CVE-2026-85394 (python-jose <= 3.5.0, no fixed release): forging HS256 tokens needs
+        # a public key used as the HMAC key and unrestricted algorithms; every jwt.decode()
+        # here uses the app's own SECRET_KEY with algorithms=["HS256"].
+        # Remove both ignores once python-jose is replaced (e.g. by PyJWT).
         run: |
           pip install pip-audit
-          pip-audit -r backend/requirements.txt --ignore-vuln PYSEC-2026-1325
+          pip-audit -r backend/requirements.txt --ignore-vuln PYSEC-2026-1325 --ignore-vuln CVE-2026-85394
