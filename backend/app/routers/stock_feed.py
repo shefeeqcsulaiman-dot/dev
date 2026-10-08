@@ -41,18 +41,25 @@ def _purchase_rows(db: Session, principal: Principal, branch_id: str | None):
     """stock_movements rows, as GET /inventory/stock-movements shows them (no 500 cap)."""
     item = func.coalesce(func.nullif(StockProductMapping.taxflow_name, ""), func.nullif(StockProductMapping.name, ""),
                          StockProductMapping.sku)
-    purchase = (AppDataRecord.company_id == StockMovement.company_id) & (AppDataRecord.collection == "purchaseRecords") \
-        & (AppDataRecord.record_key == StockMovement.reference)
+    # Each document number's date (and a purchase's supplier), worked out ONCE per request
+    # with GROUP BY and joined in. A correlated lookup per movement made the database walk
+    # the company's documents for every movement (a page took 60+ s at 15,000 movements).
+    # MIN(): a number saved on more than one record gives one value, never extra rows.
+    def by_number(collection: str):
+        return (
+            select(AppDataRecord.record_key.label("ref"), func.min(AppDataRecord.record_date).label("day"),
+                   func.min(AppDataRecord.party).label("party"))
+            .where(AppDataRecord.company_id == principal.company_id, AppDataRecord.collection == collection,
+                   AppDataRecord.record_key.isnot(None))
+            .group_by(AppDataRecord.record_key)
+            .subquery()
+        )
+
+    purchases = by_number("purchaseRecords")
     # Tracked-stock sales are saved as reference "SALE-<invoice no>" (sync_sales_invoice_stock).
-    sale = (AppDataRecord.company_id == StockMovement.company_id) & (AppDataRecord.collection == "salesInvoices") \
-        & StockMovement.reference.like("SALE-%") & (AppDataRecord.record_key == func.substr(StockMovement.reference, 6))
-
-    def first(column, condition):
-        # A reference can appear on more than one record; take one, never multiply rows.
-        return select(column).where(condition).order_by(AppDataRecord.created_at).limit(1).scalar_subquery()
-
-    day = func.coalesce(first(AppDataRecord.record_date, purchase), first(AppDataRecord.record_date, sale))
-    vendor = first(AppDataRecord.party, purchase)
+    sales = by_number("salesInvoices")
+    day = func.coalesce(purchases.c.day, sales.c.day)
+    vendor = purchases.c.party
     query = (
         select(
             func.coalesce(day, func.substr(cast(StockMovement.created_at, String), 1, 10)).label("day"),
@@ -68,6 +75,11 @@ def _purchase_rows(db: Session, principal: Principal, branch_id: str | None):
             vendor.label("vendor_name"),
         )
         .join(StockProductMapping, StockMovement.mapping_id == StockProductMapping.id)
+        .outerjoin(purchases, purchases.c.ref == StockMovement.reference)
+        # Match on the number after "SALE-" (a computed key on the grouped side can't be
+        # indexed, which made this a scan of every invoice per movement).
+        .outerjoin(sales, and_(StockMovement.reference.like("SALE-%"),
+                               sales.c.ref == func.substr(StockMovement.reference, 6)))
         .where(StockMovement.company_id == principal.company_id)
     )
     if principal.can_cross_branch("inventory"):
@@ -146,26 +158,32 @@ def list_stock_movements(
     month: YYYY-MM. Each row's balance is the item's stock after that movement, counted
     over its whole history (so a month filter doesn't restart it at zero)."""
     m = _movements(db, principal, branch_id)
+    # The item filter goes BEFORE the running balance (a balance is per item, so this
+    # gives the same figures and only that item's rows get sorted); the month filter goes
+    # after it, so a month doesn't restart the balance at zero.
+    item_match = func.lower(m.c.item_name) == item.strip().lower() if item and item.strip() else None
+    month_match = (lambda col: func.substr(col, 1, 7) == month) if month else None
+
+    count_query = select(func.count()).select_from(m)
+    if item_match is not None:
+        count_query = count_query.where(item_match)
+    if month_match is not None:
+        count_query = count_query.where(month_match(m.c.day))
+    total = db.execute(count_query).scalar() or 0
+
     order = (m.c.day.asc().nulls_first(), m.c.seq_at.asc(), m.c.seq_id.asc(), m.c.seq_line.asc())
     balanced = select(
         m,
         func.sum(m.c.quantity).over(partition_by=func.lower(m.c.item_name), order_by=order).label("balance"),
-    ).subquery("balanced")
-    conditions = []
-    if item and item.strip():
-        conditions.append(func.lower(balanced.c.item_name) == item.strip().lower())
-    if month:
-        conditions.append(func.substr(balanced.c.day, 1, 7) == month)
-    where = and_(*conditions) if conditions else None
-
-    count_query = select(func.count()).select_from(balanced)
+    )
+    if item_match is not None:
+        balanced = balanced.where(item_match)
+    balanced = balanced.subquery("balanced")
     page_query = select(balanced).order_by(
         balanced.c.day.desc().nulls_last(), balanced.c.seq_at.desc(), balanced.c.seq_id.desc(), balanced.c.seq_line.desc(),
     ).offset(offset).limit(limit)
-    if where is not None:
-        count_query = count_query.where(where)
-        page_query = page_query.where(where)
-    total = db.execute(count_query).scalar() or 0
+    if month_match is not None:
+        page_query = page_query.where(month_match(balanced.c.day))
     rows = db.execute(page_query).mappings().all()
     return {
         "ok": True,

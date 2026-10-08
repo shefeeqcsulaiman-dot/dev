@@ -667,6 +667,11 @@ class StockProductMapping(Base, TimestampMixin):
 
 class StockMovement(Base, TimestampMixin):
     __tablename__ = "stock_movements"
+    __table_args__ = (
+        # Lookups by reference: SALE-<invoice no> / purchase ref when a document is re-saved
+        # or deleted, and the stock movements feed's "already has real movements" check.
+        Index("ix_stock_movements_company_reference", "company_id", "reference"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
