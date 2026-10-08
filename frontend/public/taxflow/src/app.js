@@ -7651,7 +7651,7 @@ async function runExpAiExtraction(){
     expAiRenderFileList();
     try{
       const payload={documentType:'expense',file:{name:entry.name,size:entry.size,base64:entry.base64}};
-      const resp=await authenticatedFetch(`${apiBaseUrl()}/app-data?action=documents.extract`,{method:'POST',body:JSON.stringify(payload),signal:_extractionAbortSignal()});
+      const resp=await runExtractionJob('documents.extract',payload);
       if(!resp.ok){
         let detail='';
         try{const d=await resp.json();detail=d.detail||'';}catch{}
@@ -9548,22 +9548,46 @@ function _extractionAbortSignal(ms=EXTRACTION_TIMEOUT_MS){
   return controller.signal;
 }
 
+// AI reading runs as a server background job: start it (?background=1), then ask for the
+// result every couple of seconds. A long file or batch no longer runs into the server's
+// request time limit (the 504s). Returns a Response-like {ok,status,json()} so callers
+// handle it like the old direct call; an older server that answers directly still works.
+const EXTRACTION_JOB_TIMEOUT_MS=15*60*1000;
+async function runExtractionJob(action,payload){
+  const start=await authenticatedFetch(`${apiBaseUrl()}/app-data?action=${encodeURIComponent(action)}&background=1`,{
+    method:'POST',body:JSON.stringify(payload),signal:_extractionAbortSignal()
+  });
+  if(!start.ok)return start;
+  const started=await start.json();
+  const done=data=>({ok:true,status:200,json:async()=>data});
+  if(!started.job_id)return done(started);
+  const deadline=Date.now()+EXTRACTION_JOB_TIMEOUT_MS;
+  let job=started;
+  while(job.status!=='completed'&&job.status!=='failed'){
+    if(Date.now()>deadline){const err=new Error('timeout');err.name='AbortError';throw err;}
+    await new Promise(r=>setTimeout(r,2000));
+    // Uncached: authenticatedFetch() reuses GET answers for 3 s.
+    const resp=await _authenticatedFetchUncached(`${apiBaseUrl()}/app-data/jobs/${encodeURIComponent(started.job_id)}`,{});
+    if(!resp.ok)return resp;
+    job=await resp.json();
+  }
+  if(job.status==='failed')return {ok:false,status:500,json:async()=>({detail:job.error||'Reading failed'})};
+  return done(job.result||{});
+}
+
 async function requestInvoiceExtraction(entry){
   const payload={
     file:{name:entry.name,size:entry.size,type:entry.type,base64:entry.base64},
     category:entry.category,
     period:entry.period
   };
-  const endpoint=APP_CONFIG.extractionEndpoint||`${apiBaseUrl()}/app-data?action=documents.extract`;
   let response;
   try{
-    response=await authenticatedFetch(endpoint,{
-      method:'POST',
-      body:JSON.stringify(payload),
-      signal:_extractionAbortSignal()
-    });
+    response=APP_CONFIG.extractionEndpoint
+      ?await authenticatedFetch(APP_CONFIG.extractionEndpoint,{method:'POST',body:JSON.stringify(payload),signal:_extractionAbortSignal()})
+      :await runExtractionJob('documents.extract',payload);
   }catch(err){
-    if(err.name==='AbortError')throw new Error('Extraction timed out after 2 minutes — please try again');
+    if(err.name==='AbortError')throw new Error('Extraction is taking too long — please try again');
     throw err;
   }
   if(!response.ok){
@@ -9720,16 +9744,13 @@ async function requestSalesInvoiceExtraction(entry){
   };
   // Errors are thrown, not swallowed: the old extractionFallback path turned a 504 into
   // "Extracted, 0 invoices", so the file looked done and was never retried.
-  const endpoint=APP_CONFIG.salesExtractionEndpoint||`${apiBaseUrl()}/app-data?action=invoices.import`;
   let response;
   try{
-    response=await authenticatedFetch(endpoint,{
-      method:'POST',
-      body:JSON.stringify(payload),
-      signal:_extractionAbortSignal()
-    });
+    response=APP_CONFIG.salesExtractionEndpoint
+      ?await authenticatedFetch(APP_CONFIG.salesExtractionEndpoint,{method:'POST',body:JSON.stringify(payload),signal:_extractionAbortSignal()})
+      :await runExtractionJob('invoices.import',payload);
   }catch(err){
-    if(err.name==='AbortError')throw new Error('Invoice import timed out after 2 minutes — please try again');
+    if(err.name==='AbortError')throw new Error('Invoice import is taking too long — please try again');
     throw err;
   }
   if(!response.ok){

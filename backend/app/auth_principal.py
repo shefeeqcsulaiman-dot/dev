@@ -410,8 +410,12 @@ def get_current_principal(request: Request, db: Session = Depends(get_db)) -> Pr
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
-    token = auth[7:]
+    return principal_from_token(auth[7:], db)
 
+
+def principal_from_token(token: str, db: Session) -> Principal:
+    """get_current_principal() for a bare token, e.g. to rebuild the caller's Principal in
+    a background job's own session (app/background.py)."""
     principal = _principal_from_employee_token(token, db)
     if principal:
         return principal
