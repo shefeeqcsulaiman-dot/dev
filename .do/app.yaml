@@ -51,6 +51,11 @@ services:
       #                          by migrations (app/migrate.py)
       # Add DATABASE_DIRECT_URL as a SECRET env here at the same time. Don't
       # add it with a placeholder value: migrations would try to connect to it.
+      #
+      # Read replica (optional, docs/scaling-plan-10k.md): add a read-only node
+      # to the database cluster in the DO dashboard, then add DATABASE_READ_URL
+      # (SECRET) = the replica's URI. Only report reads use it; without it
+      # everything stays on DATABASE_URL. Same rule: no placeholder value.
 
       # ── Redis ─────────────────────────────────────────────────────────
       - key: REDIS_URL

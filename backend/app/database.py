@@ -41,6 +41,23 @@ else:
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
+# Read replica (DATABASE_READ_URL): only report reads use it, via app.read_replica.
+read_engine = None
+ReadSessionLocal = None
+if settings.database_read_url:
+    if settings.database_read_url.startswith("sqlite"):
+        read_engine = create_engine(settings.database_read_url, connect_args={"check_same_thread": False}, pool_pre_ping=True)
+    else:
+        read_engine = create_engine(
+            settings.database_read_url,
+            pool_pre_ping=True,
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_max_overflow,
+            pool_recycle=300,
+            pool_timeout=settings.db_pool_timeout,
+        )
+    ReadSessionLocal = sessionmaker(bind=read_engine, autoflush=False, autocommit=False)
+
 
 class Base(DeclarativeBase):
     pass

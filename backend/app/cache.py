@@ -244,6 +244,23 @@ def remember(key: str, ttl: int, compute, local: LocalTTLCache) -> Any:
     return value
 
 
+_recent_writes = LocalTTLCache(max_entries=20000)
+
+
+def mark_recent_write(company_id: str) -> None:
+    """Remember that this company just wrote something (app.read_replica keeps its
+    reports on the primary for a short window). Shared through Redis when connected."""
+    from app.config import get_settings
+
+    ttl = max(1, get_settings().read_replica_write_window_seconds)
+    _recent_writes.set(company_id, True, ttl)
+    set(f"recent_write:{company_id}", 1, ttl=ttl)
+
+
+def recently_written(company_id: str) -> bool:
+    return company_id in _recent_writes or get(f"recent_write:{company_id}") is not None
+
+
 def invalidate_company(company_id: str) -> None:
     """Bust report caches for a company after a write operation.
 
@@ -261,3 +278,4 @@ def invalidate_company(company_id: str) -> None:
     delete_prefix(f"trial_balance:{company_id}:")
     delete_prefix(f"vat_return:{company_id}:")
     delete(f"bootstrap:{company_id}")
+    mark_recent_write(company_id)

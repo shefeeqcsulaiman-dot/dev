@@ -26,6 +26,7 @@ from app.doc_index import (
 from app.config import get_settings
 from app.auth_principal import Principal, require_principal_permission, resolve_active_branch
 from app.database import get_db
+from app.read_replica import run_report
 from app.dependencies import get_current_user
 from app.limiter import limiter
 from app.routers.attendance import _company_offset, _local_today
@@ -146,14 +147,14 @@ def dashboard(
     # Cache key includes branch_id so one branch's result is never served
     # to another branch or to the unscoped company-wide view.
     cache_key = f"dashboard:{company_id}:{resolved_branch_id or 'all'}"
-    return _cached_or_build(cache_key, 60, lambda: _build_dashboard(db, company_id, resolved_branch_id))
+    return _cached_or_build(cache_key, 60, lambda: run_report(db, company_id, lambda s: _build_dashboard(s, company_id, resolved_branch_id)))
 
 
 @router.get("/branch-performance")
 @limiter.limit("120/minute")
 def branch_performance(request: Request, db: Session = Depends(get_db), principal: Principal = Depends(require_principal_permission("reports:view"))) -> dict[str, Any]:
     company_id = principal.company_id
-    data = _cached_or_build(f"branch_performance:{company_id}", 60, lambda: _build_branch_performance(db, company_id))
+    data = _cached_or_build(f"branch_performance:{company_id}", 60, lambda: run_report(db, company_id, lambda s: _build_branch_performance(s, company_id)))
     if principal.can_cross_branch("reports"):
         return data
     # A Branch Login (or a branch-locked Employee) must only ever see its own
@@ -972,7 +973,7 @@ def trial_balance(
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
-    result = {"status": "ready", "source": "posted journal entries", "rows": trial_balance_rows(db, company_id, resolved_branch_id)}
+    result = {"status": "ready", "source": "posted journal entries", "rows": run_report(db, company_id, lambda s: trial_balance_rows(s, company_id, resolved_branch_id))}
     cache.set(cache_key, result, ttl=120)
     return result
 
@@ -1000,7 +1001,7 @@ def report_summary(
     resolved_branch_id = branch_id if principal.can_cross_branch("reports") else resolve_active_branch(principal, branch_id)
 
     def _build() -> dict[str, Any]:
-        result = _build_summary(db, company_id, resolved_branch_id)
+        result = run_report(db, company_id, lambda s: _build_summary(s, company_id, resolved_branch_id))
         # Stable fingerprint for frontend diff-check (skips re-render when data unchanged)
         _sig = f"{result.get('dashboard',{}).get('revenue',0)}:{result.get('dashboard',{}).get('expenses',0)}:{result.get('dashboard',{}).get('net_profit',0)}"
         result["_version"] = hashlib.md5(_sig.encode()).hexdigest()[:12]

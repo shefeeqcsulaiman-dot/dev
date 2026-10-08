@@ -126,6 +126,9 @@ def create_app() -> FastAPI:
     from app import monitoring
     monitoring.init_sentry(settings.sentry_dsn, settings.sentry_environment, settings.sentry_traces_sample_rate)
     monitoring.install_query_timing(engine, settings.slow_query_ms)
+    from app import database as _database
+    if _database.read_engine is not None:
+        monitoring.install_query_timing(_database.read_engine, settings.slow_query_ms)
 
     app = FastAPI(title=settings.app_name, version="0.1.0")
     app.state.limiter = limiter

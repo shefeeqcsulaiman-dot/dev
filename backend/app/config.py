@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     # Direct (non-pooled) PostgreSQL URL for migrations. Required when
     # DATABASE_URL goes through PgBouncer in transaction mode (app/migrate.py).
     database_direct_url: str | None = None
+    # Optional read replica for heavy report reads (app/read_replica.py). A company's
+    # reports use the primary for this many seconds after any write it makes, so a
+    # report rebuilt right after a save never caches figures the replica hasn't caught up on.
+    database_read_url: str | None = None
+    read_replica_write_window_seconds: int = 15
     # Monitoring (app/monitoring.py). Sentry is off unless SENTRY_DSN is set.
     sentry_dsn: str | None = None
     sentry_environment: str = "production"
