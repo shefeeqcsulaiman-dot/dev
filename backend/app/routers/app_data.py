@@ -1295,120 +1295,132 @@ def _export_row_to_dict(obj: Any, cols: list[str]) -> dict[str, Any]:
     return out
 
 
-@router.get("/export", dependencies=[Depends(require_company_admin)])
-@limiter.limit("10/minute")
-def export_all_data(
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> dict[str, object]:
+# Real relational tables the AppDataRecord collections don't cover at all --
+# Settings > Backup & Audit's category toggles (Invoices & Sales / Purchases &
+# Bills / Journal & Accounts / Payroll & HR) describe this data. "_db" suffix
+# keeps these distinct from any same-named AppDataRecord collection (e.g.
+# "employees" as a legacy JSON blob vs. the real Employee table). leave_requests
+# (leave.py's own table) and attendance_details (attendance_store.py) are core HR
+# records a company expects "full company data" to include.
+_EXPORT_INVOICE_COLS = ["id", "invoice_number", "customer_name", "customer_trn", "issue_date",
+                        "due_date", "currency", "subtotal", "vat", "total", "status", "notes"]
+_EXPORT_INVOICE_LINE_COLS = ["id", "invoice_id", "description", "quantity", "unit_price", "vat_rate", "line_total"]
+_EXPORT_SOURCE_TXN_COLS = ["id", "module", "reference", "party_name", "subtotal", "vat", "total", "status"]
+_EXPORT_ACCOUNT_COLS = ["id", "code", "name", "type", "is_group", "parent_id"]
+_EXPORT_GL_COLS = ["id", "entry_date", "voucher_no", "voucher_type", "account_id",
+                   "debit", "credit", "balance", "party", "cost_center", "narration"]
+_EXPORT_EMPLOYEE_COLS = ["id", "employee_no", "full_name", "department", "designation", "basic_salary", "status"]
+_EXPORT_PAYROLL_RUN_COLS = ["id", "period", "status", "gross_total", "deductions_total", "net_total"]
+_EXPORT_PAYROLL_ITEM_COLS = ["id", "run_id", "employee_id", "basic", "allowances", "overtime", "deductions", "net_pay", "wps_status"]
+_EXPORT_LEAVE_COLS = ["id", "employee_id", "leave_type", "start_date", "end_date", "days", "reason", "status",
+                      "approved_by", "approved_by_employee_id", "approved_at"]
+_EXPORT_ATTENDANCE_COLS = [
+    "id", "employee_id", "employee_name", "work_date",
+    "clock_in_1", "clock_out_1", "work_seconds_1", "clock_in_2", "clock_out_2", "work_seconds_2",
+    "clock_in_3", "clock_out_3", "work_seconds_3", "clock_in_4", "clock_out_4", "work_seconds_4",
+    "clock_in_5", "clock_out_5", "work_seconds_5", "total_seconds", "ot_seconds", "under_seconds", "session_count",
+]
+# Keys the export always writes itself; an app-data collection of the same name is
+# left out (these keys always won over it before too).
+_EXPORT_FIXED_KEYS = frozenset({
+    "invoices_db", "invoice_lines_db", "source_transactions_db", "accounts_db", "general_ledger_db",
+    "employees_db", "payroll_runs_db", "payroll_items_db", "leave_requests_db", "attendance_details_db",
+    "audit", "users",
+})
+_EXPORT_BATCH = 500
+
+
+def _export_dumps(value: Any) -> str:
+    return json.dumps(value, default=str, ensure_ascii=False, separators=(",", ":"))
+
+
+def write_company_export_json(db: Session, current_user: User, fileobj: Any) -> None:
+    """GET /app-data/export's JSON, written into a text file object one row at a
+    time: {"ok", "meta", "data": {<collection>: [...], ..., "<table>_db": [...],
+    "audit", "users"}}. Building it as one dict held all of a company's records in
+    memory at once (~120 MB for a 25-employee company with 3 years of data)."""
     company_id = current_user.company_id
+    users = db.query(User).filter(User.company_id == company_id).all()
+    user_map = {u.id: u.full_name for u in users}
+    state = {"first_key": True}
+
+    def open_list(key: str) -> None:
+        fileobj.write(("" if state["first_key"] else ",") + _export_dumps(key) + ":[")
+        state["first_key"] = False
+
+    def write_list(key: str, items: Any) -> None:
+        open_list(key)
+        for i, item in enumerate(items):
+            fileobj.write(("," if i else "") + _export_dumps(item))
+        fileobj.write("]")
+
+    def rows(query: Any, cols: list[str]) -> Any:
+        return (_export_row_to_dict(row, cols) for row in query.yield_per(_EXPORT_BATCH))
+
+    meta = {
+        "exported_at": _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+        "exported_by": current_user.full_name,
+        "company_id": company_id,
+    }
+    fileobj.write('{"ok":true,"meta":' + _export_dumps(meta) + ',"data":{')
+
+    # App-data collections, oldest first within each.
     records = (
         db.query(AppDataRecord)
-        .filter(AppDataRecord.company_id == company_id)
-        .order_by(AppDataRecord.created_at.asc())
-        .all()
+        .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection.notin_(_EXPORT_FIXED_KEYS))
+        .order_by(AppDataRecord.collection.asc(), AppDataRecord.created_at.asc(), AppDataRecord.id.asc())
+        .yield_per(_EXPORT_BATCH)
     )
-    grouped: dict[str, list[dict[str, Any]]] = {}
+    current = None
+    count = 0
     for item in records:
-        grouped.setdefault(item.collection, []).append(serialize(item))
+        if item.collection != current:
+            if current is not None:
+                fileobj.write("]")
+            current, count = item.collection, 0
+            open_list(current)
+        fileobj.write(("," if count else "") + _export_dumps(serialize(item)))
+        count += 1
+    if current is not None:
+        fileobj.write("]")
 
-    # Real relational tables the AppDataRecord collections above don't
-    # cover at all — Settings > Backup & Audit's category toggles (Invoices
-    # & Sales / Purchases & Bills / Journal & Accounts / Payroll & HR)
-    # describe this data, but until now nothing in this JSON/Excel export
-    # path ever queried it (export_db_dump()'s .sql path already did, or
-    # does after its own recent fix). "_db" suffix keeps these distinct
-    # from any same-named AppDataRecord collection (e.g. "employees" as a
-    # legacy JSON blob vs. the real Employee table here).
-    invoice_cols = ["id", "invoice_number", "customer_name", "customer_trn", "issue_date",
-                     "due_date", "currency", "subtotal", "vat", "total", "status", "notes"]
-    invoices_db = [
-        _export_row_to_dict(inv, invoice_cols)
-        for inv in db.query(Invoice).filter(Invoice.company_id == company_id).order_by(Invoice.created_at.asc()).all()
-    ]
-    invoice_ids = [row["id"] for row in invoices_db]
-    invoice_line_cols = ["id", "invoice_id", "description", "quantity", "unit_price", "vat_rate", "line_total"]
-    invoice_lines_db = (
-        [
-            _export_row_to_dict(line, invoice_line_cols)
-            for line in db.query(InvoiceLine).filter(InvoiceLine.invoice_id.in_(invoice_ids)).all()
-        ]
-        if invoice_ids else []
-    )
-    source_txn_cols = ["id", "module", "reference", "party_name", "subtotal", "vat", "total", "status"]
-    source_transactions_db = [
-        _export_row_to_dict(row, source_txn_cols)
-        for row in db.query(SourceTransaction).filter(SourceTransaction.company_id == company_id)
-        .order_by(SourceTransaction.created_at.asc()).all()
-    ]
-    account_cols = ["id", "code", "name", "type", "is_group", "parent_id"]
-    accounts_db = [
-        _export_row_to_dict(acc, account_cols)
-        for acc in db.query(Account).filter(Account.company_id == company_id).order_by(Account.code.asc()).all()
-    ]
-    gl_cols = ["id", "entry_date", "voucher_no", "voucher_type", "account_id",
-               "debit", "credit", "balance", "party", "cost_center", "narration"]
-    general_ledger_db = [
-        _export_row_to_dict(row, gl_cols)
-        for row in db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == company_id)
-        .order_by(GeneralLedgerEntry.entry_date.asc()).all()
-    ]
-    employee_cols = ["id", "employee_no", "full_name", "department", "designation", "basic_salary", "status"]
-    employees_db = [
-        _export_row_to_dict(emp, employee_cols)
-        for emp in db.query(Employee).filter(Employee.company_id == company_id).all()
-    ]
-    payroll_run_cols = ["id", "period", "status", "gross_total", "deductions_total", "net_total"]
-    payroll_runs_db = [
-        _export_row_to_dict(run, payroll_run_cols)
-        for run in db.query(PayrollRun).filter(PayrollRun.company_id == company_id).order_by(PayrollRun.period.asc()).all()
-    ]
-    payroll_run_ids = [row["id"] for row in payroll_runs_db]
-    payroll_item_cols = ["id", "run_id", "employee_id", "basic", "allowances", "overtime", "deductions", "net_pay", "wps_status"]
-    payroll_items_db = (
-        [
-            _export_row_to_dict(item, payroll_item_cols)
-            for item in db.query(PayrollItem).filter(PayrollItem.run_id.in_(payroll_run_ids)).all()
-        ]
-        if payroll_run_ids else []
-    )
-
-    # "Payroll & HR" promised "employee records and payroll data" but never
-    # queried either of these two real Tier 1 tables -- leave_requests
-    # (leave.py's own real table, no longer part of the AppDataRecord
-    # bridge at all -- see loadLeaveRequests()) and attendance_details
-    # (attendance_store.py, superseded the old AttendancePunch table) are
-    # both core HR records a company would expect "full company data" to
-    # include, on par with payroll runs and the employee master list above.
-    leave_cols = ["id", "employee_id", "leave_type", "start_date", "end_date", "days", "reason", "status", "approved_by", "approved_by_employee_id", "approved_at"]
-    leave_requests_db = [
-        _export_row_to_dict(lr, leave_cols)
-        for lr in db.query(LeaveRequest).filter(LeaveRequest.company_id == company_id).order_by(LeaveRequest.start_date.asc()).all()
-    ]
-    attendance_cols = [
-        "id", "employee_id", "employee_name", "work_date",
-        "clock_in_1", "clock_out_1", "work_seconds_1", "clock_in_2", "clock_out_2", "work_seconds_2",
-        "clock_in_3", "clock_out_3", "work_seconds_3", "clock_in_4", "clock_out_4", "work_seconds_4",
-        "clock_in_5", "clock_out_5", "work_seconds_5", "total_seconds", "ot_seconds", "under_seconds", "session_count",
-    ]
-    attendance_details_db = [
-        _export_row_to_dict(a, attendance_cols)
-        for a in db.query(AttendanceDetail).filter(AttendanceDetail.company_id == company_id).order_by(AttendanceDetail.work_date.asc()).all()
-    ]
-
-    audit_rows = (
-        db.query(AuditLog)
-        .filter(AuditLog.company_id == current_user.company_id)
-        .order_by(AuditLog.created_at.desc())
-        .all()
-    )
-
-    user_map: dict[str, str] = {}
-    for u in db.query(User).filter(User.company_id == current_user.company_id).all():
-        user_map[u.id] = u.full_name
-
-    audit = [
+    invoice_ids = db.query(Invoice.id).filter(Invoice.company_id == company_id).scalar_subquery()
+    write_list("invoices_db", rows(
+        db.query(Invoice).filter(Invoice.company_id == company_id).order_by(Invoice.created_at.asc()),
+        _EXPORT_INVOICE_COLS,
+    ))
+    write_list("invoice_lines_db", rows(
+        db.query(InvoiceLine).filter(InvoiceLine.invoice_id.in_(invoice_ids)), _EXPORT_INVOICE_LINE_COLS,
+    ))
+    write_list("source_transactions_db", rows(
+        db.query(SourceTransaction).filter(SourceTransaction.company_id == company_id).order_by(SourceTransaction.created_at.asc()),
+        _EXPORT_SOURCE_TXN_COLS,
+    ))
+    write_list("accounts_db", rows(
+        db.query(Account).filter(Account.company_id == company_id).order_by(Account.code.asc()), _EXPORT_ACCOUNT_COLS,
+    ))
+    write_list("general_ledger_db", rows(
+        db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == company_id).order_by(GeneralLedgerEntry.entry_date.asc()),
+        _EXPORT_GL_COLS,
+    ))
+    write_list("employees_db", rows(db.query(Employee).filter(Employee.company_id == company_id), _EXPORT_EMPLOYEE_COLS))
+    run_ids = db.query(PayrollRun.id).filter(PayrollRun.company_id == company_id).scalar_subquery()
+    write_list("payroll_runs_db", rows(
+        db.query(PayrollRun).filter(PayrollRun.company_id == company_id).order_by(PayrollRun.period.asc()),
+        _EXPORT_PAYROLL_RUN_COLS,
+    ))
+    write_list("payroll_items_db", rows(
+        db.query(PayrollItem).filter(PayrollItem.run_id.in_(run_ids)), _EXPORT_PAYROLL_ITEM_COLS,
+    ))
+    write_list("leave_requests_db", rows(
+        db.query(LeaveRequest).filter(LeaveRequest.company_id == company_id).order_by(LeaveRequest.start_date.asc()),
+        _EXPORT_LEAVE_COLS,
+    ))
+    write_list("attendance_details_db", rows(
+        db.query(AttendanceDetail).filter(AttendanceDetail.company_id == company_id).order_by(AttendanceDetail.work_date.asc()),
+        _EXPORT_ATTENDANCE_COLS,
+    ))
+    write_list("audit", (
         {
             "time": row.created_at.strftime("%d/%m/%Y, %H:%M") if row.created_at else "",
             "user": user_map.get(row.user_id or "", current_user.full_name),
@@ -1416,10 +1428,10 @@ def export_all_data(
             "record": row.module,
             "result": "Logged",
         }
-        for row in audit_rows
-    ]
-
-    users = [
+        for row in db.query(AuditLog).filter(AuditLog.company_id == company_id)
+        .order_by(AuditLog.created_at.desc()).yield_per(_EXPORT_BATCH)
+    ))
+    write_list("users", (
         {
             "id": u.id,
             "name": u.full_name,
@@ -1427,32 +1439,30 @@ def export_all_data(
             "role": u.role,
             "created_at": u.created_at.strftime("%d/%m/%Y") if u.created_at else "",
         }
-        for u in db.query(User).filter(User.company_id == current_user.company_id).all()
-    ]
+        for u in users
+    ))
+    fileobj.write("}}")
 
-    return {
-        "ok": True,
-        "meta": {
-            "exported_at": __import__("datetime").datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
-            "exported_by": current_user.full_name,
-            "company_id": current_user.company_id,
-        },
-        "data": {
-            **grouped,
-            "audit": audit,
-            "users": users,
-            "invoices_db": invoices_db,
-            "invoice_lines_db": invoice_lines_db,
-            "source_transactions_db": source_transactions_db,
-            "accounts_db": accounts_db,
-            "general_ledger_db": general_ledger_db,
-            "employees_db": employees_db,
-            "payroll_runs_db": payroll_runs_db,
-            "payroll_items_db": payroll_items_db,
-            "leave_requests_db": leave_requests_db,
-            "attendance_details_db": attendance_details_db,
-        },
-    }
+
+@router.get("/export", dependencies=[Depends(require_company_admin)])
+@limiter.limit("10/minute")
+def export_all_data(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    """The company's full data as JSON (Settings > Backup & Audit). Written to a temp
+    file row by row, then streamed and deleted, so memory stays flat however much
+    history the company has."""
+    tmp = tempfile.NamedTemporaryFile(prefix="taxflow-export-", suffix=".json", delete=False)
+    tmp.close()
+    try:
+        with open(tmp.name, "w", encoding="utf-8") as fileobj:
+            write_company_export_json(db, current_user, fileobj)
+    except Exception:
+        os.unlink(tmp.name)
+        raise
+    return FileResponse(tmp.name, media_type="application/json", background=BackgroundTask(os.unlink, tmp.name))
 
 
 @router.get("/user-export/{user_id}", dependencies=[Depends(require_company_admin)])

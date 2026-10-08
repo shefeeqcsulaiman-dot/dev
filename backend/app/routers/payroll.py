@@ -65,19 +65,33 @@ def money(value: object) -> Decimal:
 
 
 def _app_records(db: Session, company_id: str, collection: str) -> list[AppDataRecord]:
-    return (
-        db.query(AppDataRecord)
-        .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == collection)
-        .all()
-    )
+    """A collection's rows, loaded once per request (db session): payroll generate and
+    approve ask for the same overtime/loan/advance/adjustment lists once per employee,
+    which used to re-query and re-parse the whole list every time."""
+    cache = db.info.setdefault("_payroll_app_records", {})
+    key = (company_id, collection)
+    if key not in cache:
+        cache[key] = (
+            db.query(AppDataRecord)
+            .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == collection)
+            .all()
+        )
+    return cache[key]
 
 
 def _payload(row: AppDataRecord) -> dict:
+    """Parsed row.payload, re-parsed only when the saved text changes (deductions
+    edit the dict and save it straight back with _save_payload())."""
+    cached = getattr(row, "_tf_parsed", None)
+    if cached is not None and cached[0] is row.payload:
+        return cached[1]
     try:
         data = json.loads(row.payload or "{}")
-        return data if isinstance(data, dict) else {}
+        data = data if isinstance(data, dict) else {}
     except (TypeError, json.JSONDecodeError):
-        return {}
+        data = {}
+    row._tf_parsed = (row.payload, data)
+    return data
 
 
 def _save_payload(row: AppDataRecord, data: dict) -> None:
