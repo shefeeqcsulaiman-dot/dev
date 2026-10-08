@@ -9027,6 +9027,21 @@ function _takeMePreloadCache(){
   return null;
 }
 
+// The start-up data carries only the newest entries of some long lists (products: 2,000;
+// tasks, requests: 500 -- open ones are always included). Say so once per session
+// instead of letting older entries silently not appear.
+const _TRUNCATED_LIST_NAMES={products:'products',customers:'customers',employees:'employees',tasks:'tasks',
+  overtimeRequests:'overtime requests',attendanceCorrections:'attendance corrections',employeeLoans:'loans',
+  salaryAdvances:'salary advances',candidates:'candidates',jobRequisitions:'job requisitions'};
+function _noteTruncatedCollections(list){
+  const names=(Array.isArray(list)?list:[]).map(c=>_TRUNCATED_LIST_NAMES[c]).filter(Boolean);
+  if(!names.length)return;
+  const key='tf_truncated_notice_'+names.join(',');
+  try{if(sessionStorage.getItem(key))return;sessionStorage.setItem(key,'1');}catch(e){}
+  const listed=names.length>1?`${names.slice(0,-1).join(', ')} and ${names[names.length-1]}`:names[0];
+  toast(`Showing the most recent ${listed} only. Older ones are still saved: use search to find them.`,'info');
+}
+
 function hydrateFromServer(){
   const _yield=()=>new Promise(r=>setTimeout(r,0));
   // hrms.html never renders Sales/Purchase/Accounting/Corporate data, but
@@ -9046,8 +9061,10 @@ function hydrateFromServer(){
   // set exactly).
   const _bootstrapPromise=Promise.resolve(_takeBootstrapPreloadCache())
     .then(cached=>cached||apiRequest('bootstrap',{}, {method:'GET',query:{scope:window.HRMS_STANDALONE?'hrms':'main'}}));
-  return _bootstrapPromise.then(async ({data})=>{
+  return _bootstrapPromise.then(async (resp)=>{
+    const data=resp?.data;
     if(!data)return;
+    _noteTruncatedCollections(resp.truncated_collections);
     isHydratingFromServer=true;
     const renderStats={};
     const productRows=window.HRMS_STANDALONE?[]:(Array.isArray(data.products)?data.products.filter(product=>!isDemoProductRecord(product)):[]);

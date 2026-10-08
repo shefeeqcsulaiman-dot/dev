@@ -26,7 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from starlette.background import BackgroundTask
-from sqlalchemy import case, func, or_
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -272,7 +272,9 @@ _PAGED_COLLECTIONS = frozenset({
 #   leaveRequests/overtimeRequests: ~500-1 500/year → cap 500
 #   payrollRuns: 12/year, cap 50 keeps 4 years of history
 _BOOTSTRAP_COLLECTION_CAPS: dict[str, int] = {
-    "products": 500,
+    # Product images are served by URL (serialize_for_list), so rows are small now; the
+    # cap used to be 500 because each row carried its image as base64.
+    "products": 2000,
     "salesCategories": 200,
     "salesUnits": 200,
     "journalDrafts": 300,
@@ -301,6 +303,50 @@ _BOOTSTRAP_COLLECTION_CAPS: dict[str, int] = {
     "rotaDrafts": 500,
     "tasks": 500,
 }
+
+
+# Workflow lists where the bootstrap cap must cut old FINISHED history only: an item that
+# is still open (a pending request, an active loan, a task not done) stays on screen
+# however old it is. Before, the newest-N cap silently dropped e.g. a two-year loan still
+# being repaid, or an old open task, once enough newer items existed.
+_OPEN_WORK_COLLECTIONS = frozenset({
+    "tasks", "overtimeRequests", "leaveRequests", "attendanceCorrections", "employeeLoans",
+    "salaryAdvances", "jobRequisitions", "candidates", "rotaSwaps", "rotaApprovals",
+})
+_FINISHED_STATUS_WORDS = ("done", "complete", "closed", "reject", "cancel", "repaid", "paid", "declined",
+                          "archived", "hired", "withdrawn")
+_OLDER_OPEN_LIMIT = 2000
+
+
+def _is_finished_status(status: Any) -> bool:
+    text = str(status or "").strip().lower()
+    return bool(text) and any(word in text for word in _FINISHED_STATUS_WORDS)
+
+
+def _older_open_rows(db: Session, company_id: str, collection: str, oldest_kept: AppDataRecord) -> list[AppDataRecord]:
+    """Open items older than the newest-N bootstrap window, oldest first (bounded)."""
+    older = (
+        db.query(AppDataRecord)
+        .filter(
+            AppDataRecord.company_id == company_id,
+            AppDataRecord.collection == collection,
+            or_(AppDataRecord.created_at < oldest_kept.created_at,
+                and_(AppDataRecord.created_at == oldest_kept.created_at, AppDataRecord.id < oldest_kept.id)),
+        )
+        .order_by(AppDataRecord.created_at.asc(), AppDataRecord.id.asc())
+        .yield_per(500)
+    )
+    kept: list[AppDataRecord] = []
+    for row in older:
+        try:
+            status = json.loads(row.payload or "{}").get("status")
+        except (TypeError, ValueError, AttributeError):
+            status = None
+        if not _is_finished_status(status):
+            kept.append(row)
+            if len(kept) >= _OLDER_OPEN_LIMIT:
+                break
+    return kept
 
 
 def decimal_value(value: Any) -> Decimal:
@@ -492,6 +538,10 @@ def _collection_read_filters(principal: Principal, collection: str, branch_id: s
 # The URL includes a hash of the photo, so it is unguessable and changes when the
 # photo does; saving a record that still carries the URL keeps the stored photo.
 EMPLOYEE_PHOTO_PATH = "/api/v1/app-data/employee-photo/"
+# Product images (Item Master uploads) work the same way: base64 in the record, a URL in lists.
+PRODUCT_IMAGE_PATH = "/api/v1/app-data/product-image/"
+# collection -> (image field, URL prefix)
+_RECORD_IMAGES = {"employees": ("photo", EMPLOYEE_PHOTO_PATH), "products": ("image", PRODUCT_IMAGE_PATH)}
 
 
 def _photo_version(photo: str) -> str:
@@ -499,26 +549,33 @@ def _photo_version(photo: str) -> str:
 
 
 def serialize_for_list(row: AppDataRecord) -> dict[str, Any]:
-    """serialize(), with an employee photo replaced by its image URL."""
+    """serialize(), with an employee photo / product image replaced by its image URL."""
     data = serialize(row)
-    photo = data.get("photo") if isinstance(data, dict) and row.collection == "employees" else None
-    if isinstance(photo, str) and photo.startswith("data:"):
-        data["photo"] = f"{EMPLOYEE_PHOTO_PATH}{row.id}?v={_photo_version(photo)}"
+    spec = _RECORD_IMAGES.get(row.collection)
+    if spec and isinstance(data, dict):
+        field, path = spec
+        image = data.get(field)
+        if isinstance(image, str) and image.startswith("data:"):
+            data[field] = f"{path}{row.id}?v={_photo_version(image)}"
     return data
 
 
-def _keep_stored_employee_photo(record: dict[str, Any], existing: AppDataRecord | None) -> None:
-    """An edit form that re-reads its photo preview sends the photo URL back; keep the
-    stored photo instead of saving the URL over it."""
-    photo = record.get("photo")
-    if not (isinstance(photo, str) and EMPLOYEE_PHOTO_PATH in photo):
+def _keep_stored_image(collection: str, record: dict[str, Any], existing: AppDataRecord | None) -> None:
+    """An edit form that re-reads its photo/image preview sends the image URL back; keep
+    the stored image instead of saving the URL over it."""
+    spec = _RECORD_IMAGES.get(collection)
+    if not spec:
+        return
+    field, path = spec
+    image = record.get(field)
+    if not (isinstance(image, str) and path in image):
         return
     stored = _stored_payload(existing) if existing else None
-    stored_photo = stored.get("photo") if isinstance(stored, dict) else None
-    if isinstance(stored_photo, str) and stored_photo.startswith("data:"):
-        record["photo"] = stored_photo
+    stored_image = stored.get(field) if isinstance(stored, dict) else None
+    if isinstance(stored_image, str) and stored_image.startswith("data:"):
+        record[field] = stored_image
     else:
-        record.pop("photo", None)
+        record.pop(field, None)
 
 
 def _start_job(request: Request, db: Session, principal: Principal, kind: str, work) -> dict[str, object]:
@@ -543,29 +600,40 @@ def get_job(job_id: str, db: Session = Depends(get_db), principal: Principal = D
     return background.view(job)
 
 
+def _record_image_response(collection: str, record_id: str, v: str, request: Request, db: Session) -> Response:
+    field, _ = _RECORD_IMAGES[collection]
+    row = db.query(AppDataRecord).filter(AppDataRecord.id == record_id, AppDataRecord.collection == collection).first()
+    stored = _stored_payload(row) if row else None
+    image = stored.get(field) if isinstance(stored, dict) else None
+    if not (isinstance(image, str) and image.startswith("data:") and v and v == _photo_version(image)):
+        raise HTTPException(status_code=404, detail="No image")
+    match = re.match(r"^data:([\w/+.-]+);base64,(.*)$", image, re.S)
+    if not match:
+        raise HTTPException(status_code=404, detail="No image")
+    try:
+        raw = base64.b64decode(match.group(2))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=404, detail="No image")
+    etag = f'"{v}"'
+    headers = {"ETag": etag, "Cache-Control": "private, max-age=31536000, immutable"}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(content=raw, media_type=match.group(1), headers=headers)
+
+
 @router.get("/employee-photo/{record_id}")
 def employee_photo(record_id: str, request: Request, v: str = Query(default="", max_length=32), db: Session = Depends(get_db)):
     """An employee photo as an image. No login header: an <img src> can't send one.
     The URL is a capability instead: the record id is a random UUID and v must match a
     hash of the photo itself, and both only reach someone who could already read the
     employee list. Immutable caching: a new photo gets a new v."""
-    row = db.query(AppDataRecord).filter(AppDataRecord.id == record_id, AppDataRecord.collection == "employees").first()
-    stored = _stored_payload(row) if row else None
-    photo = stored.get("photo") if isinstance(stored, dict) else None
-    if not (isinstance(photo, str) and photo.startswith("data:") and v and v == _photo_version(photo)):
-        raise HTTPException(status_code=404, detail="No photo")
-    match = re.match(r"^data:([\w/+.-]+);base64,(.*)$", photo, re.S)
-    if not match:
-        raise HTTPException(status_code=404, detail="No photo")
-    try:
-        raw = base64.b64decode(match.group(2))
-    except (ValueError, TypeError):
-        raise HTTPException(status_code=404, detail="No photo")
-    etag = f'"{v}"'
-    headers = {"ETag": etag, "Cache-Control": "private, max-age=31536000, immutable"}
-    if request.headers.get("if-none-match") == etag:
-        return Response(status_code=304, headers=headers)
-    return Response(content=raw, media_type=match.group(1), headers=headers)
+    return _record_image_response("employees", record_id, v, request, db)
+
+
+@router.get("/product-image/{record_id}")
+def product_image(record_id: str, request: Request, v: str = Query(default="", max_length=32), db: Session = Depends(get_db)):
+    """A product's Item Master image, same capability-URL rules as employee_photo()."""
+    return _record_image_response("products", record_id, v, request, db)
 
 
 @router.get("/records/{collection}")
@@ -1089,7 +1157,7 @@ def bootstrap(
     excluded_collections = _main_scope_excluded_collections() if scope == "main" else set()
     # Collections with large record counts are fetched with DB-level LIMIT to avoid
     # loading and deserializing thousands of rows that will be discarded in Python.
-    _HEAVY_COLLECTIONS = {c for c, n in _BOOTSTRAP_COLLECTION_CAPS.items() if n <= 500}
+    _HEAVY_COLLECTIONS = {c for c in _BOOTSTRAP_COLLECTION_CAPS if c not in _PAGED_COLLECTIONS}
     heavy_results: dict[str, list[dict[str, Any]]] = {}
     # One GROUP BY instead of a separate COUNT(*) per heavy collection (was
     # 17 round trips — costs more on production Postgres than locally on
@@ -1108,7 +1176,7 @@ def bootstrap(
         .all()
     )
     for coll, coll_cap in _BOOTSTRAP_COLLECTION_CAPS.items():
-        if coll_cap > 500:
+        if coll not in _HEAVY_COLLECTIONS:
             continue  # low-cap collections handled in the bulk query below
         if allowed_collections is not None and coll not in allowed_collections:
             continue
@@ -1117,11 +1185,13 @@ def bootstrap(
         rows = (
             db.query(AppDataRecord)
             .filter(AppDataRecord.company_id == principal.company_id, AppDataRecord.collection == coll)
-            .order_by(AppDataRecord.created_at.desc())
+            .order_by(AppDataRecord.created_at.desc(), AppDataRecord.id.desc())
             .limit(coll_cap)
             .all()
         )
         rows.reverse()
+        if coll in _OPEN_WORK_COLLECTIONS and heavy_totals.get(coll, 0) > coll_cap and rows:
+            rows = _older_open_rows(db, principal.company_id, coll, rows[0]) + rows
         heavy_results[coll] = [serialize_for_list(r) for r in rows]
 
     # Bulk query for all remaining (non-heavy) collections
@@ -1146,7 +1216,7 @@ def bootstrap(
         coll_cap = _BOOTSTRAP_COLLECTION_CAPS.get(coll)
         bucket = grouped.setdefault(coll, [])
         if coll_cap is None or len(bucket) < coll_cap:
-            bucket.append(serialize(item))
+            bucket.append(serialize_for_list(item))
 
     # A role without employees:view_salary never receives salary figures
     # at all -- this is the Employee Directory's real data source
@@ -1892,8 +1962,7 @@ async def app_data_action(
             assert_collection_period_open(db, principal, collection, record)
             key = record_key(collection, record)
             existing = existing_by_key.get(key) if key else None
-            if collection == "employees":
-                _keep_stored_employee_photo(record, existing)
+            _keep_stored_image(collection, record, existing)
             payload_json = json.dumps(record, ensure_ascii=False, default=str)
             _assert_branch_writable(principal, collection, existing)
             assert_record_writable(db, principal, collection, record, _stored_payload(existing), dept_index)
@@ -2296,8 +2365,7 @@ def save_app_record(db: Session, principal: Principal, collection: str, record: 
             .first()
         )
     _assert_branch_writable(principal, collection, existing)
-    if collection == "employees":
-        _keep_stored_employee_photo(record, existing)
+    _keep_stored_image(collection, record, existing)
     payload = json.dumps(record, ensure_ascii=False, default=str)
     if existing:
         existing.payload = payload

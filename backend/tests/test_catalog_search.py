@@ -1,6 +1,7 @@
 """GET /app-data/catalog/{products|customers|vendors}: what the product, customer and
-supplier pickers search as you type. Bootstrap only carries the newest 500 products, so
+supplier pickers search as you type. Bootstrap only carries the newest 2000 products, so
 anything older must be findable here."""
+import datetime as _dt
 import json
 from uuid import uuid4
 
@@ -21,13 +22,14 @@ def test_finds_products_bootstrap_leaves_out(client, db, auth_headers):
     tag = uuid4().hex[:6].upper()
     db.add_all([
         AppDataRecord(company_id=cid, collection="products", record_key=f"OLD-{tag}-{i:03d}",
-                      payload=json.dumps({"code": f"OLD-{tag}-{i:03d}", "name": f"Old Widget {tag} {i}", "unit": "PCS", "selling_price": 10 + i}))
-        for i in range(520)
+                      payload=json.dumps({"code": f"OLD-{tag}-{i:03d}", "name": f"Old Widget {tag} {i}", "unit": "PCS", "selling_price": 10 + i}),
+                      created_at=_dt.datetime(2020, 1, 1, tzinfo=_dt.timezone.utc) + _dt.timedelta(minutes=i))
+        for i in range(2020)
     ])
     db.commit()
     boot = client.get("/api/v1/app-data", headers=auth_headers).json()
-    loaded = {p.get("code") for p in boot.get("products", [])}
-    assert f"OLD-{tag}-000" not in loaded  # the oldest are beyond bootstrap's 500
+    loaded = {p.get("code") for p in boot["data"].get("products", [])}
+    assert loaded and f"OLD-{tag}-000" not in loaded  # the oldest are beyond bootstrap's 2000
     r = _search(client, auth_headers, "products", f"old-{tag}-000")
     assert r.status_code == 200, r.text
     records = r.json()["records"]
