@@ -70,9 +70,7 @@ def test_super_admin_can_switch_mode_but_company_admin_cannot(client, db):
 
     r = client.patch(f"/api/v1/superadmin/companies/{company_id}", headers=sa, json={"stock_mode": "without_stock"})
     assert r.status_code == 200, r.text
-    listed = client.get("/api/v1/superadmin/companies", headers=sa).json()
-    listed = listed.get("companies", listed) if isinstance(listed, dict) else listed
-    assert next(c for c in listed if c["id"] == company_id)["stock_mode"] == "without_stock"
+    assert client.get(f"/api/v1/superadmin/companies/{company_id}", headers=sa).json()["stock_mode"] == "without_stock"
 
     assert client.patch(f"/api/v1/superadmin/companies/{company_id}", headers=sa, json={"stock_mode": "bogus"}).status_code == 422
     client.put("/api/v1/companies/current", headers=headers, json={"stock_mode": "with_stock"})

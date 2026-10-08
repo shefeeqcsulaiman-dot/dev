@@ -424,18 +424,20 @@
     <div class="card-hd">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <div class="card-title">All Companies</div>
-        <input type="text" id="sa-co-search" placeholder="Search by name, TRN…" oninput="filterCompanies()" style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;background:var(--surface);color:var(--text);outline:none;width:200px">
+        <input type="text" id="sa-co-search" placeholder="Search name, TRN, user email…" oninput="filterCompanies()" style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;background:var(--surface);color:var(--text);outline:none;width:220px">
         <select id="sa-co-status-filter" onchange="filterCompanies()" style="padding:5px 8px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;background:var(--surface);color:var(--text)">
           <option value="">All Statuses</option>
           <option value="active">Active</option>
           <option value="expiring">Expiring in 7 days</option>
           <option value="expired">Expired</option>
           <option value="inactive">Inactive 30+ days</option>
+          <option value="no_users">No users</option>
+          <option value="no_expiry">No expiry date</option>
+          <option value="new_month">New this month</option>
         </select>
       </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-g btn-sm" onclick="exportCompaniesCSV()">Export CSV</button>
-        <button class="btn btn-g btn-sm" onclick="downloadAllCompaniesBackup(this)" title="Download a .zip with every company's own restorable SQL backup">⬇ Download All Backups</button>
+        <button class="btn btn-g btn-sm" onclick="exportCompaniesCSV(this)" title="Every company matching the search and status filter">Export CSV</button>
         <button class="btn btn-g btn-sm" onclick="openBulkModule()" title="Turn one module on or off for every company at once (e.g. DB Backup)">⚙ Module for all companies</button>
         <button class="btn btn-p btn-sm" onclick="openCreateCompany()">+ New Company</button>
       </div>
@@ -481,7 +483,7 @@
       </div>
       <div style="display:flex;gap:8px;align-items:center">
         <input id="sa-usage-users-search" placeholder="Search name, email, company…" oninput="renderUsageUsersList()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text);width:220px">
-        <button class="btn btn-g btn-sm" onclick="exportUsersCSV()">Export CSV</button>
+        <button class="btn btn-g btn-sm" onclick="exportUsersCSV(this)">Export CSV</button>
       </div>
     </div>
     <div id="sa-usage-users-wrap"><div class="loading-state">Loading…</div></div>
@@ -634,9 +636,9 @@
           <option value="7" selected>Last 7 days</option>
           <option value="30">Last 30 days</option>
         </select>
-        <select id="sa-audit-company" onchange="loadAuditLogs()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text)">
-          <option value="">All Companies</option>
-        </select>
+        <input id="sa-audit-company-q" list="sa-audit-company-list" placeholder="All companies (type to search)" oninput="onAuditCompanyInput()" autocomplete="off" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text);width:200px">
+        <datalist id="sa-audit-company-list"></datalist>
+        <input type="hidden" id="sa-audit-company" value="">
         <select id="sa-audit-sort" onchange="renderAuditLogRows()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text)">
           <option value="time" selected>Sort: Newest first</option>
           <option value="user">Sort: By user</option>
@@ -1011,7 +1013,13 @@
   }
 
   // ── Load ──────────────────────────────────────────────────────
+  // `companies` holds only the page on screen: the list is paged, searched, filtered and
+  // sorted by the server (GET /superadmin/companies). Headline counts come from
+  // /superadmin/companies/overview; a company's users/branches/employees load when its
+  // Details drawer opens.
   let companies = [];
+  let _overview = null;
+  const _coPage={offset:0, limit:50, total:0};
 
   async function loadDashboard(){
     try{
@@ -1020,76 +1028,73 @@
       if(me.role !== 'superadmin'){ window.location.replace('/'); return; }
       document.getElementById('sa-user-email').textContent = me.email;
 
-      const res = await apiFetch('/superadmin/companies');
-      companies = await res.json();
-      renderStats(companies);
-      renderCompanies(companies);
-      // the drawer keeps showing the pre-change user list (Disable never turned into Enable, edited names stayed old) unless it is redrawn from the fresh data
-      if(document.getElementById('company-drawer').classList.contains('on')) renderDrawer();
-      populateAuditCompanyFilter(companies);
+      await Promise.all([loadOverview(), loadCompaniesPage()]);
+      // the drawer keeps showing the pre-change user list (Disable never turned into Enable, edited names stayed old) unless it is reloaded
+      if(document.getElementById('company-drawer').classList.contains('on')) loadDrawerCompany();
       loadAuditLogs();
     }catch(err){
       document.getElementById('sa-companies-wrap').innerHTML = '<div class="loading-state" style="color:var(--red)">Failed to load: '+escHtml(err.message)+'</div>';
     }
   }
 
-  function renderStats(data){
-    const now = new Date();
-    const in7  = new Date(); in7.setDate(now.getDate()+7);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    let active=0, expiring=0, expired=0, totalUsers=0, newMonth=0, totalEmployees=0;
-    data.forEach(c=>{
-      totalUsers += (c.users||[]).length;
-      totalEmployees += (c.employee_count||0);
-      const exp = c.subscription_expires_at ? new Date(c.subscription_expires_at) : null;
-      if(!exp || exp > now) active++;
-      if(exp && exp > now && exp <= in7) expiring++;
-      if(exp && exp < now) expired++;
-      const created = c.created_at ? new Date(c.created_at) : null;
-      if(created && created >= monthStart) newMonth++;
-    });
-    document.getElementById('sa-stat-companies').textContent = data.length;
-    document.getElementById('sa-stat-users').textContent = totalUsers;
-    document.getElementById('sa-stat-active').textContent = active;
-    document.getElementById('sa-stat-expiring').textContent = expiring;
-    document.getElementById('sa-stat-expired').textContent = expired;
-    document.getElementById('sa-stat-new-month').textContent = newMonth;
-    document.getElementById('sa-stat-employees').textContent = totalEmployees || '—';
-    renderInsights(data, {active, expiring, expired, newMonth});
+  async function loadOverview(){
+    const res = await apiFetch('/superadmin/companies/overview');
+    if(!res.ok) throw new Error('Overview failed ('+res.status+')');
+    _overview = await res.json();
+    renderStats(_overview);
   }
 
-  function renderInsights(data, stats){
-    const now = new Date();
-    const in7  = new Date(); in7.setDate(now.getDate()+7);
-    const in30 = new Date(); in30.setDate(now.getDate()+30);
+  let _coLoadSeq=0;
+  async function loadCompaniesPage(){
+    const seq=++_coLoadSeq;
+    const q=(document.getElementById('sa-co-search')?.value||'').trim();
+    const status=document.getElementById('sa-co-status-filter')?.value||'';
+    const qs=new URLSearchParams({q, status, sort:_coSort.key, dir:_coSort.dir, limit:_coPage.limit, offset:_coPage.offset});
+    const res = await apiFetch('/superadmin/companies?'+qs);
+    const data = await res.json();
+    if(seq!==_coLoadSeq) return;  // a newer search already answered
+    if(!res.ok) throw new Error(data.detail||'Failed to load companies.');
+    companies = data.items;
+    _coPage.total = data.total;
+    renderCompanies(companies);
+  }
+
+  function renderStats(ov){
+    const c=ov.counts;
+    document.getElementById('sa-stat-companies').textContent = c.companies;
+    document.getElementById('sa-stat-users').textContent = c.users;
+    document.getElementById('sa-stat-active').textContent = c.active;
+    document.getElementById('sa-stat-expiring').textContent = c.expiring;
+    document.getElementById('sa-stat-expired').textContent = c.expired;
+    document.getElementById('sa-stat-new-month').textContent = c.new_month;
+    document.getElementById('sa-stat-employees').textContent = c.employees || '—';
+    renderInsights(ov);
+  }
+
+  function renderInsights(ov){
+    const counts=ov.counts, samples=ov.samples;
     const insights = [];
+    const names=(list,total)=>list.slice(0,3).map(c=>`<strong>${escHtml(c.name)}</strong>`).join(', ')+(total>3?' and '+(total-3)+' more':'');
 
     // Expired companies — reactivation opportunity
-    const expiredList = data.filter(c=>{
-      const exp = c.subscription_expires_at ? new Date(c.subscription_expires_at) : null;
-      return exp && exp < now;
-    });
-    if(expiredList.length){
+    if(counts.expired){
       insights.push({
         type:'red',
         icon:'⚠️',
-        title: expiredList.length+' '+(expiredList.length===1?'company has':'companies have')+' expired subscriptions',
-        body: expiredList.slice(0,3).map(c=>`<strong>${escHtml(c.name)}</strong>`).join(', ')+(expiredList.length>3?' and '+(expiredList.length-3)+' more':''),
-        action:'Scroll to Companies list and extend their subscriptions.',
+        title: counts.expired+' '+(counts.expired===1?'company has':'companies have')+' expired subscriptions',
+        body: names(samples.expired, counts.expired),
+        action:'Filter the Companies list by "Expired" and extend their subscriptions.',
       });
     }
 
     // Expiring in 7 days
-    const expiringList = data.filter(c=>{
-      const exp = c.subscription_expires_at ? new Date(c.subscription_expires_at) : null;
-      return exp && exp > now && exp <= in7;
-    });
-    if(expiringList.length){
+    if(counts.expiring){
+      const list=samples.expiring;
       insights.push({
         type:'amber',
         icon:'⏰',
-        title: expiringList.length+' '+(expiringList.length===1?'company expires':'companies expire')+' within 7 days',
-        body: expiringList.map(c=>`<strong>${escHtml(c.name)}</strong> — ${c.subscription_expires_at}`).join('<br>'),
+        title: counts.expiring+' '+(counts.expiring===1?'company expires':'companies expire')+' within 7 days',
+        body: list.slice(0,10).map(c=>`<strong>${escHtml(c.name)}</strong> — ${escHtml(c.subscription_expires_at||'')}`).join('<br>')+(counts.expiring>10?'<br>and '+(counts.expiring-10)+' more':''),
         action:'Extend their subscriptions before they lose access.',
         buttonLabel: 'Extend all by 30 days',
         buttonFn: 'bulkExtendExpiring',
@@ -1097,36 +1102,34 @@
     }
 
     // Companies with no users
-    const noUsers = data.filter(c=>!(c.users||[]).filter(u=>u.role!=='superadmin').length);
-    if(noUsers.length){
+    if(counts.no_users){
       insights.push({
         type:'blue',
         icon:'👤',
-        title: noUsers.length+' '+(noUsers.length===1?'company has':'companies have')+' no users',
-        body: noUsers.slice(0,3).map(c=>`<strong>${escHtml(c.name)}</strong>`).join(', ')+(noUsers.length>3?' and '+(noUsers.length-3)+' more':''),
+        title: counts.no_users+' '+(counts.no_users===1?'company has':'companies have')+' no users',
+        body: names(samples.no_users, counts.no_users),
         action:'Add an admin user so the company can log in.',
       });
     }
 
     // New companies this month
-    if(stats.newMonth){
+    if(counts.new_month){
       insights.push({
         type:'green',
         icon:'🎉',
-        title: stats.newMonth+' new '+(stats.newMonth===1?'company':'companies')+' joined this month',
+        title: counts.new_month+' new '+(counts.new_month===1?'company':'companies')+' joined this month',
         body:'Welcome them by checking their module setup and subscription expiry.',
         action:null,
       });
     }
 
     // No expiry set
-    const noExpiry = data.filter(c=>!c.subscription_expires_at);
-    if(noExpiry.length){
+    if(counts.no_expiry){
       insights.push({
         type:'blue',
         icon:'📅',
-        title: noExpiry.length+' '+(noExpiry.length===1?'company has':'companies have')+' no expiry date set',
-        body: noExpiry.slice(0,3).map(c=>`<strong>${escHtml(c.name)}</strong>`).join(', ')+(noExpiry.length>3?' and '+(noExpiry.length-3)+' more':''),
+        title: counts.no_expiry+' '+(counts.no_expiry===1?'company has':'companies have')+' no expiry date set',
+        body: names(samples.no_expiry, counts.no_expiry),
         action:'Set an expiry date so subscriptions can be tracked.',
       });
     }
@@ -1135,17 +1138,13 @@
     // month. A company that's about to expire is already covered by the "expires within
     // 7 days" insight above; this catches the opposite failure mode: still paying (or on
     // an open-ended subscription), but quietly not using the product.
-    const churnRisk = data.filter(c=>{
-      const exp = c.subscription_expires_at ? new Date(c.subscription_expires_at) : null;
-      const stillActive = !exp || exp >= now;
-      return stillActive && (c.inactive_days??0) >= 30;
-    });
-    if(churnRisk.length){
+    if(counts.inactive){
+      const churnRisk=samples.inactive;
       insights.push({
         type:'amber',
         icon:'📉',
-        title: churnRisk.length+' active '+(churnRisk.length===1?'company hasn’t':'companies haven’t')+' logged in for 30+ days',
-        body: churnRisk.slice(0,3).map(c=>`<strong>${escHtml(c.name)}</strong> — ${c.inactive_days}d`).join(', ')+(churnRisk.length>3?' and '+(churnRisk.length-3)+' more':''),
+        title: counts.inactive+' active '+(counts.inactive===1?'company hasn’t':'companies haven’t')+' logged in for 30+ days',
+        body: churnRisk.slice(0,3).map(c=>`<strong>${escHtml(c.name)}</strong> — ${c.inactive_days}d`).join(', ')+(counts.inactive>3?' and '+(counts.inactive-3)+' more':''),
         action:'A quiet account is a renewal risk even while the subscription is still active — worth a check-in.',
         buttonLabel:'Open Renewals',
         buttonFn:'goToRenewalsFromInsight',
@@ -1191,25 +1190,19 @@
   }
 
   // ── Companies table: sorting ────────────────────────────────────
+  // Sorted by the server, across every page.
   let _coSort={key:'created_at',dir:'desc'};
-  const _coSortAccessors={
-    name:c=>(c.name||'').toLowerCase(),
-    size:c=>(c.employee_count||0)+(c.users||[]).length,
-    expiry:c=>c.subscription_expires_at?new Date(c.subscription_expires_at).getTime():Infinity,
-    created_at:c=>c.created_at?new Date(c.created_at).getTime():0,
-  };
   function setCompanySort(key){
     if(_coSort.key===key) _coSort.dir = _coSort.dir==='asc'?'desc':'asc';
-    else _coSort={key,dir:key==='name'?'asc':'desc'};
-    filterCompanies();
+    else _coSort={key,dir:key==='name'||key==='expiry'?'asc':'desc'};
+    _coPage.offset=0;
+    loadCompaniesPage().catch(err=>alert(err.message));
   }
-  function sortCompanies(data){
-    const acc=_coSortAccessors[_coSort.key]||_coSortAccessors.created_at;
-    const dir=_coSort.dir==='asc'?1:-1;
-    return [...data].sort((a,b)=>{
-      const va=acc(a), vb=acc(b);
-      if(va<vb) return -1*dir; if(va>vb) return 1*dir; return 0;
-    });
+  function goCompanyPage(delta){
+    const next=_coPage.offset+delta*_coPage.limit;
+    if(next<0||next>=_coPage.total) return;
+    _coPage.offset=next;
+    loadCompaniesPage().catch(err=>alert(err.message));
   }
   function sortArrow(key){
     if(_coSort.key!==key) return '<span class="sort-arrow">↕</span>';
@@ -1219,23 +1212,24 @@
 
   function renderCompanies(data){
     if(!data.length){
-      document.getElementById('sa-companies-wrap').innerHTML = '<div class="loading-state">No companies yet — create one above.</div>';
+      const filtered=(document.getElementById('sa-co-search')?.value||'').trim()||document.getElementById('sa-co-status-filter')?.value;
+      document.getElementById('sa-companies-wrap').innerHTML = filtered
+        ? '<div class="loading-state">No companies match.</div>'
+        : '<div class="loading-state">No companies yet — create one above.</div>';
       return;
     }
-    const sorted=sortCompanies(data);
     const now = new Date();
-    const rows = sorted.map(c=>{
+    const rows = data.map(c=>{
       const exp = c.subscription_expires_at ? new Date(c.subscription_expires_at) : null;
       const expBadge = !exp ? '<span class="b b-g"><span class="b-dot"></span>Active</span>'
         : exp < now ? '<span class="b b-r"><span class="b-dot"></span>Expired</span>'
         : '<span class="b b-a"><span class="b-dot"></span>'+c.subscription_expires_at.slice(0,10)+'</span>';
-      const nonSaUsers=(c.users||[]).filter(u=>u.role!=='superadmin');
       return `<tr>
         <td>
           <div style="font-weight:600">${escHtml(c.name)}</div>
           <div class="mono" style="font-size:var(--fs-xs);color:var(--muted)">${escHtml(c.trn||'No TRN')} · ${escHtml(c.country||'')}${c.currency?' · '+escHtml(c.currency):''}</div>
         </td>
-        <td class="mono" style="font-size:var(--fs-sm);color:var(--muted)">${c.employee_count||0} emp · ${(c.branches||[]).length} br · ${nonSaUsers.length} usr<div style="margin-top:2px">${_lastLoginChip(c)}</div></td>
+        <td class="mono" style="font-size:var(--fs-sm);color:var(--muted)">${c.employee_count||0} emp · ${c.branch_count||0} br · ${c.user_count||0} usr<div style="margin-top:2px">${_lastLoginChip(c)}</div></td>
         <td>${expBadge}</td>
         <td style="font-size:var(--fs-xs);color:var(--muted)">${c.created_at ? c.created_at.slice(0,10) : '—'}</td>
         <td>
@@ -1273,7 +1267,18 @@
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
-      </div>`;
+      </div>
+      ${_companyPager()}`;
+  }
+
+  function _companyPager(){
+    const {offset,limit,total}=_coPage;
+    const from=total?offset+1:0, to=Math.min(offset+limit,total);
+    return `<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:10px 4px 2px;font-size:var(--fs-sm);color:var(--muted)">
+      <span>${from}–${to} of ${total}</span>
+      <button class="btn btn-g btn-sm" onclick="goCompanyPage(-1)" ${offset<=0?'disabled':''}>‹ Prev</button>
+      <button class="btn btn-g btn-sm" onclick="goCompanyPage(1)" ${to>=total?'disabled':''}>Next ›</button>
+    </div>`;
   }
 
   // ── Row overflow menus ───────────────────────────────────────────
@@ -1345,13 +1350,33 @@
     </div>`;
   }
 
+  let _drawerCompany=null;
   function openCompanyDrawer(companyId, tab){
     _drawerCompanyId=companyId;
     _drawerTab=tab||'users';
+    _drawerCompany=null;
     closeAllMenus();
     document.getElementById('drawer-overlay').classList.add('on');
     document.getElementById('company-drawer').classList.add('on');
-    renderDrawer();
+    document.getElementById('drawer-title').textContent=(companies.find(x=>x.id===companyId)||{}).name||'Company';
+    document.getElementById('drawer-sub').textContent='';
+    document.getElementById('drawer-tabs').innerHTML='';
+    document.getElementById('drawer-body').innerHTML='<div class="loading-state"><span class="spinner"></span> Loading…</div>';
+    loadDrawerCompany();
+  }
+  // Users, branches and up to 200 employees come with GET /superadmin/companies/{id}.
+  async function loadDrawerCompany(){
+    const id=_drawerCompanyId;
+    try{
+      const res=await apiFetch('/superadmin/companies/'+encodeURIComponent(id));
+      const data=await res.json();
+      if(id!==_drawerCompanyId) return;
+      if(!res.ok){ document.getElementById('drawer-body').innerHTML='<div class="loading-state" style="color:var(--red)">'+escHtml(data.detail||'Failed to load.')+'</div>'; return; }
+      _drawerCompany=data;
+      renderDrawer();
+    }catch(err){
+      document.getElementById('drawer-body').innerHTML='<div class="loading-state" style="color:var(--red)">'+escHtml(err.message)+'</div>';
+    }
   }
   function closeCompanyDrawer(){
     document.getElementById('drawer-overlay').classList.remove('on');
@@ -1362,8 +1387,8 @@
     renderDrawer();
   }
   function renderDrawer(){
-    const c=companies.find(x=>x.id===_drawerCompanyId);
-    if(!c) return;
+    const c=_drawerCompany;
+    if(!c||c.id!==_drawerCompanyId) return;
     const nonSaUsers=(c.users||[]).filter(u=>u.role!=='superadmin');
     document.getElementById('drawer-title').textContent=c.name;
     document.getElementById('drawer-sub').textContent=(c.trn||'No TRN')+' · '+(c.country||'—')+(c.currency?' · '+c.currency:'');
@@ -1472,9 +1497,14 @@
   }
 
   // ── Edit company ──────────────────────────────────────────────
-  function openEditCompany(id){
-    const c = companies.find(x=>x.id===id);
-    if(!c) return;
+  async function openEditCompany(id){
+    // The list rows carry no users; the dialog needs the admin user, so load the company.
+    let c;
+    try{
+      const res=await apiFetch('/superadmin/companies/'+encodeURIComponent(id));
+      c=await res.json();
+      if(!res.ok){ alert(c.detail||'Failed to load company.'); return; }
+    }catch(err){ alert(err.message); return; }
     document.getElementById('edit-co-err').style.display='none';
     document.getElementById('edit-co-id').value=c.id;
     document.getElementById('edit-co-name').value=c.name||'';
@@ -2180,38 +2210,40 @@
     wrap.innerHTML=html;
   }
 
-  function populateAuditCompanyFilter(companiesData){
-    const sel=document.getElementById('sa-audit-company');
-    if(!sel)return;
-    const existing=new Set([...sel.options].map(o=>o.value));
-    companiesData.forEach(c=>{
-      if(!existing.has(c.id)){
-        const opt=document.createElement('option');
-        opt.value=c.id;
-        opt.textContent=c.name;
-        sel.appendChild(opt);
-      }
-    });
+  // Audit log company filter: type to search companies on the server (a drop-down of
+  // every company stops working at thousands). The chosen company's id goes into the
+  // hidden #sa-audit-company that loadAuditLogs() reads.
+  let _auditCoTimer=null, _auditCoMatches=new Map();
+  function onAuditCompanyInput(){
+    const input=document.getElementById('sa-audit-company-q');
+    const hidden=document.getElementById('sa-audit-company');
+    const text=(input.value||'').trim();
+    const picked=_auditCoMatches.get(text);
+    if(!text||picked){
+      const id=picked||'';
+      if(hidden.value!==id){ hidden.value=id; loadAuditLogs(); }
+      if(!text) return;
+    }
+    clearTimeout(_auditCoTimer);
+    _auditCoTimer=setTimeout(async()=>{
+      try{
+        const res=await apiFetch('/superadmin/companies?'+new URLSearchParams({q:text, limit:20, sort:'name', dir:'asc'}));
+        const data=await res.json();
+        if(!res.ok) return;
+        _auditCoMatches=new Map(data.items.map(c=>[c.name, c.id]));
+        document.getElementById('sa-audit-company-list').innerHTML=data.items.map(c=>`<option value="${escHtml(c.name)}"></option>`).join('');
+      }catch(err){ /* suggestions are optional */ }
+    }, 250);
   }
 
-  // ── Company search + status filter ─────────────────────────────
+  // ── Company search + status filter (both run on the server) ────
+  let _coSearchTimer=null;
   function filterCompanies(){
-    const q=(document.getElementById('sa-co-search').value||'').toLowerCase();
-    const status=document.getElementById('sa-co-status-filter')?.value||'';
-    const now=new Date();
-    const in7=new Date(); in7.setDate(now.getDate()+7);
-    let filtered=q?companies.filter(c=>(c.name||'').toLowerCase().includes(q)||(c.trn||'').toLowerCase().includes(q)||(c.country||'').toLowerCase().includes(q)):companies;
-    if(status){
-      filtered=filtered.filter(c=>{
-        const exp=c.subscription_expires_at?new Date(c.subscription_expires_at):null;
-        if(status==='active')return !exp||exp>=now;
-        if(status==='expiring')return exp&&exp>now&&exp<=in7;
-        if(status==='expired')return exp&&exp<now;
-        if(status==='inactive')return (c.inactive_days??0)>=30;
-        return true;
-      });
-    }
-    renderCompanies(filtered);
+    clearTimeout(_coSearchTimer);
+    _coSearchTimer=setTimeout(()=>{
+      _coPage.offset=0;
+      loadCompaniesPage().catch(err=>alert(err.message));
+    }, 250);
   }
 
   // ── Mini SVG bar chart (no charting library in this codebase — kept consistent) ──
@@ -2254,6 +2286,8 @@
     const wrap=document.getElementById('sa-usage-wrap');
     const coWrap=document.getElementById('sa-usage-companies-wrap');
     const modWrap=document.getElementById('sa-usage-modules-wrap');
+    // The users list has its own paged endpoint; it doesn't wait for the charts.
+    renderUsageUsersList();
     wrap.innerHTML='<div class="loading-state"><span class="spinner"></span> Loading…</div>';
     try{
       const res=await apiFetch(`/superadmin/usage-analytics?days=${days}`);
@@ -2293,65 +2327,82 @@
             <div class="mono" style="width:40px;text-align:right;font-size:12px;color:var(--muted)">${m.count}</div>
           </div>`).join('');
       }
-
-      renderUsageUsersList();
     }catch(err){
       wrap.innerHTML='<div class="loading-state" style="color:var(--red)">Failed to load: '+escHtml(err.message)+'</div>';
     }
   }
 
-  // ── Current users list (flattened from the already-loaded companies,
-  // each of which carries its own nested `users` array — no extra
-  // round-trip needed) ────────────────────────────────────────────
-  function _allUsers(){
-    return companies.flatMap(c=>(c.users||[]).map(u=>({...u, company_name:c.name, company_id:c.id})));
-  }
-
+  // ── Current users list: paged and searched on the server (GET /superadmin/users) ──
+  const _usersPage={offset:0, limit:50, total:0};
+  let _usersTimer=null, _usersSeq=0;
   function renderUsageUsersList(){
+    // Typing in the search box: wait for a pause, then start from the first page.
+    clearTimeout(_usersTimer);
+    _usersTimer=setTimeout(()=>{ _usersPage.offset=0; loadUsersPage(); }, 250);
+  }
+  function goUsersPage(delta){
+    const next=_usersPage.offset+delta*_usersPage.limit;
+    if(next<0||next>=_usersPage.total) return;
+    _usersPage.offset=next;
+    loadUsersPage();
+  }
+  async function loadUsersPage(){
     const wrap=document.getElementById('sa-usage-users-wrap');
     const subEl=document.getElementById('sa-usage-users-sub');
     if(!wrap) return;
-    const q=(document.getElementById('sa-usage-users-search')?.value||'').trim().toLowerCase();
-    let users=_allUsers();
-    if(q){
-      users=users.filter(u=>
-        (u.full_name||'').toLowerCase().includes(q) ||
-        (u.email||'').toLowerCase().includes(q) ||
-        (u.company_name||'').toLowerCase().includes(q) ||
-        (u.role||'').toLowerCase().includes(q));
+    const seq=++_usersSeq;
+    const q=(document.getElementById('sa-usage-users-search')?.value||'').trim();
+    try{
+      const res=await apiFetch('/superadmin/users?'+new URLSearchParams({q, limit:_usersPage.limit, offset:_usersPage.offset}));
+      const data=await res.json();
+      if(seq!==_usersSeq) return;
+      if(!res.ok){ wrap.innerHTML='<div class="loading-state" style="color:var(--red)">'+escHtml(data.detail||'Failed to load users.')+'</div>'; return; }
+      _usersPage.total=data.total;
+      const users=data.items;
+      if(subEl) subEl.textContent=data.total+' user'+(data.total===1?'':'s')+(q?' match':' across all tenant companies');
+      if(!users.length){
+        wrap.innerHTML='<div class="loading-state" style="color:var(--muted)">No users match.</div>';
+        return;
+      }
+      const {offset,limit,total}=_usersPage;
+      const to=Math.min(offset+limit,total);
+      wrap.innerHTML='<div style="overflow-x:auto"><table class="tbl" style="font-size:12.5px"><thead><tr><th>Name</th><th>Email</th><th>Company</th><th>Role</th><th>Status</th><th>Joined</th></tr></thead><tbody>'+
+        users.map(u=>{
+          const statusBadge=u.is_active!==false?'<span class="b b-g">Active</span>':'<span class="b b-r">Disabled</span>';
+          return `<tr>
+            <td style="font-weight:500">${escHtml(u.full_name||'—')}</td>
+            <td class="mono">${escHtml(u.email||'')}</td>
+            <td>${escHtml(u.company_name||'—')}</td>
+            <td><span class="b b-p" style="font-size:10px">${escHtml(u.role||'')}</span></td>
+            <td>${statusBadge}</td>
+            <td style="color:var(--muted)">${u.created_at?u.created_at.slice(0,10):'—'}</td>
+          </tr>`;
+        }).join('')+'</tbody></table></div>'+
+        `<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:10px 4px 2px;font-size:var(--fs-sm);color:var(--muted)">
+          <span>${offset+1}–${to} of ${total}</span>
+          <button class="btn btn-g btn-sm" onclick="goUsersPage(-1)" ${offset<=0?'disabled':''}>‹ Prev</button>
+          <button class="btn btn-g btn-sm" onclick="goUsersPage(1)" ${to>=total?'disabled':''}>Next ›</button>
+        </div>`;
+    }catch(err){
+      wrap.innerHTML='<div class="loading-state" style="color:var(--red)">'+escHtml(err.message)+'</div>';
     }
-    users.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
-    if(subEl) subEl.textContent=users.length+' user'+(users.length===1?'':'s')+' across '+companies.length+' compan'+(companies.length===1?'y':'ies');
-    if(!users.length){
-      wrap.innerHTML='<div class="loading-state" style="color:var(--muted)">No users match.</div>';
-      return;
-    }
-    wrap.innerHTML='<div style="overflow-x:auto"><table class="tbl" style="font-size:12.5px"><thead><tr><th>Name</th><th>Email</th><th>Company</th><th>Role</th><th>Status</th><th>Joined</th></tr></thead><tbody>'+
-      users.map(u=>{
-        const statusBadge=u.is_active!==false?'<span class="b b-g">Active</span>':'<span class="b b-r">Disabled</span>';
-        return `<tr>
-          <td style="font-weight:500">${escHtml(u.full_name||'—')}</td>
-          <td class="mono">${escHtml(u.email||'')}</td>
-          <td>${escHtml(u.company_name||'—')}</td>
-          <td><span class="b b-p" style="font-size:10px">${escHtml(u.role||'')}</span></td>
-          <td>${statusBadge}</td>
-          <td style="color:var(--muted)">${u.created_at?u.created_at.slice(0,10):'—'}</td>
-        </tr>`;
-      }).join('')+'</tbody></table></div>';
   }
 
-  function exportUsersCSV(){
-    const header=['Name','Email','Company','Role','Status','Joined'];
-    const rows=_allUsers().map(u=>[
-      u.full_name||'', u.email||'', u.company_name||'', u.role||'',
-      u.is_active!==false?'Active':'Disabled', u.created_at?u.created_at.slice(0,10):'',
-    ].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(','));
-    const csv=[header.join(','),...rows].join('\n');
-    const blob=new Blob([csv],{type:'text/csv'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url;a.download='users-'+new Date().toISOString().slice(0,10)+'.csv';
-    a.click();URL.revokeObjectURL(url);
+  async function exportUsersCSV(btn){
+    const q=(document.getElementById('sa-usage-users-search')?.value||'').trim();
+    await _downloadServerFile('/superadmin/users/export.csv?'+new URLSearchParams({q}), 'users.csv', btn);
+  }
+
+  // Downloads a file the server builds (CSV exports): every matching row, not just the page on screen.
+  async function _downloadServerFile(path, fallbackName, btn){
+    const label=btn?btn.textContent:'';
+    if(btn){ btn.disabled=true; btn.textContent='Preparing…'; }
+    try{
+      const res=await apiFetch(path);
+      if(!res.ok){ const d=await res.json().catch(()=>({})); alert(d.detail||'Download failed.'); return; }
+      await _downloadBlobResponse(res, fallbackName);
+    }catch(err){ alert(err.message); }
+    finally{ if(btn){ btn.disabled=false; btn.textContent=label; } }
   }
 
   // ── System health ───────────────────────────────────────────────
@@ -2531,11 +2582,7 @@
   // Renewals page's own bulk bar uses) — one round trip, one place computing
   // "extend from current expiry, or from today if already lapsed".
   async function bulkExtendExpiring(){
-    const now=new Date(); const in7=new Date(); in7.setDate(now.getDate()+7);
-    const targets=companies.filter(c=>{
-      const exp=c.subscription_expires_at?new Date(c.subscription_expires_at):null;
-      return exp && exp>now && exp<=in7;
-    });
+    const targets=(_overview&&_overview.samples.expiring)||[];
     if(!targets.length){ alert('Nothing to extend — refresh the Overview to recheck.'); return; }
     if(!confirm(`Extend ${targets.length} ${targets.length===1?'company':'companies'} by 30 days each?`)) return;
     try{
@@ -2682,7 +2729,7 @@
   }
 
   // ── Export companies CSV ──────────────────────────────────────
-  // ── Download Backup (company-wise + all companies) ────────────────
+  // ── Download Backup (one company; every company is backed up nightly) ──
   // Reuses the exact same restorable .sql format as a company owner's own
   // Download Backup (Settings > Data > Download Backup), just reachable
   // here without needing to log in as / impersonate that company.
@@ -2707,31 +2754,10 @@
       await _downloadBlobResponse(res, 'taxflow-db-'+id.slice(0,8)+'.sql');
     }catch(err){ alert(err.message); }
   }
-  async function downloadAllCompaniesBackup(btn){
-    const label=btn?btn.textContent:'';
-    if(btn){ btn.disabled=true; btn.textContent='Preparing…'; }
-    try{
-      const res=await apiFetch('/superadmin/companies/backup-all');
-      if(!res.ok){ const d=await res.json().catch(()=>({})); alert(d.detail||'Backup download failed.'); return; }
-      await _downloadBlobResponse(res, 'taxflow-all-companies-backup.zip');
-    }catch(err){ alert(err.message); }
-    finally{ if(btn){ btn.disabled=false; btn.textContent=label; } }
-  }
-
-  function exportCompaniesCSV(){
-    const now=new Date();
-    const header=['Name','TRN','Country','Employees','Users','Status','Expires','Created'];
-    const rows=companies.map(c=>{
-      const exp=c.subscription_expires_at?new Date(c.subscription_expires_at):null;
-      const status=!exp?'Active (no expiry)':exp<now?'Expired':'Active';
-      return [c.name||'',c.trn||'',c.country||'',c.employee_count||0,(c.users||[]).filter(u=>u.role!=='superadmin').length,status,c.subscription_expires_at?c.subscription_expires_at.slice(0,10):'',c.created_at?c.created_at.slice(0,10):''].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',');
-    });
-    const csv=[header.join(','),...rows].join('\n');
-    const blob=new Blob([csv],{type:'text/csv'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url;a.download='companies-'+new Date().toISOString().slice(0,10)+'.csv';
-    a.click();URL.revokeObjectURL(url);
+  async function exportCompaniesCSV(btn){
+    const q=(document.getElementById('sa-co-search')?.value||'').trim();
+    const status=document.getElementById('sa-co-status-filter')?.value||'';
+    await _downloadServerFile('/superadmin/companies/export.csv?'+new URLSearchParams({q, status}), 'companies.csv', btn);
   }
 
   loadDashboard();

@@ -173,6 +173,121 @@ def doc_columns(record: dict[str, Any], collection: str = "salesInvoices") -> di
     }
 
 
+# ── report figures ─────────────────────────────────────────────────────────────
+# The figures reports and the dashboard total (revenue, purchases, VAT, paid/pending,
+# branch performance), stamped as columns so those totals are SQL sums instead of
+# decoding every record on each request. The rules below are the ones reports.py used
+# on the decoded payloads, moved here unchanged; reports.py now imports them.
+FIGURE_COLLECTIONS = frozenset({"salesInvoices", "purchaseRecords", "bills", "expenses"})
+PAID_STATUSES = frozenset({"paid", "posted", "complete", "completed", "received", "settled"})
+
+
+def money(value: object) -> Decimal:
+    return Decimal(str(value or 0)).quantize(Decimal("0.01"))
+
+
+def normalized_ref(value: object) -> str:
+    return str(value or "").strip().lower()
+
+
+def record_amount(record: dict[str, Any], *keys: str) -> Decimal:
+    for key in keys:
+        value = record.get(key)
+        if value not in (None, ""):
+            return money(value)
+    return Decimal("0.00")
+
+
+def purchase_row_amount(row: dict[str, Any]) -> Decimal:
+    """Total of a purchase record or bill, trying several fields in turn."""
+    # 1. Common total fields, skipping zero (might be an unset placeholder)
+    for key in ("total", "grand_total", "amount"):
+        val = row.get(key)
+        if val not in (None, ""):
+            d = money(val)
+            if d != Decimal("0"):
+                return d
+    # 2. net_amount + tax_amount
+    net = money(row.get("net_amount") or row.get("subtotal") or 0)
+    tax = money(row.get("tax_amount") or row.get("vat_amount") or row.get("vat") or 0)
+    if net or tax:
+        return net + tax
+    # 3. Sum of product lines
+    lines = row.get("lines")
+    if isinstance(lines, list):
+        line_sum = sum(
+            money(ln.get("total") or ln.get("line_total") or ln.get("amount") or 0)
+            for ln in lines
+        )
+        if line_sum:
+            return line_sum
+    return Decimal("0.00")
+
+
+def purchase_row_net(row: dict[str, Any]) -> Decimal:
+    """Net (excl. VAT) of a purchase record or bill."""
+    net = money(row.get("net_amount") or row.get("subtotal") or 0)
+    if net:
+        return net
+    total = purchase_row_amount(row)
+    vat = money(row.get("vat_amount") or row.get("tax_amount") or row.get("vat") or 0)
+    return total - vat if total else Decimal("0.00")
+
+
+def posting_ref(record: dict[str, Any], collection: str) -> str:
+    """The reference a record posts its real Invoice / input TaxLine under (app_data.py
+    sync_domain_model()), which reports use to avoid counting it twice."""
+    if collection == "salesInvoices":
+        return normalized_ref(record.get("invoice_no") or record.get("invoice_number") or record.get("ref"))
+    if collection == "purchaseRecords":
+        return normalized_ref(
+            record.get("ref") or record.get("invoice_no")
+            or (f"PURCHASE-{record['id']}" if record.get("id") else None)
+        )
+    if collection == "bills":
+        return normalized_ref(record.get("bill_no") or (f"BILL-{record['id']}" if record.get("id") else None))
+    return ""
+
+
+def _safe(compute: Callable[[], Decimal]) -> Decimal | None:
+    # A value money() can't read (e.g. "AED 100") used to fail the whole report; the
+    # record now just doesn't add to that total.
+    try:
+        return compute()
+    except (InvalidOperation, TypeError, ValueError, AttributeError):
+        return None
+
+
+def doc_figures(record: dict[str, Any], collection: str) -> dict[str, Any]:
+    """fig_* columns for FIGURE_COLLECTIONS:
+    fig_status  status as reports compare it (trimmed, lower-case, "" when unset)
+    fig_ref     posting_ref()
+    fig_gross   sales: total/amount/net_amount; purchases and bills: purchase_row_amount()
+    fig_net     sales: subtotal/net_amount/amount; purchases and bills: purchase_row_net();
+                expenses: subtotal/net_amount/total/amount
+    fig_vat     sales: vat_amount/vat/tax_amount; purchases and bills: tax_amount/vat_amount/vat
+    fig_taxable purchases and bills: net_amount/subtotal/taxable_amount (input VAT return box)
+    fig_paid    the paid / paid_amount the record itself carries"""
+    out: dict[str, Any] = {
+        "fig_status": normalized_ref(record.get("status"))[:40],
+        "fig_ref": posting_ref(record, collection)[:160] or None,
+        "fig_gross": None, "fig_net": None, "fig_vat": None, "fig_taxable": None,
+        "fig_paid": _safe(lambda: record_amount(record, "paid", "paid_amount")),
+    }
+    if collection == "salesInvoices":
+        out["fig_gross"] = _safe(lambda: record_amount(record, "total", "amount", "net_amount"))
+        out["fig_net"] = _safe(lambda: record_amount(record, "subtotal", "net_amount", "amount"))
+        out["fig_vat"] = _safe(lambda: record_amount(record, "vat_amount", "vat", "tax_amount"))
+    elif collection in ("purchaseRecords", "bills"):
+        out["fig_gross"] = _safe(lambda: purchase_row_amount(record))
+        out["fig_net"] = _safe(lambda: purchase_row_net(record))
+        out["fig_vat"] = _safe(lambda: record_amount(record, "tax_amount", "vat_amount", "vat"))
+        out["fig_taxable"] = _safe(lambda: record_amount(record, "net_amount", "subtotal", "taxable_amount"))
+    elif collection == "expenses":
+        out["fig_net"] = _safe(lambda: record_amount(record, "subtotal", "net_amount", "total", "amount"))
+    return out
+
+
 def stamp_doc_columns(target: AppDataRecord) -> None:
     try:
         record = json.loads(target.payload or "{}")
@@ -182,6 +297,9 @@ def stamp_doc_columns(target: AppDataRecord) -> None:
         record = {}
     for column, value in doc_columns(record, target.collection).items():
         setattr(target, column, value)
+    if target.collection in FIGURE_COLLECTIONS:
+        for column, value in doc_figures(record, target.collection).items():
+            setattr(target, column, value)
 
 
 def _allocations(record: dict[str, Any]) -> list[tuple[str, Decimal]]:

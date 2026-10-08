@@ -135,7 +135,11 @@ _revoked_impersonation_jtis: dict[str, float] = {}
 def revoke_impersonation_jti(jti: str, ttl_seconds: int) -> None:
     import app.cache as cache
     cache.set(f"revoked_imp:{jti}", True, ttl=ttl_seconds)
-    _revoked_impersonation_jtis[jti] = datetime.now(UTC).timestamp() + ttl_seconds
+    now = datetime.now(UTC).timestamp()
+    # Drop entries whose token has expired anyway, so the list can't grow forever.
+    for old in [k for k, exp in _revoked_impersonation_jtis.items() if exp <= now]:
+        _revoked_impersonation_jtis.pop(old, None)
+    _revoked_impersonation_jtis[jti] = now + ttl_seconds
 
 
 def is_impersonation_token_revoked(token: str) -> bool:

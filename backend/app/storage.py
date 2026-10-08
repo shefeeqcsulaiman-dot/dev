@@ -93,7 +93,8 @@ def delete_old_backups(prefix: str, keep_days: int) -> list[str]:
     if use_local_storage():
         root = LOCAL_STORAGE_ROOT / prefix
         if root.exists():
-            for f in root.iterdir():
+            # Recursive: nightly backups are one file per company under a dated folder.
+            for f in root.rglob("*"):
                 if f.is_file() and datetime.fromtimestamp(f.stat().st_mtime, tz=UTC) < cutoff:
                     f.unlink()
                     deleted.append(str(f))
@@ -101,8 +102,10 @@ def delete_old_backups(prefix: str, keep_days: int) -> list[str]:
     client = s3_client()
     paginator = client.get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=settings.s3_bucket, Prefix=prefix):
-        for obj in page.get("Contents", []):
-            if obj["LastModified"] < cutoff:
-                client.delete_object(Bucket=settings.s3_bucket, Key=obj["Key"])
-                deleted.append(obj["Key"])
+        old = [obj["Key"] for obj in page.get("Contents", []) if obj["LastModified"] < cutoff]
+        # Up to 1,000 keys per request (one file per company per night adds up).
+        for i in range(0, len(old), 1000):
+            chunk = old[i:i + 1000]
+            client.delete_objects(Bucket=settings.s3_bucket, Delete={"Objects": [{"Key": k} for k in chunk], "Quiet": True})
+            deleted.extend(chunk)
     return deleted

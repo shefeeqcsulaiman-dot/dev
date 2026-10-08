@@ -1734,28 +1734,6 @@ def sql_dump_file_response(db: Session, company_id: str, exported_by: str) -> Re
 
 
 
-def write_all_companies_backup_zip(db: Session, exported_by: str, fileobj: Any) -> None:
-    """Zips every tenant company's SQL backup into `fileobj` (a temp file, not memory). Shared by
-    the on-demand /superadmin/companies/backup-all endpoint and the nightly Celery task.
-
-    Built one company at a time: each company's rows are released from the session after its
-    file is written. Building the whole archive in memory used to add ~200 MB+ to the process
-    (and Python keeps that memory), growing with the platform's total data."""
-    companies = [
-        (company_id, name)
-        for company_id, name in db.query(Company.id, Company.name)
-        .filter(or_(Company.trn.is_(None), Company.trn != "SUPERADMIN-INTERNAL"))
-        .order_by(Company.name.asc())
-        .all()
-    ]
-    with zipfile.ZipFile(fileobj, "w", zipfile.ZIP_DEFLATED) as zf:
-        for company_id, name in companies:
-            safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in (name or company_id)).strip() or company_id
-            with zf.open(f"{safe_name}/{company_sql_dump_filename(company_id)}", "w", force_zip64=True) as entry:
-                write_company_sql_dump(db, company_id, exported_by, entry)
-            db.expunge_all()
-
-
 @router.get("/db-dump")
 @limiter.limit("5/minute")
 def export_db_dump(
