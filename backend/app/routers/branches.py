@@ -2,7 +2,7 @@ import json
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from jose import jwt
+import jwt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 

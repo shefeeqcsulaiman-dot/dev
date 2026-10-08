@@ -270,6 +270,27 @@ def install_query_timing(engine, slow_query_ms: int) -> None:
 
 # ── Middleware ───────────────────────────────────────────────────────────────
 
+def route_template(scope: dict) -> str:
+    """The matched route's full template, e.g. "/api/v1/app-data/registers/{collection}".
+
+    FastAPI up to 0.11x copied included routes onto the app with the include_router()
+    prefix already in route.path; newer versions (0.14x, what requirements.txt installs)
+    keep routers nested, so route.path is relative to the prefix. The prefix is whatever
+    part of the request path comes before the part the route's own pattern matches."""
+    route = scope.get("route")
+    template = getattr(route, "path", None)
+    if not template:
+        return "(unmatched)"
+    path = scope.get("path") or ""
+    regex = getattr(route, "path_regex", None)
+    if regex is None or regex.match(path):
+        return template
+    for i, ch in enumerate(path):
+        if ch == "/" and i and regex.match(path[i:]):
+            return path[:i] + template
+    return template
+
+
 def _is_monitored(path: str) -> bool:
     return path.startswith("/api/") or path.startswith("/iclock/")
 
@@ -293,8 +314,7 @@ async def time_request(request, call_next, slow_request_ms: int):
     finally:
         total = (time.perf_counter() - start) * 1000
         _request_db.reset(token)
-        route = request.scope.get("route")
-        key = f"{request.method} {getattr(route, 'path', None) or '(unmatched)'}"
+        key = f"{request.method} {route_template(request.scope)}"
         record(key, total, status, acc[0], acc[1])
         if slow_request_ms and total >= slow_request_ms:
             log.warning(
