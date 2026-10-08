@@ -59,6 +59,11 @@ Rough infrastructure cost at that size: a few thousand US dollars a month (reven
 - [ ] Security certification (ISO 27001 / SOC 2)
 - [ ] Accredited e-invoicing provider status
 
+## Products, customers and suppliers beyond what start-up loads (2026-10-08)
+
+- Start-up carries the newest 2,000 products (customers and suppliers share the overall cap). The pickers (invoice and quotation lines, purchase lines, customer fields) and the search boxes of the Item Master, Customers and Suppliers tables also ask `GET /app-data/catalog/<list>?q=` as you type (2+ characters) and add what it finds, so every record can be found, chosen and opened. 16-21 ms per search on 2.4M app-data rows.
+- Measured with 2,500 products in the browser, start-up froze for minutes: `invoiceProductRecords()` scanned every Item Master row for each stock-mapping row (one mapping per product: ~13 s per call at 2,000, called several times). Now a lookup built once per call (~0.16 s). The duplicate checks behind loading customers and suppliers (`hasFirstCellValue()`, the supplier TRN check) scanned the whole table per row too; they now use an index per table that is rebuilt whenever rows change behind its back (2,000 checks: 4.7 s -> 14 ms).
+
 ## Background jobs: how they work now (2026-10-08)
 
 - `POST /app-data?action=documents.extract|invoices.import&background=1` saves a `Job` row and returns its id at once; `GET /app-data/jobs/{id}` gives `status` (queued/running/completed/failed), `result` once completed, `error` once failed. Without `background=1` the actions answer in the request, as before. The browser (`runExtractionJob()` in app.js) uses the job path for purchase uploads, expense receipts and sales import, asking every 2 s for up to 15 minutes, so a long file or .zip batch no longer ends in a 504.
