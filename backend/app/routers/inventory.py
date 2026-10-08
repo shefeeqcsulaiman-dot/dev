@@ -4,7 +4,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.auth_principal import resolve_active_branch
@@ -356,9 +356,23 @@ def set_inventory_backfill_disabled(db: Session, company_id: str) -> None:
 
 
 def backfill_purchase_stock_movements(db: Session, principal: Principal) -> None:
+    # Purchases whose reference already has purchase movements are skipped in SQL, before
+    # anything is loaded or parsed: this runs on every mappings/stock-levels/stock-movements
+    # read, and used to parse the company's whole purchase history each time (0.2-0.3 s at
+    # 3,000 purchases, growing every year). A record's key is its "ref", which is the
+    # reference used below whenever "ref" is set; records without one are still checked.
+    covered = (
+        db.query(StockMovement.reference)
+        .filter(StockMovement.company_id == principal.company_id, StockMovement.movement_type == "purchase",
+                StockMovement.reference.isnot(None))
+    )
     records = (
         db.query(AppDataRecord)
-        .filter(AppDataRecord.company_id == principal.company_id, AppDataRecord.collection == "purchaseRecords")
+        .filter(
+            AppDataRecord.company_id == principal.company_id,
+            AppDataRecord.collection == "purchaseRecords",
+            or_(AppDataRecord.record_key.is_(None), AppDataRecord.record_key.notin_(covered.scalar_subquery())),
+        )
         .all()
     )
     if not records:
