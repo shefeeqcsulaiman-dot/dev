@@ -2,7 +2,7 @@
 
 TaxFlow is a UAE business management platform for sales, purchases, accounting, tax, eInvoicing, payroll, HR, rota planning, documents, reporting, approvals, and audit control.
 
-The system is live in production at `https://dev.etaxflow.com` on DigitalOcean App Platform. The frontend is a vanilla JS single-page app served by FastAPI. The backend uses PostgreSQL with SQLAlchemy 2.0 and Redis for report caching. Local development uses SQLite. The production target is a modular, tenant-aware business system where source transactions, tax lines, accounting, audit, and reporting are controlled by backend services.
+The system is live in production at `https://app.e4cs.com` on DigitalOcean App Platform. The frontend is a vanilla JS single-page app served by FastAPI. The backend uses PostgreSQL with SQLAlchemy 2.0 and Redis for report caching. Local development uses SQLite. The production target is a modular, tenant-aware business system where source transactions, tax lines, accounting, audit, and reporting are controlled by backend services.
 
 ## 1. Current Structure
 
@@ -50,7 +50,7 @@ Login:    admin@taxflowapp.com / admin123
 Production:
 
 ```text
-Live URL:         https://dev.etaxflow.com
+Live URL:         https://app.e4cs.com
 App name:         etaxflow
 Platform:         DigitalOcean App Platform (nyc3)
 Instances:        2–6 × professional-s (2 vCPU / 2 GB), autoscales at 70% CPU
@@ -170,7 +170,7 @@ FastAPI        — auth, tenant context, module APIs, app-data bridge
 
 Do not replace `frontend/index.html` with the TaxFlow HTML. The Vite shell must stay at root.
 
-### Production (https://dev.etaxflow.com)
+### Production (https://app.e4cs.com)
 
 ```text
 Browser
