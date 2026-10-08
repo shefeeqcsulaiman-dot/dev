@@ -10,12 +10,19 @@ no Redis broker today. A job lost to a restart (deploy, worker recycling) is rep
 failed once it has gone STALE_MINUTES without finishing, instead of "running" forever.
 With CELERY_TASK_ALWAYS_EAGER (tests, local dev) the work runs inline before start()
 returns, so results are deterministic.
+
+Fair across companies: one company runs at most MAX_PER_COMPANY jobs at a time on a
+server; its further jobs wait in its own line (status "queued") and start as its
+earlier ones finish, so a company uploading several big batches can't take every
+thread and hold up everyone else's invoice reading. Its running jobs' heartbeats keep
+its waiting ones fresh, so a long wait isn't mistaken for a job lost to a restart.
 """
 from __future__ import annotations
 
 import json
 import logging
 import threading
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from typing import Any, Callable
@@ -30,8 +37,14 @@ log = logging.getLogger("taxflow.background")
 
 STALE_MINUTES = 30
 _MAX_THREADS = 4
+MAX_PER_COMPANY = 2
 _executor: ThreadPoolExecutor | None = None
 _executor_lock = threading.Lock()
+
+# Per company: jobs running now, and jobs waiting their turn (job_id, token, work).
+_line_lock = threading.Lock()
+_running: dict[str, int] = {}
+_waiting: dict[str, deque] = {}
 
 # fn(db, principal) -> JSON-serialisable result
 Work = Callable[[Session, Any], Any]
@@ -54,30 +67,74 @@ def start(db: Session, company_id: str, kind: str, token: str, work: Work) -> Jo
         _run(job.id, token, work)
         db.refresh(job)
     else:
-        _pool().submit(_run, job.id, token, work)
+        _submit(company_id, job.id, token, work)
     return job
+
+
+def _submit(company_id: str, job_id: str, token: str, work: Work) -> None:
+    with _line_lock:
+        if _running.get(company_id, 0) >= MAX_PER_COMPANY:
+            _waiting.setdefault(company_id, deque()).append((job_id, token, work))
+            return
+        _running[company_id] = _running.get(company_id, 0) + 1
+    _pool().submit(_run_in_line, company_id, job_id, token, work)
+
+
+def _run_in_line(company_id: str, job_id: str, token: str, work: Work) -> None:
+    """Run one job, then hand this company's slot to its next waiting job (if any)."""
+    while True:
+        try:
+            _run(job_id, token, work, company_id)
+        except Exception:  # noqa: BLE001 -- _run records failures; never lose the slot
+            log.exception("background job %s crashed outside its own error handling", job_id)
+        with _line_lock:
+            line = _waiting.get(company_id)
+            if line:
+                job_id, token, work = line.popleft()
+                if not line:
+                    del _waiting[company_id]
+            else:
+                _running[company_id] -= 1
+                if not _running[company_id]:
+                    del _running[company_id]
+                return
+
+
+def _waiting_ids(company_id: str | None) -> list[str]:
+    if not company_id:
+        return []
+    with _line_lock:
+        return [item[0] for item in _waiting.get(company_id, ())]
 
 
 HEARTBEAT_SECONDS = 60
 
 
-def _heartbeat(job_id: str, stop: threading.Event) -> None:
+def _heartbeat(job_id: str, stop: threading.Event, company_id: str | None = None) -> None:
     """Touch the running job's updated_at every HEARTBEAT_SECONDS, so a long batch isn't
-    mistaken for one lost to a restart (view() treats STALE_MINUTES of silence as lost)."""
+    mistaken for one lost to a restart (view() treats STALE_MINUTES of silence as lost).
+    The same company's jobs waiting in line behind it are touched too."""
     while not stop.wait(HEARTBEAT_SECONDS):
         try:
             with SessionLocal() as db:
+                now = datetime.now(UTC)
                 db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.running.value).update(
-                    {Job.updated_at: datetime.now(UTC)}, synchronize_session=False
+                    {Job.updated_at: now}, synchronize_session=False
                 )
+                waiting = _waiting_ids(company_id)
+                if waiting:
+                    db.query(Job).filter(Job.id.in_(waiting), Job.status == JobStatus.queued.value).update(
+                        {Job.updated_at: now}, synchronize_session=False
+                    )
                 db.commit()
         except Exception:  # noqa: BLE001 -- a missed beat only matters after STALE_MINUTES
             log.warning("heartbeat for job %s failed", job_id, exc_info=True)
 
 
-def _run(job_id: str, token: str, work: Work) -> None:
+def _run(job_id: str, token: str, work: Work, company_id: str | None = None) -> None:
     stop = threading.Event()
-    beat = threading.Thread(target=_heartbeat, args=(job_id, stop), daemon=True, name=f"taxflow-job-beat-{job_id[:8]}")
+    beat = threading.Thread(target=_heartbeat, args=(job_id, stop, company_id), daemon=True,
+                            name=f"taxflow-job-beat-{job_id[:8]}")
     beat.start()
     try:
         _run_work(job_id, token, work)

@@ -16,7 +16,7 @@ Saved 2026-10-06. Working notes on the road from today's setup to 10,000 compani
 4. **Background jobs (Celery is already set up):** AI invoice reading, bulk uploads, report and PDF exports, payroll runs, backups and biometric sync.
 5. **Proper database migrations (Alembic)** instead of schema changes at startup. The load test showed startup changes clashing when several server processes start at once.
 6. **Split the frontend.** `app.js` is one 1.5 MB file. Load each page's code only when it's opened, and serve static files from a CDN.
-7. **Limits per company, not per IP address.** Rate limits, caches and job queues keyed by company.
+7. **Limits per company, not per IP address.** Rate limits, caches and job queues keyed by company. Status (2026-10-08): rate limits are per login, not per IP (load-test fix); report caches are keyed by company; background jobs are fair per company (`app/background.py`: at most 2 running per company per server, the rest wait in that company's own line, heartbeats keep waiting jobs from looking lost).
 8. **Monitoring:** error tracking (Sentry), response-time dashboards per endpoint, slow-query logs, alerts.
 9. **Load testing on every release**, against PostgreSQL at target size, automated.
 
