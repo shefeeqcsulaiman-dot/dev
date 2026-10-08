@@ -30,7 +30,15 @@ jobs:
           # No real AI calls from CI; tests stub the AI client.
           OPENAI_API_KEY: ""
           ANTHROPIC_API_KEY: ""
-        run: python -m pytest tests -q -p no:warnings
+        # Failing tests are also listed as annotations (::error::) on the run's summary
+        # page, so they can be read without opening the full log.
+        shell: bash
+        run: |
+          set +e
+          python -m pytest tests -q -p no:warnings -rfE 2>&1 | tee pytest.log
+          status=${PIPESTATUS[0]}
+          grep -E '^(FAILED|ERROR) ' pytest.log | head -50 | sed 's/^/::error title=pytest::/'
+          exit $status
 
   tests-postgres:
     # Same suite against PostgreSQL (production's database): SQLite doesn't enforce foreign
@@ -64,7 +72,15 @@ jobs:
           OPENAI_API_KEY: ""
           ANTHROPIC_API_KEY: ""
           TEST_DATABASE_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/taxflow_test
-        run: python -m pytest tests -q -p no:warnings
+        # Failing tests are also listed as annotations (::error::) on the run's summary
+        # page, so they can be read without opening the full log.
+        shell: bash
+        run: |
+          set +e
+          python -m pytest tests -q -p no:warnings -rfE 2>&1 | tee pytest.log
+          status=${PIPESTATUS[0]}
+          grep -E '^(FAILED|ERROR) ' pytest.log | head -50 | sed 's/^/::error title=pytest::/'
+          exit $status
 
   dependency-audit:
     runs-on: ubuntu-latest
