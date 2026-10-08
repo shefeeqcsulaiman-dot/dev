@@ -1735,8 +1735,16 @@ async function deleteInventoryRow(row,{skipConfirm=false,bulk=false,button=null}
 }
 
 function inventoryRowCellText(row,dataIndex){
-  const cells=[...row.children].filter(cell=>cell.dataset.inventoryBulkCol!=='1');
-  return cells[dataIndex]?.textContent.trim()||'';
+  // The dataIndex-th cell, not counting bulk-select checkbox cells. Walks the cells in
+  // place: copying and filtering them into an array on every call cost ~18 µs each, and
+  // start-up made 11,000+ calls at 520 products.
+  let seen=0;
+  for(let cell=row?.firstElementChild;cell;cell=cell.nextElementSibling){
+    if(cell.dataset.inventoryBulkCol==='1')continue;
+    if(seen===dataIndex)return cell.textContent.trim();
+    seen++;
+  }
+  return '';
 }
 
 function inventoryProductRecordFromRow(row){
@@ -5354,9 +5362,17 @@ const DEMO_TEXT_VALUES=[
   'Sharjah Sales Office'
 ];
 
+// The demo phrases as one case-insensitive pattern, built on first use. Checking each
+// phrase separately lowercased every text node 27 times on every start-up (~20 ms in
+// clearDemoTextNodes() alone). var: no TDZ trouble if called before this line runs.
+var _demoTextRe=null;
+function _demoTextPattern(){
+  return _demoTextRe||(_demoTextRe=new RegExp(DEMO_TEXT_VALUES.map(item=>item.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|'),'i'));
+}
+
 function containsDemoText(value){
   const text=String(value||'');
-  return DEMO_TEXT_VALUES.some(item=>text.toLowerCase().includes(item.toLowerCase()))
+  return _demoTextPattern().test(text)
     || /^(INV|PUR|QTN|BILL|PO|RCT)-2024-/i.test(text.trim())
     || /@acmetrading\.ae/i.test(text)
     || /100234567800003|100123456700003|DED-2018-84521|AE070331234567890123456|AE150331234567890123456|AE460331234567890123456/i.test(text);
@@ -5388,9 +5404,7 @@ function clearDemoTextNodes(){
   while(walker.nextNode())nodes.push(walker.currentNode);
   nodes.forEach(node=>{
     let value=node.nodeValue||'';
-    DEMO_TEXT_VALUES.forEach(item=>{
-      value=value.replace(new RegExp(item.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'),'');
-    });
+    value=value.replace(new RegExp(_demoTextPattern().source,'gi'),'');
     value=value
       .replace(/\b(INV|PUR|QTN|BILL|PO|RCT)-2024-[\w-]+\b/gi,'')
       .replace(/[a-z0-9._%+-]+@acmetrading\.ae/gi,'')
@@ -5670,8 +5684,9 @@ function _renderProductsBatch(products){
     tbody.prepend(frag);
   }
   refreshEnhancedTable(tbody.closest('table'));
-  scheduleIdleTask(()=>{syncStockLevelsFromProducts();syncStockMappingFromItems();},200);
-  scheduleIdleTask(()=>{refreshInvoiceProductSuggestions();refreshPurchaseProductSuggestions();refreshQuotationProductOptions();},400);
+  // No stock/mapping sync or suggestion refresh scheduled here: hydrateFromServer() (the
+  // only caller) runs all of them once it has drawn everything. Scheduling them here too
+  // rebuilt the stock and mapping tables a second time (~0.5 s at 520 products).
   return{rendered,failed};
 }
 
