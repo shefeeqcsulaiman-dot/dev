@@ -528,8 +528,10 @@ def sales_invoice_stock_movements(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
 ) -> dict[str, object]:
-    """One 'sale' movement per invoice line, for the Stock Movements view. POS sales are
-    skipped: they already have a real StockMovement row (sync_pos_stock())."""
+    """One 'sale' movement per invoice line. POS sales are skipped: they already have a
+    real StockMovement row (sync_pos_stock()). Superseded for the app by GET
+    /app-data/stock-movements (app/routers/stock_feed.py), which merges, filters and pages
+    these with purchases in SQL; kept for API compatibility."""
     filters = _filters(db, principal, "salesInvoices", None)
     movements: list[dict[str, Any]] = []
     query = (

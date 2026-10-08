@@ -37,7 +37,7 @@ from app.company_defaults import seed_accounts, seed_tax_codes, seed_voucher_typ
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.models import Company, User
-from app.routers import accounting, ai, ai_voice, app_data, attendance, audit, auth, branches, companies, corporate_accounting, documents, ess, ess_voice, events, exception_center, hr_access, hr_ai, inventory, invoice_share, invoices, jobs, leave, module_records, payroll, registers, reports, source_transactions, superadmin, tax
+from app.routers import accounting, ai, ai_voice, app_data, attendance, audit, auth, branches, companies, corporate_accounting, documents, ess, ess_voice, events, exception_center, hr_access, hr_ai, inventory, invoice_share, invoices, jobs, leave, module_records, payroll, registers, reports, source_transactions, stock_feed, superadmin, tax
 from app.security import hash_password
 
 
@@ -520,6 +520,7 @@ def create_app() -> FastAPI:
     app.include_router(module_records.router, prefix="/api/v1")
     app.include_router(app_data.router, prefix="/api/v1")
     app.include_router(registers.router, prefix="/api/v1")
+    app.include_router(stock_feed.router, prefix="/api/v1")
     app.include_router(superadmin.router, prefix="/api/v1")
     app.include_router(ess.router, prefix="/api/v1")
     app.include_router(ess_voice.router, prefix="/api/v1")

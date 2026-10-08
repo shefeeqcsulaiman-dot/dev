@@ -294,7 +294,6 @@ function stab(el,target){
   if(target==='hr-ot')loadOtEligibility();
   if(target==='inv-mapping')loadStockMappingsFromServer();
   if(target==='inv-stock')ensurePurchaseRecordsLoadedForStock();
-  if(target==='inv-movement')loadStockMovements();
   if(String(target||'').startsWith('inv-'))setTimeout(()=>ensureInventoryBulkSelection(),80);
   if(target==='p-records')goToPurchaseRecordsPage(1);
   if(target==='s-invoices')ensureSalesRegisterLoaded();
@@ -2750,7 +2749,7 @@ async function fetchWithBackendFallback(url,options={}){
 // a new endpoint server-side means adding its path here too.
 window.ACTIVE_BRANCH_ID=window.ACTIVE_BRANCH_ID||(()=>{try{return localStorage.getItem('taxflow_active_branch_id')||null;}catch{return null;}})();
 window.ACCESSIBLE_BRANCHES=window.ACCESSIBLE_BRANCHES||[];
-const _BRANCH_AWARE_PATH_RE=/\/(invoices|inventory\/stock-levels|inventory\/stock-movements|reports\/trial-balance|reports\/dashboard|reports\/summary|hr\/live-locations|journal|general-ledger|app-data\/records\/(purchaseRecords|posSales|salesInvoices)|app-data\/sales-invoices(\/summary|\/open|\/by-number)?)(\?|$)/;
+const _BRANCH_AWARE_PATH_RE=/\/(invoices|inventory\/stock-levels|inventory\/stock-movements|reports\/trial-balance|reports\/dashboard|reports\/summary|hr\/live-locations|journal|general-ledger|app-data\/stock-movements|app-data\/records\/(purchaseRecords|posSales|salesInvoices)|app-data\/sales-invoices(\/summary|\/open|\/by-number)?)(\?|$)/;
 function _withActiveBranchParam(url){
   if(!window.ACTIVE_BRANCH_ID)return url;
   if(typeof url!=='string'||!_BRANCH_AWARE_PATH_RE.test(url))return url;
@@ -5767,96 +5766,8 @@ async function loadStockLevelsFromServer(){
   }
 }
 
-let _allStockMovements=[];
-
-// 'sale' movements synthesised from sales invoice lines, built on the server
-// from every invoice (the register only holds one page). POS sales are left
-// out there: they already have a real pos_sale StockMovement row.
-async function _collectSalesMovements(){
-  if(window.HRMS_STANDALONE)return [];
-  try{
-    const data=await salesApi('/stock-movements');
-    return Array.isArray(data.movements)?data.movements:[];
-  }catch(err){
-    console.warn('Sales stock movements could not load:',err);
-    return [];
-  }
-}
-
-async function loadStockMovements(){
-  const tbody=document.getElementById('stock-movement-tbody');
-  if(!tbody)return;
-  try{
-    const data=await moduleApi('/inventory/stock-movements');
-    const purchaseMvt=Array.isArray(data)?data:[];
-    const salesMvt=await _collectSalesMovements();
-    _allStockMovements=[...purchaseMvt,...salesMvt]
-      .sort((a,b)=>new Date(a.date||a.movement_date||0)-new Date(b.date||b.movement_date||0));
-    _populateMovementFilters();
-    filterStockMovements();
-  }catch(e){
-    console.warn('Stock movements load failed:',e);
-    emptyTableMessage(tbody,'No stock movements in database yet.');
-  }
-}
-
-function _populateMovementFilters(){
-  const itemSel=document.getElementById('inv-movement-item-filter');
-  const monthSel=document.getElementById('inv-movement-month-filter');
-  if(!itemSel||!monthSel)return;
-  const items=[...new Set(_allStockMovements.map(m=>m.item_name||m.name||'').filter(Boolean))].sort();
-  const months=[...new Set(_allStockMovements.map(m=>{
-    const d=m.date||m.movement_date||'';
-    if(!d)return '';
-    const dt=new Date(d);
-    return isNaN(dt)?'':dt.toLocaleString('en-AE',{month:'short',year:'numeric'});
-  }).filter(Boolean))].reverse();
-  const prevItem=itemSel.value;const prevMonth=monthSel.value;
-  itemSel.innerHTML='<option value="">All Items</option>'+items.map(i=>`<option value="${escapeHtml(i)}">${escapeHtml(i)}</option>`).join('');
-  monthSel.innerHTML='<option value="">All Months</option>'+months.map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
-  if(prevItem)itemSel.value=prevItem;
-  if(prevMonth)monthSel.value=prevMonth;
-}
-
-function filterStockMovements(){
-  const tbody=document.getElementById('stock-movement-tbody');
-  if(!tbody)return;
-  const itemFilter=document.getElementById('inv-movement-item-filter')?.value||'';
-  const monthFilter=document.getElementById('inv-movement-month-filter')?.value||'';
-  const filtered=_allStockMovements.filter(m=>{
-    const itemName=m.item_name||m.name||'';
-    if(itemFilter&&itemName!==itemFilter)return false;
-    if(monthFilter){
-      const dt=new Date(m.date||m.movement_date||'');
-      const label=isNaN(dt)?'':dt.toLocaleString('en-AE',{month:'short',year:'numeric'});
-      if(label!==monthFilter)return false;
-    }
-    return true;
-  });
-  tbody.innerHTML='';
-  if(!filtered.length){
-    emptyTableMessage(tbody,'No stock movements found.');
-    return;
-  }
-  // Build running balance per item
-  const balances=new Map();
-  filtered.forEach(m=>{
-    const key=m.item_name||m.name||'';
-    const qty=Number(m.quantity||0);
-    const prev=balances.get(key)||0;
-    const bal=prev+qty;
-    balances.set(key,bal);
-    const isIn=qty>=0;
-    const row=document.createElement('tr');
-    const dateStr=m.date||m.movement_date||'';
-    const formatted=dateStr?new Date(dateStr).toLocaleDateString('en-AE',{dateStyle:'short'}):'-';
-    const mvtType=m.movement_type||m.type||'-';
-    const mvtLabel=mvtType==='sale'?'<span class="b b-r" style="font-size:11px">Sale</span>':mvtType==='purchase'||mvtType==='Purchase'?'<span class="b b-g" style="font-size:11px">Purchase</span>':escapeHtml(mvtType);
-    row.innerHTML=`<td>${escapeHtml(formatted)}</td><td>${mvtLabel}</td><td>${escapeHtml(key||'-')}</td><td style="color:var(--green)">${isIn?Math.abs(qty).toFixed(2):''}</td><td style="color:var(--red)">${!isIn?Math.abs(qty).toFixed(2):''}</td><td>${bal.toFixed(2)}</td><td class="mono" style="font-size:12px">${escapeHtml(m.reference||'-')}</td>`;
-    tbody.appendChild(row);
-  });
-  refreshEnhancedTable(tbody.closest('table'));
-}
+// Stock movements come from GET /app-data/stock-movements (app/routers/stock_feed.py),
+// filtered and balanced on the server; the Monthly History popup asks for one item.
 
 async function openStockMovementHistory(el){
   const row=el.tagName==='TR'?el:el.closest('tr');
@@ -5870,18 +5781,12 @@ async function openStockMovementHistory(el){
   tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Loading…</td></tr>';
   if(emptyEl)emptyEl.style.display='none';
   showM('m-stock-history');
-  // Load or use cached movements
-  if(!_allStockMovements.length){
-    try{
-      const data=await moduleApi('/inventory/stock-movements');
-      const purchaseMvt=Array.isArray(data)?data:[];
-      const salesMvt=await _collectSalesMovements();
-      _allStockMovements=[...purchaseMvt,...salesMvt]
-        .sort((a,b)=>new Date(a.date||a.movement_date||0)-new Date(b.date||b.movement_date||0));
-    }catch(e){console.warn('Movements load failed:',e);}
-  }
-  const nameKey=itemName.toLowerCase();
-  const relevant=_allStockMovements.filter(m=>(m.item_name||m.name||'').toLowerCase()===nameKey);
+  // This item's movements only (purchases + sales, merged on the server), oldest first.
+  let relevant=[];
+  try{
+    const data=await registersApi('/stock-movements',{item:itemName,limit:5000});
+    relevant=(Array.isArray(data.movements)?data.movements:[]).reverse();
+  }catch(e){console.warn('Movements load failed:',e);}
   tbody.innerHTML='';
   if(!relevant.length){
     tbody.innerHTML='';
