@@ -522,6 +522,7 @@
         <option value="6">Last 6 hours</option>
         <option value="24">Last 24 hours</option>
       </select>
+      <button type="button" id="sa-sentry-test" onclick="sendSentryTest(this)" title="Sends one test error to Sentry to check SENTRY_DSN" style="margin-left:8px;padding:4px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text);cursor:pointer">Send test error to Sentry</button>
     </div>
     <div id="sa-endpoint-stats-wrap"><div class="loading-state">Loading…</div></div>
   </div>
@@ -2406,6 +2407,17 @@
   }
 
   // ── System health ───────────────────────────────────────────────
+  async function sendSentryTest(btn){
+    const label=btn.textContent; btn.disabled=true; btn.textContent='Sending…';
+    try{
+      const res=await apiFetch('/superadmin/sentry-test',{method:'POST'});
+      const d=await res.json();
+      if(!res.ok) throw new Error(d.detail||'Failed');
+      alert(d.sent?'Test error sent. It appears in Sentry → Issues within a minute.':(d.detail||'Sentry is off'));
+    }catch(e){ alert('Could not send: '+e.message); }
+    finally{ btn.disabled=false; btn.textContent=label; }
+  }
+
   async function loadEndpointStats(){
     const wrap=document.getElementById('sa-endpoint-stats-wrap');
     if(!wrap)return;

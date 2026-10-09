@@ -1551,6 +1551,19 @@ def endpoint_stats(
     return _endpoint_stats(hours=hours)
 
 
+@router.post("/sentry-test")
+def sentry_test(_: User = Depends(_require_superadmin)) -> dict:
+    """Send one test event to Sentry, to check SENTRY_DSN works (Sentry's own guide suggests
+    a public crashing route; this one is super-admin only and doesn't crash anything)."""
+    from app import monitoring
+    if not monitoring._sentry_on:
+        return {"sent": False, "detail": "Sentry is off (SENTRY_DSN not set)"}
+    import sentry_sdk
+    event_id = sentry_sdk.capture_message("eTaxFlow Sentry test (sent by a super admin)", level="error")
+    sentry_sdk.flush(timeout=5)
+    return {"sent": True, "event_id": event_id}
+
+
 # ── Background job / queue health ───────────────────────────────────────────
 # PostingJob is the accounting posting pipeline (queued -> processing ->
 # posted, or failed — see module_integration.py/accounting_posting.py); Job

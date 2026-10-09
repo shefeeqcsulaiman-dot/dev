@@ -138,3 +138,9 @@ def test_flush_merges_every_process_into_one_cluster_view(monkeypatch):
     assert row["count"] == 2 and row["errors"] == 1
     assert row["max_ms"] == 700 and row["p95_ms"] == 1000
     assert row["avg_queries"] == 5.5
+
+
+def test_sentry_test_button_is_superadmin_only_and_reports_off(client, db, auth_headers):
+    assert client.post("/api/v1/superadmin/sentry-test", headers=auth_headers).status_code in (401, 403)
+    r = client.post("/api/v1/superadmin/sentry-test", headers=_superadmin_headers(client, db))
+    assert r.status_code == 200 and r.json()["sent"] is False
