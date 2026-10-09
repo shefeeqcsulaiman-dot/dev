@@ -169,6 +169,26 @@ def startup_lock() -> Iterator[None]:
             connection.commit()
 
 
+def _refuse_default_sqlite(argv: list[str]) -> str | None:
+    """Why `python -m app.migrate` should not run, or None. Run as a deploy job without
+    DATABASE_URL it would silently migrate a throwaway SQLite file in its own container and
+    report success (seen 2026-10-09: the variables were on the web component only)."""
+    from app.config import get_settings
+
+    url = get_settings().database_url
+    if url.startswith("sqlite") and "--allow-sqlite" not in argv:
+        return ("DATABASE_URL is not set for this process (it would migrate a local SQLite file, "
+                "not the real database). Give this job the same DATABASE_URL / DATABASE_DIRECT_URL "
+                "as the web service, or pass --allow-sqlite for local development.")
+    return None
+
+
 if __name__ == "__main__":
+    import sys
+
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    problem = _refuse_default_sqlite(sys.argv[1:])
+    if problem:
+        logging.error(problem)
+        sys.exit(1)
     run_migrations()
