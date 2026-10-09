@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.auth_principal import resolve_active_branch
 from app.database import get_db
 from app.dependencies import Principal, get_current_principal, get_current_user, require_module
-from app.models import AppDataRecord, InventoryValuationLayer, ItemUnit, ItemUnitConversion, StockAdjustmentApproval, StockMovement, StockProductMapping, User, Warehouse
+from app.models import AppDataRecord, DocumentLine, InventoryValuationLayer, ItemUnit, ItemUnitConversion, StockAdjustmentApproval, StockMovement, StockProductMapping, User, Warehouse
 from app.schemas import (
     InventoryValuationLayerOut,
     ItemUnitConversionIn,
@@ -572,7 +572,8 @@ def hydrate_mapping_costs_from_purchase_data(db: Session, company_id: str, mappi
     missing = [mapping for mapping in mappings if decimal_value(mapping.cost) == 0]
     if not missing:
         return
-    costs = purchase_cost_lookup(db, company_id)
+    wanted = {key for mapping in missing for key in (normalize_key(mapping.sku), normalize_key(mapping.name)) if key}
+    costs = purchase_cost_lookup(db, company_id, wanted)
     changed = False
     for mapping in missing:
         cost = costs.get(normalize_key(mapping.sku)) or costs.get(normalize_key(mapping.name))
@@ -583,11 +584,31 @@ def hydrate_mapping_costs_from_purchase_data(db: Session, company_id: str, mappi
         db.commit()
 
 
-def purchase_cost_lookup(db: Session, company_id: str) -> dict[str, Decimal]:
+def purchase_cost_lookup(db: Session, company_id: str, wanted: set[str] | None = None) -> dict[str, Decimal]:
+    """{normalized sku/name: first cost found} from products and purchase lines. With
+    `wanted`, only purchases with a line naming one of those keys are read (found through
+    document_lines), instead of decoding the company's whole purchase history."""
     lookup: dict[str, Decimal] = {}
+    purchases = AppDataRecord.collection == "purchaseRecords"
+    if wanted is not None and len(wanted) > 500:
+        wanted = None  # a huge IN list costs more than the scan it saves
+    if wanted is not None:
+        if not wanted:
+            return lookup
+        keys = list(wanted)
+        matching = db.query(DocumentLine.record_id).filter(
+            DocumentLine.company_id == company_id,
+            DocumentLine.collection == "purchaseRecords",
+            or_(
+                func.lower(func.trim(DocumentLine.product_code)).in_(keys),
+                func.trim(DocumentLine.product_key).in_(keys),
+                func.trim(DocumentLine.description_key).in_(keys),
+            ),
+        )
+        purchases = purchases & AppDataRecord.id.in_(matching)
     rows = (
         db.query(AppDataRecord.collection, AppDataRecord.payload)
-        .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection.in_(["products", "purchaseRecords"]))
+        .filter(AppDataRecord.company_id == company_id, or_(AppDataRecord.collection == "products", purchases))
         .all()
     )
     for collection, payload in rows:

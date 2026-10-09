@@ -15,7 +15,7 @@ from app.ai_client import call_llm
 from app.database import get_db
 from app.limiter import limiter
 from app.models import Company, Employee
-from app.routers.ess import _employee_app_data_records, ess_bearer, ess_leave_balance
+from app.routers.ess import _rota_assignments_between, ess_bearer, ess_leave_balance
 
 router = APIRouter(prefix="/ess", tags=["ess voice"])
 
@@ -122,8 +122,8 @@ def _balance_answer(request: Request, db: Session, leave_type: str | None, arabi
 def _next_shift_answer(db: Session, emp: Employee, today: date, arabic: bool) -> str:
     end = (today + timedelta(days=30)).isoformat()
     rows = sorted(
-        (a for a in _employee_app_data_records(db, emp.company_id, "rotaAssignments")
-         if a.get("employee_id") == emp.employee_no and today.isoformat() <= (a.get("date") or "") <= end
+        (a for a in _rota_assignments_between(db, emp.company_id, today.isoformat(), end)
+         if a.get("employee_id") == emp.employee_no
          and not re.match(r"^(off|leave|holiday)$", str(a.get("type") or a.get("code") or ""), re.I)),
         key=lambda a: a.get("date") or "",
     )
