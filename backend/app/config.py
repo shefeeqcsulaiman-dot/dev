@@ -105,10 +105,15 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
 
-    @field_validator("database_url", mode="before")
+    @field_validator("database_url", "database_direct_url", "database_read_url", mode="before")
     @classmethod
-    def normalise_db_url(cls, v: str) -> str:
+    def normalise_db_url(cls, v: str | None) -> str | None:
         # Render injects postgres:// or postgresql:// — SQLAlchemy 2 needs the driver explicit
+        if not isinstance(v, str):
+            return v
+        v = v.strip()
+        if not v:
+            return None
         if v.startswith("postgres://"):
             return v.replace("postgres://", "postgresql+psycopg2://", 1)
         if v.startswith("postgresql://") and "+psycopg" not in v:

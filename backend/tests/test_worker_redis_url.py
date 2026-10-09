@@ -16,3 +16,13 @@ def test_other_urls_unchanged():
     assert celery_redis_url("memory://") == "memory://"
     assert celery_redis_url("rediss://h:1/0?ssl_cert_reqs=none") == "rediss://h:1/0?ssl_cert_reqs=none"
     assert celery_redis_url("rediss://h:1/0?db=1") == "rediss://h:1/0?db=1&ssl_cert_reqs=required"
+
+
+def test_all_database_urls_accept_digitalocean_forms():
+    from app.config import Settings
+    s = Settings(database_url="postgresql://u:p@h:25061/pool?sslmode=require",
+                 database_direct_url="postgres://u:p@h:25060/defaultdb?sslmode=require",
+                 database_read_url="  ")
+    assert s.database_url.startswith("postgresql+psycopg2://")
+    assert s.database_direct_url.startswith("postgresql+psycopg2://")
+    assert s.database_read_url is None
