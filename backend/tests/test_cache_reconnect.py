@@ -51,3 +51,18 @@ def test_url_problem_names_the_mistake_without_the_value():
     for url in (f"redis://default:AVNS_x@{h}:25061", f"rediss://default:AVNS_x@private-{h}:25061"):
         assert "AVNS_x" not in cache.url_problem(url) and "valkeyetax" not in cache.url_problem(url)
     assert cache.url_problem("memory://") is None and cache.url_problem("redis://localhost:6379/0") is None
+
+
+def test_health_names_database_failure_without_host(client, monkeypatch):
+    import app.main as main
+
+    class _Broken:
+        def __init__(self, *a, **k):
+            raise Exception('connection to server at "db-secret-host.example" failed: '
+                            'FATAL:  password authentication failed for user "doadmin"')
+
+    monkeypatch.setattr(main, "SessionLocal", _Broken)
+    body = client.get("/health").json()
+    assert body["db"] == "error: wrong password in DATABASE_URL"
+    assert body["status"] == "degraded"
+    assert "secret-host" not in str(body) and "doadmin" not in str(body)

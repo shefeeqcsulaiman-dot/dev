@@ -336,6 +336,26 @@ def create_app() -> FastAPI:
             return FileResponse(str(index))
         return RedirectResponse(url="/login", status_code=302)
 
+    def _db_error_kind(exc: Exception) -> str:
+        """What kind of database failure, for the public /health: a fixed phrase, never
+        the driver's message (it can contain host names)."""
+        msg = str(exc).lower()
+        for needle, kind in (
+            ("password authentication failed", "wrong password in DATABASE_URL"),
+            ("no pg_hba.conf entry", "connection not allowed (trusted sources)"),
+            ("does not exist", "database, pool or user name not found"),
+            ("timeout", "timed out (trusted sources or wrong host/port)"),
+            ("timed out", "timed out (trusted sources or wrong host/port)"),
+            ("could not translate host name", "host name not found"),
+            ("connection refused", "connection refused (wrong host/port)"),
+            ("too many", "too many connections"),
+            ("ssl", "SSL problem (sslmode=require?)"),
+            ("server closed the connection", "server closed the connection"),
+        ):
+            if needle in msg:
+                return kind
+        return type(exc).__name__
+
     @app.get("/health")
     def health() -> dict[str, str]:
         try:
@@ -343,8 +363,8 @@ def create_app() -> FastAPI:
             db.execute(text("SELECT 1"))
             db.close()
             db_status = "ok"
-        except Exception:
-            db_status = "error"
+        except Exception as exc:
+            db_status = "error: " + _db_error_kind(exc)
         # Diagnostic only — app.cache already degrades gracefully if Redis is
         # unreachable (returns None / no-ops instead of raising), which means
         # a broken connection is otherwise invisible: nothing errors, caching
