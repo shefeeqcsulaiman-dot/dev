@@ -110,6 +110,11 @@ the deploy's health check.
 
 ## 4. Sentry error tracking + alerts (~15 min)
 
+**Postponed 2026-10-09** until there are regular customers (the code is ready; it only needs
+`SENTRY_DSN`; `/health` shows `"sentry":"on"/"off"`, and Super Admin → System Health has a
+*Send test error to Sentry* button). Meanwhile: a free uptime monitor (e.g. UptimeRobot) on
+`https://e4cs.com/health` with keyword `"db":"ok"`, so an outage still emails you.
+
 1. Sign up at https://sentry.io (free plan) → **Create project** → platform **FastAPI** →
    name `etaxflow-api` → Create.
 2. Copy the **DSN** it shows (`https://…@o….ingest.sentry.io/…`; also under Project
