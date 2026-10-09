@@ -356,6 +356,10 @@ def create_app() -> FastAPI:
                 return kind
         return type(exc).__name__
 
+    def monitoring_sentry_on() -> bool:
+        from app import monitoring as _monitoring
+        return _monitoring._sentry_on
+
     @app.get("/health")
     def health() -> dict[str, str]:
         try:
@@ -391,6 +395,7 @@ def create_app() -> FastAPI:
             "status": "ok" if db_status == "ok" else "degraded",
             "db": db_status,
             "redis": redis_status,
+            "sentry": "on" if monitoring_sentry_on() else "off",
             "service": settings.app_name,
         }
 

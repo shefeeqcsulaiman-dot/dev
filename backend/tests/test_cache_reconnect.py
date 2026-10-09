@@ -66,3 +66,10 @@ def test_health_names_database_failure_without_host(client, monkeypatch):
     assert body["db"] == "error: wrong password in DATABASE_URL"
     assert body["status"] == "degraded"
     assert "secret-host" not in str(body) and "doadmin" not in str(body)
+
+
+def test_health_says_whether_sentry_is_on(client, monkeypatch):
+    from app import monitoring
+    assert client.get("/health").json()["sentry"] == "off"
+    monkeypatch.setattr(monitoring, "_sentry_on", True)
+    assert client.get("/health").json()["sentry"] == "on"
