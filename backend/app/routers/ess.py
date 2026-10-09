@@ -729,8 +729,7 @@ def ess_tasks(request: Request, db: Session = Depends(get_db)) -> list:
     the same Employee.id the Task Management "Assign To" dropdown saves --
     see populateTaskAssigneeSelect() in app.js) -- never the whole board."""
     emp = ess_bearer(request, db)
-    tasks = _employee_app_data_records(db, emp.company_id, "tasks")
-    mine = [t for t in tasks if t.get("assigned_to") == emp.id]
+    mine = [t for t in _owned_records(db, emp.company_id, "tasks", [emp.id]) if t.get("assigned_to") == emp.id]
     mine.sort(key=lambda t: t.get("due_date") or "9999-99-99")
     return mine
 
@@ -883,7 +882,34 @@ def _is_mine(rec: dict, emp: Employee) -> bool:
 
 
 def _own_request_records(db: Session, emp: Employee, collection: str) -> list[dict]:
-    return [r for r in _employee_app_data_records(db, emp.company_id, collection) if _is_mine(r, emp)]
+    keys = [emp.employee_no, "name:" + (emp.full_name or "")]
+    return [r for r in _owned_records(db, emp.company_id, collection, keys) if _is_mine(r, emp)]
+
+
+def _owned_records(db: Session, company_id: str, collection: str, owner_keys: list) -> list[dict]:
+    """One employee's records of an OWNER_COLLECTIONS collection, by the indexed owner_key
+    column (app.models.payload_owner_key()), oldest first like the full scan. Callers still
+    apply their exact ownership check. Replaces loading and parsing every record the
+    company has on each ESS dashboard load (uncached without Redis)."""
+    keys = [str(k)[:160] for k in owner_keys if k]
+    if not keys:
+        return []
+    rows = (
+        db.query(AppDataRecord.payload)
+        .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == collection,
+                AppDataRecord.owner_key.in_(keys))
+        .order_by(AppDataRecord.created_at, AppDataRecord.id)
+        .all()
+    )
+    out = []
+    for (raw,) in rows:
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(parsed, dict):
+            out.append(parsed)
+    return out
 
 
 def _create_request_record(db: Session, emp: Employee, kind: str, fields: dict) -> dict:

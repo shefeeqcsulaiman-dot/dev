@@ -835,6 +835,7 @@ class AppDataRecord(Base, TimestampMixin):
         Index("ix_app_data_company_collection_status", "company_id", "collection", "doc_status"),
         Index("ix_app_data_company_collection_party", "company_id", "collection", "party"),
         Index("ix_app_data_company_collection_fig_ref", "company_id", "collection", "fig_ref"),
+        Index("ix_app_data_company_collection_owner", "company_id", "collection", "owner_key"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
@@ -863,6 +864,9 @@ class AppDataRecord(Base, TimestampMixin):
     fig_vat: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     fig_taxable: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     fig_paid: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    # Whose record it is, for OWNER_COLLECTIONS (payload_owner_key()), so ESS reads one
+    # employee's tasks/requests in SQL instead of parsing the whole company's.
+    owner_key: Mapped[str | None] = mapped_column(String(160))
 
 
 class DocumentLine(Base):
@@ -899,6 +903,29 @@ class DocumentLine(Base):
 
 
 DATED_COLLECTIONS = frozenset({"rotaAssignments"})
+
+# Employee-owned workflow records the ESS portal lists per employee. Tasks belong to their
+# assignee (payload "assigned_to" = Employee.id); requests to their employee_id
+# (= employee_no), or -- for rows written before that field existed -- to the employee's
+# display name, stored as "name:<name>". Mirrors ess.py's ownership checks exactly.
+OWNER_COLLECTIONS = frozenset({"tasks", "overtimeRequests", "employeeLoans", "salaryAdvances", "attendanceCorrections"})
+
+
+def payload_owner_key(collection: str, payload: str | None) -> str | None:
+    try:
+        data = json.loads(payload or "{}")
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    if collection == "tasks":
+        owner = data.get("assigned_to")
+        return owner[:160] if isinstance(owner, str) and owner else None
+    employee_id = str(data.get("employee_id") or "").strip()
+    if employee_id:
+        return employee_id[:160]
+    name = str(data.get("employee") or "").strip()
+    return ("name:" + name)[:160] if name else None
 _ISO_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -913,6 +940,8 @@ def payload_record_date(payload: str | None) -> str | None:
 @event.listens_for(AppDataRecord, "before_insert")
 @event.listens_for(AppDataRecord, "before_update")
 def _stamp_record_date(_mapper, _connection, target: AppDataRecord) -> None:
+    if target.collection in OWNER_COLLECTIONS:
+        target.owner_key = payload_owner_key(target.collection, target.payload)
     if target.collection in DATED_COLLECTIONS:
         target.record_date = payload_record_date(target.payload)
     else:
