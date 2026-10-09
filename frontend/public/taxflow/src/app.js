@@ -21882,9 +21882,32 @@ function renderRotaEmployeeTasksPanel(){
   body.innerHTML=dayBlocks||`<div class="rota-emp-tasks-empty">No tasks scheduled this week for ${escapeHtml(staff.name)}.</div>`;
 }
 
+// The weekly/monthly boards are grids of every staff member x every day (~4,300 buttons
+// for a 5-week month at 124 staff: ~0.8 s to build) and renderRotaBoards() runs at every
+// start-up and change, usually while their tab is closed. A hidden board is skipped and
+// marked stale; it is drawn when it becomes visible (tab click, section switch, any
+// route), watched with an IntersectionObserver. Only these draw functions touch the
+// boards' DOM, so nothing else reads a skipped board.
+var _rotaBoardStale=new Map();   // board element -> its draw function
+var _rotaBoardObserver=null;
+function _skipHiddenRotaBoard(board,draw){
+  if(board.getClientRects().length){_rotaBoardStale.delete(board);return false;}
+  _rotaBoardStale.set(board,draw);
+  if(!_rotaBoardObserver&&typeof IntersectionObserver==='function'){
+    _rotaBoardObserver=new IntersectionObserver(entries=>entries.forEach(entry=>{
+      const pending=_rotaBoardStale.get(entry.target);
+      if(entry.isIntersecting&&pending)pending();
+    }));
+  }
+  if(!_rotaBoardObserver)return false;  // no observer support: draw now, as before
+  _rotaBoardObserver.observe(board);
+  return true;
+}
+
 function renderWeeklyRotaBoard(){
   const board=document.getElementById('rota-weekly-board');
   if(!board)return;
+  if(_skipHiddenRotaBoard(board,renderWeeklyRotaBoard))return;
   const start=weekStartValue();
   const staffRows=filteredRotaStaff('week');
   const notice=_rotaTruncationNoticeHtml();
@@ -21965,6 +21988,7 @@ function _monthRotaWeekStarts(month){
 function renderMonthlyRotaBoard(){
   const board=document.getElementById('rota-monthly-board');
   if(!board)return;
+  if(_skipHiddenRotaBoard(board,renderMonthlyRotaBoard))return;
   const month=document.getElementById('rota-month-value')?.value||weekStartValue().slice(0,7);
   const staffRows=filteredRotaStaff('month');
   const notice=_rotaTruncationNoticeHtml();
