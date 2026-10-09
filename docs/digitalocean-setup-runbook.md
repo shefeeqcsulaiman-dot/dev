@@ -29,6 +29,11 @@ both of its users too. To reset:
 4. Check `/health` now and again ~10 min later (open connections survive a password
    change; new ones fail if `DATABASE_URL` still has the old password).
 
+   **Lesson (2026-10-09):** resetting `doadmin` on the live `etaxflow-pgsql` without updating
+   `DATABASE_URL` in the same minute took the site down for ~28 min (20:17–20:45). Copy the new
+   strings and Save straight after the reset. `/health` now names the cause
+   (`"db":"error: wrong password in DATABASE_URL"`, trusted sources, name not found…).
+
 ## 1. Redis (biggest single win, ~10 min)
 
 **Done 2026-10-09:** Valkey cluster `valkeyetax` (eviction policy `volatile-lru`, so queued
