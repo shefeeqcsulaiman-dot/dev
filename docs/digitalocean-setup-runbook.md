@@ -11,8 +11,8 @@ Where env vars go: **Apps → (your app) → Settings → App-Level Environment 
 
 ## 0. Database passwords (security — do first)
 
-Two database passwords were pasted into a chat on 2026-10-08/09. One was reset on 2026-10-09
-and the site stayed healthy afterwards. Reset the other one too:
+**Done 2026-10-09:** both database passwords that had been pasted into a chat were reset;
+the site stayed healthy afterwards. Steps kept for any future reset:
 
 | Host | User |
 |---|---|
