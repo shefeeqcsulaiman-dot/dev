@@ -356,6 +356,10 @@ def create_app() -> FastAPI:
             redis_status = "ok"
         elif _cache.last_error:
             redis_status = f"error: {_cache.last_error}"
+            from app.config import get_settings as _gs
+            hint = _cache.url_problem(_gs().redis_url)
+            if hint:
+                redis_status += f" (REDIS_URL: {hint})"
         else:
             redis_status = "disabled (no REDIS_URL)"
         if redis_client is not None:

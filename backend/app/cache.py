@@ -17,6 +17,36 @@ _RETRY_SECONDS = 30
 last_error: str | None = None  # error type of the last failed connect (shown by public /health)
 
 
+def url_problem(url: str | None) -> str | None:
+    """A likely mistake in REDIS_URL, described without revealing the value (it's
+    encrypted in DigitalOcean, so this is the only way to see what was saved)."""
+    if not url or url.startswith("memory"):
+        return None
+    if url != url.strip() or url[:1] in "'\"" or url[-1:] in "'\"":
+        return "spaces or quotes around the value"
+    from urllib.parse import urlsplit
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+    except ValueError:
+        return "not a valid URL"
+    if parts.scheme == "redis" and ".db.ondigitalocean.com" in (parts.hostname or ""):
+        return "starts with redis:// - DigitalOcean needs rediss:// (two s)"
+    if parts.scheme not in ("redis", "rediss", "unix"):
+        return "must start with rediss://"
+    if (parts.hostname or "").startswith("private-"):
+        return "private (VPC) host - use the Public network connection string"
+    if (parts.password or "").upper() == "PASSWORD":
+        return "password is the placeholder PASSWORD"
+    if ".db.ondigitalocean.com" not in (parts.hostname or ""):
+        return None
+    if not parts.password:
+        return "no password in the URL"
+    if port != 25061:
+        return f"port {port} - DigitalOcean's is 25061"
+    return None
+
+
 def _redis():
     global _client, _tried, _retry_at, last_error
     if _tried and (_client is not None or time.monotonic() < _retry_at):
