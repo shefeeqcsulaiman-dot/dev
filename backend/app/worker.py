@@ -12,9 +12,18 @@ from app.models import AttendanceSession, BiometricDevice, EmployeeLocationLog, 
 logger = logging.getLogger("taxflow.worker")
 
 
+def celery_redis_url(url: str) -> str:
+    """Managed Redis (DigitalOcean) gives a TLS rediss:// URL; Celery's Redis backend refuses
+    one without ssl_cert_reqs, so add the safe default (verify the certificate) when missing."""
+    if url.startswith("rediss://") and "ssl_cert_reqs=" not in url:
+        return url + ("&" if "?" in url else "?") + "ssl_cert_reqs=required"
+    return url
+
+
 settings = get_settings()
-result_backend = "cache+memory://" if settings.redis_url == "memory://" else settings.redis_url
-celery_app = Celery("taxflow", broker=settings.redis_url, backend=result_backend)
+broker_url = celery_redis_url(settings.redis_url)
+result_backend = "cache+memory://" if settings.redis_url == "memory://" else broker_url
+celery_app = Celery("taxflow", broker=broker_url, backend=result_backend)
 celery_app.conf.task_always_eager = settings.celery_task_always_eager
 celery_app.conf.task_eager_propagates = True
 
