@@ -61,6 +61,9 @@ monitoring numbers, and the Celery queue for scheduled jobs.
 
 ## 2. PgBouncer connection pool (~10 min)
 
+**Done 2026-10-09:** pool `etaxflow-pool` (Transaction mode) on `etaxflow-pgsql`; the site has
+been healthy on it since.
+
 Today's settings can open 225–450 database connections against a ~95-connection plan
 (`.do/app.yaml` explains the maths); the pool removes that ceiling.
 
@@ -80,6 +83,16 @@ Today's settings can open 225–450 database connections against a ~95-connectio
 6. If anything fails: set `DATABASE_URL` back to the direct string, Save — that undoes it.
 
 ## 3. Pre-deploy migrations job (~10 min)
+
+**Postponed 2026-10-09.** Tried and removed: the job ran without `DATABASE_URL` because the
+variables are set on the `dev` web component, not at app level, so it migrated a throwaway
+SQLite file (`Context impl SQLiteImpl`) and reported success. `python -m app.migrate` now exits
+with an error in that case, which fails the deploy (the old version keeps running). Migrations
+keep running at start-up, which is fine while the database is small. When adding the job again:
+put `DATABASE_URL` and `DATABASE_DIRECT_URL` at **app level** first, check its *Deploy logs* show
+`Context impl PostgresqlImpl`, and only then set `RUN_MIGRATIONS_ON_STARTUP=false`. The one-line
+App Spec entry that worked:
+`jobs: [{name: migrate, kind: PRE_DEPLOY, source_dir: /, dockerfile_path: backend/Dockerfile, run_command: python -m app.migrate, instance_size_slug: apps-s-1vcpu-0.5gb, github: {repo: shefeeqcsulaiman-dot/dev, branch: main, deploy_on_push: true}}]`
 
 Large migrations can take minutes; running them before the new version starts avoids failing
 the deploy's health check.
