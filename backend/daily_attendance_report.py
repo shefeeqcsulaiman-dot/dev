@@ -39,6 +39,7 @@ Usage
 from zk import ZK
 import pandas as pd
 from datetime import datetime, timedelta
+import json
 import os
 import requests
 
@@ -63,6 +64,8 @@ PUSH_TO_ETAXFLOW = False                       # set True once ETAXFLOW_DEVICE_K
 ETAXFLOW_URL = "https://e4cs.com/api/v1/adms"
 ETAXFLOW_DEVICE_KEY = "YOUR_DEVICE_KEY"        # <-- paste your real device key here
 PUSHED_LOG_CSV = os.path.join(r"C:\attendance_exports", "pushed_to_etaxflow.csv")
+PUSH_DAYS_BACK = 2                             # re-check today plus this many previous days on every run
+PUSHED_DAYS_CSV = os.path.join(OUTPUT_DIR, "pushed_days_to_etaxflow.csv")
 # ============================================
 
 
@@ -370,98 +373,103 @@ def build_formatted_report(punches_df, roster_df):
     return report_df
 
 
-def push_to_etaxflow(new_punches_df):
-    """
-    Push newly-fetched raw punches to TaxFlow's ADMS endpoint via HTTPS.
-    TaxFlow's endpoint validates against a "PunchIn" schema -- it expects ONE
-    individual scan event per request (employee_id/employee_name/punch_time/
-    direction), not the aggregated daily report format and not a field called
-    "timestamp" (punch_time is the only recognized name -- anything else is
-    silently ignored, defaulting punch_time to "now" and direction to "in").
-    The formatted report (Emp No., Clock In 1, etc.) is for your local
-    CSV/Excel only and is NOT what gets pushed here.
+def _day_directions(day_events):
+    """Directions for one employee-day. Uses the device's own in/out codes when it sends any
+    check-out code; many face devices record every scan as "check-in", so then scans are
+    paired by order instead: in, out, in, out..."""
+    day_events = sorted(day_events, key=lambda e: e[0])
+    if any(d == "out" for _, d in day_events):
+        return dedupe_punches(day_events)
+    times = []
+    for ts, _ in day_events:
+        if times and (ts - times[-1]) < timedelta(minutes=MIN_GAP_MINUTES):
+            continue  # accidental double-tap
+        times.append(ts)
+    return [(ts, "in" if i % 2 == 0 else "out") for i, ts in enumerate(times)]
 
-    Direction is derived via the shared _punch_direction() helper (see its
-    docstring for the exact code mapping) -- the same function
-    dedupe_punches()/pair_punches() use to build the local report, so what
-    gets pushed here always agrees with what the report shows.
+
+def _day_payload(emp_id, emp_name, work_date, events):
+    sessions = pair_punches(events)[:MAX_SESSIONS]
+    payload = {"employee_id": emp_id, "employee_name": emp_name, "work_date": work_date.isoformat()}
+    total = 0
+    for n in range(1, MAX_SESSIONS + 1):
+        cin, cout = sessions[n - 1] if n <= len(sessions) else (None, None)
+        secs = int((cout - cin).total_seconds()) if cin is not None and cout is not None else 0
+        total += secs
+        payload[f"clock_in_{n}"] = cin.isoformat(timespec="seconds") if cin is not None else None
+        payload[f"clock_out_{n}"] = cout.isoformat(timespec="seconds") if cout is not None else None
+        payload[f"work_seconds_{n}"] = secs
+    standard = int(STANDARD_HOURS * 3600)
+    payload.update({
+        "total_seconds": total, "ot_seconds": max(0, total - standard), "under_seconds": max(0, standard - total),
+        "session_count": sum(1 for cin, cout in sessions if cin is not None and cout is not None),
+        "raw_events": json.dumps([ts.isoformat(timespec="seconds") for ts, _ in events]),
+    })
+    return payload
+
+
+def push_to_etaxflow(all_punches_df):
+    """
+    Push one row per employee per day (work_date + clock_in_N/clock_out_N, times in the
+    device's local time) for today and the previous PUSH_DAYS_BACK days. A day is sent again
+    whenever its punches change, so evening check-outs reach TaxFlow on the late run even
+    though the same day was already sent at midday. TaxFlow treats a re-sent day as the
+    correct version and fixes any punch it had recorded with the wrong in/out direction.
     """
     if not PUSH_TO_ETAXFLOW:
         return
-    if new_punches_df is None or new_punches_df.empty:
-        log("No new punches to push to TaxFlow.")
-        return
     if not ETAXFLOW_DEVICE_KEY or ETAXFLOW_DEVICE_KEY == "YOUR_DEVICE_KEY":
-        log("TaxFlow push skipped: ETAXFLOW_DEVICE_KEY is empty or still the placeholder value.")
+        log("etaxflow push skipped: ETAXFLOW_DEVICE_KEY is empty or still the placeholder value.")
+        return
+    if all_punches_df is None or all_punches_df.empty:
+        log("etaxflow push: no punches recorded yet.")
         return
 
-    # Load record of what's already been pushed, to avoid duplicates
-    already_pushed = set()
-    if os.path.exists(PUSHED_LOG_CSV):
+    today = datetime.now().date()
+    dates = {today - timedelta(days=i) for i in range(PUSH_DAYS_BACK + 1)}
+    df = all_punches_df.copy()
+    df["user_id"] = df["user_id"].astype(str)
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df = df[df["timestamp"].dt.date.isin(dates)]
+    has_punch_col = "punch" in df.columns
+
+    sent_before = {}
+    if os.path.exists(PUSHED_DAYS_CSV):
         try:
-            pushed_df = pd.read_csv(PUSHED_LOG_CSV, dtype=str)
-            if "employee_id" in pushed_df.columns and "punch_time" in pushed_df.columns:
-                already_pushed = set(zip(pushed_df["employee_id"], pushed_df["punch_time"]))
-            else:
-                log("pushed_to_etaxflow.csv has an old/unexpected format -- starting fresh dedup list.")
+            prev = pd.read_csv(PUSHED_DAYS_CSV, dtype=str).fillna("")
+            sent_before = {(r.employee_id, r.work_date): r.signature for r in prev.itertuples()}
         except Exception as e:
-            log(f"Could not read {PUSHED_LOG_CSV}, starting fresh dedup list: {e}")
+            log(f"Could not read {PUSHED_DAYS_CSV}, re-sending the last {PUSH_DAYS_BACK + 1} days: {e}")
 
-    headers = {
-        "X-Device-Key": ETAXFLOW_DEVICE_KEY,
-        "Content-Type": "application/json"
-    }
-
-    newly_pushed_rows = []
-    success_count = 0
-    fail_count = 0
-
-    for _, punch in new_punches_df.iterrows():
-        emp_id = str(punch["user_id"])
-        emp_name = punch.get("name") or None
-        punch_time = punch["timestamp"].isoformat()
-        key = (emp_id, punch_time)
-        if key in already_pushed:
+    headers = {"X-Device-Key": ETAXFLOW_DEVICE_KEY, "Content-Type": "application/json"}
+    sent = unchanged = failed = 0
+    for (user_id, day), group in df.groupby(["user_id", df["timestamp"].dt.date]):
+        names = [n for n in group["name"] if isinstance(n, str) and n] if "name" in group else []
+        codes = group["punch"] if has_punch_col else [None] * len(group)
+        events = _day_directions([(ts.to_pydatetime(), _punch_direction(c)) for ts, c in zip(group["timestamp"], codes)])
+        payload = _day_payload(user_id, names[0] if names else None, day, events)
+        signature = json.dumps({k: v for k, v in payload.items() if k.startswith("clock_")}, sort_keys=True)
+        key = (user_id, day.isoformat())
+        if sent_before.get(key) == signature:
+            unchanged += 1
             continue
-
-        direction = _punch_direction(punch.get("punch"))
-
-        payload = {
-            "employee_id": emp_id,
-            "employee_name": emp_name,
-            "punch_time": punch_time,
-            "direction": direction,
-        }
-
         try:
-            resp = requests.post(ETAXFLOW_URL, json=payload, headers=headers, timeout=10)
+            resp = requests.post(ETAXFLOW_URL, json=payload, headers=headers, timeout=15)
             if resp.status_code in (200, 201, 202):
-                success_count += 1
-                newly_pushed_rows.append({"employee_id": emp_id, "punch_time": punch_time})
+                sent += 1
+                sent_before[key] = signature
             else:
-                fail_count += 1
-                log(f"TaxFlow push failed for employee {emp_id} at {punch_time}: "
-                    f"HTTP {resp.status_code} - {resp.text[:300]}")
+                failed += 1
+                log(f"etaxflow push failed for employee {user_id} on {day}: HTTP {resp.status_code} - {resp.text[:300]}")
         except Exception as e:
-            fail_count += 1
-            log(f"TaxFlow push error for employee {emp_id} at {punch_time}: {e}")
+            failed += 1
+            log(f"etaxflow push error for employee {user_id} on {day}: {e}")
 
-    log(f"TaxFlow push: {success_count} succeeded, {fail_count} failed.")
-
-    if newly_pushed_rows:
-        newly_pushed_df = pd.DataFrame(newly_pushed_rows)
-        if os.path.exists(PUSHED_LOG_CSV):
-            try:
-                existing = pd.read_csv(PUSHED_LOG_CSV, dtype=str)
-                if "employee_id" in existing.columns and "punch_time" in existing.columns:
-                    combined = pd.concat([existing, newly_pushed_df], ignore_index=True)
-                else:
-                    combined = newly_pushed_df
-            except Exception:
-                combined = newly_pushed_df
-        else:
-            combined = newly_pushed_df
-        combined.to_csv(PUSHED_LOG_CSV, index=False)
+    log(f"etaxflow push: {sent} day(s) sent (new or changed), {unchanged} unchanged, {failed} failed "
+        f"-- covering {min(dates)} to {max(dates)}.")
+    keep_from = (today - timedelta(days=30)).isoformat()
+    rows = [{"employee_id": e, "work_date": d, "signature": sig} for (e, d), sig in sent_before.items() if d >= keep_from]
+    pd.DataFrame(rows, columns=["employee_id", "work_date", "signature"]).to_csv(PUSHED_DAYS_CSV, index=False)
 
 
 def main():
@@ -472,7 +480,7 @@ def main():
         roster_df, new_punches_df = fetch_from_device()
         all_punches_df = update_master_csv(new_punches_df)
         report_df = build_formatted_report(all_punches_df, roster_df)
-        push_to_etaxflow(new_punches_df)
+        push_to_etaxflow(all_punches_df)
         log("=== Run completed successfully ===")
 
     except Exception as e:

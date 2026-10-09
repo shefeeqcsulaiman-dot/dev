@@ -154,6 +154,7 @@ def upsert_attendance_event(
     device_name: str | None = None,
     source: str = "manual",
     standard_hours: float = 8.0,
+    authoritative_direction: bool = False,
 ) -> dict:
     """The single write path for a punch event.
 
@@ -204,7 +205,16 @@ def upsert_attendance_event(
                 continue
 
         events = json.loads(row.raw_events or "[]")
-        if any(e.get("punch_time") == punch_time_key and e.get("device_id") == device_id for e in events):
+        same = [e for e in events if e.get("punch_time") == punch_time_key and e.get("device_id") == device_id]
+        if same:
+            # A dated report states in/out explicitly; it corrects a direction guessed earlier
+            # (e.g. a partial day where the evening scan was taken as a check-in).
+            if authoritative_direction and direction in ("in", "out") and any(e.get("direction") != direction for e in same):
+                for e in same:
+                    e["direction"] = direction
+                _recompute_day_fields(row, events, standard_hours)
+                db.commit()
+                return {"ok": True, "id": row.id, "duplicate": True, "corrected": True}
             db.commit()
             return {"ok": True, "id": row.id, "duplicate": True}
 

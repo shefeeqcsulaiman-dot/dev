@@ -632,6 +632,7 @@ def _ingest_device_punch(
     employee_name: str | None = None,
     source: str = "device",
     max_age_days: int = 90,
+    authoritative_direction: bool = False,
 ) -> dict[str, Any]:
     """Shared punch-insert core used by both the single-punch webhook path
     (_record_punch, below) and the ADMS-classic batch upload handler
@@ -668,10 +669,12 @@ def _ingest_device_punch(
         device_id=device_id,
         device_name=device_name,
         source=source,
+        authoritative_direction=authoritative_direction,
     )
     if not result.get("ok"):
         return result
-    return {"ok": True, "id": result.get("event_id") or result["id"], "duplicate": result.get("duplicate", False)}
+    return {"ok": True, "id": result.get("event_id") or result["id"], "duplicate": result.get("duplicate", False),
+            "corrected": result.get("corrected", False)}
 
 
 async def _record_punch(request: Request, db: Session, current_user: User | None, device_key: str | None) -> dict[str, Any]:
@@ -701,7 +704,7 @@ async def _record_punch(request: Request, db: Session, current_user: User | None
             # Clock In/Out at all) — explicitly not an error, and
             # explicitly not a punch.
             return {"ok": True, "inserted": 0, "duplicates": 0, "events": 0}
-        inserted = duplicates = rejected = 0
+        inserted = duplicates = rejected = corrected = 0
         for punch_time, direction in events:
             result = _ingest_device_punch(
                 db, company_id, device_id, device_name,
@@ -711,14 +714,17 @@ async def _record_punch(request: Request, db: Session, current_user: User | None
                 # work_date shape) may legitimately be a multi-month
                 # historical backfill -- allow ~13 months, not 90 days.
                 max_age_days=400,
+                authoritative_direction=True,
             )
             if not result.get("ok"):
                 rejected += 1
+            elif result.get("corrected"):
+                corrected += 1
             elif result.get("duplicate"):
                 duplicates += 1
             else:
                 inserted += 1
-        return {"ok": True, "inserted": inserted, "duplicates": duplicates, "rejected": rejected, "events": len(events)}
+        return {"ok": True, "inserted": inserted, "duplicates": duplicates, "corrected": corrected, "rejected": rejected, "events": len(events)}
 
     if _is_flattened_row_payload(raw_data):
         # A payload shaped like an AttendanceDetail export (work_date +
@@ -754,7 +760,7 @@ async def _record_punch(request: Request, db: Session, current_user: User | None
                 )
                 marked = res.get("created", False)
             return {"ok": True, "inserted": 0, "duplicates": 0, "events": 0, "absent_marked": marked}
-        inserted = duplicates = rejected = 0
+        inserted = duplicates = rejected = corrected = 0
         for punch_time, direction in events:
             result = _ingest_device_punch(
                 db, company_id, device_id, device_name,
@@ -764,14 +770,17 @@ async def _record_punch(request: Request, db: Session, current_user: User | None
                 # work_date shape) may legitimately be a multi-month
                 # historical backfill -- allow ~13 months, not 90 days.
                 max_age_days=400,
+                authoritative_direction=True,
             )
             if not result.get("ok"):
                 rejected += 1
+            elif result.get("corrected"):
+                corrected += 1
             elif result.get("duplicate"):
                 duplicates += 1
             else:
                 inserted += 1
-        return {"ok": True, "inserted": inserted, "duplicates": duplicates, "rejected": rejected, "events": len(events)}
+        return {"ok": True, "inserted": inserted, "duplicates": duplicates, "corrected": corrected, "rejected": rejected, "events": len(events)}
 
     try:
         body = PunchIn(**raw_data)
@@ -1065,6 +1074,19 @@ def _extract_events_from_flattened_row(
     work_date = str(row.get("work_date") or "").strip()
     events: list[tuple[datetime, str]] = []
     raw_events = row.get("raw_events")
+    # Bare timestamps in raw_events only give direction by position; explicit
+    # clock_in_N/clock_out_N in the same row say which is which, so they win.
+    if raw_events and work_date and any(
+        str(row.get(f"clock_{kind}_{n}") or "").strip() for n in range(1, 6) for kind in ("in", "out")
+    ):
+        parsed_check = raw_events
+        if isinstance(parsed_check, str):
+            try:
+                parsed_check = json.loads(parsed_check)
+            except (ValueError, TypeError):
+                parsed_check = []
+        if not any(isinstance(e, dict) for e in (parsed_check if isinstance(parsed_check, list) else [])):
+            raw_events = None
     if raw_events:
         # Two supported shapes: a genuine event log (list of {punch_time,
         # direction, ...} dicts, e.g. transplanted from another
@@ -1198,7 +1220,7 @@ async def import_rows(
         company_id, actor, len(body.rows),
     )
     rows_processed = 0
-    events_inserted = events_duplicate = events_rejected = 0
+    events_inserted = events_duplicate = events_rejected = events_corrected = 0
     row_errors: list[dict[str, Any]] = []
 
     for idx, row in enumerate(body.rows):
@@ -1236,11 +1258,14 @@ async def import_rows(
             result = attendance_store.upsert_attendance_event(
                 db, company_id=company_id, employee_id=employee_id,
                 punch_time=punch_time, direction=direction, employee_name=employee_name,
-                source="import",
+                source="import", authoritative_direction=True,
             )
             if not result.get("ok"):
                 events_rejected += 1
                 row_rejected += 1
+            elif result.get("corrected"):
+                events_corrected += 1
+                row_duplicate += 1
             elif result.get("duplicate"):
                 events_duplicate += 1
                 row_duplicate += 1
@@ -1261,7 +1286,7 @@ async def import_rows(
     return {
         "ok": True, "rows_processed": rows_processed,
         "events_inserted": events_inserted, "events_duplicate": events_duplicate, "events_rejected": events_rejected,
-        "row_errors": row_errors,
+        "events_corrected": events_corrected, "row_errors": row_errors,
     }
 
 
