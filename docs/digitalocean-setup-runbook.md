@@ -31,6 +31,11 @@ both of its users too. To reset:
 
 ## 1. Redis (biggest single win, ~10 min)
 
+**Done 2026-10-09:** Valkey cluster `valkeyetax` (eviction policy `volatile-lru`, so queued
+jobs are never evicted); `/health` shows `"redis":"ok"` on every instance. The live
+database is `etaxflow-pgsql` — the pool (step 2) and replica (step 5) go on that cluster.
+If `/health` shows `error: …`, it names the likely mistake in `REDIS_URL`.
+
 Turns on report caching (dashboard / summary / trial balance), shared rate limits, cluster-wide
 monitoring numbers, and the Celery queue for scheduled jobs.
 
