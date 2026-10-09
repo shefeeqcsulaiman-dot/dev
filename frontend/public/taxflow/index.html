@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=f14f81f61a" as="style">
-<link rel="preload" href="src/app.js?v=76a18851a0" as="script">
+<link rel="preload" href="src/app.js?v=1afedf9c1f" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=f14f81f61a">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
@@ -2990,6 +2990,7 @@
       <div class="rep-nav-group">
         <div class="rep-nav-label" data-i18n="repgrp_bi">Business Intelligence</div>
         <div class="rep-nav-item" id="repnav-rev"    onclick="showReport('rep-rev')" data-i18n="repnav_rev">Revenue Intelligence</div>
+        <div class="rep-nav-item" id="repnav-sp"     onclick="showReport('rep-sp')" data-i18n="repnav_sp">Sales by Sales Person</div>
         <div class="rep-nav-item" id="repnav-profit" onclick="showReport('rep-profit')" data-i18n="repnav_profit">Profitability Analytics</div>
         <div class="rep-nav-item" id="repnav-wc"     onclick="showReport('rep-wc')" data-i18n="repnav_wc">Working Capital</div>
         <div class="rep-nav-item" id="repnav-growth" onclick="showReport('rep-growth')" data-i18n="repnav_growth">Growth Trends</div>
@@ -3202,6 +3203,24 @@
           <div class="stat"><div class="stat-lbl">Top Customer</div><div class="stat-val" id="rev-top-cust" style="color:var(--purple);font-size:13px">—</div></div>
           <div class="stat"><div class="stat-lbl">Active Customers</div><div class="stat-val" id="rev-cust-count" style="color:var(--blue)">—</div></div>
         </div></div>
+      </div>
+
+      <!-- SALES BY SALES PERSON -->
+      <div class="rep-panel" id="rep-sp">
+        <div class="rep-panel-head"><h2 class="rep-title">Sales by Sales Person</h2>
+          <div class="flx" style="gap:8px;align-items:flex-end;flex-wrap:wrap">
+            <div class="fg" style="margin:0"><label class="fl" for="sp-rep-from">From</label><input class="fi" type="date" id="sp-rep-from" onchange="loadSalesByPersonReport()"></div>
+            <div class="fg" style="margin:0"><label class="fl" for="sp-rep-to">To</label><input class="fi" type="date" id="sp-rep-to" onchange="loadSalesByPersonReport()"></div>
+          </div>
+        </div>
+        <div class="card-sub" style="margin:-4px 0 10px">Issued, pending and paid sales invoices by the sales person chosen on each invoice. Drafts and cancelled invoices are left out; returns are subtracted.</div>
+        <div class="g4 mb10" id="sp-rep-stats"></div>
+        <div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr>
+          <th>Sales Person</th><th style="text-align:right">Invoices</th><th style="text-align:right" data-currency-label>Net Sales (AED)</th><th style="text-align:right" data-currency-label>VAT (AED)</th>
+          <th style="text-align:right" data-currency-label>Total (AED)</th><th style="text-align:right">Returns</th><th style="text-align:right" data-currency-label>Net After Returns (AED)</th>
+          <th style="text-align:right" data-currency-label>Avg. Invoice (AED)</th><th style="text-align:right">Share</th>
+        </tr></thead>
+        <tbody id="rep-sp-body"><tr><td colspan="9" style="color:var(--text3);text-align:center">Open this report to load it</td></tr></tbody><tfoot id="rep-sp-foot"></tfoot></table></div></div>
       </div>
 
       <!-- PROFITABILITY ANALYTICS -->
@@ -5756,6 +5775,6 @@ period_locks ─&lt; audit_logs
      order relative to app.js's own defer, so config.js still runs first. -->
 <script src="config.js" defer></script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=76a18851a0" defer></script>
+<script src="src/app.js?v=1afedf9c1f" defer></script>
 </body>
 </html>

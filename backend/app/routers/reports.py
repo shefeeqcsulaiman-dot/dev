@@ -949,6 +949,105 @@ def debug_purchase(
     }
 
 
+_SP_EXCLUDED_STATUSES = ("draft", "cancelled", "canceled", "void", "voided")
+
+
+@router.get("/sales-by-person")
+@limiter.limit("60/minute")
+def sales_by_person(
+    request: Request,
+    date_from: str | None = Query(default=None, description="YYYY-MM-DD"),
+    date_to: str | None = Query(default=None, description="YYYY-MM-DD"),
+    branch_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("reports:view", "sales:view")),
+) -> dict[str, Any]:
+    """Sales per sales person from sales invoices (drafts and cancelled excluded; returns
+    subtract). Summed in SQL from the columns every save stamps (salesperson, doc_kind,
+    record_date and the fig_* report figures, app/doc_index.py) -- the same figures the
+    dashboard and summary use -- instead of decoding every invoice the company has."""
+    for value in (date_from, date_to):
+        if value and not re.match(r"^\d{4}-\d{2}-\d{2}$", value):
+            raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
+    company_id = principal.company_id
+    resolved_branch_id = branch_id if principal.can_cross_branch("reports") else resolve_active_branch(principal, branch_id)
+
+    # Everyone on the sales-person list appears, even with no sales in the period.
+    people: dict[str, str] = {}
+    for (payload,) in db.query(AppDataRecord.payload).filter(
+            AppDataRecord.company_id == company_id, AppDataRecord.collection == "salesPeople"):
+        try:
+            row = json.loads(payload or "{}")
+        except (TypeError, ValueError):
+            continue
+        name = str(row.get("name") or "").strip() if isinstance(row, dict) else ""
+        if name and str(row.get("status") or "Active") != "Inactive":
+            people.setdefault(name.lower(), name)
+
+    person = func.lower(func.trim(func.coalesce(AppDataRecord.salesperson, "")))
+    filters = [
+        AppDataRecord.company_id == company_id,
+        AppDataRecord.collection == "salesInvoices",
+        or_(AppDataRecord.fig_status.is_(None), AppDataRecord.fig_status.notin_(_SP_EXCLUDED_STATUSES)),
+    ]
+    if resolved_branch_id:
+        filters.append(or_(AppDataRecord.branch_id == resolved_branch_id, AppDataRecord.branch_id.is_(None)))
+    if date_from:
+        filters.append(AppDataRecord.record_date >= date_from)
+    if date_to:
+        filters.append(AppDataRecord.record_date <= date_to)
+    grouped = (
+        db.query(
+            person, func.max(func.trim(AppDataRecord.salesperson)), AppDataRecord.doc_kind, func.count(AppDataRecord.id),
+            func.coalesce(func.sum(func.abs(AppDataRecord.fig_gross)), 0),
+            func.coalesce(func.sum(func.abs(AppDataRecord.fig_net)), 0),
+            func.coalesce(func.sum(func.abs(AppDataRecord.fig_vat)), 0),
+        )
+        .filter(*filters)
+        .group_by(person, AppDataRecord.doc_kind)
+        .all()
+    )
+
+    zero = Decimal("0.00")
+    totals: dict[str, dict[str, Any]] = {}
+
+    def bucket(key: str, name: str) -> dict[str, Any]:
+        return totals.setdefault(key, {"name": name, "invoices": 0, "returns": 0, "net_sales": zero, "vat": zero,
+                                       "gross_sales": zero, "returns_total": zero})
+
+    for key, name in people.items():
+        bucket(key, name)
+    for key, shown, kind, count, gross, net, vat in grouped:
+        key = key or ""
+        b = bucket(key, people.get(key) or shown or "Unassigned")
+        if kind == "return":
+            b["returns"] += int(count)
+            b["returns_total"] += money(gross)
+        else:
+            b["invoices"] += int(count)
+            b["net_sales"] += money(net)
+            b["vat"] += money(vat)
+            b["gross_sales"] += money(gross)
+
+    rows = []
+    for key, b in totals.items():
+        net_total = b["gross_sales"] - b["returns_total"]
+        rows.append({
+            "name": b["name"], "unassigned": key == "", "invoices": b["invoices"], "returns": b["returns"],
+            "net_sales": b["net_sales"], "vat": b["vat"], "gross_sales": b["gross_sales"],
+            "returns_total": b["returns_total"], "net_total": net_total,
+            "average_invoice": (b["gross_sales"] / b["invoices"]).quantize(Decimal("0.01")) if b["invoices"] else zero,
+        })
+    grand = sum((r["net_total"] for r in rows), zero)
+    for r in rows:
+        r["share_pct"] = float((r["net_total"] / grand * 100).quantize(Decimal("0.1"))) if grand else 0.0
+    rows.sort(key=lambda r: (r["unassigned"], -r["net_total"], r["name"].lower()))
+    keys = ("invoices", "returns", "net_sales", "vat", "gross_sales", "returns_total", "net_total")
+    summary = {k: sum((r[k] for r in rows), 0 if k in ("invoices", "returns") else zero) for k in keys}
+    fmt = lambda r: {k: (amount(v) if isinstance(v, Decimal) else v) for k, v in r.items()}  # noqa: E731
+    return {"date_from": date_from, "date_to": date_to, "rows": [fmt(r) for r in rows], "totals": fmt(summary)}
+
+
 @router.get("/trial-balance")
 @limiter.limit("120/minute")
 def trial_balance(

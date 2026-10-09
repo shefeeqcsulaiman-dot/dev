@@ -4317,6 +4317,61 @@ function showReport(id){
   const nav=document.getElementById(navId);
   if(nav)nav.classList.add('on');
   if(latestReportSummary)renderReportsFromDatabase(latestReportSummary);
+  if(id==='rep-sp')loadSalesByPersonReport();
+}
+
+// ── Sales by Sales Person (server-side: /reports/sales-by-person) ──
+async function loadSalesByPersonReport(){
+  const body=document.getElementById('rep-sp-body');
+  if(!body)return;
+  const from=document.getElementById('sp-rep-from'),to=document.getElementById('sp-rep-to');
+  // First open: this month to date (other code pre-fills empty date boxes with today).
+  if(from&&to&&!from.dataset.spInit){
+    from.dataset.spInit='1';
+    const now=new Date();
+    from.value=new Date(now.getFullYear(),now.getMonth(),1).toLocaleDateString('en-CA');
+    to.value=now.toLocaleDateString('en-CA');
+  }
+  const qs=new URLSearchParams();
+  if(from?.value)qs.set('date_from',from.value);
+  if(to?.value)qs.set('date_to',to.value);
+  if(window.ACTIVE_BRANCH_ID)qs.set('branch_id',window.ACTIVE_BRANCH_ID);
+  body.innerHTML='<tr><td colspan="9" style="color:var(--text3);text-align:center">Loading…</td></tr>';
+  let data;
+  try{data=await moduleApi(`/reports/sales-by-person?${qs}`);}
+  catch(err){body.innerHTML=`<tr><td colspan="9" style="color:var(--red);text-align:center">Could not load the report${err?.message?': '+escapeHtml(err.message):''}</td></tr>`;return;}
+  const cur=currentCurrency();
+  const fmt=v=>Number(v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const rows=Array.isArray(data?.rows)?data.rows:[];
+  const t=data?.totals||{};
+  const named=rows.filter(r=>!r.unassigned&&Number(r.net_total)>0);
+  const top=named[0];
+  const stats=document.getElementById('sp-rep-stats');
+  if(stats)stats.innerHTML=[
+    ['Net Sales After Returns',`${cur} ${fmt(t.net_total)}`],
+    ['Invoices',String(t.invoices||0)],
+    ['Top Sales Person',top?`${escapeHtml(top.name)}`:'—'],
+    ['Unassigned',(()=>{const u=rows.find(r=>r.unassigned);return u&&Number(u.net_total)?`${cur} ${fmt(u.net_total)}`:'None';})()]
+  ].map(([l,v])=>`<div class="stat"><div class="stat-lbl">${l}</div><div class="stat-val" style="font-size:18px">${v}</div></div>`).join('');
+  const foot=document.getElementById('rep-sp-foot');
+  if(foot)foot.innerHTML='';
+  if(!rows.length){
+    body.innerHTML='<tr><td colspan="9" style="color:var(--text3);text-align:center">No sales people or sales in this period. Add sales people from the Sales Person field on a sales invoice.</td></tr>';
+    return;
+  }
+  const cell=(v,extra='')=>`<td style="text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums${extra}">${v}</td>`;
+  const ret=(count,amt)=>count?`${fmt(amt)} <span style="color:var(--text3)">(${count})</span>`:'—';
+  body.innerHTML=rows.map(r=>`<tr${r.unassigned?' style="color:var(--text3)"':''}>
+    <td>${r.unassigned?'<em>Unassigned</em>':escapeHtml(r.name)}</td>
+    ${cell(r.invoices)}${cell(fmt(r.net_sales))}${cell(fmt(r.vat))}${cell(fmt(r.gross_sales))}
+    ${cell(ret(r.returns,r.returns_total))}${cell(fmt(r.net_total),';font-weight:600')}
+    ${cell(r.invoices?fmt(r.average_invoice):'—')}${cell(`${Number(r.share_pct||0).toFixed(1)}%`)}
+  </tr>`).join('');
+  // Totals in <tfoot> so the table's search/sort/paging never treats them as a row.
+  if(foot)foot.innerHTML=`<tr style="font-weight:700;border-top:2px solid var(--border)">
+    <td>Total</td>${cell(t.invoices||0)}${cell(fmt(t.net_sales))}${cell(fmt(t.vat))}${cell(fmt(t.gross_sales))}
+    ${cell(ret(t.returns,t.returns_total))}${cell(fmt(t.net_total))}${cell('')}${cell(Number(t.net_total)?'100%':'—')}
+  </tr>`;
 }
 
 // Admin-only branch filter for the whole Reports module — reuses the same
@@ -4351,6 +4406,7 @@ async function changeReportsBranch(branchId){
   }catch{}
   _lastReportVersion=null; // force re-render even if the version hash happens to match
   await syncReportsFromDatabase();
+  if(document.getElementById('rep-sp')?.classList.contains('on'))loadSalesByPersonReport();
 }
 
 async function syncReportsFromDatabase(){
@@ -28994,7 +29050,7 @@ const _LANG={
     repnav_gl:'General Ledger',repnav_cl:'Customer Ledger',repnav_sl:'Supplier Ledger',
     repnav_ar:'AR Aging',repnav_ap:'AP Aging',repnav_vat:'VAT Reports',repnav_inv:'Inventory Reports',
     repnav_bank:'Bank Reconciliation',repnav_assets:'Fixed Assets',
-    repnav_rev:'Revenue Intelligence',repnav_profit:'Profitability Analytics',repnav_wc:'Working Capital',repnav_growth:'Growth Trends',
+    repnav_rev:'Revenue Intelligence',repnav_sp:'Sales by Sales Person',repnav_profit:'Profitability Analytics',repnav_wc:'Working Capital',repnav_growth:'Growth Trends',
     repnav_vat201:'VAT 201',repnav_corp:'Corporate Tax',repnav_einv:'E-Invoicing Readiness',
     tab_upload_invoices:'Upload Invoices',tab_ai_extraction:'AI Extraction',tab_validation:'Validation',tab_invoices:'Invoices',
     tab_add_sales:'Add Sales',tab_customers:'Customers',tab_upload_documents:'Upload Documents',
@@ -29033,7 +29089,7 @@ const _LANG={
     repnav_gl:'دفتر الأستاذ العام',repnav_cl:'دفتر أستاذ العملاء',repnav_sl:'دفتر أستاذ الموردين',
     repnav_ar:'أعمار الذمم المدينة',repnav_ap:'أعمار الذمم الدائنة',repnav_vat:'تقارير ضريبة القيمة المضافة',repnav_inv:'تقارير المخزون',
     repnav_bank:'تسوية البنك',repnav_assets:'الأصول الثابتة',
-    repnav_rev:'ذكاء الإيرادات',repnav_profit:'تحليلات الربحية',repnav_wc:'رأس المال العامل',repnav_growth:'اتجاهات النمو',
+    repnav_rev:'ذكاء الإيرادات',repnav_sp:'المبيعات حسب مندوب المبيعات',repnav_profit:'تحليلات الربحية',repnav_wc:'رأس المال العامل',repnav_growth:'اتجاهات النمو',
     repnav_vat201:'إقرار ضريبة القيمة المضافة 201',repnav_corp:'ضريبة الشركات',repnav_einv:'جاهزية الفوترة الإلكترونية',
     tab_upload_invoices:'رفع الفواتير',tab_ai_extraction:'الاستخراج بالذكاء الاصطناعي',tab_validation:'التحقق',tab_invoices:'الفواتير',
     tab_add_sales:'إضافة مبيعات',tab_customers:'العملاء',tab_upload_documents:'رفع المستندات',
