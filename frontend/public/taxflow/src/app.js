@@ -9409,7 +9409,10 @@ function hydrateFromServer(){
     refreshEnhancedTable(document.getElementById('prod-tbody')?.closest('table'));
     refreshEnhancedTable(document.getElementById('purchase-record-tbody')?.closest('table'));
     loadStockLevelsAtStartup();
-    syncStockMappingFromItems();
+    // No syncStockMappingFromItems() here: loadStockMappingsFromServer() below empties the
+    // mapping table, draws the server's mappings and then adds the unmapped Item Master
+    // rows itself (or does the local build if the request fails), so building it here
+    // first was thrown away (~0.15-0.3 s at 520 products).
     refreshInvoiceProductSuggestions();
     refreshPurchaseProductSuggestions();
     refreshQuotationProductOptions();
