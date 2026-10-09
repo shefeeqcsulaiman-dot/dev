@@ -12,12 +12,34 @@ logger = logging.getLogger(__name__)
 
 _client: Any = None
 _tried = False
+_retry_at = 0.0          # after a failed connect, try again from this time (monotonic)
+_RETRY_SECONDS = 30
+last_error: str | None = None  # error type of the last failed connect (shown by public /health)
 
 
 def _redis():
-    global _client, _tried
-    if _tried:
+    global _client, _tried, _retry_at, last_error
+    if _tried and (_client is not None or time.monotonic() < _retry_at):
         return _client
+    _tried = True
+    try:
+        from app.config import get_settings
+        url = get_settings().redis_url
+        if not url or url.startswith("memory"):
+            return None
+        import redis as _redis_lib
+        c = _redis_lib.from_url(url, decode_responses=True, socket_connect_timeout=2)
+        c.ping()
+        _client = c
+        last_error = None
+        logger.info("Redis cache connected")
+    except Exception as exc:
+        # Unreachable (e.g. trusted sources not set yet): run without it, retry later.
+        logger.warning("Redis unavailable — caching disabled: %s", exc)
+        _client = None
+        last_error = type(exc).__name__
+        _retry_at = time.monotonic() + _RETRY_SECONDS
+    return _client
     _tried = True
     try:
         from app.config import get_settings

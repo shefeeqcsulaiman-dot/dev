@@ -352,12 +352,17 @@ def create_app() -> FastAPI:
         # checkable without DB/log access.
         from app import cache as _cache
         redis_client = _cache._redis()
-        redis_status = "disabled (no REDIS_URL)" if redis_client is None else "ok"
+        if redis_client is not None:
+            redis_status = "ok"
+        elif _cache.last_error:
+            redis_status = f"error: {_cache.last_error}"
+        else:
+            redis_status = "disabled (no REDIS_URL)"
         if redis_client is not None:
             try:
                 redis_client.ping()
             except Exception as exc:
-                redis_status = f"error: {exc}"
+                redis_status = f"error: {type(exc).__name__}"  # public endpoint: no host names
         return {
             "status": "ok" if db_status == "ok" else "degraded",
             "db": db_status,
