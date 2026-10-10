@@ -182,6 +182,7 @@ function go(page){
     return;
   }
   if(!_mainDashboardNavAllowed(page)){_mainDashboardBlockNav();return;}
+  if(page==='corporate')_ensureCorporateLoaded();
   if(page==='payments'){
     go('bank');
     setTimeout(()=>{
@@ -9489,7 +9490,12 @@ function hydrateFromServer(){
     // don't block" convention as _moduleNavAllowed()/_mainDashboardNavAllowed().
     if(!window.HRMS_STANDALONE){
       if(!window.MAIN_ALLOWED_MODULES||window.MAIN_ALLOWED_MODULES.has('accounting'))loadAccountingFromDb();
-      if(!window.MAIN_ALLOWED_MODULES||window.MAIN_ALLOWED_MODULES.has('corporate'))loadCorporateAccountingFromDb(data);
+      // Corporate Accounting's 9 lists load when its page is first opened, not on every
+      // login (most sessions never open it): see _ensureCorporateLoaded().
+      if(!window.MAIN_ALLOWED_MODULES||window.MAIN_ALLOWED_MODULES.has('corporate')){
+        _corporateBootData=data;
+        if(document.getElementById('page-corporate')?.classList.contains('on'))_ensureCorporateLoaded();
+      }
     }
     // Load new feature collections
     if(Array.isArray(data.lockedPeriods))data.lockedPeriods.filter(r=>r.locked).forEach(r=>_lockedPeriods.add(r.id));
@@ -18021,6 +18027,14 @@ function renderCorporateApprovals(records=[]){
   replaceTableBody('corp-approval-tbody',records,record=>`
     <tr><td>${escapeHtml(record.module||'-')}</td><td class="mono">${corporateAmount(record.min_amount||0)} - ${corporateAmount(record.max_amount||0)}</td><td>${escapeHtml(record.department||'All')}</td><td>${escapeHtml(record.approver_role||record.approver||'-')}</td><td>${corporateBadge(record.status||'Active')}</td></tr>
   `,'No approval matrix records in database yet.');
+}
+
+var _corporateBootData=null;
+var _corporateLoaded=false;
+function _ensureCorporateLoaded(){
+  if(_corporateLoaded||!_corporateBootData)return;
+  _corporateLoaded=true;
+  loadCorporateAccountingFromDb(_corporateBootData);
 }
 
 async function loadCorporateAccountingFromDb(data={}){
