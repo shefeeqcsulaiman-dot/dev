@@ -444,11 +444,6 @@ def _branch_row_included(row_branch_id: str | None, branch_id: str | None) -> bo
 
 
 def app_sales_invoice_records(db: Session, company_id: str, branch_id: str | None = None) -> list[dict[str, Any]]:
-    existing_refs = {
-        normalized_ref(value)
-        for (value,) in db.query(Invoice.invoice_number).filter(Invoice.company_id == company_id).all()
-        if normalized_ref(value)
-    }
     # Every saved app-data invoice (bar negative credit notes) also posts a real Invoice
     # row with the same number, so nearly all of them are dropped below. Skip those in SQL
     # instead of parsing every invoice's JSON on each dashboard/report request: a row is
@@ -468,7 +463,7 @@ def app_sales_invoice_records(db: Session, company_id: str, branch_id: str | Non
         )
         .all()
     )
-    records = []
+    candidates = []
     for payload, row_branch_id in rows:
         try:
             row = json.loads(payload or "{}")
@@ -476,11 +471,13 @@ def app_sales_invoice_records(db: Session, company_id: str, branch_id: str | Non
             continue
         if not isinstance(row, dict) or not _branch_row_included(row_branch_id, branch_id):
             continue
-        invoice_ref = normalized_ref(row.get("invoice_no") or row.get("invoice_number") or row.get("ref"))
-        if invoice_ref and invoice_ref in existing_refs:
-            continue
-        records.append(row)
-    return records
+        candidates.append((normalized_ref(row.get("invoice_no") or row.get("invoice_number") or row.get("ref")), row))
+    # Posted invoice numbers looked up for just these rows, not the company's whole history.
+    existing_refs = _existing_refs(
+        db, [ref for ref, _ in candidates if ref], Invoice.invoice_number,
+        lambda q: q.filter(Invoice.company_id == company_id),
+    )
+    return [row for ref, row in candidates if not (ref and ref in existing_refs)]
 
 
 def app_purchase_records(db: Session, company_id: str, branch_id: str | None = None) -> list[dict[str, Any]]:
@@ -495,19 +492,6 @@ def app_purchase_records(db: Session, company_id: str, branch_id: str | None = N
     understating net_vat_payable. Bills were excluded here entirely until
     they started posting real TaxLines (see sync_bill_accounting()), which
     itself understated net_vat_payable by 100% of every bill's input VAT."""
-    existing_refs = {
-        normalized_ref(reference)
-        for (reference,) in db.query(SourceTransaction.reference)
-        .join(TaxLine, TaxLine.source_id == SourceTransaction.id)
-        .filter(
-            SourceTransaction.company_id == company_id,
-            SourceTransaction.module.in_(["purchase", "purchase_bill"]),
-            TaxLine.direction == "input",
-        )
-        .distinct()
-        .all()
-        if normalized_ref(reference)
-    }
     # Rows whose posting reference (fig_ref, stamped on save with the formula below)
     # matches a posted input TaxLine are left out in SQL instead of decoding every
     # purchase and bill; the Python check below still runs on what is left.
@@ -527,7 +511,7 @@ def app_purchase_records(db: Session, company_id: str, branch_id: str | None = N
     )
     if branch_id:
         query = query.filter(or_(AppDataRecord.branch_id == branch_id, AppDataRecord.branch_id.is_(None)))
-    records = []
+    candidates = []
     for collection, payload, _row_branch_id in query.order_by(AppDataRecord.collection.desc(), AppDataRecord.created_at, AppDataRecord.id).all():
         try:
             row = json.loads(payload or "{}")
@@ -547,10 +531,30 @@ def app_purchase_records(db: Session, company_id: str, branch_id: str | None = N
         else:
             # Mirrors app_data.py's sync_domain_model() reference formula for bills.
             ref = normalized_ref(row.get("bill_no") or (f"BILL-{row['id']}" if row.get("id") else None))
-        if ref and ref in existing_refs:
-            continue
-        records.append(row)
-    return records
+        candidates.append((ref, row))
+    # Posted input-VAT references looked up for just these rows, not every purchase ever posted.
+    existing_refs = _existing_refs(
+        db, [ref for ref, _ in candidates if ref], SourceTransaction.reference,
+        lambda q: q.join(TaxLine, TaxLine.source_id == SourceTransaction.id).filter(
+            SourceTransaction.company_id == company_id,
+            SourceTransaction.module.in_(["purchase", "purchase_bill"]),
+            TaxLine.direction == "input",
+        ),
+    )
+    return [row for ref, row in candidates if not (ref and ref in existing_refs)]
+
+
+def _existing_refs(db: Session, refs: list[str], column, scope) -> set[str]:
+    """normalized_ref() of the values of `column` (within `scope`) that match any of `refs`
+    (already normalized). Matched in SQL on lower(trim()), then normalized in Python as
+    before; batched so a long list never makes one huge IN clause."""
+    found: set[str] = set()
+    unique = sorted(set(refs))
+    for start in range(0, len(unique), 500):
+        chunk = unique[start:start + 500]
+        query = scope(db.query(column).filter(func.lower(func.trim(column)).in_(chunk)))
+        found.update(normalized_ref(value) for (value,) in query.all())
+    return found & set(unique)
 
 
 def is_paid_status(value: object) -> bool:
