@@ -1849,11 +1849,12 @@ input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;}
 .rs-main{padding:20px 22px;min-width:0;}
 .rs-side{display:flex;flex-direction:column;gap:16px;min-width:0;}
 .rs-side .card{padding:16px 18px;}
-.rs-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
-.rs-head-icon{width:52px;height:52px;border-radius:14px;background:var(--accent-glow);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.rs-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+.rs-head-icon{width:40px;height:40px;border-radius:11px;background:var(--accent-glow);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.rs-head-icon svg{width:20px;height:20px;}
 .rs-head-text{flex:1 1 220px;min-width:0;}
-.rs-head-text h2{margin:0;font-size:22px;font-weight:700;color:var(--text);letter-spacing:-.3px;}
-.rs-head-text p{margin:3px 0 0;font-size:13px;color:var(--text3);}
+.rs-head-text h2{margin:0;font-size:17px;font-weight:700;color:var(--text);letter-spacing:-.3px;}
+.rs-head-text p{margin:2px 0 0;font-size:12.5px;color:var(--text3);}
 .rs-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .rs-btn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s,border-color .15s;}
 .rs-btn:hover{border-color:var(--border2);background:var(--surface2);}
@@ -1978,7 +1979,7 @@ input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;}
 @media(max-width:720px){.rs-main{padding:14px;}.rs-search{margin-left:0;flex:1 1 100%;min-width:0;}.rs-select{border-left:0;}.rs-summary{grid-template-columns:1fr 1fr;}.rs-actions{grid-template-columns:1fr;}}
 
 /* ── Monthly Rota: Monthly Schedule (hrms.html #rota-monthly, renderMonthlyRotaBoard()) ── */
-.rs-head-text h2 .b{vertical-align:middle;margin-left:8px;font-size:11px;}
+.rs-head-text h2 .b{vertical-align:middle;margin-left:8px;font-size:10.5px;}
 .rs-kpis{display:flex;align-items:stretch;gap:12px;flex-wrap:wrap;padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg3);margin-bottom:16px;}
 .rs-kpi-list{flex:1 1 640px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;min-width:0;}
 .rs-kpi{display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;background:var(--surface);min-width:0;}
