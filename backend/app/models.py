@@ -902,6 +902,35 @@ class DocumentLine(Base):
     line_total: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
 
 
+class Party(Base):
+    """A customer or vendor kept as JSON app-data, as real columns (moving records out of
+    JSON, docs/scaling-plan-10k.md): one row per record, id = the app_data_records id.
+    Maintained by app/parties.py on every write; the JSON record is still the source of
+    truth (step A), so these rows can always be rebuilt (`python -m app.parties --rebuild`)."""
+    __tablename__ = "parties"
+    __table_args__ = (
+        Index("ix_parties_company_kind_name", "company_id", "kind", "name_key"),
+        Index("ix_parties_company_kind_trn", "company_id", "kind", "trn"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)  # = app_data_records.id
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(String(36))
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)  # customer | vendor
+    record_key: Mapped[str | None] = mapped_column(String(160))
+    name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    name_key: Mapped[str] = mapped_column(String(255), nullable=False, default="")  # lower-cased, trimmed
+    trn: Mapped[str | None] = mapped_column(String(40))  # digits only
+    email: Mapped[str | None] = mapped_column(String(255))
+    phone: Mapped[str | None] = mapped_column(String(80))
+    address: Mapped[str | None] = mapped_column(Text)
+    emirate: Mapped[str | None] = mapped_column(String(80))
+    category: Mapped[str | None] = mapped_column(String(120))
+    contact: Mapped[str | None] = mapped_column(String(255))
+    credit_limit: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    status: Mapped[str | None] = mapped_column(String(40))
+
+
 DATED_COLLECTIONS = frozenset({"rotaAssignments"})
 
 # Employee-owned workflow records the ESS portal lists per employee. Tasks belong to their
@@ -1508,3 +1537,4 @@ class TrialRequest(Base, TimestampMixin):
 import app.doc_index  # noqa: E402,F401
 import app.account_totals  # noqa: E402,F401  -- keeps AccountPeriodTotal current
 import app.doc_lines  # noqa: E402,F401  -- keeps DocumentLine current
+import app.parties  # noqa: E402,F401  -- keeps Party (customers, vendors) current
