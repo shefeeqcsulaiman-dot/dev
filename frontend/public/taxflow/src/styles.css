@@ -1311,12 +1311,7 @@ body.voice-off #vc-mic-btn,body.voice-off #dash-btn-briefing,body.voice-off .vf-
 .rota-cell.holiday{border-color:var(--red-border);background:var(--red-bg);}
 .rota-cell.training{border-color:var(--accent);background:var(--accent-glow);}
 .rota-board{display:grid;gap:10px;}
-.rota-staff-row{display:grid;grid-template-columns:190px minmax(0,1fr);gap:10px;align-items:stretch;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);}
-.rota-staff-row.rota-staff-row-selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
-.rota-staff-meta{display:flex;flex-direction:column;gap:4px;justify-content:center;min-width:0;cursor:pointer;border-radius:6px;padding:2px 4px;margin:-2px -4px;}
-.rota-staff-meta:hover{background:var(--accent-glow);}
-.rota-staff-meta strong{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.rota-staff-meta span,.rota-staff-meta em{font-size:11px;color:var(--text3);font-style:normal;}
+.rota-staff-av{flex:0 0 auto;}
 
 /* ── Employee Tasks panel (Weekly Rota) ── */
 .rota-emp-tasks-empty{padding:20px 0;text-align:center;color:var(--text3);font-size:12.5px}
@@ -1327,17 +1322,10 @@ body.voice-off #vc-mic-btn,body.voice-off #dash-btn-briefing,body.voice-off .vf-
 .rota-emp-task-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .rota-emp-task-title{font-size:12.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rota-emp-task-time{font-size:11px;color:var(--text3);white-space:nowrap;margin-left:auto;padding-left:8px}
-.rota-day-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;min-width:0;}
 .rota-day-cell{display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;min-width:0;border:1px solid var(--border);background:var(--surface);border-radius:8px;padding:6px;text-align:left;cursor:pointer;color:var(--text);font:inherit;}
 .rota-day-cell small{display:block;margin-bottom:5px;color:var(--text3);font-size:10.5px;}
 .rota-day-cell .rota-cell{min-width:0;width:100%;flex:1;}
 .rota-code-row{display:flex;gap:6px;flex-wrap:wrap;}
-.rota-month-grid{display:grid;gap:10px;}
-.rota-month-card{border:1px solid var(--border);border-radius:8px;background:var(--bg3);padding:12px;display:grid;gap:10px;}
-.rota-month-card strong{display:block;font-size:13px;}
-.rota-month-card span{font-size:11px;color:var(--text3);}
-.rota-month-days{display:flex;gap:6px;flex-wrap:wrap;}
-.rota-month-chip{border:1px solid var(--border2);border-radius:99px;padding:4px 8px;background:var(--surface);font-size:11px;color:var(--text2);}
 /* ── Task Management (Kanban board) ─────────────────────────────────── */
 .task-board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start;}
 .task-col{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px;min-height:140px;}
@@ -1360,29 +1348,6 @@ body.voice-off #vc-mic-btn,body.voice-off #dash-btn-briefing,body.voice-off .vf-
 .task-progress-bar{height:5px;border-radius:99px;background:var(--border2);overflow:hidden;margin:6px 0;}
 .task-progress-fill{height:100%;background:var(--accent);border-radius:99px;transition:width .15s;}
 @media (max-width:1100px){.task-board{grid-template-columns:1fr;}}
-/* Monthly Staff Overview — spreadsheet-style week grid (one block per
-   Mon-Sun week touching the selected month, employees as rows, days as
-   columns) replacing the old per-employee chip-list layout. Cell coloring
-   reuses .rota-cell's existing classes (off/approved/overtime/etc.) via
-   rotaCellHtml() so it stays consistent with the Weekly Schedule board and
-   theme-aware in both light and dark mode. */
-.rota-month-week-block{border:1px solid var(--border);border-radius:8px;background:var(--bg3);overflow:hidden;}
-.rota-month-week-hd{padding:8px 12px;font-size:12.5px;font-weight:700;background:var(--surface2);border-bottom:1px solid var(--border);color:var(--text);}
-.rota-month-table{width:100%;border-collapse:collapse;font-size:11.5px;}
-.rota-month-table th,.rota-month-table td{padding:6px 8px;border:1px solid var(--border);text-align:center;vertical-align:middle;}
-.rota-month-table thead th{background:var(--surface);font-weight:600;color:var(--text2);white-space:nowrap;}
-.rota-month-hd-date{font-size:10px;color:var(--text3);font-weight:400;margin-top:1px;}
-.rota-month-staff-cell{text-align:left;white-space:nowrap;background:var(--surface2);}
-.rota-month-staff-cell strong{display:block;font-size:12px;}
-.rota-month-staff-cell span{display:block;font-size:10px;color:var(--text3);}
-.rota-month-table tbody tr:nth-child(even) .rota-month-staff-cell{background:var(--accent-glow);}
-.rota-month-table .rota-cell{min-width:0;width:100%;border-radius:6px;padding:4px 5px;cursor:default;}
-.rota-month-table .rota-cell .rota-time{justify-content:center;}
-/* Monthly cells are real buttons now (openRotaCellEditor), same as
-   Weekly's -- reset all button chrome so the <td>'s own border/padding
-   and rotaCellHtml()'s inner styling are all that show. */
-.rota-month-day-cell{all:unset;display:block;width:100%;cursor:pointer;}
-.rota-month-day-cell .rota-cell{cursor:pointer;}
 .rota-coverage-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
 .rota-coverage-card{border:1px solid var(--border);border-radius:8px;background:var(--bg3);padding:12px;display:grid;gap:8px;}
 .rota-coverage-card strong{font-size:13px;}
@@ -1416,7 +1381,6 @@ input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;}
   .app-function-stage{grid-template-columns:1fr 1fr;}
   .app-function-strips{grid-column:1 / -1;}
   .app-function-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
-  .rota-staff-row{grid-template-columns:1fr;}
   .rota-day-grid{overflow-x:auto;grid-template-columns:repeat(7,92px);}
   .g3,.fr3,.fr4,.pricing-line{grid-template-columns:repeat(2,minmax(0,1fr));}
   .tabs{overflow-x:auto;white-space:nowrap;padding-bottom:1px;}
@@ -1879,3 +1843,189 @@ input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;}
   #page-hrms-ai [style*="grid-template-columns"]{grid-template-columns:minmax(0,1fr)!important;}
   #page-hrms-ai [style*="grid-column:span"]{grid-column:auto!important;}
 }
+
+/* ── Weekly Rota: Staff Schedule (hrms.html #rota-weekly, renderWeeklyRotaBoard()) ── */
+.rs-layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px;align-items:start;}
+.rs-main{padding:20px 22px;min-width:0;}
+.rs-side{display:flex;flex-direction:column;gap:16px;min-width:0;}
+.rs-side .card{padding:16px 18px;}
+.rs-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
+.rs-head-icon{width:52px;height:52px;border-radius:14px;background:var(--accent-glow);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.rs-head-text{flex:1 1 220px;min-width:0;}
+.rs-head-text h2{margin:0;font-size:22px;font-weight:700;color:var(--text);letter-spacing:-.3px;}
+.rs-head-text p{margin:3px 0 0;font-size:13px;color:var(--text3);}
+.rs-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.rs-btn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s,border-color .15s;}
+.rs-btn:hover{border-color:var(--border2);background:var(--surface2);}
+.rs-btn-csv svg{color:var(--green);}
+.rs-btn-pdf{background:var(--red-bg);border-color:var(--red-border);}
+.rs-btn-pdf svg{color:var(--red);}
+.rs-week{display:inline-flex;align-items:center;height:40px;border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden;}
+.rs-week-step{width:30px;height:100%;border:0;background:transparent;color:var(--text2);font-size:20px;line-height:1;cursor:pointer;}
+.rs-week-step:hover{background:var(--surface2);color:var(--text);}
+.rs-week-label{position:relative;display:inline-flex;align-items:center;gap:8px;height:100%;padding:0 10px;border-left:1px solid var(--border);border-right:1px solid var(--border);font-size:13px;font-weight:600;color:var(--text);cursor:pointer;white-space:nowrap;}
+.rs-week-label svg{color:var(--text3);flex-shrink:0;}
+.rs-week-input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0;}
+.rs-filters{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 8px;border:1px solid var(--border);border-radius:12px;background:var(--bg3);margin-bottom:12px;}
+.rs-tab{position:relative;display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 12px;border:0;background:transparent;color:var(--text2);font:inherit;font-size:14px;font-weight:600;cursor:pointer;border-radius:8px;}
+.rs-tab.on{color:var(--accent);}
+.rs-tab.on::after{content:"";position:absolute;left:8px;right:8px;bottom:-7px;height:3px;border-radius:3px;background:var(--accent);}
+.rs-select{display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 8px 0 12px;border-left:1px solid var(--border);color:var(--text3);}
+.rs-select select{border:0;background:transparent;color:var(--text);font:inherit;font-size:13.5px;font-weight:500;padding:0 4px;height:100%;cursor:pointer;max-width:170px;}
+.rs-select select:focus-visible,.rs-search input:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px;}
+.rs-search{margin-left:auto;display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;min-width:240px;flex:0 1 330px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text3);}
+.rs-search input{flex:1;min-width:0;border:0;background:transparent;color:var(--text);font:inherit;font-size:13.5px;height:100%;}
+.rs-workflow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+.rs-workflow-gap{flex:1;}
+.rs-repeat{position:relative;}
+.rs-repeat summary{list-style:none;}
+.rs-repeat summary::-webkit-details-marker{display:none;}
+.rs-repeat-pop{position:absolute;z-index:30;top:calc(100% + 6px);left:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:max-content;max-width:min(560px,80vw);padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:0 10px 30px rgba(15,23,42,.14);}
+
+/* The grid: one row per person, a box per day. */
+.rs-table-wrap{overflow-x:auto;margin:0 -4px;padding:0 4px 4px;}
+.rs-table{width:100%;min-width:1100px;border-collapse:separate;border-spacing:0 10px;margin-top:-10px;table-layout:fixed;}
+.rs-table thead th{background:var(--bg3);padding:12px 8px;text-align:left;font-weight:600;color:var(--text);}
+.rs-table thead th:first-child{border-radius:10px 0 0 10px;padding-left:20px;font-size:14px;}
+.rs-table thead th:last-child{border-radius:0 10px 10px 0;}
+.rs-th-staff{width:260px;}
+.rs-th-day b{display:block;font-size:14px;}
+.rs-th-day span{display:block;font-size:12px;font-weight:400;color:var(--text3);margin-top:2px;}
+.rs-th-day.is-today b{color:var(--accent);}
+.rs-th-day.is-today span{color:var(--accent);font-weight:600;}
+.rs-table tbody td,.rs-table tbody th{background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:10px 5px;vertical-align:stretch;}
+.rs-table tbody th{border-left:1px solid var(--border);border-radius:12px 0 0 12px;text-align:left;font-weight:400;padding-left:16px;}
+.rs-table tbody td:last-child{border-right:1px solid var(--border);border-radius:0 12px 12px 0;padding-right:10px;}
+.rs-row.is-selected th,.rs-row.is-selected td{background:var(--accent-glow);border-color:var(--accent);}
+.rs-row.is-selected th{box-shadow:inset 4px 0 0 var(--accent);}
+.rs-staff-inner{display:flex;align-items:flex-start;gap:6px;}
+.rs-staff-pick{flex:1;min-width:0;display:flex;align-items:center;gap:14px;border:0;background:transparent;padding:2px;text-align:left;font:inherit;color:inherit;cursor:pointer;border-radius:10px;}
+.rs-staff-pick:focus-visible,.rs-kebab:focus-visible,.rs-day:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.rs-staff-pick .co-av{border-radius:50%;}
+.rs-staff-text{display:flex;flex-direction:column;gap:4px;min-width:0;}
+.rs-staff-text strong{font-size:14.5px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rs-staff-text>span{font-size:12.5px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rs-staff-text em{display:inline-flex;align-items:center;gap:6px;font-style:normal;font-size:12.5px;font-weight:600;color:var(--text2);margin-top:4px;}
+.rs-kebab{border:0;background:transparent;color:var(--text3);font-size:20px;line-height:1;padding:4px 6px;border-radius:6px;cursor:pointer;}
+.rs-kebab:hover{background:var(--surface2);color:var(--text);}
+.rs-day.rota-day-cell{width:100%;height:100%;min-height:84px;padding:0;border:1px solid var(--border);border-radius:10px;background:var(--surface);transition:border-color .15s,box-shadow .15s;}
+.rs-day.rota-day-cell:hover{border-color:var(--accent);box-shadow:0 2px 10px rgba(15,23,42,.08);}
+.rs-table td.is-today .rs-day{border-color:var(--accent);}
+.rs-cell{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:9px;height:100%;min-height:82px;padding:10px 12px;text-align:left;}
+.rs-time{font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;}
+.rs-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:99px;font-size:11.5px;font-weight:600;}
+.rs-pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;}
+.rs-pill-green{background:var(--green-bg);color:var(--green);}
+.rs-pill-amber{background:var(--amber-bg);color:var(--amber);}
+.rs-pill-red{background:var(--red-bg);color:var(--red);}
+.rs-pill-orange{background:rgba(249,115,22,.12);color:#ea580c;}
+.rs-pill-indigo{background:rgba(99,102,241,.13);color:#4f46e5;}
+.rs-pill-blue{background:var(--accent-glow);color:var(--accent);}
+.rs-pill-gray{background:var(--surface2);color:var(--text3);}
+.rs-cell-off{background:var(--bg3);border-radius:9px;gap:6px;}
+.rs-off-top{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--text2);}
+.rs-cell-off small{font-size:11.5px;color:var(--text3);}
+.rs-tasks-badge{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;color:var(--text3);}
+.rs-tasks-badge i{width:7px;height:7px;border-radius:50%;}
+
+/* Side panel */
+.rs-person{padding:0 !important;overflow:hidden;}
+.rs-person-head{display:flex;align-items:flex-start;gap:14px;padding:18px;background:var(--accent-glow);}
+.rs-person-head .co-av{border-radius:50%;box-shadow:0 0 0 3px var(--surface);}
+.rs-person-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding-top:4px;}
+.rs-person-text strong{font-size:18px;font-weight:700;color:var(--text);}
+.rs-person-text>span{font-size:13px;color:var(--text3);}
+.rs-chip{align-self:flex-start;display:inline-flex;align-items:center;margin-top:6px;padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);font-style:normal;font-size:12px;font-weight:600;color:var(--accent);}
+.rs-person-tools{display:flex;gap:6px;}
+.rs-icon-btn{width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text2);font-size:16px;cursor:pointer;}
+.rs-icon-btn:hover{color:var(--accent);border-color:var(--accent);}
+#rota-emp-tasks-body{padding:12px 14px 14px;}
+.rs-note{width:100%;display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface);text-align:left;font:inherit;color:inherit;cursor:pointer;}
+.rs-note:hover{border-color:var(--accent);}
+.rs-note-icon{width:44px;height:44px;border-radius:10px;background:var(--green-bg);color:var(--green);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.rs-note-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
+.rs-note-text b{font-size:13px;color:var(--text);}
+.rs-note-text small{font-size:12px;color:var(--text3);}
+.rs-note i,.rs-action i{font-style:normal;font-size:20px;color:var(--text3);}
+.rs-tasks{max-height:260px;overflow:auto;}
+.rs-card-title{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:700;color:var(--text);margin-bottom:14px;}
+.rs-card-icon{color:var(--accent);display:inline-flex;}
+.rs-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;}
+.rs-tile{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--surface);min-width:0;}
+.rs-tile-icon{color:var(--accent);}
+.rs-tile b{font-family:'DM Mono',monospace;font-size:19px;font-weight:600;color:var(--text);}
+.rs-tile span:last-child{font-size:11.5px;color:var(--text3);line-height:1.3;}
+.rs-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.rs-action{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface);font:inherit;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;text-align:left;}
+.rs-action svg{color:var(--accent);flex-shrink:0;}
+.rs-action span{flex:1;min-width:0;}
+.rs-action:hover{border-color:var(--accent);}
+.rs-legend-title{margin:18px 0 10px;padding-top:14px;border-top:1px solid var(--border);font-size:14px;font-weight:700;color:var(--text);}
+.rs-legend{display:flex;flex-wrap:wrap;gap:8px;}
+.rs-legend-chip{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:10px;font-size:12px;font-weight:500;color:var(--text2);background:var(--surface2);}
+.rs-legend-chip b{font-weight:700;}
+.rs-legend-green{background:var(--green-bg);}.rs-legend-green b{color:var(--green);}
+.rs-legend-violet{background:var(--purple-bg);}.rs-legend-violet b{color:var(--purple);}
+.rs-legend-indigo{background:rgba(99,102,241,.1);}.rs-legend-indigo b{color:#4f46e5;}
+.rs-legend-amber{background:var(--amber-bg);}.rs-legend-amber b{color:var(--amber);}
+.rs-legend-orange{background:var(--red-bg);}.rs-legend-orange b{color:var(--red);}
+.rs-legend-gray b{color:var(--text);}
+.rs-bulk{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+.rs-menu{position:absolute;z-index:1000;min-width:180px;padding:6px;border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:0 12px 32px rgba(15,23,42,.16);display:flex;flex-direction:column;}
+.rs-menu button{border:0;background:transparent;text-align:left;padding:8px 10px;border-radius:7px;font:inherit;font-size:13px;color:var(--text);cursor:pointer;}
+.rs-menu button:hover,.rs-menu button:focus-visible{background:var(--accent-glow);color:var(--accent);outline:none;}
+@media(max-width:1599px){.rs-layout{grid-template-columns:1fr;}.rs-side{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));align-items:start;}}
+@media(max-width:720px){.rs-main{padding:14px;}.rs-search{margin-left:0;flex:1 1 100%;min-width:0;}.rs-select{border-left:0;}.rs-summary{grid-template-columns:1fr 1fr;}.rs-actions{grid-template-columns:1fr;}}
+
+/* ── Monthly Rota: Monthly Schedule (hrms.html #rota-monthly, renderMonthlyRotaBoard()) ── */
+.rs-head-text h2 .b{vertical-align:middle;margin-left:8px;font-size:11px;}
+.rs-kpis{display:flex;align-items:stretch;gap:12px;flex-wrap:wrap;padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg3);margin-bottom:16px;}
+.rs-kpi-list{flex:1 1 640px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;min-width:0;}
+.rs-kpi{display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;background:var(--surface);min-width:0;}
+.rs-kpi-icon{width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.rs-kpi-blue{background:var(--accent-glow);color:var(--accent);}
+.rs-kpi-green{background:var(--green-bg);color:var(--green);}
+.rs-kpi-violet{background:var(--purple-bg);color:var(--purple);}
+.rs-kpi-amber{background:var(--amber-bg);color:var(--amber);}
+.rs-kpi-pink{background:var(--red-bg);color:var(--red);}
+.rs-kpi-text{display:flex;flex-direction:column;gap:3px;min-width:0;}
+.rs-kpi-text b{font-family:'DM Mono',monospace;font-size:20px;font-weight:600;color:var(--text);}
+.rs-kpi-text span{font-size:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rs-kpi-filters{flex:1 1 300px;display:flex;flex-direction:column;justify-content:center;gap:8px;}
+.rs-kpi-filters .rs-search{margin-left:0;flex:none;min-width:0;width:100%;}
+.rs-select-box{border:1px solid var(--border);border-radius:10px;background:var(--surface);}
+.rs-th-staff-in{display:inline-flex;align-items:center;gap:10px;}
+.rs-table-month .rs-th-day b{display:flex;align-items:center;gap:6px;}
+.rs-table-month .rs-th-day b svg,.rs-table-month .rs-th-day em svg{color:var(--text3);}
+.rs-table-month .rs-th-day em{display:flex;align-items:center;gap:5px;margin-top:6px;font-style:normal;font-size:12px;font-weight:500;color:var(--text2);}
+.rs-table-month .rs-th-day.is-today{background:var(--accent-glow);}
+.rs-table-month .rs-th-day.is-today svg{color:var(--accent);}
+.rs-staff-static{cursor:default;}
+.rs-time{display:inline-flex;align-items:center;gap:6px;}
+.rs-time svg{color:var(--text2);}
+.rs-tinted.rs-cell{border-radius:9px;}
+.rs-tinted.rs-cell-green{background:var(--green-bg);}
+.rs-tinted.rs-cell-orange{background:rgba(249,115,22,.08);}
+.rs-tinted.rs-cell-indigo{background:rgba(99,102,241,.08);}
+.rs-tinted.rs-cell-red{background:var(--red-bg);}
+.rs-tinted.rs-cell-blue{background:var(--accent-glow);}
+.rs-tinted .rs-pill{background:transparent;padding-left:0;}
+.rs-cell-leave{gap:6px;}
+.rs-leave-top{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--red);}
+.rs-cell-leave small{font-size:11.5px;color:var(--red);opacity:.85;}
+.rs-tinted.rs-cell-leave{background:var(--red-bg);}
+.rs-day:has(.rs-tinted.rs-cell-leave){border-color:var(--red-border);}
+.rs-day:has(.rs-tinted.rs-cell-green){border-color:var(--green-border);}
+.rs-month-foot{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:6px;}
+.rs-month-count{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text3);margin-right:auto;}
+.rs-pager{display:flex;gap:6px;}
+.rs-page{min-width:34px;height:34px;padding:0 8px;border:1px solid var(--border);border-radius:9px;background:var(--surface);font:inherit;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;}
+.rs-page.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+.rs-page:disabled{opacity:.45;cursor:default;}
+@media(max-width:1300px){.rs-kpi-list{grid-template-columns:repeat(3,minmax(0,1fr));}}
+@media(max-width:720px){.rs-kpi-list{grid-template-columns:1fr 1fr;}}
+/* Staff column stays in view while the days scroll sideways on narrower screens. */
+.rs-table thead th:first-child,.rs-table tbody th{position:sticky;left:0;z-index:2;}
+.rs-table thead th:first-child{background:var(--bg3);}
+.rs-row.is-selected th{background:linear-gradient(var(--accent-glow),var(--accent-glow)),var(--surface);}
+.rs-table .rs-cell{padding:10px;}
