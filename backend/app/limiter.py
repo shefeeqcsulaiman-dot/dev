@@ -78,6 +78,10 @@ limiter = Limiter(
     storage_uri=_storage_uri(),
     # Same timeouts as app.cache: a dropped Redis connection must not hang every API request.
     storage_options=_storage_options(),
+    # Redis down or timing out: count in this process's memory instead, and never turn a
+    # storage error into a 500 (it did, 2026-10-10, once reads stopped hanging forever).
+    in_memory_fallback_enabled=True,
+    swallow_errors=True,
     enabled=_enabled,
     default_limits=["300/minute"],
 )

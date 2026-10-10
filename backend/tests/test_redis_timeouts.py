@@ -62,3 +62,10 @@ def test_limiter_uses_the_same_timeouts(monkeypatch):
     assert opts["socket_timeout"] == cache.CONNECTION_OPTIONS["socket_timeout"]
     monkeypatch.setattr(get_settings(), "redis_url", "memory://")
     assert limiter._storage_options() == {}
+
+
+def test_rate_limiter_fails_open_when_redis_misbehaves():
+    # A Redis timeout inside the limiter must not become a 500 for the user.
+    from app.limiter import limiter
+    assert limiter._swallow_errors is True
+    assert limiter._in_memory_fallback_enabled is True
