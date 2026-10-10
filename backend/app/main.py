@@ -33,6 +33,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import bindparam, inspect, text
 from sqlalchemy.orm import Session
 
+from app.cache import LocalTTLCache
 from app.company_defaults import seed_accounts, seed_tax_codes, seed_voucher_types
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
@@ -96,6 +97,9 @@ def _resolve_ess_js() -> tuple[bytes, bool]:
     return _resolve_minified_js("ess")
 
 
+_user_company_ids = LocalTTLCache(max_entries=50000)
+
+
 async def _invalidate_cache_bg(auth_header: str) -> None:
     import asyncio
     try:
@@ -104,17 +108,24 @@ async def _invalidate_cache_bg(auth_header: str) -> None:
             return
         from app.security import user_id_from_token
         user_id = await asyncio.get_event_loop().run_in_executor(None, user_id_from_token, token)
-        if not user_id:
+        # Employee ("emp:") and branch ("branch:") tokens never match a User row.
+        if not user_id or ":" in user_id:
             return
         def _sync():
-            db = SessionLocal()
-            try:
-                user = db.query(User).filter(User.id == user_id).first()
-                if user:
-                    import app.cache as _cache
-                    _cache.invalidate_company(user.company_id)
-            finally:
-                db.close()
+            import app.cache as _cache
+            # A user's company never changes, so it's looked up once per process rather
+            # than on every write.
+            company_id = _user_company_ids.get(user_id)
+            if company_id is None:
+                db = SessionLocal()
+                try:
+                    company_id = db.query(User.company_id).filter(User.id == user_id).scalar()
+                finally:
+                    db.close()
+                if not company_id:
+                    return
+                _user_company_ids.set(user_id, company_id, 3600)
+            _cache.invalidate_company(company_id)
         await asyncio.get_event_loop().run_in_executor(None, _sync)
     except Exception:
         pass
@@ -171,79 +182,12 @@ def create_app() -> FastAPI:
     ])
     _csp_mode = os.environ.get("CSP_MODE", "enforce").strip().lower()
 
-    @app.middleware("http")
-    async def security_headers(request: Request, call_next):
-        response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = "camera=(self), microphone=(self), geolocation=(self), payment=(), usb=()"
-        if _csp_mode == "enforce":
-            response.headers["Content-Security-Policy"] = _csp
-        elif _csp_mode == "report":
-            response.headers["Content-Security-Policy-Report-Only"] = _csp
-        # DO App Platform terminates TLS upstream and forwards plain HTTP to
-        # the app, so request.url.scheme is unreliable -- X-Forwarded-Proto
-        # is what actually reflects what the browser used. Only send HSTS
-        # when the browser reached us over HTTPS, so a plain-http local/
-        # scratch server (no proxy in front) never gets it either.
-        if request.headers.get("x-forwarded-proto", request.url.scheme) == "https":
-            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        return response
+    # Security and cache headers, request timing, live-load counts and cache
+    # invalidation after writes, in one plain ASGI middleware (app/http_middleware.py).
+    # Added last, so it wraps CORS and compression as the five functions it replaced did.
+    from app.http_middleware import AppMiddleware
 
-    @app.middleware("http")
-    async def cache_invalidation(request: Request, call_next):
-        response = await call_next(request)
-        if request.method in ("POST", "PUT", "PATCH", "DELETE") and "/api/v1/" in request.url.path:
-            import asyncio
-            auth_header = request.headers.get("authorization", "")
-            asyncio.create_task(_invalidate_cache_bg(auth_header))
-        return response
-
-    @app.middleware("http")
-    async def request_timing(request: Request, call_next):
-        # Per-endpoint timings, slow-request/slow-query logs, Server-Timing
-        # header -- see app/monitoring.py.
-        return await monitoring.time_request(request, call_next, settings.slow_request_ms)
-
-    @app.middleware("http")
-    async def request_load_tracking(request: Request, call_next):
-        # Feeds the superadmin "Live Load" panel (system-health) — scoped to
-        # /api/v1/ only so static asset traffic doesn't dilute the signal of
-        # how many actual app requests are in flight right now.
-        from app.request_metrics import request_finished, request_started
-        is_api = "/api/v1/" in request.url.path
-        if is_api:
-            request_started()
-        try:
-            return await call_next(request)
-        finally:
-            if is_api:
-                request_finished()
-
-    @app.middleware("http")
-    async def static_cache_headers(request: Request, call_next):
-        response = await call_next(request)
-        if request.method == "GET" and response.status_code == 200 and "cache-control" not in response.headers:
-            path = request.url.path
-            last_segment = path.rsplit("/", 1)[-1]
-            ext = last_segment.rsplit(".", 1)[-1].lower() if "." in last_segment else ""
-            if ext in ("js", "css") and "v=" in request.url.query:
-                # Cache-busted via ?v=... query string, so it's safe to cache "forever" —
-                # any future edit ships under a new query string and misses this cache entirely.
-                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-            elif ext in ("woff2", "woff") and not path.startswith("/api/"):
-                # Self-hosted fonts: a given file name never changes content, cache "forever".
-                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-            elif ext in ("png", "jpg", "jpeg", "gif", "svg", "ico", "webp") and not path.startswith("/api/"):
-                # Static site images (logo etc.). Not versioned, so a day (not a year); never
-                # applied to /api/ paths, which can return per-user images.
-                response.headers["Cache-Control"] = "public, max-age=86400"
-            elif ext == "html" or path in ("", "/"):
-                # Never cache HTML itself — it's the only thing that references the current
-                # ?v=... asset URLs above, so it must always be revalidated on load.
-                response.headers["Cache-Control"] = "no-cache"
-        return response
+    app.add_middleware(AppMiddleware, csp=_csp, csp_mode=_csp_mode, on_write=_invalidate_cache_bg)
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -358,7 +302,7 @@ def create_app() -> FastAPI:
 
     # Bumped with each deploy-relevant change, so /health shows which code is live (the image
     # has no git metadata). Format: date.sequence.
-    BUILD = "2026-10-10.7"
+    BUILD = "2026-10-10.8"
 
     def monitoring_sentry_on() -> bool:
         from app import monitoring as _monitoring

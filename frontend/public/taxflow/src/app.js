@@ -4432,6 +4432,7 @@ async function syncReportsFromDatabase(){
       return;
     }
     _lastReportVersion=data._version||null;
+    _glLoadedFor=null; // figures changed: the General Ledger tab fetches again when shown
     renderReportsFromDatabase(data);
   }catch(err){
     console.warn('Reports database sync failed:',err);
@@ -4472,7 +4473,7 @@ function renderReportsFromDatabase(data){
     ()=>renderBalanceSheetReport(d.balance_sheet||{}),
     ()=>renderBudgetCashReports(d.budget_cash||{}),
     ()=>renderTrialBalanceReport(d.trial_balance||[]),
-    ()=>renderGeneralLedger(d.general_ledger||[]),
+    ()=>{if(document.getElementById('rep-gl')?.classList.contains('on'))loadGeneralLedgerReport();},
     ()=>renderPartyLedger('rep-cl-body',d.customer_ledger||[],'Customer','customer'),
     ()=>renderPartyLedger('rep-sl-body',d.supplier_ledger||[],'Supplier','supplier'),
     ()=>renderAgingReport(d.aging||[]),
@@ -4616,6 +4617,30 @@ function renderTrialBalanceReport(rows){
   const dt=rows.reduce((s,r)=>s+Number(r.debit||0),0);
   const ct=rows.reduce((s,r)=>s+Number(r.credit||0),0);
   body.innerHTML=(rows.length?rows.map(r=>`<tr><td class="mono">${escapeHtml(r.code)}</td><td>${escapeHtml(r.name)}</td><td class="mono" style="text-align:right">${reportAmount(r.debit)}</td><td class="mono" style="text-align:right">${reportAmount(r.credit)}</td></tr>`).join(''):`<tr><td colspan="4" style="color:var(--text3);text-align:center">No posted journal lines in database.</td></tr>`)+`<tr style="background:var(--surface2)"><td colspan="2" style="font-weight:600">Total</td><td class="mono" style="text-align:right;font-weight:600">${reportAmount(dt)}</td><td class="mono" style="text-align:right;font-weight:600">${reportAmount(ct)}</td></tr>`;
+}
+
+// Reports > General Ledger comes from its own endpoint, fetched when the tab is shown
+// (it used to ride along in every /reports/summary response, ~99% of its size).
+let _glLoadedFor=null;
+async function loadGeneralLedgerReport(){
+  const body=document.getElementById('rep-gl-body');
+  if(!body)return;
+  const key=window.ACTIVE_BRANCH_ID||'all';
+  if(_glLoadedFor===key)return;
+  _glLoadedFor=key;
+  body.innerHTML='<tr><td colspan="8" style="color:var(--text3);text-align:center">Loading…</td></tr>';
+  try{
+    const response=await _fetchReportWithRetry(`${apiBaseUrl()}/reports/general-ledger`);
+    if(!response.ok)throw new Error('General Ledger API returned '+response.status);
+    const data=await response.json();
+    if(_glLoadedFor!==key)return; // branch changed while loading
+    renderGeneralLedger(data.rows||[]);
+    refreshEnhancedTable(body.closest('table'));
+  }catch(err){
+    console.warn('General Ledger load failed:',err);
+    if(_glLoadedFor===key)_glLoadedFor=null;
+    body.innerHTML='<tr><td colspan="8" style="color:var(--text3);text-align:center">Could not load — try refreshing</td></tr>';
+  }
 }
 
 function renderGeneralLedger(rows){

@@ -8,7 +8,8 @@ from app import cache, database
 from tests.conftest import TEST_DB
 
 REPORTS = ("/api/v1/reports/dashboard", "/api/v1/reports/summary",
-           "/api/v1/reports/trial-balance", "/api/v1/reports/branch-performance")
+           "/api/v1/reports/trial-balance", "/api/v1/reports/branch-performance",
+           "/api/v1/reports/general-ledger")
 
 
 class _Counting:

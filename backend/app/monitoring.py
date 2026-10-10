@@ -292,35 +292,8 @@ def route_template(scope: dict) -> str:
 
 
 def _is_monitored(path: str) -> bool:
+    """Requests timed by app/http_middleware.py (which records them here)."""
     return path.startswith("/api/") or path.startswith("/iclock/")
-
-
-async def time_request(request, call_next, slow_request_ms: int):
-    path = request.url.path
-    if not _is_monitored(path):
-        return await call_next(request)
-    acc = [0.0, 0]
-    token = _request_db.set(acc)
-    start = time.perf_counter()
-    status = 500
-    try:
-        response = await call_next(request)
-        status = response.status_code
-        total = (time.perf_counter() - start) * 1000
-        response.headers["Server-Timing"] = (
-            f'app;dur={total:.1f}, db;dur={acc[0]:.1f};desc="{acc[1]} queries"'
-        )
-        return response
-    finally:
-        total = (time.perf_counter() - start) * 1000
-        _request_db.reset(token)
-        key = f"{request.method} {route_template(request.scope)}"
-        record(key, total, status, acc[0], acc[1])
-        if slow_request_ms and total >= slow_request_ms:
-            log.warning(
-                "slow request %s %s -> %s in %.0fms (db %.0fms, %d queries)",
-                request.method, path, status, total, acc[0], acc[1],
-            )
 
 
 # ── Sentry ───────────────────────────────────────────────────────────────────

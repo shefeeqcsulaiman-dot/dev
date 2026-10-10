@@ -5,7 +5,9 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.account_totals import account_totals
 from app.accounting_posting import PostingError, build_journal, post_source_transaction, repost_source_transaction
+from app.config import get_settings
 from app.models import (
     Account,
     Company,
@@ -302,17 +304,29 @@ def refresh_corporate_tax_from_posted_sources(db: Session, company_id: str, peri
     accounting_profit = sales - purchases
     # Prefer the ledger (includes operating expenses and manual journals);
     # sales-minus-purchases is only the fallback for a company with no GL yet.
-    gl_rows = (
-        db.query(Account.type, func.coalesce(func.sum(JournalLine.credit - JournalLine.debit), 0))
-        .join(JournalLine, JournalLine.account_id == Account.id)
-        .join(JournalEntry, JournalEntry.id == JournalLine.journal_id)
-        .filter(JournalEntry.company_id == company_id, JournalEntry.status == "posted",
-                Account.type.in_(["sales", "purchase", "direct expense", "indirect expense"]))
-        .group_by(Account.type)
-        .all()
-    )
-    if gl_rows:
-        accounting_profit = money(sum((Decimal(str(v or 0)) for _t, v in gl_rows), Decimal("0.00")))
+    profit_types = ["sales", "purchase", "direct expense", "indirect expense"]
+    if get_settings().report_totals_source == "live":
+        gl_rows = (
+            db.query(Account.type, func.coalesce(func.sum(JournalLine.credit - JournalLine.debit), 0))
+            .join(JournalLine, JournalLine.account_id == Account.id)
+            .join(JournalEntry, JournalEntry.id == JournalLine.journal_id)
+            .filter(JournalEntry.company_id == company_id, JournalEntry.status == "posted", Account.type.in_(profit_types))
+            .group_by(Account.type)
+            .all()
+        )
+        gl_values = [v for _t, v in gl_rows]
+    else:
+        # This runs on every sales/purchase/receipt save. Summing the company's whole
+        # journal here took ~30 ms per save at 9k journal lines and grew with its history;
+        # the stored per-month totals (app/account_totals.py, already updated for this
+        # save's journal by the flush above) give the same figure from a few rows.
+        totals = account_totals(db, company_id)
+        profit_accounts = {
+            account_id for (account_id,) in db.query(Account.id).filter(Account.id.in_(list(totals)), Account.type.in_(profit_types))
+        } if totals else set()
+        gl_values = [credit - debit for account_id, (debit, credit) in totals.items() if account_id in profit_accounts]
+    if gl_values:
+        accounting_profit = money(sum((Decimal(str(v or 0)) for v in gl_values), Decimal("0.00")))
     existing_adjustments = (
         db.query(CorporateTaxRecord.tax_adjustments)
         .filter(CorporateTaxRecord.company_id == company_id, CorporateTaxRecord.period == period)
