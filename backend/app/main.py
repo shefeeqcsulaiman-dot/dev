@@ -358,7 +358,7 @@ def create_app() -> FastAPI:
 
     # Bumped with each deploy-relevant change, so /health shows which code is live (the image
     # has no git metadata). Format: date.sequence.
-    BUILD = "2026-10-10.6"
+    BUILD = "2026-10-10.7"
 
     def monitoring_sentry_on() -> bool:
         from app import monitoring as _monitoring
@@ -546,8 +546,6 @@ def create_app() -> FastAPI:
     app.include_router(invoices.router, prefix="/api/v1")
     app.include_router(documents.router, prefix="/api/v1")
     app.include_router(jobs.router, prefix="/api/v1")
-    from app.routers import demo_data as demo_data_router
-    app.include_router(demo_data_router.router, prefix="/api/v1")
     app.include_router(source_transactions.router, prefix="/api/v1")
     app.include_router(accounting.router, prefix="/api/v1")
     app.include_router(corporate_accounting.router, prefix="/api/v1")

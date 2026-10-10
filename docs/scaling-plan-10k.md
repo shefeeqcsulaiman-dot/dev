@@ -66,10 +66,6 @@ Rough infrastructure cost at that size: a few thousand US dollars a month (reven
 - `catalog_products` (migration 0016, `app/catalog_products.py`): one row per "products" app-data record, kept current on every save, edit and delete through `app/record_mirror.py` like `parties` (customers, vendors). Check/rebuild: `python -m app.catalog_products [--rebuild]`.
 - `GET /app-data/catalog/<list>` now matches on these typed columns (products: code, name, barcode, category, supplier; customers/vendors: name, TRN digits, email, phone, contact) instead of the JSON text, which matched field names too: searching "name", "code" or "email" returned every record.
 
-## Demo data (Settings > Data > Fill Demo Data, 2026-10-10)
-
-- `POST /api/v1/demo-data` (company admins) starts a background job that fills the company through the app's own API, in-process, as that admin (`app/demo_data.py`): 4 branches, 10 employees with full HR details, shifts, this week's rota, 10 days of attendance, leave, overtime, a loan and an advance, tasks, last month's payroll (approved), categories/units, 8 customers, 6 suppliers, 15 products, 10 purchases, 4 bills, 12 sales invoices, 4 quotations, receipts and supplier payments, 6 expenses, a bank account with statement lines and 2 journals (~200 records, ~10 s). Every posting, VAT line and stock movement is made by the normal save paths. Stable `DEMO-` keys: a second run updates instead of duplicating (tested). Product names avoid app.js's hidden old-sample list (`DEMO_PRODUCT_NAMES`).
-
 ## Products, customers and suppliers beyond what start-up loads (2026-10-08)
 
 - Start-up carries the newest 2,000 products (customers and suppliers share the overall cap). The pickers (invoice and quotation lines, purchase lines, customer fields) and the search boxes of the Item Master, Customers and Suppliers tables also ask `GET /app-data/catalog/<list>?q=` as you type (2+ characters) and add what it finds, so every record can be found, chosen and opened. 16-21 ms per search on 2.4M app-data rows.

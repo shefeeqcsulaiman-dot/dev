@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=f14f81f61a" as="style">
-<link rel="preload" href="src/app.js?v=a05689fa00" as="script">
+<link rel="preload" href="src/app.js?v=64eb453fe0" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=f14f81f61a">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
@@ -1734,13 +1734,6 @@
             <tr><td class="mono">HOUR</td><td>Hour</td><td>Time</td><td class="mono">2</td><td><span class="b b-g">Active</span></td></tr>
           </tbody>
         </table>
-      </div>
-    </div>
-    <div class="card mb16">
-      <div class="card-hd"><div><div class="card-title">Sample Data</div><div class="card-sub">Fill this company with realistic demo records in every module, to try the app or train staff</div></div></div>
-      <div class="flx" style="gap:10px;flex-wrap:wrap;align-items:center">
-        <button class="btn btn-p btn-sm" id="demo-data-btn" onclick="fillDemoData(this)">Fill Demo Data</button>
-        <span id="demo-data-status" style="font-size:12px;color:var(--text3)">Adds 4 branches, 10 employees with full HR records (rota, attendance, leave, overtime, loans, payroll, tasks), customers, suppliers, products, purchases, bills, sales invoices, quotations, receipts, payments, expenses, bank and journals. Safe to run again: it updates the same DEMO- records.</span>
       </div>
     </div>
     <div class="card" style="border-color:rgba(240,107,107,.3)">
@@ -5782,6 +5775,6 @@ period_locks ─&lt; audit_logs
      order relative to app.js's own defer, so config.js still runs first. -->
 <script src="config.js" defer></script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=a05689fa00" defer></script>
+<script src="src/app.js?v=64eb453fe0" defer></script>
 </body>
 </html>

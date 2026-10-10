@@ -15635,45 +15635,6 @@ function runOCR(){
   ready.forEach((f,i)=>setTimeout(()=>extractSingleFile(f),i*500));
 }
 
-// Settings > Data > Fill Demo Data: POST /demo-data starts a server job that creates the sample
-// records through the app's own API (app/demo_data.py); this waits for it, then reloads.
-async function fillDemoData(btn){
-  const ok=await appConfirm({title:'Fill demo data?',message:'This adds 4 branches, 10 employees and sample records in every module to this company. Running it again updates the same DEMO- records instead of adding copies.',okText:'Fill Demo Data',tone:'primary'});
-  if(!ok)return;
-  const status=document.getElementById('demo-data-status');
-  const label=btn?btn.textContent:'';
-  const say=text=>{if(status)status.textContent=text;};
-  if(btn){btn.disabled=true;btn.textContent='Filling…';}
-  say('Creating demo records… this takes about a minute.');
-  try{
-    const start=await authenticatedFetch(`${apiBaseUrl()}/demo-data`,{method:'POST'});
-    const started=await start.json().catch(()=>({}));
-    if(!start.ok)throw new Error(started.detail||`server returned ${start.status}`);
-    let job=started;
-    const deadline=Date.now()+10*60*1000;
-    while(job.status!=='completed'&&job.status!=='failed'){
-      if(Date.now()>deadline)throw new Error('still running after 10 minutes; check back shortly');
-      await new Promise(r=>setTimeout(r,3000));
-      const resp=await _authenticatedFetchUncached(`${apiBaseUrl()}/app-data/jobs/${encodeURIComponent(started.job_id)}`,{});
-      job=await resp.json();
-    }
-    if(job.status==='failed')throw new Error(job.error||'the job failed');
-    const counts=job.result?.counts||{};
-    const failed=job.result?.failed||0;
-    const total=Object.values(counts).reduce((a,b)=>a+Number(b||0),0);
-    say(`Done: ${total} records (${counts.branches||0} branches, ${counts.employees||0} employees, ${counts.sales_invoices||0} invoices, ${counts.purchases||0} purchases…)${failed?` — ${failed} could not be saved`:''}. Reloading…`);
-    toast(failed?`Demo data added; ${failed} item(s) could not be saved`:'Demo data added','ok');
-    if(failed)console.warn('Demo data items not saved:',job.result.failures);
-    // A full reload: the in-place refresh doesn't redraw every list (e.g. the Item Master).
-    setTimeout(()=>location.reload(),failed?4000:1500);
-  }catch(err){
-    say(`Could not fill demo data: ${err.message}`);
-    toast(`Could not fill demo data: ${err.message}`,'err');
-  }finally{
-    if(btn){btn.disabled=false;btn.textContent=label;}
-  }
-}
-
 async function wipeAllCompanyData(){
   const confirmed=await appConfirm({
     title:'Clear All Data from Database',
