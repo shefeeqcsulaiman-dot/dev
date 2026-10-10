@@ -22287,6 +22287,12 @@ function selectedWeekAssignments(scope='week'){
   return [...rotaAssignmentsById.values()].filter(item=>ids.has(item.employee_id)&&dates.has(item.date));
 }
 
+// Rota hours as a duration: 184 -> "184 hrs", 7.5 -> "7h 30m", 0 -> "0 hrs".
+function rotaHoursLabel(hours){
+  const mins=Math.round((Number(hours)||0)*60);
+  const h=Math.floor(mins/60),m=mins%60;
+  return m?`${h}h ${m}m`:`${h} hrs`;
+}
 function renderRotaSummary(){
   const weeklyBody=document.getElementById('rota-weekly-summary-tbody');
   const weekly=selectedWeekAssignments('week');
@@ -22295,14 +22301,14 @@ function renderRotaSummary(){
   const ot=weekly.filter(item=>item.code==='OT').length;
   const leave=weekly.filter(item=>item.code==='L').length;
   const off=weekly.filter(item=>item.code==='OFF').length;
-  if(weeklyBody)weeklyBody.innerHTML=`<tr><td>Total Staff</td><td class="mono">${staffCount}</td></tr><tr><td>Scheduled Hours</td><td class="mono">${scheduled.toFixed(1)}</td></tr><tr><td>Overtime Cells</td><td class="mono" style="color:var(--purple)">${ot}</td></tr><tr><td>Leave Days</td><td class="mono" style="color:var(--amber)">${leave}</td></tr><tr><td>Off Days</td><td class="mono">${off}</td></tr>`;
+  if(weeklyBody)weeklyBody.innerHTML=`<tr><td>Total Staff</td><td class="mono">${staffCount}</td></tr><tr><td>Scheduled Hours</td><td class="mono">${rotaHoursLabel(scheduled)}</td></tr><tr><td>Overtime Cells</td><td class="mono" style="color:var(--purple)">${ot}</td></tr><tr><td>Leave Days</td><td class="mono" style="color:var(--amber)">${leave}</td></tr><tr><td>Off Days</td><td class="mono">${off}</td></tr>`;
   const tiles=document.getElementById('rota-weekly-summary');
   if(tiles){
     const icon=d=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" aria-hidden="true">${d}</svg>`;
     const cal='<rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>';
     tiles.innerHTML=[
       [icon('<circle cx="9" cy="8" r="3.2"/><path d="M3 19c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14c2.4.2 4 1.7 4.5 4.5"/>'),String(staffCount),'Total Staff'],
-      [icon('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),scheduled.toFixed(1),'Scheduled Hours'],
+      [icon('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),rotaHoursLabel(scheduled),'Scheduled Hours'],
       [icon(cal+'<path d="M12 13v4M10 15h4"/>'),String(ot),'Overtime Cells'],
       [icon(cal+'<path d="m9.5 13.5 5 4M14.5 13.5l-5 4"/>'),String(leave),'Leave Days'],
     ].map(([ic,val,lbl])=>`<div class="rs-tile"><span class="rs-tile-icon">${ic}</span><b>${escapeHtml(val)}</b><span>${escapeHtml(lbl)}</span></div>`).join('');
@@ -22433,8 +22439,8 @@ function renderMonthlyRotaBoard(){
     kpis.innerHTML=[
       ['blue',icon('<circle cx="9" cy="8" r="3.2"/><path d="M3 19c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14c2.4.2 4 1.7 4.5 4.5"/>'),String(staffAll.length),'Total Staff'],
       ['green',icon(cal+'<path d="m9 15 2 2 4-4"/>'),String(scheduledDays),'Scheduled Days'],
-      ['violet',icon('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),totalHours.toFixed(1),'Total Scheduled Hours'],
-      ['amber',icon('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),otHours.toFixed(1),'Overtime Hours'],
+      ['violet',icon('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),rotaHoursLabel(totalHours),'Total Scheduled Hours'],
+      ['amber',icon('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),rotaHoursLabel(otHours),'Overtime Hours'],
       ['pink',icon(cal),String(leaveDays),'Leave Days'],
     ].map(([tone,ic,val,lbl])=>`<div class="rs-kpi"><span class="rs-kpi-icon rs-kpi-${tone}">${ic}</span><span class="rs-kpi-text"><b>${escapeHtml(val)}</b><span>${escapeHtml(lbl)}</span></span></div>`).join('');
   }
@@ -24754,48 +24760,145 @@ function _fmtTrendDate(iso){
   return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
 }
 
+// Dashboard "Attendance Trend" card: a stat strip (latest day, average, peak)
+// over a smooth area chart with gridlines, date ticks, a dashed average line
+// and a hover tooltip. Drawn at the card's real pixel width (and redrawn when
+// it resizes) so text and dots are never stretched. Leading days before
+// tracking began are skipped so the chart isn't mostly a flat zero line.
 function _updateDashboardAttTrend(dates,counts){
   const wrap=document.querySelector('.hrms-line-chart-wrap');
   if(!wrap)return;
-  // A line/area chart, not the bar chart the Attendance page's own bigger
-  // trend chart uses — this compact Dashboard card's own header icon is a
-  // trend-line illustration ("Attendance Trend"), so the actual chart
-  // rendered underneath should match that, not bars.
-  const chart=_renderAttendanceLineChart(dates,counts,{width:400,height:100,fullSize:true});
-  wrap.innerHTML=`<div style="width:100%;height:100%;display:flex;flex-direction:column"><div style="flex:1;min-height:0">${chart.svg}</div><div style="font-size:10.5px;color:var(--text3);text-align:center;padding-top:4px">${escapeHtml(chart.subText)}</div></div>`;
+  wrap._attTrend={dates,counts};
+  _drawDashboardAttTrend(wrap);
+  if(!wrap._attTrendRO&&typeof ResizeObserver==='function'){
+    let lastW=Math.round(wrap.clientWidth);
+    wrap._attTrendRO=new ResizeObserver(()=>{
+      const w=Math.round(wrap.clientWidth);
+      if(w&&Math.abs(w-lastW)>4){lastW=w;_drawDashboardAttTrend(wrap);}
+    });
+    wrap._attTrendRO.observe(wrap);
+  }
 }
 
-function _renderAttendanceLineChart(dates,counts,{width:W,height:H,fullSize=false}={}){
-  const PAD=6;
-  const n=dates.length;
-  const max=Math.max(1,...counts);
-  const firstActiveIdx=counts.findIndex(c=>c>0);
-  const trackedCounts=firstActiveIdx>=0?counts.slice(firstActiveIdx):counts;
-  const avg=trackedCounts.length?Math.round(trackedCounts.reduce((a,b)=>a+b,0)/trackedCounts.length):0;
+// Catmull-Rom → cubic Bézier through the points; control points are clamped
+// to each segment's y-range so the curve never overshoots (e.g. below zero).
+function _attSmoothPath(pts){
+  if(!pts.length)return '';
+  let d=`M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for(let i=0;i<pts.length-1;i++){
+    const p0=pts[i-1]||pts[i],p1=pts[i],p2=pts[i+1],p3=pts[i+2]||p2;
+    const lo=Math.min(p1[1],p2[1]),hi=Math.max(p1[1],p2[1]);
+    const c1y=Math.min(hi,Math.max(lo,p1[1]+(p2[1]-p0[1])/6));
+    const c2y=Math.min(hi,Math.max(lo,p2[1]-(p3[1]-p1[1])/6));
+    const c1x=p1[0]+(p2[0]-p0[0])/6,c2x=p2[0]-(p3[0]-p1[0])/6;
+    d+=` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+
+function _drawDashboardAttTrend(wrap){
+  const data=wrap._attTrend;
+  if(!data)return;
+  let {dates,counts}=data;
+  const firstActive=counts.findIndex(c=>c>0);
+  if(firstActive>0&&dates.length-firstActive>=2){dates=dates.slice(firstActive);counts=counts.slice(firstActive);}
+  const n=counts.length;
+  if(!n)return;
+  const last=counts[n-1],prev=n>1?counts[n-2]:null;
+  const avg=counts.reduce((a,b)=>a+b,0)/n;
+  const peak=Math.max(...counts);
+  const peakIdx=counts.lastIndexOf(peak);
+  const diff=prev==null?null:last-prev;
   const todayIso=new Date().toISOString().slice(0,10);
-  const stepX=n>1?(W-PAD*2)/(n-1):0;
-  const points=counts.map((c,i)=>[PAD+i*stepX,H-PAD-(c/max)*(H-PAD*2)]);
-  const linePath=points.map(([x,y],i)=>`${i===0?'M':'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-  const lastX=points.length?points[points.length-1][0].toFixed(1):PAD;
-  const firstX=points.length?points[0][0].toFixed(1):PAD;
-  const areaPath=points.length?`${linePath} L${lastX},${(H-PAD).toFixed(1)} L${firstX},${(H-PAD).toFixed(1)} Z`:'';
-  const gradId='attTrendAreaGrad'+Math.random().toString(36).slice(2,8);
-  const todayIdx=dates.indexOf(todayIso);
-  const dots=points.map(([x,y],i)=>{
-    const isToday=i===todayIdx;
-    const r=isToday?3:1.6;
-    const style=isToday?`fill:var(--accent)" stroke="var(--surface,#fff)" stroke-width="1.5`:'fill:var(--accent)" opacity="0.55';
-    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" style="${style}"><title>${dates[i]}: ${counts[i]} present${isToday?' (today)':''}</title></circle>`;
+  const lastLabel=dates[n-1]===todayIso?'Today':_fmtTrendDate(dates[n-1]);
+  const diffHtml=diff==null?''
+    :diff===0?'<span class="hd-at-delta">No change</span>'
+    :`<span class="hd-at-delta ${diff>0?'up':'down'}">${diff>0?'▲':'▼'} ${Math.abs(diff)} vs prev. day</span>`;
+  const avgTxt=avg<10&&avg%1?avg.toFixed(1):String(Math.round(avg));
+  const stats=`<div class="hd-at-stats">`
+    +`<div class="hd-at-stat"><span>${escapeHtml(lastLabel)}</span><b>${last}</b>${diffHtml}</div>`
+    +`<div class="hd-at-stat"><span>Daily average</span><b>${avgTxt}</b><span class="hd-at-delta">last ${n} days</span></div>`
+    +`<div class="hd-at-stat"><span>Peak</span><b>${peak}</b><span class="hd-at-delta">${escapeHtml(_fmtTrendDate(dates[peakIdx]))}</span></div>`
+    +`</div>`;
+
+  const W=Math.max(240,Math.round(wrap.clientWidth||400)),H=160;
+  const L=30,R=12,T=12,B=24;
+  const cw=W-L-R,ch=H-T-B;
+  // A "nice" y-axis top split into 4 even steps.
+  const stepRaw=Math.max(1,peak)/4;
+  const mag=Math.pow(10,Math.floor(Math.log10(stepRaw)));
+  let step=[1,2,2.5,5,10].map(m=>m*mag).find(v=>v>=stepRaw);
+  if(step<1)step=1;
+  const yMax=step*4;
+  const x=i=>L+(n>1?i*cw/(n-1):cw/2);
+  const y=v=>T+ch-(v/yMax)*ch;
+  const pts=counts.map((c,i)=>[x(i),y(c)]);
+  const line=_attSmoothPath(pts);
+  const base=(T+ch).toFixed(1);
+  const area=`${line} L${pts[n-1][0].toFixed(1)},${base} L${pts[0][0].toFixed(1)},${base} Z`;
+  const fmtTick=v=>Number.isInteger(v)?String(v):v.toFixed(1);
+  let grid='';
+  for(let k=0;k<=4;k++){
+    const yy=y(step*k).toFixed(1);
+    grid+=`<line x1="${L}" x2="${W-R}" y1="${yy}" y2="${yy}" class="hd-at-grid${k===0?' base':''}"/>`
+      +`<text x="${L-7}" y="${yy}" class="hd-at-ylab" text-anchor="end" dominant-baseline="middle">${fmtTick(step*k)}</text>`;
+  }
+  // Date ticks: ~one per 70px, always including the first and last day.
+  const slots=Math.max(2,Math.min(7,Math.floor(cw/70)));
+  const every=Math.max(1,Math.ceil((n-1)/(slots-1)));
+  const tickIdx=[];
+  for(let i=0;i<n;i+=every)tickIdx.push(i);
+  if(tickIdx[tickIdx.length-1]!==n-1){
+    if(n-1-tickIdx[tickIdx.length-1]<every*0.6&&tickIdx.length>1)tickIdx.pop();
+    tickIdx.push(n-1);
+  }
+  const xt=tickIdx.map(i=>{
+    const anchor=n>1&&i===0?'start':i===n-1&&n>1?'end':'middle';
+    return `<text x="${x(i).toFixed(1)}" y="${H-6}" class="hd-at-xlab" text-anchor="${anchor}">${escapeHtml(_fmtTrendDate(dates[i]))}</text>`;
   }).join('');
-  const defs=`<defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" style="stop-color:var(--accent)" stop-opacity="0.3"/><stop offset="100%" style="stop-color:var(--accent)" stop-opacity="0"/></linearGradient></defs>`;
-  const svgAttrs=fullSize
-    ?`viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:100%"`
-    :`viewBox="0 0 ${W} ${H}" width="100%" style="overflow:visible"`;
-  const svg=`<svg ${svgAttrs}>${defs}<path d="${areaPath}" style="fill:url(#${gradId})"/><path d="${linePath}" style="fill:none;stroke:var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}</svg>`;
-  const subText=firstActiveIdx>0
-    ?`Avg ${avg} employees/day since tracking began (${_fmtTrendDate(dates[firstActiveIdx])})`
-    :`Avg ${avg} employees/day over last ${n} days`;
-  return {svg,subText,avg,firstActiveIdx};
+  const avgY=y(avg).toFixed(1);
+  const gid='hdAtGrad'+Math.random().toString(36).slice(2,8);
+  const lx=pts[n-1][0].toFixed(1),ly=pts[n-1][1].toFixed(1);
+  const svg=`<svg class="hd-at-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Employees present per day, last ${n} days">`
+    +`<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" style="stop-color:var(--accent)" stop-opacity="0.30"/><stop offset="100%" style="stop-color:var(--accent)" stop-opacity="0.02"/></linearGradient></defs>`
+    +grid
+    +`<line x1="${L}" x2="${W-R}" y1="${avgY}" y2="${avgY}" class="hd-at-avg"/>`
+    +`<path d="${area}" style="fill:url(#${gid})"/>`
+    +`<path d="${line}" class="hd-at-line"/>`
+    +`<circle cx="${lx}" cy="${ly}" r="7.5" class="hd-at-halo"/><circle cx="${lx}" cy="${ly}" r="4" class="hd-at-dot"/>`
+    +xt
+    +`<g class="hd-at-hover" style="display:none"><line class="hd-at-cross" y1="${T}" y2="${T+ch}"/><circle r="4.5" class="hd-at-dot"/></g>`
+    +`<rect x="${L}" y="${T}" width="${cw}" height="${ch}" fill="transparent" class="hd-at-hit"/>`
+    +`</svg>`;
+  wrap.style.height='auto';
+  wrap.innerHTML=stats
+    +`<div class="hd-at-plot">${svg}<div class="hd-at-tip" style="display:none"></div></div>`
+    +`<div class="hd-at-legend"><span><i class="hd-at-key-line"></i>Present</span><span><i class="hd-at-key-avg"></i>Average</span></div>`;
+
+  const svgEl=wrap.querySelector('.hd-at-svg'),hit=wrap.querySelector('.hd-at-hit');
+  const hover=wrap.querySelector('.hd-at-hover'),tip=wrap.querySelector('.hd-at-tip');
+  const cross=hover.querySelector('line'),dot=hover.querySelector('circle');
+  const move=ev=>{
+    const pt=ev.touches?ev.touches[0]:ev;
+    const px=pt.clientX-svgEl.getBoundingClientRect().left;
+    const i=n>1?Math.max(0,Math.min(n-1,Math.round((px-L)/(cw/(n-1))))):0;
+    const [hx,hy]=pts[i];
+    cross.setAttribute('x1',hx);cross.setAttribute('x2',hx);
+    dot.setAttribute('cx',hx);dot.setAttribute('cy',hy);
+    hover.style.display='';
+    const day=new Date(dates[i]+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    tip.innerHTML=`<b>${counts[i]}</b> present<span>${escapeHtml(day)}</span>`;
+    tip.style.display='';
+    const tw=tip.offsetWidth;
+    tip.style.left=Math.max(0,Math.min(W-tw,hx-tw/2))+'px';
+    tip.style.top=Math.max(0,hy-tip.offsetHeight-12)+'px';
+  };
+  const hide=()=>{hover.style.display='none';tip.style.display='none';};
+  hit.addEventListener('mousemove',move);
+  hit.addEventListener('touchstart',move,{passive:true});
+  hit.addEventListener('touchmove',move,{passive:true});
+  hit.addEventListener('mouseleave',hide);
+  hit.addEventListener('touchend',hide);
 }
 
 // ── CSV Import ────────────────────────────────────────────────────────────────
