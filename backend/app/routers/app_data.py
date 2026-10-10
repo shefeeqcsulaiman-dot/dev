@@ -725,30 +725,51 @@ def search_catalog(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
 ) -> dict[str, object]:
-    """Records of products/customers/vendors whose key (code or name) or saved fields
-    contain `q` (any case), keys starting with `q` first. Same access rules as
-    GET /records/{collection}."""
+    """Records of products/customers/vendors matching `q` (any case), names or codes
+    starting with `q` first. Same access rules as GET /records/{collection}.
+
+    Matched on the typed copies of these records (catalog_products, parties), not the
+    JSON text: searching the JSON matched its field names too, so "name", "code" or
+    "email" returned every record. Products: code, name, barcode, category, supplier.
+    Customers/vendors: name, TRN (digits, any punctuation), email, phone, contact."""
+    from app.models import CatalogProduct, Party
+
     if collection not in _CATALOG_COLLECTIONS:
         raise HTTPException(status_code=404, detail="Not a searchable list")
     company = resolve_principal_company(principal, db)
     assert_collection_module_enabled(db, principal, company, collection)
     assert_collection_read_permission(principal, collection)
     filters = _collection_read_filters(principal, collection, None)
+    query = db.query(AppDataRecord)
     needle = q.strip().lower()
     if needle:
-        like = "%" + needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-        # The payload is JSON text, so names and other fields are matched inside it;
-        # \u-escaped characters (json.dumps default) are matched through the key only.
-        filters.append(or_(
-            func.lower(AppDataRecord.record_key).like(like, escape="\\"),
-            func.lower(AppDataRecord.payload).like(like, escape="\\"),
-        ))
-        prefix = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-        rank = case((func.lower(AppDataRecord.record_key).like(prefix, escape="\\"), 0), else_=1)
-        order = (rank, func.lower(AppDataRecord.record_key), AppDataRecord.id)
+        escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        like, prefix = f"%{escaped}%", f"{escaped}%"
+
+        def has(column):
+            return func.lower(column).like(like, escape="\\")
+
+        if collection == "products":
+            query = query.join(CatalogProduct, CatalogProduct.id == AppDataRecord.id)
+            filters.append(or_(
+                CatalogProduct.code_key.like(like, escape="\\"), CatalogProduct.name_key.like(like, escape="\\"),
+                has(CatalogProduct.barcode), has(CatalogProduct.category), has(CatalogProduct.supplier_name),
+            ))
+            starts = or_(CatalogProduct.code_key.like(prefix, escape="\\"), CatalogProduct.name_key.like(prefix, escape="\\"))
+            sort_key = CatalogProduct.name_key
+        else:
+            query = query.join(Party, Party.id == AppDataRecord.id)
+            matches = [Party.name_key.like(like, escape="\\"), has(Party.email), has(Party.phone), has(Party.contact)]
+            digits = "".join(ch for ch in needle if ch.isdigit())
+            if len(digits) >= 3:
+                matches.append(Party.trn.like(f"%{digits}%"))
+            filters.append(or_(*matches))
+            starts = Party.name_key.like(prefix, escape="\\")
+            sort_key = Party.name_key
+        order = (case((starts, 0), else_=1), sort_key, AppDataRecord.id)
     else:
         order = (AppDataRecord.created_at.desc(), AppDataRecord.id.desc())
-    rows = db.query(AppDataRecord).filter(*filters).order_by(*order).limit(limit).all()
+    rows = query.filter(*filters).order_by(*order).limit(limit).all()
     return {"ok": True, "collection": collection, "records": [serialize_for_list(row) for row in rows]}
 
 
