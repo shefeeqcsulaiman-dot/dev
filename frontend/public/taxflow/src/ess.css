@@ -1047,3 +1047,50 @@
   #tb-leave .hcal-cell{min-height:46px;padding:4px}
   #tb-leave .hcal-daynum{font-size:11px}
 }
+
+/* ── Dashboard: same look as the HRMS dashboard (hero, tinted KPI cards,
+      icon + title + subtitle card headers). Scoped to #tb-dashboard. ── */
+#tb-dashboard .ed-hero{position:relative;display:flex;align-items:center;min-height:132px;margin:0 0 16px;padding:6px 4px 14px;border-bottom:0;overflow:hidden}
+#tb-dashboard .ed-hero-text{position:relative;z-index:1;min-width:0;max-width:56%}
+#tb-dashboard .ed-greet{font-size:22px;font-weight:700;letter-spacing:-.3px;color:var(--text);line-height:1.25}
+#tb-dashboard .ed-wave{display:inline-block;transform-origin:70% 70%}
+#tb-dashboard .ed-greet-sub{margin-top:4px;font-size:13px;color:var(--text2)}
+#tb-dashboard .ed-hero .ess-greet-chips{margin-top:10px}
+#tb-dashboard .ed-hero-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+#tb-dashboard .ed-hero-actions .btn-login{width:auto;padding:9px 18px;margin:0;font-size:13px}
+#tb-dashboard .ed-hero-actions .btn-ghost{background:var(--surface);color:var(--text);font-weight:500;padding:9px 16px}
+#tb-dashboard .ed-hero-art{position:absolute;right:150px;bottom:0;width:260px;max-width:34%;height:auto;pointer-events:none}
+#tb-dashboard .ed-hero-note{position:absolute;right:8px;top:14px;font-family:'Segoe Print','Bradley Hand','Comic Sans MS',cursive;font-size:14px;font-weight:600;line-height:1.35;color:#1e3a8a;transform:rotate(-4deg)}
+:root[data-theme="dark"] #tb-dashboard .ed-hero-note{color:#bfdbfe}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) #tb-dashboard .ed-hero-note{color:#bfdbfe}}
+@media(max-width:1100px){#tb-dashboard .ed-hero-note{display:none}#tb-dashboard .ed-hero-art{right:0}}
+@media(max-width:820px){#tb-dashboard .ed-hero-art{display:none}#tb-dashboard .ed-hero-text{max-width:none}}
+
+#tb-dashboard .ed-kpi-grid .ess-kpi{--tint:#3b82f6;border-radius:16px;padding:16px;min-height:104px;border:1px solid color-mix(in srgb,var(--tint) 18%,var(--border));background:color-mix(in srgb,var(--tint) 7%,var(--surface))}
+#tb-dashboard .ed-kpi-grid .ess-kpi:nth-child(2){--tint:#10b981}
+#tb-dashboard .ed-kpi-grid .ess-kpi:nth-child(3){--tint:#14b8a6}
+#tb-dashboard .ed-kpi-grid .ess-kpi:nth-child(4){--tint:#8b5cf6}
+#tb-dashboard .ed-kpi-grid .ess-kpi:nth-child(5){--tint:#f59e0b}
+#tb-dashboard .ed-kpi-grid .ess-kpi:nth-child(6){--tint:#f43f5e}
+#tb-dashboard .ed-kpi-grid .ess-kpi-icon{width:42px;height:42px;border-radius:12px;background:color-mix(in srgb,var(--tint) 16%,var(--surface))!important}
+#tb-dashboard .ed-kpi-grid .ess-kpi-icon svg{stroke:var(--tint)}
+#tb-dashboard .ed-kpi-grid .ess-kpi-lbl{font-size:12.5px;font-weight:600;color:var(--text2);margin-bottom:0}
+#tb-dashboard .ed-kpi-grid .ess-kpi-val{font-size:22px;font-weight:700;margin:6px 0 3px;color:var(--text)!important;filter:none}
+#tb-dashboard .ed-kpi-grid .ess-kpi-sub{font-size:12px;color:var(--text3)}
+
+#tb-dashboard .ed-card{border-radius:16px;padding:16px 18px}
+#tb-dashboard .ed-card-hd{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+#tb-dashboard .ed-card-hd-text{flex:1;min-width:0}
+#tb-dashboard .ed-card-title{font-size:15px;font-weight:700;color:var(--text);line-height:1.25}
+#tb-dashboard .ed-card-sub{font-size:12px;color:var(--text3);margin-top:2px}
+#tb-dashboard .ed-link{font-size:12.5px;font-weight:600;color:var(--accent-text);cursor:pointer;white-space:nowrap;text-decoration:none}
+#tb-dashboard .ed-link:hover{text-decoration:underline}
+#tb-dashboard .ed-ico{--c:#3b82f6;width:36px;height:36px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--c);background:color-mix(in srgb,var(--c) 14%,var(--surface))}
+#tb-dashboard .ed-blue{--c:#3b82f6}#tb-dashboard .ed-green{--c:#10b981}#tb-dashboard .ed-purple{--c:#8b5cf6}
+#tb-dashboard .ed-amber{--c:#f59e0b}#tb-dashboard .ed-rose{--c:#f43f5e}#tb-dashboard .ed-teal{--c:#14b8a6}
+#tb-dashboard .ed-card-body{padding:0}
+#tb-dashboard .ess-qa{color:var(--text2);font-weight:500;border-color:color-mix(in srgb,var(--qa) 18%,var(--border));background:color-mix(in srgb,var(--qa) 7%,var(--surface))}
+#tb-dashboard .ess-qa svg{color:var(--qa);width:20px;height:20px}
+#tb-dashboard .ess-qa:hover{color:var(--qa);border-color:var(--qa);background:color-mix(in srgb,var(--qa) 13%,var(--surface))}
+/* Phones show the app-style home (.m-home) instead of the hero, as before. */
+@media (max-width:760px){#tb-dashboard .ed-hero{display:none}}

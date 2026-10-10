@@ -15,7 +15,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
   <title>Employee Self-Service — ETaxFlow</title>
   <link rel="preload" href="/fonts/dmsans-rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu0-K4.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="src/ess.css?v=ea8399be29">
+  <link rel="stylesheet" href="src/ess.css?v=b19b1e7f3d">
   <script>
     // Runs before body paints, so a saved/system dark preference applies
     // immediately instead of flashing light-then-dark once the main
@@ -214,28 +214,34 @@
         </div>
         <button type="button" class="m-card m-announce" id="m-announce" hidden onclick="essGoTab('dashboard')"><span class="m-muted">Announcement</span><span id="m-announce-text"></span></button>
       </section>
-      <!-- Greeting header (main-dashboard style) -->
-      <div class="ess-greet">
-        <div class="ess-greet-main">
-          <div class="dash-avatar" id="dash-avatar">—</div>
-          <div style="min-width:0">
-            <div class="ess-greet-title" id="dash-name">Welcome</div>
-            <div class="ess-greet-sub" id="dash-role">—</div>
-            <div class="ess-greet-chips">
-              <span class="ess-chip">Company · <b id="dash-hero-company">—</b></span>
-              <span class="ess-chip">Today · <b id="dash-hero-today">—</b></span>
-              <span class="ess-chip">Hours · <b id="dash-hero-hours">—</b></span>
-            </div>
+      <!-- Greeting hero (same look as the HRMS dashboard's) -->
+      <div class="ess-greet ed-hero">
+        <div class="ed-hero-text">
+          <div class="ed-greet"><span class="ed-wave" aria-hidden="true">👋</span> <span id="dash-name">Welcome</span></div>
+          <div class="ed-greet-sub" id="dash-role">—</div>
+          <div class="ess-greet-chips">
+            <span class="ess-chip">Company · <b id="dash-hero-company">—</b></span>
+            <span class="ess-chip">Today · <b id="dash-hero-today">—</b></span>
+            <span class="ess-chip">Hours · <b id="dash-hero-hours">—</b></span>
+          </div>
+          <div class="ed-hero-actions">
+            <button class="btn-ghost" onclick="essOpenLeaveModal()">Request Leave</button>
+            <button class="btn-login" onclick="essOpenRequestModal('overtime')">Request Overtime</button>
           </div>
         </div>
-        <div class="ess-greet-actions">
-          <button class="btn-ghost" onclick="essOpenLeaveModal()">Request Leave</button>
-          <button class="btn-login" onclick="essOpenRequestModal('overtime')">Request Overtime</button>
-        </div>
+        <svg class="ed-hero-art" viewBox="0 0 300 110" aria-hidden="true" focusable="false">
+          <ellipse cx="128" cy="104" rx="96" ry="10" fill="#dbeafe"/>
+          <path d="M70 108a58 58 0 01116 0z" fill="#bfdbfe" opacity=".6"/>
+          <g transform="translate(108 30)"><circle cx="22" cy="14" r="12" fill="#1e293b"/><path d="M10 14c0-9 6-13 12-13s12 4 12 13c0 4-2 7-3 9-2-6-5-9-9-9s-7 3-9 9c-1-2-3-5-3-9z" fill="#0f172a"/><circle cx="22" cy="17" r="8" fill="#fcd9b8"/><path d="M6 58c0-16 7-26 16-26s16 10 16 26z" fill="#fff"/><path d="M6 58c0-16 7-26 16-26" stroke="#e2e8f0" stroke-width="2" fill="none"/></g>
+          <rect x="96" y="70" width="64" height="38" rx="4" fill="#1e293b"/><rect x="100" y="74" width="56" height="28" rx="2" fill="#334155"/>
+          <g transform="translate(60 72)"><rect x="6" y="22" width="16" height="14" rx="3" fill="#3b82f6"/><path d="M14 22c-8-6-10-14-6-20 2 6 6 10 6 20zM14 22c6-8 12-10 16-8-4 2-8 6-16 8z" fill="#22c55e"/></g>
+          <g transform="translate(176 46)"><path d="M10 62c-2-20 4-36 14-44M24 18c-6-6-6-14-2-18 4 6 4 12 2 18zM24 18c6-2 12 0 14 4-6 2-10 0-14-4zM18 40c-8-2-12-8-10-14 6 2 9 7 10 14zM20 30c6-4 12-4 14 0-5 3-10 3-14 0z" fill="#22c55e" stroke="#16a34a" stroke-width=".8"/><rect x="2" y="56" width="20" height="16" rx="3" fill="#bfdbfe"/></g>
+        </svg>
+        <div class="ed-hero-note" aria-hidden="true">Have a great<br>day at work!</div>
       </div>
 
       <!-- KPI row (3 x 2, same tile as the HRMS dashboard) -->
-      <div class="ess-kpi-row">
+      <div class="ess-kpi-row ed-kpi-grid">
         <div class="ess-kpi" onclick="essGoTab('attendance')">
           <div class="ess-kpi-icon" style="background:var(--accent-bg)"><svg viewBox="0 0 16 16" fill="none" stroke="var(--accent)" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2.5 1.5"/></svg></div>
           <div class="ess-kpi-text"><div class="ess-kpi-lbl">Today</div><div class="ess-kpi-val" id="dash-att-status" style="color:var(--accent)">—</div><div class="ess-kpi-sub">Attendance status</div></div>
@@ -266,32 +272,23 @@
       <div class="dash-main-col">
         <div class="ess-row2">
           <!-- My Team Attendance (green banner): who in the employee's own department is in / on leave / absent today -->
-          <div class="card ess-bn" id="dash-team-att-card" style="margin-bottom:0">
-            <div class="ess-bn-hd">
-              <div><div class="ess-bn-kick">My Department</div><div class="ess-bn-title">My Team Attendance</div></div>
-              <svg viewBox="0 0 110 90" width="96" height="78" xmlns="http://www.w3.org/2000/svg"><ellipse cx="55" cy="84" rx="34" ry="5" fill="#059669" opacity=".12"/><circle cx="55" cy="34" r="12" fill="#10b981" opacity=".9"/><path d="M33 72c0-13 10-21 22-21s22 8 22 21z" fill="#10b981" opacity=".9"/><circle cx="30" cy="42" r="9" fill="#34d399" opacity=".85"/><path d="M13 74c0-10 7-16 17-16 4 0 7 1 10 3-4 3-6 7-7 13z" fill="#34d399" opacity=".85"/><circle cx="80" cy="42" r="9" fill="#6ee7b7" opacity=".9"/><path d="M97 74c0-10-7-16-17-16-4 0-7 1-10 3 4 3 6 7 7 13z" fill="#6ee7b7" opacity=".9"/><circle cx="92" cy="20" r="9" fill="#065f46"/><path d="M87.5 20l3 3 5-6" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
-            <div class="ess-bn-body">
+          <div class="card ed-card" id="dash-team-att-card" style="margin-bottom:0">
+            <div class="ed-card-hd"><span class="ed-ico ed-green" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14c2.4.2 4 1.7 4.5 4.5"/></svg></span><div class="ed-card-hd-text"><div class="ed-card-title">My Team Attendance</div><div class="ed-card-sub">Your department today</div></div></div>
+            <div class="ed-card-body">
               <div id="dash-team-att"><div class="loading" style="padding:10px">Loading…</div></div>
             </div>
           </div>
           <!-- Latest payslip (orange banner) -->
-          <div class="card ess-bn orange" id="dash-payslip-card" style="margin-bottom:0">
-            <div class="ess-bn-hd">
-              <div><div class="ess-bn-kick">Finance</div><div class="ess-bn-title">Latest Payslip</div></div>
-              <svg viewBox="0 0 110 90" width="96" height="78" xmlns="http://www.w3.org/2000/svg"><ellipse cx="55" cy="84" rx="34" ry="5" fill="#ea580c" opacity=".14"/><rect x="18" y="26" width="64" height="44" rx="7" fill="#fb923c" opacity=".9"/><rect x="18" y="36" width="64" height="9" fill="#9a3412" opacity=".35"/><rect x="26" y="54" width="18" height="5" rx="2.5" fill="#fff" opacity=".7"/><circle cx="72" cy="57" r="6" fill="#fff" opacity=".55"/><circle cx="88" cy="24" r="10" fill="#10b981"/><path d="M83.5 24l3 3 5-6" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
-            <div class="ess-bn-body" id="dash-payslip-body"><div class="loading" style="padding:10px">Loading…</div></div>
+          <div class="card ed-card" id="dash-payslip-card" style="margin-bottom:0">
+            <div class="ed-card-hd"><span class="ed-ico ed-amber" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10.5h18M7 15h4"/></svg></span><div class="ed-card-hd-text"><div class="ed-card-title">Latest Payslip</div><div class="ed-card-sub">Your most recent pay</div></div><a class="ed-link" onclick="essGoTab('payslips')">All payslips</a></div>
+            <div class="ed-card-body" id="dash-payslip-body"><div class="loading" style="padding:10px">Loading…</div></div>
           </div>
         </div>
 
         <!-- Leave balance (purple banner) -->
-        <div class="card ess-bn purple" id="dash-leave-balance-card" style="margin-bottom:14px">
-          <div class="ess-bn-hd">
-            <div><div class="ess-bn-kick">Time Off</div><div class="ess-bn-title">Leave Balance</div></div>
-            <svg viewBox="0 0 110 90" width="96" height="78" xmlns="http://www.w3.org/2000/svg"><ellipse cx="55" cy="84" rx="34" ry="5" fill="#7c3aed" opacity=".14"/><rect x="24" y="24" width="56" height="48" rx="7" fill="#fff" opacity=".85"/><rect x="24" y="24" width="56" height="13" rx="7" fill="#8b5cf6"/><rect x="34" y="17" width="4" height="12" rx="2" fill="#5b21b6"/><rect x="66" y="17" width="4" height="12" rx="2" fill="#5b21b6"/><circle cx="40" cy="50" r="4" fill="#c4b5fd"/><circle cx="52" cy="50" r="4" fill="#c4b5fd"/><circle cx="64" cy="50" r="4" fill="#8b5cf6"/><circle cx="40" cy="62" r="4" fill="#c4b5fd"/><circle cx="52" cy="62" r="4" fill="#c4b5fd"/><circle cx="90" cy="26" r="9" fill="#fbbf24"/></svg>
-          </div>
-          <div class="ess-bn-body">
+        <div class="card ed-card" id="dash-leave-balance-card" style="margin-bottom:14px">
+            <div class="ed-card-hd"><span class="ed-ico ed-purple" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4M9 15l2 2 4-4"/></svg></span><div class="ed-card-hd-text"><div class="ed-card-title">Leave Balance</div><div class="ed-card-sub">Days left this year</div></div><a class="ed-link" onclick="essOpenLeaveModal()">Request leave</a></div>
+          <div class="ed-card-body">
             <div id="dash-leave-balance" class="leave-balance-grid"><div class="loading">Loading…</div></div>
             <div class="dash-help-banner" style="margin-top:14px;font-size:13px">
               <span><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.5"/><path d="M6 6.2a2 2 0 013.8 1c0 1.3-2 1.3-2 3"/><circle cx="8" cy="12" r=".6" fill="currentColor" stroke="none"/></svg></span>
@@ -303,18 +300,15 @@
           </div>
         </div>
 
-        <div class="card" id="dash-requests-card">
-          <div class="card-hd" style="align-items:center;margin-bottom:12px">
-            <div class="card-title" style="margin-bottom:0">My Requests</div>
-            <a style="font-size:12px;color:var(--accent-text);cursor:pointer;font-weight:600" onclick="essGoTab('requests')">View all →</a>
-          </div>
+        <div class="card ed-card" id="dash-requests-card">
+          <div class="ed-card-hd"><span class="ed-ico ed-blue" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M8.5 10h7M8.5 14h7M8.5 18h4"/></svg></span><div class="ed-card-hd-text"><div class="ed-card-title">My Requests</div><div class="ed-card-sub">Leave, overtime and other requests</div></div><a class="ed-link" onclick="essGoTab('requests')">View all</a></div>
           <div id="dash-requests-list"><div class="loading">Loading…</div></div>
         </div>
       </div><!-- /dash-main-col -->
 
       <div class="dash-side-col">
-        <div class="card" id="dash-quick-actions-card" style="padding:16px">
-          <div class="card-title" style="margin-bottom:12px">Quick Actions</div>
+        <div class="card ed-card" id="dash-quick-actions-card">
+          <div class="ed-card-hd"><span class="ed-ico ed-blue" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5 13.5h6L10 21l8-10.5h-6z"/></svg></span><div class="ed-card-hd-text"><div class="ed-card-title">Quick Actions</div><div class="ed-card-sub">Common things in one click</div></div></div>
           <div class="ess-qa-grid">
             <div class="ess-qa" style="--qa:var(--accent)" onclick="essOpenLeaveModal()"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="16" height="14" rx="1"/><path d="M6 1.5v3M14 1.5v3M2 8h16"/></svg><span>Apply Leave</span></div>
             <div class="ess-qa" style="--qa:var(--amber)" onclick="essOpenRequestModal('overtime')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2"/></svg><span>Overtime</span></div>
@@ -329,37 +323,34 @@
         </div>
 
         <!-- Pending requests (approvals-style list) -->
-        <div class="card" id="dash-req-summary-card" style="padding:16px">
-          <div class="card-title" style="margin-bottom:12px">Pending With HR</div>
+        <div class="card ed-card" id="dash-req-summary-card">
+          <div class="ed-card-hd"><span class="ed-ico ed-amber" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10M7 21h10M8 3c0 5 8 6 8 9s-8 4-8 9M16 3c0 5-8 6-8 9s8 4 8 9"/></svg></span><div class="ed-card-hd-text"><div class="ed-card-title">Pending With HR</div><div class="ed-card-sub">Waiting for a decision</div></div><a class="ed-link" onclick="essGoTab('requests')">View all</a></div>
           <div id="dash-req-summary"><div class="loading" style="padding:10px">Loading…</div></div>
         </div>
 
         <div class="card doc-alert" id="dash-doc-alert-card" style="display:none;padding:16px;cursor:pointer" onclick="essGoTab('profile')"></div>
 
-        <div class="card" id="dash-schedule-card" style="padding:16px">
-          <div class="card-hd" style="align-items:center;margin-bottom:10px">
-            <div class="card-title" style="margin-bottom:0">Today's Schedule</div>
-            <a style="font-size:12px;color:var(--accent-text);cursor:pointer;font-weight:600" onclick="essGoTab('rota')">Full rota →</a>
-          </div>
+        <div class="card ed-card" id="dash-schedule-card">
+          <div class="ed-card-hd"><span class="ed-ico ed-purple" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span><div class="ed-card-hd-text"><div class="ed-card-title">Today's Schedule</div><div class="ed-card-sub">Your shift for today</div></div><a class="ed-link" onclick="essGoTab('rota')">Full rota</a></div>
           <div id="dash-today-schedule"><div class="loading">Loading…</div></div>
         </div>
 
-        <div class="card" id="dash-announcements-card" style="padding:16px">
-          <div class="card-title" style="margin-bottom:10px">Latest Announcements</div>
+        <div class="card ed-card" id="dash-announcements-card">
+          <div class="ed-card-hd"><span class="ed-ico ed-rose" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4h3l7 4V6L7 10z"/><path d="M17.5 9.5a3.5 3.5 0 010 5"/></svg></span><div class="ed-card-hd-text"><div class="ed-card-title">Latest Announcements</div><div class="ed-card-sub">News from your company</div></div></div>
           <div id="dash-announcements"><div class="loading">Loading…</div></div>
         </div>
 
         <!-- Next holiday (GET /ess/holidays); opens the Leave tab's calendar. The "My Team Today" list now lives in the My Team Attendance banner. -->
-        <div class="card" id="dash-holiday-card" style="padding:16px">
-          <div class="card-title" style="margin-bottom:10px">Next Holiday</div>
+        <div class="card ed-card" id="dash-holiday-card">
+          <div class="ed-card-hd"><span class="ed-ico ed-green" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg></span><div class="ed-card-hd-text"><div class="ed-card-title">Next Holiday</div><div class="ed-card-sub">Public holidays calendar</div></div><a class="ed-link" onclick="essGoTab('leave')">Calendar</a></div>
           <div id="dash-next-holiday-wrap" title="Open the holiday calendar" onclick="essGoTab('leave')" style="font-size:13px;color:var(--text2);display:flex;align-items:center;gap:8px;cursor:pointer">
             <span><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1.5v3M11 1.5v3M2 6h12"/></svg></span><span id="dash-next-holiday">Loading…</span>
           </div>
         </div>
 
         <!-- User Handbook -- same link + copy pattern as the HRMS dashboard's own card -->
-        <div class="card" style="padding:16px">
-          <div class="card-title" style="margin-bottom:8px">User Handbook</div>
+        <div class="card ed-card">
+          <div class="ed-card-hd"><span class="ed-ico ed-teal" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 016.5 3H20v15H6.5A2.5 2.5 0 004 20.5z"/><path d="M4 20.5A2.5 2.5 0 016.5 18H20"/></svg></span><div class="ed-card-hd-text"><div class="ed-card-title">User Handbook</div><div class="ed-card-sub">How to use this portal</div></div></div>
           <div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.5">A screen-by-screen guide to the Main App, HRMS, and this portal, with screenshots.</div>
           <button class="btn-ghost" style="width:100%;text-align:center" onclick="window.open('/handbook','_blank')">Open Handbook →</button>
         </div>
