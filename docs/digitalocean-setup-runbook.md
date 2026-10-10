@@ -64,6 +64,13 @@ monitoring numbers, and the Celery queue for scheduled jobs.
 **Done 2026-10-09:** pool `etaxflow-pool` (Transaction mode) on `etaxflow-pgsql`; the site has
 been healthy on it since.
 
+**Pool size (2026-10-10): 10 on the 22-connection plan.** It was created at 5 (too few for
+real use). 19 was tried and is too many: PgBouncer keeps its pool connections open, DO reserves
+~3, so nothing was left for the direct connection each new instance opens at start-up
+(`DATABASE_DIRECT_URL`) and deploys hung. Rule: pool size = plan limit − 3 reserved − ~8 for
+start-up/migrations. App vars `DB_POOL_SIZE=5`, `DB_MAX_OVERFLOW=5` keep each process's own pool
+small behind PgBouncer.
+
 Today's settings can open 225–450 database connections against a ~95-connection plan
 (`.do/app.yaml` explains the maths); the pool removes that ceiling.
 
@@ -153,3 +160,24 @@ taking load off the main database.
 Tell Claude; it will re-run the PostgreSQL load test (`load-tests/postgres/README.md`)
 against a production-like setup and pick the next code work from what it shows. Status of
 every item: `docs/scaling-plan-10k.md`.
+
+## Lessons from 2026-10-10 (deploys failing, hangs)
+
+- **Every code deploy failed from 2026-10-09 22:15 to 2026-10-10 07:50** ("container did not
+  respond to health checks") and DO rolled back silently each time, so nothing new went live.
+  Cause: start-up waited on `pg_advisory_lock()` with no limit. Fixed in `04a7aa4` (45 s
+  bounded wait, then serve without the idempotent start-up tasks; server keepalives on the lock
+  session). Database connects now give up after 10 s (`3542068`).
+- **`/health` shows `"build"`** (constant `BUILD` in `app/main.py`, bump it with deploy-relevant
+  changes): the quickest way to see whether a deploy actually went live.
+- **Redis had no read timeout:** about 1 in 7 `/health` calls hung 15-20 s after idle periods.
+  Fixed in `b32556c` (`socket_timeout`, keepalive, idle health checks; never together with
+  `retry_on_timeout`, which retries forever) and `77c95e4` (rate limiter falls back to memory).
+- **Only the DEPLOY logs show start-up** (Activity → failed deployment → *View deploy logs*);
+  build logs only show the image build.
+- **Read-only public load test** (`/health` + front page, from one home connection): ~75
+  requests/s with no errors after the fixes; the same with 2 or 4 instances while app CPU stayed
+  ~4 % and database CPU ~10 %, so the limit is probably the test client, not the server.
+- **Instance size:** 1 GB / 1 shared vCPU × 2 is enough today (memory ~35-40 %). Upgrade when
+  memory stays above ~75 % or restarts appear; prefer more vCPUs over more RAM.
+
