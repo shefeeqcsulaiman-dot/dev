@@ -1,0 +1,32 @@
+# Read-only load test of the live site's public endpoints, run from GitHub's network (so a
+# home connection isn't the limit). Manual only: Actions -> Live public load test -> Run workflow.
+# No logins and no writes: /health (one DB query + Redis ping) and the login page.
+name: Live public load test
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Site to test
+        default: https://e4cs.com
+      stages:
+        description: Users at once per stage (comma-separated)
+        default: 25,50,100,150,200,300,400
+      seconds:
+        description: Seconds per stage
+        default: "30"
+
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install httpx==0.28.1
+      - name: Run
+        run: |
+          python load-tests/live/live_public_load.py "${{ inputs.url }}" "${{ inputs.stages }}" "${{ inputs.seconds }}" | tee result.md
+          cat result.md >> "$GITHUB_STEP_SUMMARY"
