@@ -32,6 +32,9 @@ if _is_sqlite:
 else:
     engine = create_engine(
         settings.database_url,
+        # Fail a connection attempt in 10 s instead of the OS default (~2 min per attempt), so an
+        # unreachable host can't hold startup past the platform's health check.
+        connect_args={"connect_timeout": 10},
         pool_pre_ping=True,
         pool_size=settings.db_pool_size,
         max_overflow=settings.db_max_overflow,
@@ -50,6 +53,7 @@ if settings.database_read_url:
     else:
         read_engine = create_engine(
             settings.database_read_url,
+            connect_args={"connect_timeout": 10},
             pool_pre_ping=True,
             pool_size=settings.db_pool_size,
             max_overflow=settings.db_max_overflow,

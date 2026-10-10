@@ -92,7 +92,8 @@ def migration_engine() -> Engine:
     is set (needed behind PgBouncer -- see module docstring)."""
     direct = get_settings().database_direct_url
     if direct:
-        return create_engine(direct, poolclass=NullPool, pool_pre_ping=True)
+        connect_args = {"connect_timeout": 10} if direct.startswith("postgresql") else {}
+        return create_engine(direct, poolclass=NullPool, pool_pre_ping=True, connect_args=connect_args)
     return engine
 
 

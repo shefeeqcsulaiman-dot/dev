@@ -356,6 +356,10 @@ def create_app() -> FastAPI:
                 return kind
         return type(exc).__name__
 
+    # Bumped with each deploy-relevant change, so /health shows which code is live (the image
+    # has no git metadata). Format: date.sequence.
+    BUILD = "2026-10-10.2"
+
     def monitoring_sentry_on() -> bool:
         from app import monitoring as _monitoring
         return _monitoring._sentry_on
@@ -396,6 +400,7 @@ def create_app() -> FastAPI:
             "db": db_status,
             "redis": redis_status,
             "sentry": "on" if monitoring_sentry_on() else "off",
+            "build": BUILD,
             "service": settings.app_name,
         }
 
