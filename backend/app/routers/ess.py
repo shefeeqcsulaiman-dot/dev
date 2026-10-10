@@ -856,6 +856,8 @@ _REQUEST_COLLECTIONS = {
     "loan": ("employeeLoans", "LN"),
     "advance": ("salaryAdvances", "ADV"),
     "correction": ("attendanceCorrections", "CORR"),
+    # Extra work the employee asks for; HR approves it into a real task (Task Management).
+    "task": ("taskRequests", "TR"),
 }
 _MAX_PENDING_PER_KIND = 10
 _HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -1198,6 +1200,40 @@ def ess_create_advance(payload: EssAdvanceIn, request: Request, db: Session = De
     })
 
 
+_TASK_PRIORITIES = ("Low", "Medium", "High")
+
+
+class EssTaskRequestIn(BaseModel):
+    title: str
+    description: str | None = None
+    priority: str = "Medium"
+    due_date: date | None = None
+    reason: str | None = None
+
+
+@router.post("/task-requests", status_code=201)
+def ess_create_task_request(payload: EssTaskRequestIn, request: Request, db: Session = Depends(get_db)) -> dict:
+    """The employee asks for an extra task. HR approves it in Task Management
+    (POST /app-data/task-requests/{id}/decide), which creates the task assigned to them."""
+    emp = ess_bearer(request, db)
+    title = " ".join((payload.title or "").split())
+    if len(title) < 3:
+        raise HTTPException(status_code=400, detail="Give the task a short title (at least 3 characters)")
+    if len(title) > 160:
+        raise HTTPException(status_code=400, detail="Keep the title under 160 characters")
+    priority = (payload.priority or "Medium").strip().title()
+    if priority not in _TASK_PRIORITIES:
+        raise HTTPException(status_code=400, detail="Priority must be Low, Medium or High")
+    today = _local_today_for(db, emp)
+    if payload.due_date and not (today <= payload.due_date <= today + timedelta(days=365)):
+        raise HTTPException(status_code=400, detail="The due date must be between today and a year from now")
+    return _create_request_record(db, emp, "task", {
+        "title": title, "description": (payload.description or "").strip()[:1000], "priority": priority,
+        "due_date": payload.due_date.isoformat() if payload.due_date else "",
+        "reason": (payload.reason or "").strip()[:500], "date": today.isoformat(),
+    })
+
+
 @router.get("/requests")
 def ess_requests(request: Request, db: Session = Depends(get_db)) -> list[dict]:
     """Every request this employee has filed -- leave (its own table) plus
@@ -1233,6 +1269,9 @@ def ess_requests(request: Request, db: Session = Depends(get_db)) -> list[dict]:
                 item.update(loan_type=r.get("type"), amount=r.get("amount"), months=r.get("months"), emi=r.get("emi"))
             elif kind == "advance":
                 item.update(amount=r.get("amount"), month=r.get("month"))
+            elif kind == "task":
+                item.update(title=r.get("title"), priority=r.get("priority"), due_date=r.get("due_date"),
+                            task_id=r.get("task_id"), decision_note=r.get("decision_note"))
             else:
                 item.update(date=r.get("date"), checkin=r.get("checkin"), checkout=r.get("checkout"))
             out.append(item)

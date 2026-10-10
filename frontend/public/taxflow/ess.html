@@ -16,7 +16,7 @@
   <title>Employee Self-Service — ETaxFlow</title>
   <link rel="preload" href="/fonts/dmsans-rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu0-K4.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/syne-8vIH7w4qzmVxm2BL9A.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="src/ess.css?v=b60fbb4de8">
+  <link rel="stylesheet" href="src/ess.css?v=ee17229f16">
   <script>
     // Runs before body paints, so a saved/system dark preference applies
     // immediately instead of flashing light-then-dark once the main
@@ -555,6 +555,7 @@
             <button class="btn-ghost" onclick="essOpenRequestModal('advance')">+ Salary advance</button>
             <button class="btn-ghost" onclick="essOpenRequestModal('loan')">+ Loan</button>
             <button class="btn-ghost" onclick="essOpenRequestModal('correction')">+ Attendance fix</button>
+            <button class="btn-ghost" onclick="essOpenRequestModal('task')">+ Extra task</button>
           </div>
         </div>
         <div class="ess-view-toggle" id="req-filter" style="flex-wrap:wrap"></div>
@@ -626,6 +627,9 @@
         <div class="tk-toolbar">
           <div class="tk-filters" id="tk-filters" role="tablist" aria-label="Filter by priority"></div>
           <div class="tk-tools">
+            <button type="button" class="tk-btn tk-btn-primary tk-request-btn" onclick="essOpenRequestModal('task')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Request extra task</span>
+            </button>
             <label class="tk-search">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
               <input type="search" id="tk-search" placeholder="Search tasks..." aria-label="Search tasks" oninput="renderEssTasks()">
@@ -641,6 +645,7 @@
             </label>
           </div>
         </div>
+        <div class="tk-requests" id="tk-requests" hidden></div>
         <div id="tasks-content" class="loading">Loading…</div>
       </div>
     </div>
@@ -763,6 +768,6 @@
      order between them, so config.js still runs before ess.js. -->
 <script src="/config.js" defer></script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/ess.js?v=30a89b6861" defer></script>
+<script src="src/ess.js?v=15b25a29ba" defer></script>
 </body>
 </html>

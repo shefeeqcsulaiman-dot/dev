@@ -25431,6 +25431,78 @@ async function loadTasks(){
   }
   await _processRepeatingTasks();
   renderTaskBoard();
+  loadTaskRequests();
+}
+
+// ── Task requests: extra work employees asked for in ESS ("Request extra task") ──
+// Approve creates the task assigned to them (server side, POST
+// /app-data/task-requests/{id}/decide); Reject sends them the note.
+let _taskRequestCache=[];
+async function loadTaskRequests(){
+  try{
+    const r=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/taskRequests?limit=300`);
+    const data=r.ok?await r.json():{};
+    _taskRequestCache=Array.isArray(data?.records)?data.records:[];
+  }catch(e){
+    console.warn('[loadTaskRequests]',e);
+    _taskRequestCache=[];
+  }
+  renderTaskRequests();
+}
+
+function renderTaskRequests(){
+  const card=document.getElementById('task-requests-card');
+  const list=document.getElementById('task-requests-list');
+  if(!card||!list)return;
+  const pending=_taskRequestCache.filter(q=>String(q.status||'Pending').toLowerCase()==='pending')
+    .sort((a,b)=>String(a.submitted||'').localeCompare(String(b.submitted||'')));
+  card.style.display=pending.length?'':'none';
+  setText('task-requests-count',String(pending.length));
+  const priClass={High:'b-r',Medium:'b-a',Low:'b-g'};
+  list.innerHTML=pending.map(q=>{
+    const id=escapeHtml(q.id||'');
+    const sent=q.submitted?String(q.submitted).slice(0,10):'';
+    return `<div class="task-req-row">
+      <div class="task-req-main">
+        <div class="task-req-title">${escapeHtml(q.title||'Extra task')} <span class="b ${priClass[q.priority]||'b-a'}">${escapeHtml(q.priority||'Medium')}</span></div>
+        <div class="task-req-sub">${escapeHtml(q.employee||'Employee')}${q.department?` · ${escapeHtml(q.department)}`:''}${q.due_date?` · wants it by ${escapeHtml(q.due_date)}`:''}${sent?` · sent ${escapeHtml(sent)}`:''}</div>
+        ${q.description?`<div class="task-req-desc">${escapeHtml(q.description)}</div>`:''}
+        ${q.reason?`<div class="task-req-desc"><b>Why:</b> ${escapeHtml(q.reason)}</div>`:''}
+      </div>
+      <div class="task-req-actions">
+        <button class="btn btn-g btn-sm" type="button" data-id="${id}" onclick="decideTaskRequest(this.dataset.id,'reject',this)">Reject</button>
+        <button class="btn btn-p btn-sm" type="button" data-id="${id}" onclick="decideTaskRequest(this.dataset.id,'approve',this)">Approve &amp; create task</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function decideTaskRequest(id,decision,btn){
+  const q=_taskRequestCache.find(x=>x.id===id);
+  if(!q)return;
+  const approve=decision==='approve';
+  const ok=await appConfirm({
+    title:approve?'Approve task request':'Reject task request',
+    messageHtml:`<div style="margin-bottom:8px"><b>${escapeHtml(q.title||'Extra task')}</b> for ${escapeHtml(q.employee||'the employee')}</div>`+
+      (approve?'<div style="font-size:12.5px;color:var(--text3);margin-bottom:8px">A task is created and assigned to them; it appears on their ESS Tasks page.</div>':'')+
+      `<label class="fl" for="task-req-note">Note to ${escapeHtml(q.employee||'the employee')} (optional)</label><textarea class="fi" id="task-req-note" rows="2" maxlength="500"></textarea>`,
+    okText:approve?'Approve & create task':'Reject',
+    tone:approve?'primary':'danger'
+  });
+  if(!ok)return;
+  const note=document.getElementById('task-req-note')?.value?.trim()||'';
+  if(btn)btn.disabled=true;
+  try{
+    const r=await authenticatedFetch(`${apiBaseUrl()}/app-data/task-requests/${encodeURIComponent(id)}/decide`,{method:'POST',body:JSON.stringify({decision,note:note||null})});
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(data.detail||`Could not save (${r.status})`);
+    toast(approve?`Task created for ${q.employee||'the employee'}`:'Request rejected',approve?'ok':'warn');
+    audit(approve?'Approved task request':'Rejected task request',`${q.employee||''} ${q.title||''}`,approve?'Approved':'Rejected');
+    await loadTasks();
+  }catch(e){
+    toast(e.message,'err');
+    if(btn)btn.disabled=false;
+  }
 }
 
 // Checked once per page visit (this feature is Tier 2/JSON-backed, not

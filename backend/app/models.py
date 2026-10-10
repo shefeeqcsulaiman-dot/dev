@@ -968,7 +968,8 @@ DATED_COLLECTIONS = frozenset({"rotaAssignments"})
 # assignee (payload "assigned_to" = Employee.id); requests to their employee_id
 # (= employee_no), or -- for rows written before that field existed -- to the employee's
 # display name, stored as "name:<name>". Mirrors ess.py's ownership checks exactly.
-OWNER_COLLECTIONS = frozenset({"tasks", "overtimeRequests", "employeeLoans", "salaryAdvances", "attendanceCorrections"})
+OWNER_COLLECTIONS = frozenset({"tasks", "overtimeRequests", "employeeLoans", "salaryAdvances", "attendanceCorrections",
+                               "taskRequests"})
 
 
 def payload_owner_key(collection: str, payload: str | None) -> str | None:

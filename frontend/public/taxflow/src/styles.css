@@ -1844,6 +1844,16 @@ input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;}
   #page-hrms-ai [style*="grid-column:span"]{grid-column:auto!important;}
 }
 
+/* Task Management > Task Requests (renderTaskRequests()) */
+.task-req-row{display:flex;align-items:flex-start;gap:14px;padding:12px 0;border-top:1px solid var(--border);}
+.task-req-row:first-child{border-top:0;padding-top:0;}
+.task-req-main{flex:1;min-width:0;}
+.task-req-title{font-size:14px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.task-req-sub{font-size:12px;color:var(--text3);margin-top:3px;}
+.task-req-desc{font-size:12.5px;color:var(--text2);margin-top:6px;}
+.task-req-actions{display:flex;gap:8px;flex-shrink:0;}
+@media(max-width:720px){.task-req-row{flex-direction:column;}.task-req-actions{width:100%;}.task-req-actions .btn{flex:1;}}
+
 /* ── Weekly Rota: Staff Schedule (hrms.html #rota-weekly, renderWeeklyRotaBoard()) ── */
 .rs-layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px;align-items:start;}
 .rs-main{padding:20px 22px;min-width:0;}

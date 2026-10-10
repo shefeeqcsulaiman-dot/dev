@@ -97,7 +97,7 @@ _REPORT_AFFECTING_COLLECTIONS = frozenset({
 # assigning a task from the HRMS side).
 _ESS_CACHED_COLLECTIONS = frozenset({
     "tasks", "rotaAssignments", "overtimeRequests", "employeeLoans",
-    "salaryAdvances", "attendanceCorrections", "hrHolidays",
+    "salaryAdvances", "attendanceCorrections", "hrHolidays", "taskRequests",
 })
 
 
@@ -143,7 +143,7 @@ _BRANCH_FILTERED_COLLECTIONS = frozenset({
     # collections, and wasn't verified either way.
     "employeeLoans", "salaryAdvances", "leaveRequests",
     "rotaShifts", "rotaSwaps", "rotaApprovals", "rotaDrafts", "rotaAssignments",
-    "attendanceCorrections", "overtimeRequests",
+    "attendanceCorrections", "overtimeRequests", "taskRequests",
 })
 
 # Superadmin's per-company Module Permissions, enforced against writes to the
@@ -302,6 +302,7 @@ _BOOTSTRAP_COLLECTION_CAPS: dict[str, int] = {
     "rotaApprovals": 500,
     "rotaDrafts": 500,
     "tasks": 500,
+    "taskRequests": 500,
 }
 
 
@@ -311,7 +312,7 @@ _BOOTSTRAP_COLLECTION_CAPS: dict[str, int] = {
 # being repaid, or an old open task, once enough newer items existed.
 _OPEN_WORK_COLLECTIONS = frozenset({
     "tasks", "overtimeRequests", "leaveRequests", "attendanceCorrections", "employeeLoans",
-    "salaryAdvances", "jobRequisitions", "candidates", "rotaSwaps", "rotaApprovals",
+    "salaryAdvances", "jobRequisitions", "candidates", "rotaSwaps", "rotaApprovals", "taskRequests",
 })
 _FINISHED_STATUS_WORDS = ("done", "complete", "closed", "reject", "cancel", "repaid", "paid", "declined",
                           "archived", "hired", "withdrawn")
@@ -860,7 +861,8 @@ _COLLECTIONS_BY_MODULE: dict[str, list[str]] = {
     "payroll": ["payrollRuns", "payrollAdjustments"],
     # Task Management (sidebar data-module="hr_workflow"). Was missing, so a
     # role granted hr_workflow:view never received tasks from bootstrap.
-    "hr_workflow": ["tasks"],
+    # taskRequests: extra work an employee asked for in ESS, approved here into a task.
+    "hr_workflow": ["tasks", "taskRequests"],
     # Main-dashboard modules — products/customers/vendors are shared
     # reference data needed by more than one module, so they're duplicated
     # across every module list that plausibly needs them; the union below
@@ -5994,3 +5996,89 @@ def wipe_company_data(
     cache.delete(f"dashboard:{cid}")
 
     return {"ok": True, "app_records_deleted": app_deleted}
+
+
+# ── Task requests (ESS "Request extra task") ─────────────────────────────────
+# An employee asks for extra work in ESS (POST /ess/task-requests); a manager with Task
+# Management edit rights approves or rejects it here. Approving creates the task, assigned
+# to that employee, in the same transaction, so a request can never be approved without its
+# task (or produce two). A decided request can't be decided again.
+
+class TaskRequestDecision(BaseModel):
+    decision: str            # "approve" | "reject"
+    note: str | None = None
+    priority: str | None = None   # optional overrides when approving
+    due_date: str | None = None
+
+
+@router.post("/task-requests/{request_id}/decide")
+def decide_task_request(
+    request_id: str,
+    payload: TaskRequestDecision,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> dict[str, Any]:
+    decision = (payload.decision or "").strip().lower()
+    if decision not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="decision must be approve or reject")
+    company = resolve_principal_company(principal, db)
+    for collection in ("taskRequests", "tasks"):
+        assert_collection_module_enabled(db, principal, company, collection)
+        assert_collection_write_permission(principal, collection)
+    row = (
+        db.query(AppDataRecord)
+        .filter(AppDataRecord.company_id == principal.company_id, AppDataRecord.collection == "taskRequests",
+                AppDataRecord.record_key == request_id)
+        .with_for_update()
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Task request not found")
+    try:
+        data = json.loads(row.payload or "{}")
+    except (TypeError, ValueError):
+        data = {}
+    _assert_department_writable(db, principal, "taskRequests", data)
+    status = str(data.get("status") or "Pending")
+    if status.lower() != "pending":
+        raise HTTPException(status_code=409, detail=f"This request was already {status.lower()}")
+    now = _dt.datetime.now(_dt.UTC).isoformat()
+    data.update(status="Approved" if decision == "approve" else "Rejected", decided_at=now,
+                decided_by=principal.display_name, decision_note=(payload.note or "").strip()[:500])
+    task = None
+    if decision == "approve":
+        emp = (
+            db.query(Employee)
+            .filter(Employee.company_id == principal.company_id, Employee.employee_no == data.get("employee_id"))
+            .first()
+        )
+        if not emp:
+            raise HTTPException(status_code=409, detail="The employee who asked for this task is no longer on the staff list")
+        priority = (payload.priority or data.get("priority") or "Medium").strip().title()
+        if priority not in ("Low", "Medium", "High"):
+            priority = "Medium"
+        due_date = (payload.due_date or data.get("due_date") or "").strip()
+        if due_date and not re.match(r"^\d{4}-\d{2}-\d{2}$", due_date):
+            raise HTTPException(status_code=400, detail="due_date must be YYYY-MM-DD")
+        task = {
+            "id": f"TASK-{int(_dt.datetime.now(_dt.UTC).timestamp() * 1000)}-{uuid4().hex[:5]}",
+            "title": data.get("title") or "Extra task",
+            "description": data.get("description") or "",
+            "priority": priority,
+            "due_date": due_date,
+            "status": "todo",
+            "progress": 0,
+            "assigned_to": emp.id,
+            "assigned_to_name": emp.full_name,
+            "department": emp.department or "",
+            "color": "",
+            "source": "task_request",
+            "task_request_id": request_id,
+        }
+        save_app_record(db, principal, "tasks", task)
+        data["task_id"] = task["id"]
+    row.payload = json.dumps(data, ensure_ascii=False, default=str)
+    db.commit()
+    for collection in ("taskRequests", "tasks"):
+        _invalidate_write_caches(collection, principal.company_id)
+    return {"ok": True, "request": data, "task": task}

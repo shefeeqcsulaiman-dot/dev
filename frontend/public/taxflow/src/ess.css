@@ -1025,6 +1025,16 @@
     .tk-btn-primary:hover{filter:brightness(1.08)}
     .tk-btn-outline{border:1px solid var(--accent);background:var(--surface);color:var(--accent-text)}
     .tk-btn-outline:hover{background:var(--accent-bg)}
+    .tk-request-btn{min-width:0;height:46px;padding:0 18px;font-size:14px}
+    .tk-requests{margin:-4px 0 14px;padding:12px 14px;border:1px dashed var(--border);border-radius:14px;background:var(--bg2)}
+    .tk-req-hd{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:8px}
+    .tk-req{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--border)}
+    .tk-req:first-of-type{border-top:0}
+    .tk-req-title{flex:1;min-width:0;font-size:14px;font-weight:600;color:var(--text)}
+    .tk-req-st{font-size:12px;font-weight:700;padding:3px 10px;border-radius:99px;background:var(--amber-bg);color:var(--amber)}
+    .tk-req-approved .tk-req-st{background:var(--green-bg);color:var(--green)}
+    .tk-req-rejected .tk-req-st{background:var(--red-bg);color:var(--red)}
+    .tk-req-note{flex-basis:100%;font-size:12.5px;color:var(--text3)}
     .tk-menu{position:fixed;z-index:1000;min-width:190px;padding:6px;border:1px solid var(--border);border-radius:12px;background:var(--surface);box-shadow:0 12px 32px rgba(15,23,42,.18);display:flex;flex-direction:column}
     .tk-menu button{border:0;background:transparent;text-align:left;padding:8px 12px;border-radius:8px;font:inherit;font-size:13px;color:var(--text);cursor:pointer}
     .tk-menu button:hover:not(:disabled),.tk-menu button:focus-visible{background:var(--accent-bg);color:var(--accent-text);outline:0}

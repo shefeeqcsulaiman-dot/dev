@@ -35,7 +35,7 @@ from app.models import Employee, Role
 # in _EMPLOYEE_REF_FIELDS / _EMPLOYEE_NAME_FIELDS below).
 EMPLOYEE_KEYED_COLLECTIONS = frozenset({
     "leaveRequests", "attendanceCorrections", "overtimeRequests",
-    "employeeLoans", "salaryAdvances", "rotaAssignments", "payrollAdjustments",
+    "employeeLoans", "salaryAdvances", "rotaAssignments", "payrollAdjustments", "taskRequests",
 })
 # Rota drafts/approvals describe a whole department's rota, not one person.
 DEPARTMENT_KEYED_COLLECTIONS = frozenset({"rotaDrafts", "rotaApprovals"})

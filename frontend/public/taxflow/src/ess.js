@@ -283,6 +283,7 @@
     {t: 'Request overtime', kind: 'Action', k: 'ot extra hours', go: function() { essOpenRequestModal('overtime'); }},
     {t: 'Request a salary advance', kind: 'Action', k: 'advance money', go: function() { essOpenRequestModal('advance'); }},
     {t: 'Request a loan', kind: 'Action', k: 'borrow emi', go: function() { essOpenRequestModal('loan'); }},
+    {t: 'Request an extra task', kind: 'Action', k: 'more work assignment ask task', go: function() { essOpenRequestModal('task'); }},
     {t: 'Request an attendance correction', kind: 'Action', k: 'fix missing check-out punch forgot', go: function() { essOpenRequestModal('correction'); }},
     {t: 'Change password', kind: 'Action', k: 'security', go: function() { essGoTab('profile'); setTimeout(function() { var el = document.getElementById('pw-current'); if (el) el.focus(); }, 60); }},
     {t: 'Edit contact details', kind: 'Action', k: 'phone mobile address emergency', go: function() { essGoTab('profile'); essEditContact(true); }}
@@ -1278,6 +1279,24 @@
     return {text: text, overdue: !done && days < 0};
   }
   function setEssTaskFilter(f) { _tkFilter = f; renderEssTasks(); }
+  // Tasks page strip: the employee's own extra-task requests still waiting, or decided in
+  // the last two weeks (an approved one is also in the list below as a task).
+  function renderEssTaskRequests() {
+    var el = document.getElementById('tk-requests');
+    if (!el) return;
+    var cutoff = _addDaysISO(_todayISO(), -14);
+    var mine = (_essRequests || []).filter(function(q) {
+      return q.kind === 'task' && (q.status === 'pending' || String(q.submitted || '').slice(0, 10) >= cutoff);
+    }).slice(0, 5);
+    if (!mine.length) { el.innerHTML = ''; el.hidden = true; return; }
+    el.hidden = false;
+    var label = {pending: 'Waiting for approval', approved: 'Approved · added below', rejected: 'Not approved'};
+    el.innerHTML = '<div class="tk-req-hd">Your task requests</div>' + mine.map(function(q) {
+      return '<div class="tk-req tk-req-' + _reqStatusClass(q.status) + '"><span class="tk-req-title">' + escHtml(q.title || 'Extra task') + '</span>' +
+        '<span class="tk-req-st">' + escHtml(label[q.status] || q.status) + '</span>' +
+        (q.status === 'rejected' && q.decision_note ? '<span class="tk-req-note">' + escHtml(q.decision_note) + '</span>' : '') + '</div>';
+    }).join('');
+  }
   function renderEssTasks() {
     var el = document.getElementById('tasks-content');
     var all = _essData.tasks || [];
@@ -1585,9 +1604,11 @@
   var REQ_KIND = {
     leave: {label: 'Leave', icon: 'calendar'}, overtime: {label: 'Overtime', icon: 'clock'},
     loan: {label: 'Loan', icon: 'wallet'}, advance: {label: 'Salary advance', icon: 'wallet'},
-    correction: {label: 'Attendance correction', icon: 'edit'}
+    correction: {label: 'Attendance correction', icon: 'edit'},
+    task: {label: 'Extra task', icon: 'taskreq'}
   };
   ES_ICONS.edit = '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>';
+  ES_ICONS.taskreq = '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8.5v7M8.5 12h7"/>';
   function essIconSvg(name) {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + (ES_ICONS[name] || ES_ICONS.check) + '</svg>';
   }
@@ -1599,6 +1620,7 @@
     if (q.kind === 'overtime') return 'Overtime · ' + q.ot_hours + ' h';
     if (q.kind === 'loan') return (q.loan_type || 'Loan') + ' · ' + essMoney(q.amount);
     if (q.kind === 'advance') return 'Salary advance · ' + essMoney(q.amount);
+    if (q.kind === 'task') return q.title || 'Extra task';
     return 'Attendance correction';
   }
   function _reqSub(q) {
@@ -1606,6 +1628,8 @@
     if (q.kind === 'overtime') return _dateOrDash(q.date) + ' · ' + (OT_TYPE_LABEL[q.ot_type] || 'Normal') + (q.multiplier ? ' · ' + q.multiplier : '');
     if (q.kind === 'loan') return q.months + ' month' + (Number(q.months) === 1 ? '' : 's') + ' · EMI ' + essMoney(q.emi);
     if (q.kind === 'advance') return 'Recover from ' + _psPeriodLabel(q.month);
+    if (q.kind === 'task') return 'Extra task · ' + (q.priority || 'Medium') + ' priority' + (q.due_date ? ' · due ' + _dateOrDash(q.due_date) : '') +
+      (q.status === 'approved' ? ' · added to your Tasks' : '') + (q.decision_note ? ' · “' + q.decision_note + '”' : '');
     return _dateOrDash(q.date) + ' · in ' + (q.checkin || '—') + ' · out ' + (q.checkout || '—');
   }
   function _reqRowHtml(q, compact) {
@@ -1633,12 +1657,12 @@
     _essRequests.forEach(function(q) { counts[q.kind] = (counts[q.kind] || 0) + 1; });
     if (f) {
       f.style.display = _essRequests.length ? '' : 'none';
-      f.innerHTML = ['all', 'leave', 'overtime', 'loan', 'advance', 'correction'].filter(function(k) { return k === 'all' || counts[k]; }).map(function(k) {
+      f.innerHTML = ['all', 'leave', 'overtime', 'loan', 'advance', 'correction', 'task'].filter(function(k) { return k === 'all' || counts[k]; }).map(function(k) {
         return '<button type="button" class="ess-view-toggle-btn' + (_essReqFilter === k ? ' on' : '') + '" onclick="essSetReqFilter(\'' + k + '\')">' +
           (k === 'all' ? 'All' : REQ_KIND[k].label) + ' (' + counts[k] + ')</button>';
       }).join('');
     }
-    if (!_essRequests.length) { el.innerHTML = emptyState('check', 'No requests yet', 'Use the buttons above to send leave, overtime, a salary advance, a loan or an attendance fix to HR.'); return; }
+    if (!_essRequests.length) { el.innerHTML = emptyState('check', 'No requests yet', 'Use the buttons above to send leave, overtime, a salary advance, a loan, an attendance fix or an extra-task request to HR.'); return; }
     var shown = _essRequests.filter(function(q) { return _essReqFilter === 'all' || q.kind === _essReqFilter; });
     el.innerHTML = shown.length ? shown.map(function(q) { return _reqRowHtml(q, false); }).join('') : emptyState('check', 'Nothing in this category', '');
   }
@@ -1653,6 +1677,7 @@
       return;
     }
     renderRequests();
+    renderEssTaskRequests();
     renderAttendance();
     updateDashboard();
     essProcessRequestUpdates();
@@ -1806,6 +1831,24 @@
         return {type: _rqVal('rq-loantype'), amount: amt, months: mo, reason: _rqVal('rq-reason') || null};
       }
     },
+    task: {
+      title: 'Request an Extra Task', path: '/ess/task-requests', ok: 'Task request sent to your manager',
+      html: function(p) {
+        var today = _todayISO();
+        return '<div class="field"><label for="rq-task-title">What would you like to work on?</label><input id="rq-task-title" type="text" maxlength="160" placeholder="e.g. Help with the month-end stock count" value="' + escHtml(p.title || '') + '"></div>' +
+          '<div class="field"><label for="rq-task-desc">Details (optional)</label><textarea id="rq-task-desc" rows="3" maxlength="1000" placeholder="What you would do, and when you have time"></textarea></div>' +
+          '<div class="fr2"><div class="field"><label for="rq-task-pri">Priority</label><select id="rq-task-pri" class="ess-select"><option>Low</option><option selected>Medium</option><option>High</option></select></div>' +
+          '<div class="field"><label for="rq-task-due">Preferred due date (optional)</label><input id="rq-task-due" type="date" min="' + today + '" max="' + _addDaysISO(today, 365) + '"></div></div>' +
+          '<div class="hint" style="margin:-6px 0 14px">Your manager reviews it. Once approved, it appears on your Tasks page.</div>' +
+          _RQ_REASON('Why you are asking', false);
+      },
+      collect: function() {
+        var title = _rqVal('rq-task-title');
+        if (title.length < 3) throw new Error('Give the task a short title');
+        return {title: title, description: _rqVal('rq-task-desc') || null, priority: _rqVal('rq-task-pri') || 'Medium',
+                due_date: _rqVal('rq-task-due') || null, reason: _rqVal('rq-reason') || null};
+      }
+    },
     correction: {
       title: 'Request an Attendance Correction', path: '/ess/attendance-corrections', ok: 'Correction request sent to HR',
       html: function(p) {
@@ -1855,6 +1898,7 @@
       essCloseRequestModal();
       essToast(f.ok);
       await essRefreshRequests();
+      if (_essReqKind === 'task') renderEssTaskRequests();
     } catch (e) {
       err.textContent = e.message; err.style.display = 'block';
     }
