@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from app.models import (
     AppDataRecord,
+    User,
     CorporateTaxRecord,
     InventoryValuationLayer,
     JournalEntry,
@@ -124,7 +125,10 @@ def test_purchase_record_syncs_line_quantity_to_stock_tables(client, auth_header
     after_clear = client.get("/api/v1/inventory/stock-levels", headers=auth_headers)
     assert after_clear.status_code == 200
     assert after_clear.json() == []
-    assert db.query(AppDataRecord).filter(AppDataRecord.collection == "products").count() == 0
+    # This company's products only: other tests' companies keep theirs.
+    company_id = db.query(User.company_id).filter(User.email == "qa-admin@taxflowqa.com").scalar()
+    assert db.query(AppDataRecord).filter(AppDataRecord.company_id == company_id,
+                                          AppDataRecord.collection == "products").count() == 0
 
 
 def test_pos_sale_syncs_negative_stock_movement(client, auth_headers, db):

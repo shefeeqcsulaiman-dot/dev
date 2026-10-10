@@ -931,6 +931,37 @@ class Party(Base):
     status: Mapped[str | None] = mapped_column(String(40))
 
 
+class CatalogProduct(Base):
+    """A product kept as JSON app-data ("products"), as real columns: one row per record,
+    id = the app_data_records id. Maintained by app/catalog_products.py on every write
+    (step A, like Party): the JSON record is still the source of truth, so these rows can
+    always be rebuilt (`python -m app.catalog_products --rebuild`)."""
+    __tablename__ = "catalog_products"
+    __table_args__ = (
+        Index("ix_catalog_products_company_name", "company_id", "name_key"),
+        Index("ix_catalog_products_company_code", "company_id", "code_key"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)  # = app_data_records.id
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(String(36))
+    record_key: Mapped[str | None] = mapped_column(String(160))
+    code: Mapped[str | None] = mapped_column(String(120))
+    code_key: Mapped[str | None] = mapped_column(String(120))  # lower-cased, trimmed
+    name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    name_key: Mapped[str] = mapped_column(String(255), nullable=False, default="")  # lower-cased, trimmed
+    type: Mapped[str | None] = mapped_column(String(60))
+    category: Mapped[str | None] = mapped_column(String(120))
+    unit: Mapped[str | None] = mapped_column(String(40))
+    selling_price: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    cost: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    vat: Mapped[str | None] = mapped_column(String(40))
+    tracking: Mapped[str | None] = mapped_column(String(20))
+    supplier_name: Mapped[str | None] = mapped_column(String(255))
+    barcode: Mapped[str | None] = mapped_column(String(80))
+    status: Mapped[str | None] = mapped_column(String(40))
+
+
 DATED_COLLECTIONS = frozenset({"rotaAssignments"})
 
 # Employee-owned workflow records the ESS portal lists per employee. Tasks belong to their
@@ -1538,3 +1569,4 @@ import app.doc_index  # noqa: E402,F401
 import app.account_totals  # noqa: E402,F401  -- keeps AccountPeriodTotal current
 import app.doc_lines  # noqa: E402,F401  -- keeps DocumentLine current
 import app.parties  # noqa: E402,F401  -- keeps Party (customers, vendors) current
+import app.catalog_products  # noqa: E402,F401  -- keeps CatalogProduct (products) current
