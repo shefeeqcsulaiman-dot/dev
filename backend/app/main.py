@@ -141,7 +141,16 @@ def create_app() -> FastAPI:
     if _database.read_engine is not None:
         monitoring.install_query_timing(_database.read_engine, settings.slow_query_ms)
 
-    app = FastAPI(title=settings.app_name, version="0.1.0")
+    # /docs, /redoc and /openapi.json publish a map of every endpoint and its parameters;
+    # off in production (a 2026-10-10 check found them public on e4cs.com), on elsewhere.
+    # ENABLE_API_DOCS=true turns them back on in production when needed.
+    show_docs = settings.app_env != "production" or os.environ.get("ENABLE_API_DOCS", "").lower() == "true"
+    app = FastAPI(
+        title=settings.app_name, version="0.1.0",
+        docs_url="/docs" if show_docs else None,
+        redoc_url="/redoc" if show_docs else None,
+        openapi_url="/openapi.json" if show_docs else None,
+    )
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     # Brotli compresses ~15-20% smaller than gzip for text/JS/CSS at the same
@@ -302,7 +311,7 @@ def create_app() -> FastAPI:
 
     # Bumped with each deploy-relevant change, so /health shows which code is live (the image
     # has no git metadata). Format: date.sequence.
-    BUILD = "2026-10-10.9"
+    BUILD = "2026-10-10.10"
 
     def monitoring_sentry_on() -> bool:
         from app import monitoring as _monitoring
