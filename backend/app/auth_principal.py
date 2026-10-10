@@ -78,9 +78,9 @@ def _employee_id_from_token(token: str) -> str | None:
 _LAST_ACTIVITY_REFRESH_SECONDS = 60
 
 
-def _touch_last_activity(db: Session, emp: Employee) -> None:
-    """Record that this employee was just active. This used to UPDATE + COMMIT on
-    EVERY authenticated request (and the commit also forced the row to be re-read);
+def _touch_last_activity(db: Session, emp: Employee | Branch) -> None:
+    """Record that this employee (or branch login) was just active. This used to UPDATE +
+    COMMIT on EVERY authenticated request (and the commit also forced the row to be re-read);
     now at most once a minute, which is all that "last active" can usefully mean."""
     now = datetime.now(UTC)
     prev = emp.last_activity
@@ -341,9 +341,7 @@ def _principal_from_branch_token(token: str, db: Session) -> Principal | None:
         m for m in BRANCH_ELIGIBLE_MODULES
         if company_allows_module(company_modules, m) and branch_allows_module(branch.modules_enabled, m)
     ]
-    branch.last_activity = datetime.now(UTC)
-    db.add(branch)
-    db.commit()
+    _touch_last_activity(db, branch)
     return Principal(
         kind="branch", company_id=branch.company_id, display_name=branch.name,
         is_admin=False, permissions=frozenset(f"{m}:{level}" for m in enabled for level in ("view", "edit", "delete")),

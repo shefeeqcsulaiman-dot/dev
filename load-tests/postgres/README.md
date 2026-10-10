@@ -108,3 +108,37 @@ company by company against the old code) and `/reports/summary` went from 390 ms
 
 Rough sizing from this: 500 companies at peak (about 1,000-2,000 people online at once)
 need 3-4 such instances (about 500-600 people each) behind PgBouncer.
+
+## 2026-10-10: towards 2,000 users at once
+
+Same seed (200 companies) and one 3-worker instance, old code (commit 0e8644c) and new code
+run back to back on the same laptop and data (no Redis, so dashboard and summary are rebuilt
+on every request). The laptop was also running a browser and a preview server, so both runs
+saturate earlier than the table above; compare them with each other.
+
+| Users at once | Before: req/s, median, 95% | After: req/s, median, 95% |
+|---|---|---|
+| 300 | 18.1, 175 ms, 1.9 s | 20.1, 71 ms, 363 ms |
+| 500 | 23.1, 2.4 s, 8.8 s | 27.2, 1.1 s, 5.1 s |
+
+What changed (each measured on its own first):
+
+- **Fixed cost of every request 4.4 ms -> 2.0 ms.** Five `@app.middleware("http")` functions
+  (each a Starlette BaseHTTPMiddleware with its own task and stream per request) are one plain
+  ASGI middleware, `app/http_middleware.py`. The live-load counter made three blocking Redis
+  calls on the event loop per API request; it now counts in memory and a thread flushes every
+  2 s (`app/request_metrics.py`).
+- **Saving an invoice 138 ms -> 79 ms, a receipt 90 ms -> 43 ms.** The corporate-tax refresh
+  on every save added up the company's whole journal (35 ms at 9k lines, growing with
+  history); it reads the stored account totals (2 ms, identical figures for all 200 companies).
+- **`/reports/summary` 640 KB -> 49 KB.** The General Ledger listing (up to 2,000 rows) was 99%
+  of it, and of its Redis entry; it is `GET /reports/general-ledger`, fetched when the tab opens.
+- **Cache invalidation after a write no longer scans Redis.** Trial balance and VAT return keys
+  are listed in a per-company set (`cache.set_in_group`); a write costs one or two Redis round
+  trips however many keys Redis holds (SCAN cost grew with every company). The company of the
+  writing user is remembered per process instead of queried on every write.
+- Branch logins wrote `last_activity` (UPDATE + COMMIT) on every request; now at most once a
+  minute, like employees.
+
+Still open: FastAPI 0.142 matches routes by scanning every route of each included router
+(~1.3 ms per request here, a one-route app takes 0.05 ms).

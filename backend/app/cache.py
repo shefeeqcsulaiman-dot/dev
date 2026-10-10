@@ -150,57 +150,6 @@ def available() -> bool:
     return _redis() is not None
 
 
-def incr_gauge(key: str) -> None:
-    """Increment a live counter with no expiry (e.g. in-flight request count) —
-    paired incr_gauge()/decr_gauge() calls around a unit of work. No-ops
-    without Redis; see request_metrics.py for the in-memory fallback."""
-    r = _redis()
-    if r is None:
-        return
-    try:
-        r.incr(f"tf:{key}")
-    except Exception:
-        pass
-
-
-def decr_gauge(key: str) -> None:
-    r = _redis()
-    if r is None:
-        return
-    try:
-        r.decr(f"tf:{key}")
-    except Exception:
-        pass
-
-
-def get_gauge(key: str) -> int | None:
-    """None means Redis is unavailable (caller should fall back), not that
-    the count is unknown/zero — an untouched gauge reads back as 0."""
-    r = _redis()
-    if r is None:
-        return None
-    try:
-        raw = r.get(f"tf:{key}")
-        return int(raw) if raw is not None else 0
-    except Exception:
-        return None
-
-
-def incr_window(key: str, ttl: int) -> None:
-    """Increment a counter that expires after `ttl` seconds — used for
-    fixed-window rate counters (e.g. "requests this minute")."""
-    r = _redis()
-    if r is None:
-        return
-    try:
-        pipe = r.pipeline()
-        pipe.incr(f"tf:{key}")
-        pipe.expire(f"tf:{key}", ttl)
-        pipe.execute()
-    except Exception:
-        pass
-
-
 def delete(key: str) -> None:
     r = _redis()
     if r is None:
@@ -211,26 +160,35 @@ def delete(key: str) -> None:
         pass
 
 
-def delete_prefix(prefix: str) -> None:
-    """Delete all keys matching tf:<prefix>*.
+# A group is a Redis set holding the names of cache keys that are dropped together
+# (invalidate_company). It replaces deleting by key prefix: SCAN walks the whole keyspace
+# 500 keys per call, so with thousands of companies every write paid hundreds of Redis
+# round trips. Members may outlive their keys; deleting a missing key is harmless.
+_GROUP_TTL = 3600  # longer than any member's TTL; refreshed on every add
 
-    SCAN, not KEYS: KEYS walks the whole keyspace in one blocking call, and this runs
-    on every company write (invalidate_company), so with thousands of companies'
-    keys it would stall Redis for everyone."""
+
+def _group_key(group: str) -> str:
+    return f"tf:grp:{group}"
+
+
+def set_in_group(key: str, value: Any, ttl: int, group: str) -> None:
+    """set(), and record the key in `group` so invalidate_company() can find it."""
     r = _redis()
     if r is None:
         return
     try:
-        batch = []
-        for key in r.scan_iter(match=f"tf:{prefix}*", count=500):
-            batch.append(key)
-            if len(batch) >= 500:
-                r.delete(*batch)
-                batch = []
-        if batch:
-            r.delete(*batch)
+        pipe = r.pipeline(transaction=False)
+        pipe.setex(f"tf:{key}", ttl, json.dumps(value, default=str))
+        pipe.sadd(_group_key(group), f"tf:{key}")
+        pipe.expire(_group_key(group), _GROUP_TTL)
+        pipe.execute()
     except Exception:
         pass
+
+
+def report_group(company_id: str) -> str:
+    """Group of a company's report caches cleared on every write (trial balance, VAT return)."""
+    return f"reports:{company_id}"
 
 
 class LocalTTLCache:
@@ -293,17 +251,9 @@ def remember(key: str, ttl: int, compute, local: LocalTTLCache) -> Any:
     return value
 
 
+# Companies that just wrote something (app.read_replica keeps their reports on the primary
+# for a short window); set by invalidate_company(), shared through Redis when connected.
 _recent_writes = LocalTTLCache(max_entries=20000)
-
-
-def mark_recent_write(company_id: str) -> None:
-    """Remember that this company just wrote something (app.read_replica keeps its
-    reports on the primary for a short window). Shared through Redis when connected."""
-    from app.config import get_settings
-
-    ttl = max(1, get_settings().read_replica_write_window_seconds)
-    _recent_writes.set(company_id, True, ttl)
-    set(f"recent_write:{company_id}", 1, ttl=ttl)
 
 
 def recently_written(company_id: str) -> bool:
@@ -321,10 +271,28 @@ def invalidate_company(company_id: str) -> None:
     on nearly every load. A dashboard/summary being up to 60-120s stale
     after a write is an accepted tradeoff for a large jump in cache-hit
     rate under real traffic."""
-    # trial_balance is written per-branch (reports.py: f"trial_balance:{company_id}:{branch_id or 'all'}"),
-    # so a plain delete() here never matched any actual key — the cache only
-    # ever cleared itself via its own TTL, not on writes.
-    delete_prefix(f"trial_balance:{company_id}:")
-    delete_prefix(f"vat_return:{company_id}:")
-    delete(f"bootstrap:{company_id}")
-    mark_recent_write(company_id)
+    # trial_balance (per branch) and vat_return (per period) are cached with
+    # set_in_group(report_group(...)), so they're found without scanning keys.
+    # One pipelined round trip, plus one more when the group has members.
+    from app.config import get_settings
+
+    ttl = max(1, get_settings().read_replica_write_window_seconds)
+    _recent_writes.set(company_id, True, ttl)
+    r = _redis()
+    if r is None:
+        return
+    try:
+        group = _group_key(report_group(company_id))
+        pipe = r.pipeline(transaction=False)
+        pipe.smembers(group)
+        pipe.delete(f"tf:bootstrap:{company_id}")
+        pipe.setex(f"tf:recent_write:{company_id}", ttl, json.dumps(1))
+        members = pipe.execute()[0]
+        if members:
+            pipe = r.pipeline(transaction=False)
+            pipe.delete(*members)
+            # SREM rather than deleting the set: a key cached between the two calls stays listed.
+            pipe.srem(group, *members)
+            pipe.execute()
+    except Exception:
+        pass

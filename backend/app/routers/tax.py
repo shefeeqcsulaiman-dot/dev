@@ -74,7 +74,7 @@ def vat_return(
         "input_vat": f"{Decimal(str(input_vat)):.2f}",
         "net_vat_payable": f"{net:.2f}",
     }
-    cache.set(cache_key, result, ttl=300)
+    cache.set_in_group(cache_key, result, 300, cache.report_group(principal.company_id))
     return result
 
 

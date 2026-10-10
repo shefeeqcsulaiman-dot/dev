@@ -1073,7 +1073,7 @@ def trial_balance(
     if cached is not None:
         return cached
     result = {"status": "ready", "source": "posted journal entries", "rows": run_report(db, company_id, lambda s: trial_balance_rows(s, company_id, resolved_branch_id))}
-    cache.set(cache_key, result, ttl=120)
+    cache.set_in_group(cache_key, result, 120, cache.report_group(company_id))
     return result
 
 
@@ -1115,6 +1115,24 @@ def report_summary(
         # the shared cached object and must never be mutated.
         result = {**result, "control": {**(result.get("control") or {}), "audit": []}}
     return result
+
+
+@router.get("/general-ledger")
+@limiter.limit("120/minute")
+def report_general_ledger(
+    request: Request,
+    branch_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("reports:view")),
+) -> dict[str, Any]:
+    """Reports > General Ledger: the last year of posted lines by account (see
+    general_ledger_rows()). Branch-scoped and cached like /reports/summary."""
+    company_id = principal.company_id
+    resolved_branch_id = branch_id if principal.can_cross_branch("reports") else resolve_active_branch(principal, branch_id)
+    cache_key = f"general_ledger:{company_id}:{resolved_branch_id or 'all'}"
+    return _cached_or_build(cache_key, 120, lambda: {
+        "rows": run_report(db, company_id, lambda s: general_ledger_rows(s, company_id, resolved_branch_id)),
+    })
 
 
 def _is_recognized_revenue_status(status: object) -> bool:
@@ -1591,7 +1609,8 @@ def _build_summary(db: Session, company_id: str, branch_id: str | None = None) -
         "assets": asset_report_rows(db, company_id),
         "budget_cash": budget_cash_rows(db, company_id, revenue, purchases, operating_expenses, net_profit),
         "control": control_report_rows(db, company_id, revenue, purchases, net_profit),
-        "general_ledger": general_ledger_rows(db, company_id, branch_id),
+        # The General Ledger listing (up to 2,000 rows, ~600 KB) is GET /reports/general-ledger,
+        # loaded when its tab opens: here it was ~99% of every summary response and cache entry.
         "customer_ledger": customer_ledger_rows(db, company_id, app_sales, branch_id),
         "supplier_ledger": supplier_ledger_rows(db, company_id, app_purchases, branch_id),
         "ap_aging": _ap_aging,
