@@ -10,10 +10,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=971d02a65d" as="style">
-<link rel="preload" href="src/app.js?v=ca80023d6d" as="script">
+<link rel="preload" href="src/styles.css?v=9b4e07436d" as="style">
+<link rel="preload" href="src/app.js?v=db165dcf8a" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=971d02a65d">
+<link rel="stylesheet" href="src/styles.css?v=9b4e07436d">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -210,6 +210,54 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 [data-hr-readonly~="rota"] #page-rota :is([onclick^="openShiftModal"],[onclick^="copyPreviousRota"],[onclick^="autoGenerate"],[onclick^="saveRotaDraft"],[onclick^="submitRotaApproval"],[onclick^="publishRota"],[onclick^="applyRotaRepeat"],[onclick^="requestExtraStaff"],[onclick*="m-shift-swap"],[onclick^="editShift"],[onclick^="deleteShift"],[onclick*="notifications queued"],[onclick*="Employees notified"],#rota-repeat-row){display:none!important}
 [data-hr-nodelete~="rota"] #page-rota [onclick^="deleteShift"]{display:none!important}
 #m-edit-shift.is-readonly .modal-foot .btn-danger,#m-edit-shift.is-readonly .modal-foot .btn-p,#m-edit-shift.is-readonly [onclick^="addRotaEditTaskRow"],#m-edit-shift.is-readonly [data-task-row] button{display:none!important}
+
+/* ── HRMS Dashboard redesign (greeting, tinted KPIs, clean card headers, activity) ── */
+#page-hrms .hd-hero{position:relative;display:flex;align-items:center;min-height:104px;margin:0 0 16px;padding:6px 4px;overflow:hidden}
+#page-hrms .hd-hero-text{position:relative;z-index:1}
+#page-hrms .hd-greet{font-family:'Syne',sans-serif;font-size:22px;font-weight:700;letter-spacing:-.3px;color:var(--text)}
+#page-hrms .hd-wave{display:inline-block;transform-origin:70% 70%}
+#page-hrms .hd-greet-sub{margin-top:4px;font-size:13px;color:var(--text2)}
+#page-hrms .hd-hero-art{position:absolute;right:150px;bottom:0;width:260px;max-width:40%;height:auto;pointer-events:none}
+#page-hrms .hd-hero-note{position:absolute;right:8px;top:12px;font-family:'Segoe Print','Bradley Hand','Comic Sans MS',cursive;font-size:14px;font-weight:600;line-height:1.35;color:#1e3a8a;transform:rotate(-4deg)}
+body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
+#page-hrms .hd-kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:16px}
+#page-hrms .hd-kpi-grid .hrms-kpi-card{--tint:#3b82f6;align-items:flex-start;gap:12px;padding:16px;border-radius:16px;border:1px solid color-mix(in srgb,var(--tint) 16%,var(--border));background:color-mix(in srgb,var(--tint) 6%,var(--surface));min-height:118px}
+#page-hrms .hd-tint-blue{--tint:#3b82f6!important}#page-hrms .hd-tint-green{--tint:#10b981!important}
+#page-hrms .hd-tint-purple{--tint:#8b5cf6!important}#page-hrms .hd-tint-amber{--tint:#f59e0b!important}
+#page-hrms .hd-kpi-grid .hrms-kpi-icon{width:42px;height:42px;border-radius:12px;flex-shrink:0}
+#page-hrms .hd-kpi-grid .hrms-kpi-lbl{font-size:12.5px;font-weight:600;color:var(--text2)}
+#page-hrms .hd-kpi-grid .hrms-kpi-val{font-size:24px;font-weight:700;margin:6px 0 4px;color:var(--text)!important}
+#page-hrms .hd-kpi-grid .hrms-kpi-trend{font-size:12px}
+#page-hrms .hd-kpi-secondary{display:none!important}
+#page-hrms .hd-card-hd{display:flex;align-items:center;gap:12px;padding:16px 18px 0}
+#page-hrms .hd-card-ico{width:36px;height:36px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:var(--accent-glow);color:var(--accent);flex-shrink:0}
+#page-hrms .hd-card-title{font-size:15px;font-weight:700;color:var(--text)}
+#page-hrms .hd-card-sub{font-size:12px;color:var(--text3);margin-top:2px}
+#page-hrms .hd-trend-body{padding:12px 18px 16px}
+#page-hrms .hc-title{font-size:15px;font-weight:700}
+#page-hrms .hc-legend{font-size:12.5px!important}
+#page-hrms .hd-link{font-size:12.5px;font-weight:600;color:var(--accent);cursor:pointer;white-space:nowrap;text-decoration:none}
+#page-hrms .hd-link:hover{text-decoration:underline}
+#page-hrms .hd-count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;margin-left:6px;border-radius:99px;background:var(--red);color:#fff;font-size:11px;font-weight:700;vertical-align:middle}
+#page-hrms .hd-count[data-zero]{background:var(--bg3);color:var(--text3)}
+#page-hrms .hd-row-c{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-bottom:14px}
+#page-hrms .hd-list{padding:10px 18px 16px}
+#page-hrms .hd-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+#page-hrms .hd-item:last-child{border-bottom:0}
+#page-hrms .hd-avatar{width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
+#page-hrms .hd-item-main{flex:1;min-width:0}
+#page-hrms .hd-item-title{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#page-hrms .hd-item-sub{font-size:12px;color:var(--text3);margin-top:2px}
+#page-hrms .hd-item-side{font-size:11.5px;color:var(--text3);white-space:nowrap}
+#page-hrms .hd-empty{font-size:12.5px;color:var(--text3);padding:14px 0}
+#page-hrms .mb3-side-card{border-radius:16px}
+#page-hrms .dv2-qa{background:color-mix(in srgb,var(--qa) 8%,var(--surface));border-color:color-mix(in srgb,var(--qa) 18%,var(--border));border-radius:12px;font-size:12px}
+#page-hrms .hc-appr-row{position:relative;padding-right:18px}
+#page-hrms .hc-appr-row::after{content:"›";position:absolute;right:2px;top:50%;transform:translateY(-50%);font-size:18px;color:var(--text3)}
+#page-hrms .hc-appr-name{font-size:13px}
+#page-hrms .hc-alert-title{color:var(--red)}
+@media(max-width:1200px){#page-hrms .hd-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#page-hrms .hd-hero-art{display:none}}
+@media(max-width:760px){#page-hrms .hd-row-c{grid-template-columns:1fr}#page-hrms .hd-hero-note{display:none}#page-hrms .hd-greet{font-size:19px}}
 </style>
 </head>
 <body class="theme-light">
@@ -387,10 +435,27 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 <!-- ══ LEFT MAIN ══ -->
 <div class="mb3-main">
 
+<!-- ── Greeting (Dashboard redesign) ─────────────────────────────── -->
+<div class="hd-hero">
+  <div class="hd-hero-text">
+    <div class="hd-greet"><span class="hd-wave" aria-hidden="true">👋</span> <span id="hrms-greeting">Welcome</span>, <span id="hrms-greet-name">Admin</span></div>
+    <div class="hd-greet-sub">Here&rsquo;s what&rsquo;s happening with your team today.</div>
+  </div>
+  <svg class="hd-hero-art" viewBox="0 0 300 110" aria-hidden="true" focusable="false">
+    <ellipse cx="128" cy="104" rx="96" ry="10" fill="#dbeafe"/>
+    <path d="M70 108a58 58 0 01116 0z" fill="#bfdbfe" opacity=".6"/>
+    <g transform="translate(108 30)"><circle cx="22" cy="14" r="12" fill="#1e293b"/><path d="M10 14c0-9 6-13 12-13s12 4 12 13c0 4-2 7-3 9-2-6-5-9-9-9s-7 3-9 9c-1-2-3-5-3-9z" fill="#0f172a"/><circle cx="22" cy="17" r="8" fill="#fcd9b8"/><path d="M6 58c0-16 7-26 16-26s16 10 16 26z" fill="#fff"/><path d="M6 58c0-16 7-26 16-26" stroke="#e2e8f0" stroke-width="2" fill="none"/></g>
+    <rect x="96" y="70" width="64" height="38" rx="4" fill="#1e293b"/><rect x="100" y="74" width="56" height="28" rx="2" fill="#334155"/>
+    <g transform="translate(60 72)"><rect x="6" y="22" width="16" height="14" rx="3" fill="#3b82f6"/><path d="M14 22c-8-6-10-14-6-20 2 6 6 10 6 20zM14 22c6-8 12-10 16-8-4 2-8 6-16 8z" fill="#22c55e"/></g>
+    <g transform="translate(176 46)"><path d="M10 62c-2-20 4-36 14-44M24 18c-6-6-6-14-2-18 4 6 4 12 2 18zM24 18c6-2 12 0 14 4-6 2-10 0-14-4zM18 40c-8-2-12-8-10-14 6 2 9 7 10 14zM20 30c6-4 12-4 14 0-5 3-10 3-14 0z" fill="#22c55e" stroke="#16a34a" stroke-width=".8"/><rect x="2" y="56" width="20" height="16" rx="3" fill="#bfdbfe"/></g>
+  </svg>
+  <div class="hd-hero-note" aria-hidden="true">Better teams build<br>greater success!</div>
+</div>
+
 <!-- ── KPI Row (3 × 2) ───────────────────────────────────────────── -->
-<div class="hrms-kpi-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px">
+<div class="hrms-kpi-row hd-kpi-grid">
   <!-- 1. Total Employees -->
-  <div class="hrms-kpi-card">
+  <div class="hrms-kpi-card hd-tint-blue">
     <div class="hrms-kpi-icon" style="background:var(--accent-glow)">
       <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="var(--accent)" stroke-width="1.6"><circle cx="8" cy="7" r="3.5"/><path d="M2 18c0-3.5 2.7-5.5 6-5.5s6 2 6 5.5"/><circle cx="17" cy="7" r="2.5"/><path d="M20 17.5c0-2.5-1.5-4-3-4.5"/></svg>
     </div>
@@ -404,7 +469,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
     </div>
   </div>
   <!-- 2. Present Today -->
-  <div class="hrms-kpi-card">
+  <div class="hrms-kpi-card hd-tint-green">
     <div class="hrms-kpi-icon" style="background:var(--green-bg)">
       <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="var(--green)" stroke-width="1.6"><circle cx="11" cy="11" r="8" stroke-width="1.4"/><path d="M7 11l3 3 5-5"/></svg>
     </div>
@@ -417,7 +482,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
     </div>
   </div>
   <!-- 3. On Leave -->
-  <div class="hrms-kpi-card">
+  <div class="hrms-kpi-card hd-tint-purple">
     <div class="hrms-kpi-icon" style="background:var(--purple-bg)">
       <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="var(--purple)" stroke-width="1.6"><path d="M11 2l2 3h4l-3 2.5 1.5 4-4.5-2.5L6.5 11.5 8 7.5 5 5h4z"/><path d="M4 18c1-2 3-3 7-3s6 1 7 3"/></svg>
     </div>
@@ -428,7 +493,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
     </div>
   </div>
   <!-- 4. Net Payroll -->
-  <div class="hrms-kpi-card">
+  <div class="hrms-kpi-card hd-tint-amber">
     <div class="hrms-kpi-icon" style="background:var(--amber-bg)">
       <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="var(--amber)" stroke-width="1.6"><rect x="3" y="5" width="16" height="12" rx="2"/><path d="M3 9h16M7 13h3M14 13h1"/></svg>
     </div>
@@ -442,7 +507,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
     </div>
   </div>
   <!-- 5. Open Positions -->
-  <div class="hrms-kpi-card">
+  <div class="hrms-kpi-card hd-kpi-secondary">
     <div class="hrms-kpi-icon" style="background:var(--accent-glow)">
       <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="var(--accent)" stroke-width="1.6"><rect x="3" y="7" width="16" height="11" rx="2"/><path d="M8 7V5a3 3 0 016 0v2"/><path d="M11 12v3M9.5 13.5h3"/></svg>
     </div>
@@ -456,7 +521,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
     </div>
   </div>
   <!-- 6. Pending Approvals -->
-  <div class="hrms-kpi-card">
+  <div class="hrms-kpi-card hd-kpi-secondary">
     <div class="hrms-kpi-icon" style="background:var(--red-bg)">
       <svg viewBox="0 0 22 22" width="22" height="22" fill="none" stroke="var(--red)" stroke-width="1.6"><rect x="4" y="3" width="14" height="16" rx="2"/><path d="M8 7h6M8 10.5h6M8 14h4"/><circle cx="16" cy="16" r="4" fill="var(--surface)" stroke="var(--red)"/><path d="M16 14.5v2M16 17.5v.5"/></svg>
     </div>
@@ -473,26 +538,11 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 
   <!-- Attendance Trend with illustrated banner -->
   <div class="mb3-card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
-    <div style="background:linear-gradient(135deg,#f0fdf4 0%,#dcfce7 55%,#bbf7d0 100%);padding:16px 18px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:90px;position:relative;overflow:hidden">
-      <div style="position:absolute;top:-15px;right:-15px;width:80px;height:80px;border-radius:50%;background:rgba(16,185,129,.18);filter:blur(20px)"></div>
-      <div style="z-index:1;padding-bottom:12px">
-        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#065f46;opacity:.75">Workforce</div>
-        <div style="font-size:14px;font-weight:800;color:#065f46">Attendance Trend</div>
-      </div>
-      <svg viewBox="0 0 110 90" width="110" height="90" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
-        <ellipse cx="55" cy="84" rx="32" ry="5" fill="#059669" opacity=".12"/>
-        <circle cx="55" cy="40" r="28" fill="none" stroke="#059669" stroke-width="3" opacity=".3"/>
-        <circle cx="55" cy="40" r="22" fill="#10b981" opacity=".15"/>
-        <circle cx="55" cy="40" r="22" fill="none" stroke="#10b981" stroke-width="2.5" opacity=".5"/>
-        <path d="M55 22v18l10 10" stroke="#065f46" stroke-width="3" stroke-linecap="round"/>
-        <circle cx="55" cy="40" r="3" fill="#065f46"/>
-        <polyline points="18,72 28,58 38,64 52,50 65,56 80,42 95,48" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity=".7"/>
-        <circle cx="28" cy="58" r="3" fill="#10b981" opacity=".8"/>
-        <circle cx="52" cy="50" r="3" fill="#10b981" opacity=".8"/>
-        <circle cx="80" cy="42" r="3" fill="#10b981" opacity=".8"/>
-      </svg>
+    <div class="hd-card-hd">
+      <span class="hd-card-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4M7.5 16l3-3 2.5 2 3.5-4"/></svg></span>
+      <div><div class="hd-card-title">Attendance Trend</div><div class="hd-card-sub">Employees present per day</div></div>
     </div>
-    <div style="padding:14px 18px 16px;flex:1">
+    <div class="hd-trend-body" style="flex:1">
       <!-- _updateDashboardAttTrend() (called from loadAttendanceTrend(),
            which refreshHrmsKpis() now also triggers on Dashboard load, see
            app.js) replaces this whole placeholder with a real SVG chart
@@ -500,7 +550,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
            all — this stayed a hardcoded "no data" message permanently,
            even for a company with months of real attendance data, because
            nothing could ever find it to replace it. -->
-      <div class="hrms-line-chart-wrap" style="height:100px">
+      <div class="hrms-line-chart-wrap" style="height:150px">
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:8px">
           <svg viewBox="0 0 32 32" width="28" height="28" fill="none" style="stroke:var(--text3)" stroke-width="2"><circle cx="16" cy="16" r="12"/><path d="M16 9v7l4 4"/></svg>
           <div style="font-size:12px;color:var(--text3);text-align:center">No attendance log data yet.<br>Daily check-in tracking not yet enabled.</div>
@@ -513,7 +563,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
   <div style="display:flex;flex-direction:column;gap:14px">
     <!-- Department Strength -->
     <div class="mb3-card" style="flex:1">
-      <div class="hc-hd"><div class="hc-title">Department Strength</div></div>
+      <div class="hc-hd"><div class="hc-title">Department Distribution</div></div>
       <div class="hc-donut-wrap" style="align-items:flex-start">
         <div class="hc-donut">
           <svg id="hrms-dept-svg" viewBox="0 0 100 100" width="90" height="90">
@@ -543,6 +593,25 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
         <div class="hc-legend" id="hrms-type-legend" style="flex:1;font-size:11px"></div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ── ROW C: Recent Activity + Upcoming Leave (Dashboard redesign) ── -->
+<div class="hd-row-c">
+  <div class="mb3-card hd-activity">
+    <div class="hd-card-hd">
+      <span class="hd-card-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>
+      <div style="flex:1"><div class="hd-card-title">Recent Activity</div><div class="hd-card-sub">Latest leave requests from your team</div></div>
+      <a class="hd-link" onclick="goHrmsTab(4,'hr-leave')">View all &rarr;</a>
+    </div>
+    <div id="hrms-recent-activity" class="hd-list"><div class="hd-empty">No recent activity yet.</div></div>
+  </div>
+  <div class="mb3-card hd-upcoming">
+    <div class="hd-card-hd">
+      <span class="hd-card-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h2M12 14h2M16 14h0" stroke-width="2.4"/></svg></span>
+      <div style="flex:1"><div class="hd-card-title">Upcoming Leave</div><div class="hd-card-sub">Approved leave in the next 14 days</div></div>
+    </div>
+    <div id="hrms-upcoming-leave" class="hd-list"><div class="hd-empty">No upcoming leave in the next 14 days.</div></div>
   </div>
 </div>
 
@@ -750,7 +819,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 
   <!-- Pending Approvals -->
   <div class="mb3-side-card" style="padding:16px">
-    <div class="hc-hd" style="margin-bottom:12px"><div class="hc-title">Pending Approvals</div></div>
+    <div class="hc-hd" style="margin-bottom:12px"><div class="hc-title">Pending Approvals <span class="hd-count" id="hrms-appr-total">0</span></div><a class="hd-link" onclick="goHrmsTab(4,'hr-leave')">View all &rarr;</a></div>
     <div class="hc-approvals">
       <div class="hc-appr-row" style="cursor:pointer" onclick="goHrmsTab(4,'hr-leave')">
         <div class="hc-appr-icon" style="background:var(--accent-glow)"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="var(--accent)" stroke-width="1.4"><rect x="2" y="2" width="10" height="11" rx="1"/><path d="M4 5h6M4 7.5h6M4 10h3"/></svg></div>
@@ -3152,7 +3221,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 window.HRMS_STANDALONE=true;
 </script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=ca80023d6d" defer></script>
+<script src="src/app.js?v=db165dcf8a" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
@@ -3601,6 +3670,7 @@ document.addEventListener('DOMContentLoaded',function(){
           set('hrms-appr-corr',await count('/app-data/records/attendanceCorrections?limit=500'));
           set('hrms-appr-loans',await count('/app-data/records/employeeLoans?limit=500'));
           set('hrms-appr-advances',await count('/app-data/records/salaryAdvances?limit=500'));
+          if(typeof _updateHrmsApprovalTotal==='function')_updateHrmsApprovalTotal();
         })();
         // Notification badge
         var totalAlerts=(parseInt(otCount)||0)+(parseInt(loanCount)||0);

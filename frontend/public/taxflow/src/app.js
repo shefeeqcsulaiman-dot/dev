@@ -18416,6 +18416,56 @@ function renderOrgChart(){
 // refreshHrmsKpis() below from re-firing on its own follow-up invocation
 // (and every later Dashboard-load call) — see that call site's comment.
 let _hrmsLeaveKpiSynced=false;
+// HRMS Dashboard redesign: greeting, Pending Approvals total, Recent Activity and Upcoming
+// Leave. Uses only data the dashboard already has (_leaveRequestsCache from
+// loadLeaveRequests(), the top-bar name); nothing is invented, and both lists show an
+// empty state until real requests exist.
+// Pending Approvals header badge = the sum of its five row badges (filled by hrms.html's
+// approval counts); called again whenever those counts land.
+function _updateHrmsApprovalTotal(){
+  const totalEl=document.getElementById('hrms-appr-total');
+  if(!totalEl)return;
+  const total=['hrms-appr-leave','hrms-appr-ot','hrms-appr-corr','hrms-appr-loans','hrms-appr-advances']
+    .reduce((n,id)=>n+(parseInt(document.getElementById(id)?.textContent,10)||0),0);
+  totalEl.textContent=String(total);
+  totalEl.toggleAttribute('data-zero',total===0);
+}
+
+function _renderHrmsDashboardExtras(){
+  const greetEl=document.getElementById('hrms-greeting');
+  if(!greetEl)return;  // not on hrms.html
+  const h=new Date().getHours();
+  greetEl.textContent=h<12?'Good Morning':h<17?'Good Afternoon':'Good Evening';
+  const name=(document.getElementById('hrms-top-name')?.textContent||'').trim();
+  const nameEl=document.getElementById('hrms-greet-name');
+  if(nameEl&&name)nameEl.textContent=name;
+  _updateHrmsApprovalTotal();
+  const rows=Array.isArray(_leaveRequestsCache)?_leaveRequestsCache:[];
+  const colors=['#6366f1','#10b981','#3b82f6','#f59e0b','#ec4899','#14b8a6'];
+  const initials=n=>String(n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()||'?';
+  const avatar=(n,i)=>`<span class="hd-avatar" style="background:${colors[i%colors.length]}">${escapeHtml(initials(n))}</span>`;
+  const fmt=d=>{try{return new Date(d+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});}catch(_e){return d||'';}};
+  const act=document.getElementById('hrms-recent-activity');
+  if(act){
+    const recent=[...rows].sort((a,b)=>String(b.created_at||b.start_date||'').localeCompare(String(a.created_at||a.start_date||''))).slice(0,4);
+    act.innerHTML=recent.length?recent.map((r,i)=>{
+      const st=String(r.status||'pending').toLowerCase();
+      const verb=st==='approved'?'has approved leave':st==='rejected'?'had a leave request rejected':st==='cancelled'?'cancelled a leave request':'submitted a leave request';
+      return `<div class="hd-item">${avatar(r.employee_name,i)}<div class="hd-item-main"><div class="hd-item-title">${escapeHtml(r.employee_name||'Employee')} ${verb}</div><div class="hd-item-sub">${escapeHtml(r.leave_type||'Leave')} &middot; ${escapeHtml(fmt(r.start_date))} &ndash; ${escapeHtml(fmt(r.end_date))}</div></div><span class="hd-item-side" style="text-transform:capitalize">${escapeHtml(st)}</span></div>`;
+    }).join(''):'<div class="hd-empty">No recent activity yet.</div>';
+  }
+  const up=document.getElementById('hrms-upcoming-leave');
+  if(up){
+    const today=new Date();today.setHours(0,0,0,0);
+    const horizon=new Date(today);horizon.setDate(horizon.getDate()+14);
+    const iso=d=>d.toISOString().slice(0,10);
+    const soon=rows.filter(r=>String(r.status||'').toLowerCase()==='approved'&&r.end_date>=iso(today)&&r.start_date<=iso(horizon))
+      .sort((a,b)=>String(a.start_date).localeCompare(String(b.start_date))).slice(0,5);
+    up.innerHTML=soon.length?soon.map((r,i)=>`<div class="hd-item">${avatar(r.employee_name,i)}<div class="hd-item-main"><div class="hd-item-title">${escapeHtml(r.employee_name||'Employee')}</div><div class="hd-item-sub">${escapeHtml(r.leave_type||'Leave')} &middot; ${escapeHtml(fmt(r.start_date))} &ndash; ${escapeHtml(fmt(r.end_date))}</div></div><span class="hd-item-side">${r.days?escapeHtml(String(r.days))+' day'+(Number(r.days)===1?'':'s'):''}</span></div>`).join('')
+      :'<div class="hd-empty">No upcoming leave in the next 14 days.</div>';
+  }
+}
+
 function refreshHrmsKpis(){
   // "Total Employees" tile's own subtitle promises "active headcount" —
   // previously counted every row regardless of status, so a company that
@@ -18457,6 +18507,7 @@ function refreshHrmsKpis(){
   set('hrms-kpi-leave',onLeaveToday||'0');
   set('hrms-kpi-pending',(pendingLeave+pendingOT+pendingCorr)||'0');
   set('hrms-kpi-payroll',payrollNetTotal>0?fmtAed(payrollNetTotal):'—');
+  _renderHrmsDashboardExtras();
   // Present Today: "active minus on approved leave" is not a valid stand-in
   // for "present" — it silently counts anyone on an unfiled day off, or
   // simply not yet clocked in (e.g. early in the day before any punches
