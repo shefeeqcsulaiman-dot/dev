@@ -279,8 +279,6 @@ def create_app() -> FastAPI:
             except Exception as exc:
                 log.warning("SQLite WAL checkpoint failed: %s", exc)
 
-    site_dir = static_dir / "site"
-
     @app.get("/", response_model=None)
     def root():
         from fastapi.responses import RedirectResponse
@@ -357,17 +355,21 @@ def create_app() -> FastAPI:
             "service": settings.app_name,
         }
 
+    # The old marketing pages (frontend/public/site/*.html) were removed in June 2026 but
+    # their routes stayed, so these URLs answered 500. Old links now go to the live pages.
+    from fastapi.responses import RedirectResponse as _Redirect
+
     @app.get("/landing.html", include_in_schema=False)
-    def landing() -> FileResponse:
-        return FileResponse(str(site_dir / "landing.html"))
+    def landing() -> _Redirect:
+        return _Redirect(url="/", status_code=301)
 
     @app.get("/signup.html", include_in_schema=False)
-    def signup() -> FileResponse:
-        return FileResponse(str(site_dir / "signup.html"))
+    def signup() -> _Redirect:
+        return _Redirect(url="/signup", status_code=301)
 
     @app.get("/contact.html", include_in_schema=False)
-    def contact() -> FileResponse:
-        return FileResponse(str(site_dir / "contact.html"))
+    def contact() -> _Redirect:
+        return _Redirect(url="/", status_code=301)
 
     # Primary routes at root path
     @app.get("/login", include_in_schema=False)
