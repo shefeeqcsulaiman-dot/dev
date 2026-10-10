@@ -342,7 +342,7 @@
     .lb-item-days{font-size:18px;font-weight:700;font-family:'Syne',sans-serif;color:var(--text)}
     .lb-item-days span{font-size:10.5px;font-weight:500;color:var(--text3);font-family:'DM Sans',sans-serif}
     .lb-bar{height:5px;border-radius:99px;background:var(--border);margin-top:9px;overflow:hidden}
-    .lb-bar-fill{height:100%;border-radius:99px;background:var(--accent)}
+    .lb-bar-fill{height:100%;width:var(--used,0%);border-radius:99px;background:var(--accent)}
     .lb-bar-fill.low{background:var(--red)}
     .dash-help-banner{display:flex;align-items:center;gap:12px;margin-top:16px;padding:14px 16px;border-radius:12px;background:var(--success-bg);border:1px solid var(--success-border);font-size:17px}
     .dash-help-banner .btn-ghost{background:var(--surface);white-space:nowrap}
@@ -1049,3 +1049,72 @@
       .tk-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:10px}
       .tk-btn{min-width:0;height:36px;padding:0 12px;font-size:13px;white-space:nowrap}
     }
+
+/* ── Leave page redesign: banner, tinted balance cards, panel headers, calendar ──
+   Scoped to #tb-leave so the dashboard's Leave Balance widget keeps its own look. */
+#tb-leave .lv-hero{position:relative;display:flex;align-items:center;min-height:96px;padding:16px 20px;margin-bottom:12px;border-radius:18px;overflow:hidden;background:linear-gradient(120deg,rgba(59,130,246,.10),rgba(147,197,253,.18) 55%,rgba(191,219,254,.30))}
+#tb-leave .lv-hero-text{position:relative;z-index:1}
+#tb-leave .lv-hero-text h1{margin:0;font-family:'Syne',sans-serif;font-size:22px;font-weight:800;line-height:1.1;letter-spacing:-.4px;color:var(--text)}
+#tb-leave .lv-hero-text p{margin:5px 0 0;font-size:13px;color:var(--text2)}
+#tb-leave .lv-hero-art{position:absolute;right:8px;bottom:0;width:360px;max-width:58%;height:100%;pointer-events:none}
+#tb-leave .lv-hero-note{--note:#1e3a8a;font-family:'Segoe Print','Bradley Hand','Comic Sans MS',cursive;font-size:15px;font-weight:600;fill:var(--note);stroke:var(--note)}
+#tb-leave .lv-hero-note text{stroke:none}
+:root[data-theme="dark"] #tb-leave .lv-hero-note{--note:#bfdbfe}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) #tb-leave .lv-hero-note{--note:#bfdbfe}}
+#tb-leave .lv-card{border-radius:16px;padding:16px 18px}
+#tb-leave .lv-card-title,#tb-leave .lv-panel-title{font-size:16px;font-weight:700;color:var(--text);margin:0}
+#tb-leave .lv-card-sub{font-size:12.5px;color:var(--text3);margin-top:3px}
+#tb-leave .lv-panel-hd{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+#tb-leave .lv-panel-title{display:flex;align-items:center;gap:10px}
+#tb-leave .lv-panel-ico{width:34px;height:34px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:var(--accent-bg);color:var(--accent-text);flex-shrink:0}
+#tb-leave .lv-btn-primary{border:0;border-radius:99px;padding:9px 18px;background:var(--accent);color:#fff;font:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(37,99,235,.25)}
+#tb-leave .lv-btn-primary:hover{filter:brightness(1.06)}
+#tb-leave .lv-btn-primary:focus-visible,#tb-leave .lv-nav-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#tb-leave .lv-month-nav{display:flex;align-items:center;gap:8px}
+#tb-leave .lv-nav-btn{width:32px;height:32px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:16px;line-height:1;cursor:pointer}
+#tb-leave .lv-month-label{font-size:13px;font-weight:700;min-width:110px;text-align:center;color:var(--text)}
+
+#leave-balance-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+#leave-balance-grid .lb-item{--tone:#3b82f6;--tone-bg:rgba(59,130,246,.08);background:var(--tone-bg);border:1px solid color-mix(in srgb,var(--tone) 18%,var(--border));border-radius:14px;padding:14px 14px 12px}
+#leave-balance-grid .lb-item-icon{width:38px;height:38px;border-radius:50%;border:0;background:color-mix(in srgb,var(--tone) 18%,transparent);font-size:18px;margin-bottom:10px}
+#leave-balance-grid .lb-item-type{font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px}
+#leave-balance-grid .lb-item-days{font-size:22px;font-weight:700;color:var(--text)}
+#leave-balance-grid .lb-item-days span{font-size:12px;color:var(--text2)}
+#leave-balance-grid .lb-bar{height:6px;margin-top:10px;background:color-mix(in srgb,var(--tone) 15%,transparent)}
+#leave-balance-grid .lb-bar-fill{width:var(--left,0%);background:var(--tone)}
+#leave-balance-grid .lb-bar-fill.low{background:var(--red)}
+.lb-tone-green{--tone:#10b981!important;--tone-bg:rgba(16,185,129,.08)!important}
+.lb-tone-pink{--tone:#ec4899!important;--tone-bg:rgba(236,72,153,.07)!important}
+.lb-tone-blue{--tone:#3b82f6!important;--tone-bg:rgba(59,130,246,.08)!important}
+.lb-tone-purple{--tone:#8b5cf6!important;--tone-bg:rgba(139,92,246,.08)!important}
+.lb-tone-orange{--tone:#f59e0b!important;--tone-bg:rgba(245,158,11,.09)!important}
+.lb-tone-teal{--tone:#14b8a6!important;--tone-bg:rgba(20,184,166,.08)!important}
+.lb-tone-slate{--tone:#64748b!important;--tone-bg:rgba(100,116,139,.08)!important}
+
+#tb-leave #leave-content .empty-state{padding:28px 12px}
+#tb-leave #leave-content .es-ico{width:64px;height:64px;border-radius:18px;background:var(--accent-bg);color:var(--accent-text)}
+#tb-leave #leave-content .es-title{font-size:15px;font-weight:700}
+#tb-leave #leave-content .es-sub{font-size:12.5px;max-width:340px;margin-left:auto;margin-right:auto}
+#tb-leave .leave-card{border-radius:12px}
+#tb-leave .leave-type{font-size:13.5px}
+
+#tb-leave .hcal-legend{font-size:12px;margin-bottom:12px}
+#tb-leave .hcal-dot{width:9px;height:9px}
+#tb-leave .hcal-grid{gap:6px}
+#tb-leave .hcal-weekday{font-size:11px;letter-spacing:.5px;padding-bottom:6px}
+#tb-leave .hcal-cell{min-height:58px;border-radius:10px;padding:6px 7px}
+#tb-leave .hcal-daynum{font-size:12.5px;color:var(--text)}
+#tb-leave .hcal-cell.hcal-today{border-color:var(--accent);box-shadow:0 0 0 1.5px var(--accent);background:var(--accent-bg)}
+#tb-leave .hcal-chip{font-size:10.5px;border-radius:5px;padding:1px 5px}
+@media(max-width:760px){
+  #tb-leave .lv-hero{min-height:84px;padding:14px 16px}
+  #tb-leave .lv-hero-text h1{font-size:19px}
+  #tb-leave .lv-hero-text p{font-size:12.5px;max-width:55%}
+  #tb-leave .lv-hero-art{width:220px;max-width:58%}
+  #tb-leave .lv-hero-note{display:none}
+  #leave-balance-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  #leave-balance-grid .lb-item-days{font-size:19px}
+  #tb-leave .lv-card{padding:14px}
+  #tb-leave .hcal-cell{min-height:46px;padding:4px}
+  #tb-leave .hcal-daynum{font-size:11px}
+}

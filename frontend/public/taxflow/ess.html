@@ -16,7 +16,7 @@
   <title>Employee Self-Service — ETaxFlow</title>
   <link rel="preload" href="/fonts/dmsans-rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu0-K4.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/syne-8vIH7w4qzmVxm2BL9A.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="src/ess.css?v=0484975014">
+  <link rel="stylesheet" href="src/ess.css?v=b60fbb4de8">
   <script>
     // Runs before body paints, so a saved/system dark preference applies
     // immediately instead of flashing light-then-dark once the main
@@ -477,27 +477,55 @@
 
     <!-- Leave -->
     <div class="tab-body" id="tb-leave">
-      <div class="card" id="leave-balance-card">
+      <div class="lv-hero">
+        <div class="lv-hero-text">
+          <h1>Leave</h1>
+          <p>Time off, balances and the team calendar</p>
+        </div>
+        <svg class="lv-hero-art" viewBox="0 0 360 120" aria-hidden="true" focusable="false">
+          <g fill="#fff" opacity=".85"><ellipse cx="62" cy="112" rx="62" ry="18"/><ellipse cx="318" cy="112" rx="52" ry="14"/></g>
+          <g transform="translate(22 26) rotate(-10 34 34)">
+            <rect x="0" y="7" width="66" height="60" rx="12" fill="#3b82f6"/><rect x="0" y="7" width="66" height="17" rx="9" fill="#2563eb"/>
+            <rect x="13" y="0" width="6" height="14" rx="3" fill="#1e40af"/><rect x="47" y="0" width="6" height="14" rx="3" fill="#1e40af"/>
+            <g fill="#dbeafe"><rect x="10" y="31" width="10" height="8" rx="2"/><rect x="25" y="31" width="10" height="8" rx="2"/><rect x="40" y="31" width="10" height="8" rx="2"/><rect x="10" y="44" width="10" height="8" rx="2"/><rect x="25" y="44" width="10" height="8" rx="2"/><rect x="40" y="44" width="10" height="8" rx="2"/></g>
+          </g>
+          <g class="lv-hero-note" transform="rotate(-7 170 60)">
+            <text x="118" y="38">Rest today</text>
+            <text x="118" y="60">for a brighter</text>
+            <text x="126" y="82">tomorrow</text>
+            <path d="M136 92c18-5 34-6 48-4" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+          </g>
+          <circle cx="318" cy="38" r="14" fill="#fcd34d"/>
+          <g stroke="#fbbf24" stroke-width="3" stroke-linecap="round"><path d="M318 15v6M318 55v6M295 38h6M335 38h6M302 22l4 4M330 50l4 4M302 54l4-4M330 26l4-4"/></g>
+        </svg>
+      </div>
+      <div class="card lv-card" id="leave-balance-card">
         <div class="card-hd" style="align-items:center;margin-bottom:12px">
-          <div><div class="card-title" style="margin-bottom:2px">Leave Balance</div><div style="font-size:11.5px;color:var(--text3)">Your available days per leave type</div></div>
+          <div><div class="lv-card-title">Leave Balance</div><div class="lv-card-sub">Your available days per leave type</div></div>
         </div>
         <div id="leave-balance-grid" class="leave-balance-grid"><div class="loading">Loading…</div></div>
       </div>
       <div class="leave-2col">
-      <div class="card">
-        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
-          <span>My Leave Requests</span>
-          <button class="btn-login" style="width:auto;padding:8px 16px;font-size:12.5px" onclick="essOpenLeaveModal()">+ Request Leave</button>
+      <div class="card lv-card">
+        <div class="lv-panel-hd">
+          <div class="lv-panel-title">
+            <span class="lv-panel-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 2h8l6 6v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2zm7 1.5V9h5.5L13 3.5zM8 13h8v1.6H8V13zm0 3.6h8v1.6H8v-1.6z"/></svg></span>
+            <span>My Leave Requests</span>
+          </div>
+          <button class="lv-btn-primary" onclick="essOpenLeaveModal()">+ Request Leave</button>
         </div>
         <div id="leave-content" class="loading">Loading…</div>
       </div>
-      <div class="card" id="holiday-calendar-card">
-        <div class="card-hd" style="margin-bottom:8px">
-          <div class="card-title" style="margin-bottom:0">Holiday &amp; Team Leave Calendar</div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <button type="button" class="btn-ghost" style="padding:4px 10px" onclick="shiftHolidayCalendarMonth(-1)">‹</button>
-            <span id="holiday-cal-month-label" style="font-size:12.5px;font-weight:700;min-width:108px;text-align:center">—</span>
-            <button type="button" class="btn-ghost" style="padding:4px 10px" onclick="shiftHolidayCalendarMonth(1)">›</button>
+      <div class="card lv-card" id="holiday-calendar-card">
+        <div class="lv-panel-hd">
+          <div class="lv-panel-title">
+            <span class="lv-panel-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h2M12 14h2M8 17h2" stroke-width="2.4"/></svg></span>
+            <span>Holiday &amp; Team Leave Calendar</span>
+          </div>
+          <div class="lv-month-nav">
+            <button type="button" class="lv-nav-btn" aria-label="Previous month" onclick="shiftHolidayCalendarMonth(-1)">‹</button>
+            <span id="holiday-cal-month-label" class="lv-month-label">—</span>
+            <button type="button" class="lv-nav-btn" aria-label="Next month" onclick="shiftHolidayCalendarMonth(1)">›</button>
           </div>
         </div>
         <div class="hcal-legend">
@@ -735,6 +763,6 @@
      order between them, so config.js still runs before ess.js. -->
 <script src="/config.js" defer></script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/ess.js?v=9850e2828e" defer></script>
+<script src="src/ess.js?v=30a89b6861" defer></script>
 </body>
 </html>

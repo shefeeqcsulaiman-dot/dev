@@ -226,7 +226,7 @@
     var hd = document.getElementById('ess-page-hd'), meta = ESS_PAGES[id] || [id, ''];
     if (hd) {
       // Dashboard and Rota draw their own header (Rota: the illustrated banner).
-      hd.style.display = id === 'dashboard' || id === 'rota' ? 'none' : '';
+      hd.style.display = id === 'dashboard' || id === 'rota' || id === 'leave' ? 'none' : '';
       document.getElementById('ess-page-title').textContent = meta[0];
       document.getElementById('ess-page-sub').textContent = meta[1];
     }
@@ -716,6 +716,11 @@
     } catch(e) { var lEl = document.getElementById('leave-content'); lEl.classList.remove('loading'); lEl.innerHTML = '<div class="empty">Failed to load.</div>'; }
   }
 
+  var LEAVE_TYPE_TONES = {
+    'Annual Leave': 'green', 'Sick Leave': 'pink', 'Emergency Leave': 'blue', 'Maternity Leave': 'purple',
+    'Paternity Leave': 'orange', 'Hajj Leave': 'teal', 'Casual Leave': 'blue', 'Unpaid Leave': 'slate',
+    'Work From Home': 'teal', 'Lieu Days': 'purple'
+  };
   var LEAVE_TYPE_ICONS = {
     'Annual Leave': '🌴', 'Sick Leave': '❤️', 'Emergency Leave': '🛡️',
     'Maternity Leave': '🤱', 'Paternity Leave': '👨', 'Hajj Leave': '🕋',
@@ -746,11 +751,15 @@
         var b = data.by_type[type];
         var pct = b.entitlement > 0 ? Math.min(100, Math.round((b.used / b.entitlement) * 100)) : 0;
         var low = b.entitlement > 0 && b.remaining <= Math.max(1, Math.round(b.entitlement * 0.15));
-        return '<div class="lb-item">' +
+        // Leave page colours each card by type and shows days LEFT in the bar; the
+        // dashboard widget keeps its used-days bar (--used). See .lv-* in ess.css.
+        var left = b.entitlement > 0 ? Math.max(0, Math.min(100, Math.round((b.remaining / b.entitlement) * 100))) : 0;
+        var tone = LEAVE_TYPE_TONES[type] || 'default';
+        return '<div class="lb-item lb-tone-' + tone + '" style="--used:' + pct + '%;--left:' + left + '%">' +
           '<div class="lb-item-icon">' + (LEAVE_TYPE_ICONS[type] || '📅') + '</div>' +
           '<div class="lb-item-type">' + escHtml(type) + '</div>' +
           '<div class="lb-item-days">' + b.remaining + ' <span>/ ' + b.entitlement + ' days left</span></div>' +
-          '<div class="lb-bar"><div class="lb-bar-fill' + (low ? ' low' : '') + '" style="width:' + pct + '%"></div></div>' +
+          '<div class="lb-bar"><div class="lb-bar-fill' + (low ? ' low' : '') + '"></div></div>' +
         '</div>';
       }).join(''));
     } catch (e) { setAll('<div class="empty">Failed to load.</div>'); }
