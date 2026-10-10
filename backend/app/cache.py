@@ -12,6 +12,18 @@ logger = logging.getLogger(__name__)
 
 _client: Any = None
 _tried = False
+# Without socket_timeout a read on a connection the server (or the network) silently dropped
+# blocks forever: on 2026-10-09/10 about 1 in 7 /health calls on e4cs.com hung 15-20 s after
+# idle periods, tying up worker threads. health_check_interval pings a connection that sat idle
+# before reusing it; a timeout makes a dead one fail fast (callers already treat errors as a miss).
+CONNECTION_OPTIONS = {
+    "socket_connect_timeout": 2,
+    "socket_timeout": 2,
+    "socket_keepalive": True,
+    "health_check_interval": 30,
+    # No retry_on_timeout: with health_check_interval it retries forever against a server that
+    # accepts but never answers (redis-py 5.2), i.e. the very hang this is meant to prevent.
+}
 _retry_at = 0.0          # after a failed connect, try again from this time (monotonic)
 _RETRY_SECONDS = 30
 last_error: str | None = None  # error type of the last failed connect (shown by public /health)
@@ -58,7 +70,7 @@ def _redis():
         if not url or url.startswith("memory"):
             return None
         import redis as _redis_lib
-        c = _redis_lib.from_url(url, decode_responses=True, socket_connect_timeout=2)
+        c = _redis_lib.from_url(url, decode_responses=True, **CONNECTION_OPTIONS)
         c.ping()
         _client = c
         last_error = None
@@ -69,21 +81,6 @@ def _redis():
         _client = None
         last_error = type(exc).__name__
         _retry_at = time.monotonic() + _RETRY_SECONDS
-    return _client
-    _tried = True
-    try:
-        from app.config import get_settings
-        url = get_settings().redis_url
-        if not url or url.startswith("memory"):
-            return None
-        import redis as _redis_lib
-        c = _redis_lib.from_url(url, decode_responses=True, socket_connect_timeout=2)
-        c.ping()
-        _client = c
-        logger.info("Redis cache connected")
-    except Exception as exc:
-        logger.warning("Redis unavailable — caching disabled: %s", exc)
-        _client = None
     return _client
 
 

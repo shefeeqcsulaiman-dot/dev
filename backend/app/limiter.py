@@ -64,11 +64,20 @@ def _storage_uri() -> str:
     return "memory://"
 
 
+def _storage_options() -> dict:
+    if _storage_uri().startswith("memory"):
+        return {}
+    from app.cache import CONNECTION_OPTIONS
+    return dict(CONNECTION_OPTIONS)
+
+
 # Disable rate limiting during automated tests so login fixtures never hit 429
 _enabled = os.environ.get("TESTING", "").lower() not in ("1", "true", "yes")
 limiter = Limiter(
     key_func=rate_limit_key,
     storage_uri=_storage_uri(),
+    # Same timeouts as app.cache: a dropped Redis connection must not hang every API request.
+    storage_options=_storage_options(),
     enabled=_enabled,
     default_limits=["300/minute"],
 )
