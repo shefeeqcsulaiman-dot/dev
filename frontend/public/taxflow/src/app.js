@@ -183,6 +183,7 @@ function go(page){
   }
   if(!_mainDashboardNavAllowed(page)){_mainDashboardBlockNav();return;}
   if(page==='corporate')_ensureCorporateLoaded();
+  if(page==='ai')_ensureAIWorkbenchLoaded();
   if(page==='payments'){
     go('bank');
     setTimeout(()=>{
@@ -26179,6 +26180,14 @@ function renderAIWorkbench(data){
   if(status)status.textContent=data?.answer||'AI workbench is ready.';
 }
 
+var _aiWorkbenchLoaded=false;
+function _ensureAIWorkbenchLoaded(){
+  if(_aiWorkbenchLoaded||!document.getElementById('page-ai'))return;
+  if(['employee','branch'].includes(localStorage.getItem('taxflow_principal_kind')))return;
+  _aiWorkbenchLoaded=true;
+  loadAIWorkbench();
+}
+
 function loadAIWorkbench(){
   const status=document.getElementById('ai-workbench-status');
   if(status)status.textContent='Refreshing snapshot…';
@@ -29207,9 +29216,9 @@ function initApp(){
   // principal) it 401s, which authenticatedFetch treats as an invalid
   // session and force-logs them out. Same guard as syncCompanyFromDatabase()
   // etc. below.
-  if(document.getElementById('page-ai')&&!['employee','branch'].includes(localStorage.getItem('taxflow_principal_kind'))){
-    scheduleIdleTask(loadAIWorkbench,600);
-  }
+  // Loaded when the AI page is first opened (see go()), not on every login; straight away if
+  // it is the restored view.
+  if(document.getElementById('page-ai')?.classList.contains('on'))_ensureAIWorkbenchLoaded();
   renderAuditLog();
   initInvoiceLayouts();
   updateInvoiceLayoutPreview();
