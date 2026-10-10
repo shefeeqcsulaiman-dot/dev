@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import time
 import pathlib
 from collections.abc import Iterator
 
@@ -51,6 +52,29 @@ BASELINE_REVISION = "0001_baseline"
 # and for the whole startup sequence around them (see startup_lock()).
 _ADVISORY_LOCK_KEY = 7_340_211_001
 _STARTUP_LOCK_KEY = 7_340_211_002
+# How long a starting process waits for another one's lock before going on without it. An
+# unbounded pg_advisory_lock() hung every new instance past its health check (2026-10-10, DO
+# deploys failing with "application startup was still pending") when the holder never let go.
+LOCK_WAIT_SECONDS = 45
+# Per-session server keepalives on the lock connections: if the holder's container dies without
+# closing its socket, PostgreSQL drops the session (and the lock) in ~1 min instead of ~2 h.
+_SESSION_KEEPALIVES = ("SET tcp_keepalives_idle = 30", "SET tcp_keepalives_interval = 10", "SET tcp_keepalives_count = 3")
+
+
+def _advisory_lock(connection: Connection, key: int, what: str) -> None:
+    """Take a session-level advisory lock, waiting at most LOCK_WAIT_SECONDS.
+    Raises TimeoutError when another session still holds it."""
+    for statement in _SESSION_KEEPALIVES:
+        connection.execute(text(statement))
+    deadline = time.monotonic() + LOCK_WAIT_SECONDS
+    while True:
+        got = connection.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": key}).scalar()
+        connection.commit()
+        if got:
+            return
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"{what} lock still held by another session after {LOCK_WAIT_SECONDS}s")
+        time.sleep(1)
 
 
 def alembic_config(connection: Connection | None = None) -> Config:
@@ -136,8 +160,7 @@ def run_migrations(bind: Engine | None = None) -> None:
     with (bind or migration_engine()).connect() as connection:
         is_pg = connection.dialect.name == "postgresql"
         if is_pg:
-            connection.execute(text("SELECT pg_advisory_lock(:k)"), {"k": _ADVISORY_LOCK_KEY})
-            connection.commit()
+            _advisory_lock(connection, _ADVISORY_LOCK_KEY, "Migration")
         try:
             _migrate(connection)
         finally:
@@ -159,8 +182,15 @@ def startup_lock() -> Iterator[None]:
         if connection.dialect.name != "postgresql":
             yield
             return
-        connection.execute(text("SELECT pg_advisory_lock(:k)"), {"k": _STARTUP_LOCK_KEY})
-        connection.commit()
+        try:
+            _advisory_lock(connection, _STARTUP_LOCK_KEY, "Startup")
+        except TimeoutError as exc:
+            # Serve traffic rather than fail the health check; the tasks are idempotent and the
+            # next start (or the holder, if it's alive) runs them.
+            log.warning("%s; starting without the startup tasks", exc)
+            connection.rollback()
+            yield
+            return
         try:
             yield
         finally:

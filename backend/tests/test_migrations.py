@@ -121,3 +121,33 @@ def test_migrations_on_postgresql():
         with admin.connect() as conn:
             conn.execute(text(f'DROP DATABASE IF EXISTS "{name}"'))
         admin.dispose()
+
+
+def test_startup_lock_wait_is_bounded_on_postgres(monkeypatch):
+    """A session that never releases the startup/migration lock must not hang a new
+    instance past its health check (DO deploys failed this way, 2026-10-10)."""
+    import os
+
+    url = os.environ.get("TEST_DATABASE_URL")
+    if not url or not url.startswith("postgresql"):
+        pytest.skip("needs TEST_DATABASE_URL (PostgreSQL)")
+    import time
+
+    from sqlalchemy import create_engine, text
+
+    from app import migrate
+
+    monkeypatch.setattr(migrate, "LOCK_WAIT_SECONDS", 2)
+    monkeypatch.setattr(migrate, "migration_engine", lambda: create_engine(url))
+    holder = create_engine(url).connect()
+    try:
+        holder.execute(text("SELECT pg_advisory_lock(:k)"), {"k": migrate._STARTUP_LOCK_KEY})
+        holder.commit()
+        start, ran = time.monotonic(), []
+        with migrate.startup_lock():
+            ran.append(True)
+        assert ran and time.monotonic() - start < 10
+    finally:
+        holder.execute(text("SELECT pg_advisory_unlock_all()"))
+        holder.commit()
+        holder.close()
