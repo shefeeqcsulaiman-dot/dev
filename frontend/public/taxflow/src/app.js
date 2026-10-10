@@ -11404,7 +11404,7 @@ function quotationLayoutPreviewHtml(quote=sampleQuotationLayoutRecord(),layout=g
   const initials=(layout.logo||layout.company||'TF').split(/\s+/).map(part=>part[0]).join('').slice(0,2).toUpperCase()||'TF';
   const textAlign={left:'left',center:'center',right:'right'}[layout.align]||'left';
   const brandJustify={left:'flex-start',center:'center',right:'flex-end'}[layout.align]||'flex-start';
-  const fontFamily=layout.font==='Classic Serif'?'Georgia,serif':layout.font==='Compact Mono'?'DM Mono,monospace':'Syne,sans-serif';
+  const fontFamily=layout.font==='Classic Serif'?'Georgia,serif':layout.font==='Compact Mono'?'DM Mono,monospace':"'DM Sans',sans-serif";
   const lines=quotationLinesFromRecord(quote);
   return `
     <div class="invoice-layout-live" dir="${layout.enableRtl?'rtl':'ltr'}" style="--invoice-accent:${escapeHtml(layout.color)}">
@@ -11938,7 +11938,7 @@ function invoiceViewPrintHtml(inv=currentInvoiceForShare()){
   return `<!doctype html><html><head><meta charset="utf-8"><title>${title} - TaxFlow</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap">
     <link rel="stylesheet" href="${styleBase}/src/styles.css">
     <style>
       body{margin:0;background:#fff;color:#172033;padding:24px;height:auto;overflow:auto;}
@@ -12038,7 +12038,7 @@ function updateInvoiceLayoutPreview(){
   const initials=(layout.logo||layout.company||'TF').split(/\s+/).map(part=>part[0]).join('').slice(0,2).toUpperCase()||'TF';
   const textAlign={left:'left',center:'center',right:'right'}[layout.align]||'left';
   const brandJustify={left:'flex-start',center:'center',right:'flex-end'}[layout.align]||'flex-start';
-  const fontFamily=layout.font==='Classic Serif'?'Georgia,serif':layout.font==='Compact Mono'?'DM Mono,monospace':'Syne,sans-serif';
+  const fontFamily=layout.font==='Classic Serif'?'Georgia,serif':layout.font==='Compact Mono'?'DM Mono,monospace':"'DM Sans',sans-serif";
   const qrValue=invoiceQrValue(sampleInvoice,layout);
   const qrType=layout.qrCodeType==='payment_url'?'invoice_url':layout.qrCodeType;
   const labels=invoiceLabels(layout);
@@ -12294,7 +12294,7 @@ function renderSalesInvoicePreview(inv){
   const digitalUrl=publicInvoiceUrl(inv);
   const textAlign={left:'left',center:'center',right:'right'}[layout.align]||'left';
   const brandJustify={left:'flex-start',center:'center',right:'flex-end'}[layout.align]||'flex-start';
-  const fontFamily=layout.font==='Classic Serif'?'Georgia,serif':layout.font==='Compact Mono'?'DM Mono,monospace':'Syne,sans-serif';
+  const fontFamily=layout.font==='Classic Serif'?'Georgia,serif':layout.font==='Compact Mono'?'DM Mono,monospace':"'DM Sans',sans-serif";
   const qrValue=invoiceQrValue(inv,layout);
   const qrType=layout.qrCodeType==='payment_url'?'invoice_url':layout.qrCodeType;
   const labels=invoiceLabels(layout);
@@ -28258,7 +28258,7 @@ function exportRowDetailPdf(){
   }
   const styles=[...document.querySelectorAll('link[rel="stylesheet"],style')].map(node=>node.outerHTML).join('\n');
   printWindow.document.open();
-  printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escapeHtml(title)} - TaxFlow</title>${styles}<style>body{background:#fff;color:#111;padding:24px;height:auto;overflow:auto}.topbar,.sb,.scrim,.toasts,.btn{display:none!important}.card,.chart-panel,.setting-tile{background:#fff!important;border:1px solid #d9dee8!important;box-shadow:none!important}</style></head><body><div class="pdf-shell"><div class="pdf-title" style="font-family:Syne,sans-serif;font-size:22px;font-weight:700;margin-bottom:14px">${escapeHtml(title)}</div>${body}</div><script>window.onload=()=>setTimeout(()=>window.print(),250);<\/script></body></html>`);
+  printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escapeHtml(title)} - TaxFlow</title>${styles}<style>body{background:#fff;color:#111;padding:24px;height:auto;overflow:auto}.topbar,.sb,.scrim,.toasts,.btn{display:none!important}.card,.chart-panel,.setting-tile{background:#fff!important;border:1px solid #d9dee8!important;box-shadow:none!important}</style></head><body><div class="pdf-shell"><div class="pdf-title" style="font-family:'DM Sans',sans-serif;font-size:22px;font-weight:700;margin-bottom:14px">${escapeHtml(title)}</div>${body}</div><script>window.onload=()=>setTimeout(()=>window.print(),250);<\/script></body></html>`);
   printWindow.document.close();
   toast(`${title} PDF export opened`,'ok');
   audit('Exported record',title,'PDF');
@@ -29247,7 +29247,7 @@ function renderQuotationPreview(quote){
   const initials=(layout.logo||layout.company||'TF').split(/\s+/).map(part=>part[0]).join('').slice(0,2).toUpperCase()||'TF';
   const textAlign={left:'left',center:'center',right:'right'}[layout.align]||'left';
   const brandJustify={left:'flex-start',center:'center',right:'flex-end'}[layout.align]||'flex-start';
-  const fontFamily=layout.font==='Classic Serif'?'Georgia,serif':layout.font==='Compact Mono'?'DM Mono,monospace':'Syne,sans-serif';
+  const fontFamily=layout.font==='Classic Serif'?'Georgia,serif':layout.font==='Compact Mono'?'DM Mono,monospace':"'DM Sans',sans-serif";
   const status=quote.status||'Draft';
 
   if(title)title.textContent='Quotation '+(quote.quote_no||'Draft');

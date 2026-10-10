@@ -658,17 +658,20 @@
     var me = _essMe || {};
     var w = window.open('', '_blank', 'width=760,height=900');
     if (!w) { essToast('Please allow pop-ups for this site to print your payslip.', 'err'); return; }
-    var line = function(label, val, bold) { return '<tr' + (bold ? ' class="b"' : '') + '><td>' + label + '</td><td class="n">' + essMoney(val) + '</td></tr>'; };
+    var line = function(label, val, cls) { return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + label + '</td><td class="n">' + essMoney(val) + '</td></tr>'; };
+    var status = String(p.run_status || '');
+    status = status.charAt(0).toUpperCase() + status.slice(1);
+    var gross = (Number(p.basic) || 0) + (Number(p.allowances) || 0) + (Number(p.overtime) || 0);
     w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Payslip ' + escHtml(_psPeriodLabel(p.period)) + '</title>' +
-      '<style>body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;margin:40px}h1{font-size:20px;margin:0}h2{font-size:13px;color:#475569;font-weight:400;margin:4px 0 24px}' +
+      '<style>@page{size:A4;margin:16mm}body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;margin:40px}h1{font-size:20px;margin:0}h2{font-size:13px;color:#475569;font-weight:400;margin:4px 0 24px}' +
       '.meta{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font-size:13px;margin-bottom:24px}.meta b{color:#64748b;font-weight:600;font-size:11px;text-transform:uppercase;display:block}' +
-      'table{width:100%;border-collapse:collapse;font-size:14px}td{padding:9px 4px;border-bottom:1px solid #e2e8f0}td.n{text-align:right}tr.b td{font-weight:700;font-size:16px;border-top:2px solid #0f172a;border-bottom:none}' +
+      'table{width:100%;border-collapse:collapse;font-size:14px}td{padding:9px 4px;border-bottom:1px solid #e2e8f0}td.n{text-align:right}tr.b td{font-weight:700;font-size:16px;border-top:2px solid #0f172a;border-bottom:none}tr.g td{font-weight:600;background:#f8fafc}' +
       '.foot{margin-top:32px;font-size:11px;color:#94a3b8}</style></head><body>' +
-      '<h1>' + escHtml(me.company_name || 'Payslip') + '</h1><h2>Payslip — ' + escHtml(_psPeriodLabel(p.period)) + ' (' + escHtml(p.run_status || '') + ')</h2>' +
+      '<h1>' + escHtml(me.company_name || 'Payslip') + '</h1><h2>Payslip — ' + escHtml(_psPeriodLabel(p.period)) + (status ? ' (' + escHtml(status) + ')' : '') + '</h2>' +
       '<div class="meta"><div><b>Employee</b>' + escHtml(me.full_name || '') + '</div><div><b>Employee ID</b>' + escHtml(me.employee_no || '') + '</div>' +
       '<div><b>Department</b>' + escHtml(me.department || '') + '</div><div><b>Designation</b>' + escHtml(me.designation || '') + '</div></div>' +
-      '<table>' + line('Basic', p.basic) + line('Allowances', p.allowances) + line('Overtime', p.overtime) +
-      '<tr><td>Deductions</td><td class="n">− ' + essMoney(p.deductions) + '</td></tr>' + line('Net Pay', p.net_pay, true) + '</table>' +
+      '<table>' + line('Basic', p.basic) + line('Allowances', p.allowances) + line('Overtime', p.overtime) + line('Gross Pay', gross, 'g') +
+      '<tr><td>Deductions</td><td class="n">− ' + essMoney(p.deductions) + '</td></tr>' + line('Net Pay', p.net_pay, 'b') + '</table>' +
       '<div class="foot">Generated from the Employee Self-Service portal on ' + escHtml(new Date().toLocaleDateString('en-US', {day: 'numeric', month: 'long', year: 'numeric'})) + '.</div>' +
       '</body></html>');
     w.document.close();

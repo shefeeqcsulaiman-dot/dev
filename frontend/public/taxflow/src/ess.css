@@ -1,4 +1,4 @@
-/* ── Self-hosted fonts (Syne, DM Sans, DM Mono -- SIL Open Font License). Identical @font-face rules to the Google Fonts CSS
+/* ── Self-hosted fonts (DM Sans, DM Mono -- SIL Open Font License). Identical @font-face rules to the Google Fonts CSS
        this page used before, served from our own domain: no third-party DNS/TLS round trips, cached for a year. ── */
 /* latin-ext */
 @font-face {
@@ -94,7 +94,7 @@
 @font-face {
   font-family: 'DM Sans';
   font-style: normal;
-  font-weight: 700;
+  font-weight: 700 800;
   font-display: swap;
   src: url(/fonts/dmsans-rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu6-K6h9Q.woff2) format('woff2');
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
@@ -103,94 +103,12 @@
 @font-face {
   font-family: 'DM Sans';
   font-style: normal;
-  font-weight: 700;
+  font-weight: 700 800;
   font-display: swap;
   src: url(/fonts/dmsans-rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu0-K4.woff2) format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
-/* greek */
-@font-face {
-  font-family: 'Syne';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/syne-8vIH7w4qzmVxm2NL9Hz_.woff2) format('woff2');
-  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
-}
-/* latin-ext */
-@font-face {
-  font-family: 'Syne';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/syne-8vIH7w4qzmVxm25L9Hz_.woff2) format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-/* latin */
-@font-face {
-  font-family: 'Syne';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/syne-8vIH7w4qzmVxm2BL9A.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-/* greek */
-@font-face {
-  font-family: 'Syne';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url(/fonts/syne-8vIH7w4qzmVxm2NL9Hz_.woff2) format('woff2');
-  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
-}
-/* latin-ext */
-@font-face {
-  font-family: 'Syne';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url(/fonts/syne-8vIH7w4qzmVxm25L9Hz_.woff2) format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-/* latin */
-@font-face {
-  font-family: 'Syne';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url(/fonts/syne-8vIH7w4qzmVxm2BL9A.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-/* greek */
-@font-face {
-  font-family: 'Syne';
-  font-style: normal;
-  font-weight: 800;
-  font-display: swap;
-  src: url(/fonts/syne-8vIH7w4qzmVxm2NL9Hz_.woff2) format('woff2');
-  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
-}
-/* latin-ext */
-@font-face {
-  font-family: 'Syne';
-  font-style: normal;
-  font-weight: 800;
-  font-display: swap;
-  src: url(/fonts/syne-8vIH7w4qzmVxm25L9Hz_.woff2) format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-/* latin */
-@font-face {
-  font-family: 'Syne';
-  font-style: normal;
-  font-weight: 800;
-  font-display: swap;
-  src: url(/fonts/syne-8vIH7w4qzmVxm2BL9A.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     :root{--accent:#2563eb;--accent-text:#1d4ed8;--accent2:#3b82f6;--accent-bg:rgba(37,99,235,.12);--bg:#f2f4f8;--bg2:#f8fafc;--bg3:#e9eef6;--surface:#fff;--border:#e2e7ef;--text:#0c1630;--text2:#3a4d6e;--sb-bg:#f1f4f8;--sb-border:#dde2eb;--sb-lbl:#9ca3af;--sb-text:#374151;--sb-hover:rgba(0,0,0,.05);--pink:#cc4d91;--amber:#c77800;--amber-bg:rgba(199,120,0,.12);--text3:#64748b;--red:#ef4444;--red-bg:rgba(239,68,68,.12);--green:#10b981;--green-bg:rgba(16,185,129,.12);--purple:#7c3aed;--purple-bg:rgba(124,58,237,.12);--teal:#0d9488;--teal-bg:rgba(13,148,136,.12);--field-bg:#f9fafb;--field-border:#d1d5db;--field-text:#111827;--field-label:#374151;--field-focus-bg:#fff;--scrollbar:#94a3b8;--danger-bg:#fef2f2;--danger-border:#fecaca;--success-bg:#f0fdf4;--success-border:#bbf7d0;--hcal-holiday-bg:rgba(245,158,11,.18);--hcal-holiday-text:#b45309;--hcal-leave-bg:rgba(139,92,246,.18);--hcal-leave-text:#6d28d9;}
     /* Dark mode: system preference by default (unless the user explicitly
        picked "light" via the topbar toggle -- see essApplyTheme()), or an
@@ -232,7 +150,7 @@
     .login-card{--accent:#2563eb;--accent-text:#1d4ed8;--danger-bg:#fef2f2;--danger-border:#fecaca;--success-bg:#f0fdf4;--success-border:#bbf7d0;--field-bg:#f9fafb;--field-border:#d1d5db;--field-text:#111827;--field-label:#374151;--field-focus-bg:#fff;background:#fff;border-radius:20px;padding:44px 40px 36px;width:100%;max-width:420px;margin:20px;box-shadow:0 40px 120px rgba(0,0,0,.45)}
     .brand{text-align:center;margin-bottom:32px}
     .brand-logo{width:120px;height:auto;margin-bottom:10px}
-    .brand-title{font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--accent-text);margin-bottom:4px}
+    .brand-title{font-family:'DM Sans',sans-serif;font-size:20px;font-weight:700;color:var(--accent-text);margin-bottom:4px}
     .brand-sub{font-size:13px;color:var(--text3)}
     .field{margin-bottom:16px}
     .field label{display:block;font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--field-label);margin-bottom:7px}
@@ -258,7 +176,7 @@
     .ess-sb{width:220px;min-width:220px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;overflow-y:auto;flex-shrink:0}
     .ess-sb-logo{padding:18px 18px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
     .ess-sb-logo-icon{width:34px;height:34px;border-radius:9px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-    .ess-sb-brand{font-family:'Syne',sans-serif;font-size:16.5px;font-weight:700;color:var(--text);letter-spacing:-.3px}
+    .ess-sb-brand{font-family:'DM Sans',sans-serif;font-size:16.5px;font-weight:700;color:var(--text);letter-spacing:-.3px}
     .ess-sb-brand span{color:var(--accent-text)}
     .ess-sb-tagline{font-size:10px;color:var(--text3);letter-spacing:.4px;margin-top:1px}
     .ess-sb-section{padding:14px 10px 6px;flex:1}
@@ -284,7 +202,7 @@
     .ess-notif-row:last-child{border-bottom:none}
     .ess-notif-row-title{font-size:12.5px;font-weight:600;color:var(--text)}
     .ess-notif-row-sub{font-size:11.5px;color:var(--text3);margin-top:1px}
-    .ess-tb-title{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text);flex:1}
+    .ess-tb-title{font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;color:var(--text);flex:1}
     .ess-tb-right{margin-left:auto;display:flex;align-items:center;gap:10px}
     .ess-hm-date{font-size:12px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:6px 11px;white-space:nowrap}
     .ess-hm-user{display:flex;align-items:center;gap:8px;padding:5px 12px 5px 5px;background:var(--bg3);border:1px solid var(--border);border-radius:8px}
@@ -339,7 +257,7 @@
     .lb-item{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px}
     .lb-item-icon{width:32px;height:32px;border-radius:9px;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:15px;margin-bottom:10px}
     .lb-item-type{font-size:11.5px;font-weight:600;color:var(--text2);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .lb-item-days{font-size:18px;font-weight:700;font-family:'Syne',sans-serif;color:var(--text)}
+    .lb-item-days{font-size:18px;font-weight:700;font-family:'DM Sans',sans-serif;color:var(--text)}
     .lb-item-days span{font-size:10.5px;font-weight:500;color:var(--text3);font-family:'DM Sans',sans-serif}
     .lb-bar{height:5px;border-radius:99px;background:var(--border);margin-top:9px;overflow:hidden}
     .lb-bar-fill{height:100%;width:var(--used,0%);border-radius:99px;background:var(--accent)}
@@ -363,7 +281,7 @@
     .ess-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:100;align-items:center;justify-content:center;padding:16px}
     .ess-overlay.on{display:flex}
     .ess-modal{background:var(--surface);border-radius:16px;padding:24px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto}
-    .ess-modal-title{font-size:16px;font-weight:700;margin-bottom:16px;font-family:'Syne',sans-serif}
+    .ess-modal-title{font-size:16px;font-weight:700;margin-bottom:16px;font-family:'DM Sans',sans-serif}
     .fr2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     select.ess-select{width:100%;padding:11px 15px;border:1.5px solid var(--field-border);border-radius:9px;font-size:14px;font-family:inherit;color:var(--field-text);background:var(--field-bg);outline:none}
     input.ess-month-picker{width:auto;padding:8px 12px;border:1.5px solid var(--field-border);border-radius:9px;font-size:13px;font-family:inherit;color:var(--field-text);background:var(--field-bg);outline:none}
@@ -379,7 +297,7 @@
     .rota-hero{position:relative;display:flex;align-items:center;gap:14px;min-height:96px;padding:16px 20px;margin-bottom:12px;border-radius:18px;overflow:hidden;background:linear-gradient(120deg,rgba(59,130,246,.16),rgba(147,197,253,.22) 55%,rgba(191,219,254,.35))}
     .rota-hero-icon{flex-shrink:0;filter:drop-shadow(0 6px 12px rgba(37,99,235,.25))}
     .rota-hero-text{position:relative;z-index:1;min-width:0}
-    .rota-hero-text h1{margin:0;font-family:'Syne',sans-serif;font-size:22px;font-weight:800;line-height:1.1;color:var(--text);letter-spacing:-.5px}
+    .rota-hero-text h1{margin:0;font-family:'DM Sans',sans-serif;font-size:22px;font-weight:800;line-height:1.1;color:var(--text);letter-spacing:-.5px}
     .rota-hero-text p{margin:5px 0 0;font-size:13px;color:var(--text2)}
     .rota-hero-art{position:absolute;right:0;bottom:0;width:280px;max-width:48%;height:auto;pointer-events:none}
     .rota-tabs{gap:10px;margin-bottom:16px}
@@ -582,7 +500,7 @@
     .payslip-period{font-size:13.5px;font-weight:700;color:var(--text)}
     .ps-net{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px}
     .ps-net-label{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)}
-    .ps-net-val{font-family:'Syne',sans-serif;font-size:21px;font-weight:700;color:var(--text);margin-top:2px}
+    .ps-net-val{font-family:'DM Sans',sans-serif;font-size:21px;font-weight:700;color:var(--text);margin-top:2px}
     .payslip-row{display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;color:var(--text2)}
     .payslip-row span:last-child{color:var(--text);font-variant-numeric:tabular-nums}
     .payslip-row.neg span:last-child{color:var(--red)}
@@ -640,7 +558,7 @@
     .att-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
     .att-stat{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px}
     .att-stat-label{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)}
-    .att-stat-val{font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--text);margin-top:4px}
+    .att-stat-val{font-family:'DM Sans',sans-serif;font-size:20px;font-weight:700;color:var(--text);margin-top:4px}
     .att-stat-sub{font-size:11.5px;color:var(--text3);margin-top:2px}
     .att-pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600}
     .att-pill.live{background:var(--green-bg);color:var(--green)}
@@ -652,22 +570,22 @@
     .profile-col>.card{margin-bottom:0}
     @media(max-width:960px){.profile-2col{grid-template-columns:1fr}}
     .profile-hero{display:flex;align-items:center;gap:14px;padding-bottom:16px;margin-bottom:16px;border-bottom:1px solid var(--border)}
-    .profile-avatar{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,#4f8ef7,#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:26px;font-weight:700;flex-shrink:0;overflow:hidden}
-    .profile-hero-name{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:var(--text)}
+    .profile-avatar{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,#4f8ef7,#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'DM Sans',sans-serif;font-size:26px;font-weight:700;flex-shrink:0;overflow:hidden}
+    .profile-hero-name{font-family:'DM Sans',sans-serif;font-size:18px;font-weight:700;color:var(--text)}
     .profile-hero-sub{font-size:12.5px;color:var(--text2);margin-top:2px}
 
     /* ══ HRMS / main-dashboard alignment layer ═══════════════════════════════
        Same visual language as hrms.html + index.html: grouped sidebar with a
        solid blue active pill, search / icon buttons / user chip / date chip /
        Sign Out topbar, KPI cards with tinted icon tiles, illustrated pastel
-       banner cards, Quick Actions tiles, approvals-style lists, Syne headings. */
+       banner cards, Quick Actions tiles, approvals-style lists, DM Sans headings. */
     body{font-size:13.5px}
     #app-screen{background:var(--bg)}
     /* sidebar */
     .ess-sb{width:230px;min-width:230px;background:var(--sb-bg);border-right:1px solid var(--sb-border)}
     .ess-sb-logo{padding:16px 18px 14px;border-bottom:1px solid var(--sb-border)}
     .ess-sb-logo-icon{width:40px;height:40px;border-radius:11px;background:#2563eb}
-    .ess-sb-brand{font-family:'Syne',sans-serif;font-size:19px;font-weight:700;letter-spacing:-.5px;color:var(--text);line-height:1.2}
+    .ess-sb-brand{font-family:'DM Sans',sans-serif;font-size:19px;font-weight:700;letter-spacing:-.5px;color:var(--text);line-height:1.2}
     .ess-sb-brand span{color:var(--accent)}
     .ess-sb-tagline{font-size:11.5px;font-weight:600;color:var(--text3);letter-spacing:0;margin-top:1px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .ess-sb-section{padding:6px 10px 6px}
@@ -715,13 +633,13 @@
     .content-inner{max-width:1500px}
     @media(max-width:560px){.content{padding:14px 12px}}
     .ess-page-hd{margin-bottom:16px}
-    .ess-page-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;letter-spacing:-.3px;color:var(--text)}
+    .ess-page-title{font-family:'DM Sans',sans-serif;font-size:18px;font-weight:700;letter-spacing:-.3px;color:var(--text)}
     .ess-page-sub{font-size:12.5px;color:var(--text3);margin-top:3px}
     /* cards */
     .card{border-radius:12px;padding:18px}
-    .card-title,.dash-section-title{font-family:'Syne',sans-serif;font-size:13.5px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--text);margin-bottom:14px}
+    .card-title,.dash-section-title{font-family:'DM Sans',sans-serif;font-size:13.5px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--text);margin-bottom:14px}
     .dash-section-title{margin:6px 0 10px}
-    .rota-week-label{font-family:'Syne',sans-serif;text-transform:none;letter-spacing:0;font-size:12.5px}
+    .rota-week-label{font-family:'DM Sans',sans-serif;text-transform:none;letter-spacing:0;font-size:12.5px}
     .tbl-wrap{border-radius:10px}
     th{background:transparent;font-size:10.5px;letter-spacing:.6px}
     .st-badge,.badge{border:1px solid transparent}
@@ -742,8 +660,8 @@
     /* greeting header (main-dashboard style) */
     .ess-greet{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border)}
     .ess-greet-main{display:flex;align-items:center;gap:14px;min-width:0}
-    .dash-avatar{width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#4f8ef7,#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:20px;font-weight:700;flex-shrink:0;overflow:hidden}
-    .ess-greet-title{font-family:'Syne',sans-serif;font-size:24px;font-weight:700;letter-spacing:-.5px;line-height:1.15;padding-bottom:2px;background:linear-gradient(135deg,var(--pink),var(--amber) 55%,var(--amber));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+    .dash-avatar{width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#4f8ef7,#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'DM Sans',sans-serif;font-size:20px;font-weight:700;flex-shrink:0;overflow:hidden}
+    .ess-greet-title{font-family:'DM Sans',sans-serif;font-size:24px;font-weight:700;letter-spacing:-.5px;line-height:1.15;padding-bottom:2px;background:linear-gradient(135deg,var(--pink),var(--amber) 55%,var(--amber));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
     .ess-greet-sub{font-size:12.5px;color:var(--text2);margin-top:3px}
     .ess-greet-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
     .ess-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:99px;border:1px solid var(--border);background:var(--surface);font-size:11.5px;color:var(--text2)}
@@ -834,7 +752,7 @@
     .acal-off,.acal-lg.acal-off{background:rgba(148,163,184,.18);color:var(--text2)}
     :root[data-theme="dark"] .acal-present{color:#6ee7b7}
     :root[data-theme="dark"] .acal-holiday{color:#93c5fd}
-    .att-today-status{font-family:'Syne',sans-serif;font-size:22px;font-weight:700;color:var(--text);margin:4px 0 2px}
+    .att-today-status{font-family:'DM Sans',sans-serif;font-size:22px;font-weight:700;color:var(--text);margin:4px 0 2px}
     .att-today-sub{font-size:12.5px;color:var(--text2);line-height:1.5}
     .att-today-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
     /* leave page balance card */
@@ -1064,7 +982,7 @@
    Scoped to #tb-leave so the dashboard's Leave Balance widget keeps its own look. */
 #tb-leave .lv-hero{position:relative;display:flex;align-items:center;min-height:96px;padding:16px 20px;margin-bottom:12px;border-radius:18px;overflow:hidden;background:linear-gradient(120deg,rgba(59,130,246,.10),rgba(147,197,253,.18) 55%,rgba(191,219,254,.30))}
 #tb-leave .lv-hero-text{position:relative;z-index:1}
-#tb-leave .lv-hero-text h1{margin:0;font-family:'Syne',sans-serif;font-size:22px;font-weight:800;line-height:1.1;letter-spacing:-.4px;color:var(--text)}
+#tb-leave .lv-hero-text h1{margin:0;font-family:'DM Sans',sans-serif;font-size:22px;font-weight:800;line-height:1.1;letter-spacing:-.4px;color:var(--text)}
 #tb-leave .lv-hero-text p{margin:5px 0 0;font-size:13px;color:var(--text2)}
 #tb-leave .lv-hero-art{position:absolute;right:8px;bottom:0;width:360px;max-width:58%;height:100%;pointer-events:none}
 #tb-leave .lv-hero-note{--note:#1e3a8a;font-family:'Segoe Print','Bradley Hand','Comic Sans MS',cursive;font-size:15px;font-weight:600;fill:var(--note);stroke:var(--note)}
