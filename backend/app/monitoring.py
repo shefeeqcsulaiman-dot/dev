@@ -299,6 +299,19 @@ def _is_monitored(path: str) -> bool:
 # ── Sentry ───────────────────────────────────────────────────────────────────
 
 _sentry_on = False
+_SENSITIVE_HEADERS = frozenset({"authorization", "cookie", "set-cookie", "x-api-key", "proxy-authorization"})
+
+
+def _scrub_event(event: dict, _hint: dict) -> dict:
+    """Last check before an event leaves: no credentials, cookies, query strings or bodies."""
+    request = event.get("request")
+    if isinstance(request, dict):
+        headers = request.get("headers")
+        if isinstance(headers, dict):
+            request["headers"] = {k: ("[Filtered]" if k.lower() in _SENSITIVE_HEADERS else v) for k, v in headers.items()}
+        for key in ("cookies", "data", "query_string"):
+            request.pop(key, None)
+    return event
 
 
 def init_sentry(dsn: str | None, environment: str, traces_sample_rate: float) -> bool:
@@ -312,13 +325,23 @@ def init_sentry(dsn: str | None, environment: str, traces_sample_rate: float) ->
         return False
     import os
 
-    sentry_sdk.init(
-        dsn=dsn,
-        environment=environment,
-        release=os.environ.get("APP_VERSION") or None,
-        traces_sample_rate=traces_sample_rate,
-        send_default_pii=False,
-    )
+    try:
+        sentry_sdk.init(
+            dsn=dsn,
+            environment=environment,
+            release=os.environ.get("APP_VERSION") or None,
+            traces_sample_rate=traces_sample_rate,
+            send_default_pii=False,
+            # Stack-frame local variables are on by default and held bearer tokens
+            # (ASGI scope headers), request bodies with passwords, payroll figures...
+            include_local_variables=False,
+            before_send=_scrub_event,
+        )
+    except Exception as exc:
+        # sentry-sdk 2.19 crashed at init on Starlette 1.x (it imported Jinja2Templates
+        # without jinja2): error tracking must never stop the app from starting.
+        log.warning("Sentry could not start (%s: %s); error tracking is off", type(exc).__name__, exc)
+        return False
     _sentry_on = True
     log.info("Sentry error tracking enabled (%s)", environment)
     return True

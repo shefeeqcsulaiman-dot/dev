@@ -79,6 +79,33 @@ def test_sentry_stays_off_without_dsn():
     assert monitoring.init_sentry(None, "test", 0.0) is False
 
 
+def test_sentry_that_fails_to_start_does_not_stop_the_app(monkeypatch):
+    import sentry_sdk
+
+    def broken_init(**_kwargs):
+        raise ImportError("jinja2 must be installed to use Jinja2Templates")
+
+    monkeypatch.setattr(sentry_sdk, "init", broken_init)
+    monkeypatch.setattr(monitoring, "_sentry_on", False)
+    assert monitoring.init_sentry("https://key@o0.ingest.sentry.io/1", "test", 0.0) is False
+    assert monitoring._sentry_on is False
+
+
+def test_sentry_is_started_without_local_variables_or_credentials(monkeypatch):
+    import sentry_sdk
+
+    seen = {}
+    monkeypatch.setattr(sentry_sdk, "init", lambda **kwargs: seen.update(kwargs))
+    monkeypatch.setattr(monitoring, "_sentry_on", False)
+    assert monitoring.init_sentry("https://key@o0.ingest.sentry.io/1", "test", 0.0) is True
+    monkeypatch.setattr(monitoring, "_sentry_on", False)
+    assert seen["send_default_pii"] is False and seen["include_local_variables"] is False
+    event = {"request": {"headers": {"Authorization": "Bearer abc", "Cookie": "s=1", "Accept": "json"},
+                         "cookies": {"s": "1"}, "data": {"password": "x"}, "query_string": "token=abc"}}
+    scrubbed = seen["before_send"](event, {})
+    assert scrubbed["request"] == {"headers": {"Authorization": "[Filtered]", "Cookie": "[Filtered]", "Accept": "json"}}
+
+
 class _FakeRedis:
     """Just the hash commands monitoring.flush()/_from_redis() use."""
 
