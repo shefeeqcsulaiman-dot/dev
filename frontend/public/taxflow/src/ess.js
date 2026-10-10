@@ -225,7 +225,8 @@
     document.getElementById('tb-' + id).classList.add('on');
     var hd = document.getElementById('ess-page-hd'), meta = ESS_PAGES[id] || [id, ''];
     if (hd) {
-      hd.style.display = id === 'dashboard' ? 'none' : '';
+      // Dashboard and Rota draw their own header (Rota: the illustrated banner).
+      hd.style.display = id === 'dashboard' || id === 'rota' ? 'none' : '';
       document.getElementById('ess-page-title').textContent = meta[0];
       document.getElementById('ess-page-sub').textContent = meta[1];
     }
@@ -932,16 +933,62 @@
     var fmt = function(d) { return d.toLocaleDateString('en-US', {month: 'short', day: 'numeric'}); };
     return fmt(mon) + ' – ' + fmt(end);
   }
+  // ── My Rota row look: icon, label and colour for a day ────────────────────
+  var ROTA_ICONS = {
+    sun: '<circle cx="12" cy="12" r="4.2" fill="currentColor" stroke="none"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/>',
+    sunset: '<path d="M7 15a5 5 0 0 1 10 0" fill="currentColor" stroke="none"/><path d="M3 18.5h18M12 4v3M4.9 8.9l1.8 1.8M19.1 8.9l-1.8 1.8M2 15h2.5M19.5 15H22"/>',
+    moon: '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z" fill="currentColor" stroke="none"/>',
+    plane: '<path d="M10.5 13.5 3 11l1.5-1.5 7.5 1.5 4.5-4.5a2 2 0 0 1 3 3L15 14l1.5 7.5L15 23l-2.5-7.5L9 19v2.5L7.5 23 6 18l-5-1.5L2.5 15H5z" fill="currentColor" stroke="none" transform="scale(.9) translate(1 -1)"/>',
+    star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" fill="currentColor" stroke="none"/>',
+    bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z" fill="currentColor" stroke="none"/>',
+    book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 21a2 2 0 0 1 2-2h13v2" />',
+    alarm: '<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5M4.5 4.5 2.5 6.5M19.5 4.5l2 2"/>',
+    pin: '<path d="M12 21.5s-7-6-7-11.5a7 7 0 0 1 14 0c0 5.5-7 11.5-7 11.5z" fill="currentColor" stroke="none"/><circle cx="12" cy="10" r="2.6" fill="#fff" stroke="none"/>',
+    chevron: '<path d="m9 6 6 6-6 6"/>'
+  };
+  function _rotaIcon(name, size) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="' + size + '" height="' + size + '" aria-hidden="true">' + (ROTA_ICONS[name] || '') + '</svg>';
+  }
+  // Morning / Afternoon / Night from the shift's own name, else from its start time.
+  function _rotaLook(a, kind) {
+    if (kind === 'off') return {icon: 'moon', tone: 'off', pill: 'Day Off', title: 'Day off', sub: a._gap ? 'No shift scheduled' : ''};
+    if (kind === 'leave') return {icon: 'plane', tone: 'leave', pill: 'Leave', title: 'On leave', sub: a._leaveType || 'Approved leave'};
+    if (kind === 'holiday') return {icon: 'star', tone: 'holiday', pill: 'Holiday', title: 'Public holiday', sub: a.holiday_name || ''};
+    if (kind === 'ot') return {icon: 'bolt', tone: 'ot', pill: 'Overtime'};
+    if (kind === 'training') return {icon: 'book', tone: 'training', pill: 'Training'};
+    var name = String(a.type || '').toLowerCase();
+    var hour = parseInt(String(a.start || '').slice(0, 2), 10);
+    if (/night/.test(name) || (!/morning|evening|afternoon/.test(name) && !isNaN(hour) && (hour >= 18 || hour < 4))) return {icon: 'moon', tone: 'night', pill: 'Night'};
+    if (/evening|afternoon/.test(name) || (!/morning/.test(name) && !isNaN(hour) && hour >= 12)) return {icon: 'sunset', tone: 'evening', pill: /afternoon/.test(name) ? 'Afternoon' : 'Evening'};
+    return {icon: 'sun', tone: 'morning', pill: 'Morning'};
+  }
+  function _rotaShiftHours(a) {
+    var p = function(s) { var m = /^(\d{1,2}):(\d{2})/.exec(s || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+    var s = p(a.start), e = p(a.end);
+    if (s === null || e === null) return '';
+    var mins = (e - s + 1440) % 1440 - (+a.break_minutes || 0);
+    return mins > 0 ? (Math.round(mins / 6) / 10) + ' hrs' : '';
+  }
+  function toggleRotaRow(btn) {
+    var open = btn.getAttribute('aria-expanded') !== 'true';
+    btn.setAttribute('aria-expanded', String(open));
+    var panel = document.getElementById(btn.getAttribute('aria-controls'));
+    if (panel) panel.hidden = !open;
+  }
   async function loadRota() {
     var month = document.getElementById('rota-month-picker') ? document.getElementById('rota-month-picker').value : '';
     var titleEl = document.getElementById('rota-card-title');
     var resetBtn = document.getElementById('rota-reset-btn');
-    if (titleEl) {
-      if (month) {
-        var monthLabel = new Date(month + '-01T00:00:00').toLocaleDateString('en-US', {month: 'long', year: 'numeric'});
-        titleEl.textContent = 'My Shifts — ' + monthLabel;
-      } else {
-        titleEl.textContent = 'My Upcoming Shifts (next 30 days)';
+    var rangeEl = document.getElementById('rota-range-label');
+    var monthLabel = month ? new Date(month + '-01T00:00:00').toLocaleDateString('en-US', {month: 'long', year: 'numeric'}) : '';
+    if (titleEl) titleEl.innerHTML = month ? 'My Shifts <small>' + escHtml(monthLabel) + '</small>' : 'My Upcoming Shifts <small>(next 30 days)</small>';
+    if (rangeEl) {
+      if (month) rangeEl.textContent = monthLabel;
+      else {
+        var from = new Date(), to = new Date();
+        to.setDate(from.getDate() + 29);
+        var md = function(d) { return d.toLocaleDateString('en-US', {month: 'short', day: 'numeric'}); };
+        rangeEl.textContent = md(from) + ' – ' + md(to) + ', ' + to.getFullYear();
       }
     }
     if (resetBtn) resetBtn.style.display = month ? '' : 'none';
@@ -964,7 +1011,7 @@
         var lastWeekLabel = null;
         var html = '';
         rows = _fillRotaDayOffs(rows);
-        rows.forEach(function(a) {
+        rows.forEach(function(a, index) {
           var d = new Date((a.date || '') + 'T00:00:00');
           var valid = !isNaN(d.getTime());
           var weekLabel = valid ? _rotaWeekLabel(d, thisMonday) : 'Upcoming';
@@ -981,26 +1028,40 @@
           var working = ['off', 'leave', 'holiday'].indexOf(kind) < 0;
           var timeRange = working ? ((a.start || '') + (a.end ? (' – ' + a.end) : '')) : '';
           var pill = isToday ? '<span class="rota-today-pill">Today</span>' : (isTomorrow ? '<span class="rota-today-pill">Tomorrow</span>' : '');
-          // Time first (what the employee needs), shift name underneath.
-          var titleText = escHtml(timeRange || meta.fallback) + (timeRange && a.location ? ' · ' + escHtml(a.location) : '') + pill;
-          var subText = working ? escHtml(a.type || a.code || 'Shift') : (a._leaveType ? escHtml(a._leaveType) : (a._gap ? 'No shift scheduled' : ''));
-          // The task picker in HRMS's Weekly/Monthly Rota can attach one or
-          // more tasks to a specific day's shift (its own title/color/time,
-          // separate from the standalone "My Tasks" tab) -- /ess/rota
-          // already returns them per assignment, this just stopped
-          // silently dropping them on the floor.
+          var look = _rotaLook(a, kind);
           var shiftTasks = Array.isArray(a.tasks) ? a.tasks : [];
-          var tasksHtml = shiftTasks.length ? ('<div class="rota-shift-tasks">' + shiftTasks.map(function(t) {
-            var taskTime = (t.start && t.end) ? (' <span class="rota-shift-task-time">' + escHtml(t.start) + '–' + escHtml(t.end) + '</span>') : '';
-            return '<div class="rota-shift-task-item"><span class="rota-shift-task-dot" style="background:' + escHtml(t.color || '#2563eb') + '"></span>' + escHtml(t.title || 'Task') + taskTime + '</div>';
-          }).join('') + '</div>') : '';
-          html += '<div class="rota-row ' + meta.cls + (isToday ? ' is-today' : '') + '">' +
-            '<div class="rota-date-chip"><div class="dow">' + dowShort + '</div><div class="d">' + dayNum + '</div></div>' +
-            '<div style="flex:1;min-width:0">' +
-              '<div class="rota-shift-title" style="font-weight:700;font-size:15px;color:var(--text);font-variant-numeric:tabular-nums">' + titleText + '</div>' +
-              (subText ? '<div class="rota-shift-sub" style="font-size:12.5px;color:var(--text2);margin-top:2px">' + subText + '</div>' : '') +
-              tasksHtml +
-            '</div>' +
+          var rowId = 'rota-d-' + (a.date || index);
+          var mainHtml = working
+            ? '<div class="rota-line-time">' + _rotaIcon('alarm', 16) + '<b>' + escHtml(timeRange || meta.fallback) + '</b>' + pill + '</div>' +
+              (a.location ? '<div class="rota-line-sub">' + _rotaIcon('pin', 15) + escHtml(a.location) + '</div>' : '')
+            : '<div class="rota-line-time"><b>' + escHtml(look.title) + '</b>' + pill + '</div>' +
+              (look.sub ? '<div class="rota-line-sub">' + escHtml(look.sub) + '</div>' : '');
+          // Shift details and the tasks the HRMS rota attached to this day (/ess/rota
+          // returns them per assignment), shown when the row is opened.
+          var hours = working ? _rotaShiftHours(a) : '';
+          var facts = [];
+          if (working) facts.push(['Shift', a.type || a.code || 'Shift']);
+          if (hours) facts.push(['Hours', hours]);
+          if (working && a.break_minutes) facts.push(['Break', a.break_minutes + ' min']);
+          if (a.location) facts.push(['Location', a.location]);
+          if (a.department) facts.push(['Department', a.department]);
+          var detailHtml = '<div class="rota-detail" id="' + rowId + '" hidden>' +
+            (facts.length ? '<dl class="rota-facts">' + facts.map(function(f) { return '<div><dt>' + escHtml(f[0]) + '</dt><dd>' + escHtml(String(f[1])) + '</dd></div>'; }).join('') + '</dl>' : '') +
+            (shiftTasks.length ? '<div class="rota-shift-tasks">' + shiftTasks.map(function(t) {
+              var taskTime = (t.start && t.end) ? (' <span class="rota-shift-task-time">' + escHtml(t.start) + '–' + escHtml(t.end) + '</span>') : '';
+              return '<div class="rota-shift-task-item"><span class="rota-shift-task-dot" style="background:' + escHtml(t.color || '#2563eb') + '"></span>' + escHtml(t.title || 'Task') + taskTime + '</div>';
+            }).join('') + '</div>' : '<div class="rota-detail-empty">' + (working ? 'No tasks attached to this shift.' : escHtml(look.sub || meta.fallback)) + '</div>') +
+          '</div>';
+          var dowIdx = valid ? (d.getDay() + 6) % 7 : 0;
+          html += '<div class="rota-item ' + meta.cls + (isToday ? ' is-today' : '') + '">' +
+            '<div class="rota-date-chip rota-dow-' + (working || kind === 'leave' || kind === 'holiday' ? dowIdx : 'off') + '"><div class="dow">' + escHtml(dowShort) + '</div><div class="d">' + dayNum + '</div></div>' +
+            '<button type="button" class="rota-row" aria-expanded="false" aria-controls="' + rowId + '" onclick="toggleRotaRow(this)">' +
+              '<span class="rota-row-icon rota-icon-' + look.icon + '">' + _rotaIcon(look.icon, 30) + '</span>' +
+              '<span class="rota-row-main">' + mainHtml + (shiftTasks.length ? '<span class="rota-task-count">' + shiftTasks.length + ' task' + (shiftTasks.length > 1 ? 's' : '') + '</span>' : '') + '</span>' +
+              '<span class="rota-type-pill rota-pill-' + look.tone + '">' + _rotaIcon(look.icon, 16) + escHtml(look.pill) + '</span>' +
+              '<span class="rota-chevron" aria-hidden="true">' + _rotaIcon('chevron', 18) + '</span>' +
+            '</button>' +
+            detailHtml +
           '</div>';
         });
         el.innerHTML = html;
@@ -1025,8 +1086,8 @@
     var mineView = document.getElementById('rota-view-mine');
     var deptView = document.getElementById('rota-view-dept');
     var isDept = view === 'dept';
-    if (mineBtn) mineBtn.classList.toggle('on', !isDept);
-    if (deptBtn) deptBtn.classList.toggle('on', isDept);
+    if (mineBtn) { mineBtn.classList.toggle('on', !isDept); mineBtn.setAttribute('aria-selected', String(!isDept)); }
+    if (deptBtn) { deptBtn.classList.toggle('on', isDept); deptBtn.setAttribute('aria-selected', String(isDept)); }
     if (mineView) mineView.style.display = isDept ? 'none' : '';
     if (deptView) deptView.style.display = isDept ? '' : 'none';
     if (isDept) {
@@ -1122,14 +1183,14 @@
 
   function _taskActions(t) {
     if (!t.id) return '';
-    var cur = t.status === 'in_progress' ? 'progress' : (t.status || 'todo');
-    var b = function(label, to, primary) {
-      return '<button class="mini-btn' + (primary ? ' primary' : '') + '" data-id="' + escHtml(t.id) + '" onclick="essSetTaskStatus(this.dataset.id,\'' + to + '\',this)">' + label + '</button>';
+    var cur = _taskStatusLabel(t.status).cls;
+    var b = function(label, to, cls, icon) {
+      return '<button type="button" class="tk-btn ' + cls + '" data-id="' + escHtml(t.id) + '" onclick="essSetTaskStatus(this.dataset.id,\'' + to + '\',this)">' + _tkIcon(icon, 16) + '<span>' + label + '</span></button>';
     };
-    var inner = cur === 'done' ? b('Reopen', 'todo')
-      : cur === 'progress' ? b('Mark done', 'done', true) + b('Back to To Do', 'todo')
-      : b('Start', 'progress') + b('Mark done', 'done', true);
-    return '<div class="task-actions">' + inner + '</div>';
+    var inner = cur === 'done' ? b('Reopen', 'todo', 'tk-btn-outline', 'undo')
+      : cur === 'progress' ? b('Mark done', 'done', 'tk-btn-primary', 'check')
+      : b('Start', 'progress', 'tk-btn-primary', 'play') + b('Mark done', 'done', 'tk-btn-outline', 'check');
+    return '<div class="tk-actions">' + inner + '</div>';
   }
 
   async function essSetTaskStatus(id, status, btn) {
@@ -1150,29 +1211,159 @@
       if (r.status === 401) { essLogout(); return; }
       var rows = await r.json();
       _essData.tasks = rows;
-      var el = document.getElementById('tasks-content');
-      el.classList.remove('loading');
-      if (!rows.length) { el.innerHTML = emptyState('check', 'No tasks assigned to you', 'Tasks your manager assigns will appear here.'); }
-      else {
-        el.innerHTML = rows.map(function(t) {
-          var st = _taskStatusLabel(t.status);
-          var priClass = 'pri-' + (t.priority || 'Medium').toLowerCase().replace(/[^a-z]/g, '');
-          return '<div class="task-row">' +
-            '<div style="min-width:0">' +
-              '<div style="font-weight:600;font-size:13.5px;color:var(--text)">' + escHtml(t.title || 'Untitled task') + '</div>' +
-              (t.description ? '<div style="font-size:12px;color:var(--text2);margin-top:4px">' + escHtml(t.description) + '</div>' : '') +
-              '<div style="font-size:11.5px;color:var(--text3);margin-top:6px">' +
-                (t.due_date ? ('Due ' + escHtml(t.due_date) + ' · ') : '') +
-                '<span class="' + priClass + '">' + escHtml(t.priority || 'Medium') + ' priority</span>' +
-              '</div>' +
-              _taskActions(t) +
-            '</div>' +
-            '<span class="st-badge st-' + st.cls + '">' + escHtml(st.text) + '</span>' +
-          '</div>';
-        }).join('');
-      }
+      document.getElementById('tasks-content').classList.remove('loading');
+      renderEssTasks();
       updateDashboard();
     } catch(e) { var tEl = document.getElementById('tasks-content'); tEl.classList.remove('loading'); tEl.innerHTML = '<div class="empty">Failed to load.</div>'; }
+  }
+
+  // ── Tasks page: priority filter pills, search, sort and one card per task ──
+  var _tkFilter = 'all';
+  var TK_PRIORITY_RANK = {high: 0, medium: 1, low: 2};
+  var TK_ICONS = {
+    clipboard: '<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 12l2 2 4-4"/>',
+    doc: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6M9 9h2"/>',
+    cert: '<path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5"/><path d="M13 3v5h5v3M8 9h3M8 13h4"/><circle cx="16" cy="16" r="3"/><path d="m14.5 18.5-.5 3 2-1 2 1-.5-3"/>',
+    invoice: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"/><path d="M14 3v5h5v2M8 9h3M8 13h4"/><circle cx="16.5" cy="16.5" r="4"/><path d="M16.5 14.5v2l1.5 1"/>',
+    people: '<circle cx="9" cy="8" r="3.2"/><path d="M3 19c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14c2.4.2 4 1.7 4.5 4.5"/>',
+    phone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/>',
+    box: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
+    task: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+    play: '<path d="M7 4.5v15l12-7.5z" fill="currentColor"/>',
+    check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+    undo: '<path d="M9 7 4 12l5 5"/><path d="M4 12h11a5 5 0 0 1 0 10h-2"/>',
+    cal: '<rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>',
+    user: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/>',
+    alert: '<circle cx="12" cy="12" r="9" fill="currentColor" stroke="none"/><path d="M12 7.5v5.5M12 16.5h.01" stroke="#fff"/>',
+    bars: '<path d="M6 20v-5M12 20V10M18 20V4" stroke-width="3.2"/>',
+    ok: '<circle cx="12" cy="12" r="9" fill="currentColor" stroke="none"/><path d="m8 12 3 3 5-6" stroke="#fff"/>'
+  };
+  function _tkIcon(name, size) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="' + size + '" height="' + size + '" aria-hidden="true">' + (TK_ICONS[name] || '') + '</svg>';
+  }
+  // An icon that suits the task, picked from words in its title.
+  function _tkKindIcon(t) {
+    var s = ((t.title || '') + ' ' + (t.description || '')).toLowerCase();
+    if (/licen[cs]e|renew|certif|permit|visa|contract/.test(s)) return 'cert';
+    if (/invoice|payment|overdue|collect|receivable|bill/.test(s)) return 'invoice';
+    if (/stock|count|inventory|audit|check/.test(s)) return 'clipboard';
+    if (/delivery|shipment|order|package|warehouse/.test(s)) return 'box';
+    if (/call|phone|follow up|follow-up|contact/.test(s)) return 'phone';
+    if (/meeting|team|train|interview|onboard/.test(s)) return 'people';
+    if (/price|list|report|update|document|file|prepare/.test(s)) return 'doc';
+    return 'task';
+  }
+  function _tkPriority(t) {
+    var p = String(t.priority || 'Medium').toLowerCase();
+    return p === 'high' || p === 'urgent' ? 'high' : p === 'low' ? 'low' : 'medium';
+  }
+  function _tkDue(t, done) {
+    if (!t.due_date) return {text: 'No due date', overdue: false};
+    var d = new Date(t.due_date + 'T00:00:00');
+    if (isNaN(d.getTime())) return {text: 'Due ' + t.due_date, overdue: false};
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var days = Math.round((d - today) / 86400000);
+    var text = 'Due ' + d.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
+    if (!done && days === 0) text += ' · Today';
+    else if (!done && days === 1) text += ' · Tomorrow';
+    return {text: text, overdue: !done && days < 0};
+  }
+  function setEssTaskFilter(f) { _tkFilter = f; renderEssTasks(); }
+  function renderEssTasks() {
+    var el = document.getElementById('tasks-content');
+    var all = _essData.tasks || [];
+    var counts = {all: all.length, high: 0, medium: 0, low: 0};
+    all.forEach(function(t) { counts[_tkPriority(t)] += 1; });
+    var filtersEl = document.getElementById('tk-filters');
+    if (filtersEl) {
+      filtersEl.innerHTML = [['all', 'All Tasks'], ['high', 'High Priority'], ['medium', 'Medium Priority'], ['low', 'Low Priority']].map(function(f) {
+        var on = _tkFilter === f[0];
+        return '<button type="button" role="tab" aria-selected="' + on + '" class="tk-filter tk-filter-' + f[0] + (on ? ' on' : '') + '" onclick="setEssTaskFilter(\'' + f[0] + '\')">' + f[1] + '<b>' + counts[f[0]] + '</b></button>';
+      }).join('');
+    }
+    if (!el) return;
+    if (!all.length) { el.innerHTML = emptyState('check', 'No tasks assigned to you', 'Tasks your manager assigns will appear here.'); return; }
+    var q = (document.getElementById('tk-search') || {}).value || '';
+    q = q.trim().toLowerCase();
+    var sort = (document.getElementById('tk-sort') || {}).value || 'due-asc';
+    var statusRank = {progress: 0, todo: 1, done: 2};
+    var rows = all.filter(function(t) {
+      if (_tkFilter !== 'all' && _tkPriority(t) !== _tkFilter) return false;
+      return !q || ((t.title || '') + ' ' + (t.description || '')).toLowerCase().indexOf(q) >= 0;
+    }).sort(function(a, b) {
+      // Finished work sinks to the bottom whatever the sort.
+      var doneA = _taskStatusLabel(a.status).cls === 'done', doneB = _taskStatusLabel(b.status).cls === 'done';
+      if (doneA !== doneB) return doneA ? 1 : -1;
+      var da = a.due_date || '9999-99-99', db = b.due_date || '9999-99-99';
+      if (sort === 'due-desc') return (b.due_date || '') < (a.due_date || '') ? -1 : (b.due_date || '') > (a.due_date || '') ? 1 : 0;
+      if (sort === 'priority') return (TK_PRIORITY_RANK[_tkPriority(a)] - TK_PRIORITY_RANK[_tkPriority(b)]) || (da < db ? -1 : 1);
+      if (sort === 'status') return (statusRank[_taskStatusLabel(a.status).cls] - statusRank[_taskStatusLabel(b.status).cls]) || (da < db ? -1 : 1);
+      return da < db ? -1 : da > db ? 1 : 0;
+    });
+    if (!rows.length) { el.innerHTML = emptyState('check', 'No matching tasks', 'Try another priority or search.'); return; }
+    var priMeta = {high: ['alert', 'High priority'], medium: ['bars', 'Medium priority'], low: ['ok', 'Low priority']};
+    el.innerHTML = rows.map(function(t) {
+      var st = _taskStatusLabel(t.status);
+      var pri = _tkPriority(t);
+      var done = st.cls === 'done';
+      var due = _tkDue(t, done);
+      var color = /^#[0-9a-f]{3,8}$/i.test(t.color || '') ? t.color : '';
+      var progress = Math.max(0, Math.min(100, Number(t.progress) || 0));
+      var id = escHtml(t.id || '');
+      return '<article class="tk-item tk-pri-' + pri + (done ? ' is-done' : '') + '"' + (color ? ' style="--tk-accent:' + escHtml(color) + '"' : '') + '>' +
+        '<div class="tk-icon">' + _tkIcon(_tkKindIcon(t), 30) + '</div>' +
+        '<div class="tk-body">' +
+          '<h3 class="tk-title">' + escHtml(t.title || 'Untitled task') + '</h3>' +
+          (t.description ? '<p class="tk-desc">' + escHtml(t.description) + '</p>' : '') +
+          '<span class="tk-pri">' + _tkIcon(priMeta[pri][0], 16) + priMeta[pri][1] + '</span>' +
+          '<div class="tk-meta">' +
+            '<span class="' + (due.overdue ? 'tk-overdue' : '') + '">' + _tkIcon('cal', 16) + escHtml(due.text) + (due.overdue ? ' · Overdue' : '') + '</span>' +
+            '<span class="tk-sep" aria-hidden="true"></span>' +
+            '<span>' + _tkIcon('user', 16) + 'Assigned to: You</span>' +
+          '</div>' +
+          (progress > 0 && !done ? '<div class="tk-progress" role="progressbar" aria-valuenow="' + progress + '" aria-valuemin="0" aria-valuemax="100" aria-label="Progress"><i style="width:' + progress + '%"></i><span>' + progress + '%</span></div>' : '') +
+        '</div>' +
+        '<div class="tk-side">' +
+          '<div class="tk-side-top">' +
+            '<span class="tk-status tk-status-' + st.cls + '">' + escHtml(st.text) + '</span>' +
+            (t.id ? '<button type="button" class="tk-more" aria-label="More actions" data-id="' + id + '" data-status="' + st.cls + '" onclick="openEssTaskMenu(event,this)">&#8943;</button>' : '') +
+          '</div>' +
+          _taskActions(t) +
+        '</div>' +
+      '</article>';
+    }).join('');
+  }
+  // "⋯": move the task to any status.
+  function openEssTaskMenu(event, btn) {
+    event.stopPropagation();
+    var old = document.getElementById('tk-menu');
+    if (old) { old.remove(); if (old._for === btn) return; }
+    var menu = document.createElement('div');
+    menu.id = 'tk-menu';
+    menu.className = 'tk-menu';
+    menu.setAttribute('role', 'menu');
+    menu._for = btn;
+    var cur = btn.dataset.status;
+    menu.innerHTML = [['todo', 'Move to To Do'], ['progress', 'Move to In Progress'], ['done', 'Mark as done']].map(function(o) {
+      return '<button type="button" role="menuitem"' + (o[0] === cur ? ' disabled' : '') + ' data-to="' + o[0] + '">' + o[1] + '</button>';
+    }).join('');
+    menu.addEventListener('click', function(e) {
+      var item = e.target.closest('button[data-to]');
+      if (!item || item.disabled) return;
+      menu.remove();
+      essSetTaskStatus(btn.dataset.id, item.dataset.to, btn);
+    });
+    document.body.appendChild(menu);
+    var r = btn.getBoundingClientRect();
+    menu.style.top = (r.bottom + 6) + 'px';  // position:fixed -- ESS scrolls .content, not the window
+    menu.style.left = Math.max(8, r.right - menu.offsetWidth) + 'px';
+    setTimeout(function() {
+      document.addEventListener('click', function close(e) {
+        if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', close); }
+      });
+    });
+    var first = menu.querySelector('button:not([disabled])');
+    if (first) first.focus();
   }
 
   // ── Dashboard summary — derived entirely from data the other tabs'

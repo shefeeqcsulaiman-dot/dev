@@ -10,10 +10,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=f14f81f61a" as="style">
-<link rel="preload" href="src/app.js?v=490c4ab361" as="script">
+<link rel="preload" href="src/styles.css?v=971d02a65d" as="style">
+<link rel="preload" href="src/app.js?v=ca80023d6d" as="script">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=f14f81f61a">
+<link rel="stylesheet" href="src/styles.css?v=971d02a65d">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -2166,100 +2166,137 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
   </div>
 
   <div class="tab-body" id="rota-weekly">
-    <div class="card mb16">
-      <div class="card-hd">
-        <div><div class="card-title">Weekly Rota</div><div class="card-sub">Assign staff shifts and save the schedule to database</div></div>
-        <span class="b b-gray" id="rota-weekly-status">Draft</span>
-      </div>
-      <div class="fr4">
-        <div class="fg"><label class="fl">Department</label><select class="fi" id="rota-week-department" onchange="renderRotaBoards()"><option value="">All Departments</option></select></div>
-        <div class="fg"><label class="fl">Week Start</label><input class="fi mono" id="rota-week-start" type="date" value="2026-05-04" onchange="_saveRotaViewDate('week',this.value);_syncMonthPickerToWeek(this.value);renderRotaBoards()"></div>
-        <div class="fg"><label class="fl">Location</label><select class="fi" id="rota-week-location" onchange="renderRotaBoards()"><option value="">All Locations</option></select></div>
-        <div class="fg"><label class="fl">Search</label><input class="fi" id="rota-staff-search" placeholder="Employee name" oninput="renderRotaBoards()"></div>
-      </div>
-      <div class="flx" style="gap:8px;flex-wrap:wrap;align-items:center;padding-bottom:8px;border-bottom:1px solid var(--border1)">
-        <button class="btn btn-g btn-sm" onclick="copyPreviousRota()">Copy Previous</button>
-        <button class="btn btn-g btn-sm" onclick="autoGenerateRota()">Auto Fill All Staff</button>
-        <button class="btn btn-g btn-sm" onclick="saveRotaDraft()">Save Draft</button>
-        <button class="btn btn-warn btn-sm" onclick="submitRotaApproval()">Submit Approval</button>
-        <button class="btn btn-p btn-sm" onclick="publishRota()">Publish Rota</button>
-      </div>
-      <div class="flx" id="rota-repeat-row" style="gap:8px;align-items:center;padding-top:8px;flex-wrap:wrap">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="15" height="15" style="opacity:.45;flex-shrink:0"><path d="M2 4h9a3 3 0 0 1 0 6H4"/><path d="M4 7l-2.5 3L4 13"/></svg>
-        <span style="font-size:12px;color:var(--text3);white-space:nowrap">Repeat this rota:</span>
-        <select class="fi" id="rota-repeat-mode" style="width:160px;height:30px;padding:3px 8px;font-size:12px">
-          <option value="none">— No Repeat —</option>
-          <option value="1year">1 Year (52 weeks)</option>
-          <option value="forever">Indefinitely (∞)</option>
-        </select>
-        <select class="fi" id="rota-repeat-employee" style="width:180px;height:30px;padding:3px 8px;font-size:12px">
-          <option value="all">All Employees</option>
-        </select>
-        <button class="btn btn-p btn-sm" onclick="applyRotaRepeat()">Apply Repeat</button>
-        <span id="rota-repeat-info" style="font-size:11px;color:var(--text3)"></span>
-      </div>
-    </div>
-
-    <div class="g2 g2-main-side mb16">
-      <div class="card">
-        <div class="card-hd">
-          <div><div class="card-title">Staff Schedule</div><div class="card-sub">Click a cell to edit. Saved cells update weekly, monthly, and department views.</div></div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <button class="btn btn-g btn-sm" onclick="downloadRotaExcel()">↓ Excel</button>
-            <button class="btn btn-g btn-sm" onclick="downloadRotaPdf()">↓ PDF</button>
-            <button class="btn btn-g btn-sm" onclick="renderRotaBoards()">Refresh</button>
+    <div class="rs-layout">
+      <div class="card rs-main">
+        <div class="rs-head">
+          <div class="rs-head-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="26" height="26" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/><path d="m9 15 2 2 4-4"/></svg></div>
+          <div class="rs-head-text">
+            <h2>Staff Schedule</h2>
+            <p>View and manage your team's weekly schedule, hours and leave. Click a day to edit it.</p>
+          </div>
+          <div class="rs-head-actions">
+            <button class="rs-btn rs-btn-csv" type="button" onclick="downloadRotaExcel()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 11v6M9 14l3 3 3-3"/></svg><span>Export CSV</span></button>
+            <button class="rs-btn rs-btn-pdf" type="button" onclick="downloadRotaPdf()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8.5 18v-6h2a1.5 1.5 0 0 1 0 3h-2"/></svg><span>PDF</span></button>
+            <button class="rs-btn" type="button" onclick="renderRotaBoards()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg><span>Refresh</span></button>
+            <div class="rs-week">
+              <button class="rs-week-step" type="button" onclick="shiftRotaWeek(-1)" title="Previous week" aria-label="Previous week">&#8249;</button>
+              <label class="rs-week-label" title="Choose a week">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg><span id="rota-week-range-label">This week</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                <input class="rs-week-input" id="rota-week-start" type="date" value="2026-05-04" aria-label="Week start" onclick="try{this.showPicker()}catch(e){}" onchange="setRotaWeekStart(this.value)">
+              </label>
+              <button class="rs-week-step" type="button" onclick="shiftRotaWeek(1)" title="Next week" aria-label="Next week">&#8250;</button>
+            </div>
           </div>
         </div>
+
+        <div class="rs-filters">
+          <button class="rs-tab" id="rota-all-staff-tab" type="button" onclick="resetRotaWeekFilters()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14c2.4.2 4 1.7 4.5 4.5"/></svg><span>All Staff</span></button>
+          <label class="rs-select"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><rect x="4" y="3" width="10" height="18" rx="1.5"/><path d="M14 9h5a1 1 0 0 1 1 1v11h-6M7.5 7h3M7.5 11h3M7.5 15h3"/></svg><select id="rota-week-department" aria-label="Department" onchange="renderRotaBoards()"><option value="">All Departments</option></select></label>
+          <label class="rs-select"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></svg><select id="rota-week-role" aria-label="Role" onchange="renderRotaBoards()"><option value="">All Roles</option></select></label>
+          <label class="rs-select"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg><select id="rota-week-status" aria-label="Status" onchange="renderRotaBoards()"><option value="">Any Status</option><option value="working">Working this week</option><option value="leave">On leave this week</option><option value="unscheduled">No shifts this week</option></select></label>
+          <label class="rs-select" id="rota-week-location-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg><select id="rota-week-location" aria-label="Location" onchange="renderRotaBoards()"><option value="">All Locations</option></select></label>
+          <div class="rs-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg><input id="rota-staff-search" type="search" placeholder="Search staff by name or department..." aria-label="Search staff" oninput="renderRotaBoards()"></div>
+        </div>
+
+        <div class="rs-workflow">
+          <span class="b b-gray" id="rota-weekly-status">Draft</span>
+          <button class="btn btn-g btn-sm" onclick="copyPreviousRota()">Copy Previous Week</button>
+          <button class="btn btn-g btn-sm" onclick="autoGenerateRota()">Auto Fill All Staff</button>
+          <button class="btn btn-g btn-sm" onclick="saveRotaDraft()">Save Draft</button>
+          <details class="rs-repeat">
+            <summary class="btn btn-g btn-sm">Repeat...</summary>
+            <div class="rs-repeat-pop" id="rota-repeat-row">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="15" height="15" style="opacity:.45;flex-shrink:0"><path d="M2 4h9a3 3 0 0 1 0 6H4"/><path d="M4 7l-2.5 3L4 13"/></svg>
+          <select class="fi" id="rota-repeat-mode" style="width:160px;height:30px;padding:3px 8px;font-size:12px">
+            <option value="none">— No Repeat —</option>
+            <option value="1year">1 Year (52 weeks)</option>
+            <option value="forever">Indefinitely (∞)</option>
+          </select>
+          <select class="fi" id="rota-repeat-employee" style="width:180px;height:30px;padding:3px 8px;font-size:12px">
+            <option value="all">All Employees</option>
+          </select>
+          <button class="btn btn-p btn-sm" onclick="applyRotaRepeat()">Apply Repeat</button>
+              <span id="rota-repeat-info" style="font-size:11px;color:var(--text3)"></span>
+            </div>
+          </details>
+          <span class="rs-workflow-gap"></span>
+          <button class="btn btn-warn btn-sm" onclick="submitRotaApproval()">Submit for Approval</button>
+          <button class="btn btn-p btn-sm" onclick="publishRota()">Publish Rota</button>
+        </div>
+
         <div class="rota-board" id="rota-weekly-board"></div>
-        <div class="divider"></div>
-        <div class="flx" style="gap:8px;flex-wrap:wrap"><button class="btn btn-g btn-sm" onclick="autoGenerateRota()">Bulk Assign</button><button class="btn btn-g btn-sm" onclick="toast('Employee notifications queued','ok')">Notify Employees</button></div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:16px">
-        <!-- Click an employee's name in Staff Schedule (selectRotaStaffForTasks())
-             to see their tasks for the week here, day by day with each
-             task's time -- previously the only way to see a task's time
-             was opening the Edit Shift modal for one specific day at a
-             time; this gives the whole week for one person in one place. -->
-        <div class="card" id="rota-emp-tasks-card">
-          <div class="card-hd"><div class="card-title" style="margin-bottom:0">Employee Tasks</div></div>
-          <div id="rota-emp-tasks-body">
-            <div class="rota-emp-tasks-empty">Click an employee's name in Staff Schedule to see their tasks for the week.</div>
-          </div>
+
+      <aside class="rs-side">
+        <!-- Click an employee in Staff Schedule (selectRotaStaffForTasks()) to see them
+             here with their tasks for the week, day by day with each task's time. -->
+        <div class="card rs-person" id="rota-emp-tasks-card">
+          <div id="rota-emp-profile"></div>
+          <div id="rota-emp-tasks-body"></div>
         </div>
         <div class="card">
-          <div class="card-hd"><div class="card-title">Weekly Summary</div></div>
-          <table class="tbl" data-delete-actions-bound="skip">
-            <tbody id="rota-weekly-summary-tbody"></tbody>
-          </table>
-          <div class="divider"></div>
-          <div class="rota-code-row" id="rota-code-row"></div>
+          <div class="rs-card-title"><span class="rs-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>Weekly Summary</div>
+          <div class="rs-summary" id="rota-weekly-summary"></div>
         </div>
-      </div>
+        <div class="card">
+          <div class="rs-card-title"><span class="rs-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></span>Quick Actions</div>
+          <div class="rs-actions">
+            <button class="rs-action" type="button" onclick="openEmpModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c.7-3.6 3-5.5 6-5.5 1.6 0 3 .5 4 1.4M18 13v6M15 16h6"/></svg><span>Add Staff</span><i>&#8250;</i></button>
+            <button class="rs-action" type="button" onclick="assignShiftForSelectedRotaStaff()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg><span>Assign Shift</span><i>&#8250;</i></button>
+            <button class="rs-action" type="button" onclick="goHrmsTab(4,'hr-leave')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M8 3v4M16 3v4M3 9h18"/><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="m9.5 13 5 5M14.5 13l-5 5"/></svg><span>Manage Leave</span><i>&#8250;</i></button>
+            <button class="rs-action" type="button" onclick="go('hrms-reports')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>View Reports</span><i>&#8250;</i></button>
+          </div>
+          <div class="rs-legend-title">Shift Legend</div>
+          <div class="rs-legend" id="rota-code-row"></div>
+          <div class="rs-bulk">
+            <button class="btn btn-g btn-sm" onclick="autoGenerateRota()">Bulk Assign</button>
+            <button class="btn btn-g btn-sm" onclick="toast('Employee notifications queued','ok')">Notify Employees</button>
+          </div>
+        </div>
+      </aside>
     </div>
   </div>
 
   <div class="tab-body" id="rota-monthly">
-    <div class="card mb16">
-      <div class="card-hd"><div><div class="card-title">Monthly Rota</div><div class="card-sub">Monthly overview built from saved weekly rota records</div></div><span class="b b-gray" id="rota-monthly-status">Draft</span></div>
-      <div class="fr3">
-        <div class="fg"><label class="fl">Month</label><input class="fi mono" id="rota-month-value" type="month" value="2026-05" onchange="_saveRotaViewDate('month',this.value);renderRotaBoards()"></div>
-        <div class="fg"><label class="fl">Department</label><select class="fi" id="rota-month-department" onchange="renderRotaBoards()"><option value="">All Departments</option></select></div>
-        <div class="fg"><label class="fl">Employee</label><input class="fi" id="rota-month-search" placeholder="Search employee" oninput="renderRotaBoards()"></div>
+    <!-- Monthly Rota is a read view of Weekly Rota's saved records, one week of the month at
+         a time (Copy Previous Month / Auto Fill / Submit / Publish were removed 2026-09-22;
+         those stay on Weekly/Department Rota). Cells still open the shift editor. -->
+    <div class="card rs-main rs-month">
+      <div class="rs-head">
+        <div class="rs-head-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="26" height="26" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg></div>
+        <div class="rs-head-text">
+          <h2>Monthly Schedule <span class="b b-gray" id="rota-monthly-status">Draft</span></h2>
+          <p>Saved assignments for the selected month, one week at a time. Click a day to edit it.</p>
+        </div>
+        <div class="rs-head-actions">
+          <div class="rs-week">
+            <button class="rs-week-step" type="button" onclick="shiftRotaMonthWeek(-1)" title="Previous week" aria-label="Previous week">&#8249;</button>
+            <label class="rs-week-label" title="Choose a month">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg><span id="rota-month-week-label">This month</span>
+              <input class="rs-week-input" id="rota-month-value" type="month" value="2026-05" aria-label="Month" onclick="try{this.showPicker()}catch(e){}" onchange="setRotaMonth(this.value)">
+            </label>
+            <button class="rs-week-step" type="button" onclick="shiftRotaMonthWeek(1)" title="Next week" aria-label="Next week">&#8250;</button>
+          </div>
+          <button class="rs-btn rs-btn-pdf" type="button" onclick="downloadRotaMonthWeekPdf()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8.5 18v-6h2a1.5 1.5 0 0 1 0 3h-2"/></svg><span>Export PDF</span></button>
+          <button class="rs-btn" type="button" onclick="renderRotaBoards()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg><span>Refresh</span></button>
+        </div>
       </div>
-      <!-- Copy Previous Month / Auto Fill Month / Save Status / Submit Approval /
-           Publish removed by request (2026-09-22) -- Monthly Rota is a read view built
-           from Weekly Rota's own saved records; those actions stay on Weekly/Department
-           Rota, where a schedule is actually created and published. The status badge
-           above still updates on its own (updateRotaStatusBadges() in app.js derives it
-           from that month's own saved assignment records, same as before this change). -->
-    </div>
 
-    <div class="mb16">
-      <div class="card">
-        <div class="card-hd"><div><div class="card-title">Monthly Schedule</div><div class="card-sub">Shows saved assignments for the selected month</div></div></div>
-        <div class="rota-month-grid" id="rota-monthly-board"></div>
-        <div class="divider"></div>
+      <div class="rs-kpis">
+        <div class="rs-kpi-list" id="rota-month-kpis"></div>
+        <div class="rs-kpi-filters">
+          <label class="rs-select rs-select-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><rect x="4" y="3" width="10" height="18" rx="1.5"/><path d="M14 9h5a1 1 0 0 1 1 1v11h-6M7.5 7h3M7.5 11h3M7.5 15h3"/></svg><select id="rota-month-department" aria-label="Department" onchange="_rotaMonthPage=0;renderRotaBoards()"><option value="">All Departments</option></select></label>
+          <div class="rs-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg><input id="rota-month-search" type="search" placeholder="Search staff by name or department..." aria-label="Search staff" oninput="_rotaMonthPage=0;renderRotaBoards()"></div>
+        </div>
+      </div>
+
+      <div class="rota-board" id="rota-monthly-board"></div>
+
+      <div class="rs-month-foot">
+        <span class="rs-month-count" id="rota-month-count"></span>
         <div class="flx" style="gap:8px;flex-wrap:wrap"><button class="btn btn-g btn-sm" onclick="autoGenerateMonthlyRota()">Bulk Assign</button><button class="btn btn-g btn-sm" onclick="toast('Employees notified','ok')">Notify Employees</button></div>
+        <div class="rs-pager" id="rota-month-pager"></div>
       </div>
     </div>
   </div>
@@ -3115,7 +3152,7 @@ details[open]>.hc-more-toggle .hc-more-chevron{transform:rotate(90deg);}
 window.HRMS_STANDALONE=true;
 </script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=490c4ab361" defer></script>
+<script src="src/app.js?v=ca80023d6d" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

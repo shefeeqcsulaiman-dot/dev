@@ -375,24 +375,125 @@
     /* Week-group headers, same look as .dash-section-title so the list reads
        as "this week / next week / ..." instead of one undifferentiated
        30-day column an employee has to scan date-by-date. */
-    .rota-week-label{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:18px 0 8px}
-    .rota-week-label:first-child{margin-top:0}
-    .rota-row{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:8px}
-    .rota-row.is-today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+    /* ── Rota & Shift: banner, My Rota / Department Rota tabs, My Upcoming Shifts ── */
+    .rota-hero{position:relative;display:flex;align-items:center;gap:16px;min-height:118px;padding:20px 24px;margin-bottom:14px;border-radius:20px;overflow:hidden;background:linear-gradient(120deg,rgba(59,130,246,.16),rgba(147,197,253,.22) 55%,rgba(191,219,254,.35))}
+    .rota-hero-icon{flex-shrink:0;filter:drop-shadow(0 6px 12px rgba(37,99,235,.25))}
+    .rota-hero-text{position:relative;z-index:1;min-width:0}
+    .rota-hero-text h1{margin:0;font-family:'Syne',sans-serif;font-size:30px;font-weight:800;line-height:1.1;color:var(--text);letter-spacing:-.5px}
+    .rota-hero-text p{margin:6px 0 0;font-size:15px;color:var(--text2)}
+    .rota-hero-art{position:absolute;right:0;bottom:0;width:340px;max-width:48%;height:auto;pointer-events:none}
+    .rota-tabs{gap:10px;margin-bottom:16px}
+    .rota-tabs .ess-view-toggle-btn{display:inline-flex;align-items:center;gap:10px;padding:12px 22px;border-radius:14px;border:1px solid var(--border);background:var(--surface);font-size:15px;font-weight:700;color:var(--text);box-shadow:0 2px 8px rgba(15,23,42,.05)}
+    .rota-tabs .ess-view-toggle-btn svg{color:var(--text3)}
+    .rota-tabs .ess-view-toggle-btn.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 6px 16px rgba(37,99,235,.28)}
+    .rota-tabs .ess-view-toggle-btn.on svg{color:#fff}
+    .rota-tabs .ess-view-toggle-btn:focus-visible,.rota-row:focus-visible,.rota-range:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+    .rota-card{padding:20px 22px;border-radius:20px}
+    .rota-card-hd{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+    .rota-card-title{display:flex;align-items:center;gap:12px;font-size:19px;font-weight:700;color:var(--text)}
+    .rota-card-title small{font-size:15px;font-weight:400;color:var(--text3)}
+    .rota-card-icon{color:var(--accent);display:inline-flex}
+    .rota-range-wrap{display:flex;align-items:center;gap:8px}
+    .rota-range{position:relative;display:inline-flex;align-items:center;gap:10px;padding:10px 16px;border-radius:12px;background:var(--bg3);font-size:14px;font-weight:700;color:var(--text);cursor:pointer;white-space:nowrap}
+    .rota-range svg{color:var(--text2)}
+    .rota-range-input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0}
+    .rota-reset{padding:8px 12px;font-size:12px}
+    #tb-rota .rota-week-label{font-family:inherit;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin:20px 0 10px}
+    #tb-rota .rota-week-label:first-child{margin-top:0}
+    .rota-item{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:22px;align-items:stretch;margin-bottom:10px}
+    .rota-item .rota-detail{grid-column:2}
     .rota-today-pill{display:inline-block;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 7px;border-radius:99px;background:var(--accent);color:#fff;margin-left:8px;vertical-align:middle}
-    .rota-date-chip{width:46px;height:46px;border-radius:10px;background:#eff6ff;color:#1d4ed8;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;font-family:'Syne',sans-serif}
-    .rota-date-chip .dow{font-size:9px;text-transform:uppercase;font-weight:700;opacity:.75;line-height:1}
-    .rota-date-chip .d{font-size:16px;font-weight:700;line-height:1.15}
-    /* Shift-type coloring — same pastel pairs already used for leave/task
-       status badges elsewhere in ESS, reused here so an Off day, approved
-       Leave, a Public Holiday, and a real working Shift read as visibly
-       different things instead of identical blue rows with different text. */
-    .rota-type-off .rota-date-chip{background:var(--bg3);color:var(--text3)}
-    .rota-type-leave .rota-date-chip{background:var(--purple-bg);color:var(--purple)}
-    .rota-type-holiday .rota-date-chip{background:var(--green-bg);color:var(--green)}
-    .rota-type-ot .rota-date-chip{background:var(--amber-bg);color:var(--amber)}
-    .rota-type-training .rota-date-chip{background:var(--teal-bg);color:var(--teal)}
-    .rota-type-off .rota-shift-title,.rota-type-off .rota-shift-sub{color:var(--text3)}
+    .rota-date-chip{position:relative;width:76px;min-height:64px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;font-family:'DM Sans',sans-serif;box-shadow:0 2px 6px rgba(15,23,42,.06)}
+    .rota-date-chip::after{content:"";position:absolute;right:-12px;top:12px;bottom:12px;width:1px;background:var(--border)}
+    .rota-date-chip .dow{font-size:15px;text-transform:uppercase;font-weight:800;line-height:1;letter-spacing:.3px}
+    .rota-date-chip .d{font-size:26px;font-weight:800;line-height:1.15;color:#1e1b4b}
+    .rota-dow-0{background:rgba(59,130,246,.16);color:#1d4ed8}
+    .rota-dow-1{background:rgba(139,92,246,.18);color:#6d28d9}
+    .rota-dow-2{background:rgba(14,165,233,.18);color:#0369a1}
+    .rota-dow-3{background:rgba(236,72,153,.15);color:#9d174d}
+    .rota-dow-4{background:rgba(16,185,129,.16);color:#047857}
+    .rota-dow-5{background:rgba(245,158,11,.18);color:#b45309}
+    .rota-dow-6{background:rgba(99,102,241,.16);color:#4338ca}
+    .rota-dow-off{background:var(--bg3);color:var(--text3)}
+    .rota-dow-off .d{color:var(--text2)}
+    .rota-row{display:flex;align-items:center;gap:18px;width:100%;min-height:64px;padding:10px 18px 10px 22px;border:1px solid var(--border);border-radius:14px;background:var(--surface);font:inherit;color:inherit;text-align:left;cursor:pointer;box-shadow:0 2px 8px rgba(15,23,42,.04);transition:border-color .15s,box-shadow .15s}
+    .rota-row:hover{border-color:rgba(37,99,235,.35);box-shadow:0 4px 14px rgba(15,23,42,.08)}
+    .rota-item.is-today .rota-row{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+    .rota-type-off .rota-row{background:var(--bg2)}
+    .rota-row-icon{display:inline-flex;flex-shrink:0}
+    .rota-icon-sun{color:#f59e0b}.rota-icon-sunset{color:#f97316}.rota-icon-moon{color:#1e3a8a}.rota-icon-plane{color:#7c3aed}.rota-icon-star{color:#10b981}.rota-icon-bolt{color:#d97706}.rota-icon-book{color:#0d9488}
+    .rota-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+    .rota-line-time{display:flex;align-items:center;gap:7px;font-size:17px;color:var(--text);font-variant-numeric:tabular-nums}
+    .rota-line-time b{font-weight:700}
+    .rota-line-time svg{color:var(--text2)}
+    .rota-line-sub{display:flex;align-items:center;gap:7px;font-size:14px;color:var(--text2)}
+    .rota-line-sub svg{color:var(--text3)}
+    .rota-task-count{align-self:flex-start;font-size:11.5px;font-weight:600;color:var(--accent-text);background:var(--accent-bg);padding:2px 8px;border-radius:99px}
+    .rota-type-pill{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:12px;font-size:14px;font-weight:700;white-space:nowrap;flex-shrink:0}
+    .rota-pill-morning{background:var(--green-bg);color:#047857}
+    .rota-pill-evening{background:rgba(249,115,22,.13);color:#c2410c}
+    .rota-pill-night{background:rgba(99,102,241,.14);color:#4338ca}
+    .rota-pill-off{background:var(--bg3);color:#1e3a8a}
+    .rota-pill-leave{background:var(--purple-bg);color:var(--purple)}
+    .rota-pill-holiday{background:var(--green-bg);color:var(--green)}
+    .rota-pill-ot{background:var(--amber-bg);color:var(--amber)}
+    .rota-pill-training{background:var(--teal-bg);color:var(--teal)}
+    .rota-chevron{display:inline-flex;color:var(--text2);transition:transform .15s}
+    .rota-row[aria-expanded="true"] .rota-chevron{transform:rotate(90deg)}
+    .rota-detail{margin-top:6px;padding:12px 18px;border:1px dashed var(--border);border-radius:12px;background:var(--bg2)}
+    .rota-facts{display:flex;flex-wrap:wrap;gap:8px 24px;margin:0}
+    .rota-facts div{min-width:90px}
+    .rota-facts dt{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3)}
+    .rota-facts dd{margin:2px 0 0;font-size:13.5px;font-weight:600;color:var(--text)}
+    .rota-detail .rota-shift-tasks{margin-top:10px}
+    .rota-detail-empty{margin-top:8px;font-size:12.5px;color:var(--text3)}
+    /* Dark mode: lighter text on the same translucent chips and labels. */
+    :root[data-theme="dark"] .rota-date-chip .d{color:var(--text)}
+    :root[data-theme="dark"] .rota-dow-0{color:#93c5fd}
+    :root[data-theme="dark"] .rota-dow-1{color:#c4b5fd}
+    :root[data-theme="dark"] .rota-dow-2{color:#7dd3fc}
+    :root[data-theme="dark"] .rota-dow-3{color:#f9a8d4}
+    :root[data-theme="dark"] .rota-dow-4{color:#6ee7b7}
+    :root[data-theme="dark"] .rota-dow-5{color:#fcd34d}
+    :root[data-theme="dark"] .rota-dow-6{color:#a5b4fc}
+    :root[data-theme="dark"] .rota-icon-moon,:root[data-theme="dark"] .rota-pill-off{color:#93c5fd}
+    :root[data-theme="dark"] .rota-pill-morning{color:#6ee7b7}
+    :root[data-theme="dark"] .rota-pill-evening{color:#fdba74}
+    :root[data-theme="dark"] .rota-pill-night{color:#a5b4fc}
+    :root[data-theme="dark"] .rota-hero{background:linear-gradient(120deg,rgba(59,130,246,.22),rgba(30,64,175,.18) 60%,rgba(30,58,138,.25))}
+    @media (prefers-color-scheme: dark){
+      :root:not([data-theme="light"]) .rota-date-chip .d{color:var(--text)}
+      :root:not([data-theme="light"]) .rota-dow-0{color:#93c5fd}
+      :root:not([data-theme="light"]) .rota-dow-1{color:#c4b5fd}
+      :root:not([data-theme="light"]) .rota-dow-2{color:#7dd3fc}
+      :root:not([data-theme="light"]) .rota-dow-3{color:#f9a8d4}
+      :root:not([data-theme="light"]) .rota-dow-4{color:#6ee7b7}
+      :root:not([data-theme="light"]) .rota-dow-5{color:#fcd34d}
+      :root:not([data-theme="light"]) .rota-dow-6{color:#a5b4fc}
+      :root:not([data-theme="light"]) .rota-icon-moon,:root:not([data-theme="light"]) .rota-pill-off{color:#93c5fd}
+      :root:not([data-theme="light"]) .rota-pill-morning{color:#6ee7b7}
+      :root:not([data-theme="light"]) .rota-pill-evening{color:#fdba74}
+      :root:not([data-theme="light"]) .rota-pill-night{color:#a5b4fc}
+      :root:not([data-theme="light"]) .rota-hero{background:linear-gradient(120deg,rgba(59,130,246,.22),rgba(30,64,175,.18) 60%,rgba(30,58,138,.25))}
+    }
+    @media (max-width:640px){
+      .rota-hero{min-height:96px;padding:16px}
+      .rota-hero-text h1{font-size:23px}
+      .rota-hero-text p{font-size:13px;max-width:60%}
+      .rota-hero-art{width:200px;opacity:.75}
+      .rota-hero-icon svg{width:44px;height:44px}
+      .rota-tabs .ess-view-toggle-btn{flex:1;justify-content:center;padding:11px 12px;font-size:14px}
+      .rota-card{padding:14px}
+      .rota-item{column-gap:10px}
+      .rota-date-chip{width:58px;min-height:58px}
+      .rota-date-chip::after{display:none}
+      .rota-date-chip .dow{font-size:12px}.rota-date-chip .d{font-size:21px}
+      .rota-row{gap:10px;padding:10px 12px}
+      .rota-row-icon svg{width:24px;height:24px}
+      .rota-line-time{font-size:15px}
+      .rota-type-pill{padding:6px 10px;font-size:12.5px}
+      .rota-type-pill svg{display:none}
+    }
     /* Tasks attached to one day's shift (Weekly/Monthly Rota's task picker
        in HRMS) -- the ESS Rota list used to show only the shift's time and
        silently drop this, even though /ess/rota already returns it. */
@@ -420,7 +521,6 @@
     .dept-rota-cell .task-count{margin-top:3px;font-size:9.5px;color:var(--accent-text);font-weight:600}
     .dept-rota-row.is-me td:first-child{color:var(--accent-text)}
     .dept-rota-table th.is-today{color:var(--accent-text)}
-    .task-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:8px}
 
     /* ── CARDS ── */
     .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px}
@@ -511,7 +611,6 @@
     .mini-btn:hover{border-color:var(--accent);color:var(--accent-text)}
     .mini-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
     .mini-btn:disabled{opacity:.55;cursor:not-allowed}
-    .task-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
     .leave-preview{display:none;margin:-4px 0 14px;padding:10px 12px;border-radius:9px;background:var(--bg3);border:1px solid var(--border);font-size:12.5px;color:var(--text2);line-height:1.5}
     .leave-preview.warn{background:var(--hcal-holiday-bg);border-color:transparent;color:var(--hcal-holiday-text)}
     .hint{font-size:11.5px;color:var(--text3);margin-top:5px;line-height:1.4}
@@ -872,3 +971,81 @@
 }
 @keyframes m-sheet{from{transform:translateY(100%)}to{transform:none}}
 @media (prefers-reduced-motion:reduce){.ess-overlay .ess-modal{animation:none}}
+
+    /* ── Tasks page: priority pills, search/sort, one card per task (renderEssTasks()) ── */
+    .tk-card{padding:18px 20px;border-radius:20px}
+    .tk-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+    .tk-filters{display:flex;gap:10px;flex-wrap:wrap}
+    .tk-filter{display:inline-flex;align-items:center;gap:12px;padding:11px 20px;border:0;border-radius:99px;background:var(--bg3);font:inherit;font-size:14.5px;font-weight:600;color:var(--text);cursor:pointer}
+    .tk-filter b{font-weight:700}
+    .tk-filter-high b{color:var(--red)}.tk-filter-medium b{color:var(--amber)}.tk-filter-low b{color:var(--green)}
+    .tk-filter.on{background:var(--accent);color:#fff;box-shadow:0 6px 16px rgba(37,99,235,.28)}
+    .tk-filter.on b{color:#fff}
+    .tk-tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .tk-search,.tk-sort{display:inline-flex;align-items:center;gap:10px;height:46px;padding:0 14px;border:1px solid var(--border);border-radius:14px;background:var(--surface);color:var(--text3)}
+    .tk-search input{border:0;background:transparent;font:inherit;font-size:14px;color:var(--text);width:200px;height:100%;outline:0}
+    .tk-sort select{border:0;background:transparent;font:inherit;font-size:14px;font-weight:600;color:var(--text);height:100%;cursor:pointer;outline:0}
+    .tk-search:focus-within,.tk-sort:focus-within,.tk-filter:focus-visible,.tk-btn:focus-visible,.tk-more:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+    .tk-item{--tk-accent:#3b82f6;position:relative;display:flex;gap:22px;align-items:flex-start;padding:18px 20px 18px 26px;margin-bottom:12px;border:1px solid var(--border);border-radius:16px;background:var(--surface);box-shadow:0 2px 8px rgba(15,23,42,.04);overflow:hidden}
+    .tk-item::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--tk-accent)}
+    .tk-pri-high{--tk-accent:#ef4444}.tk-pri-medium{--tk-accent:#f59e0b}.tk-pri-low{--tk-accent:#10b981}
+    .tk-item.is-done{opacity:.72}
+    .tk-item.is-done .tk-title{text-decoration:line-through;text-decoration-color:var(--text3)}
+    .tk-icon{width:76px;height:72px;border-radius:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--tk-accent);background:color-mix(in srgb,var(--tk-accent) 13%,transparent)}
+    .tk-body{flex:1;min-width:0}
+    .tk-title{margin:0;font-size:17px;font-weight:700;color:var(--text)}
+    .tk-desc{margin:4px 0 0;font-size:14px;color:var(--text2)}
+    .tk-pri{display:inline-flex;align-items:center;gap:7px;margin-top:10px;padding:6px 12px;border-radius:99px;font-size:13.5px;font-weight:600}
+    .tk-pri-high .tk-pri{background:var(--red-bg);color:var(--red)}
+    .tk-pri-medium .tk-pri{background:var(--amber-bg);color:var(--amber)}
+    .tk-pri-low .tk-pri{background:var(--green-bg);color:var(--green)}
+    .tk-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;font-size:13.5px;color:var(--text2)}
+    .tk-meta span{display:inline-flex;align-items:center;gap:7px}
+    .tk-meta svg{color:var(--text3)}
+    .tk-sep{width:1px;height:16px;background:var(--border)}
+    .tk-overdue{color:var(--red);font-weight:600}
+    .tk-overdue svg{color:var(--red)!important}
+    .tk-progress{position:relative;display:flex;align-items:center;gap:10px;margin-top:12px;max-width:340px}
+    .tk-progress::before{content:"";flex:1;height:6px;border-radius:99px;background:var(--bg3)}
+    .tk-progress i{position:absolute;left:0;top:50%;height:6px;margin-top:-3px;border-radius:99px;background:var(--tk-accent);max-width:calc(100% - 46px)}
+    .tk-progress span{font-size:12px;font-weight:600;color:var(--text2);width:36px;text-align:right}
+    .tk-side{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;gap:24px;align-self:stretch;flex-shrink:0}
+    .tk-side-top{display:flex;align-items:center;gap:12px}
+    .tk-status{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:12px;font-size:14px;font-weight:600}
+    .tk-status::before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor}
+    .tk-status-todo{background:var(--purple-bg);color:var(--purple)}
+    .tk-status-progress{background:var(--accent-bg);color:var(--accent-text)}
+    .tk-status-done{background:var(--green-bg);color:var(--green)}
+    .tk-more{width:42px;height:38px;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);font-size:20px;line-height:1;cursor:pointer}
+    .tk-more:hover{border-color:var(--accent)}
+    .tk-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+    .tk-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-width:118px;height:44px;padding:0 20px;border-radius:12px;font:inherit;font-size:15px;font-weight:600;cursor:pointer}
+    .tk-btn:disabled{opacity:.6;cursor:default}
+    .tk-btn-primary{border:1px solid var(--accent);background:var(--accent);color:#fff}
+    .tk-btn-primary:hover{filter:brightness(1.08)}
+    .tk-btn-outline{border:1px solid var(--accent);background:var(--surface);color:var(--accent-text)}
+    .tk-btn-outline:hover{background:var(--accent-bg)}
+    .tk-menu{position:fixed;z-index:1000;min-width:190px;padding:6px;border:1px solid var(--border);border-radius:12px;background:var(--surface);box-shadow:0 12px 32px rgba(15,23,42,.18);display:flex;flex-direction:column}
+    .tk-menu button{border:0;background:transparent;text-align:left;padding:9px 12px;border-radius:8px;font:inherit;font-size:13.5px;color:var(--text);cursor:pointer}
+    .tk-menu button:hover:not(:disabled),.tk-menu button:focus-visible{background:var(--accent-bg);color:var(--accent-text);outline:0}
+    .tk-menu button:disabled{color:var(--text3);cursor:default}
+    @media (max-width:760px){
+      .tk-card{padding:14px}
+      .tk-toolbar{flex-direction:column;align-items:stretch}
+      .tk-filters{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}
+      .tk-filter{flex-shrink:0;padding:9px 14px;font-size:13.5px}
+      .tk-toolbar{flex-wrap:nowrap}
+      .tk-toolbar>*{min-width:0;max-width:100%}
+      .tk-tools{flex-direction:column;align-items:stretch}
+      .tk-search,.tk-sort{width:100%;box-sizing:border-box}
+      .tk-search input{width:auto;flex:1;min-width:0}
+      .tk-sort select{flex:1}
+      .tk-item{flex-wrap:wrap;gap:12px 14px;padding:14px 14px 14px 20px}
+      .tk-icon{width:52px;height:52px}
+      .tk-icon svg{width:24px;height:24px}
+      .tk-body{flex:1 1 calc(100% - 70px)}
+      .tk-side{flex:1 1 100%;flex-direction:column;align-items:stretch;gap:10px}
+      .tk-side-top{justify-content:space-between}
+      .tk-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:10px}
+      .tk-btn{min-width:0;height:42px;padding:0 12px;font-size:14px;white-space:nowrap}
+    }

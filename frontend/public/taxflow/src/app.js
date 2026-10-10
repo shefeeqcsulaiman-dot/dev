@@ -21494,13 +21494,20 @@ const ROTA_STAFF_DISPLAY_CAP=300;
 function currentRotaStaff(){
   const rows=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')].map(row=>{
     const emp=employeeFromDirectoryRow(row);
-    return {id:emp.id||'',name:emp.name||'',department:emp.department||'Management',role:emp.designation||'Employee',location:emp.location||'',status:emp.status||'Active'};
+    return {id:emp.id||'',name:emp.name||'',department:emp.department||'Management',role:emp.designation||'Employee',location:emp.location||'',status:emp.status||'Active',photo:emp.photo||''};
   // An Inactive employee's OWN past rota assignments are left untouched in
   // the backend — this only stops them appearing as a schedulable row going
   // forward, same as _getAttendanceEmployees() already does for Today's
   // Attendance's manual roll call.
   }).filter(staff=>staff.id&&staff.name&&staff.status!=='Inactive');
   return rows.length?rows.slice(0,ROTA_STAFF_DISPLAY_CAP):ROTA_DEFAULT_STAFF;
+}
+
+// Staff picture for the rota boards (photo URL from the employee record, else initials),
+// same look as the Employee Directory's avatar.
+function rotaStaffAvatarHtml(staff,size=34){
+  const photo=staff.photo?`<img src="${escapeHtml(staff.photo)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">`:escapeHtml(initialsFromName(staff.name));
+  return `<div class="co-av rota-staff-av" style="width:${size}px;height:${size}px;font-size:${Math.round(size*0.36)}px${staff.photo?';padding:0;overflow:hidden':''}">${photo}</div>`;
 }
 
 function rotaAssignmentId(employeeId,date){
@@ -21896,10 +21903,26 @@ function syncRotaWeekFromDept(){
 function filteredRotaStaff(scope='week'){
   const department=document.getElementById(scope==='month'?'rota-month-department':scope==='dept'?'rota-dept-department':'rota-week-department')?.value||'All Departments';
   const search=(document.getElementById(scope==='month'?'rota-month-search':'rota-staff-search')?.value||'').toLowerCase();
+  // Weekly-only filters: Location (branch names, as on the employee record -- it used to be
+  // shown but never applied), Role, and Status (what this person's week looks like).
+  const weekly=scope==='week';
+  const location=weekly?(document.getElementById('rota-week-location')?.value||'').trim().toLowerCase():'';
+  const role=weekly?(document.getElementById('rota-week-role')?.value||''):'';
+  const status=weekly?(document.getElementById('rota-week-status')?.value||''):'';
+  const start=status?weekStartValue():'';
   return currentRotaStaff().filter(staff=>{
     const deptOk=department==='All Departments'||staff.department===department;
-    const searchOk=!search||staff.name.toLowerCase().includes(search)||staff.role.toLowerCase().includes(search);
-    return deptOk&&searchOk;
+    const searchOk=!search||staff.name.toLowerCase().includes(search)||staff.role.toLowerCase().includes(search)||staff.department.toLowerCase().includes(search);
+    const locationOk=!location||String(staff.location||'').trim().toLowerCase()===location;
+    const roleOk=!role||staff.role===role;
+    let statusOk=true;
+    if(status){
+      const week=ROTA_WEEK_DAYS.map((day,i)=>assignmentFor(staff,weekDateFromStart(start,i),day));
+      const working=week.some(a=>rotaHours(a)>0);
+      const onLeave=week.some(a=>String(a.code||'').toUpperCase()==='L'||a.mark==='Leave');
+      statusOk=status==='working'?working:status==='leave'?onLeave:!working&&!onLeave;
+    }
+    return deptOk&&searchOk&&locationOk&&roleOk&&statusOk;
   });
 }
 
@@ -21946,23 +21969,43 @@ function _rotaTruncationNoticeHtml(){
 let selectedRotaStaffId=null;
 
 function selectRotaStaffForTasks(staffId){
-  selectedRotaStaffId=(selectedRotaStaffId===staffId)?null:staffId; // click again to deselect
+  selectedRotaStaffId=staffId;
   renderWeeklyRotaBoard();
   renderRotaEmployeeTasksPanel();
 }
 
+// The person shown in the side panel: whoever was clicked, else the first row on screen.
+function _selectedRotaStaff(){
+  const rows=filteredRotaStaff('week');
+  return rows.find(s=>s.id===selectedRotaStaffId)||rows[0]||null;
+}
+
 function renderRotaEmployeeTasksPanel(){
   const body=document.getElementById('rota-emp-tasks-body');
-  const titleEl=document.querySelector('#rota-emp-tasks-card .card-title');
+  const profile=document.getElementById('rota-emp-profile');
   if(!body)return;
-  const staff=filteredRotaStaff('week').find(s=>s.id===selectedRotaStaffId);
+  const staff=_selectedRotaStaff();
   if(!staff){
-    if(titleEl)titleEl.textContent='Employee Tasks';
-    body.innerHTML='<div class="rota-emp-tasks-empty">Click an employee\'s name in Staff Schedule to see their tasks for the week.</div>';
+    if(profile)profile.innerHTML='';
+    body.innerHTML='<div class="rota-emp-tasks-empty">Click a staff member in Staff Schedule to see their week here.</div>';
     return;
   }
-  if(titleEl)titleEl.textContent=`${staff.name} — This Week`;
   const start=weekStartValue();
+  if(profile){
+    const hours=ROTA_WEEK_DAYS.reduce((sum,day,i)=>sum+rotaHours(assignmentFor(staff,weekDateFromStart(start,i),day)),0);
+    profile.innerHTML=`<div class="rs-person-head">
+      ${rotaStaffAvatarHtml(staff,72)}
+      <div class="rs-person-text">
+        <strong>${escapeHtml(staff.name)}</strong>
+        <span>${escapeHtml(staff.role)} · ${escapeHtml(staff.department)}</span>
+        <em class="rs-chip">${escapeHtml(_rotaWeekIsCurrent(start)?'This Week':_rotaWeekRangeText(start))} · ${hours.toFixed(1)} hrs</em>
+      </div>
+      <div class="rs-person-tools">
+        <button class="rs-icon-btn" type="button" title="Edit employee" aria-label="Edit employee" onclick="openRotaStaffProfile('${escapeHtml(staff.id)}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/></svg></button>
+        <button class="rs-icon-btn" type="button" title="More" aria-label="More actions" onclick="openRotaRowMenu(event,'${escapeHtml(staff.id)}')">&#8943;</button>
+      </div>
+    </div>`;
+  }
   const dayBlocks=ROTA_WEEK_DAYS.map((day,index)=>{
     const date=weekDateFromStart(start,index);
     const assignment=assignmentFor(staff,date,day);
@@ -21975,7 +22018,9 @@ function renderRotaEmployeeTasksPanel(){
     }).join('');
     return `<div class="rota-emp-tasks-day">${escapeHtml(dateLabel)}</div>${taskRows}`;
   }).filter(Boolean).join('');
-  body.innerHTML=dayBlocks||`<div class="rota-emp-tasks-empty">No tasks scheduled this week for ${escapeHtml(staff.name)}.</div>`;
+  body.innerHTML=dayBlocks
+    ?`<div class="rs-tasks">${dayBlocks}</div>`
+    :`<button class="rs-note" type="button" onclick="assignShiftForSelectedRotaStaff()"><span class="rs-note-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/><path d="m9 15 2 2 4-4"/></svg></span><span class="rs-note-text"><b>No tasks scheduled this week for ${escapeHtml(staff.name)}.</b><small>Open a day to add tasks or change the shift.</small></span><i>&#8250;</i></button>`;
 }
 
 // The weekly/monthly boards are grids of every staff member x every day (~4,300 buttons
@@ -22011,16 +22056,176 @@ function renderWeeklyRotaBoard(){
     board.innerHTML=notice+'<div class="empty-card">No staff found for this filter.</div>';
     return;
   }
-  board.innerHTML=notice+staffRows.map(staff=>{
-    const cells=ROTA_WEEK_DAYS.map((day,index)=>{
-      const date=weekDateFromStart(start,index);
-      const assignment=assignmentFor(staff,date,day);
-      return `<button class="rota-day-cell" type="button" onclick="openRotaCellEditor(this)" data-assignment="${escapeHtml(JSON.stringify(assignment))}" data-employee-id="${escapeHtml(staff.id)}" data-employee-name="${escapeHtml(staff.name)}" data-role="${escapeHtml(staff.role)}" data-department="${escapeHtml(staff.department)}" data-location="${escapeHtml(staff.location)}" data-date="${escapeHtml(date)}" data-day="${escapeHtml(day)}"><small>${escapeHtml(day)} ${escapeHtml(date.slice(8))}</small>${rotaCellHtml(assignment)}</button>`;
+  const dates=ROTA_WEEK_DAYS.map((_,i)=>weekDateFromStart(start,i));
+  const today=_rotaTodayIso();
+  const selectedId=_selectedRotaStaff()?.id;
+  const head=`<tr><th class="rs-th-staff" scope="col">Staff Member</th>${dates.map((date,i)=>
+    `<th scope="col" class="rs-th-day${date===today?' is-today':''}"><b>${ROTA_WEEK_DAYS[i]}</b><span>${escapeHtml(_rotaShortDate(date))}</span></th>`).join('')}</tr>`;
+  const rows=staffRows.map(staff=>{
+    const week=dates.map((date,i)=>assignmentFor(staff,date,ROTA_WEEK_DAYS[i]));
+    const total=week.reduce((sum,a)=>sum+rotaHours(a),0);
+    const cells=week.map((assignment,i)=>{
+      const date=dates[i],day=ROTA_WEEK_DAYS[i];
+      return `<td class="${date===today?'is-today':''}"><button class="rota-day-cell rs-day" type="button" onclick="openRotaCellEditor(this)" aria-label="${escapeHtml(`${staff.name}, ${day} ${_rotaShortDate(date)}: ${_rotaCellLabel(assignment)}`)}" data-assignment="${escapeHtml(JSON.stringify(assignment))}" data-employee-id="${escapeHtml(staff.id)}" data-employee-name="${escapeHtml(staff.name)}" data-role="${escapeHtml(staff.role)}" data-department="${escapeHtml(staff.department)}" data-location="${escapeHtml(staff.location)}" data-date="${escapeHtml(date)}" data-day="${escapeHtml(day)}">${rotaWeekCellHtml(assignment)}</button></td>`;
     }).join('');
-    const total=ROTA_WEEK_DAYS.reduce((sum,day,index)=>sum+rotaHours(assignmentFor(staff,weekDateFromStart(start,index),day)),0);
-    const rowSelected=staff.id===selectedRotaStaffId?' rota-staff-row-selected':'';
-    return `<div class="rota-staff-row${rowSelected}"><div class="rota-staff-meta" onclick="selectRotaStaffForTasks('${escapeHtml(staff.id)}')" title="Click to see this employee's tasks for the week"><strong>${escapeHtml(staff.name)}</strong><span>${escapeHtml(staff.role)} · ${escapeHtml(staff.department)}</span><em>${total.toFixed(1)} hrs</em></div><div class="rota-day-grid">${cells}</div></div>`;
+    const id=escapeHtml(staff.id);
+    return `<tr class="rs-row${staff.id===selectedId?' is-selected':''}">
+      <th scope="row" class="rs-staff"><div class="rs-staff-inner">
+        <button class="rs-staff-pick" type="button" onclick="selectRotaStaffForTasks('${id}')" title="Show ${escapeHtml(staff.name)}'s week">
+          ${rotaStaffAvatarHtml(staff,52)}
+          <span class="rs-staff-text"><strong>${escapeHtml(staff.name)}</strong><span>${escapeHtml(staff.role)} · ${escapeHtml(staff.department)}</span><em><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>${total.toFixed(1)} hrs / week</em></span>
+        </button>
+        <button class="rs-kebab" type="button" aria-label="More actions for ${escapeHtml(staff.name)}" onclick="openRotaRowMenu(event,'${id}')">&#8942;</button>
+      </div></th>${cells}</tr>`;
   }).join('');
+  board.innerHTML=notice+`<div class="rs-table-wrap"><table class="rs-table"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+}
+
+// ── Weekly Rota (Staff Schedule) helpers ─────────────────────────────────────
+
+function _rotaTodayIso(){
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+const _ROTA_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function _rotaShortDate(iso){
+  return `${iso.slice(8,10)} ${_ROTA_MONTHS[Number(iso.slice(5,7))-1]||''}`;
+}
+
+function _rotaWeekRangeText(start){
+  return `Mon ${_rotaShortDate(start)} – Sun ${_rotaShortDate(weekDateFromStart(start,6))}`;
+}
+
+function _rotaWeekIsCurrent(start){
+  return start===_currentRotaWeekStart();
+}
+
+// A week always starts on a Monday: the grid labels its columns Mon..Sun, so a mid-week
+// date would label every day wrong.
+function setRotaWeekStart(value){
+  const input=document.getElementById('rota-week-start');
+  if(!input||!value)return;
+  const monday=_mondayOnOrBefore(value);
+  input.value=monday;
+  _saveRotaViewDate('week',monday);
+  _syncMonthPickerToWeek(monday);
+  renderRotaBoards();
+}
+
+function shiftRotaWeek(weeks){
+  setRotaWeekStart(weekDateFromStart(_mondayOnOrBefore(weekStartValue()),7*weeks));
+}
+
+function resetRotaWeekFilters(){
+  ['rota-week-department','rota-week-role','rota-week-status','rota-week-location','rota-staff-search'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.value='';
+  });
+  renderRotaBoards();
+}
+
+// Header label, Role options and the "All Staff" tab's state, kept in step with the data.
+function _updateRotaWeekControls(){
+  const start=weekStartValue();
+  const label=document.getElementById('rota-week-range-label');
+  if(label)label.textContent=_rotaWeekRangeText(start);
+  const roleSel=document.getElementById('rota-week-role');
+  if(roleSel){
+    const roles=[...new Set(currentRotaStaff().map(s=>s.role).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    const cur=roleSel.value;
+    roleSel.innerHTML='<option value="">All Roles</option>'+roles.map(r=>`<option>${escapeHtml(r)}</option>`).join('');
+    roleSel.value=roles.includes(cur)?cur:'';
+  }
+  const locSel=document.getElementById('rota-week-location');
+  const locWrap=document.getElementById('rota-week-location-wrap');
+  if(locWrap&&locSel)locWrap.style.display=locSel.options.length>1?'':'none';
+  const filtered=['rota-week-department','rota-week-role','rota-week-status','rota-week-location','rota-staff-search']
+    .some(id=>{const v=document.getElementById(id)?.value||'';return v&&v!=='All Departments';});
+  document.getElementById('rota-all-staff-tab')?.classList.toggle('on',!filtered);
+}
+
+function _rotaCellLabel(assignment){
+  const code=String(assignment?.code||'OFF').toUpperCase();
+  if(code==='OFF')return 'Day off';
+  if(code==='L'||assignment?.mark==='Leave')return 'Leave';
+  if(code==='PH'||assignment?.mark==='Holiday')return 'Public holiday';
+  return `${assignment.start||''}–${assignment.end||''} ${code}`;
+}
+
+// One day in the Staff Schedule: shift time and a status pill, or a muted day-off box.
+// tinted (Monthly Schedule): the whole box takes the status colour and the time a clock.
+function rotaWeekCellHtml(assignment,{tinted=false}={}){
+  const code=String(assignment?.code||'OFF').toUpperCase();
+  const mark=assignment?.mark||'';
+  const tasks=Array.isArray(assignment?.tasks)?assignment.tasks:[];
+  const taskRow=tasks.length?`<span class="rs-tasks-badge" title="${escapeHtml(tasks.map(t=>t.title).filter(Boolean).join(', '))}">${tasks.slice(0,3).map(t=>`<i style="background:${escapeHtml(t.color||TASK_COLORS[0])}"></i>`).join('')}${tasks.length} task${tasks.length>1?'s':''}</span>`:'';
+  const tint=tinted?' rs-tinted':'';
+  if(code==='OFF'){
+    const offIcon=tinted?'<path d="M3 18v-7M3 14h18v4M21 18v-3a3 3 0 0 0-3-3h-7v2"/><circle cx="7" cy="11" r="1.6"/>':'<path d="M12 12v9M4 12a8 8 0 0 1 16 0zM12 4v-1"/>';
+    return `<span class="rs-cell rs-cell-off${tint}"><span class="rs-off-top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true">${offIcon}</svg>OFF</span><small>Day off</small>${taskRow}</span>`;
+  }
+  if(code==='L'||mark==='Leave'){
+    return `<span class="rs-cell rs-cell-leave${tint}"><span class="rs-leave-top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>Leave</span><small>Full day</small>${taskRow}</span>`;
+  }
+  let pill='Working',tone='green';
+  if(code==='PH'||mark==='Holiday'){pill='Holiday';tone='red';}
+  else if(code==='TR'||mark==='Training'){pill='Training';tone='blue';}
+  else if(code==='OT'||mark==='OT'||assignment?.className==='overtime'){pill='Overtime';tone='orange';}
+  else if(code==='N'||assignment?.className==='night'){pill='Night';tone='indigo';}
+  if(assignment?.className==='draft'&&tone==='green'){pill='Draft';tone='gray';}
+  const clock=tinted?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" width="15" height="15" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>':'';
+  const time=assignment?.start&&assignment?.end&&code!=='PH'?`<span class="rs-time">${clock}${escapeHtml(assignment.start)} – ${escapeHtml(assignment.end)}</span>`:'';
+  return `<span class="rs-cell rs-cell-${tone}${tint}">${time}<span class="rs-pill rs-pill-${tone}">${pill}</span>${taskRow}</span>`;
+}
+
+// Quick Actions > Assign Shift: opens the shift editor for the selected person on today's
+// column (when this week is on screen) or the week's Monday.
+function assignShiftForSelectedRotaStaff(){
+  const staff=_selectedRotaStaff();
+  if(!staff){toast('Add staff first, then assign shifts','warn');return;}
+  const cells=[...document.querySelectorAll('#rota-weekly-board .rs-day')].filter(c=>c.dataset.employeeId===staff.id);
+  const cell=cells.find(c=>c.dataset.date===_rotaTodayIso())||cells[0];
+  if(cell)openRotaCellEditor(cell);
+}
+
+// Monthly Schedule row menu: the same person and week in Weekly Rota (tasks, editing).
+function openRotaStaffInWeekly(staffId){
+  const start=typeof _rotaMonthWeekStart==='function'?_rotaMonthWeekStart():null;
+  selectedRotaStaffId=staffId;
+  const tab=[...document.querySelectorAll('#page-rota .tab')].find(t=>/Weekly Rota/.test(t.textContent));
+  if(tab)stab(tab,'rota-weekly');
+  if(start)setRotaWeekStart(start);
+  else renderRotaBoards();
+}
+
+function openRotaStaffProfile(staffId){
+  const row=[...document.querySelectorAll('#employee-tbody tr:not([data-empty-state])')].find(r=>employeeFromDirectoryRow(r).id===staffId);
+  if(row&&typeof openEmployeeProfile==='function')openEmployeeProfile(row.firstElementChild||row);
+  else toast('Employee record not found','warn');
+}
+
+// Row "⋮" menu (and the side panel's "⋯").
+function openRotaRowMenu(event,staffId,view='week'){
+  event.stopPropagation();
+  document.getElementById('rs-row-menu')?.remove();
+  const menu=document.createElement('div');
+  menu.id='rs-row-menu';
+  menu.className='rs-menu';
+  menu.setAttribute('role','menu');
+  const id=escapeHtml(staffId);
+  menu.innerHTML=(view==='month'
+    ?`<button role="menuitem" type="button" onclick="openRotaStaffInWeekly('${id}')">Open in Weekly Rota</button>`
+    :`<button role="menuitem" type="button" onclick="selectRotaStaffForTasks('${id}')">View week &amp; tasks</button>
+    <button role="menuitem" type="button" onclick="selectRotaStaffForTasks('${id}');assignShiftForSelectedRotaStaff()">Assign shift</button>`)+
+    `<button role="menuitem" type="button" onclick="openRotaStaffProfile('${id}')">Edit employee</button>`;
+  document.body.appendChild(menu);
+  const r=event.currentTarget.getBoundingClientRect();
+  menu.style.top=`${window.scrollY+r.bottom+4}px`;
+  menu.style.left=`${Math.max(8,window.scrollX+r.right-menu.offsetWidth)}px`;
+  const close=e=>{if(!menu.contains(e.target)||e.target.closest('button')){menu.remove();document.removeEventListener('click',close,true);}};
+  setTimeout(()=>document.addEventListener('click',close,true));
+  menu.querySelector('button')?.focus();
 }
 
 function selectedWeekAssignments(scope='week'){
@@ -22040,6 +22245,17 @@ function renderRotaSummary(){
   const leave=weekly.filter(item=>item.code==='L').length;
   const off=weekly.filter(item=>item.code==='OFF').length;
   if(weeklyBody)weeklyBody.innerHTML=`<tr><td>Total Staff</td><td class="mono">${staffCount}</td></tr><tr><td>Scheduled Hours</td><td class="mono">${scheduled.toFixed(1)}</td></tr><tr><td>Overtime Cells</td><td class="mono" style="color:var(--purple)">${ot}</td></tr><tr><td>Leave Days</td><td class="mono" style="color:var(--amber)">${leave}</td></tr><tr><td>Off Days</td><td class="mono">${off}</td></tr>`;
+  const tiles=document.getElementById('rota-weekly-summary');
+  if(tiles){
+    const icon=d=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" aria-hidden="true">${d}</svg>`;
+    const cal='<rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>';
+    tiles.innerHTML=[
+      [icon('<circle cx="9" cy="8" r="3.2"/><path d="M3 19c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14c2.4.2 4 1.7 4.5 4.5"/>'),String(staffCount),'Total Staff'],
+      [icon('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),scheduled.toFixed(1),'Scheduled Hours'],
+      [icon(cal+'<path d="M12 13v4M10 15h4"/>'),String(ot),'Overtime Cells'],
+      [icon(cal+'<path d="m9.5 13.5 5 4M14.5 13.5l-5 4"/>'),String(leave),'Leave Days'],
+    ].map(([ic,val,lbl])=>`<div class="rs-tile"><span class="rs-tile-icon">${ic}</span><b>${escapeHtml(val)}</b><span>${escapeHtml(lbl)}</span></div>`).join('');
+  }
 }
 
 // Monday on/before the given date, as YYYY-MM-DD. See weekDateFromStart()'s
@@ -22081,45 +22297,132 @@ function _monthRotaWeekStarts(month){
   return {monthStart,monthEnd,weekStarts};
 }
 
+// Monthly Schedule: one week of the selected month at a time (Week N · dd/mm – dd/mm),
+// a page of staff at a time. Reads Weekly Rota's saved records; cells open the same
+// shift editor (openRotaCellEditor reads the cell's dataset attributes).
+var _rotaMonthWeek=null;   // Monday of the week on screen
+var _rotaMonthPage=0;
+const ROTA_MONTH_PAGE_SIZE=10;
+
+function _rotaMonthWeekStart(){
+  const month=document.getElementById('rota-month-value')?.value||weekStartValue().slice(0,7);
+  const range=_monthRotaWeekStarts(month);
+  if(!range)return null;
+  if(!_rotaMonthWeek||!range.weekStarts.includes(_rotaMonthWeek)){
+    const current=_currentRotaWeekStart();
+    _rotaMonthWeek=range.weekStarts.includes(current)?current:range.weekStarts[0];
+  }
+  return _rotaMonthWeek;
+}
+
+function setRotaMonth(value){
+  const monthEl=document.getElementById('rota-month-value');
+  if(!monthEl||!value)return;
+  monthEl.value=value;
+  _saveRotaViewDate('month',value);
+  _rotaMonthWeek=null;
+  _rotaMonthPage=0;
+  renderRotaBoards();
+}
+
+// Next/previous week; crossing into another month moves the month picker with it (the
+// month a week belongs to is the month of its Thursday, as ISO week numbers count it).
+function shiftRotaMonthWeek(weeks){
+  const monthEl=document.getElementById('rota-month-value');
+  const next=weekDateFromStart(_rotaMonthWeekStart()||_currentRotaWeekStart(),7*weeks);
+  const range=_monthRotaWeekStarts(monthEl?.value);
+  if(monthEl&&(!range||!range.weekStarts.includes(next))){
+    monthEl.value=weekDateFromStart(next,3).slice(0,7);
+    _saveRotaViewDate('month',monthEl.value);
+  }
+  _rotaMonthWeek=next;
+  renderRotaBoards();
+}
+
+function setRotaMonthPage(page){
+  _rotaMonthPage=Math.max(0,page);
+  renderMonthlyRotaBoard();
+}
+
+// Export PDF on the Monthly Schedule: the week on screen, through Weekly Rota's export.
+function downloadRotaMonthWeekPdf(){
+  const start=_rotaMonthWeekStart();
+  if(start&&weekStartValue()!==start)setRotaWeekStart(start);
+  downloadRotaPdf();
+}
+
 function renderMonthlyRotaBoard(){
   const board=document.getElementById('rota-monthly-board');
   if(!board)return;
   if(_skipHiddenRotaBoard(board,renderMonthlyRotaBoard))return;
-  const month=document.getElementById('rota-month-value')?.value||weekStartValue().slice(0,7);
-  const staffRows=filteredRotaStaff('month');
+  const start=_rotaMonthWeekStart();
   const notice=_rotaTruncationNoticeHtml();
-  if(!staffRows.length){
+  const label=document.getElementById('rota-month-week-label');
+  const kpis=document.getElementById('rota-month-kpis');
+  const count=document.getElementById('rota-month-count');
+  const pager=document.getElementById('rota-month-pager');
+  if(!start){
+    board.innerHTML=notice+'<div class="empty-card">Select a month.</div>';
+    return;
+  }
+  const dates=ROTA_WEEK_DAYS.map((_,i)=>weekDateFromStart(start,i));
+  const dm=iso=>`${iso.slice(8,10)}/${iso.slice(5,7)}`;
+  if(label)label.textContent=`Week ${_isoWeekNumber(dates[3])} · ${dm(dates[0])} – ${dm(dates[6])}`;
+  const staffAll=filteredRotaStaff('month');
+  const weeks=staffAll.map(staff=>dates.map((date,i)=>assignmentFor(staff,date,ROTA_WEEK_DAYS[i])));
+  const flat=weeks.flat();
+  const scheduledDays=flat.filter(a=>rotaHours(a)>0).length;
+  const totalHours=flat.reduce((sum,a)=>sum+rotaHours(a),0);
+  const otHours=flat.filter(a=>String(a.code||'').toUpperCase()==='OT'||a.mark==='OT').reduce((sum,a)=>sum+rotaHours(a),0);
+  const leaveDays=flat.filter(a=>String(a.code||'').toUpperCase()==='L'||a.mark==='Leave').length;
+  const dayHours=dates.map((_,i)=>weeks.reduce((sum,week)=>sum+rotaHours(week[i]),0));
+  if(kpis){
+    const icon=d=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">${d}</svg>`;
+    const cal='<rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>';
+    kpis.innerHTML=[
+      ['blue',icon('<circle cx="9" cy="8" r="3.2"/><path d="M3 19c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14c2.4.2 4 1.7 4.5 4.5"/>'),String(staffAll.length),'Total Staff'],
+      ['green',icon(cal+'<path d="m9 15 2 2 4-4"/>'),String(scheduledDays),'Scheduled Days'],
+      ['violet',icon('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),totalHours.toFixed(1),'Total Scheduled Hours'],
+      ['amber',icon('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),otHours.toFixed(1),'Overtime Hours'],
+      ['pink',icon(cal),String(leaveDays),'Leave Days'],
+    ].map(([tone,ic,val,lbl])=>`<div class="rs-kpi"><span class="rs-kpi-icon rs-kpi-${tone}">${ic}</span><span class="rs-kpi-text"><b>${escapeHtml(val)}</b><span>${escapeHtml(lbl)}</span></span></div>`).join('');
+  }
+  const pages=Math.max(1,Math.ceil(staffAll.length/ROTA_MONTH_PAGE_SIZE));
+  if(_rotaMonthPage>=pages)_rotaMonthPage=pages-1;
+  const from=_rotaMonthPage*ROTA_MONTH_PAGE_SIZE;
+  const pageStaff=staffAll.slice(from,from+ROTA_MONTH_PAGE_SIZE);
+  if(count)count.innerHTML=staffAll.length?`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/></svg>Showing ${from+1}–${from+pageStaff.length} of ${staffAll.length} staff`:'';
+  if(pager){
+    pager.innerHTML=pages>1?`<button type="button" class="rs-page" aria-label="Previous page" ${_rotaMonthPage===0?'disabled':''} onclick="setRotaMonthPage(${_rotaMonthPage-1})">&#8249;</button>`+
+      Array.from({length:pages},(_,i)=>`<button type="button" class="rs-page${i===_rotaMonthPage?' on':''}" aria-label="Page ${i+1}" ${i===_rotaMonthPage?'aria-current="page"':''} onclick="setRotaMonthPage(${i})">${i+1}</button>`).join('')+
+      `<button type="button" class="rs-page" aria-label="Next page" ${_rotaMonthPage>=pages-1?'disabled':''} onclick="setRotaMonthPage(${_rotaMonthPage+1})">&#8250;</button>`:'';
+  }
+  if(!staffAll.length){
     board.innerHTML=notice+'<div class="empty-card">No staff found for this month.</div>';
     return;
   }
-  const range=_monthRotaWeekStarts(month);
-  if(!range){board.innerHTML=notice+'<div class="empty-card">Select a month.</div>';return;}
-  const {weekStarts}=range;
-  const blocks=weekStarts.map(weekStart=>{
-    const dates=ROTA_WEEK_DAYS.map((_,i)=>weekDateFromStart(weekStart,i));
-    const weekNo=_isoWeekNumber(dates[3]); // Thursday-anchored per ISO 8601
-    const headCells=ROTA_MONTH_DAY_NAMES.map((name,i)=>
-      `<th>${name}<div class="rota-month-hd-date">${escapeHtml(dates[i].slice(8,10))}/${escapeHtml(dates[i].slice(5,7))}</div></th>`
-    ).join('');
-    const rows=staffRows.map(staff=>{
-      // Clickable now, same as Weekly Rota's own cells (openRotaCellEditor
-      // reads these exact dataset attributes off whatever element it's
-      // given) -- previously a plain <td>, so the colored task-count dots
-      // rotaCellHtml() already draws here were visible only as a bare
-      // hover tooltip, with no way to open the day and see task names,
-      // times, or edit anything from the Monthly view at all.
-      const cells=ROTA_WEEK_DAYS.map((day,i)=>{
-        const assignment=assignmentFor(staff,dates[i],day);
-        return `<td><button class="rota-day-cell rota-month-day-cell" type="button" onclick="openRotaCellEditor(this)" data-assignment="${escapeHtml(JSON.stringify(assignment))}" data-employee-id="${escapeHtml(staff.id)}" data-employee-name="${escapeHtml(staff.name)}" data-role="${escapeHtml(staff.role)}" data-department="${escapeHtml(staff.department)}" data-location="${escapeHtml(staff.location)}" data-date="${escapeHtml(dates[i])}" data-day="${escapeHtml(day)}">${rotaCellHtml(assignment)}</button></td>`;
-      }).join('');
-      return `<tr><td class="rota-month-staff-cell"><strong>${escapeHtml(staff.name)}</strong><span>${escapeHtml(staff.department)} · ${escapeHtml(staff.role)}</span></td>${cells}</tr>`;
+  const today=_rotaTodayIso();
+  const smallIcon=d=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true">${d}</svg>`;
+  const head=`<tr><th class="rs-th-staff" scope="col"><span class="rs-th-staff-in">${smallIcon('<circle cx="9" cy="8" r="3.2"/><path d="M3 19c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14c2.4.2 4 1.7 4.5 4.5"/>')}Staff Member</span></th>${dates.map((date,i)=>
+    `<th scope="col" class="rs-th-day${date===today?' is-today':''}"><b>${smallIcon('<rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>')}${ROTA_MONTH_DAY_NAMES[i]}</b><span>${dm(date)}</span><em>${smallIcon('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>')}${dayHours[i].toFixed(1)} hrs</em></th>`).join('')}</tr>`;
+  const rows=pageStaff.map((staff,index)=>{
+    const week=weeks[from+index];
+    const total=week.reduce((sum,a)=>sum+rotaHours(a),0);
+    const id=escapeHtml(staff.id);
+    const cells=week.map((assignment,i)=>{
+      const date=dates[i],day=ROTA_WEEK_DAYS[i];
+      return `<td class="${date===today?'is-today':''}"><button class="rota-day-cell rs-day" type="button" onclick="openRotaCellEditor(this)" aria-label="${escapeHtml(`${staff.name}, ${ROTA_MONTH_DAY_NAMES[i]} ${dm(date)}: ${_rotaCellLabel(assignment)}`)}" data-assignment="${escapeHtml(JSON.stringify(assignment))}" data-employee-id="${escapeHtml(staff.id)}" data-employee-name="${escapeHtml(staff.name)}" data-role="${escapeHtml(staff.role)}" data-department="${escapeHtml(staff.department)}" data-location="${escapeHtml(staff.location)}" data-date="${escapeHtml(date)}" data-day="${escapeHtml(day)}">${rotaWeekCellHtml(assignment,{tinted:true})}</button></td>`;
     }).join('');
-    return `<div class="rota-month-week-block">
-      <div class="rota-month-week-hd">Week ${weekNo} · ${dates[0].slice(8,10)}/${dates[0].slice(5,7)} – ${dates[6].slice(8,10)}/${dates[6].slice(5,7)}</div>
-      <div style="overflow-x:auto"><table class="rota-month-table"><thead><tr><th style="text-align:left">Staff</th>${headCells}</tr></thead><tbody>${rows}</tbody></table></div>
-    </div>`;
+    return `<tr class="rs-row">
+      <th scope="row" class="rs-staff"><div class="rs-staff-inner">
+        <div class="rs-staff-pick rs-staff-static">
+          ${rotaStaffAvatarHtml(staff,52)}
+          <span class="rs-staff-text"><strong>${escapeHtml(staff.name)}</strong><span>${escapeHtml(staff.department)} · ${escapeHtml(staff.role)}</span><em>${smallIcon('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>')}${total.toFixed(1)} hrs / week</em></span>
+        </div>
+        <button class="rs-kebab" type="button" aria-label="More actions for ${escapeHtml(staff.name)}" onclick="openRotaRowMenu(event,'${id}','month')">&#8942;</button>
+      </div></th>${cells}</tr>`;
   }).join('');
-  board.innerHTML=notice+blocks;
+  board.innerHTML=notice+`<div class="rs-table-wrap"><table class="rs-table rs-table-month"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function renderDepartmentRota(){
@@ -22164,7 +22467,8 @@ function renderDepartmentRota(){
 function renderRotaCodes(){
   const row=document.getElementById('rota-code-row');
   if(!row)return;
-  row.innerHTML=['M Morning','E Evening','N Night','OFF Off','L Leave','OT Overtime'].map(text=>`<span class="chip">${escapeHtml(text)}</span>`).join('');
+  row.innerHTML=[['M','Morning','green'],['E','Evening','violet'],['N','Night','indigo'],['OFF','Day Off','gray'],['L','Leave','amber'],['OT','Overtime','orange']]
+    .map(([code,label,tone])=>`<span class="rs-legend-chip rs-legend-${tone}"><b>${code}</b>${label}</span>`).join('');
 }
 
 // Rota assignments are not in the bootstrap (it used to carry the newest 500,
@@ -22224,6 +22528,7 @@ function _loadVisibleRotaRanges(){
 }
 
 function renderRotaBoards(){
+  _updateRotaWeekControls();
   renderWeeklyRotaBoard();
   renderRotaEmployeeTasksPanel();
   renderMonthlyRotaBoard();
