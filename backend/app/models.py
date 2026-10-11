@@ -6,7 +6,7 @@ from enum import Enum
 from uuid import uuid4
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, event, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, attributes, mapped_column, object_session, relationship
 
 from app.database import Base
 
@@ -867,6 +867,14 @@ class AppDataRecord(Base, TimestampMixin):
     # Whose record it is, for OWNER_COLLECTIONS (payload_owner_key()), so ESS reads one
     # employee's tasks/requests in SQL instead of parsing the whole company's.
     owner_key: Mapped[str | None] = mapped_column(String(160))
+    # Edit-conflict check (migration 0017): row_version goes up whenever the payload
+    # changes and updated_by/updated_by_name say who changed it last (the request's
+    # actor, see record_actor()). The browser gets the version as "_v" and sends it back
+    # on save; save_app_record() refuses a save based on an older version when someone
+    # else has saved since, instead of silently overwriting their change.
+    row_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    updated_by: Mapped[str | None] = mapped_column(String(80))
+    updated_by_name: Mapped[str | None] = mapped_column(String(160))
 
 
 class DocumentLine(Base):
@@ -996,6 +1004,41 @@ def payload_record_date(payload: str | None) -> str | None:
     except (TypeError, ValueError, AttributeError):
         return None
     return day if _ISO_DAY.match(day) else None
+
+
+def record_actor(session) -> tuple[str | None, str | None]:
+    """(key, display name) of whoever is writing in this session: set by
+    principal_from_token() / ess_bearer() for a request, absent for system jobs."""
+    actor = (session.info.get("actor") if session is not None else None) or (None, None)
+    return actor[0], actor[1]
+
+
+def _strip_version_field(target: AppDataRecord) -> None:
+    """"_v" is the browser's copy of row_version; it never belongs in the stored payload."""
+    if target.payload and '"_v"' in target.payload:
+        try:
+            data = json.loads(target.payload)
+        except (TypeError, ValueError):
+            return
+        if isinstance(data, dict) and "_v" in data:
+            data.pop("_v", None)
+            target.payload = json.dumps(data, ensure_ascii=False, default=str)
+
+
+@event.listens_for(AppDataRecord, "before_insert")
+def _stamp_version_on_insert(_mapper, _connection, target: AppDataRecord) -> None:
+    _strip_version_field(target)
+    target.row_version = 1
+    target.updated_by, target.updated_by_name = record_actor(object_session(target))
+
+
+@event.listens_for(AppDataRecord, "before_update")
+def _stamp_version_on_update(_mapper, _connection, target: AppDataRecord) -> None:
+    if not attributes.get_history(target, "payload").has_changes():
+        return  # e.g. only amount_paid moved: not an edit of the record
+    _strip_version_field(target)
+    target.row_version = (target.row_version or 1) + 1
+    target.updated_by, target.updated_by_name = record_actor(object_session(target))
 
 
 @event.listens_for(AppDataRecord, "before_insert")

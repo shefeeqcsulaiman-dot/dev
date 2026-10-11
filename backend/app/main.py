@@ -168,6 +168,8 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "Accept"],
+        # Lets a cross-origin page tell an edit conflict (409) apart from other refusals.
+        expose_headers=["X-Edit-Conflict"],
     )
 
     # Content Security Policy. 'unsafe-inline' is needed for the pages' inline scripts and
@@ -309,7 +311,7 @@ def create_app() -> FastAPI:
 
     # Bumped with each deploy-relevant change, so /health shows which code is live (the image
     # has no git metadata). Format: date.sequence.
-    BUILD = "2026-10-11.2"
+    BUILD = "2026-10-11.3"
 
     def monitoring_sentry_on() -> bool:
         from app import monitoring as _monitoring

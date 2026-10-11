@@ -217,6 +217,19 @@ class Principal:
     def is_dept_scoped(self) -> bool:
         return bool(self.department_scope) and not self.is_admin
 
+    @property
+    def actor_key(self) -> str | None:
+        """Who is writing, for app-data edit-conflict checks (AppDataRecord.updated_by).
+        An employee is "emp:<id>" in both HRMS and ESS, so their own two sessions don't
+        count as someone else."""
+        if self.employee is not None:
+            return f"emp:{self.employee.id}"
+        if self.branch is not None:
+            return f"branch:{self.branch.id}"
+        if self.user is not None:
+            return f"user:{self.user.id}"
+        return None
+
     def has(self, *keys: str) -> bool:
         return self.is_admin or bool(self.permissions.intersection(keys))
 
@@ -414,14 +427,12 @@ def get_current_principal(request: Request, db: Session = Depends(get_db)) -> Pr
 def principal_from_token(token: str, db: Session) -> Principal:
     """get_current_principal() for a bare token, e.g. to rebuild the caller's Principal in
     a background job's own session (app/background.py)."""
-    principal = _principal_from_employee_token(token, db)
+    principal = (_principal_from_employee_token(token, db) or _principal_from_branch_token(token, db)
+                 or _principal_from_user_token(token, db))
     if principal:
-        return principal
-    principal = _principal_from_branch_token(token, db)
-    if principal:
-        return principal
-    principal = _principal_from_user_token(token, db)
-    if principal:
+        # Every app-data change this session makes is attributed to this identity
+        # (app.models record_actor(), used by the edit-conflict check).
+        db.info["actor"] = (principal.actor_key, principal.display_name)
         return principal
     # Diagnostic only, no behavior change — see user_id_from_token()'s log
     # line for the underlying decode failure (this fires once all three

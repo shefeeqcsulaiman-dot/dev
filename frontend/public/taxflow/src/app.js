@@ -352,6 +352,7 @@ function stab(el,target){
 }
 
 function toast(msg,type='ok',ms=3500){
+  if((type==='err'||type==='warn')&&ms<12000&&Date.now()-_editConflictShownAt<2500)return;
   const svgs={
     ok:`<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><polyline points="5.5,8 7,9.5 10.5,6"/></svg>`,
     warn:`<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 2.5L14 13H2z"/><line x1="8" y1="7" x2="8" y2="10"/><circle cx="8" cy="11.5" r=".6" fill="currentColor" stroke="none"/></svg>`,
@@ -5139,6 +5140,13 @@ async function apiRequest(action,payload,options={}){
     const err=new Error(typeof detail==='string'&&detail?detail:'FastAPI app-data endpoint returned '+response.status);
     err.status=response.status;
     err.serverDetail=typeof detail==='string'?detail:'';
+    // Someone else saved this record after it was opened (server edit-conflict check):
+    // say so once, clearly, whatever the calling screen does with the error.
+    if(response.status===409&&(response.headers.get('X-Edit-Conflict')==='1'||/changed this record/.test(err.serverDetail))){
+      err.conflict=true;
+      showEditConflict(err.serverDetail);
+      err.notified=true;
+    }
     throw err;
   }
   const data=await response.json();
@@ -5153,7 +5161,17 @@ async function apiRequest(action,payload,options={}){
 // Failures within a few seconds of each other (a bulk action offline) share one
 // message with a count instead of stacking dozens.
 let _saveFailedNotice=null;
+// After an edit-conflict message, the calling screen's own generic error ("could not
+// save — cannot reach server") would contradict it; toast() drops those for a moment.
+var _editConflictShownAt=0,_editConflictToast=null;
+function showEditConflict(detail){
+  _editConflictShownAt=Date.now();
+  if(_editConflictToast?.isConnected)return;  // one message at a time, not a stack of identical ones
+  toast(detail||'Someone else changed this record after you opened it. Your change was not saved — reload the page and try again.','err',12000);
+  _editConflictToast=document.getElementById('toasts')?.lastElementChild||null;
+}
 function notifySaveFailed(err,verb){
+  if(err?.notified)return;
   const offline=!navigator.onLine||err instanceof TypeError;
   const reason=offline?'Check your internet connection.':(err?.serverDetail||(err?.status>=500?'The server had a problem.':''));
   const now=Date.now();
@@ -5173,7 +5191,11 @@ function notifySaveFailed(err,verb){
 function saveServer(collection,record,options={}){
   _catalogCache?.[collection]?.clear();  // picker search results may now be out of date
   // createOnly: the server refuses (409) instead of overwriting a record with the same key.
-  return apiRequest('save',options.createOnly?{collection,record,create_only:true}:{collection,record}).catch(err=>{
+  return apiRequest('save',options.createOnly?{collection,record,create_only:true}:{collection,record}).then(res=>{
+    // Keep this copy's version current, so its next save isn't mistaken for an old copy.
+    if(res&&res._v!=null&&record&&typeof record==='object')record._v=res._v;
+    return res;
+  }).catch(err=>{
     console.warn('Database save failed:',err);
     if(options.throwOnError)throw err;
     if(!options.silent)notifySaveFailed(err,'save');

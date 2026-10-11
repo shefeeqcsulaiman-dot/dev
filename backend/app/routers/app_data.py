@@ -73,6 +73,7 @@ from app.models import (
     StockProductMapping,
     TaxLine,
     User,
+    record_actor,
 )
 
 # Local time offset punches are recorded in — resolved per company via
@@ -549,9 +550,18 @@ def _photo_version(photo: str) -> str:
     return hashlib.sha256(photo.encode()).hexdigest()[:16]
 
 
+def with_version(data: dict[str, Any], row: AppDataRecord) -> dict[str, Any]:
+    """Add "_v" (row_version) to a record sent to the browser; the browser sends it back on
+    save for the edit-conflict check (_assert_no_edit_conflict())."""
+    if isinstance(data, dict):
+        data["_v"] = row.row_version or 1
+    return data
+
+
 def serialize_for_list(row: AppDataRecord) -> dict[str, Any]:
-    """serialize(), with an employee photo / product image replaced by its image URL."""
-    data = serialize(row)
+    """serialize(), with an employee photo / product image replaced by its image URL,
+    plus "_v" for the edit-conflict check."""
+    data = with_version(serialize(row), row)
     spec = _RECORD_IMAGES.get(row.collection)
     if spec and isinstance(data, dict):
         field, path = spec
@@ -819,7 +829,7 @@ def list_rota_assignments_in_range(
         base_filters.append(AppDataRecord.payload.contains(json.dumps(employee_id)))
     rows = db.query(AppDataRecord).filter(*base_filters).order_by(AppDataRecord.created_at, AppDataRecord.id).all()
     records = [
-        r for r in (serialize(row) for row in rows)
+        r for r in (with_version(serialize(row), row) for row in rows)
         if date_from <= str(r.get("date") or "") <= date_to and (not employee_id or r.get("employee_id") == employee_id)
     ]
     records = filter_records(db, principal, "rotaAssignments", records)
@@ -841,7 +851,7 @@ def list_rota_assignments_by_ids(
         .filter(*_rota_read_filters(db, principal, branch_id), AppDataRecord.record_key.in_(wanted))
         .all()
     ) if wanted else []
-    records = filter_records(db, principal, "rotaAssignments", [serialize(row) for row in rows])
+    records = filter_records(db, principal, "rotaAssignments", [with_version(serialize(row), row) for row in rows])
     return {"ok": True, "collection": "rotaAssignments", "records": records}
 
 
@@ -1953,9 +1963,11 @@ async def app_data_action(
             _assert_record_is_new(db, principal.company_id, collection, record)
         saved = save_app_record(db, principal, collection, record)
         sync_domain_model(db, principal, collection, serialize(saved))
+        db.flush()
+        version = saved.row_version
         db.commit()
         _invalidate_write_caches(collection, principal.company_id)
-        return {"ok": True, "saved": True, "id": saved.id}
+        return {"ok": True, "saved": True, "id": saved.id, "_v": version}
 
     if action == "bulk-save":
         collection = str(payload.get("collection", "app_actions"))
@@ -1965,6 +1977,8 @@ async def app_data_action(
         if not isinstance(records, list):
             records = []
         normalized_records = [record if isinstance(record, dict) else {"value": record} for record in records]
+        for r in normalized_records:
+            r.pop("_v", None)  # bulk saves (imports, restores) keep last-write-wins
         normalized_records = [_guard_employee_write(db, principal, collection, r) for r in normalized_records]
         keys = [key for key in (record_key(collection, record) for record in normalized_records) if key]
         existing_by_key = {
@@ -2374,7 +2388,41 @@ def _assert_branch_writable(principal: Principal, collection: str, existing: App
     raise HTTPException(status_code=403, detail="This record belongs to a different branch")
 
 
+EDIT_CONFLICT_HEADER = "X-Edit-Conflict"
+
+
+def _assert_no_edit_conflict(db: Session, existing: AppDataRecord, expected_version: Any) -> None:
+    """Refuse a save based on an older copy of the record when someone else has saved
+    since. A save without a version (a new record, or a screen that rebuilds the record
+    instead of saving the one it loaded) and a save by whoever saved last both go
+    through as before, so this only ever blocks a real overwrite of another person's change."""
+    try:
+        expected = int(expected_version)
+    except (TypeError, ValueError):
+        return
+    if expected >= (existing.row_version or 1):
+        return
+    actor_key, _ = record_actor(db)
+    if existing.updated_by and existing.updated_by == actor_key:
+        return
+    who = existing.updated_by_name or "Someone else"
+    when = ""
+    if existing.updated_at:
+        country = db.query(Company.country).filter(Company.id == existing.company_id).scalar()
+        stamp = existing.updated_at
+        if stamp.tzinfo is not None:
+            stamp = stamp.replace(tzinfo=None) - (stamp.utcoffset() or _dt.timedelta(0))
+        when = (stamp + timezone_utils.company_utc_offset(country)).strftime(" at %H:%M")
+    raise HTTPException(
+        status_code=409,
+        detail=f"{who} changed this record{when}, after you opened it. Your change was not saved, "
+               "so their change isn't lost. Reload the page to see the latest version, then make your change again.",
+        headers={EDIT_CONFLICT_HEADER: "1"},
+    )
+
+
 def save_app_record(db: Session, principal: Principal, collection: str, record: dict[str, Any]) -> AppDataRecord:
+    expected_version = record.pop("_v", None)  # the browser's copy of row_version, never stored
     key = record_key(collection, record)
     existing = None
     if key:
@@ -2388,6 +2436,8 @@ def save_app_record(db: Session, principal: Principal, collection: str, record: 
             .first()
         )
     _assert_branch_writable(principal, collection, existing)
+    if existing and expected_version is not None:
+        _assert_no_edit_conflict(db, existing, expected_version)
     _keep_stored_image(collection, record, existing)
     payload = json.dumps(record, ensure_ascii=False, default=str)
     if existing:

@@ -134,7 +134,11 @@ def ess_bearer(request: Request, db: Session = Depends(get_db)) -> Employee:
     if not auth.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing ESS token")
     token = auth[7:]
-    return _get_employee_from_token(token, db)
+    emp = _get_employee_from_token(token, db)
+    # Same key as this employee's HRMS principal (Principal.actor_key): changes made
+    # from ESS count as theirs in the app-data edit-conflict check.
+    db.info["actor"] = (f"emp:{emp.id}", emp.full_name)
+    return emp
 
 
 # ── routes ───────────────────────────────────────────────────────────────────

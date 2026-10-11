@@ -27,6 +27,7 @@ from app.doc_lines import LINE_COLLECTIONS
 from app.models import AppDataRecord, DocumentLine
 from app.routers.app_data import (
     _collection_read_filters,
+    with_version,
     assert_collection_module_enabled,
     assert_collection_read_permission,
     resolve_principal_company,
@@ -79,7 +80,7 @@ def register_record(row: AppDataRecord) -> dict[str, Any]:
     """The saved record; for documents settled by payments (invoices, bills, purchases)
     status/amount_paid/balance_due reflect the payments allocated to it (previously
     patched onto each on-screen row by the browser)."""
-    data = serialize(row)
+    data = with_version(serialize(row), row)
     spec = SPECS.get(row.collection)
     paid = _paid(row.amount_paid)
     if spec and spec.paid_by and paid > 0:
@@ -585,7 +586,7 @@ def list_purchase_documents(
     )
     records = []
     for row in rows:
-        record = serialize(row)
+        record = with_version(serialize(row), row)
         if isinstance(record, dict):
             record.pop("base64", None)
             records.append(record)
@@ -603,4 +604,4 @@ def get_purchase_document(
     row = db.query(AppDataRecord).filter(*filters, AppDataRecord.record_key == doc_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Document not found")
-    return {"ok": True, "record": serialize(row)}
+    return {"ok": True, "record": with_version(serialize(row), row)}
