@@ -1575,6 +1575,10 @@ input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;}
 .pmt-alloc-chk{width:16px;height:16px;accent-color:#2e5db5;cursor:pointer;vertical-align:middle;}
 .pmt-alloc-toggle{width:24px;height:24px;background:#2e5db5;color:#fff;border:none;border-radius:4px;font-size:16px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;line-height:1;padding:0;}
 .pmt-alloc-toggle:hover{background:#1a3f8f;}
+/* Partial payment fully allocated: the other invoices can't be ticked (updatePmtBalance()). */
+.pmt-alloc-chk:disabled{cursor:not-allowed;}
+.pmt-alloc-tbl tr.pmt-alloc-locked td{opacity:.5;}
+.pmt-alloc-toggle:disabled{opacity:.45;cursor:not-allowed;}
 .pmt-alloc-inp{width:100%;min-width:90px;box-sizing:border-box;border:1px solid #cdd5e8;border-radius:4px;padding:4px 8px;font-size:12px;font-family:'DM Mono',monospace;text-align:right;background:#fff;color:#1e2a46;}
 .pmt-alloc-inp:focus{border-color:#2e5db5;outline:none;box-shadow:0 0 0 2px rgba(46,93,181,.1);}
 
