@@ -6957,15 +6957,17 @@ function loadAllocationTable(docs){
       <td class="pmt-alloc-method"></td>
       <td class="mono r">${fmtAed(original)}</td>
       <td class="mono r">${fmtAed(remaining)}</td>
-      <td><input type="number" class="pmt-alloc-inp" value="${remaining.toFixed(2)}" min="0" max="${remaining}" step="0.01" oninput="updatePmtBalance()" data-doc-ref="${escapeHtml(d.ref)}" data-doc-amount="${remaining}"></td>
+      <td><input type="number" class="pmt-alloc-inp" value="${remaining.toFixed(2)}" min="0" max="${remaining}" step="0.01" oninput="updatePmtBalance()" onchange="clampPmtAllocation(this)" data-doc-ref="${escapeHtml(d.ref)}" data-doc-amount="${remaining}"></td>
     </tr>`;
   }).join('');
-  updatePmtBalance();
+  _pmtPickOrder=[];
+  distributePaymentAmountAcrossAllocations();
   syncAllocationMeta();
 }
 
 function toggleAllAllocation(checked){
   document.querySelectorAll('#pmt-alloc-tbody .pmt-alloc-chk').forEach(chk=>{chk.checked=checked;});
+  _pmtPickOrder=[];  // all ticked: paid oldest first
   const btn=document.getElementById('pmt-alloc-toggle-btn');
   if(btn)btn.textContent=checked?'−':'+';
   distributePaymentAmountAcrossAllocations();
@@ -6978,57 +6980,73 @@ function toggleAllAllocationBtn(btn){
 }
 
 function onAllocChkChange(chk){
+  const ref=chk.closest('tr')?.querySelector('.pmt-alloc-inp')?.dataset.docRef||'';
+  _pmtPickOrder=_pmtPickOrder.filter(r=>r!==ref);
+  if(chk.checked)_pmtPickOrder.push(ref);
   distributePaymentAmountAcrossAllocations();
 }
 
-// Water-filling equal split: divides `payment` across `caps` (each selected
-// invoice's own remaining balance) as evenly as possible, processing
-// smallest balance first so a small invoice is never handed more than it
-// actually owes -- any amount it can't absorb spills over to be split
-// equally among the rest instead of being lost.
-function splitAmountEqually(payment,caps){
-  const order=caps.map((cap,i)=>({cap,i})).sort((a,b)=>a.cap-b.cap);
-  const result=new Array(caps.length).fill(0);
-  let remaining=payment;
-  for(let k=0;k<order.length;k++){
-    const share=remaining/(order.length-k);
-    if(order[k].cap<=share+0.005){
-      result[order[k].i]=order[k].cap;
-      remaining-=order[k].cap;
-    }else{
-      for(let j=k;j<order.length;j++)result[order[j].i]=remaining/(order.length-k);
-      break;
-    }
-  }
-  return result;
-}
+// Allocation rules, run whenever the payment amount or the ticked invoices change:
+// - Full payment (amount >= everything owed): every invoice is ticked and paid in full.
+// - Partial payment: the ticked invoices are paid one after another -- oldest first, then
+//   in the order they were ticked -- the last one partly. An invoice the money no longer
+//   reaches is unticked, and once nothing is left to allocate (Available 0) the remaining
+//   invoices can't be ticked until one is unticked (updatePmtBalance()).
+// - No amount yet: ticked invoices show their full balance, as before.
+// It used to split a partial payment equally across every ticked invoice.
+let _pmtPickOrder=[];   // doc refs in the order they were ticked
+function _pmtAllocRows(){return [...document.querySelectorAll('#pmt-alloc-tbody tr')].filter(row=>row.querySelector('.pmt-alloc-chk'));}
+function _pmtRowCap(row){return parseFloat(row.querySelector('.pmt-alloc-inp')?.dataset.docAmount||'0')||0;}
+function _pmtRowRef(row){return row.querySelector('.pmt-alloc-inp')?.dataset.docRef||'';}
 
-// Triggered whenever the total payment amount is typed in, or which
-// invoices are selected changes. A partial payment (less than the total
-// owing across the checked invoices) gets split equally between them
-// automatically, rather than leaving the user to divide it up by hand row
-// by row; a full payment still just pays every selected invoice in full,
-// same as "Calculate all owing" already does. Manually editing a single
-// row's own amount afterward is untouched by this and still works as a
-// fine-tune on top of the auto-split.
 function distributePaymentAmountAcrossAllocations(){
   const payment=parseAmount(document.getElementById('payment-amount')?.value||'0');
-  const allRows=[...document.querySelectorAll('#pmt-alloc-tbody tr')];
-  const checkedRows=allRows.filter(row=>row.querySelector('.pmt-alloc-chk')?.checked);
-  allRows.forEach(row=>{
-    if(!row.querySelector('.pmt-alloc-chk')?.checked){
-      const inp=row.querySelector('.pmt-alloc-inp');
-      if(inp)inp.value='0.00';
-    }
-  });
-  if(!checkedRows.length){updatePmtBalance();return;}
-  const caps=checkedRows.map(row=>parseFloat(row.querySelector('.pmt-alloc-inp')?.dataset.docAmount||'0'));
-  const totalOwing=caps.reduce((a,b)=>a+b,0);
-  const amounts=(payment<=0||payment>=totalOwing-0.005)?caps:splitAmountEqually(payment,caps);
-  checkedRows.forEach((row,idx)=>{
+  const rows=_pmtAllocRows();
+  if(!rows.length){updatePmtBalance();return;}
+  const set=(row,checked,amount)=>{
+    row.querySelector('.pmt-alloc-chk').checked=checked;
     const inp=row.querySelector('.pmt-alloc-inp');
-    if(inp)inp.value=amounts[idx].toFixed(2);
-  });
+    if(inp)inp.value=(checked?amount:0).toFixed(2);
+  };
+  const totalOwing=rows.reduce((sum,row)=>sum+_pmtRowCap(row),0);
+  if(payment<=0){
+    rows.forEach(row=>set(row,row.querySelector('.pmt-alloc-chk').checked,_pmtRowCap(row)));
+  }else if(payment>=totalOwing-0.005){
+    rows.forEach(row=>set(row,true,_pmtRowCap(row)));
+  }else{
+    // Rows are listed oldest first; ticked ones keep the order they were ticked in.
+    const rank=ref=>{const i=_pmtPickOrder.indexOf(ref);return i<0?-1:i;};
+    const ticked=rows.filter(row=>row.querySelector('.pmt-alloc-chk').checked)
+      .map((row,i)=>({row,i,r:rank(_pmtRowRef(row))}))
+      .sort((a,b)=>(a.r-b.r)||(a.i-b.i)).map(x=>x.row);
+    let remaining=payment;
+    ticked.forEach(row=>{
+      const amount=Math.min(_pmtRowCap(row),remaining);
+      if(amount<=0.005){set(row,false,0);return;}
+      set(row,true,amount);
+      remaining-=amount;
+    });
+    rows.filter(row=>!row.querySelector('.pmt-alloc-chk').checked).forEach(row=>set(row,false,0));
+  }
+  _pmtPickOrder=_pmtPickOrder.filter(ref=>rows.some(row=>_pmtRowRef(row)===ref&&row.querySelector('.pmt-alloc-chk').checked));
+  updatePmtBalance();
+}
+
+// A row's own amount edited by hand: never more than the invoice owes, nor more than is
+// still available from the payment.
+function clampPmtAllocation(inp){
+  const payment=parseAmount(document.getElementById('payment-amount')?.value||'0');
+  const cap=parseFloat(inp.dataset.docAmount||'0')||0;
+  let value=Math.max(0,parseAmount(inp.value||'0'));
+  if(payment>0){
+    const others=_pmtAllocRows().filter(row=>row.querySelector('.pmt-alloc-inp')!==inp&&row.querySelector('.pmt-alloc-chk').checked)
+      .reduce((sum,row)=>sum+parseAmount(row.querySelector('.pmt-alloc-inp')?.value||'0'),0);
+    value=Math.min(value,Math.max(0,payment-others));
+  }
+  value=Math.min(value,cap);
+  inp.value=value.toFixed(2);
+  const chk=inp.closest('tr')?.querySelector('.pmt-alloc-chk');
+  if(chk)chk.checked=value>0.005;
   updatePmtBalance();
 }
 
@@ -7048,6 +7066,21 @@ function updatePmtBalance(){
   const availEl=document.getElementById('pmt-available');
   if(allocEl)allocEl.textContent=fmt(allocated);
   if(availEl){availEl.textContent=fmt(available);availEl.style.color=available<0?'var(--red)':'';}
+  // Full payment: every invoice must be included. Partial: nothing more can be ticked once
+  // Available reaches 0 (untick one to free money for another).
+  const rows=_pmtAllocRows();
+  const totalOwing=rows.reduce((sum,row)=>sum+_pmtRowCap(row),0);
+  const full=payment>0&&payment>=totalOwing-0.005;
+  const exhausted=payment>0&&!full&&available<=0.005;
+  rows.forEach(row=>{
+    const chk=row.querySelector('.pmt-alloc-chk');
+    const locked=full||(exhausted&&!chk.checked);
+    chk.disabled=locked;
+    chk.title=full?'Full payment: every invoice is included':locked?'Nothing left to allocate. Untick an invoice to choose a different one.':'';
+    row.classList.toggle('pmt-alloc-locked',exhausted&&!chk.checked);
+  });
+  const toggle=document.getElementById('pmt-alloc-toggle-btn');
+  if(toggle)toggle.disabled=full;
 }
 
 function collectPaymentContacts(type=document.getElementById('payment-type')?.value){
@@ -28782,6 +28815,11 @@ async function savePayment(){
     const docRef=inp?.dataset.docRef||row.querySelector('td:nth-child(2)')?.textContent.trim()||'';
     allocations.push({doc_ref:docRef,amount:allocAmt});
   });
+  const allocatedTotal=allocations.reduce((sum,a)=>sum+a.amount,0);
+  if(allocatedTotal>amount+0.005){
+    toast(`Allocated ${formatAed(allocatedTotal)} is more than the payment of ${formatAed(amount)} — reduce an invoice's allocation`,'err');
+    return;
+  }
 
   const primaryDoc=allocations[0]?.doc_ref||'';
   const record={type,ref,contact,amount,method,date,bank,comments,detail,
