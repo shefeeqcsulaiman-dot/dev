@@ -1051,15 +1051,16 @@
 /* ── Dashboard: same look as the HRMS dashboard (hero, tinted KPI cards,
       icon + title + subtitle card headers). Scoped to #tb-dashboard. ── */
 #tb-dashboard .ed-hero{position:relative;display:flex;align-items:center;min-height:132px;margin:0 0 16px;padding:6px 4px 14px;border-bottom:0;overflow:hidden}
-#tb-dashboard .ed-hero-text{position:relative;z-index:1;min-width:0;max-width:56%}
+#tb-dashboard .ed-hero-text{position:relative;z-index:1;min-width:0;max-width:calc(100% - 240px)}
 #tb-dashboard .ed-greet{font-size:22px;font-weight:700;letter-spacing:-.3px;color:var(--text);line-height:1.25}
 #tb-dashboard .ed-wave{display:inline-block;transform-origin:70% 70%}
 #tb-dashboard .ed-greet-sub{margin-top:4px;font-size:13px;color:var(--text2)}
-#tb-dashboard .ed-hero .ess-greet-chips{margin-top:10px}
-#tb-dashboard .ed-hero-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+#tb-dashboard .ed-hero-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
+#tb-dashboard .ed-hero-row .ess-chip{white-space:nowrap}
+#tb-dashboard .ed-hero-actions{display:inline-flex;gap:8px;margin-left:6px}
 #tb-dashboard .ed-hero-actions .btn-login{width:auto;padding:9px 18px;margin:0;font-size:13px}
 #tb-dashboard .ed-hero-actions .btn-ghost{background:var(--surface);color:var(--text);font-weight:500;padding:9px 16px}
-#tb-dashboard .ed-hero-art{position:absolute;right:150px;bottom:0;width:260px;max-width:34%;height:auto;pointer-events:none}
+#tb-dashboard .ed-hero-art{position:absolute;right:0;bottom:0;width:220px;max-width:24%;height:auto;pointer-events:none}
 #tb-dashboard .ed-hero-note{position:absolute;right:8px;top:14px;font-family:'Segoe Print','Bradley Hand','Comic Sans MS',cursive;font-size:14px;font-weight:600;line-height:1.35;color:#1e3a8a;transform:rotate(-4deg)}
 :root[data-theme="dark"] #tb-dashboard .ed-hero-note{color:#bfdbfe}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) #tb-dashboard .ed-hero-note{color:#bfdbfe}}
@@ -1094,3 +1095,12 @@
 #tb-dashboard .ess-qa:hover{color:var(--qa);border-color:var(--qa);background:color-mix(in srgb,var(--qa) 13%,var(--surface))}
 /* Phones show the app-style home (.m-home) instead of the hero, as before. */
 @media (max-width:760px){#tb-dashboard .ed-hero{display:none}}
+
+/* ── Font consistency: buttons and fields use the page font (the Leave
+      calendar arrows were falling back to Arial), and labels that sat at
+      10–10.5px get a readable 11–11.5px floor. Calendar-cell text stays small. ── */
+button,input,select,textarea{font-family:inherit}
+.att-stat-label,.ps-net-label,.att-mini span,.lb-item-days span,.acal-lg{font-size:11.5px}
+th,.dept-rota-table th{font-size:11.5px}
+.acal-wd,.hcal-weekday,.ess-bn-kick,.ess-search-item small,.ess-hm-role{font-size:11px}
+.rota-today-pill{font-size:10.5px}

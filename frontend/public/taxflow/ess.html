@@ -15,7 +15,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
   <title>Employee Self-Service — ETaxFlow</title>
   <link rel="preload" href="/fonts/dmsans-rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu0-K4.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="src/ess.css?v=b19b1e7f3d">
+  <link rel="stylesheet" href="src/ess.css?v=895827b967">
   <script>
     // Runs before body paints, so a saved/system dark preference applies
     // immediately instead of flashing light-then-dark once the main
@@ -219,14 +219,15 @@
         <div class="ed-hero-text">
           <div class="ed-greet"><span class="ed-wave" aria-hidden="true">👋</span> <span id="dash-name">Welcome</span></div>
           <div class="ed-greet-sub" id="dash-role">—</div>
-          <div class="ess-greet-chips">
+          <!-- Chips and the two request buttons share one line -->
+          <div class="ed-hero-row">
             <span class="ess-chip">Company · <b id="dash-hero-company">—</b></span>
             <span class="ess-chip">Today · <b id="dash-hero-today">—</b></span>
             <span class="ess-chip">Hours · <b id="dash-hero-hours">—</b></span>
-          </div>
-          <div class="ed-hero-actions">
-            <button class="btn-ghost" onclick="essOpenLeaveModal()">Request Leave</button>
-            <button class="btn-login" onclick="essOpenRequestModal('overtime')">Request Overtime</button>
+            <span class="ed-hero-actions">
+              <button class="btn-ghost" onclick="essOpenLeaveModal()">Request Leave</button>
+              <button class="btn-login" onclick="essOpenRequestModal('overtime')">Request Overtime</button>
+            </span>
           </div>
         </div>
         <svg class="ed-hero-art" viewBox="0 0 300 110" aria-hidden="true" focusable="false">
@@ -758,6 +759,6 @@
      order between them, so config.js still runs before ess.js. -->
 <script src="/config.js" defer></script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/ess.js?v=943f7f28bf" defer></script>
+<script src="src/ess.js?v=b5915fa70e" defer></script>
 </body>
 </html>
