@@ -351,7 +351,7 @@ function stab(el,target){
   updateBackButton();
 }
 
-function toast(msg,type='ok'){
+function toast(msg,type='ok',ms=3500){
   const svgs={
     ok:`<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><polyline points="5.5,8 7,9.5 10.5,6"/></svg>`,
     warn:`<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 2.5L14 13H2z"/><line x1="8" y1="7" x2="8" y2="10"/><circle cx="8" cy="11.5" r=".6" fill="currentColor" stroke="none"/></svg>`,
@@ -368,7 +368,7 @@ function toast(msg,type='ok'){
   text.textContent=msg;
   t.append(icon,text);
   document.getElementById('toasts').appendChild(t);
-  setTimeout(()=>t.remove(),3500);
+  setTimeout(()=>t.remove(),ms);
 }
 
 function toggleSidebar(force){
@@ -5146,12 +5146,37 @@ async function apiRequest(action,payload,options={}){
   return data;
 }
 
+// A failed save/delete used to be silent unless the caller passed throwOnError
+// (only a console warning), so a screen could say "Saved" while nothing reached
+// the database. Callers that handle errors themselves pass throwOnError; background
+// writes (audit log, action log) pass silent. Everything else now tells the user.
+// Failures within a few seconds of each other (a bulk action offline) share one
+// message with a count instead of stacking dozens.
+let _saveFailedNotice=null;
+function notifySaveFailed(err,verb){
+  const offline=!navigator.onLine||err instanceof TypeError;
+  const reason=offline?'Check your internet connection.':(err?.serverDetail||(err?.status>=500?'The server had a problem.':''));
+  const now=Date.now();
+  if(_saveFailedNotice&&now-_saveFailedNotice.at<4000){
+    _saveFailedNotice.count++;
+    _saveFailedNotice.at=now;
+    if(_saveFailedNotice.el?.isConnected){
+      const txt=_saveFailedNotice.el.lastElementChild;
+      if(txt)txt.textContent=`${_saveFailedNotice.count} changes were not saved. ${reason} Please try again.`.replace(/\s+/g,' ').trim();
+      return;
+    }
+  }
+  _saveFailedNotice={at:now,count:1,el:null};
+  toast(`${verb==='delete'?'Delete failed — this item was not deleted.':'Save failed — your change was not saved.'} ${reason} Please try again.`.replace(/\s+/g,' ').trim(),'err',9000);
+  _saveFailedNotice.el=document.getElementById('toasts')?.lastElementChild||null;
+}
 function saveServer(collection,record,options={}){
   _catalogCache?.[collection]?.clear();  // picker search results may now be out of date
   // createOnly: the server refuses (409) instead of overwriting a record with the same key.
   return apiRequest('save',options.createOnly?{collection,record,create_only:true}:{collection,record}).catch(err=>{
     console.warn('Database save failed:',err);
     if(options.throwOnError)throw err;
+    if(!options.silent)notifySaveFailed(err,'save');
     return null;
   });
 }
@@ -5160,14 +5185,14 @@ function saveServer(collection,record,options={}){
 // Useful for audit log writes and any record that can be saved multiple times
 // in quick succession (e.g., product sync after bulk import).
 const _debounceSaveTimers=new Map();
-function debouncedSaveServer(collection,record,delay=400){
+function debouncedSaveServer(collection,record,delay=400,options={}){
   const key=collection+':'+(record.id||record.key||JSON.stringify(record).slice(0,40));
   const existing=_debounceSaveTimers.get(key);
   if(existing)clearTimeout(existing);
   return new Promise((resolve,reject)=>{
     _debounceSaveTimers.set(key,setTimeout(()=>{
       _debounceSaveTimers.delete(key);
-      saveServer(collection,record).then(resolve).catch(reject);
+      saveServer(collection,record,options).then(resolve).catch(reject);
     },delay));
   });
 }
@@ -5191,6 +5216,7 @@ function deleteServer(collection,record,options={}){
   return apiRequest('delete',{collection,record}).catch(err=>{
     console.warn('Database delete failed:',err);
     if(options.throwOnError)throw err;
+    if(!options.silent)notifySaveFailed(err,'delete');
     return null;
   });
 }
@@ -5315,7 +5341,7 @@ function audit(action,record='System',result='Logged'){
   // principal kind), whichever loaded first on this page.
   const displayUser=localStorage.getItem('taxflow_user_display_name')||'Unknown User';
   const entry={time:new Date().toLocaleString('en-AE',{dateStyle:'short',timeStyle:'short'}),user:displayUser,action,record,result};
-  debouncedSaveServer('audit',entry,300);
+  debouncedSaveServer('audit',entry,300,{silent:true});
   renderAuditLog([entry]);
 }
 
@@ -28308,7 +28334,7 @@ async function deleteCurrentDetailRow(){
       if(collection==='expenses')refreshRegister('expenses');
     })
     .catch(err=>console.warn('Database delete failed:',err));
-  saveServer('app_actions',{mode:'delete',record:label,page:document.getElementById('ptitle')?.textContent||'App'});
+  saveServer('app_actions',{mode:'delete',record:label,page:document.getElementById('ptitle')?.textContent||'App'},{silent:true});
   audit('Deleted record',label,'Deleted');
   closeM('m-row-detail');
   currentDetailRow=null;
@@ -28503,7 +28529,7 @@ function saveGenericForm(){
     toast('Record added','ok');
     audit('Added record',values[0]||'Quick add','Saved');
   }
-  saveServer('app_actions',{mode:genericFormState.mode,values});
+  saveServer('app_actions',{mode:genericFormState.mode,values},{silent:true});
   closeM('m-generic-form');
 }
 
