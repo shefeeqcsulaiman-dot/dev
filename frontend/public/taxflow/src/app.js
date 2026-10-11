@@ -20348,7 +20348,7 @@ async function loadBranchesFromDb(){
 
 function _syncDeptBranchSelectsFromList(){
   const names=_deptList.filter(d=>d.status!=='Inactive').map(d=>d.name);
-  const deptOpts='<option value="">— Select Department —</option>'+names.map(d=>`<option>${escapeHtml(d)}</option>`).join('');
+  const deptOpts=(names.length?'<option value="">— Select Department —</option>':'<option value="">No departments yet — add them in HR Settings → Departments</option>')+names.map(d=>`<option>${escapeHtml(d)}</option>`).join('');
   const deptAllOpts='<option value="">All Departments</option>'+names.map(d=>`<option>${escapeHtml(d)}</option>`).join('');
   document.querySelectorAll('#emp-department,#req-dept,#task-department').forEach(sel=>{
     const cur=sel.value; sel.innerHTML=deptOpts; if(cur)sel.value=cur;
@@ -21709,12 +21709,26 @@ function openRotaCellEditor(cell){
   const assignment=cell.dataset.assignment?normalizeRotaAssignment(JSON.parse(cell.dataset.assignment)):null;
   const day=cell.dataset.day||assignment?.day||'Shift';
   const employee=cell.dataset.employeeName||assignment?.employee_name||'Employee';
+  // The saved assignment is the source of truth. The redesigned weekly cells no longer
+  // carry the old <strong>CODE</strong> / .rota-time markup, so reading the cell's HTML
+  // opened every day as "Morning" with blank times; the markup stays as a fallback.
   const rota=cell.querySelector('.rota-cell');
-  const code=rota?.querySelector('strong')?.textContent.trim()||'M';
-  const [start='',end='']=[...(rota?.querySelectorAll('.rota-time b')||[])].map(b=>b.textContent.trim());
-  const type=rotaCellTypeFromCode(code);
+  const code=String(assignment?.code||rota?.querySelector('strong')?.textContent||'M').trim().toUpperCase();
+  const domTimes=[...(rota?.querySelectorAll('.rota-time b')||[])].map(b=>b.textContent.trim());
+  const isWorkingCode=!['OFF','L'].includes(code);
+  const start=isWorkingCode?(assignment?.start||domTimes[0]||''):'';
+  const end=isWorkingCode?(assignment?.end||domTimes[1]||''):'';
+  // Match the shift by its code, so custom shift names (e.g. "Day Shift", code D) work too.
+  const shiftForCode=[...document.querySelectorAll('#rota-shift-tbody tr:not([data-empty-state])')]
+    .map(row=>{try{return JSON.parse(row.dataset.shift||'{}');}catch{return {};}})
+    .find(shift=>String(shift.code||'').toUpperCase()===code);
+  const type=shiftForCode?(shiftForCode.name||shiftForCode.shift_name||rotaCellTypeFromCode(code)):rotaCellTypeFromCode(code);
   setText('rota-edit-sub',`${employee} - ${day}`);
   populateRotaEditTypeSelect(type);
+  // An Off/Leave day isn't one of the shifts in the list: show "— Select Shift —"
+  // rather than the first shift, which read as if Morning were already assigned.
+  const typeSel=document.getElementById('rota-edit-type');
+  if(typeSel&&![...typeSel.options].some(o=>o.value===type))typeSel.value='';
   setFieldValue(document.getElementById('rota-edit-start'),start&&start!=='-'?start:'');
   setFieldValue(document.getElementById('rota-edit-end'),end&&end!=='-'?end:'');
   setFieldValue(document.getElementById('rota-edit-break'),String(assignment?.break_minutes??ROTA_EDIT_DEFAULTS[type]?.break_minutes??60));
@@ -21914,7 +21928,13 @@ async function saveActiveRotaAssignmentFromModal(forceOff=false){
   // — a training day rendered pixel-for-pixel identical to a real worked
   // shift, with no way to tell them apart on the board.
   const className=mark==='Off'?'off':mark==='Leave'?'draft':mark==='OT'?'overtime':mark==='Holiday'?'holiday':mark==='Training'?'training':defaults.className;
-  const code=mark==='Off'?'OFF':mark==='Leave'?'L':mark==='OT'?'OT':mark==='Holiday'?'PH':mark==='Training'?'TR':defaults.code;
+  // A shift set up in Shift Setup keeps its own code: a custom shift ("Day Shift", D)
+  // used to be saved with the Morning default's code (M) and shown as Morning.
+  const setupShift=[...document.querySelectorAll('#rota-shift-tbody tr:not([data-empty-state])')]
+    .map(row=>{try{return JSON.parse(row.dataset.shift||'{}');}catch{return {};}})
+    .find(shift=>(shift.name||shift.shift_name)===type&&shift.code);
+  const shiftCode=setupShift?String(setupShift.code).toUpperCase():defaults.code;
+  const code=mark==='Off'?'OFF':mark==='Leave'?'L':mark==='OT'?'OT':mark==='Holiday'?'PH':mark==='Training'?'TR':shiftCode;
   const existing=activeRotaCell.dataset.assignment?normalizeRotaAssignment(JSON.parse(activeRotaCell.dataset.assignment)):{};
   const assignment=normalizeRotaAssignment({
     ...existing,
@@ -22738,7 +22758,7 @@ function renderRotaShiftRecord(shift){
   const row=document.createElement('tr');
   row.dataset.serverRecord='rotaShifts';
   row.dataset.shift=JSON.stringify(shift);
-  row.innerHTML=`<td>${escapeHtml(shift.name||shift.shift_name||code)}</td><td class="mono">${escapeHtml(code)}</td><td class="mono">${escapeHtml(start||'-')}</td><td class="mono">${escapeHtml(end||'-')}</td><td>${escapeHtml(String(breakMinutes||0))}m</td><td>${escapeHtml(shift.hours||shiftHours(start,end,breakMinutes))}</td><td>${escapeHtml(shift.grace||shift.grace_period||'-')}</td><td>${escapeHtml(shift.ot_after||shift.overtime_after||'-')}</td><td>${escapeHtml(shiftDepartmentList(shift).join(', ')||'All departments')}</td><td>${rotaBadge(shift.status||'Active')}</td><td><div class="flx"><button class="btn btn-g btn-sm" onclick="editShift(this)">Edit</button><button class="btn btn-danger btn-sm" onclick="deleteShift(this)">Delete</button></div></td>`;
+  row.innerHTML=`<td>${escapeHtml(shift.name||shift.shift_name||code)}</td><td class="mono">${escapeHtml(code)}</td><td class="mono">${escapeHtml(start||'-')}</td><td class="mono">${escapeHtml(end||'-')}</td><td>${escapeHtml(String(breakMinutes||0))}m</td><td>${escapeHtml(start&&end?rotaHoursLabel(parseFloat(shiftHours(start,end,breakMinutes))):(shift.hours||'-'))}</td><td>${escapeHtml(shift.grace||shift.grace_period||'-')}</td><td>${escapeHtml(shift.ot_after||shift.overtime_after||'-')}</td><td>${escapeHtml(shiftDepartmentList(shift).join(', ')||'All departments')}</td><td>${rotaBadge(shift.status||'Active')}</td><td><div class="flx"><button class="btn btn-g btn-sm" onclick="editShift(this)">Edit</button><button class="btn btn-danger btn-sm" onclick="deleteShift(this)">Delete</button></div></td>`;
   removeEmptyState(tbody);
   if(existing||options.prepend===false)tbody.appendChild(row);
   else tbody.prepend(row);
@@ -28626,12 +28646,15 @@ function recordFromTableRow(table,row){
 }
 
 function bindEditActions(){
+  // The generic row editor is only a fallback for "Edit" buttons with no handler of
+  // their own. It used to replace every Edit button's handler (only purchase records
+  // were exempt), so e.g. Shift Setup's Edit opened a generic form that saved the
+  // table's display text into an unused collection: "Record updated", nothing saved.
+  // Chart of Accounts, inventory items and AI purchase rows were hijacked the same way.
   document.querySelectorAll('table.tbl button').forEach(button=>{
     const text=button.textContent.trim().toLowerCase();
-    const inlineAction=button.getAttribute('onclick')||'';
-    if(text==='edit'&&!inlineAction.includes('editPurchaseRecord')){
-      button.onclick=()=>openGenericEditRow(button,'Edit '+(document.getElementById('ptitle')?.textContent||'Record'),'Update selected row');
-    }
+    if(text!=='edit'||button.id||button.getAttribute('onclick'))return;
+    button.onclick=()=>openGenericEditRow(button,'Edit '+(document.getElementById('ptitle')?.textContent||'Record'),'Update selected row');
   });
   document.querySelectorAll('button').forEach(button=>{
     const text=button.textContent.trim().toLowerCase();

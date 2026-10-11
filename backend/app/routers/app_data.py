@@ -38,6 +38,8 @@ from app.config import get_settings
 from app.database import get_db
 from app.auth_principal import resolve_active_branch
 from app.doc_index import parse_document_date, recompute_payment_targets
+from app.task_records import COLLECTIONS as TASK_COLLECTIONS
+from app.workflow_status import is_finished_status
 from app.department_scope import SCOPED_COLLECTIONS, assert_record_writable, build_index, filter_records, record_in_scope
 from app.dependencies import Principal, branch_allows_module, company_allows_module, get_current_principal, get_current_user, principal_module_allowed, require_company_admin, require_module
 from app.limiter import limiter
@@ -72,6 +74,7 @@ from app.models import (
     StockMovement,
     StockProductMapping,
     TaxLine,
+    TaskRecord,
     User,
     record_actor,
 )
@@ -315,26 +318,32 @@ _OPEN_WORK_COLLECTIONS = frozenset({
     "tasks", "overtimeRequests", "leaveRequests", "attendanceCorrections", "employeeLoans",
     "salaryAdvances", "jobRequisitions", "candidates", "rotaSwaps", "rotaApprovals", "taskRequests",
 })
-_FINISHED_STATUS_WORDS = ("done", "complete", "closed", "reject", "cancel", "repaid", "paid", "declined",
-                          "archived", "hired", "withdrawn")
 _OLDER_OPEN_LIMIT = 2000
-
-
-def _is_finished_status(status: Any) -> bool:
-    text = str(status or "").strip().lower()
-    return bool(text) and any(word in text for word in _FINISHED_STATUS_WORDS)
+_is_finished_status = is_finished_status  # app/workflow_status.py, shared with task_records.is_open
 
 
 def _older_open_rows(db: Session, company_id: str, collection: str, oldest_kept: AppDataRecord) -> list[AppDataRecord]:
     """Open items older than the newest-N bootstrap window, oldest first (bounded)."""
+    older_filters = (
+        AppDataRecord.company_id == company_id,
+        AppDataRecord.collection == collection,
+        or_(AppDataRecord.created_at < oldest_kept.created_at,
+            and_(AppDataRecord.created_at == oldest_kept.created_at, AppDataRecord.id < oldest_kept.id)),
+    )
+    if collection in TASK_COLLECTIONS:
+        # Tasks have typed rows (app/task_records.py): "still open" is an indexed column,
+        # so a company with years of finished tasks no longer has every one decoded here.
+        return (
+            db.query(AppDataRecord)
+            .join(TaskRecord, TaskRecord.id == AppDataRecord.id)
+            .filter(*older_filters, TaskRecord.is_open.is_(True))
+            .order_by(AppDataRecord.created_at.asc(), AppDataRecord.id.asc())
+            .limit(_OLDER_OPEN_LIMIT)
+            .all()
+        )
     older = (
         db.query(AppDataRecord)
-        .filter(
-            AppDataRecord.company_id == company_id,
-            AppDataRecord.collection == collection,
-            or_(AppDataRecord.created_at < oldest_kept.created_at,
-                and_(AppDataRecord.created_at == oldest_kept.created_at, AppDataRecord.id < oldest_kept.id)),
-        )
+        .filter(*older_filters)
         .order_by(AppDataRecord.created_at.asc(), AppDataRecord.id.asc())
         .yield_per(500)
     )

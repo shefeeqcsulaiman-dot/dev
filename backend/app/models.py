@@ -939,6 +939,35 @@ class Party(Base):
     status: Mapped[str | None] = mapped_column(String(40))
 
 
+class TaskRecord(Base):
+    """A task kept as JSON app-data ("tasks"), as real columns: one row per record,
+    id = the app_data_records id. Maintained by app/task_records.py on every write (step A
+    of moving records out of JSON, like Party): the JSON record is still the source of
+    truth, so these rows can always be rebuilt (`python -m app.task_records --rebuild`).
+    The bootstrap finds old open tasks through is_open instead of decoding every task."""
+    __tablename__ = "task_records"
+    __table_args__ = (
+        Index("ix_task_records_company_open", "company_id", "is_open"),
+        Index("ix_task_records_company_assignee", "company_id", "assigned_to", "status"),
+        Index("ix_task_records_company_due", "company_id", "due_date"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)  # = app_data_records.id
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(String(36))
+    record_key: Mapped[str | None] = mapped_column(String(160))
+    title: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    department: Mapped[str | None] = mapped_column(String(120))
+    assigned_to: Mapped[str | None] = mapped_column(String(80))
+    assigned_to_name: Mapped[str | None] = mapped_column(String(160))
+    status: Mapped[str | None] = mapped_column(String(40))
+    is_open: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)  # workflow_status rule
+    priority: Mapped[str | None] = mapped_column(String(20))
+    progress: Mapped[int | None] = mapped_column(Integer)
+    due_date: Mapped[str | None] = mapped_column(String(10))  # YYYY-MM-DD, or empty
+    repeat: Mapped[str | None] = mapped_column(String(20))
+
+
 class CatalogProduct(Base):
     """A product kept as JSON app-data ("products"), as real columns: one row per record,
     id = the app_data_records id. Maintained by app/catalog_products.py on every write
@@ -1614,3 +1643,4 @@ import app.account_totals  # noqa: E402,F401  -- keeps AccountPeriodTotal curren
 import app.doc_lines  # noqa: E402,F401  -- keeps DocumentLine current
 import app.parties  # noqa: E402,F401  -- keeps Party (customers, vendors) current
 import app.catalog_products  # noqa: E402,F401  -- keeps CatalogProduct (products) current
+import app.task_records  # noqa: E402,F401  -- keeps TaskRecord (tasks) current

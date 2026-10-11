@@ -160,7 +160,9 @@ body:not(.theme-light) .sb{--sb-bg:#131a29;}
 
 /* ── STAT CARDS ── */
 .stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px 18px;}
-.stat-lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:7px;}
+/* Buttons and form fields use the page font (browsers default them to Arial). */
+button,input,select,textarea{font-family:inherit}
+.stat-lbl{font-size:11.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:7px;}
 .stat-val{font-family:'DM Mono',monospace;font-size:24px;font-weight:500;letter-spacing:-1px;}
 .stat-delta{font-size:11.5px;margin-top:4px;}
 .up{color:var(--green);}
@@ -314,7 +316,7 @@ body:not(.theme-light) .nbadge.red{background:var(--red);}
 
 /* ── TABLE ── */
 .tbl{width:100%;border-collapse:collapse;}
-.tbl th{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);font-weight:600;padding:9px 12px;text-align:left;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:2;background:var(--bg2);}
+.tbl th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);font-weight:600;padding:9px 12px;text-align:left;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:2;background:var(--bg2);}
 .tbl td{padding:10px 12px;font-size:13px;border-bottom:1px solid var(--border);vertical-align:middle;transition:background .1s;}
 .tbl tr:last-child td{border-bottom:none;}
 .tbl tbody tr:hover td{background:var(--surface);}
@@ -439,7 +441,7 @@ body:not(.theme-light) .nbadge.red{background:var(--red);}
 .paid-val{font-size:12px;color:var(--text);font-weight:500;word-break:break-word;}
 .paid-warn{color:var(--red);}
 .paid-lines-table{width:100%;border-collapse:collapse;font-size:12px;}
-.paid-lines-table th{text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:6px 8px;border-bottom:2px solid var(--border);white-space:nowrap;}
+.paid-lines-table th{text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:6px 8px;border-bottom:2px solid var(--border);white-space:nowrap;}
 .paid-lines-table td{padding:7px 8px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top;}
 .paid-lines-table tbody tr:hover{background:var(--bg2,var(--bg));}
 .ai-upload-more-tile{grid-column:span 2;min-height:260px;border:1px dashed var(--border3);border-radius:8px;background:var(--bg3);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;color:var(--text2);padding:24px;}
@@ -682,7 +684,7 @@ textarea.fi{resize:vertical;min-height:80px;}
 
 /* ── CALENDAR ── */
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center;}
-.cal-day-name{font-size:10.5px;color:var(--text3);padding:4px 0;font-weight:500;text-transform:uppercase;}
+.cal-day-name{font-size:11px;color:var(--text3);padding:4px 0;font-weight:500;text-transform:uppercase;}
 .cal-day{padding:7px 4px;border-radius:7px;font-size:12.5px;cursor:pointer;transition:background .15s;min-height:34px;}
 .cal-day:hover{background:var(--surface2);}
 .cal-day.today{background:var(--accent-glow);color:var(--accent);font-weight:600;}

@@ -10,10 +10,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=cdcfa8bc76" as="style">
-<link rel="preload" href="src/app.js?v=055a553ded" as="script">
+<link rel="preload" href="src/styles.css?v=b023cfe7d1" as="style">
+<link rel="preload" href="src/app.js?v=df23200136" as="script">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=cdcfa8bc76">
+<link rel="stylesheet" href="src/styles.css?v=b023cfe7d1">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -75,7 +75,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 .hm-user{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;cursor:pointer;margin-left:4px;}
 .hm-avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#4f8ef7,#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;flex-shrink:0;}
 .hm-user-name{font-size:12.5px;font-weight:600;color:var(--text);white-space:nowrap;}
-.hm-user-role{font-size:10px;color:var(--text3);}
+.hm-user-role{font-size:11px;color:var(--text3);}
 .hm-date{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:6px 11px;white-space:nowrap;margin-left:4px;}
 /* ── KPI Cards ───────────────────────────────────────────── */
 .hrms-kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;align-items:flex-start;gap:12px;transition:box-shadow .15s,transform .15s;}
@@ -91,7 +91,7 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 /* ── Leave Calendar (month grid, same visual pattern as ESS's own
    Holiday & Team Leave Calendar) ────────────────────────── */
 .hcal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;min-width:560px;}
-.hcal-weekday{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);text-align:center;padding-bottom:4px;}
+.hcal-weekday{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);text-align:center;padding-bottom:4px;}
 .hcal-cell{min-height:72px;border:1px solid var(--border);border-radius:8px;padding:4px 5px;background:var(--surface);overflow:hidden;cursor:pointer;transition:border-color .12s,box-shadow .12s;}
 .hcal-cell.hcal-empty{border-color:transparent;background:transparent;cursor:default;}
 .hcal-cell:not(.hcal-empty):hover{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
@@ -117,14 +117,14 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 .hc-donut{position:relative;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
 .hc-donut-center{position:absolute;text-align:center;}
 .hc-donut-val{font-size:16px;font-weight:700;color:var(--text);line-height:1;}
-.hc-donut-lbl{font-size:9.5px;color:var(--text3);margin-top:2px;}
+.hc-donut-lbl{font-size:10.5px;color:var(--text3);margin-top:2px;}
 /* ── Legend ──────────────────────────────────────────────── */
 .hc-legend{display:flex;flex-direction:column;gap:5px;}
 .hc-legend-row{display:flex;align-items:center;gap:6px;}
 .hc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
 .hc-leg-name{font-size:11.5px;color:var(--text2);flex:1;white-space:nowrap;}
 .hc-leg-val{font-size:11px;font-weight:600;color:var(--text);min-width:28px;text-align:right;}
-.hc-leg-pct{font-size:10px;color:var(--text3);min-width:38px;text-align:right;}
+.hc-leg-pct{font-size:11px;color:var(--text3);min-width:38px;text-align:right;}
 /* ── Progress Bars ───────────────────────────────────────── */
 .hc-progress-list{display:flex;flex-direction:column;gap:10px;}
 .hc-progress-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
@@ -159,19 +159,19 @@ body:not(.theme-light) .sb .sb-foot .btn-g:hover{background:rgba(255,255,255,.14
 .hc-bar-chart::after{content:'';position:absolute;bottom:16px;left:0;right:0;height:1px;background:var(--border);}
 .hc-bar-col{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;}
 .hc-bar{width:100%;border-radius:4px 4px 0 0;min-height:4px;transition:height .4s;}
-.hc-bar-val{font-size:9.5px;font-weight:700;color:var(--text2);}
-.hc-bar-lbl{font-size:9px;color:var(--text3);white-space:nowrap;}
+.hc-bar-val{font-size:11px;font-weight:700;color:var(--text2);}
+.hc-bar-lbl{font-size:10.5px;color:var(--text3);white-space:nowrap;}
 /* ── AI Insight cards ────────────────────────────────────── */
 .hc-ai{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;}
 .hc-ai-hd{display:flex;align-items:flex-start;gap:8px;margin-bottom:9px;}
 .hc-ai-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .hc-ai-title{font-size:11.5px;font-weight:700;color:var(--text);line-height:1.3;}
-.hc-ai-sub{font-size:10px;color:var(--text3);margin-top:1px;}
+.hc-ai-sub{font-size:11px;color:var(--text3);margin-top:1px;}
 .hc-ai-body{display:flex;flex-direction:column;gap:4px;}
 .hc-ai-row{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;}
 .hc-ai-name{color:var(--text2);}
 .hc-ai-pct{font-weight:700;}
-.hc-ai-link{font-size:10.5px;color:var(--accent);margin-top:8px;cursor:pointer;display:block;}
+.hc-ai-link{font-size:11.5px;color:var(--accent);margin-top:8px;cursor:pointer;display:block;}
 /* ── Sidebar user footer ─────────────────────────────────── */
 .hrms-sb-user{display:flex;align-items:center;gap:9px;padding:12px 16px 10px;}
 .hrms-sb-av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#4f8ef7,#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0;}
@@ -653,8 +653,8 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
     <div style="background:linear-gradient(135deg,#fff7ed 0%,#fed7aa 55%,#fdba74 100%);padding:16px 18px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:90px;position:relative;overflow:hidden">
       <div style="position:absolute;top:-15px;right:-15px;width:80px;height:80px;border-radius:50%;background:rgba(234,88,12,.18);filter:blur(20px)"></div>
       <div style="z-index:1;padding-bottom:12px">
-        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#7c2d12;opacity:.75">Finance</div>
-        <div style="font-size:14px;font-weight:800;color:#7c2d12">Payroll Summary <span style="font-size:10px;font-weight:600;opacity:.7" id="hrms-payroll-month">This Month</span></div>
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#7c2d12;opacity:.75">Finance</div>
+        <div style="font-size:14px;font-weight:800;color:#7c2d12">Payroll Summary <span style="font-size:11px;font-weight:600;opacity:.7" id="hrms-payroll-month">This Month</span></div>
       </div>
       <svg viewBox="0 0 110 90" width="110" height="90" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
         <ellipse cx="55" cy="84" rx="32" ry="5" fill="#ea580c" opacity=".12"/>
@@ -683,7 +683,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
             <circle cx="50" cy="50" r="38" fill="none" stroke="#ef4444" stroke-width="13" stroke-dasharray="12.6 226.2" stroke-dashoffset="-226.5" transform="rotate(-90 50 50)"/>
           </svg>
           <div class="hc-donut-center">
-            <div style="font-size:9px;font-weight:700;color:var(--text)" data-currency-label>AED</div>
+            <div style="font-size:10.5px;font-weight:700;color:var(--text)" data-currency-label>AED</div>
             <div style="font-size:13px;font-weight:700;color:var(--text);line-height:1" id="hrms-payroll-total">—</div>
           </div>
         </div>
@@ -703,7 +703,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
     <div style="background:linear-gradient(135deg,#eff6ff 0%,#dbeafe 55%,#bfdbfe 100%);padding:16px 18px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:90px;position:relative;overflow:hidden">
       <div style="position:absolute;top:-15px;right:-15px;width:80px;height:80px;border-radius:50%;background:rgba(37,99,235,.18);filter:blur(20px)"></div>
       <div style="z-index:1;padding-bottom:12px">
-        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#1e3a8a;opacity:.75">Talent</div>
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#1e3a8a;opacity:.75">Talent</div>
         <div style="font-size:14px;font-weight:800;color:#1e3a8a">Recruitment Funnel</div>
       </div>
       <svg viewBox="0 0 110 90" width="110" height="90" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
@@ -736,7 +736,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
   <div style="background:linear-gradient(135deg,#faf5ff 0%,#ede9fe 55%,#ddd6fe 100%);padding:16px 18px 0;display:flex;align-items:flex-end;justify-content:space-between;min-height:80px;position:relative;overflow:hidden">
     <div style="position:absolute;top:-15px;right:-15px;width:80px;height:80px;border-radius:50%;background:rgba(139,92,246,.18);filter:blur(20px)"></div>
     <div style="z-index:1;padding-bottom:12px">
-      <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#4c1d95;opacity:.75">Intelligence</div>
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#4c1d95;opacity:.75">Intelligence</div>
       <div style="font-size:14px;font-weight:800;color:#4c1d95">AI Insights</div>
     </div>
     <svg viewBox="0 0 200 70" width="200" height="70" style="flex-shrink:0;z-index:1" xmlns="http://www.w3.org/2000/svg">
@@ -1381,7 +1381,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
   <div class="tab-body" id="hr-policy">
     <style>
       .hrs-sidebar{width:204px;flex-shrink:0;border-right:1px solid var(--border);background:var(--bg2);padding:8px 0}
-      .hrs-nav-group{font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;padding:14px 16px 4px}
+      .hrs-nav-group{font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;padding:14px 16px 4px}
       .hrs-nav-item{display:flex;align-items:center;gap:9px;padding:9px 16px;cursor:pointer;font-size:12.5px;font-weight:500;color:var(--text2);transition:all .12s;border-right:2px solid transparent;user-select:none}
       .hrs-nav-item:hover{background:var(--bg3);color:var(--text)}
       .hrs-nav-item.hrs-active{background:var(--accent-glow,rgba(99,102,241,.07));color:var(--accent);border-right-color:var(--accent)}
@@ -3258,7 +3258,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
 window.HRMS_STANDALONE=true;
 </script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=055a553ded" defer></script>
+<script src="src/app.js?v=df23200136" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
