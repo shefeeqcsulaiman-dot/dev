@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import Principal, get_current_principal
-from app.doc_index import PAID_TOLERANCE, SPECS, effective_status
+from app.doc_index import OPEN_FLAG_COLLECTIONS, PAID_TOLERANCE, SETTLED_STATUS_WORDS, SPECS, effective_status
 from app.doc_lines import LINE_COLLECTIONS
 from app.models import AppDataRecord, DocumentLine
 from app.routers.app_data import (
@@ -38,8 +38,7 @@ router = APIRouter(prefix="/app-data", tags=["registers"])
 
 # Collections served by GET /registers/{collection}.
 REGISTERS = frozenset({"salesInvoices", "bills", "quotations", "payments", "expenses", "purchaseRecords"})
-# isPendingDocumentStatus() in app.js: statuses that mean nothing is left to collect/pay.
-_SETTLED_STATUS_WORDS = ("paid", "posted", "settled", "allocated", "closed", "reconciled", "complete")
+_SETTLED_STATUS_WORDS = SETTLED_STATUS_WORDS  # app/doc_index.py
 # _refreshBillPageStats() in app.js: bill statuses that are no longer open.
 _BILL_CLOSED_STATUSES = ("paid", "complete", "completed", "posted", "settled", "received")
 _SORTS = {
@@ -92,8 +91,11 @@ def register_record(row: AppDataRecord) -> dict[str, Any]:
     return data
 
 
-def _open_filters() -> list[Any]:
-    """Documents with money still outstanding: not in a settled status and not fully paid."""
+def _open_filters(collection: str | None = None) -> list[Any]:
+    """Documents with money still outstanding: not in a settled status and not fully paid.
+    Invoices, bills and purchases carry this as the indexed doc_open flag (doc_index.py)."""
+    if collection in OPEN_FLAG_COLLECTIONS:
+        return [AppDataRecord.doc_open.is_(True)]
     return [
         *[~AppDataRecord.doc_status.like(f"%{word}%") for word in _SETTLED_STATUS_WORDS],
         func.coalesce(AppDataRecord.amount, 0) - func.coalesce(AppDataRecord.amount_paid, 0) > PAID_TOLERANCE,
@@ -148,7 +150,7 @@ def list_register(
         filters.append(AppDataRecord.record_date <= date_to)
     # open: money still owed; overdue: owed and past its due date (indexed due_date column).
     if state in ("open", "overdue"):
-        filters.extend(_bills_open_filters() if collection == "bills" else _open_filters())
+        filters.extend(_bills_open_filters() if collection == "bills" else _open_filters(collection))
         if state == "overdue":
             filters.append(AppDataRecord.due_date < _dt.date.today().isoformat())
     if product and product.strip() and collection in LINE_COLLECTIONS:
@@ -327,8 +329,7 @@ def _sales_summary(db: Session, filters: list[Any]) -> dict[str, object]:
         and_(has_receipts, amount - paid <= PAID_TOLERANCE),
         and_(~has_receipts, AppDataRecord.doc_status == "paid"),
     )
-    past_due = and_(AppDataRecord.due_date < _dt.date.today().isoformat(),
-                    *[~AppDataRecord.doc_status.like(f"%{word}%") for word in _SETTLED_STATUS_WORDS])
+    past_due = and_(AppDataRecord.doc_open.is_(True), AppDataRecord.due_date < _dt.date.today().isoformat())
     overdue = and_(~has_receipts, or_(AppDataRecord.doc_status.like("%overdue%"), past_due))
     count, total, collected_total, overdue_total = (
         db.query(
@@ -433,7 +434,7 @@ def open_payables(
     docs = []
     for collection, label in sources.items():
         filters = _filters(db, principal, collection, branch_id)
-        filters += _open_filters()
+        filters += _open_filters(collection)
         if collection == "salesInvoices":
             filters.append(AppDataRecord.doc_kind == "invoice")
         else:

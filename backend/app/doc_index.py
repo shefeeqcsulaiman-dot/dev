@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable, Iterable
 
-from sqlalchemy import event, func, inspect, or_
+from sqlalchemy import and_, event, func, inspect, literal, or_
 from sqlalchemy.orm import Session
 
 from app.models import AppDataRecord
@@ -154,6 +154,10 @@ SPECS: dict[str, DocSpec] = {
     ),
 }
 INDEXED_DOC_COLLECTIONS = frozenset(SPECS)
+# Documents settled by payments carry doc_open (money still owed, see doc_is_open()).
+OPEN_FLAG_COLLECTIONS = frozenset(c for c, spec in SPECS.items() if spec.paid_by)
+# isPendingDocumentStatus() in app.js: statuses that mean nothing is left to collect/pay.
+SETTLED_STATUS_WORDS = ("paid", "posted", "settled", "allocated", "closed", "reconciled", "complete")
 # Payment side -> the collections whose amount_paid it feeds.
 PAID_COLLECTIONS = {
     side: tuple(c for c, spec in SPECS.items() if spec.paid_by == side) for side in ("customer", "supplier")
@@ -302,6 +306,23 @@ def doc_due_date(record: dict[str, Any], collection: str) -> str | None:
     return day.isoformat() if day else None
 
 
+def doc_is_open(status: Any, amount: Any, amount_paid: Any) -> bool:
+    """Money still owed: more than PAID_TOLERANCE left after payments, and the status
+    (doc_status, lower case) isn't a settled one. open_sql() is the same rule in SQL."""
+    text = str(status or "")
+    owed = Decimal(str(amount or 0)) - Decimal(str(amount_paid or 0))
+    return owed > PAID_TOLERANCE and not any(word in text for word in SETTLED_STATUS_WORDS)
+
+
+def open_sql(amount_paid: Any = None) -> Any:
+    """doc_is_open() as an SQL expression over the row's columns; amount_paid overrides the
+    row's paid column (recompute_paid() sets both in one UPDATE)."""
+    paid = AppDataRecord.amount_paid if amount_paid is None else amount_paid
+    status = func.coalesce(AppDataRecord.doc_status, "")
+    return and_(func.coalesce(AppDataRecord.amount, 0) - func.coalesce(paid, 0) > PAID_TOLERANCE,
+                *[~status.like(f"%{word}%") for word in SETTLED_STATUS_WORDS])
+
+
 def stamp_doc_columns(target: AppDataRecord) -> None:
     try:
         record = json.loads(target.payload or "{}")
@@ -312,6 +333,8 @@ def stamp_doc_columns(target: AppDataRecord) -> None:
     for column, value in doc_columns(record, target.collection).items():
         setattr(target, column, value)
     target.due_date = doc_due_date(record, target.collection)
+    if target.collection in OPEN_FLAG_COLLECTIONS:
+        target.doc_open = doc_is_open(target.doc_status, target.amount, target.amount_paid)
     if target.collection in FIGURE_COLLECTIONS:
         for column, value in doc_figures(record, target.collection).items():
             setattr(target, column, value)
@@ -405,8 +428,10 @@ def recompute_paid(db: Session, company_id: str, side: str, refs: Iterable[str])
     for row_id, key in doc_rows:
         by_amount.setdefault(paid.get(str(key or "").strip().lower(), Decimal("0")), []).append(row_id)
     for amount, ids in by_amount.items():
+        # doc_open follows the paid amount in the same statement (no ORM hooks run here).
         db.query(AppDataRecord).filter(AppDataRecord.id.in_(ids)).update(
-            {AppDataRecord.amount_paid: amount}, synchronize_session=False
+            {AppDataRecord.amount_paid: amount, AppDataRecord.doc_open: open_sql(literal(amount))},
+            synchronize_session=False,
         )
 
 

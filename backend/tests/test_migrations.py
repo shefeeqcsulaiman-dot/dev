@@ -238,3 +238,28 @@ def test_open_work_status_migration_fills_existing_records(scratch_engine):
     with scratch_engine.connect() as conn:
         status = dict(conn.execute(text("SELECT id, doc_status FROM app_data_records")).all())
     assert status == {"w1": "pending", "w2": "closed", "w3": None, "w4": None}
+
+
+def test_open_flag_migration_fills_existing_documents(scratch_engine):
+    """0023: doc_open for invoices, bills and purchases from status, amount and amount_paid."""
+    from alembic import command
+    from app.migrate import alembic_config
+
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        command.downgrade(alembic_config(conn), "0022_open_work_status")
+        conn.commit()
+    rows = (("d1", "salesInvoices", "issued", 100, 0), ("d2", "salesInvoices", "issued", 100, 100),
+            ("d3", "bills", "awaiting payment", 50, 10), ("d4", "purchaseRecords", "paid", 70, 0),
+            ("d5", "quotations", "draft", 30, 0))
+    with scratch_engine.begin() as conn:
+        conn.execute(text("INSERT INTO companies (id, name, country, currency, vat_rate, stock_mode, inventory_accounting) "
+                          "VALUES ('c1', 'c1', 'UAE', 'AED', 5, 'with_stock', 'periodic')"))
+        for rid, collection, status, amount, paid in rows:
+            conn.execute(text("INSERT INTO app_data_records (id, company_id, collection, payload, row_version, doc_status, "
+                              "amount, amount_paid) VALUES (:i, 'c1', :c, '{}', 1, :s, :a, :p)"),
+                         {"i": rid, "c": collection, "s": status, "a": amount, "p": paid})
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        flags = {i: (None if v is None else bool(v)) for i, v in conn.execute(text("SELECT id, doc_open FROM app_data_records"))}
+    assert flags == {"d1": True, "d2": False, "d3": True, "d4": False, "d5": None}

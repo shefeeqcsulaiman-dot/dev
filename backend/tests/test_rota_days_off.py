@@ -3,6 +3,7 @@ where the employee has entries, counts as a day off in the monthly report, the
 employee's daily view, and the day's attendance roll call."""
 from datetime import date
 
+from app.models import AppDataRecord
 from app.rota_days import rota_day_statuses
 from tests.test_attendance_monthly_report import _company_id, _seed_app_record, _seed_employee, _seed_punch
 
@@ -13,7 +14,12 @@ def _rota(db, company_id, employee_no, day, **fields):
 
 
 def _setup(db, company_id):
-    # Fri/Sat weekend: Mon 24 - Thu 27 and Sun 30 Aug 2026 are working days.
+    # Fri/Sat weekend: Mon 24 - Thu 27 and Sun 30 Aug 2026 are working days. Other tests
+    # save their own weekend policy in this shared company (one is "custom"), and the
+    # report reads the first it finds, so only this one may be there.
+    db.query(AppDataRecord).filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == "hr_settings",
+                                   AppDataRecord.record_key == "weekend-policy-config").delete(synchronize_session=False)
+    db.commit()
     _seed_app_record(db, company_id, "hr_settings", "weekend-policy-config", {"mode": "fri_sat"})
     emp = _seed_employee(db, company_id, "ROFF-1", "Rota Off Person")
     _rota(db, company_id, "ROFF-1", "2026-08-24", code="M", mark="Shift", start="08:00", end="17:00")

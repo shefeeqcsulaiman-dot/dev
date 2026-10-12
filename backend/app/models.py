@@ -843,6 +843,7 @@ class AppDataRecord(Base, TimestampMixin):
         Index("ix_app_data_company_collection_fig_ref", "company_id", "collection", "fig_ref"),
         Index("ix_app_data_company_collection_owner", "company_id", "collection", "owner_key"),
         Index("ix_app_data_company_collection_due", "company_id", "collection", "due_date"),
+        Index("ix_app_data_company_collection_open_due", "company_id", "collection", "doc_open", "due_date"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
@@ -864,6 +865,9 @@ class AppDataRecord(Base, TimestampMixin):
     salesperson: Mapped[str | None] = mapped_column(String(120))
     amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     amount_paid: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    # Money still owed on a sales invoice / bill / purchase (doc_index.doc_is_open()), kept
+    # current on save and whenever its payments change (recompute_paid()).
+    doc_open: Mapped[bool | None] = mapped_column(Boolean)
     # Report figures for sales invoices, purchases, bills and expenses (doc_index.doc_figures()),
     # so the dashboard, summary, VAT and branch figures are SQL sums.
     fig_status: Mapped[str | None] = mapped_column(String(40))

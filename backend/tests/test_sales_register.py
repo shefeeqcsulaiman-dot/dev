@@ -195,3 +195,43 @@ def test_due_date_column_and_open_overdue_date_filters(db, client, tenant):
     # Editing the due date moves it out of overdue.
     _save(client, tenant, "salesInvoices", _invoice("DU-LATE", total=100, due_date=future) | {"date": "2026-08-10"})
     assert refs(state="overdue") == ["DU-PART"]
+
+
+def test_open_flag_follows_saves_and_payments(db, client, tenant):
+    def flag(no):
+        db.expire_all()
+        return db.query(AppDataRecord.doc_open).filter(AppDataRecord.record_key == no).scalar()
+
+    _save(client, tenant, "salesInvoices", _invoice("OF-1", total=100))
+    _save(client, tenant, "salesInvoices", _invoice("OF-PAID", total=100, status="Paid"))
+    _save(client, tenant, "salesInvoices", _invoice("OF-ZERO", total=0))
+    assert (flag("OF-1"), flag("OF-PAID"), flag("OF-ZERO")) == (True, False, False)
+    _save(client, tenant, "payments", {"type": "Customer Receipt", "ref": "RCT-OF1", "amount": 60, "invoice_no": "OF-1"})
+    assert flag("OF-1") is True                       # 40 still owed
+    _save(client, tenant, "payments", {"type": "Customer Receipt", "ref": "RCT-OF2", "amount": 40, "invoice_no": "OF-1"})
+    assert flag("OF-1") is False                      # fully received
+    r = client.post("/api/v1/app-data?action=delete", headers=tenant, json={"collection": "payments", "record": {"ref": "RCT-OF2"}})
+    assert r.status_code == 200, r.text
+    assert flag("OF-1") is True                       # the receipt's money is owed again
+    _save(client, tenant, "salesInvoices", _invoice("OF-1", total=100, status="Closed"))
+    assert flag("OF-1") is False                      # a settled status closes it
+
+
+def test_open_flag_python_and_sql_rules_agree(db, client, tenant):
+    from sqlalchemy import select
+
+    from app.doc_index import doc_is_open, open_sql
+
+    cases = [("issued", 100, None), ("issued", 100, 99.995), ("issued", 100, 99.98), ("partially paid", 100, 10),
+             ("overdue", 50, 0), ("posted", 50, 0), ("draft", 0, 0), ("", 10, 0), ("reconciled", 10, 0)]
+    for i, (status, amount, paid) in enumerate(cases):
+        _save(client, tenant, "salesInvoices", _invoice(f"RULE-{i}", total=amount, status=status or "Issued"))
+    for i, (status, amount, paid) in enumerate(cases):
+        db.query(AppDataRecord).filter(AppDataRecord.record_key == f"RULE-{i}").update(
+            {"doc_status": status, "amount_paid": paid}, synchronize_session=False)
+    db.commit()
+    rows = db.execute(select(AppDataRecord.doc_status, AppDataRecord.amount, AppDataRecord.amount_paid, open_sql())
+                      .where(AppDataRecord.record_key.like("RULE-%"))).all()
+    assert len(rows) == len(cases)
+    for status, amount, paid, sql_open in rows:
+        assert bool(sql_open) is doc_is_open(status, amount, paid), (status, amount, paid)
