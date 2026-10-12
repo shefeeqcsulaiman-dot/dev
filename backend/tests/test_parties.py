@@ -30,7 +30,7 @@ def test_save_edit_delete_keep_parties_current(client, db, tenant):  # noqa: F81
 
     _save(client, headers, "vendors", {"id": f"V-{tag}", "name": f"Supplier {tag}", "trn": "", "category": "Goods"})
     db.expire_all()
-    assert db.query(Party).filter(Party.company_id == cid, Party.kind == "vendor", Party.name == f"Supplier {tag}").one().trn is None
+    assert db.query(Party).filter(Party.company_id == cid, Party.kind == "vendor", Party.name == f"Supplier {tag}").one().trn == ""  # given but empty: kept as ""
 
     r = client.post("/api/v1/app-data?action=delete", headers=headers, json={"collection": "customers", "record": cust})
     assert r.status_code == 200, r.text

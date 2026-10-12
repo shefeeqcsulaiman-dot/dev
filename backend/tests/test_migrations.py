@@ -263,3 +263,55 @@ def test_open_flag_migration_fills_existing_documents(scratch_engine):
     with scratch_engine.connect() as conn:
         flags = {i: (None if v is None else bool(v)) for i, v in conn.execute(text("SELECT id, doc_open FROM app_data_records"))}
     assert flags == {"d1": True, "d2": False, "d3": True, "d4": False, "d5": None}
+
+
+def test_parties_main_copy_migration_rewrites_records(scratch_engine):
+    """0024: customers/suppliers' JSON is rewritten as their parties row regenerates it, and
+    the rows (with extra) are refilled."""
+    import json as _json
+
+    from alembic import command
+    from app.migrate import alembic_config
+
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        command.downgrade(alembic_config(conn), "0023_document_open_flag")
+        conn.commit()
+    with scratch_engine.begin() as conn:
+        conn.execute(text("INSERT INTO companies (id, name, country, currency, vat_rate, stock_mode, inventory_accounting) "
+                          "VALUES ('c1', 'c1', 'UAE', 'AED', 5, 'with_stock', 'periodic')"))
+        conn.execute(text("INSERT INTO app_data_records (id, company_id, collection, record_key, payload, row_version) "
+                          "VALUES ('p1', 'c1', 'customers', 'Acme', :p, 1)"),
+                     {"p": _json.dumps({"name": "Acme", "trn": "100-1", "credit_limit": "1,000", "notes": "VIP"})})
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        payload = conn.execute(text("SELECT payload FROM app_data_records WHERE id = 'p1'")).scalar()
+        extra, trn = conn.execute(text("SELECT extra, trn FROM parties WHERE id = 'p1'")).one()
+    assert _json.loads(payload) == {"name": "Acme", "trn": "1001", "credit_limit": 1000.0, "notes": "VIP"}
+    assert (_json.loads(extra), trn) == ({"notes": "VIP"}, "1001")
+
+
+def test_products_main_copy_migration_rewrites_records(scratch_engine):
+    """0025: products' JSON is rewritten as their row regenerates it (image kept), rows refilled."""
+    import json as _json
+
+    from alembic import command
+    from app.migrate import alembic_config
+
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        command.downgrade(alembic_config(conn), "0024_parties_main_copy")
+        conn.commit()
+    with scratch_engine.begin() as conn:
+        conn.execute(text("INSERT INTO companies (id, name, country, currency, vat_rate, stock_mode, inventory_accounting) "
+                          "VALUES ('c1', 'c1', 'UAE', 'AED', 5, 'with_stock', 'periodic')"))
+        conn.execute(text("INSERT INTO app_data_records (id, company_id, collection, record_key, payload, row_version) "
+                          "VALUES ('q1', 'c1', 'products', 'K-1', :p, 1)"),
+                     {"p": _json.dumps({"code": "K-1", "name": "Kit", "price": "1,500", "image": "data:x", "notes": "n"})})
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        payload = conn.execute(text("SELECT payload FROM app_data_records WHERE id = 'q1'")).scalar()
+        extra, price = conn.execute(text("SELECT extra, selling_price FROM catalog_products WHERE id = 'q1'")).one()
+    assert _json.loads(payload) == {"code": "K-1", "name": "Kit", "selling_price": 1500.0, "price": "1,500",
+                                    "notes": "n", "image": "data:x"}
+    assert (_json.loads(extra), float(price)) == ({"price": "1,500", "notes": "n"}, 1500.0)

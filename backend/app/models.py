@@ -950,6 +950,9 @@ class Party(Base):
     contact: Mapped[str | None] = mapped_column(String(255))
     credit_limit: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     status: Mapped[str | None] = mapped_column(String(40))
+    # The record's other fields (JSON object text): with the columns, the whole record, so
+    # it can be regenerated from this row (app/parties.py party_record()).
+    extra: Mapped[str | None] = mapped_column(Text)
 
 
 class TaskRecord(Base):
@@ -1041,6 +1044,9 @@ class CatalogProduct(Base):
     supplier_name: Mapped[str | None] = mapped_column(String(255))
     barcode: Mapped[str | None] = mapped_column(String(80))
     status: Mapped[str | None] = mapped_column(String(40))
+    # The product's other fields (JSON object text) except its inline image: with the
+    # columns, the whole product (app/catalog_products.py product_record()).
+    extra: Mapped[str | None] = mapped_column(Text)
 
 
 from app.workflow_status import OPEN_WORK_COLLECTIONS, status_key  # noqa: E402 -- no model imports

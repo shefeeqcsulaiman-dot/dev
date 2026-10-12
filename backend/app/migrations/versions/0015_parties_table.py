@@ -43,12 +43,8 @@ def upgrade() -> None:
         )
         op.create_index("ix_parties_company_kind_name", "parties", ["company_id", "kind", "name_key"])
         op.create_index("ix_parties_company_kind_trn", "parties", ["company_id", "kind", "trn"])
-    bind.execute(sa.text("DELETE FROM parties"))
-    from app.parties import mirror
-
-    table = sa.table("parties", *[sa.column(c, sa.Numeric(14, 2)) if c == "credit_limit" else sa.column(c)
-                                  for c in _COLUMNS])
-    mirror.refill_all(bind, table)
+    # Filled by 0024_parties_main_copy, which adds parties.extra: app/parties.py's rows now
+    # carry it, so filling here (before that column exists) would fail on a new database.
 
 
 def downgrade() -> None:

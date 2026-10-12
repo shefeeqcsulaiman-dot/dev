@@ -49,5 +49,6 @@ def test_imports_and_lenient_saves_clean_and_carry_on(client, db, tenant):  # no
     assert _lenient(client, h, {"code": "p-5", "name": "Flour"}) == {"ok": True, "saved": False, "skipped": True}
     db.expire_all()
     rows = {p.code: (p.name, p.cost, p.barcode) for p in db.query(CatalogProduct).filter(CatalogProduct.company_id == company_id)}
-    assert rows == {"P-1": ("Rice", None, None), "P-2": ("Sugar", None, None), "P-4": ("Salt", None, None),
+    # A cleared barcode stays on the record as "" (app/main_copy.py keeps a given field's key).
+    assert rows == {"P-1": ("Rice", None, None), "P-2": ("Sugar", None, None), "P-4": ("Salt", None, ""),
                     "P-5": ("Flour", None, None)}

@@ -68,7 +68,8 @@ def test_bulk_imports_clean_bad_fields_and_skip_duplicates(client, db, tenant):
     ])
     assert (out["saved"], out["skipped"], out["cleaned"]) == (3, 3, 2)
     rows = {p.name: (p.trn, p.email) for p in db.query(Party).filter(Party.company_id == company_id, Party.kind == "vendor")}
-    assert rows == {"Gulf Bev": (TRN_A, None), "Delta Paper": (None, None), "Echo Foods": (None, None),
+    # Cleared fields stay on the record as "" (app/parties.py keeps a given field's key).
+    assert rows == {"Gulf Bev": (TRN_A, None), "Delta Paper": ("", ""), "Echo Foods": ("", None),
                     "Fox Trading": (TRN_B, "f@fox.ae")}
 
 

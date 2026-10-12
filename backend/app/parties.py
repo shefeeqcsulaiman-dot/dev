@@ -1,12 +1,17 @@
-"""Customers and vendors as real rows (the parties table), step A of moving them out of JSON.
+"""Customers and vendors as real rows (the parties table): the main copy of each record.
 
-Every save, edit and delete of a "customers" or "vendors" app-data record updates its
-row in parties (app/record_mirror.py). The JSON record is still the source of truth; the
-rows can be checked or rebuilt with `python -m app.parties [--rebuild]`. Next steps
-(docs/scaling-plan-10k.md): reads move to this table, then writes, then the JSON copy goes.
+Every customer / supplier has one row here with its fields as columns (name, TRN, email,
+phone, address, emirate, category, contact, credit limit, status) and any other fields it
+carries in `extra`, so the row alone holds the whole record. Saves go through it: the JSON
+app-data record is regenerated from the row (party_record()), and kept only because many
+generic readers (bootstrap, exports, backups, voice) still read app_data_records. Step A
+made this a copy of the JSON; step B checks saves (app/party_checks.py); step C (this)
+makes the row the source. Check, rebuild or rewrite with
+`python -m app.parties [--rebuild] [--rewrite-json]`.
 
-Values are normalised on the way in: TRN keeps its digits only, names get a lower-cased
-search key, the credit limit is a number (or empty when it isn't one).
+Values are normalised: TRN keeps its digits only, names get a lower-cased search key, the
+credit limit is a number (dropped when it isn't one). A field the record has but leaves
+empty is kept as "" (not dropped), so the regenerated record has the same keys.
 """
 from __future__ import annotations
 
@@ -17,6 +22,8 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import main_copy
+from app.main_copy import Field, fields_from, record_from
 from app.models import AppDataRecord, Party
 from app.record_mirror import Record, RecordMirror
 
@@ -38,6 +45,27 @@ def _money(value: Any) -> Decimal | None:
     return number.quantize(Decimal("0.01"))
 
 
+# The record fields with a column of their own (app/main_copy.py does the rest).
+FIELDS = (Field("name", 255, ("customer", "vendor")), Field("trn", 40, kind="digits"), Field("email", 255),
+          Field("phone", 80, ("mobile",)), Field("address", 4000), Field("emirate", 80), Field("category", 120),
+          Field("contact", 255, ("contact_person",)), Field("credit_limit", kind="money"), Field("status", 40))
+
+
+def party_fields(doc: dict[str, Any]) -> dict[str, Any]:
+    """Column values for one customer / supplier record, plus `extra` (the other fields)."""
+    return fields_from(doc, FIELDS)
+
+
+def party_record(fields: Any) -> dict[str, Any]:
+    """The JSON record regenerated from a parties row (or party_fields() output)."""
+    return record_from(fields, FIELDS)
+
+
+def canonical_party(record: dict[str, Any]) -> dict[str, Any]:
+    """A customer / supplier record as it is stored: put through its row and back."""
+    return party_record(party_fields(record))
+
+
 def party_rows(rec: Record) -> list[dict[str, Any]]:
     record_id, company_id, collection, payload, branch_id, record_key = rec
     try:
@@ -46,63 +74,50 @@ def party_rows(rec: Record) -> list[dict[str, Any]]:
         return []
     if not isinstance(doc, dict):
         return []
-    name = _text(doc.get("name") or doc.get("customer") or doc.get("vendor"), 255) or ""
-    trn = "".join(ch for ch in str(doc.get("trn") or "") if ch.isdigit())[:40] or None
+    fields = party_fields(doc)
+    name = fields["name"] or ""
     return [{
         "id": record_id,
         "company_id": company_id,
         "branch_id": branch_id,
         "kind": KINDS[collection],
         "record_key": _text(record_key, 160),
+        **fields,
         "name": name,
         "name_key": name.lower(),
-        "trn": trn,
-        "email": _text(doc.get("email"), 255),
-        "phone": _text(doc.get("phone") or doc.get("mobile"), 80),
-        "address": _text(doc.get("address"), 4000),
-        "emirate": _text(doc.get("emirate"), 80),
-        "category": _text(doc.get("category"), 120),
-        "contact": _text(doc.get("contact") or doc.get("contact_person"), 255),
-        "credit_limit": _money(doc.get("credit_limit")) if doc.get("credit_limit") not in (None, "") else None,
-        "status": _text(doc.get("status"), 40),
     }]
 
 
 mirror = RecordMirror("parties", KINDS, Party, Party.id, party_rows).register()
 
 
+_COMPARED = ("kind", "record_key", "name", "name_key", *(f.name for f in FIELDS if f.name != "name"), "extra")
+_SOURCE = (AppDataRecord.id, AppDataRecord.company_id, AppDataRecord.collection, AppDataRecord.payload,
+           AppDataRecord.branch_id, AppDataRecord.record_key)
+
+
 def verify_company(session: Session, company_id: str) -> bool:
-    """True when the company's parties rows match what its JSON records produce."""
-    have = {r.id: (r.kind, r.name, r.trn, r.email, r.credit_limit, r.record_key)
+    """True when the company's parties rows match its records: every column, extra included."""
+    have = {r.id: tuple(getattr(r, c) for c in _COMPARED)
             for r in session.query(Party).filter(Party.company_id == company_id)}
     want = {}
-    for rec in session.execute(select(AppDataRecord.id, AppDataRecord.company_id, AppDataRecord.collection,
-                                      AppDataRecord.payload, AppDataRecord.branch_id, AppDataRecord.record_key)
-                               .where(AppDataRecord.company_id == company_id,
-                                      AppDataRecord.collection.in_(KINDS))):
+    for rec in session.execute(select(*_SOURCE).where(AppDataRecord.company_id == company_id,
+                                                      AppDataRecord.collection.in_(KINDS))):
         for row in party_rows(tuple(rec)):
-            want[row["id"]] = (row["kind"], row["name"], row["trn"], row["email"], row["credit_limit"], row["record_key"])
+            want[row["id"]] = tuple(row[c] for c in _COMPARED)
     return have == want
 
 
+def stale_json(session: Session, company_id: str) -> list[str]:
+    return main_copy.stale_json(session, company_id, KINDS, canonical_party)
+
+
+def rewrite_json(session: Session, record_ids: list[str]) -> None:
+    main_copy.rewrite_json(session, record_ids, canonical_party)
+
+
 def _main() -> None:
-    import argparse
-
-    from app.database import SessionLocal
-
-    parser = argparse.ArgumentParser(description="Check (or rebuild) the parties table against the JSON records.")
-    parser.add_argument("--rebuild", action="store_true", help="rebuild companies whose rows differ")
-    args = parser.parse_args()
-    with SessionLocal() as db:
-        companies = [c for (c,) in db.execute(
-            select(AppDataRecord.company_id).where(AppDataRecord.collection.in_(KINDS)).distinct())]
-        bad = [c for c in companies if not verify_company(db, c)]
-        print(f"{len(companies)} companies checked, {len(bad)} differ")
-        if args.rebuild and bad:
-            for company_id in bad:
-                mirror.rebuild_company(db, company_id)
-            db.commit()
-            print(f"rebuilt {len(bad)}")
+    main_copy.check_tool("Check (or rebuild) the parties table and the JSON it regenerates.", KINDS, verify_company, canonical_party, mirror)
 
 
 if __name__ == "__main__":

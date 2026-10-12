@@ -46,12 +46,8 @@ def upgrade() -> None:
         )
         op.create_index("ix_catalog_products_company_name", "catalog_products", ["company_id", "name_key"])
         op.create_index("ix_catalog_products_company_code", "catalog_products", ["company_id", "code_key"])
-    bind.execute(sa.text("DELETE FROM catalog_products"))
-    from app.catalog_products import mirror
-
-    table = sa.table("catalog_products", *[sa.column(c, sa.Numeric(14, 2)) if c in _MONEY else sa.column(c)
-                                           for c in _COLUMNS])
-    mirror.refill_all(bind, table)
+    # Filled by 0025_products_main_copy, which adds catalog_products.extra: app/catalog_products.py's
+    # rows now carry it, so filling here (before that column exists) would fail on a new database.
 
 
 def downgrade() -> None:
