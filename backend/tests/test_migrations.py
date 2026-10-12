@@ -189,3 +189,52 @@ def test_pack_units_migration_recounts_outer_purchases_once(scratch_engine):
     assert (float(moves["s2"].quantity), moves["s2"].source_quantity) == (8, None)   # pack size 1: untouched
     assert float(moves["s3"].quantity) == -10                                         # sales were already pieces
     assert tuple(map(float, layer)) == (48, 48, 5)
+
+
+def test_due_date_migration_fills_existing_documents(scratch_engine):
+    """0021: the due date column is filled from each document's own field (purchases' "due"
+    is an amount, so only their due_date counts)."""
+    from alembic import command
+    from app.migrate import alembic_config
+
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        command.downgrade(alembic_config(conn), "0020_rota_records")
+        conn.commit()
+    rows = (("r1", "salesInvoices", '{"due_date": "2026-11-01"}'), ("r2", "bills", '{"due": "05/11/2026"}'),
+            ("r3", "purchaseRecords", '{"due": 105, "due_date": "2026-11-09"}'), ("r4", "purchaseRecords", '{"due": 105}'),
+            ("r5", "quotations", '{"due_date": "2026-11-01"}'))
+    with scratch_engine.begin() as conn:
+        conn.execute(text("INSERT INTO companies (id, name, country, currency, vat_rate, stock_mode, inventory_accounting) "
+                          "VALUES ('c1', 'c1', 'UAE', 'AED', 5, 'with_stock', 'periodic')"))
+        for rid, collection, payload in rows:
+            conn.execute(text("INSERT INTO app_data_records (id, company_id, collection, payload, row_version) "
+                              "VALUES (:i, 'c1', :c, :p, 1)"), {"i": rid, "c": collection, "p": payload})
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        due = dict(conn.execute(text("SELECT id, due_date FROM app_data_records")).all())
+    assert due == {"r1": "2026-11-01", "r2": "2026-11-05", "r3": "2026-11-09", "r4": None, "r5": None}
+
+
+def test_open_work_status_migration_fills_existing_records(scratch_engine):
+    """0022: workflow records' status is stamped into doc_status (lower case); documents and
+    other collections are left alone."""
+    from alembic import command
+    from app.migrate import alembic_config
+
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        command.downgrade(alembic_config(conn), "0021_document_due_date")
+        conn.commit()
+    rows = (("w1", "overtimeRequests", '{"status": " Pending "}'), ("w2", "employeeLoans", '{"status": "Closed"}'),
+            ("w3", "leaveRequests", '{}'), ("w4", "products", '{"status": "Active"}'))
+    with scratch_engine.begin() as conn:
+        conn.execute(text("INSERT INTO companies (id, name, country, currency, vat_rate, stock_mode, inventory_accounting) "
+                          "VALUES ('c1', 'c1', 'UAE', 'AED', 5, 'with_stock', 'periodic')"))
+        for rid, collection, payload in rows:
+            conn.execute(text("INSERT INTO app_data_records (id, company_id, collection, payload, row_version) "
+                              "VALUES (:i, 'c1', :c, :p, 1)"), {"i": rid, "c": collection, "p": payload})
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        status = dict(conn.execute(text("SELECT id, doc_status FROM app_data_records")).all())
+    assert status == {"w1": "pending", "w2": "closed", "w3": None, "w4": None}

@@ -188,3 +188,38 @@ def test_expenses_page_status_filter_and_summary(client, tenant):
     assert (s["total"], s["pending"], s["approved"], s["rejected"], s["direct"]) == (200, 100, 70, 30, 120)
     data = client.get("/api/v1/app-data", headers=tenant).json()["data"]
     assert "expenses" not in data and "ledger" not in data
+
+
+# ── purchase records ───────────────────────────────────────────────────────────
+
+def _purchase(ref, supplier, day, product, total=105, status="Pending Payment"):
+    return {"ref": ref, "supplier": supplier, "date": day, "status": status, "net_amount": total / 1.05,
+            "tax_amount": total - total / 1.05, "total": total,
+            "lines": [{"product": product, "quantity": 1, "unit_cost": total / 1.05, "line_total": total / 1.05}]}
+
+
+def test_purchase_records_search_product_and_date_range(client, tenant, second_tenant_headers):
+    _save(client, tenant, "purchaseRecords", _purchase("PR-1", "Gulf Bev", "2026-08-03", "Cola Can"))
+    _save(client, tenant, "purchaseRecords", _purchase("PR-2", "Alpha Foods", "2026-09-14", "Rice 5kg"))
+    _save(client, tenant, "purchaseRecords", _purchase("PR-3", "Gulf Bev", "2026-09-28", "Water 1.5L", status="Paid"))
+    _save(client, tenant, "purchaseRecords", _purchase("PR-4", "Alpha Foods", "2026-10-02", "Cola Can"))
+
+    page = _get(client, tenant, "/registers/purchaseRecords", limit=2)
+    assert page["total"] == 4 and [r["ref"] for r in page["records"]] == ["PR-4", "PR-3"]
+    assert sorted(r["ref"] for r in _get(client, tenant, "/registers/purchaseRecords", q="gulf")["records"]) == ["PR-1", "PR-3"]
+    assert [r["ref"] for r in _get(client, tenant, "/registers/purchaseRecords", q="paid")["records"]] == ["PR-3"]
+    assert sorted(r["ref"] for r in _get(client, tenant, "/registers/purchaseRecords", product="cola can")["records"]) == ["PR-1", "PR-4"]
+    september = _get(client, tenant, "/registers/purchaseRecords", **{"from": "2026-09-01", "to": "2026-09-30"})
+    assert sorted(r["ref"] for r in september["records"]) == ["PR-2", "PR-3"]
+    assert [r["ref"] for r in _get(client, tenant, "/registers/purchaseRecords", **{"from": "2026-09-20"},
+                                   q="gulf")["records"]] == ["PR-3"]
+    assert _get(client, tenant, "/registers/purchaseRecords", to="2026-08-31")["total"] == 1
+    assert client.get("/api/v1/app-data/registers/purchaseRecords", headers=tenant,
+                      params={"from": "2026/09/01"}).status_code == 422
+    assert _get(client, second_tenant_headers, "/registers/purchaseRecords", q="PR-")["total"] == 0
+
+
+def test_date_range_filters_other_registers_too(client, tenant):
+    _save(client, tenant, "bills", _bill("B-AUG", date="2026-08-10"))
+    _save(client, tenant, "bills", _bill("B-SEP", date="2026-09-10"))
+    assert [r["bill_no"] for r in _get(client, tenant, "/registers/bills", **{"from": "2026-09-01"})["records"]] == ["B-SEP"]

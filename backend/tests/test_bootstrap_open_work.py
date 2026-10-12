@@ -46,3 +46,27 @@ def test_old_open_items_survive_the_cap(client, db):
     loans = [l["id"] for l in data["employeeLoans"]]
     assert "LOAN-ACTIVE" in loans and "LOAN-CLOSED" not in loans
     assert "tasks" in body.get("truncated_collections", [])
+
+
+def test_status_is_stamped_and_read_in_sql(client, db):
+    company_id, headers = _tenant(client, db)
+    # Older than 500 newer finished requests: no status (open), "REJECTED by HR" and
+    # "Pending" -- then "Pending" is edited to "Paid", which finishes it.
+    for i, status in enumerate([None, "REJECTED by HR", "Pending"]):
+        _add(db, company_id, "overtimeRequests", f"OT-OLD-{i}", status, i)
+    for i in range(500):
+        _add(db, company_id, "overtimeRequests", f"OT-{i}", "Approved and Paid", 100 + i)
+    db.commit()
+    rows = {r.record_key: r.doc_status for r in db.query(AppDataRecord).filter(
+        AppDataRecord.company_id == company_id, AppDataRecord.record_key.like("OT-OLD-%"))}
+    assert rows == {"OT-OLD-0": None, "OT-OLD-1": "rejected by hr", "OT-OLD-2": "pending"}
+
+    def old_open():
+        body = client.get("/api/v1/app-data", headers=headers).json()
+        return [r["id"] for r in body.get("data", body)["overtimeRequests"] if r["id"].startswith("OT-OLD-")]
+
+    assert old_open() == ["OT-OLD-0", "OT-OLD-2"]
+    row = db.query(AppDataRecord).filter(AppDataRecord.company_id == company_id, AppDataRecord.record_key == "OT-OLD-2").one()
+    row.payload = json.dumps({"id": "OT-OLD-2", "title": "OT-OLD-2", "status": "Paid"})
+    db.commit()
+    assert old_open() == ["OT-OLD-0"]

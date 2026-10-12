@@ -10,10 +10,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=253c2af451" as="style">
-<link rel="preload" href="src/app.js?v=252fe58567" as="script">
+<link rel="preload" href="src/styles.css?v=5cc755cc58" as="style">
+<link rel="preload" href="src/app.js?v=ed205ff0c8" as="script">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=253c2af451">
+<link rel="stylesheet" href="src/styles.css?v=5cc755cc58">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
 </head>
 <body class="theme-light">
@@ -1140,6 +1140,14 @@
         </div>
         <div class="flx"><input class="fi" id="sales-invoice-search" type="search" style="width:210px" placeholder="Search invoices..." aria-label="Search invoices and returns" oninput="searchSalesRegister(this.value)"><button class="btn btn-g btn-sm" id="sales-invoice-prev" type="button" onclick="prevSalesRegisterPage('invoice')">&larr; Previous</button><button class="btn btn-g btn-sm" id="sales-invoice-next" type="button" onclick="nextSalesRegisterPage('invoice')">Next &rarr;</button><button class="btn btn-g" onclick="stab(document.querySelector('#page-sales .tab:nth-child(1)'),'s-upload')">Upload</button><button class="btn btn-p" onclick="openSalesAddChoice()">+ New Invoice</button></div>
       </div>
+      <div class="list-filters">
+        <label class="list-filter-date">From <input class="fi" id="sales-filter-from" type="date" data-no-default-date onchange="filterSalesRegister()"></label>
+        <label class="list-filter-date">To <input class="fi" id="sales-filter-to" type="date" data-no-default-date onchange="filterSalesRegister()"></label>
+        <select class="fi" id="sales-filter-state" aria-label="Invoice payment state" onchange="filterSalesRegister()" style="width:auto">
+          <option value="">All invoices</option><option value="open">Open (balance due)</option><option value="overdue">Overdue</option>
+        </select>
+        <button class="btn btn-g btn-sm" id="sales-filter-clear" type="button" hidden onclick="clearSalesRegisterFilters()">Clear</button>
+      </div>
       <!-- Paged from the server (loadSalesRegisterPage() in app.js), so no client-side pager/search. -->
       <table class="tbl" data-no-table-tools="1">
         <thead><tr><th>Invoice No.</th><th>Customer</th><th>Date</th><th>Due Date</th><th>Amount</th><th>VAT</th><th>Total</th><th>Source</th><th>Status</th><th></th></tr></thead>
@@ -1631,6 +1639,13 @@
           <button class="btn btn-g btn-sm" id="purchase-next-btn" type="button" onclick="nextPurchaseRecordsPage()">Next &rarr;</button>
           <button class="btn btn-p btn-sm" type="button" onclick="openPurchaseAddChoice()">+ Manual Entry</button>
         </div>
+      </div>
+      <div class="list-filters">
+        <input class="fi" id="purchase-filter-q" type="search" placeholder="Search ref, supplier, status or date" aria-label="Search purchase records" oninput="filterPurchaseRecords()">
+        <input class="fi" id="purchase-filter-product" type="search" placeholder="Product name" aria-label="Filter by product" onchange="filterPurchaseRecords()">
+        <label class="list-filter-date">From <input class="fi" id="purchase-filter-from" type="date" data-no-default-date onchange="filterPurchaseRecords()"></label>
+        <label class="list-filter-date">To <input class="fi" id="purchase-filter-to" type="date" data-no-default-date onchange="filterPurchaseRecords()"></label>
+        <button class="btn btn-g btn-sm" id="purchase-filter-clear" type="button" hidden onclick="clearPurchaseRecordFilters()">Clear</button>
       </div>
       <table class="tbl" data-delete-actions-bound="skip" data-default-page-size="all">
         <thead><tr><th data-action-col="1">Actions</th><th>Ref No.</th><th>Product Name</th><th>Supplier</th><th>Date</th><th>Location</th><th>Items</th><th>Net Amount</th><th>Tax</th><th>Shipping</th><th>Total</th><th>Paid</th><th>Due</th><th>Source</th><th>Status</th></tr></thead>
@@ -5775,6 +5790,6 @@ period_locks ─&lt; audit_logs
      order relative to app.js's own defer, so config.js still runs first. -->
 <script src="config.js" defer></script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=252fe58567" defer></script>
+<script src="src/app.js?v=ed205ff0c8" defer></script>
 </body>
 </html>

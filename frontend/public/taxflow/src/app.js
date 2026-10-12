@@ -2762,7 +2762,7 @@ async function fetchWithBackendFallback(url,options={}){
 // a new endpoint server-side means adding its path here too.
 window.ACTIVE_BRANCH_ID=window.ACTIVE_BRANCH_ID||(()=>{try{return localStorage.getItem('taxflow_active_branch_id')||null;}catch{return null;}})();
 window.ACCESSIBLE_BRANCHES=window.ACCESSIBLE_BRANCHES||[];
-const _BRANCH_AWARE_PATH_RE=/\/(invoices|inventory\/stock-levels|inventory\/stock-movements|reports\/trial-balance|reports\/dashboard|reports\/summary|hr\/live-locations|journal|general-ledger|app-data\/stock-movements|app-data\/records\/(purchaseRecords|posSales|salesInvoices)|app-data\/sales-invoices(\/summary|\/open|\/by-number)?)(\?|$)/;
+const _BRANCH_AWARE_PATH_RE=/\/(invoices|inventory\/stock-levels|inventory\/stock-movements|reports\/trial-balance|reports\/dashboard|reports\/summary|hr\/live-locations|journal|general-ledger|app-data\/stock-movements|app-data\/records\/(purchaseRecords|posSales|salesInvoices)|app-data\/registers\/purchaseRecords|app-data\/sales-invoices(\/summary|\/open|\/by-number)?)(\?|$)/;
 function _withActiveBranchParam(url){
   if(!window.ACTIVE_BRANCH_ID)return url;
   if(typeof url!=='string'||!_BRANCH_AWARE_PATH_RE.test(url))return url;
@@ -8397,17 +8397,45 @@ function renderPurchaseRecordList(records=[]){
 // ever holds the one page currently on screen, so Next/Previous never grows
 // the DOM past PURCHASE_PAGE_SIZE rows regardless of how many pages a user
 // clicks through.
-const _prPage={page:1,total:0,loading:false};
+// Filters (search, product, date range) run on the server over every purchase, through
+// GET /app-data/registers/purchaseRecords (routers/registers.py): ref, supplier, status and
+// date are indexed columns, products come from document_lines.
+const _prPage={page:1,total:0,loading:false,seq:0,filters:{q:'',product:'',from:'',to:''}};
+
+function _purchaseRecordFiltersActive(){
+  return Object.values(_prPage.filters).some(Boolean);
+}
+
+let _purchaseFilterTimer=null;
+function filterPurchaseRecords(){
+  clearTimeout(_purchaseFilterTimer);
+  _purchaseFilterTimer=setTimeout(()=>{
+    const val=id=>String(document.getElementById(id)?.value||'').trim();
+    _prPage.filters={q:val('purchase-filter-q'),product:val('purchase-filter-product'),from:val('purchase-filter-from'),to:val('purchase-filter-to')};
+    const clear=document.getElementById('purchase-filter-clear');
+    if(clear)clear.hidden=!_purchaseRecordFiltersActive();
+    _prPage.loading=false;  // a new search supersedes a page still loading
+    goToPurchaseRecordsPage(1);
+  },300);
+}
+
+function clearPurchaseRecordFilters(){
+  ['purchase-filter-q','purchase-filter-product','purchase-filter-from','purchase-filter-to'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.value='';
+  });
+  filterPurchaseRecords();
+}
 
 async function goToPurchaseRecordsPage(page){
   if(_prPage.loading||page<1)return;
   _prPage.loading=true;
+  const seq=++_prPage.seq;
   updatePurchaseRecordPageControls();
   try{
     const offset=(page-1)*PURCHASE_PAGE_SIZE;
-    const response=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/purchaseRecords?limit=${PURCHASE_PAGE_SIZE}&offset=${offset}`);
-    if(!response.ok)throw new Error('Purchase records API returned '+response.status);
-    const data=await response.json();
+    const data=await registersApi('/registers/purchaseRecords',{..._prPage.filters,limit:PURCHASE_PAGE_SIZE,offset});
+    if(seq!==_prPage.seq)return;  // a newer search or page request superseded this one
     const records=Array.isArray(data.records)?data.records:[];
     _prPage.total=Number(data.total||0);
     _prPage.page=page;
@@ -8424,15 +8452,18 @@ async function goToPurchaseRecordsPage(page){
       });
       tbody.innerHTML='';
       if(rendered)tbody.appendChild(fragment);
-      else emptyTableMessage(tbody,'No purchase records in database yet.');
+      else emptyTableMessage(tbody,_purchaseRecordFiltersActive()?'No purchase records match these filters.':'No purchase records in database yet.');
       refreshEnhancedTable(tbody.closest('table'));
     }
   }catch(err){
+    if(seq!==_prPage.seq)return;
     console.warn('Purchase records page load failed:',err);
     toast('Purchase records could not load. Check backend connection.','warn');
   }finally{
-    _prPage.loading=false;
-    updatePurchaseRecordPageControls();
+    if(seq===_prPage.seq){
+      _prPage.loading=false;
+      updatePurchaseRecordPageControls();
+    }
   }
 }
 
@@ -8456,8 +8487,8 @@ function updatePurchaseRecordPageControls(){
     count.textContent=_prPage.loading
       ? 'Loading purchase records...'
       : _prPage.total
-      ? `Page ${_prPage.page.toLocaleString('en-AE')} of ${totalPages.toLocaleString('en-AE')} — ${_prPage.total.toLocaleString('en-AE')} database records`
-      : 'No purchase records in database yet.';
+      ? `Page ${_prPage.page.toLocaleString('en-AE')} of ${totalPages.toLocaleString('en-AE')} — ${_prPage.total.toLocaleString('en-AE')} ${_purchaseRecordFiltersActive()?'matching purchase records':'database records'}`
+      : _purchaseRecordFiltersActive()?'No purchase records match these filters.':'No purchase records in database yet.';
   }
   if(prevBtn)prevBtn.disabled=_prPage.loading||_prPage.page<=1;
   if(nextBtn)nextBtn.disabled=_prPage.loading||_prPage.page>=totalPages;
@@ -10760,6 +10791,30 @@ const _salesReg={
   invoice:{page:1,total:0,q:'',loading:false,seq:0,loaded:false},
   return:{page:1,total:0,q:'',loading:false,seq:0,loaded:false}
 };
+// Invoice date range and payment state (open / overdue), filtered on the server: the date
+// and due date are indexed columns (app/doc_index.py). The state applies to invoices only.
+const _salesFilters={from:'',to:'',state:''};
+
+function _salesFiltersActive(kind){
+  return Boolean(_salesReg[kind].q||_salesFilters.from||_salesFilters.to||(kind==='invoice'&&_salesFilters.state));
+}
+
+function filterSalesRegister(){
+  const val=id=>String(document.getElementById(id)?.value||'').trim();
+  Object.assign(_salesFilters,{from:val('sales-filter-from'),to:val('sales-filter-to'),state:val('sales-filter-state')});
+  const clear=document.getElementById('sales-filter-clear');
+  if(clear)clear.hidden=!(_salesFilters.from||_salesFilters.to||_salesFilters.state);
+  loadSalesRegisterPage('invoice',1);
+  loadSalesRegisterPage('return',1);
+}
+
+function clearSalesRegisterFilters(){
+  ['sales-filter-from','sales-filter-to','sales-filter-state'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.value='';
+  });
+  filterSalesRegister();
+}
 
 function _salesRegTbody(kind){
   return document.getElementById(kind==='return'?'sales-return-tbody':'sales-invoice-tbody');
@@ -10782,7 +10837,8 @@ async function loadSalesRegisterPage(kind='invoice',page=_salesReg[kind].page){
   state.loading=true;
   updateSalesRegisterControls(kind);
   try{
-    const data=await salesApi('',{kind,q:state.q,limit:SALES_PAGE_SIZE,offset:(Math.max(1,page)-1)*SALES_PAGE_SIZE});
+    const data=await salesApi('',{kind,q:state.q,from:_salesFilters.from,to:_salesFilters.to,
+      state:kind==='invoice'?_salesFilters.state:'',limit:SALES_PAGE_SIZE,offset:(Math.max(1,page)-1)*SALES_PAGE_SIZE});
     if(seq!==state.seq)return; // a newer search/page request superseded this one
     const records=Array.isArray(data.records)?data.records:[];
     state.total=Number(data.total||0);
@@ -10800,7 +10856,9 @@ async function loadSalesRegisterPage(kind='invoice',page=_salesReg[kind].page){
     });
     tbody.innerHTML='';
     if(fragment.childNodes.length)tbody.appendChild(fragment);
-    else emptyTableMessage(tbody,state.q?`No ${kind==='return'?'sales returns':'invoices'} match "${state.q}".`:(kind==='return'?'No sales returns in database yet.':'No sales invoices in database yet.'));
+    else emptyTableMessage(tbody,state.q?`No ${kind==='return'?'sales returns':'invoices'} match "${state.q}".`
+      :_salesFiltersActive(kind)?`No ${kind==='return'?'sales returns':'invoices'} match these filters.`
+      :(kind==='return'?'No sales returns in database yet.':'No sales invoices in database yet.'));
     // A page past the end (rows deleted elsewhere) steps back to the last real page.
     if(!records.length&&state.page>1&&state.total>0)return loadSalesRegisterPage(kind,Math.ceil(state.total/SALES_PAGE_SIZE));
   }catch(err){
@@ -10826,8 +10884,8 @@ function updateSalesRegisterControls(kind){
     count.textContent=state.loading&&!state.loaded
       ? `Loading ${label}...`
       : state.total
-      ? `Page ${state.page.toLocaleString('en-AE')} of ${totalPages.toLocaleString('en-AE')} — ${state.total.toLocaleString('en-AE')} ${state.q?'matching ':''}${label}`
-      : state.q?`No ${label} match your search`:`No ${label} yet`;
+      ? `Page ${state.page.toLocaleString('en-AE')} of ${totalPages.toLocaleString('en-AE')} — ${state.total.toLocaleString('en-AE')} ${_salesFiltersActive(kind)?'matching ':''}${label}`
+      : _salesFiltersActive(kind)?`No ${label} match your search`:`No ${label} yet`;
   }
   if(prevBtn)prevBtn.disabled=state.loading||state.page<=1;
   if(nextBtn)nextBtn.disabled=state.loading||state.page>=totalPages;
@@ -29898,7 +29956,8 @@ function initApp(){
   _applyLogoEverywhere();
   applyTheme('light');
   const today=new Date().toISOString().split('T')[0];
-  document.querySelectorAll('input[type=date]').forEach(i=>{if(!i.value)i.value=today;});
+  // Filter fields (data-no-default-date) start empty: a date there narrows a list.
+  document.querySelectorAll('input[type=date]:not([data-no-default-date])').forEach(i=>{if(!i.value)i.value=today;});
   const invDate=document.getElementById('inv-date');
   if(invDate)invDate.value=today;
   const due=new Date();

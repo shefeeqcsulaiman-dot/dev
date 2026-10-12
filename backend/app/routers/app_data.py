@@ -40,7 +40,7 @@ from app.auth_principal import resolve_active_branch
 from app.doc_index import parse_document_date, recompute_payment_targets
 from app.stock_units import purchase_stock, unit_cost as stock_unit_cost
 from app.task_records import COLLECTIONS as TASK_COLLECTIONS
-from app.workflow_status import is_finished_status
+from app.workflow_status import OPEN_WORK_COLLECTIONS, finished_status_sql, is_finished_status
 from app.department_scope import SCOPED_COLLECTIONS, assert_record_writable, build_index, filter_records, record_in_scope
 from app.dependencies import Principal, branch_allows_module, company_allows_module, get_current_principal, get_current_user, principal_module_allowed, require_company_admin, require_module
 from app.limiter import limiter
@@ -315,10 +315,7 @@ _BOOTSTRAP_COLLECTION_CAPS: dict[str, int] = {
 # is still open (a pending request, an active loan, a task not done) stays on screen
 # however old it is. Before, the newest-N cap silently dropped e.g. a two-year loan still
 # being repaid, or an old open task, once enough newer items existed.
-_OPEN_WORK_COLLECTIONS = frozenset({
-    "tasks", "overtimeRequests", "leaveRequests", "attendanceCorrections", "employeeLoans",
-    "salaryAdvances", "jobRequisitions", "candidates", "rotaSwaps", "rotaApprovals", "taskRequests",
-})
+_OPEN_WORK_COLLECTIONS = OPEN_WORK_COLLECTIONS  # app/workflow_status.py
 _OLDER_OPEN_LIMIT = 2000
 _is_finished_status = is_finished_status  # app/workflow_status.py, shared with task_records.is_open
 
@@ -342,23 +339,16 @@ def _older_open_rows(db: Session, company_id: str, collection: str, oldest_kept:
             .limit(_OLDER_OPEN_LIMIT)
             .all()
         )
-    older = (
+    # The others carry their status in doc_status (stamped on every save, models.py), so
+    # finished items are skipped in SQL instead of every older record being decoded here.
+    return (
         db.query(AppDataRecord)
-        .filter(*older_filters)
+        .filter(*older_filters, or_(AppDataRecord.doc_status.is_(None),
+                                    ~finished_status_sql(AppDataRecord.doc_status)))
         .order_by(AppDataRecord.created_at.asc(), AppDataRecord.id.asc())
-        .yield_per(500)
+        .limit(_OLDER_OPEN_LIMIT)
+        .all()
     )
-    kept: list[AppDataRecord] = []
-    for row in older:
-        try:
-            status = json.loads(row.payload or "{}").get("status")
-        except (TypeError, ValueError, AttributeError):
-            status = None
-        if not _is_finished_status(status):
-            kept.append(row)
-            if len(kept) >= _OLDER_OPEN_LIMIT:
-                break
-    return kept
 
 
 def decimal_value(value: Any) -> Decimal:

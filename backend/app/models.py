@@ -842,6 +842,7 @@ class AppDataRecord(Base, TimestampMixin):
         Index("ix_app_data_company_collection_party", "company_id", "collection", "party"),
         Index("ix_app_data_company_collection_fig_ref", "company_id", "collection", "fig_ref"),
         Index("ix_app_data_company_collection_owner", "company_id", "collection", "owner_key"),
+        Index("ix_app_data_company_collection_due", "company_id", "collection", "due_date"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
@@ -852,6 +853,8 @@ class AppDataRecord(Base, TimestampMixin):
     payload: Mapped[str] = mapped_column(Text, nullable=False)
     # Payload's "date" (YYYY-MM-DD) for DATED_COLLECTIONS, so date-window reads can filter in SQL.
     record_date: Mapped[str | None] = mapped_column(String(10))
+    # Due date (YYYY-MM-DD) of sales invoices, bills and purchases (doc_index.doc_due_date()).
+    due_date: Mapped[str | None] = mapped_column(String(10))
     # Summary columns for INDEXED_DOC_COLLECTIONS (app/doc_index.py), so paged lists, search
     # and totals run in SQL instead of parsing every payload. Stamped on every write;
     # amount_paid is kept current from the payments collection instead.
@@ -1036,6 +1039,8 @@ class CatalogProduct(Base):
     status: Mapped[str | None] = mapped_column(String(40))
 
 
+from app.workflow_status import OPEN_WORK_COLLECTIONS, status_key  # noqa: E402 -- no model imports
+
 DATED_COLLECTIONS = frozenset({"rotaAssignments"})
 
 # Employee-owned workflow records the ESS portal lists per employee. Tasks belong to their
@@ -1114,6 +1119,9 @@ def _stamp_record_date(_mapper, _connection, target: AppDataRecord) -> None:
         target.owner_key = payload_owner_key(target.collection, target.payload)
     if target.collection in DATED_COLLECTIONS:
         target.record_date = payload_record_date(target.payload)
+    elif target.collection in OPEN_WORK_COLLECTIONS:
+        # Their status, so the bootstrap finds still-open items in SQL (app/workflow_status.py).
+        target.doc_status = status_key(target.payload)
     else:
         from app.doc_index import INDEXED_DOC_COLLECTIONS, stamp_doc_columns
 

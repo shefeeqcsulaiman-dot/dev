@@ -288,6 +288,20 @@ def doc_figures(record: dict[str, Any], collection: str) -> dict[str, Any]:
     return out
 
 
+# Due date fields per collection (purchases' "due" is the amount still owed, not a date).
+# Kept out of doc_columns(): migrations 0002-0004 write doc_columns() into tables of their day.
+DUE_FIELDS = {"salesInvoices": ("due_date",), "bills": ("due", "due_date"), "purchaseRecords": ("due_date",)}
+
+
+def doc_due_date(record: dict[str, Any], collection: str) -> str | None:
+    """The document's due date as YYYY-MM-DD (the due_date column), or None."""
+    fields = DUE_FIELDS.get(collection)
+    if not fields:
+        return None
+    day = parse_document_date(_first(record, fields))
+    return day.isoformat() if day else None
+
+
 def stamp_doc_columns(target: AppDataRecord) -> None:
     try:
         record = json.loads(target.payload or "{}")
@@ -297,6 +311,7 @@ def stamp_doc_columns(target: AppDataRecord) -> None:
         record = {}
     for column, value in doc_columns(record, target.collection).items():
         setattr(target, column, value)
+    target.due_date = doc_due_date(record, target.collection)
     if target.collection in FIGURE_COLLECTIONS:
         for column, value in doc_figures(record, target.collection).items():
             setattr(target, column, value)

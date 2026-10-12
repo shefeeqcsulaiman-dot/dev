@@ -163,3 +163,35 @@ def test_columns_stamped_from_non_iso_date(db, client, tenant):
     row = db.query(AppDataRecord).filter(AppDataRecord.record_key == "DT-1").one()
     assert (row.record_date, row.party, row.doc_status, row.doc_kind, row.amount) == (
         "2026-02-20", "Acme LLC", "issued", "invoice", Decimal("105.00"))
+
+
+def test_due_date_column_and_open_overdue_date_filters(db, client, tenant):
+    import datetime as dt
+
+    today = dt.date.today()
+    past, future = (today - dt.timedelta(days=5)).isoformat(), (today + dt.timedelta(days=20)).isoformat()
+    _save(client, tenant, "salesInvoices", _invoice("DU-LATE", total=100, due_date=past) | {"date": "2026-08-10"})
+    _save(client, tenant, "salesInvoices", _invoice("DU-SOON", total=200, due_date=future) | {"date": "2026-09-05"})
+    _save(client, tenant, "salesInvoices", _invoice("DU-PAID", total=300, status="Paid", due_date=past) | {"date": "2026-09-20"})
+    _save(client, tenant, "salesInvoices", _invoice("DU-PART", total=400, due_date=past) | {"date": "2026-09-25"})
+    _save(client, tenant, "salesInvoices", _invoice("DU-NODUE", total=500) | {"date": "2026-10-01"})
+    _save(client, tenant, "payments", {"type": "Customer Receipt", "ref": "RCT-DU", "amount": 150, "invoice_no": "DU-PART"})
+
+    row = db.query(AppDataRecord).filter(AppDataRecord.record_key == "DU-LATE").one()
+    assert row.due_date == past
+    assert db.query(AppDataRecord).filter(AppDataRecord.record_key == "DU-NODUE").one().due_date is None
+
+    refs = lambda **p: sorted(r["invoice_no"] for r in _get(client, tenant, "", **p)["records"])  # noqa: E731
+    assert refs(state="overdue") == ["DU-LATE", "DU-PART"]           # paid one is not overdue
+    assert refs(state="open") == ["DU-LATE", "DU-NODUE", "DU-PART", "DU-SOON"]
+    assert refs(**{"from": "2026-09-01", "to": "2026-09-30"}) == ["DU-PAID", "DU-PART", "DU-SOON"]
+    assert refs(state="overdue", **{"from": "2026-09-01"}) == ["DU-PART"]
+    assert client.get("/api/v1/app-data/sales-invoices", headers=tenant, params={"state": "late"}).status_code == 422
+
+    # The Overdue card: past due with nothing received (the part-paid one stays pending).
+    s = _get(client, tenant, "/summary")
+    assert (s["overdue"], s["collected"]) == (100, 300)
+
+    # Editing the due date moves it out of overdue.
+    _save(client, tenant, "salesInvoices", _invoice("DU-LATE", total=100, due_date=future) | {"date": "2026-08-10"})
+    assert refs(state="overdue") == ["DU-PART"]

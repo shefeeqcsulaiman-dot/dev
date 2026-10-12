@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import Principal, get_current_principal
-from app.doc_index import PAID_TOLERANCE, SPECS, effective_status, parse_document_date
+from app.doc_index import PAID_TOLERANCE, SPECS, effective_status
 from app.doc_lines import LINE_COLLECTIONS
 from app.models import AppDataRecord, DocumentLine
 from app.routers.app_data import (
@@ -37,7 +37,7 @@ from app.routers.app_data import (
 router = APIRouter(prefix="/app-data", tags=["registers"])
 
 # Collections served by GET /registers/{collection}.
-REGISTERS = frozenset({"salesInvoices", "bills", "quotations", "payments", "expenses"})
+REGISTERS = frozenset({"salesInvoices", "bills", "quotations", "payments", "expenses", "purchaseRecords"})
 # isPendingDocumentStatus() in app.js: statuses that mean nothing is left to collect/pay.
 _SETTLED_STATUS_WORDS = ("paid", "posted", "settled", "allocated", "closed", "reconciled", "complete")
 # _refreshBillPageStats() in app.js: bill statuses that are no longer open.
@@ -113,6 +113,9 @@ def list_register(
     contains: str | None = None,
     party: str | None = None,
     product: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    state: str | None = None,
     sort: str = "newest",
     limit: int = 50,
     offset: int = 0,
@@ -137,6 +140,17 @@ def list_register(
         filters.append(func.lower(AppDataRecord.payload).like(_like(contains), escape="\\"))
     if party and party.strip():
         filters.append(func.lower(AppDataRecord.party) == party.strip().lower())
+    # Document date (record_date, stamped from the record's own date by app/doc_index.py),
+    # through the (company, collection, record_date) index.
+    if date_from:
+        filters.append(AppDataRecord.record_date >= date_from)
+    if date_to:
+        filters.append(AppDataRecord.record_date <= date_to)
+    # open: money still owed; overdue: owed and past its due date (indexed due_date column).
+    if state in ("open", "overdue"):
+        filters.extend(_bills_open_filters() if collection == "bills" else _open_filters())
+        if state == "overdue":
+            filters.append(AppDataRecord.due_date < _dt.date.today().isoformat())
     if product and product.strip() and collection in LINE_COLLECTIONS:
         # A line whose description, product name or product is exactly this (any case),
         # from document_lines (app/doc_lines.py).
@@ -183,6 +197,9 @@ def get_register(
     contains: str | None = Query(default=None, max_length=160),
     party: str | None = Query(default=None, max_length=160),
     product: str | None = Query(default=None, max_length=160),
+    date_from: str | None = Query(default=None, alias="from", pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    date_to: str | None = Query(default=None, alias="to", pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    state: str | None = Query(default=None, pattern="^(open|overdue)$"),
     sort: str = Query(default="newest", pattern="^(newest|date-desc|date-asc|amount-desc|amount-asc)$"),
     running: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
@@ -193,12 +210,14 @@ def get_register(
 ) -> dict[str, object]:
     """One page of a register. q: number, party, status, salesperson/owner or date.
     contains: anywhere in the saved record. party: exact customer/vendor/contact (any
-    case). product: a line item named exactly this. kind: invoice/return, customer/
+    case). product: a line item named exactly this. from / to: document date range
+    (YYYY-MM-DD, either end optional). state: open (money still owed) or overdue (owed
+    and past its due date). kind: invoice/return, customer/
     supplier (payments), direct/other (expenses). status: exact status (any case).
     running: also return running_before for a running balance."""
     return list_register(
         db, principal, _register(collection), kind=kind, status=status, q=q, contains=contains, party=party, product=product,
-        sort=sort, limit=limit, offset=offset, branch_id=branch_id, running=running,
+        date_from=date_from, date_to=date_to, state=state, sort=sort, limit=limit, offset=offset, branch_id=branch_id, running=running,
     )
 
 
@@ -298,8 +317,9 @@ def _expenses_summary(db: Session, filters: list[Any]) -> dict[str, object]:
 
 def _sales_summary(db: Session, filters: list[Any]) -> dict[str, object]:
     """Sales register KPIs over every invoice (returns excluded), in the buckets the
-    cards always used: collected = paid, overdue = marked overdue with nothing received
-    yet, pending = everything else (Partial included)."""
+    cards always used: collected = paid, overdue = nothing received yet and either marked
+    overdue or past its due date while still open, pending = everything else (Partial
+    included)."""
     amount = func.coalesce(AppDataRecord.amount, 0)
     paid = func.coalesce(AppDataRecord.amount_paid, 0)
     has_receipts = paid > 0
@@ -307,7 +327,9 @@ def _sales_summary(db: Session, filters: list[Any]) -> dict[str, object]:
         and_(has_receipts, amount - paid <= PAID_TOLERANCE),
         and_(~has_receipts, AppDataRecord.doc_status == "paid"),
     )
-    overdue = and_(~has_receipts, AppDataRecord.doc_status.like("%overdue%"))
+    past_due = and_(AppDataRecord.due_date < _dt.date.today().isoformat(),
+                    *[~AppDataRecord.doc_status.like(f"%{word}%") for word in _SETTLED_STATUS_WORDS])
+    overdue = and_(~has_receipts, or_(AppDataRecord.doc_status.like("%overdue%"), past_due))
     count, total, collected_total, overdue_total = (
         db.query(
             func.count(AppDataRecord.id),
@@ -342,23 +364,20 @@ def _bills_summary(db: Session, filters: list[Any]) -> dict[str, object]:
     count, total = db.query(
         func.count(AppDataRecord.id), func.coalesce(func.sum(AppDataRecord.amount), 0)
     ).filter(*filters).one()
+    # The due date is a column (app/doc_index.py doc_due_date()), so open bills aren't decoded.
     open_rows = (
-        db.query(AppDataRecord.amount, AppDataRecord.amount_paid, AppDataRecord.payload)
+        db.query(AppDataRecord.amount, AppDataRecord.amount_paid, AppDataRecord.due_date)
         .filter(*filters, *_bills_open_filters())
         .all()
     )
     today = _dt.date.today()
-    week_out = today + _dt.timedelta(days=7)
+    lo, hi = today.isoformat(), (today + _dt.timedelta(days=7)).isoformat()
     open_total = due_total = Decimal("0")
     due_count = 0
-    for amount, paid, payload in open_rows:
+    for amount, paid, due in open_rows:
         owed = Decimal(str(amount or 0)) - _paid(paid)
         open_total += owed
-        try:
-            due = parse_document_date(json.loads(payload or "{}").get("due"))
-        except (TypeError, ValueError, AttributeError):
-            due = None
-        if due and today <= due <= week_out:
+        if due and lo <= due <= hi:
             due_total += owed
             due_count += 1
     return {
@@ -457,6 +476,9 @@ def list_sales_invoices(
     contains: str | None = Query(default=None, max_length=160),
     customer: str | None = Query(default=None, max_length=160),
     product: str | None = Query(default=None, max_length=160),
+    date_from: str | None = Query(default=None, alias="from", pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    date_to: str | None = Query(default=None, alias="to", pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    state: str | None = Query(default=None, pattern="^(open|overdue)$"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     branch_id: str | None = Query(default=None),
@@ -466,10 +488,11 @@ def list_sales_invoices(
     """One page of the sales register, newest first.
     q: invoice no., customer, status, salesperson or date. contains: anywhere in the saved
     invoice, line items included. customer: exact customer name (any case). product: a
-    line item whose description/product name is exactly this (any case)."""
+    line item whose description/product name is exactly this (any case). from / to:
+    invoice date range. state: open (balance still due) or overdue (due date passed)."""
     return list_register(
         db, principal, "salesInvoices", kind=kind, q=q, contains=contains, party=customer, product=product,
-        limit=limit, offset=offset, branch_id=branch_id,
+        date_from=date_from, date_to=date_to, state=state, limit=limit, offset=offset, branch_id=branch_id,
     )
 
 
