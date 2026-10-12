@@ -18,8 +18,8 @@ from app.config import get_settings
 from app.database import get_db
 from app.dependencies import assert_company_active, company_allows_module
 from app.limiter import limiter
-from app.rota_days import rota_day_statuses, rota_in_range
-from app.models import AppDataRecord, AttendanceDetail, AuditLog, Company, Employee, LeaveRequest, PayrollItem, PayrollRun, Role
+from app.rota_days import rota_day_statuses
+from app.models import AppDataRecord, AttendanceDetail, AuditLog, Company, Employee, LeaveRequest, PayrollItem, PayrollRun, Role, RotaRecord
 from app.routers.attendance import _company_offset, _ot_cooloff_seconds, overtime_eligibility_rows, _late_rules, _local_today, _standard_hours_per_day, _weekend_day_set
 from app.routers.leave import (
     _ALLOWED_TYPES,
@@ -680,10 +680,19 @@ def ess_create_leave(payload: EssLeaveRequestIn, request: Request, db: Session =
     return _leave_out(req)
 
 
-def _rota_assignments_between(db: Session, company_id: str, lo: str, hi: str) -> list[dict]:
-    """rotaAssignments dated lo..hi only, filtered in SQL rather than the whole rota history."""
+def _rota_assignments_between(db: Session, company_id: str, lo: str, hi: str, employee_nos) -> list[dict]:
+    """These employees' rotaAssignments dated lo..hi, found through rota_records'
+    (company, employee, day) index rather than decoding the company's whole rota for the range."""
     out = []
-    query = db.query(AppDataRecord.payload).filter(AppDataRecord.company_id == company_id, *rota_in_range(lo, hi))
+    wanted = list({str(e) for e in employee_nos if e})
+    if not wanted:
+        return out
+    query = (
+        db.query(AppDataRecord.payload)
+        .join(RotaRecord, RotaRecord.id == AppDataRecord.id)
+        .filter(AppDataRecord.company_id == company_id, RotaRecord.company_id == company_id,
+                RotaRecord.employee_no.in_(wanted), RotaRecord.day >= lo, RotaRecord.day <= hi)
+    )
     for (raw,) in query.order_by(AppDataRecord.created_at, AppDataRecord.id).all():
         try:
             parsed = json.loads(raw)
@@ -782,7 +791,7 @@ def ess_rota(
         window_start = (today - timedelta(days=7)).isoformat()
         window_end = (today + timedelta(days=30)).isoformat()
     mine = [
-        a for a in _rota_assignments_between(db, emp.company_id, window_start, window_end)
+        a for a in _rota_assignments_between(db, emp.company_id, window_start, window_end, [emp.employee_no])
         if a.get("employee_id") == emp.employee_no
     ]
     mine.sort(key=lambda a: a.get("date") or "")
@@ -828,7 +837,7 @@ def ess_team_rota(
 
     peer_nos = {p.employee_no for p in peers}
     rows = [
-        a for a in _rota_assignments_between(db, emp.company_id, week_start_iso, week_end_iso)
+        a for a in _rota_assignments_between(db, emp.company_id, week_start_iso, week_end_iso, peer_nos)
         if a.get("employee_id") in peer_nos
     ]
     return {

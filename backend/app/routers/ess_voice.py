@@ -122,7 +122,7 @@ def _balance_answer(request: Request, db: Session, leave_type: str | None, arabi
 def _next_shift_answer(db: Session, emp: Employee, today: date, arabic: bool) -> str:
     end = (today + timedelta(days=30)).isoformat()
     rows = sorted(
-        (a for a in _rota_assignments_between(db, emp.company_id, today.isoformat(), end)
+        (a for a in _rota_assignments_between(db, emp.company_id, today.isoformat(), end, [emp.employee_no])
          if a.get("employee_id") == emp.employee_no
          and not re.match(r"^(off|leave|holiday)$", str(a.get("type") or a.get("code") or ""), re.I)),
         key=lambda a: a.get("date") or "",

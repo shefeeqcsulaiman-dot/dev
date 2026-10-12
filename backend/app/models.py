@@ -5,7 +5,7 @@ from decimal import Decimal
 from enum import Enum
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, event, func
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, event, func
 from sqlalchemy.orm import Mapped, attributes, mapped_column, object_session, relationship
 
 from app.database import Base
@@ -974,6 +974,37 @@ class TaskRecord(Base):
     repeat: Mapped[str | None] = mapped_column(String(20))
 
 
+class RotaRecord(Base):
+    """A rota assignment kept as JSON app-data ("rotaAssignments"), as real columns: one row
+    per record, id = the app_data_records id. Maintained by app/rota_records.py on every
+    write (step A of moving records out of JSON, like TaskRecord): the JSON record is still
+    the source of truth, so these rows can always be rebuilt (`python -m app.rota_records
+    --rebuild`). Days off, unpaid breaks and the ESS rota find an employee's days through
+    (company, employee, day) instead of decoding the company's whole rota for the range."""
+    __tablename__ = "rota_records"
+    __table_args__ = (
+        Index("ix_rota_records_company_employee_day", "company_id", "employee_no", "day"),
+        Index("ix_rota_records_company_day", "company_id", "day"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)  # = app_data_records.id
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(String(36))
+    record_key: Mapped[str | None] = mapped_column(String(160))
+    employee_no: Mapped[str | None] = mapped_column(String(80))  # the record's employee_id
+    employee_name: Mapped[str | None] = mapped_column(String(160))
+    department: Mapped[str | None] = mapped_column(String(120))
+    location: Mapped[str | None] = mapped_column(String(120))
+    day: Mapped[str | None] = mapped_column(String(10))  # YYYY-MM-DD, or empty
+    kind: Mapped[str] = mapped_column(String(10), nullable=False, default="shift")  # shift/off/leave/holiday
+    code: Mapped[str | None] = mapped_column(String(20))  # upper case
+    shift_type: Mapped[str | None] = mapped_column(String(80))
+    start_time: Mapped[str | None] = mapped_column(String(8))
+    end_time: Mapped[str | None] = mapped_column(String(8))
+    break_minutes: Mapped[float | None] = mapped_column(Float)  # empty: none saved on the assignment
+    status: Mapped[str | None] = mapped_column(String(40))
+
+
 class CatalogProduct(Base):
     """A product kept as JSON app-data ("products"), as real columns: one row per record,
     id = the app_data_records id. Maintained by app/catalog_products.py on every write
@@ -1650,3 +1681,4 @@ import app.doc_lines  # noqa: E402,F401  -- keeps DocumentLine current
 import app.parties  # noqa: E402,F401  -- keeps Party (customers, vendors) current
 import app.catalog_products  # noqa: E402,F401  -- keeps CatalogProduct (products) current
 import app.task_records  # noqa: E402,F401  -- keeps TaskRecord (tasks) current
+import app.rota_records  # noqa: E402,F401  -- keeps RotaRecord (rotaAssignments) current

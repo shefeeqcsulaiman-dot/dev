@@ -11,7 +11,8 @@ from datetime import date, timedelta
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
-from app.models import AppDataRecord
+from app.models import AppDataRecord, RotaRecord
+from app.rota_records import minutes, rota_kind
 
 
 def rota_in_range(lo: str, hi: str):
@@ -23,16 +24,20 @@ def rota_in_range(lo: str, hi: str):
     )
 
 
-def _kind(rec: dict) -> str:
-    mark = str(rec.get("mark") or rec.get("type") or "").lower()
-    code = str(rec.get("code") or "").upper()
-    if mark == "off" or code == "OFF":
-        return "off"
-    if mark == "leave" or code == "L":
-        return "leave"
-    if mark == "holiday" or code == "PH":
-        return "holiday"
-    return "shift"
+_kind = rota_kind  # app/rota_records.py: the same rule its kind column is filled with
+
+# For more employees than this, reading the company's range by its (company, day) index and
+# filtering here beats an IN list (measured: 330 staff, one week 12 -> 7 ms).
+_MAX_IN = 50
+
+
+def _employee_days(db: Session, company_id: str, wanted: set, lo: str, hi: str, *columns):
+    """rota_records rows (employee_no, day, *columns) for these employees, dated lo..hi."""
+    query = db.query(RotaRecord.employee_no, RotaRecord.day, *columns).filter(
+        RotaRecord.company_id == company_id, RotaRecord.day >= lo, RotaRecord.day <= hi)
+    if len(wanted) <= _MAX_IN:
+        query = query.filter(RotaRecord.employee_no.in_(wanted))
+    return [row for row in query.all() if row[0] in wanted]
 
 
 def rota_day_statuses(db: Session, company_id: str, employee_nos, start: date, end: date) -> dict[tuple[str, str], str]:
@@ -44,34 +49,29 @@ def rota_day_statuses(db: Session, company_id: str, employee_nos, start: date, e
     week_to = end + timedelta(days=6 - end.weekday())
     lo, hi = week_from.isoformat(), week_to.isoformat()
 
-    by_emp: dict[str, dict[str, dict]] = {}
-    for (payload,) in db.query(AppDataRecord.payload).filter(
-        AppDataRecord.company_id == company_id, *rota_in_range(lo, hi),
-    ).all():
-        try:
-            rec = json.loads(payload or "{}")
-        except (TypeError, ValueError):
-            continue
-        if not isinstance(rec, dict):
-            continue
-        eno, day = rec.get("employee_id"), str(rec.get("date") or "")
-        if eno in wanted and lo <= day <= hi:
-            by_emp.setdefault(eno, {})[day] = rec
+    # Typed rows (app/rota_records.py) for just these employees, not every payload in the range.
+    by_emp: dict[str, dict[str, str]] = {}
+    for eno, day, kind in _employee_days(db, company_id, wanted, lo, hi, RotaRecord.kind):
+        by_emp.setdefault(eno, {})[day] = kind
+
+    # Each day in lo..hi with its week's Monday, worked out once rather than per employee.
+    week_of: dict[str, str] = {}
+    d = week_from
+    while d <= week_to:
+        week_of[d.isoformat()] = (d - timedelta(days=d.weekday())).isoformat()
+        d += timedelta(days=1)
+    span = [day for day in week_of if start.isoformat() <= day <= end.isoformat()]
 
     out: dict[tuple[str, str], str] = {}
     for eno, days in by_emp.items():
-        weeks_with_rota = {(date.fromisoformat(d) - timedelta(days=date.fromisoformat(d).weekday())) for d in days}
-        d = start
-        while d <= end:
-            iso = d.isoformat()
-            rec = days.get(iso)
-            if rec is not None:
-                kind = _kind(rec)
+        weeks_with_rota = {week_of[day] for day in days}
+        for iso in span:
+            kind = days.get(iso)
+            if kind is not None:
                 if kind != "shift":
                     out[(eno, iso)] = kind
-            elif d - timedelta(days=d.weekday()) in weeks_with_rota:
+            elif week_of[iso] in weeks_with_rota:
                 out[(eno, iso)] = "off"
-            d += timedelta(days=1)
     return out
 
 
@@ -79,11 +79,7 @@ def rota_day_statuses(db: Session, company_id: str, employee_nos, start: date, e
 _DEFAULT_BREAK_MINUTES = {"M": 60, "E": 60, "N": 60}
 
 
-def _minutes(value) -> float | None:
-    try:
-        return max(0.0, float(value)) if value not in (None, "") else None
-    except (TypeError, ValueError):
-        return None
+_minutes = minutes
 
 
 def rota_break_seconds(db: Session, company_id: str, employee_nos, start: date, end: date) -> dict[tuple[str, str], int]:
@@ -106,20 +102,11 @@ def rota_break_seconds(db: Session, company_id: str, employee_nos, start: date, 
             if mins is not None:
                 shifts[str(rec["code"]).upper()] = mins
     out: dict[tuple[str, str], int] = {}
-    for (payload,) in db.query(AppDataRecord.payload).filter(
-        AppDataRecord.company_id == company_id, *rota_in_range(lo, hi),
-    ).all():
-        try:
-            rec = json.loads(payload or "{}")
-        except (TypeError, ValueError):
+    for eno, day, kind, code, mins in _employee_days(db, company_id, wanted, lo, hi, RotaRecord.kind,
+                                                     RotaRecord.code, RotaRecord.break_minutes):
+        if kind != "shift":
             continue
-        if not isinstance(rec, dict) or _kind(rec) != "shift":
-            continue
-        eno, day = rec.get("employee_id"), str(rec.get("date") or "")[:10]
-        if eno not in wanted or not (lo <= day <= hi):
-            continue
-        code = str(rec.get("code") or "").upper()
-        mins = _minutes(rec.get("break_minutes", rec.get("breakMinutes")))
+        code = code or ""
         if mins is None:
             mins = shifts.get(code, _DEFAULT_BREAK_MINUTES.get(code, 0))
         if mins:

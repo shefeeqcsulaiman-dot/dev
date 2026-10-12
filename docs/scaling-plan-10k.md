@@ -61,6 +61,14 @@ Rough infrastructure cost at that size: a few thousand US dollars a month (reven
 - [ ] Security certification (ISO 27001 / SOC 2)
 - [ ] Accredited e-invoicing provider status
 
+## Tasks and rota as typed rows (2026-10-11, 2026-10-12)
+
+Step A (typed copy kept current on every write by `app/record_mirror.py`; JSON stays the source of truth) for the next two collections in the agreed order (tasks, rota, purchases, sales invoices):
+- `task_records` (migration 0018, `app/task_records.py`): the bootstrap finds old open tasks through the indexed `is_open` column (20,000 tasks: 806 -> 73 ms). Check/rebuild: `python -m app.task_records [--rebuild]`.
+- `rota_records` (migration 0020, `app/rota_records.py`): employee, day, kind (shift/off/leave/holiday), code, times, break, status per rotaAssignments record, indexed on (company, employee, day) and (company, day). Days off and unpaid breaks (`app/rota_days.py`, used by attendance and ESS) and ESS My Rota / team rota read it instead of decoding the company's whole rota for the range. Check/rebuild: `python -m app.rota_records [--rebuild]`.
+- Measured on PostgreSQL, one company with 330 staff x 365 days plus 200 others (480,000 rota records), same answers in every case: days off for one employee/month 65 -> 0.9 ms; all 330 staff/month 148 -> 63 ms; all staff/one day 34 -> 11 ms; ESS My Rota 221 -> 3.1 ms; ESS team week 29 -> 5.8 ms. The migration's refill: ~8,000 records/s on an analysed table (60 s for 480,000).
+- Still JSON-only for rota: the HRMS rota screens load whole records through `/records/rotaAssignments/range` (already date-filtered in SQL), and approving a swap reads the two records by key.
+
 ## Products as a typed table; search reads the typed tables (2026-10-10)
 
 - `catalog_products` (migration 0016, `app/catalog_products.py`): one row per "products" app-data record, kept current on every save, edit and delete through `app/record_mirror.py` like `parties` (customers, vendors). Check/rebuild: `python -m app.catalog_products [--rebuild]`.
