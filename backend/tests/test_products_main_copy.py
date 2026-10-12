@@ -2,6 +2,8 @@
 except its inline image, saves store the JSON the row regenerates, the image is kept."""
 import json
 
+from sqlalchemy import text
+
 from app import catalog_products
 from app.catalog_products import canonical_product, product_fields, product_record
 from app.models import AppDataRecord, CatalogProduct
@@ -14,7 +16,7 @@ def test_round_trip_keeps_every_field_and_the_image():
     doc = {"code": " ABC-1 ", "name": "Cola Can", "price": "2.50", "cost": "1,200", "sku": "ABC-1", "image": IMG,
            "reorder_level": 5, "description": "330ml", "barcode": "", "supplier": "Gulf Bev"}
     out = canonical_product(doc)
-    assert out == {"name": "Cola Can", "code": "ABC-1", "selling_price": 2.5, "cost": 1200.0, "supplier_name": "Gulf Bev",
+    assert out == {"name": "Cola Can", "code": " ABC-1 ", "selling_price": 2.5, "cost": 1200.0, "supplier_name": "Gulf Bev",
                    "barcode": "", "price": "2.50", "sku": "ABC-1", "reorder_level": 5, "description": "330ml",
                    "supplier": "Gulf Bev", "image": IMG}
     assert canonical_product(out) == out
@@ -37,10 +39,12 @@ def test_saves_store_what_the_row_regenerates(client, db, tenant):  # noqa: F811
     assert rice.selling_price == 12 and json.loads(rice.extra) == {"min_stock": 2}
     assert catalog_products.verify_company(db, company_id) and catalog_products.stale_json(db, company_id) == []
 
-    # A product written around the save path is found and rewritten, image kept.
-    rec = db.get(AppDataRecord, rice.id)
-    rec.payload = json.dumps({"code": "P-1", "name": "Rice", "price": "13", "image": IMG})
+    # A product written around every save path (raw SQL) is found and rewritten, image kept.
+    db.execute(text("UPDATE app_data_records SET payload = :p WHERE id = :i"),
+               {"p": json.dumps({"code": "P-1", "name": "Rice", "price": "13", "image": IMG}), "i": rice.id})
     db.commit()
+    db.expire_all()
+    rec = db.get(AppDataRecord, rice.id)
     assert catalog_products.stale_json(db, company_id) == [rec.id]
     catalog_products.rewrite_json(db, [rec.id])
     db.commit()

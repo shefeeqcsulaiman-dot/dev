@@ -3,6 +3,8 @@ record, saves store the JSON its row regenerates, and the tools find and fix rec
 were saved another way."""
 import json
 
+from sqlalchemy import text
+
 from app import parties
 from app.models import AppDataRecord, Party
 from app.parties import canonical_party, party_fields, party_record
@@ -14,8 +16,9 @@ def test_round_trip_keeps_every_field_and_is_stable():
            "contact_person": "Ali", "credit_limit": "5,000", "status": "", "notes": {"vip": True}, "source": "CSV",
            "emirate": None, "_v": 3}
     out = canonical_party(doc)
-    assert out == {"name": "  Padded Co ", "trn": "100123456700003", "email": "a@b.ae", "phone": "050 1",
-                   "contact": "Ali", "credit_limit": 5000.0, "status": "", "emirate": "", "id": "C-1", "mobile": "050 1",
+    # Text keeps its original value in the JSON (only its column is trimmed); numbers are normalised.
+    assert out == {"name": "  Padded Co ", "trn": "100123456700003", "email": " a@b.ae ", "phone": "050 1",
+                   "contact": "Ali", "credit_limit": 5000.0, "status": "", "emirate": None, "id": "C-1", "mobile": "050 1",
                    "contact_person": "Ali", "notes": {"vip": True}, "source": "CSV", "_v": 3}
     assert canonical_party(out) == out                                   # stable
     fields = party_fields(doc)
@@ -39,11 +42,14 @@ def test_saves_store_what_the_row_regenerates(client, db, tenant):  # noqa: F811
     assert (gulf["trn"], gulf["credit_limit"], gulf["phone"], gulf["website"]) == ("100123456700003", 2500.0, "", "gulf.ae")
     assert parties.verify_company(db, company_id) and parties.stale_json(db, company_id) == []
 
-    # A record written around the save path (e.g. a restore) is found and rewritten.
+    # A record written around every save path (raw SQL, e.g. a database restore) is found and rewritten.
     rec = db.query(AppDataRecord).filter(AppDataRecord.company_id == company_id, AppDataRecord.record_key == "Delta").one()
-    rec.payload = json.dumps({"name": "Delta", "category": "Goods", "trn": "1-2", "credit_limit": "9,000"})
+    db.execute(text("UPDATE app_data_records SET payload = :p WHERE id = :i"),
+               {"p": json.dumps({"name": "Delta", "category": "Goods", "trn": "1-2", "credit_limit": "9,000"}), "i": rec.id})
     db.commit()
-    assert parties.stale_json(db, company_id) == [rec.id] and parties.verify_company(db, company_id)
+    db.expire_all()
+    # Raw SQL skipped the row too: both checks see it until the rewrite (an ORM write) fixes them.
+    assert parties.stale_json(db, company_id) == [rec.id] and not parties.verify_company(db, company_id)
     parties.rewrite_json(db, [rec.id])
     db.commit()
     assert json.loads(db.get(AppDataRecord, rec.id).payload) == {"name": "Delta", "trn": "12", "category": "Goods",

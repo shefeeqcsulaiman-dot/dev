@@ -6,14 +6,18 @@ record through its row (record_from(fields_from(doc))), so what is stored is wha
 gives back. app/parties.py (customers, suppliers) and app/catalog_products.py (products)
 describe their fields with Field and use these.
 
-Rules: a field given under its own name or an alias is kept even when empty ("" for text,
-dropped for a number that isn't one); a text field is trimmed and clipped; money is a
-number. The name is kept exactly as sent (it can be the record's key): a padded name goes
-into extra so the regenerated record has it unchanged.
+Rules: a field given under its own name or an alias is kept even when empty. Its column is
+normalised: text trimmed and clipped, money a number, digits only for a TRN, a day as
+YYYY-MM-DD, a percentage a whole number 0-100. In the JSON, text keeps its original value
+(type and spacing: a name can be the record's key, an id can be a number other code
+compares exactly), so a text value that differs from its column goes into extra; money,
+digits, days and percentages are stored normalised (one that isn't valid is dropped, or ""
+for a day).
 """
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable, Iterable
@@ -33,12 +37,28 @@ def digits(value: Any, size: int) -> str:
     return "".join(ch for ch in str(value or "") if ch.isdigit())[:size]
 
 
+_ISO_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def day(value: Any) -> str:
+    text = str(value or "").strip()[:10]
+    return text if _ISO_DAY.match(text) else ""
+
+
+def percent(value: Any) -> int | None:
+    try:
+        number = int(float(str(value).strip()))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return max(0, min(100, number))
+
+
 @dataclass(frozen=True)
 class Field:
     name: str
     size: int | None = None            # text length; None for money
     aliases: tuple[str, ...] = ()      # other names the field may come as
-    kind: str = "text"                 # text | money | digits
+    kind: str = "text"                 # text | money | digits | day | percent
 
 
 def _given(doc: dict[str, Any], field: Field) -> tuple[bool, Any]:
@@ -54,6 +74,8 @@ def fields_from(doc: dict[str, Any], fields: Iterable[Field], skip: Iterable[str
     (kept only in the JSON, e.g. an inline image)."""
     fields = tuple(fields)
     out: dict[str, Any] = {}
+    names = {field.name for field in fields}
+    extra = {k: v for k, v in doc.items() if k not in names and k not in set(skip)}
     for field in fields:
         present, value = _given(doc, field)
         if not present:
@@ -62,13 +84,14 @@ def fields_from(doc: dict[str, Any], fields: Iterable[Field], skip: Iterable[str
             out[field.name] = money(value) if value not in (None, "") else None
         elif field.kind == "digits":
             out[field.name] = digits(value, field.size or 40)
+        elif field.kind == "day":
+            out[field.name] = day(value)
+        elif field.kind == "percent":
+            out[field.name] = percent(value) if value not in (None, "") else None
         else:
             out[field.name] = (str(value).strip() if value is not None else "")[:field.size]
-    names = {field.name for field in fields}
-    extra = {k: v for k, v in doc.items() if k not in names and k not in set(skip)}
-    raw_name = doc.get("name")
-    if "name" in names and isinstance(raw_name, str) and raw_name != (out["name"] or ""):
-        extra["name"] = raw_name
+            if field.name in doc and doc[field.name] != out[field.name]:
+                extra[field.name] = doc[field.name]  # the JSON keeps the value exactly as given
     out["extra"] = json.dumps(extra, ensure_ascii=False, default=str) if extra else None
     return out
 

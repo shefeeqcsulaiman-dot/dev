@@ -315,3 +315,30 @@ def test_products_main_copy_migration_rewrites_records(scratch_engine):
     assert _json.loads(payload) == {"code": "K-1", "name": "Kit", "selling_price": 1500.0, "price": "1,500",
                                     "notes": "n", "image": "data:x"}
     assert (_json.loads(extra), float(price)) == ({"price": "1,500", "notes": "n"}, 1500.0)
+
+
+def test_tasks_main_copy_migration_rewrites_records(scratch_engine):
+    """0026: tasks' JSON is rewritten as their row regenerates it, rows (with extra) refilled."""
+    import json as _json
+
+    from alembic import command
+    from app.migrate import alembic_config
+
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        command.downgrade(alembic_config(conn), "0025_products_main_copy")
+        conn.commit()
+    with scratch_engine.begin() as conn:
+        conn.execute(text("INSERT INTO companies (id, name, country, currency, vat_rate, stock_mode, inventory_accounting) "
+                          "VALUES ('c1', 'c1', 'UAE', 'AED', 5, 'with_stock', 'periodic')"))
+        conn.execute(text("INSERT INTO app_data_records (id, company_id, collection, record_key, payload, row_version) "
+                          "VALUES ('t1', 'c1', 'tasks', 'T-1', :p, 1)"),
+                     {"p": _json.dumps({"id": "T-1", "title": "Audit", "progress": "45", "due_date": "2026-11-01T00:00:00",
+                                        "status": "Done", "color": "blue"})})
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        payload = conn.execute(text("SELECT payload FROM app_data_records WHERE id = 't1'")).scalar()
+        extra, is_open = conn.execute(text("SELECT extra, is_open FROM task_records WHERE id = 't1'")).one()
+    assert _json.loads(payload) == {"title": "Audit", "status": "Done", "progress": 45, "due_date": "2026-11-01",
+                                    "id": "T-1", "color": "blue"}
+    assert (_json.loads(extra), bool(is_open)) == ({"id": "T-1", "color": "blue"}, False)

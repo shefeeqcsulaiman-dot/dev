@@ -39,10 +39,8 @@ from app.database import get_db
 from app.auth_principal import resolve_active_branch
 from app.doc_index import parse_document_date, recompute_payment_targets
 from app.stock_units import purchase_stock, unit_cost as stock_unit_cost
-from app.parties import canonical_party
-from app.party_checks import PARTY_COLLECTIONS, check_party_form, clean_party_batch
-from app.catalog_products import canonical_product
-from app.product_checks import PRODUCT_COLLECTIONS, check_product_form, clean_product_batch
+from app.party_checks import check_party_form, clean_party_batch
+from app.product_checks import check_product_form, clean_product_batch
 from app.task_records import COLLECTIONS as TASK_COLLECTIONS
 from app.workflow_status import OPEN_WORK_COLLECTIONS, finished_status_sql, is_finished_status
 from app.department_scope import SCOPED_COLLECTIONS, assert_record_writable, build_index, filter_records, record_in_scope
@@ -1975,12 +1973,6 @@ async def app_data_action(
         else:
             check_party_form(db, principal.company_id, collection, record)
             check_product_form(db, principal.company_id, collection, record, record_key(collection, record))
-        # Customers, suppliers and products: their typed row is the main copy and the stored
-        # JSON is regenerated from it (app/parties.py, app/catalog_products.py).
-        if collection in PARTY_COLLECTIONS:
-            record = canonical_party(record)
-        elif collection in PRODUCT_COLLECTIONS:
-            record = canonical_product(record)
         if payload.get("create_only"):
             _assert_record_is_new(db, principal.company_id, collection, record)
         saved = save_app_record(db, principal, collection, record)
@@ -2006,10 +1998,6 @@ async def app_data_action(
         normalized_records, party_counts = clean_party_batch(db, principal.company_id, collection, normalized_records)
         normalized_records, product_counts = clean_product_batch(db, principal.company_id, collection, normalized_records)
         party_counts = {**party_counts, **product_counts}
-        if collection in PARTY_COLLECTIONS:
-            normalized_records = [canonical_party(r) for r in normalized_records]
-        elif collection in PRODUCT_COLLECTIONS:
-            normalized_records = [canonical_product(r) for r in normalized_records]
         keys = [key for key in (record_key(collection, record) for record in normalized_records) if key]
         existing_by_key = {
             item.record_key: item

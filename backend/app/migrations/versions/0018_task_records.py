@@ -43,13 +43,8 @@ def upgrade() -> None:
         op.create_index("ix_task_records_company_open", "task_records", ["company_id", "is_open"])
         op.create_index("ix_task_records_company_assignee", "task_records", ["company_id", "assigned_to", "status"])
         op.create_index("ix_task_records_company_due", "task_records", ["company_id", "due_date"])
-    bind.execute(sa.text("DELETE FROM task_records"))
-    from app.task_records import mirror
-
-    table = sa.table("task_records", *[sa.column(c, sa.Boolean()) if c == "is_open"
-                                       else sa.column(c, sa.Integer()) if c == "progress"
-                                       else sa.column(c) for c in _COLUMNS])
-    mirror.refill_all(bind, table)
+    # Filled by 0026_tasks_main_copy, which adds task_records.extra: app/task_records.py's rows
+    # now carry it, so filling here (before that column exists) would fail on a new database.
 
 
 def downgrade() -> None:

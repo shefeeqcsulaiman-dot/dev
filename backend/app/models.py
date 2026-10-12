@@ -982,6 +982,9 @@ class TaskRecord(Base):
     progress: Mapped[int | None] = mapped_column(Integer)
     due_date: Mapped[str | None] = mapped_column(String(10))  # YYYY-MM-DD, or empty
     repeat: Mapped[str | None] = mapped_column(String(20))
+    # The task's other fields (JSON object text): with the columns, the whole task
+    # (app/task_records.py canonical_task()).
+    extra: Mapped[str | None] = mapped_column(Text)
 
 
 class RotaRecord(Base):
@@ -1122,9 +1125,39 @@ def _stamp_version_on_update(_mapper, _connection, target: AppDataRecord) -> Non
     target.updated_by, target.updated_by_name = record_actor(object_session(target))
 
 
+# Collections whose typed table is the main copy: every write, from any path (the app-data
+# routes, ESS, imports, server-side syncs), stores the JSON its row regenerates.
+def _main_copy_canonical(collection: str):
+    if collection in ("customers", "vendors"):
+        from app.parties import canonical_party
+        return canonical_party
+    if collection == "products":
+        from app.catalog_products import canonical_product
+        return canonical_product
+    if collection == "tasks":
+        from app.task_records import canonical_task
+        return canonical_task
+    return None
+
+
+def _store_main_copy(target: AppDataRecord) -> None:
+    canonical = _main_copy_canonical(target.collection)
+    if canonical is None:
+        return
+    try:
+        doc = json.loads(target.payload or "{}")
+    except (TypeError, ValueError):
+        return
+    if isinstance(doc, dict):
+        stored = canonical(doc)
+        if stored != doc:
+            target.payload = json.dumps(stored, ensure_ascii=False, default=str)
+
+
 @event.listens_for(AppDataRecord, "before_insert")
 @event.listens_for(AppDataRecord, "before_update")
 def _stamp_record_date(_mapper, _connection, target: AppDataRecord) -> None:
+    _store_main_copy(target)
     if target.collection in OWNER_COLLECTIONS:
         target.owner_key = payload_owner_key(target.collection, target.payload)
     if target.collection in DATED_COLLECTIONS:
