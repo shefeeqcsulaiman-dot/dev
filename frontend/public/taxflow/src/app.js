@@ -6229,6 +6229,14 @@ function productStockLevelFromRow(row){
 
 function purchaseStockItems(){
   const items=new Map();
+  // Pack size per mapped SKU / purchase name (Stock Mapping "Units / Outer"): stock counts in
+  // the item's own units, as the server does (app/stock_units.py) — 2 CTN of 24 -> 48 at cost / 24.
+  const packSize=new Map();
+  document.querySelectorAll('#stock-map-tbody tr:not([data-empty-state])').forEach(row=>{
+    const per=Number(row.dataset.unitsPerOuter||1);
+    if(!(per>0)||per===1)return;
+    [row.dataset.stockSku,inventoryRowCellText(row,0)].filter(Boolean).forEach(k=>packSize.set(String(k).trim().toLowerCase(),per));
+  });
   const sourceRecords=purchaseRecordCache.size
     ? [...purchaseRecordCache.values()]
     : [...document.querySelectorAll('#purchase-record-tbody tr:not([data-empty-state])')].map(purchaseRecordFromRow);
@@ -6256,15 +6264,17 @@ function purchaseStockItems(){
       const code=String(line.sku||line.code||name).trim();
       const key=purchaseLineStockKey(line);
       if(!key)return;
-      const quantity=purchaseLineQuantity(line);
+      const per=packSize.get(String(line.sku||line.code||'').trim().toLowerCase())
+        ||packSize.get(String(line.product||line.name||line.description||'').trim().toLowerCase())||1;
+      const quantity=purchaseLineQuantity(line)*per;
       if(!quantity)return;
-      const unitCost=parseAmount(line.unit_cost_before_tax||line.unit_cost||line.purchase_unit_cost||line.cost||0);
+      const unitCost=parseAmount(line.unit_cost_before_tax||line.unit_cost||line.purchase_unit_cost||line.cost||0)/per;
       const existing=items.get(key)||{
         code,
         name,
         category:line.category||'Purchases',
         available:0,
-        unit:line.unit||line.unit_of_measure||line.uom||'PCS',
+        unit:per>1?'PCS':(line.unit||line.unit_of_measure||line.uom||'PCS'),
         reorderLevel:0,
         purchase_rate:0,
         _rate_qty:0,
