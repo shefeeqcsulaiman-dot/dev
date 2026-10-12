@@ -3261,6 +3261,7 @@ function applyModulePermissionNav(modulesEnabled){
     document.querySelectorAll('.sb .nav[data-module]').forEach(n=>n.classList.remove('hidden'));
     document.querySelectorAll('[data-module-gate]').forEach(n=>n.classList.remove('hidden'));
     renderModuleAccessCard(null);
+    _syncSidebarSections();
     return;
   }
   const allowed=window.COMPANY_ALLOWED_MODULES;
@@ -3274,6 +3275,18 @@ function applyModulePermissionNav(modulesEnabled){
     n.classList.toggle('hidden',!allowed.has(n.dataset.moduleGate));
   });
   renderModuleAccessCard(allowed);
+  _syncSidebarSections();
+}
+
+// A sidebar group (Purchasing, Finance, ...) whose items are all hidden by the company's
+// modules or the login's role shows no heading either, instead of an empty label.
+function _syncSidebarSections(){
+  document.querySelectorAll('.sb .sb-section').forEach(section=>{
+    const navs=[...section.querySelectorAll('.nav')];
+    if(!navs.length)return;
+    const anyShown=navs.some(n=>!n.classList.contains('hidden')&&n.style.display!=='none');
+    section.style.display=anyShown?'':'none';
+  });
 }
 
 function _moduleNavAllowed(page){
@@ -3331,6 +3344,7 @@ async function applyMainDashboardPermissionNav(){
       const hasAnyHrAccess=[...allowed].some(m=>['employees','leave','attendance','rota','overtime','loans','recruitment','payroll','hr','hr_settings','hr_workflow','performance'].includes(m));
       hrmsNav.style.display=hasAnyHrAccess?'':'none';
     }
+    _syncSidebarSections();
   }catch(e){
     console.warn('[MainDashboardPermissionNav]',e);
   }
