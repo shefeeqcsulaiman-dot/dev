@@ -2046,3 +2046,16 @@ input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;}
 .rs-table thead th:first-child{background:var(--bg3);}
 .rs-row.is-selected th{background:linear-gradient(var(--accent-glow),var(--accent-glow)),var(--surface);}
 .rs-table .rs-cell{padding:10px;}
+
+/* Phones: buttons and links big enough to tap (a 2026-10-12 check at 375px found Prev/Next,
+   Export, Save, Delete at 22-24px tall and the menu button at 28px; ~40px is the usual
+   minimum for a finger). Desktop sizes are unchanged. */
+@media(max-width:720px){
+  .btn{min-height:40px;}
+  .btn-sm{min-height:36px;padding:6px 12px;font-size:12.5px;}
+  .menu-btn,.hrms-menu-btn{min-width:40px;min-height:40px;justify-content:center;align-items:center;}
+  .hd-link,.hc-ai-link,#page-hrms a[onclick]:not(.btn){display:inline-block;padding:10px 0;}
+  .icon-btn{width:40px;height:40px;}
+  #rota-repeat-row select{height:40px!important;}
+  .rs-kebab{min-width:40px;min-height:40px;}
+}

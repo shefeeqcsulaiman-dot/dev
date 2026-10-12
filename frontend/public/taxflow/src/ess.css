@@ -1104,3 +1104,13 @@ button,input,select,textarea{font-family:inherit}
 th,.dept-rota-table th{font-size:11.5px}
 .acal-wd,.hcal-weekday,.ess-bn-kick,.ess-search-item small,.ess-hm-role{font-size:11px}
 .rota-today-pill{font-size:10.5px}
+
+    /* Phones: links and small buttons big enough to tap (a 2026-10-12 check at 375px found the
+       dashboard links ~16px tall, the calendar arrows 26px and the task filters 30px). The
+       negative margins keep the layout where it was while enlarging the tappable area. */
+    @media (max-width:760px){
+      #tb-dashboard .ed-link{display:inline-block;padding:12px 6px;margin:-12px -6px}
+      .link-btn{padding:10px 0}
+      .btn-ghost{min-height:40px;min-width:40px}
+      .tk-filter{min-height:40px}
+    }

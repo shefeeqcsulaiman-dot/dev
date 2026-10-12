@@ -240,7 +240,7 @@
   // The nav items, dashboard tiles/quick actions and calendar days are
   // clickable <div>s -- give them button semantics so they're reachable by
   // Tab and operable with Enter/Space (re-run after the calendar re-renders).
-  var ESS_CLICKABLE = '.ess-nav,.ess-kpi,.ess-qa,.ess-appr-row,.hcal-cell:not(.hcal-empty)';
+  var ESS_CLICKABLE = '.ess-nav,.ess-kpi,.ess-qa,.ess-appr-row,.hcal-cell:not(.hcal-empty),.ed-link';
   function essMakeKeyboardOperable(root) {
     (root || document).querySelectorAll(ESS_CLICKABLE).forEach(function(el) {
       if (el.hasAttribute('tabindex')) return;
@@ -2116,7 +2116,7 @@
       '<div class="lb-bar" style="margin:10px 0 4px"><div class="lb-bar-fill" style="width:' + pct + '%;background:var(--green)"></div></div>' +
       '<div class="hint" style="margin:0 0 6px">' + caption + '</div>' + list +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><span class="hint" style="margin:0">' + (rows.length > 5 ? '+' + (rows.length - 5) + ' more' : rows.length + ' in your team') + '</span>' +
-      '<a style="font-size:12px;color:var(--accent-text);cursor:pointer;font-weight:600" onclick="essGoTab(\'team\')">View team →</a></div>';
+      '<button type="button" class="link-btn" style="margin-top:0" onclick="essGoTab(\'team\')">View team →</button></div>';
   }
 
   async function loadTeamToday() {

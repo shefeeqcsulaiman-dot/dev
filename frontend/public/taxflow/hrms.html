@@ -10,10 +10,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=d48a2f5768" as="style">
+<link rel="preload" href="src/styles.css?v=253c2af451" as="style">
 <link rel="preload" href="src/app.js?v=adfda3c921" as="script">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=d48a2f5768">
+<link rel="stylesheet" href="src/styles.css?v=253c2af451">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -288,6 +288,8 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
 #page-rota>.tabs .tab{font-size:12.5px;padding:8px 14px;}
 /* Weekly Rota "Staff Schedule" and Monthly Rota "Monthly Schedule": 15% smaller overall (text, cells, controls). */
 #rota-weekly .rs-main,#rota-monthly .rs-main{zoom:.85}
+/* Phones: full size, so buttons and day boxes stay big enough to tap. */
+@media(max-width:720px){#rota-weekly .rs-main,#rota-monthly .rs-main{zoom:1}}
 </style>
 </head>
 <body class="theme-light">
@@ -414,7 +416,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
   </div>
   <!-- New HRMS Topbar -->
   <div class="hrms-topbar">
-    <button style="background:none;border:none;color:var(--text2);font-size:20px;padding:4px 8px;line-height:1;cursor:pointer;border-radius:6px;transition:background .15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</button>
+    <button class="hrms-menu-btn" type="button" aria-label="Toggle menu" style="background:none;border:none;color:var(--text2);font-size:20px;padding:4px 8px;line-height:1;cursor:pointer;border-radius:6px;transition:background .15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</button>
     <div class="hrms-search">
       <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10l3 3"/></svg>
       <input type="text" placeholder="Search employees, modules, reports..." id="hrms-global-search">
