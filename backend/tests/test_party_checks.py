@@ -74,7 +74,7 @@ def test_bulk_imports_clean_bad_fields_and_skip_duplicates(client, db, tenant):
 
 def test_other_collections_are_untouched(client, tenant):
     _, h = tenant
-    assert _save(client, h, "products", {"code": "P-1", "name": "", "trn": "1"}).status_code == 200
+    assert _save(client, h, "salesCategories", {"name": "", "trn": "1", "email": "x"}).status_code == 200
 
 
 def test_padded_names_keep_their_key(client, db, tenant):

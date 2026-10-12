@@ -2194,7 +2194,7 @@ function _buildItemRowHtml({code,name,type,category,unit,tracking,vatText,vatCla
   return `<td class="mono">${escapeHtml(code)}</td><td>${escapeHtml(name)}</td><td>${escapeHtml(type||'Stock Item')}</td><td>${escapeHtml(category)}</td><td>${escapeHtml(unit)}</td><td>Main Store</td><td><span class="b ${trackingClass}">${escapeHtml(tracking)}</span></td><td><span class="b ${vatClass}">${escapeHtml(vatText)}</span></td><td><span class="b ${statusClass}">${escapeHtml(status)}</span></td><td><button class="btn btn-g btn-sm" onclick="openInventoryItemModal(this.closest('tr'))">Edit</button></td>`;
 }
 
-function saveInventoryItem(){
+async function saveInventoryItem(){
   const v=id=>document.getElementById(id)?.value||'';
   const code=(v('inv-item-code')||generateStockSku(v('inv-item-name'))).trim();
   const name=v('inv-item-name').trim();
@@ -2227,6 +2227,14 @@ function saveInventoryItem(){
     const dupCode=otherRows.some(r=>inventoryRowCellText(r,0).trim().toLowerCase()===codeLower);
     if(dupName){toast(`Item name "${name}" already exists in inventory`,'warn');return;}
     if(dupCode){toast(`Item code "${code}" already exists — use a unique code`,'warn');return;}
+  }
+  // Checked on the server too (app/product_checks.py: code or barcode taken, bad numbers);
+  // the table only changes once it's saved, and the server's reason is shown otherwise.
+  try{
+    await saveServer('products',{code,name,type,description,category,unit,cost,selling_price:sellingPrice,vat,tracking,image,opening_date:openingDate,reorder_level:reorderLevel,min_stock:minStock,max_stock:maxStock,supplier_name:supplier,status},{throwOnError:true});
+  }catch(err){
+    toast(err.serverDetail||'Item was not saved. Check your connection and try again.','err',9000);
+    return;
   }
   const vatText=vat.includes('Zero')||vat.includes('0%')?'0%':vat==='Exempt'?'Exempt':'5%';
   const vatClass=vatText==='5%'?'b-b':vatText==='Exempt'?'b-t':'b-g';
@@ -2263,7 +2271,6 @@ function saveInventoryItem(){
       tbody.prepend(row);syncStockLevelsFromProducts();
     }
   }
-  saveServer('products',{code,name,type,description,category,unit,cost,selling_price:sellingPrice,vat,tracking,image,opening_date:openingDate,reorder_level:reorderLevel,min_stock:minStock,max_stock:maxStock,supplier_name:supplier,status});
   syncStockMappingFromItems();
   closeM('m-inv-item');
   document.querySelectorAll('#m-inv-item input').forEach(i=>i.value='');
@@ -5207,7 +5214,12 @@ function notifySaveFailed(err,verb){
 function saveServer(collection,record,options={}){
   _catalogCache?.[collection]?.clear();  // picker search results may now be out of date
   // createOnly: the server refuses (409) instead of overwriting a record with the same key.
-  return apiRequest('save',options.createOnly?{collection,record,create_only:true}:{collection,record}).then(res=>{
+  // lenient: a record made by an import (e.g. from an AI-read purchase line): the server
+  // cleans a bad field instead of refusing it, as a bulk save does (app/product_checks.py).
+  const body={collection,record};
+  if(options.createOnly)body.create_only=true;
+  if(options.lenient)body.lenient=true;
+  return apiRequest('save',body).then(res=>{
     // Keep this copy's version current, so its next save isn't mistaken for an old copy.
     if(res&&res._v!=null&&record&&typeof record==='object')record._v=res._v;
     return res;
@@ -14357,7 +14369,7 @@ function autoSyncUnitsAndCategoriesFromPurchaseLines(records){
             description:line.description||''
           };
           renderProductRecord(product);
-          saveServer('products',product);
+          saveServer('products',product,{lenient:true});
         }
       }
     });
@@ -17488,7 +17500,7 @@ function openAddProductFromInvoice(){
   showM('m-product');
 }
 
-function saveProd(){
+async function saveProd(){
   syncProductMasterOptions();
   const tbody=document.getElementById('prod-tbody');
   const code=(document.getElementById('prod-code')?.value||`PRD-00${(tbody?.rows.length||0)+1}`).trim();
@@ -17507,6 +17519,14 @@ function saveProd(){
     toast('Enter product or service name','warn');
     return;
   }
+  // The server refuses a code another product has (products are keyed by code, so this
+  // used to overwrite that product) or a bad number; the table only changes once saved.
+  try{
+    await saveServer('products',{code,name,category,unit,cost,price,vat,tracking,supplier_name:supplier,reorder_level:reorderLevel,status},{throwOnError:true});
+  }catch(err){
+    toast(err.serverDetail||'Product was not saved. Check your connection and try again.','err',9000);
+    return;
+  }
 
   const shouldFillInvoice=productReturnToInvoice;
   const targetLine=productTargetLine;
@@ -17523,7 +17543,6 @@ function saveProd(){
   row.dataset.supplier=supplier;
   row.innerHTML=`<td class="mono">${escapeHtml(code)}</td><td>${escapeHtml(name)}</td><td>Stock Item</td><td>${escapeHtml(category)}</td><td>${escapeHtml(unit)}</td><td>Main Store</td><td><span class="b ${tracking==='No'?'b-gray':'b-g'}">${escapeHtml(tracking)}</span></td><td><span class="b ${vatClass}">${escapeHtml(vatText)}</span></td><td><span class="b ${status==='Active'?'b-g':'b-gray'}">${escapeHtml(status)}</span></td>`;
   tbody.prepend(row);
-  saveServer('products',{code,name,category,unit,cost,price,vat,tracking,supplier_name:supplier,reorder_level:reorderLevel,status});
   syncStockLevelsFromProducts();
   syncStockMappingFromItems();
   refreshInvoiceProductSuggestions();
