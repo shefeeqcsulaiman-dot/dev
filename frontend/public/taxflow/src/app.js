@@ -13211,7 +13211,7 @@ function openAddCustomerFromQuotation(){
   showM('m-customer');
 }
 
-function saveCustomer(){
+async function saveCustomer(){
   const name=(document.getElementById('cust-name')?.value||'').trim();
   const trn=(document.getElementById('cust-trn')?.value||'').replace(/\D/g,'');
   const emirate=document.getElementById('cust-emirate')?.value||'Dubai';
@@ -13228,6 +13228,14 @@ function saveCustomer(){
     return;
   }
 
+  // The server checks the record (app/party_checks.py: duplicate name or TRN, bad email)
+  // and its reason is shown here; the list only changes once it's saved.
+  try{
+    await saveServer('customers',{name,trn,emirate,address,email,phone},{throwOnError:true});
+  }catch(err){
+    toast(err.serverDetail||'Customer was not saved. Check your connection and try again.','err',9000);
+    return;
+  }
   const tbody=document.getElementById('customer-tbody');
   const exists=tbody&&[...tbody.querySelectorAll('tr td:first-child')].some(td=>td.textContent.trim().toLowerCase()===name.toLowerCase());
   if(tbody&&!exists){
@@ -13236,7 +13244,6 @@ function saveCustomer(){
     refreshInvoiceCustomerOptions();
     refreshQuotationCustomerOptions();
   }
-  saveServer('customers',{name,trn,emirate,address,email,phone});
 
   const shouldFillInvoice=customerReturnToInvoice;
   const shouldFillQuotation=customerReturnToQuotation;
@@ -13259,7 +13266,7 @@ function saveCustomer(){
     const field=document.getElementById(id);
     if(field)field.value='';
   });
-  toast('Customer added ?','ok');
+  toast('Customer saved','ok');
   audit('Added customer',name,'Saved');
 }
 
@@ -28898,7 +28905,7 @@ function saveBill(){
   audit('Saved vendor bill',billNo,'Saved');
 }
 
-function saveVendor(){
+async function saveVendor(){
   const name=(document.getElementById('vendor-name')?.value||'').trim();
   const trn=(document.getElementById('vendor-trn')?.value||'').replace(/\D/g,'');
   const category=document.getElementById('vendor-category')?.value||'';
@@ -28908,9 +28915,15 @@ function saveVendor(){
   if(!name){toast('Vendor name is required','err');return;}
   if(!category){toast('Select a vendor category','err');return;}
   if(trn&&trn.length!==15){toast('Vendor TRN must be 15 digits','err');return;}
+  // Checked on the server too (app/party_checks.py); the list only changes once it's saved.
+  try{
+    await saveServer('vendors',{name,trn,category,email,phone,address},{throwOnError:true});
+  }catch(err){
+    toast(err.serverDetail||'Vendor was not saved. Check your connection and try again.','err',9000);
+    return;
+  }
   renderVendorRecord({name,trn,category,email,phone,address});
   syncSupplierOptions(name);
-  saveServer('vendors',{name,trn,category,email,phone,address});
   closeM('m-vendor');
   ['vendor-name','vendor-trn','vendor-email','vendor-phone','vendor-address'].forEach(id=>setFieldValue(document.getElementById(id),''));
   toast('Vendor added','ok');
