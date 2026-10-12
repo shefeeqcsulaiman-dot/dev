@@ -11,6 +11,7 @@ from app.auth_principal import resolve_active_branch
 from app.database import get_db
 from app.dependencies import Principal, get_current_principal, get_current_user, require_module
 from app.models import AppDataRecord, DocumentLine, InventoryValuationLayer, ItemUnit, ItemUnitConversion, StockAdjustmentApproval, StockMovement, StockProductMapping, User, Warehouse
+from app.stock_units import purchase_stock, units_per_outer, unit_cost as stock_unit_cost
 from app.schemas import (
     InventoryValuationLayerOut,
     ItemUnitConversionIn,
@@ -202,7 +203,7 @@ def list_stock_levels(
             old_qty = float(entry.get("_qty_for_avg", 0))
             new_qty = float(current_stock)
             old_cost = float(entry["cost"] or 0)
-            new_cost = float(mapping.cost or 0)
+            new_cost = float(stock_unit_cost(mapping))
             total_qty = old_qty + new_qty
             if total_qty > 0:
                 entry["cost"] = round((old_cost * old_qty + new_cost * new_qty) / total_qty, 6)
@@ -215,7 +216,7 @@ def list_stock_levels(
                 "current_stock": float(current_stock),
                 "unit": "PCS",
                 "reorder_level": mapping.reorder_level,
-                "cost": float(mapping.cost or 0),
+                "cost": float(stock_unit_cost(mapping)),
                 "_qty_for_avg": float(current_stock),
             }
     result = []
@@ -227,6 +228,8 @@ def list_stock_levels(
         # surfaced that it had happened, so it stayed invisible.
         entry["negative_stock"] = entry["current_stock"] < 0
         result.append(entry)
+    # A-Z by item name (then code), as Current Stock Levels lists them.
+    result.sort(key=lambda e: (str(e["name"] or e["code"] or "").lower(), str(e["code"] or "").lower()))
     return result
 
 
@@ -443,15 +446,16 @@ def backfill_purchase_stock_movements(db: Session, principal: Principal) -> None
             if mapping.tracking in ("No", "Optional"):
                 continue
             unit_cost = decimal_value(line.get("unit_cost_before_tax") or line.get("unit_cost") or line.get("purchase_unit_cost") or line.get("cost"))
+            # Same pack conversion as sync_purchase_stock() (app/stock_units.py).
+            stock = purchase_stock(mapping, line, quantity, unit_cost)
             db.add(
                 StockMovement(
                     company_id=principal.company_id,
                     branch_id=branch_id,
                     mapping_id=mapping.id,
                     movement_type="purchase",
-                    quantity=quantity,
-                    unit_cost=unit_cost,
                     reference=reference,
+                    **stock,
                 )
             )
             db.add(
@@ -460,9 +464,9 @@ def backfill_purchase_stock_movements(db: Session, principal: Principal) -> None
                     item_code=mapping.sku,
                     source_module="purchase",
                     source_id=reference,
-                    quantity_in=quantity,
-                    quantity_remaining=quantity,
-                    unit_cost=unit_cost,
+                    quantity_in=stock["quantity"],
+                    quantity_remaining=stock["quantity"],
+                    unit_cost=stock["unit_cost"],
                 )
             )
             updated_mapping_ids.add(mapping.id)
@@ -498,7 +502,8 @@ def _update_mapping_weighted_avg_cost(db: Session, company_id: str, mapping_ids:
                 StockProductMapping.company_id == company_id,
             ).first()
             if mapping:
-                mapping.cost = avg_cost
+                # Movements are in the item's own units; the mapping's cost is per outer pack.
+                mapping.cost = (avg_cost * units_per_outer(mapping)).quantize(Decimal("0.000001"))
 
 
 def stock_mapping_for_purchase_line(
@@ -848,7 +853,7 @@ def approve_adjustment(
     )
     if not mapping:
         raise HTTPException(status_code=422, detail=f"No stock item found for code '{approval.item_code}'")
-    unit_cost = mapping.cost or Decimal("0.00")
+    unit_cost = stock_unit_cost(mapping)  # quantity_delta is in the item's own units
     db.add(
         StockMovement(
             company_id=current_user.company_id,

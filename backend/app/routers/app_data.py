@@ -38,6 +38,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.auth_principal import resolve_active_branch
 from app.doc_index import parse_document_date, recompute_payment_targets
+from app.stock_units import purchase_stock, unit_cost as stock_unit_cost
 from app.task_records import COLLECTIONS as TASK_COLLECTIONS
 from app.workflow_status import is_finished_status
 from app.department_scope import SCOPED_COLLECTIONS, assert_record_writable, build_index, filter_records, record_in_scope
@@ -2859,7 +2860,7 @@ def _item_average_cost(db: Session, company_id: str, mapping: StockProductMappin
     qty, value = Decimal(str(qty or 0)), Decimal(str(value or 0))
     if qty > 0:
         return value / qty
-    return decimal_value(getattr(mapping, "cost", 0))
+    return stock_unit_cost(mapping)
 
 
 def _cogs_transactions(db: Session, company_id: str, reference: str) -> list[SourceTransaction]:
@@ -2947,15 +2948,16 @@ def sync_purchase_stock(db: Session, principal: Principal, record: dict[str, Any
             or line.get("purchase_unit_cost")
             or line.get("cost")
         )
+        # An outer pack (mapping.units_per_outer) counts in the item's own units: 2 CTN x 24 -> 48.
+        stock = purchase_stock(mapping, line, quantity, unit_cost)
         db.add(
             StockMovement(
                 company_id=principal.company_id,
                 branch_id=branch_id,
                 mapping_id=mapping.id,
                 movement_type="purchase",
-                quantity=quantity,
-                unit_cost=unit_cost,
                 reference=reference,
+                **stock,
             )
         )
         db.add(
@@ -2964,9 +2966,9 @@ def sync_purchase_stock(db: Session, principal: Principal, record: dict[str, Any
                 item_code=mapping.sku,
                 source_module="purchase",
                 source_id=reference,
-                quantity_in=quantity,
-                quantity_remaining=quantity,
-                unit_cost=unit_cost,
+                quantity_in=stock["quantity"],
+                quantity_remaining=stock["quantity"],
+                unit_cost=stock["unit_cost"],
             )
         )
 
@@ -3073,6 +3075,14 @@ def purchase_line_stock_mapping(
         mapping = (
             db.query(StockProductMapping)
             .filter(StockProductMapping.company_id == principal.company_id, StockProductMapping.name == product)
+            .first()
+        )
+    if not mapping and product:
+        # Sales show the mapped (TaxFlow) name, so a line without a code may carry that.
+        mapping = (
+            db.query(StockProductMapping)
+            .filter(StockProductMapping.company_id == principal.company_id,
+                    StockProductMapping.taxflow_name == product)
             .first()
         )
     if not mapping:

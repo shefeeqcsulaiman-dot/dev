@@ -151,3 +151,41 @@ def test_startup_lock_wait_is_bounded_on_postgres(monkeypatch):
         holder.execute(text("SELECT pg_advisory_unlock_all()"))
         holder.commit()
         holder.close()
+
+
+def test_pack_units_migration_recounts_outer_purchases_once(scratch_engine):
+    """0019: purchases of an item mapped as an outer pack were stored in packs; they're
+    re-counted in units (2 CTN of 24 -> 48 at cost / 24), their valuation layers with them."""
+    from alembic import command
+    from app.migrate import alembic_config
+
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        command.downgrade(alembic_config(conn), "0018_task_records")
+        conn.commit()
+    mapping_cols = ("sales_account_code, purchase_account_code, inventory_account_code, tax_code, reorder_level, "
+                    "cost, markup_percent, tax_rate, vat_amount, inc_vat, price_outer, mapping_confirmed, tracking")
+    mapping_vals = "'3000', '4000', '1200', 'VAT5', 0, 0, 0, 5, 0, 0, 0, 1, 'Yes'"
+    with scratch_engine.begin() as conn:
+        for mid, sku, outer in (("m-ctn", "COLA-CTN", 24), ("m-pcs", "SOAP-1", 1)):
+            conn.execute(text(f"INSERT INTO stock_product_mappings (id, company_id, sku, name, units_per_outer, {mapping_cols}) "
+                              f"VALUES (:id, 'c1', :sku, :sku, :outer, {mapping_vals})"), {"id": mid, "sku": sku, "outer": outer})
+        conn.execute(text("INSERT INTO stock_movements (id, company_id, mapping_id, movement_type, reference, quantity, unit_cost) VALUES "
+                          "('s1', 'c1', 'm-ctn', 'purchase', 'P1', 2, 120), ('s2', 'c1', 'm-pcs', 'purchase', 'P2', 8, 3), "
+                          "('s3', 'c1', 'm-ctn', 'sales_invoice', 'SALE-1', -10, 0)"))
+        conn.execute(text("INSERT INTO inventory_valuation_layers (id, company_id, item_code, source_module, source_id, "
+                          "quantity_in, quantity_remaining, unit_cost, valuation_method) VALUES "
+                          "('l1', 'c1', 'COLA-CTN', 'purchase', 'P1', 2, 2, 120, 'FIFO')"))
+
+    run_migrations(scratch_engine)
+    run_migrations(scratch_engine)  # a second run must not scale again
+
+    with scratch_engine.connect() as conn:
+        moves = {r.id: r for r in conn.execute(text(
+            "SELECT id, quantity, unit_cost, source_quantity, units_per_outer FROM stock_movements"))}
+        layer = conn.execute(text("SELECT quantity_in, quantity_remaining, unit_cost FROM inventory_valuation_layers")).one()
+    assert (float(moves["s1"].quantity), float(moves["s1"].unit_cost)) == (48, 5)
+    assert (float(moves["s1"].source_quantity), float(moves["s1"].units_per_outer)) == (2, 24)
+    assert (float(moves["s2"].quantity), moves["s2"].source_quantity) == (8, None)   # pack size 1: untouched
+    assert float(moves["s3"].quantity) == -10                                         # sales were already pieces
+    assert tuple(map(float, layer)) == (48, 48, 5)

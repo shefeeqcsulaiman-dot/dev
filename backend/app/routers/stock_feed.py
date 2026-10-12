@@ -73,6 +73,11 @@ def _purchase_rows(db: Session, principal: Principal, branch_id: str | None):
             StockMovement.reference.label("reference"),
             null().label("unit"),
             vendor.label("vendor_name"),
+            # A purchase of a mapped outer pack: the line's own quantity/unit and the pack
+            # size (app/stock_units.py); quantity above is already in the item's units.
+            cast(StockMovement.source_quantity, Float).label("source_quantity"),
+            StockMovement.source_unit.label("source_unit"),
+            cast(StockMovement.units_per_outer, Float).label("units_per_outer"),
         )
         .join(StockProductMapping, StockMovement.mapping_id == StockProductMapping.id)
         .outerjoin(purchases, purchases.c.ref == StockMovement.reference)
@@ -115,6 +120,9 @@ def _sale_rows(db: Session, principal: Principal):
             DocumentLine.doc_ref.label("reference"),
             DocumentLine.unit.label("unit"),
             null().label("vendor_name"),
+            null().label("source_quantity"),
+            null().label("source_unit"),
+            null().label("units_per_outer"),
         )
         .join(AppDataRecord, AppDataRecord.id == DocumentLine.record_id)
         .where(
@@ -202,6 +210,9 @@ def list_stock_movements(
                 "unit": row["unit"] or ("PCS" if row["movement_type"] == "sale" else None),
                 "vendor_name": row["vendor_name"] or "",
                 "balance": float(row["balance"] or 0),
+                "source_quantity": None if row["source_quantity"] is None else float(row["source_quantity"]),
+                "source_unit": row["source_unit"] or None,
+                "units_per_outer": None if row["units_per_outer"] is None else float(row["units_per_outer"]),
             }
             for row in rows
         ],

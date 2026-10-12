@@ -1982,7 +1982,9 @@ async function loadStockMappingsFromServer(){
     tbody.innerHTML='';
     // Chunked for the same reason as renderRecordList/journal (app.js) — a
     // large product catalog would otherwise render in one uninterrupted pass.
-    const rows=mappings||[];
+    // The server sends newest first and each row is prepended, so draw them oldest
+    // first: the newest mapping ends up on top (latest in, first shown).
+    const rows=[...(mappings||[])].reverse();
     for(let i=0;i<rows.length;i++){
       renderStockMappingRecord(rows[i]);
       if(i>0&&i%60===0)await new Promise(r=>setTimeout(r,0));
@@ -5886,6 +5888,12 @@ function renderProductRecord(product,options={}){
   }
 }
 
+// Current Stock Levels are listed A-Z by item name (then code).
+function compareStockLevelNames(a,b){
+  return String(a.name||a.code||'').localeCompare(String(b.name||b.code||''),undefined,{sensitivity:'base',numeric:true})
+    ||String(a.code||'').localeCompare(String(b.code||''),undefined,{sensitivity:'base',numeric:true});
+}
+
 function syncStockLevelsFromProducts(){
   const tbody=document.getElementById('stock-level-tbody');
   if(!tbody)return;
@@ -5921,7 +5929,7 @@ function syncStockLevelsFromProducts(){
       addStockItemAliases(stockByKey,item);
     }
   });
-  const products=[...new Set(stockByKey.values())].filter(item=>!isDemoProductRecord(item));
+  const products=[...new Set(stockByKey.values())].filter(item=>!isDemoProductRecord(item)).sort(compareStockLevelNames);
   tbody.innerHTML='';
   if(!products.length){
     emptyTableMessage(tbody,'No stock items in database yet.');
@@ -5989,7 +5997,8 @@ async function loadStockLevelsFromServer(){
         negativeStock:!!row.negative_stock
       }))
       .filter(item=>!isDemoProductRecord(item))
-      .filter(item=>item.code||item.name);
+      .filter(item=>item.code||item.name)
+      .sort(compareStockLevelNames);
     if(!products.length){
       setInventoryTableCleared(true);
       clearInventoryUiTables();
@@ -6099,6 +6108,17 @@ function openStockDayHistory(itemName,unit,monthKey,monthLabel,allMovements){
   if(!rows.length){if(emptyEl)emptyEl.style.display='';showM('m-stock-day-history');return;}
   const fmt=(n,d=2)=>n!=null&&n!==''&&Number(n)>0?Number(n).toLocaleString('en-AE',{minimumFractionDigits:d,maximumFractionDigits:d}):'';
   const fmtQ=(n)=>Number(n)>0?Number(n).toLocaleString('en-AE',{maximumFractionDigits:2}):'';
+  // A purchase of a mapped outer pack shows the purchase's own quantity and unit ("2 CTN"),
+  // with the units it added below ("= 48 PCS · 1 CTN = 24"). Stock and the closing balance
+  // are in the item's own units.
+  const baseUnit=unit&&unit!=='-'?unit:'PCS';
+  const inQtyCell=(m,qty)=>{
+    const per=Number(m.units_per_outer||0);
+    const srcQty=Number(m.source_quantity||0);
+    const packUnit=String(m.source_unit||'').trim()||'Outer';
+    if(!(qty>0)||!(srcQty>0)||!(per>0)||per===1)return fmtQ(qty);
+    return `${fmtQ(srcQty)} ${escapeHtml(packUnit)}<div style="font-size:11px;color:var(--text3);font-weight:400;white-space:nowrap">= ${fmtQ(qty)} ${escapeHtml(baseUnit)} · 1 ${escapeHtml(packUnit)} = ${fmtQ(per)}</div>`;
+  };
   let closingQty=0,closingVal=0;
   rows.forEach((m,i)=>{
     const qty=Number(m.quantity||0);
@@ -6129,11 +6149,11 @@ function openStockDayHistory(itemName,unit,monthKey,monthLabel,allMovements){
       <td style="padding:7px 10px;border:1px solid var(--border)">${escapeHtml(m.display_name||m.item_name||'-')}</td>
       <td style="padding:7px 10px;border:1px solid var(--border)">${escapeHtml(m.item_name||'-')}</td>
       <td style="padding:7px 10px;border:1px solid var(--border)"><span class="b ${isIn?'b-g':'b-r'}">${escapeHtml(voucherType)}</span></td>
-      <td class="mono" style="text-align:right;padding:7px 10px;border:1px solid var(--border);color:var(--green)">${fmtQ(inQty)}</td>
+      <td class="mono" style="text-align:right;padding:7px 10px;border:1px solid var(--border);color:var(--green)">${inQtyCell(m,inQty)}</td>
       <td class="mono" style="text-align:right;padding:7px 10px;border:1px solid var(--border);color:var(--green)">${fmt(inVal)}</td>
       <td class="mono" style="text-align:right;padding:7px 10px;border:1px solid var(--border);color:var(--red)">${fmtQ(outQty)}</td>
       <td class="mono" style="text-align:right;padding:7px 10px;border:1px solid var(--border);color:var(--red)">${fmt(outVal)}</td>
-      <td class="mono" style="text-align:right;padding:7px 10px;border:1px solid var(--border);font-weight:700">${fmtQ(closingQty)}</td>
+      <td class="mono" style="text-align:right;padding:7px 10px;border:1px solid var(--border);font-weight:700">${fmtQ(closingQty)}${closingQty>0?` <span style="font-size:11px;color:var(--text3);font-weight:400">${escapeHtml(baseUnit)}</span>`:''}</td>
       <td class="mono" style="text-align:right;padding:7px 10px;border:1px solid var(--border);font-weight:700">${fmt(Math.abs(closingVal))}</td>`;
     tbody.appendChild(tr);
   });
@@ -17110,15 +17130,18 @@ function invoiceProductRecords(){
     });
   });
   document.querySelectorAll('#stock-map-tbody tr:not([data-empty-state])').forEach(row=>{
-    // Col 0 = Display Name (what appears on invoice), Col 2 = TaxFlow internal name
-    const displayName=inventoryRowCellText(row,0);
-    const taxflowName=inventoryRowCellText(row,2)||displayName;
-    const name=displayName||taxflowName;  // Display Name is the invoice-facing name
+    // Col 0 = the supplier's / purchase line name, Col 2 = the mapped (TaxFlow) name.
+    // Sales show the mapped name; the purchase name stays an alias so typing it still finds
+    // the item.
+    const purchaseName=inventoryRowCellText(row,0);
+    const taxflowName=inventoryRowCellText(row,2)||purchaseName;
+    const displayName=taxflowName;
+    const name=taxflowName;
     if(!name)return;
     // Same rule as before (first item whose code is the SKU or whose name is either name),
     // looked up instead of scanned.
     const sku=String(row.dataset.stockSku||'').toLowerCase();
-    const candidates=[itemRowByCode.get(sku),itemRowByName.get(displayName.toLowerCase()),itemRowByName.get(taxflowName.toLowerCase())].filter(Boolean);
+    const candidates=[itemRowByCode.get(sku),itemRowByName.get(purchaseName.toLowerCase()),itemRowByName.get(taxflowName.toLowerCase())].filter(Boolean);
     const itemRow=candidates.length?candidates.reduce((first,r)=>(first.compareDocumentPosition(r)&Node.DOCUMENT_POSITION_PRECEDING)?r:first):undefined;
     // Selling price: price_outer > inc_vat > cost+markup fallback
     const priceOuter=Number(row.dataset.priceOuter||0);
@@ -17131,7 +17154,7 @@ function invoiceProductRecords(){
       name,
       displayName,
       taxflowName,
-      aliases:[displayName,taxflowName].filter(Boolean),
+      aliases:[taxflowName,purchaseName].filter(Boolean),
       unit:itemRow?inventoryRowCellText(itemRow,4):'PCS',
       price:computedPrice,
       sourcePrice:computedPrice,

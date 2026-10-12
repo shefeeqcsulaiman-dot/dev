@@ -679,9 +679,15 @@ class StockMovement(Base, TimestampMixin):
     mapping_id: Mapped[str] = mapped_column(ForeignKey("stock_product_mappings.id"), nullable=False)
     warehouse_id: Mapped[str | None] = mapped_column(ForeignKey("warehouses.id"))
     movement_type: Mapped[str] = mapped_column(String(40), nullable=False)
-    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
-    unit_cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)  # in the item's own units
+    # 4 decimals: a pack cost spread over its units (120.00 / 24 CTN-units) must not round.
+    unit_cost: Mapped[Decimal] = mapped_column(Numeric(12, 4), default=0)
     reference: Mapped[str | None] = mapped_column(String(200))
+    # A purchase of an outer pack (app/stock_units.py): the line's own quantity and unit and
+    # the pack size used, e.g. 2 CTN x 24 -> quantity 48. Empty for other movements.
+    source_quantity: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    source_unit: Mapped[str | None] = mapped_column(String(30))
+    units_per_outer: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
 
 
 class ItemUnit(Base, TimestampMixin):
