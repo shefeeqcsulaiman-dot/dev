@@ -287,7 +287,12 @@ def test_parties_main_copy_migration_rewrites_records(scratch_engine):
     with scratch_engine.connect() as conn:
         payload = conn.execute(text("SELECT payload FROM app_data_records WHERE id = 'p1'")).scalar()
         extra, trn = conn.execute(text("SELECT extra, trn FROM parties WHERE id = 'p1'")).one()
-    assert _json.loads(payload) == {"name": "Acme", "trn": "1001", "credit_limit": 1000.0, "notes": "VIP"}
+        row = conn.execute(text("SELECT * FROM parties WHERE id = 'p1'")).mappings().one()
+    # 0024 rewrites the JSON; 0039 then empties it, as the row rebuilds it exactly.
+    from app.parties import party_record
+
+    assert payload == ""
+    assert party_record(dict(row)) == {"name": "Acme", "trn": "1001", "credit_limit": 1000.0, "notes": "VIP"}
     assert (_json.loads(extra), trn) == ({"notes": "VIP"}, "1001")
 
 

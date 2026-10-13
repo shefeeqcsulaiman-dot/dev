@@ -171,26 +171,15 @@ def branch_performance(request: Request, db: Session = Depends(get_db), principa
 
 
 def _pending_appdata_count(db: Session, company_id: str, collection: str) -> int:
-    """Overtime requests and attendance corrections are AppDataRecord-backed
-    (no dedicated SQL table, unlike LeaveRequest), so "pending" isn't a
-    column to filter on in SQL -- has to be read out of each row's JSON
-    payload. Same "small admin-managed list" scale assumption already made
-    elsewhere for these exact collections (see loans/jobRequisitions'
-    own comment), and this dashboard build is cached 60s (_cached_or_build),
-    so one Python-side scan per cache period is cheap enough."""
-    rows = db.query(AppDataRecord.payload).filter(
-        AppDataRecord.company_id == company_id,
-        AppDataRecord.collection == collection,
-    ).all()
-    pending = 0
-    for (payload,) in rows:
-        try:
-            data = json.loads(payload) if payload else {}
-        except (TypeError, ValueError):
-            continue
-        if str(data.get("status") or "").strip().lower() == "pending":
-            pending += 1
-    return pending
+    """Pending overtime requests / attendance corrections, from their request_records rows
+    (app/request_records.py: status as saved, trimmed) -- the JSON isn't stored any more."""
+    from app.models import RequestRecord
+
+    return db.query(func.count(RequestRecord.id)).filter(
+        RequestRecord.company_id == company_id,
+        RequestRecord.collection == collection,
+        func.lower(RequestRecord.status) == "pending",
+    ).scalar() or 0
 
 
 def _hr_dashboard_snapshot(db: Session, company_id: str, app_counts: dict[str, int]) -> dict[str, Any]:

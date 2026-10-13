@@ -3,10 +3,9 @@
 Every customer / supplier has one row here with its fields as columns (name, TRN, email,
 phone, address, emirate, category, contact, credit limit, status) and any other fields it
 carries in `extra`, so the row alone holds the whole record. Saves go through it: the JSON
-app-data record is regenerated from the row (party_record()), and kept only because many
-generic readers (bootstrap, exports, backups, voice) still read app_data_records. Step A
-made this a copy of the JSON; step B checks saves (app/party_checks.py); step C (this)
-makes the row the source. Check, rebuild or rewrite with
+app-data record is regenerated from the row (party_record()). Step A made this a copy of
+the JSON; step B checks saves (app/party_checks.py); step C makes the row the source; step
+D stops storing the JSON (app/record_payloads.py: rebuilt from the row on read). Check, rebuild or rewrite with
 `python -m app.parties [--rebuild] [--rewrite-json]`.
 
 Values are normalised: TRN keeps its digits only, names get a lower-cased search key, the
@@ -92,20 +91,25 @@ mirror = RecordMirror("parties", KINDS, Party, Party.id, party_rows).register()
 
 
 _COMPARED = ("kind", "record_key", "name", "name_key", *(f.name for f in FIELDS if f.name != "name"), "extra")
-_SOURCE = (AppDataRecord.id, AppDataRecord.company_id, AppDataRecord.collection, AppDataRecord.payload,
+_SOURCE = (AppDataRecord.id, AppDataRecord.company_id, AppDataRecord.collection, AppDataRecord._payload,
            AppDataRecord.branch_id, AppDataRecord.record_key)
 
 
 def verify_company(session: Session, company_id: str) -> bool:
-    """True when the company's parties rows match its records: every column, extra included."""
-    have = {r.id: tuple(getattr(r, c) for c in _COMPARED)
-            for r in session.query(Party).filter(Party.company_id == company_id)}
-    want = {}
+    """Rows match the records that still store their JSON (every column, extra included); a
+    record with no stored JSON (its row is the only copy, app/record_payloads.py) only needs a row."""
+    stored, blank, want = set(), set(), {}
     for rec in session.execute(select(*_SOURCE).where(AppDataRecord.company_id == company_id,
                                                       AppDataRecord.collection.in_(KINDS))):
+        if not rec[3]:
+            blank.add(rec[0])
+            continue
+        stored.add(rec[0])
         for row in party_rows(tuple(rec)):
             want[row["id"]] = tuple(row[c] for c in _COMPARED)
-    return have == want
+    rows = session.query(Party).filter(Party.company_id == company_id).all()
+    have = {r.id: tuple(getattr(r, c) for c in _COMPARED) for r in rows if r.id in stored}
+    return have == want and blank <= {r.id for r in rows}
 
 
 def stale_json(session: Session, company_id: str) -> list[str]:

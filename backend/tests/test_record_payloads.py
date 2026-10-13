@@ -79,3 +79,17 @@ def test_bulk_update_keeps_the_only_copy(client, db, auth_headers):
     db.expire_all()
     assert db.get(LookupRecord, record_id).name == unit["name"]
     assert json.loads(db.get(AppDataRecord, record_id).payload) == unit
+
+
+def test_dashboard_pending_requests_count_from_the_table(client, db, auth_headers):
+    """The main dashboard's pending approvals count requests whose JSON isn't stored."""
+    from app.routers.reports import _pending_appdata_count
+
+    cid = _company_id(client, auth_headers)
+    before = _pending_appdata_count(db, cid, "overtimeRequests")
+    tag = uuid.uuid4().hex[:6]
+    for status in ("Pending", " pending ", "Approved"):
+        assert _save(client, auth_headers, "overtimeRequests", {"id": f"OT-{tag}-{status.strip()}{len(status)}",
+                                                                "employee_id": "E1", "hours": 2,
+                                                                "status": status}).status_code == 200
+    assert _pending_appdata_count(db, cid, "overtimeRequests") == before + 2

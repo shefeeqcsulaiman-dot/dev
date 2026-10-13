@@ -2,6 +2,8 @@
 (step A of moving them out of JSON); the JSON stays the source of truth."""
 from uuid import uuid4
 
+import pytest
+
 from app import parties
 from app.models import AppDataRecord, Party
 from tests.test_document_lines import tenant  # noqa: F401  (fixture)
@@ -50,17 +52,15 @@ def test_bulk_writes_and_rebuild(client, db, tenant):  # noqa: F811
 
     # Bulk delete through the ORM query API removes the rows too.
     db.query(AppDataRecord).filter(AppDataRecord.company_id == cid, AppDataRecord.collection == "customers",
-                                   AppDataRecord.payload.like(f'%Bulk 0 {tag}%')).delete(synchronize_session=False)
+                                   AppDataRecord.record_key == f"Bulk 0 {tag}").delete(synchronize_session=False)
     db.commit()
     assert db.query(Party).filter(Party.company_id == cid, Party.name == f"Bulk 0 {tag}").count() == 0
     assert parties.verify_company(db, cid)
 
-    db.query(Party).filter(Party.company_id == cid).delete()
-    db.commit()
-    assert not parties.verify_company(db, cid)
-    parties.mirror.rebuild_company(db, cid)
-    db.commit()
-    assert parties.verify_company(db, cid)
+    # Their JSON isn't stored any more (app/record_payloads.py): the rows are the only copy,
+    # so a rebuild from JSON is refused.
+    with pytest.raises(RuntimeError, match="only copy"):
+        parties.mirror.rebuild_company(db, cid)
 
 
 def test_bad_payload_is_skipped():

@@ -46,6 +46,11 @@ def _rebuilders() -> dict[str, tuple[Any, Callable[[Any], dict]]]:
         from app.models import RotaRecord
 
         _REBUILDERS["rotaAssignments"] = (RotaRecord, lambda row: record_from(row, rota_records.FIELDS))
+        from app import parties
+        from app.models import Party
+
+        for collection in parties.KINDS:
+            _REBUILDERS[collection] = (Party, parties.party_record)
     return _REBUILDERS
 
 
@@ -60,6 +65,8 @@ STORED_IN_TABLE = frozenset({
     "tasks",
     # rota assignments (2026-10-13, migration 0038)
     "rotaAssignments",
+    # customers and suppliers (2026-10-13, migration 0039)
+    "customers", "vendors",
 })
 
 
