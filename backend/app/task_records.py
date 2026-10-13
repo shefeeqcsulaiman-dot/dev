@@ -56,7 +56,7 @@ def task_rows(rec: Record) -> list[dict[str, Any]]:
         "company_id": company_id,
         "branch_id": branch_id,
         "record_key": _text(record_key, 160),
-        **{key: (value or None) if key in _NULLABLE_EMPTY else value for key, value in fields.items()},
+        **fields,  # "" kept: the JSON is rebuilt from the row (app/record_payloads.py)
         "title": fields["title"] or "",
         "is_open": not is_finished_status(doc.get("status")),
     }]
@@ -64,25 +64,28 @@ def task_rows(rec: Record) -> list[dict[str, Any]]:
 
 _COMPARED = ("record_key", "title", "department", "assigned_to", "assigned_to_name", "status", "is_open",
              "priority", "progress", "due_date", "repeat", "extra")
-# A text column left empty ("" in the record) is stored as NULL, as before step C.
-_NULLABLE_EMPTY = frozenset(f.name for f in FIELDS if f.kind in ("text", "day")) - {"title"}
 
 
 mirror = RecordMirror("task_records", COLLECTIONS, TaskRecord, TaskRecord.id, task_rows).register()
 
 
 def verify_company(session: Session, company_id: str) -> bool:
-    """True when the company's task_records rows match what its JSON tasks produce."""
-    have = {r.id: tuple(getattr(r, c) for c in _COMPARED)
-            for r in session.query(TaskRecord).filter(TaskRecord.company_id == company_id)}
-    want = {}
+    """Rows match the tasks that still store their JSON; a task with no stored JSON (its row
+    is the only copy, app/record_payloads.py) only needs a row."""
+    stored, blank, want = set(), set(), {}
     for rec in session.execute(select(AppDataRecord.id, AppDataRecord.company_id, AppDataRecord.collection,
-                                      AppDataRecord.payload, AppDataRecord.branch_id, AppDataRecord.record_key)
+                                      AppDataRecord._payload, AppDataRecord.branch_id, AppDataRecord.record_key)
                                .where(AppDataRecord.company_id == company_id,
                                       AppDataRecord.collection.in_(COLLECTIONS))):
+        if not rec[3]:
+            blank.add(rec[0])
+            continue
+        stored.add(rec[0])
         for row in task_rows(tuple(rec)):
             want[row["id"]] = tuple(row[c] for c in _COMPARED)
-    return have == want
+    rows = session.query(TaskRecord).filter(TaskRecord.company_id == company_id).all()
+    have = {r.id: tuple(getattr(r, c) for c in _COMPARED) for r in rows if r.id in stored}
+    return have == want and blank <= {r.id for r in rows}
 
 
 def stale_json(session: Session, company_id: str) -> list[str]:

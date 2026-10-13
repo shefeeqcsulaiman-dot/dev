@@ -38,6 +38,10 @@ def _rebuilders() -> dict[str, tuple[Any, Callable[[Any], dict]]]:
 
         for collection in request_records.COLLECTIONS:
             _REBUILDERS[collection] = (RequestRecord, lambda row: record_from(row, request_records.FIELDS))
+        from app import task_records
+        from app.models import TaskRecord
+
+        _REBUILDERS["tasks"] = (TaskRecord, lambda row: record_from(row, task_records.FIELDS))
     return _REBUILDERS
 
 
@@ -48,6 +52,8 @@ STORED_IN_TABLE = frozenset({
     # employee requests and HR workflow lists (2026-10-13, migration 0036)
     "overtimeRequests", "employeeLoans", "salaryAdvances", "attendanceCorrections", "taskRequests",
     "payrollAdjustments", "rotaSwaps", "rotaApprovals", "jobRequisitions", "candidates",
+    # tasks (2026-10-13, migration 0037)
+    "tasks",
 })
 
 

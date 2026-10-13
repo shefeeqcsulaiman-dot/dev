@@ -339,8 +339,15 @@ def test_tasks_main_copy_migration_rewrites_records(scratch_engine):
     with scratch_engine.connect() as conn:
         payload = conn.execute(text("SELECT payload FROM app_data_records WHERE id = 't1'")).scalar()
         extra, is_open = conn.execute(text("SELECT extra, is_open FROM task_records WHERE id = 't1'")).one()
-    assert _json.loads(payload) == {"title": "Audit", "status": "Done", "progress": 45, "due_date": "2026-11-01",
-                                    "id": "T-1", "color": "blue"}
+    # 0026 rewrites the JSON; 0037 then empties it, as the row rebuilds it exactly.
+    from app.main_copy import record_from
+    from app.task_records import FIELDS
+
+    with scratch_engine.connect() as conn:
+        row = conn.execute(text("SELECT * FROM task_records WHERE id = 't1'")).mappings().one()
+    assert payload == ""
+    assert record_from(dict(row), FIELDS) == {"title": "Audit", "status": "Done", "progress": 45,
+                                              "due_date": "2026-11-01", "id": "T-1", "color": "blue"}
     assert (_json.loads(extra), bool(is_open)) == ({"id": "T-1", "color": "blue"}, False)
 
 

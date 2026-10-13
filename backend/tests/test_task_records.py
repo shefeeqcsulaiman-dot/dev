@@ -4,6 +4,9 @@ bulk delete; verify_company() agrees and rebuild_company() repairs a drifted row
 import json
 import uuid
 
+import pytest
+from sqlalchemy import text
+
 from app.models import AppDataRecord, TaskRecord
 from app.task_records import mirror, verify_company
 from tests.test_hrms_department_scope import DEPT_A, _company_id, _delete, _login_as, _save
@@ -69,7 +72,10 @@ def test_verify_spots_drift_and_rebuild_repairs_it(client, db, auth_headers):
     row = _row(db, task_id)
     db.query(TaskRecord).filter(TaskRecord.id == row.id).update({"is_open": False}, synchronize_session=False)
     db.commit()
-    assert not verify_company(db, cid)
-    mirror.rebuild_company(db, cid)
-    db.commit()
-    assert verify_company(db, cid) and _row(db, task_id).is_open is True
+    # Tasks' JSON isn't stored any more (app/record_payloads.py): the row is the only copy, so
+    # there is nothing to compare it against or rebuild it from, and a rebuild is refused.
+    db.expire_all()
+    assert db.execute(text("SELECT payload FROM app_data_records WHERE id = :i"), {"i": row.id}).scalar() == ""
+    assert verify_company(db, cid)
+    with pytest.raises(RuntimeError, match="only copy"):
+        mirror.rebuild_company(db, cid)
