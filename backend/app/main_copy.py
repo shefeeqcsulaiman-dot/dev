@@ -33,6 +33,22 @@ def money(value: Any) -> Decimal | None:
     return number.quantize(Decimal("0.01"))
 
 
+def amount(value: Any) -> float | int | None:
+    """A document amount as a number at full precision ("1,234.50" -> 1234.5; 95.2380952
+    stays as it is, so VAT and totals don't move); None when it isn't a number."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return value if value == value and abs(value) != float("inf") else None
+    try:
+        number = Decimal(str(value).replace(",", "").strip())
+    except (InvalidOperation, ValueError):
+        return None
+    if not number.is_finite():
+        return None
+    return int(number) if number == number.to_integral_value() and "." not in str(value) else float(number)
+
+
 def digits(value: Any, size: int) -> str:
     return "".join(ch for ch in str(value or "") if ch.isdigit())[:size]
 
@@ -69,7 +85,7 @@ class Field:
     name: str                          # the record's (JSON) field name
     size: int | None = None            # text length; None for money
     aliases: tuple[str, ...] = ()      # other names the field may come as
-    kind: str = "text"                 # text | money | digits | day | percent | minutes
+    kind: str = "text"                 # text | money | digits | day | percent | minutes | amount
     column: str | None = None          # the table column, when it has another name
 
     @property
@@ -107,6 +123,10 @@ def fields_from(doc: dict[str, Any], fields: Iterable[Field], skip: Iterable[str
             out[col] = percent(value) if value not in (None, "") else None
         elif field.kind == "minutes":
             out[col] = minutes(value) if value not in (None, "") else None
+        elif field.kind == "amount":
+            out[col] = amount(value) if value not in (None, "") else None
+            if out[col] is None and field.name in doc and doc[field.name] is not None:
+                extra[field.name] = doc[field.name]  # not a number: kept exactly as given
         else:
             out[col] = (str(value).strip() if value is not None else "")[:field.size]
             if field.name in doc and doc[field.name] != out[col]:

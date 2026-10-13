@@ -1021,6 +1021,37 @@ class RotaRecord(Base):
     extra: Mapped[str | None] = mapped_column(Text)
 
 
+class DocumentRecord(Base):
+    """A sales invoice or purchase record kept as JSON app-data, its header as real columns:
+    one row per record, id = the app_data_records id. The main copy of the header
+    (app/document_records.py): every write goes through it and the JSON is regenerated from
+    it; the line items stay in the JSON (and document_lines)."""
+    __tablename__ = "document_records"
+    __table_args__ = (
+        Index("ix_document_records_company_collection_number", "company_id", "collection", "number"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)  # = app_data_records.id
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(String(36))
+    collection: Mapped[str] = mapped_column(String(80), nullable=False)
+    record_key: Mapped[str | None] = mapped_column(String(160))
+    number: Mapped[str | None] = mapped_column(String(160))      # invoice_no / purchase ref
+    party: Mapped[str | None] = mapped_column(String(255))       # customer / supplier
+    party_trn: Mapped[str | None] = mapped_column(String(80))
+    doc_date: Mapped[str | None] = mapped_column(String(10))     # YYYY-MM-DD, parsed
+    due_date: Mapped[str | None] = mapped_column(String(10))
+    status: Mapped[str | None] = mapped_column(String(40))
+    subtotal: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    vat: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    total: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    paid: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    salesperson: Mapped[str | None] = mapped_column(String(120))
+    location: Mapped[str | None] = mapped_column(String(120))
+    # The header's other fields (JSON object text), its lines aside.
+    extra: Mapped[str | None] = mapped_column(Text)
+
+
 class CatalogProduct(Base):
     """A product kept as JSON app-data ("products"), as real columns: one row per record,
     id = the app_data_records id. Maintained by app/catalog_products.py on every write
@@ -1143,6 +1174,9 @@ def _main_copy_canonical(collection: str):
     if collection == "rotaAssignments":
         from app.rota_records import canonical_rota
         return canonical_rota
+    if collection in ("salesInvoices", "purchaseRecords"):
+        from app.document_records import canonical_document
+        return lambda doc: canonical_document(collection, doc)
     return None
 
 
@@ -1739,3 +1773,4 @@ import app.parties  # noqa: E402,F401  -- keeps Party (customers, vendors) curre
 import app.catalog_products  # noqa: E402,F401  -- keeps CatalogProduct (products) current
 import app.task_records  # noqa: E402,F401  -- keeps TaskRecord (tasks) current
 import app.rota_records  # noqa: E402,F401  -- keeps RotaRecord (rotaAssignments) current
+import app.document_records  # noqa: E402,F401  -- keeps DocumentRecord (salesInvoices, purchaseRecords) current

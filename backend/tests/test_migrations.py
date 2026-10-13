@@ -369,3 +369,30 @@ def test_rota_main_copy_migration_rewrites_records(scratch_engine):
     assert _json.loads(payload) == {"employee_id": "E1", "date": "2026-10-14", "code": "OFF", "break_minutes": 0,
                                     "id": "E1-2026-10-14", "mark": "Off", "notes": "n"}
     assert (_json.loads(extra), kind, day) == ({"id": "E1-2026-10-14", "mark": "Off", "notes": "n"}, "off", "2026-10-14")
+
+
+def test_document_records_migration_fills_and_rewrites(scratch_engine):
+    """0028: sales invoices / purchases get header rows; their JSON is rewritten (amounts as numbers, lines kept)."""
+    import json as _json
+
+    from alembic import command
+    from app.migrate import alembic_config
+
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        command.downgrade(alembic_config(conn), "0027_rota_main_copy")
+        conn.commit()
+    with scratch_engine.begin() as conn:
+        conn.execute(text("INSERT INTO companies (id, name, country, currency, vat_rate, stock_mode, inventory_accounting) "
+                          "VALUES ('c1', 'c1', 'UAE', 'AED', 5, 'with_stock', 'periodic')"))
+        conn.execute(text("INSERT INTO app_data_records (id, company_id, collection, record_key, payload, row_version) "
+                          "VALUES ('s1', 'c1', 'salesInvoices', 'INV-1', :p, 1)"),
+                     {"p": _json.dumps({"invoice_no": "INV-1", "customer": "Acme", "date": "20/02/2026", "total": "1,050.00",
+                                        "lines": [{"qty": 1}]})})
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        payload = conn.execute(text("SELECT payload FROM app_data_records WHERE id = 's1'")).scalar()
+        number, day, total = conn.execute(text("SELECT number, doc_date, total FROM document_records WHERE id = 's1'")).one()
+    assert _json.loads(payload) == {"invoice_no": "INV-1", "customer": "Acme", "date": "20/02/2026", "total": 1050.0,
+                                    "lines": [{"qty": 1}]}
+    assert (number, day, float(total)) == ("INV-1", "2026-02-20", 1050.0)
