@@ -56,7 +56,7 @@ def _column(col: str, value: Any) -> Any:
         return parsed.isoformat() if parsed else None
     if col in _NUMBERS:
         return Decimal(str(value)).quantize(_FOUR) if value is not None and abs(value) < 1e12 else None
-    return value or None
+    return value  # "" kept: the JSON is rebuilt from the row (app/record_payloads.py)
 
 
 def request_rows(rec: Record) -> list[dict[str, Any]]:
@@ -84,16 +84,22 @@ mirror = RecordMirror("request_records", COLLECTIONS, RequestRecord, RequestReco
 
 
 def verify_company(session: Session, company_id: str) -> bool:
-    """True when the company's request_records rows match its requests."""
-    have = {r.id: tuple(getattr(r, c) for c in _COMPARED)
-            for r in session.query(RequestRecord).filter(RequestRecord.company_id == company_id)}
+    """Rows match the requests that still store their JSON; a request with no stored JSON
+    (its row is the only copy, app/record_payloads.py) only needs a row."""
+    stored, blank = set(), set()
     want = {}
     for rec in session.execute(select(AppDataRecord.id, AppDataRecord.company_id, AppDataRecord.collection,
-                                      AppDataRecord.payload, AppDataRecord.branch_id, AppDataRecord.record_key)
+                                      AppDataRecord._payload, AppDataRecord.branch_id, AppDataRecord.record_key)
                                .where(AppDataRecord.company_id == company_id, AppDataRecord.collection.in_(COLLECTIONS))):
+        if not rec[3]:
+            blank.add(rec[0])
+            continue
+        stored.add(rec[0])
         for row in request_rows(tuple(rec)):
             want[row["id"]] = tuple(row[c] for c in _COMPARED)
-    return have == want
+    rows = session.query(RequestRecord).filter(RequestRecord.company_id == company_id).all()
+    have = {r.id: tuple(getattr(r, c) for c in _COMPARED) for r in rows if r.id in stored}
+    return have == want and blank <= {r.id for r in rows}
 
 
 def stale_json(session: Session, company_id: str) -> list[str]:

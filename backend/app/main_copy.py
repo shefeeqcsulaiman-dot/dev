@@ -148,7 +148,11 @@ def record_from(source: Any, fields: Iterable[Field]) -> dict[str, Any]:
     for field in fields:
         value = get(field.col)
         if value is not None:
-            record[field.name] = float(value) if field.kind == "money" else value
+            if field.kind == "money":
+                value = float(value)
+            elif isinstance(value, Decimal):  # a numeric column read back from the database
+                value = int(value) if value == value.to_integral_value() else float(value)
+            record[field.name] = value
     try:
         extra = json.loads(get("extra") or "{}")
     except (TypeError, ValueError):

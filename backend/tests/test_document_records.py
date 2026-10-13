@@ -57,7 +57,7 @@ def test_bills_quotations_expenses_payments_too(client, db, tenant):  # noqa: F8
             for r in db.query(DocumentRecord).filter(DocumentRecord.company_id == company_id)}
     assert rows == {"bills": ("B-1", "Gulf", "2026-10-01", 1050.0), "quotations": ("Q-1", "Acme", "2026-10-02", 210.0),
                     "expenses": ("EX-1", "DEWA", "2026-10-03", 300.0), "payments": ("PAY-1", "Acme", "2026-10-04", 210.0)}
-    pay = json.loads(db.query(AppDataRecord.payload).filter(AppDataRecord.company_id == company_id,
-                                                           AppDataRecord.record_key == "PAY-1").scalar())
+    pay = json.loads(db.query(AppDataRecord).filter(AppDataRecord.company_id == company_id,
+                                                   AppDataRecord.record_key == "PAY-1").one().payload)
     assert (pay["amount"], pay["allocations"]) == (210, [{"doc_ref": "INV-1", "amount": 210}])
     assert document_records.verify_company(db, company_id) and document_records.stale_json(db, company_id) == []

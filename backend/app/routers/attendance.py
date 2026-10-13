@@ -1631,11 +1631,11 @@ def overtime_eligibility_rows(db: Session, company_id: str, employees: list[Empl
     ).order_by(AttendanceDetail.work_date.desc()).all()
 
     requests: dict[tuple[str, str], dict] = {}
-    for (raw,) in db.query(AppDataRecord.payload).filter(
+    for row in db.query(AppDataRecord).filter(
         AppDataRecord.company_id == company_id, AppDataRecord.collection == "overtimeRequests"
     ).all():
         try:
-            rec = json.loads(raw)
+            rec = json.loads(row.payload)
         except (TypeError, ValueError):
             continue
         if not isinstance(rec, dict):

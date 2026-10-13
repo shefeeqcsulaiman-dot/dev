@@ -910,16 +910,16 @@ def _owned_records(db: Session, company_id: str, collection: str, owner_keys: li
     if not keys:
         return []
     rows = (
-        db.query(AppDataRecord.payload)
+        db.query(AppDataRecord)
         .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == collection,
                 AppDataRecord.owner_key.in_(keys))
         .order_by(AppDataRecord.created_at, AppDataRecord.id)
         .all()
     )
     out = []
-    for (raw,) in rows:
+    for row in rows:
         try:
-            parsed = json.loads(raw)
+            parsed = json.loads(row.payload)
         except (TypeError, ValueError):
             continue
         if isinstance(parsed, dict):

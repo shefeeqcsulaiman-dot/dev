@@ -43,7 +43,7 @@ def lookup_rows(rec: Record) -> list[dict[str, Any]]:
     return [{
         "id": record_id, "company_id": company_id, "branch_id": branch_id, "collection": collection,
         "record_key": _text(record_key, 160),
-        "code": fields["code"] or None, "name": fields["name"] or None, "status": fields["status"] or None,
+        "code": fields["code"], "name": fields["name"], "status": fields["status"],  # "" kept: the JSON is rebuilt from these
         "extra": fields["extra"],
     }]
 

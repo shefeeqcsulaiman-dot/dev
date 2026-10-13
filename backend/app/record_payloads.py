@@ -33,12 +33,21 @@ def _rebuilders() -> dict[str, tuple[Any, Callable[[Any], dict]]]:
 
         for collection in lookup_records.COLLECTIONS:
             _REBUILDERS[collection] = (LookupRecord, lambda row: record_from(row, lookup_records.FIELDS))
+        from app import request_records
+        from app.models import RequestRecord
+
+        for collection in request_records.COLLECTIONS:
+            _REBUILDERS[collection] = (RequestRecord, lambda row: record_from(row, request_records.FIELDS))
     return _REBUILDERS
 
 
 # Collections whose JSON is not stored. Grows one type at a time.
 STORED_IN_TABLE = frozenset({
+    # lookup lists (2026-10-13, migration 0034)
     "salesUnits", "salesCategories", "serviceTypes", "salesPeople", "rotaShifts", "hrHolidays", "bankAccounts",
+    # employee requests and HR workflow lists (2026-10-13, migration 0036)
+    "overtimeRequests", "employeeLoans", "salaryAdvances", "attendanceCorrections", "taskRequests",
+    "payrollAdjustments", "rotaSwaps", "rotaApprovals", "jobRequisitions", "candidates",
 })
 
 
@@ -97,7 +106,26 @@ def blank_stored_payloads(session: Session, _ctx: Any) -> None:
     rebuild the typed rows from the now-empty JSON."""
     from app.models import AppDataRecord
 
-    targets = [obj for obj in session.info.pop("_payload_written", set()) if obj._payload]
+    written = [obj for obj in session.info.pop("_payload_written", set()) if obj._payload]
+    if not written:
+        return
+    # Only records whose typed row (just written by the mirrors) rebuilds exactly the same
+    # JSON; any other keeps its stored JSON, so nothing can be lost.
+    targets = []
+    with session.no_autoflush:
+        by_model: dict[Any, list[Any]] = {}
+        for obj in written:
+            by_model.setdefault(_rebuilders()[obj.collection][0], []).append(obj)
+        for model, objs in by_model.items():
+            typed = {row.id: row for row in session.query(model).filter(model.id.in_([o.id for o in objs]))}
+            for obj in objs:
+                try:
+                    doc = json.loads(obj._payload)
+                except (TypeError, ValueError):
+                    continue
+                row = typed.get(obj.id)
+                if row is not None and isinstance(doc, dict) and rebuild(obj.collection, row) == doc:
+                    targets.append(obj)
     if not targets:
         return
     table = AppDataRecord.__table__
