@@ -978,10 +978,10 @@ def sales_by_person(
 
     # Everyone on the sales-person list appears, even with no sales in the period.
     people: dict[str, str] = {}
-    for (payload,) in db.query(AppDataRecord.payload).filter(
+    for record in db.query(AppDataRecord).filter(
             AppDataRecord.company_id == company_id, AppDataRecord.collection == "salesPeople"):
         try:
-            row = json.loads(payload or "{}")
+            row = json.loads(record.payload or "{}")
         except (TypeError, ValueError):
             continue
         name = str(row.get("name") or "").strip() if isinstance(row, dict) else ""

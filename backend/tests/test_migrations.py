@@ -451,3 +451,30 @@ def test_employees_main_copy_migration(scratch_engine):
     assert _json.loads(payload) == {"id": "E-1", "name": "Omar", "department": "Sales", "salary": 8000,
                                     "status": "Active", "passport_no": "P9"}
     assert _json.loads(extra) == {"id": "E-1", "status": "Active", "passport_no": "P9"}
+
+
+def test_lookup_json_migration_empties_only_lossless_records(scratch_engine):
+    """0034: a lookup entry whose row rebuilds its JSON exactly has the JSON emptied; downgrade restores it."""
+    import json as _json
+
+    from alembic import command
+    from app.migrate import alembic_config
+
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        command.downgrade(alembic_config(conn), "0033_lookup_records")
+        conn.commit()
+    doc = {"code": "BOX", "name": "Box", "notes": "x"}
+    with scratch_engine.begin() as conn:
+        conn.execute(text("INSERT INTO companies (id, name, country, currency, vat_rate, stock_mode, inventory_accounting) "
+                          "VALUES ('c1', 'c1', 'UAE', 'AED', 5, 'with_stock', 'periodic')"))
+        conn.execute(text("INSERT INTO app_data_records (id, company_id, collection, record_key, payload, row_version) "
+                          "VALUES ('u1', 'c1', 'salesUnits', 'BOX', :p, 1)"), {"p": _json.dumps(doc)})
+        conn.execute(text("INSERT INTO lookup_records (id, company_id, collection, record_key, code, name, extra) "
+                          "VALUES ('u1', 'c1', 'salesUnits', 'BOX', 'BOX', 'Box', :e)"), {"e": _json.dumps({"notes": "x"})})
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        assert conn.execute(text("SELECT payload FROM app_data_records WHERE id = 'u1'")).scalar() == ""
+        command.downgrade(alembic_config(conn), "0033_lookup_records")
+        conn.commit()
+        assert _json.loads(conn.execute(text("SELECT payload FROM app_data_records WHERE id = 'u1'")).scalar()) == doc

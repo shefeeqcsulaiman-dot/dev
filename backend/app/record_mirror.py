@@ -79,7 +79,14 @@ class RecordMirror:
         self.insert_only(session, records)
 
     def rebuild_company(self, session: Session, company_id: str) -> int:
-        """Rebuild a company's rows from its JSON records. Returns the number read."""
+        """Rebuild a company's rows from its JSON records. Returns the number read. Refused for
+        collections whose JSON is no longer stored (app/record_payloads.py): there, the
+        typed table is the only copy."""
+        from app.record_payloads import STORED_IN_TABLE
+
+        if self.collections & STORED_IN_TABLE:
+            raise RuntimeError(f"{sorted(self.collections & STORED_IN_TABLE)}: the typed table is the only copy; "
+                               "it can't be rebuilt from JSON")
         self._guarded(session, lambda: session.execute(delete(self.model).where(self.model.company_id == company_id)))
         count, last_id = 0, ""
         while True:  # keyset batches: memory stays flat for a big company
@@ -134,7 +141,7 @@ class RecordMirror:
         for obj in session.dirty:
             if not isinstance(obj, AppDataRecord):
                 continue
-            if not any(self._changed(obj, a) for a in ("payload", "collection", "company_id", "branch_id", "record_key")):
+            if not any(self._changed(obj, a) for a in ("_payload", "collection", "company_id", "branch_id", "record_key")):
                 continue
             if obj.collection in self.collections:
                 refresh[obj.id] = obj

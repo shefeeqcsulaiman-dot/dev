@@ -6,6 +6,7 @@ from enum import Enum
 from uuid import uuid4
 
 from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, event, func
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, attributes, mapped_column, object_session, relationship
 
 from app.database import Base
@@ -854,7 +855,28 @@ class AppDataRecord(Base, TimestampMixin):
     branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), index=True)
     collection: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
     record_key: Mapped[str | None] = mapped_column(String(160), index=True)
-    payload: Mapped[str] = mapped_column(Text, nullable=False)
+    # The stored JSON. Read it through `payload`: for a collection whose typed table holds
+    # the record (app/record_payloads.py STORED_IN_TABLE) the column is left empty and the
+    # JSON is rebuilt from that table on first read.
+    _payload: Mapped[str] = mapped_column("payload", Text, nullable=False)
+
+    @hybrid_property
+    def payload(self) -> str:
+        if not self._payload and self.collection:
+            from app.record_payloads import STORED_IN_TABLE, fill_session
+
+            if self.collection in STORED_IN_TABLE:
+                fill_session(object_session(self))
+        return self._payload
+
+    @payload.inplace.setter
+    def _payload_setter(self, value: str) -> None:
+        self._payload = value
+
+    @payload.inplace.expression
+    @classmethod
+    def _payload_expression(cls):
+        return cls._payload
     # Payload's "date" (YYYY-MM-DD) for DATED_COLLECTIONS, so date-window reads can filter in SQL.
     record_date: Mapped[str | None] = mapped_column(String(10))
     # Due date (YYYY-MM-DD) of sales invoices, bills and purchases (doc_index.doc_due_date()).
@@ -1185,9 +1207,9 @@ def record_actor(session) -> tuple[str | None, str | None]:
 
 def _strip_version_field(target: AppDataRecord) -> None:
     """"_v" is the browser's copy of row_version; it never belongs in the stored payload."""
-    if target.payload and '"_v"' in target.payload:
+    if target._payload and '"_v"' in target._payload:
         try:
-            data = json.loads(target.payload)
+            data = json.loads(target._payload)
         except (TypeError, ValueError):
             return
         if isinstance(data, dict) and "_v" in data:
@@ -1204,7 +1226,7 @@ def _stamp_version_on_insert(_mapper, _connection, target: AppDataRecord) -> Non
 
 @event.listens_for(AppDataRecord, "before_update")
 def _stamp_version_on_update(_mapper, _connection, target: AppDataRecord) -> None:
-    if not attributes.get_history(target, "payload").has_changes():
+    if not attributes.get_history(target, "_payload").has_changes():
         return  # e.g. only amount_paid moved: not an edit of the record
     _strip_version_field(target)
     target.row_version = (target.row_version or 1) + 1
@@ -1245,7 +1267,7 @@ def _store_main_copy(target: AppDataRecord) -> None:
     if canonical is None:
         return
     try:
-        doc = json.loads(target.payload or "{}")
+        doc = json.loads(target._payload or "{}")
     except (TypeError, ValueError):
         return
     if isinstance(doc, dict):
@@ -1259,12 +1281,12 @@ def _store_main_copy(target: AppDataRecord) -> None:
 def _stamp_record_date(_mapper, _connection, target: AppDataRecord) -> None:
     _store_main_copy(target)
     if target.collection in OWNER_COLLECTIONS:
-        target.owner_key = payload_owner_key(target.collection, target.payload)
+        target.owner_key = payload_owner_key(target.collection, target._payload)
     if target.collection in DATED_COLLECTIONS:
-        target.record_date = payload_record_date(target.payload)
+        target.record_date = payload_record_date(target._payload)
     elif target.collection in OPEN_WORK_COLLECTIONS:
         # Their status, so the bootstrap finds still-open items in SQL (app/workflow_status.py).
-        target.doc_status = status_key(target.payload)
+        target.doc_status = status_key(target._payload)
     else:
         from app.doc_index import INDEXED_DOC_COLLECTIONS, stamp_doc_columns
 
@@ -1836,3 +1858,4 @@ import app.rota_records  # noqa: E402,F401  -- keeps RotaRecord (rotaAssignments
 import app.document_records  # noqa: E402,F401  -- keeps DocumentRecord (sales, purchases, bills, quotations, expenses, payments) current
 import app.request_records  # noqa: E402,F401  -- keeps RequestRecord (employee requests) current
 import app.lookup_records  # noqa: E402,F401  -- keeps LookupRecord (small lookup lists) current
+import app.record_payloads  # noqa: E402,F401  -- after the mirrors: empties JSON stored in typed tables

@@ -325,7 +325,7 @@ def open_sql(amount_paid: Any = None) -> Any:
 
 def stamp_doc_columns(target: AppDataRecord) -> None:
     try:
-        record = json.loads(target.payload or "{}")
+        record = json.loads(target._payload or "{}")
     except (TypeError, ValueError):
         record = {}
     if not isinstance(record, dict):
@@ -471,9 +471,9 @@ def _collect_paid_refs(session: Session, _ctx) -> None:
             continue
         found: list[tuple[str, set[str]]] = []
         if obj.collection == "payments":
-            found.append(_payment_refs(obj.payload))
+            found.append(_payment_refs(obj._payload))
             # Documents the payment pointed at before this edit lose its money too.
-            for old in inspect(obj).attrs.payload.history.deleted or ():
+            for old in inspect(obj).attrs._payload.history.deleted or ():
                 found.append(_payment_refs(old))
         elif obj in session.new and obj.collection in SPECS and SPECS[obj.collection].paid_by:
             found.append((SPECS[obj.collection].paid_by, {str(obj.record_key or "").strip().lower()}))

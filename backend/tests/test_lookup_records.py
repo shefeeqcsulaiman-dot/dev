@@ -22,6 +22,6 @@ def test_rows_for_each_list_and_json_unchanged(client, db, auth_headers):
     night = db.query(LookupRecord).filter(LookupRecord.company_id == cid, LookupRecord.code == f"N{tag}").one()
     assert (night.collection, night.name, json.loads(night.extra)) == ("rotaShifts", "Night",
                                                                        {"start": "22:00", "end": "06:00", "break_minutes": 60})
-    stored = json.loads(db.query(AppDataRecord.payload).filter(AppDataRecord.id == night.id).scalar())
+    stored = json.loads(db.get(AppDataRecord, night.id).payload)  # rebuilt from the row (app/record_payloads.py)
     assert stored == entries[1][1]
     assert lookup_records.verify_company(db, cid)

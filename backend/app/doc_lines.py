@@ -247,7 +247,7 @@ def _collect(session: Session, _ctx) -> None:
     for obj in session.dirty:
         if not isinstance(obj, AppDataRecord):
             continue
-        if not (_changed(obj, "payload") or _changed(obj, "collection") or _changed(obj, "company_id")):
+        if not (_changed(obj, "_payload") or _changed(obj, "collection") or _changed(obj, "company_id")):
             continue
         if obj.collection in LINE_COLLECTIONS:
             refresh[obj.id] = obj

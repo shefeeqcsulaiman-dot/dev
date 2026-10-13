@@ -52,15 +52,25 @@ mirror = RecordMirror("lookup_records", COLLECTIONS, LookupRecord, LookupRecord.
 
 
 def verify_company(session: Session, company_id: str) -> bool:
+    """Rows match the records that still store their JSON; a record with no stored JSON (its
+    row is the only copy, app/record_payloads.py) only needs a row."""
+    stored_ids = {i for (i,) in session.query(AppDataRecord.id).filter(
+        AppDataRecord.company_id == company_id, AppDataRecord.collection.in_(COLLECTIONS), AppDataRecord._payload != "")}
     have = {r.id: tuple(getattr(r, c) for c in _COMPARED)
-            for r in session.query(LookupRecord).filter(LookupRecord.company_id == company_id)}
+            for r in session.query(LookupRecord).filter(LookupRecord.company_id == company_id)
+            if r.id in stored_ids}
     want = {}
     for rec in session.execute(select(AppDataRecord.id, AppDataRecord.company_id, AppDataRecord.collection,
                                       AppDataRecord.payload, AppDataRecord.branch_id, AppDataRecord.record_key)
                                .where(AppDataRecord.company_id == company_id, AppDataRecord.collection.in_(COLLECTIONS))):
+        if rec.id not in stored_ids:
+            continue
         for row in lookup_rows(tuple(rec)):
             want[row["id"]] = tuple(row[c] for c in _COMPARED)
-    return have == want
+    blank = {i for (i,) in session.query(AppDataRecord.id).filter(
+        AppDataRecord.company_id == company_id, AppDataRecord.collection.in_(COLLECTIONS), AppDataRecord._payload == "")}
+    with_rows = {i for (i,) in session.query(LookupRecord.id).filter(LookupRecord.id.in_(blank))} if blank else set()
+    return have == want and blank == with_rows
 
 
 def _main() -> None:

@@ -90,11 +90,11 @@ def rota_break_seconds(db: Session, company_id: str, employee_nos, start: date, 
         return {}
     lo, hi = start.isoformat(), end.isoformat()
     shifts: dict[str, float] = {}
-    for (payload,) in db.query(AppDataRecord.payload).filter(
+    for row in db.query(AppDataRecord).filter(
         AppDataRecord.company_id == company_id, AppDataRecord.collection == "rotaShifts",
     ).all():
         try:
-            rec = json.loads(payload or "{}")
+            rec = json.loads(row.payload or "{}")
         except (TypeError, ValueError):
             continue
         if isinstance(rec, dict) and rec.get("code"):

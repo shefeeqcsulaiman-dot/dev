@@ -283,11 +283,11 @@ def ess_team_today(request: Request, db: Session = Depends(get_db)) -> list[dict
     is_weekend = weekend_days is not None and js_dow in weekend_days
 
     holiday_dates: set[str] = set()
-    for (raw,) in db.query(AppDataRecord.payload).filter(
+    for row in db.query(AppDataRecord).filter(
         AppDataRecord.company_id == emp.company_id, AppDataRecord.collection == "hrHolidays",
     ).all():
         try:
-            payload = json.loads(raw)
+            payload = json.loads(row.payload)
         except (ValueError, TypeError):
             continue
         raw_date = str(payload.get("date") or payload.get("holiday_date") or "")
@@ -721,13 +721,13 @@ def _employee_app_data_records(db: Session, company_id: str, collection: str) ->
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
-    rows = db.query(AppDataRecord.payload).filter(
+    rows = db.query(AppDataRecord).filter(
         AppDataRecord.company_id == company_id, AppDataRecord.collection == collection,
     ).all()
     out = []
-    for (raw,) in rows:
+    for row in rows:
         try:
-            parsed = json.loads(raw)
+            parsed = json.loads(row.payload)
         except (TypeError, ValueError):
             continue
         if isinstance(parsed, dict):

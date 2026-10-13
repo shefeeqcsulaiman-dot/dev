@@ -2070,12 +2070,12 @@ def attendance_employee_daily(
     # this guessing at parsing it, same "don't fabricate" principle as
     # daily_attendance_report.py leaving this column blank entirely.
     holiday_dates: set[str] = set()
-    for rec in db.query(AppDataRecord.payload).filter(
+    for rec in db.query(AppDataRecord).filter(
         AppDataRecord.company_id == principal.company_id,
         AppDataRecord.collection == "hrHolidays",
     ).all():
         try:
-            payload = json.loads(rec[0])
+            payload = json.loads(rec.payload)
         except (ValueError, TypeError):
             continue
         raw_date = str(payload.get("date") or payload.get("holiday_date") or "")

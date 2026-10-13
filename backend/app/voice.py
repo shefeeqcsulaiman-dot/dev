@@ -119,14 +119,14 @@ _vocab_cache = cache.LocalTTLCache(max_entries=500)
 
 def _names(db: Session, company_id: str, collection: str, limit: int) -> list[str]:
     rows = (
-        db.query(AppDataRecord.payload)
+        db.query(AppDataRecord)
         .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == collection)
         .limit(limit).all()
     )
     out = []
-    for (payload,) in rows:
+    for row in rows:
         try:
-            name = str((json.loads(payload or "{}") or {}).get("name") or "").strip()
+            name = str((json.loads(row.payload or "{}") or {}).get("name") or "").strip()
         except (TypeError, ValueError, AttributeError):
             continue
         if name:
