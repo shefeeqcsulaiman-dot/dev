@@ -44,3 +44,23 @@ def test_columns_hold_parsed_values_for_every_writer(client, db, auth_headers):
     assert stored["ot_hours"] == "2.5" and stored["date"] == "13/10/2026"    # unchanged
     assert json.loads(o.extra)["ot_type"] == "weekend"
     assert request_records.verify_company(db, cid) and request_records.stale_json(db, cid) == []
+
+
+def test_hr_workflow_lists_have_rows_too(client, db, auth_headers):
+    cid = _company_id(client, auth_headers)
+    tag = uuid.uuid4().hex[:6]
+    for collection, record in (
+        ("payrollAdjustments", {"id": f"PA-{tag}", "employee_id": f"E-{tag}", "employee": "Ali", "amount": "250",
+                                "type": "Bonus", "status": "Approved", "date": "2026-10-01"}),
+        ("jobRequisitions", {"id": f"JR-{tag}", "title": "Cashier", "department": "Sales", "status": "Open"}),
+        ("candidates", {"id": f"CA-{tag}", "name": "Mona", "status": "Hired"}),
+    ):
+        assert _save(client, auth_headers, collection, record).status_code == 200, collection
+    db.expire_all()
+    rows = {r.collection: (r.amount, r.title, r.is_open) for r in
+            db.query(RequestRecord).filter(RequestRecord.company_id == cid, RequestRecord.record_key.like(f"%-{tag}"))}
+    # "Approved" isn't a finished status (app/workflow_status.py): an approved item is still open.
+    assert rows == {"payrollAdjustments": (Decimal("250"), None, True), "jobRequisitions": (None, "Cashier", True),
+                    "candidates": (None, None, False)}
+    stored = json.loads(db.query(AppDataRecord.payload).filter(AppDataRecord.record_key == f"PA-{tag}").scalar())
+    assert stored["amount"] == "250"      # JSON unchanged

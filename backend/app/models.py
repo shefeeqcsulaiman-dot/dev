@@ -1086,6 +1086,24 @@ class RequestRecord(Base):
     extra: Mapped[str | None] = mapped_column(Text)
 
 
+class LookupRecord(Base):
+    """An entry of a small lookup list kept as JSON app-data (units, categories, service
+    types, salespeople, shift setup, holidays, bank accounts): code, name and status as
+    columns plus extra. The main copy (app/lookup_records.py); the JSON is left as saved."""
+    __tablename__ = "lookup_records"
+    __table_args__ = (Index("ix_lookup_records_company_collection_name", "company_id", "collection", "name"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)  # = app_data_records.id
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(String(36))
+    collection: Mapped[str] = mapped_column(String(80), nullable=False)
+    record_key: Mapped[str | None] = mapped_column(String(160))
+    code: Mapped[str | None] = mapped_column(String(120))
+    name: Mapped[str | None] = mapped_column(String(255))
+    status: Mapped[str | None] = mapped_column(String(40))
+    extra: Mapped[str | None] = mapped_column(Text)
+
+
 class CatalogProduct(Base):
     """A product kept as JSON app-data ("products"), as real columns: one row per record,
     id = the app_data_records id. Maintained by app/catalog_products.py on every write
@@ -1208,12 +1226,17 @@ def _main_copy_canonical(collection: str):
     if collection == "rotaAssignments":
         from app.rota_records import canonical_rota
         return canonical_rota
-    if collection in ("salesInvoices", "purchaseRecords"):
+    if collection in ("salesInvoices", "purchaseRecords", "bills", "quotations", "expenses", "payments"):
         from app.document_records import canonical_document
         return lambda doc: canonical_document(collection, doc)
-    if collection in ("overtimeRequests", "employeeLoans", "salaryAdvances", "attendanceCorrections", "taskRequests"):
+    if collection in ("overtimeRequests", "employeeLoans", "salaryAdvances", "attendanceCorrections", "taskRequests",
+                      "payrollAdjustments", "rotaSwaps", "rotaApprovals", "jobRequisitions", "candidates"):
         from app.request_records import canonical_request
         return canonical_request
+    if collection in ("salesUnits", "salesCategories", "serviceTypes", "salesPeople", "rotaShifts", "hrHolidays",
+                      "bankAccounts"):
+        from app.lookup_records import canonical_lookup
+        return canonical_lookup
     return None
 
 
@@ -1810,5 +1833,6 @@ import app.parties  # noqa: E402,F401  -- keeps Party (customers, vendors) curre
 import app.catalog_products  # noqa: E402,F401  -- keeps CatalogProduct (products) current
 import app.task_records  # noqa: E402,F401  -- keeps TaskRecord (tasks) current
 import app.rota_records  # noqa: E402,F401  -- keeps RotaRecord (rotaAssignments) current
-import app.document_records  # noqa: E402,F401  -- keeps DocumentRecord (salesInvoices, purchaseRecords) current
+import app.document_records  # noqa: E402,F401  -- keeps DocumentRecord (sales, purchases, bills, quotations, expenses, payments) current
 import app.request_records  # noqa: E402,F401  -- keeps RequestRecord (employee requests) current
+import app.lookup_records  # noqa: E402,F401  -- keeps LookupRecord (small lookup lists) current

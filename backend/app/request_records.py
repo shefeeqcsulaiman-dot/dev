@@ -27,7 +27,9 @@ from app.parties import _text
 from app.record_mirror import Record, RecordMirror
 from app.workflow_status import is_finished_status
 
-COLLECTIONS = ("overtimeRequests", "employeeLoans", "salaryAdvances", "attendanceCorrections", "taskRequests")
+COLLECTIONS = ("overtimeRequests", "employeeLoans", "salaryAdvances", "attendanceCorrections", "taskRequests",
+               # HR workflow lists with the same shape (who, status, date, amount): added 2026-10-13.
+               "payrollAdjustments", "rotaSwaps", "rotaApprovals", "jobRequisitions", "candidates")
 FIELDS = (Field("employee_id", 80, column="employee_no"), Field("employee", 160, column="employee_name"),
           Field("department", 120), Field("status", 40), Field("date", 40, column="request_date"),
           Field("amount", kind="number"), Field("ot_hours", kind="number", column="hours"),

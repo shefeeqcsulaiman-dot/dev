@@ -1,8 +1,8 @@
-"""Sales invoices and purchases as real rows (the document_records table): the main copy of
-each document's header.
+"""Documents as real rows (the document_records table): the main copy of each document's
+header -- sales invoices, purchase records, bills, quotations, expenses and payments.
 
-One row per sales invoice / purchase record with its header as columns (number, customer or
-supplier, TRN, date, due date, status, subtotal, VAT, total, paid, salesperson / location)
+One row per document with its header as columns (number, customer / supplier / contact, TRN,
+date, due date, status, subtotal, VAT, total, paid, salesperson / owner / location)
 and the header's other fields in `extra`. The line items are left out of the row: they stay
 in the JSON, and have their own typed copy in document_lines (app/doc_lines.py), so copying
 them here would store every invoice's lines a third time. Every write, from any path, is put
@@ -47,6 +47,31 @@ FIELDS = {
         Field("due_date", 40), Field("status", 40), Field("net_amount", kind="amount", aliases=("subtotal",), column="subtotal"),
         Field("tax_amount", kind="amount", aliases=("vat_amount", "vat"), column="vat"), Field("total", kind="amount"),
         Field("paid", kind="amount", aliases=("paid_amount",)), Field("location", 120),
+    ),
+    # Field names as app/doc_index.py SPECS reads them for these documents.
+    "bills": (
+        Field("bill_no", 160, column="number"), Field("vendor", 255, ("supplier", "vendor_name"), column="party"),
+        Field("vendor_trn", 80, ("supplier_trn",), column="party_trn"), Field("date", 40, ("bill_date",), column="doc_date"),
+        Field("due", 40, ("due_date",), column="due_date"), Field("status", 40), Field("subtotal", kind="amount"),
+        Field("vat", kind="amount", aliases=("vat_amount", "tax_amount")), Field("total", kind="amount", aliases=("grand_total",)),
+        Field("paid", kind="amount", aliases=("paid_amount",)),
+    ),
+    "quotations": (
+        Field("quote_no", 160, column="number"), Field("customer", 255, ("customer_name",), column="party"),
+        Field("customer_trn", 80, column="party_trn"), Field("date", 40, column="doc_date"),
+        Field("valid_until", 40, ("expiry_date",), column="due_date"), Field("status", 40), Field("subtotal", kind="amount"),
+        Field("vat_amount", kind="amount", aliases=("vat",), column="vat"), Field("total", kind="amount"),
+        Field("owner", 120, column="salesperson"),
+    ),
+    "expenses": (
+        Field("ref", 160, column="number"), Field("vendor", 255, ("supplier", "employee"), column="party"),
+        Field("vendor_trn", 80, ("supplier_trn",), column="party_trn"), Field("date", 40, ("expense_date",), column="doc_date"),
+        Field("status", 40), Field("subtotal", kind="amount", aliases=("net_amount",)),
+        Field("vat", kind="amount", aliases=("vat_amount", "tax_amount")), Field("total", kind="amount", aliases=("amount",)),
+    ),
+    "payments": (
+        Field("ref", 160, column="number"), Field("contact", 255, ("customer", "supplier", "vendor"), column="party"),
+        Field("date", 40, column="doc_date"), Field("status", 40), Field("amount", kind="amount", aliases=("total",), column="total"),
     ),
 }
 COLLECTIONS = tuple(FIELDS)
@@ -118,12 +143,6 @@ def verify_company(session: Session, company_id: str) -> bool:
     return have == want
 
 
-def _canonical_any(doc: dict[str, Any]) -> dict[str, Any]:
-    # The check tool's stale-JSON test works per record without its collection: a sales
-    # invoice carries invoice_no, a purchase its ref.
-    return canonical_document("salesInvoices" if "invoice_no" in doc and "ref" not in doc else "purchaseRecords", doc)
-
-
 def stale_json(session: Session, company_id: str) -> list[str]:
     stale = []
     for collection in COLLECTIONS:
@@ -141,8 +160,29 @@ def rewrite_json(session: Session, record_ids: list[str]) -> None:
 
 
 def _main() -> None:
-    main_copy.check_tool("Check (or rebuild) the document_records table and the JSON it regenerates.", COLLECTIONS,
-                         verify_company, _canonical_any, mirror)
+    import argparse
+
+    from app.database import SessionLocal
+
+    parser = argparse.ArgumentParser(description="Check (or rebuild) the document_records table and the JSON it regenerates.")
+    parser.add_argument("--rebuild", action="store_true", help="rebuild companies whose rows differ")
+    parser.add_argument("--rewrite-json", action="store_true", help="regenerate records whose JSON isn't canonical")
+    args = parser.parse_args()
+    with SessionLocal() as db:
+        companies = [c for (c,) in db.execute(
+            select(AppDataRecord.company_id).where(AppDataRecord.collection.in_(COLLECTIONS)).distinct())]
+        bad = [c for c in companies if not verify_company(db, c)]
+        stale = {c: ids for c in companies if (ids := stale_json(db, c))}
+        print(f"{len(companies)} companies checked, {len(bad)} with rows that differ, "
+              f"{sum(map(len, stale.values()))} records with non-canonical JSON")
+        if args.rewrite_json and stale:
+            for ids in stale.values():
+                rewrite_json(db, ids)
+            db.commit()
+        if args.rebuild and bad:
+            for company_id in bad:
+                mirror.rebuild_company(db, company_id)
+            db.commit()
 
 
 if __name__ == "__main__":

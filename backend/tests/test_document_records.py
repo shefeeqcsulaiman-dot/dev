@@ -39,3 +39,25 @@ def test_saves_store_the_regenerated_header(client, db, tenant):  # noqa: F811
     assert json.loads(row.extra) == {"po_number": "PO-9"}
     assert float(rec.fig_gross) == 1050.0 and rec.record_date == "2026-10-12"   # report columns unchanged
     assert document_records.verify_company(db, company_id) and document_records.stale_json(db, company_id) == []
+
+
+def test_bills_quotations_expenses_payments_too(client, db, tenant):  # noqa: F811
+    company_id, h = tenant
+    for collection, record in (
+        ("bills", {"bill_no": "B-1", "vendor": "Gulf", "date": "2026-10-01", "due": "2026-10-31", "subtotal": "1,000",
+                   "vat": "50", "total": "1,050", "status": "Awaiting Payment", "lines": [{"description": "x"}]}),
+        ("quotations", {"quote_no": "Q-1", "customer": "Acme", "date": "2026-10-02", "total": "210", "owner": "Sara"}),
+        ("expenses", {"ref": "EX-1", "vendor": "DEWA", "date": "2026-10-03", "amount": "300", "category": "Utilities"}),
+        ("payments", {"ref": "PAY-1", "type": "Customer Receipt", "contact": "Acme", "amount": "210", "date": "2026-10-04",
+                      "allocations": [{"doc_ref": "INV-1", "amount": 210}]}),
+    ):
+        assert _save(client, h, collection, record).status_code == 200, collection
+    db.expire_all()
+    rows = {r.collection: (r.number, r.party, r.doc_date, float(r.total) if r.total is not None else None)
+            for r in db.query(DocumentRecord).filter(DocumentRecord.company_id == company_id)}
+    assert rows == {"bills": ("B-1", "Gulf", "2026-10-01", 1050.0), "quotations": ("Q-1", "Acme", "2026-10-02", 210.0),
+                    "expenses": ("EX-1", "DEWA", "2026-10-03", 300.0), "payments": ("PAY-1", "Acme", "2026-10-04", 210.0)}
+    pay = json.loads(db.query(AppDataRecord.payload).filter(AppDataRecord.company_id == company_id,
+                                                           AppDataRecord.record_key == "PAY-1").scalar())
+    assert (pay["amount"], pay["allocations"]) == (210, [{"doc_ref": "INV-1", "amount": 210}])
+    assert document_records.verify_company(db, company_id) and document_records.stale_json(db, company_id) == []
