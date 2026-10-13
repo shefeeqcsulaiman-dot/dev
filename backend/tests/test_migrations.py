@@ -317,8 +317,15 @@ def test_products_main_copy_migration_rewrites_records(scratch_engine):
     with scratch_engine.connect() as conn:
         payload = conn.execute(text("SELECT payload FROM app_data_records WHERE id = 'q1'")).scalar()
         extra, price = conn.execute(text("SELECT extra, selling_price FROM catalog_products WHERE id = 'q1'")).one()
-    assert _json.loads(payload) == {"code": "K-1", "name": "Kit", "selling_price": 1500.0, "price": "1,500",
-                                    "notes": "n", "image": "data:x"}
+        row = conn.execute(text("SELECT * FROM catalog_products WHERE id = 'q1'")).mappings().one()
+    # 0025 rewrites the JSON; 0041 moves the image into its column and empties the JSON.
+    from types import SimpleNamespace
+
+    from app.catalog_products import rebuilt_product
+
+    assert payload == ""
+    assert rebuilt_product(SimpleNamespace(**row)) == {"code": "K-1", "name": "Kit", "selling_price": 1500.0,
+                                                       "price": "1,500", "notes": "n", "image": "data:x"}
     assert (_json.loads(extra), float(price)) == ({"price": "1,500", "notes": "n"}, 1500.0)
 
 

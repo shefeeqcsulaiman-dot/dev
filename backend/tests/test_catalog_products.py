@@ -5,6 +5,9 @@ import json
 from decimal import Decimal
 from uuid import uuid4
 
+import pytest
+from sqlalchemy import text
+
 from app.catalog_products import mirror, verify_company
 from app.models import AppDataRecord, CatalogProduct, User
 
@@ -43,18 +46,21 @@ def test_rows_follow_saves_edits_and_deletes(client, db, auth_headers):
     assert verify_company(db, _company_id(db))
 
 
-def test_rebuild_restores_missing_rows(db, auth_headers):
+def test_rebuild_is_refused_once_the_row_is_the_only_copy(db, auth_headers):
+    """Products' JSON isn't stored any more (app/record_payloads.py): the rows can't be
+    rebuilt from it."""
     cid = _company_id(db)
     tag = uuid4().hex[:6]
-    db.add(AppDataRecord(company_id=cid, collection="products", record_key=f"RB-{tag}",
-                         payload=json.dumps({"code": f"RB-{tag}", "name": "Rebuild Me"})))
+    rec = AppDataRecord(company_id=cid, collection="products", record_key=f"RB-{tag}",
+                        payload=json.dumps({"code": f"RB-{tag}", "name": "Rebuild Me", "image": "data:image/png;base64,AA"}))
+    db.add(rec)
     db.commit()
-    db.query(CatalogProduct).filter(CatalogProduct.company_id == cid).delete()
-    db.commit()
-    assert not verify_company(db, cid)
-    mirror.rebuild_company(db, cid)
-    db.commit()
+    db.expire_all()
+    assert db.execute(text("SELECT payload FROM app_data_records WHERE id = :i"), {"i": rec.id}).scalar() == ""
+    assert json.loads(db.get(AppDataRecord, rec.id).payload)["image"] == "data:image/png;base64,AA"
     assert verify_company(db, cid)
+    with pytest.raises(RuntimeError, match="only copy"):
+        mirror.rebuild_company(db, cid)
 
 
 def test_search_matches_fields_not_json_keys(client, db, auth_headers):

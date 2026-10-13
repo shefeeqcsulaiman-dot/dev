@@ -1161,6 +1161,9 @@ class CatalogProduct(Base):
     # The product's other fields (JSON object text) except its inline image: with the
     # columns, the whole product (app/catalog_products.py product_record()).
     extra: Mapped[str | None] = mapped_column(Text)
+    # Its inline image (data URL) as saved; NULL when the product has none. Deferred: only
+    # rebuilding the record or the image endpoint loads it.
+    image: Mapped[str | None] = mapped_column(Text, deferred=True)
 
 
 from app.workflow_status import OPEN_WORK_COLLECTIONS, status_key  # noqa: E402 -- no model imports

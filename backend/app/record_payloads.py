@@ -59,7 +59,26 @@ def _rebuilders() -> dict[str, tuple[Any, Callable[[Any], dict]]]:
 
         _REBUILDERS["employees"] = (Employee, employee_records.employee_record)
         _LOADERS[Employee] = employee_records.typed_rows
+        from app import catalog_products
+        from app.models import CatalogProduct
+
+        _REBUILDERS["products"] = (CatalogProduct, catalog_products.rebuilt_product)
+        _LOADERS[CatalogProduct] = _products_with_images
     return _REBUILDERS
+
+
+def _products_with_images(session: Session, objs: list[Any]) -> dict[str, Any]:
+    """catalog_products rows by record id, their deferred image loaded in the same query."""
+    from sqlalchemy.orm import undefer
+
+    from app.models import CatalogProduct
+
+    ids, typed = [o.id for o in objs], {}
+    for start in range(0, len(ids), 500):
+        for row in session.query(CatalogProduct).options(undefer(CatalogProduct.image)).filter(
+                CatalogProduct.id.in_(ids[start:start + 500])):
+            typed[row.id] = row
+    return typed
 
 
 def _typed_rows(session: Session, objs: list[Any]) -> dict[str, Any]:
@@ -95,6 +114,8 @@ STORED_IN_TABLE = frozenset({
     "customers", "vendors",
     # employees (2026-10-13, migration 0040)
     "employees",
+    # products (2026-10-13, migration 0041)
+    "products",
 })
 
 

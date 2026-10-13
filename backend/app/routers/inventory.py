@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.auth_principal import resolve_active_branch
 from app.database import get_db
 from app.dependencies import Principal, get_current_principal, get_current_user, require_module
-from app.models import AppDataRecord, DocumentLine, InventoryValuationLayer, ItemUnit, ItemUnitConversion, StockAdjustmentApproval, StockMovement, StockProductMapping, User, Warehouse
+from app.models import AppDataRecord, CatalogProduct, DocumentLine, InventoryValuationLayer, ItemUnit, ItemUnitConversion, StockAdjustmentApproval, StockMovement, StockProductMapping, User, Warehouse
 from app.stock_units import purchase_stock, units_per_outer, unit_cost as stock_unit_cost
 from app.schemas import (
     InventoryValuationLayerOut,
@@ -611,28 +611,30 @@ def purchase_cost_lookup(db: Session, company_id: str, wanted: set[str] | None =
             ),
         )
         purchases = purchases & AppDataRecord.id.in_(matching)
-    rows = (
-        db.query(AppDataRecord.collection, AppDataRecord.payload)
-        .filter(AppDataRecord.company_id == company_id, or_(AppDataRecord.collection == "products", purchases))
-        .all()
-    )
-    for collection, payload in rows:
+    # Products from their rows (app/catalog_products.py: code covers sku, cost covers
+    # unit_cost; purchase_price is in extra), then purchase lines.
+    for code, name, cost, extra in db.query(CatalogProduct.code, CatalogProduct.name, CatalogProduct.cost,
+                                            CatalogProduct.extra).filter(CatalogProduct.company_id == company_id):
+        if not cost:
+            try:
+                cost = (json.loads(extra or "{}") or {}).get("purchase_price")
+            except (TypeError, ValueError, AttributeError):
+                cost = None
+        add_cost_lookup(lookup, code, cost)
+        add_cost_lookup(lookup, name, cost)
+    for row in db.query(AppDataRecord).filter(AppDataRecord.company_id == company_id, purchases):
         try:
-            record = json.loads(payload or "{}")
+            record = json.loads(row.payload or "{}")
         except (TypeError, json.JSONDecodeError):
             continue
         if not isinstance(record, dict):
             continue
-        if collection == "products":
-            add_cost_lookup(lookup, record.get("code") or record.get("sku"), record.get("cost") or record.get("purchase_price") or record.get("unit_cost"))
-            add_cost_lookup(lookup, record.get("name"), record.get("cost") or record.get("purchase_price") or record.get("unit_cost"))
-        else:
-            for line in record.get("lines") or []:
-                if not isinstance(line, dict):
-                    continue
-                cost = line.get("unit_cost") or line.get("purchase_unit_cost") or line.get("unit_cost_before_discount") or line.get("cost")
-                add_cost_lookup(lookup, line.get("sku"), cost)
-                add_cost_lookup(lookup, line.get("product") or line.get("description"), cost)
+        for line in record.get("lines") or []:
+            if not isinstance(line, dict):
+                continue
+            cost = line.get("unit_cost") or line.get("purchase_unit_cost") or line.get("unit_cost_before_discount") or line.get("cost")
+            add_cost_lookup(lookup, line.get("sku"), cost)
+            add_cost_lookup(lookup, line.get("product") or line.get("description"), cost)
     return lookup
 
 

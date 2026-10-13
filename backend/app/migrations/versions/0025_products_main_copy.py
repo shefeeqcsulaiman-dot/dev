@@ -20,14 +20,10 @@ branch_labels = None
 depends_on = None
 
 _BATCH = 500  # products may carry inline images
-_COLUMNS = ("id", "company_id", "branch_id", "record_key", "code", "code_key", "name", "name_key", "type",
-            "category", "unit", "selling_price", "cost", "vat", "tracking", "supplier_name", "barcode", "status",
-            "extra")
-_MONEY = {"selling_price", "cost"}
 
 
 def upgrade() -> None:
-    from app.catalog_products import COLLECTIONS, canonical_product, mirror
+    from app.catalog_products import COLLECTIONS, canonical_product
 
     bind = op.get_bind()
     if "extra" not in {c["name"] for c in sa.inspect(bind).get_columns("catalog_products")}:
@@ -57,10 +53,7 @@ def upgrade() -> None:
             bind.execute(update, values)
         last_id = rows[-1][0]
 
-    bind.execute(sa.text("DELETE FROM catalog_products"))
-    table = sa.table("catalog_products", *[sa.column(c, sa.Numeric(14, 2)) if c in _MONEY else sa.column(c)
-                                           for c in _COLUMNS])
-    mirror.refill_all(bind, table)
+    # The table is refilled by 0041 (its rows now carry the image column added there).
 
 
 def downgrade() -> None:
