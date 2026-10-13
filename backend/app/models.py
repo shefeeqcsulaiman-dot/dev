@@ -785,6 +785,9 @@ class Employee(Base, TimestampMixin):
     last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_activity: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The HRMS record's fields this table has no column for (JSON object text, the photo
+    # aside): with the columns, the whole employee (app/employee_records.py).
+    extra: Mapped[str | None] = mapped_column(Text)
 
 
 class PayrollRun(Base, TimestampMixin):

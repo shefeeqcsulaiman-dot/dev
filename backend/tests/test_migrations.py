@@ -421,3 +421,33 @@ def test_request_records_migration_fills_without_rewriting(scratch_engine):
         hours, is_open, day = conn.execute(text("SELECT hours, is_open, request_date FROM request_records WHERE id = 'o1'")).one()
     assert payload == raw
     assert (float(hours), bool(is_open), day) == (3.0, True, "2026-10-01")
+
+
+def test_employees_main_copy_migration(scratch_engine):
+    """0030: employees.extra is filled and the JSON gets the row's values (salary from the row)."""
+    import json as _json
+
+    from alembic import command
+    from app.migrate import alembic_config
+
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        command.downgrade(alembic_config(conn), "0029_request_records")
+        conn.commit()
+    with scratch_engine.begin() as conn:
+        conn.execute(text("INSERT INTO companies (id, name, country, currency, vat_rate, stock_mode, inventory_accounting) "
+                          "VALUES ('c1', 'c1', 'UAE', 'AED', 5, 'with_stock', 'periodic')"))
+        conn.execute(text("INSERT INTO employees (id, company_id, employee_no, full_name, department, designation, basic_salary, "
+                          "housing_allowance, transport_allowance, other_allowance, status, is_active) "
+                          "VALUES ('e1', 'c1', 'E-1', 'Omar', 'Sales', 'Staff', 8000, 1500, 0, 0, 'active', 1)"))
+        conn.execute(text("INSERT INTO app_data_records (id, company_id, collection, record_key, payload, row_version) "
+                          "VALUES ('a1', 'c1', 'employees', 'E-1', :p, 1)"),
+                     {"p": _json.dumps({"id": "E-1", "name": "Omar", "department": "Sales", "salary": 0,
+                                        "status": "Active", "passport_no": "P9"})})
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        payload = conn.execute(text("SELECT payload FROM app_data_records WHERE id = 'a1'")).scalar()
+        extra = conn.execute(text("SELECT extra FROM employees WHERE id = 'e1'")).scalar()
+    assert _json.loads(payload) == {"id": "E-1", "name": "Omar", "department": "Sales", "salary": 8000,
+                                    "status": "Active", "passport_no": "P9"}
+    assert _json.loads(extra) == {"id": "E-1", "status": "Active", "passport_no": "P9"}

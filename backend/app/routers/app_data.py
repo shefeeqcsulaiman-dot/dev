@@ -39,6 +39,7 @@ from app.database import get_db
 from app.auth_principal import resolve_active_branch
 from app.doc_index import parse_document_date, recompute_payment_targets
 from app.stock_units import purchase_stock, unit_cost as stock_unit_cost
+from app.employee_records import store_main_copy as store_employee_main_copy
 from app.party_checks import check_party_form, clean_party_batch
 from app.product_checks import check_product_form, clean_product_batch
 from app.task_records import COLLECTIONS as TASK_COLLECTIONS
@@ -1977,6 +1978,9 @@ async def app_data_action(
             _assert_record_is_new(db, principal.company_id, collection, record)
         saved = save_app_record(db, principal, collection, record)
         sync_domain_model(db, principal, collection, serialize(saved))
+        if collection == "employees":
+            # The employees row is the main copy: the JSON is regenerated from it (app/employee_records.py).
+            store_employee_main_copy(db, principal.company_id, saved)
         db.flush()
         version = saved.row_version
         db.commit()
@@ -2038,6 +2042,8 @@ async def app_data_action(
                     existing_by_key[key] = saved
                 created_count += 1
             sync_domain_model(db, principal, collection, record)
+            if collection == "employees":
+                store_employee_main_copy(db, principal.company_id, saved)
             saved_count += 1
         log_action(
             db,
