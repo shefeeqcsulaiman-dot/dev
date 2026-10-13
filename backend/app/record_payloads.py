@@ -23,6 +23,9 @@ from sqlalchemy.orm import Session, attributes
 
 # Collection -> (typed model, function(row) -> JSON dict). Filled lazily (import cycles).
 _REBUILDERS: dict[str, tuple[Any, Callable[[Any], dict]]] = {}
+# Typed model -> function(session, records) -> {record id: row}, for a table not keyed by
+# the record id (employees: by employee number). Others are found by id.
+_LOADERS: dict[Any, Callable[[Session, list[Any]], dict[str, Any]]] = {}
 
 
 def _rebuilders() -> dict[str, tuple[Any, Callable[[Any], dict]]]:
@@ -51,7 +54,30 @@ def _rebuilders() -> dict[str, tuple[Any, Callable[[Any], dict]]]:
 
         for collection in parties.KINDS:
             _REBUILDERS[collection] = (Party, parties.party_record)
+        from app import employee_records
+        from app.models import Employee
+
+        _REBUILDERS["employees"] = (Employee, employee_records.employee_record)
+        _LOADERS[Employee] = employee_records.typed_rows
     return _REBUILDERS
+
+
+def _typed_rows(session: Session, objs: list[Any]) -> dict[str, Any]:
+    """{record id: its typed row} for these records (all in STORED_IN_TABLE)."""
+    by_model: dict[Any, list[Any]] = {}
+    for obj in objs:
+        by_model.setdefault(_rebuilders()[obj.collection][0], []).append(obj)
+    typed: dict[str, Any] = {}
+    for model, group in by_model.items():
+        loader = _LOADERS.get(model)
+        if loader is not None:
+            typed.update(loader(session, group))
+            continue
+        ids = [o.id for o in group]
+        for start in range(0, len(ids), 500):
+            for row in session.query(model).filter(model.id.in_(ids[start:start + 500])):
+                typed[row.id] = row
+    return typed
 
 
 # Collections whose JSON is not stored. Grows one type at a time.
@@ -67,6 +93,8 @@ STORED_IN_TABLE = frozenset({
     "rotaAssignments",
     # customers and suppliers (2026-10-13, migration 0039)
     "customers", "vendors",
+    # employees (2026-10-13, migration 0040)
+    "employees",
 })
 
 
@@ -81,24 +109,16 @@ def fill_session(session: Session | None) -> None:
         return
     from app.models import AppDataRecord
 
-    pending: dict[str, list[Any]] = {}
-    for obj in list(session.identity_map.values()):
-        if isinstance(obj, AppDataRecord) and obj.collection in STORED_IN_TABLE and not obj._payload:
-            pending.setdefault(obj.collection, []).append(obj)
-    by_model: dict[Any, list[Any]] = {}
-    for collection, objs in pending.items():
-        by_model.setdefault(_rebuilders()[collection][0], []).extend(objs)
+    pending = [obj for obj in list(session.identity_map.values())
+               if isinstance(obj, AppDataRecord) and obj.collection in STORED_IN_TABLE and not obj._payload]
+    if not pending:
+        return
     with session.no_autoflush:
-        for model, objs in by_model.items():
-            ids = [o.id for o in objs]
-            typed = {}
-            for start in range(0, len(ids), 500):
-                for row in session.query(model).filter(model.id.in_(ids[start:start + 500])):
-                    typed[row.id] = row
-            for obj in objs:
-                row = typed.get(obj.id)
-                text = json.dumps(rebuild(obj.collection, row), ensure_ascii=False, default=str) if row else "{}"
-                attributes.set_committed_value(obj, "_payload", text)
+        typed = _typed_rows(session, pending)
+        for obj in pending:
+            row = typed.get(obj.id)
+            text = json.dumps(rebuild(obj.collection, row), ensure_ascii=False, default=str) if row else "{}"
+            attributes.set_committed_value(obj, "_payload", text)
 
 
 def payload_texts(session: Session, rows: list[Any]) -> list[str]:
@@ -123,28 +143,30 @@ def blank_stored_payloads(session: Session, _ctx: Any) -> None:
     the stored JSON of records in STORED_IN_TABLE written in this flush; it is rebuilt from
     the table when read. A Core UPDATE on the table: an ORM-level one would make the mirrors
     rebuild the typed rows from the now-empty JSON."""
+    blank_if_rebuilt(session, list(session.info.pop("_payload_written", set())))
+
+
+def blank_if_rebuilt(session: Session, objs: list[Any]) -> None:
+    """Empty the stored JSON of these records (in STORED_IN_TABLE, as written to the database)
+    whose typed row rebuilds exactly the same JSON; any other keeps its stored JSON, so
+    nothing can be lost. Also called directly where the typed row is completed after the
+    record's own write (employees, app/employee_records.py)."""
     from app.models import AppDataRecord
 
-    written = [obj for obj in session.info.pop("_payload_written", set()) if obj._payload]
+    written = [obj for obj in objs if obj.collection in STORED_IN_TABLE and obj._payload]
     if not written:
         return
-    # Only records whose typed row (just written by the mirrors) rebuilds exactly the same
-    # JSON; any other keeps its stored JSON, so nothing can be lost.
     targets = []
     with session.no_autoflush:
-        by_model: dict[Any, list[Any]] = {}
+        typed = _typed_rows(session, written)
         for obj in written:
-            by_model.setdefault(_rebuilders()[obj.collection][0], []).append(obj)
-        for model, objs in by_model.items():
-            typed = {row.id: row for row in session.query(model).filter(model.id.in_([o.id for o in objs]))}
-            for obj in objs:
-                try:
-                    doc = json.loads(obj._payload)
-                except (TypeError, ValueError):
-                    continue
-                row = typed.get(obj.id)
-                if row is not None and isinstance(doc, dict) and rebuild(obj.collection, row) == doc:
-                    targets.append(obj)
+            try:
+                doc = json.loads(obj._payload)
+            except (TypeError, ValueError):
+                continue
+            row = typed.get(obj.id)
+            if row is not None and isinstance(doc, dict) and rebuild(obj.collection, row) == doc:
+                targets.append(obj)
     if not targets:
         return
     table = AppDataRecord.__table__

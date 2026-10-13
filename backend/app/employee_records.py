@@ -13,7 +13,12 @@ to store salary 0 in the JSON while the row kept the real salary.
 
 Not written back: status (the JSON keeps HRMS's wording, "On Leave" etc.; the row keeps
 active / inactive) and the photo (the row has it in its own column, so it isn't copied into
-extra). Check or rewrite with `python -m app.employee_records [--rewrite-json]`.
+extra unless the record's differs). Check or rewrite with
+`python -m app.employee_records [--rewrite-json]`.
+
+Step D: the JSON isn't stored (app/record_payloads.py); employee_record() rebuilds it from
+the row. extra["~keys"] lists which of each column's field names the record uses ("name" or
+"full_name", ...), so the rebuilt record has exactly the record's keys.
 """
 from __future__ import annotations
 
@@ -39,6 +44,8 @@ MAPPED = (
     (("branch_id",), "branch_id"),
 )
 _NOT_EXTRA = {key for keys, _ in MAPPED for key in keys} | {"photo"}
+# extra's list of the column field names (and "photo") the record carries.
+_KEYS = "~keys"
 
 
 def employee_no(record: dict[str, Any]) -> str:
@@ -51,10 +58,63 @@ def _json_value(value: Any) -> Any:
     return value if value is not None else ""
 
 
-def employee_extra(record: dict[str, Any]) -> str | None:
-    """The record's fields the employees row has no column for (the photo aside)."""
+def employee_extra(record: dict[str, Any], emp: Employee | None = None) -> str | None:
+    """The record's fields the employees row has no column for (the photo only when it
+    differs from the row's), and which column field names it uses (_KEYS)."""
     extra = {k: v for k, v in record.items() if k not in _NOT_EXTRA}
+    carried = []
+    for keys, _column in MAPPED:
+        present = [key for key in keys if key in record]
+        carried += present[:1]
+        extra.update({key: record[key] for key in present[1:]})  # a second name for the column: as given
+    if "photo" in record:
+        carried.append("photo")
+        if emp is not None and record["photo"] != (emp.photo or ""):
+            extra["photo"] = record["photo"]
+    if carried:
+        extra[_KEYS] = carried
     return json.dumps(extra, ensure_ascii=False, default=str) if extra else None
+
+
+def employee_record(emp: Any) -> dict[str, Any]:
+    """The JSON record rebuilt from its row alone ({} for a row saved before _KEYS)."""
+    try:
+        extra = json.loads(emp.extra or "{}")
+    except (TypeError, ValueError):
+        return {}
+    if not isinstance(extra, dict) or _KEYS not in extra:
+        return {}
+    carried = extra.pop(_KEYS)
+    out = extra
+    for keys, column in MAPPED:
+        key = next((k for k in keys if k in carried), None)
+        if key:
+            out[key] = _json_value(getattr(emp, column))
+    if "photo" in carried and "photo" not in out:
+        out["photo"] = emp.photo or ""
+    return out
+
+
+def typed_rows(session: Session, records: list[AppDataRecord]) -> dict[str, Employee]:
+    """{record id: its employees row}, found by (company, employee number = record key)."""
+    wanted: dict[str, set[str]] = {}
+    for rec in records:
+        number = str(rec.record_key or "").strip()
+        if number:
+            wanted.setdefault(rec.company_id, set()).add(number)
+    found = {}
+    for company_id, numbers in wanted.items():
+        ordered = sorted(numbers)
+        for start in range(0, len(ordered), 500):
+            for emp in session.query(Employee).filter(Employee.company_id == company_id,
+                                                      Employee.employee_no.in_(ordered[start:start + 500])):
+                found[(company_id, emp.employee_no)] = emp
+    out = {}
+    for rec in records:
+        emp = found.get((rec.company_id, str(rec.record_key or "").strip()))
+        if emp is not None:
+            out[rec.id] = emp
+    return out
 
 
 def canonical_employee(record: dict[str, Any], emp: Employee) -> dict[str, Any]:
@@ -88,10 +148,15 @@ def store_main_copy(db: Session, company_id: str, app_record: AppDataRecord) -> 
     emp = _row(db, company_id, record)
     if emp is None:
         return
-    emp.extra = employee_extra(record)
     stored = canonical_employee(record, emp)
+    emp.extra = employee_extra(stored, emp)
     if stored != record:
         app_record.payload = json.dumps(stored, ensure_ascii=False, default=str)
+    # The row now holds the whole record: stop storing the JSON (when it rebuilds exactly).
+    from app.record_payloads import blank_if_rebuilt
+
+    db.flush()
+    blank_if_rebuilt(db, [app_record])
 
 
 def stale_json(db: Session, company_id: str) -> list[str]:
@@ -104,7 +169,7 @@ def stale_json(db: Session, company_id: str) -> list[str]:
         except (TypeError, ValueError):
             continue
         emp = _row(db, company_id, record) if isinstance(record, dict) else None
-        if emp is not None and (canonical_employee(record, emp) != record or emp.extra != employee_extra(record)):
+        if emp is not None and (canonical_employee(record, emp) != record or emp.extra != employee_extra(record, emp)):
             stale.append(row.id)
     return stale
 

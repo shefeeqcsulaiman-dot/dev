@@ -466,9 +466,17 @@ def test_employees_main_copy_migration(scratch_engine):
     with scratch_engine.connect() as conn:
         payload = conn.execute(text("SELECT payload FROM app_data_records WHERE id = 'a1'")).scalar()
         extra = conn.execute(text("SELECT extra FROM employees WHERE id = 'e1'")).scalar()
-    assert _json.loads(payload) == {"id": "E-1", "name": "Omar", "department": "Sales", "salary": 8000,
-                                    "status": "Active", "passport_no": "P9"}
-    assert _json.loads(extra) == {"id": "E-1", "status": "Active", "passport_no": "P9"}
+        row = conn.execute(text("SELECT * FROM employees WHERE id = 'e1'")).mappings().one()
+    # 0030 writes the row's values into the JSON; 0040 then empties it, as the row rebuilds it.
+    from types import SimpleNamespace
+
+    from app.employee_records import employee_record
+
+    assert payload == ""
+    assert employee_record(SimpleNamespace(**row)) == {"id": "E-1", "name": "Omar", "department": "Sales",
+                                                      "salary": 8000, "status": "Active", "passport_no": "P9"}
+    assert _json.loads(extra) == {"id": "E-1", "status": "Active", "passport_no": "P9",
+                                  "~keys": ["name", "department", "salary"]}
 
 
 def test_lookup_json_migration_empties_only_lossless_records(scratch_engine):
