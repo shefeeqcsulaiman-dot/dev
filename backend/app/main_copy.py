@@ -85,7 +85,7 @@ class Field:
     name: str                          # the record's (JSON) field name
     size: int | None = None            # text length; None for money
     aliases: tuple[str, ...] = ()      # other names the field may come as
-    kind: str = "text"                 # text | money | digits | day | percent | minutes | amount
+    kind: str = "text"                 # text | money | digits | day | percent | minutes | amount | number
     column: str | None = None          # the table column, when it has another name
 
     @property
@@ -127,6 +127,12 @@ def fields_from(doc: dict[str, Any], fields: Iterable[Field], skip: Iterable[str
             out[col] = amount(value) if value not in (None, "") else None
             if out[col] is None and field.name in doc and doc[field.name] is not None:
                 extra[field.name] = doc[field.name]  # not a number: kept exactly as given
+        elif field.kind == "number":
+            # A number column; the JSON keeps the value exactly as given (e.g. hours saved as
+            # the text "2.5", which code reading the record may expect).
+            out[col] = amount(value) if value not in (None, "") else None
+            if field.name in doc and (doc[field.name] != out[col] or type(doc[field.name]) is not type(out[col])):
+                extra[field.name] = doc[field.name]
         else:
             out[col] = (str(value).strip() if value is not None else "")[:field.size]
             if field.name in doc and doc[field.name] != out[col]:

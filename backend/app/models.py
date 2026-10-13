@@ -1052,6 +1052,37 @@ class DocumentRecord(Base):
     extra: Mapped[str | None] = mapped_column(Text)
 
 
+class RequestRecord(Base):
+    """An employee request kept as JSON app-data (overtime, loan, salary advance, attendance
+    correction, task request), as real columns: one row per record, id = the
+    app_data_records id. The main copy (app/request_records.py); the JSON is left exactly as
+    saved, the columns hold parsed values."""
+    __tablename__ = "request_records"
+    __table_args__ = (
+        Index("ix_request_records_company_collection_employee", "company_id", "collection", "employee_no"),
+        Index("ix_request_records_company_collection_open", "company_id", "collection", "is_open"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)  # = app_data_records.id
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(String(36))
+    collection: Mapped[str] = mapped_column(String(80), nullable=False)
+    record_key: Mapped[str | None] = mapped_column(String(160))
+    employee_no: Mapped[str | None] = mapped_column(String(80))
+    employee_name: Mapped[str | None] = mapped_column(String(160))
+    department: Mapped[str | None] = mapped_column(String(120))
+    status: Mapped[str | None] = mapped_column(String(40))
+    is_open: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)  # workflow_status rule
+    request_date: Mapped[str | None] = mapped_column(String(10))  # YYYY-MM-DD, parsed
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    hours: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    months: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    reason: Mapped[str | None] = mapped_column(Text)
+    title: Mapped[str | None] = mapped_column(String(255))
+    # The request's other fields (JSON object text): with the columns, the whole request.
+    extra: Mapped[str | None] = mapped_column(Text)
+
+
 class CatalogProduct(Base):
     """A product kept as JSON app-data ("products"), as real columns: one row per record,
     id = the app_data_records id. Maintained by app/catalog_products.py on every write
@@ -1177,6 +1208,9 @@ def _main_copy_canonical(collection: str):
     if collection in ("salesInvoices", "purchaseRecords"):
         from app.document_records import canonical_document
         return lambda doc: canonical_document(collection, doc)
+    if collection in ("overtimeRequests", "employeeLoans", "salaryAdvances", "attendanceCorrections", "taskRequests"):
+        from app.request_records import canonical_request
+        return canonical_request
     return None
 
 
@@ -1774,3 +1808,4 @@ import app.catalog_products  # noqa: E402,F401  -- keeps CatalogProduct (product
 import app.task_records  # noqa: E402,F401  -- keeps TaskRecord (tasks) current
 import app.rota_records  # noqa: E402,F401  -- keeps RotaRecord (rotaAssignments) current
 import app.document_records  # noqa: E402,F401  -- keeps DocumentRecord (salesInvoices, purchaseRecords) current
+import app.request_records  # noqa: E402,F401  -- keeps RequestRecord (employee requests) current

@@ -396,3 +396,28 @@ def test_document_records_migration_fills_and_rewrites(scratch_engine):
     assert _json.loads(payload) == {"invoice_no": "INV-1", "customer": "Acme", "date": "20/02/2026", "total": 1050.0,
                                     "lines": [{"qty": 1}]}
     assert (number, day, float(total)) == ("INV-1", "2026-02-20", 1050.0)
+
+
+def test_request_records_migration_fills_without_rewriting(scratch_engine):
+    """0029: requests get rows; their JSON is left exactly as it was."""
+    import json as _json
+
+    from alembic import command
+    from app.migrate import alembic_config
+
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        command.downgrade(alembic_config(conn), "0028_document_records")
+        conn.commit()
+    raw = _json.dumps({"id": "OT-9", "employee_id": "E9", "ot_hours": "3", "status": "Approved", "date": "2026-10-01"})
+    with scratch_engine.begin() as conn:
+        conn.execute(text("INSERT INTO companies (id, name, country, currency, vat_rate, stock_mode, inventory_accounting) "
+                          "VALUES ('c1', 'c1', 'UAE', 'AED', 5, 'with_stock', 'periodic')"))
+        conn.execute(text("INSERT INTO app_data_records (id, company_id, collection, record_key, payload, row_version) "
+                          "VALUES ('o1', 'c1', 'overtimeRequests', 'OT-9', :p, 1)"), {"p": raw})
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        payload = conn.execute(text("SELECT payload FROM app_data_records WHERE id = 'o1'")).scalar()
+        hours, is_open, day = conn.execute(text("SELECT hours, is_open, request_date FROM request_records WHERE id = 'o1'")).one()
+    assert payload == raw
+    assert (float(hours), bool(is_open), day) == (3.0, True, "2026-10-01")
