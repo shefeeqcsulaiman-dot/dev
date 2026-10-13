@@ -65,6 +65,9 @@ class Company(Base, TimestampMixin):
     phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
     website: Mapped[str | None] = mapped_column(String(160), nullable=True)
     subscription_expires_at: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # How many branches the company may have, set by Super Admin (NULL: no limit). Checked
+    # when a branch is created (routers/branches.py).
+    max_branches: Mapped[int | None] = mapped_column(Integer, nullable=True)
     logo: Mapped[str | None] = mapped_column(Text, nullable=True)
     fta_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     departments: Mapped[str | None] = mapped_column(Text, nullable=True)

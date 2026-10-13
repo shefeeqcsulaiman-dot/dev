@@ -148,6 +148,16 @@ def create_branch(
         raise HTTPException(status_code=404, detail="No company found")
     company_modules = current_user.company.modules_enabled if current_user.company else None
     modules_enabled = _validate_branch_modules(payload.modules_enabled, company_modules)
+    # The branch limit Super Admin set for the company (NULL: no limit).
+    limit = current_user.company.max_branches if current_user.company else None
+    if limit is not None:
+        existing = db.query(Branch).filter(Branch.company_id == current_user.company_id).count()
+        if existing >= limit:
+            raise HTTPException(
+                status_code=409,
+                detail=(f"Your plan allows {limit} branch{'es' if limit != 1 else ''} and you already have {existing}. "
+                        "Contact support to raise the limit."),
+            )
     branch = Branch(
         company_id=current_user.company_id,
         name=payload.name.strip(),

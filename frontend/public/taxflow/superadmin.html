@@ -693,6 +693,7 @@
     <div class="fr2">
       <div class="fg"><label class="fl">TRN (optional)</label><input class="fi mono" id="c-trn" placeholder="100000000000003"></div>
       <div class="fg"><label class="fl">Subscription Expiry</label><input class="fi" id="c-expiry" type="date"></div>
+      <div class="fg"><label class="fl">Branch limit</label><input class="fi mono" id="c-max-branches" type="number" min="0" step="1" placeholder="No limit"><div style="font-size:var(--fs-xs);color:var(--muted);margin-top:4px">How many branches the company may create. Empty = no limit.</div></div>
     </div>
     <div class="fg"><label class="fl">Admin Email</label><input class="fi" id="c-email" type="email" placeholder="admin@company.ae"></div>
     <div class="fg"><label class="fl">Admin Full Name</label><input class="fi" id="c-fullname" placeholder="Company Administrator"></div>
@@ -731,6 +732,7 @@
       <div class="fg"><label class="fl">TRN (optional)</label><input class="fi mono" id="edit-co-trn" placeholder="100000000000003"></div>
       <div class="fg"><label class="fl">Subscription Expiry</label><input class="fi" id="edit-co-expiry" type="date"></div>
     </div>
+    <div class="fg"><label class="fl">Branch limit</label><input class="fi mono" id="edit-co-max-branches" type="number" min="0" step="1" placeholder="No limit"><div style="font-size:var(--fs-xs);color:var(--muted);margin-top:4px" id="edit-co-branch-usage">Empty = no limit.</div></div>
     <div class="fg"><label class="fl">Admin Email</label><input class="fi" id="edit-co-admin-email" type="email" placeholder="admin@company.ae"></div>
     <div class="fg"><label class="fl">Admin Full Name</label><input class="fi" id="edit-co-admin-name" placeholder="Company Administrator"></div>
     <div class="fg"><label class="fl">Admin Password <span style="color:var(--muted);font-weight:400">(leave blank to keep current)</span></label><input class="fi" id="edit-co-admin-pwd" type="password" placeholder="Set a new password" autocomplete="new-password"></div>
@@ -1230,7 +1232,7 @@
           <div style="font-weight:600">${escHtml(c.name)}</div>
           <div class="mono" style="font-size:var(--fs-xs);color:var(--muted)">${escHtml(c.trn||'No TRN')} · ${escHtml(c.country||'')}${c.currency?' · '+escHtml(c.currency):''}</div>
         </td>
-        <td class="mono" style="font-size:var(--fs-sm);color:var(--muted)">${c.employee_count||0} emp · ${c.branch_count||0} br · ${c.user_count||0} usr<div style="margin-top:2px">${_lastLoginChip(c)}</div></td>
+        <td class="mono" style="font-size:var(--fs-sm);color:var(--muted)">${c.employee_count||0} emp · ${c.branch_count||0}${c.max_branches!=null?'/'+c.max_branches:''} br · ${c.user_count||0} usr<div style="margin-top:2px">${_lastLoginChip(c)}</div></td>
         <td>${expBadge}</td>
         <td style="font-size:var(--fs-xs);color:var(--muted)">${c.created_at ? c.created_at.slice(0,10) : '—'}</td>
         <td>
@@ -1470,6 +1472,9 @@
     const fullName = document.getElementById('c-fullname').value.trim();
     const trn = document.getElementById('c-trn').value.trim()||null;
     const expiry = document.getElementById('c-expiry').value||null;
+    const maxBranchesRaw = document.getElementById('c-max-branches')?.value.trim()||'';
+    const maxBranches = maxBranchesRaw===''?null:Number(maxBranchesRaw);
+    if(maxBranches!==null&&!(Number.isInteger(maxBranches)&&maxBranches>=0)){ errEl.textContent='Branch limit must be a whole number (0 or more), or empty for no limit.'; errEl.style.display='block'; return; }
     const modules = getCheckedModules('c-mod-grid');
     const countryName=document.getElementById('c-country')?.value||'United Arab Emirates';
     const countryDef=SA_CREATE_COUNTRIES.find(c=>c.name===countryName)||SA_CREATE_COUNTRIES[0];
@@ -1478,7 +1483,7 @@
     if(!name||!email||!password){ errEl.textContent='Company name, email and password are required.'; errEl.style.display='block'; return; }
     btn.disabled=true; btn.textContent='Creating…';
     try{
-      const res = await apiFetch('/superadmin/companies',{method:'POST',body:JSON.stringify({name,email,password,full_name:fullName,trn,expires_at:expiry,modules,country:countryDef.name,currency:countryDef.currency,vat_rate:countryDef.vat,stock_mode:stockMode,inventory_accounting:inventoryAccounting})});
+      const res = await apiFetch('/superadmin/companies',{method:'POST',body:JSON.stringify({name,email,password,full_name:fullName,trn,expires_at:expiry,modules,country:countryDef.name,currency:countryDef.currency,vat_rate:countryDef.vat,stock_mode:stockMode,inventory_accounting:inventoryAccounting,max_branches:maxBranches})});
       const data = await res.json();
       if(!res.ok){ errEl.textContent=data.detail||'Failed to create company.'; errEl.style.display='block'; return; }
       // If this creation started from convertTrialToCompany(), close the
@@ -1522,6 +1527,9 @@
     document.getElementById('edit-co-invacc').value=c.inventory_accounting==='perpetual'?'perpetual':'periodic';
     syncStockAccountingVisibility('edit-co');
     document.getElementById('edit-co-expiry').value=c.subscription_expires_at?c.subscription_expires_at.slice(0,10):'';
+    document.getElementById('edit-co-max-branches').value=c.max_branches==null?'':String(c.max_branches);
+    const usage=document.getElementById('edit-co-branch-usage');
+    if(usage)usage.textContent=`${(c.branches||[]).length||c.branch_count||0} branch(es) now. Empty = no limit.`;
     // Previously fell back to c.users[0] (whichever user happens to sort
     // first) when no user had role==='admin' exactly — if that first user
     // ever turned out to be a superadmin account attached to this company,
@@ -1585,6 +1593,10 @@
     const countrySel=document.getElementById('edit-co-country');
     const newCountry=countrySel?.value||null;
     const body={ name, trn:val('edit-co-trn'), country:newCountry, stock_mode:document.getElementById('edit-co-stock').value||'with_stock', inventory_accounting:document.getElementById('edit-co-invacc').value||'periodic' };
+    // Branch limit: always sent, so emptying the field removes the limit (null).
+    const maxBranchesRaw=document.getElementById('edit-co-max-branches')?.value.trim()||'';
+    body.max_branches=maxBranchesRaw===''?null:Number(maxBranchesRaw);
+    if(body.max_branches!==null&&!(Number.isInteger(body.max_branches)&&body.max_branches>=0)){ errEl.textContent='Branch limit must be a whole number (0 or more), or empty for no limit.'; errEl.style.display='block'; return; }
     if(countrySel&&newCountry!==countrySel.dataset.original){
       const countryDef=SA_CREATE_COUNTRIES.find(x=>x.name===newCountry);
       if(countryDef)body.currency=countryDef.currency;

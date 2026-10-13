@@ -20963,7 +20963,12 @@ async function saveBranchModal(){
       method:id?'PUT':'POST',
       body:JSON.stringify(payload),
     });
-    if(!response.ok)throw new Error('Save failed ('+response.status+')');
+    if(!response.ok){
+      // The server's reason, e.g. the company's branch limit (routers/branches.py).
+      let detail='';
+      try{detail=(await response.json())?.detail||'';}catch{}
+      throw new Error(typeof detail==='string'&&detail?detail:'Save failed ('+response.status+')');
+    }
     const saved=await response.json();
     if(id){
       const idx=_branchList.findIndex(x=>x.id===id);
@@ -20975,7 +20980,7 @@ async function saveBranchModal(){
     renderBranchTable();
     _syncBranchSelects(_branchList.filter(b=>b.status!=='Inactive').map(b=>b.name));
     toast(`Branch "${name}" ${id?'updated':'added'}`,'ok');
-  }catch(err){toast('Save failed: '+err.message,'err');}
+  }catch(err){toast(err.message,'err',9000);}
 }
 
 async function deleteBranch(id){

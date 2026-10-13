@@ -99,7 +99,8 @@ class CompanyUpdate(BaseModel):
     country: str | None = None
     currency: str | None = None
     vat_rate: Decimal | None = None
-    # Only Super Admin's PATCH reads this (companies.py ignores it).
+    # Only Super Admin's PATCH reads these (companies.py ignores them).
+    max_branches: int | None = Field(default=None, ge=0, le=10000)
     stock_mode: Literal["with_stock", "without_stock"] | None = None
     inventory_accounting: Literal["perpetual", "periodic"] | None = None
     emirate: str | None = None

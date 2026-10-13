@@ -105,6 +105,7 @@ class CreateCompanyIn(BaseModel):
     vat_rate: Decimal | None = None
     stock_mode: Literal["with_stock", "without_stock"] = "with_stock"
     inventory_accounting: Literal["perpetual", "periodic"] = "perpetual"
+    max_branches: int | None = Field(default=None, ge=0, le=10000)  # None: no limit
 
 
 
@@ -305,6 +306,7 @@ def _company_row(company: Company, user_count: int, sub_user_count: int, last_lo
         "user_count": user_count or 0,
         "sub_user_count": sub_user_count or 0,
         "branch_count": branch_count or 0,
+        "max_branches": company.max_branches,
         "modules_enabled": _company_modules(company),
     }
 
@@ -716,6 +718,7 @@ def create_company(
         modules_enabled=json.dumps(mods),
         stock_mode=body.stock_mode,
         inventory_accounting=body.inventory_accounting,
+        max_branches=body.max_branches,
     )
     # currency/vat_rate otherwise fall back to the Company model's own
     # defaults (AED/5.00) — only set explicitly when the frontend sends a
@@ -787,6 +790,11 @@ def update_company(
         company.currency = body.currency.strip()
     if body.vat_rate is not None:
         company.vat_rate = body.vat_rate
+    # The branch limit is sent on every Super Admin edit; null removes it.
+    if "max_branches" in body.model_fields_set and body.max_branches != company.max_branches:
+        company.max_branches = body.max_branches
+        _write_audit_blob(db, company.id, superadmin.email, "set_branch_limit",
+                          "No limit" if body.max_branches is None else f"Branch limit {body.max_branches}", "Done")
     if body.stock_mode:
         company.stock_mode = body.stock_mode
     if body.inventory_accounting:
