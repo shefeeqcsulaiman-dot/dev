@@ -1016,6 +1016,9 @@ class RotaRecord(Base):
     end_time: Mapped[str | None] = mapped_column(String(8))
     break_minutes: Mapped[float | None] = mapped_column(Float)  # empty: none saved on the assignment
     status: Mapped[str | None] = mapped_column(String(40))
+    # The assignment's other fields (JSON object text): with the columns, the whole
+    # assignment (app/rota_records.py canonical_rota()).
+    extra: Mapped[str | None] = mapped_column(Text)
 
 
 class CatalogProduct(Base):
@@ -1137,6 +1140,9 @@ def _main_copy_canonical(collection: str):
     if collection == "tasks":
         from app.task_records import canonical_task
         return canonical_task
+    if collection == "rotaAssignments":
+        from app.rota_records import canonical_rota
+        return canonical_rota
     return None
 
 

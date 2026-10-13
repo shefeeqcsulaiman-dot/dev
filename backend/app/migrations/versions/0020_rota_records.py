@@ -45,12 +45,8 @@ def upgrade() -> None:
         )
         op.create_index("ix_rota_records_company_employee_day", "rota_records", ["company_id", "employee_no", "day"])
         op.create_index("ix_rota_records_company_day", "rota_records", ["company_id", "day"])
-    bind.execute(sa.text("DELETE FROM rota_records"))
-    from app.rota_records import mirror
-
-    table = sa.table("rota_records", *[sa.column(c, sa.Float()) if c == "break_minutes" else sa.column(c)
-                                       for c in _COLUMNS])
-    mirror.refill_all(bind, table)
+    # Filled by 0027_rota_main_copy, which adds rota_records.extra: app/rota_records.py's rows
+    # now carry it, so filling here (before that column exists) would fail on a new database.
 
 
 def downgrade() -> None:

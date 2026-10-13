@@ -342,3 +342,30 @@ def test_tasks_main_copy_migration_rewrites_records(scratch_engine):
     assert _json.loads(payload) == {"title": "Audit", "status": "Done", "progress": 45, "due_date": "2026-11-01",
                                     "id": "T-1", "color": "blue"}
     assert (_json.loads(extra), bool(is_open)) == ({"id": "T-1", "color": "blue"}, False)
+
+
+def test_rota_main_copy_migration_rewrites_records(scratch_engine):
+    """0027: rota assignments' JSON is rewritten as their row regenerates it, rows (with extra) refilled."""
+    import json as _json
+
+    from alembic import command
+    from app.migrate import alembic_config
+
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        command.downgrade(alembic_config(conn), "0026_tasks_main_copy")
+        conn.commit()
+    with scratch_engine.begin() as conn:
+        conn.execute(text("INSERT INTO companies (id, name, country, currency, vat_rate, stock_mode, inventory_accounting) "
+                          "VALUES ('c1', 'c1', 'UAE', 'AED', 5, 'with_stock', 'periodic')"))
+        conn.execute(text("INSERT INTO app_data_records (id, company_id, collection, record_key, payload, row_version) "
+                          "VALUES ('r1', 'c1', 'rotaAssignments', 'E1-2026-10-14', :p, 1)"),
+                     {"p": _json.dumps({"id": "E1-2026-10-14", "employee_id": "E1", "date": "2026-10-14T00:00:00Z",
+                                        "code": "OFF", "mark": "Off", "break_minutes": "0", "notes": "n"})})
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        payload = conn.execute(text("SELECT payload FROM app_data_records WHERE id = 'r1'")).scalar()
+        extra, kind, day = conn.execute(text("SELECT extra, kind, day FROM rota_records WHERE id = 'r1'")).one()
+    assert _json.loads(payload) == {"employee_id": "E1", "date": "2026-10-14", "code": "OFF", "break_minutes": 0,
+                                    "id": "E1-2026-10-14", "mark": "Off", "notes": "n"}
+    assert (_json.loads(extra), kind, day) == ({"id": "E1-2026-10-14", "mark": "Off", "notes": "n"}, "off", "2026-10-14")

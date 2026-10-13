@@ -45,6 +45,17 @@ def day(value: Any) -> str:
     return text if _ISO_DAY.match(text) else ""
 
 
+def minutes(value: Any) -> float | int | None:
+    try:
+        number = float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    if number != number:  # NaN is not a number of minutes
+        return None
+    number = max(0.0, number)
+    return int(number) if number.is_integer() else number
+
+
 def percent(value: Any) -> int | None:
     try:
         number = int(float(str(value).strip()))
@@ -55,10 +66,15 @@ def percent(value: Any) -> int | None:
 
 @dataclass(frozen=True)
 class Field:
-    name: str
+    name: str                          # the record's (JSON) field name
     size: int | None = None            # text length; None for money
     aliases: tuple[str, ...] = ()      # other names the field may come as
-    kind: str = "text"                 # text | money | digits | day | percent
+    kind: str = "text"                 # text | money | digits | day | percent | minutes
+    column: str | None = None          # the table column, when it has another name
+
+    @property
+    def col(self) -> str:
+        return self.column or self.name
 
 
 def _given(doc: dict[str, Any], field: Field) -> tuple[bool, Any]:
@@ -78,19 +94,22 @@ def fields_from(doc: dict[str, Any], fields: Iterable[Field], skip: Iterable[str
     extra = {k: v for k, v in doc.items() if k not in names and k not in set(skip)}
     for field in fields:
         present, value = _given(doc, field)
+        col = field.col
         if not present:
-            out[field.name] = None
+            out[col] = None
         elif field.kind == "money":
-            out[field.name] = money(value) if value not in (None, "") else None
+            out[col] = money(value) if value not in (None, "") else None
         elif field.kind == "digits":
-            out[field.name] = digits(value, field.size or 40)
+            out[col] = digits(value, field.size or 40)
         elif field.kind == "day":
-            out[field.name] = day(value)
+            out[col] = day(value)
         elif field.kind == "percent":
-            out[field.name] = percent(value) if value not in (None, "") else None
+            out[col] = percent(value) if value not in (None, "") else None
+        elif field.kind == "minutes":
+            out[col] = minutes(value) if value not in (None, "") else None
         else:
-            out[field.name] = (str(value).strip() if value is not None else "")[:field.size]
-            if field.name in doc and doc[field.name] != out[field.name]:
+            out[col] = (str(value).strip() if value is not None else "")[:field.size]
+            if field.name in doc and doc[field.name] != out[col]:
                 extra[field.name] = doc[field.name]  # the JSON keeps the value exactly as given
     out["extra"] = json.dumps(extra, ensure_ascii=False, default=str) if extra else None
     return out
@@ -101,7 +120,7 @@ def record_from(source: Any, fields: Iterable[Field]) -> dict[str, Any]:
     get: Callable[[str], Any] = source.get if isinstance(source, dict) else (lambda key: getattr(source, key))
     record: dict[str, Any] = {}
     for field in fields:
-        value = get(field.name)
+        value = get(field.col)
         if value is not None:
             record[field.name] = float(value) if field.kind == "money" else value
     try:
