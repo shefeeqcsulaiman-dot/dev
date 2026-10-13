@@ -61,3 +61,21 @@ def test_server_readers_of_a_lookup_list_see_its_fields(client, db, auth_headers
     db.expire_all()
     # The shift's own break (stored only in the table now) is what the rota uses.
     assert rota_break_seconds(db, cid, [emp], date(2026, 10, 20), date(2026, 10, 20)) == {(emp, "2026-10-20"): 45 * 60}
+
+
+def test_bulk_update_keeps_the_only_copy(client, db, auth_headers):
+    """A bulk UPDATE on a record whose JSON isn't stored (e.g. doc_index's paid amounts) must
+    not rebuild its row from the empty column: the row is kept, its branch follows."""
+    cid = _company_id(client, auth_headers)
+    tag = uuid.uuid4().hex[:6]
+    unit = {"id": f"U-{tag}", "name": f"Crate {tag}", "code": f"CR{tag}"}
+    assert _save(client, auth_headers, "salesUnits", unit).status_code == 200
+    rec = db.query(AppDataRecord).filter(AppDataRecord.company_id == cid, AppDataRecord.record_key == unit["code"]).one()
+    record_id = rec.id
+    db.query(AppDataRecord).filter(AppDataRecord.id == record_id).update(
+        {AppDataRecord.branch_id: None, AppDataRecord.row_version: AppDataRecord.row_version + 1},
+        synchronize_session=False)
+    db.commit()
+    db.expire_all()
+    assert db.get(LookupRecord, record_id).name == unit["name"]
+    assert json.loads(db.get(AppDataRecord, record_id).payload) == unit

@@ -311,7 +311,7 @@ def create_app() -> FastAPI:
 
     # Bumped with each deploy-relevant change, so /health shows which code is live (the image
     # has no git metadata). Format: date.sequence.
-    BUILD = "2026-10-13.9"
+    BUILD = "2026-10-13.10"
 
     def monitoring_sentry_on() -> bool:
         from app import monitoring as _monitoring
@@ -877,12 +877,16 @@ def _apply_legacy_schema_updates(connection) -> None:
         connection.execute(text("CREATE TABLE IF NOT EXISTS schema_flags (name VARCHAR(80) PRIMARY KEY)"))
         if not connection.execute(text("SELECT 1 FROM schema_flags WHERE name = 'app_data_record_date_v1'")).first():
             from app.models import DATED_COLLECTIONS, payload_record_date
+            # A rota assignment's JSON may not be stored (app/record_payloads.py): its row's day.
+            row_day = ("r.day FROM app_data_records a LEFT JOIN rota_records r ON r.id = a.id"
+                       if "rota_records" in table_names else "NULL FROM app_data_records a")
             rows = connection.execute(
-                text("SELECT id, payload FROM app_data_records WHERE collection IN :c AND record_date IS NULL")
+                text(f"SELECT a.id, a.payload, {row_day} WHERE a.collection IN :c AND a.record_date IS NULL")
                 .bindparams(bindparam("c", expanding=True)),
                 {"c": sorted(DATED_COLLECTIONS)},
             ).all()
-            updates = [{"i": rid, "d": day} for rid, payload in rows if (day := payload_record_date(payload))]
+            updates = [{"i": rid, "d": day} for rid, payload, row_day in rows
+                       if (day := payload_record_date(payload) or row_day)]
             if updates:
                 connection.execute(text("UPDATE app_data_records SET record_date = :d WHERE id = :i"), updates)
             connection.execute(text("INSERT INTO schema_flags (name) VALUES ('app_data_record_date_v1') ON CONFLICT (name) DO NOTHING"))

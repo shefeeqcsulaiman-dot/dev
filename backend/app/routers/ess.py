@@ -688,14 +688,14 @@ def _rota_assignments_between(db: Session, company_id: str, lo: str, hi: str, em
     if not wanted:
         return out
     query = (
-        db.query(AppDataRecord.payload)
+        db.query(AppDataRecord)
         .join(RotaRecord, RotaRecord.id == AppDataRecord.id)
         .filter(AppDataRecord.company_id == company_id, RotaRecord.company_id == company_id,
                 RotaRecord.employee_no.in_(wanted), RotaRecord.day >= lo, RotaRecord.day <= hi)
     )
-    for (raw,) in query.order_by(AppDataRecord.created_at, AppDataRecord.id).all():
+    for row in query.order_by(AppDataRecord.created_at, AppDataRecord.id).all():
         try:
-            parsed = json.loads(raw)
+            parsed = json.loads(row.payload)
         except (TypeError, ValueError):
             continue
         if isinstance(parsed, dict) and lo <= str(parsed.get("date") or "") <= hi:

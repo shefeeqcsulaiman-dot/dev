@@ -2,8 +2,12 @@
 for every kind of write: app-data save / edit / delete, bulk save and a bulk delete;
 verify_company() agrees and rebuild_company() repairs a drifted row. The readers that moved
 to it (days off, unpaid breaks) give the same answers as reading the JSON did."""
+import json
 import uuid
 from datetime import date
+
+import pytest
+from sqlalchemy import text
 
 from app.models import AppDataRecord, RotaRecord
 from app.rota_days import rota_break_seconds, rota_day_statuses
@@ -87,7 +91,35 @@ def test_verify_spots_drift_and_rebuild_repairs_it(client, db, auth_headers):
     row = _row(db, key)
     db.query(RotaRecord).filter(RotaRecord.id == row.id).update({"kind": "off"}, synchronize_session=False)
     db.commit()
-    assert not verify_company(db, cid)
-    mirror.rebuild_company(db, cid)
+    # Rota JSON isn't stored any more (app/record_payloads.py): the row is the only copy, so
+    # there is nothing to compare it against or rebuild it from, and a rebuild is refused.
+    db.expire_all()
+    assert db.execute(text("SELECT payload FROM app_data_records WHERE id = :i"), {"i": row.id}).scalar() == ""
+    assert verify_company(db, cid)
+    with pytest.raises(RuntimeError, match="only copy"):
+        mirror.rebuild_company(db, cid)
+
+
+def test_rota_json_rebuilt_from_the_row(client, db, auth_headers):
+    """The stored JSON is emptied; reads give back exactly what was saved (a lower-case code
+    too), the employee filter and the task unlink find it through the row."""
+    tag = uuid.uuid4().hex[:8]
+    emp, key = f"J-{tag}", f"J-{tag}-2026-10-15"
+    saved = {"id": key, "employee_id": emp, "date": "2026-10-15", "code": "m", "start": "09:00", "end": "",
+             "tasks": [{"task_id": f"T-{tag}", "title": "Count"}], "notes": "x"}
+    assert _save(client, auth_headers, "rotaAssignments", saved).status_code == 200
+    rec = db.query(AppDataRecord).filter(AppDataRecord.record_key == key).one()
+    assert db.execute(text("SELECT payload FROM app_data_records WHERE id = :i"), {"i": rec.id}).scalar() == ""
+    r = client.get("/api/v1/app-data/records/rotaAssignments/range", headers=auth_headers,
+                   params={"from": "2026-10-15", "to": "2026-10-15", "employee_id": emp})
+    assert r.status_code == 200, r.text
+    got = [{k: v for k, v in x.items() if k in saved} for x in r.json()["records"]]
+    assert got == [saved]
+    assert _row(db, key).code == "M"
+
+    from app.routers.app_data import _unlink_deleted_tasks
+
+    _unlink_deleted_tasks(db, rec.company_id, [f"T-{tag}"])
     db.commit()
-    assert verify_company(db, cid) and _row(db, key).kind == "shift"
+    db.expire_all()
+    assert json.loads(db.query(AppDataRecord).filter(AppDataRecord.record_key == key).one().payload)["tasks"] == []

@@ -33,6 +33,6 @@ def test_saves_store_what_the_row_regenerates(client, db, auth_headers):
     rec = db.query(AppDataRecord).filter(AppDataRecord.collection == "rotaAssignments", AppDataRecord.record_key == key).one()
     row = db.get(RotaRecord, rec.id)
     assert (row.code, row.kind, row.day, row.break_minutes) == ("E", "shift", "2026-10-15", 30)
-    assert json.loads(row.extra) == {"id": key, "tasks": [], "notes": "cover"}
+    assert json.loads(row.extra) == {"id": key, "tasks": [], "notes": "cover", "code": "e"}  # as given; column upper case
     assert json.loads(rec.payload) == canonical_rota(json.loads(rec.payload))
     assert rota_records.verify_company(db, cid) and rota_records.stale_json(db, cid) == []

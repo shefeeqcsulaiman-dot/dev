@@ -26,7 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from starlette.background import BackgroundTask
-from sqlalchemy import and_, case, func, or_
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -52,6 +52,7 @@ from app.routers.inventory import consume_valuation_layers
 from app.rota_days import rota_in_range
 from app.models import (
     PeriodLock,
+    RotaRecord,
     Job,
     Account,
     AppDataRecord,
@@ -829,7 +830,9 @@ def list_rota_assignments_in_range(
         raise HTTPException(status_code=400, detail="'from' must not be after 'to'")
     base_filters = [*_rota_read_filters(db, principal, branch_id), *rota_in_range(date_from, date_to)]
     if employee_id:
-        base_filters.append(AppDataRecord.payload.contains(json.dumps(employee_id)))
+        base_filters.append(AppDataRecord.id.in_(
+            select(RotaRecord.id).where(RotaRecord.company_id == principal.company_id,
+                                        RotaRecord.employee_no == employee_id)))
     rows = db.query(AppDataRecord).filter(*base_filters).order_by(AppDataRecord.created_at, AppDataRecord.id).all()
     records = [
         r for r in (with_version(serialize(row), row) for row in rows)
@@ -3190,7 +3193,9 @@ def _unlink_deleted_tasks(db: Session, company_id: str, task_ids: list[str]) -> 
         .filter(
             AppDataRecord.company_id == company_id,
             AppDataRecord.collection == "rotaAssignments",
-            or_(*[AppDataRecord.payload.contains(t) for t in ids]),
+            # Attached tasks live in the row's extra (app/rota_records.py).
+            AppDataRecord.id.in_(select(RotaRecord.id).where(
+                RotaRecord.company_id == company_id, or_(*[RotaRecord.extra.contains(t) for t in ids]))),
         )
         .all()
     )

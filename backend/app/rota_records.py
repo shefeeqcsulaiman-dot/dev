@@ -68,16 +68,20 @@ def rota_rows(rec: Record) -> list[dict[str, Any]]:
         return []
     if not isinstance(doc, dict):
         return []
-    fields = rota_fields(doc)
-    row = {col: (value or None) if isinstance(value, str) else value for col, value in fields.items()}
-    row["extra"] = fields["extra"]
+    row = rota_fields(doc)  # "" kept: the JSON is rebuilt from the row (app/record_payloads.py)
+    code = row["code"]
+    if code is not None and code != code.upper():
+        # The column is upper case; the JSON keeps the code as given.
+        extra = json.loads(row["extra"] or "{}")
+        extra.setdefault("code", doc["code"])
+        row["extra"] = json.dumps(extra, ensure_ascii=False, default=str)
     return [{
         "id": record_id,
         "company_id": company_id,
         "branch_id": branch_id,
         "record_key": _text(record_key, 160),
         **row,
-        "code": (row["code"] or "").upper() or None,
+        "code": code.upper() if code is not None else None,
         "kind": rota_kind(doc),
     }]
 
@@ -86,17 +90,22 @@ mirror = RecordMirror("rota_records", COLLECTIONS, RotaRecord, RotaRecord.id, ro
 
 
 def verify_company(session: Session, company_id: str) -> bool:
-    """True when the company's rota_records rows match what its JSON rota produces."""
-    have = {r.id: tuple(getattr(r, c) for c in _COMPARED)
-            for r in session.query(RotaRecord).filter(RotaRecord.company_id == company_id)}
-    want = {}
+    """Rows match the assignments that still store their JSON; one with no stored JSON (its
+    row is the only copy, app/record_payloads.py) only needs a row."""
+    stored, blank, want = set(), set(), {}
     for rec in session.execute(select(AppDataRecord.id, AppDataRecord.company_id, AppDataRecord.collection,
-                                      AppDataRecord.payload, AppDataRecord.branch_id, AppDataRecord.record_key)
+                                      AppDataRecord._payload, AppDataRecord.branch_id, AppDataRecord.record_key)
                                .where(AppDataRecord.company_id == company_id,
                                       AppDataRecord.collection.in_(COLLECTIONS))):
+        if not rec[3]:
+            blank.add(rec[0])
+            continue
+        stored.add(rec[0])
         for row in rota_rows(tuple(rec)):
             want[row["id"]] = tuple(row[c] for c in _COMPARED)
-    return have == want
+    rows = session.query(RotaRecord).filter(RotaRecord.company_id == company_id).all()
+    have = {r.id: tuple(getattr(r, c) for c in _COMPARED) for r in rows if r.id in stored}
+    return have == want and blank <= {r.id for r in rows}
 
 
 def stale_json(session: Session, company_id: str) -> list[str]:

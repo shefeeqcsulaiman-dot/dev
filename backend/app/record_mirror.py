@@ -72,11 +72,33 @@ class RecordMirror:
         self._guarded(session, run)
 
     def replace(self, session: Session, records: Iterable[Record]) -> None:
+        from app.record_payloads import STORED_IN_TABLE
+
         records = list(records)
+        # A record whose JSON isn't stored (app/record_payloads.py), read here as its column
+        # (a bulk UPDATE): its row is the only copy, so it is kept; only the columns the
+        # record itself holds follow it.
+        only_copy = [r for r in records if not r[3] and r[2] in STORED_IN_TABLE]
+        if only_copy:
+            self._follow(session, only_copy)
+            records = [r for r in records if r[3] or r[2] not in STORED_IN_TABLE]
         if not records:
             return
         self.drop(session, [r[0] for r in records])
         self.insert_only(session, records)
+
+    def _follow(self, session: Session, records: list[Record]) -> None:
+        columns = self.model.__table__.c
+
+        def run():
+            for record_id, company_id, _collection, _payload, branch_id, record_key in records:
+                values = {"company_id": company_id}
+                if "branch_id" in columns:
+                    values["branch_id"] = branch_id
+                if "record_key" in columns:
+                    values["record_key"] = (str(record_key).strip()[:160] or None) if record_key is not None else None
+                session.execute(sa.update(self.model).where(self.record_column == record_id).values(**values))
+        self._guarded(session, run)
 
     def rebuild_company(self, session: Session, company_id: str) -> int:
         """Rebuild a company's rows from its JSON records. Returns the number read. Refused for

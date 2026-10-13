@@ -373,7 +373,13 @@ def test_rota_main_copy_migration_rewrites_records(scratch_engine):
     with scratch_engine.connect() as conn:
         payload = conn.execute(text("SELECT payload FROM app_data_records WHERE id = 'r1'")).scalar()
         extra, kind, day = conn.execute(text("SELECT extra, kind, day FROM rota_records WHERE id = 'r1'")).one()
-    assert _json.loads(payload) == {"employee_id": "E1", "date": "2026-10-14", "code": "OFF", "break_minutes": 0,
+        row = conn.execute(text("SELECT * FROM rota_records WHERE id = 'r1'")).mappings().one()
+    # 0027 rewrites the JSON; 0038 then empties it, as the row rebuilds it exactly.
+    from app.main_copy import record_from
+    from app.rota_records import FIELDS
+
+    assert payload == ""
+    assert record_from(dict(row), FIELDS) == {"employee_id": "E1", "date": "2026-10-14", "code": "OFF", "break_minutes": 0,
                                     "id": "E1-2026-10-14", "mark": "Off", "notes": "n"}
     assert (_json.loads(extra), kind, day) == ({"id": "E1-2026-10-14", "mark": "Off", "notes": "n"}, "off", "2026-10-14")
 
