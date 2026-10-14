@@ -807,7 +807,7 @@
 /* ── Mobile app layer (phones ≤ 760px) ── */
 .m-only{display:none}
 @media (max-width:760px){
-  /* iPhones zoom into any field under 16px when it's tapped (login, search, month picker...). */
+  /* iPhones zoom into any field under 16px when it's tapped (login, search, month picker...), 2026-10-14. */
   input,select,textarea{font-size:16px!important}
   .m-only{display:block}
   #app-screen{height:100dvh}
