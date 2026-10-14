@@ -1132,6 +1132,28 @@ class LookupRecord(Base):
     extra: Mapped[str | None] = mapped_column(Text)
 
 
+class PurchaseDocumentRecord(Base):
+    """A file uploaded on the Purchases screen ("purchaseDocuments"): its details as columns,
+    the file (base64) in `file`, the rest in extra. The only copy (app/purchase_documents.py)."""
+    __tablename__ = "purchase_documents"
+    __table_args__ = (Index("ix_purchase_documents_company", "company_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)  # = app_data_records.id
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(String(36))
+    record_key: Mapped[str | None] = mapped_column(String(160))
+    name: Mapped[str | None] = mapped_column(String(255))
+    file_type: Mapped[str | None] = mapped_column(String(120))
+    size: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    category: Mapped[str | None] = mapped_column(String(120))
+    period: Mapped[str | None] = mapped_column(String(40))
+    status: Mapped[str | None] = mapped_column(String(40))
+    uploaded_at: Mapped[str | None] = mapped_column(String(40))
+    extracted_at: Mapped[str | None] = mapped_column(String(40))
+    extra: Mapped[str | None] = mapped_column(Text)
+    file: Mapped[str | None] = mapped_column(Text, deferred=True)
+
+
 class CatalogProduct(Base):
     """A product kept as JSON app-data ("products"), as real columns: one row per record,
     id = the app_data_records id. Maintained by app/catalog_products.py on every write
@@ -1867,4 +1889,5 @@ import app.rota_records  # noqa: E402,F401  -- keeps RotaRecord (rotaAssignments
 import app.document_records  # noqa: E402,F401  -- keeps DocumentRecord (sales, purchases, bills, quotations, expenses, payments) current
 import app.request_records  # noqa: E402,F401  -- keeps RequestRecord (employee requests) current
 import app.lookup_records  # noqa: E402,F401  -- keeps LookupRecord (small lookup lists) current
+import app.purchase_documents  # noqa: E402,F401  -- keeps PurchaseDocumentRecord (uploaded purchase files) current
 import app.record_payloads  # noqa: E402,F401  -- after the mirrors: empties JSON stored in typed tables

@@ -520,3 +520,37 @@ def test_lookup_json_migration_empties_only_lossless_records(scratch_engine):
         command.downgrade(alembic_config(conn), "0033_lookup_records")
         conn.commit()
         assert _json.loads(conn.execute(text("SELECT payload FROM app_data_records WHERE id = 'u1'")).scalar()) == doc
+
+
+def test_purchase_documents_and_pos_sales_migration(scratch_engine):
+    """0043: an uploaded purchase file and a POS receipt saved before it get their rows and
+    their JSON emptied (rebuilt exactly from the rows)."""
+    import json as _json
+    from types import SimpleNamespace
+
+    from alembic import command
+    from app.document_records import StoredDocument, rebuilt_document
+    from app.migrate import alembic_config
+    from app.purchase_documents import rebuilt_document as rebuilt_file
+
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        command.downgrade(alembic_config(conn), "0042_document_json_in_table")
+        conn.commit()
+    pdoc = {"id": "PD-1", "name": "scan.pdf", "size": 10, "type": "application/pdf", "base64": "data:x",
+            "invoices": [{"invoice_no": "I-1"}], "status": "Ready"}
+    sale = {"id": "R-1", "receipt_no": "R-1", "date": "2026-10-14", "items": [{"name": "Tea", "qty": 1}], "total": 3.5}
+    with scratch_engine.begin() as conn:
+        conn.execute(text("INSERT INTO companies (id, name, country, currency, vat_rate, stock_mode, inventory_accounting) "
+                          "VALUES ('c1', 'c1', 'UAE', 'AED', 5, 'with_stock', 'periodic')"))
+        for rid, coll, key, doc in (("d1", "purchaseDocuments", "PD-1", pdoc), ("p1", "posSales", "R-1", sale)):
+            conn.execute(text("INSERT INTO app_data_records (id, company_id, collection, record_key, payload, row_version) "
+                              "VALUES (:i, 'c1', :c, :k, :p, 1)"), {"i": rid, "c": coll, "k": key, "p": _json.dumps(doc)})
+    run_migrations(scratch_engine)
+    with scratch_engine.connect() as conn:
+        payloads = dict(conn.execute(text("SELECT id, payload FROM app_data_records WHERE id IN ('d1', 'p1')")).all())
+        file_row = conn.execute(text("SELECT * FROM purchase_documents WHERE id = 'd1'")).mappings().one()
+        sale_row = conn.execute(text("SELECT * FROM document_records WHERE id = 'p1'")).mappings().one()
+    assert payloads == {"d1": "", "p1": ""}
+    assert rebuilt_file(SimpleNamespace(**file_row)) == pdoc
+    assert rebuilt_document(StoredDocument(SimpleNamespace(**sale_row), [])) == sale

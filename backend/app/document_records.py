@@ -78,6 +78,12 @@ FIELDS = {
         Field("ref", 160, column="number"), Field("contact", 255, ("customer", "supplier", "vendor"), column="party"),
         Field("date", 40, column="doc_date"), Field("status", 40), Field("amount", kind="amount", aliases=("total",), column="total"),
     ),
+    # POS receipts (pos.html): their "items" stay in extra, exactly as saved.
+    "posSales": (
+        Field("receipt_no", 160, column="number"), Field("customer", 255, column="party"),
+        Field("date", 40, column="doc_date"), Field("status", 40), Field("subtotal", kind="amount"),
+        Field("vat", kind="amount"), Field("total", kind="amount"), Field("staff", 120, column="salesperson"),
+    ),
 }
 COLLECTIONS = tuple(FIELDS)
 _DAYS = ("doc_date", "due_date")

@@ -80,3 +80,16 @@ def test_other_line_lists_and_searches(client, db, tenant):  # noqa: F811
     assert r.json()["total"] == 1
     r = client.get("/api/v1/app-data/registers/expenses", headers=h, params={"kind": "all", "product": f"Ride {tag}"})
     assert r.json()["total"] == 1
+
+
+def test_pos_receipt_rebuilt_with_its_items(client, db, tenant):  # noqa: F811
+    cid, h = tenant
+    no = f"R-{uuid4().hex[:6]}"
+    sale = {"id": no, "receipt_no": no, "date": "2026-10-14", "customer": "Walk-In Customer", "staff": "Sara",
+            "items": [{"name": "Tea", "qty": 2, "price": 3.5, "vatRate": 5, "line_total": 7, "line_vat": 0.35}],
+            "subtotal": 7, "vat": 0.35, "total": 7.35, "payment_method": "cash", "cash_tendered": 10, "change": 2.65,
+            "card_ref": "", "created_at": "2026-10-14T08:00:00.000Z"}
+    _save(client, h, "posSales", sale)
+    rec = _record(db, cid, "posSales", no)
+    assert _raw(db, rec.id) == ""
+    assert json.loads(rec.payload) == sale

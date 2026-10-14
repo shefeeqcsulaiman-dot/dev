@@ -609,19 +609,37 @@ def list_purchase_documents(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
 ) -> dict[str, object]:
-    """Newest first, without the file itself (fetch one with /purchase-documents/{id})."""
+    """Newest first, without the file itself (fetch one with /purchase-documents/{id}): built
+    from the purchase_documents columns, so the files aren't read at all."""
+    from app.models import PurchaseDocumentRecord
+    from app.purchase_documents import rebuilt_document
+
     filters = _filters(db, principal, "purchaseDocuments", None)
     total = db.query(func.count(AppDataRecord.id)).filter(*filters).scalar() or 0
     rows = (
-        db.query(AppDataRecord).filter(*filters)
+        db.query(AppDataRecord.id, AppDataRecord._payload, AppDataRecord.row_version).filter(*filters)
         .order_by(AppDataRecord.created_at.desc(), AppDataRecord.id.desc())
         .offset(offset).limit(limit).all()
     )
+    table = PurchaseDocumentRecord.__table__
+    columns = [c for c in table.c if c.name != "file"]
+    blank = [row.id for row in rows if not row._payload]
+    typed = {r.id: r for r in db.execute(select(*columns).where(table.c.id.in_(blank)))} if blank else {}
     records = []
     for row in rows:
-        record = with_version(serialize(row), row)
+        if row._payload:
+            try:
+                record = json.loads(row._payload)
+            except (TypeError, ValueError):
+                continue
+        elif row.id in typed:
+            typed_row = typed[row.id]
+            record = rebuilt_document(typed_row, with_file=False)
+        else:
+            continue
         if isinstance(record, dict):
             record.pop("base64", None)
+            record["_v"] = row.row_version or 1
             records.append(record)
     return {"ok": True, "records": records, "total": total, "has_more": offset + len(rows) < total}
 

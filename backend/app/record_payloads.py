@@ -70,6 +70,10 @@ def _rebuilders() -> dict[str, tuple[Any, Callable[[Any], dict]]]:
         for collection in document_records.COLLECTIONS:
             _REBUILDERS[collection] = (DocumentRecord, document_records.rebuilt_document)
         _LOADERS[DocumentRecord] = document_records.typed_documents
+        from app import purchase_documents
+        from app.models import PurchaseDocumentRecord
+
+        _REBUILDERS["purchaseDocuments"] = (PurchaseDocumentRecord, purchase_documents.rebuilt_document)
     return _REBUILDERS
 
 
@@ -139,6 +143,8 @@ STORED_IN_TABLE = frozenset({
     "products",
     # sales invoices, purchases, bills, quotations, expenses, payments (2026-10-13, migration 0042)
     "salesInvoices", "purchaseRecords", "bills", "quotations", "expenses", "payments",
+    # uploaded purchase files and POS receipts (2026-10-14, migration 0043)
+    "purchaseDocuments", "posSales",
 })
 
 
