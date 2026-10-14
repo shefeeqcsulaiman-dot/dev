@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import and_, case, event, func, or_, select, text
+from sqlalchemy import and_, case, event, exists, func, or_, select, text
 from sqlalchemy.exc import OperationalError as SQLAOperationalError
 from sqlalchemy.exc import TimeoutError as SQLATimeoutError
 from sqlalchemy.orm import Session
@@ -30,8 +30,10 @@ from app.read_replica import run_report
 from app.dependencies import get_current_user
 from app.limiter import limiter
 from app.routers.attendance import _company_offset, _local_today
+from app.record_payloads import record_columns, record_dicts
 from app.models import (
     Account,
+    DocumentRecord,
     AccrualPrepaymentRecord,
     AppDataRecord,
     AttendanceDetail,
@@ -440,25 +442,21 @@ def app_sales_invoice_records(db: Session, company_id: str, branch_id: str | Non
     # key, which is its invoice_no, matches a posted invoice number and invoice_no is a
     # non-empty string). Anything less certain still goes through the check below.
     posted_numbers = select(func.lower(func.trim(Invoice.invoice_number))).where(Invoice.company_id == company_id)
-    rows = (
-        db.query(AppDataRecord.payload, AppDataRecord.branch_id)
+    has_number = exists().where(DocumentRecord.id == AppDataRecord.id, DocumentRecord.number.isnot(None),
+                                DocumentRecord.number != "")
+    records = (
+        db.query(*record_columns(), AppDataRecord.branch_id)
         .filter(
             AppDataRecord.company_id == company_id,
             AppDataRecord.collection == "salesInvoices",
-            ~and_(
-                func.lower(func.trim(AppDataRecord.record_key)).in_(posted_numbers),
-                AppDataRecord.payload.like('%"invoice_no": "_%'),
-            ),
+            ~and_(func.lower(func.trim(AppDataRecord.record_key)).in_(posted_numbers), has_number),
         )
         .all()
     )
     candidates = []
-    for payload, row_branch_id in rows:
-        try:
-            row = json.loads(payload or "{}")
-        except (TypeError, json.JSONDecodeError):
-            continue
-        if not isinstance(row, dict) or not _branch_row_included(row_branch_id, branch_id):
+    for record, row in zip(records, record_dicts(db, records)):
+        row_branch_id = record.branch_id
+        if not row or not _branch_row_included(row_branch_id, branch_id):
             continue
         candidates.append((normalized_ref(row.get("invoice_no") or row.get("invoice_number") or row.get("ref")), row))
     # Posted invoice numbers looked up for just these rows, not the company's whole history.
@@ -493,7 +491,7 @@ def app_purchase_records(db: Session, company_id: str, branch_id: str | None = N
             TaxLine.direction == "input",
         )
     )
-    query = db.query(AppDataRecord.collection, AppDataRecord.payload, AppDataRecord.branch_id).filter(
+    query = db.query(*record_columns(), AppDataRecord.branch_id).filter(
         AppDataRecord.company_id == company_id,
         AppDataRecord.collection.in_(("purchaseRecords", "bills")),
         or_(AppDataRecord.fig_ref.is_(None), AppDataRecord.fig_ref.notin_(posted_refs)),
@@ -501,12 +499,10 @@ def app_purchase_records(db: Session, company_id: str, branch_id: str | None = N
     if branch_id:
         query = query.filter(or_(AppDataRecord.branch_id == branch_id, AppDataRecord.branch_id.is_(None)))
     candidates = []
-    for collection, payload, _row_branch_id in query.order_by(AppDataRecord.collection.desc(), AppDataRecord.created_at, AppDataRecord.id).all():
-        try:
-            row = json.loads(payload or "{}")
-        except (TypeError, json.JSONDecodeError):
-            continue
-        if not isinstance(row, dict):
+    records = query.order_by(AppDataRecord.collection.desc(), AppDataRecord.created_at, AppDataRecord.id).all()
+    for record, row in zip(records, record_dicts(db, records)):
+        collection = record.collection
+        if not row:
             continue
         if collection == "purchaseRecords":
             # Mirrors app_data.py's sync_domain_model() reference formula for

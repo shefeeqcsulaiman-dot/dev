@@ -24,7 +24,7 @@ from app.database import get_db
 from app.dependencies import Principal, get_current_principal
 from app.doc_index import OPEN_FLAG_COLLECTIONS, PAID_TOLERANCE, SETTLED_STATUS_WORDS, SPECS, effective_status
 from app.doc_lines import LINE_COLLECTIONS
-from app.models import AppDataRecord, DocumentLine
+from app.models import AppDataRecord, DocumentLine, DocumentRecord
 from app.routers.app_data import (
     _collection_read_filters,
     with_version,
@@ -139,7 +139,14 @@ def list_register(
             AppDataRecord.record_date.like(pattern, escape="\\"),
         ))
     if contains and contains.strip():
-        filters.append(func.lower(AppDataRecord.payload).like(_like(contains), escape="\\"))
+        # Anywhere in the saved document: its row's text columns, extra, and its lines.
+        pattern = _like(contains)
+        filters.append(exists().where(DocumentRecord.id == AppDataRecord.id, or_(
+            *(func.lower(column).like(pattern, escape="\\") for column in (
+                DocumentRecord.number, DocumentRecord.party, DocumentRecord.party_trn, DocumentRecord.status,
+                DocumentRecord.salesperson, DocumentRecord.location, DocumentRecord.extra)),
+        )) | exists().where(DocumentLine.record_id == AppDataRecord.id,
+                            func.lower(DocumentLine.data).like(pattern, escape="\\")))
     if party and party.strip():
         filters.append(func.lower(AppDataRecord.party) == party.strip().lower())
     # Document date (record_date, stamped from the record's own date by app/doc_index.py),
@@ -162,10 +169,12 @@ def list_register(
             or_(DocumentLine.description_key == key, DocumentLine.product_name_key == key, DocumentLine.product_key == key),
         ))
     elif product and product.strip():
-        # Payloads are json.dumps() output, so a line field reads exactly `"description": "<name>"`.
+        # Their line lists are in the row's extra (json.dumps() output), so a line field reads
+        # exactly `"description": "<name>"`.
         name = json.dumps(product.strip().lower(), ensure_ascii=False)
         needles = [_like_escape(f'"{field}": {name}') for field in ("description", "product_name", "product")]
-        filters.append(or_(*(func.lower(AppDataRecord.payload).like(f"%{n}%", escape="\\") for n in needles)))
+        filters.append(exists().where(DocumentRecord.id == AppDataRecord.id, or_(
+            *(func.lower(DocumentRecord.extra).like(f"%{n}%", escape="\\") for n in needles))))
     order = _SORTS.get(sort, _SORTS["newest"])()
     total = db.query(func.count(AppDataRecord.id)).filter(*filters).scalar() or 0
     rows = db.query(AppDataRecord).filter(*filters).order_by(*order).offset(offset).limit(limit).all()
@@ -560,14 +569,14 @@ def sales_invoice_stock_movements(
     filters = _filters(db, principal, "salesInvoices", None)
     movements: list[dict[str, Any]] = []
     query = (
-        db.query(AppDataRecord.payload)
+        db.query(AppDataRecord)
         .filter(*filters, AppDataRecord.doc_kind == "invoice")
         .order_by(AppDataRecord.created_at)
         .yield_per(500)
     )
-    for (payload,) in query:
+    for row in query:
         try:
-            inv = json.loads(payload or "{}")
+            inv = json.loads(row.payload or "{}")
         except (TypeError, ValueError):
             continue
         if not isinstance(inv, dict) or not inv.get("date") or str(inv.get("source") or "").lower().startswith("pos"):

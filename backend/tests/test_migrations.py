@@ -418,8 +418,17 @@ def test_document_records_migration_fills_and_rewrites(scratch_engine):
     with scratch_engine.connect() as conn:
         payload = conn.execute(text("SELECT payload FROM app_data_records WHERE id = 's1'")).scalar()
         number, day, total = conn.execute(text("SELECT number, doc_date, total FROM document_records WHERE id = 's1'")).one()
-    assert _json.loads(payload) == {"invoice_no": "INV-1", "customer": "Acme", "date": "20/02/2026", "total": 1050.0,
-                                    "lines": [{"qty": 1}]}
+        row = conn.execute(text("SELECT * FROM document_records WHERE id = 's1'")).mappings().one()
+        lines = [_json.loads(d) for (d,) in conn.execute(text("SELECT data FROM document_lines WHERE record_id = 's1' "
+                                                                "ORDER BY line_no"))]
+    # 0028 rewrites the JSON; 0042 then empties it, as the row and its lines rebuild it exactly.
+    from types import SimpleNamespace
+
+    from app.document_records import StoredDocument, rebuilt_document
+
+    assert payload == ""
+    assert rebuilt_document(StoredDocument(SimpleNamespace(**row), lines)) == {
+        "invoice_no": "INV-1", "customer": "Acme", "date": "20/02/2026", "total": 1050.0, "lines": [{"qty": 1}]}
     assert (number, day, float(total)) == ("INV-1", "2026-02-20", 1050.0)
 
 

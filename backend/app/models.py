@@ -949,6 +949,9 @@ class DocumentLine(Base):
     quantity: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
     unit_price: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     line_total: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    # The line exactly as saved (JSON object text): the document's lines are rebuilt from
+    # these rows (app/document_records.py). Deferred: line-level reads use the columns.
+    data: Mapped[str | None] = mapped_column(Text, deferred=True)
 
 
 class Party(Base):

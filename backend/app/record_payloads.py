@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 from typing import Any, Callable
 
-from sqlalchemy import event
+from sqlalchemy import event, select
 from sqlalchemy.orm import Session, attributes
 
 # Collection -> (typed model, function(row) -> JSON dict). Filled lazily (import cycles).
@@ -64,25 +64,46 @@ def _rebuilders() -> dict[str, tuple[Any, Callable[[Any], dict]]]:
 
         _REBUILDERS["products"] = (CatalogProduct, catalog_products.rebuilt_product)
         _LOADERS[CatalogProduct] = _products_with_images
+        from app import document_records
+        from app.models import DocumentRecord
+
+        for collection in document_records.COLLECTIONS:
+            _REBUILDERS[collection] = (DocumentRecord, document_records.rebuilt_document)
+        _LOADERS[DocumentRecord] = document_records.typed_documents
     return _REBUILDERS
 
 
 def _products_with_images(session: Session, objs: list[Any]) -> dict[str, Any]:
-    """catalog_products rows by record id, their deferred image loaded in the same query."""
-    from sqlalchemy.orm import undefer
-
+    """catalog_products rows by record id, image included (a deferred column on the model)."""
     from app.models import CatalogProduct
 
-    ids, typed = [o.id for o in objs], {}
-    for start in range(0, len(ids), 500):
-        for row in session.query(CatalogProduct).options(undefer(CatalogProduct.image)).filter(
-                CatalogProduct.id.in_(ids[start:start + 500])):
+    table = CatalogProduct.__table__
+    typed = {}
+    for match in id_batches(session, table.c.id, [o.id for o in objs]):
+        for row in session.execute(select(table).where(match)):
             typed[row.id] = row
     return typed
 
 
+def id_batches(session: Session, column: Any, ids: list[str]):
+    """(column matches these ids) filters, in batches: on PostgreSQL one array parameter
+    per 5,000 ids (= ANY), elsewhere IN lists of 500 -- building and parsing hundreds of
+    500-value IN lists cost seconds on a 50,000-record read."""
+    if session.get_bind().dialect.name == "postgresql":
+        from sqlalchemy import String, any_, bindparam
+        from sqlalchemy.dialects.postgresql import ARRAY
+
+        for start in range(0, len(ids), 5000):
+            yield column == any_(bindparam("ids", ids[start:start + 5000], type_=ARRAY(String)))
+    else:
+        for start in range(0, len(ids), 500):
+            yield column.in_(ids[start:start + 500])
+
+
 def _typed_rows(session: Session, objs: list[Any]) -> dict[str, Any]:
-    """{record id: its typed row} for these records (all in STORED_IN_TABLE)."""
+    """{record id: its typed row} for these records (all in STORED_IN_TABLE). Rows are read
+    as plain column rows (not ORM objects): several times cheaper for a big page, and always
+    what the database holds now (the mirrors write the tables without the ORM)."""
     by_model: dict[Any, list[Any]] = {}
     for obj in objs:
         by_model.setdefault(_rebuilders()[obj.collection][0], []).append(obj)
@@ -92,9 +113,9 @@ def _typed_rows(session: Session, objs: list[Any]) -> dict[str, Any]:
         if loader is not None:
             typed.update(loader(session, group))
             continue
-        ids = [o.id for o in group]
-        for start in range(0, len(ids), 500):
-            for row in session.query(model).filter(model.id.in_(ids[start:start + 500])):
+        table = model.__table__
+        for match in id_batches(session, table.c.id, [o.id for o in group]):
+            for row in session.execute(select(table).where(match)):
                 typed[row.id] = row
     return typed
 
@@ -116,6 +137,8 @@ STORED_IN_TABLE = frozenset({
     "employees",
     # products (2026-10-13, migration 0041)
     "products",
+    # sales invoices, purchases, bills, quotations, expenses, payments (2026-10-13, migration 0042)
+    "salesInvoices", "purchaseRecords", "bills", "quotations", "expenses", "payments",
 })
 
 
@@ -140,6 +163,46 @@ def fill_session(session: Session | None) -> None:
             row = typed.get(obj.id)
             text = json.dumps(rebuild(obj.collection, row), ensure_ascii=False, default=str) if row else "{}"
             attributes.set_committed_value(obj, "_payload", text)
+
+
+RECORD_COLUMNS = ("id", "company_id", "collection", "record_key", "_payload")
+
+
+def record_dicts(session: Session, rows: list[Any]) -> list[dict[str, Any]]:
+    """Each record's JSON as a dict, for readers of many records that only need their content
+    (reports): rows are column rows with RECORD_COLUMNS (select them with
+    record_columns()); no ORM objects and no JSON text round trip for rebuilt ones. A record
+    whose JSON can't be read gives {}."""
+    pending = [row for row in rows if not row._payload and row.collection in STORED_IN_TABLE]
+    with session.no_autoflush:
+        typed = _typed_rows(session, pending) if pending else {}
+    out = []
+    for row in rows:
+        if row._payload:
+            try:
+                doc = json.loads(row._payload)
+            except (TypeError, ValueError):
+                doc = {}
+        else:
+            found = typed.get(row.id)
+            doc = rebuild(row.collection, found) if found is not None else {}
+        out.append(doc if isinstance(doc, dict) else {})
+    return out
+
+
+def record_columns() -> tuple[Any, ...]:
+    from app.models import AppDataRecord
+
+    return (AppDataRecord.id, AppDataRecord.company_id, AppDataRecord.collection, AppDataRecord.record_key,
+            AppDataRecord._payload.label("_payload"))
+
+
+def previous_json(session: Session, obj: Any) -> str:
+    """The JSON of a record as its typed row in the database has it -- in after_flush, before
+    the mirrors rewrite the row: the version this flush replaces or deletes ("" if none)."""
+    with session.no_autoflush:
+        row = _typed_rows(session, [obj]).get(obj.id)
+    return json.dumps(rebuild(obj.collection, row), ensure_ascii=False, default=str) if row is not None else ""
 
 
 def payload_texts(session: Session, rows: list[Any]) -> list[str]:

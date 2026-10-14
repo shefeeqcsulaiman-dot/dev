@@ -68,8 +68,10 @@ def _number(value: Any, places: str | None = None) -> Decimal | None:
     return number.quantize(Decimal(places)) if places else number
 
 
-def line_rows(company_id: str, record_id: str, collection: str, payload: str | None) -> list[dict[str, Any]]:
-    """document_lines rows for one record's saved JSON."""
+def line_rows(company_id: str, record_id: str, collection: str, payload: str | None,
+              with_data: bool = False) -> list[dict[str, Any]]:
+    """document_lines rows for one record's saved JSON; with_data: each with the line exactly
+    as saved (the data column, added by migration 0042)."""
     try:
         doc = json.loads(payload or "{}")
     except (TypeError, ValueError):
@@ -105,13 +107,22 @@ def line_rows(company_id: str, record_id: str, collection: str, payload: str | N
             "quantity": _number(qty),
             "unit_price": _number(price, "0.01"),
             "line_total": _number(total, "0.01"),
+            **({"data": json.dumps(line, ensure_ascii=False, default=str)} if with_data else {}),
         })
     return rows
 
 
+def _only_copy(record: tuple) -> bool:
+    """A record whose JSON isn't stored (app/record_payloads.py): its lines are the only
+    copy of them, so they are never rebuilt from its (empty) payload column."""
+    from app.record_payloads import STORED_IN_TABLE
+
+    return not record[3] and record[2] in STORED_IN_TABLE
+
+
 def _replace(session: Session, records: Iterable[tuple[str, str, str, str | None]]) -> None:
     """(record_id, company_id, collection, payload) -> delete the old lines, insert new."""
-    records = list(records)
+    records = [r for r in records if not _only_copy(r)]
     if not records:
         return
     session.info[_BUSY] = True
@@ -119,7 +130,8 @@ def _replace(session: Session, records: Iterable[tuple[str, str, str, str | None
         ids = [r[0] for r in records]
         for start in range(0, len(ids), 500):
             session.execute(delete(DocumentLine).where(DocumentLine.record_id.in_(ids[start:start + 500])))
-        rows = [row for rid, cid, coll, payload in records if coll in LINE_COLLECTIONS for row in line_rows(cid, rid, coll, payload)]
+        rows = [row for rid, cid, coll, payload in records if coll in LINE_COLLECTIONS
+                for row in line_rows(cid, rid, coll, payload, with_data=True)]
         for start in range(0, len(rows), 1000):
             session.execute(insert(DocumentLine), rows[start:start + 1000])
     finally:
@@ -140,7 +152,11 @@ def _drop(session: Session, record_ids: Iterable[str]) -> None:
 
 def rebuild_company(session: Session, company_id: str) -> int:
     """Rebuild every line of a company's line collections from their JSON. Returns the
-    number of records read."""
+    number of records read. Refused once their JSON isn't stored: the lines are the only copy."""
+    from app.record_payloads import STORED_IN_TABLE
+
+    if LINE_COLLECTIONS & STORED_IN_TABLE:
+        raise RuntimeError("document_lines is the only copy of the lines; it can't be rebuilt from JSON")
     session.info[_BUSY] = True
     try:
         session.execute(delete(DocumentLine).where(DocumentLine.company_id == company_id))
@@ -164,7 +180,8 @@ def rebuild_company(session: Session, company_id: str) -> int:
 
 
 def _insert_only(session: Session, records: list[tuple[str, str, str, str | None]]) -> None:
-    rows = [row for rid, cid, coll, payload in records for row in line_rows(cid, rid, coll, payload)]
+    rows = [row for rid, cid, coll, payload in records if not _only_copy((rid, cid, coll, payload))
+            for row in line_rows(cid, rid, coll, payload, with_data=True)]
     if not rows:
         return
     session.info[_BUSY] = True
@@ -177,9 +194,12 @@ def _insert_only(session: Session, records: list[tuple[str, str, str, str | None
 
 def refill_all(bind: Any, batch: int = 1000) -> None:
     """Rebuild every row of document_lines from the JSON records, on a Connection
-    (migrations). Keyset batches, so memory stays flat however many records there are."""
+    (migrations). Keyset batches, so memory stays flat however many records there are.
+    Lines of a record whose JSON isn't stored (app/record_payloads.py) are the only copy:
+    left as they are."""
     import sqlalchemy as sa
 
+    with_data = "data" in {c["name"] for c in sa.inspect(bind).get_columns("document_lines")}
     table = sa.table(
         "document_lines",
         *(sa.column(c) for c in (
@@ -188,28 +208,32 @@ def refill_all(bind: Any, batch: int = 1000) -> None:
         sa.column("quantity", sa.Numeric(18, 6)),
         sa.column("unit_price", sa.Numeric(14, 2)),
         sa.column("line_total", sa.Numeric(14, 2)),
+        *([sa.column("data", sa.Text)] if with_data else []),
     )
     records = sa.table("app_data_records", sa.column("id"), sa.column("company_id"),
                        sa.column("collection"), sa.column("payload"))
-    bind.execute(sa.delete(table))
+    # NOT EXISTS (a primary-key lookup per line), not NOT IN (subquery): PostgreSQL ran the
+    # latter as a scan of the subquery per line (over 10 minutes on 65,000 documents).
+    bind.execute(sa.delete(table).where(~sa.exists().where(records.c.id == table.c.record_id, records.c.payload == "")))
     last_id = ""
     while True:
         rows = bind.execute(
             sa.select(records.c.id, records.c.company_id, records.c.collection, records.c.payload)
-            .where(records.c.collection.in_(LINE_COLLECTIONS), records.c.id > last_id)
+            .where(records.c.collection.in_(LINE_COLLECTIONS), records.c.id > last_id, records.c.payload != "")
             .order_by(records.c.id)
             .limit(batch)
         ).all()
         if not rows:
             return
-        lines = [line for rid, cid, coll, payload in rows for line in line_rows(cid, rid, coll, payload)]
+        lines = [line for rid, cid, coll, payload in rows for line in line_rows(cid, rid, coll, payload, with_data)]
         if lines:
             bind.execute(sa.insert(table), lines)
         last_id = rows[-1][0]
 
 
 def verify_company(session: Session, company_id: str) -> bool:
-    """True when the stored lines match what the JSON records give."""
+    """True when the stored lines match what the JSON records give (records whose JSON isn't
+    stored have nothing to compare against: their lines are the only copy)."""
     stored: dict[str, list[tuple]] = {}
     cols = (DocumentLine.record_id, DocumentLine.line_no, DocumentLine.item_name, DocumentLine.quantity,
             DocumentLine.unit_price, DocumentLine.line_total, DocumentLine.doc_ref)
@@ -217,8 +241,11 @@ def verify_company(session: Session, company_id: str) -> bool:
         stored.setdefault(rid, []).append(tuple(rest))
     expected: dict[str, list[tuple]] = {}
     for rid, cid, coll, payload in session.execute(
-            select(AppDataRecord.id, AppDataRecord.company_id, AppDataRecord.collection, AppDataRecord.payload)
+            select(AppDataRecord.id, AppDataRecord.company_id, AppDataRecord.collection, AppDataRecord._payload)
             .where(AppDataRecord.company_id == company_id, AppDataRecord.collection.in_(LINE_COLLECTIONS))):
+        if not payload:
+            stored.pop(rid, None)
+            continue
         rows = line_rows(cid, rid, coll, payload)
         if rows:
             expected[rid] = [(r["line_no"], r["item_name"], r["quantity"], r["unit_price"], r["line_total"], r["doc_ref"]) for r in rows]

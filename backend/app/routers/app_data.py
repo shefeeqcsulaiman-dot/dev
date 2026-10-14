@@ -2333,11 +2333,12 @@ def _mark_purchase_duplicates(db: Session, company_id: str, invoices: list[dict[
         inv_no = str(inv["invoice_no"]).strip()
         keys.update({inv_no, _purchase_alt_ref(inv_no, inv.get("supplier"))})
     stored: dict[str, dict[str, Any]] = {}
-    for key, payload in db.query(AppDataRecord.record_key, AppDataRecord.payload).filter(
+    for record in db.query(AppDataRecord).filter(
         AppDataRecord.company_id == company_id,
         AppDataRecord.collection == "purchaseRecords",
         AppDataRecord.record_key.in_(keys),
     ).all():
+        key, payload = record.record_key, record.payload
         try:
             stored[key] = json.loads(payload or "{}") or {}
         except (TypeError, ValueError):

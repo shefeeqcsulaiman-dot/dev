@@ -5,7 +5,7 @@ import json
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app import doc_lines
 from app.models import AppDataRecord, DocumentLine
@@ -35,12 +35,12 @@ def _delete(client, headers, record):
 def _old_stock_movements(db, company_id):
     """The JSON scan stock movements used before document_lines (reference behaviour)."""
     out = []
-    rows = (db.query(AppDataRecord.payload)
+    rows = (db.query(AppDataRecord)
             .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == "salesInvoices",
                     AppDataRecord.doc_kind == "invoice")
             .order_by(AppDataRecord.created_at, AppDataRecord.id).all())
-    for (payload,) in rows:
-        inv = json.loads(payload)
+    for row in rows:
+        inv = json.loads(row.payload)
         if not inv.get("date") or str(inv.get("source") or "").lower().startswith("pos"):
             continue
         for line in inv["lines"] if isinstance(inv.get("lines"), list) else []:
@@ -148,13 +148,11 @@ def test_bulk_delete_and_bulk_update_and_rebuild(db, tenant):
     assert count() == 2
     assert doc_lines.verify_company(db, company_id)
 
-    # A rebuild from the JSON gives the same rows.
-    db.query(DocumentLine).filter(DocumentLine.company_id == company_id).delete(synchronize_session=False)
-    db.commit()
-    assert not doc_lines.verify_company(db, company_id)
-    doc_lines.rebuild_company(db, company_id)
-    db.commit()
-    assert doc_lines.verify_company(db, company_id) and count() == 2
+    # The documents' JSON isn't stored any more (app/record_payloads.py): the lines are the
+    # only copy, so a rebuild from JSON is refused.
+    with pytest.raises(RuntimeError, match="only copy"):
+        doc_lines.rebuild_company(db, company_id)
+    assert count() == 2
 
 
 def test_record_moved_out_of_a_line_collection_loses_its_lines(db, tenant):
@@ -214,14 +212,19 @@ def test_product_filter_on_bill_and_quotation_registers(client, db, tenant):
 
 
 def test_refill_all_rebuilds_every_collection(db, tenant):
+    """refill_all (migrations) rebuilds the lines of documents that still store their JSON
+    (written around the ORM, e.g. a restore) and leaves the only copy of the others alone."""
     company_id, _ = tenant
-    db.add(AppDataRecord(company_id=company_id, collection="bills", record_key="B-REFILL",
-                         payload=json.dumps({"bill_no": "B-REFILL", "lines": [{"description": "Ink", "qty": 1}]})))
+    db.add(AppDataRecord(company_id=company_id, collection="bills", record_key="B-ONLY",
+                         payload=json.dumps({"bill_no": "B-ONLY", "lines": [{"description": "Toner", "qty": 1}]})))
     db.commit()
-    db.query(DocumentLine).filter(DocumentLine.company_id == company_id).delete(synchronize_session=False)
+    db.execute(text("INSERT INTO app_data_records (id, company_id, collection, record_key, payload, row_version) "
+                    "VALUES (:i, :c, 'bills', 'B-REFILL', :p, 1)"),
+               {"i": str(uuid4()), "c": company_id,
+                "p": json.dumps({"bill_no": "B-REFILL", "lines": [{"description": "Ink", "qty": 1}]})})
     db.commit()
     doc_lines.refill_all(db.connection())
     db.commit()
     assert doc_lines.verify_company(db, company_id)
-    assert db.query(DocumentLine).filter(DocumentLine.record_id.isnot(None),
-                                         DocumentLine.company_id == company_id).count() == 1
+    names = {n for (n,) in db.query(DocumentLine.item_name).filter(DocumentLine.company_id == company_id)}
+    assert {"Ink", "Toner"} <= names

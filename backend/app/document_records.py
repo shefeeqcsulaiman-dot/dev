@@ -3,12 +3,15 @@ header -- sales invoices, purchase records, bills, quotations, expenses and paym
 
 One row per document with its header as columns (number, customer / supplier / contact, TRN,
 date, due date, status, subtotal, VAT, total, paid, salesperson / owner / location)
-and the header's other fields in `extra`. The line items are left out of the row: they stay
-in the JSON, and have their own typed copy in document_lines (app/doc_lines.py), so copying
-them here would store every invoice's lines a third time. Every write, from any path, is put
-through the row and the JSON regenerated from it (canonical_document(), applied in
-models.py), kept because generic readers still read app_data_records. Check, rebuild or
-rewrite with `python -m app.document_records [--rebuild] [--rewrite-json]`.
+and the header's other fields in `extra` -- with any value a column can't give back exactly
+(a date as typed, an amount past 4 decimals, an empty text), as saved. The "lines" of sales
+invoices, quotations, bills and purchases are one row each in document_lines
+(app/doc_lines.py), each line kept exactly; extra marks that the document has them
+("~lines"). Any other line list stays in extra. Every write, from any path, is put through
+the row and the JSON regenerated from it (canonical_document(), applied in models.py); the
+JSON itself isn't stored (app/record_payloads.py) but rebuilt from the row and its lines
+(rebuilt_document()). Check, rewrite with
+`python -m app.document_records [--rewrite-json]`.
 
 Normalised (app/main_copy.py): amounts become numbers at full precision ("1,234.50" ->
 1234.5; 95.2380952 stays, so VAT and totals don't move; one that isn't a number is kept as
@@ -28,10 +31,12 @@ from app import main_copy
 from app.doc_index import parse_document_date
 from app.main_copy import Field, fields_from, record_from
 from app.models import AppDataRecord, DocumentRecord
+from app.doc_lines import LINE_COLLECTIONS
 from app.parties import _text
 from app.record_mirror import Record, RecordMirror
 
-LINES = ("lines", "items")  # kept only in the JSON (and document_lines)
+LINES = ("lines", "items")  # not header fields: see document_rows()
+_LINES_MARK = "~lines"  # extra: the document's "lines" are its document_lines rows
 # The record's field names per collection, onto shared columns.
 FIELDS = {
     "salesInvoices": (
@@ -106,6 +111,20 @@ def _column(col: str, value: Any) -> Any:
     return value or None  # empty text: NULL
 
 
+def _from_column(value: Any) -> Any:
+    """A column's value as the rebuilt record has it (app/main_copy.py record_from())."""
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    return value
+
+
+def lines_in_table(collection: str, doc: dict[str, Any]) -> bool:
+    """Its "lines" are kept as document_lines rows (a list of line objects, in a collection
+    with lines); any other line list stays in extra."""
+    lines = doc.get("lines")
+    return collection in LINE_COLLECTIONS and isinstance(lines, list) and all(isinstance(l, dict) for l in lines)
+
+
 def document_rows(rec: Record) -> list[dict[str, Any]]:
     record_id, company_id, collection, payload, branch_id, record_key = rec
     try:
@@ -116,6 +135,19 @@ def document_rows(rec: Record) -> list[dict[str, Any]]:
         return []
     fields = document_fields(collection, doc)
     row = {col: _column(col, fields.get(col)) for col in _COLUMNS}
+    extra = json.loads(fields["extra"]) if fields["extra"] else {}
+    # A value its column can't give back exactly (a date as typed, an amount past 4
+    # decimals, an empty text) is kept in extra as the record has it.
+    for field in FIELDS[collection]:
+        want = fields[field.col]
+        if want is not None and field.name not in extra and _from_column(row.get(field.col)) != want:
+            extra[field.name] = want
+    for key in LINES:
+        if key in doc:
+            if key == "lines" and lines_in_table(collection, doc):
+                extra[_LINES_MARK] = True
+            else:
+                extra[key] = doc[key]
     return [{
         "id": record_id,
         "company_id": company_id,
@@ -123,24 +155,68 @@ def document_rows(rec: Record) -> list[dict[str, Any]]:
         "collection": collection,
         "record_key": _text(record_key, 160),
         **row,
-        "extra": fields["extra"],
+        "extra": json.dumps(extra, ensure_ascii=False, default=str) if extra else None,
     }]
+
+
+class StoredDocument:
+    """A document's row with its lines (each as saved, in order): all its JSON is rebuilt from."""
+    __slots__ = ("row", "lines")
+
+    def __init__(self, row: Any, lines: list[Any]):
+        self.row, self.lines = row, lines
+
+
+def rebuilt_document(stored: StoredDocument) -> dict[str, Any]:
+    record = record_from(stored.row, FIELDS[stored.row.collection])
+    if record.pop(_LINES_MARK, None):
+        record["lines"] = stored.lines
+    return record
+
+
+def typed_documents(session: Session, records: list[Any]) -> dict[str, StoredDocument]:
+    """{record id: StoredDocument} for these records: one query for the rows, one for the
+    lines (plain column rows, not ORM objects: app/record_payloads.py _typed_rows())."""
+    from app.models import DocumentLine
+    from app.record_payloads import id_batches
+
+    table = DocumentRecord.__table__
+    ids = [r.id for r in records]
+    rows: dict[str, Any] = {}
+    lines: dict[str, list[Any]] = {}
+    for match in id_batches(session, table.c.id, ids):
+        for row in session.execute(select(table).where(match)):
+            rows[row.id] = row
+    for match in id_batches(session, DocumentLine.record_id, ids):
+        for record_id, data in session.execute(
+                select(DocumentLine.record_id, DocumentLine.data).where(match)
+                .order_by(DocumentLine.record_id, DocumentLine.line_no)):
+            try:
+                lines.setdefault(record_id, []).append(json.loads(data) if data else None)
+            except (TypeError, ValueError):
+                lines.setdefault(record_id, []).append(None)
+    return {record_id: StoredDocument(row, lines.get(record_id, [])) for record_id, row in rows.items()}
 
 
 mirror = RecordMirror("document_records", COLLECTIONS, DocumentRecord, DocumentRecord.id, document_rows).register()
 
 
 def verify_company(session: Session, company_id: str) -> bool:
-    """True when the company's document_records rows match its sales invoices / purchases."""
-    have = {r.id: tuple(getattr(r, c) for c in _COMPARED)
-            for r in session.query(DocumentRecord).filter(DocumentRecord.company_id == company_id)}
-    want = {}
+    """Rows match the documents that still store their JSON; one with no stored JSON (its
+    row is the only copy, app/record_payloads.py) only needs a row."""
+    stored, blank, want = set(), set(), {}
     for rec in session.execute(select(AppDataRecord.id, AppDataRecord.company_id, AppDataRecord.collection,
-                                      AppDataRecord.payload, AppDataRecord.branch_id, AppDataRecord.record_key)
+                                      AppDataRecord._payload, AppDataRecord.branch_id, AppDataRecord.record_key)
                                .where(AppDataRecord.company_id == company_id, AppDataRecord.collection.in_(COLLECTIONS))):
+        if not rec[3]:
+            blank.add(rec[0])
+            continue
+        stored.add(rec[0])
         for row in document_rows(tuple(rec)):
             want[row["id"]] = tuple(row[c] for c in _COMPARED)
-    return have == want
+    rows = session.query(DocumentRecord).filter(DocumentRecord.company_id == company_id).all()
+    have = {r.id: tuple(getattr(r, c) for c in _COMPARED) for r in rows if r.id in stored}
+    return have == want and blank <= {r.id for r in rows}
 
 
 def stale_json(session: Session, company_id: str) -> list[str]:
@@ -164,8 +240,9 @@ def _main() -> None:
 
     from app.database import SessionLocal
 
-    parser = argparse.ArgumentParser(description="Check (or rebuild) the document_records table and the JSON it regenerates.")
-    parser.add_argument("--rebuild", action="store_true", help="rebuild companies whose rows differ")
+    parser = argparse.ArgumentParser(description="Check the document_records table and the JSON it regenerates.")
+    parser.add_argument("--rebuild", action="store_true", help="rebuild companies whose rows differ (refused "
+                                                                "once the JSON isn't stored)")
     parser.add_argument("--rewrite-json", action="store_true", help="regenerate records whose JSON isn't canonical")
     args = parser.parse_args()
     with SessionLocal() as db:

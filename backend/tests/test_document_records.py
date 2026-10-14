@@ -36,7 +36,9 @@ def test_saves_store_the_regenerated_header(client, db, tenant):  # noqa: F811
            ("INV-DR", "Acme", "2026-10-12", "2026-11-12", 1050.0, 50.0)
     stored = json.loads(rec.payload)
     assert (stored["total"], stored["subtotal"], stored["po_number"], stored["lines"][0]["description"]) == (1050, 1000, "PO-9", "Widget")
-    assert json.loads(row.extra) == {"po_number": "PO-9"}
+    # extra: the other fields, the due date as typed (its column is parsed), and the mark
+    # that the lines are its document_lines rows.
+    assert json.loads(row.extra) == {"po_number": "PO-9", "due_date": "12/11/2026", "~lines": True}
     assert float(rec.fig_gross) == 1050.0 and rec.record_date == "2026-10-12"   # report columns unchanged
     assert document_records.verify_company(db, company_id) and document_records.stale_json(db, company_id) == []
 

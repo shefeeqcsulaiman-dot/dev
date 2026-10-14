@@ -27,7 +27,7 @@ from typing import Any, Callable, Iterable
 from sqlalchemy import and_, event, func, inspect, literal, or_
 from sqlalchemy.orm import Session
 
-from app.models import AppDataRecord
+from app.models import AppDataRecord, DocumentRecord
 
 PAID_TOLERANCE = Decimal("0.01")
 
@@ -387,10 +387,12 @@ def _like_escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def recompute_paid(db: Session, company_id: str, side: str, refs: Iterable[str]) -> None:
+def recompute_paid(db: Session, company_id: str, side: str, refs: Iterable[str],
+                   written: dict[str, str] | None = None) -> None:
     """Set amount_paid on the documents numbered `refs` (any case) that `side` payments
     settle (sales invoices for customer receipts; bills and purchases for supplier
-    payments), from every such payment that allocates to them."""
+    payments), from every such payment that allocates to them. written: {id: JSON} of
+    payments saved in the flush being applied (their rows may not be written yet)."""
     wanted = {str(r).strip().lower() for r in refs if str(r or "").strip()}
     if not wanted:
         return
@@ -402,13 +404,17 @@ def recompute_paid(db: Session, company_id: str, side: str, refs: Iterable[str])
             chunk = ordered[i:i + 40]
             # Narrow in SQL to payments whose JSON mentions one of the numbers; the
             # allocations themselves are read in Python below.
+            # A payment whose JSON isn't stored (app/record_payloads.py) has its allocations in
+            # its document_records row's extra.
             needles = [_like_escape(json.dumps(ref, ensure_ascii=False)[1:-1]) for ref in chunk]
-            rows = db.query(AppDataRecord.id, AppDataRecord.payload).filter(
+            rows = db.query(AppDataRecord).outerjoin(DocumentRecord, DocumentRecord.id == AppDataRecord.id).filter(
                 AppDataRecord.company_id == company_id,
                 AppDataRecord.collection == "payments",
-                or_(*[func.lower(AppDataRecord.payload).like(f"%{n}%", escape="\\") for n in needles]),
+                or_(*[func.lower(AppDataRecord._payload).like(f"%{n}%", escape="\\") for n in needles],
+                    *[func.lower(DocumentRecord.extra).like(f"%{n}%", escape="\\") for n in needles]),
             ).all()
-            payments.update(rows)
+            payments.update((row.id, row.payload) for row in rows)
+        payments.update(written or {})
         for payload in payments.values():
             try:
                 pay_side, allocs = side_allocations(json.loads(payload or "{}"))
@@ -462,6 +468,7 @@ def effective_status(status: Any, amount: Any, amount_paid: Any) -> str:
 
 # ── keep amount_paid current on every write path ──────────────────────────────
 _PENDING_KEY = "_doc_index_paid_refs"
+_WRITTEN_KEY = "_doc_index_payments_written"
 
 
 @event.listens_for(Session, "after_flush")
@@ -471,9 +478,20 @@ def _collect_paid_refs(session: Session, _ctx) -> None:
             continue
         found: list[tuple[str, set[str]]] = []
         if obj.collection == "payments":
-            found.append(_payment_refs(obj._payload))
-            # Documents the payment pointed at before this edit lose its money too.
-            for old in inspect(obj).attrs._payload.history.deleted or ():
+            found.append(_payment_refs(obj._payload) if obj._payload or obj not in session.deleted
+                         else ("customer", set()))
+            if obj not in session.deleted:
+                session.info.setdefault(_WRITTEN_KEY, {})[obj.id] = (obj.company_id, obj._payload)
+            # Documents the payment pointed at before this edit lose its money too. A payment
+            # whose JSON isn't stored: its previous version from its row, not yet rewritten
+            # (the mirrors run after this, app/record_payloads.py).
+            before = [old for old in inspect(obj).attrs._payload.history.deleted or () if old]
+            if not before and obj not in session.new:
+                from app.record_payloads import STORED_IN_TABLE, previous_json
+
+                if obj.collection in STORED_IN_TABLE:
+                    before = [previous_json(session, obj)]
+            for old in before:
                 found.append(_payment_refs(old))
         elif obj in session.new and obj.collection in SPECS and SPECS[obj.collection].paid_by:
             found.append((SPECS[obj.collection].paid_by, {str(obj.record_key or "").strip().lower()}))
@@ -486,7 +504,9 @@ def _collect_paid_refs(session: Session, _ctx) -> None:
 @event.listens_for(Session, "after_flush_postexec")
 def _apply_paid_refs(session: Session, _ctx) -> None:
     pending = session.info.pop(_PENDING_KEY, None)
+    written = session.info.pop(_WRITTEN_KEY, {})
     if not pending:
         return
     for (company_id, side), refs in pending.items():
-        recompute_paid(session, company_id, side, refs)
+        recompute_paid(session, company_id, side, refs,
+                       {i: text for i, (c, text) in written.items() if c == company_id})
