@@ -435,6 +435,7 @@ def _branch_row_included(row_branch_id: str | None, branch_id: str | None) -> bo
 
 
 def app_sales_invoice_records(db: Session, company_id: str, branch_id: str | None = None) -> list[dict[str, Any]]:
+    """Unposted app-data sales invoices for report totals: header fields only (no "lines")."""
     # Every saved app-data invoice (bar negative credit notes) also posts a real Invoice
     # row with the same number, so nearly all of them are dropped below. Skip those in SQL
     # instead of parsing every invoice's JSON on each dashboard/report request: a row is
@@ -454,7 +455,7 @@ def app_sales_invoice_records(db: Session, company_id: str, branch_id: str | Non
         .all()
     )
     candidates = []
-    for record, row in zip(records, record_dicts(db, records)):
+    for record, row in zip(records, record_dicts(db, records, headers_only=True)):
         row_branch_id = record.branch_id
         if not row or not _branch_row_included(row_branch_id, branch_id):
             continue
@@ -468,8 +469,8 @@ def app_sales_invoice_records(db: Session, company_id: str, branch_id: str | Non
 
 
 def app_purchase_records(db: Session, company_id: str, branch_id: str | None = None) -> list[dict[str, Any]]:
-    """purchaseRecords + bills app-data rows, deduped against purchases that
-    already posted a real input TaxLine (saving a purchaseRecords or bills
+    """purchaseRecords + bills app-data rows (header fields only, no "lines"), deduped
+    against purchases that already posted a real input TaxLine (saving a purchaseRecords or bills
     row triggers sync_purchase_accounting()/sync_bill_accounting() ->
     approve_and_post_source(), app_data.py's purchaseRecords/bills branches)
     — the same dedup app_sales_invoice_records() already does against
@@ -500,7 +501,7 @@ def app_purchase_records(db: Session, company_id: str, branch_id: str | None = N
         query = query.filter(or_(AppDataRecord.branch_id == branch_id, AppDataRecord.branch_id.is_(None)))
     candidates = []
     records = query.order_by(AppDataRecord.collection.desc(), AppDataRecord.created_at, AppDataRecord.id).all()
-    for record, row in zip(records, record_dicts(db, records)):
+    for record, row in zip(records, record_dicts(db, records, headers_only=True)):
         collection = record.collection
         if not row:
             continue

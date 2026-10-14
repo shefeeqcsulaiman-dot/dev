@@ -174,14 +174,23 @@ def fill_session(session: Session | None) -> None:
 RECORD_COLUMNS = ("id", "company_id", "collection", "record_key", "_payload")
 
 
-def record_dicts(session: Session, rows: list[Any]) -> list[dict[str, Any]]:
+def record_dicts(session: Session, rows: list[Any], headers_only: bool = False) -> list[dict[str, Any]]:
     """Each record's JSON as a dict, for readers of many records that only need their content
     (reports): rows are column rows with RECORD_COLUMNS (select them with
     record_columns()); no ORM objects and no JSON text round trip for rebuilt ones. A record
-    whose JSON can't be read gives {}."""
+    whose JSON can't be read gives {}. headers_only: documents rebuilt without their
+    "lines" (no lines read) -- for readers that use only header fields."""
     pending = [row for row in rows if not row._payload and row.collection in STORED_IN_TABLE]
     with session.no_autoflush:
-        typed = _typed_rows(session, pending) if pending else {}
+        if headers_only:
+            from app import document_records
+
+            docs = [row for row in pending if row.collection in document_records.FIELDS]
+            others = [row for row in pending if row.collection not in document_records.FIELDS]
+            typed = {**(_typed_rows(session, others) if others else {}),
+                     **(document_records.typed_documents(session, docs, with_lines=False) if docs else {})}
+        else:
+            typed = _typed_rows(session, pending) if pending else {}
     out = []
     for row in rows:
         if row._payload:

@@ -166,23 +166,25 @@ def document_rows(rec: Record) -> list[dict[str, Any]]:
 
 
 class StoredDocument:
-    """A document's row with its lines (each as saved, in order): all its JSON is rebuilt from."""
+    """A document's row with its lines (each as saved, in order): all its JSON is rebuilt from.
+    lines None: not loaded -- the record is rebuilt without them (header-only readers)."""
     __slots__ = ("row", "lines")
 
-    def __init__(self, row: Any, lines: list[Any]):
+    def __init__(self, row: Any, lines: list[Any] | None):
         self.row, self.lines = row, lines
 
 
 def rebuilt_document(stored: StoredDocument) -> dict[str, Any]:
     record = record_from(stored.row, FIELDS[stored.row.collection])
-    if record.pop(_LINES_MARK, None):
+    if record.pop(_LINES_MARK, None) and stored.lines is not None:
         record["lines"] = stored.lines
     return record
 
 
-def typed_documents(session: Session, records: list[Any]) -> dict[str, StoredDocument]:
+def typed_documents(session: Session, records: list[Any], with_lines: bool = True) -> dict[str, StoredDocument]:
     """{record id: StoredDocument} for these records: one query for the rows, one for the
-    lines (plain column rows, not ORM objects: app/record_payloads.py _typed_rows())."""
+    lines (plain column rows, not ORM objects: app/record_payloads.py _typed_rows()).
+    with_lines False: headers only (no lines query; rebuilt records have no "lines")."""
     from app.models import DocumentLine
     from app.record_payloads import id_batches
 
@@ -193,7 +195,7 @@ def typed_documents(session: Session, records: list[Any]) -> dict[str, StoredDoc
     for match in id_batches(session, table.c.id, ids):
         for row in session.execute(select(table).where(match)):
             rows[row.id] = row
-    for match in id_batches(session, DocumentLine.record_id, ids):
+    for match in (id_batches(session, DocumentLine.record_id, ids) if with_lines else ()):
         for record_id, data in session.execute(
                 select(DocumentLine.record_id, DocumentLine.data).where(match)
                 .order_by(DocumentLine.record_id, DocumentLine.line_no)):
@@ -201,7 +203,8 @@ def typed_documents(session: Session, records: list[Any]) -> dict[str, StoredDoc
                 lines.setdefault(record_id, []).append(json.loads(data) if data else None)
             except (TypeError, ValueError):
                 lines.setdefault(record_id, []).append(None)
-    return {record_id: StoredDocument(row, lines.get(record_id, [])) for record_id, row in rows.items()}
+    return {record_id: StoredDocument(row, lines.get(record_id, []) if with_lines else None)
+            for record_id, row in rows.items()}
 
 
 mirror = RecordMirror("document_records", COLLECTIONS, DocumentRecord, DocumentRecord.id, document_rows).register()
