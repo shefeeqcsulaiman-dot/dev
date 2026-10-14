@@ -10,8 +10,11 @@ request. Behaviour is the same: the same headers, timings and invalidation.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
+from pathlib import Path
 from typing import Awaitable, Callable
+from urllib.parse import parse_qs
 
 from starlette.datastructures import MutableHeaders
 
@@ -30,14 +33,50 @@ def _header(scope: dict, name: bytes) -> str:
     return ""
 
 
-def _static_cache_control(scope: dict) -> str | None:
+# Asset path -> its version (the first 10 hex of its SHA-256, as
+# frontend/scripts/inject-asset-versions.mjs stamps it), or None when it isn't a file here.
+_VERSIONS: dict[str, str | None] = {}
+
+
+def _file_version(static_root: Path | None, path: str) -> str | None:
+    if static_root is None:
+        return None
+    if path in _VERSIONS:
+        return _VERSIONS[path]
+    rel = path.lstrip("/")
+    if rel.startswith("static-assets/"):
+        candidate = static_root / rel[len("static-assets/"):]
+    elif rel.startswith("taxflow/"):
+        candidate = static_root / rel
+    else:
+        candidate = static_root / "taxflow" / rel
+    version = None
+    try:
+        resolved = candidate.resolve()
+        if resolved.is_file() and resolved.is_relative_to(static_root.resolve()):
+            version = hashlib.sha256(resolved.read_bytes()).hexdigest()[:10]
+    except (OSError, ValueError):
+        version = None
+    if version is not None:
+        _VERSIONS[path] = version  # only real files: request paths can't grow this
+    return version
+
+
+def _static_cache_control(scope: dict, static_root: Path | None = None) -> str | None:
     """Cache-Control for a successful GET that didn't set its own."""
     path = scope.get("path") or ""
     last_segment = path.rsplit("/", 1)[-1]
     ext = last_segment.rsplit(".", 1)[-1].lower() if "." in last_segment else ""
-    if ext in ("js", "css") and "v=" in (scope.get("query_string") or b"").decode("latin-1"):
-        # Cache-busted via ?v=... query string, so it's safe to cache "forever" —
-        # any future edit ships under a new query string and misses this cache entirely.
+    query = (scope.get("query_string") or b"").decode("latin-1")
+    if ext in ("js", "css") and "v=" in query:
+        # Cache-busted via ?v=... query string, so it's safe to cache "forever" -- but
+        # only when ?v= is THIS file's version. During a deploy an old instance can
+        # receive the new page's URL; cached "forever" its old file would stick in the
+        # CDN under the new URL (it happened 2026-10-14). A mismatch is not cached.
+        requested = (parse_qs(query).get("v") or [""])[0]
+        version = _file_version(static_root, path)
+        if version is not None and requested != version:
+            return "no-cache"
         return _FOREVER
     if ext in ("woff2", "woff") and not path.startswith("/api/"):
         # Self-hosted fonts: a given file name never changes content, cache "forever".
@@ -54,8 +93,10 @@ def _static_cache_control(scope: dict) -> str | None:
 
 
 class AppMiddleware:
-    def __init__(self, app, *, csp: str, csp_mode: str, on_write: Callable[[str], Awaitable[None]]):
+    def __init__(self, app, *, csp: str, csp_mode: str, on_write: Callable[[str], Awaitable[None]],
+                 static_root: Path | None = None):
         self.app = app
+        self.static_root = static_root
         self.csp = csp
         self.csp_mode = csp_mode
         self.on_write = on_write
@@ -83,7 +124,7 @@ class AppMiddleware:
                 status = message["status"]
                 headers = MutableHeaders(scope=message)
                 if method == "GET" and status == 200 and "cache-control" not in headers:
-                    cache_control = _static_cache_control(scope)
+                    cache_control = _static_cache_control(scope, self.static_root)
                     if cache_control:
                         headers["Cache-Control"] = cache_control
                 headers["X-Content-Type-Options"] = "nosniff"

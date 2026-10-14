@@ -198,7 +198,8 @@ def create_app() -> FastAPI:
     # Added last, so it wraps CORS and compression as the five functions it replaced did.
     from app.http_middleware import AppMiddleware
 
-    app.add_middleware(AppMiddleware, csp=_csp, csp_mode=_csp_mode, on_write=_invalidate_cache_bg)
+    app.add_middleware(AppMiddleware, csp=_csp, csp_mode=_csp_mode, on_write=_invalidate_cache_bg,
+                       static_root=static_dir)
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -311,7 +312,7 @@ def create_app() -> FastAPI:
 
     # Bumped with each deploy-relevant change, so /health shows which code is live (the image
     # has no git metadata). Format: date.sequence.
-    BUILD = "2026-10-14.4"
+    BUILD = "2026-10-14.5"
 
     def monitoring_sentry_on() -> bool:
         from app import monitoring as _monitoring
