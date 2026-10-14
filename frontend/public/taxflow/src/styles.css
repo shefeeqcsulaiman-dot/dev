@@ -14,7 +14,7 @@
 body.theme-light{
   --bg:#f1f1f1;--bg2:#ffffff;--bg3:#e8edf6;--surface:#ffffff;--surface2:#f1f1f1;--surface3:#e4eaf4;
   --border:rgba(7,61,127,0.10);--border2:rgba(7,61,127,0.17);--border3:rgba(7,61,127,0.26);
-  --text:#0c1630;--text2:#3a4d6e;--text3:#7a8dad;
+  --text:#0c1630;--text2:#3a4d6e;--text3:#56667f;
   --accent:#6491DE;--accent2:#073D7F;--accent-glow:rgba(100,145,222,0.12);
   --green:#0f9f6e;--green-bg:rgba(15,159,110,0.1);--green-border:rgba(15,159,110,0.25);
   --red:#dc4c4c;--red-bg:rgba(220,76,76,0.1);--red-border:rgba(220,76,76,0.25);
@@ -27,7 +27,7 @@ body.theme-light{
 body:not(.theme-light){
   --bg:#0d1117;--bg2:#161b27;--bg3:#1c2333;--surface:#1e2840;--surface2:#16202f;--surface3:#253050;
   --border:rgba(100,145,222,0.12);--border2:rgba(100,145,222,0.20);--border3:rgba(100,145,222,0.32);
-  --text:#e4e8f0;--text2:#8892a4;--text3:#7a879e;
+  --text:#e4e8f0;--text2:#8892a4;--text3:#909cb0;
   --accent:#6491DE;--accent2:#4f7fd6;--accent-glow:rgba(100,145,222,0.20);
   --green:#34d399;--green-bg:rgba(52,211,153,0.12);--green-border:rgba(52,211,153,0.28);
   --red:#f87171;--red-bg:rgba(248,113,113,0.12);--red-border:rgba(248,113,113,0.28);
@@ -39,7 +39,7 @@ body:not(.theme-light){
 }
 /* Dashboard page text overrides */
 body.theme-light #page-dashboard{--text:#091126;--text2:#2e3d58;--text3:#61708a;}
-body:not(.theme-light) #page-dashboard{--text:#c8d0dc;--text2:#8892a4;--text3:#7a879e;}
+body:not(.theme-light) #page-dashboard{--text:#c8d0dc;--text2:#8892a4;--text3:#909cb0;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;overflow:hidden;font-size:13.5px;}
 .hidden{display:none!important;}
@@ -349,13 +349,8 @@ body:not(.theme-light) .nbadge.red{background:var(--red);}
 .icon-btn.skip:hover{background:var(--amber-bg);border-color:var(--amber-border);color:var(--amber);}
 .icon-btn.danger:hover{background:var(--red-bg);border-color:var(--red-border);color:var(--red);}
 .icon-btn.invoice-img:hover{background:#f0f0ff;border-color:#c7d2fe;color:#6366f1;}
-.row-actions{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:opacity .15s;}
-.tbl tbody tr .row-actions{opacity:.45;}
-.tbl tbody tr:hover .row-actions,.tbl tbody tr:focus-within .row-actions{opacity:1;}
-/* Fade-until-hover is a nice progressive-disclosure touch for a mouse, but
-   devices that report no hover capability at all (phones/tablets) would
-   otherwise never see these actions become discoverable. */
-@media (hover:none){.tbl tbody tr .row-actions{opacity:1;}}
+/* Row actions are always shown at full strength: faded until hover, they looked disabled. */
+.row-actions{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;}
 .ai-card-toolbar{gap:12px;flex-wrap:wrap;}
 .ai-card-controls{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
 .ai-view-toggle{display:inline-flex;align-items:center;border:1px solid var(--border2);border-radius:8px;background:var(--bg3);padding:3px;gap:3px;}
