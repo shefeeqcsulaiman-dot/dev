@@ -142,14 +142,21 @@ def _sale_rows(db: Session, principal: Principal):
     )
 
 
-def _movements(db: Session, principal: Principal, branch_id: str | None):
+def _movements(db: Session, principal: Principal, branch_id: str | None, item: str | None = None):
+    """Every movement (purchases and sales), as a CTE; item (lower-cased): only that item's,
+    filtered inside each source so the database never builds the others."""
     if not inventory_backfill_disabled(db, principal.company_id):
         backfill_purchase_stock_movements(db, principal)
     parts = [_purchase_rows(db, principal, branch_id)]
     sales = _sale_rows(db, principal)
     if sales is not None:
         parts.append(sales)
-    return union_all(*parts).subquery("movements")
+    movements = union_all(*parts).subquery("all_movements")
+    query = select(*movements.c)
+    if item:
+        query = query.where(func.lower(movements.c.item_name) == item)
+    # A CTE: the page, its total and the balances below all read it, and PostgreSQL builds it once.
+    return query.cte("movements")
 
 
 @router.get("/stock-movements")
@@ -165,34 +172,39 @@ def list_stock_movements(
     """One page of stock movements, newest first. item: exact item name (any case).
     month: YYYY-MM. Each row's balance is the item's stock after that movement, counted
     over its whole history (so a month filter doesn't restart it at zero)."""
-    m = _movements(db, principal, branch_id)
-    # The item filter goes BEFORE the running balance (a balance is per item, so this
-    # gives the same figures and only that item's rows get sorted); the month filter goes
-    # after it, so a month doesn't restart the balance at zero.
-    item_match = func.lower(m.c.item_name) == item.strip().lower() if item and item.strip() else None
-    month_match = (lambda col: func.substr(col, 1, 7) == month) if month else None
+    m = _movements(db, principal, branch_id, item.strip().lower() if item and item.strip() else None)
+    filters = []
+    if month:
+        filters.append(func.substr(m.c.day, 1, 7) == month)
+    key = (m.c.seq_id, m.c.seq_line, m.c.movement_type)
 
-    count_query = select(func.count()).select_from(m)
-    if item_match is not None:
-        count_query = count_query.where(item_match)
-    if month_match is not None:
-        count_query = count_query.where(month_match(m.c.day))
-    total = db.execute(count_query).scalar() or 0
-
-    order = (m.c.day.asc().nulls_first(), m.c.seq_at.asc(), m.c.seq_id.asc(), m.c.seq_line.asc())
-    balanced = select(
-        m,
-        func.sum(m.c.quantity).over(partition_by=func.lower(m.c.item_name), order_by=order).label("balance"),
+    # 1. The page (filters, newest first), with the filtered total counted in the same pass.
+    page = (
+        select(*m.c, func.count().over().label("total"))
+        .where(*filters)
+        .order_by(m.c.day.desc().nulls_last(), m.c.seq_at.desc(), m.c.seq_id.desc(), m.c.seq_line.desc())
+        .offset(offset).limit(limit)
+        .cte("page")
     )
-    if item_match is not None:
-        balanced = balanced.where(item_match)
-    balanced = balanced.subquery("balanced")
-    page_query = select(balanced).order_by(
-        balanced.c.day.desc().nulls_last(), balanced.c.seq_at.desc(), balanced.c.seq_id.desc(), balanced.c.seq_line.desc(),
-    ).offset(offset).limit(limit)
-    if month_match is not None:
-        page_query = page_query.where(month_match(balanced.c.day))
-    rows = db.execute(page_query).mappings().all()
+    # 2. Each row's balance: its item's stock after that movement, over the item's whole
+    # history (so a month filter doesn't restart it at zero) -- computed only for the
+    # items on this page, not for every item the company has.
+    order = (m.c.day.asc().nulls_first(), m.c.seq_at.asc(), m.c.seq_id.asc(), m.c.seq_line.asc())
+    history = (
+        select(*key, func.sum(m.c.quantity).over(partition_by=func.lower(m.c.item_name), order_by=order).label("balance"))
+        .where(func.lower(m.c.item_name).in_(select(func.lower(page.c.item_name))))
+        .subquery("history")
+    )
+    rows = db.execute(
+        select(page, history.c.balance)
+        .join(history, and_(history.c.seq_id == page.c.seq_id, history.c.seq_line == page.c.seq_line,
+                            history.c.movement_type == page.c.movement_type))
+        .order_by(page.c.day.desc().nulls_last(), page.c.seq_at.desc(), page.c.seq_id.desc(), page.c.seq_line.desc())
+    ).mappings().all()
+    if rows:
+        total = rows[0]["total"]
+    else:  # a page past the end: count on its own
+        total = db.execute(select(func.count()).select_from(m).where(*filters)).scalar() or 0
     return {
         "ok": True,
         "total": total,
