@@ -1038,12 +1038,13 @@ function openEmpImport(){
   if(typeof hrmsCan==='function'&&!hrmsCan('employees:edit')){toast('Your role cannot add employees','warn');return;}
   _empImportRows=[];
   const fileEl=document.getElementById('emp-import-file');if(fileEl)fileEl.value='';
-  const fill=(id,names,blank)=>{
+  const depts=_getDeptNames();
+  const fill=(id,names,blank,none)=>{
     const sel=document.getElementById(id);if(!sel)return;
-    sel.innerHTML=`<option value="">${blank}</option>`+names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+    sel.innerHTML=`<option value="">${names.length?blank:none}</option>`+names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
   };
-  fill('emp-import-dept',_getDeptNames(),'— Select Department —');
-  fill('emp-import-branch',_getBranchNames(),'— No branch —');
+  fill('emp-import-dept',depts,'— Select Department —','No departments yet — add them in HR Settings → Departments');
+  fill('emp-import-branch',_getBranchNames(),'— No branch —','— No branch —');
   empImportRenderPreview();
   showM('m-emp-import');
 }
@@ -1076,25 +1077,27 @@ async function empImportReadFile(file){
   empImportRenderPreview();
 }
 
-// Each row's final record and whether it will be imported.
+// Each row's final record and whether it will be imported. A row's department/branch is,
+// in order: what was picked for that row in the preview, the file's own value, then the
+// default chosen above the table.
 function _empImportPlan(){
   const dept=document.getElementById('emp-import-dept')?.value||'';
   const branch=document.getElementById('emp-import-branch')?.value||'';
   const existing=_empImportExistingIds();
   const seen=new Set();
   let nextNo=Number((nextEmployeeId().match(/\d+/)||['1'])[0]);
-  return _empImportRows.map(r=>{
+  return _empImportRows.map((r,index)=>{
     const id=r.id||`EMP-${String(nextNo++).padStart(3,'0')}`;
     const key=id.toLowerCase();
-    const department=r.department||dept;
-    const branchName=r.branch||branch;
+    const department=r._dept??(r.department||dept);
+    const branchName=r._branch??(r.branch||branch);
     let status='new';
     if(!r.name)status='no-name';
     else if(existing.has(key))status='exists';
     else if(seen.has(key))status='duplicate';
     else if(!department)status='no-dept';
     seen.add(key);
-    return {status,record:{
+    return {index,status,record:{
       id,name:r.name,department,designation:r.designation||'Employee',
       branch:branchName,
       branch_id:(typeof _branchList!=='undefined'?_branchList.find(b=>b.name===branchName):null)?.id||'',
@@ -1109,7 +1112,24 @@ const _EMP_IMPORT_STATUS={
   'no-name':['b-r','No name, skipped'],'no-dept':['b-a','Needs a department'],
 };
 
-function empImportRenderPreview(){
+// One row's department or branch picked in the preview ('' = none for branch).
+function empImportSetRow(index,field,value){
+  const row=_empImportRows[index];
+  if(!row)return;
+  row[field==='dept'?'_dept':'_branch']=value;
+  empImportRenderPreview(`emp-import-${field}-${index}`);
+}
+
+function _empImportRowSelect(index,field,current,names,blank){
+  // A value from the file that isn't one of the company's names still shows (and can be changed).
+  const opts=current&&!names.includes(current)?[current,...names]:names;
+  return `<select class="fi" id="emp-import-${field}-${index}" style="width:100%;min-width:110px;padding:4px 8px;height:auto" onchange="empImportSetRow(${index},'${field}',this.value)">`+
+    `<option value="">${blank}</option>`+
+    opts.map(n=>`<option value="${escapeHtml(n)}"${n===current?' selected':''}>${escapeHtml(n)}</option>`).join('')+
+    '</select>';
+}
+
+function empImportRenderPreview(focusId){
   const tbody=document.getElementById('emp-import-tbody');
   const summary=document.getElementById('emp-import-summary');
   const btn=document.getElementById('emp-import-btn');
@@ -1120,16 +1140,22 @@ function empImportRenderPreview(){
     if(btn){btn.disabled=true;btn.textContent='Import';}
     return;
   }
+  const depts=_getDeptNames(),branches=_getBranchNames();
   const plan=_empImportPlan();
-  tbody.innerHTML=plan.map(({status,record})=>{
+  tbody.innerHTML=plan.map(({index,status,record})=>{
     const [cls,label]=_EMP_IMPORT_STATUS[status];
-    return `<tr><td class="mono">${escapeHtml(record.id)}</td><td>${escapeHtml(record.name||'—')}</td><td>${escapeHtml(record.department||'—')}</td><td>${escapeHtml(record.branch||'—')}</td><td><span class="b ${cls}">${label}</span></td></tr>`;
+    const editable=status==='new'||status==='no-dept';
+    const deptCell=editable?_empImportRowSelect(index,'dept',record.department,depts,'— Select —'):escapeHtml(record.department||'—');
+    const branchCell=editable?_empImportRowSelect(index,'branch',record.branch,branches,'— No branch —'):escapeHtml(record.branch||'—');
+    return `<tr><td class="mono">${escapeHtml(record.id)}</td><td>${escapeHtml(record.name||'—')}</td><td>${deptCell}</td><td>${branchCell}</td><td><span class="b ${cls}">${label}</span></td></tr>`;
   }).join('');
+  if(typeof focusId==='string')document.getElementById(focusId)?.focus();
   const count=s=>plan.filter(p=>p.status===s).length;
   const ready=count('new'),needDept=count('no-dept');
   const skipped=plan.length-ready-needDept;
+  const noDepts=!depts.length?' · <span style="color:var(--red)">This company has no departments yet — add them in HR Settings → Departments, then open Import again</span>':'';
   if(summary)summary.innerHTML=`<b>${plan.length}</b> rows · <b style="color:var(--green)">${ready}</b> ready to import`+
-    (skipped?` · ${skipped} skipped`:'')+(needDept?` · <span style="color:var(--amber)">${needDept} need a department — pick one above</span>`:'');
+    (skipped?` · ${skipped} skipped`:'')+(needDept?` · <span style="color:var(--amber)">${needDept} need a department — pick one above or on each row</span>`:'')+noDepts;
   if(btn){btn.disabled=!ready||needDept>0;btn.textContent=ready?`Import ${ready} employee${ready===1?'':'s'}`:'Import';}
 }
 
