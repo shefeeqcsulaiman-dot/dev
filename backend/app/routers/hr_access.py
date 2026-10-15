@@ -24,6 +24,7 @@ from app.auth_principal import (
     _role_department_scope,
     resolve_department_scope,
     _role_permission_keys,
+    assert_employee_may_sign_in,
     get_current_employee,
     require_permission,
     require_principal_permission,
@@ -417,8 +418,7 @@ def hr_login(request: Request, payload: HrLoginRequest, db: Session = Depends(ge
     if not verify_employee_password(payload.password, emp.password_hash, emp.employee_no):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="We couldn't sign you in — check your username and password and try again")
 
-    if not emp.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+    assert_employee_may_sign_in(emp)
 
     expires_at = db.query(Company.subscription_expires_at).filter(Company.id == emp.company_id).scalar()
     assert_company_active(expires_at)
@@ -608,6 +608,24 @@ def _assert_can_grant(principal: Principal, keys: set[str] | list[str], departme
             raise HTTPException(status_code=403, detail="You can only give access to your own departments")
 
 
+def _assert_can_manage_role(db: Session, principal: Principal, role: Role) -> None:
+    """Editing or deleting an existing role: on top of _assert_can_grant() for the new values,
+    a department-scoped login may only touch a role that already belongs to its own departments
+    and is held only by employees in them. Otherwise a Sales-only HR editor could re-scope the
+    Warehouse manager's role to Sales (or strip it) and cut Warehouse off."""
+    if not principal.is_dept_scoped:
+        return
+    current = {d.lower() for d in _role_department_scope(role)}
+    if not current or not (current - {OWN_DEPARTMENT.lower()}) <= principal.department_scope:
+        raise HTTPException(status_code=403, detail="This role covers other departments too, so only an administrator can change it")
+    holder_departments = {
+        str(d or "").strip().lower()
+        for (d,) in db.query(Employee.department).filter(Employee.company_id == principal.company_id, Employee.role_id == role.id).distinct()
+    }
+    if not holder_departments <= principal.department_scope:
+        raise HTTPException(status_code=403, detail="This role is held by employees in other departments, so only an administrator can change it")
+
+
 def _normalize_department_scope(names: list[str]) -> str | None:
     cleaned = sorted({str(n).strip() for n in names if str(n).strip()})
     return json.dumps(cleaned) if cleaned else None
@@ -638,6 +656,13 @@ def create_role(
     emp: Employee = Depends(require_permission("hr:manage_roles")),
 ) -> RoleOut:
     catalog = _ensure_permission_catalog(db)
+    # Same module rule as admin_create_role(): nothing from a module the company hasn't enabled.
+    company_modules = db.query(Company.modules_enabled).filter(Company.id == emp.company_id).scalar()
+    allowed_keys = _company_allowed_catalog_keys(catalog, company_modules)
+    for key in payload.permission_keys:
+        perm = catalog.get(key)
+        if perm and key not in allowed_keys:
+            raise HTTPException(status_code=400, detail=f"'{perm.module}' is not enabled for your company — cannot grant this permission")
     holder = db.get(Role, emp.role_id) if emp.role_id else None
     _assert_can_grant(
         Principal(kind="employee", company_id=emp.company_id, display_name=emp.full_name, is_admin=False,
@@ -792,6 +817,7 @@ def admin_update_role(
             raise HTTPException(status_code=400, detail=f"'{perm.module}' is not enabled for your company — cannot grant this permission")
     # Both the new permissions and the role as it stands: a non-admin can't edit a role that
     # already holds more than they do (e.g. strip it, or rename it into something they can take).
+    _assert_can_manage_role(db, principal, role)
     _assert_can_grant(principal, set(payload.permission_keys) | _role_permission_keys(db, role), payload.department_scope)
     # Built-in roles are looked up by name (_ensure_default_roles), so their name never changes.
     role_name = role.role_name if role.is_system_role else payload.role_name.strip()
@@ -827,6 +853,9 @@ def admin_delete_role(
         return
     if role.is_system_role:
         raise HTTPException(status_code=400, detail="Default system roles cannot be deleted")
+    _assert_can_manage_role(db, principal, role)
+    # Same rule as editing it: a non-admin can't delete a role that holds more than they do.
+    _assert_can_grant(principal, _role_permission_keys(db, role), _role_department_scope(role) or None)
     if db.query(Employee).filter(Employee.role_id == role.id).first():
         raise HTTPException(status_code=409, detail="This role is still assigned to one or more employees — reassign them first")
     db.query(RolePermission).filter(RolePermission.role_id == role.id).delete()

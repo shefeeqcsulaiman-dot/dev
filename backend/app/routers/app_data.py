@@ -790,9 +790,12 @@ def search_catalog(
 
 def _rota_read_filters(db: Session, principal: Principal, branch_id: str | None) -> list[Any]:
     """Company + branch scoping for rotaAssignments reads (department scoping is applied
-    to the parsed records afterwards with filter_records())."""
+    to the parsed records afterwards with filter_records()). Same role check as
+    GET /records/rotaAssignments: an employee without Rota access reads only their own
+    shifts, through /ess/rota."""
     company = resolve_principal_company(principal, db)
     assert_collection_module_enabled(db, principal, company, "rotaAssignments")
+    assert_collection_read_permission(principal, "rotaAssignments")
     base_filters = [AppDataRecord.company_id == principal.company_id, AppDataRecord.collection == "rotaAssignments"]
     collection_module = _COLLECTION_MODULE.get("rotaAssignments")
     cross_branch = bool(collection_module and principal.can_cross_branch(collection_module))
@@ -938,12 +941,14 @@ _HR_WRITE_PERMISSION_MODULES = frozenset({
 # "employees" deliberately stays on the `:view`-gated check below, not the
 # `:edit` one -- unlike the other HR modules, its protection is field-level:
 # a `:view`-only role IS allowed to write ordinary profile fields (name,
-# department, designation...), with basic_salary/allowances silently
+# designation, contacts...), with basic_salary/allowances silently
 # redacted server-side for anyone lacking employees:view_salary (see
 # _redact_employee_salary() and test_employees_salary_permission.py's
 # test_write_side_ignores_salary_fields_without_permission). Requiring
 # `:edit` here would block that already-correct, narrower redaction model
-# entirely rather than tightening it.
+# entirely rather than tightening it. Department is NOT one of those ordinary
+# fields: it decides which department-scoped managers see the employee, so it
+# needs employees:edit (_EMPLOYEE_SENSITIVE_FIELDS).
 _HR_EDIT_GATED_MODULES = _HR_WRITE_PERMISSION_MODULES - {"employees"}
 
 _HR_MODULE_LABELS = {
@@ -958,7 +963,7 @@ _HR_COLLECTION_MODULE = {
 }
 _EMPLOYEE_SENSITIVE_FIELDS = (
     "salary", "basic_salary", "housing_allowance", "transport_allowance", "other_allowance",
-    "iban", "wps_id", "status", "branch_id",
+    "iban", "wps_id", "status", "branch_id", "department",
 )
 
 

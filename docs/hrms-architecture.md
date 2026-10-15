@@ -301,7 +301,7 @@ employees
   id, company_id, employee_no, full_name, department, designation,
   basic_salary, housing_allowance, transport_allowance, other_allowance,
   iban, wps_id, status, password_hash (for ESS/HR login — unset means the
-  password defaults to employee_no itself, see §9.1)
+  employee can't sign in until HR sets one, see §9.3)
   -- access control / GPS attendance (built, see §7):
   username, role_id, work_location_id, branch_id, is_active,
   last_login, last_activity, password_changed_at
@@ -944,7 +944,9 @@ An employee granted only `hr_settings:edit` — plausible for someone administer
 
 Fix direction (not yet implemented): split role/permission administration onto its own permission (e.g. `roles:manage`), separate from `hr_settings:edit`'s actual intended scope (OT/weekend/leave-policy config), and require it specifically for all three call sites above.
 
-### 9.3 Weak default credential: unset password defaults to `employee_no` (CONFIRMED)
+### 9.3 Weak default credential: unset password defaulted to `employee_no` (FIXED 2026-10-15)
+
+Fixed: `verify_employee_password()` now rejects an employee with no `password_hash` (same bcrypt timing as a wrong password), so HR must set a password in Users & Roles before the employee can sign in. The same change blocks ESS/HRMS sign-in, and every request on an existing token, for an employee whose status is inactive (`assert_employee_may_sign_in()`). Tests: `backend/tests/test_hr_ess_permission_gaps.py`. The original finding follows.
 
 Both `ess.py` (`/ess/login`) and `hr_access.py` (`/hr/login`) fall back to treating the employee's own `employee_no` as their password whenever `Employee.password_hash` is `None` — i.e. before an admin has ever set a real password via `PUT /hr/admin/employees/{id}/portal-access`. Employee numbers are small, often-sequential values (seen in this deployment's own live data: `"10"`, `"22"`, `"52"`, ...) that also appear on payslips, ID badges, and the Employee Directory table itself — not a secret, and easily enumerable by anyone who can see one real employee's number and guess nearby ones. Any employee whose portal access was created but whose password was never explicitly changed is reachable with a guessable credential for as long as that remains true.
 

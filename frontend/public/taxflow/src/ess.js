@@ -762,7 +762,7 @@
         return '<div class="lb-item lb-tone-' + tone + '" style="--used:' + pct + '%;--left:' + left + '%">' +
           '<div class="lb-item-icon">' + (LEAVE_TYPE_ICONS[type] || '📅') + '</div>' +
           '<div class="lb-item-type">' + escHtml(type) + '</div>' +
-          '<div class="lb-item-days">' + b.remaining + ' <span>/ ' + b.entitlement + ' days left</span></div>' +
+          '<div class="lb-item-days">' + b.remaining + ' <span>/ ' + b.entitlement + ' days left' + (b.pending ? ' · ' + b.pending + ' pending' : '') + '</span></div>' +
           '<div class="lb-bar"><div class="lb-bar-fill' + (low ? ' low' : '') + '"></div></div>' +
         '</div>';
       }).join(''));
@@ -1919,14 +1919,22 @@
     var type = _rqVal('leave-type'), s = _rqVal('leave-start'), e = _rqVal('leave-end');
     if (!s || !e) { el.style.display = 'none'; return; }
     var days = Math.round((new Date(e + 'T00:00:00') - new Date(s + 'T00:00:00')) / 86400000) + 1;
+    var b = _essLeaveBal[type];
+    // Same count as the server (leave_request_days): a Working-basis annual policy skips Sat/Sun.
+    if (days >= 1 && b && b.basis === 'Working') {
+      days = 0;
+      for (var d = new Date(s + 'T00:00:00'); d <= new Date(e + 'T00:00:00'); d.setDate(d.getDate() + 1)) {
+        if (d.getDay() !== 0 && d.getDay() !== 6) days++;
+      }
+    }
     var html, warn = false;
-    if (days < 1) { html = 'The end date is before the start date.'; warn = true; }
+    if (days < 1 && s > e) { html = 'The end date is before the start date.'; warn = true; }
     else {
       html = '<b>' + days + ' day' + (days === 1 ? '' : 's') + '</b>';
-      var b = _essLeaveBal[type];
-      if (b) {
-        html += ' · ' + escHtml(type) + ' balance: <b>' + b.remaining + '</b> of ' + b.entitlement + ' days left';
-        if (days > b.remaining) { html += '<br>That is more than your remaining balance — HR may decline it or treat the extra days as unpaid.'; warn = true; }
+      // The balance shown is this year's; leave starting in another year is checked against that year.
+      if (b && s.slice(0, 4) === String(new Date().getFullYear())) {
+        html += ' · ' + escHtml(type) + ' balance: <b>' + b.remaining + '</b> of ' + b.entitlement + ' days left' + (b.pending ? ' (' + b.pending + ' on hold in pending requests)' : '');
+        if (days > b.remaining) { html += '<br>That is more than your remaining balance, so it cannot be submitted.'; warn = true; }
       }
       var clash = (_essData.leave || []).filter(function(l) { return (l.status === 'pending' || l.status === 'approved') && l.start_date <= e && l.end_date >= s; })[0];
       if (clash) { html += '<br>This overlaps your ' + escHtml(clash.status) + ' leave (' + escHtml(clash.start_date) + ' → ' + escHtml(clash.end_date) + ').'; warn = true; }

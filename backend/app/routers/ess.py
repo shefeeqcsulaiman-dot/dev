@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 import app.cache as cache
 import app.timezone_utils as timezone_utils
-from app.auth_principal import resolve_department_scope
+from app.auth_principal import assert_employee_may_sign_in, resolve_department_scope
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import assert_company_active, company_allows_module
@@ -28,6 +28,9 @@ from app.routers.leave import (
     _leave_entitlement_days,
     _leave_type_caps,
     _used_days_by_employee_and_type,
+    annual_leave_basis,
+    assert_leave_available,
+    leave_request_days,
 )
 from app.security import pwd_context, verify_employee_password
 
@@ -122,8 +125,7 @@ def _get_employee_from_token(token: str, db: Session) -> Employee:
     emp = db.query(Employee).filter(Employee.id == emp_id).first()
     if not emp:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Employee not found")
-    if not emp.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal access has been disabled for this account")
+    assert_employee_may_sign_in(emp, "Portal access has been disabled for this account")
     expires_at = db.query(Company.subscription_expires_at).filter(Company.id == emp.company_id).scalar()
     assert_company_active(expires_at)
     return emp
@@ -179,8 +181,7 @@ def ess_login(request: Request, payload: EssLoginRequest, db: Session = Depends(
     if not verify_employee_password(password, emp.password_hash, emp.employee_no):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="We couldn't sign you in — check your username and password and try again")
 
-    if not emp.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal access has been disabled for this account")
+    assert_employee_may_sign_in(emp, "Portal access has been disabled for this account")
 
     # Superadmin's per-company Module Permissions — gated at login (there's no
     # per-request principal to hang a require_module check off of here, same
@@ -452,6 +453,7 @@ def ess_leave_balance(request: Request, db: Session = Depends(get_db)) -> dict:
     caps = _leave_type_caps(db, emp.company_id)
     annual_entitlement = _leave_entitlement_days(emp.employee_no, policies, configs, default_days=caps.get("Annual Leave", 21))
     used_map = _used_days_by_employee_and_type(db, emp.company_id, emp.id)   # one grouped query
+    pending_map = _used_days_by_employee_and_type(db, emp.company_id, emp.id, statuses=("pending",))
     annual_used = used_map.get((emp.id, "Annual Leave"), 0)
     by_type = {}
     for leave_type, cap in caps.items():
@@ -460,8 +462,12 @@ def ess_leave_balance(request: Request, db: Session = Depends(get_db)) -> dict:
         else:
             entitlement = cap
             used = used_map.get((emp.id, leave_type), 0)
-        by_type[leave_type] = {"entitlement": entitlement, "used": used, "remaining": max(0, entitlement - used)}
-    return {"by_type": by_type}
+        pending = pending_map.get((emp.id, leave_type), 0)
+        # remaining = what this employee can still request: pending requests are on hold.
+        by_type[leave_type] = {"entitlement": entitlement, "used": used, "pending": pending,
+                               "remaining": max(0, entitlement - used - pending)}
+    by_type.get("Annual Leave", {})["basis"] = annual_leave_basis(db, emp.company_id, emp.employee_no)
+    return {"year": date.today().year, "by_type": by_type}
 
 
 class EssAnnouncementOut(BaseModel):
@@ -664,12 +670,12 @@ def ess_create_leave(payload: EssLeaveRequestIn, request: Request, db: Session =
             status_code=409,
             detail=f"This overlaps an existing {overlap.status} leave request ({overlap.start_date} to {overlap.end_date})",
         )
-    days = (payload.end_date - payload.start_date).days + 1
     if payload.start_date < date.today() - timedelta(days=30):
         raise HTTPException(status_code=400, detail="Leave can't be requested for dates more than 30 days in the past — contact HR")
-    remaining = ess_leave_balance(request, db)["by_type"].get(payload.leave_type)
-    if remaining is not None and "unpaid" not in payload.leave_type.lower() and days > remaining["remaining"]:
-        raise HTTPException(status_code=400, detail=f"Only {remaining['remaining']} day(s) of {payload.leave_type} remaining; this request is {days}")
+    # Same day count (Working-basis policies skip weekends) and the same balance rule as
+    # HRMS: the year the leave starts in, with pending requests counted as on hold.
+    days = leave_request_days(db, emp.company_id, emp.employee_no, payload.leave_type, payload.start_date, payload.end_date)
+    assert_leave_available(db, emp.company_id, emp, payload.leave_type, payload.start_date, days)
     req = LeaveRequest(
         company_id=emp.company_id, employee_id=emp.id, leave_type=payload.leave_type,
         start_date=payload.start_date.isoformat(), end_date=payload.end_date.isoformat(),
