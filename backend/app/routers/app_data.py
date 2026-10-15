@@ -2024,11 +2024,24 @@ async def app_data_action(
         saved_count = 0
         updated_count = 0
         created_count = 0
+        # skip_existing: an import (e.g. Employee Directory > Import) only adds new records; one
+        # whose key is already saved is left untouched instead of overwritten by the sparser row.
+        skip_existing = bool(payload.get("skip_existing"))
+        skipped_keys: list[str] = []
+        existing_employee_nos: set[str] = set()
+        if skip_existing and collection in ("employees", "staff") and keys:
+            existing_employee_nos = {
+                no for (no,) in db.query(Employee.employee_no).filter(
+                    Employee.company_id == principal.company_id, Employee.employee_no.in_(keys))
+            }
         dept_index = build_index(db, principal.company_id) if principal.is_dept_scoped and collection in SCOPED_COLLECTIONS else None
         for record in normalized_records:
             assert_collection_period_open(db, principal, collection, record)
             key = record_key(collection, record)
             existing = existing_by_key.get(key) if key else None
+            if skip_existing and (existing is not None or key in existing_employee_nos):
+                skipped_keys.append(key)
+                continue
             _keep_stored_image(collection, record, existing)
             payload_json = json.dumps(record, ensure_ascii=False, default=str)
             _assert_branch_writable(principal, collection, existing)
@@ -2058,11 +2071,12 @@ async def app_data_action(
             principal,
             collection,
             "records_bulk_saved",
-            {"count": saved_count, "created": created_count, "updated": updated_count},
+            {"count": saved_count, "created": created_count, "updated": updated_count, "skipped": len(skipped_keys)},
         )
         db.commit()
         _invalidate_write_caches(collection, principal.company_id)
-        return {"ok": True, "saved": saved_count, "created": created_count, "updated": updated_count, **party_counts}
+        return {"ok": True, "saved": saved_count, "created": created_count, "updated": updated_count,
+                "skipped": len(skipped_keys), "skipped_keys": skipped_keys[:200], **party_counts}
 
     if action == "delete":
         collection = str(payload.get("collection", "app_actions"))
