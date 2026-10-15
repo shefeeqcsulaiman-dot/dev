@@ -2591,52 +2591,27 @@ function localApiBaseUrl(){
   return `${window.location.protocol}//${window.location.host}/api/v1`;
 }
 
-// ── HR RBAC / GPS attendance (Company Locations, Live Locations) ───────────
-// Uses a separate employee-scoped token (same "emp:" JWT format as
-// /ess/login) because the permission-gated /hr/* endpoints authenticate as
-// an Employee with an assigned role, not as the logged-in User account.
-// See docs/hrms-architecture.md §7 "Employee Login & RBAC".
-const HR_ACCESS_TOKEN_KEY='hr_access_token';
-
+// ── GPS attendance (Company Locations, Live Locations) ─────────────────────
+// Uses the same HRMS session as every other screen: the company admin, or an
+// employee login whose role has the location / live-attendance permissions.
+// (It used to need a second "Connect HR Access" employee sign-in.)
 function hrAccessHeaders(){
-  const headers={'Content-Type':'application/json'};
-  const token=localStorage.getItem(HR_ACCESS_TOKEN_KEY);
-  if(token)headers.Authorization='Bearer '+token;
-  return headers;
+  return backendHeaders();
 }
 
-async function hrAccessLogin(){
-  const user=(document.getElementById('hr-access-user')?.value||'').trim();
-  const pass=document.getElementById('hr-access-pass')?.value||'';
-  const errEl=document.getElementById('hr-access-err');
-  if(errEl)errEl.style.display='none';
-  if(!user||!currentCompany?.id){toast('Enter your HR employee ID','warn');return;}
-  try{
-    const r=await fetch(`${apiBaseUrl()}/hr/login`,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({username:user,password:pass||user,company_id:currentCompany.id})});
-    const d=await r.json();
-    if(r.ok&&d.access_token){
-      localStorage.setItem(HR_ACCESS_TOKEN_KEY,d.access_token);
-      toast('HR Access connected ('+(d.role_name||'Employee')+')','ok');
-      renderHrAccessPanel();
-    }else{
-      if(errEl){errEl.textContent=d.detail||'Invalid credentials.';errEl.style.display='block';}
-    }
-  }catch(e){if(errEl){errEl.textContent='Cannot reach server.';errEl.style.display='block';}}
-}
+// Kept for older inline handlers: there is no separate HR Access session any more.
+function hrAccessLogout(){}
 
-function hrAccessLogout(){
-  localStorage.removeItem(HR_ACCESS_TOKEN_KEY);
-  renderHrAccessPanel();
+function _hrGpsNoAccess(tbody,cols){
+  if(tbody)tbody.innerHTML=`<tr><td colspan="${cols}" style="text-align:center;color:var(--text3);padding:20px">Your role does not have access to this.</td></tr>`;
 }
 
 function renderHrAccessPanel(){
   const loginBox=document.getElementById('hr-access-login');
   const panel=document.getElementById('hr-access-panel');
-  const connected=!!localStorage.getItem(HR_ACCESS_TOKEN_KEY);
-  if(loginBox)loginBox.style.display=connected?'none':'block';
-  if(panel)panel.style.display=connected?'block':'none';
-  if(connected){loadCompanyLocations();loadLiveLocations();populateAssignEmployeeSelect();loadEmployeeLocationAssignments();}
+  if(loginBox)loginBox.style.display='none';
+  if(panel)panel.style.display='block';
+  loadCompanyLocations();loadLiveLocations();populateAssignEmployeeSelect();loadEmployeeLocationAssignments();
 }
 
 let HR_LOCATIONS_CACHE=[];
@@ -2646,7 +2621,7 @@ async function loadCompanyLocations(){
   if(!tbody)return;
   try{
     const r=await fetch(`${apiBaseUrl()}/hr/company-locations`,{headers:hrAccessHeaders()});
-    if(r.status===401){hrAccessLogout();return;}
+    if(r.status===401||r.status===403){_hrGpsNoAccess(tbody,5);return;}
     const rows=await r.json();
     HR_LOCATIONS_CACHE=rows;
     tbody.innerHTML=rows.length?rows.map(l=>`<tr>
@@ -2684,8 +2659,7 @@ async function loadEmployeeLocationAssignments(){
   if(!tbody)return;
   try{
     const r=await fetch(`${apiBaseUrl()}/hr/employee-locations`,{headers:hrAccessHeaders()});
-    if(r.status===401){hrAccessLogout();return;}
-    if(r.status===403){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:16px">Your role does not have access to manage assignments.</td></tr>';return;}
+    if(r.status===401||r.status===403){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:16px">Your role does not have access to manage assignments.</td></tr>';return;}
     const rows=await r.json();
     tbody.innerHTML=rows.length?rows.map(a=>`<tr>
       <td>${escapeHtml(a.employee_name)}</td><td>${escapeHtml(a.location_name)}</td>
@@ -2747,8 +2721,7 @@ async function loadLiveLocations(){
   if(!tbody)return;
   try{
     const r=await fetch(`${apiBaseUrl()}/hr/live-locations`,{headers:hrAccessHeaders()});
-    if(r.status===401){hrAccessLogout();return;}
-    if(r.status===403){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Your role does not have live-attendance access.</td></tr>';return;}
+    if(r.status===401||r.status===403){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Your role does not have live-attendance access.</td></tr>';return;}
     const rows=await r.json();
     tbody.innerHTML=rows.length?rows.map(p=>`<tr>
       <td>${escapeHtml(p.employee_name)}</td>
@@ -23427,6 +23400,28 @@ function _setRotaStatusBadge(elId,statusText){
   el.className=`b ${_rotaStatusBadgeClass(statusText)}`;
 }
 
+// Saves many rota shifts in batches of 200 through the bulk endpoint. The rota buttons
+// (Auto Fill, Copy Previous Week, Repeat, Publish) used to send one request per shift, all
+// at once: 68 staff x 7 days = 476 parallel requests (a 1-year Repeat: ~25,000), more than
+// the server's database connections can serve, so many failed with "the server had a
+// problem". Returns how many shifts were saved; a failed batch is reported once.
+async function saveRotaAssignmentsInBatches(assignments,{label='shifts'}={}){
+  const list=assignments.filter(Boolean);
+  let saved=0,failed=0,reason='';
+  for(let i=0;i<list.length;i+=200){
+    const chunk=list.slice(i,i+200);
+    try{
+      const res=await apiRequest('bulk-save',{collection:'rotaAssignments',records:chunk});
+      saved+=res?.saved??chunk.length;
+    }catch(e){
+      failed+=chunk.length;
+      reason=reason||e.serverDetail||e.message||'';
+    }
+  }
+  if(failed)toast(`${failed} of ${list.length} ${label} were not saved${reason?`: ${reason}`:''}. Please try again.`,'err',10000);
+  return saved;
+}
+
 function saveRotaDraft(status='Draft'){
   _setRotaStatusBadge('rota-weekly-status',status);
   _setRotaStatusBadge('rota-monthly-status',status);
@@ -23494,10 +23489,8 @@ function publishRota(){
   // the week actually being viewed (respecting the current Department/
   // Location/Search filters), like every other Weekly Rota action already does.
   const weekAssignments=selectedWeekAssignments('week');
-  weekAssignments.forEach(item=>{
-    item.status='Published';
-    saveServer('rotaAssignments',item);
-  });
+  weekAssignments.forEach(item=>{item.status='Published';});
+  saveRotaAssignmentsInBatches(weekAssignments);
   saveRotaDraft('Published');
   renderRotaBoards();
   toast(`Rota published for ${weekAssignments.length} shift(s) this week`,'ok');
@@ -23534,7 +23527,7 @@ async function applyRotaRepeat(){
     toast(empFilter==='all'?'No assignments in the current week to repeat':'No assignments for this employee in the current week','warn');
     return;
   }
-  let count=0;
+  const toSave=[];
   for(let w=1;w<=weeks;w++){
     sourceAssignments.forEach(src=>{
       const dayOffset=Math.round((new Date(`${src.date}T00:00:00`)-new Date(`${start}T00:00:00`))/86400000);
@@ -23548,10 +23541,12 @@ async function applyRotaRepeat(){
         updated_at:new Date().toISOString()
       });
       rotaAssignmentsById.set(assignment.id,assignment);
-      saveServer('rotaAssignments',assignment);
-      count++;
+      toSave.push(assignment);
     });
   }
+  toast(`Saving ${toSave.length} shifts…`,'info');
+  const count=await saveRotaAssignmentsInBatches(toSave);
+  if(!count)return;
   const empName=empFilter==='all'?'all employees':([...document.getElementById('rota-repeat-employee')?.options||[]].find(o=>o.value===empFilter)?.textContent||empFilter);
   const label=mode==='1year'?'1 year (52 weeks)':'indefinitely (~5 years / 260 weeks)';
   const info=document.getElementById('rota-repeat-info');
@@ -23810,7 +23805,7 @@ async function copyPreviousRota(){
   const priorStart=weekDateFromStart(start,-7);
   await _ensureRotaRangeLoaded(priorStart,weekDateFromStart(priorStart,6),{render:false});
   const staffRows=filteredRotaStaff('week');
-  let copied=0;
+  const toSave=[];
   staffRows.forEach(staff=>{
     ROTA_WEEK_DAYS.forEach((day,index)=>{
       const priorDate=weekDateFromStart(priorStart,index);
@@ -23819,19 +23814,21 @@ async function copyPreviousRota(){
       if(prior){
         const next=normalizeRotaAssignment({...prior,id:rotaAssignmentId(staff.id,currentDate),date:currentDate,day,status:'Draft',updated_at:new Date().toISOString()});
         rotaAssignmentsById.set(next.id,next);
-        saveServer('rotaAssignments',next);
-        copied++;
+        toSave.push(next);
       }
     });
   });
   _syncMonthPickerToWeek(start);
   renderRotaBoards();
-  toast('Previous week copied. Leave, inactive employee, and hour-limit checks completed.','ok');
+  if(!toSave.length){toast('Nothing to copy: the previous week has no shifts for these staff','warn');return;}
+  const copied=await saveRotaAssignmentsInBatches(toSave);
+  if(copied)toast(`Previous week copied: ${copied} shifts saved.`,'ok');
   audit('Previous rota copied','Rota Planning','Draft');
 }
 
-function autoGenerateRota(){
+async function autoGenerateRota(){
   const start=weekStartValue();
+  const toSave=[];
   // Previously .slice(0,4) — silently auto-filled only the first 4
   // (department-)filtered staff no matter how many there actually were,
   // matching the button's own old "Auto Fill 4 Staff" label. Now fills
@@ -23861,12 +23858,13 @@ function autoGenerateRota(){
         status:'Draft'
       });
       rotaAssignmentsById.set(assignment.id,assignment);
-      saveServer('rotaAssignments',assignment);
+      toSave.push(assignment);
     });
   });
   _syncMonthPickerToWeek(start);
   renderRotaBoards();
-  toast('Rota auto-generated from availability, leave, coverage, and rest-day rules.','ok');
+  const saved=await saveRotaAssignmentsInBatches(toSave);
+  if(saved)toast(`Rota auto-filled: ${saved} shifts saved as Draft.`,'ok');
   audit('Rota auto-generated','Rota Planning','Draft');
 }
 
@@ -23875,9 +23873,10 @@ function copyPreviousMonthRota(){
   audit('Previous month rota copied','Rota Planning','Draft');
 }
 
-function autoGenerateMonthlyRota(){
+async function autoGenerateMonthlyRota(){
   const month=document.getElementById('rota-month-value')?.value||weekStartValue().slice(0,7);
   const start=`${month}-01`;
+  const toSave=[];
   // Same fix as autoGenerateRota() above — previously capped at the first
   // 4 filtered staff regardless of the real roster size.
   const staffRows=filteredRotaStaff('month');
@@ -23907,11 +23906,12 @@ function autoGenerateMonthlyRota(){
         status:'Draft'
       });
       rotaAssignmentsById.set(assignment.id,assignment);
-      saveServer('rotaAssignments',assignment);
+      toSave.push(assignment);
     }
   });
   renderRotaBoards();
-  toast('Monthly rota auto-generated from availability, holidays, coverage, rest gaps, and role skills.','ok');
+  const saved=await saveRotaAssignmentsInBatches(toSave);
+  if(saved)toast(`Month auto-filled: ${saved} shifts saved as Draft.`,'ok');
   audit('Monthly rota auto-generated','Rota Planning','Draft');
 }
 
