@@ -19285,23 +19285,14 @@ async function updateLeaveBalance(){
   }catch(e){console.warn('[updateLeaveBalance] balance fetch failed',e);}
   if(!Array.isArray(balances)||!balances.length){emptyTableMessage(tbody,'No employees in database yet.');return;}
 
-  const pendingByEmployee={};
-  try{
-    const reqRes=await authenticatedFetch(`${apiBaseUrl()}/leave/requests`);
-    if(reqRes.ok){
-      const requests=await reqRes.json();
-      (Array.isArray(requests)?requests:[]).filter(r=>r.status==='pending'&&r.leave_type==='Annual Leave').forEach(r=>{
-        pendingByEmployee[r.employee_id]=(pendingByEmployee[r.employee_id]||0)+(Number(r.days)||0);
-      });
-    }
-  }catch(e){console.warn('[updateLeaveBalance] requests fetch failed',e);}
-
   tbody.innerHTML='';
   balances.forEach(b=>{
     const sick=b.by_type?.['Sick Leave']||{remaining:90};
-    const pending=pendingByEmployee[b.employee_id]||0;
+    // This year's annual leave: pending requests are on hold, so Remaining is what's still free to book.
+    const pending=b.pending||0;
+    const left=b.available??b.remaining;
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${escapeHtml(b.employee_name)}</td><td class="mono">${b.annual_entitlement}</td><td class="mono">${sick.remaining}</td><td class="mono">${b.used}</td><td class="mono">${pending}</td><td class="mono" ${b.remaining<5?'style="color:var(--red)"':''}>${b.remaining}</td>`;
+    tr.innerHTML=`<td>${escapeHtml(b.employee_name)}</td><td class="mono">${b.annual_entitlement}</td><td class="mono">${sick.remaining}</td><td class="mono">${b.used}</td><td class="mono">${pending}</td><td class="mono" ${left<5?'style="color:var(--red)"':''}>${left}</td>`;
     tbody.appendChild(tr);
   });
   if(!tbody.children.length)emptyTableMessage(tbody,'No employees in database yet.');
@@ -20036,7 +20027,7 @@ async function saveHrUser(){
   const password=document.getElementById('hr-user-password')?.value||'';
 
   if(!username){toast('Enter a portal username','warn');return;}
-  if(!emp?.has_password&&!password){toast('Set a password — this employee has never had one saved (their default is currently their Employee No.)','warn');return;}
+  if(!emp?.has_password&&!password){toast('Set a password — this employee has never had one saved, so they cannot sign in yet','warn');return;}
   if(password&&password.length<6){toast('Password must be at least 6 characters','warn');return;}
 
   const body={username,role_id:roleId||null,is_active:status==='active'};

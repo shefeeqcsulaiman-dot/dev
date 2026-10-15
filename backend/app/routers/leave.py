@@ -315,16 +315,11 @@ def create_leave_request(
             status_code=409,
             detail=f"This overlaps an existing {overlap.status} leave request ({overlap.start_date} to {overlap.end_date})",
         )
-    days = (payload.end_date - payload.start_date).days + 1
     # Only Annual Leave is counted against a named policy's Working/Calendar
     # basis — Sick/Emergency/etc. leave types are governed by their own flat
     # per-type caps (see _leave_type_caps), which are always calendar days.
-    if payload.leave_type == "Annual Leave":
-        policy_name = _employee_leave_policies(db, principal.company_id).get(emp.employee_no, "")
-        configs = _effective_leave_policy_configs(db, principal.company_id)
-        basis = configs.get(policy_name, {}).get("basis", _DEFAULT_LEAVE_POLICY_BASIS.get(policy_name, "Calendar"))
-        if basis == "Working":
-            days = _working_days_count(payload.start_date, payload.end_date)
+    days = leave_request_days(db, principal.company_id, emp.employee_no, payload.leave_type, payload.start_date, payload.end_date)
+    assert_leave_available(db, principal.company_id, emp, payload.leave_type, payload.start_date, days)
     req = LeaveRequest(
         company_id=principal.company_id, employee_id=emp.id, leave_type=payload.leave_type,
         start_date=payload.start_date.isoformat(), end_date=payload.end_date.isoformat(),
@@ -413,7 +408,10 @@ def approve_leave_request(
         else:
             entitlement = type_caps.get(req.leave_type)
         if entitlement is not None:
-            used = _used_days_for_type(db, principal.company_id, req.employee_id, req.leave_type, exclude_request_id=req.id)
+            # Against the year the leave starts in, not the current year (January leave
+            # approved in December used to be checked against this year's usage).
+            used = _used_days_for_type(db, principal.company_id, req.employee_id, req.leave_type, exclude_request_id=req.id,
+                                       year=int(req.start_date[:4]))
             if used + req.days > entitlement:
                 raise HTTPException(
                     status_code=409,
@@ -495,21 +493,29 @@ def delete_leave_request(
     db.commit()
 
 
-def _used_days_for_type(db: Session, company_id: str, employee_id: str, leave_type: str, exclude_request_id: str | None = None) -> int:
+def _year_bounds(year: int | None) -> tuple[str, str]:
+    year = year or datetime.now(timezone.utc).year
+    return f"{year}-01-01", f"{year + 1}-01-01"
+
+
+def _used_days_for_type(
+    db: Session, company_id: str, employee_id: str, leave_type: str, exclude_request_id: str | None = None,
+    *, year: int | None = None, statuses: tuple[str, ...] = ("approved",),
+) -> int:
     # Attributed entirely to the year the request STARTS in (a request
     # spanning a year boundary, e.g. 28 Dec - 5 Jan, counts fully against
     # the starting year's entitlement — a simple, documented rule, not an
     # attempt to pro-rate across the boundary). Previously had no upper
     # bound at all: an approved request starting in a FUTURE year was
     # still >= this year's Jan 1, so it silently drained the CURRENT
-    # year's balance forever.
-    year = datetime.now(timezone.utc).year
-    year_start = f"{year}-01-01"
-    year_end = f"{year + 1}-01-01"
+    # year's balance forever. `year` defaults to this year; pass the year a
+    # request starts in to check it against that year's balance.
+    # statuses=("pending",) gives the days on hold for requests not yet decided.
+    year_start, year_end = _year_bounds(year)
     query = db.query(LeaveRequest).filter(
         LeaveRequest.company_id == company_id,
         LeaveRequest.employee_id == employee_id,
-        LeaveRequest.status == "approved",
+        LeaveRequest.status.in_(statuses),
         LeaveRequest.leave_type == leave_type,
         LeaveRequest.start_date >= year_start,
         LeaveRequest.start_date < year_end,
@@ -519,19 +525,22 @@ def _used_days_for_type(db: Session, company_id: str, employee_id: str, leave_ty
     return sum(r.days for r in query.all())
 
 
-def _used_days_by_employee_and_type(db: Session, company_id: str, employee_id: str | None = None) -> dict[tuple[str, str], int]:
+def _used_days_by_employee_and_type(
+    db: Session, company_id: str, employee_id: str | None = None,
+    *, year: int | None = None, statuses: tuple[str, ...] = ("approved",),
+) -> dict[tuple[str, str], int]:
     """Approved leave days used this calendar year, grouped by (employee_id,
     leave_type) in ONE query -- exactly the same filter and year rule as
     _used_days_for_type() (attributed to the year the request STARTS in), which
     is what the balance screens used to call once per employee per leave type
     (1,200+ queries for a 200-employee company). Pass employee_id to limit it
-    to one employee."""
-    year = datetime.now(timezone.utc).year
+    to one employee; statuses=("pending",) for the days still waiting on a decision."""
+    year_start, year_end = _year_bounds(year)
     query = db.query(LeaveRequest.employee_id, LeaveRequest.leave_type, func.sum(LeaveRequest.days)).filter(
         LeaveRequest.company_id == company_id,
-        LeaveRequest.status == "approved",
-        LeaveRequest.start_date >= f"{year}-01-01",
-        LeaveRequest.start_date < f"{year + 1}-01-01",
+        LeaveRequest.status.in_(statuses),
+        LeaveRequest.start_date >= year_start,
+        LeaveRequest.start_date < year_end,
     )
     if employee_id:
         query = query.filter(LeaveRequest.employee_id == employee_id)
@@ -540,6 +549,57 @@ def _used_days_by_employee_and_type(db: Session, company_id: str, employee_id: s
 
 def _annual_used_days(db: Session, company_id: str, employee_id: str, exclude_request_id: str | None = None) -> int:
     return _used_days_for_type(db, company_id, employee_id, "Annual Leave", exclude_request_id)
+
+
+def leave_request_days(db: Session, company_id: str, employee_no: str, leave_type: str, start: date, end: date) -> int:
+    """Days a request uses: calendar days, except Annual Leave under a Working-basis
+    policy, which skips weekends. Shared by HRMS and ESS so the same dates always
+    cost the same number of days (ESS used to count every calendar day)."""
+    if leave_type == "Annual Leave":
+        policy_name = _employee_leave_policies(db, company_id).get(employee_no, "")
+        configs = _effective_leave_policy_configs(db, company_id)
+        basis = configs.get(policy_name, {}).get("basis", _DEFAULT_LEAVE_POLICY_BASIS.get(policy_name, "Calendar"))
+        if basis == "Working":
+            return _working_days_count(start, end)
+    return (end - start).days + 1
+
+
+def annual_leave_basis(db: Session, company_id: str, employee_no: str) -> str:
+    policy_name = _employee_leave_policies(db, company_id).get(employee_no, "")
+    configs = _effective_leave_policy_configs(db, company_id)
+    return configs.get(policy_name, {}).get("basis", _DEFAULT_LEAVE_POLICY_BASIS.get(policy_name, "Calendar"))
+
+
+def leave_entitlement(db: Session, company_id: str, employee_no: str, leave_type: str) -> int | None:
+    """This employee's yearly entitlement for a leave type; None = not capped
+    (Unpaid Leave, Work From Home, and any type without a configured cap)."""
+    if leave_type in _UNCAPPED_LEAVE_TYPES:
+        return None
+    caps = _leave_type_caps(db, company_id)
+    if leave_type == "Annual Leave":
+        return _leave_entitlement_days(
+            employee_no, _employee_leave_policies(db, company_id), _effective_leave_policy_configs(db, company_id),
+            default_days=caps.get("Annual Leave", 21),
+        )
+    return caps.get(leave_type)
+
+
+def assert_leave_available(db: Session, company_id: str, employee: Employee, leave_type: str, start: date, days: int) -> None:
+    """A new request must fit in what's left for the year it starts in, counting
+    pending requests as already on hold -- otherwise several pending requests could
+    each pass on their own and add up to more than the entitlement."""
+    entitlement = leave_entitlement(db, company_id, employee.employee_no, leave_type)
+    if entitlement is None:
+        return
+    taken = _used_days_for_type(db, company_id, employee.id, leave_type, year=start.year, statuses=("approved",))
+    pending = _used_days_for_type(db, company_id, employee.id, leave_type, year=start.year, statuses=("pending",))
+    available = max(0, entitlement - taken - pending)
+    if days > available:
+        on_hold = f" ({pending} more on hold in pending requests)" if pending else ""
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only {available} day(s) of {leave_type} available for {start.year}{on_hold}; this request is {days}",
+        )
 
 
 @router.get("/balance")
@@ -570,18 +630,25 @@ def leave_balance(
     caps = _leave_type_caps(db, principal.company_id)
     result = []
     used_map = _used_days_by_employee_and_type(db, principal.company_id)   # one grouped query, not employees x leave types
+    pending_map = _used_days_by_employee_and_type(db, principal.company_id, statuses=("pending",))
     for e in employees:
         annual_entitlement = _leave_entitlement_days(e.employee_no, policies, configs, default_days=caps.get("Annual Leave", 21))
         annual_used = used_map.get((e.id, "Annual Leave"), 0)
+        annual_pending = pending_map.get((e.id, "Annual Leave"), 0)
         by_type = {}
         for leave_type, cap in caps.items():
             used = annual_used if leave_type == "Annual Leave" else used_map.get((e.id, leave_type), 0)
-            by_type[leave_type] = {"entitlement": cap, "used": used, "remaining": max(0, cap - used)}
+            pending = pending_map.get((e.id, leave_type), 0)
+            by_type[leave_type] = {"entitlement": cap, "used": used, "pending": pending, "remaining": max(0, cap - used),
+                                   "available": max(0, cap - used - pending)}
+        # remaining = entitlement - approved; available also takes off pending requests (on hold).
         result.append({
             "employee_id": e.id, "employee_name": e.full_name,
             "annual_entitlement": annual_entitlement,
             "used": annual_used,
+            "pending": annual_pending,
             "remaining": max(0, annual_entitlement - annual_used),
+            "available": max(0, annual_entitlement - annual_used - annual_pending),
             "by_type": by_type,
         })
     return result

@@ -94,6 +94,15 @@ def _touch_last_activity(db: Session, emp: Employee | Branch) -> None:
     db.commit()
 
 
+def assert_employee_may_sign_in(emp: Employee, disabled_detail: str = "Account is disabled") -> None:
+    """Portal access switched off (is_active) or the employee deactivated in HRMS (status
+    "inactive"): no ESS/HRMS login, and an existing token stops working too."""
+    if not emp.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=disabled_detail)
+    if str(emp.status or "active").strip().lower() != "active":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This employee is inactive, so their sign-in is switched off")
+
+
 def get_current_employee(request: Request, db: Session = Depends(get_db)) -> Employee:
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
@@ -104,8 +113,7 @@ def get_current_employee(request: Request, db: Session = Depends(get_db)) -> Emp
     emp = db.query(Employee).filter(Employee.id == emp_id).first()
     if not emp:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Employee not found")
-    if not emp.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+    assert_employee_may_sign_in(emp)
     expires_at = db.query(Company.subscription_expires_at).filter(Company.id == emp.company_id).scalar()
     assert_company_active(expires_at)
     _touch_last_activity(db, emp)
@@ -283,8 +291,7 @@ def _principal_from_employee_token(token: str, db: Session) -> Principal | None:
     emp = db.query(Employee).filter(Employee.id == emp_id).first()
     if not emp:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Employee not found")
-    if not emp.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+    assert_employee_may_sign_in(emp)
     # Employee has no `company` relationship (just company_id) — a minimal
     # scalar query, same pattern require_module() already uses for its
     # employee-path fallback.

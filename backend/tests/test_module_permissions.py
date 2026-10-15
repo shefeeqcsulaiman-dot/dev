@@ -134,7 +134,8 @@ def test_disabled_module_blocks_appdata_collection_save(client, db):
 
 def test_ess_login_blocked_when_ess_module_disabled(client, db):
     company_id, _, sa_headers = _make_restricted_company(client, db, "ess-block", ["sales", "hrms"])
-    emp = Employee(company_id=company_id, employee_no="ESS-BLOCK-001", full_name="ESS Block Test")
+    emp = Employee(company_id=company_id, employee_no="ESS-BLOCK-001", full_name="ESS Block Test",
+                   password_hash=hash_password("ESS-BLOCK-001"))
     db.add(emp)
     db.commit()
 
