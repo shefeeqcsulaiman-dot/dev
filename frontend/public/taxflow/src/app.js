@@ -969,6 +969,196 @@ function saveEmployee(){
   audit(isEdit?'Updated employee':'Created employee',employee.id,'Saved');
 }
 
+// ── Employee Directory > Import: many employees from a CSV / Excel file ──────
+// Rows are parsed in the browser and shown as a preview; Import sends only the new
+// ones through the normal employees bulk-save with skip_existing, so an Employee ID
+// that's already saved (here or by someone else meanwhile) is never overwritten.
+let _empImportRows=[];
+const _EMP_IMPORT_COLUMNS={
+  id:['userid','employeeid','employeeno','empid','empno','staffid','staffno','id','no','code','employeecode'],
+  name:['name','fullname','employeename','employee','staffname'],
+  department:['department','dept'],
+  designation:['designation','position','jobtitle','title'],
+  branch:['branch','location','site'],
+  email:['email','emailaddress'],
+  mobile:['mobile','phone','mobileno','phoneno','contact'],
+  join_date:['joindate','joiningdate','dateofjoining','doj','startdate'],
+  nationality:['nationality'],
+};
+
+function _empImportKey(h){return String(h||'').toLowerCase().replace(/[^a-z0-9]/g,'');}
+
+// RFC-4180-style CSV: quoted fields, "" escapes, commas and newlines inside quotes.
+// A file with no commas in its first line but semicolons there is read as ;-separated.
+function _parseCsv(text){
+  text=String(text||'').replace(/^﻿/,'');
+  const firstLine=text.split(/\r?\n/,1)[0]||'';
+  const sep=!firstLine.includes(',')&&firstLine.includes(';')?';':',';
+  const rows=[];let row=[],field='',q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){
+      if(c==='"'){if(text[i+1]==='"'){field+='"';i++;}else q=false;}
+      else field+=c;
+    }else if(c==='"')q=true;
+    else if(c===sep){row.push(field);field='';}
+    else if(c==='\n'||c==='\r'){
+      if(c==='\r'&&text[i+1]==='\n')i++;
+      row.push(field);rows.push(row);row=[];field='';
+    }else field+=c;
+  }
+  if(field!==''||row.length){row.push(field);rows.push(row);}
+  return rows.filter(r=>r.some(v=>String(v).trim()!==''));
+}
+
+function _empImportFromTable(table){
+  if(!table.length)return {rows:[],error:'The file is empty.'};
+  const header=table[0].map(_empImportKey);
+  const col={};
+  for(const [field,names] of Object.entries(_EMP_IMPORT_COLUMNS)){
+    const idx=names.map(n=>header.indexOf(n)).find(i=>i>=0);
+    if(idx!==undefined)col[field]=idx;
+  }
+  if(col.name===undefined)return {rows:[],error:'No name column found. The first row must be headings, for example "user_id,name".'};
+  const cell=(r,f)=>col[f]===undefined?'':String(r[col[f]]??'').trim();
+  return {rows:table.slice(1).map(r=>{
+    const out={};
+    for(const f of Object.keys(_EMP_IMPORT_COLUMNS))out[f]=cell(r,f);
+    return out;
+  }).filter(r=>r.name||r.id)};
+}
+
+function _empImportExistingIds(){
+  return new Set([...document.querySelectorAll('#employee-tbody tr')].map(tr=>{
+    try{return String(JSON.parse(tr.dataset.employee||'{}').id||'').trim().toLowerCase();}catch{return '';}
+  }).filter(Boolean));
+}
+
+function openEmpImport(){
+  if(typeof hrmsCan==='function'&&!hrmsCan('employees:edit')){toast('Your role cannot add employees','warn');return;}
+  _empImportRows=[];
+  const fileEl=document.getElementById('emp-import-file');if(fileEl)fileEl.value='';
+  const fill=(id,names,blank)=>{
+    const sel=document.getElementById(id);if(!sel)return;
+    sel.innerHTML=`<option value="">${blank}</option>`+names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  };
+  fill('emp-import-dept',_getDeptNames(),'— Select Department —');
+  fill('emp-import-branch',_getBranchNames(),'— No branch —');
+  empImportRenderPreview();
+  showM('m-emp-import');
+}
+
+async function empImportReadFile(file){
+  _empImportRows=[];
+  if(!file){empImportRenderPreview();return;}
+  const summary=document.getElementById('emp-import-summary');
+  try{
+    let table;
+    if(/\.(xlsx|xls)$/i.test(file.name)){
+      if(summary)summary.textContent='Reading Excel file…';
+      await _loadSheetJs();
+      const wb=window.XLSX.read(await file.arrayBuffer(),{type:'array'});
+      table=window.XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:''});
+    }else if(/\.pdf$/i.test(file.name)){
+      throw new Error('PDF lists cannot be read yet. Save the list as CSV or Excel and import that.');
+    }else{
+      table=_parseCsv(await file.text());
+    }
+    const parsed=_empImportFromTable(table);
+    if(parsed.error)throw new Error(parsed.error);
+    _empImportRows=parsed.rows;
+  }catch(e){
+    _empImportRows=[];
+    empImportRenderPreview();
+    if(summary)summary.innerHTML=`<span style="color:var(--red)">${escapeHtml(e.message||'Could not read this file')}</span>`;
+    return;
+  }
+  empImportRenderPreview();
+}
+
+// Each row's final record and whether it will be imported.
+function _empImportPlan(){
+  const dept=document.getElementById('emp-import-dept')?.value||'';
+  const branch=document.getElementById('emp-import-branch')?.value||'';
+  const existing=_empImportExistingIds();
+  const seen=new Set();
+  let nextNo=Number((nextEmployeeId().match(/\d+/)||['1'])[0]);
+  return _empImportRows.map(r=>{
+    const id=r.id||`EMP-${String(nextNo++).padStart(3,'0')}`;
+    const key=id.toLowerCase();
+    const department=r.department||dept;
+    const branchName=r.branch||branch;
+    let status='new';
+    if(!r.name)status='no-name';
+    else if(existing.has(key))status='exists';
+    else if(seen.has(key))status='duplicate';
+    else if(!department)status='no-dept';
+    seen.add(key);
+    return {status,record:{
+      id,name:r.name,department,designation:r.designation||'Employee',
+      branch:branchName,
+      branch_id:(typeof _branchList!=='undefined'?_branchList.find(b=>b.name===branchName):null)?.id||'',
+      email:r.email,mobile:r.mobile,join_date:r.join_date,nationality:r.nationality,
+      contract:'Full-Time',status:'Active',salary:0,created_at:new Date().toISOString(),
+    }};
+  });
+}
+
+const _EMP_IMPORT_STATUS={
+  new:['b-g','New'],exists:['b-gray','Already exists, skipped'],duplicate:['b-a','Repeated in file, skipped'],
+  'no-name':['b-r','No name, skipped'],'no-dept':['b-a','Needs a department'],
+};
+
+function empImportRenderPreview(){
+  const tbody=document.getElementById('emp-import-tbody');
+  const summary=document.getElementById('emp-import-summary');
+  const btn=document.getElementById('emp-import-btn');
+  if(!tbody)return;
+  if(!_empImportRows.length){
+    tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Choose a file to see a preview.</td></tr>';
+    if(summary)summary.textContent='';
+    if(btn){btn.disabled=true;btn.textContent='Import';}
+    return;
+  }
+  const plan=_empImportPlan();
+  tbody.innerHTML=plan.map(({status,record})=>{
+    const [cls,label]=_EMP_IMPORT_STATUS[status];
+    return `<tr><td class="mono">${escapeHtml(record.id)}</td><td>${escapeHtml(record.name||'—')}</td><td>${escapeHtml(record.department||'—')}</td><td>${escapeHtml(record.branch||'—')}</td><td><span class="b ${cls}">${label}</span></td></tr>`;
+  }).join('');
+  const count=s=>plan.filter(p=>p.status===s).length;
+  const ready=count('new'),needDept=count('no-dept');
+  const skipped=plan.length-ready-needDept;
+  if(summary)summary.innerHTML=`<b>${plan.length}</b> rows · <b style="color:var(--green)">${ready}</b> ready to import`+
+    (skipped?` · ${skipped} skipped`:'')+(needDept?` · <span style="color:var(--amber)">${needDept} need a department — pick one above</span>`:'');
+  if(btn){btn.disabled=!ready||needDept>0;btn.textContent=ready?`Import ${ready} employee${ready===1?'':'s'}`:'Import';}
+}
+
+async function empImportSave(){
+  const records=_empImportPlan().filter(p=>p.status==='new').map(p=>p.record);
+  if(!records.length)return;
+  const btn=document.getElementById('emp-import-btn');
+  if(btn){btn.disabled=true;btn.textContent='Importing…';}
+  let created=0,skipped=0;
+  const skippedIds=new Set();
+  try{
+    for(let i=0;i<records.length;i+=200){
+      const res=await apiRequest('bulk-save',{collection:'employees',records:records.slice(i,i+200),skip_existing:true});
+      created+=res?.created||0;
+      skipped+=res?.skipped||0;
+      (res?.skipped_keys||[]).forEach(k=>skippedIds.add(String(k)));
+    }
+  }catch(e){
+    toast(`Import stopped: ${e.serverDetail||e.message||'could not save'}. ${created} employee${created===1?' was':'s were'} added before it stopped.`,'err',10000);
+    if(btn){btn.disabled=false;btn.textContent='Import';}
+    return;
+  }
+  records.filter(r=>!skippedIds.has(String(r.id))).forEach(r=>{renderEmployeeRecord(r);renderPayrollEmployeeRecord(r);});
+  if(typeof applyEmployeeInactiveFilter==='function')applyEmployeeInactiveFilter();
+  closeM('m-emp-import');
+  toast(`${created} employee${created===1?'':'s'} imported`+(skipped?` · ${skipped} already existed and were left unchanged`:''),'ok',8000);
+  audit('Imported employees',`${created} employees`,'Saved');
+}
+
 // Numeric-aware sort key for an employee id: pulls out the first run of
 // digits so "52" and "EMP-012" both sort on their number (52, 12) rather
 // than as plain strings (which would put "EMP-012" before "52" — and "10"
@@ -25543,6 +25733,14 @@ function downloadHrAttendanceReportCsv(){
   setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
 
+// Dashboard Quick Actions > Late Coming Report: Reports & Analytics, on its Late Coming tab.
+function openHrLateReport(){
+  go('hrms-reports');
+  const tab=[...document.querySelectorAll('#page-hrms-reports .tab')].find(t=>(t.getAttribute('onclick')||'').includes("'hrr-late'"));
+  if(!tab||!document.getElementById('page-hrms-reports')?.classList.contains('on'))return;
+  stab(tab,'hrr-late');
+  loadHrLateReport();
+}
 let _hrLateReportCache=null;
 let _hrLateSort={key:null,dir:-1};
 
