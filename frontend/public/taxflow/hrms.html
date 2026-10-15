@@ -2291,7 +2291,6 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
         <div class="rs-workflow">
           <span class="b b-gray" id="rota-weekly-status">Draft</span>
           <button class="btn btn-g btn-sm" onclick="copyPreviousRota()">Copy Previous Week</button>
-          <button class="btn btn-g btn-sm" onclick="autoGenerateRota()">Auto Fill All Staff</button>
           <button class="btn btn-g btn-sm" onclick="saveRotaDraft()">Save Draft</button>
           <details class="rs-repeat">
             <summary class="btn btn-g btn-sm">Repeat...</summary>
@@ -2339,7 +2338,6 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
           <div class="rs-legend-title">Shift Legend</div>
           <div class="rs-legend" id="rota-code-row"></div>
           <div class="rs-bulk">
-            <button class="btn btn-g btn-sm" onclick="autoGenerateRota()">Bulk Assign</button>
             <button class="btn btn-g btn-sm" onclick="toast('Employee notifications queued','ok')">Notify Employees</button>
           </div>
         </div>
@@ -2384,7 +2382,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
 
       <div class="rs-month-foot">
         <span class="rs-month-count" id="rota-month-count"></span>
-        <div class="flx" style="gap:8px;flex-wrap:wrap"><button class="btn btn-g btn-sm" onclick="autoGenerateMonthlyRota()">Bulk Assign</button><button class="btn btn-g btn-sm" onclick="toast('Employees notified','ok')">Notify Employees</button></div>
+        <div class="flx" style="gap:8px;flex-wrap:wrap"><button class="btn btn-g btn-sm" onclick="toast('Employees notified','ok')">Notify Employees</button></div>
         <div class="rs-pager" id="rota-month-pager"></div>
       </div>
     </div>
@@ -2402,7 +2400,6 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
         <div class="fg"><label class="fl">Supervisor</label><input class="fi" id="rota-dept-supervisor" value="HR Manager"></div>
       </div>
       <div class="flx" style="gap:8px;flex-wrap:wrap">
-        <button class="btn btn-g btn-sm" onclick="autoGenerateRota()">Auto Fill Gaps</button>
         <button class="btn btn-g btn-sm" onclick="saveRotaDraft()">Save Draft</button>
         <button class="btn btn-warn btn-sm" onclick="submitRotaApproval()">Submit Approval</button>
         <button class="btn btn-p btn-sm" onclick="publishRota()">Publish</button>
