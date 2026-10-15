@@ -1,7 +1,7 @@
 """Read-only load test of the live site's PUBLIC endpoints: /health (one DB query + a Redis
 ping) and / (the login page). No logins, no writes, no test data.
 
-    python load-tests/live/live_public_load.py https://e4cs.com 25,50,100,150,200,300 30
+    python load-tests/live/live_public_load.py https://app.etaxflow.com 25,50,100,150,200,300 30
 
 Each simulated user makes about one request a second. Stops when 95% of answers take over
 3 s or more than 2% fail. Run it from a machine with a fast connection (the GitHub Actions

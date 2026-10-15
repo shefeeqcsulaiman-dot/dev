@@ -2,7 +2,7 @@
 
 Everything the code needs is already deployed with `main`; each step below only switches on
 something in the DigitalOcean (DO) dashboard (https://cloud.digitalocean.com). Do them in
-this order, one at a time. After each one, open https://e4cs.com/health — it must keep
+this order, one at a time. After each one, open https://app.etaxflow.com/health — it must keep
 showing `"status":"ok"` and `"db":"ok"`.
 
 **Where env vars go:** Apps → (your app) → **Settings** → **App-Level Environment Variables**
@@ -120,7 +120,7 @@ the deploy's health check.
 **Postponed 2026-10-09** until there are regular customers (the code is ready; it only needs
 `SENTRY_DSN`; `/health` shows `"sentry":"on"/"off"`, and Super Admin → System Health has a
 *Send test error to Sentry* button). Meanwhile: a free uptime monitor (e.g. UptimeRobot) on
-`https://e4cs.com/health` with keyword `"db":"ok"`, so an outage still emails you.
+`https://app.etaxflow.com/health` with keyword `"db":"ok"`, so an outage still emails you.
 
 1. Sign up at https://sentry.io (free plan) → **Create project** → platform **FastAPI** →
    name `etaxflow-api` → Create.
@@ -148,12 +148,13 @@ taking load off the main database.
 4. Check: dashboard and summary load as before; Super Admin → System Health → *Slowest
    Endpoints* still lists the report endpoints with normal times.
 
-## 6. Optional: www.e4cs.com
+## 6. Domain names
 
-1. Apps → your app → **Settings** → **Domains** → **Add Domain** → `www.e4cs.com` →
-   "You manage your domain in DigitalOcean" → Add.
-2. Wait for the certificate (status *Active*, ~5–15 min), then open https://www.e4cs.com.
-   `app.e4cs.com` can be dropped; `e4cs.com` is the main address.
+`app.etaxflow.com` is the main address (since 2026-10-15; before that, `e4cs.com`). To add
+another name: Apps → your app → **Settings** → **Domains** → **Add Domain** → the name →
+"You manage your domain in DigitalOcean" → Add, then wait for the certificate (status
+*Active*, ~5–15 min) and open `https://<name>/health`. Removing a name from this list also
+deletes its DNS records, so that name stops working at once.
 
 ## After all of the above
 

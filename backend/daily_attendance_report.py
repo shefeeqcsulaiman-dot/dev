@@ -61,7 +61,7 @@ MIN_GAP_MINUTES = 5      # ignore duplicate/accidental double-taps within this m
 
 # --- TaxFlow ADMS push settings ---
 PUSH_TO_ETAXFLOW = False                       # set True once ETAXFLOW_DEVICE_KEY is filled in
-ETAXFLOW_URL = "https://e4cs.com/api/v1/adms"
+ETAXFLOW_URL = "https://app.etaxflow.com/api/v1/adms"
 ETAXFLOW_DEVICE_KEY = "YOUR_DEVICE_KEY"        # <-- paste your real device key here
 PUSHED_LOG_CSV = os.path.join(r"C:\attendance_exports", "pushed_to_etaxflow.csv")
 PUSH_DAYS_BACK = 2                             # re-check today plus this many previous days on every run
