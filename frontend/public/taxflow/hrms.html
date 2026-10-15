@@ -10,10 +10,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=01e09bb7c7" as="style">
-<link rel="preload" href="src/app.js?v=d34325d96d" as="script">
+<link rel="preload" href="src/styles.css?v=701c8cb647" as="style">
+<link rel="preload" href="src/app.js?v=ca6f3106aa" as="script">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=01e09bb7c7">
+<link rel="stylesheet" href="src/styles.css?v=701c8cb647">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -2354,16 +2354,16 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
         <div class="rs-head-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="26" height="26" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg></div>
         <div class="rs-head-text">
           <h2>Monthly Schedule <span class="b b-gray" id="rota-monthly-status">Draft</span></h2>
-          <p>Saved assignments for the selected month, one week at a time. Click a day to edit it.</p>
+          <p>The whole month for every staff member. Hover a day to see times; click it to edit.</p>
         </div>
         <div class="rs-head-actions">
           <div class="rs-week">
-            <button class="rs-week-step" type="button" onclick="shiftRotaMonthWeek(-1)" title="Previous week" aria-label="Previous week">&#8249;</button>
+            <button class="rs-week-step" type="button" onclick="shiftRotaMonth(-1)" title="Previous month" aria-label="Previous month">&#8249;</button>
             <label class="rs-week-label" title="Choose a month">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg><span id="rota-month-week-label">This month</span>
               <input class="rs-week-input" id="rota-month-value" type="month" value="2026-05" aria-label="Month" onclick="try{this.showPicker()}catch(e){}" onchange="setRotaMonth(this.value)">
             </label>
-            <button class="rs-week-step" type="button" onclick="shiftRotaMonthWeek(1)" title="Next week" aria-label="Next week">&#8250;</button>
+            <button class="rs-week-step" type="button" onclick="shiftRotaMonth(1)" title="Next month" aria-label="Next month">&#8250;</button>
           </div>
           <button class="rs-btn rs-btn-pdf" type="button" onclick="downloadRotaMonthWeekPdf()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8.5 18v-6h2a1.5 1.5 0 0 1 0 3h-2"/></svg><span>Export PDF</span></button>
           <button class="rs-btn" type="button" onclick="renderRotaBoards()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg><span>Refresh</span></button>
@@ -3262,7 +3262,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
 window.HRMS_STANDALONE=true;
 </script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=d34325d96d" defer></script>
+<script src="src/app.js?v=ca6f3106aa" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
