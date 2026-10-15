@@ -1288,6 +1288,50 @@ def clear_client_errors(
     return {"ok": True, "deleted": deleted}
 
 
+@router.get("/server-errors")
+def list_server_errors(
+    limit: int = 500,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_superadmin),
+):
+    """Recent 500s (bugs) and 503s (overloaded) from app/server_errors.py, newest first,
+    with the person and company behind each request filled in by name."""
+    from app import server_errors
+    from app.models import Branch, Employee
+
+    entries, source = server_errors.recent(max(1, min(limit, 1000)))
+    user_ids = {e["subject"] for e in entries if e.get("subject") and ":" not in e["subject"]}
+    emp_ids = {e["subject"][4:] for e in entries if (e.get("subject") or "").startswith("emp:")}
+    branch_ids = {e["subject"][7:] for e in entries if (e.get("subject") or "").startswith("branch:")}
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    emps = {e.id: e for e in db.query(Employee).filter(Employee.id.in_(emp_ids)).all()} if emp_ids else {}
+    branches = {b.id: b for b in db.query(Branch).filter(Branch.id.in_(branch_ids)).all()} if branch_ids else {}
+    company_ids = ({u.company_id for u in users.values()} | {e.company_id for e in emps.values()}
+                   | {b.company_id for b in branches.values()}) - {None}
+    companies = {c.id: c.name for c in db.query(Company).filter(Company.id.in_(company_ids)).all()} if company_ids else {}
+    out = []
+    for e in entries:
+        sub = e.get("subject") or ""
+        who, company_id = None, None
+        if sub.startswith("emp:") and sub[4:] in emps:
+            emp = emps[sub[4:]]
+            who, company_id = f"{emp.full_name} (employee {emp.employee_no})", emp.company_id
+        elif sub.startswith("branch:") and sub[7:] in branches:
+            br = branches[sub[7:]]
+            who, company_id = f"Branch login: {br.name}", br.company_id
+        elif sub in users:
+            u = users[sub]
+            who, company_id = f"{u.full_name or u.email} <{u.email}>", u.company_id
+        out.append({**e, "who": who, "company_name": companies.get(company_id)})
+    return {"source": source, "total": len(out), "errors": out}
+
+
+@router.delete("/server-errors")
+def clear_server_errors(_: User = Depends(_require_superadmin)):
+    from app import server_errors
+    return {"ok": True, "deleted": server_errors.clear()}
+
+
 # ── Audit log aggregation ─────────────────────────────────────────────────────
 
 @router.get("/audit-logs")

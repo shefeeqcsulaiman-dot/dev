@@ -273,7 +273,7 @@
     </div>
     <div class="sb-item" data-page="errors" onclick="saGo('errors',this)">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5l7 12.5H1L8 1.5z"/><path d="M8 6.5v3M8 11.5v.1"/></svg>
-      Client Errors
+      Errors
       <span class="sb-badge" id="sb-badge-errors" style="display:none"></span>
     </div>
     <div class="sb-item" data-page="audit" onclick="saGo('audit',this)">
@@ -344,6 +344,10 @@
     <div class="stat-card hero">
       <div class="stat-label"><span class="stat-icon" style="background:var(--red-soft);color:var(--red)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5l7 12.5H1L8 1.5z"/><path d="M8 6.5v3M8 11.5v.1"/></svg></span>JS Errors (7d)</div>
       <div class="stat-val" id="sa-stat-errors" style="color:var(--red)">—</div>
+    </div>
+    <div class="stat-card hero" style="cursor:pointer" onclick="saGo('errors',document.querySelector('.sb-item[data-page=errors]'))">
+      <div class="stat-label"><span class="stat-icon" style="background:var(--red-soft);color:var(--red)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2.5" width="12" height="4" rx="1"/><rect x="2" y="9.5" width="12" height="4" rx="1"/><path d="M4.5 4.5h.01M4.5 11.5h.01"/></svg></span>Server Errors (24h)</div>
+      <div class="stat-val" id="sa-stat-server-errors" style="color:var(--red)">—</div>
     </div>
   </div>
 
@@ -549,6 +553,26 @@
   </div><!-- /page-health -->
 
   <div class="page-section" id="page-errors">
+  <!-- Server Error Report: 500s (bugs) and 503s (overloaded), from app/server_errors.py -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-hd">
+      <div>
+        <div class="card-title">Server Errors</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">Requests the server failed: <b>Error</b> = a bug (500), <b>Overloaded</b> = no free database connection (503). Newest 1,000 kept.</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="sa-serr-hours" onchange="renderServerErrors()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text)">
+          <option value="1">Last hour</option>
+          <option value="24" selected>Last 24h</option>
+          <option value="168">Last 7 days</option>
+          <option value="0">All kept</option>
+        </select>
+        <button class="btn btn-g btn-sm" onclick="loadServerErrors()">Refresh</button>
+        <button class="btn btn-sm" style="background:var(--red-soft);color:var(--red);border:1px solid rgba(220,76,76,.3)" onclick="clearServerErrors()">Clear</button>
+      </div>
+    </div>
+    <div id="sa-serr-wrap"><div class="loading-state">Loading…</div></div>
+  </div>
   <!-- Client Error Report -->
   <div class="card">
     <div class="card-hd">
@@ -972,12 +996,12 @@
   const SA_PAGE_LOADERS={
     analytics: ()=>loadUsageAnalytics(),
     // re-read on open so the list (and its sidebar badge) isn't stale after a long session
-    errors: ()=>loadClientErrors(),
+    errors: ()=>{loadServerErrors();loadClientErrors();},
     trials: ()=>loadTrialRequests(),
     renewals: ()=>loadRenewals(),
     health: ()=>{loadSystemHealth();loadJobHealth();loadImpersonationSessions();startLiveLoadPolling();},
   };
-  const SA_PAGE_TITLES={overview:'Overview',renewals:'Renewals',companies:'Companies',analytics:'Usage Analytics',health:'System Health',errors:'Client Errors',audit:'Audit Log',trials:'Trial Requests'};
+  const SA_PAGE_TITLES={overview:'Overview',renewals:'Renewals',companies:'Companies',analytics:'Usage Analytics',health:'System Health',errors:'Errors',audit:'Audit Log',trials:'Trial Requests'};
 
   function saApplyTheme(mode){
     const dark=mode==='dark';
@@ -2159,6 +2183,73 @@
     }
   }
 
+  // ── Server errors (500 / 503) ─────────────────────────────────
+  let _serverErrors=[],_serverErrorsSource='';
+  async function loadServerErrors(){
+    const wrap=document.getElementById('sa-serr-wrap');
+    if(wrap)wrap.innerHTML='<div class="loading-state"><span class="spinner"></span> Loading…</div>';
+    try{
+      const res=await apiFetch('/superadmin/server-errors?limit=1000');
+      const data=await res.json();
+      _serverErrors=Array.isArray(data.errors)?data.errors:[];
+      _serverErrorsSource=data.source||'';
+      const dayAgo=Date.now()-86400000;
+      const last24=_serverErrors.filter(e=>Date.parse(e.at)>=dayAgo).length;
+      const stat=document.getElementById('sa-stat-server-errors');
+      if(stat)stat.textContent=last24;
+      renderServerErrors();
+    }catch(err){
+      if(wrap)wrap.innerHTML='<div class="loading-state" style="color:var(--red)">Failed to load server errors: '+escHtml(err.message)+'</div>';
+    }
+  }
+  function renderServerErrors(){
+    const wrap=document.getElementById('sa-serr-wrap');
+    if(!wrap)return;
+    const hours=parseInt(document.getElementById('sa-serr-hours')?.value||'24',10);
+    const since=hours?Date.now()-hours*3600000:0;
+    const list=_serverErrors.filter(e=>!since||Date.parse(e.at)>=since);
+    const note=_serverErrorsSource==='memory'?'<div style="font-size:11.5px;color:var(--muted);margin:0 0 8px">Redis is not connected, so this only shows errors from the server instance that answered.</div>':'';
+    if(!list.length){wrap.innerHTML=note+'<div class="loading-state" style="color:var(--green)">No server errors in this period.</div>';return;}
+    const groups=new Map();
+    list.forEach(e=>{
+      const key=[e.kind,e.method,e.path,e.action||'',e.error].join('|');
+      if(!groups.has(key))groups.set(key,{count:0,last:e,first:e,who:new Set(),companies:new Set()});
+      const g=groups.get(key);
+      g.count++;g.first=e;               // list is newest first, so the last one seen is the oldest
+      if(e.who)g.who.add(e.who);
+      if(e.company_name)g.companies.add(e.company_name);
+    });
+    const rows=[...groups.values()].sort((a,b)=>b.count-a.count);
+    let html=note+'<table class="tbl" style="font-size:12px"><thead><tr><th>Count</th><th>Type</th><th>Request</th><th>Error</th><th>Who</th><th>Company</th><th>First / last seen</th></tr></thead><tbody>';
+    rows.forEach(g=>{
+      const e=g.last;
+      const type=e.kind==='overload'?'<span class="b" style="background:var(--amber-soft,#fef3c7);color:#b45309">Overloaded 503</span>':'<span class="b" style="background:var(--red-soft);color:var(--red)">Error 500</span>';
+      const req=`<span class="mono">${escHtml(e.method)} ${escHtml(e.path)}</span>${e.action?` <span style="color:var(--muted)">action=${escHtml(e.action)}</span>`:''}`;
+      const trace=e.trace?`<details style="margin-top:4px"><summary style="cursor:pointer;color:var(--primary);font-size:11px">Trace</summary><div style="font-family:monospace;font-size:11px;white-space:pre-wrap;background:var(--hover);padding:8px;border-radius:4px;margin-top:6px;max-height:220px;overflow:auto">${escHtml(e.trace)}</div></details>`:'';
+      const who=[...g.who];
+      const companies=[...g.companies];
+      html+=`<tr>
+        <td><span style="background:var(--red-soft);color:var(--red);padding:2px 8px;border-radius:12px;font-weight:600">${g.count}</span></td>
+        <td style="white-space:nowrap">${type}</td>
+        <td style="max-width:260px;word-break:break-all">${req}</td>
+        <td style="max-width:320px"><div style="font-weight:500">${escHtml(e.error)}</div><div style="color:var(--muted);word-break:break-word">${escHtml((e.message||'').slice(0,240))}</div>${trace}</td>
+        <td style="max-width:200px">${who.length?escHtml(who[0])+(who.length>1?`<div style="font-size:10.5px;color:var(--muted)">+${who.length-1} more</div>`:''):'<span style="color:var(--muted)">—</span>'}</td>
+        <td style="white-space:nowrap">${companies.length?escHtml(companies.join(', ')):'<span style="color:var(--muted)">—</span>'}</td>
+        <td style="white-space:nowrap;color:var(--muted)">${escHtml(new Date(g.first.at).toLocaleString())}<br>${escHtml(new Date(e.at).toLocaleString())}${e.build?`<div style="font-size:10.5px">build ${escHtml(e.build)}</div>`:''}</td>
+      </tr>`;
+    });
+    wrap.innerHTML=html+'</tbody></table>';
+  }
+  async function clearServerErrors(){
+    if(!confirm('Clear all recorded server errors? This cannot be undone.'))return;
+    try{
+      await apiFetch('/superadmin/server-errors',{method:'DELETE'});
+      _serverErrors=[];
+      const stat=document.getElementById('sa-stat-server-errors');if(stat)stat.textContent='0';
+      renderServerErrors();
+    }catch(err){alert('Failed: '+err.message);}
+  }
+
   async function clearClientErrors(){
     if(!confirm('Clear all captured client errors? This cannot be undone.')) return;
     try{
@@ -2786,6 +2877,7 @@
 
   loadDashboard();
   loadClientErrors();
+  loadServerErrors();
   loadTrialRequests();
 
   // ── Module permissions ────────────────────────────────────────

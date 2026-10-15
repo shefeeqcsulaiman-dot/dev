@@ -225,10 +225,20 @@ def create_app() -> FastAPI:
             # first for both exception types; this only fires when there's
             # truly nothing cached yet.
             logging.getLogger("taxflow").warning("DB overload (%s) on %s %s", type(exc).__name__, request.method, request.url.path)
+            _record_server_error(request, exc, 503)
             return JSONResponse(status_code=503, content={"detail": "Service temporarily busy, please retry."}, headers={"Retry-After": "3"})
         logging.getLogger("taxflow").error("Unhandled error on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
         monitoring.capture_exception(exc)
+        _record_server_error(request, exc, 500)
         return JSONResponse(status_code=500, content={"detail": "An internal error occurred."})
+
+    def _record_server_error(request: Request, exc: Exception, status_code: int) -> None:
+        """Super Admin > Errors (app/server_errors.py)."""
+        from app import server_errors
+        server_errors.record(
+            status=status_code, method=request.method, path=request.url.path, query=request.url.query,
+            exc=exc, authorization=request.headers.get("Authorization"), build=globals().get("_LIVE_BUILD"),
+        )
 
     def _run_startup_tasks(log) -> None:
         """Migrations, initial data and idempotent backfills; startup() runs this under
@@ -312,7 +322,8 @@ def create_app() -> FastAPI:
 
     # Bumped with each deploy-relevant change, so /health shows which code is live (the image
     # has no git metadata). Format: date.sequence.
-    BUILD = "2026-10-15.7"
+    BUILD = "2026-10-15.8"
+    globals()["_LIVE_BUILD"] = BUILD
 
     def monitoring_sentry_on() -> bool:
         from app import monitoring as _monitoring

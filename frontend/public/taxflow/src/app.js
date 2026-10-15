@@ -1168,6 +1168,7 @@ async function empImportSave(){
   const skippedIds=new Set();
   try{
     for(let i=0;i<records.length;i+=200){
+      if(records.length>200)setSavingProgress('employees',i,records.length);
       const res=await apiRequest('bulk-save',{collection:'employees',records:records.slice(i,i+200),skip_existing:true});
       created+=res?.created||0;
       skipped+=res?.skipped||0;
@@ -5337,14 +5338,175 @@ function toggleNightMode(enabled){
   toast(enabled?'Night mode enabled':'Day mode enabled','info');
 }
 
+// ── Write gate: every app-data write goes through here ─────────────────────
+// A screen that saved in a loop used to fire hundreds of requests at once (Staff Schedule
+// Auto Fill: 476; a 1-year Repeat: ~25,000) and fill every server connection, so everyone
+// else's saves failed with "the server had a problem". Now:
+//  - at most 6 writes per tab are in flight; the rest wait their turn (a save the user is
+//    waiting on goes to the front of the line);
+//  - a write the server answers "busy" (503/429), or that times out after 60 s, is retried
+//    up to 3 times (Retry-After, else 2/4/8 s with jitter) before it counts as failed;
+//  - a "Saving… please wait" bar appears when saving takes longer than a second, and
+//    leaving the page while writes are pending asks first.
+// Only plain writes are gated/retried; AI reading, imports and every read go straight through.
+const _GATED_WRITE_ACTIONS=new Set(['save','bulk-save','delete','bulk-delete']);
+const _WRITE_MAX_IN_FLIGHT=6;
+const _WRITE_TIMEOUT_MS=60000;
+const _WRITE_MAX_RETRIES=3;
+const _writeGate={active:0,queue:[],retrying:0,burstTotal:0,burstDone:0,progress:null};
+
+function _writeGateAcquire(priority){
+  _writeGate.burstTotal++;
+  let granted;
+  if(_writeGate.active<_WRITE_MAX_IN_FLIGHT){_writeGate.active++;granted=Promise.resolve();}
+  else granted=new Promise(resolve=>{if(priority)_writeGate.queue.unshift(resolve);else _writeGate.queue.push(resolve);});
+  _savingBarUpdate();   // after counting this write, so the bar sees it pending
+  return granted;
+}
+function _writeGateRelease(){
+  _writeGate.burstDone++;
+  const next=_writeGate.queue.shift();
+  if(next)next();              // hand the slot straight to the next waiting write
+  else _writeGate.active--;
+  if(!_writeGate.active&&!_writeGate.queue.length){
+    _writeGate.burstTotal=0;_writeGate.burstDone=0;_writeGate.progress=null;
+  }
+  _savingBarUpdate();
+}
+function _writesPending(){return _writeGate.active+_writeGate.queue.length;}
+
+// Bulk jobs that know their size report it: setSavingProgress('shifts',200,476).
+function setSavingProgress(label,done,total){
+  _writeGate.progress=total?{label,done,total}:null;
+  _savingBarUpdate();
+}
+
+// The bar measures the whole busy period, not each request: a job that saves batch after
+// batch (Repeat: ~120 batches) is idle for a moment between batches, and restarting the
+// 1-second delay on every batch kept the bar hidden for the entire job.
+let _savingBarShowTimer=null,_savingBarHideTimer=null,_savingBusySince=0;
+function _savingBarEl(){
+  let el=document.getElementById('saving-bar');
+  if(!el){
+    el=document.createElement('div');
+    el.id='saving-bar';
+    el.setAttribute('role','status');
+    el.setAttribute('aria-live','polite');
+    el.style.cssText='position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9999;display:none;'
+      +'align-items:center;gap:10px;padding:10px 18px;border-radius:999px;font-size:13px;font-weight:500;'
+      +'background:var(--surface,#fff);color:var(--text,#1f2937);border:1px solid var(--border,#e5e7eb);'
+      +'box-shadow:0 6px 24px rgba(0,0,0,.14);max-width:calc(100vw - 32px)';
+    el.innerHTML='<span class="spinner" style="width:14px;height:14px;flex:0 0 auto;border:2px solid var(--border,#e5e7eb);border-top-color:var(--accent,#2563eb);border-radius:50%;display:inline-block;animation:savingBarSpin .8s linear infinite"></span><span class="saving-bar-text"></span>';
+    if(!document.getElementById('saving-bar-style')){
+      const st=document.createElement('style');
+      st.id='saving-bar-style';
+      st.textContent='@keyframes savingBarSpin{to{transform:rotate(360deg)}}';
+      document.head.appendChild(st);
+    }
+    document.body.appendChild(el);
+  }
+  return el;
+}
+function _savingBarText(){
+  const p=_writeGate.progress;
+  const count=p?`Saving ${Math.min(p.done,p.total)} of ${p.total} ${p.label}`
+    :_writeGate.burstTotal>1?`Saving ${Math.min(_writeGate.burstDone+1,_writeGate.burstTotal)} of ${_writeGate.burstTotal}`
+    :'Saving';
+  if(_writeGate.retrying)return `${count} — server busy, retrying, please wait…`;
+  return `${count}… please wait`;
+}
+function _savingBarUpdate(){
+  if(typeof document==='undefined'||!document.body)return;
+  const el=document.getElementById('saving-bar');
+  if(!_writesPending()){
+    // Hide only once saving has stayed stopped for a moment (the next batch may be about to start).
+    if(!_savingBarHideTimer)_savingBarHideTimer=setTimeout(()=>{
+      _savingBarHideTimer=null;
+      if(_writesPending())return;
+      clearTimeout(_savingBarShowTimer);_savingBarShowTimer=null;_savingBusySince=0;
+      const bar=document.getElementById('saving-bar');
+      if(bar)bar.style.display='none';
+    },600);
+    return;
+  }
+  clearTimeout(_savingBarHideTimer);_savingBarHideTimer=null;
+  const show=()=>{
+    const bar=_savingBarEl();
+    bar.querySelector('.saving-bar-text').textContent=_savingBarText();
+    bar.style.display='flex';
+  };
+  if(el&&el.style.display==='flex'){show();return;}   // already visible: just refresh the text
+  if(!_savingBusySince)_savingBusySince=Date.now();
+  if(!_savingBarShowTimer){
+    _savingBarShowTimer=setTimeout(()=>{_savingBarShowTimer=null;if(_savingBusySince)show();},
+      Math.max(0,1000-(Date.now()-_savingBusySince)));
+  }
+}
+
+window.addEventListener('beforeunload',e=>{
+  if(_writesPending()){e.preventDefault();e.returnValue='Changes are still being saved. Leave anyway?';return e.returnValue;}
+});
+
+function _writeRetryDelay(err,attempt){
+  const retryAfter=Number(err?.retryAfter);
+  const base=retryAfter>0?retryAfter*1000:2000*Math.pow(2,attempt);   // 2 s, 4 s, 8 s
+  return Math.round(base*(0.5+Math.random()));                        // ±50% so many tabs don't retry in step
+}
+
 async function apiRequest(action,payload,options={}){
+  if(!_GATED_WRITE_ACTIONS.has(action)||options.method==='GET')return _apiRequestOnce(action,payload,options);
+  await _writeGateAcquire(!!options.priority);
+  try{
+    for(let attempt=0;;attempt++){
+      try{
+        return await _apiRequestOnce(action,payload,{...options,timeoutMs:_WRITE_TIMEOUT_MS});
+      }catch(err){
+        const busy=err?.status===503||err?.status===429||err?.timedOut;
+        if(!busy||attempt>=_WRITE_MAX_RETRIES){
+          // A create-only save that already failed once as "busy" may have gone through on that
+          // attempt: don't report it as a plain duplicate.
+          if(attempt>0&&err?.status===409&&payload?.create_only&&!err.conflict){
+            err.serverDetail='This may already have been saved on an earlier attempt while the server was busy — check the list before trying again.';
+            err.message=err.serverDetail;
+          }
+          throw err;
+        }
+        _writeGate.retrying++;_savingBarUpdate();
+        await new Promise(r=>setTimeout(r,_writeRetryDelay(err,attempt)));
+        _writeGate.retrying--;_savingBarUpdate();
+      }
+    }
+  }finally{
+    _writeGateRelease();
+  }
+}
+
+// One request to /app-data, no queueing or retry (apiRequest above adds those for writes).
+// timeoutMs: abort after that long and throw an error with timedOut=true.
+async function _apiRequestOnce(action,payload,options={}){
   await ensureBackendSession();
   const endpoint=APP_CONFIG.apiEndpoint||`${apiBaseUrl()}/app-data`;
   const extraQuery=options.query?Object.entries(options.query).map(([k,v])=>`&${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join(''):'';
-  const response=await authenticatedFetch(`${endpoint}?action=${encodeURIComponent(action)}${extraQuery}`,{
-    method:options.method||'POST',
-    body:options.method==='GET'?undefined:JSON.stringify(payload||{})
-  });
+  const controller=options.timeoutMs&&typeof AbortController!=='undefined'?new AbortController():null;
+  const timer=controller?setTimeout(()=>controller.abort(),options.timeoutMs):null;
+  let response;
+  try{
+    response=await authenticatedFetch(`${endpoint}?action=${encodeURIComponent(action)}${extraQuery}`,{
+      method:options.method||'POST',
+      body:options.method==='GET'?undefined:JSON.stringify(payload||{}),
+      ...(controller?{signal:controller.signal}:{})
+    });
+  }catch(e){
+    if(controller?.signal.aborted){
+      const err=new Error('The server took too long to answer.');
+      err.timedOut=true;err.action=action;
+      err.collection=payload&&typeof payload==='object'?String(payload.collection||''):'';
+      throw err;
+    }
+    throw e;
+  }finally{
+    if(timer)clearTimeout(timer);
+  }
   if(!response.ok){
     // Keep the server's reason (e.g. "Outside your department scope") so screens can show it.
     let detail='';
@@ -5352,6 +5514,9 @@ async function apiRequest(action,payload,options={}){
     const err=new Error(typeof detail==='string'&&detail?detail:'FastAPI app-data endpoint returned '+response.status);
     err.status=response.status;
     err.serverDetail=typeof detail==='string'?detail:'';
+    err.action=action;
+    err.collection=payload&&typeof payload==='object'?String(payload.collection||''):'';
+    err.retryAfter=response.headers.get('Retry-After');
     // Someone else saved this record after it was opened (server edit-conflict check):
     // say so once, clearly, whatever the calling screen does with the error.
     if(response.status===409&&(response.headers.get('X-Edit-Conflict')==='1'||/changed this record/.test(err.serverDetail))){
@@ -5397,6 +5562,12 @@ function notifySaveFailed(err,verb){
     }
   }
   _saveFailedNotice={at:now,count:1,el:null};
+  // One report per burst of failures, so Super Admin > Errors shows what failed and for whom.
+  // Only server-side trouble (5xx, 429) and lost connections -- not validation refusals like "already exists".
+  if(typeof window.reportClientError==='function'&&(offline||!err?.status||err.status>=500||err.status===429)){
+    const what=[err?.action&&`action=${err.action}`,err?.collection&&`collection=${err.collection}`].filter(Boolean).join(' ');
+    window.reportClientError(`${verb==='delete'?'Delete':'Save'} failed (${offline?'no connection':(err?.status||'network error')})${what?` ${what}`:''}: ${err?.serverDetail||err?.message||''}`,'','save-failed');
+  }
   toast(`${verb==='delete'?'Delete failed — this item was not deleted.':'Save failed — your change was not saved.'} ${reason} Please try again.`.replace(/\s+/g,' ').trim(),'err',9000);
   _saveFailedNotice.el=document.getElementById('toasts')?.lastElementChild||null;
 }
@@ -5408,7 +5579,7 @@ function saveServer(collection,record,options={}){
   const body={collection,record};
   if(options.createOnly)body.create_only=true;
   if(options.lenient)body.lenient=true;
-  return apiRequest('save',body).then(res=>{
+  return apiRequest('save',body,{priority:!!options.throwOnError}).then(res=>{
     // Keep this copy's version current, so its next save isn't mistaken for an old copy.
     if(res&&res._v!=null&&record&&typeof record==='object')record._v=res._v;
     return res;
@@ -5452,7 +5623,7 @@ function hrmsCan(perm){
 
 function deleteServer(collection,record,options={}){
   _catalogCache?.[collection]?.clear();
-  return apiRequest('delete',{collection,record}).catch(err=>{
+  return apiRequest('delete',{collection,record},{priority:!!options.throwOnError}).catch(err=>{
     console.warn('Database delete failed:',err);
     if(options.throwOnError)throw err;
     if(!options.silent)notifySaveFailed(err,'delete');
@@ -23410,6 +23581,7 @@ async function saveRotaAssignmentsInBatches(assignments,{label='shifts'}={}){
   let saved=0,failed=0,reason='';
   for(let i=0;i<list.length;i+=200){
     const chunk=list.slice(i,i+200);
+    if(list.length>200)setSavingProgress(label,i,list.length);
     try{
       const res=await apiRequest('bulk-save',{collection:'rotaAssignments',records:chunk});
       saved+=res?.saved??chunk.length;
@@ -30020,6 +30192,7 @@ function mergeBankAndPaymentsModule(){
         :fetch(base+'/api/v1/superadmin/client-errors',{method:'POST',headers,body:JSON.stringify(body)}).catch(()=>{});
     }catch(e){/* never throw inside error handler */}
   }
+  window.reportClientError=_sendError;
   window.addEventListener('error',function(e){
     _sendError(e.message||'Script error',e.error&&e.error.stack,'window.onerror');
   });
