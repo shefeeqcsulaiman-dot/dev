@@ -182,3 +182,12 @@ def test_sqlite_database_blocked_in_production():
     finally:
         (settings.app_env, settings.database_url, settings.secret_key, settings.admin_password,
          settings.superadmin_password, settings.cors_origins) = saved
+
+
+def test_admin_passwords_ignore_spaces_at_either_end():
+    """A space copied in at either end of SUPERADMIN_PASSWORD / ADMIN_PASSWORD in the hosting
+    dashboard must not make the typed password fail."""
+    from app.config import Settings
+
+    s = Settings(superadmin_password=" Strong-pass-1 ", admin_password="Strong-pass-2\n")
+    assert (s.superadmin_password, s.admin_password) == ("Strong-pass-1", "Strong-pass-2")

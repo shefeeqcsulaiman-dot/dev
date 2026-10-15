@@ -105,6 +105,14 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
 
+    @field_validator("admin_password", "superadmin_password", mode="before")
+    @classmethod
+    def strip_password(cls, v: object) -> object:
+        # A space copied in at either end of a password set in the hosting dashboard made
+        # the Super Admin sign-in fail (2026-10-15): the sign-in page sends the password as
+        # typed, so the stored one never matched. Ends are never meant to be spaces.
+        return v.strip() if isinstance(v, str) else v
+
     @field_validator("database_url", "database_direct_url", "database_read_url", mode="before")
     @classmethod
     def normalise_db_url(cls, v: str | None) -> str | None:
