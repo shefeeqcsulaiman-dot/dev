@@ -1213,7 +1213,7 @@ def db_diagnostics(
     pg_version = db.execute(text("SELECT version()")).scalar()
     top_tables = db.execute(text("""
         SELECT relname, pg_size_pretty(pg_total_relation_size(relid)) AS size, n_live_tup
-        FROM pg_catalog.pg_statio_user_tables
+        FROM pg_catalog.pg_stat_user_tables  -- n_live_tup lives here, not in pg_statio_user_tables
         ORDER BY pg_total_relation_size(relid) DESC
         LIMIT 15
     """)).all()
