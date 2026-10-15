@@ -312,7 +312,7 @@ def create_app() -> FastAPI:
 
     # Bumped with each deploy-relevant change, so /health shows which code is live (the image
     # has no git metadata). Format: date.sequence.
-    BUILD = "2026-10-15.5"
+    BUILD = "2026-10-15.6"
 
     def monitoring_sentry_on() -> bool:
         from app import monitoring as _monitoring
