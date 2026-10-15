@@ -312,7 +312,7 @@ def create_app() -> FastAPI:
 
     # Bumped with each deploy-relevant change, so /health shows which code is live (the image
     # has no git metadata). Format: date.sequence.
-    BUILD = "2026-10-15.1"
+    BUILD = "2026-10-15.2"
 
     def monitoring_sentry_on() -> bool:
         from app import monitoring as _monitoring
@@ -1151,8 +1151,12 @@ def seed_initial_data() -> None:
             sa_user.role = "superadmin"
             sa_user.password_hash = hash_password(superadmin_pwd)
             sa_user.company_id = sa_company.id
+        # Sign-in also refuses an inactive account: the Super Admin is always active.
+        sa_user.is_active = True
 
         db.commit()
+        import logging
+        logging.getLogger("taxflow").info("Super admin account ready (password set from SUPERADMIN_PASSWORD)")
     finally:
         db.close()
 
