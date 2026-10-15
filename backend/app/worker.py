@@ -27,11 +27,11 @@ celery_app = Celery("taxflow", broker=broker_url, backend=result_backend)
 celery_app.conf.task_always_eager = settings.celery_task_always_eager
 celery_app.conf.task_eager_propagates = True
 
-# Sweeps every 5 minutes for sessions with no recent GPS ping (client killed,
-# network lost, battery died) — the inline check in hr_access.ping_location
-# only catches employees who keep pinging while walking away. Requires a
-# Celery beat process running app.worker as the schedule source; the API
-# process alone does not execute this on a timer.
+# Sweeps every 5 minutes for GPS sessions left open far too long (a forgotten check-out).
+# ESS is a web page: it can only send location pings while it is open, so a missing ping
+# does NOT mean the employee left -- they usually just closed the app. Leaving the site
+# with the app open is caught by hr_access.ping_location instead. Requires a Celery beat
+# process running app.worker as the schedule source; the API process alone does not run it.
 celery_app.conf.beat_schedule = {
     "hr-auto-checkout-stale-sessions": {
         "task": "hr.auto_checkout_stale_sessions",
@@ -48,26 +48,24 @@ celery_app.conf.beat_schedule = {
     },
 }
 
-_STALE_PING_MINUTES = 10  # grace (5min) + one missed ~2min ping cycle + margin
+_STALE_SESSION_HOURS = 16  # longer than any shift: the check-out was forgotten
 _BACKUP_RETENTION_DAYS = 30
 _BACKUP_KEY_PREFIX = "platform-backups/"
 
 
 @celery_app.task(name="hr.auto_checkout_stale_sessions")
 def auto_checkout_stale_sessions() -> int:
-    """Auto-closes open attendance sessions that have received no GPS ping
-    for _STALE_PING_MINUTES — covers dropped connectivity/killed apps that
-    the per-ping check in hr_access.py never sees.
-
-    One query finds the stale sessions: only open sessions checked in before the
-    cutoff can be stale, and their latest ping comes from a grouped subquery (it
-    used to be one query per open session across every company)."""
+    """Closes GPS sessions with no ping for _STALE_SESSION_HOURS, so a forgotten check-out
+    doesn't block the next day's check-in. It used to close any session silent for 10
+    minutes -- i.e. everyone who checked in and then closed ESS -- who then couldn't check
+    out. No check-out time is invented for attendance: the day keeps its check-in and shows
+    "No check-out", which the employee fixes with a correction request."""
     from sqlalchemy import func, update
 
     db = SessionLocal()
     try:
         now = datetime.now(UTC)
-        cutoff = now - timedelta(minutes=_STALE_PING_MINUTES)
+        cutoff = now - timedelta(hours=_STALE_SESSION_HOURS)
         last_ping = (
             db.query(EmployeeLocationLog.session_id.label("session_id"), func.max(EmployeeLocationLog.created_at).label("at"))
             .join(AttendanceSession, AttendanceSession.id == EmployeeLocationLog.session_id)

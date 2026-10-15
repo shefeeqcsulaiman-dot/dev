@@ -1,4 +1,4 @@
-"""The 5-minute jobs only touch what has something to do: the stale check-out sweep
+"""The 5-minute jobs only touch what has something to do: the forgotten check-out sweep
 finds stale sessions in one query (not one per open session), and the BioTime sync queues
 one task per active BioTime server."""
 from datetime import UTC, datetime, timedelta
@@ -38,17 +38,21 @@ def _ping(db, s, minutes_ago):
 
 
 def test_stale_sessions_close_and_live_ones_stay_open(db):
+    """Only a forgotten check-out (silent 16+ hours) is closed: someone who checked in and
+    then closed ESS stops pinging but is still at work, so their session stays open."""
     from app import worker
 
+    hours = 60
     company, emp = _company_with_employee(db)
-    no_ping_old = _session(db, company, emp, 60)          # no ping, checked in an hour ago -> close
-    old_ping = _session(db, company, emp, 90)             # last ping 30 min ago -> close
-    _ping(db, old_ping, 80)
-    _ping(db, old_ping, 30)
-    recent_ping = _session(db, company, emp, 120)         # pinged 2 min ago -> stays open
+    no_ping_old = _session(db, company, emp, 17 * hours)    # no ping since check-in 17h ago -> close
+    old_ping = _session(db, company, emp, 20 * hours)       # last ping 17h ago -> close
+    _ping(db, old_ping, 19 * hours)
+    _ping(db, old_ping, 17 * hours)
+    app_closed = _session(db, company, emp, 6 * hours)      # checked in 6h ago, app closed since -> stays open
+    recent_ping = _session(db, company, emp, 18 * hours)    # long shift, pinged 2 min ago -> stays open
     _ping(db, recent_ping, 2)
-    just_started = _session(db, company, emp, 3)          # checked in 3 min ago -> stays open
-    closed_already = _session(db, company, emp, 300, status="closed")
+    just_started = _session(db, company, emp, 3)            # checked in 3 min ago -> stays open
+    closed_already = _session(db, company, emp, 30 * hours, status="closed")
     db.commit()
 
     closed = worker.auto_checkout_stale_sessions()
@@ -58,6 +62,7 @@ def test_stale_sessions_close_and_live_ones_stay_open(db):
     got = {s.id: (s.status, s.auto_checkout) for s in db.query(AttendanceSession).filter(AttendanceSession.company_id == company.id)}
     assert got[no_ping_old.id] == ("closed", True)
     assert got[old_ping.id] == ("closed", True)
+    assert got[app_closed.id][0] == "open"
     assert got[recent_ping.id][0] == "open"
     assert got[just_started.id][0] == "open"
     assert got[closed_already.id] == ("closed", False)

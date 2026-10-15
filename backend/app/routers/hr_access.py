@@ -7,13 +7,14 @@ subject prefix and secret key, so an /hr/login token also works against
 """
 
 import json
+import logging
 import math
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 import jwt
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -26,6 +27,7 @@ from app.auth_principal import (
     _role_permission_keys,
     assert_employee_may_sign_in,
     get_current_employee,
+    get_current_principal,
     require_permission,
     require_principal_permission,
 )
@@ -64,6 +66,12 @@ settings = get_settings()
 
 _EMP_PREFIX = "emp:"
 _AUTO_CHECKOUT_GRACE_MINUTES = 5
+# A phone reporting its position as "somewhere within N metres" can't prove it is inside a
+# geofence that is smaller than N. Readings less precise than this (or than the site's
+# own radius, whichever is larger) are refused instead of trusted.
+_MAX_GPS_ACCURACY_METERS = 100
+_FORGOTTEN_CHECKOUT_HOURS = 16  # same as worker._STALE_SESSION_HOURS
+logger = logging.getLogger(__name__)
 
 # ── default RBAC catalog ───────────────────────────────────────────────────
 
@@ -341,20 +349,51 @@ def _scope_attendance_to_branch_only(query, emp: Employee, db: Session, requeste
     )
 
 
-def _nearest_assigned_location(db: Session, employee_id: str) -> tuple[CompanyLocation, bool] | None:
-    """Returns (location, is_primary) for the employee's primary assigned location, or None."""
-    link = (
-        db.query(EmployeeLocation)
+def _assigned_locations(db: Session, employee_id: str) -> list[CompanyLocation]:
+    """Every active work location assigned to this employee, primary first."""
+    rows = (
+        db.query(CompanyLocation)
+        .join(EmployeeLocation, EmployeeLocation.location_id == CompanyLocation.id)
         .filter(EmployeeLocation.employee_id == employee_id)
-        .order_by(EmployeeLocation.is_primary.desc())
-        .first()
+        .order_by(EmployeeLocation.is_primary.desc(), CompanyLocation.location_name)
+        .all()
     )
-    if not link:
-        return None
-    loc = db.get(CompanyLocation, link.location_id)
-    if not loc:
-        return None
-    return loc, link.is_primary
+    return [loc for loc in rows if str(loc.status or "active").strip().lower() == "active"]
+
+
+def _nearest_assigned_location(
+    db: Session, employee_id: str, latitude: float, longitude: float,
+) -> tuple[CompanyLocation, float] | None:
+    """(location, distance in metres) of the employee's assigned site closest to this point,
+    so someone assigned to several clinics can check in at whichever one they're at
+    (this used to check only the primary site). None when no active site is assigned."""
+    best: tuple[CompanyLocation, float] | None = None
+    for loc in _assigned_locations(db, employee_id):
+        distance = _distance_meters(latitude, longitude, float(loc.latitude), float(loc.longitude))
+        if best is None or distance < best[1]:
+            best = (loc, distance)
+    return best
+
+
+def _record_gps_punch(db: Session, emp: Employee, when: datetime, direction: str, location_name: str | None) -> None:
+    """Writes a GPS check-in/out into the same attendance records biometric punches use, so it
+    shows in Today's Attendance, the monthly and late reports, payroll overtime and ESS history.
+    The GPS session is already saved; a failure here is logged, never turned into an error."""
+    from app import attendance_store
+
+    if when.tzinfo is None:  # some databases hand stored times back without a zone; they are UTC
+        when = when.replace(tzinfo=UTC)
+    try:
+        result = attendance_store.upsert_attendance_event(
+            db, company_id=emp.company_id, employee_id=emp.employee_no, punch_time=when, direction=direction,
+            employee_name=emp.full_name, device_id="gps", device_name=f"GPS · {location_name}" if location_name else "GPS",
+            source="gps",
+        )
+        if not result.get("ok"):
+            logger.warning("GPS %s for employee %s not recorded in attendance: %s", direction, emp.id, result.get("error"))
+    except Exception:
+        db.rollback()
+        logger.exception("GPS %s for employee %s not recorded in attendance", direction, emp.id)
 
 
 # ── auth ─────────────────────────────────────────────────────────────────────
@@ -376,11 +415,11 @@ class HrToken(BaseModel):
 
 
 class GeoPoint(BaseModel):
-    latitude: float
-    longitude: float
-    accuracy: float | None = None
-    device: str | None = None
-    battery: int | None = None
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    accuracy: float | None = Field(default=None, ge=0)
+    device: str | None = Field(default=None, max_length=200)
+    battery: int | None = Field(default=None, ge=0, le=100)
 
 
 def _create_employee_token(employee_id: str, role_id: str | None) -> str:
@@ -1077,14 +1116,14 @@ def _location_out(loc: CompanyLocation) -> CompanyLocationOut:
 
 
 @gated_router.get("/company-locations", response_model=list[CompanyLocationOut])
-def list_company_locations(db: Session = Depends(get_db), emp: Employee = Depends(get_current_employee)) -> list[CompanyLocationOut]:
-    query = db.query(CompanyLocation).filter(CompanyLocation.company_id == emp.company_id)
+def list_company_locations(db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> list[CompanyLocationOut]:
+    query = db.query(CompanyLocation).filter(CompanyLocation.company_id == principal.company_id)
     # Same accessible-branches + NULL-stays-visible shape as
     # _scope_attendance_to_branch() — previously this returned every
-    # branch's work locations to any branch-assigned employee.
-    if emp.branch_id:
-        accessible = {row[0] for row in db.query(EmployeeBranchAccess.branch_id).filter(EmployeeBranchAccess.employee_id == emp.id).all()}
-        accessible.add(emp.branch_id)
+    # branch's work locations to any branch-assigned employee. A company
+    # admin's own HRMS login (no branch) sees them all.
+    if principal.branch_id and not principal.is_admin:
+        accessible = set(principal.accessible_branch_ids) | {principal.branch_id}
         query = query.filter((CompanyLocation.branch_id.in_(accessible)) | (CompanyLocation.branch_id.is_(None)))
     rows = query.order_by(CompanyLocation.location_name).all()
     return [_location_out(r) for r in rows]
@@ -1094,10 +1133,10 @@ def list_company_locations(db: Session = Depends(get_db), emp: Employee = Depend
 def create_company_location(
     payload: CompanyLocationRequest,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_permission("hr:manage_locations")),
+    principal: Principal = Depends(require_principal_permission("hr:manage_locations")),
 ) -> CompanyLocationOut:
     loc = CompanyLocation(
-        company_id=emp.company_id, location_name=payload.location_name.strip(), branch_id=payload.branch_id,
+        company_id=principal.company_id, location_name=payload.location_name.strip(), branch_id=payload.branch_id,
         address=payload.address, latitude=Decimal(str(payload.latitude)), longitude=Decimal(str(payload.longitude)),
         allowed_radius_meters=payload.allowed_radius_meters,
     )
@@ -1111,9 +1150,9 @@ def update_company_location(
     location_id: str,
     payload: CompanyLocationRequest,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_permission("hr:manage_locations")),
+    principal: Principal = Depends(require_principal_permission("hr:manage_locations")),
 ) -> CompanyLocationOut:
-    loc = db.query(CompanyLocation).filter(CompanyLocation.id == location_id, CompanyLocation.company_id == emp.company_id).first()
+    loc = db.query(CompanyLocation).filter(CompanyLocation.id == location_id, CompanyLocation.company_id == principal.company_id).first()
     if not loc:
         raise HTTPException(status_code=404, detail="Location not found")
     loc.location_name = payload.location_name.strip()
@@ -1131,9 +1170,9 @@ def update_company_location(
 def delete_company_location(
     location_id: str,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_permission("hr:manage_locations")),
+    principal: Principal = Depends(require_principal_permission("hr:manage_locations")),
 ) -> None:
-    loc = db.query(CompanyLocation).filter(CompanyLocation.id == location_id, CompanyLocation.company_id == emp.company_id).first()
+    loc = db.query(CompanyLocation).filter(CompanyLocation.id == location_id, CompanyLocation.company_id == principal.company_id).first()
     if loc:
         db.delete(loc)
         db.commit()
@@ -1157,16 +1196,16 @@ class EmployeeLocationOut(BaseModel):
 @gated_router.get("/employee-locations", response_model=list[EmployeeLocationOut])
 def list_employee_locations(
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_permission("hr:manage_locations", "hr:manage_employees", "hr:view_all_attendance")),
+    principal: Principal = Depends(require_principal_permission("hr:manage_locations", "hr:manage_employees", "hr:view_all_attendance")),
 ) -> list[EmployeeLocationOut]:
     rows = (
         db.query(EmployeeLocation, Employee, CompanyLocation)
         .join(Employee, Employee.id == EmployeeLocation.employee_id)
         .join(CompanyLocation, CompanyLocation.id == EmployeeLocation.location_id)
-        .filter(Employee.company_id == emp.company_id)
+        .filter(Employee.company_id == principal.company_id)
         .order_by(EmployeeLocation.is_primary.desc())
     )
-    rows = scope_employee_query_by_names(rows, employee_scope(db, emp)).all()  # department-scoped role: only its departments
+    rows = scope_employee_query_by_names(rows, principal.department_scope).all()  # department-scoped role: only its departments
     return [
         EmployeeLocationOut(
             id=link.id, employee_id=e.id, employee_name=e.full_name, location_id=loc.id,
@@ -1180,17 +1219,17 @@ def list_employee_locations(
 def unassign_employee_location(
     link_id: str,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_permission("hr:manage_locations", "hr:manage_employees")),
+    principal: Principal = Depends(require_principal_permission("hr:manage_locations", "hr:manage_employees")),
 ) -> None:
     link = (
         db.query(EmployeeLocation)
         .join(Employee, Employee.id == EmployeeLocation.employee_id)
-        .filter(EmployeeLocation.id == link_id, Employee.company_id == emp.company_id)
+        .filter(EmployeeLocation.id == link_id, Employee.company_id == principal.company_id)
         .first()
     )
     if link:
         target = db.get(Employee, link.employee_id)
-        assert_employee_in_names_scope(employee_scope(db, emp), target)
+        assert_employee_in_names_scope(principal.department_scope, target)
         db.delete(link)
         db.flush()
         # If the deleted link was the primary, and no other assignment remains
@@ -1211,13 +1250,13 @@ def unassign_employee_location(
 def assign_employee_location(
     payload: EmployeeLocationAssignRequest,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_permission("hr:manage_locations", "hr:manage_employees")),
+    principal: Principal = Depends(require_principal_permission("hr:manage_locations", "hr:manage_employees")),
 ) -> dict:
-    target = db.query(Employee).filter(Employee.id == payload.employee_id, Employee.company_id == emp.company_id).first()
-    loc = db.query(CompanyLocation).filter(CompanyLocation.id == payload.location_id, CompanyLocation.company_id == emp.company_id).first()
+    target = db.query(Employee).filter(Employee.id == payload.employee_id, Employee.company_id == principal.company_id).first()
+    loc = db.query(CompanyLocation).filter(CompanyLocation.id == payload.location_id, CompanyLocation.company_id == principal.company_id).first()
     if not target or not loc:
         raise HTTPException(status_code=404, detail="Employee or location not found")
-    assert_employee_in_names_scope(employee_scope(db, emp), target)
+    assert_employee_in_names_scope(principal.department_scope, target)
     if payload.is_primary:
         db.query(EmployeeLocation).filter(EmployeeLocation.employee_id == target.id).update({"is_primary": False})
     link = EmployeeLocation(employee_id=target.id, location_id=loc.id, is_primary=payload.is_primary)
@@ -1250,13 +1289,33 @@ def check_in(
         .first()
     )
     if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already checked in")
+        started = existing.check_in if existing.check_in.tzinfo else existing.check_in.replace(tzinfo=UTC)
+        if datetime.now(UTC) - started < timedelta(hours=_FORGOTTEN_CHECKOUT_HOURS):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already checked in")
+        # A session from an earlier shift whose check-out was forgotten (and the background
+        # sweep hasn't closed yet) must not block today's check-in. Its day keeps the check-in
+        # with no check-out time, which the employee fixes with a correction request.
+        existing.check_out = datetime.now(UTC)
+        existing.status = "closed"
+        existing.auto_checkout = True
+        db.add(existing)
+        db.commit()
 
-    nearest = _nearest_assigned_location(db, emp.id)
+    if payload.latitude == 0 and payload.longitude == 0:
+        # 0,0 is what a phone sends when it has no position at all.
+        raise HTTPException(status_code=422, detail="Your phone did not report a location. Turn on location services and try again.")
+    nearest = _nearest_assigned_location(db, emp.id, payload.latitude, payload.longitude)
     if not nearest:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No work location assigned")
-    loc, _ = nearest
-    distance = _distance_meters(payload.latitude, payload.longitude, float(loc.latitude), float(loc.longitude))
+    loc, distance = nearest
+    max_accuracy = max(_MAX_GPS_ACCURACY_METERS, loc.allowed_radius_meters)
+    if payload.accuracy is None or payload.accuracy > max_accuracy:
+        shown = "unknown" if payload.accuracy is None else f"±{int(payload.accuracy)}m"
+        raise HTTPException(
+            status_code=422,
+            detail=f"GPS signal too weak to confirm you're on site ({shown}; needs ±{max_accuracy}m or better). "
+                   "Move near a window or outdoors, make sure precise location is on, and try again.",
+        )
     if distance > loc.allowed_radius_meters:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -1288,6 +1347,7 @@ def check_in(
         inside_geofence=True, device=payload.device, battery=payload.battery,
     ))
     db.commit()
+    _record_gps_punch(db, emp, now, "in", loc.location_name)
     return CheckInOut(session_id=session.id, status="open", check_in=str(session.check_in), location_name=loc.location_name, distance_meters=distance)
 
 
@@ -1312,6 +1372,8 @@ def check_out(
         session.check_out_lng = Decimal(str(payload.longitude))
     db.add(session)
     db.commit()
+    loc = db.get(CompanyLocation, session.location_id) if session.location_id else None
+    _record_gps_punch(db, emp, now, "out", loc.location_name if loc else None)
     return {"ok": True, "session_id": session.id, "check_out": str(now)}
 
 
@@ -1347,6 +1409,8 @@ def ping_location(
     auto_closed = False
     if not inside:
         auto_closed = _maybe_auto_checkout(db, session)
+        if auto_closed:
+            _record_gps_punch(db, emp, session.check_out, "out", loc.location_name if loc else None)
 
     return {"inside_geofence": inside, "distance_meters": distance, "auto_checked_out": auto_closed}
 
@@ -1377,7 +1441,8 @@ def _maybe_auto_checkout(db: Session, session: AttendanceSession) -> bool:
     ref = earliest_outside if earliest_outside.tzinfo else earliest_outside.replace(tzinfo=UTC)
     if now - ref < timedelta(minutes=_AUTO_CHECKOUT_GRACE_MINUTES):
         return False
-    session.check_out = now
+    # Checked out at the moment they were first seen outside, not when the grace ran out.
+    session.check_out = ref
     session.status = "closed"
     session.auto_checkout = True
     db.add(session)
@@ -1402,13 +1467,17 @@ class LiveLocationOut(BaseModel):
 def live_locations(
     branch_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_permission("hr:view_all_attendance")),
+    principal: Principal = Depends(require_principal_permission("hr:view_all_attendance")),
 ) -> list[LiveLocationOut]:
-    sessions = _scope_attendance_to_branch(
-        db.query(AttendanceSession)
-        .filter(AttendanceSession.company_id == emp.company_id, AttendanceSession.status == "open"),
-        emp, db, branch_id,
-    ).all()
+    query = db.query(AttendanceSession).filter(
+        AttendanceSession.company_id == principal.company_id, AttendanceSession.status == "open",
+    )
+    if principal.employee is not None:
+        # An employee login keeps its branch and department limits.
+        query = _scope_attendance_to_branch(query, principal.employee, db, branch_id)
+    elif branch_id:
+        query = query.filter(AttendanceSession.branch_id == branch_id)
+    sessions = query.all()
     out: list[LiveLocationOut] = []
     for session in sessions:
         latest = (

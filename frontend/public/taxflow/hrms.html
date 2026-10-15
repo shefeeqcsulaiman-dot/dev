@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=01e09bb7c7" as="style">
-<link rel="preload" href="src/app.js?v=3669ba322c" as="script">
+<link rel="preload" href="src/app.js?v=0e266fcbdf" as="script">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=01e09bb7c7">
 <style>
@@ -1162,20 +1162,8 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
       <div class="card-hd">
         <div><div class="card-title">GPS Attendance — Company Locations &amp; Live Tracking</div><div class="card-sub">Geofenced check-in and live employee locations</div></div>
       </div>
-      <div id="hr-access-login">
-        <div id="hr-access-err" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:9px;padding:10px 14px;font-size:13px;color:var(--red);margin-bottom:12px"></div>
-        <p style="font-size:12.5px;color:var(--text3);margin-bottom:10px">Sign in with an HR/Administrator employee login to manage locations and view live attendance. This uses the employee RBAC login, separate from your TaxFlow admin account.</p>
-        <div class="flx" style="gap:8px;flex-wrap:wrap">
-          <input type="text" id="hr-access-user" placeholder="Employee ID" style="max-width:180px">
-          <input type="password" id="hr-access-pass" placeholder="Password (default = Employee ID)" style="max-width:220px">
-          <button class="btn btn-p" onclick="hrAccessLogin()">Connect HR Access</button>
-        </div>
-      </div>
+      <div id="hr-access-login" style="display:none"></div>
       <div id="hr-access-panel" style="display:none">
-        <div class="flx" style="justify-content:space-between;margin-bottom:10px">
-          <span class="b b-g" style="font-size:11px">HR Access Connected</span>
-          <button class="btn btn-g btn-sm" onclick="hrAccessLogout()">Disconnect</button>
-        </div>
         <div class="g2 mb16">
           <div>
             <div class="card-title" style="margin-bottom:8px">Company Locations</div>
@@ -3277,7 +3265,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
 window.HRMS_STANDALONE=true;
 </script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=3669ba322c" defer></script>
+<script src="src/app.js?v=0e266fcbdf" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

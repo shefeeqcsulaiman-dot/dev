@@ -163,7 +163,7 @@
       if (r.status === 401) { essLogout(); return; }
       var d = await r.json();
       if (r.ok) { await refreshGpsStatus(); }
-      else { gpsSetStatus(d.detail || 'Check-in failed.', true); }
+      else { gpsSetStatus(typeof d.detail === 'string' ? d.detail : 'Your phone sent a location the server could not use. Try again.', true); }
     } catch(e) { gpsSetStatus(e.message || 'Check-in failed.', true); }
     btn.disabled = false;
   }
