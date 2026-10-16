@@ -23,6 +23,9 @@ _FLUSH_SECONDS = 2
 # Hash of process id -> "<in flight>|<unix time>", written by each process's flush.
 _PROCS_KEY = "tf:load:procs"
 _PROC_STALE_SECONDS = 15   # a process that hasn't reported for this long has gone
+# Hash of process id -> "<build>|<unix time>": which code each server copy runs (Super Admin's
+# deploy status). Same flush, same staleness rule.
+_BUILDS_KEY = "tf:load:builds"
 _PROC_ID = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
 
 _local_in_flight = 0
@@ -100,12 +103,46 @@ def flush() -> None:
             pipe.expire(f"tf:load:rate:{bucket}", _RATE_WINDOW_SECONDS * 3)
         pipe.hset(_PROCS_KEY, _PROC_ID, f"{in_flight}|{time.time():.0f}")
         pipe.expire(_PROCS_KEY, 3600)
+        pipe.hset(_BUILDS_KEY, _PROC_ID, f"{_build()}|{time.time():.0f}")
+        pipe.expire(_BUILDS_KEY, 3600)
         pipe.execute()
     except Exception:
         with _local_lock:  # put the counts back so a Redis blip doesn't lose them
             for bucket, n in pending.items():
                 _unflushed[bucket] = _unflushed.get(bucket, 0) + n
         raise
+
+
+def _build() -> str:
+    import sys
+    return str(getattr(sys.modules.get("app.main"), "_LIVE_BUILD", "") or "unknown")
+
+
+def builds() -> dict:
+    """{"copies": n, "builds": {build: copies}} for the server copies that reported in the last
+    _PROC_STALE_SECONDS (via Redis), or just this process without Redis."""
+    r = cache._redis()
+    counts: dict[str, int] = {}
+    if r is not None:
+        try:
+            now, stale = time.time(), []
+            for proc, value in (r.hgetall(_BUILDS_KEY) or {}).items():
+                build, _, reported = str(value).rpartition("|")
+                try:
+                    fresh = now - float(reported) <= _PROC_STALE_SECONDS
+                except ValueError:
+                    fresh = False
+                if fresh:
+                    counts[build] = counts.get(build, 0) + 1
+                else:
+                    stale.append(proc)
+            if stale:
+                r.hdel(_BUILDS_KEY, *stale)
+        except Exception:
+            counts = {}
+    if not counts:
+        return {"copies": 1, "builds": {_build(): 1}, "cluster_wide": False}
+    return {"copies": sum(counts.values()), "builds": counts, "cluster_wide": True}
 
 
 def _cluster_figures(r, now: float, local_in_flight: int) -> tuple[int, int]:

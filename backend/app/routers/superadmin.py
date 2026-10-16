@@ -1593,6 +1593,22 @@ def system_health(
     }
 
 
+@router.get("/platform-health")
+def platform_health(db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
+    """Live health strip for the overview: database, errors in the last hour, load, people
+    online and which build each server copy runs (app/sa_insights.py). Not cached."""
+    from app.sa_insights import platform_health as _health
+    return _health(db)
+
+
+@router.get("/insights")
+def insights(db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
+    """Busiest hours, companies needing attention, weekly growth and module adoption
+    (app/sa_insights.py). Cached 5 minutes: it counts a month of records."""
+    from app.sa_insights import insights as _insights
+    return cache.remember("sa:insights", 300, lambda: _insights(db), _local_cache)
+
+
 @router.get("/active-users")
 def active_users(db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
     """People using the app: online now (last 15 min) and active in the last 24 h / 7 / 30 days,

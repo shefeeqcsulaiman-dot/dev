@@ -30,6 +30,7 @@ _WINDOWS = (("online", timedelta(minutes=ONLINE_MINUTES)), ("last_24h", timedelt
             ("last_7d", timedelta(days=7)), ("last_30d", timedelta(days=30)))
 _PEAK_KEY = "tf:active:peak:{hour}"
 _SAMPLE_SECONDS = 60
+_KEEP_HOURS = 8 * 24 + 2   # a week of hourly peaks for the busiest-hours chart
 
 _local_peaks: dict[int, tuple[int, float]] = {}   # hour -> (count, unix time), without Redis
 _sampler_started = False
@@ -96,14 +97,14 @@ def record_sample(count: int, at: float | None = None) -> None:
             key = _PEAK_KEY.format(hour=hour)
             current = r.get(key)
             if current is None or int(str(current).split("|")[0]) < count:
-                r.set(key, f"{count}|{at:.0f}", ex=26 * 3600)
+                r.set(key, f"{count}|{at:.0f}", ex=_KEEP_HOURS * 3600)
             return
         except Exception:
             pass
     prev = _local_peaks.get(hour)
     if prev is None or prev[0] < count:
         _local_peaks[hour] = (count, at)
-    for old in [h for h in _local_peaks if h < hour - 25]:
+    for old in [h for h in _local_peaks if h < hour - _KEEP_HOURS]:
         _local_peaks.pop(old, None)
 
 
@@ -126,6 +127,24 @@ def peak_last_24h(now: float | None = None) -> dict | None:
         return None
     count, at = max(samples)
     return {"count": count, "at": datetime.fromtimestamp(at, UTC).isoformat()}
+
+
+def hourly_peaks(hours: int = 168, now: float | None = None) -> list[dict]:
+    """The highest "online now" of each of the last `hours` hours, oldest first (None = no sample)."""
+    now = now or time.time()
+    hour_ids = [int(now // 3600) - i for i in range(hours - 1, -1, -1)]
+    values: dict[int, int] = {}
+    r = cache._redis()
+    if r is not None:
+        try:
+            for h, value in zip(hour_ids, r.mget([_PEAK_KEY.format(hour=h) for h in hour_ids])):
+                if value:
+                    values[h] = int(str(value).split("|")[0])
+        except Exception:
+            values = {}
+    if not values:
+        values = {h: _local_peaks[h][0] for h in hour_ids if h in _local_peaks}
+    return [{"hour": datetime.fromtimestamp(h * 3600, UTC).isoformat(), "peak": values.get(h)} for h in hour_ids]
 
 
 def summary(db: Session) -> dict:

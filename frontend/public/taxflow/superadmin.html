@@ -327,6 +327,11 @@
     </div>
   </div>
 
+  <!-- Platform health strip (GET /superadmin/platform-health) -->
+  <div class="card" id="sa-health-card" style="margin-bottom:16px">
+    <div id="sa-health-wrap"><div class="loading-state">Checking platform health…</div></div>
+  </div>
+
   <!-- Hero stats -->
   <div class="stats-hero">
     <div class="stat-card hero">
@@ -370,6 +375,28 @@
       <button class="btn btn-g btn-sm" onclick="loadActiveUsers()">Refresh</button>
     </div>
     <div id="sa-active-wrap" style="padding:4px 0"><div class="loading-state">Loading…</div></div>
+  </div>
+
+  <!-- Busiest hours / attention / growth / adoption (GET /superadmin/insights) -->
+  <div class="card" id="sa-busy-card">
+    <div class="card-hd"><div><div class="card-title">Busiest Hours</div>
+      <div style="font-size:var(--fs-sm);color:var(--muted);margin-top:2px">Peak people online per hour, last 7 days (your local time)</div></div></div>
+    <div id="sa-busy-wrap"><div class="loading-state">Loading…</div></div>
+  </div>
+  <div class="card" id="sa-attention-card">
+    <div class="card-hd"><div><div class="card-title">Companies Needing Attention</div>
+      <div style="font-size:var(--fs-sm);color:var(--muted);margin-top:2px">Subscriptions ending or ended, and companies not using the app</div></div></div>
+    <div id="sa-attention-wrap"><div class="loading-state">Loading…</div></div>
+  </div>
+  <div class="card" id="sa-growth-card">
+    <div class="card-hd"><div><div class="card-title">Growth</div>
+      <div style="font-size:var(--fs-sm);color:var(--muted);margin-top:2px">New per week, last 8 weeks (this week last)</div></div></div>
+    <div id="sa-growth-wrap"><div class="loading-state">Loading…</div></div>
+  </div>
+  <div class="card" id="sa-adoption-card">
+    <div class="card-hd"><div><div class="card-title">Module Adoption</div>
+      <div style="font-size:var(--fs-sm);color:var(--muted);margin-top:2px">Records each company created per module, last 30 days</div></div></div>
+    <div id="sa-adoption-wrap"><div class="loading-state">Loading…</div></div>
   </div>
 
   <!-- Insights & Actions -->
@@ -1006,6 +1033,7 @@
 
   // ── Sidebar page switcher ──────────────────────────────────────
   const SA_PAGE_LOADERS={
+    overview: ()=>loadPlatformHealth(),
     analytics: ()=>loadUsageAnalytics(),
     // re-read on open so the list (and its sidebar badge) isn't stale after a long session
     errors: ()=>{loadServerErrors();loadClientErrors();},
@@ -1068,13 +1096,142 @@
       document.getElementById('sa-user-email').textContent = me.email;
 
       await Promise.all([loadOverview(), loadCompaniesPage()]);
+      loadPlatformHealth();
       loadActiveUsers();
+      loadSaInsights();
       // the drawer keeps showing the pre-change user list (Disable never turned into Enable, edited names stayed old) unless it is reloaded
       if(document.getElementById('company-drawer').classList.contains('on')) loadDrawerCompany();
       loadAuditLogs();
     }catch(err){
       document.getElementById('sa-companies-wrap').innerHTML = '<div class="loading-state" style="color:var(--red)">Failed to load: '+escHtml(err.message)+'</div>';
     }
+  }
+
+  // ── Platform health strip: refreshed every 30 s while the overview is open ──
+  let _healthTimer=null;
+  async function loadPlatformHealth(){
+    const wrap=document.getElementById('sa-health-wrap');
+    if(!wrap)return;
+    clearTimeout(_healthTimer);
+    try{
+      const res=await apiFetch('/superadmin/platform-health');
+      if(!res.ok)throw new Error('Health check failed ('+res.status+')');
+      const h=await res.json();
+      const lvl=h.status?.level||'green';
+      const color={green:'var(--green)',amber:'var(--amber)',red:'var(--red)'}[lvl];
+      const label={green:'All systems normal',amber:'Needs a look',red:'Problem'}[lvl];
+      const conn=h.db_connections?`${h.db_connections.used} / ${h.db_connections.max}`:'—';
+      const builds=Object.entries(h.deploy?.builds||{});
+      const deploy=builds.length===1?`${escHtml(builds[0][0])} · ${h.deploy.copies} server cop${h.deploy.copies===1?'y':'ies'}`
+        :builds.map(([b,n])=>`${escHtml(b)} ×${n}`).join(' · ');
+      const cell=(lbl,val,warn)=>`<div style="min-width:120px"><div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)">${lbl}</div><div style="font-size:16px;font-weight:700;margin-top:3px;${warn?`color:${warn}`:''}">${val}</div></div>`;
+      const e1=h.errors_1h||{};
+      wrap.innerHTML=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:${(h.status?.reasons||[]).length?6:12}px">
+          <span style="width:12px;height:12px;border-radius:50%;background:${color};box-shadow:0 0 0 4px color-mix(in srgb,${color} 22%,transparent)"></span>
+          <b style="font-size:15px">${label}</b>
+          <span style="margin-left:auto;font-size:var(--fs-sm);color:var(--muted)">checked ${new Date(h.checked_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span></div>
+        ${(h.status?.reasons||[]).length?`<div style="font-size:var(--fs-sm);color:${color};margin-bottom:12px">${h.status.reasons.map(escHtml).join(' · ')}</div>`:''}
+        <div style="display:flex;flex-wrap:wrap;gap:18px 28px">
+          ${cell('Database',h.db_ok?`${h.db_latency_ms} ms`:'Down',h.db_ok?(h.db_latency_ms>150?'var(--amber)':''):'var(--red)')}
+          ${cell('DB connections',conn)}
+          ${cell('Overloads (1 h)',e1.overloads||0,e1.overloads?'var(--red)':'')}
+          ${cell('Errors (1 h)',e1.errors||0,e1.errors?'var(--amber)':'')}
+          ${cell('Requests now',h.load?.in_flight??'—')}
+          ${cell('Requests / min',h.load?.requests_this_minute??'—')}
+          ${cell('Online now',h.online_now??'—')}
+          ${cell('Live build',deploy,builds.length>1?'var(--amber)':'')}
+        </div>`;
+    }catch(err){
+      wrap.innerHTML='<div class="loading-state" style="color:var(--red)">'+escHtml(err.message)+'</div>';
+    }
+    if(document.getElementById('page-overview')?.classList.contains('on'))_healthTimer=setTimeout(loadPlatformHealth,30000);
+  }
+
+  // ── Busiest hours, attention, growth, adoption (cached 5 min on the server) ──
+  async function loadSaInsights(){
+    const ids=['sa-busy-wrap','sa-attention-wrap','sa-growth-wrap','sa-adoption-wrap'];
+    try{
+      const res=await apiFetch('/superadmin/insights');
+      if(!res.ok)throw new Error('Insights failed ('+res.status+')');
+      const d=await res.json();
+      renderBusiestHours(d.busiest_hours||[]);
+      renderAttention(d.attention||[]);
+      renderGrowth(d.growth||{});
+      renderAdoption(d.adoption||{});
+    }catch(err){
+      ids.forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='<div class="loading-state" style="color:var(--red)">'+escHtml(err.message)+'</div>';});
+    }
+  }
+
+  function renderBusiestHours(series){
+    const wrap=document.getElementById('sa-busy-wrap');
+    if(!wrap)return;
+    // 7 rows (days, local time) x 24 columns (hours); darker = more people online
+    const days=new Map();
+    let max=0;
+    series.forEach(p=>{
+      if(p.peak==null)return;
+      const t=new Date(p.hour);
+      const key=t.toLocaleDateString([], {weekday:'short',day:'2-digit',month:'short'});
+      if(!days.has(key))days.set(key,{order:t.getTime(),hours:{}});
+      const row=days.get(key);
+      row.hours[t.getHours()]=Math.max(row.hours[t.getHours()]||0,p.peak);
+      max=Math.max(max,p.peak);
+    });
+    if(!days.size){wrap.innerHTML='<div style="font-size:var(--fs-sm);color:var(--muted)">No samples yet: the chart fills in as people use the app (one sample a minute).</div>';return;}
+    const rows=[...days.entries()].sort((a,b)=>a[1].order-b[1].order).slice(-7);
+    let best={v:-1};
+    rows.forEach(([day,r])=>Object.entries(r.hours).forEach(([h,v])=>{if(v>best.v)best={v,day,h:+h};}));
+    const cellBg=v=>v==null?'var(--surface-3)':`color-mix(in srgb,var(--primary) ${Math.round(15+85*(v/(max||1)))}%,transparent)`;
+    const head='<tr><th></th>'+Array.from({length:24},(_,h)=>`<th style="font-size:10px;font-weight:500;color:var(--muted);padding:0 0 4px">${h%3===0?String(h).padStart(2,'0'):''}</th>`).join('')+'</tr>';
+    const body=rows.map(([day,r])=>'<tr><td style="font-size:11.5px;color:var(--muted);padding-right:8px;white-space:nowrap">'+escHtml(day)+'</td>'+
+      Array.from({length:24},(_,h)=>{const v=r.hours[h];return `<td title="${escHtml(day)} ${String(h).padStart(2,'0')}:00 · ${v==null?'no sample':v+' online'}" style="padding:1px"><div style="height:18px;min-width:12px;border-radius:3px;background:${cellBg(v)}"></div></td>`;}).join('')+'</tr>').join('');
+    wrap.innerHTML=`<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%">${head}${body}</table></div>
+      <div style="font-size:var(--fs-sm);color:var(--muted);margin-top:8px">Busiest: <b style="color:var(--text)">${best.v} online</b> on ${escHtml(best.day)} at ${String(best.h).padStart(2,'0')}:00.</div>`;
+  }
+
+  function renderAttention(items){
+    const wrap=document.getElementById('sa-attention-wrap');
+    if(!wrap)return;
+    if(!items.length){wrap.innerHTML='<div style="font-size:var(--fs-sm);color:var(--green)">Nothing needs attention.</div>';return;}
+    const tone={red:'var(--red)',amber:'var(--amber)'};
+    const kindLabel={expired:'Expired',expiring:'Ending soon',inactive:'Inactive',never_used:'Never used'};
+    wrap.innerHTML=`<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Company</th><th>Issue</th><th>Detail</th><th></th></tr></thead><tbody>${items.slice(0,50).map(i=>`<tr>
+      <td>${escHtml(i.company_name||'')}</td>
+      <td><span style="font-weight:600;color:${tone[i.severity]||'var(--muted)'}">${kindLabel[i.kind]||escHtml(i.kind)}</span></td>
+      <td style="color:var(--muted)">${escHtml(i.detail||'')}</td>
+      <td style="text-align:right"><button class="btn btn-g btn-sm" onclick="saGo('${i.kind==='expired'||i.kind==='expiring'?'renewals':'companies'}')">${i.kind==='expired'||i.kind==='expiring'?'Renewals':'Companies'}</button></td></tr>`).join('')}</tbody></table></div>
+      ${items.length>50?`<div style="font-size:var(--fs-sm);color:var(--muted);margin-top:6px">+${items.length-50} more</div>`:''}`;
+  }
+
+  function renderGrowth(g){
+    const wrap=document.getElementById('sa-growth-wrap');
+    if(!wrap)return;
+    const weeks=g.weeks||[];
+    const bars=(label,vals,color)=>{
+      const max=Math.max(1,...vals);
+      const total=vals.reduce((a,b)=>a+b,0);
+      const last=vals[vals.length-1]||0,prev=vals[vals.length-2]||0;
+      const change=prev?Math.round((last-prev)/prev*100):null;
+      return `<div style="flex:1 1 220px;min-width:200px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)">${label}</div>
+          <div style="font-size:var(--fs-sm);color:var(--muted)">${total.toLocaleString()} in 8 wks</div></div>
+        <div style="font-size:20px;font-weight:700;margin:4px 0">${last.toLocaleString()} <span style="font-size:12px;font-weight:600;color:${change==null?'var(--muted)':change>=0?'var(--green)':'var(--red)'}">${change==null?'this week':(change>=0?'+':'')+change+'% vs last week'}</span></div>
+        <div style="display:flex;align-items:flex-end;gap:4px;height:56px">${vals.map((v,i)=>`<div title="Week of ${escHtml(weeks[i]||'')}: ${v}" style="flex:1;height:${Math.max(3,Math.round(v/max*56))}px;border-radius:3px 3px 0 0;background:${color};opacity:${i===vals.length-1?1:.55}"></div>`).join('')}</div>
+      </div>`;
+    };
+    wrap.innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:22px">${bars('New companies',g.companies||[],'var(--primary)')}${bars('New employees',g.employees||[],'var(--green)')}${bars('Records created',g.records||[],'var(--purple)')}</div>`;
+  }
+
+  function renderAdoption(a){
+    const wrap=document.getElementById('sa-adoption-wrap');
+    if(!wrap)return;
+    const mods=a.modules||[];
+    const title=m=>m.charAt(0).toUpperCase()+m.slice(1);
+    const usingRow=`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">${mods.map(m=>`<span style="font-size:12px;padding:4px 10px;border-radius:99px;background:var(--surface-3)"><b>${a.companies_using?.[m]||0}</b> / ${a.total_companies||0} use ${title(m)}</span>`).join('')}</div>`;
+    const rows=(a.rows||[]);
+    const cell=v=>v?`<span style="font-weight:600">${Number(v).toLocaleString()}</span>`:'<span style="color:var(--dim)">—</span>';
+    wrap.innerHTML=usingRow+(rows.length?`<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Company</th>${mods.map(m=>`<th style="text-align:right">${title(m)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr><td>${escHtml(r.company_name||'')}</td>${mods.map(m=>`<td style="text-align:right">${cell(r.modules?.[m])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`:'<div style="font-size:var(--fs-sm);color:var(--muted)">No activity in the last 30 days.</div>');
   }
 
   // Active users card (GET /superadmin/active-users, app/active_users.py)
