@@ -1593,6 +1593,16 @@ def system_health(
     }
 
 
+@router.get("/active-users")
+def active_users(db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
+    """People using the app: online now (last 15 min) and active in the last 24 h / 7 / 30 days,
+    for company users, employees (ESS / HRMS logins) and branch logins, plus the busiest
+    companies and the highest "online now" of the last 24 hours (app/active_users.py).
+    Cached 30 s: a glance panel, not worth a scan per click."""
+    from app.active_users import summary
+    return cache.remember("sa:active-users", 30, lambda: summary(db), _local_cache)
+
+
 @router.get("/endpoint-stats")
 def endpoint_stats(
     hours: int = 1,

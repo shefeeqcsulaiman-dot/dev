@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 import app.cache as cache
 import app.timezone_utils as timezone_utils
-from app.auth_principal import assert_employee_may_sign_in, resolve_department_scope
+from app.auth_principal import _touch_last_activity, assert_employee_may_sign_in, resolve_department_scope
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import assert_company_active, company_allows_module
@@ -130,6 +130,9 @@ def _get_employee_from_token(token: str, db: Session) -> Employee:
     assert_employee_may_sign_in(emp, "Portal access has been disabled for this account")
     expires_at = db.query(Company.subscription_expires_at).filter(Company.id == emp.company_id).scalar()
     assert_company_active(expires_at)
+    # ESS requests count as the employee being active (Super Admin's active-users counts),
+    # same as their HRMS ones (get_current_employee). At most one write a minute.
+    _touch_last_activity(db, emp)
     return emp
 
 

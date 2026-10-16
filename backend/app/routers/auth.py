@@ -53,7 +53,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     # Feeds Super Admin's Renewals / inactive-company views. Best effort: a failed
     # write here must never stop someone signing in.
     try:
-        user.last_login = datetime.now(timezone.utc)
+        user.last_login = user.last_activity = datetime.now(timezone.utc)
         db.commit()
     except Exception:
         db.rollback()

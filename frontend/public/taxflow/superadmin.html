@@ -360,6 +360,18 @@
     <div class="stat-card"><div class="stat-label">Total Employees</div><div class="stat-val" id="sa-stat-employees">—</div></div>
   </div>
 
+  <!-- Active users -->
+  <div class="card" id="sa-active-card">
+    <div class="card-hd">
+      <div>
+        <div class="card-title">Active Users</div>
+        <div style="font-size:var(--fs-sm);color:var(--muted);margin-top:2px">People using the app: online = a request in the last 15 minutes</div>
+      </div>
+      <button class="btn btn-g btn-sm" onclick="loadActiveUsers()">Refresh</button>
+    </div>
+    <div id="sa-active-wrap" style="padding:4px 0"><div class="loading-state">Loading…</div></div>
+  </div>
+
   <!-- Insights & Actions -->
   <div class="card" id="sa-insights-card">
     <div class="card-hd">
@@ -1056,11 +1068,35 @@
       document.getElementById('sa-user-email').textContent = me.email;
 
       await Promise.all([loadOverview(), loadCompaniesPage()]);
+      loadActiveUsers();
       // the drawer keeps showing the pre-change user list (Disable never turned into Enable, edited names stayed old) unless it is reloaded
       if(document.getElementById('company-drawer').classList.contains('on')) loadDrawerCompany();
       loadAuditLogs();
     }catch(err){
       document.getElementById('sa-companies-wrap').innerHTML = '<div class="loading-state" style="color:var(--red)">Failed to load: '+escHtml(err.message)+'</div>';
+    }
+  }
+
+  // Active users card (GET /superadmin/active-users, app/active_users.py)
+  async function loadActiveUsers(){
+    const wrap=document.getElementById('sa-active-wrap');
+    if(!wrap)return;
+    try{
+      const res=await apiFetch('/superadmin/active-users');
+      if(!res.ok)throw new Error('Active users failed ('+res.status+')');
+      const d=await res.json();
+      const c=d.counts||{};
+      const n=v=>Number(v||0).toLocaleString();
+      const big=(label,val,sub,color)=>`<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-val" style="${color?`color:${color}`:''}">${n(val)}</div>${sub?`<div style="font-size:var(--fs-sm);color:var(--muted);margin-top:4px">${sub}</div>`:''}</div>`;
+      const peak=d.peak_24h;
+      const peakAt=peak?new Date(peak.at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'';
+      const rows=[['Company users','users'],['Employees (ESS / HRMS)','employees'],['Branch logins','branches'],['Total','total']];
+      const table=`<div style="margin-top:12px;overflow-x:auto"><table class="tbl"><thead><tr><th>Login type</th><th style="text-align:right">Online now</th><th style="text-align:right">Last 24 h</th><th style="text-align:right">Last 7 days</th><th style="text-align:right">Last 30 days</th></tr></thead><tbody>${rows.map(([label,key])=>{const r=c[key]||{};const b=key==='total'?'font-weight:700':'';return `<tr style="${b}"><td>${label}</td><td style="text-align:right">${n(r.online)}</td><td style="text-align:right">${n(r.last_24h)}</td><td style="text-align:right">${n(r.last_7d)}</td><td style="text-align:right">${n(r.last_30d)}</td></tr>`;}).join('')}</tbody></table></div>`;
+      const top=(d.by_company||[]);
+      const topHtml=top.length?`<div style="font-weight:600;margin:16px 0 6px">Busiest companies (last 24 h)</div><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Company</th><th style="text-align:right">Online now</th><th style="text-align:right">Active 24 h</th><th style="text-align:right">Users</th><th style="text-align:right">Employees</th><th style="text-align:right">Branches</th></tr></thead><tbody>${top.map(e=>`<tr><td>${escHtml(e.company_name||'')}</td><td style="text-align:right">${n(e.online)}</td><td style="text-align:right">${n(e.last_24h)}</td><td style="text-align:right">${n(e.users)}</td><td style="text-align:right">${n(e.employees)}</td><td style="text-align:right">${n(e.branches)}</td></tr>`).join('')}</tbody></table></div>`:'<div style="font-size:var(--fs-sm);color:var(--muted);margin-top:12px">No activity in the last 24 hours.</div>';
+      wrap.innerHTML=`<div class="stats" style="margin:0">${big('Online now',c.total?.online,`last ${d.online_minutes||15} min`,'var(--green)')}${big('Peak (24 h)',peak?.count,peak?`at ${peakAt}`:'not sampled yet')}${big('Active 24 h',c.total?.last_24h)}${big('Active 7 days',c.total?.last_7d)}${big('Active 30 days',c.total?.last_30d)}</div>${table}${topHtml}`;
+    }catch(err){
+      wrap.innerHTML='<div class="loading-state" style="color:var(--red)">'+escHtml(err.message)+'</div>';
     }
   }
 

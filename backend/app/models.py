@@ -93,6 +93,9 @@ class User(Base, TimestampMixin):
     # (accounts that last signed in before this column existed) -- Super Admin's
     # "inactive companies" view only counts a company once a real login is on record.
     last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Last request this login made (at most once a minute, app/auth_principal.py), like
+    # employees.last_activity. Feeds Super Admin's "users online / active" counts.
+    last_activity: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     company: Mapped[Company] = relationship(back_populates="users")
 

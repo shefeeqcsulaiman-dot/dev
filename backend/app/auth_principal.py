@@ -92,6 +92,30 @@ def _touch_last_activity(db: Session, emp: Employee | Branch) -> None:
     emp.last_activity = now
     db.add(emp)
     db.commit()
+    from app.active_users import ensure_sampler
+    ensure_sampler()
+
+
+def touch_user_activity(db: Session, user: User, token: str) -> None:
+    """Same as _touch_last_activity() for a company user, except a Super Admin impersonating
+    the user (a token with "imp") isn't the user being active."""
+    now = datetime.now(UTC)
+    prev = user.last_activity
+    if prev is not None:
+        if prev.tzinfo is None:
+            prev = prev.replace(tzinfo=UTC)
+        if (now - prev).total_seconds() < _LAST_ACTIVITY_REFRESH_SECONDS:
+            return
+    try:
+        if jwt.decode(token, settings.secret_key, algorithms=["HS256"]).get("imp"):
+            return
+    except JWTError:
+        return
+    user.last_activity = now
+    db.add(user)
+    db.commit()
+    from app.active_users import ensure_sampler
+    ensure_sampler()
 
 
 def assert_employee_may_sign_in(emp: Employee, disabled_detail: str = "Account is disabled") -> None:
@@ -412,6 +436,7 @@ def _principal_from_user_token(token: str, db: Session) -> Principal | None:
     if not getattr(user, "is_active", True):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
     assert_company_active(user.company.subscription_expires_at if user.company else None)
+    touch_user_activity(db, user, token)
     role_permissions = user_role_permissions(user.role)
     return Principal(
         kind="user", company_id=user.company_id, display_name=user.full_name,

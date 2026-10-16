@@ -22,6 +22,7 @@ from app.auth_principal import (  # noqa: F401
     get_current_principal,
     require_permission,
     require_principal_permission,
+    touch_user_activity,
 )
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -45,6 +46,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if not getattr(user, "is_active", True):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
     assert_company_active(user.company.subscription_expires_at if user.company else None)
+    touch_user_activity(db, user, token)
     return user
 
 
