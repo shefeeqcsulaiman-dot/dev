@@ -3848,6 +3848,10 @@ async function syncDashboardFromDatabase(){
   if(!window.__taxflowFreshDashboardLoaded)renderCachedDashboardSnapshot();
   try{
     const [response]=await Promise.all([_fetchReportWithRetry(`${apiBaseUrl()}/reports/dashboard`),loadExpenseTotals()]);
+    if(seq!==_dashboardSyncSeq)return;
+    // A login without Reports access (e.g. sales only) can't read the dashboard figures. That
+    // isn't a connection problem: show the modules it can open instead of "Check backend connection".
+    if(response.status===403){renderLimitedDashboard();return;}
     if(!response.ok)throw new Error('Dashboard API returned '+response.status);
     const data=await response.json();
     if(seq!==_dashboardSyncSeq)return;
@@ -3875,6 +3879,33 @@ async function syncDashboardFromDatabase(){
       setTimeout(()=>syncDashboardFromDatabase(),3000);
     }
   }
+}
+
+function renderLimitedDashboard(){
+  const page=document.getElementById('page-dashboard');
+  if(!page)return;
+  const grid=page.querySelector('.mb3-main-grid');
+  if(grid)grid.style.display='none';
+  const allowed=window.MAIN_ALLOWED_MODULES;
+  [['dash-btn-new-invoice','sales'],['dash-btn-add-purchase','purchase']].forEach(([id,mod])=>{
+    const btn=document.getElementById(id);
+    if(btn&&allowed&&!allowed.has(mod))btn.style.display='none';
+  });
+  const links=[...document.querySelectorAll('.sb .nav[data-module]')]
+    .filter(nav=>nav.style.display!=='none'&&(!allowed||allowed.has(nav.dataset.module)))
+    .map(nav=>({mod:nav.dataset.module,label:(nav.textContent||'').replace(/\s+/g,' ').trim()}))
+    .filter(l=>l.label);
+  let card=document.getElementById('dash-limited');
+  if(!card){
+    card=document.createElement('div');
+    card.id='dash-limited';
+    card.className='card';
+    card.style.cssText='padding:20px;max-width:640px';
+    (grid?grid.parentNode:page).insertBefore(card,grid||null);
+  }
+  card.innerHTML=`<div style="font-size:15px;font-weight:700;margin-bottom:4px">Your workspace</div>
+    <div style="font-size:12.5px;color:var(--text3);margin-bottom:14px">Company figures are shown to logins with Reports access. Open one of your modules:</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">${links.map(l=>`<button type="button" class="btn" style="justify-content:flex-start;min-height:44px" onclick="go('${escapeHtml(l.mod)}')">${escapeHtml(l.label)}</button>`).join('')||'<span style="font-size:12.5px;color:var(--text3)">No modules are assigned to your login yet. Contact your administrator.</span>'}</div>`;
 }
 
 async function syncBranchPerformanceFromDatabase(){

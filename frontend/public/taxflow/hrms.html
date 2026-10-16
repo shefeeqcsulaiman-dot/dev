@@ -10,10 +10,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=ad6bafcab2" as="style">
-<link rel="preload" href="src/app.js?v=29961a2221" as="script">
+<link rel="preload" href="src/styles.css?v=64d6cc917d" as="style">
+<link rel="preload" href="src/app.js?v=72dce7a237" as="script">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=ad6bafcab2">
+<link rel="stylesheet" href="src/styles.css?v=64d6cc917d">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -290,6 +290,38 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
 #rota-weekly .rs-main,#rota-monthly .rs-main{zoom:.85}
 /* Phones: full size, so buttons and day boxes stay big enough to tap. */
 @media(max-width:720px){#rota-weekly .rs-main,#rota-monthly .rs-main{zoom:1}}
+
+/* ── Phones (2026-10-16 check at 375px) ── */
+@media(max-width:760px){
+  /* Dashboard summary cards: a 2-column grid instead of a sideways strip that cut the 2nd card off. */
+  #page-hrms .hrms-kpi-row.hd-kpi-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible;gap:10px!important}
+  #page-hrms .hrms-kpi-row.hd-kpi-grid>.hrms-kpi-card{flex:none;min-height:0;padding:12px;gap:8px;flex-direction:column}
+  #page-hrms .hd-kpi-grid .hrms-kpi-icon{width:34px;height:34px;border-radius:10px}
+  #page-hrms .hd-kpi-grid .hrms-kpi-val{font-size:20px;margin:2px 0}
+  #page-hrms .hd-kpi-grid .hrms-kpi-lbl,#page-hrms .hd-kpi-grid .hrms-kpi-trend{font-size:11.5px}
+  /* Employee Directory: one card per employee instead of a 10-column table with a squeezed name. */
+  #employee-directory-table thead{display:none}
+  #employee-directory-table,#employee-directory-table tbody{display:block;width:100%;min-width:0}
+  #employee-directory-table tbody tr:not([hidden]):not(.tbl-empty-row){display:grid;grid-template-columns:minmax(0,1fr) auto;
+    grid-template-areas:"name status" "dept desig" "id salary" "act act";gap:4px 10px;padding:12px;margin-bottom:10px;
+    border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+  #employee-directory-table tbody td{display:block;border:0!important;padding:0!important;min-width:0}
+  #employee-directory-table tbody td:nth-child(1){grid-area:id;font-size:12px;color:var(--text3)}
+  #employee-directory-table tbody td:nth-child(2){grid-area:name;font-weight:600}
+  #employee-directory-table tbody td:nth-child(4){grid-area:dept;font-size:12.5px;color:var(--text2)}
+  #employee-directory-table tbody td:nth-child(5){grid-area:desig;text-align:right;font-size:12.5px;color:var(--text2)}
+  #employee-directory-table tbody td:nth-child(3),#employee-directory-table tbody td:nth-child(6),#employee-directory-table tbody td:nth-child(7){display:none}
+  #employee-directory-table tbody td:nth-child(8){grid-area:salary;text-align:right;font-size:12.5px}
+  #employee-directory-table tbody td:nth-child(8)::before{content:"AED ";color:var(--text3)}
+  #employee-directory-table tbody td:nth-child(9){grid-area:status;align-self:start}
+  #employee-directory-table tbody td:nth-child(10){grid-area:act;padding-top:6px!important}
+  #employee-directory-table tbody td:nth-child(10) .row-actions{display:flex;flex-wrap:wrap;gap:6px}
+  /* Leave Calendar: fits the screen instead of a fixed 560px that scrolled sideways. */
+  .hcal-grid{min-width:0;gap:2px}
+  .hcal-cell{min-height:48px;padding:2px;border-radius:6px}
+  .hcal-weekday{font-size:9.5px;letter-spacing:0}
+  .hcal-chip{font-size:8.5px;padding:1px 2px}
+}
 </style>
 </head>
 <body class="theme-light">
@@ -2354,7 +2386,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
         <div class="rs-head-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="26" height="26" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg></div>
         <div class="rs-head-text">
           <h2>Monthly Schedule <span class="b b-gray" id="rota-monthly-status">Draft</span></h2>
-          <p>The whole month for every staff member. Hover a day to see times; click it to edit.</p>
+          <p>The whole month for every staff member. Tap a day to see its times and edit it.</p>
         </div>
         <div class="rs-head-actions">
           <div class="rs-week">
@@ -3262,7 +3294,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
 window.HRMS_STANDALONE=true;
 </script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=29961a2221" defer></script>
+<script src="src/app.js?v=72dce7a237" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
