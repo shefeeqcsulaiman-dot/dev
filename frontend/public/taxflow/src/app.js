@@ -5492,7 +5492,11 @@ async function apiRequest(action,payload,options={}){
       try{
         return await _apiRequestOnce(action,payload,{...options,timeoutMs:_WRITE_TIMEOUT_MS});
       }catch(err){
-        const busy=err?.status===503||err?.status===429||err?.timedOut;
+        // A dropped connection ("Failed to fetch", Safari's "Load failed": phone or tablet losing
+        // signal mid-upload) is retried like a busy server: saves are by record key, so a retry
+        // can't duplicate one, and a moment later the connection is usually back.
+        const dropped=!err?.status&&!err?.timedOut&&(err instanceof TypeError||/failed to fetch|load failed|network/i.test(String(err?.message||'')));
+        const busy=err?.status===503||err?.status===429||err?.timedOut||dropped;
         if(!busy||attempt>=_WRITE_MAX_RETRIES){
           // A create-only save that already failed once as "busy" may have gone through on that
           // attempt: don't report it as a plain duplicate.
@@ -12613,6 +12617,15 @@ async function copyCurrentInvoiceLink(){
   }
 }
 
+// The layout's "Due Days" is free text: "30", "Net 30", or empty. Its first whole number,
+// else 30, kept to 0-3650 -- a value like "abc" or 1e9 made new Date() invalid and
+// toISOString() threw while the company loaded (Super Admin > Client errors, 2026-10-16).
+function _layoutDueDays(layout){
+  const match=String(layout?.dueDays??'').match(/\d+/);
+  const days=match?Number(match[0]):30;
+  return Math.min(3650,Math.max(0,days));
+}
+
 function sampleLayoutInvoice(){
   const layout=getInvoiceLayout();
   const subtotal=12400;
@@ -12627,7 +12640,7 @@ function sampleLayoutInvoice(){
     delivery_note_no:'DN-7781',
     reference_no:'REF-DXB-01',
     date:new Date().toISOString().slice(0,10),
-    due_date:new Date(Date.now()+Number(layout.dueDays||30)*86400000).toISOString().slice(0,10),
+    due_date:new Date(Date.now()+_layoutDueDays(layout)*86400000).toISOString().slice(0,10),
     subtotal,
     vat_amount:vat,
     total:subtotal+vat,

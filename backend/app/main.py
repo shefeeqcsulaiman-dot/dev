@@ -204,8 +204,15 @@ def create_app() -> FastAPI:
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         from fastapi import HTTPException as _HTTPEx
+        from starlette.requests import ClientDisconnect as _ClientDisconnect
         if isinstance(exc, _HTTPEx):
             return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        if isinstance(exc, _ClientDisconnect):
+            # The browser went away while the request body was still arriving (tab closed,
+            # phone lost signal, or the page's own 60 s timeout gave up on a slow upload).
+            # Nothing was saved and nobody is waiting for the answer: not a server error, so
+            # it isn't logged as a 500 in Super Admin > Errors. 499 = client closed request.
+            return JSONResponse(status_code=499, content={"detail": "Client disconnected"})
         import logging
         from sqlalchemy.exc import OperationalError as _SQLAOperationalError
         from sqlalchemy.exc import TimeoutError as _SQLATimeoutError
@@ -322,7 +329,7 @@ def create_app() -> FastAPI:
 
     # Bumped with each deploy-relevant change, so /health shows which code is live (the image
     # has no git metadata). Format: date.sequence.
-    BUILD = "2026-10-16.11"
+    BUILD = "2026-10-16.12"
     globals()["_LIVE_BUILD"] = BUILD
 
     def monitoring_sentry_on() -> bool:
