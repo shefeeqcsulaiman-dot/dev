@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -92,6 +93,7 @@ def create_invoice(
         branch_id=payload.branch_id or principal.branch_id,
         customer_name=payload.customer_name,
         invoice_number=payload.invoice_number,
+        invoice_date=payload.invoice_date or datetime.now(timezone.utc).date(),
     )
     invoice.lines = [InvoiceLine(**line.model_dump()) for line in payload.lines]
     calculate_totals(invoice)

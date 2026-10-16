@@ -566,11 +566,16 @@ def monthly_revenue_vat(db: Session, company_id: str, app_sales: list[dict[str, 
     cutoff = (_date.today().replace(day=1) - timedelta(days=210)).replace(day=1)
     # Just the three columns used (not whole ORM objects: building those was most of this
     # function's time on the dashboard).
-    invoice_query = db.query(Invoice.created_at, Invoice.total, Invoice.vat).filter(Invoice.company_id == company_id, Invoice.created_at >= cutoff)
+    # By the document's own date (invoice_date / document_date) where it was kept, so a
+    # September invoice typed in October counts in September, as its ledger posting does.
+    invoice_query = db.query(Invoice.invoice_date, Invoice.created_at, Invoice.total, Invoice.vat).filter(
+        Invoice.company_id == company_id, (Invoice.created_at >= cutoff) | (Invoice.invoice_date >= cutoff))
     if branch_id:
         invoice_query = invoice_query.filter((Invoice.branch_id == branch_id) | (Invoice.branch_id.is_(None)))
-    for created_at, total, vat in invoice_query.all():
-        item = periods.setdefault(period_label(created_at), {"sales": Decimal("0.00"), "purchases": Decimal("0.00"), "output_vat": Decimal("0.00"), "input_vat": Decimal("0.00")})
+    for invoice_date, created_at, total, vat in invoice_query.all():
+        if (invoice_date or created_at.date()) < cutoff:
+            continue
+        item = periods.setdefault(period_label(invoice_date or created_at), {"sales": Decimal("0.00"), "purchases": Decimal("0.00"), "output_vat": Decimal("0.00"), "input_vat": Decimal("0.00")})
         item["sales"] += money(total)
         item["output_vat"] += money(vat)
     for invoice in app_sales:
@@ -580,13 +585,16 @@ def monthly_revenue_vat(db: Session, company_id: str, app_sales: list[dict[str, 
     purchase_filters = [
         SourceTransaction.company_id == company_id,
         SourceTransaction.module.in_(["purchase", "purchase_bill"]),
-        SourceTransaction.created_at >= cutoff,
+        (SourceTransaction.created_at >= cutoff) | (SourceTransaction.document_date >= cutoff),
     ]
     if branch_id:
         purchase_filters.append((SourceTransaction.branch_id == branch_id) | (SourceTransaction.branch_id.is_(None)))
-    purchases = db.query(SourceTransaction.created_at, SourceTransaction.total, SourceTransaction.vat).filter(*purchase_filters).all()
-    for created_at, total, vat in purchases:
-        item = periods.setdefault(period_label(created_at), {"sales": Decimal("0.00"), "purchases": Decimal("0.00"), "output_vat": Decimal("0.00"), "input_vat": Decimal("0.00")})
+    purchases = db.query(SourceTransaction.document_date, SourceTransaction.created_at, SourceTransaction.total,
+                         SourceTransaction.vat).filter(*purchase_filters).all()
+    for document_date, created_at, total, vat in purchases:
+        if (document_date or created_at.date()) < cutoff:
+            continue
+        item = periods.setdefault(period_label(document_date or created_at), {"sales": Decimal("0.00"), "purchases": Decimal("0.00"), "output_vat": Decimal("0.00"), "input_vat": Decimal("0.00")})
         item["purchases"] += money(total)
         item["input_vat"] += money(vat)
     if not periods:
@@ -1818,12 +1826,12 @@ def _add_to_aging_bucket(buckets: dict[str, Decimal], value: Decimal, days_overd
 def receivables_aging(db: Session, company_id: str, app_sales: list[dict[str, Any]], branch_id: str | None = None) -> list[dict[str, str]]:
     result: dict[str, dict[str, Decimal]] = {}
 
-    # DB invoices — no due_date field; use created_at + 30 days as proxy.
+    # DB invoices — no due_date field; use the invoice date (else created_at) + 30 days as proxy.
     # Excludes "cancelled" (voided, never going to be collected — was
     # inflating AR/overdue totals) and "draft" (not yet a committed sale,
     # same recognized-revenue line the rest of this file already draws)
     # alongside "paid", not just "paid" alone.
-    query = db.query(Invoice.customer_name, Invoice.total, Invoice.created_at).filter(
+    query = db.query(Invoice.customer_name, Invoice.total, Invoice.created_at, Invoice.invoice_date).filter(
         Invoice.company_id == company_id, Invoice.status.notin_(["paid", "cancelled", "draft"])
     )
     if branch_id:
@@ -1831,10 +1839,11 @@ def receivables_aging(db: Session, company_id: str, app_sales: list[dict[str, An
         # branch-scoped viewer, same rule used throughout this file.
         query = query.filter((Invoice.branch_id == branch_id) | (Invoice.branch_id.is_(None)))
     db_rows = query.all()
-    for customer, total, created_at in db_rows:
+    for customer, total, created_at, invoice_date in db_rows:
         key = str(customer or "Unknown").strip() or "Unknown"
         e = result.setdefault(key, {k: Decimal("0") for k in ("current", "d1_30", "d31_60", "d61_90", "over90")})
-        proxy_due = str((created_at.date() + timedelta(days=30))) if created_at else ""
+        issued = invoice_date or (created_at.date() if created_at else None)
+        proxy_due = str(issued + timedelta(days=30)) if issued else ""
         _add_to_aging_bucket(e, money(total), _days_overdue(proxy_due))
 
     # App sales invoices — have real due_date

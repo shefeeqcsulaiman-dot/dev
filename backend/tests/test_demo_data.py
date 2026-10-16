@@ -35,6 +35,12 @@ def test_two_months_of_demo_data_fill_every_area(client, db, monkeypatch):
         assert count(collection) > 0, collection
     assert db.query(Invoice).filter(Invoice.company_id == cid).count() > 10
     assert db.query(PayrollRun).filter(PayrollRun.company_id == cid).count() >= 1
+    # postings follow their documents' dates (no backdating of the ledger afterwards)
+    from app.models import JournalEntry, SourceTransaction
+    for st in db.query(SourceTransaction).filter(SourceTransaction.company_id == cid,
+                                                 SourceTransaction.module.in_(["sales", "purchase", "receipt"])).limit(40):
+        dates = {j.entry_date.date() for j in db.query(JournalEntry).filter(JournalEntry.source_id == st.id)}
+        assert dates == {st.document_date}, (st.reference, dates, st.document_date)
 
     # a second run only adds: same customers aren't duplicated, nothing is overwritten
     customers = count("customers")

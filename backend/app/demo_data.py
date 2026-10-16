@@ -321,7 +321,7 @@ def _run(job: dict) -> None:
             ("Sales invoices and receipts", _sales),
             ("Purchases and supplier payments", _purchases),
             ("Expenses", _expenses),
-            ("Dating the ledger, VAT and documents to their own dates", _backdate),
+            ("Dating the documents to their own days", _backdate),
         ]
         from app.dependencies import company_allows_module
         off = [m for m in ("hrms", "ess", "sales", "purchase", "expense", "inventory", "accounting")
@@ -968,14 +968,13 @@ def _expenses(ctx) -> str:
 
 
 def _backdate(ctx) -> str:
-    """The ledger dates a posting by the day it was saved; a person enters each document on
-    its day, so demo documents saved today are moved to their own dates: the invoice row,
-    the source transaction, its journal entries and VAT lines, and the app-data row. Then
-    the per-month account totals are rebuilt."""
+    """Postings already follow each document's own date (journal, VAT line, account totals).
+    What still says "today" is when each row was entered: a person enters each document on
+    its day, so the invoice row, source transaction, app-data row and payroll runs get their
+    document's day as created_at (lists sorted by entry time, supplier ageing)."""
     from sqlalchemy import func as _f
 
-    from app import account_totals
-    from app.models import AppDataRecord, Invoice, JournalEntry, PayrollRun, SourceTransaction, TaxLine
+    from app.models import AppDataRecord, Invoice, PayrollRun, SourceTransaction
     db, company = ctx["db"], ctx["company"]
     dates = ctx.get("doc_dates", {})
     if not dates:
@@ -996,10 +995,6 @@ def _backdate(ctx) -> str:
             st.created_at = at(d)
             if st.approved_at:
                 st.approved_at = at(d)
-            db.query(JournalEntry).filter(JournalEntry.source_id == st.id).update(
-                {JournalEntry.entry_date: at(d), JournalEntry.created_at: at(d)}, synchronize_session=False)
-            db.query(TaxLine).filter(TaxLine.source_id == st.id).update(
-                {TaxLine.period: f"{d:%Y-%m}", TaxLine.created_at: at(d)}, synchronize_session=False)
             moved += 1
         for inv in db.query(Invoice).filter(Invoice.company_id == company.id, _f.lower(Invoice.invoice_number).in_(chunk)).all():
             inv.created_at = at(dates[inv.invoice_number.lower()])
@@ -1023,6 +1018,4 @@ def _backdate(ctx) -> str:
         except (ValueError, AttributeError):
             continue
     db.commit()
-    account_totals.rebuild_company(db, company.id)
-    db.commit()
-    return f"{moved} postings dated to their documents, account totals rebuilt"
+    return f"{moved} documents dated to their own days"

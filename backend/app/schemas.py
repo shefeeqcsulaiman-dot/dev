@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -223,6 +223,8 @@ class InvoiceCreate(BaseModel):
     customer_name: str
     invoice_number: str
     branch_id: str | None = None
+    # The invoice's own date (its ledger and VAT month); today when left out.
+    invoice_date: date | None = None
     lines: list[InvoiceLineIn]
 
 
@@ -241,6 +243,7 @@ class InvoiceOut(BaseModel):
     subtotal: Decimal
     vat: Decimal
     total: Decimal
+    invoice_date: date | None = None
     created_at: datetime
     lines: list[InvoiceLineOut] = []
 

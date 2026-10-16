@@ -259,6 +259,18 @@ def _record_period_date(record: dict[str, Any]) -> _dt.datetime | None:
     return None
 
 
+_DOCUMENT_DATE_KEYS = ("date", "invoice_date", "bill_date", "purchase_date", "payment_date", "expense_date")
+
+
+def record_document_date(record: dict[str, Any]) -> _dt.date | None:
+    """A sales/purchase/payment record's own date, which its ledger posting follows."""
+    for key in _DOCUMENT_DATE_KEYS:
+        parsed = parse_document_date(record.get(key))
+        if parsed:
+            return parsed
+    return None
+
+
 def assert_collection_period_open(db: Session, principal: Principal, collection: str, record: dict[str, Any]) -> None:
     module = _PERIOD_LOCKED_COLLECTIONS.get(collection)
     if not module:
@@ -2608,6 +2620,7 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
             lines=record.get("lines") if isinstance(record.get("lines"), list) else None,
             user_id=principal_user_id(principal),
             branch_id=str(record.get("branch_id") or "").strip() or principal.branch_id,
+            document_date=record_document_date(record),
         )
 
     elif collection == "purchaseRecords":
@@ -2623,6 +2636,7 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
             lines=_purchase_posting_lines(db, principal, record),
             user_id=principal_user_id(principal),
             branch_id=str(record.get("branch_id") or "").strip() or principal.branch_id,
+            document_date=record_document_date(record),
         )
         sync_purchase_stock(db, principal, record, reference)
 
@@ -2659,6 +2673,7 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
                 amount=amount,
                 user_id=principal_user_id(principal),
                 branch_id=str(record.get("branch_id") or "").strip() or principal.branch_id,
+                document_date=record_document_date(record),
             )
 
     elif collection in ("employees", "staff"):
@@ -2910,7 +2925,8 @@ def _cogs_transactions(db: Session, company_id: str, reference: str) -> list[Sou
     ).all()
 
 
-def _sync_cogs(db: Session, principal: Principal, stock_reference: str, cost: Decimal, is_return: bool, branch_id: str | None) -> None:
+def _sync_cogs(db: Session, principal: Principal, stock_reference: str, cost: Decimal, is_return: bool, branch_id: str | None,
+               document_date: _dt.date | None = None) -> None:
     """Post (or correct) the cost-of-sales entry for one sale/return under perpetual inventory.
     A zero cost (cancelled, back to draft, no longer perpetual) reverses what was posted;
     posted journals are never edited or deleted."""
@@ -2938,7 +2954,7 @@ def _sync_cogs(db: Session, principal: Principal, stock_reference: str, cost: De
         db, company_id=principal.company_id, module=module, reference=reference, party_name="",
         subtotal=cost, vat=Decimal("0"), total=cost,
         lines=[{"description": "Cost of goods sold", "account_code": "5000", "amount": cost, "quantity": 1, "unit_price": cost}],
-        default_account_code="5000", branch_id=branch_id,
+        default_account_code="5000", branch_id=branch_id, document_date=document_date,
     )
     approve_and_post_source(db, tx, principal_user_id(principal))
 
@@ -3089,7 +3105,8 @@ def sync_pos_stock(db: Session, principal: Principal, record: dict[str, Any], re
         )
         if not is_return:
             consume_valuation_layers(db, principal.company_id, mapping.sku, quantity)
-    _sync_cogs(db, principal, reference, cost_total if perpetual else Decimal("0"), is_return, branch_id)
+    _sync_cogs(db, principal, reference, cost_total if perpetual else Decimal("0"), is_return, branch_id,
+               record_document_date(record))
 
 
 def purchase_line_stock_mapping(
@@ -3434,7 +3451,8 @@ def sync_sales_invoice_stock(db: Session, principal: Principal, record: dict[str
         ))
         if not is_return:
             consume_valuation_layers(db, principal.company_id, mapping.sku, quantity)
-    _sync_cogs(db, principal, reference, cost_total if perpetual else Decimal("0"), is_return, branch_id)
+    _sync_cogs(db, principal, reference, cost_total if perpetual else Decimal("0"), is_return, branch_id,
+               record_document_date(record))
 
 
 def _record_pos_receipt(db: Session, principal: Principal, record: dict[str, Any], invoice: Invoice) -> None:
@@ -3473,6 +3491,12 @@ def sync_sales_invoice(db: Session, principal: Principal, record: dict[str, Any]
         invoice = Invoice(company_id=principal.company_id, invoice_number=number, customer_name=customer)
         db.add(invoice)
     invoice.customer_name = customer
+    # The invoice's own date decides its ledger/VAT month (sync_sales_invoice_accounting).
+    invoice_date = record_document_date(record)
+    if invoice_date:
+        invoice.invoice_date = invoice_date
+    elif invoice.invoice_date is None and invoice.id is None:
+        invoice.invoice_date = _dt.datetime.now(_dt.timezone.utc).date()
     branch_id = str(record.get("branch_id") or "").strip() or principal.branch_id
     if branch_id:
         invoice.branch_id = branch_id

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -6,7 +6,13 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.account_totals import account_totals
-from app.accounting_posting import PostingError, build_journal, post_source_transaction, repost_source_transaction
+from app.accounting_posting import (
+    PostingError,
+    build_journal,
+    post_source_transaction,
+    repost_source_transaction,
+    utc_date,
+)
 from app.config import get_settings
 from app.models import (
     Account,
@@ -27,6 +33,18 @@ def money(value: object) -> Decimal:
         return Decimal(str(value or 0)).quantize(Decimal("0.01"))
     except (InvalidOperation, ValueError):
         return Decimal("0.00")
+
+
+def document_date_of(value: object) -> date | None:
+    """A document's own date from whatever form it was saved in (a date, an ISO string, or
+    the day-first formats AI-read invoices use); None when it can't be read."""
+    if isinstance(value, datetime):
+        return utc_date(value)
+    if isinstance(value, date):
+        return value
+    from app.doc_index import parse_document_date
+
+    return parse_document_date(value)
 
 
 def _company_vat_rate(db: Session, company_id: str) -> Decimal:
@@ -58,6 +76,7 @@ def sync_sales_invoice_accounting(db: Session, invoice: Invoice, user_id: str | 
         lines=lines,
         default_account_code="3000",
         branch_id=invoice.branch_id,
+        document_date=invoice.invoice_date,
     )
     approve_and_post_source(db, tx, user_id)
     refresh_corporate_tax_from_posted_sources(db, invoice.company_id)
@@ -75,6 +94,7 @@ def sync_purchase_accounting(
     lines: list[dict[str, Any]] | None = None,
     user_id: str | None = None,
     branch_id: str | None = None,
+    document_date: object = None,
 ) -> SourceTransaction:
     tx = upsert_source_transaction(
         db,
@@ -88,6 +108,7 @@ def sync_purchase_accounting(
         lines=lines,
         default_account_code="4000",
         branch_id=branch_id,
+        document_date=document_date,
     )
     approve_and_post_source(db, tx, user_id)
     refresh_corporate_tax_from_posted_sources(db, company_id)
@@ -105,6 +126,7 @@ def sync_bill_accounting(
     lines: list[dict[str, Any]] | None = None,
     user_id: str | None = None,
     branch_id: str | None = None,
+    document_date: object = None,
 ) -> SourceTransaction:
     tx = upsert_source_transaction(
         db,
@@ -118,6 +140,7 @@ def sync_bill_accounting(
         lines=lines,
         default_account_code="4000",
         branch_id=branch_id,
+        document_date=document_date,
     )
     approve_and_post_source(db, tx, user_id)
     refresh_corporate_tax_from_posted_sources(db, company_id)
@@ -133,6 +156,7 @@ def sync_receipt_payment_accounting(
     amount: Decimal,
     user_id: str | None = None,
     branch_id: str | None = None,
+    document_date: object = None,
 ) -> SourceTransaction:
     """Customer receipts and supplier payments move real cash/bank money but
     were never wired into the ledger at all: app_data.py's old "payments"
@@ -158,6 +182,7 @@ def sync_receipt_payment_accounting(
         lines=None,
         default_account_code="1000",
         branch_id=branch_id,
+        document_date=document_date,
     )
     approve_and_post_source(db, tx, user_id)
     return tx
@@ -175,7 +200,10 @@ def upsert_source_transaction(
     lines: list[dict[str, Any]] | None,
     default_account_code: str,
     branch_id: str | None = None,
+    document_date: object = None,
 ) -> SourceTransaction:
+    """document_date: the document's own date, which its journal and VAT line follow. A new
+    posting without a readable one is dated today; an existing one keeps the date it has."""
     tx = (
         db.query(SourceTransaction)
         .filter(
@@ -185,10 +213,20 @@ def upsert_source_transaction(
         )
         .first()
     )
-    if not tx:
+    is_new = tx is None
+    if is_new:
         tx = SourceTransaction(company_id=company_id, module=module, reference=reference)
         db.add(tx)
         db.flush()
+    parsed_date = document_date_of(document_date)
+    # Read by _posting_date_moved(): posted before document dates were kept (its journal is
+    # dated the day it was saved), or re-dated by this save.
+    tx._undated_posting = not is_new and tx.document_date is None
+    tx._date_changed = bool(not is_new and parsed_date and tx.document_date and parsed_date != tx.document_date)
+    if parsed_date:
+        tx.document_date = parsed_date
+    elif is_new:
+        tx.document_date = datetime.now(timezone.utc).date()
     tx.party_name = party_name
     if branch_id is not None:
         tx.branch_id = branch_id
@@ -237,7 +275,8 @@ def upsert_source_transaction(
 
 def _posting_is_stale(db: Session, tx: SourceTransaction) -> bool:
     """True when an already-posted transaction was edited: the net of its journals (and their
-    reversals) or its VAT line no longer matches what the current amounts would post."""
+    reversals) or its VAT line no longer matches what the current amounts would post, or
+    its document's date moved away from the date its journal carries."""
     db.flush()
     db.expire(tx, ["lines"])
     try:
@@ -261,8 +300,26 @@ def _posting_is_stale(db: Session, tx: SourceTransaction) -> bool:
     nonzero = lambda d: {k: v for k, v in d.items() if v}
     if nonzero(want) != nonzero(have):
         return True
+    if _posting_date_moved(db, tx, journal_ids, reversal_ids):
+        return True
     tax = db.query(TaxLine).filter(TaxLine.company_id == tx.company_id, TaxLine.source_id == tx.id).first()
     return bool(tax) and (money(tax.taxable_amount) != money(tx.subtotal) or money(tax.tax_amount) != money(tx.vat))
+
+
+def _posting_date_moved(db: Session, tx: SourceTransaction, journal_ids: list[str], reversal_ids: list[str]) -> bool:
+    """This save changed the document's date, so its journal has to move. A posting from
+    before document dates were kept was dated the day it was saved, usually a few days after
+    its document: that one moves only when it sits in another month, so re-saving old
+    documents doesn't fill the ledger with same-month reversals."""
+    if not tx.document_date or not journal_ids:
+        return False
+    if not getattr(tx, "_undated_posting", False):
+        return getattr(tx, "_date_changed", False)
+    reversed_ids = {row[0] for row in db.query(JournalEntry.source_id).filter(JournalEntry.id.in_(reversal_ids)).all()} if reversal_ids else set()
+    live_dates = [utc_date(d) for (jid, d) in db.query(JournalEntry.id, JournalEntry.entry_date).filter(
+        JournalEntry.id.in_(journal_ids)).all() if jid not in reversed_ids]
+    month = tx.document_date.strftime("%Y-%m")
+    return any(d and d.strftime("%Y-%m") != month for d in live_dates)
 
 
 def approve_and_post_source(db: Session, tx: SourceTransaction, user_id: str | None) -> PostingJob:

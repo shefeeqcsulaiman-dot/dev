@@ -1,6 +1,6 @@
 import json
 import re
-from datetime import datetime
+from datetime import date as _date, datetime
 from decimal import Decimal
 from enum import Enum
 from uuid import uuid4
@@ -118,6 +118,8 @@ class Invoice(Base, TimestampMixin):
     subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     vat: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     total: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    # The invoice's own date (its posting month); NULL on rows saved before it was kept.
+    invoice_date: Mapped[_date | None] = mapped_column(Date)
 
     company: Mapped[Company] = relationship(back_populates="invoices")
     lines: Mapped[list["InvoiceLine"]] = relationship(back_populates="invoice", cascade="all, delete-orphan")
@@ -439,6 +441,9 @@ class SourceTransaction(Base, TimestampMixin):
     approved_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     validation_result: Mapped[str | None] = mapped_column(Text)
+    # The document's own date: its journal and VAT line are dated by it, not by the day it
+    # was saved. NULL on rows saved before it was kept (they stay where they posted).
+    document_date: Mapped[_date | None] = mapped_column(Date)
 
     lines: Mapped[list["SourceTransactionLine"]] = relationship(back_populates="transaction", cascade="all, delete-orphan")
 

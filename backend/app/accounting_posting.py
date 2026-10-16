@@ -1,7 +1,8 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import NAMESPACE_URL, uuid5
 
+from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
@@ -11,6 +12,7 @@ from app.models import (
     GeneralLedgerEntry,
     JournalEntry,
     JournalLine,
+    PeriodLock,
     PostingJob,
     SourceTransaction,
     TaxCode,
@@ -23,6 +25,56 @@ MONEY = Decimal("0.01")
 
 class PostingError(Exception):
     pass
+
+
+def posting_datetime(document_date: date | None) -> datetime:
+    """When a document's journal is dated: its own date, not the day it was saved (a
+    September invoice typed in October belongs to September's ledger and VAT return).
+    Noon UTC keeps the same calendar day in every time zone; a document dated today, or
+    with no date, posts at the current moment as before."""
+    now = datetime.now(timezone.utc)
+    if document_date is None or document_date == now.date():
+        return now
+    return datetime(document_date.year, document_date.month, document_date.day, 12, 0, tzinfo=timezone.utc)
+
+
+# The module whose period lock (besides "accounting") also closes a posting's month; the same
+# names app_data.py's _PERIOD_LOCKED_COLLECTIONS and accounting.assert_period_open() use.
+_LOCK_MODULES = {
+    "sales": "sales", "sales_invoice": "sales", "cogs": "sales", "cogs_return": "sales",
+    "purchase": "purchase", "purchase_bill": "purchase", "expense": "expense", "expenses": "expense",
+}
+
+
+class PeriodLockedError(HTTPException):
+    def __init__(self, period: str, reference: str | None = None) -> None:
+        what = f" ({reference})" if reference else ""
+        super().__init__(status_code=423, detail=(
+            f"Period {period} is locked: a posting{what} can't be added to or moved out of it. "
+            "Unlock the period first or keep the document's date."))
+
+
+def assert_posting_period_open(db: Session, company_id: str, source_module: str | None, when: datetime | None,
+                               reference: str | None = None) -> None:
+    """Refuse a journal (or a reversal) dated in a locked month. Now that postings follow
+    their document's date, a backdated document or a changed date could otherwise slip into
+    a period whose VAT return was already filed."""
+    period = (utc_date(when) or datetime.now(timezone.utc).date()).strftime("%Y-%m")
+    modules = ["accounting", *([_LOCK_MODULES[source_module]] if source_module in _LOCK_MODULES else [])]
+    locked = db.query(PeriodLock.id).filter(
+        PeriodLock.company_id == company_id, PeriodLock.module.in_(modules),
+        PeriodLock.period == period, PeriodLock.status == "locked").first()
+    if locked:
+        raise PeriodLockedError(period, reference)
+
+
+def utc_date(value: datetime | None) -> date | None:
+    """The UTC calendar day of a stored timestamp (SQLite gives them back without a zone)."""
+    if value is None:
+        return None
+    if value.tzinfo is not None:
+        value = value.astimezone(timezone.utc)
+    return value.date()
 
 
 def post_source_transaction(db: Session, job: PostingJob, user_id: str | None = None) -> PostingJob:
@@ -52,6 +104,8 @@ def post_source_transaction(db: Session, job: PostingJob, user_id: str | None = 
         transaction.status = "posted"
         return job
 
+    assert_posting_period_open(db, transaction.company_id, transaction.module,
+                               posting_datetime(transaction.document_date), transaction.reference)
     job.status = "processing"
     try:
         journal = build_journal(db, transaction)
@@ -78,19 +132,29 @@ def post_source_transaction(db: Session, job: PostingJob, user_id: str | None = 
     return job
 
 
-def reverse_journal_entry(db: Session, original: JournalEntry, user_id: str | None = None) -> JournalEntry:
+def reverse_journal_entry(db: Session, original: JournalEntry, user_id: str | None = None,
+                          entry_date: datetime | None = None) -> JournalEntry:
     """Same logic as accounting.py's POST /journal/{id}/reverse endpoint,
     factored out so repost_source_transaction() below can reuse it without
     duplicating the reversal mechanics. Posted journals are never mutated or
     deleted (docs/architecture.md's "corrections use reversal journals"
-    rule) — this posts an equal-and-opposite entry instead."""
+    rule) — this posts an equal-and-opposite entry instead.
+
+    Dated like the journal it cancels (unless entry_date says otherwise), so a document
+    edited or re-dated later leaves its original month at zero instead of keeping the
+    old figures there and a negative copy in the month of the edit."""
+    entry_date = entry_date or original.entry_date or datetime.now(timezone.utc)
+    source_module = original.source_module
+    if source_module == "reversal":
+        source_module = None
+    assert_posting_period_open(db, original.company_id, source_module, entry_date, original.entry_number)
     reversal = JournalEntry(
         company_id=original.company_id,
         branch_id=original.branch_id,
         entry_number=f"REV-{original.entry_number}",
         source_module="reversal",
         source_id=original.id,
-        entry_date=datetime.now(timezone.utc),
+        entry_date=entry_date,
         description=f"Reversal of {original.entry_number}: {original.description}",
         status="posted",
     )
@@ -145,6 +209,8 @@ def repost_source_transaction(db: Session, transaction: SourceTransaction, user_
         )
         .all()
     )
+    assert_posting_period_open(db, transaction.company_id, transaction.module,
+                               posting_datetime(transaction.document_date), transaction.reference)
     if existing_journals:
         reversed_journal_ids = {
             row[0]
@@ -173,6 +239,7 @@ def repost_source_transaction(db: Session, transaction: SourceTransaction, user_
     if tax_line:
         tax_line.taxable_amount = money(transaction.subtotal)
         tax_line.tax_amount = money(transaction.vat)
+        tax_line.period = tax_period(transaction)
     else:
         ensure_tax_line(db, transaction)
 
@@ -265,6 +332,7 @@ def build_journal(db: Session, transaction: SourceTransaction) -> JournalEntry:
         entry_number=f"AUTO-{transaction.reference}",
         source_module=transaction.module,
         source_id=transaction.id,
+        entry_date=posting_datetime(transaction.document_date),
         description=f"Auto-posted {transaction.module} {transaction.reference}",
     )
     journal.lines = lines
@@ -289,7 +357,7 @@ def ensure_tax_line(db: Session, transaction: SourceTransaction) -> None:
     tax_code = db.query(TaxCode).filter(TaxCode.company_id == transaction.company_id, TaxCode.code == code_name).first()
     if not tax_code:
         tax_code = db.query(TaxCode).filter(TaxCode.company_id == transaction.company_id, TaxCode.code == "VAT5").first()
-    period = (transaction.created_at or datetime.now(timezone.utc)).strftime("%Y-%m")
+    period = tax_period(transaction)
     db.add(
         TaxLine(
             company_id=transaction.company_id,
@@ -301,6 +369,13 @@ def ensure_tax_line(db: Session, transaction: SourceTransaction) -> None:
             period=period,
         )
     )
+
+
+def tax_period(transaction: SourceTransaction) -> str:
+    """The VAT return month of a posting: its document's month, else the day it was saved."""
+    if transaction.document_date:
+        return transaction.document_date.strftime("%Y-%m")
+    return (transaction.created_at or datetime.now(timezone.utc)).strftime("%Y-%m")
 
 
 def ensure_credit_note_tax_line(
