@@ -33,7 +33,8 @@ def _punch(db, company_id, emp, hour, minute=0, direction="in"):
 
 def _rota(db, company_id, emp, **extra):
     rec = {"id": f"{emp.employee_no}-{DAY}", "employee_id": emp.employee_no, "date": DAY, "type": "Morning", "code": "M",
-           "start": "08:00", "end": "18:00", "mark": "Shift", **extra}
+           # an 8-hour shift: the 10-hour days below run past it (a day's standard is its shift's length)
+           "start": "08:00", "end": "16:00", "mark": "Shift", **extra}
     _seed_app_record(db, company_id, "rotaAssignments", rec["id"], rec)
 
 

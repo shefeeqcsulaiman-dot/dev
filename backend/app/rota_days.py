@@ -112,3 +112,75 @@ def rota_break_seconds(db: Session, company_id: str, employee_nos, start: date, 
         if mins:
             out[(eno, day)] = int(mins * 60)
     return out
+
+
+class DayShift:
+    """One employee's rota shift on one day: local "HH:MM" start/end (end may be past
+    midnight, i.e. not after start), unpaid break and late grace."""
+    __slots__ = ("start", "end", "break_seconds", "grace_minutes")
+
+    def __init__(self, start: str | None, end: str | None, break_seconds: int, grace_minutes: int | None):
+        self.start, self.end, self.break_seconds, self.grace_minutes = start, end, break_seconds, grace_minutes
+
+    def length_seconds(self) -> int | None:
+        """Scheduled paid time: end - start - break (an overnight shift wraps past midnight)."""
+        s, e = _hm_minutes(self.start), _hm_minutes(self.end)
+        if s is None or e is None:
+            return None
+        span = (e - s) % (24 * 60) or 24 * 60
+        return max(0, span * 60 - self.break_seconds)
+
+
+def _hm_minutes(value) -> int | None:
+    text = str(value or "").strip()[:5]
+    if len(text) == 5 and text[2] == ":" and text[:2].isdigit() and text[3:].isdigit():
+        h, m = int(text[:2]), int(text[3:])
+        if h < 24 and m < 60:
+            return h * 60 + m
+    return None
+
+
+def _grace(value) -> int | None:
+    """Shift Setup's grace is free text ("10 minutes", "10"): its first number, in minutes."""
+    import re
+    match = re.search(r"\d+(\.\d+)?", str(value or ""))
+    return int(float(match.group())) if match else None
+
+
+def rota_day_shifts(db: Session, company_id: str, employee_nos, start: date, end: date) -> dict[tuple[str, str], DayShift]:
+    """{(employee_no, 'YYYY-MM-DD'): DayShift} for days the rota gives a shift. Start, end and
+    break come from the assignment, else its shift in Shift Setup (by code); grace from Shift
+    Setup only. Break falls back to the rota default like rota_break_seconds()."""
+    wanted = set(employee_nos)
+    if not wanted or end < start:
+        return {}
+    setup: dict[str, dict] = {}
+    for row in db.query(AppDataRecord).filter(
+        AppDataRecord.company_id == company_id, AppDataRecord.collection == "rotaShifts",
+    ).all():
+        try:
+            rec = json.loads(row.payload or "{}")
+        except (TypeError, ValueError):
+            continue
+        if isinstance(rec, dict) and rec.get("code"):
+            setup[str(rec["code"]).upper()] = rec
+    out: dict[tuple[str, str], DayShift] = {}
+    for eno, day, kind, code, mins, start_time, end_time in _employee_days(
+            db, company_id, wanted, start.isoformat(), end.isoformat(), RotaRecord.kind, RotaRecord.code,
+            RotaRecord.break_minutes, RotaRecord.start_time, RotaRecord.end_time):
+        if kind != "shift":
+            continue
+        code = (code or "").upper()
+        shift = setup.get(code, {})
+        if mins is None:
+            mins = _minutes(shift.get("break_minutes", shift.get("break")))
+        if mins is None:
+            mins = _DEFAULT_BREAK_MINUTES.get(code, 0)
+        s = start_time if _hm_minutes(start_time) is not None else shift.get("start")
+        e = end_time if _hm_minutes(end_time) is not None else shift.get("end")
+        out[(eno, day)] = DayShift(
+            str(s)[:5] if _hm_minutes(s) is not None else None,
+            str(e)[:5] if _hm_minutes(e) is not None else None,
+            int((mins or 0) * 60), _grace(shift.get("grace")),
+        )
+    return out

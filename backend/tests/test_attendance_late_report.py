@@ -86,7 +86,8 @@ def test_late_report_flags_checkin_after_start_time_plus_grace(client, db, auth_
     _save_late_rules(client, auth_headers, "09:00", 15)
     _seed_employee(db, company_id, "LATE-001", "Late Report Employee")
 
-    # Local 09:20 -- 5 minutes past the 09:00 + 15min grace threshold.
+    # Local 09:20 -- past the 09:00 + 15min grace threshold, so late; how late is
+    # measured from 09:00 itself (20 min), grace only decides whether it counts.
     _seed_checkin(db, company_id, "LATE-001", 26, 5, 20)
     # Thu 27 Aug 2026, local 09:10 -- inside the 15-minute grace, not late.
     _seed_checkin(db, company_id, "LATE-001", 27, 5, 10)
@@ -98,8 +99,8 @@ def test_late_report_flags_checkin_after_start_time_plus_grace(client, db, auth_
     assert data["grace_minutes"] == 15
     row = next(e for e in data["employees"] if e["employee_no"] == "LATE-001")
     assert row["late_days"] == 1
-    assert row["total_late_seconds"] == 5 * 60
-    assert row["total_late"] == "0:05"
+    assert row["total_late_seconds"] == 20 * 60
+    assert row["total_late"] == "0:20"
     assert row["last_late_date"] == "2026-08-26"
 
 

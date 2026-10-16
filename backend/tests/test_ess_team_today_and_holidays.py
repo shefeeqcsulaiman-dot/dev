@@ -31,27 +31,34 @@ def _ess_login(client, db, admin_headers, company_id, employee_no, username, dep
     return emp, headers
 
 
+def _weekend_rows(db, company_id):
+    return db.query(AppDataRecord).filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == "hr_settings",
+                                          AppDataRecord.record_key == "weekend-policy-config").all()
+
+
 def _every_day_is_a_working_day(db, company_id):
     """'custom' weekend policy = no weekend, so this test passes on any weekday (other tests leave
-    the shared company on a Fri/Sat weekend). Returns the previous payload to restore."""
-    row = db.query(AppDataRecord).filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == "hr_settings",
-                                         AppDataRecord.record_key == "weekend-policy-config").first()
-    previous = row.payload if row else None
-    if not row:
+    the shared company on a Fri/Sat weekend, sometimes in more than one row: every row is set).
+    Returns the previous payloads to restore."""
+    rows = _weekend_rows(db, company_id)
+    previous = [(row.id, row.payload) for row in rows]
+    if not rows:
         row = AppDataRecord(company_id=company_id, collection="hr_settings", record_key="weekend-policy-config")
         db.add(row)
-    row.payload = json.dumps({"mode": "custom"})
+        rows = [row]
+    for row in rows:
+        row.payload = json.dumps({"mode": "custom"})
     db.commit()
     return previous
 
 
 def _restore_weekend_policy(db, company_id, previous):
-    row = db.query(AppDataRecord).filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == "hr_settings",
-                                         AppDataRecord.record_key == "weekend-policy-config").first()
-    if previous is None:
-        db.delete(row)
-    else:
-        row.payload = previous
+    saved = dict(previous)
+    for row in _weekend_rows(db, company_id):
+        if row.id in saved:
+            row.payload = saved[row.id]
+        else:
+            db.delete(row)
     db.commit()
 
 

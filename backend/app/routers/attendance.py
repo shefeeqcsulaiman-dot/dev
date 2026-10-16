@@ -37,7 +37,7 @@ from app.auth_principal import resolve_active_branch
 from app.department_scope import assert_employee_in_scope, scope_employee_query, scoped_employee_no_select, scoped_employee_nos
 from app.dependencies import Principal, get_current_user, require_module, require_principal_permission
 from app.limiter import limiter
-from app.rota_days import rota_break_seconds, rota_day_statuses
+from app.rota_days import DayShift, rota_day_shifts, rota_day_statuses
 from app.models import AppDataRecord, AttendanceDetail, BiometricDevice, Company, Employee, LeaveRequest, User
 from app.security import verify_password, hash_password
 
@@ -1574,6 +1574,66 @@ def _paid_seconds(row: Any, break_seconds: int) -> int:
     return max(0, total - max(0, break_seconds - gaps))
 
 
+def _shift_start_utc(row: Any, shift: DayShift, offset: timedelta) -> datetime | None:
+    """The shift's start on the row's work date, as the same kind of datetime as the punches."""
+    if not shift.start:
+        return None
+    h, m = (int(x) for x in shift.start.split(":"))
+    local = datetime.combine(date.fromisoformat(row.work_date), datetime.min.time()).replace(hour=h, minute=m)
+    start = local - offset
+    cin = getattr(row, "clock_in_1", None)
+    return start.replace(tzinfo=UTC) if cin is not None and cin.tzinfo is not None else start
+
+
+def _shift_paid_seconds(row: Any, shift: DayShift | None, offset: timedelta) -> int:
+    """Worked time for one day, by its rota shift (agreed rules, 2026-10-16):
+    - a punch before the shift start counts from the shift start (early minutes are not work);
+    - a late punch counts from the punch itself;
+    - less the shift's unpaid break, of which time already punched out between sessions counts;
+    - only complete in/out pairs, like total_seconds.
+    No shift that day (or no start time): the old rule, _paid_seconds()."""
+    if row is None:
+        return 0
+    if shift is None:
+        return _paid_seconds(row, 0)
+    start = _shift_start_utc(row, shift, offset)
+    if start is None:
+        return _paid_seconds(row, shift.break_seconds)
+    counted, gaps, prev_out = 0, 0, None
+    for n in range(1, 6):
+        cin, cout = getattr(row, f"clock_in_{n}", None), getattr(row, f"clock_out_{n}", None)
+        if not (cin and cout and cout > cin):
+            continue
+        cin_c, cout_c = max(cin, start), max(cout, start)
+        counted += int((cout_c - cin_c).total_seconds())
+        if prev_out is not None:
+            gaps += max(0, int((cin_c - prev_out).total_seconds()))
+        prev_out = cout_c
+    return max(0, counted - max(0, shift.break_seconds - gaps))
+
+
+def _holiday_dates(db: Session, company_id: str) -> set[str]:
+    """Holiday Calendar dates (hrHolidays) in ISO form; other formats are skipped."""
+    out: set[str] = set()
+    for (payload,) in db.query(AppDataRecord.payload).filter(
+        AppDataRecord.company_id == company_id, AppDataRecord.collection == "hrHolidays",
+    ).all():
+        try:
+            rec = json.loads(payload or "{}")
+        except (ValueError, TypeError):
+            continue
+        raw = str(rec.get("date") or rec.get("holiday_date") or "") if isinstance(rec, dict) else ""
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", raw):
+            out.add(raw)
+    return out
+
+
+def _shift_standard_seconds(shift: DayShift | None, default_seconds: int) -> int:
+    """A day's standard: the shift's own length (end - start - break), else the company standard."""
+    length = shift.length_seconds() if shift is not None else None
+    return length if length else default_seconds
+
+
 def _late_rules(db: Session, company_id: str) -> tuple[str, int]:
     """(standard_start_time "HH:MM", grace_minutes) for the Late Coming
     Report -- a separate hr_settings record from ot-rules-config (OT is
@@ -1646,18 +1706,20 @@ def overtime_eligibility_rows(db: Session, company_id: str, employees: list[Empl
             if who:
                 requests[(str(who), day)] = rec
 
-    breaks = rota_break_seconds(db, company_id, list(by_no), start, end)
+    shifts = rota_day_shifts(db, company_id, list(by_no), start, end)
     rows = []
     for d in details:
-        paid = _paid_seconds(d, breaks.get((d.employee_id, d.work_date), 0))
-        excess = paid - standard_seconds
+        shift = shifts.get((d.employee_id, d.work_date))
+        paid = _shift_paid_seconds(d, shift, offset)
+        day_standard = _shift_standard_seconds(shift, standard_seconds)
+        excess = paid - day_standard
         if excess <= 0:
             continue
         emp = by_no[d.employee_id]
         sessions = [(getattr(d, f"clock_in_{n}"), getattr(d, f"clock_out_{n}")) for n in range(1, 6)]
         first_in = next((i for i, _ in sessions if i), None)
         last_out = next((o for _, o in reversed(sessions) if o), None)
-        eligible_seconds = _ot_after_cooloff(paid, standard_seconds, cooloff)
+        eligible_seconds = _ot_after_cooloff(paid, day_standard, cooloff)
         req = requests.get((emp.id, d.work_date)) or requests.get((emp.employee_no, d.work_date)) or requests.get((emp.full_name.strip().lower(), d.work_date))
         if eligible_seconds <= 0:
             eligibility = "Not eligible (within cool-off)"
@@ -1677,7 +1739,8 @@ def overtime_eligibility_rows(db: Session, company_id: str, employees: list[Empl
             "clock_out": (last_out + offset).strftime("%H:%M") if last_out else None,
             "worked": _format_duration_hm(paid),
             "break": _format_duration_hm(d.total_seconds - paid) if d.total_seconds > paid else None,
-            "standard": _format_duration_hm(standard_seconds),
+            "standard": _format_duration_hm(day_standard),
+            "shift": f"{shift.start}-{shift.end}" if shift and shift.start and shift.end else None,
             "extra": _format_duration_hm(excess),
             "eligible_ot": _format_duration_hm(eligible_seconds),
             "eligible_hours": round(eligible_seconds / 3600, 2),
@@ -1819,7 +1882,8 @@ def attendance_monthly_report(
                 leave_dates_by_emp.setdefault(lr.employee_id, set()).add(d.isoformat())
             d += timedelta(days=1)
     rota_status = rota_day_statuses(db, principal.company_id, emp_nos, start, period_end)
-    breaks = rota_break_seconds(db, principal.company_id, emp_nos, start, period_end)
+    shifts = rota_day_shifts(db, principal.company_id, emp_nos, start, period_end)
+    offset = _company_offset(db, principal.company_id)
 
     result = []
     for emp in employees:
@@ -1833,12 +1897,16 @@ def attendance_monthly_report(
         # company's actual setting. OT is a sum of PER-DAY overages (a
         # 10-hour day contributes 2 OT hours even if another day that month
         # was short), not (total_hours - working_days * standard_hours).
+        # Worked time counts from the shift start and leaves out the break; overtime is past
+        # each day's own shift length plus the cool-off (_shift_paid_seconds()).
         standard_seconds = int(standard_hours * 3600)
-        total_seconds_month = sum(row.total_seconds for row in days.values())
-        ot_seconds_month = sum(
-            _ot_after_cooloff(_paid_seconds(row, breaks.get((emp.employee_no, day), 0)), standard_seconds, ot_cooloff)
-            for day, row in days.items()
-        )
+        total_seconds_month = 0
+        ot_seconds_month = 0
+        for day, row in days.items():
+            shift = shifts.get((emp.employee_no, day))
+            paid = _shift_paid_seconds(row, shift, offset)
+            total_seconds_month += paid
+            ot_seconds_month += _ot_after_cooloff(paid, _shift_standard_seconds(shift, standard_seconds), ot_cooloff)
         leave_set = set(leave_dates_by_emp.get(emp.id, set()))
         off_days = 0
         for iso in working_day_set:
@@ -1928,6 +1996,12 @@ def attendance_late_report(
         return {"period": period, "standard_start_time": start_time_str, "grace_minutes": grace_minutes, "employees": []}
 
     emp_nos = [e.employee_no for e in employees]
+    # Each day is judged against that day's rota shift start and its grace (Shift Setup),
+    # falling back to the company start time and grace; rota days off / leave / holidays and
+    # Holiday Calendar days aren't working days, even with a punch.
+    shifts = rota_day_shifts(db, principal.company_id, emp_nos, start, period_end)
+    rota_status = rota_day_statuses(db, principal.company_id, emp_nos, start, period_end)
+    holiday_dates = _holiday_dates(db, principal.company_id)
     detail_rows = db.query(
         AttendanceDetail.employee_id, AttendanceDetail.work_date, AttendanceDetail.clock_in_1,
     ).filter(
@@ -1950,10 +2024,16 @@ def attendance_late_report(
         total_late_seconds = 0.0
         last_late_date: str | None = None
         for r in rows_by_emp.get(emp.employee_no, []):
+            if r.work_date in holiday_dates or rota_status.get((emp.employee_no, r.work_date)):
+                continue
+            shift = shifts.get((emp.employee_no, r.work_date))
+            day_h, day_m = (int(x) for x in shift.start.split(":")) if shift and shift.start else (start_h, start_m)
+            day_grace = shift.grace_minutes if shift and shift.grace_minutes is not None else grace_minutes
             local_in = r.clock_in_1 + offset
-            scheduled = local_in.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
-            late_seconds = (local_in - scheduled).total_seconds() - grace_minutes * 60
-            if late_seconds > 0:
+            scheduled = local_in.replace(hour=day_h, minute=day_m, second=0, microsecond=0)
+            # Late = past start + grace; how late is measured from the start itself.
+            late_seconds = (local_in - scheduled).total_seconds()
+            if late_seconds > day_grace * 60:
                 late_days += 1
                 total_late_seconds += late_seconds
                 if last_late_date is None or r.work_date > last_late_date:
@@ -2083,7 +2163,7 @@ def attendance_employee_daily(
             holiday_dates.add(raw_date)
 
     rota_status = rota_day_statuses(db, principal.company_id, [emp.employee_no], start, last_day)
-    breaks = rota_break_seconds(db, principal.company_id, [emp.employee_no], start, last_day)
+    shifts = rota_day_shifts(db, principal.company_id, [emp.employee_no], start, last_day)
     days = []
     d = start
     while d <= last_day:
@@ -2095,7 +2175,9 @@ def attendance_employee_daily(
         is_holiday = iso in holiday_dates
 
         detail_row = details_by_date.get(iso)
-        total_seconds_day = detail_row.total_seconds if detail_row else 0
+        shift = shifts.get((emp.employee_no, iso))
+        paid_day = _shift_paid_seconds(detail_row, shift, offset)
+        standard_day = _shift_standard_seconds(shift, standard_seconds_day)
         sessions = []
         if detail_row:
             for n in range(1, _EMPLOYEE_DAILY_MAX_SESSIONS + 1):
@@ -2146,11 +2228,10 @@ def attendance_employee_daily(
             "sessions": sessions,
             # "H:MM", not decimal hours -- see _format_duration_hm's
             # docstring: "8.95" looks like it could already be a time.
-            "total_hours": _format_duration_hm(total_seconds_day),
-            "ot_hours": _format_duration_hm(_ot_after_cooloff(
-                _paid_seconds(detail_row, breaks.get((emp.employee_no, iso), 0)), standard_seconds_day, ot_cooloff,
-            )) if has_punches else "0:00",
-            "under_hours": _format_duration_hm(max(0, standard_seconds_day - _paid_seconds(detail_row, breaks.get((emp.employee_no, iso), 0)))) if has_punches and not (is_weekend or is_leave or is_holiday) else "0:00",
+            "shift": f"{shift.start}-{shift.end}" if shift and shift.start and shift.end else None,
+            "total_hours": _format_duration_hm(paid_day),
+            "ot_hours": _format_duration_hm(_ot_after_cooloff(paid_day, standard_day, ot_cooloff)) if has_punches else "0:00",
+            "under_hours": _format_duration_hm(max(0, standard_day - paid_day)) if has_punches and not (is_weekend or is_leave or is_holiday) else "0:00",
             "absent": "Yes" if is_absent else "",
             "sick": "Yes" if is_sick else "",
             "holiday": "Yes" if is_holiday or status == "holiday" else "",
