@@ -754,6 +754,7 @@
           if (first) ltSel.value = first.value || first.textContent;
         }
       }
+      if (typeof _mSyncLeaveChips === 'function') _mSyncLeaveChips();
       essUpdateLeavePreview();
       var types = Object.keys(data.by_type || {});
       var annual = _essLeaveBal['Annual Leave'];
@@ -2702,6 +2703,9 @@
   function _mSyncLeaveChips() {
     var sel = document.getElementById('leave-type');
     document.querySelectorAll('#m-leave-chips button').forEach(function(b) {
+      // A type HR switched off (Leave Policy > Status = Inactive) is hidden in the <select>; hide its chip too.
+      var opt = sel && [].find.call(sel.options, function(o) { return o.value === b.dataset.value; });
+      b.hidden = !!(opt && (opt.hidden || opt.disabled));
       var on = sel && b.dataset.value === sel.value;
       b.classList.toggle('on', on);
       b.setAttribute('aria-checked', on ? 'true' : 'false');
