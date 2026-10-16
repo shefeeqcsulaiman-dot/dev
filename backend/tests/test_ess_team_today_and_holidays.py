@@ -55,7 +55,9 @@ def _restore_weekend_policy(db, company_id, previous):
     db.commit()
 
 
-def test_team_today_shows_present_absent_and_leave_within_the_same_department(client, db, auth_headers):
+def test_team_today_shows_present_absent_and_leave_within_the_same_department(client, db, auth_headers, monkeypatch):
+    # Work starts at midnight with no grace: anyone without a punch is already "absent".
+    monkeypatch.setattr("app.routers.ess._late_rules", lambda db, company_id: ("00:00", 0))
     company_id = _company_id(client, auth_headers)
     previous_policy = _every_day_is_a_working_day(db, company_id)
     try:
@@ -89,6 +91,22 @@ def _check_team_today(client, db, auth_headers, company_id):
     assert rows["TTODAY-ABSENT"]["status"] == "absent"
     assert rows["TTODAY-LEAVE"]["status"] == "leave"
     assert rows["TTODAY-PRESENT"]["is_me"] is True
+
+
+def test_no_punch_before_the_start_time_is_not_started_not_absent(client, db, auth_headers, monkeypatch):
+    # Work starts at 23:59: an employee with no punch yet hasn't started, they aren't absent.
+    monkeypatch.setattr("app.routers.ess._late_rules", lambda db, company_id: ("23:59", 0))
+    company_id = _company_id(client, auth_headers)
+    previous_policy = _every_day_is_a_working_day(db, company_id)
+    try:
+        _, headers = _ess_login(client, db, auth_headers, company_id, "TTODAY-LATER", "ttoday.later", department="LaterDept")
+        r = client.get("/api/v1/ess/team/today", headers=headers)
+        assert r.status_code == 200, r.text
+        row = r.json()[0]
+        assert row["status"] == "upcoming"
+        assert row["starts_at"] == "23:59"
+    finally:
+        _restore_weekend_policy(db, company_id, previous_policy)
 
 
 def test_team_today_available_to_every_employee_no_special_role_needed(client, db, auth_headers):
@@ -129,7 +147,8 @@ def test_holidays_requires_ess_auth(client):
     assert r.status_code == 401
 
 
-def test_team_today_shows_rota_days_off(client, db, auth_headers):
+def test_team_today_shows_rota_days_off(client, db, auth_headers, monkeypatch):
+    monkeypatch.setattr("app.routers.ess._late_rules", lambda db, company_id: ("00:00", 0))
     from datetime import timedelta
     company_id = _company_id(client, auth_headers)
     me, headers = _ess_login(client, db, auth_headers, company_id, "TOFF-EXPLICIT", "toff.explicit", department="TeamOffDept")

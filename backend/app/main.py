@@ -322,7 +322,7 @@ def create_app() -> FastAPI:
 
     # Bumped with each deploy-relevant change, so /health shows which code is live (the image
     # has no git metadata). Format: date.sequence.
-    BUILD = "2026-10-16.5"
+    BUILD = "2026-10-16.6"
     globals()["_LIVE_BUILD"] = BUILD
 
     def monitoring_sentry_on() -> bool:
@@ -1135,7 +1135,18 @@ def seed_initial_data() -> None:
 
         user.full_name = "Administrator"
         user.role = "admin"
-        user.password_hash = hash_password(admin_pwd)
+        # The password comes from ADMIN_PASSWORD once: when the account is created, or when
+        # ADMIN_PASSWORD itself changes. It used to be reset on every start, which undid a
+        # password changed in the app at every deploy. schema_flags remembers a digest of
+        # the value last applied (never the password).
+        seed_mark = "admin_password_seed:" + hashlib.sha256(
+            f"{settings.secret_key}:{admin_pwd}".encode()).hexdigest()[:24]
+        db.execute(text("CREATE TABLE IF NOT EXISTS schema_flags (name VARCHAR(80) PRIMARY KEY)"))
+        if not user.password_hash or not db.execute(
+                text("SELECT 1 FROM schema_flags WHERE name = :n"), {"n": seed_mark}).first():
+            user.password_hash = hash_password(admin_pwd)
+            db.execute(text("DELETE FROM schema_flags WHERE name LIKE 'admin_password_seed:%'"))
+            db.execute(text("INSERT INTO schema_flags (name) VALUES (:n) ON CONFLICT (name) DO NOTHING"), {"n": seed_mark})
         user.company_id = company.id
 
         seed_accounts(db, company.id)

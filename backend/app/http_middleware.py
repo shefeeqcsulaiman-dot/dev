@@ -23,6 +23,22 @@ from app.config import get_settings
 from app.request_metrics import request_finished, request_started
 
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+# Writes in progress per login on this server copy. One event loop per copy, so a plain dict
+# is enough. A single page firing hundreds of saves at once filled the database pool for
+# every company (2026-10-15); the browser now queues its writes, and this cap protects
+# against old cached pages, scripts and future bugs.
+_writes_in_flight: dict[str, int] = {}
+_BUSY_BODY = b'{"detail":"Too many saves at once from this login. Please wait a moment and try again."}'
+
+
+def _write_login(scope: dict) -> str | None:
+    """The login (token subject, signature checked) of a signed-in write, else None."""
+    auth = _header(scope, b"authorization")
+    if auth[:7].lower() != "bearer ":
+        return None
+    from app.limiter import _token_subject
+    return _token_subject(auth[7:].strip())
 _FOREVER = "public, max-age=31536000, immutable"
 
 
@@ -147,11 +163,33 @@ class AppMiddleware:
                     headers["Server-Timing"] = f'app;dur={total:.1f}, db;dur={acc[0]:.1f};desc="{acc[1]} queries"'
             await send(message)
 
+        login = None
+        cap = get_settings().max_writes_per_login if is_api and method in _WRITE_METHODS else 0
+        if cap > 0:
+            login = _write_login(scope)
+            if login is not None:
+                if _writes_in_flight.get(login, 0) >= cap:
+                    await send_with_headers({"type": "http.response.start", "status": 429, "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"retry-after", b"1"),
+                        (b"content-length", str(len(_BUSY_BODY)).encode()),
+                    ]})
+                    await send_with_headers({"type": "http.response.body", "body": _BUSY_BODY})
+                    if monitored:
+                        monitoring._request_db.reset(token)
+                    return
+                _writes_in_flight[login] = _writes_in_flight.get(login, 0) + 1
         if is_api:
             request_started()
         try:
             await self.app(scope, receive, send_with_headers)
         finally:
+            if login is not None:
+                left = _writes_in_flight.get(login, 1) - 1
+                if left > 0:
+                    _writes_in_flight[login] = left
+                else:
+                    _writes_in_flight.pop(login, None)
             if is_api:
                 request_finished()
             if monitored:

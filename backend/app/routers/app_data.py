@@ -2002,6 +2002,7 @@ async def app_data_action(
         records = payload.get("records", [])
         if not isinstance(records, list):
             records = []
+        _check_bulk_size(records)
         normalized_records = [record if isinstance(record, dict) else {"value": record} for record in records]
         for r in normalized_records:
             r.pop("_v", None)  # bulk saves (imports, restores) keep last-write-wins
@@ -2121,6 +2122,7 @@ async def app_data_action(
         records = payload.get("records", [])
         if not isinstance(records, list):
             records = []
+        _check_bulk_size(records)
         records = [r if isinstance(r, dict) else {"value": r} for r in records]
         keys = [k for k in (record_key(collection, r) for r in records) if k]
         deleted_count = 0
@@ -3200,6 +3202,19 @@ def _delete_source_transaction_cascade(db: Session, company_id: str, tx_id: str)
     db.query(SourceTransaction).filter(
         SourceTransaction.id == tx_id
     ).delete(synchronize_session=False)
+
+
+# Most records one bulk-save / bulk-delete may carry. The app sends batches of 200; one
+# huge request holds a database connection (and its locks) for a long time.
+MAX_BULK_RECORDS = 1000
+
+
+def _check_bulk_size(records: list) -> None:
+    if len(records) > MAX_BULK_RECORDS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Send at most {MAX_BULK_RECORDS:,} records per request ({len(records):,} sent).",
+        )
 
 
 def _unlink_deleted_tasks(db: Session, company_id: str, task_ids: list[str]) -> None:

@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     sentry_traces_sample_rate: float = 0.05
     # Log a warning for any API request / SQL query at least this slow (0 = off).
     slow_request_ms: int = 1000
+    # Writes (POST/PUT/PATCH/DELETE on /api/v1/) one login may have in progress at once on
+    # each server copy; more get 429 + Retry-After (app/http_middleware.py). 0 = no cap.
+    max_writes_per_login: int = 8
     slow_query_ms: int = 500
     # Where reports get account totals: "stored" (account_period_totals, app/account_totals.py)
     # or "live" (add up journal lines on every request, the old way) as a fallback switch.

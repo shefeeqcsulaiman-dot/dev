@@ -320,6 +320,20 @@ def ess_team_today(request: Request, db: Session = Depends(get_db)) -> list[dict
     }
 
     rota_status = rota_day_statuses(db, emp.company_id, peer_nos, today, today)
+    # Someone with no punch yet isn't "absent" before their day has started: their rota shift
+    # start today, or (no rota) the company's standard start time, plus the late grace period.
+    now_hm = (datetime.now(UTC) + offset).strftime("%H:%M")
+    standard_start, grace_minutes = _late_rules(db, emp.company_id)
+    shift_start: dict[str, str] = {}
+    for a in _rota_assignments_between(db, emp.company_id, today_iso, today_iso, peer_nos):
+        start = str(a.get("start") or "").strip()[:5]
+        if a.get("employee_id") and re.match(r"^([01]\d|2[0-3]):[0-5]\d$", start):
+            shift_start[str(a["employee_id"])] = start
+
+    def _plus_grace(hm: str) -> str:
+        h, m = (int(x) for x in hm.split(":"))
+        total = min(h * 60 + m + grace_minutes, 23 * 60 + 59)
+        return f"{total // 60:02d}:{total % 60:02d}"
 
     out = []
     for p in peers:
@@ -333,8 +347,11 @@ def ess_team_today(request: Request, db: Session = Depends(get_db)) -> list[dict
             day_status = "leave"
         elif has_punches:
             day_status = "present"
+        elif rota_status.get((p.employee_no, today_iso)):
+            day_status = rota_status[(p.employee_no, today_iso)]   # off / leave / holiday on the rota
         else:
-            day_status = rota_status.get((p.employee_no, today_iso)) or "absent"
+            starts = shift_start.get(p.employee_no) or standard_start
+            day_status = "upcoming" if now_hm < _plus_grace(starts) else "absent"
         check_in = None
         if detail_row and detail_row.clock_in_1:
             check_in = (detail_row.clock_in_1 + offset).strftime("%H:%M")
@@ -348,6 +365,7 @@ def ess_team_today(request: Request, db: Session = Depends(get_db)) -> list[dict
             # above), so this was a pure per-colleague base64-blob payload cost
             # on every single dashboard load for a field nothing displays.
             "status": day_status,
+            "starts_at": (shift_start.get(p.employee_no) or standard_start) if day_status == "upcoming" else None,
             "check_in": check_in,
             "is_me": p.id == emp.id,
         })

@@ -8337,6 +8337,30 @@ function expAiRenderExtracted(invoices,filename){
   if(statEl)statEl.textContent=document.querySelectorAll('#exp-ai-tbody .exp-ai-card').length;
 }
 
+// The expense record an AI receipt card would save. The ref used to be EXP-AI-<millisecond>,
+// so several receipts saved together got the SAME ref and overwrote each other.
+let _expAiSeq=0;
+function _expAiRecord(card){
+  const date=card.querySelector('.exp-ai-date')?.value||new Date().toISOString().slice(0,10);
+  const ref=card.querySelector('.exp-ai-ref')?.value||'';
+  const supplier=card.querySelector('.exp-ai-supplier')?.value||'';
+  const amount=parseAmount(card.querySelector('.exp-ai-amount')?.value||0);
+  const vat=parseAmount(card.querySelector('.exp-ai-vat')?.value||0);
+  return {
+    ref:`EXP-AI-${Date.now()}-${++_expAiSeq}`,
+    date,
+    invoice_no:ref||`EXP-AI-${Date.now()}`,
+    category:'Supplies',
+    description:supplier||'AI Extracted Expense',
+    amount,
+    vat,
+    total:amount+vat,
+    status:'Pending',
+    source:'AI Upload',
+    supplier
+  };
+}
+
 function expAiSaveOne(btn){
   const card=btn.closest('.exp-ai-card');
   if(!card)return;
@@ -8348,7 +8372,7 @@ function expAiSaveOne(btn){
     const vat=parseAmount(card.querySelector('.exp-ai-vat')?.value||0);
     const total=amount+vat;
     const record={
-      ref:`EXP-AI-${Date.now()}`,
+      ref:`EXP-AI-${Date.now()}-${++_expAiSeq}`,
       date,
       invoice_no:ref,
       category:'Supplies',
@@ -8366,10 +8390,16 @@ function expAiSaveOne(btn){
   }catch(e){toast('Save failed: '+e.message,'warn');}
 }
 
-function saveExtractedExpenses(){
+async function saveExtractedExpenses(){
   const cards=[...document.querySelectorAll('#exp-ai-tbody .exp-ai-card')].filter(c=>c.querySelector('.expense-ai-select')?.checked);
   if(!cards.length){toast('No receipts selected to save','warn');return;}
-  cards.forEach(card=>expAiSaveOne(card.querySelector('.ai-card-action.approve')));
+  if(cards.length===1){expAiSaveOne(cards[0].querySelector('.ai-card-action.approve'));return;}
+  // Many receipts: one batch request, not a request (and a toast) per receipt.
+  const records=cards.map(_expAiRecord);
+  const saved=await writeRecordsInBatches('expenses',records,{label:'receipts'});
+  if(saved===records.length)cards.forEach(c=>c.remove());
+  if(saved)refreshRegister('expenses');
+  if(saved)toast(`${saved} expense${saved===1?'':'s'} saved from receipts`,'ok');
 }
 
 function setExpAiView(mode,btn){
@@ -13926,6 +13956,14 @@ function persistPurchaseDocumentRecord(file){
   purchaseDocumentIds.add(file.id);
   saveServer('purchaseDocuments',purchaseDocumentRecordFromFile(file));
 }
+// Several files at once (after Save All / deleting AI rows): one after another rather than
+// all at once. One per request, since each record carries its uploaded file.
+function persistPurchaseDocumentRecords(files){
+  const list=(files||[]).filter(Boolean);
+  if(list.length<=1){list.forEach(persistPurchaseDocumentRecord);return;}
+  list.forEach(file=>{file.id=purchaseDocumentId(file);purchaseDocumentIds.add(file.id);});
+  writeRecordsInBatches('purchaseDocuments',list.map(purchaseDocumentRecordFromFile),{label:'documents',size:1});
+}
 
 async function downloadUploadedPurchaseFile(id){
   const file=uploadedFiles.find(item=>String(item.id)===String(id));
@@ -14043,7 +14081,7 @@ function _pumpExtractQueue(){
   }
 }
 function _isRetryableExtractError(err){
-  return /\((502|503|504)\)|Failed to fetch|NetworkError|timed out/i.test(String(err?.message||''));
+  return /\((429|502|503|504)\)|Failed to fetch|NetworkError|timed out/i.test(String(err?.message||''));
 }
 async function _extractSingleFileNow(entry){
   const quiet=_extractBatch.total>1||entry._bulk;
@@ -14666,6 +14704,7 @@ function autoSyncUnitsAndCategoriesFromPurchaseLines(records){
   const seenUnits=new Set();
   const seenCats=new Set();
   const seenProducts=new Set();
+  const newUnits=[],newCategories=[],newProducts=[];
 
   records.forEach(record=>{
     (Array.isArray(record.lines)?record.lines:[]).forEach(line=>{
@@ -14680,7 +14719,7 @@ function autoSyncUnitsAndCategoriesFromPurchaseLines(records){
           // Duplicate check: skip if code already in table
           if(unitTbody&&!hasFirstCellValue(unitTbody,code)){
             renderSalesUnitRecord({code,name:unit,type:'Quantity',decimals:'2',status:'Active'});
-            saveServer('salesUnits',{code,name:unit,type:'Quantity',decimals:'2',status:'Active'});
+            newUnits.push({code,name:unit,type:'Quantity',decimals:'2',status:'Active'});
           }
         }
       }
@@ -14694,7 +14733,7 @@ function autoSyncUnitsAndCategoriesFromPurchaseLines(records){
           // Duplicate check: skip if name already in table
           if(catTbody&&!hasFirstCellValue(catTbody,cat)){
             renderSalesCategoryRecord({name:cat,scope:'Sales & Purchase',vat:'Standard 5%',status:'Active'});
-            saveServer('salesCategories',{name:cat,scope:'Sales & Purchase',vat:'Standard 5%',status:'Active'});
+            newCategories.push({name:cat,scope:'Sales & Purchase',vat:'Standard 5%',status:'Active'});
           }
         }
       }
@@ -14729,11 +14768,18 @@ function autoSyncUnitsAndCategoriesFromPurchaseLines(records){
             description:line.description||''
           };
           renderProductRecord(product);
-          saveServer('products',product,{lenient:true});
+          newProducts.push(product);
         }
       }
     });
   });
+  // One request per collection (a bulk save cleans bad product fields like a lenient save),
+  // instead of a request for every new unit, category and product on every line.
+  return Promise.all([
+    newUnits.length?writeRecordsInBatches('salesUnits',newUnits,{label:'units'}):0,
+    newCategories.length?writeRecordsInBatches('salesCategories',newCategories,{label:'categories'}):0,
+    newProducts.length?writeRecordsInBatches('products',newProducts,{label:'products'}):0,
+  ]);
 }
 
 async function storeExtractedPurchaseRecords(){
@@ -15053,14 +15099,16 @@ function markExtractedInvoiceUploaded(inv){
 
 function markExtractedInvoicesUploaded(invoices){
   const keys=new Set((invoices||[]).map(v=>typeof v==='string'?v:purchaseAiSessionKey(v)).filter(Boolean));
+  const changed=[];
   uploadedFiles.forEach(file=>{
     if(!Array.isArray(file.invoices))return;
     const hits=file.invoices.filter(inv=>keys.has(purchaseAiSessionKey(inv)));
     if(!hits.length)return;
     file.savedInvoiceNos=file.savedInvoiceNos instanceof Set?file.savedInvoiceNos:new Set(file.savedInvoiceNos||[]);
     hits.forEach(inv=>file.savedInvoiceNos.add(String(inv.invoice_no||'')));
-    persistPurchaseDocumentRecord(file);
+    changed.push(file);
   });
+  persistPurchaseDocumentRecords(changed);
   renderPurchaseValidationDocumentStatus();
 }
 
@@ -15937,13 +15985,15 @@ async function deletePurchaseAiRow(btn){
   });
   // Also drop it from its uploaded file, or Save All (which re-reads file.invoices) saves it anyway.
   const deletedKey=purchaseAiSessionKey({...inv,invoice_no:invoiceNo});
+  const changed=[];
   uploadedFiles.forEach(file=>{
     if(!Array.isArray(file.invoices))return;
     const kept=file.invoices.filter(item=>purchaseAiSessionKey(item)!==deletedKey);
     if(kept.length===file.invoices.length)return;
     file.invoices=kept;
-    persistPurchaseDocumentRecord(file);
+    changed.push(file);
   });
+  persistPurchaseDocumentRecords(changed);
   updatePurchaseValidationFileStatus();
   if(tbody&&purchaseAiRows(tbody).length===0){
     tbody.innerHTML='<div class="ai-empty-state">AI uploaded purchase data will appear here for validation.</div>';
@@ -16297,7 +16347,7 @@ async function clearPendingUploads(){
     tone:'danger'
   });
   if(!confirmed)return;
-  await Promise.all(toDelete.map(f=>deleteServer('purchaseDocuments',{id:f.id})));
+  await writeRecordsInBatches('purchaseDocuments',toDelete.map(f=>({id:f.id})),{label:'uploads',action:'bulk-delete'});
   const deleteIds=new Set(toDelete.map(f=>f.id));
   for(let i=uploadedFiles.length-1;i>=0;i--){
     if(deleteIds.has(uploadedFiles[i].id))uploadedFiles.splice(i,1);
@@ -16320,7 +16370,7 @@ async function autoClearIncompleteUploads(){
   // "Ready" files are about to join the extraction queue — leave them too.
   const toDelete=_incompleteUploadFiles().filter(f=>f.status!=='Ready');
   if(!toDelete.length)return;
-  Promise.all(toDelete.map(f=>deleteServer('purchaseDocuments',{id:f.id}))).catch(()=>{});
+  writeRecordsInBatches('purchaseDocuments',toDelete.map(f=>({id:f.id})),{label:'uploads',action:'bulk-delete'}).catch(()=>{});
   const deleteIds=new Set(toDelete.map(f=>f.id));
   for(let i=uploadedFiles.length-1;i>=0;i--){
     if(deleteIds.has(uploadedFiles[i].id))uploadedFiles.splice(i,1);
@@ -23019,10 +23069,73 @@ function setRotaMonthPage(page){
 }
 
 // Export PDF on the Monthly Schedule: the current week of the month, through Weekly Rota's export.
+// Monthly Schedule > Export PDF: the whole month (every staff member the filters show, not
+// just the page on screen) on A4 landscape, one column per day. It used to print one week.
 function downloadRotaMonthWeekPdf(){
-  const start=_rotaMonthWeekStart();
-  if(start&&weekStartValue()!==start)setRotaWeekStart(start);
-  downloadRotaPdf();
+  const month=_rotaMonthValue();
+  const dates=_rotaMonthDates(month);
+  if(!dates){toast('Select a month first','warn');return;}
+  const companyName=document.getElementById('sb-company-name')?.textContent||'TaxFlow HRMS';
+  const monthName=new Date(`${month}-01T00:00:00`).toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  const dayIdx=iso=>(new Date(`${iso}T00:00:00`).getDay()+6)%7;
+  const holidayMap=_companyHolidayMap();
+  const dayHolidays=dates.map(d=>holidayMap.get(d)||'');
+  const staff=filteredRotaStaff('month');
+  const rows=staff.map(s=>{
+    const cells=dates.map((date,i)=>{
+      const a=assignmentFor(s,date,ROTA_WEEK_DAYS[dayIdx(date)]);
+      const code=String(a?.code||'OFF').toUpperCase();
+      const isHoliday=!!dayHolidays[i]||code==='PH';
+      return{code:code==='OFF'&&isHoliday?'PH':code,isHoliday,hours:rotaHours(a)};
+    });
+    return{name:s.name,department:s.department,cells,total:cells.reduce((t,c)=>t+c.hours,0)};
+  });
+  const th='padding:4px 1px;font-size:8px;font-weight:700;color:#fff;text-align:center';
+  const dayHeaders=dates.map((d,i)=>{
+    const di=dayIdx(d);
+    const bg=dayHolidays[i]?'#7f1d1d':di>=5?'#334155':'#1e293b';
+    return `<th style="${th};background:${bg}" title="${escapeHtml(dayHolidays[i])}">${Number(d.slice(8,10))}<br><span style="font-weight:400;opacity:.75">${ROTA_MONTH_DAY_SHORT[di]}</span></th>`;
+  }).join('');
+  const bodyRows=rows.map((r,ri)=>{
+    const bg=ri%2===0?'#ffffff':'#f8fafc';
+    const cells=r.cells.map(c=>{
+      const{bg:cbg,fg:cfg}=_shiftColor(c.code,c.isHoliday);
+      const blank=c.code==='OFF';
+      return `<td style="padding:2px 1px;background:${bg};text-align:center"><div style="background:${cbg};color:${cfg};border-radius:3px;padding:2px 0;font-size:7.5px;font-weight:700">${blank?'<span style="opacity:.45">OFF</span>':escapeHtml(c.code.slice(0,3))}</div></td>`;
+    }).join('');
+    return `<tr><td style="padding:3px 5px;background:${bg};font-size:8.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(r.name)}<div style="font-weight:400;font-size:7.5px;color:#64748b;overflow:hidden;text-overflow:ellipsis">${escapeHtml(r.department||'')}</div></td>${cells}<td style="padding:3px 2px;background:${bg};font-size:8.5px;font-weight:700;text-align:center;color:#2563eb">${r.total>0?r.total.toFixed(1):'—'}</td></tr>`;
+  }).join('');
+  const holidays=dates.map((d,i)=>dayHolidays[i]?`${Number(d.slice(8,10))} – ${escapeHtml(dayHolidays[i])}`:null).filter(Boolean);
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Monthly Rota ${month}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff;padding:18px;color:#0f172a}
+    thead{display:table-header-group}tr{page-break-inside:avoid}
+    @media print{@page{size:A4 landscape;margin:8mm}body{padding:0}}
+  </style></head><body>
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #2563eb">
+    <div>
+      <div style="font-size:18px;font-weight:800;color:#1e293b">${escapeHtml(companyName)}</div>
+      <div style="font-size:12px;color:#2563eb;font-weight:600;margin-top:2px">Monthly Staff Rota — ${escapeHtml(monthName)}</div>
+    </div>
+    <div style="text-align:right;font-size:10px;color:#64748b">
+      <div><strong>Period:</strong> ${dates[0]} – ${dates[dates.length-1]}</div>
+      <div><strong>Staff:</strong> ${rows.length} employees</div>
+      <div><strong>Generated:</strong> ${new Date().toLocaleDateString('en-GB')}</div>
+    </div>
+  </div>
+  <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+    <colgroup><col style="width:13%">${dates.map(()=>`<col style="width:${(83/dates.length).toFixed(2)}%">`).join('')}<col style="width:4%"></colgroup>
+    <thead><tr><th style="${th};background:#1e293b;text-align:left;padding-left:5px">Employee</th>${dayHeaders}<th style="${th};background:#1e293b">Hrs</th></tr></thead>
+    <tbody>${bodyRows||`<tr><td colspan="${dates.length+2}" style="padding:16px;text-align:center;color:#64748b">No staff found for this month.</td></tr>`}</tbody>
+  </table>
+  <div style="margin-top:10px;font-size:8px;color:#64748b">Shift Codes — M: Morning &middot; E: Evening &middot; N: Night &middot; OT: Overtime &middot; TR: Training &middot; L: Leave &middot; OFF: Day Off &middot; PH: Public Holiday</div>
+  ${holidays.length?`<div style="font-size:8px;color:#b91c1c;margin-top:3px"><strong>Public Holidays:</strong> ${holidays.join(', ')}</div>`:''}
+  <script>window.onload=function(){window.print();}<\/script>
+  </body></html>`;
+  const win=window.open('','_blank','width=1100,height=760');
+  if(win){win.document.write(html);win.document.close();}
+  else{toast('Allow pop-ups to download PDF','warn');}
 }
 
 // One compact cell of the month grid: the shift code in its usual colour; times on hover.
@@ -23621,21 +23734,29 @@ function _setRotaStatusBadge(elId,statusText){
 // the server's database connections can serve, so many failed with "the server had a
 // problem". Returns how many shifts were saved; a failed batch is reported once.
 async function saveRotaAssignmentsInBatches(assignments,{label='shifts'}={}){
-  const list=assignments.filter(Boolean);
-  let saved=0,failed=0,reason='';
-  for(let i=0;i<list.length;i+=200){
-    const chunk=list.slice(i,i+200);
-    if(list.length>200)setSavingProgress(label,i,list.length);
+  return writeRecordsInBatches('rotaAssignments',assignments,{label});
+}
+
+// Saves (or, with action:'bulk-delete', deletes) many records of one collection in a few
+// requests instead of one request each. `size` per request: 200, smaller for records that
+// carry files. Reports progress on the "please wait" bar and one message if any batch fails.
+// Returns how many records were written.
+async function writeRecordsInBatches(collection,records,{label='records',size=200,action='bulk-save'}={}){
+  const list=(records||[]).filter(Boolean);
+  let done=0,failed=0,reason='';
+  for(let i=0;i<list.length;i+=size){
+    const chunk=list.slice(i,i+size);
+    if(list.length>size)setSavingProgress(label,i,list.length);
     try{
-      const res=await apiRequest('bulk-save',{collection:'rotaAssignments',records:chunk});
-      saved+=res?.saved??chunk.length;
+      const res=await apiRequest(action,{collection,records:chunk});
+      done+=(action==='bulk-delete'?res?.deleted:res?.saved)??chunk.length;
     }catch(e){
       failed+=chunk.length;
       reason=reason||e.serverDetail||e.message||'';
     }
   }
-  if(failed)toast(`${failed} of ${list.length} ${label} were not saved${reason?`: ${reason}`:''}. Please try again.`,'err',10000);
-  return saved;
+  if(failed)toast(`${failed} of ${list.length} ${label} were not ${action==='bulk-delete'?'deleted':'saved'}${reason?`: ${reason}`:''}. Please try again.`,'err',10000);
+  return done;
 }
 
 function saveRotaDraft(status='Draft'){

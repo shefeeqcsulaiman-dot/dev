@@ -2099,6 +2099,7 @@
   var TEAM_STATUS_META = {
     present: {label: 'Present', color: '#10b981', bg: 'rgba(16,185,129,.12)'},
     absent: {label: 'Absent', color: '#ef4444', bg: 'rgba(239,68,68,.12)'},
+    upcoming: {label: 'Not started', color: '#3b82f6', bg: 'rgba(59,130,246,.12)'},
     leave: {label: 'On Leave', color: '#f59e0b', bg: 'rgba(245,158,11,.12)'},
     holiday: {label: 'Holiday', color: '#8b5cf6', bg: 'rgba(139,92,246,.12)'},
     weekend: {label: 'Weekend', color: '#64748b', bg: 'rgba(100,116,139,.12)'},
@@ -2111,18 +2112,18 @@
     if (!el) return;
     if (!rows.length) { el.innerHTML = '<div class="empty" style="padding:6px 0">No teammates found in your department.</div>'; return; }
     var cnt = function(st) { return rows.filter(function(e) { return e.status === st; }).length; };
-    var present = cnt('present'), leave = cnt('leave'), absent = cnt('absent'), off = cnt('off');
-    var expected = present + leave + absent;
+    var present = cnt('present'), leave = cnt('leave'), absent = cnt('absent'), off = cnt('off'), upcoming = cnt('upcoming');
+    var expected = present + leave + absent + upcoming;
     var offDay = rows.every(function(e) { return e.status === 'weekend' || e.status === 'holiday'; });
     var pct = expected ? Math.round(present / expected * 100) : 0;
     var caption = offDay ? (rows[0].status === 'holiday' ? 'Public holiday — no attendance expected' : 'Weekend — no attendance expected')
-      : present + ' of ' + expected + ' in today (' + pct + '%)' + (off ? ' · ' + off + ' on a day off' : '');
-    var rank = {present: 0, leave: 1, absent: 2, off: 3};
-    var sorted = rows.slice().sort(function(a, b) { return (rank[a.status] == null ? 3 : rank[a.status]) - (rank[b.status] == null ? 3 : rank[b.status]); });
+      : present + ' of ' + expected + ' in today (' + pct + '%)' + (upcoming ? ' · ' + upcoming + ' not started yet' : '') + (off ? ' · ' + off + ' on a day off' : '');
+    var rank = {present: 0, upcoming: 1, leave: 2, absent: 3, off: 4};
+    var sorted = rows.slice().sort(function(a, b) { return (rank[a.status] == null ? 4 : rank[a.status]) - (rank[b.status] == null ? 4 : rank[b.status]); });
     var list = sorted.slice(0, 5).map(function(e) {
       var meta = TEAM_STATUS_META[e.status] || TEAM_STATUS_META.absent;
       var name = escHtml(e.full_name) + (e.is_me ? ' <span style="color:var(--text3)">(You)</span>' : '');
-      var sub = escHtml(e.designation || '') + (e.status === 'present' && e.check_in ? ' · in ' + escHtml(e.check_in) : '');
+      var sub = escHtml(e.designation || '') + (e.status === 'present' && e.check_in ? ' · in ' + escHtml(e.check_in) : '') + (e.status === 'upcoming' && e.starts_at ? ' · starts ' + escHtml(e.starts_at) : '');
       return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)"><div style="min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + name + '</div><div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + sub + '</div></div>' +
         '<span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:11.5px;font-weight:600;white-space:nowrap;background:' + meta.bg + ';color:' + meta.color + '">' + meta.label + '</span></div>';
     }).join('');
@@ -2150,7 +2151,7 @@
       if (sumEl) {
         var cnt = function(st) { return rows.filter(function(e) { return e.status === st; }).length; };
         var stat = function(label, val, sub) { return '<div class="att-stat"><div class="att-stat-label">' + label + '</div><div class="att-stat-val">' + val + '</div><div class="att-stat-sub">' + sub + '</div></div>'; };
-        sumEl.innerHTML = stat('Present Today', cnt('present'), 'In your department') + stat('Team Size', rows.length, 'Active colleagues') + stat('On Leave', cnt('leave'), 'Approved leave today') + stat('Day Off', cnt('off'), 'Off on the rota today') + stat('Absent', cnt('absent'), 'No punch yet');
+        sumEl.innerHTML = stat('Present Today', cnt('present'), 'In your department') + stat('Team Size', rows.length, 'Active colleagues') + stat('On Leave', cnt('leave'), 'Approved leave today') + stat('Day Off', cnt('off'), 'Off on the rota today') + stat('Not Started', cnt('upcoming'), 'Shift starts later') + stat('Absent', cnt('absent'), 'No punch after start time');
       }
       if (body) {
         body.innerHTML = rows.length ? rows.map(function(e) {
